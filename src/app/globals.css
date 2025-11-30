@@ -2,26 +2,148 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
-body {
-  color: var(--foreground);
-  background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
-}
-
 @layer utilities {
   .text-balance {
     text-wrap: balance;
   }
+}
+
+@layer base {
+  :root {
+    /* TikTok Dark Mode - 全局深色主题 */
+    --background: 0 0% 4%;
+    --foreground: 0 0% 98%;
+    --card: 0 0% 7%;
+    --card-foreground: 0 0% 98%;
+    --popover: 0 0% 7%;
+    --popover-foreground: 0 0% 98%;
+    --primary: 174 100% 47%;
+    --primary-foreground: 0 0% 0%;
+    --secondary: 340 100% 50%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 0 0% 12%;
+    --muted-foreground: 0 0% 65%;
+    --accent: 174 100% 47%;
+    --accent-foreground: 0 0% 0%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 0 0% 16%;
+    --input: 0 0% 16%;
+    --ring: 174 100% 47%;
+    --chart-1: 174 100% 47%;
+    --chart-2: 340 100% 50%;
+    --chart-3: 280 80% 55%;
+    --chart-4: 45 100% 60%;
+    --chart-5: 200 80% 50%;
+    --radius: 0.75rem;
+    
+    /* TikTok 霓虹色自定义变量 */
+    --tiktok-cyan: 174 100% 47%;
+    --tiktok-pink: 340 100% 50%;
+    --sidebar-width: 280px;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+}
+
+@layer utilities {
+  /* TikTok 霓虹渐变效果 */
+  .gradient-tiktok {
+    @apply bg-gradient-to-r from-tiktok-cyan to-tiktok-pink;
+  }
+  
+  .gradient-tiktok-text {
+    @apply bg-gradient-to-r from-tiktok-cyan to-tiktok-pink bg-clip-text text-transparent;
+  }
+  
+  /* 霓虹发光效果 */
+  .glow-cyan {
+    box-shadow: 0 0 20px rgba(0, 242, 234, 0.3),
+                0 0 40px rgba(0, 242, 234, 0.1);
+  }
+  
+  .glow-pink {
+    box-shadow: 0 0 20px rgba(255, 0, 80, 0.3),
+                0 0 40px rgba(255, 0, 80, 0.1);
+  }
+  
+  .glow-tiktok {
+    box-shadow: 0 0 15px rgba(0, 242, 234, 0.25),
+                0 0 30px rgba(255, 0, 80, 0.15);
+  }
+  
+  /* 侧边栏背景 */
+  .sidebar-gradient {
+    background: linear-gradient(
+      180deg,
+      hsl(0 0% 7%) 0%,
+      hsl(0 0% 5%) 100%
+    );
+  }
+  
+  /* 悬停高亮效果 */
+  .nav-item-hover {
+    @apply relative overflow-hidden;
+  }
+  
+  .nav-item-hover::before {
+    content: '';
+    @apply absolute inset-0 opacity-0 transition-opacity duration-300;
+    background: linear-gradient(
+      90deg,
+      rgba(0, 242, 234, 0.1) 0%,
+      rgba(255, 0, 80, 0.05) 100%
+    );
+  }
+  
+  .nav-item-hover:hover::before {
+    @apply opacity-100;
+  }
+  
+  /* 动画 */
+  .animate-pulse-slow {
+    animation: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+  
+  .animate-glow {
+    animation: glow 2s ease-in-out infinite alternate;
+  }
+}
+
+@keyframes glow {
+  from {
+    box-shadow: 0 0 10px rgba(0, 242, 234, 0.2),
+                0 0 20px rgba(255, 0, 80, 0.1);
+  }
+  to {
+    box-shadow: 0 0 20px rgba(0, 242, 234, 0.4),
+                0 0 40px rgba(255, 0, 80, 0.2);
+  }
+}
+
+/* 滚动条样式 */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-background;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-muted rounded-full;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-muted-foreground/50;
 }
