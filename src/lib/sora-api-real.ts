@@ -15,7 +15,7 @@
 
 export interface SoraSubmitParams {
   prompt: string;
-  duration?: 10 | 15;           // 视频时长（秒），默认 10
+  duration?: 10 | 15 | 25;       // 视频时长（秒），默认 10
   aspectRatio?: "9:16" | "16:9"; // 视频比例，默认 9:16
   size?: "small" | "large";      // 视频分辨率，默认 small
   url?: string;                  // 参考图片 URL（可选）
@@ -67,8 +67,10 @@ export interface GenerationTask {
 // 配置
 // ============================================================================
 
-const API_BASE_URL = "https://api.wuyinkeji.com/api/sora2";
-const API_KEY = process.env.SORA_API_KEY || "";
+const API_BASE_URL = process.env.SUCHUANG_API_ENDPOINT 
+  ? `${process.env.SUCHUANG_API_ENDPOINT}/api/sora2` 
+  : "https://api.wuyinkeji.com/api/sora2";
+const API_KEY = process.env.SUCHUANG_API_KEY || process.env.SORA_API_KEY || "";
 
 // 状态映射
 const STATUS_MAP: Record<number, GenerationTask["status"]> = {

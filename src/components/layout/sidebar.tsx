@@ -26,6 +26,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
+import { SidebarThemeToggle } from "@/components/theme-toggle";
 
 interface NavItem {
   title: string;
@@ -37,42 +38,35 @@ interface NavItem {
 }
 
 const navItems: NavItem[] = [
-  {
-    title: "Dashboard",
-    href: "/dashboard",
-    icon: LayoutDashboard,
-    description: "概览",
-  },
-  {
-    title: "Asset Library",
-    href: "/assets",
-    icon: Package,
-    description: "选品中心",
-  },
+  // 1. 模特市场
   {
     title: "Model Market",
     href: "/models",
     icon: Users,
     description: "模特市场",
   },
+  // 2. 我的签约模特
   {
     title: "My Team",
     href: "/team",
     icon: UserCheck,
     description: "我的签约模特",
   },
+  // 3. 快速生成单个视频
   {
     title: "Quick Generator",
     href: "/quick-gen",
     icon: Zap,
     description: "快速生成单个视频",
   },
+  // 4. 批量生产工坊
   {
     title: "Pro Studio (Batch)",
-    href: "/studio",
+    href: "/pro-studio",
     icon: Factory,
     description: "批量生产工坊",
   },
+  // 5. 多镜头拼接 (预留)
   {
     title: "Clip Editor",
     href: "/clip-editor",
@@ -80,6 +74,20 @@ const navItems: NavItem[] = [
     description: "多镜头拼接",
     comingSoon: true,
     comingSoonMessage: "Coming Soon: Combine your generated clips into a masterpiece.",
+  },
+  // 6. 选品中心
+  {
+    title: "Asset Library",
+    href: "/assets",
+    icon: Package,
+    description: "选品中心",
+  },
+  // 7. 概览
+  {
+    title: "Dashboard",
+    href: "/dashboard",
+    icon: LayoutDashboard,
+    description: "概览",
   },
 ];
 
@@ -107,7 +115,7 @@ export function Sidebar() {
         {/* Logo */}
         <div className="flex h-16 items-center gap-3 border-b border-border/50 px-4">
           <div className="relative flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-tiktok-cyan to-tiktok-pink">
-            <Sparkles className="h-5 w-5 text-black" />
+            <Sparkles className="h-5 w-5 text-primary-foreground dark:text-black" />
             <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-tiktok-cyan to-tiktok-pink opacity-50 blur-lg" />
           </div>
           {!collapsed && (
@@ -115,7 +123,7 @@ export function Sidebar() {
               <span className="text-lg font-bold tracking-tight">
                 <span className="text-tiktok-cyan">TikTok</span>{" "}
                 <span className="text-tiktok-pink">AI</span>{" "}
-                <span className="text-white">MCN</span>
+                <span className="text-foreground">MCN</span>
               </span>
               <span className="text-xs text-muted-foreground">
                 智能创作平台
@@ -191,8 +199,8 @@ export function Sidebar() {
                 className={cn(
                   "group relative flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium transition-all duration-200",
                   isActive
-                    ? "bg-gradient-to-r from-tiktok-cyan/10 to-tiktok-pink/10 text-white"
-                    : "text-muted-foreground hover:bg-white/5 hover:text-white"
+                    ? "bg-gradient-to-r from-tiktok-cyan/10 to-tiktok-pink/10 text-foreground"
+                    : "text-muted-foreground hover:bg-accent hover:text-foreground"
                 )}
               >
                 {/* Active indicator */}
@@ -205,7 +213,7 @@ export function Sidebar() {
                     "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-all duration-200",
                     isActive
                       ? "bg-gradient-to-br from-tiktok-cyan/20 to-tiktok-pink/20 text-tiktok-cyan"
-                      : "bg-white/5 group-hover:bg-white/10"
+                      : "bg-muted group-hover:bg-accent"
                   )}
                 >
                   <Icon className="h-5 w-5" />
@@ -232,7 +240,16 @@ export function Sidebar() {
         </nav>
 
       {/* Footer */}
-      <div className="border-t border-border/50 p-3">
+      <div className="border-t border-border/50 p-3 space-y-3">
+        {/* Theme Toggle */}
+        {!collapsed && (
+          <div className="flex items-center justify-between px-1">
+            <span className="text-xs text-muted-foreground">主题</span>
+            <SidebarThemeToggle />
+          </div>
+        )}
+
+        {/* Pro Plan Badge */}
         <div
           className={cn(
             "flex items-center gap-3 rounded-xl bg-gradient-to-r from-tiktok-cyan/5 to-tiktok-pink/5 p-3",
@@ -240,11 +257,11 @@ export function Sidebar() {
           )}
         >
           <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-tiktok-cyan to-tiktok-pink">
-            <span className="text-sm font-bold text-black">AI</span>
+            <span className="text-sm font-bold text-primary-foreground">AI</span>
           </div>
           {!collapsed && (
             <div className="flex-1">
-              <p className="text-sm font-medium text-white">Pro Plan</p>
+              <p className="text-sm font-medium">Pro Plan</p>
               <p className="text-xs text-muted-foreground">无限创作额度</p>
             </div>
           )}
@@ -256,7 +273,7 @@ export function Sidebar() {
           variant="ghost"
           size="icon"
           onClick={() => setCollapsed(!collapsed)}
-          className="absolute -right-3 top-20 z-10 h-6 w-6 rounded-full border border-border bg-card shadow-md hover:bg-white/10"
+          className="absolute -right-3 top-20 z-10 h-6 w-6 rounded-full border border-border bg-card shadow-md hover:bg-accent"
         >
           {collapsed ? (
             <ChevronRight className="h-3 w-3" />

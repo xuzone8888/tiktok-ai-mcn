@@ -17,6 +17,7 @@ import {
 import { cn } from "@/lib/utils";
 import { type UserRole, isAdmin } from "@/lib/admin";
 import { createClient } from "@/lib/supabase/client";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 // ============================================================================
 // 类型定义
@@ -62,13 +63,15 @@ export function Header() {
         .eq("id", authUser.id)
         .single();
 
+      const profileData = profile as { name?: string; avatar_url?: string; role?: string; credits?: number } | null;
+
       setUser({
         id: authUser.id,
         email: authUser.email || "",
-        name: profile?.name || authUser.email?.split("@")[0] || "User",
-        avatar_url: profile?.avatar_url || null,
-        role: (profile?.role as UserRole) || "user",
-        credits: profile?.credits ?? 0,
+        name: profileData?.name || authUser.email?.split("@")[0] || "User",
+        avatar_url: profileData?.avatar_url || null,
+        role: (profileData?.role as UserRole) || "user",
+        credits: profileData?.credits ?? 0,
       });
     } catch (error) {
       console.error("[Header] Failed to fetch user:", error);
@@ -157,10 +160,13 @@ export function Header() {
           </Button>
         )}
 
+        {/* Theme Toggle */}
+        <ThemeToggle />
+
         <Button
           variant="ghost"
           size="icon"
-          className="relative h-10 w-10 rounded-xl hover:bg-white/5"
+          className="relative h-10 w-10 rounded-xl hover:bg-muted/50"
         >
           <Bell className="h-5 w-5 text-muted-foreground" />
           <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-tiktok-pink" />
@@ -169,7 +175,7 @@ export function Header() {
         <Button
           variant="ghost"
           size="icon"
-          className="h-10 w-10 rounded-xl hover:bg-white/5"
+          className="h-10 w-10 rounded-xl hover:bg-muted/50"
         >
           <Settings className="h-5 w-5 text-muted-foreground" />
         </Button>
@@ -183,7 +189,7 @@ export function Header() {
               <DropdownMenuTrigger asChild>
                 <Button
                   variant="ghost"
-                  className="flex items-center gap-3 rounded-xl px-3 hover:bg-white/5"
+                  className="flex items-center gap-3 rounded-xl px-3 hover:bg-muted/50"
                 >
                   <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-tiktok-cyan to-tiktok-pink">
                     {user.avatar_url ? (
@@ -193,7 +199,7 @@ export function Header() {
                         className="h-full w-full rounded-full object-cover"
                       />
                     ) : (
-                      <User className="h-4 w-4 text-black" />
+                      <User className="h-4 w-4 text-primary-foreground" />
                     )}
                   </div>
                   <div className="flex flex-col items-start">
@@ -214,7 +220,7 @@ export function Header() {
 
               <DropdownMenuContent
                 align="end"
-                className="w-56 bg-black/95 border-white/10 backdrop-blur-xl"
+                className="w-56 bg-popover/95 border-border/50 backdrop-blur-xl"
               >
                 <DropdownMenuLabel className="font-normal">
                   <div className="flex flex-col space-y-1">
@@ -227,7 +233,7 @@ export function Header() {
                   </div>
                 </DropdownMenuLabel>
 
-                <DropdownMenuSeparator className="bg-white/10" />
+                <DropdownMenuSeparator className="bg-border/50" />
 
                 {/* Profile */}
                 <DropdownMenuItem asChild>
@@ -250,7 +256,7 @@ export function Header() {
                 {/* ============================================ */}
                 {isAdmin(user.role) && (
                   <>
-                    <DropdownMenuSeparator className="bg-white/10" />
+                    <DropdownMenuSeparator className="bg-border/50" />
                     <DropdownMenuItem asChild>
                       <Link
                         href="/admin"
@@ -269,7 +275,7 @@ export function Header() {
                   </>
                 )}
 
-                <DropdownMenuSeparator className="bg-white/10" />
+                <DropdownMenuSeparator className="bg-border/50" />
 
                 {/* Log Out */}
                 <DropdownMenuItem

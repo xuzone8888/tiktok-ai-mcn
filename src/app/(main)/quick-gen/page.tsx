@@ -62,79 +62,35 @@ import {
 } from "@/lib/actions/models";
 
 // ============================================================================
-// 类型定义
+// 类型定义 - 从共享模块导入
 // ============================================================================
 
-type OutputMode = "video" | "image";
-type SourceType = "local_upload" | "nano_banana";
-type NanoTier = "fast" | "pro";
-type ProcessingType = "upscale" | "9grid";
-// 只保留 API 支持的时长: 10s 和 15s
-type VideoModel = "sora-2" | "sora-2-pro-15";
-type VideoAspectRatio = "9:16" | "16:9";
-type ImageAspectRatio = "auto" | "1:1" | "16:9" | "9:16" | "4:3" | "3:4";
-type ImageResolution = "1k" | "2k" | "4k";
-type AiCastMode = "auto" | "team" | "all";
-type BatchCount = 1 | 2 | 3 | 4;
+import {
+  type OutputMode,
+  type SourceType,
+  type NanoTier,
+  type ProcessingType,
+  type VideoModel,
+  type VideoAspectRatio,
+  type ImageAspectRatio,
+  type ImageResolution,
+  type AiCastMode,
+  type CanvasState,
+  type DisplayModel,
+  type UploadedFile,
+  NANO_PRICING,
+  VIDEO_MODEL_PRICING,
+  IMAGE_ASPECT_OPTIONS,
+  IMAGE_RESOLUTION_OPTIONS,
+  IMAGE_ENHANCEMENT_PRICING,
+  calculateVideoCost,
+  calculateImageCost,
+  calculateEnhancementCost,
+  getVideoEstimatedTime,
+} from "@/types/generation";
 
-// 公开模特类型 (用于 UI 显示)
-interface DisplayModel {
-  id: string;
-  name: string;
-  avatar_url: string | null;
-  demo_video_url?: string | null;
-  tags: string[];
-  category: string;
-  gender: "male" | "female" | "neutral" | null;
-  price_monthly: number;
-  rating: number;
-  is_featured: boolean;
-  is_trending: boolean;
-  is_hired?: boolean;
-  days_remaining?: number;
-  contract_end_date?: string | null;
-}
-
-type CanvasState = 
-  | "empty"
-  | "preview"
-  | "processing"
-  | "selection"
-  | "selected"
-  | "generating"
-  | "result"
-  | "failed";
-
-// ============================================================================
-// 计费配置
-// ============================================================================
-
-const NANO_PRICING = {
-  fast: { label: "Fast", credits: 10 },
-  pro: { label: "Pro", credits: 28 },
-};
-
-// 速创 API 支持的时长选项: 10s, 15s
-// 定价策略：10秒便宜，15秒贵 (API 实际消耗)
-const VIDEO_MODEL_PRICING: Record<VideoModel, { label: string; duration: string; credits: number; apiDuration: 10 | 15 }> = {
-  "sora-2": { label: "Sora 2 Standard", duration: "10s", credits: 30, apiDuration: 10 },
-  "sora-2-pro-15": { label: "Sora 2 Pro", duration: "15s", credits: 50, apiDuration: 15 },
-};
-
-const IMAGE_ASPECT_OPTIONS: { value: ImageAspectRatio; label: string }[] = [
-  { value: "auto", label: "Auto" },
-  { value: "1:1", label: "1:1" },
-  { value: "16:9", label: "16:9" },
-  { value: "9:16", label: "9:16" },
-  { value: "4:3", label: "4:3" },
-  { value: "3:4", label: "3:4" },
-];
-
-const IMAGE_RESOLUTION_OPTIONS: { value: ImageResolution; label: string }[] = [
-  { value: "1k", label: "1K (Default)" },
-  { value: "2k", label: "2K" },
-  { value: "4k", label: "4K" },
-];
+// 本地类型 (仅用于此页面)
+type BatchCount = 1 | 2;
 
 // ============================================================================
 // Mock 生成图片
@@ -178,6 +134,9 @@ export default function QuickGeneratorPage() {
   const [imageNanoTier, setImageNanoTier] = useState<NanoTier>("fast");
   const [imageAspectRatio, setImageAspectRatio] = useState<ImageAspectRatio>("auto");
   const [imageResolution, setImageResolution] = useState<ImageResolution>("1k");
+  
+  // Image Mode: 多图上传 (最多4张)
+  const [imageUploadedFiles, setImageUploadedFiles] = useState<Array<{ url: string; name: string }>>([]);
 
   // ================================================================
   // Video Mode: Step 2 - Content Configuration
@@ -204,10 +163,18 @@ export default function QuickGeneratorPage() {
   const [canvasState, setCanvasState] = useState<CanvasState>("empty");
   const [processedImages, setProcessedImages] = useState<string[]>([]);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [currentImageIndex, setCurrentImageIndex] = useState(0); // 当前显示的图片索引
   const [processingProgress, setProcessingProgress] = useState(0);
   const [generatingProgress, setGeneratingProgress] = useState(0);
   const [resultUrl, setResultUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  
+  // 全屏预览弹窗
+  const [fullscreenPreview, setFullscreenPreview] = useState<{
+    open: boolean;
+    url: string;
+    type: "video" | "image";
+  }>({ open: false, url: "", type: "image" });
 
   // ================================================================
   // User Data
@@ -221,24 +188,24 @@ export default function QuickGeneratorPage() {
   const [userId, setUserId] = useState<string | null>(null);
 
   // ================================================================
-  // 计费计算
+  // 计费计算 - 使用共享计费函数
   // ================================================================
   
-  // Video Mode: Process Image Cost
+  // Video Mode: Process Image Cost (图片增强费用)
   const processImageCost = useMemo(() => {
-    if (sourceType === "local_upload") return 0;
-    return NANO_PRICING[nanoTier].credits;
-  }, [sourceType, nanoTier]);
+    // 使用共享的计费函数
+    return calculateEnhancementCost(processingType, "2k", batchCount);
+  }, [processingType, batchCount]);
 
   // Video Mode: Generate Video Cost
   const generateVideoCost = useMemo(() => {
-    return VIDEO_MODEL_PRICING[videoModel].credits;
+    return calculateVideoCost(videoModel);
   }, [videoModel]);
 
   // Image Mode: Generate Image Cost (基于 tier)
   const generateImageCost = useMemo(() => {
-    return NANO_PRICING[imageNanoTier].credits;
-  }, [imageNanoTier]);
+    return calculateImageCost(imageNanoTier, imageResolution, imageNanoTier === "pro");
+  }, [imageNanoTier, imageResolution]);
 
   // 当前总费用
   const totalCost = useMemo(() => {
@@ -255,7 +222,7 @@ export default function QuickGeneratorPage() {
   
   // Video Mode: 是否可以处理图片
   const canProcessImage = outputMode === "video" && sourceType === "nano_banana" && uploadedFile && 
-    (canvasState === "preview" || canvasState === "selected");
+    (canvasState === "preview" || canvasState === "selected" || canvasState === "uploaded");
   
   // 是否有可用底图 (用于显示，不用于禁用生成按钮)
   const hasBaseImage = selectedImage || (sourceType === "local_upload" && uploadedFile);
@@ -277,10 +244,12 @@ export default function QuickGeneratorPage() {
       const hasImage = hasBaseImage;
       return hasPrompt || hasImage;
     } else {
-      // Image Mode: 必须有上传的图片
-      return !!uploadedFile;
+      // Image Mode: Prompt 或 Image 至少有一个
+      const hasPrompt = prompt.trim().length > 0;
+      const hasImage = imageUploadedFiles.length > 0;
+      return hasPrompt || hasImage;
     }
-  }, [canvasState, userCredits, totalCost, outputMode, prompt, hasBaseImage, uploadedFile]);
+  }, [canvasState, userCredits, totalCost, outputMode, prompt, hasBaseImage, imageUploadedFiles]);
 
   // 获取已选模特信息 (从所有模特中查找)
   const selectedModel = useMemo(() => {
@@ -446,27 +415,178 @@ export default function QuickGeneratorPage() {
 
     setCanvasState("processing");
     setProcessingProgress(0);
+    // 清空之前的处理结果
+    setProcessedImages([]);
 
-    for (let i = 0; i <= 100; i += 5) {
-      await new Promise((r) => setTimeout(r, 100));
-      setProcessingProgress(i);
+    try {
+      // 先上传图片到 Supabase 获取公网 URL
+      let remoteImageUrl = uploadedFile.url;
+      
+      if (uploadedFile.url.startsWith("blob:")) {
+        try {
+          const blobResponse = await fetch(uploadedFile.url);
+          const blob = await blobResponse.blob();
+          
+          const formData = new FormData();
+          formData.append("file", blob, uploadedFile.name);
+          
+          const uploadResponse = await fetch("/api/upload/image", {
+            method: "POST",
+            body: formData,
+          });
+          
+          const uploadResult = await uploadResponse.json();
+          
+          if (uploadResult.success && uploadResult.data?.url) {
+            remoteImageUrl = uploadResult.data.url;
+          } else {
+            throw new Error("图片上传失败");
+          }
+        } catch (uploadError) {
+          console.error("[Quick Gen] Image upload error:", uploadError);
+          toast({ variant: "destructive", title: "图片上传失败" });
+          setCanvasState("uploaded");
+          return;
+        }
+      }
+
+      setProcessingProgress(10);
+
+      // 调用图片增强 API
+      const mode = processingType === "upscale" ? "upscale" : "nine_grid";
+      
+      // 九宫格模式：根据 batchCount 生成多张图片
+      const tasksToGenerate = processingType === "9grid" ? batchCount : 1;
+      const generatedImages: string[] = [];
+      
+      console.log(`[Quick Gen] Starting ${tasksToGenerate} ${mode} task(s), batchCount=${batchCount}, processingType=${processingType}`);
+      
+      toast({ 
+        title: mode === "upscale" ? "🔍 正在高清放大..." : `🎨 正在生成 ${tasksToGenerate} 张九宫格...`,
+        description: `预计需要 ${tasksToGenerate * 30}-${tasksToGenerate * 60} 秒`,
+      });
+
+      // 并行提交所有任务
+      const taskPromises = [];
+      for (let i = 0; i < tasksToGenerate; i++) {
+        const submitTask = async () => {
+          const response = await fetch("/api/generate/image", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              mode,
+              sourceImageUrl: remoteImageUrl,
+              resolution: processingType === "upscale" ? "2k" : undefined,
+              prompt: processingType === "9grid" ? "Product photo, multiple angles, professional lighting" : undefined,
+              userId,
+            }),
+          });
+
+          const result = await response.json();
+          if (!result.success) {
+            throw new Error(result.error || "提交任务失败");
+          }
+          return { taskId: result.data.taskId, model: result.data.model, index: i };
+        };
+        taskPromises.push(submitTask());
+      }
+
+      const tasks = await Promise.all(taskPromises);
+      console.log("[Quick Gen] All tasks submitted:", tasks);
+
+      setProcessingProgress(20);
+
+      // 轮询单个任务直到完成
+      const pollSingleTask = async (task: { taskId: string; model: string; index: number }): Promise<string | null> => {
+        const maxPolls = 60; // 60 * 3s = 180 秒
+        const pollIntervalMs = 3000;
+        
+        for (let pollCount = 0; pollCount < maxPolls; pollCount++) {
+          await new Promise(resolve => setTimeout(resolve, pollIntervalMs));
+          
+          try {
+            const statusResponse = await fetch(`/api/generate/image?taskId=${task.taskId}&model=${task.model}`);
+            const statusResult = await statusResponse.json();
+            
+            if (!statusResult.success) {
+              console.error(`[Quick Gen] Task ${task.index} status query failed:`, statusResult.error);
+              continue;
+            }
+
+            const taskData = statusResult.data;
+            console.log(`[Quick Gen] Task ${task.index} status:`, taskData.status, `(poll ${pollCount + 1})`);
+
+            if (taskData.status === "completed" && taskData.imageUrl) {
+              console.log(`[Quick Gen] Task ${task.index} completed with URL:`, taskData.imageUrl);
+              return taskData.imageUrl;
+            } else if (taskData.status === "failed") {
+              console.error(`[Quick Gen] Task ${task.index} failed:`, taskData.errorMessage);
+              return null;
+            }
+          } catch (pollError) {
+            console.error(`[Quick Gen] Task ${task.index} polling error:`, pollError);
+          }
+        }
+        
+        console.error(`[Quick Gen] Task ${task.index} timed out`);
+        return null;
+      };
+
+      // 并行轮询所有任务
+      console.log(`[Quick Gen] Starting to poll ${tasks.length} tasks in parallel`);
+      
+      // 使用 Promise.allSettled 等待所有任务完成
+      const progressInterval = setInterval(() => {
+        setProcessingProgress(prev => Math.min(90, prev + 1));
+      }, 2000);
+
+      const results = await Promise.allSettled(tasks.map(task => pollSingleTask(task)));
+      
+      clearInterval(progressInterval);
+      
+      // 收集成功的图片
+      const successfulImages: string[] = [];
+      results.forEach((result, index) => {
+        if (result.status === "fulfilled" && result.value) {
+          successfulImages.push(result.value);
+          console.log(`[Quick Gen] Task ${index} result: success`);
+        } else {
+          console.log(`[Quick Gen] Task ${index} result: failed or null`);
+        }
+      });
+
+      console.log(`[Quick Gen] All tasks completed. Success: ${successfulImages.length}/${tasksToGenerate}`);
+
+      if (successfulImages.length > 0) {
+        setProcessingProgress(100);
+        setUserCredits((prev) => prev - processImageCost);
+        window.dispatchEvent(new CustomEvent("credits-updated"));
+        
+        if (processingType === "upscale") {
+          setProcessedImages(successfulImages);
+          setSelectedImage(successfulImages[0]);
+          setCanvasState("selected");
+          toast({ title: "✨ Ultra-HD 高清放大完成！" });
+        } else {
+          setProcessedImages(successfulImages);
+          setCurrentImageIndex(0);
+          setCanvasState("selection");
+          toast({ title: `🎨 已生成 ${successfulImages.length} 张九宫格图片，点击选择使用` });
+        }
+      } else {
+        setError("所有任务都失败或超时了");
+        setCanvasState("failed");
+        toast({ variant: "destructive", title: "处理失败", description: "图片生成失败，请稍后重试" });
+      }
+
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : "处理失败";
+      console.error("[Quick Gen] Image processing error:", errorMessage);
+      setError(errorMessage);
+      setCanvasState("failed");
+      toast({ variant: "destructive", title: "处理失败", description: errorMessage });
     }
-
-    setUserCredits((prev) => prev - processImageCost);
-
-    if (processingType === "upscale") {
-      const upscaledUrl = `${uploadedFile.url}&upscaled=true&t=${Date.now()}`;
-      setProcessedImages([upscaledUrl]);
-      setSelectedImage(upscaledUrl);
-      setCanvasState("selected");
-      toast({ title: "✨ Ultra-HD 增强完成" });
-    } else {
-      const images = generateMockGridImages(batchCount);
-      setProcessedImages(images);
-      setCanvasState("selection");
-      toast({ title: `🎨 已生成 ${batchCount} 张方案，请选择` });
-    }
-  }, [canProcessImage, uploadedFile, userCredits, processImageCost, processingType, batchCount, toast]);
+  }, [canProcessImage, uploadedFile, userCredits, processImageCost, processingType, batchCount, userId, toast]);
 
   const handleSelectImage = useCallback((url: string) => {
     setSelectedImage(url);
@@ -480,6 +600,44 @@ export default function QuickGeneratorPage() {
       setCanvasState("selection");
     }
   }, [processedImages]);
+
+  // 全屏预览
+  const handleOpenFullscreen = useCallback((url: string, type: "video" | "image") => {
+    setFullscreenPreview({ open: true, url, type });
+  }, []);
+
+  const handleCloseFullscreen = useCallback(() => {
+    setFullscreenPreview({ open: false, url: "", type: "image" });
+  }, []);
+
+  // 下载内容
+  const handleDownloadContent = useCallback(async (url: string, type: "video" | "image") => {
+    try {
+      const response = await fetch(url);
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = blobUrl;
+      link.download = `quick-gen-${Date.now()}.${type === "video" ? "mp4" : "jpg"}`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(blobUrl);
+      toast({ title: "✅ 下载成功" });
+    } catch {
+      toast({ variant: "destructive", title: "下载失败" });
+    }
+  }, [toast]);
+
+  // 删除内容（重置状态）
+  const handleDeleteContent = useCallback(() => {
+    setResultUrl(null);
+    setProcessedImages([]);
+    setSelectedImage(null);
+    setCanvasState("empty");
+    setFullscreenPreview({ open: false, url: "", type: "image" });
+    toast({ title: "🗑️ 已删除" });
+  }, [toast]);
 
   // ================================================================
   // Model Dialog Handlers
@@ -619,7 +777,8 @@ export default function QuickGeneratorPage() {
         }
 
         const taskId = result.data.taskId;
-        console.log("[Quick Gen] Task submitted:", taskId, "Estimated:", result.data.estimatedTime);
+        const usePro = result.data.usePro || apiDuration >= 20;
+        console.log("[Quick Gen] Task submitted:", taskId, "Estimated:", result.data.estimatedTime, "UsePro:", usePro);
 
         toast({ 
           title: "🚀 视频生成已启动", 
@@ -629,9 +788,9 @@ export default function QuickGeneratorPage() {
         // 立即扣除积分（乐观更新）
         setUserCredits((prev) => prev - costCredits);
 
-        // 轮询任务状态 (每 10 秒查询一次，最多 8 分钟)
+        // 轮询任务状态 (每 10 秒查询一次，最多 12 分钟用于 25s 视频)
         let pollCount = 0;
-        const maxPolls = 48; // 48 * 10s = 8 分钟
+        const maxPolls = usePro ? 72 : 48; // Pro: 72 * 10s = 12 分钟, 普通: 48 * 10s = 8 分钟
         const pollIntervalMs = 10000; // 10 秒
         
         const pollTimer = setInterval(async () => {
@@ -642,7 +801,7 @@ export default function QuickGeneratorPage() {
           setGeneratingProgress(estimatedProgress);
 
           try {
-            const statusResponse = await fetch(`/api/generate/video?taskId=${taskId}`);
+            const statusResponse = await fetch(`/api/generate/video?taskId=${taskId}&usePro=${usePro}`);
             const statusResult = await statusResponse.json();
             
             if (!statusResult.success) {
@@ -670,15 +829,30 @@ export default function QuickGeneratorPage() {
                 description: `消耗 ${costCredits} Credits`,
               });
 
-              // 自动下载
+              // 自动下载 - 使用 fetch + blob 方式下载，避免页面跳转
               if (autoDownload && task.videoUrl) {
-                setTimeout(() => {
-                  const link = document.createElement("a");
-                  link.href = task.videoUrl;
-                  link.download = `quick-gen-${Date.now()}.mp4`;
-                  link.click();
-                  toast({ title: "📥 视频已自动下载" });
-                }, 500);
+                setTimeout(async () => {
+                  try {
+                    const response = await fetch(task.videoUrl);
+                    const blob = await response.blob();
+                    const blobUrl = URL.createObjectURL(blob);
+                    const link = document.createElement("a");
+                    link.href = blobUrl;
+                    link.download = `quick-gen-${Date.now()}.mp4`;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    URL.revokeObjectURL(blobUrl);
+                    toast({ title: "📥 视频已自动下载" });
+                  } catch (downloadError) {
+                    console.error("[Quick Gen] Auto download failed:", downloadError);
+                    toast({ 
+                      variant: "destructive",
+                      title: "自动下载失败", 
+                      description: "请手动点击下载按钮" 
+                    });
+                  }
+                }, 1000);
               }
             } else if (task.status === "failed") {
               clearInterval(pollTimer);
@@ -725,40 +899,176 @@ export default function QuickGeneratorPage() {
       }
     } else {
       // ============================================
-      // Image Mode: 保持原有逻辑
+      // Image Mode: 使用 NanoBanana API 生成图片
       // ============================================
-      const payload = {
-        mode: outputMode,
-        prompt: prompt.trim() || null,
-        source_image: hasBaseImage ? (selectedImage || uploadedFile?.url) : null,
-        nano_tier: imageNanoTier,
-        aspect_ratio: imageAspectRatio,
-        resolution: imageNanoTier === "pro" ? imageResolution : null,
-        enhancement_prompt: prompt.trim() || null,
-      };
+      try {
+        // 准备参考图片 URL 数组 (最多4张)
+        const sourceImageUrls: string[] = [];
+        
+        // 上传所有参考图片
+        for (const file of imageUploadedFiles) {
+          if (file.url.startsWith("blob:")) {
+            try {
+              const blobResponse = await fetch(file.url);
+              const blob = await blobResponse.blob();
+              
+              const formData = new FormData();
+              formData.append("file", blob, file.name || "source-image.jpg");
+              
+              const uploadResponse = await fetch("/api/upload/image", {
+                method: "POST",
+                body: formData,
+              });
+              
+              const uploadResult = await uploadResponse.json();
+              
+              if (uploadResult.success && uploadResult.data?.url) {
+                sourceImageUrls.push(uploadResult.data.url);
+              }
+            } catch (uploadError) {
+              console.error("[Quick Gen] Image upload error:", uploadError);
+            }
+          } else if (file.url.startsWith("http")) {
+            sourceImageUrls.push(file.url);
+          }
+        }
 
-      console.log("Generate payload:", payload);
+        setGeneratingProgress(15);
 
-      const steps = 15;
-      for (let i = 0; i <= steps; i++) {
-        await new Promise((r) => setTimeout(r, 200));
-        setGeneratingProgress(Math.round((i / steps) * 100));
-      }
+        // 调用图片生成 API
+        const model = imageNanoTier === "pro" ? "nano-banana-pro" : "nano-banana";
+        const response = await fetch("/api/generate/image", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            mode: "generate",
+            model,
+            prompt: prompt.trim() || "High quality product photo, professional lighting, clean background",
+            sourceImageUrl: sourceImageUrls.length > 0 ? sourceImageUrls : undefined,
+            tier: imageNanoTier,
+            aspectRatio: imageAspectRatio,
+            resolution: imageNanoTier === "pro" ? imageResolution : "1k",
+            userId,
+          }),
+        });
 
-      setUserCredits((prev) => prev - totalCost);
+        const result = await response.json();
 
-      const mockResult = selectedImage || uploadedFile?.url || "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=1024";
+        if (!result.success) {
+          throw new Error(result.error || "图片生成失败");
+        }
 
-      setResultUrl(mockResult);
-      setCanvasState("result");
+        const taskId = result.data.taskId;
+        const taskModel = result.data.model;
+        
+        console.log("[Quick Gen] Image task submitted:", { taskId, model: taskModel });
+        
+        toast({ 
+          title: "🎨 图片生成已启动", 
+          description: "预计需要 30-60 秒",
+        });
 
-      toast({ title: "🎉 图片生成成功！", description: `消耗 ${totalCost} Credits` });
+        // 立即扣除积分（乐观更新）
+        setUserCredits((prev) => prev - totalCost);
 
-      if (autoDownload && mockResult) {
-        const link = document.createElement("a");
-        link.href = mockResult;
-        link.download = `quick-gen-${Date.now()}.jpg`;
-        link.click();
+        // 轮询任务状态
+        // NanoBanana Pro 处理时间较长，增加超时时间到 180 秒
+        let pollCount = 0;
+        const maxPolls = 60; // 60 * 3s = 180 秒
+        const pollIntervalMs = 3000;
+        
+        const pollTimer = setInterval(async () => {
+          pollCount++;
+          setGeneratingProgress(Math.min(95, 15 + pollCount * 1.3));
+
+          try {
+            const statusResponse = await fetch(`/api/generate/image?taskId=${taskId}&model=${taskModel}`);
+            const statusResult = await statusResponse.json();
+            
+            if (!statusResult.success) {
+              console.error("[Quick Gen] Image status query failed:", statusResult.error);
+              return;
+            }
+
+            const task = statusResult.data;
+            console.log("[Quick Gen] Image task status:", task.status, `(poll ${pollCount})`);
+
+            if (task.status === "completed" && task.imageUrl) {
+              clearInterval(pollTimer);
+              setGeneratingProgress(100);
+              
+              // 触发全局积分刷新
+              window.dispatchEvent(new CustomEvent("credits-updated"));
+              
+              setResultUrl(task.imageUrl);
+              setCanvasState("result");
+              
+              toast({ 
+                title: "🎉 图片生成成功！", 
+                description: `消耗 ${totalCost} Credits`,
+              });
+
+              // 自动下载
+              if (autoDownload && task.imageUrl) {
+                setTimeout(async () => {
+                  try {
+                    const downloadResponse = await fetch(task.imageUrl);
+                    const blob = await downloadResponse.blob();
+                    const blobUrl = URL.createObjectURL(blob);
+                    const link = document.createElement("a");
+                    link.href = blobUrl;
+                    link.download = `quick-gen-${Date.now()}.jpg`;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    URL.revokeObjectURL(blobUrl);
+                    toast({ title: "📥 图片已自动下载" });
+                  } catch (downloadError) {
+                    console.error("[Quick Gen] Auto download failed:", downloadError);
+                  }
+                }, 500);
+              }
+            } else if (task.status === "failed") {
+              clearInterval(pollTimer);
+              
+              // 退还积分
+              setUserCredits((prev) => prev + totalCost);
+              
+              setError(task.errorMessage || "生成失败");
+              setCanvasState("failed");
+              
+              toast({ 
+                variant: "destructive",
+                title: "生成失败", 
+                description: task.errorMessage || "请重试",
+              });
+            } else if (pollCount >= maxPolls) {
+              clearInterval(pollTimer);
+              setError("生成超时，请稍后查看结果");
+              setCanvasState("failed");
+              toast({ 
+                variant: "destructive",
+                title: "生成超时", 
+                description: "请稍后刷新查看",
+              });
+            }
+          } catch (pollError) {
+            console.error("[Quick Gen] Image polling error:", pollError);
+          }
+        }, pollIntervalMs);
+
+      } catch (error: unknown) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error";
+        console.error("[Quick Gen] Image generation error:", errorMessage);
+        
+        setError(errorMessage);
+        setCanvasState("failed");
+        
+        toast({ 
+          variant: "destructive",
+          title: "生成失败", 
+          description: errorMessage,
+        });
       }
     }
   }, [canGenerate, outputMode, prompt, hasBaseImage, selectedImage, uploadedFile, videoModel, videoAspectRatio, useAiModel, aiCastMode, selectedModelId, imageNanoTier, imageAspectRatio, imageResolution, totalCost, autoDownload, toast]);
@@ -789,7 +1099,22 @@ export default function QuickGeneratorPage() {
         </div>
 
         {/* Global Mode Switcher */}
-        <div className="flex p-1 rounded-xl bg-white/5 border border-white/10">
+        <div className="flex p-1 rounded-xl panel-surface">
+          <Button
+            variant="ghost"
+            onClick={() => {
+              setOutputMode("image");
+              setCanvasState(imageUploadedFiles.length > 0 ? "preview" : "empty");
+            }}
+            className={cn(
+              "flex-1 py-2 rounded-lg gap-2",
+              outputMode === "image"
+                ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white font-semibold"
+                : "text-muted-foreground"
+            )}
+          >
+            <ImageIcon className="h-4 w-4" /> Image
+          </Button>
           <Button
             variant="ghost"
             onClick={() => {
@@ -804,21 +1129,6 @@ export default function QuickGeneratorPage() {
             )}
           >
             <Video className="h-4 w-4" /> Video
-          </Button>
-          <Button
-            variant="ghost"
-            onClick={() => {
-              setOutputMode("image");
-              setCanvasState(uploadedFile ? "preview" : "empty");
-            }}
-            className={cn(
-              "flex-1 py-2 rounded-lg gap-2",
-              outputMode === "image"
-                ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white font-semibold"
-                : "text-muted-foreground"
-            )}
-          >
-            <ImageIcon className="h-4 w-4" /> Image
           </Button>
         </div>
 
@@ -840,7 +1150,7 @@ export default function QuickGeneratorPage() {
               <CardContent className="space-y-3">
                 {/* Upload Area - Compact */}
                 {!uploadedFile ? (
-                  <label className="flex items-center justify-center gap-3 h-16 rounded-xl border-2 border-dashed border-white/20 cursor-pointer hover:border-tiktok-cyan/50 hover:bg-tiktok-cyan/5 transition-all px-4">
+                  <label className="dropzone flex items-center justify-center gap-3 h-16 px-4">
                     <input ref={fileInputRef} type="file" accept="image/*" onChange={handleUpload} className="hidden" />
                     <Upload className="h-5 w-5 text-muted-foreground flex-shrink-0" />
                     <div className="text-left">
@@ -849,8 +1159,8 @@ export default function QuickGeneratorPage() {
                     </div>
                   </label>
                 ) : (
-                  <div className="flex items-center gap-3 p-2.5 rounded-xl bg-white/5 border border-white/10">
-                    <div className="h-12 w-12 rounded-lg overflow-hidden flex-shrink-0 bg-black/30">
+                  <div className="flex items-center gap-3 p-2.5 rounded-xl panel-surface">
+                    <div className="h-12 w-12 rounded-lg overflow-hidden flex-shrink-0 thumb-surface">
                       <img src={uploadedFile.url} alt="" className="w-full h-full object-cover" />
                     </div>
                     <div className="flex-1 min-w-0">
@@ -876,7 +1186,7 @@ export default function QuickGeneratorPage() {
                         setCanvasState("preview");
                       }
                     }}>
-                      <TabsList className="grid w-full grid-cols-2 bg-black/30 h-9">
+                      <TabsList className="grid w-full grid-cols-2 tabs-surface h-9">
                         <TabsTrigger value="local_upload" className="text-xs">
                           <FileImage className="h-3.5 w-3.5 mr-1.5" /> Direct Use
                         </TabsTrigger>
@@ -886,42 +1196,39 @@ export default function QuickGeneratorPage() {
                       </TabsList>
                     </Tabs>
 
-                    {/* Nano Banana Settings */}
+                    {/* Nano Banana Pro Settings - 图片增强只支持 Pro 版本 */}
                     {sourceType === "nano_banana" && (
-                      <div className="space-y-3 p-3 rounded-lg bg-white/5 border border-white/10">
-                        <div className="flex gap-2">
-                          <Button variant="outline" size="sm" onClick={() => setNanoTier("fast")}
-                            className={cn("flex-1 h-8", nanoTier === "fast" ? "bg-tiktok-cyan/20 border-tiktok-cyan/50 text-tiktok-cyan" : "border-white/20")}>
-                            Fast (10 pts)
-                          </Button>
-                          <Button variant="outline" size="sm" onClick={() => setNanoTier("pro")}
-                            className={cn("flex-1 h-8", nanoTier === "pro" ? "bg-tiktok-pink/20 border-tiktok-pink/50 text-tiktok-pink" : "border-white/20")}>
-                            Pro (28 pts)
-                          </Button>
+                      <div className="space-y-3 p-3 rounded-lg panel-surface">
+                        <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
+                          <span className="flex items-center gap-1">
+                            <Sparkles className="h-3 w-3 text-tiktok-pink" />
+                            NanoBanana Pro 图片增强
+                          </span>
                         </div>
                         <div className="flex gap-2">
                           <Button variant="outline" size="sm" onClick={() => setProcessingType("upscale")}
-                            className={cn("flex-1 h-8 gap-1", processingType === "upscale" ? "bg-tiktok-cyan/20 border-tiktok-cyan/50 text-tiktok-cyan" : "border-white/20")}>
-                            <ZoomIn className="h-3.5 w-3.5" /> Upscale
+                            className={cn("flex-1 h-8 gap-1", processingType === "upscale" ? "bg-tiktok-cyan/20 border-tiktok-cyan/50 text-tiktok-cyan" : "btn-subtle")}>
+                            <ZoomIn className="h-3.5 w-3.5" /> 高清放大 (40 pts)
                           </Button>
                           <Button variant="outline" size="sm" onClick={() => setProcessingType("9grid")}
-                            className={cn("flex-1 h-8 gap-1", processingType === "9grid" ? "bg-tiktok-pink/20 border-tiktok-pink/50 text-tiktok-pink" : "border-white/20")}>
-                            <Grid3X3 className="h-3.5 w-3.5" /> 9-Grid
+                            className={cn("flex-1 h-8 gap-1", processingType === "9grid" ? "bg-tiktok-pink/20 border-tiktok-pink/50 text-tiktok-pink" : "btn-subtle")}>
+                            <Grid3X3 className="h-3.5 w-3.5" /> 九宫格 (60 pts)
                           </Button>
                         </div>
                         {processingType === "9grid" && (
                           <div className="flex gap-2">
-                            {([1, 2, 3, 4] as BatchCount[]).map((count) => (
+                            <span className="text-xs text-muted-foreground self-center mr-2">生成数量:</span>
+                            {([1, 2] as BatchCount[]).map((count) => (
                               <Button key={count} variant="outline" size="sm" onClick={() => setBatchCount(count)}
-                                className={cn("flex-1 h-8", batchCount === count ? "bg-amber-500/20 border-amber-500/50 text-amber-400" : "border-white/20")}>
+                                className={cn("flex-1 h-8", batchCount === count ? "bg-amber-500/20 border-amber-500/50 text-amber-400" : "btn-subtle")}>
                                 {count}
                               </Button>
                             ))}
                           </div>
                         )}
-                        <Button onClick={handleProcessImage} disabled={!canProcessImage || canvasState === "processing"}
+                        <Button onClick={handleProcessImage} disabled={!canProcessImage}
                           className={cn("w-full h-9 font-semibold", canProcessImage ? "bg-gradient-to-r from-tiktok-cyan to-blue-500 text-black" : "bg-white/10 text-muted-foreground")}>
-                          {canvasState === "processing" ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />{processingProgress}%</> : <><Sparkles className="h-4 w-4 mr-2" />Process ({processImageCost} pts)</>}
+                          <Sparkles className="h-4 w-4 mr-2" />开始处理 ({processImageCost} pts)
                         </Button>
                       </div>
                     )}
@@ -952,7 +1259,7 @@ export default function QuickGeneratorPage() {
                       onChange={(e) => setPrompt(e.target.value)}
                       placeholder={uploadedFile ? "Describe the video content you want to generate..." : "Describe your video in detail (required for text-to-video)..."}
                       disabled={canvasState === "generating"} 
-                      className="bg-black/30 border-white/10 resize-none text-sm pr-16 min-h-[140px]" 
+                      className="input-surface resize-none text-sm pr-16 min-h-[180px]" 
                     />
                     <Button size="sm" variant="ghost" onClick={handleEnhancePrompt}
                       disabled={isEnhancingPrompt || !prompt.trim()}
@@ -970,7 +1277,7 @@ export default function QuickGeneratorPage() {
                     <div className="space-y-1.5">
                       {(Object.entries(VIDEO_MODEL_PRICING) as [VideoModel, typeof VIDEO_MODEL_PRICING[VideoModel]][]).map(([key, value]) => (
                         <Button key={key} variant="outline" size="sm" onClick={() => setVideoModel(key)}
-                          className={cn("w-full justify-between h-8", videoModel === key ? "bg-tiktok-cyan/20 border-tiktok-cyan/50 text-tiktok-cyan" : "border-white/20")}>
+                          className={cn("w-full justify-between h-8", videoModel === key ? "bg-tiktok-cyan/20 border-tiktok-cyan/50 text-tiktok-cyan" : "btn-subtle")}>
                           <span className="flex items-center gap-1.5"><Clock className="h-3.5 w-3.5" />{value.duration} ({value.label})</span>
                           <span className="text-xs">{value.credits} pts</span>
                         </Button>
@@ -981,11 +1288,11 @@ export default function QuickGeneratorPage() {
                     <Label className="text-xs text-muted-foreground mb-2 block">Aspect Ratio</Label>
                     <div className="flex gap-2">
                       <Button variant="outline" size="sm" onClick={() => setVideoAspectRatio("9:16")}
-                        className={cn("flex-1 h-8", videoAspectRatio === "9:16" ? "bg-tiktok-cyan/20 border-tiktok-cyan/50 text-tiktok-cyan" : "border-white/20")}>
+                        className={cn("flex-1 h-8", videoAspectRatio === "9:16" ? "bg-tiktok-cyan/20 border-tiktok-cyan/50 text-tiktok-cyan" : "btn-subtle")}>
                         <Smartphone className="h-3.5 w-3.5 mr-1" /> 9:16
                       </Button>
                       <Button variant="outline" size="sm" onClick={() => setVideoAspectRatio("16:9")}
-                        className={cn("flex-1 h-8", videoAspectRatio === "16:9" ? "bg-tiktok-pink/20 border-tiktok-pink/50 text-tiktok-pink" : "border-white/20")}>
+                        className={cn("flex-1 h-8", videoAspectRatio === "16:9" ? "bg-tiktok-pink/20 border-tiktok-pink/50 text-tiktok-pink" : "btn-subtle")}>
                         <Monitor className="h-3.5 w-3.5 mr-1" /> 16:9
                       </Button>
                     </div>
@@ -1038,7 +1345,7 @@ export default function QuickGeneratorPage() {
                               {selectedModel.tags && selectedModel.tags.length > 0 && (
                                 <div className="flex gap-1 mt-0.5">
                                   {selectedModel.tags.slice(0, 2).map((tag, idx) => (
-                                    <span key={idx} className="text-[9px] px-1 py-0.5 rounded bg-white/10 text-muted-foreground">
+                                    <span key={idx} className="text-[9px] px-1 py-0.5 rounded tag-surface">
                                       {tag}
                                     </span>
                                   ))}
@@ -1048,7 +1355,7 @@ export default function QuickGeneratorPage() {
                           </>
                         ) : (
                           <>
-                            <div className="h-8 w-8 rounded-full bg-white/10 flex items-center justify-center border border-white/20">
+                            <div className="h-8 w-8 rounded-full thumb-surface flex items-center justify-center">
                               <User className="h-4 w-4 text-muted-foreground" />
                             </div>
                             <span className="text-sm text-muted-foreground">Select a Model</span>
@@ -1061,7 +1368,7 @@ export default function QuickGeneratorPage() {
                 </div>
 
                 {/* Auto Download */}
-                <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-white/5">
+                <div className="flex items-center justify-between py-2 px-3 rounded-lg panel-surface">
                   <Label className="text-xs flex items-center gap-1.5"><Download className="h-3.5 w-3.5 text-tiktok-cyan" />Auto-Download</Label>
                   <Switch checked={autoDownload} onCheckedChange={setAutoDownload} className="data-[state=checked]:bg-tiktok-cyan scale-90" />
                 </div>
@@ -1080,33 +1387,84 @@ export default function QuickGeneratorPage() {
                 <Sparkles className="h-4 w-4 text-tiktok-pink" />
                 Image Generation Settings
               </CardTitle>
-              <CardDescription className="text-xs">使用 Nano Banana AI 增强图片</CardDescription>
+              <CardDescription className="text-xs">使用 Nano Banana AI 生成/增强图片 (最多支持 4 张参考图)</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              {/* Upload Area - Compact */}
-              {!uploadedFile ? (
-                <label className="flex items-center justify-center gap-3 h-16 rounded-xl border-2 border-dashed border-white/20 cursor-pointer hover:border-tiktok-pink/50 hover:bg-tiktok-pink/5 transition-all px-4">
-                  <input ref={fileInputRef} type="file" accept="image/*" onChange={handleUpload} className="hidden" />
-                  <Upload className="h-5 w-5 text-muted-foreground flex-shrink-0" />
-                  <div className="text-left">
-                    <p className="text-sm font-medium">Upload Source Image</p>
-                    <p className="text-xs text-muted-foreground">Required for image generation</p>
-                  </div>
-                </label>
-              ) : (
-                <div className="flex items-center gap-3 p-2.5 rounded-xl bg-white/5 border border-white/10">
-                  <div className="h-12 w-12 rounded-lg overflow-hidden flex-shrink-0 bg-black/30">
-                    <img src={uploadedFile.url} alt="" className="w-full h-full object-cover" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">{uploadedFile.name}</p>
-                    <p className="text-xs text-muted-foreground">Ready for enhancement</p>
-                  </div>
-                  <Button variant="ghost" size="icon" onClick={handleRemoveUpload} className="h-8 w-8">
-                    <X className="h-4 w-4" />
-                  </Button>
+              {/* 多图上传区域 - 最多4张 */}
+              <div>
+                <Label className="text-xs text-muted-foreground mb-2 block flex items-center gap-1.5">
+                  <FileImage className="h-3.5 w-3.5 text-purple-400" />
+                  <span className="font-medium">参考图片</span>
+                  <span className="text-muted-foreground ml-1">(可选，最多4张)</span>
+                </Label>
+                <div className="grid grid-cols-4 gap-2">
+                  {/* 已上传的图片 */}
+                  {imageUploadedFiles.map((file, index) => (
+                    <div key={index} className="relative aspect-square rounded-lg overflow-hidden thumb-surface group">
+                      <img src={file.url} alt={file.name} className="w-full h-full object-cover" />
+                      <button
+                        onClick={() => {
+                          URL.revokeObjectURL(file.url);
+                          setImageUploadedFiles(prev => {
+                            const updated = prev.filter((_, i) => i !== index);
+                            // 如果删除后没有图片了，重置 canvas 状态
+                            if (updated.length === 0) {
+                              setCanvasState("empty");
+                            }
+                            return updated;
+                          });
+                        }}
+                        className="absolute top-1 right-1 h-5 w-5 rounded-full thumb-overlay text-white opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                      <div className="absolute bottom-1 left-1 thumb-overlay px-1.5 py-0.5 rounded text-[10px] text-white">
+                        #{index + 1}
+                      </div>
+                    </div>
+                  ))}
+                  {/* 添加更多图片按钮 */}
+                  {imageUploadedFiles.length < 4 && (
+                    <label className="dropzone aspect-square flex flex-col items-center justify-center gap-1">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        onChange={(e) => {
+                          const files = Array.from(e.target.files || []);
+                          const remainingSlots = 4 - imageUploadedFiles.length;
+                          const filesToAdd = files.slice(0, remainingSlots);
+                          
+                          const newFiles = filesToAdd.map(file => ({
+                            url: URL.createObjectURL(file),
+                            name: file.name
+                          }));
+                          
+                          setImageUploadedFiles(prev => {
+                            const updated = [...prev, ...newFiles];
+                            // 上传图片后设置预览状态
+                            if (updated.length > 0) {
+                              setCanvasState("preview");
+                            }
+                            return updated;
+                          });
+                          e.target.value = ""; // Reset input
+                        }}
+                        className="hidden"
+                      />
+                      <Upload className="h-5 w-5 text-muted-foreground" />
+                      <span className="text-[10px] text-muted-foreground">
+                        {imageUploadedFiles.length === 0 ? "上传图片" : "添加更多"}
+                      </span>
+                    </label>
+                  )}
                 </div>
-              )}
+                {imageUploadedFiles.length > 0 && (
+                  <p className="text-xs text-muted-foreground mt-1.5">
+                    已上传 {imageUploadedFiles.length}/4 张图片
+                  </p>
+                )}
+              </div>
 
               {/* 【修复2】Prompt Input for Image Mode - Prominent */}
               <div>
@@ -1121,7 +1479,7 @@ export default function QuickGeneratorPage() {
                     onChange={(e) => setPrompt(e.target.value)}
                     placeholder="Describe how you want the image enhanced... (e.g., 'studio lighting, white background, product photography')"
                     disabled={canvasState === "generating"} 
-                    className="bg-black/30 border-white/10 resize-none text-sm pr-16 min-h-[120px]" 
+                    className="input-surface resize-none text-sm pr-16 min-h-[180px]" 
                   />
                   <Button size="sm" variant="ghost" onClick={handleEnhancePrompt}
                     disabled={isEnhancingPrompt || !prompt.trim()}
@@ -1137,12 +1495,12 @@ export default function QuickGeneratorPage() {
                 <Label className="text-xs text-muted-foreground mb-2 block">Quality Tier</Label>
                 <div className="flex gap-2">
                   <Button variant="outline" size="sm" onClick={() => setImageNanoTier("fast")}
-                    className={cn("flex-1 h-10 flex-col gap-0.5", imageNanoTier === "fast" ? "bg-tiktok-cyan/20 border-tiktok-cyan/50 text-tiktok-cyan" : "border-white/20")}>
+                    className={cn("flex-1 h-10 flex-col gap-0.5", imageNanoTier === "fast" ? "bg-tiktok-cyan/20 border-tiktok-cyan/50 text-tiktok-cyan" : "btn-subtle")}>
                     <span className="font-semibold">Fast</span>
                     <span className="text-xs opacity-70">10 Credits</span>
                   </Button>
                   <Button variant="outline" size="sm" onClick={() => setImageNanoTier("pro")}
-                    className={cn("flex-1 h-10 flex-col gap-0.5", imageNanoTier === "pro" ? "bg-tiktok-pink/20 border-tiktok-pink/50 text-tiktok-pink" : "border-white/20")}>
+                    className={cn("flex-1 h-10 flex-col gap-0.5", imageNanoTier === "pro" ? "bg-tiktok-pink/20 border-tiktok-pink/50 text-tiktok-pink" : "btn-subtle")}>
                     <span className="font-semibold">Pro</span>
                     <span className="text-xs opacity-70">28 Credits</span>
                   </Button>
@@ -1153,10 +1511,10 @@ export default function QuickGeneratorPage() {
               <div>
                 <Label className="text-xs text-muted-foreground mb-2 block">Aspect Ratio</Label>
                 <Select value={imageAspectRatio} onValueChange={(v) => setImageAspectRatio(v as ImageAspectRatio)}>
-                  <SelectTrigger className="bg-black/30 border-white/10 h-9">
+                  <SelectTrigger className="input-surface h-9">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent className="bg-black/95 border-white/10">
+                  <SelectContent className="bg-popover/95 border-border/50 backdrop-blur-xl">
                     {IMAGE_ASPECT_OPTIONS.map((opt) => (
                       <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
                     ))}
@@ -1169,10 +1527,10 @@ export default function QuickGeneratorPage() {
                 <div>
                   <Label className="text-xs text-muted-foreground mb-2 block">Resolution</Label>
                   <Select value={imageResolution} onValueChange={(v) => setImageResolution(v as ImageResolution)}>
-                    <SelectTrigger className="bg-black/30 border-white/10 h-9">
+                    <SelectTrigger className="input-surface h-9">
                       <SelectValue />
                     </SelectTrigger>
-                    <SelectContent className="bg-black/95 border-white/10">
+                    <SelectContent className="bg-popover/95 border-border/50 backdrop-blur-xl">
                       {IMAGE_RESOLUTION_OPTIONS.map((opt) => (
                         <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
                       ))}
@@ -1234,23 +1592,23 @@ export default function QuickGeneratorPage() {
       {/* ============================================================ */}
       {/* RIGHT PANEL - Canvas/Preview */}
       {/* ============================================================ */}
-      <div className="flex-1 rounded-2xl border border-border/50 bg-black/30 overflow-hidden relative">
+      <div className="flex-1 rounded-2xl border border-border/50 bg-muted/30 dark:bg-black/30 overflow-hidden relative">
         
         {/* Empty State */}
         {canvasState === "empty" && (
           <div className="absolute inset-0 flex flex-col items-center justify-center">
-            <div className="h-24 w-24 rounded-3xl bg-white/5 flex items-center justify-center mb-6">
+            <div className="h-24 w-24 rounded-3xl bg-muted/50 dark:bg-white/5 flex items-center justify-center mb-6">
               {outputMode === "video" ? <Video className="h-12 w-12 text-muted-foreground/50" /> : <ImageIcon className="h-12 w-12 text-muted-foreground/50" />}
             </div>
             <p className="text-xl font-medium text-muted-foreground/70 mb-2">Preview Area</p>
             <p className="text-sm text-muted-foreground/50">
-              {outputMode === "video" ? "Upload an image or just use prompt" : "Upload an image to get started"}
+              {outputMode === "video" ? "Upload an image or just use prompt" : "输入提示词或上传参考图片开始生成"}
             </p>
           </div>
         )}
 
-        {/* Preview State */}
-        {canvasState === "preview" && uploadedFile && (
+        {/* Preview State - Video Mode */}
+        {canvasState === "preview" && outputMode === "video" && uploadedFile && (
           <div className="absolute inset-0 flex flex-col items-center justify-center p-8">
             <div className="relative">
               <img src={uploadedFile.url} alt="Preview" className="max-w-full max-h-[500px] object-contain rounded-xl border border-white/20" />
@@ -1258,11 +1616,45 @@ export default function QuickGeneratorPage() {
                 Original Image
               </div>
             </div>
-            {outputMode === "video" && sourceType === "nano_banana" && (
+            {sourceType === "nano_banana" && (
               <p className="mt-6 text-muted-foreground text-center text-sm">
                 Click <span className="text-tiktok-cyan font-semibold">&quot;Process&quot;</span> to enhance
               </p>
             )}
+          </div>
+        )}
+
+        {/* Preview State - Image Mode (多图预览) */}
+        {canvasState === "preview" && outputMode === "image" && imageUploadedFiles.length > 0 && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center p-8">
+            <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-purple-500/90 text-white px-4 py-1.5 rounded-full text-sm font-semibold">
+              {imageUploadedFiles.length} 张参考图片
+            </div>
+            <div className={cn(
+              "grid gap-3 max-w-[500px]",
+              imageUploadedFiles.length === 1 ? "grid-cols-1" :
+              imageUploadedFiles.length === 2 ? "grid-cols-2" :
+              "grid-cols-2"
+            )}>
+              {imageUploadedFiles.map((file, index) => (
+                <div key={index} className="relative rounded-xl overflow-hidden border border-white/20">
+                  <img 
+                    src={file.url} 
+                    alt={`Reference ${index + 1}`} 
+                    className={cn(
+                      "w-full object-cover",
+                      imageUploadedFiles.length === 1 ? "max-h-[400px]" : "h-[180px]"
+                    )} 
+                  />
+                  <div className="absolute bottom-2 left-2 bg-black/70 px-2 py-0.5 rounded text-xs">
+                    #{index + 1}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <p className="mt-6 text-muted-foreground text-center text-sm">
+              输入提示词并点击 <span className="text-purple-400 font-semibold">&quot;Generate Image&quot;</span> 开始生成
+            </p>
           </div>
         )}
 
@@ -1284,22 +1676,104 @@ export default function QuickGeneratorPage() {
           </div>
         )}
 
-        {/* Selection State */}
+        {/* Selection State - 支持多图轮换 */}
         {canvasState === "selection" && processedImages.length > 0 && (
           <div className="absolute inset-0 flex flex-col items-center justify-center p-8">
-            <p className="text-xl font-semibold mb-6">Select a result</p>
-            <div className="grid grid-cols-2 gap-4">
-              {processedImages.map((img, index) => (
-                <button key={index} onClick={() => handleSelectImage(img)}
-                  className="relative group rounded-xl overflow-hidden border-2 border-white/20 hover:border-tiktok-cyan transition-all hover:scale-[1.02]">
-                  <img src={img} alt={`Option ${index + 1}`} className="w-full h-auto max-h-[280px] object-cover" />
-                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center">
-                    <div className="opacity-0 group-hover:opacity-100 transition-opacity bg-tiktok-cyan text-black px-4 py-2 rounded-lg font-semibold">Select</div>
+            <p className="text-xl font-semibold mb-4">选择处理结果</p>
+            
+            {/* 单图大图预览模式 */}
+            {processedImages.length === 1 ? (
+              <div className="relative flex flex-col items-center">
+                <div 
+                  className="relative cursor-pointer group"
+                  onClick={() => handleOpenFullscreen(processedImages[0], "image")}
+                >
+                  <img 
+                    src={processedImages[0]} 
+                    alt="Processed" 
+                    className="max-w-full max-h-[400px] object-contain rounded-xl border-2 border-white/20 group-hover:border-tiktok-cyan/50 transition-all" 
+                  />
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/30 transition-all rounded-xl">
+                    <span className="opacity-0 group-hover:opacity-100 text-white text-sm font-medium">点击放大</span>
                   </div>
-                  <div className="absolute top-3 left-3 bg-black/70 px-2 py-1 rounded text-sm">#{index + 1}</div>
-                </button>
-              ))}
-            </div>
+                </div>
+                <Button 
+                  onClick={() => handleSelectImage(processedImages[0])}
+                  className="mt-4 bg-gradient-to-r from-tiktok-cyan to-blue-500 text-black font-semibold"
+                >
+                  <Check className="h-4 w-4 mr-2" />使用此图片
+                </Button>
+              </div>
+            ) : (
+              <>
+                {/* 多图轮换模式 */}
+                <div className="relative flex items-center gap-6">
+                  {/* 左箭头 - 更醒目 */}
+                  <Button 
+                    variant="outline" 
+                    size="icon"
+                    onClick={() => setCurrentImageIndex(prev => (prev - 1 + processedImages.length) % processedImages.length)}
+                    className="h-14 w-14 rounded-full bg-gradient-to-r from-tiktok-cyan/80 to-blue-500/80 border-2 border-white/30 hover:from-tiktok-cyan hover:to-blue-500 shadow-lg shadow-tiktok-cyan/30"
+                  >
+                    <ArrowLeft className="h-7 w-7 text-white" />
+                  </Button>
+                  
+                  {/* 当前图片 - 点击可全屏预览 */}
+                  <div 
+                    className="relative cursor-pointer group"
+                    onClick={() => handleOpenFullscreen(processedImages[currentImageIndex], "image")}
+                  >
+                    <img 
+                      src={processedImages[currentImageIndex]} 
+                      alt={`Option ${currentImageIndex + 1}`} 
+                      className="max-w-[400px] max-h-[400px] object-contain rounded-xl border-2 border-white/20 group-hover:border-tiktok-cyan/50 transition-all" 
+                    />
+                    <div className="absolute top-3 left-3 bg-black/70 px-3 py-1 rounded-full text-sm font-semibold">
+                      {currentImageIndex + 1} / {processedImages.length}
+                    </div>
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/30 transition-all rounded-xl">
+                      <span className="opacity-0 group-hover:opacity-100 text-white text-sm font-medium">点击放大</span>
+                    </div>
+                  </div>
+                  
+                  {/* 右箭头 - 更醒目 */}
+                  <Button 
+                    variant="outline" 
+                    size="icon"
+                    onClick={() => setCurrentImageIndex(prev => (prev + 1) % processedImages.length)}
+                    className="h-14 w-14 rounded-full bg-gradient-to-r from-tiktok-pink/80 to-purple-500/80 border-2 border-white/30 hover:from-tiktok-pink hover:to-purple-500 shadow-lg shadow-tiktok-pink/30"
+                  >
+                    <ChevronRight className="h-7 w-7 text-white" />
+                  </Button>
+                </div>
+                
+                {/* 缩略图导航 */}
+                <div className="flex gap-3 mt-5">
+                  {processedImages.map((img, index) => (
+                    <button 
+                      key={index} 
+                      onClick={() => setCurrentImageIndex(index)}
+                      className={cn(
+                        "w-18 h-18 rounded-lg overflow-hidden border-2 transition-all",
+                        currentImageIndex === index 
+                          ? "border-tiktok-cyan ring-2 ring-tiktok-cyan/50 scale-110" 
+                          : "border-white/20 hover:border-white/40 opacity-70 hover:opacity-100"
+                      )}
+                    >
+                      <img src={img} alt={`Thumb ${index + 1}`} className="w-16 h-16 object-cover" />
+                    </button>
+                  ))}
+                </div>
+                
+                {/* 选择按钮 */}
+                <Button 
+                  onClick={() => handleSelectImage(processedImages[currentImageIndex])}
+                  className="mt-5 bg-gradient-to-r from-tiktok-cyan to-blue-500 text-black font-semibold px-6 py-2"
+                >
+                  <Check className="h-4 w-4 mr-2" />使用图片 #{currentImageIndex + 1}
+                </Button>
+              </>
+            )}
           </div>
         )}
 
@@ -1338,17 +1812,42 @@ export default function QuickGeneratorPage() {
         {/* Result State */}
         {canvasState === "result" && resultUrl && (
           <div className="absolute inset-0 flex flex-col items-center justify-center p-8">
-            <div className="relative max-w-full max-h-[70%]">
+            {/* 点击可全屏预览 */}
+            <div 
+              className="relative max-w-full max-h-[65%] cursor-pointer group"
+              onClick={() => handleOpenFullscreen(resultUrl, outputMode)}
+            >
               {outputMode === "video" ? (
-                <video src={resultUrl} controls autoPlay loop className="max-w-full max-h-[500px] rounded-xl" />
+                <video src={resultUrl} controls autoPlay loop className="max-w-full max-h-[450px] rounded-xl group-hover:ring-2 group-hover:ring-tiktok-cyan/50 transition-all" />
               ) : (
-                <img src={resultUrl} alt="Generated" className="max-w-full max-h-[500px] object-contain rounded-xl" />
+                <img src={resultUrl} alt="Generated" className="max-w-full max-h-[450px] object-contain rounded-xl group-hover:ring-2 group-hover:ring-tiktok-cyan/50 transition-all" />
               )}
+              <div className="absolute top-3 right-3 bg-black/70 px-3 py-1.5 rounded-full text-xs font-medium opacity-0 group-hover:opacity-100 transition-opacity">
+                🔍 点击全屏查看
+              </div>
             </div>
-            <div className="flex gap-3 mt-6">
-              <Button onClick={() => { const link = document.createElement("a"); link.href = resultUrl; link.download = `quick-gen-${Date.now()}.${outputMode === "video" ? "mp4" : "jpg"}`; link.click(); }}
-                className="bg-tiktok-cyan text-black font-semibold"><Download className="h-4 w-4 mr-2" />Download</Button>
-              <Button variant="outline" onClick={handleRemoveUpload} className="border-white/20"><RotateCcw className="h-4 w-4 mr-2" />New</Button>
+            {/* 操作按钮 */}
+            <div className="flex gap-3 mt-5">
+              <Button 
+                onClick={() => handleDownloadContent(resultUrl, outputMode)}
+                className="bg-gradient-to-r from-tiktok-cyan to-blue-500 text-black font-semibold px-5"
+              >
+                <Download className="h-4 w-4 mr-2" />保留它
+              </Button>
+              <Button 
+                variant="outline" 
+                onClick={handleDeleteContent} 
+                className="border-red-500/50 text-red-400 hover:bg-red-500/10 hover:text-red-300 px-5"
+              >
+                <X className="h-4 w-4 mr-2" />删除它
+              </Button>
+              <Button 
+                variant="outline" 
+                onClick={handleRemoveUpload} 
+                className="border-white/20 px-5"
+              >
+                <RotateCcw className="h-4 w-4 mr-2" />重新生成
+              </Button>
             </div>
           </div>
         )}
@@ -1634,6 +2133,69 @@ export default function QuickGeneratorPage() {
               </Button>
             </div>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ============================================================ */}
+      {/* 全屏预览弹窗 */}
+      {/* ============================================================ */}
+      <Dialog open={fullscreenPreview.open} onOpenChange={(open) => !open && handleCloseFullscreen()}>
+        <DialogContent className="max-w-[95vw] max-h-[95vh] w-auto h-auto p-0 bg-black/95 border-white/10 overflow-hidden">
+          <div className="relative flex flex-col items-center justify-center min-h-[80vh]">
+            {/* 关闭按钮 */}
+            <button
+              onClick={handleCloseFullscreen}
+              className="absolute top-4 right-4 z-50 h-10 w-10 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors"
+            >
+              <X className="h-5 w-5 text-white" />
+            </button>
+            
+            {/* 内容 */}
+            <div className="flex-1 flex items-center justify-center p-8">
+              {fullscreenPreview.type === "video" ? (
+                <video 
+                  src={fullscreenPreview.url} 
+                  controls 
+                  autoPlay 
+                  loop 
+                  className="max-w-[85vw] max-h-[70vh] rounded-xl"
+                />
+              ) : (
+                <img 
+                  src={fullscreenPreview.url} 
+                  alt="Full preview" 
+                  className="max-w-[85vw] max-h-[70vh] object-contain rounded-xl"
+                />
+              )}
+            </div>
+            
+            {/* 底部操作栏 */}
+            <div className="w-full px-8 py-4 bg-black/50 border-t border-white/10 flex items-center justify-center gap-4">
+              <Button 
+                onClick={() => handleDownloadContent(fullscreenPreview.url, fullscreenPreview.type)}
+                className="bg-gradient-to-r from-tiktok-cyan to-blue-500 text-black font-semibold px-6"
+              >
+                <Download className="h-4 w-4 mr-2" />保留它 (下载)
+              </Button>
+              <Button 
+                variant="outline" 
+                onClick={() => {
+                  handleDeleteContent();
+                  handleCloseFullscreen();
+                }} 
+                className="border-red-500/50 text-red-400 hover:bg-red-500/10 hover:text-red-300 px-6"
+              >
+                <X className="h-4 w-4 mr-2" />删除它
+              </Button>
+              <Button 
+                variant="outline" 
+                onClick={handleCloseFullscreen}
+                className="border-white/20 px-6"
+              >
+                返回
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

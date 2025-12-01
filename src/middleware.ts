@@ -1,27 +1,42 @@
 /**
- * TikTok AI MCN - 中间件 (简化版)
+ * TikTok AI MCN - 中间件
  * 
  * 功能：
- * 1. Admin 路由保护 - 开发环境默认放行，生产环境需验证
- * 2. 静态资源放行
- * 
- * 注意：当前为开发环境，使用 Mock 数据
- * 生产环境需要安装 @supabase/auth-helpers-nextjs 并启用完整认证
+ * 1. 登录验证 - 未登录用户重定向到登录页
+ * 2. Admin 路由保护
+ * 3. 静态资源放行
  */
 
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { createServerClient, type CookieOptions } from "@supabase/ssr";
 
-// ============================================================================
-// 开发环境配置
-// ============================================================================
+// 公开路由（不需要登录）
+const PUBLIC_ROUTES = [
+  "/auth/login",
+  "/auth/register",
+  "/auth/forgot-password",
+  "/auth/callback",
+];
 
-// Mock 当前用户角色 (开发环境)
-// 生产环境应从 Supabase Auth 获取
-const MOCK_USER_ROLE = "super_admin"; // 可改为 "user" 测试权限拦截
+// 需要登录的路由
+const PROTECTED_ROUTES = [
+  "/dashboard",
+  "/assets",
+  "/models",
+  "/team",
+  "/quick-gen",
+  "/pro-studio",
+  "/admin",
+];
 
 export async function middleware(req: NextRequest) {
-  const res = NextResponse.next();
+  let res = NextResponse.next({
+    request: {
+      headers: req.headers,
+    },
+  });
+
   const { pathname } = req.nextUrl;
 
   // ============================================
@@ -36,28 +51,108 @@ export async function middleware(req: NextRequest) {
   }
 
   // ============================================
-  // 2. Admin 路由保护 (开发环境简化版)
+  // 2. 检查是否为受保护路由
   // ============================================
-  if (pathname.startsWith("/admin")) {
-    // 开发环境：使用 Mock 角色检查
-    const isAdmin = MOCK_USER_ROLE === "admin" || MOCK_USER_ROLE === "super_admin";
+  const isProtectedRoute = PROTECTED_ROUTES.some(route => 
+    pathname === route || pathname.startsWith(route + "/")
+  );
 
-    if (!isAdmin) {
-      console.log(`[Middleware] Access denied to /admin (mock role: ${MOCK_USER_ROLE})`);
-      // 非 Admin 用户，重定向到 404
-      return NextResponse.rewrite(new URL("/not-found", req.url));
-    }
-
-    // Admin 用户，允许访问
-    console.log(`[Middleware] Admin access granted: ${pathname}`);
+  // 如果不是受保护路由，直接放行
+  if (!isProtectedRoute) {
+    return res;
   }
 
   // ============================================
-  // 3. 在响应头中添加用户角色 (供前端调试)
+  // 3. 创建 Supabase 客户端并检查用户会话
   // ============================================
-  res.headers.set("X-User-Role", MOCK_USER_ROLE);
+  try {
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          get(name: string) {
+            return req.cookies.get(name)?.value;
+          },
+          set(name: string, value: string, options: CookieOptions) {
+            req.cookies.set({
+              name,
+              value,
+              ...options,
+            });
+            res = NextResponse.next({
+              request: {
+                headers: req.headers,
+              },
+            });
+            res.cookies.set({
+              name,
+              value,
+              ...options,
+            });
+          },
+          remove(name: string, options: CookieOptions) {
+            req.cookies.set({
+              name,
+              value: "",
+              ...options,
+            });
+            res = NextResponse.next({
+              request: {
+                headers: req.headers,
+              },
+            });
+            res.cookies.set({
+              name,
+              value: "",
+              ...options,
+            });
+          },
+        },
+      }
+    );
 
-  return res;
+    // 获取当前用户
+    const { data: { user }, error } = await supabase.auth.getUser();
+
+    // ============================================
+    // 4. 未登录用户重定向到登录页
+    // ============================================
+    if (error || !user) {
+      console.log(`[Middleware] Unauthorized access to ${pathname}, redirecting to login`);
+      const loginUrl = new URL("/auth/login", req.url);
+      loginUrl.searchParams.set("redirect", pathname);
+      return NextResponse.redirect(loginUrl);
+    }
+
+    // ============================================
+    // 5. Admin 路由保护
+    // ============================================
+    if (pathname.startsWith("/admin")) {
+      // 从数据库获取用户角色 (使用 profiles 表)
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", user.id)
+        .single();
+
+      const userRole = profile?.role || "user";
+      const isAdmin = userRole === "admin" || userRole === "super_admin";
+
+      if (!isAdmin) {
+        console.log(`[Middleware] Access denied to /admin (role: ${userRole})`);
+        return NextResponse.rewrite(new URL("/not-found", req.url));
+      }
+    }
+
+    return res;
+  } catch (error) {
+    // Supabase 连接错误，重定向到登录页
+    console.error(`[Middleware] Error checking auth:`, error);
+    const loginUrl = new URL("/auth/login", req.url);
+    loginUrl.searchParams.set("redirect", pathname);
+    return NextResponse.redirect(loginUrl);
+  }
 }
 
 // 配置中间件匹配的路由

@@ -6,12 +6,26 @@
  */
 
 import { NextResponse } from "next/server";
-import { 
-  submitVideoGeneration, 
-  queryVideoResult,
-  type SoraSubmitParams 
-} from "@/lib/sora-api-real";
+import { submitSora2, querySora2Result } from "@/lib/suchuang-api";
 import { createAdminClient } from "@/lib/supabase/admin";
+
+// ============================================================================
+// 积分配置
+// ============================================================================
+
+const CREDIT_COST_MAP: Record<number, number> = {
+  10: 30,   // 10s = 30积分
+  15: 50,   // 15s = 50积分
+  20: 200,  // 20s = 200积分
+  25: 350,  // 25s = 350积分
+};
+
+const ESTIMATED_TIME_MAP: Record<number, string> = {
+  10: "4-5 minutes",
+  15: "5-6 minutes",
+  20: "7-8 minutes",
+  25: "8-10 minutes",
+};
 
 // ============================================================================
 // POST - 提交视频生成任务
@@ -38,10 +52,10 @@ export async function POST(request: Request) {
       );
     }
 
-    // 验证时长
-    if (![10, 15].includes(duration)) {
+    // 验证时长 - 支持 10, 15, 20, 25 秒
+    if (![10, 15, 20, 25].includes(duration)) {
       return NextResponse.json(
-        { success: false, error: "Duration must be 10 or 15 seconds" },
+        { success: false, error: "Duration must be 10, 15, 20, or 25 seconds" },
         { status: 400 }
       );
     }
@@ -49,7 +63,7 @@ export async function POST(request: Request) {
     // ============================================
     // 计算费用并扣除积分
     // ============================================
-    const creditCost = duration === 10 ? 30 : 50; // 10s=30积分, 15s=50积分
+    const creditCost = CREDIT_COST_MAP[duration] || 50;
     
     if (userId) {
       const supabase = createAdminClient();
@@ -92,6 +106,7 @@ export async function POST(request: Request) {
       console.log("[Generate Video] Credits deducted:", {
         userId,
         cost: creditCost,
+        duration,
         before: profile.credits,
         after: profile.credits - creditCost,
       });
@@ -129,25 +144,47 @@ export async function POST(request: Request) {
       aspectRatio,
       size,
       hasSourceImage: !!sourceImageUrl,
+      usePro: duration >= 20,
     });
 
-    // 提交到速创 API
-    const submitParams: SoraSubmitParams = {
+    // 提交到速创 API - 使用新的统一接口
+    const result = await submitSora2({
       prompt: finalPrompt,
-      duration: duration as 10 | 15,
+      duration: duration as 10 | 15 | 20 | 25,
       aspectRatio: aspectRatio as "9:16" | "16:9",
       size: size as "small" | "large",
-    };
-
-    // 如果有参考图片，添加到请求
-    if (sourceImageUrl) {
-      submitParams.url = sourceImageUrl;
-    }
-
-    const result = await submitVideoGeneration(submitParams);
+      url: sourceImageUrl,
+    });
 
     if (!result.success) {
       console.error("[Generate Video] Submit failed:", result.error);
+      
+      // 如果提交失败，退还积分
+      if (userId) {
+        try {
+          const supabase = createAdminClient();
+          const { data: profile } = await supabase
+            .from("profiles")
+            .select("credits")
+            .eq("id", userId)
+            .single();
+          
+          if (profile) {
+            await supabase
+              .from("profiles")
+              .update({ credits: profile.credits + creditCost })
+              .eq("id", userId);
+            
+            console.log("[Generate Video] Credits refunded due to submit failure:", {
+              userId,
+              refund: creditCost,
+            });
+          }
+        } catch (refundError) {
+          console.error("[Generate Video] Failed to refund credits:", refundError);
+        }
+      }
+      
       return NextResponse.json(
         { success: false, error: result.error },
         { status: 500 }
@@ -169,6 +206,8 @@ export async function POST(request: Request) {
           size,
           source_image_url: sourceImageUrl || null,
           status: "processing",
+          credit_cost: creditCost,
+          use_pro: duration >= 20,
         });
       } catch (dbError) {
         console.error("[Generate Video] Failed to save to DB:", dbError);
@@ -178,6 +217,8 @@ export async function POST(request: Request) {
 
     console.log("[Generate Video] Task submitted successfully:", {
       taskId: result.taskId,
+      duration,
+      usePro: duration >= 20,
     });
 
     return NextResponse.json({
@@ -185,7 +226,8 @@ export async function POST(request: Request) {
       data: {
         taskId: result.taskId,
         status: "processing",
-        estimatedTime: duration === 10 ? "4-5 minutes" : "5-6 minutes",
+        estimatedTime: ESTIMATED_TIME_MAP[duration] || "5-6 minutes",
+        usePro: duration >= 20,
       },
     });
   } catch (error) {
@@ -205,6 +247,7 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const taskId = searchParams.get("taskId");
+    const usePro = searchParams.get("usePro") === "true";
 
     if (!taskId) {
       return NextResponse.json(
@@ -213,9 +256,9 @@ export async function GET(request: Request) {
       );
     }
 
-    console.log("[Generate Video] Querying task:", taskId);
+    console.log("[Generate Video] Querying task:", taskId, { usePro });
 
-    const result = await queryVideoResult(taskId);
+    const result = await querySora2Result(taskId, usePro);
 
     if (!result.success) {
       return NextResponse.json(
@@ -234,7 +277,7 @@ export async function GET(request: Request) {
         // 获取 generation 记录以获取 user_id 和 duration
         const { data: generation } = await supabase
           .from("generations")
-          .select("user_id, duration, status")
+          .select("user_id, duration, status, credit_cost")
           .eq("task_id", taskId)
           .single();
         
@@ -243,7 +286,7 @@ export async function GET(request: Request) {
           .from("generations")
           .update({
             status: task.status,
-            video_url: task.videoUrl || null,
+            video_url: task.resultUrl || null,
             error_message: task.errorMessage || null,
             updated_at: new Date().toISOString(),
           })
@@ -251,7 +294,7 @@ export async function GET(request: Request) {
         
         // 如果生成失败，退还积分
         if (task.status === "failed" && generation?.user_id && generation?.status !== "failed") {
-          const refundAmount = generation.duration === 10 ? 30 : 50;
+          const refundAmount = generation.credit_cost || CREDIT_COST_MAP[generation.duration] || 50;
           
           const { data: profile } = await supabase
             .from("profiles")
@@ -281,10 +324,8 @@ export async function GET(request: Request) {
       data: {
         taskId: task.taskId,
         status: task.status,
-        videoUrl: task.videoUrl,
+        videoUrl: task.resultUrl,
         errorMessage: task.errorMessage,
-        duration: task.duration,
-        aspectRatio: task.aspectRatio,
         createdAt: task.createdAt,
         updatedAt: task.updatedAt,
       },
@@ -297,4 +338,3 @@ export async function GET(request: Request) {
     );
   }
 }
-

@@ -9,38 +9,124 @@
 }
 
 @layer base {
+  /* ============================================================================
+   * Light Mode - "Porcelain Editorial" 浅色主题
+   * 极简、高级、护眼的编辑风格设计
+   * ============================================================================ */
   :root {
-    /* TikTok Dark Mode - 全局深色主题 */
+    /* 背景：极淡的冷灰，护眼且高级 */
+    --background: 210 40% 98%;
+    /* 前景：深黑蓝色，比纯黑更有质感 */
+    --foreground: 222.2 84% 4.9%;
+
+    /* 卡片：纯白，利用阴影区分层级 */
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+
+    /* Popover/弹窗 */
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+
+    /* 主色：纯黑块+白字，时尚感强 */
+    --primary: 222.2 47.4% 11.2%;
+    --primary-foreground: 210 40% 98%;
+
+    /* 次级色：几乎白色，极淡 */
+    --secondary: 210 40% 99%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+
+    /* 柔和色调：几乎白色 */
+    --muted: 210 40% 99%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+
+    /* 强调色：极淡的青色 */
+    --accent: 175 40% 97%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+
+    /* 危险/警告色 */
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+
+    /* 边框色：稍微明显，增加精致感 */
+    --border: 214.3 32% 88%;
+    --input: 214.3 32% 88%;
+
+    /* TikTok 品牌色作为强调环 (Focus Ring) */
+    --ring: 175 100% 47%;
+
+    /* 图表色彩 - 浅色模式下的柔和版本 */
+    --chart-1: 175 100% 40%;
+    --chart-2: 340 85% 55%;
+    --chart-3: 262 80% 55%;
+    --chart-4: 43 96% 56%;
+    --chart-5: 199 89% 48%;
+
+    /* 圆角半径 */
+    --radius: 0.5rem;
+
+    /* TikTok 品牌色 - 浅色模式下稍微柔和 */
+    --tiktok-cyan: 175 100% 40%;
+    --tiktok-pink: 340 85% 55%;
+    
+    /* 侧边栏宽度 */
+    --sidebar-width: 280px;
+  }
+
+  /* ============================================================================
+   * Dark Mode - "Cyber Neon" 深色主题
+   * TikTok 风格的赛博霓虹黑色主题
+   * ============================================================================ */
+  .dark {
+    /* 背景：深邃的纯黑 */
     --background: 0 0% 4%;
+    /* 前景：柔和的白色 */
     --foreground: 0 0% 98%;
+
+    /* 卡片：略浅的黑色，形成层次 */
     --card: 0 0% 7%;
     --card-foreground: 0 0% 98%;
+
+    /* Popover/弹窗 */
     --popover: 0 0% 7%;
     --popover-foreground: 0 0% 98%;
+
+    /* 主色：TikTok Cyan 霓虹色 */
     --primary: 174 100% 47%;
     --primary-foreground: 0 0% 0%;
+
+    /* 次级色：TikTok Pink 霓虹色 */
     --secondary: 340 100% 50%;
     --secondary-foreground: 0 0% 100%;
+
+    /* 柔和色调 */
     --muted: 0 0% 12%;
     --muted-foreground: 0 0% 65%;
+
+    /* 强调色 */
     --accent: 174 100% 47%;
     --accent-foreground: 0 0% 0%;
+
+    /* 危险/警告色 */
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 98%;
+
+    /* 边框色：深灰 */
     --border: 0 0% 16%;
     --input: 0 0% 16%;
+
+    /* Focus Ring：TikTok Cyan */
     --ring: 174 100% 47%;
+
+    /* 图表色彩 - 霓虹色调 */
     --chart-1: 174 100% 47%;
     --chart-2: 340 100% 50%;
     --chart-3: 280 80% 55%;
     --chart-4: 45 100% 60%;
     --chart-5: 200 80% 50%;
-    --radius: 0.75rem;
-    
-    /* TikTok 霓虹色自定义变量 */
+
+    /* TikTok 品牌霓虹色 */
     --tiktok-cyan: 174 100% 47%;
     --tiktok-pink: 340 100% 50%;
-    --sidebar-width: 280px;
   }
 }
 
@@ -85,9 +171,144 @@
   .sidebar-gradient {
     background: linear-gradient(
       180deg,
-      hsl(0 0% 7%) 0%,
-      hsl(0 0% 5%) 100%
+      hsl(var(--card)) 0%,
+      hsl(var(--background)) 100%
     );
+  }
+
+  /* ============================================================================
+   * Theme-Adaptive Utilities (主题适配实用类)
+   * 这些类会根据当前主题自动切换样式
+   * ============================================================================ */
+
+  /* Upload Dropzone - 上传区域 (线框风格) */
+  .dropzone {
+    @apply border-2 border-dashed rounded-xl transition-all cursor-pointer;
+    @apply bg-white border-slate-300;
+    @apply hover:border-tiktok-cyan hover:bg-cyan-50/50;
+  }
+  
+  .dark .dropzone {
+    @apply bg-transparent border-white/20;
+    @apply hover:border-tiktok-cyan/50 hover:bg-tiktok-cyan/5;
+  }
+
+  /* Glass Card - 毛玻璃卡片 */
+  .glass-card {
+    @apply rounded-xl border transition-all;
+    @apply bg-white border-slate-200 shadow-sm;
+    @apply hover:shadow-md hover:border-slate-300;
+  }
+  
+  .dark .glass-card {
+    @apply bg-card/50 border-border/50 backdrop-blur-sm shadow-none;
+    @apply hover:border-tiktok-cyan/30 hover:shadow-none;
+  }
+
+  /* Input Surface - 输入框表面 (线框风格) */
+  .input-surface {
+    @apply bg-white border border-slate-200 shadow-sm;
+    @apply text-slate-800 placeholder:text-slate-400;
+    @apply focus:border-tiktok-cyan focus:ring-1 focus:ring-tiktok-cyan/20;
+  }
+  
+  .dark .input-surface {
+    @apply bg-black/30 border-white/10 shadow-none;
+    @apply text-white placeholder:text-white/50;
+    @apply focus:border-tiktok-cyan/50;
+  }
+
+  /* Panel Surface - 面板表面 (纯白线框) */
+  .panel-surface {
+    @apply bg-white border border-slate-200;
+  }
+  
+  .dark .panel-surface {
+    @apply bg-white/5 border-white/10;
+  }
+
+  /* Tab List Background */
+  .tabs-surface {
+    @apply bg-slate-100/80;
+  }
+  
+  .dark .tabs-surface {
+    @apply bg-black/30;
+  }
+
+  /* Subtle Button Border */
+  .btn-subtle {
+    @apply border-slate-200 text-slate-700;
+    @apply hover:bg-slate-100 hover:text-slate-900 hover:border-slate-300;
+  }
+  
+  .dark .btn-subtle {
+    @apply border-white/20 text-white/80;
+    @apply hover:bg-white/10 hover:text-white hover:border-white/30;
+  }
+
+  /* Preview Area Background */
+  .preview-surface {
+    @apply bg-slate-50 border border-slate-200;
+  }
+  
+  .dark .preview-surface {
+    @apply bg-black/30 border-white/10;
+  }
+
+  /* Image Thumbnail Background */
+  .thumb-surface {
+    @apply bg-white border border-slate-200;
+  }
+  
+  .dark .thumb-surface {
+    @apply bg-black/30 border-white/10;
+  }
+
+  /* Badge/Tag Surface */
+  .tag-surface {
+    @apply bg-slate-100 text-slate-600 border border-slate-200;
+  }
+  
+  .dark .tag-surface {
+    @apply bg-white/10 text-muted-foreground border-transparent;
+  }
+
+  /* Overlay for thumbnails */
+  .thumb-overlay {
+    @apply bg-black/60;
+  }
+  
+  .dark .thumb-overlay {
+    @apply bg-black/70;
+  }
+
+  /* Progress Bar Background */
+  .progress-surface {
+    @apply bg-slate-100;
+  }
+  
+  .dark .progress-surface {
+    @apply bg-white/5;
+  }
+
+  /* Task/Staging Card - 任务卡片 (选中态支持) */
+  .task-card {
+    @apply bg-white border border-slate-200 rounded-xl p-4 transition-all;
+    @apply hover:border-slate-300 hover:shadow-sm;
+  }
+  
+  .task-card.selected {
+    @apply bg-cyan-50 border-tiktok-cyan;
+  }
+  
+  .dark .task-card {
+    @apply bg-card/50 border-border/50;
+    @apply hover:border-tiktok-cyan/30;
+  }
+  
+  .dark .task-card.selected {
+    @apply bg-tiktok-cyan/10 border-tiktok-cyan/50;
   }
   
   /* 悬停高亮效果 */
