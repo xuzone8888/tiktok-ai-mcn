@@ -10,7 +10,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { mockModels, mockContracts } from "@/lib/mock-data";
+import { createClient } from "@/lib/supabase/server";
 
 // ============================================================================
 // 类型定义
@@ -54,23 +54,20 @@ const SENSITIVE_FIELDS = [
 
 /**
  * 将原始模特数据转换为安全的公开格式
- * 
- * ⚠️ 此函数确保敏感字段被剔除
  */
-function toPublicModel(model: typeof mockModels[number]): PublicModel {
-  // 显式构造安全对象，不使用展开运算符，确保不会意外包含敏感字段
+function toPublicModel(model: Record<string, unknown>): PublicModel {
   return {
-    id: model.id,
-    name: model.name,
-    avatar_url: model.avatar_url,
-    demo_video_url: model.sample_videos?.[0] || null,
-    tags: model.style_tags || [],
-    category: model.category,
-    gender: model.gender,
-    price_monthly: model.price_monthly,
-    rating: model.rating,
-    is_featured: model.is_featured,
-    is_trending: model.is_trending,
+    id: model.id as string,
+    name: model.name as string,
+    avatar_url: model.avatar_url as string | null,
+    demo_video_url: (model.sample_videos as string[] | undefined)?.[0] || null,
+    tags: (model.style_tags as string[]) || [],
+    category: model.category as string,
+    gender: model.gender as "male" | "female" | "neutral" | null,
+    price_monthly: model.price_monthly as number,
+    rating: model.rating as number,
+    is_featured: model.is_featured as boolean,
+    is_trending: model.is_trending as boolean,
   };
 }
 
@@ -88,55 +85,75 @@ export async function GET(request: NextRequest) {
     const trending = searchParams.get("trending") === "true";
     const search = searchParams.get("search");
     const limit = parseInt(searchParams.get("limit") || "50");
-    const userId = searchParams.get("user_id"); // 用于获取合约状态
+    const userId = searchParams.get("user_id");
 
-    // 1. 仅查询 active 状态的模特 (核心安全逻辑)
-    let models = mockModels.filter((m) => m.is_active === true);
+    const supabase = await createClient();
+
+    // 1. 构建查询 - 仅查询 active 状态的模特
+    let query = supabase
+      .from("ai_models")
+      .select("*")
+      .eq("is_active", true);
 
     // 2. 按条件筛选
     if (category && category !== "all") {
-      models = models.filter(
-        (m) => m.category.toLowerCase() === category.toLowerCase()
-      );
+      query = query.ilike("category", category);
     }
 
     if (featured) {
-      models = models.filter((m) => m.is_featured);
+      query = query.eq("is_featured", true);
     }
 
     if (trending) {
-      models = models.filter((m) => m.is_trending);
+      query = query.eq("is_trending", true);
     }
 
     // 3. 搜索过滤
     if (search && search.trim().length >= 2) {
-      const searchTerm = search.toLowerCase().trim();
-      models = models.filter((m) => {
-        if (m.name.toLowerCase().includes(searchTerm)) return true;
-        if (m.style_tags.some((tag) => tag.toLowerCase().includes(searchTerm)))
-          return true;
-        if (m.category.toLowerCase().includes(searchTerm)) return true;
-        return false;
-      });
+      const searchTerm = `%${search.toLowerCase().trim()}%`;
+      query = query.or(`name.ilike.${searchTerm},category.ilike.${searchTerm}`);
     }
 
     // 4. 限制数量
     if (limit > 0) {
-      models = models.slice(0, Math.min(limit, 100)); // 最多返回 100 条
+      query = query.limit(Math.min(limit, 100));
     }
 
-    // 5. 转换为安全的公开格式 (⚠️ 核心安全逻辑)
-    const publicModels = models.map((model) => {
+    const { data: models, error } = await query;
+
+    if (error) {
+      console.error("[API] Database error:", error);
+      return NextResponse.json(
+        { success: false, error: "Failed to fetch models" },
+        { status: 500 }
+      );
+    }
+
+    // 获取用户的合约状态
+    let userContracts: Record<string, { end_date: string }> = {};
+    if (userId) {
+      const { data: contracts } = await supabase
+        .from("contracts")
+        .select("model_id, end_date")
+        .eq("user_id", userId)
+        .eq("status", "active");
+
+      if (contracts) {
+        userContracts = contracts.reduce((acc, c) => {
+          acc[c.model_id] = { end_date: c.end_date };
+          return acc;
+        }, {} as Record<string, { end_date: string }>);
+      }
+    }
+
+    // 5. 转换为安全的公开格式
+    const publicModels = (models || []).map((model) => {
       const safe = toPublicModel(model);
 
       // 如果提供了 userId，添加合约状态
       if (userId) {
-        const contract = mockContracts.get(model.id);
-        const hasActiveContract =
-          contract &&
-          contract.user_id === userId &&
-          contract.status === "active" &&
-          new Date(contract.end_date) > new Date();
+        const contract = userContracts[model.id];
+        const hasActiveContract = contract && new Date(contract.end_date) > new Date();
 
         return {
           ...safe,
@@ -173,4 +190,3 @@ export async function GET(request: NextRequest) {
     );
   }
 }
-

@@ -6,7 +6,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { mockModels, mockContracts } from "@/lib/mock-data";
+import { createClient } from "@/lib/supabase/server";
 
 // 需要从响应中剔除的敏感字段
 const SENSITIVE_FIELDS = ["trigger_word", "metadata"] as const;
@@ -29,27 +29,58 @@ export async function GET(request: NextRequest) {
   const trending = searchParams.get("trending");
 
   try {
-    let models = [...mockModels];
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
 
-    // 只返回激活状态的模特给前台
-    models = models.filter((m) => m.is_active);
+    // 构建查询
+    let query = supabase
+      .from("ai_models")
+      .select("*")
+      .eq("is_active", true);
 
-    // 筛选
+    // 筛选条件
     if (category && category !== "all") {
-      models = models.filter((m) => m.category.toLowerCase() === category.toLowerCase());
+      query = query.ilike("category", category);
     }
 
     if (featured === "true") {
-      models = models.filter((m) => m.is_featured);
+      query = query.eq("is_featured", true);
     }
 
     if (trending === "true") {
-      models = models.filter((m) => m.is_trending);
+      query = query.eq("is_trending", true);
+    }
+
+    const { data: models, error } = await query;
+
+    if (error) {
+      console.error("[Models API] Database error:", error);
+      return NextResponse.json(
+        { error: "Failed to fetch models" },
+        { status: 500 }
+      );
+    }
+
+    // 获取用户的合约状态
+    let userContracts: Record<string, { status: string; end_date: string }> = {};
+    if (user) {
+      const { data: contracts } = await supabase
+        .from("contracts")
+        .select("model_id, status, end_date")
+        .eq("user_id", user.id)
+        .eq("status", "active");
+
+      if (contracts) {
+        userContracts = contracts.reduce((acc, c) => {
+          acc[c.model_id] = { status: c.status, end_date: c.end_date };
+          return acc;
+        }, {} as Record<string, { status: string; end_date: string }>);
+      }
     }
 
     // 添加合约状态，并剔除敏感字段
-    const modelsWithContractStatus = models.map((model) => {
-      const contract = mockContracts.get(model.id);
+    const modelsWithContractStatus = (models || []).map((model) => {
+      const contract = userContracts[model.id];
       const hasActiveContract = contract && 
         contract.status === "active" && 
         new Date(contract.end_date) > new Date();
@@ -73,6 +104,3 @@ export async function GET(request: NextRequest) {
     );
   }
 }
-
-
-

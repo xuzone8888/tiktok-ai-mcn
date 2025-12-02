@@ -142,8 +142,16 @@ export async function submitNanoBanana(
     });
 
     // 构建请求体
+    // 注意：如果有参考图片，需要确保提示词能正确引导图片生成
+    let finalPrompt = params.prompt;
+    
+    // 如果有参考图片但提示词较短，添加引导语
+    if (params.img_url && params.prompt.length < 20) {
+      finalPrompt = `Based on the reference image provided, ${params.prompt}. Maintain the style, quality and key elements from the reference.`;
+    }
+    
     const requestBody: Record<string, unknown> = {
-      prompt: params.prompt,
+      prompt: finalPrompt,
     };
 
     // 普通 NanoBanana 需要 model 参数，Pro 版本不需要

@@ -26,7 +26,6 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
-import { SidebarThemeToggle } from "@/components/theme-toggle";
 
 interface NavItem {
   title: string;
@@ -38,56 +37,56 @@ interface NavItem {
 }
 
 const navItems: NavItem[] = [
-  // 1. 模特市场
+  // 1. 运营驾驶舱 (原概览)
   {
-    title: "Model Market",
-    href: "/models",
-    icon: Users,
-    description: "模特市场",
-  },
-  // 2. 我的签约模特
-  {
-    title: "My Team",
-    href: "/team",
-    icon: UserCheck,
-    description: "我的签约模特",
-  },
-  // 3. 快速生成单个视频
-  {
-    title: "Quick Generator",
-    href: "/quick-gen",
-    icon: Zap,
-    description: "快速生成单个视频",
-  },
-  // 4. 批量生产工坊
-  {
-    title: "Pro Studio (Batch)",
-    href: "/pro-studio",
-    icon: Factory,
-    description: "批量生产工坊",
-  },
-  // 5. 多镜头拼接 (预留)
-  {
-    title: "Clip Editor",
-    href: "/clip-editor",
-    icon: Film,
-    description: "多镜头拼接",
-    comingSoon: true,
-    comingSoonMessage: "Coming Soon: Combine your generated clips into a masterpiece.",
-  },
-  // 6. 选品中心
-  {
-    title: "Asset Library",
-    href: "/assets",
-    icon: Package,
-    description: "选品中心",
-  },
-  // 7. 概览
-  {
-    title: "Dashboard",
+    title: "运营驾驶舱",
     href: "/dashboard",
     icon: LayoutDashboard,
-    description: "概览",
+    description: "数据概览与运营分析",
+  },
+  // 2. 模特资源库 (原模特市场)
+  {
+    title: "模特资源库",
+    href: "/models",
+    icon: Users,
+    description: "浏览全部 AI 模特",
+  },
+  // 3. 专属模特仓 (原我的签约模特)
+  {
+    title: "专属模特仓",
+    href: "/team",
+    icon: UserCheck,
+    description: "已签约的专属模特",
+  },
+  // 4. 单条即时工位 (原快速生成单个视频)
+  {
+    title: "单条即时工位",
+    href: "/quick-gen",
+    icon: Zap,
+    description: "快速生成单条视频",
+  },
+  // 5. 批量生产线 (原批量生产工坊)
+  {
+    title: "批量生产线",
+    href: "/pro-studio",
+    icon: Factory,
+    description: "批量生产视频与图片",
+  },
+  // 6. 多镜合成间 → 爆款复刻 (预留)
+  {
+    title: "爆款复刻",
+    href: "/clip-editor",
+    icon: Film,
+    description: "多镜合成间",
+    comingSoon: true,
+    comingSoonMessage: "即将推出：一键复刻爆款视频风格，快速生成同款内容",
+  },
+  // 7. 选品决策室 (原选品中心)
+  {
+    title: "选品决策室",
+    href: "/assets",
+    icon: Package,
+    description: "智能选品与素材管理",
   },
 ];
 
@@ -96,11 +95,11 @@ export function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const { toast } = useToast();
 
-  // 处理 Coming Soon 项点击
+  // 处理即将推出项点击
   const handleComingSoonClick = (item: NavItem) => {
     toast({
-      title: "🚀 Coming Soon",
-      description: item.comingSoonMessage || "This feature is under development.",
+      title: "🚀 即将推出",
+      description: item.comingSoonMessage || "此功能正在开发中",
     });
   };
 
@@ -168,8 +167,8 @@ export function Sidebar() {
                         <div className="flex flex-1 flex-col">
                           <div className="flex items-center gap-2">
                             <span>{item.title}</span>
-                            <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-semibold text-amber-400 uppercase tracking-wider">
-                              Soon
+                            <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-semibold text-amber-400 tracking-wider">
+                              即将推出
                             </span>
                           </div>
                           {item.description && (
@@ -182,7 +181,7 @@ export function Sidebar() {
                     </button>
                   </TooltipTrigger>
                   <TooltipContent side="right" className="max-w-[250px]">
-                    <p className="font-medium">🚀 Coming Soon</p>
+                    <p className="font-medium">🚀 即将推出</p>
                     <p className="text-xs text-muted-foreground mt-1">
                       {item.comingSoonMessage}
                     </p>
@@ -241,14 +240,6 @@ export function Sidebar() {
 
       {/* Footer */}
       <div className="border-t border-border/50 p-3 space-y-3">
-        {/* Theme Toggle */}
-        {!collapsed && (
-          <div className="flex items-center justify-between px-1">
-            <span className="text-xs text-muted-foreground">主题</span>
-            <SidebarThemeToggle />
-          </div>
-        )}
-
         {/* Pro Plan Badge */}
         <div
           className={cn(
@@ -261,7 +252,7 @@ export function Sidebar() {
           </div>
           {!collapsed && (
             <div className="flex-1">
-              <p className="text-sm font-medium">Pro Plan</p>
+              <p className="text-sm font-medium">专业版</p>
               <p className="text-xs text-muted-foreground">无限创作额度</p>
             </div>
           )}

@@ -15,31 +15,37 @@ import {
   ChevronRight,
   Shield,
   Zap,
+  Wand2,
 } from "lucide-react";
 
 const adminNavItems = [
   {
-    title: "Dashboard",
+    title: "控制面板",
     href: "/admin",
     icon: LayoutDashboard,
   },
   {
-    title: "Users",
+    title: "用户管理",
     href: "/admin/users",
     icon: Users,
   },
   {
-    title: "AI Models",
+    title: "AI 模特",
     href: "/admin/models",
     icon: UserCircle,
   },
   {
-    title: "Audit Logs",
+    title: "提示词配置",
+    href: "/admin/prompts",
+    icon: Wand2,
+  },
+  {
+    title: "操作日志",
     href: "/admin/audit-logs",
     icon: FileText,
   },
   {
-    title: "Settings",
+    title: "系统设置",
     href: "/admin/settings",
     icon: Settings,
   },
@@ -112,7 +118,7 @@ export default function AdminLayout({
           })}
         </nav>
 
-        {/* Back to App */}
+        {/* 返回前端 */}
         <div className="p-3 border-t border-border/50">
           <Link href="/dashboard">
             <Button
@@ -123,7 +129,7 @@ export default function AdminLayout({
               )}
             >
               <Zap className="h-4 w-4 text-tiktok-cyan" />
-              {!collapsed && <span>Back to App</span>}
+              {!collapsed && <span>返回前端</span>}
             </Button>
           </Link>
         </div>
@@ -131,16 +137,16 @@ export default function AdminLayout({
 
       {/* Main Content */}
       <main className="flex-1 overflow-auto">
-        {/* Top Bar */}
+        {/* 顶部栏 */}
         <header className="h-16 border-b border-border/50 bg-black/20 backdrop-blur-sm flex items-center justify-between px-6 sticky top-0 z-10">
           <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">Admin Panel</span>
+            <span className="text-sm text-muted-foreground">管理后台</span>
             <span className="text-muted-foreground">/</span>
             <span className="font-medium">
               {adminNavItems.find((item) => 
                 pathname === item.href || 
                 (item.href !== "/admin" && pathname.startsWith(item.href))
-              )?.title || "Dashboard"}
+              )?.title || "控制面板"}
             </span>
           </div>
           <div className="flex items-center gap-4">
@@ -155,10 +161,10 @@ export default function AdminLayout({
                 返回前端
               </Button>
             </Link>
-            {/* Admin 标识 */}
+            {/* 管理员标识 */}
             <div className="px-2.5 py-1 rounded-full bg-red-500/10 border border-red-500/30 text-red-400 text-xs font-semibold flex items-center gap-1.5">
               <Shield className="h-3 w-3" />
-              Super Admin
+              超级管理员
             </div>
           </div>
         </header>

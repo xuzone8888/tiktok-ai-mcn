@@ -6,7 +6,6 @@ import { Input } from "@/components/ui/input";
 import { 
   Search,
   Filter,
-  Loader2,
   Users,
   Sparkles,
   TrendingUp,

@@ -12,6 +12,8 @@ export interface AIModel {
   style_tags: string[];
   gender: "male" | "female" | "neutral" | null;
   age_range?: string;
+  // AI模特触发词 - 用于在视频生成时指定模特外观
+  trigger_word?: string;
   price_daily: number;
   price_weekly: number;
   price_monthly: number;

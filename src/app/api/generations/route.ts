@@ -1,33 +1,27 @@
+/**
+ * 生成任务 API
+ * 
+ * POST /api/generations - 创建生成任务
+ * GET /api/generations - 获取生成任务列表/状态
+ */
+
 import { NextRequest, NextResponse } from "next/server";
-import { mockUser, mockContracts } from "@/lib/mock-data";
-
-// 模拟生成结果存储
-const generationsStore = new Map<string, {
-  id: string;
-  status: "pending" | "processing" | "completed" | "failed";
-  progress: number;
-  type: "video" | "image";
-  output_url?: string;
-  thumbnail_url?: string;
-  created_at: string;
-  completed_at?: string;
-}>();
-
-// 模拟输出 URLs
-const MOCK_VIDEO_OUTPUTS = [
-  "https://sample-videos.com/video321/mp4/720/big_buck_bunny_720p_1mb.mp4",
-  "https://www.w3schools.com/html/mov_bbb.mp4",
-];
-
-const MOCK_IMAGE_OUTPUTS = [
-  "https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=800",
-  "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=800",
-  "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=800",
-];
+import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 // POST: 创建生成任务
 export async function POST(request: NextRequest) {
   try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) {
+      return NextResponse.json(
+        { error: "未登录" },
+        { status: 401 }
+      );
+    }
+
     const body = await request.json();
     const { model_id, product_id, type, script, template } = body;
 
@@ -39,57 +33,95 @@ export async function POST(request: NextRequest) {
     }
 
     // 检查是否有有效合约
-    const contract = mockContracts.get(model_id);
-    if (!contract || contract.status !== "active" || new Date(contract.end_date) <= new Date()) {
+    const { data: contract } = await supabase
+      .from("contracts")
+      .select("*")
+      .eq("user_id", user.id)
+      .eq("model_id", model_id)
+      .eq("status", "active")
+      .gt("end_date", new Date().toISOString())
+      .single();
+
+    if (!contract) {
       return NextResponse.json(
-        { error: "No active contract for this model" },
+        { error: "没有该模特的有效签约" },
         { status: 400 }
+      );
+    }
+
+    // 获取用户积分
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("credits")
+      .eq("id", user.id)
+      .single();
+
+    if (!profile) {
+      return NextResponse.json(
+        { error: "用户不存在" },
+        { status: 404 }
       );
     }
 
     // 计算消耗积分
     const creditsRequired = type === "video" ? 50 : 10;
 
-    if (mockUser.credits < creditsRequired) {
+    if (profile.credits < creditsRequired) {
       return NextResponse.json(
-        { error: "Insufficient credits", required: creditsRequired, available: mockUser.credits },
+        { error: "积分不足", required: creditsRequired, available: profile.credits },
         { status: 400 }
       );
     }
 
-    // 扣除积分
-    mockUser.credits -= creditsRequired;
+    // 使用 admin client 扣除积分
+    const adminSupabase = createAdminClient();
+    const { error: deductError } = await adminSupabase
+      .from("profiles")
+      .update({ credits: profile.credits - creditsRequired })
+      .eq("id", user.id);
 
-    // 创建生成任务
-    const generationId = `gen-${Date.now()}`;
-    const generation = {
-      id: generationId,
-      user_id: mockUser.id,
-      model_id,
-      product_id: product_id || null,
-      type,
-      status: "processing" as const,
-      progress: 0,
-      input_params: { script, template },
-      credits_used: creditsRequired,
-      created_at: new Date().toISOString(),
-    };
+    if (deductError) {
+      console.error("[Generations API] Failed to deduct credits:", deductError);
+      return NextResponse.json(
+        { error: "扣除积分失败" },
+        { status: 500 }
+      );
+    }
 
-    generationsStore.set(generationId, {
-      id: generationId,
-      status: "processing",
-      progress: 0,
-      type,
-      created_at: new Date().toISOString(),
-    });
+    // 创建生成任务记录
+    const { data: generation, error: insertError } = await adminSupabase
+      .from("generations")
+      .insert({
+        user_id: user.id,
+        model_id,
+        product_id: product_id || null,
+        type,
+        status: "processing",
+        progress: 0,
+        input_params: { script, template },
+        credits_used: creditsRequired,
+      })
+      .select()
+      .single();
 
-    // 启动模拟生成过程
-    simulateGeneration(generationId, type);
+    if (insertError) {
+      // 退还积分
+      await adminSupabase
+        .from("profiles")
+        .update({ credits: profile.credits })
+        .eq("id", user.id);
+
+      console.error("[Generations API] Failed to create generation:", insertError);
+      return NextResponse.json(
+        { error: "创建任务失败" },
+        { status: 500 }
+      );
+    }
 
     return NextResponse.json({
       success: true,
-      generation: generation,
-      new_balance: mockUser.credits,
+      generation,
+      new_balance: profile.credits - creditsRequired,
     });
   } catch (error) {
     console.error("Generation error:", error);
@@ -102,55 +134,58 @@ export async function POST(request: NextRequest) {
 
 // GET: 获取生成任务状态
 export async function GET(request: NextRequest) {
-  const { searchParams } = new URL(request.url);
-  const id = searchParams.get("id");
+  try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
 
-  if (id) {
-    const generation = generationsStore.get(id);
-    if (!generation) {
-      return NextResponse.json({ error: "Generation not found" }, { status: 404 });
+    if (!user) {
+      return NextResponse.json(
+        { error: "未登录" },
+        { status: 401 }
+      );
     }
-    return NextResponse.json(generation);
-  }
 
-  // 返回所有生成记录
-  const generations = Array.from(generationsStore.values());
-  return NextResponse.json(generations);
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get("id");
+
+    if (id) {
+      // 获取单个任务
+      const { data: generation, error } = await supabase
+        .from("generations")
+        .select("*")
+        .eq("id", id)
+        .eq("user_id", user.id)
+        .single();
+
+      if (error || !generation) {
+        return NextResponse.json({ error: "任务不存在" }, { status: 404 });
+      }
+
+      return NextResponse.json(generation);
+    }
+
+    // 返回用户的所有生成记录
+    const { data: generations, error } = await supabase
+      .from("generations")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(50);
+
+    if (error) {
+      console.error("[Generations API] Failed to fetch generations:", error);
+      return NextResponse.json(
+        { error: "获取任务列表失败" },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json(generations || []);
+  } catch (error) {
+    console.error("[Generations API] Error:", error);
+    return NextResponse.json(
+      { error: "服务器错误" },
+      { status: 500 }
+    );
+  }
 }
-
-// 模拟生成过程（10秒）
-async function simulateGeneration(generationId: string, type: "video" | "image") {
-  const totalDuration = 10000; // 10 seconds
-  const updateInterval = 500; // Update every 500ms
-  const steps = totalDuration / updateInterval;
-
-  for (let i = 1; i <= steps; i++) {
-    await new Promise((resolve) => setTimeout(resolve, updateInterval));
-    
-    const generation = generationsStore.get(generationId);
-    if (generation) {
-      generation.progress = Math.round((i / steps) * 100);
-      generationsStore.set(generationId, generation);
-    }
-  }
-
-  // 完成生成
-  const generation = generationsStore.get(generationId);
-  if (generation) {
-    generation.status = "completed";
-    generation.progress = 100;
-    generation.completed_at = new Date().toISOString();
-    
-    if (type === "video") {
-      generation.output_url = MOCK_VIDEO_OUTPUTS[Math.floor(Math.random() * MOCK_VIDEO_OUTPUTS.length)];
-      generation.thumbnail_url = MOCK_IMAGE_OUTPUTS[Math.floor(Math.random() * MOCK_IMAGE_OUTPUTS.length)];
-    } else {
-      generation.output_url = MOCK_IMAGE_OUTPUTS[Math.floor(Math.random() * MOCK_IMAGE_OUTPUTS.length)];
-    }
-    
-    generationsStore.set(generationId, generation);
-  }
-}
-
-
-

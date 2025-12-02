@@ -52,7 +52,7 @@ export interface SystemSettings {
 // Mock 数据存储
 // ============================================================================
 
-let mockSystemSettings: SystemSettings = {
+const mockSystemSettings: SystemSettings = {
   payment_info: {
     bank_name: "招商银行",
     bank_account: "6225 8888 8888 8888",

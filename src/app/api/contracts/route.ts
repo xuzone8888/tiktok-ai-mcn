@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@/lib/supabase/server";
 import { mockContracts, mockModels, mockUser } from "@/lib/mock-data";
 import type { Contract, AIModel } from "@/types/model";
 
@@ -11,8 +12,60 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const status = searchParams.get("status");
-    const includeModel = searchParams.get("include_model") === "true";
 
+    // 尝试从真实数据库获取
+    try {
+      const supabase = await createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+
+      if (user) {
+        // 从数据库获取用户的签约合约，关联模特信息
+        let query = supabase
+          .from("contracts")
+          .select(`
+            *,
+            ai_models (
+              id,
+              name,
+              description,
+              avatar_url,
+              trigger_word,
+              category,
+              gender,
+              style_tags
+            )
+          `)
+          .eq("user_id", user.id);
+
+        // 按状态过滤
+        if (status) {
+          query = query.eq("status", status);
+        } else {
+          // 默认只返回 active 状态的合约
+          query = query.eq("status", "active");
+        }
+
+        const { data: contracts, error } = await query;
+
+        if (error) {
+          console.error("[Contracts API] Database error:", error);
+          throw error;
+        }
+
+        console.log("[Contracts API] Loaded contracts from database:", contracts?.length || 0);
+
+        return NextResponse.json({
+          success: true,
+          data: contracts || [],
+        });
+      }
+    } catch (dbError) {
+      console.log("[Contracts API] Database not available, using mock data:", dbError);
+    }
+
+    // 回退到 mock 数据
+    console.log("[Contracts API] Using mock data");
+    
     // 获取所有合约
     let contracts = Array.from(mockContracts.values()).filter(
       (c) => c.user_id === mockUser.id
@@ -27,29 +80,31 @@ export async function GET(request: NextRequest) {
       return contract;
     });
 
-    // 按状态过滤
+    // 按状态过滤 - 默认只返回 active 状态的合约
     if (status) {
       contracts = contracts.filter((c) => c.status === status);
+    } else {
+      // 默认只返回有效的合约
+      contracts = contracts.filter((c) => c.status === "active");
     }
 
-    // 是否包含模特信息
-    if (includeModel) {
-      const contractsWithModels: ContractWithModel[] = contracts.map((contract) => {
-        const model = mockModels.find((m) => m.id === contract.model_id) || null;
-        return {
-          ...contract,
-          ai_models: model,
-        };
-      });
+    // 默认返回包含模特信息的格式
+    const contractsWithModels: ContractWithModel[] = contracts.map((contract) => {
+      const model = mockModels.find((m) => m.id === contract.model_id) || null;
+      return {
+        ...contract,
+        ai_models: model,
+      };
+    });
 
-      return NextResponse.json(contractsWithModels);
-    }
-
-    return NextResponse.json(contracts);
+    return NextResponse.json({
+      success: true,
+      data: contractsWithModels,
+    });
   } catch (error) {
     console.error("Error fetching contracts:", error);
     return NextResponse.json(
-      { error: "Failed to fetch contracts" },
+      { success: false, error: "获取签约信息失败" },
       { status: 500 }
     );
   }

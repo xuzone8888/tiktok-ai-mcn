@@ -150,33 +150,134 @@ export const IMAGE_ENHANCEMENT_PRICING = {
 };
 
 // ============================================================================
+// 图片处理类型 (批量处理单元)
+// ============================================================================
+
+/** 图片处理动作类型 */
+export type ImageProcessAction = "generate" | "upscale" | "nine_grid";
+
+/** 图片批量任务配置 */
+export interface ImageBatchTaskConfig {
+  sourceImageUrl: string;
+  sourceImageName: string;
+  model: "nano-banana" | "nano-banana-pro";
+  action: ImageProcessAction;
+  aspectRatio: ImageAspectRatio;
+  resolution?: ImageResolution; // 仅 Pro 模式
+  prompt?: string;
+}
+
+/** 图片批量任务 */
+export interface ImageBatchTask {
+  id: string;
+  index: number;
+  status: "pending" | "processing" | "completed" | "failed";
+  config: ImageBatchTaskConfig;
+  apiTaskId?: string;
+  resultUrl?: string;
+  error?: string;
+  progress?: number;
+  createdAt: string;
+  startedAt?: string;
+  completedAt?: string;
+}
+
+// ============================================================================
 // 选项配置
 // ============================================================================
 
 export interface AspectRatioOption {
   value: ImageAspectRatio;
   label: string;
+  icon?: string;
 }
 
-export const IMAGE_ASPECT_OPTIONS: AspectRatioOption[] = [
-  { value: "auto", label: "Auto" },
-  { value: "1:1", label: "1:1" },
-  { value: "16:9", label: "16:9" },
-  { value: "9:16", label: "9:16" },
-  { value: "4:3", label: "4:3" },
-  { value: "3:4", label: "3:4" },
+/** Nano Banana (快速) 支持的尺寸比例 */
+export const NANO_FAST_ASPECT_OPTIONS: AspectRatioOption[] = [
+  { value: "auto", label: "自动", icon: "🔄" },
+  { value: "1:1", label: "1:1 正方形", icon: "⬜" },
+  { value: "16:9", label: "16:9 横屏", icon: "🖥️" },
+  { value: "9:16", label: "9:16 竖屏", icon: "📱" },
+  { value: "4:3", label: "4:3 横屏", icon: "📺" },
+  { value: "3:4", label: "3:4 竖屏", icon: "📋" },
 ];
+
+/** Nano Banana Pro (专业) 支持的尺寸比例 - 包含所有快速版比例 */
+export const NANO_PRO_ASPECT_OPTIONS: AspectRatioOption[] = [
+  ...NANO_FAST_ASPECT_OPTIONS,
+];
+
+/** 兼容旧代码的别名 */
+export const IMAGE_ASPECT_OPTIONS = NANO_FAST_ASPECT_OPTIONS;
 
 export interface ResolutionOption {
   value: ImageResolution;
   label: string;
+  description?: string;
 }
 
 export const IMAGE_RESOLUTION_OPTIONS: ResolutionOption[] = [
-  { value: "1k", label: "1K (Default)" },
-  { value: "2k", label: "2K" },
-  { value: "4k", label: "4K" },
+  { value: "1k", label: "1K", description: "默认 · 1024px" },
+  { value: "2k", label: "2K", description: "高清 · 2048px" },
+  { value: "4k", label: "4K", description: "超清 · 4096px" },
 ];
+
+// ============================================================================
+// 图片处理动作定价
+// ============================================================================
+
+export interface ImageActionPricing {
+  label: string;
+  description: string;
+  credits: number;
+  estimatedTime: string;
+  promptHint?: string;
+}
+
+/** Nano Banana (快速) 处理动作定价 */
+export const NANO_FAST_ACTION_PRICING: Record<ImageProcessAction, ImageActionPricing> = {
+  generate: {
+    label: "图片生成",
+    description: "根据提示词生成新图片",
+    credits: 10,
+    estimatedTime: "15-30秒",
+    promptHint: "描述你想要的图片效果...",
+  },
+  upscale: {
+    label: "高清放大",
+    description: "将产品图片放大至高清画质，保持细节清晰",
+    credits: 40,
+    estimatedTime: "30-60秒",
+    promptHint: "High resolution upscale, enhance details, sharp edges, professional product photography",
+  },
+  nine_grid: {
+    label: "九宫格多角度",
+    description: "生成产品的9个不同角度展示图，便于 Sora2 读取生成视频",
+    credits: 60,
+    estimatedTime: "45-90秒",
+    promptHint: "Product displayed from 9 different angles in a 3x3 grid layout: front view, back view, left side, right side, top view, bottom view, 45-degree front-left, 45-degree front-right, detail close-up. Professional studio lighting, white background, consistent product positioning",
+  },
+};
+
+/** Nano Banana Pro (专业) 处理动作定价 */
+export const NANO_PRO_ACTION_PRICING: Record<"generate" | "nine_grid", ImageActionPricing & { resolutionPricing?: Record<ImageResolution, number> }> = {
+  generate: {
+    label: "专业图片生成",
+    description: "高质量图片生成，支持多种分辨率输出",
+    credits: 28,
+    estimatedTime: "30-60秒",
+    promptHint: "描述你想要的图片效果...",
+    resolutionPricing: { "1k": 30, "2k": 50, "4k": 80 },
+  },
+  nine_grid: {
+    label: "专业九宫格",
+    description: "高质量多角度产品展示，支持高分辨率输出",
+    credits: 80,
+    estimatedTime: "60-120秒",
+    promptHint: "Product displayed from 9 different angles in a 3x3 grid layout: front view, back view, left side, right side, top view, bottom view, 45-degree front-left, 45-degree front-right, detail close-up. Professional studio lighting, white background, consistent product positioning, high detail, 8K quality",
+    resolutionPricing: { "1k": 80, "2k": 120, "4k": 180 },
+  },
+};
 
 // ============================================================================
 // 计费函数
@@ -358,4 +459,8 @@ export interface TaskStatusResponse {
   };
   error?: string;
 }
+
+
+
+
 
