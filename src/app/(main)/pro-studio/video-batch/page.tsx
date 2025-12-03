@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useRef, useMemo, memo } from "react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -77,9 +77,14 @@ import {
   type VideoBatchTask,
   type TaskImageInfo,
   type VideoAspectRatio,
+  type VideoModelType,
+  type VideoDuration,
+  type VideoQuality,
   PIPELINE_STEPS,
-  VIDEO_BATCH_PRICING,
   getStatusLabel,
+  getVideoBatchTotalPrice,
+  getAvailableDurations,
+  getAvailableQualities,
 } from "@/types/video-batch";
 
 // Store
@@ -165,7 +170,7 @@ interface ImageUploaderProps {
   compact?: boolean;
 }
 
-function ImageUploader({ images, onImagesChange, maxImages = 10, compact = false }: ImageUploaderProps) {
+function ImageUploader({ images, onImagesChange, maxImages = 4, compact = false }: ImageUploaderProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
@@ -289,7 +294,7 @@ function ImageUploader({ images, onImagesChange, maxImages = 10, compact = false
       <div className="flex items-center gap-2 p-2 rounded-lg bg-amber-500/10 border border-amber-500/30">
         <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0" />
         <p className="text-xs text-amber-400">
-          <strong>第一张图片必须是高清九宫格图（3×3 多角度）</strong>，其余为补充素材
+          <strong>第一张图片必须是高清九宫格图（3×3 多角度）</strong>，其余最多3张为补充素材（共4张）
         </p>
       </div>
 
@@ -448,9 +453,13 @@ interface VideoTaskCardProps {
   onViewScript: () => void;
   onEditImages: () => void;
   onPlayVideo: () => void;
+  // 全局配置信息
+  modelType: VideoModelType;
+  duration: VideoDuration;
+  quality: VideoQuality;
 }
 
-function VideoTaskCard({
+const VideoTaskCard = memo(function VideoTaskCard({
   task,
   isSelected,
   onToggleSelect,
@@ -460,10 +469,25 @@ function VideoTaskCard({
   onViewScript,
   onEditImages,
   onPlayVideo,
+  modelType,
+  duration,
+  quality,
 }: VideoTaskCardProps) {
-  const cost = getVideoBatchTaskCost();
   const validation = validateTaskImages(task.images);
   const canStart = task.status === "pending" && validation.valid;
+  
+  // 获取显示标签
+  const getModelLabel = () => {
+    if (modelType === "sora2") {
+      return `${duration}秒`;
+    } else {
+      // sora2-pro
+      if (quality === "hd") {
+        return `${duration}秒 高清`;
+      }
+      return `${duration}秒`;
+    }
+  };
 
   const getStatusBadge = () => {
     const statusConfig: Record<string, { className: string; icon: React.ReactNode }> = {
@@ -589,8 +613,13 @@ function VideoTaskCard({
             {task.aspectRatio}
           </Badge>
           <Badge variant="outline" className="text-[10px] h-5 px-1.5">
-            15s
+            {getModelLabel()}
           </Badge>
+          {modelType === "sora2-pro" && (
+            <Badge variant="outline" className="text-[10px] h-5 px-1.5 bg-purple-500/10 border-purple-500/30 text-purple-400">
+              Pro
+            </Badge>
+          )}
         </div>
 
         {/* 生成结果标记 */}
@@ -654,8 +683,7 @@ function VideoTaskCard({
         )}
 
         {/* 操作栏 */}
-        <div className="flex items-center justify-between pt-1">
-          <span className="text-xs font-semibold text-amber-400">{cost} Credits</span>
+        <div className="flex items-center justify-end pt-1">
           <div className="flex items-center gap-1">
             {/* 开始按钮 */}
             {canStart && (
@@ -771,7 +799,7 @@ function VideoTaskCard({
       </div>
     </div>
   );
-}
+});
 
 // ============================================================================
 // VideoPlayerDialog 组件 - 视频全屏播放弹窗
@@ -786,9 +814,19 @@ interface VideoPlayerDialogProps {
 function VideoPlayerDialog({ task, open, onClose }: VideoPlayerDialogProps) {
   if (!task || !task.soraVideoUrl) return null;
 
+  // 获取视频时长和清晰度显示文字
+  const getDurationLabel = () => {
+    const { duration, quality } = task;
+    if (duration === "25s") return "25秒 标清";
+    if (duration === "15s" && quality === "hd") return "15秒 高清";
+    if (duration === "15s") return "15秒";
+    if (duration === "10s") return "10秒";
+    return "15秒";
+  };
+
   return (
     <Dialog open={open} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-4xl p-0 bg-black border-white/10 overflow-hidden">
+      <DialogContent className="max-w-4xl p-0 bg-background border-border overflow-hidden">
         <div className="relative">
           {/* 视频播放器 */}
           <video 
@@ -798,19 +836,19 @@ function VideoPlayerDialog({ task, open, onClose }: VideoPlayerDialogProps) {
             className="w-full max-h-[80vh] bg-black"
           />
           
-          {/* 底部操作栏 */}
-          <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 to-transparent p-4">
+          {/* 底部操作栏 - 使用不透明背景确保文字可见 */}
+          <div className="border-t border-border bg-background p-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30">
                   <CheckCircle2 className="h-3 w-3 mr-1" />
                   生成成功
                 </Badge>
-                <Badge variant="outline" className="text-xs">
+                <Badge variant="outline" className="text-xs text-foreground border-border">
                   {task.aspectRatio}
                 </Badge>
-                <Badge variant="outline" className="text-xs">
-                  15秒
+                <Badge variant="outline" className="text-xs text-foreground border-border">
+                  {getDurationLabel()}
                 </Badge>
               </div>
               
@@ -950,13 +988,21 @@ export default function VideoBatchPage() {
   const [newTaskImages, setNewTaskImages] = useState<TaskImageInfo[]>([]);
   const [batchCreateCount, setBatchCreateCount] = useState(1);
   
-  // AI模特功能
-  const [useAiModel, setUseAiModel] = useState(false);
-  const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
+  // AI模特功能 - 使用 store 中的全局设置
+  const useAiModel = globalSettings.useAiModel;
+  const selectedModelId = globalSettings.aiModelId;
+  const selectedModelTriggerWord = globalSettings.aiModelTriggerWord;
   const [selectedModelName, setSelectedModelName] = useState<string>("");
-  const [selectedModelTriggerWord, setSelectedModelTriggerWord] = useState<string>("");
   const [hiredModels, setHiredModels] = useState<Array<{ id: string; name: string; trigger_word: string; avatar_url: string }>>([]);
   const [showModelSelector, setShowModelSelector] = useState(false);
+  
+  // AI 模特设置函数
+  const setUseAiModel = (value: boolean) => updateGlobalSettings("useAiModel", value);
+  const setSelectedModelId = (value: string | null) => updateGlobalSettings("aiModelId", value);
+  const setSelectedModelTriggerWord = (value: string | null) => updateGlobalSettings("aiModelTriggerWord", value);
+  
+  // 任务处理锁，防止重复执行
+  const processingTasksRef = useRef<Set<string>>(new Set());
 
   // 获取用户积分和签约模特
   useEffect(() => {
@@ -992,13 +1038,42 @@ export default function VideoBatchPage() {
       });
   }, []);
 
-  // 计算属性
-  const pendingTasks = tasks.filter((t) => t.status === "pending" && validateTaskImages(t.images).valid);
-  const canStartBatch =
+  // 页面离开警告 - 当有任务正在处理时提醒用户
+  useEffect(() => {
+    const hasRunningTasks = tasks.some(t => 
+      ["uploading", "generating_script", "generating_prompt", "generating_video"].includes(t.status)
+    );
+
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (hasRunningTasks) {
+        e.preventDefault();
+        e.returnValue = "有任务正在处理中，确定要离开吗？任务状态已自动保存，返回后可继续处理。";
+        return e.returnValue;
+      }
+    };
+
+    if (hasRunningTasks) {
+      window.addEventListener("beforeunload", handleBeforeUnload);
+    }
+
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+    };
+  }, [tasks]);
+
+  // 计算属性 - 使用 useMemo 缓存避免重复计算
+  const pendingTasks = useMemo(() => 
+    tasks.filter((t) => t.status === "pending" && validateTaskImages(t.images).valid),
+    [tasks]
+  );
+  
+  const canStartBatch = useMemo(() =>
     pendingTasks.length > 0 &&
     jobStatus === "idle" &&
     userCredits >= stats.totalCost &&
-    userId !== null;
+    userId !== null,
+    [pendingTasks.length, jobStatus, userCredits, stats.totalCost, userId]
+  );
 
   // 上传单张图片到服务器
   const uploadImageToServer = async (image: TaskImageInfo): Promise<string> => {
@@ -1035,6 +1110,23 @@ export default function VideoBatchPage() {
         toast({ variant: "destructive", title: "请先完善任务图片" });
         return;
       }
+
+      // 检查任务是否已经在处理中（防止重复执行）
+      if (processingTasksRef.current.has(task.id)) {
+        console.warn(`[Video Batch] Task ${task.id} is already being processed, skipping...`);
+        return;
+      }
+      
+      // 检查任务状态，如果不是 pending 则跳过
+      const currentState = useVideoBatchStore.getState();
+      const currentTask = currentState.tasks.find(t => t.id === task.id);
+      if (currentTask && currentTask.status !== "pending") {
+        console.warn(`[Video Batch] Task ${task.id} status is ${currentTask.status}, skipping...`);
+        return;
+      }
+      
+      // 添加到处理锁
+      processingTasksRef.current.add(task.id);
 
       try {
         // ==================== Step 0: 上传图片 ====================
@@ -1115,8 +1207,10 @@ export default function VideoBatchPage() {
           body: JSON.stringify({
             aiVideoPrompt: finalVideoPrompt,
             mainGridImageUrl: mainGridImageUrl,
-            aspectRatio: task.aspectRatio,
-            durationSeconds: 15,
+            aspectRatio: globalSettings.aspectRatio,
+            durationSeconds: globalSettings.duration,
+            quality: globalSettings.quality,
+            modelType: globalSettings.modelType,
             taskId: task.id,
           }),
         });
@@ -1145,57 +1239,24 @@ export default function VideoBatchPage() {
           title: "❌ 任务失败",
           description: error instanceof Error ? error.message : "未知错误",
         });
+      } finally {
+        // 释放任务处理锁
+        processingTasksRef.current.delete(task.id);
       }
     },
     [updateTaskStatus, toast, useAiModel, selectedModelTriggerWord]
   );
 
-  // 批量处理（顺序执行，避免API超时）
-  const handleStartBatch = useCallback(async () => {
+  // 批量处理 - 只设置状态，后台任务管理器会自动执行
+  const handleStartBatch = useCallback(() => {
     if (!canStartBatch) return;
 
     startBatch();
     toast({
       title: "🚀 批量处理已启动",
-      description: `共 ${pendingTasks.length} 个任务，将依次执行避免超时`,
+      description: `共 ${pendingTasks.length} 个任务，可以离开页面，任务会在后台继续执行`,
     });
-
-    // 顺序执行任务，避免同时请求导致API超时
-    for (let i = 0; i < pendingTasks.length; i++) {
-      const task = pendingTasks[i];
-      
-      // 检查是否被暂停或取消
-      const currentState = useVideoBatchStore.getState();
-      if (currentState.jobStatus !== "running") {
-        console.log("[Video Batch] Batch stopped, remaining tasks:", pendingTasks.length - i);
-        break;
-      }
-      
-      await handleStartSingleTask(task);
-      
-      // 任务之间添加短暂延迟
-      if (i < pendingTasks.length - 1) {
-        await new Promise(resolve => setTimeout(resolve, 2000));
-      }
-    }
-
-    // 更新最终状态
-    const currentState = useVideoBatchStore.getState();
-    const allDone = currentState.tasks.every(
-      (t) => t.status === "success" || t.status === "failed" || t.status === "pending"
-    );
-    if (allDone && currentState.jobStatus === "running") {
-      useVideoBatchStore.setState({ jobStatus: "completed" });
-      const finalStats = {
-        success: currentState.tasks.filter((t) => t.status === "success").length,
-        failed: currentState.tasks.filter((t) => t.status === "failed").length,
-      };
-      toast({
-        title: "🎉 批量处理完成",
-        description: `成功 ${finalStats.success}，失败 ${finalStats.failed}`,
-      });
-    }
-  }, [canStartBatch, pendingTasks, startBatch, handleStartSingleTask, toast]);
+  }, [canStartBatch, pendingTasks, startBatch, toast]);
 
   // 编辑任务图片
   const handleEditTaskImages = useCallback((task: VideoBatchTask) => {
@@ -1231,6 +1292,29 @@ export default function VideoBatchPage() {
               上传产品图片 → 生成口播脚本 → 生成AI提示词 → Sora2生成15秒视频
             </p>
           </div>
+          
+          {/* 快捷切换按钮组 */}
+          <div className="flex items-center gap-2 p-1 rounded-xl bg-muted/50 border border-border/50">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="bg-gradient-to-r from-tiktok-cyan/20 to-tiktok-cyan/10 text-tiktok-cyan border border-tiktok-cyan/30"
+            >
+              <Video className="h-4 w-4 mr-1.5" />
+              视频
+            </Button>
+            <Link href="/pro-studio/image-batch">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="hover:bg-tiktok-pink/10 hover:text-tiktok-pink"
+              >
+                <ImageIcon className="h-4 w-4 mr-1.5" />
+                图片
+              </Button>
+            </Link>
+          </div>
+          
           <div className="flex items-center gap-2">
             <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-500/10 border border-amber-500/30">
               <Zap className="h-4 w-4 text-amber-400" />
@@ -1273,9 +1357,110 @@ export default function VideoBatchPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex flex-wrap items-center gap-4">
+              {/* 视频模型 */}
+              <div className="flex items-center gap-2">
+                <Label className="text-xs text-muted-foreground whitespace-nowrap">模型</Label>
+                <div className="flex gap-1">
+                  {(["sora2", "sora2-pro"] as VideoModelType[]).map((model) => (
+                    <Button
+                      key={model}
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        updateGlobalSettings("modelType", model);
+                        // 切换模型时重置时长和质量
+                        if (model === "sora2") {
+                          updateGlobalSettings("duration", 15);
+                          updateGlobalSettings("quality", "standard");
+                        } else {
+                          // sora2-pro 默认 15秒高清
+                          updateGlobalSettings("duration", 15);
+                          updateGlobalSettings("quality", "hd");
+                        }
+                      }}
+                      className={cn(
+                        "h-8 px-3 text-xs",
+                        globalSettings.modelType === model
+                          ? "bg-purple-500/20 border-purple-500/50 text-purple-400"
+                          : "btn-subtle"
+                      )}
+                    >
+                      {model === "sora2" ? "Sora2 标清" : "Sora2 Pro"}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+
+              {/* 视频时长 + 质量 */}
+              <div className="flex items-center gap-2">
+                <Label className="text-xs text-muted-foreground whitespace-nowrap">时长</Label>
+                <div className="flex gap-1">
+                  {globalSettings.modelType === "sora2" ? (
+                    // Sora2 标清: 10秒、15秒
+                    <>
+                      {([10, 15] as VideoDuration[]).map((dur) => (
+                        <Button
+                          key={dur}
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            updateGlobalSettings("duration", dur);
+                            updateGlobalSettings("quality", "standard");
+                          }}
+                          className={cn(
+                            "h-8 px-3 text-xs",
+                            globalSettings.duration === dur
+                              ? "bg-amber-500/20 border-amber-500/50 text-amber-400"
+                              : "btn-subtle"
+                          )}
+                        >
+                          {dur}秒
+                        </Button>
+                      ))}
+                    </>
+                  ) : (
+                    // Sora2 Pro: 15秒高清、25秒标清
+                    <>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          updateGlobalSettings("duration", 15);
+                          updateGlobalSettings("quality", "hd");
+                        }}
+                        className={cn(
+                          "h-8 px-3 text-xs",
+                          globalSettings.duration === 15 && globalSettings.quality === "hd"
+                            ? "bg-emerald-500/20 border-emerald-500/50 text-emerald-400"
+                            : "btn-subtle"
+                        )}
+                      >
+                        15秒 高清
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          updateGlobalSettings("duration", 25);
+                          updateGlobalSettings("quality", "standard");
+                        }}
+                        className={cn(
+                          "h-8 px-3 text-xs",
+                          globalSettings.duration === 25 && globalSettings.quality === "standard"
+                            ? "bg-amber-500/20 border-amber-500/50 text-amber-400"
+                            : "btn-subtle"
+                        )}
+                      >
+                        25秒 标清
+                      </Button>
+                    </>
+                  )}
+                </div>
+              </div>
+
               {/* 视频比例 */}
               <div className="flex items-center gap-2">
-                <Label className="text-xs text-muted-foreground whitespace-nowrap">视频比例</Label>
+                <Label className="text-xs text-muted-foreground whitespace-nowrap">比例</Label>
                 <div className="flex gap-1">
                   {(["9:16", "16:9"] as VideoAspectRatio[]).map((ratio) => (
                     <Button
@@ -1348,19 +1533,16 @@ export default function VideoBatchPage() {
             {/* 费用说明 */}
             <div className="flex items-center gap-4 text-xs text-muted-foreground p-2 rounded-lg bg-muted/30">
               <span className="flex items-center gap-1">
-                <FileText className="h-3 w-3" />
-                脚本生成: {VIDEO_BATCH_PRICING.doubaoScript} pts
+                <Video className="h-3 w-3" />
+                {globalSettings.modelType === "sora2" ? "Sora2" : "Sora2 Pro"} {globalSettings.duration}秒
+                {globalSettings.modelType === "sora2-pro" && globalSettings.quality === "hd" && " 高清"}
               </span>
               <span className="flex items-center gap-1">
-                <Wand2 className="h-3 w-3" />
-                提示词生成: {VIDEO_BATCH_PRICING.doubaoPrompt} pts
-              </span>
-              <span className="flex items-center gap-1">
-                <Film className="h-3 w-3" />
-                视频生成: {VIDEO_BATCH_PRICING.sora15s} pts
+                {globalSettings.aspectRatio === "9:16" ? <Smartphone className="h-3 w-3" /> : <Monitor className="h-3 w-3" />}
+                {globalSettings.aspectRatio === "9:16" ? "竖屏" : "横屏"}
               </span>
               <span className="font-semibold text-amber-400">
-                总计: {VIDEO_BATCH_PRICING.total} pts/任务
+                总计: {getVideoBatchTotalPrice(globalSettings.modelType, globalSettings.duration, globalSettings.quality)} pts/任务
               </span>
             </div>
           </CardContent>
@@ -1452,6 +1634,9 @@ export default function VideoBatchPage() {
                     onViewScript={() => setPreviewTask(task)}
                     onEditImages={() => handleEditTaskImages(task)}
                     onPlayVideo={() => setPlayingVideoTask(task)}
+                    modelType={globalSettings.modelType}
+                    duration={globalSettings.duration}
+                    quality={globalSettings.quality}
                   />
                 ))}
               </div>
@@ -1573,7 +1758,7 @@ export default function VideoBatchPage() {
 
         {/* 创建任务弹窗 */}
         <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
-          <DialogContent className="max-w-2xl bg-black/95 border-white/10">
+          <DialogContent className="max-w-2xl bg-background border-border">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <FolderUp className="h-5 w-5 text-tiktok-cyan" />
@@ -1583,7 +1768,7 @@ export default function VideoBatchPage() {
             </DialogHeader>
 
             <div className="py-4">
-              <ImageUploader images={newTaskImages} onImagesChange={setNewTaskImages} maxImages={10} />
+              <ImageUploader images={newTaskImages} onImagesChange={setNewTaskImages} maxImages={4} />
             </div>
 
             <DialogFooter className="flex-col sm:flex-row gap-3">
@@ -1656,7 +1841,7 @@ export default function VideoBatchPage() {
 
         {/* 编辑任务图片弹窗 */}
         <Dialog open={!!editingTaskId} onOpenChange={(open) => !open && setEditingTaskId(null)}>
-          <DialogContent className="max-w-2xl bg-black/95 border-white/10">
+          <DialogContent className="max-w-2xl bg-background border-border">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <ImageIcon className="h-5 w-5 text-tiktok-pink" />
@@ -1666,7 +1851,7 @@ export default function VideoBatchPage() {
             </DialogHeader>
 
             <div className="py-4">
-              <ImageUploader images={editingImages} onImagesChange={setEditingImages} maxImages={10} />
+              <ImageUploader images={editingImages} onImagesChange={setEditingImages} maxImages={4} />
             </div>
 
             <DialogFooter>

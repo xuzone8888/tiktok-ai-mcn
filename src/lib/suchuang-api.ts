@@ -332,71 +332,175 @@ export async function queryNanoBananaResult(
 }
 
 // ============================================================================
-// Sora2 API (视频生成)
+// Sora2 API (视频生成) - 新版 API
+// 文档: https://k0qzjtg1od.apifox.cn/384599477e0
 // ============================================================================
 
+// 新版 Sora2 API 端点 (生产队API)
+const SORA2_API_BASE = "https://api_scddl.scd666.com";
+const SORA2_API_KEY = process.env.SORA2_API_KEY || "";
+
 /**
- * 提交 Sora2 视频生成任务
+ * Sora2 模型类型
  * 
- * 注意: 
- * - sora2 端点支持 10s, 15s
- * - sora2pro 端点支持 10s, 15s, 20s, 25s
+ * 标清版 (3-5分钟):
+ * - sora2-portrait: 竖屏 10秒
+ * - sora2-landscape: 横屏 10秒
+ * - sora2-portrait-15s: 竖屏 15秒
+ * - sora2-landscape-15s: 横屏 15秒
+ * 
+ * Pro版 (15-30分钟):
+ * - sora2-pro-portrait-hd-15s: 竖屏 15秒 高清
+ * - sora2-pro-landscape-hd-15s: 横屏 15秒 高清
+ * - sora2-pro-portrait-25s: 竖屏 25秒
+ * - sora2-pro-landscape-25s: 横屏 25秒
+ */
+export type Sora2ModelType = 
+  | "sora2-portrait"           // 竖屏 10秒 标清
+  | "sora2-landscape"          // 横屏 10秒 标清
+  | "sora2-portrait-15s"       // 竖屏 15秒 标清
+  | "sora2-landscape-15s"      // 横屏 15秒 标清
+  | "sora2-pro-portrait-hd-15s"    // 竖屏 15秒 高清 Pro
+  | "sora2-pro-landscape-hd-15s"   // 横屏 15秒 高清 Pro
+  | "sora2-pro-portrait-25s"       // 竖屏 25秒 标清 Pro
+  | "sora2-pro-landscape-25s";     // 横屏 25秒 标清 Pro
+
+/**
+ * 根据参数获取 Sora2 模型名称
+ */
+export function getSora2ModelName(
+  aspectRatio: "9:16" | "16:9",
+  duration: 10 | 15 | 25,
+  quality: "standard" | "hd"
+): Sora2ModelType {
+  const isPortrait = aspectRatio === "9:16";
+  const isPro = quality === "hd" || duration === 25;
+  
+  if (duration === 10) {
+    return isPortrait ? "sora2-portrait" : "sora2-landscape";
+  } else if (duration === 15) {
+    if (quality === "hd") {
+      return isPortrait ? "sora2-pro-portrait-hd-15s" : "sora2-pro-landscape-hd-15s";
+    }
+    return isPortrait ? "sora2-portrait-15s" : "sora2-landscape-15s";
+  } else if (duration === 25) {
+    return isPortrait ? "sora2-pro-portrait-25s" : "sora2-pro-landscape-25s";
+  }
+  
+  // 默认返回 15 秒标清
+  return isPortrait ? "sora2-portrait-15s" : "sora2-landscape-15s";
+}
+
+/**
+ * 新版 Sora2 响应类型
+ * 
+ * 提交响应 (POST /v1/videos):
+ * - id, object, model, status, progress, created_at, size
+ * 
+ * 查询响应 (GET /v1/videos/{id}):
+ * - 同上 + video_url, completed_at
+ */
+interface Sora2SubmitResponse {
+  id: string;
+  object: string;
+  model: string;
+  status: string;  // "queued" | "processing" | "completed" | "failed"
+  progress: number;
+  created_at: number;
+  completed_at?: number;
+  size: string;
+  video_url?: string;  // 任务完成后返回
+  error?: {
+    message: string;
+  };
+}
+
+/**
+ * 提交 Sora2 视频生成任务（新版 API）
+ * 
+ * API 端点: POST /v1/videos
+ * 文档: https://k0qzjtg1od.apifox.cn/384599477e0
  */
 export async function submitSora2(
-  params: Sora2Params,
+  params: Sora2Params & { model?: Sora2ModelType },
   apiKey?: string
 ): Promise<{ success: boolean; taskId?: string; error?: string }> {
-  const key = apiKey || API_KEY;
+  const key = apiKey || SORA2_API_KEY || API_KEY;
   
   if (!key) {
-    return { success: false, error: "API key not configured" };
+    return { success: false, error: "Sora2 API key not configured" };
   }
 
   try {
-    // 根据时长选择端点: 20s 和 25s 需要使用 sora2pro 端点
-    const usePro = params.duration && params.duration >= 20;
-    const endpoint = usePro
-      ? `${API_BASE_URL}/api/sora2pro/submit`
-      : `${API_BASE_URL}/api/sora2/submit`;
+    // 获取模型名称
+    const model = params.model || getSora2ModelName(
+      params.aspectRatio || "9:16",
+      (params.duration as 10 | 15 | 25) || 15,
+      "standard"
+    );
+    
+    const endpoint = `${SORA2_API_BASE}/v1/videos`;
 
     console.log("[Sora2] Submitting task:", {
-      endpoint: usePro ? "sora2pro" : "sora2",
+      endpoint,
+      model,
       prompt: params.prompt.substring(0, 50) + "...",
-      duration: params.duration || 10,
-      aspectRatio: params.aspectRatio || "9:16",
       hasImage: !!params.url,
     });
+
+    // 构建请求体
+    const requestBody: Record<string, unknown> = {
+      prompt: params.prompt,
+      model: model,
+    };
+
+    // 如果有参考图片，添加到请求体（图生视频）
+    // 文档: https://k0qzjtg1od.apifox.cn/384599479e0
+    // 参数名: image_url
+    if (params.url) {
+      requestBody.image_url = params.url;
+    }
 
     const response = await fetch(endpoint, {
       method: "POST",
       headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${key}`,
+        "Accept": "application/json",
       },
-      body: new URLSearchParams({
-        key,
-        prompt: params.prompt,
-        duration: String(params.duration || 10),
-        aspectRatio: params.aspectRatio || "9:16",
-        size: params.size || "small",
-        ...(params.url && { url: params.url }),
-      }),
+      body: JSON.stringify(requestBody),
     });
 
-    const data: Sora2Response = await response.json();
+    const responseText = await response.text();
+    console.log("[Sora2] Raw response:", responseText.substring(0, 500));
+
+    let data: Sora2SubmitResponse;
+    try {
+      data = JSON.parse(responseText);
+    } catch {
+      console.error("[Sora2] Failed to parse response:", responseText);
+      return { success: false, error: "Invalid API response format" };
+    }
 
     console.log("[Sora2] Submit response:", {
-      code: data.code,
-      msg: data.msg,
-      taskId: data.data?.id,
+      id: data.id,
+      status: data.status,
+      model: data.model,
+      progress: data.progress,
     });
 
-    if (data.code === 200 && data.data?.id) {
-      return { success: true, taskId: data.data.id };
+    // 检查是否有错误
+    if (data.error?.message) {
+      return { success: false, error: data.error.message };
+    }
+
+    if (data.id) {
+      return { success: true, taskId: data.id };
     }
 
     return { 
       success: false, 
-      error: data.msg || `API error: code ${data.code}` 
+      error: "Failed to get task ID from API response" 
     };
   } catch (error) {
     console.error("[Sora2] Submit error:", error);
@@ -408,65 +512,69 @@ export async function submitSora2(
 }
 
 /**
- * 查询 Sora2 任务结果
+ * 查询 Sora2 任务结果（新版 API）
+ * 
+ * API 端点: GET /v1/videos/{id}
  */
 export async function querySora2Result(
   taskId: string,
   usePro: boolean = false,
   apiKey?: string
-): Promise<{ success: boolean; task?: TaskStatus; error?: string; raw?: Sora2ResultResponse }> {
-  const key = apiKey || API_KEY;
+): Promise<{ success: boolean; task?: TaskStatus; error?: string; raw?: unknown }> {
+  const key = apiKey || SORA2_API_KEY || API_KEY;
   
   if (!key) {
-    return { success: false, error: "API key not configured" };
+    return { success: false, error: "Sora2 API key not configured" };
   }
 
   try {
-    const endpoint = usePro
-      ? `${API_BASE_URL}/api/sora2pro/detail`
-      : `${API_BASE_URL}/api/sora2/detail`;
+    const endpoint = `${SORA2_API_BASE}/v1/videos/${taskId}`;
 
     const response = await fetch(endpoint, {
-      method: "POST",
+      method: "GET",
       headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
+        "Authorization": `Bearer ${key}`,
+        "Accept": "application/json",
       },
-      body: new URLSearchParams({
-        key,
-        id: taskId,
-      }),
     });
 
-    const data: Sora2ResultResponse = await response.json();
-
-    console.log("[Sora2] Query response:", {
-      code: data.code,
-      status: data.data?.status,
-      hasUrl: !!data.data?.remote_url,
-    });
-
-    if (data.code === 200 && data.data) {
-      const statusMap: Record<number, TaskStatus["status"]> = {
-        0: "processing",
-        1: "completed",
-        2: "failed",
-      };
-
-      return {
-        success: true,
-        task: {
-          taskId: data.data.id || taskId,
-          status: statusMap[data.data.status] || "processing",
-          resultUrl: data.data.remote_url,
-          errorMessage: data.data.fail_reason,
-          createdAt: data.data.created_at,
-          updatedAt: data.data.updated_at,
-        },
-        raw: data,
-      };
+    const responseText = await response.text();
+    
+    let data: Sora2SubmitResponse;
+    try {
+      data = JSON.parse(responseText);
+    } catch {
+      console.error("[Sora2] Failed to parse query response");
+      return { success: false, error: "Invalid API response format" };
     }
 
-    return { success: false, error: data.msg || "Query failed", raw: data };
+    console.log("[Sora2] Query response:", {
+      id: data.id,
+      status: data.status,
+      progress: data.progress,
+      hasUrl: !!data.video_url,
+    });
+
+    // 状态映射
+    const statusMap: Record<string, TaskStatus["status"]> = {
+      "queued": "pending",
+      "processing": "processing",
+      "completed": "completed",
+      "failed": "failed",
+    };
+
+    const taskStatus = statusMap[data.status] || "processing";
+
+    return {
+      success: true,
+      task: {
+        taskId: data.id || taskId,
+        status: taskStatus,
+        resultUrl: data.video_url,
+        errorMessage: data.error?.message,
+      },
+      raw: data,
+    };
   } catch (error) {
     console.error("[Sora2] Query error:", error);
     return { 

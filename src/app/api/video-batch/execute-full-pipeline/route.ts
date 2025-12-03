@@ -27,6 +27,9 @@ interface RequestBody {
   images: ImageInfo[];
   aspectRatio: "9:16" | "16:9" | "1:1";
   userId?: string;
+  durationSeconds?: number;
+  quality?: "standard" | "hd";
+  creditCost?: number;
 }
 
 // ============================================================================
@@ -71,9 +74,16 @@ async function callGenerateSoraVideo(
   aiVideoPrompt: string, 
   mainGridImageUrl: string, 
   aspectRatio: string,
-  taskId: string
+  taskId: string,
+  options: {
+    durationSeconds?: number;
+    quality?: string;
+    userId?: string;
+    creditCost?: number;
+  } = {}
 ): Promise<{ soraTaskId: string; videoUrl: string }> {
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+  const { durationSeconds = 15, quality = "standard", userId, creditCost = 0 } = options;
   
   const response = await fetch(`${baseUrl}/api/video-batch/generate-sora-video`, {
     method: "POST",
@@ -82,8 +92,11 @@ async function callGenerateSoraVideo(
       aiVideoPrompt, 
       mainGridImageUrl, 
       aspectRatio,
-      durationSeconds: 15,
+      durationSeconds,
+      quality,
       taskId,
+      userId,
+      creditCost,
     }),
   });
 
@@ -105,7 +118,7 @@ async function callGenerateSoraVideo(
 export async function POST(request: NextRequest) {
   try {
     const body: RequestBody = await request.json();
-    const { taskId, images, aspectRatio, userId } = body;
+    const { taskId, images, aspectRatio, userId, durationSeconds = 15, quality = "standard", creditCost = 0 } = body;
 
     // 参数校验
     if (!taskId) {
@@ -161,7 +174,8 @@ export async function POST(request: NextRequest) {
       aiVideoPrompt,
       mainGridImage.url,
       aspectRatio,
-      taskId
+      taskId,
+      { durationSeconds, quality, userId, creditCost }
     );
     console.log("[Video Batch Pipeline] Step 3 completed, video URL:", videoUrl);
 
@@ -190,4 +204,5 @@ export async function POST(request: NextRequest) {
     );
   }
 }
+
 

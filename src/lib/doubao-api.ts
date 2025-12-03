@@ -148,18 +148,47 @@ async function getConfiguredPrompts(): Promise<typeof DEFAULT_PROMPTS> {
 // API 函数
 // ============================================================================
 
+// 全局请求计数器和时间戳，用于控制请求频率
+let lastRequestTime = 0;
+const MIN_REQUEST_INTERVAL = 3000; // 最小请求间隔 3 秒
+
 /**
- * 调用豆包 API 进行文本/图片理解
+ * 延迟函数
+ */
+function delay(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
+ * 等待至少到达最小请求间隔
+ */
+async function waitForRateLimit(): Promise<void> {
+  const now = Date.now();
+  const timeSinceLastRequest = now - lastRequestTime;
+  
+  if (timeSinceLastRequest < MIN_REQUEST_INTERVAL) {
+    const waitTime = MIN_REQUEST_INTERVAL - timeSinceLastRequest;
+    console.log(`[Doubao API] Rate limiting: waiting ${waitTime}ms before next request`);
+    await delay(waitTime);
+  }
+  
+  lastRequestTime = Date.now();
+}
+
+/**
+ * 调用豆包 API 进行文本/图片理解（带重试机制）
  */
 async function callDoubaoAPI(
   messages: DoubaoMessage[],
   options?: {
     maxTokens?: number;
     temperature?: number;
+    maxRetries?: number;
   }
 ): Promise<{ success: boolean; content?: string; error?: string }> {
   const apiKey = DOUBAO_API_KEY;
   const endpointId = DOUBAO_ENDPOINT_ID;
+  const maxRetries = options?.maxRetries ?? 3;
   
   if (!apiKey) {
     console.error("[Doubao API] API key not configured");
@@ -171,63 +200,124 @@ async function callDoubaoAPI(
     return { success: false, error: "豆包 Endpoint ID 未配置，请在火山引擎控制台创建推理接入点，并在 .env.local 中配置 DOUBAO_ENDPOINT_ID" };
   }
 
-  try {
-    const requestBody: DoubaoRequest = {
-      model: endpointId,  // 使用 Endpoint ID 而不是模型名称
-      messages,
-      max_tokens: options?.maxTokens || 4096,
-      temperature: options?.temperature || 0.7,
-      stream: false,
-    };
+  // 请求频率限制
+  await waitForRateLimit();
 
-    console.log("[Doubao API] Calling API:", {
-      endpoint: endpointId,
-      messageCount: messages.length,
-      hasImages: messages.some(m => 
-        Array.isArray(m.content) && m.content.some(c => c.type === "image_url")
-      ),
-    });
+  const requestBody: DoubaoRequest = {
+    model: endpointId,
+    messages,
+    max_tokens: options?.maxTokens || 4096,
+    temperature: options?.temperature || 0.7,
+    stream: false,
+  };
 
-    const response = await fetch(DOUBAO_API_ENDPOINT, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify(requestBody),
-    });
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      console.log("[Doubao API] Calling API:", {
+        endpoint: endpointId,
+        messageCount: messages.length,
+        hasImages: messages.some(m => 
+          Array.isArray(m.content) && m.content.some(c => c.type === "image_url")
+        ),
+        attempt,
+      });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("[Doubao API] HTTP error:", response.status, errorText);
+      const response = await fetch(DOUBAO_API_ENDPOINT, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify(requestBody),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("[Doubao API] HTTP error:", response.status, errorText);
+        
+        // 处理 429 限流错误
+        if (response.status === 429) {
+          // 解析错误信息
+          let errorMessage = "API 请求频率过高，请稍后重试";
+          try {
+            const errorJson = JSON.parse(errorText);
+            if (errorJson.error?.message) {
+              // 检查是否是账户限制
+              if (errorJson.error.message.includes("SetLimitExceeded")) {
+                errorMessage = "豆包 API 账户已达到推理限制，请前往火山引擎控制台调整「安全体验模式」或提升配额";
+              } else {
+                errorMessage = `API 限流: ${errorJson.error.message}`;
+              }
+            }
+          } catch {
+            // 忽略 JSON 解析错误
+          }
+          
+          // 如果是账户限制，不重试
+          if (errorMessage.includes("安全体验模式")) {
+            return { success: false, error: errorMessage };
+          }
+          
+          // 其他 429 错误，等待后重试
+          if (attempt < maxRetries) {
+            const retryDelay = Math.min(5000 * Math.pow(2, attempt - 1), 30000); // 指数退避，最大30秒
+            console.log(`[Doubao API] Rate limited (429), retrying in ${retryDelay}ms (attempt ${attempt}/${maxRetries})`);
+            await delay(retryDelay);
+            continue;
+          }
+          
+          return { success: false, error: errorMessage };
+        }
+        
+        // 其他 5xx 错误，可能重试
+        if (response.status >= 500 && attempt < maxRetries) {
+          const retryDelay = 3000 * attempt;
+          console.log(`[Doubao API] Server error (${response.status}), retrying in ${retryDelay}ms (attempt ${attempt}/${maxRetries})`);
+          await delay(retryDelay);
+          continue;
+        }
+        
+        return { 
+          success: false, 
+          error: `API 请求失败: ${response.status} - ${errorText}` 
+        };
+      }
+
+      const data: DoubaoResponse = await response.json();
+
+      if (!data.choices || data.choices.length === 0) {
+        console.error("[Doubao API] No choices in response:", data);
+        return { success: false, error: "API 返回结果为空" };
+      }
+
+      const content = data.choices[0].message.content;
+      
+      console.log("[Doubao API] Success:", {
+        contentLength: content.length,
+        usage: data.usage,
+        attempt,
+      });
+
+      return { success: true, content };
+    } catch (error) {
+      console.error("[Doubao API] Error:", error);
+      
+      // 网络错误，可能重试
+      if (attempt < maxRetries) {
+        const retryDelay = 3000 * attempt;
+        console.log(`[Doubao API] Network error, retrying in ${retryDelay}ms (attempt ${attempt}/${maxRetries})`);
+        await delay(retryDelay);
+        continue;
+      }
+      
       return { 
         success: false, 
-        error: `API 请求失败: ${response.status} - ${errorText}` 
+        error: error instanceof Error ? error.message : "网络请求失败" 
       };
     }
-
-    const data: DoubaoResponse = await response.json();
-
-    if (!data.choices || data.choices.length === 0) {
-      console.error("[Doubao API] No choices in response:", data);
-      return { success: false, error: "API 返回结果为空" };
-    }
-
-    const content = data.choices[0].message.content;
-    
-    console.log("[Doubao API] Success:", {
-      contentLength: content.length,
-      usage: data.usage,
-    });
-
-    return { success: true, content };
-  } catch (error) {
-    console.error("[Doubao API] Error:", error);
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : "网络请求失败" 
-    };
   }
+
+  return { success: false, error: "API 请求失败，已达到最大重试次数" };
 }
 
 /**
@@ -372,6 +462,49 @@ export async function generateAiVideoPrompt(
     const modelPrefix = `[AI MODEL APPEARANCE: The creator/influencer in this video should have the appearance of ${modelTriggerWord}. Maintain this consistent appearance throughout all 7 shots.]\n\n`;
     finalPrompt = modelPrefix + finalPrompt;
     console.log("[Doubao] Added model trigger word to prompt");
+  }
+
+  // 限制提示词长度，避免 Sora API 报错 "提示词过长"
+  // Sora2 API 限制更严格，设置为 1000 字符以确保安全
+  const MAX_PROMPT_LENGTH = 1000;
+  if (finalPrompt.length > MAX_PROMPT_LENGTH) {
+    console.warn(`[Doubao] Prompt too long (${finalPrompt.length} chars), truncating to ${MAX_PROMPT_LENGTH}`);
+    
+    // 尝试智能截断：优先保留前几个镜头的完整描述
+    const shots = finalPrompt.split(/(?=C0[1-7]:)/);
+    let truncatedPrompt = "";
+    
+    // 如果有模特触发词前缀，先添加
+    const modelPrefixMatch = finalPrompt.match(/^\[AI MODEL APPEARANCE:.*?\]\n\n/);
+    if (modelPrefixMatch) {
+      truncatedPrompt = modelPrefixMatch[0];
+    }
+    
+    for (const shot of shots) {
+      // 跳过已添加的模特前缀部分
+      if (shot.startsWith("[AI MODEL APPEARANCE:")) continue;
+      
+      if ((truncatedPrompt + shot).length <= MAX_PROMPT_LENGTH) {
+        truncatedPrompt += shot;
+      } else {
+        // 如果加上这个镜头会超长，尝试截断这个镜头
+        const remaining = MAX_PROMPT_LENGTH - truncatedPrompt.length;
+        if (remaining > 50) {
+          // 截断当前镜头，保留开头部分
+          const shotCode = shot.match(/^C0[1-7]:/)?.[0] || "";
+          truncatedPrompt += shotCode + shot.substring(shotCode.length, remaining - 3).trim() + "...";
+        }
+        break;
+      }
+    }
+    
+    // 确保最终长度不超过限制
+    if (truncatedPrompt.length > MAX_PROMPT_LENGTH) {
+      truncatedPrompt = truncatedPrompt.substring(0, MAX_PROMPT_LENGTH - 3) + "...";
+    }
+    
+    finalPrompt = truncatedPrompt || finalPrompt.substring(0, MAX_PROMPT_LENGTH);
+    console.log(`[Doubao] Truncated prompt to ${finalPrompt.length} chars`);
   }
 
   return { success: true, prompt: finalPrompt };

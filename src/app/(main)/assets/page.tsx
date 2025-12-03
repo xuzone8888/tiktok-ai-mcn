@@ -1,24 +1,28 @@
 "use client";
 
-import { useState } from "react";
-import { Card, CardContent } from "@/components/ui/card";
+import { useState, useEffect } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-  Package,
-  Upload,
+  History,
   Search,
   Grid3X3,
   List,
-  Plus,
   Image as ImageIcon,
   Video,
-  FileText,
   MoreVertical,
   Download,
-  Trash2,
-  Edit,
   Eye,
+  CheckCircle,
+  XCircle,
+  Clock,
+  Loader2,
+  RefreshCw,
+  AlertTriangle,
+  Play,
+  Trash2,
+  ExternalLink,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -26,102 +30,181 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-// import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
-// 模拟素材数据
-const mockAssets = [
-  {
-    id: "1",
-    name: "夏季新品展示图",
-    type: "image",
-    thumbnail: "/api/placeholder/300/200",
-    size: "2.4 MB",
-    uploadedAt: "2024-01-15",
-    category: "产品图",
-  },
-  {
-    id: "2",
-    name: "品牌介绍视频",
-    type: "video",
-    thumbnail: "/api/placeholder/300/200",
-    size: "45.2 MB",
-    uploadedAt: "2024-01-14",
-    category: "视频素材",
-  },
-  {
-    id: "3",
-    name: "产品文案模板",
-    type: "document",
-    thumbnail: "/api/placeholder/300/200",
-    size: "128 KB",
-    uploadedAt: "2024-01-13",
-    category: "文案",
-  },
-  {
-    id: "4",
-    name: "秋季穿搭素材",
-    type: "image",
-    thumbnail: "/api/placeholder/300/200",
-    size: "3.1 MB",
-    uploadedAt: "2024-01-12",
-    category: "产品图",
-  },
-  {
-    id: "5",
-    name: "美妆产品展示",
-    type: "image",
-    thumbnail: "/api/placeholder/300/200",
-    size: "1.8 MB",
-    uploadedAt: "2024-01-11",
-    category: "产品图",
-  },
-  {
-    id: "6",
-    name: "运动装备介绍",
-    type: "video",
-    thumbnail: "/api/placeholder/300/200",
-    size: "32.5 MB",
-    uploadedAt: "2024-01-10",
-    category: "视频素材",
-  },
+interface TaskLogItem {
+  id: string;
+  type: "video" | "image";
+  source: "quick_gen" | "batch_video" | "batch_image";
+  status: "completed" | "failed" | "processing" | "pending";
+  resultUrl: string | null;
+  thumbnailUrl: string | null;
+  prompt: string | null;
+  model: string;
+  credits: number;
+  createdAt: string;
+  completedAt: string | null;
+  expiresAt: string;
+}
+
+interface TaskStats {
+  totalTasks: number;
+  completedTasks: number;
+  failedTasks: number;
+  processingTasks: number;
+  totalVideos: number;
+  totalImages: number;
+  totalCreditsUsed: number;
+}
+
+const typeFilters = [
+  { value: "all", label: "全部" },
+  { value: "video", label: "视频" },
+  { value: "image", label: "图片" },
 ];
 
-const categories = ["全部", "产品图", "视频素材", "文案", "背景音乐"];
+const statusFilters = [
+  { value: "all", label: "全部状态" },
+  { value: "completed", label: "已完成" },
+  { value: "processing", label: "处理中" },
+  { value: "failed", label: "失败" },
+];
 
-export default function AssetsPage() {
+function formatDate(dateString: string): string {
+  const date = new Date(dateString);
+  return date.toLocaleDateString("zh-CN", {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function getExpiryStatus(expiresAt: string): { text: string; isExpiringSoon: boolean; isExpired: boolean } {
+  const now = new Date();
+  const expiry = new Date(expiresAt);
+  const diff = expiry.getTime() - now.getTime();
+  const days = Math.ceil(diff / (1000 * 60 * 60 * 24));
+  
+  if (diff <= 0) {
+    return { text: "已过期", isExpiringSoon: false, isExpired: true };
+  }
+  if (days <= 1) {
+    return { text: "即将过期", isExpiringSoon: true, isExpired: false };
+  }
+  if (days <= 3) {
+    return { text: `${days}天后过期`, isExpiringSoon: true, isExpired: false };
+  }
+  return { text: `${days}天后过期`, isExpiringSoon: false, isExpired: false };
+}
+
+function getSourceLabel(source: string): string {
+  switch (source) {
+    case "quick_gen":
+      return "快速生成";
+    case "batch_video":
+      return "批量视频";
+    case "batch_image":
+      return "批量图片";
+    default:
+      return "未知来源";
+  }
+}
+
+export default function TaskLogPage() {
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState("全部");
+  const [selectedType, setSelectedType] = useState("all");
+  const [selectedStatus, setSelectedStatus] = useState("all");
+  const [tasks, setTasks] = useState<TaskLogItem[]>([]);
+  const [stats, setStats] = useState<TaskStats | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [previewTask, setPreviewTask] = useState<TaskLogItem | null>(null);
 
-  const filteredAssets = mockAssets.filter((asset) => {
-    const matchesSearch = asset.name.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesCategory = selectedCategory === "全部" || asset.category === selectedCategory;
-    return matchesSearch && matchesCategory;
-  });
-
-  const getTypeIcon = (type: string) => {
-    switch (type) {
-      case "image":
-        return <ImageIcon className="h-4 w-4" />;
-      case "video":
-        return <Video className="h-4 w-4" />;
-      case "document":
-        return <FileText className="h-4 w-4" />;
-      default:
-        return <Package className="h-4 w-4" />;
+  const fetchTasks = async () => {
+    try {
+      setLoading(true);
+      const params = new URLSearchParams();
+      if (selectedType !== "all") params.set("type", selectedType);
+      if (selectedStatus !== "all") params.set("status", selectedStatus);
+      
+      const response = await fetch(`/api/user/tasks?${params.toString()}`);
+      const result = await response.json();
+      
+      if (result.success) {
+        setTasks(result.data.tasks);
+        setStats(result.data.stats);
+      }
+    } catch (error) {
+      console.error("[TaskLog] Error:", error);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const getTypeColor = (type: string) => {
-    switch (type) {
-      case "image":
-        return "text-tiktok-cyan bg-tiktok-cyan/10";
-      case "video":
-        return "text-tiktok-pink bg-tiktok-pink/10";
-      case "document":
-        return "text-amber-400 bg-amber-400/10";
+  useEffect(() => {
+    fetchTasks();
+  }, [selectedType, selectedStatus]);
+
+  const filteredTasks = tasks.filter((task) => {
+    if (!searchQuery) return true;
+    const query = searchQuery.toLowerCase();
+    return (
+      task.prompt?.toLowerCase().includes(query) ||
+      task.model.toLowerCase().includes(query)
+    );
+  });
+
+  const handleDownload = async (task: TaskLogItem) => {
+    if (!task.resultUrl) return;
+    
+    try {
+      const response = await fetch(task.resultUrl);
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${task.type}-${task.id}.${task.type === "video" ? "mp4" : "png"}`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error("[Download] Error:", error);
+    }
+  };
+
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case "completed":
+        return <CheckCircle className="h-4 w-4 text-emerald-400" />;
+      case "failed":
+        return <XCircle className="h-4 w-4 text-red-400" />;
+      case "processing":
+      case "pending":
+        return <Loader2 className="h-4 w-4 text-amber-400 animate-spin" />;
       default:
-        return "text-gray-400 bg-gray-400/10";
+        return <Clock className="h-4 w-4 text-muted-foreground" />;
+    }
+  };
+
+  const getStatusLabel = (status: string) => {
+    switch (status) {
+      case "completed":
+        return "已完成";
+      case "failed":
+        return "失败";
+      case "processing":
+        return "处理中";
+      case "pending":
+        return "等待中";
+      default:
+        return status;
     }
   };
 
@@ -131,38 +214,74 @@ export default function AssetsPage() {
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">
-            <span className="gradient-tiktok-text">选品中心</span>
+            <span className="gradient-tiktok-text">任务日志</span>
           </h1>
           <p className="mt-2 text-muted-foreground">
-            管理您的产品素材、视频和文案资源
+            查看和下载您生成的视频与图片内容
           </p>
         </div>
-        <Button className="gap-2 bg-gradient-to-r from-tiktok-cyan to-tiktok-pink hover:opacity-90">
-          <Upload className="h-4 w-4" />
-          上传素材
-        </Button>
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/30">
+            <AlertTriangle className="h-4 w-4 text-amber-400" />
+            <span className="text-sm text-amber-400">内容保留7天</span>
+          </div>
+          <Button variant="outline" size="sm" onClick={fetchTasks} className="gap-2">
+            <RefreshCw className="h-4 w-4" />
+            刷新
+          </Button>
+        </div>
       </div>
 
       {/* Stats Cards */}
       <div className="grid gap-4 md:grid-cols-4">
-        {[
-          { label: "总素材数", value: "1,234", icon: Package, color: "cyan" },
-          { label: "图片素材", value: "856", icon: ImageIcon, color: "pink" },
-          { label: "视频素材", value: "234", icon: Video, color: "cyan" },
-          { label: "文案模板", value: "144", icon: FileText, color: "pink" },
-        ].map((stat, index) => (
-          <Card key={index} className="border-border/50 bg-card/50 backdrop-blur-sm">
-            <CardContent className="flex items-center gap-4 p-6">
-              <div className={`flex h-12 w-12 items-center justify-center rounded-xl bg-tiktok-${stat.color}/10`}>
-                <stat.icon className={`h-6 w-6 text-tiktok-${stat.color}`} />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">{stat.label}</p>
-                <p className="text-2xl font-bold">{stat.value}</p>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+        <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
+          <CardContent className="flex items-center gap-4 p-6">
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-tiktok-cyan/10">
+              <History className="h-6 w-6 text-tiktok-cyan" />
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">总任务数</p>
+              <p className="text-2xl font-bold">{stats?.totalTasks || 0}</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
+          <CardContent className="flex items-center gap-4 p-6">
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-tiktok-pink/10">
+              <Video className="h-6 w-6 text-tiktok-pink" />
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">视频</p>
+              <p className="text-2xl font-bold">{stats?.totalVideos || 0}</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
+          <CardContent className="flex items-center gap-4 p-6">
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-tiktok-cyan/10">
+              <ImageIcon className="h-6 w-6 text-tiktok-cyan" />
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">图片</p>
+              <p className="text-2xl font-bold">{stats?.totalImages || 0}</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
+          <CardContent className="flex items-center gap-4 p-6">
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-500/10">
+              <CheckCircle className="h-6 w-6 text-emerald-400" />
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">成功率</p>
+              <p className="text-2xl font-bold">
+                {stats && stats.totalTasks > 0 
+                  ? Math.round((stats.completedTasks / stats.totalTasks) * 100) 
+                  : 0}%
+              </p>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Filters and Search */}
@@ -173,27 +292,45 @@ export default function AssetsPage() {
             <div className="relative flex-1 max-w-md">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
-                placeholder="搜索素材..."
+                placeholder="搜索提示词或模型..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-10 bg-background/50 border-border/50"
               />
             </div>
 
-            {/* Categories */}
+            {/* Type Filter */}
             <div className="flex flex-wrap gap-2">
-              {categories.map((category) => (
+              {typeFilters.map((filter) => (
                 <Button
-                  key={category}
-                  variant={selectedCategory === category ? "default" : "outline"}
+                  key={filter.value}
+                  variant={selectedType === filter.value ? "default" : "outline"}
                   size="sm"
-                  onClick={() => setSelectedCategory(category)}
-                  className={selectedCategory === category 
+                  onClick={() => setSelectedType(filter.value)}
+                  className={selectedType === filter.value 
                     ? "bg-gradient-to-r from-tiktok-cyan to-tiktok-pink" 
                     : "border-border/50 hover:border-tiktok-cyan/50"
                   }
                 >
-                  {category}
+                  {filter.label}
+                </Button>
+              ))}
+            </div>
+
+            {/* Status Filter */}
+            <div className="flex flex-wrap gap-2">
+              {statusFilters.map((filter) => (
+                <Button
+                  key={filter.value}
+                  variant={selectedStatus === filter.value ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setSelectedStatus(filter.value)}
+                  className={selectedStatus === filter.value 
+                    ? "bg-gradient-to-r from-tiktok-cyan to-tiktok-pink" 
+                    : "border-border/50 hover:border-tiktok-cyan/50"
+                  }
+                >
+                  {filter.label}
                 </Button>
               ))}
             </div>
@@ -221,142 +358,318 @@ export default function AssetsPage() {
         </CardContent>
       </Card>
 
-      {/* Assets Grid/List */}
-      {viewMode === "grid" ? (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {/* Upload Card */}
-          <Card className="group cursor-pointer border-2 border-dashed border-border/50 bg-card/30 hover:border-tiktok-cyan/50 hover:bg-card/50 transition-all">
-            <CardContent className="flex flex-col items-center justify-center h-[200px] gap-3">
-              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-tiktok-cyan/10 group-hover:bg-tiktok-cyan/20 transition-colors">
-                <Plus className="h-8 w-8 text-tiktok-cyan" />
-              </div>
-              <p className="text-sm text-muted-foreground group-hover:text-foreground transition-colors">
-                上传新素材
-              </p>
-            </CardContent>
-          </Card>
-
-          {/* Asset Cards */}
-          {filteredAssets.map((asset) => (
-            <Card key={asset.id} className="group overflow-hidden border-border/50 bg-card/50 hover:border-tiktok-cyan/30 transition-all">
-              <div className="relative aspect-[4/3] bg-gradient-to-br from-background to-background/50">
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <div className={`flex h-16 w-16 items-center justify-center rounded-xl ${getTypeColor(asset.type)}`}>
-                    {getTypeIcon(asset.type)}
-                  </div>
-                </div>
-                {/* Hover Actions */}
-                <div className="absolute inset-0 flex items-center justify-center gap-2 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <Button size="icon" variant="secondary" className="h-9 w-9">
-                    <Eye className="h-4 w-4" />
-                  </Button>
-                  <Button size="icon" variant="secondary" className="h-9 w-9">
-                    <Download className="h-4 w-4" />
-                  </Button>
-                  <Button size="icon" variant="secondary" className="h-9 w-9">
-                    <Edit className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-              <CardContent className="p-4">
-                <div className="flex items-start justify-between">
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium truncate">{asset.name}</p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {asset.size} · {asset.uploadedAt}
-                    </p>
-                  </div>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
-                        <MoreVertical className="h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem>
-                        <Eye className="h-4 w-4 mr-2" />
-                        预览
-                      </DropdownMenuItem>
-                      <DropdownMenuItem>
-                        <Download className="h-4 w-4 mr-2" />
-                        下载
-                      </DropdownMenuItem>
-                      <DropdownMenuItem>
-                        <Edit className="h-4 w-4 mr-2" />
-                        编辑
-                      </DropdownMenuItem>
-                      <DropdownMenuItem className="text-red-400">
-                        <Trash2 className="h-4 w-4 mr-2" />
-                        删除
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-                <div className="mt-2">
-                  <span className="inline-flex items-center gap-1 rounded-full bg-white/5 px-2 py-1 text-xs">
-                    {getTypeIcon(asset.type)}
-                    {asset.category}
-                  </span>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+      {/* Loading State */}
+      {loading && (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="h-8 w-8 animate-spin text-tiktok-cyan" />
         </div>
-      ) : (
+      )}
+
+      {/* Empty State */}
+      {!loading && filteredTasks.length === 0 && (
         <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
-          <CardContent className="p-0">
-            <div className="divide-y divide-border/50">
-              {filteredAssets.map((asset) => (
-                <div key={asset.id} className="flex items-center gap-4 p-4 hover:bg-white/5 transition-colors">
-                  <div className={`flex h-12 w-12 items-center justify-center rounded-lg ${getTypeColor(asset.type)}`}>
-                    {getTypeIcon(asset.type)}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium truncate">{asset.name}</p>
-                    <p className="text-sm text-muted-foreground">{asset.category}</p>
-                  </div>
-                  <div className="text-sm text-muted-foreground hidden md:block">
-                    {asset.size}
-                  </div>
-                  <div className="text-sm text-muted-foreground hidden lg:block">
-                    {asset.uploadedAt}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button variant="ghost" size="icon" className="h-8 w-8">
-                      <Eye className="h-4 w-4" />
-                    </Button>
-                    <Button variant="ghost" size="icon" className="h-8 w-8">
-                      <Download className="h-4 w-4" />
-                    </Button>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-8 w-8">
-                          <MoreVertical className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem>
-                          <Edit className="h-4 w-4 mr-2" />
-                          编辑
-                        </DropdownMenuItem>
-                        <DropdownMenuItem className="text-red-400">
-                          <Trash2 className="h-4 w-4 mr-2" />
-                          删除
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                </div>
-              ))}
-            </div>
+          <CardContent className="flex flex-col items-center justify-center py-16">
+            <History className="h-16 w-16 text-muted-foreground/50 mb-4" />
+            <h3 className="text-lg font-medium mb-2">暂无任务记录</h3>
+            <p className="text-muted-foreground text-center max-w-md">
+              开始使用快速生成或批量生产功能后，您的生成记录将显示在这里
+            </p>
           </CardContent>
         </Card>
       )}
+
+      {/* Tasks Grid/List */}
+      {!loading && filteredTasks.length > 0 && (
+        viewMode === "grid" ? (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {filteredTasks.map((task) => {
+              const expiry = getExpiryStatus(task.expiresAt);
+              
+              return (
+                <Card 
+                  key={task.id} 
+                  className={`group overflow-hidden border-border/50 bg-card/50 hover:border-tiktok-cyan/30 transition-all ${
+                    expiry.isExpired ? "opacity-50" : ""
+                  }`}
+                >
+                  <div className="relative aspect-video bg-gradient-to-br from-background to-background/50">
+                    {task.resultUrl && task.status === "completed" ? (
+                      task.type === "video" ? (
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <video 
+                            src={task.resultUrl} 
+                            className="w-full h-full object-cover"
+                            muted
+                          />
+                          <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+                            <Play className="h-12 w-12 text-white" />
+                          </div>
+                        </div>
+                      ) : (
+                        <img 
+                          src={task.resultUrl} 
+                          alt={task.prompt || "生成图片"}
+                          className="w-full h-full object-cover"
+                        />
+                      )
+                    ) : (
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <div className={`flex h-16 w-16 items-center justify-center rounded-xl ${
+                          task.type === "video" ? "bg-tiktok-pink/20" : "bg-tiktok-cyan/20"
+                        }`}>
+                          {task.type === "video" ? (
+                            <Video className="h-8 w-8 text-tiktok-pink" />
+                          ) : (
+                            <ImageIcon className="h-8 w-8 text-tiktok-cyan" />
+                          )}
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* Status Badge */}
+                    <div className="absolute top-2 left-2">
+                      <div className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs ${
+                        task.status === "completed" ? "bg-emerald-500/20 text-emerald-400" :
+                        task.status === "failed" ? "bg-red-500/20 text-red-400" :
+                        "bg-amber-500/20 text-amber-400"
+                      }`}>
+                        {getStatusIcon(task.status)}
+                        {getStatusLabel(task.status)}
+                      </div>
+                    </div>
+
+                    {/* Expiry Badge */}
+                    {expiry.isExpiringSoon && !expiry.isExpired && (
+                      <div className="absolute top-2 right-2">
+                        <div className="flex items-center gap-1 px-2 py-1 rounded-full text-xs bg-amber-500/20 text-amber-400">
+                          <AlertTriangle className="h-3 w-3" />
+                          {expiry.text}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Hover Actions */}
+                    {task.status === "completed" && task.resultUrl && !expiry.isExpired && (
+                      <div className="absolute inset-0 flex items-center justify-center gap-2 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Button 
+                          size="icon" 
+                          variant="secondary" 
+                          className="h-9 w-9"
+                          onClick={() => setPreviewTask(task)}
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                        <Button 
+                          size="icon" 
+                          variant="secondary" 
+                          className="h-9 w-9"
+                          onClick={() => handleDownload(task)}
+                        >
+                          <Download className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                  
+                  <CardContent className="p-4">
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium truncate text-sm">
+                          {task.prompt?.substring(0, 30) || "未命名任务"}
+                          {task.prompt && task.prompt.length > 30 ? "..." : ""}
+                        </p>
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className="text-xs text-muted-foreground">
+                            {getSourceLabel(task.source)}
+                          </span>
+                          <span className="text-xs text-muted-foreground">·</span>
+                          <span className="text-xs text-muted-foreground">
+                            {task.credits} 积分
+                          </span>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {formatDate(task.createdAt)}
+                        </p>
+                      </div>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
+                            <MoreVertical className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="bg-popover border-border">
+                          {task.status === "completed" && task.resultUrl && !expiry.isExpired && (
+                            <>
+                              <DropdownMenuItem onClick={() => setPreviewTask(task)}>
+                                <Eye className="h-4 w-4 mr-2" />
+                                预览
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => handleDownload(task)}>
+                                <Download className="h-4 w-4 mr-2" />
+                                下载
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => window.open(task.resultUrl!, "_blank")}>
+                                <ExternalLink className="h-4 w-4 mr-2" />
+                                新窗口打开
+                              </DropdownMenuItem>
+                            </>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        ) : (
+          <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
+            <CardContent className="p-0">
+              <div className="divide-y divide-border/50">
+                {filteredTasks.map((task) => {
+                  const expiry = getExpiryStatus(task.expiresAt);
+                  
+                  return (
+                    <div 
+                      key={task.id} 
+                      className={`flex items-center gap-4 p-4 hover:bg-white/5 transition-colors ${
+                        expiry.isExpired ? "opacity-50" : ""
+                      }`}
+                    >
+                      <div className={`flex h-12 w-12 items-center justify-center rounded-lg ${
+                        task.type === "video" ? "bg-tiktok-pink/20" : "bg-tiktok-cyan/20"
+                      }`}>
+                        {task.type === "video" ? (
+                          <Video className="h-5 w-5 text-tiktok-pink" />
+                        ) : (
+                          <ImageIcon className="h-5 w-5 text-tiktok-cyan" />
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium truncate">
+                          {task.prompt?.substring(0, 50) || "未命名任务"}
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          {getSourceLabel(task.source)} · {task.model}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {getStatusIcon(task.status)}
+                        <span className="text-sm">{getStatusLabel(task.status)}</span>
+                      </div>
+                      <div className="text-sm text-muted-foreground hidden md:block">
+                        {task.credits} 积分
+                      </div>
+                      <div className="text-sm text-muted-foreground hidden lg:block">
+                        {formatDate(task.createdAt)}
+                      </div>
+                      {expiry.isExpiringSoon && !expiry.isExpired && (
+                        <div className="flex items-center gap-1 px-2 py-1 rounded-full text-xs bg-amber-500/20 text-amber-400">
+                          <AlertTriangle className="h-3 w-3" />
+                          {expiry.text}
+                        </div>
+                      )}
+                      <div className="flex items-center gap-2">
+                        {task.status === "completed" && task.resultUrl && !expiry.isExpired && (
+                          <>
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="h-8 w-8"
+                              onClick={() => setPreviewTask(task)}
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="h-8 w-8"
+                              onClick={() => handleDownload(task)}
+                            >
+                              <Download className="h-4 w-4" />
+                            </Button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+        )
+      )}
+
+      {/* Preview Dialog */}
+      <Dialog open={!!previewTask} onOpenChange={() => setPreviewTask(null)}>
+        <DialogContent className="max-w-4xl bg-background border-border">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {previewTask?.type === "video" ? (
+                <Video className="h-5 w-5 text-tiktok-pink" />
+              ) : (
+                <ImageIcon className="h-5 w-5 text-tiktok-cyan" />
+              )}
+              {previewTask?.type === "video" ? "视频预览" : "图片预览"}
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            {previewTask?.type === "video" && previewTask.resultUrl ? (
+              <video 
+                src={previewTask.resultUrl} 
+                controls 
+                autoPlay
+                className="w-full rounded-lg"
+              />
+            ) : previewTask?.resultUrl ? (
+              <img 
+                src={previewTask.resultUrl} 
+                alt={previewTask.prompt || "预览图片"}
+                className="w-full rounded-lg"
+              />
+            ) : null}
+            
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">提示词</span>
+                <span className="max-w-md truncate">{previewTask?.prompt || "无"}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">来源</span>
+                <span>{getSourceLabel(previewTask?.source || "")}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">模型</span>
+                <span>{previewTask?.model}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">消耗积分</span>
+                <span>{previewTask?.credits} 积分</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">创建时间</span>
+                <span>{previewTask?.createdAt && formatDate(previewTask.createdAt)}</span>
+              </div>
+            </div>
+            
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setPreviewTask(null)}>
+                关闭
+              </Button>
+              {previewTask?.resultUrl && (
+                <Button 
+                  className="gap-2 bg-gradient-to-r from-tiktok-cyan to-tiktok-pink"
+                  onClick={() => handleDownload(previewTask)}
+                >
+                  <Download className="h-4 w-4" />
+                  下载
+                </Button>
+              )}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
-
-
-
-
-

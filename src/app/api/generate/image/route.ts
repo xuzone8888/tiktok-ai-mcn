@@ -16,26 +16,29 @@ import { createAdminClient } from "@/lib/supabase/admin";
 
 // ============================================================================
 // 积分配置
+// 快速单个图片/批量生产图片扣分机制：
+// - Nano Banana Fast: 10 积分/次
+// - Nano Banana Pro: 28 积分/次
 // ============================================================================
 
 // NanoBanana 积分配置
 const NANO_BANANA_CREDITS = {
   "nano-banana": {
-    "fast": 10,   // 快速模式
-    "pro": 28,    // Pro 模式
+    "fast": 10,   // Fast 模式 = 10积分
+    "pro": 10,    // 同样是 10积分（nano-banana 只有 fast 模式）
   },
   "nano-banana-pro": {
-    "1k": 30,     // 1K 分辨率
-    "2k": 50,     // 2K 分辨率
-    "4k": 80,     // 4K 分辨率
+    "1k": 28,     // Pro 模式 = 28积分
+    "2k": 28,     // Pro 模式 = 28积分
+    "4k": 28,     // Pro 模式 = 28积分
   },
 };
 
 // 图片增强积分配置
 const ENHANCEMENT_CREDITS = {
-  "upscale_2k": 40,   // 放大到 2K
-  "upscale_4k": 70,   // 放大到 4K
-  "nine_grid": 60,    // 九宫格多角度
+  "upscale_2k": 10,   // Nano Banana 放大 = 10积分
+  "upscale_4k": 10,   // Nano Banana 放大 = 10积分
+  "nine_grid": 10,    // Nano Banana 九宫格 = 10积分
 };
 
 // ============================================================================
@@ -55,6 +58,7 @@ export async function POST(request: Request) {
       aspectRatio = "auto",
       resolution = "1k",            // "1k" | "2k" | "4k" (for nano-banana-pro)
       userId,
+      source = "quick_gen",         // "quick_gen" | "batch_image"
     } = body;
 
     // ============================================
@@ -236,6 +240,30 @@ export async function POST(request: Request) {
       model,
     });
 
+    // 写入 generations 表
+    if (userId && result.taskId) {
+      try {
+        const supabase = createAdminClient();
+        await supabase.from("generations").insert({
+          user_id: userId,
+          task_id: result.taskId,
+          type: "image",
+          source: source,
+          prompt: prompt || null,
+          model: model,
+          aspect_ratio: aspectRatio,
+          quality: resolution,
+          source_image_url: sourceImageUrl || null,
+          status: "processing",
+          credit_cost: creditCost,
+          created_at: new Date().toISOString(),
+        });
+        console.log("[Generate Image] Saved to generations table:", result.taskId);
+      } catch (dbError) {
+        console.error("[Generate Image] Failed to save to DB:", dbError);
+      }
+    }
+
     return NextResponse.json({
       success: true,
       data: {
@@ -286,6 +314,26 @@ export async function GET(request: Request) {
     }
 
     const task = result.task!;
+
+    // 更新 generations 表状态
+    if (task.status === "completed" || task.status === "failed") {
+      try {
+        const supabase = createAdminClient();
+        await supabase
+          .from("generations")
+          .update({
+            status: task.status,
+            result_url: task.resultUrl || null,
+            image_url: task.resultUrl || null,
+            error_message: task.errorMessage || null,
+            completed_at: task.status === "completed" ? new Date().toISOString() : null,
+          })
+          .eq("task_id", taskId);
+        console.log("[Generate Image] Updated generations table:", taskId, task.status);
+      } catch (dbError) {
+        console.error("[Generate Image] Failed to update DB:", dbError);
+      }
+    }
 
     return NextResponse.json({
       success: true,

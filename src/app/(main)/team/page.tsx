@@ -24,7 +24,45 @@ import {
   ChevronRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { getUserHiredModels, type HiredModel } from "@/lib/actions/models";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+
+// 从 API 获取签约模特
+interface HiredModel {
+  id: string;
+  name: string;
+  description: string | null;
+  avatar_url: string | null;
+  demo_video_url: string | null;
+  tags: string[];
+  category: string;
+  gender: "male" | "female" | "neutral" | null;
+  base_price: number;
+  price_monthly: number;
+  rating: number;
+  is_featured: boolean;
+  is_trending: boolean;
+  total_rentals: number;
+  total_generations: number;
+  created_at: string;
+  contract_id: string;
+  contract_end_date: string;
+  days_remaining: number;
+  contract_status: string;
+}
 import { useToast } from "@/hooks/use-toast";
 
 // ============================================================================
@@ -32,24 +70,24 @@ import { useToast } from "@/hooks/use-toast";
 // ============================================================================
 
 function formatCountdown(daysRemaining: number): string {
-  if (daysRemaining <= 0) return "Expired";
-  if (daysRemaining === 1) return "1 day left";
-  if (daysRemaining < 7) return `${daysRemaining} days left`;
-  if (daysRemaining < 30) return `${Math.floor(daysRemaining / 7)} weeks left`;
-  return `${Math.floor(daysRemaining / 30)} months left`;
+  if (daysRemaining <= 0) return "已过期";
+  if (daysRemaining === 1) return "剩余 1 天";
+  if (daysRemaining < 7) return `剩余 ${daysRemaining} 天`;
+  if (daysRemaining < 30) return `剩余 ${Math.floor(daysRemaining / 7)} 周`;
+  return `剩余 ${Math.floor(daysRemaining / 30)} 月`;
 }
 
 function getStatusConfig(daysRemaining: number) {
   if (daysRemaining <= 0) {
-    return { color: "bg-red-500", text: "Expired", badge: "destructive" as const };
+    return { color: "bg-red-500", text: "已过期", badge: "destructive" as const };
   }
   if (daysRemaining <= 3) {
-    return { color: "bg-red-500", text: "Critical", badge: "destructive" as const };
+    return { color: "bg-red-500", text: "紧急", badge: "destructive" as const };
   }
   if (daysRemaining <= 7) {
-    return { color: "bg-amber-500", text: "Expiring Soon", badge: "warning" as const };
+    return { color: "bg-amber-500", text: "即将过期", badge: "warning" as const };
   }
-  return { color: "bg-emerald-500", text: "Active", badge: "success" as const };
+  return { color: "bg-emerald-500", text: "有效", badge: "success" as const };
 }
 
 // ============================================================================
@@ -65,16 +103,16 @@ function EmptyState() {
         <div className="absolute inset-0 bg-gradient-to-r from-tiktok-cyan/20 to-tiktok-pink/20 blur-3xl" />
         <Users className="relative h-24 w-24 text-muted-foreground/30" />
       </div>
-      <h3 className="text-xl font-semibold mb-2">No Team Members Yet</h3>
+      <h3 className="text-xl font-semibold mb-2">暂无签约模特</h3>
       <p className="text-muted-foreground max-w-sm mb-6">
-        Visit the Model Market to hire your first AI talent and start creating amazing content.
+        前往模特资源库聘用您的第一位 AI 模特，开始创作精彩内容。
       </p>
       <Button 
         onClick={() => router.push("/models")}
         className="bg-gradient-to-r from-tiktok-cyan to-tiktok-pink text-black font-semibold hover:opacity-90"
       >
         <Sparkles className="mr-2 h-4 w-4" />
-        Browse Models
+        浏览模特
       </Button>
     </div>
   );
@@ -87,9 +125,10 @@ function EmptyState() {
 interface TeamMemberCardProps {
   model: HiredModel;
   onUseInStudio: (modelId: string) => void;
+  onRenew: (model: HiredModel) => void;
 }
 
-function TeamMemberCard({ model, onUseInStudio }: TeamMemberCardProps) {
+function TeamMemberCard({ model, onUseInStudio, onRenew }: TeamMemberCardProps) {
   const status = getStatusConfig(model.days_remaining);
   const isExpiring = model.days_remaining <= 3;
   const isWarning = model.days_remaining <= 7 && model.days_remaining > 3;
@@ -139,7 +178,7 @@ function TeamMemberCard({ model, onUseInStudio }: TeamMemberCardProps) {
           {model.is_trending && (
             <Badge className="bg-gradient-to-r from-tiktok-cyan to-tiktok-pink text-black font-semibold border-0">
               <TrendingUp className="h-3 w-3 mr-1" />
-              Trending
+              热门
             </Badge>
           )}
         </div>
@@ -194,24 +233,35 @@ function TeamMemberCard({ model, onUseInStudio }: TeamMemberCardProps) {
           </div>
           <div className="flex items-center gap-1.5 text-muted-foreground">
             <Calendar className="h-4 w-4" />
-            <span className="text-xs">
-              {new Date(model.contract_end_date).toLocaleDateString("en-US", {
-                month: "short",
-                day: "numeric",
-              })}
-            </span>
+                <span className="text-xs">
+                  {new Date(model.contract_end_date).toLocaleDateString("zh-CN", {
+                    month: "short",
+                    day: "numeric",
+                  })}
+                </span>
           </div>
         </div>
 
-        {/* Action Button */}
-        <Button 
-          onClick={() => onUseInStudio(model.id)}
-          className="w-full bg-gradient-to-r from-tiktok-cyan to-tiktok-pink text-black font-bold hover:opacity-90 hover:scale-[1.02] transition-all shadow-lg shadow-tiktok-cyan/20"
-        >
-          <Zap className="mr-2 h-4 w-4" />
-          Use in Studio
-          <ChevronRight className="ml-auto h-4 w-4" />
-        </Button>
+        {/* Action Buttons */}
+        <div className="flex gap-2">
+          <Button 
+            onClick={() => onUseInStudio(model.id)}
+            className="flex-1 bg-gradient-to-r from-tiktok-cyan to-tiktok-pink text-black font-bold hover:opacity-90 hover:scale-[1.02] transition-all shadow-lg shadow-tiktok-cyan/20"
+          >
+            <Zap className="mr-2 h-4 w-4" />
+            去创作
+          </Button>
+          <Button 
+            variant="outline"
+            onClick={() => onRenew(model)}
+            className={cn(
+              "border-border/50 hover:border-tiktok-cyan/50",
+              isExpiring && "border-red-500/50 text-red-400 hover:bg-red-500/10"
+            )}
+          >
+            <RefreshCw className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
     </div>
   );
@@ -221,54 +271,85 @@ function TeamMemberCard({ model, onUseInStudio }: TeamMemberCardProps) {
 // Main Page
 // ============================================================================
 
+// 续约周期选项
+const RENTAL_PERIODS = [
+  { value: "daily", label: "1 天", multiplier: 1 },
+  { value: "weekly", label: "1 周", multiplier: 7 },
+  { value: "monthly", label: "1 个月", multiplier: 30 },
+  { value: "yearly", label: "1 年", multiplier: 365 },
+];
+
 export default function TeamPage() {
   const router = useRouter();
   const { toast } = useToast();
   
   const [models, setModels] = useState<HiredModel[]>([]);
   const [loading, setLoading] = useState(true);
-  const [userId, setUserId] = useState<string | null>(null);
-
-  // Fetch user ID
-  const fetchUserId = async () => {
-    try {
-      const response = await fetch("/api/user/credits");
-      if (response.ok) {
-        const data = await response.json();
-        if (data.userId) {
-          setUserId(data.userId);
-          return data.userId;
-        }
-      }
-    } catch (error) {
-      console.error("Failed to fetch user info:", error);
-    }
-    return null;
-  };
-
-  // Fetch hired models
-  const fetchModels = useCallback(async (uid?: string) => {
-    const currentUserId = uid || userId;
-    if (!currentUserId) {
-      setLoading(false);
-      return;
-    }
-
+  const [renewDialogOpen, setRenewDialogOpen] = useState(false);
+  const [selectedModel, setSelectedModel] = useState<HiredModel | null>(null);
+  const [renewPeriod, setRenewPeriod] = useState("monthly");
+  const [isRenewing, setIsRenewing] = useState(false);
+  // Fetch hired models - 使用 /api/contracts API
+  const fetchModels = useCallback(async () => {
     setLoading(true);
     try {
-      const result = await getUserHiredModels(currentUserId);
+      const response = await fetch("/api/contracts?status=active");
+      const result = await response.json();
       
       if (result.success && result.data) {
+        // 将合约数据转换为 HiredModel 格式
+        const hiredModels: HiredModel[] = result.data
+          .filter((contract: any) => contract.ai_models)
+          .map((contract: any) => {
+            const model = contract.ai_models;
+            const endDate = new Date(contract.end_date);
+            const now = new Date();
+            const daysRemaining = Math.max(0, Math.ceil((endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
+            
+            // 处理 style_tags
+            let tags: string[] = [];
+            if (model.style_tags) {
+              if (typeof model.style_tags === "string") {
+                try { tags = JSON.parse(model.style_tags); } catch { tags = [model.style_tags]; }
+              } else if (Array.isArray(model.style_tags)) {
+                tags = model.style_tags;
+              }
+            }
+            
+            return {
+              id: model.id,
+              name: model.name,
+              description: model.description || null,
+              avatar_url: model.avatar_url || null,
+              demo_video_url: null,
+              tags,
+              category: model.category || "general",
+              gender: model.gender || null,
+              base_price: 0,
+              price_monthly: 0,
+              rating: 0,
+              is_featured: false,
+              is_trending: false,
+              total_rentals: 0,
+              total_generations: 0,
+              created_at: model.created_at || contract.created_at,
+              contract_id: contract.id,
+              contract_end_date: contract.end_date,
+              days_remaining: daysRemaining,
+              contract_status: contract.status,
+            };
+          });
+        
         // Sort by days remaining (expiring first)
-        const sorted = [...result.data.models].sort((a, b) => a.days_remaining - b.days_remaining);
+        const sorted = hiredModels.sort((a, b) => a.days_remaining - b.days_remaining);
         setModels(sorted);
         console.log(`[Team Page] Loaded ${sorted.length} hired models`);
       } else {
         console.error("[Team Page] Failed to fetch:", result.error);
         toast({
           variant: "destructive",
-          title: "Failed to load team",
-          description: result.error || "Unable to fetch your team members",
+          title: "加载失败",
+          description: result.error || "无法获取您的签约模特",
         });
         setModels([]);
       }
@@ -278,20 +359,12 @@ export default function TeamPage() {
     } finally {
       setLoading(false);
     }
-  }, [userId, toast]);
+  }, [toast]);
 
   // Initial load
   useEffect(() => {
-    const init = async () => {
-      const uid = await fetchUserId();
-      if (uid) {
-        fetchModels(uid);
-      } else {
-        setLoading(false);
-      }
-    };
-    init();
-  }, []);
+    fetchModels();
+  }, [fetchModels]);
 
   // Handle "Use in Studio"
   const handleUseInStudio = (modelId: string) => {
@@ -301,6 +374,59 @@ export default function TeamPage() {
   // Handle refresh
   const handleRefresh = () => {
     fetchModels();
+  };
+
+  // Handle renew dialog open
+  const handleOpenRenewDialog = (model: HiredModel) => {
+    setSelectedModel(model);
+    setRenewPeriod("monthly");
+    setRenewDialogOpen(true);
+  };
+
+  // Handle renew
+  const handleRenew = async () => {
+    if (!selectedModel) return;
+    
+    setIsRenewing(true);
+    try {
+      const response = await fetch("/api/contracts", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contract_id: selectedModel.contract_id,
+          rental_period: renewPeriod,
+        }),
+      });
+      
+      const result = await response.json();
+      
+      if (result.success) {
+        toast({
+          title: "✅ 续约成功",
+          description: `${selectedModel.name} 已续约，新到期日：${new Date(result.new_end_date).toLocaleDateString("zh-CN")}`,
+        });
+        setRenewDialogOpen(false);
+        fetchModels(); // 刷新列表
+        
+        // 触发积分刷新
+        window.dispatchEvent(new CustomEvent("credits-updated"));
+      } else {
+        toast({
+          variant: "destructive",
+          title: "续约失败",
+          description: result.error || "请稍后重试",
+        });
+      }
+    } catch (error) {
+      console.error("[Team Page] Renew error:", error);
+      toast({
+        variant: "destructive",
+        title: "续约失败",
+        description: "网络错误，请稍后重试",
+      });
+    } finally {
+      setIsRenewing(false);
+    }
   };
 
   // Stats
@@ -314,10 +440,10 @@ export default function TeamPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">
-            <span className="gradient-tiktok-text">My Team</span>
+            <span className="gradient-tiktok-text">专属模特仓</span>
           </h1>
           <p className="mt-2 text-muted-foreground">
-            Manage your hired AI talent roster
+            管理您已签约的 AI 模特
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -328,14 +454,14 @@ export default function TeamPage() {
             className="border-border/50 hover:border-tiktok-cyan/50"
           >
             <RefreshCw className={cn("mr-2 h-4 w-4", loading && "animate-spin")} />
-            Refresh
+            刷新
           </Button>
           <Button 
             onClick={() => router.push("/models")}
             className="bg-gradient-to-r from-tiktok-cyan to-tiktok-pink text-black font-semibold hover:opacity-90"
           >
             <Plus className="mr-2 h-4 w-4" />
-            Hire More
+            聘用更多
           </Button>
         </div>
       </div>
@@ -349,7 +475,7 @@ export default function TeamPage() {
             </div>
             <div>
               <p className="text-3xl font-bold">{totalModels}</p>
-              <p className="text-sm text-muted-foreground">Team Members</p>
+              <p className="text-sm text-muted-foreground">签约模特</p>
             </div>
           </CardContent>
         </Card>
@@ -364,7 +490,7 @@ export default function TeamPage() {
             </div>
             <div>
               <p className="text-3xl font-bold">{expiringModels}</p>
-              <p className="text-sm text-muted-foreground">Expiring Soon</p>
+              <p className="text-sm text-muted-foreground">即将到期</p>
             </div>
           </CardContent>
         </Card>
@@ -376,7 +502,7 @@ export default function TeamPage() {
             </div>
             <div>
               <p className="text-3xl font-bold">{totalGenerations.toLocaleString()}</p>
-              <p className="text-sm text-muted-foreground">Total Generations</p>
+              <p className="text-sm text-muted-foreground">总生成次数</p>
             </div>
           </CardContent>
         </Card>
@@ -387,15 +513,15 @@ export default function TeamPage() {
         <div className="flex items-center gap-3 p-4 rounded-xl bg-red-500/10 border border-red-500/30">
           <AlertTriangle className="h-5 w-5 text-red-500 animate-pulse" />
           <p className="text-sm">
-            <span className="font-semibold text-red-400">{expiringModels} contract(s)</span>
-            <span className="text-muted-foreground"> expiring within 3 days. Consider renewing to avoid interruption.</span>
+            <span className="font-semibold text-red-400">{expiringModels} 个合约</span>
+            <span className="text-muted-foreground"> 将在 3 天内到期，建议尽快续约以避免中断。</span>
           </p>
           <Button 
             variant="outline" 
             size="sm" 
             className="ml-auto border-red-500/50 text-red-400 hover:bg-red-500/10"
           >
-            Renew All
+            全部续约
           </Button>
         </div>
       )}
@@ -425,6 +551,7 @@ export default function TeamPage() {
               key={model.id}
               model={model}
               onUseInStudio={handleUseInStudio}
+              onRenew={handleOpenRenewDialog}
             />
           ))}
         </div>
@@ -436,7 +563,7 @@ export default function TeamPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-lg">
               <Calendar className="h-5 w-5 text-tiktok-pink" />
-              Contract Timeline
+              合约时间线
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -471,10 +598,10 @@ export default function TeamPage() {
                     <div className="flex-1 min-w-0">
                       <p className="font-medium truncate">{model.name}</p>
                       <p className="text-xs text-muted-foreground">
-                        Expires {new Date(model.contract_end_date).toLocaleDateString("en-US", {
+                        到期: {new Date(model.contract_end_date).toLocaleDateString("zh-CN", {
+                          year: "numeric",
                           month: "long",
                           day: "numeric",
-                          year: "numeric",
                         })}
                       </p>
                     </div>
@@ -508,6 +635,103 @@ export default function TeamPage() {
           </CardContent>
         </Card>
       )}
+
+      {/* Renew Dialog */}
+      <Dialog open={renewDialogOpen} onOpenChange={setRenewDialogOpen}>
+        <DialogContent className="bg-background border-border/50 max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <RefreshCw className="h-5 w-5 text-tiktok-cyan" />
+              续约模特
+            </DialogTitle>
+            <DialogDescription>
+              为 {selectedModel?.name} 续约合约
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            {/* Model Info */}
+            {selectedModel && (
+              <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/30">
+                <div className="h-12 w-12 rounded-lg overflow-hidden bg-gradient-to-br from-tiktok-cyan/20 to-tiktok-pink/20">
+                  {selectedModel.avatar_url ? (
+                    <img
+                      src={selectedModel.avatar_url}
+                      alt={selectedModel.name}
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <div className="h-full w-full flex items-center justify-center">
+                      <Sparkles className="h-5 w-5 text-muted-foreground" />
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <p className="font-medium">{selectedModel.name}</p>
+                  <p className="text-sm text-muted-foreground">
+                    当前到期: {new Date(selectedModel.contract_end_date).toLocaleDateString("zh-CN")}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Period Selection */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium">续约周期</label>
+              <Select value={renewPeriod} onValueChange={setRenewPeriod}>
+                <SelectTrigger className="bg-background border-border/50">
+                  <SelectValue placeholder="选择续约周期" />
+                </SelectTrigger>
+                <SelectContent className="bg-background border-border/50">
+                  {RENTAL_PERIODS.map((period) => (
+                    <SelectItem key={period.value} value={period.value}>
+                      {period.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Price Info */}
+            <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">续约费用</span>
+                <span className="font-bold text-amber-400">
+                  {selectedModel?.price_monthly || 150} 积分
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setRenewDialogOpen(false)}
+              disabled={isRenewing}
+              className="border-border/50"
+            >
+              取消
+            </Button>
+            <Button
+              onClick={handleRenew}
+              disabled={isRenewing}
+              className="bg-gradient-to-r from-tiktok-cyan to-tiktok-pink text-black font-semibold"
+            >
+              {isRenewing ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  处理中...
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                  确认续约
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

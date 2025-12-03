@@ -55,11 +55,16 @@ import { useToast } from "@/hooks/use-toast";
 // 不再使用 Server Action，直接调用 API 路由
 // import { generateVideo, getVideoTaskStatus } from "@/lib/actions/generate-video";
 import { 
-  getUserHiredModels, 
   getMarketplaceModels,
-  type HiredModel,
   type PublicModel as ServerPublicModel,
 } from "@/lib/actions/models";
+import { 
+  useQuickGenStore, 
+  useQuickGenActiveTask, 
+  useQuickGenIsGenerating,
+  useQuickGenActiveImageTask,
+  useQuickGenIsImageGenerating,
+} from "@/stores/quick-gen-store";
 
 // ============================================================================
 // 类型定义 - 从共享模块导入
@@ -143,7 +148,7 @@ export default function QuickGeneratorPage() {
   // ================================================================
   const [prompt, setPrompt] = useState("");
   const [isEnhancingPrompt, setIsEnhancingPrompt] = useState(false);
-  const [videoModel, setVideoModel] = useState<VideoModel>("sora-2");
+  const [videoModel, setVideoModel] = useState<VideoModel>("sora2-15s");
   const [videoAspectRatio, setVideoAspectRatio] = useState<VideoAspectRatio>("9:16");
   const [useAiModel, setUseAiModel] = useState(false);
   const [aiCastMode, setAiCastMode] = useState<AiCastMode>("auto");
@@ -168,6 +173,20 @@ export default function QuickGeneratorPage() {
   const [generatingProgress, setGeneratingProgress] = useState(0);
   const [resultUrl, setResultUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  
+  // ================================================================
+  // Quick Gen Store - 后台任务状态
+  // ================================================================
+  const quickGenActiveTask = useQuickGenActiveTask();
+  const isQuickGenRunning = useQuickGenIsGenerating();
+  const createVideoTask = useQuickGenStore((state) => state.createVideoTask);
+  const clearActiveTask = useQuickGenStore((state) => state.clearActiveTask);
+  
+  // 图片任务
+  const quickGenImageTask = useQuickGenActiveImageTask();
+  const isQuickGenImageRunning = useQuickGenIsImageGenerating();
+  const createImageTask = useQuickGenStore((state) => state.createImageTask);
+  const clearActiveImageTask = useQuickGenStore((state) => state.clearActiveImageTask);
   
   // 全屏预览弹窗
   const [fullscreenPreview, setFullscreenPreview] = useState<{
@@ -235,6 +254,12 @@ export default function QuickGeneratorPage() {
     // 基本条件：不在处理中
     if (canvasState === "processing" || canvasState === "generating") return false;
     
+    // 视频模式：后台任务正在运行时禁用
+    if (outputMode === "video" && isQuickGenRunning) return false;
+    
+    // 图片模式：后台任务正在运行时禁用
+    if (outputMode === "image" && isQuickGenImageRunning) return false;
+    
     // 积分检查
     if (userCredits < totalCost) return false;
     
@@ -249,7 +274,7 @@ export default function QuickGeneratorPage() {
       const hasImage = imageUploadedFiles.length > 0;
       return hasPrompt || hasImage;
     }
-  }, [canvasState, userCredits, totalCost, outputMode, prompt, hasBaseImage, imageUploadedFiles]);
+  }, [canvasState, userCredits, totalCost, outputMode, prompt, hasBaseImage, imageUploadedFiles, isQuickGenRunning, isQuickGenImageRunning]);
 
   // 获取已选模特信息 (从所有模特中查找)
   const selectedModel = useMemo(() => {
@@ -274,6 +299,54 @@ export default function QuickGeneratorPage() {
       })
       .catch(console.error);
   }, []);
+  
+  // 监听后台视频任务状态变化
+  useEffect(() => {
+    if (!quickGenActiveTask) return;
+    
+    // 同步任务状态到 UI
+    if (quickGenActiveTask.status === "generating" || quickGenActiveTask.status === "polling") {
+      setCanvasState("generating");
+      setGeneratingProgress(quickGenActiveTask.progress);
+    } else if (quickGenActiveTask.status === "completed" && quickGenActiveTask.resultUrl) {
+      setResultUrl(quickGenActiveTask.resultUrl);
+      setCanvasState("result");
+      setGeneratingProgress(100);
+      // 刷新积分
+      window.dispatchEvent(new CustomEvent("credits-updated"));
+      // 清除已完成的任务
+      clearActiveTask();
+    } else if (quickGenActiveTask.status === "failed") {
+      setError(quickGenActiveTask.errorMessage || "生成失败");
+      setCanvasState("failed");
+      // 清除失败的任务
+      clearActiveTask();
+    }
+  }, [quickGenActiveTask, clearActiveTask]);
+
+  // 监听后台图片任务状态变化
+  useEffect(() => {
+    if (!quickGenImageTask) return;
+    
+    // 同步任务状态到 UI
+    if (quickGenImageTask.status === "generating" || quickGenImageTask.status === "polling") {
+      setCanvasState("generating");
+      setGeneratingProgress(quickGenImageTask.progress);
+    } else if (quickGenImageTask.status === "completed" && quickGenImageTask.resultUrl) {
+      setResultUrl(quickGenImageTask.resultUrl);
+      setCanvasState("result");
+      setGeneratingProgress(100);
+      // 刷新积分
+      window.dispatchEvent(new CustomEvent("credits-updated"));
+      // 清除已完成的任务
+      clearActiveImageTask();
+    } else if (quickGenImageTask.status === "failed") {
+      setError(quickGenImageTask.errorMessage || "生成失败");
+      setCanvasState("failed");
+      // 清除失败的任务
+      clearActiveImageTask();
+    }
+  }, [quickGenImageTask, clearActiveImageTask]);
 
   // 获取模特数据 (My Team + All Models) - 使用 Server Actions
   useEffect(() => {
@@ -309,32 +382,51 @@ export default function QuickGeneratorPage() {
     fetchModels();
   }, []);
 
-  // 获取 My Team 模特 - 仅已签约且未过期的模特
+  // 获取 My Team 模特 - 使用 /api/contracts API
   useEffect(() => {
     const fetchMyTeam = async () => {
-      if (!userId) return;
-      
       try {
-        const teamResult = await getUserHiredModels(userId);
-        if (teamResult.success && teamResult.data?.models) {
-          // 转换为 DisplayModel 格式
-          // getUserHiredModels 已经只返回 status='active' 且 end_date > now() 的合约
-          const hiredModels: DisplayModel[] = teamResult.data.models.map((m) => ({
-            id: m.id,
-            name: m.name,
-            avatar_url: m.avatar_url,
-            demo_video_url: m.demo_video_url,
-            tags: m.tags,
-            category: m.category,
-            gender: m.gender,
-            price_monthly: m.base_price,
-            rating: m.rating,
-            is_featured: m.is_featured,
-            is_trending: m.is_trending,
-            is_hired: true,
-            days_remaining: m.days_remaining,
-            contract_end_date: m.contract_end_date,
-          }));
+        const response = await fetch("/api/contracts?status=active");
+        const result = await response.json();
+        
+        if (result.success && result.data) {
+          // 将合约数据转换为 DisplayModel 格式
+          const hiredModels: DisplayModel[] = result.data
+            .filter((contract: any) => contract.ai_models)
+            .map((contract: any) => {
+              const model = contract.ai_models;
+              const endDate = new Date(contract.end_date);
+              const now = new Date();
+              const daysRemaining = Math.max(0, Math.ceil((endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
+              
+              // 处理 style_tags
+              let tags: string[] = [];
+              if (model.style_tags) {
+                if (typeof model.style_tags === "string") {
+                  try { tags = JSON.parse(model.style_tags); } catch { tags = [model.style_tags]; }
+                } else if (Array.isArray(model.style_tags)) {
+                  tags = model.style_tags;
+                }
+              }
+              
+              return {
+                id: model.id,
+                name: model.name,
+                avatar_url: model.avatar_url || null,
+                demo_video_url: null,
+                tags,
+                category: model.category || "general",
+                gender: model.gender || null,
+                price_monthly: 0,
+                rating: 0,
+                is_featured: false,
+                is_trending: false,
+                is_hired: true,
+                days_remaining: daysRemaining,
+                contract_end_date: contract.end_date,
+              };
+            });
+          
           setMyTeamModels(hiredModels);
           console.log(`[Quick Gen] Loaded ${hiredModels.length} hired models (active & not expired)`);
         }
@@ -344,7 +436,7 @@ export default function QuickGeneratorPage() {
     };
 
     fetchMyTeam();
-  }, [userId]);
+  }, []);
 
   // ================================================================
   // Prompt Enhancement
@@ -680,7 +772,7 @@ export default function QuickGeneratorPage() {
 
     if (outputMode === "video") {
       // ============================================
-      // Video Mode: 调用真实 Sora API
+      // Video Mode: 使用后台任务管理器执行 (支持页面切换)
       // ============================================
       try {
         // 从配置获取 API 时长
@@ -744,7 +836,7 @@ export default function QuickGeneratorPage() {
           }
         }
 
-        console.log("[Quick Gen] Starting video generation:", {
+        console.log("[Quick Gen] Creating background video task:", {
           prompt: prompt.trim().substring(0, 50) + "...",
           duration: `${apiDuration}s`,
           aspectRatio: videoAspectRatio,
@@ -753,136 +845,26 @@ export default function QuickGeneratorPage() {
           cost: costCredits,
         });
 
-        setGeneratingProgress(10);
-
-        // 调用真实 API
-        const response = await fetch("/api/generate/video", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            prompt: prompt.trim(),
-            duration: apiDuration,
-            aspectRatio: videoAspectRatio,
-            size: "small",
-            modelId: modelIdToSend,
-            sourceImageUrl: remoteImageUrl,
-            userId,
-          }),
+        // 创建后台任务 - 由 BackgroundTaskManager 执行
+        createVideoTask({
+          prompt: prompt.trim(),
+          model: videoModel,
+          aspectRatio: videoAspectRatio,
+          quality: modelConfig.quality,
+          apiModel: modelConfig.apiModel,
+          duration: apiDuration,
+          sourceImageUrl: remoteImageUrl,
+          modelId: modelIdToSend || undefined,
+          creditCost: costCredits,
         });
-
-        const result = await response.json();
-
-        if (!result.success) {
-          throw new Error(result.error || "提交生成任务失败");
-        }
-
-        const taskId = result.data.taskId;
-        const usePro = result.data.usePro || apiDuration >= 20;
-        console.log("[Quick Gen] Task submitted:", taskId, "Estimated:", result.data.estimatedTime, "UsePro:", usePro);
 
         toast({ 
           title: "🚀 视频生成已启动", 
-          description: `预计需要 ${result.data.estimatedTime}`,
+          description: "任务将在后台执行，可以切换页面",
         });
 
         // 立即扣除积分（乐观更新）
         setUserCredits((prev) => prev - costCredits);
-
-        // 轮询任务状态 (每 10 秒查询一次，最多 12 分钟用于 25s 视频)
-        let pollCount = 0;
-        const maxPolls = usePro ? 72 : 48; // Pro: 72 * 10s = 12 分钟, 普通: 48 * 10s = 8 分钟
-        const pollIntervalMs = 10000; // 10 秒
-        
-        const pollTimer = setInterval(async () => {
-          pollCount++;
-          
-          // 模拟进度 (基于时间估算)
-          const estimatedProgress = Math.min(95, Math.round((pollCount / 30) * 100));
-          setGeneratingProgress(estimatedProgress);
-
-          try {
-            const statusResponse = await fetch(`/api/generate/video?taskId=${taskId}&usePro=${usePro}`);
-            const statusResult = await statusResponse.json();
-            
-            if (!statusResult.success) {
-              console.error("[Quick Gen] Status query failed:", statusResult.error);
-              // 继续轮询
-              return;
-            }
-
-            const task = statusResult.data;
-            console.log("[Quick Gen] Task status:", task.status, `(poll ${pollCount})`);
-
-            if (task.status === "completed") {
-              clearInterval(pollTimer);
-              setGeneratingProgress(100);
-              
-              // 设置结果
-              setResultUrl(task.videoUrl);
-              setCanvasState("result");
-              
-              // 触发全局积分刷新事件
-              window.dispatchEvent(new CustomEvent("credits-updated"));
-              
-              toast({ 
-                title: "🎉 视频生成成功！", 
-                description: `消耗 ${costCredits} Credits`,
-              });
-
-              // 自动下载 - 使用 fetch + blob 方式下载，避免页面跳转
-              if (autoDownload && task.videoUrl) {
-                setTimeout(async () => {
-                  try {
-                    const response = await fetch(task.videoUrl);
-                    const blob = await response.blob();
-                    const blobUrl = URL.createObjectURL(blob);
-                    const link = document.createElement("a");
-                    link.href = blobUrl;
-                    link.download = `quick-gen-${Date.now()}.mp4`;
-                    document.body.appendChild(link);
-                    link.click();
-                    document.body.removeChild(link);
-                    URL.revokeObjectURL(blobUrl);
-                    toast({ title: "📥 视频已自动下载" });
-                  } catch (downloadError) {
-                    console.error("[Quick Gen] Auto download failed:", downloadError);
-                    toast({ 
-                      variant: "destructive",
-                      title: "自动下载失败", 
-                      description: "请手动点击下载按钮" 
-                    });
-                  }
-                }, 1000);
-              }
-            } else if (task.status === "failed") {
-              clearInterval(pollTimer);
-              
-              // 退还积分
-              setUserCredits((prev) => prev + costCredits);
-              
-              setError(task.errorMessage || "生成失败");
-              setCanvasState("failed");
-              
-              toast({ 
-                variant: "destructive",
-                title: "生成失败", 
-                description: task.errorMessage || "请重试",
-              });
-            } else if (pollCount >= maxPolls) {
-              clearInterval(pollTimer);
-              setError("生成超时，请稍后查看结果");
-              setCanvasState("failed");
-              toast({ 
-                variant: "destructive",
-                title: "生成超时", 
-                description: "Sora 2 视频生成需要 4-6 分钟，请稍后刷新查看",
-              });
-            }
-          } catch (pollError) {
-            console.error("[Quick Gen] Polling error:", pollError);
-            // 继续轮询，不中断
-          }
-        }, pollIntervalMs);
 
       } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : "Unknown error";
@@ -899,7 +881,7 @@ export default function QuickGeneratorPage() {
       }
     } else {
       // ============================================
-      // Image Mode: 使用 NanoBanana API 生成图片
+      // Image Mode: 使用后台任务管理器执行 (支持页面切换)
       // ============================================
       try {
         // 准备参考图片 URL 数组 (最多4张)
@@ -933,129 +915,26 @@ export default function QuickGeneratorPage() {
           }
         }
 
-        setGeneratingProgress(15);
-
-        // 调用图片生成 API
+        // 创建后台任务 - 由 BackgroundTaskManager 执行
         const model = imageNanoTier === "pro" ? "nano-banana-pro" : "nano-banana";
-        const response = await fetch("/api/generate/image", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            mode: "generate",
-            model,
-            prompt: prompt.trim() || "High quality product photo, professional lighting, clean background",
-            sourceImageUrl: sourceImageUrls.length > 0 ? sourceImageUrls : undefined,
-            tier: imageNanoTier,
-            aspectRatio: imageAspectRatio,
-            resolution: imageNanoTier === "pro" ? imageResolution : "1k",
-            userId,
-          }),
+        
+        createImageTask({
+          prompt: prompt.trim() || "高质量产品照片，专业灯光，干净背景",
+          model: model as "nano-banana" | "nano-banana-pro",
+          tier: imageNanoTier,
+          aspectRatio: imageAspectRatio,
+          resolution: imageNanoTier === "pro" ? imageResolution : "1k",
+          sourceImageUrls,
+          creditCost: totalCost,
         });
 
-        const result = await response.json();
-
-        if (!result.success) {
-          throw new Error(result.error || "图片生成失败");
-        }
-
-        const taskId = result.data.taskId;
-        const taskModel = result.data.model;
-        
-        console.log("[Quick Gen] Image task submitted:", { taskId, model: taskModel });
-        
         toast({ 
           title: "🎨 图片生成已启动", 
-          description: "预计需要 30-60 秒",
+          description: "任务将在后台执行，可以切换页面",
         });
 
         // 立即扣除积分（乐观更新）
         setUserCredits((prev) => prev - totalCost);
-
-        // 轮询任务状态
-        // NanoBanana Pro 处理时间较长，增加超时时间到 180 秒
-        let pollCount = 0;
-        const maxPolls = 60; // 60 * 3s = 180 秒
-        const pollIntervalMs = 3000;
-        
-        const pollTimer = setInterval(async () => {
-          pollCount++;
-          setGeneratingProgress(Math.min(95, 15 + pollCount * 1.3));
-
-          try {
-            const statusResponse = await fetch(`/api/generate/image?taskId=${taskId}&model=${taskModel}`);
-            const statusResult = await statusResponse.json();
-            
-            if (!statusResult.success) {
-              console.error("[Quick Gen] Image status query failed:", statusResult.error);
-              return;
-            }
-
-            const task = statusResult.data;
-            console.log("[Quick Gen] Image task status:", task.status, `(poll ${pollCount})`);
-
-            if (task.status === "completed" && task.imageUrl) {
-              clearInterval(pollTimer);
-              setGeneratingProgress(100);
-              
-              // 触发全局积分刷新
-              window.dispatchEvent(new CustomEvent("credits-updated"));
-              
-              setResultUrl(task.imageUrl);
-              setCanvasState("result");
-              
-              toast({ 
-                title: "🎉 图片生成成功！", 
-                description: `消耗 ${totalCost} Credits`,
-              });
-
-              // 自动下载
-              if (autoDownload && task.imageUrl) {
-                setTimeout(async () => {
-                  try {
-                    const downloadResponse = await fetch(task.imageUrl);
-                    const blob = await downloadResponse.blob();
-                    const blobUrl = URL.createObjectURL(blob);
-                    const link = document.createElement("a");
-                    link.href = blobUrl;
-                    link.download = `quick-gen-${Date.now()}.jpg`;
-                    document.body.appendChild(link);
-                    link.click();
-                    document.body.removeChild(link);
-                    URL.revokeObjectURL(blobUrl);
-                    toast({ title: "📥 图片已自动下载" });
-                  } catch (downloadError) {
-                    console.error("[Quick Gen] Auto download failed:", downloadError);
-                  }
-                }, 500);
-              }
-            } else if (task.status === "failed") {
-              clearInterval(pollTimer);
-              
-              // 退还积分
-              setUserCredits((prev) => prev + totalCost);
-              
-              setError(task.errorMessage || "生成失败");
-              setCanvasState("failed");
-              
-              toast({ 
-                variant: "destructive",
-                title: "生成失败", 
-                description: task.errorMessage || "请重试",
-              });
-            } else if (pollCount >= maxPolls) {
-              clearInterval(pollTimer);
-              setError("生成超时，请稍后查看结果");
-              setCanvasState("failed");
-              toast({ 
-                variant: "destructive",
-                title: "生成超时", 
-                description: "请稍后刷新查看",
-              });
-            }
-          } catch (pollError) {
-            console.error("[Quick Gen] Image polling error:", pollError);
-          }
-        }, pollIntervalMs);
 
       } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : "Unknown error";
@@ -1071,7 +950,7 @@ export default function QuickGeneratorPage() {
         });
       }
     }
-  }, [canGenerate, outputMode, prompt, hasBaseImage, selectedImage, uploadedFile, videoModel, videoAspectRatio, useAiModel, aiCastMode, selectedModelId, imageNanoTier, imageAspectRatio, imageResolution, totalCost, autoDownload, toast]);
+  }, [canGenerate, outputMode, prompt, hasBaseImage, selectedImage, uploadedFile, videoModel, videoAspectRatio, useAiModel, aiCastMode, selectedModelId, imageNanoTier, imageAspectRatio, imageResolution, totalCost, autoDownload, toast, createVideoTask, createImageTask, imageUploadedFiles]);
 
   // ================================================================
   // 渲染
@@ -1154,8 +1033,8 @@ export default function QuickGeneratorPage() {
                     <input ref={fileInputRef} type="file" accept="image/*" onChange={handleUpload} className="hidden" />
                     <Upload className="h-5 w-5 text-muted-foreground flex-shrink-0" />
                     <div className="text-left">
-                      <p className="text-sm font-medium">Upload Reference Image</p>
-                      <p className="text-xs text-muted-foreground">Optional - for Image-to-Video</p>
+                      <p className="text-sm font-medium">上传参考图片</p>
+                      <p className="text-xs text-muted-foreground">可选 - 用于图生视频</p>
                     </div>
                   </label>
                 ) : (
@@ -1257,7 +1136,7 @@ export default function QuickGeneratorPage() {
                     <Textarea 
                       value={prompt} 
                       onChange={(e) => setPrompt(e.target.value)}
-                      placeholder={uploadedFile ? "Describe the video content you want to generate..." : "Describe your video in detail (required for text-to-video)..."}
+                      placeholder={uploadedFile ? "描述你想要生成的视频内容..." : "详细描述你的视频内容（文生视频必填）..."}
                       disabled={canvasState === "generating"} 
                       className="input-surface resize-none text-sm pr-16 min-h-[180px]" 
                     />
@@ -1273,12 +1152,12 @@ export default function QuickGeneratorPage() {
                 {/* Video Specs */}
                 <div className="space-y-3">
                   <div>
-                    <Label className="text-xs text-muted-foreground mb-2 block">Model & Duration</Label>
+                    <Label className="text-xs text-muted-foreground mb-2 block">模型 & 时长</Label>
                     <div className="space-y-1.5">
                       {(Object.entries(VIDEO_MODEL_PRICING) as [VideoModel, typeof VIDEO_MODEL_PRICING[VideoModel]][]).map(([key, value]) => (
                         <Button key={key} variant="outline" size="sm" onClick={() => setVideoModel(key)}
                           className={cn("w-full justify-between h-8", videoModel === key ? "bg-tiktok-cyan/20 border-tiktok-cyan/50 text-tiktok-cyan" : "btn-subtle")}>
-                          <span className="flex items-center gap-1.5"><Clock className="h-3.5 w-3.5" />{value.duration} ({value.label})</span>
+                          <span className="flex items-center gap-1.5"><Clock className="h-3.5 w-3.5" />{value.label}</span>
                           <span className="text-xs">{value.credits} pts</span>
                         </Button>
                       ))}
@@ -1477,7 +1356,7 @@ export default function QuickGeneratorPage() {
                   <Textarea 
                     value={prompt} 
                     onChange={(e) => setPrompt(e.target.value)}
-                    placeholder="Describe how you want the image enhanced... (e.g., 'studio lighting, white background, product photography')"
+                    placeholder="描述你想要生成的图片效果... (例如：'摄影棚灯光、白色背景、产品摄影')"
                     disabled={canvasState === "generating"} 
                     className="input-surface resize-none text-sm pr-16 min-h-[180px]" 
                   />
@@ -1561,17 +1440,17 @@ export default function QuickGeneratorPage() {
               )}
             </div>
           </div>
-          <Button onClick={handleGenerate} disabled={!canGenerate || canvasState === "generating"}
+          <Button onClick={handleGenerate} disabled={!canGenerate || canvasState === "generating" || isQuickGenRunning || isQuickGenImageRunning}
             className={cn("w-full h-12 font-semibold transition-all text-base",
-              canGenerate ? "bg-gradient-to-r from-tiktok-pink to-purple-500 text-white shadow-[0_0_20px_rgba(255,0,80,0.3)]" : "bg-white/10 text-muted-foreground")}>
-            {canvasState === "generating" ? (
-              <><Loader2 className="h-5 w-5 mr-2 animate-spin" />Generating... {generatingProgress}%</>
+              canGenerate && !isQuickGenRunning && !isQuickGenImageRunning ? "bg-gradient-to-r from-tiktok-pink to-purple-500 text-white shadow-[0_0_20px_rgba(255,0,80,0.3)]" : "bg-white/10 text-muted-foreground")}>
+            {canvasState === "generating" || isQuickGenRunning || isQuickGenImageRunning ? (
+              <><Loader2 className="h-5 w-5 mr-2 animate-spin" />生成中... {quickGenActiveTask?.progress || quickGenImageTask?.progress || generatingProgress}%</>
             ) : (
-              <><Play className="h-5 w-5 mr-2" />Generate {outputMode === "video" ? "Video" : "Image"}</>
+              <><Play className="h-5 w-5 mr-2" />生成 {outputMode === "video" ? "视频" : "图片"}</>
             )}
           </Button>
           {/* 显示禁用原因 */}
-          {!canGenerate && canvasState !== "generating" && (
+          {!canGenerate && canvasState !== "generating" && !isQuickGenRunning && (
             <p className="text-xs text-center mt-2">
               {!userId ? (
                 <a href="/auth/login" className="text-tiktok-cyan hover:underline">
@@ -1584,6 +1463,17 @@ export default function QuickGeneratorPage() {
               ) : (
                 <span className="text-amber-400">请完成必填项</span>
               )}
+            </p>
+          )}
+          {/* 后台任务运行中提示 */}
+          {isQuickGenRunning && (
+            <p className="text-xs text-center mt-2 text-tiktok-cyan">
+              🎬 视频正在后台生成中，可以切换到其他页面
+            </p>
+          )}
+          {isQuickGenImageRunning && (
+            <p className="text-xs text-center mt-2 text-violet-400">
+              🎨 图片正在后台生成中，可以切换到其他页面
             </p>
           )}
         </div>

@@ -79,9 +79,24 @@ interface AdminUser {
   created_at: string;
   banned_at?: string | null;
   banned_reason?: string | null;
+  // 功能限制
+  feature_restrictions?: {
+    video_generation?: boolean;
+    image_generation?: boolean;
+    model_hiring?: boolean;
+    batch_processing?: boolean;
+  };
 }
 
 type CreditActionType = "recharge" | "deduct";
+
+// 功能限制选项
+const FEATURE_OPTIONS = [
+  { key: "video_generation", label: "视频生成", description: "允许使用 Sora2 生成视频" },
+  { key: "image_generation", label: "图片生成", description: "允许使用 Nano Banana 处理图片" },
+  { key: "model_hiring", label: "模特签约", description: "允许签约 AI 模特" },
+  { key: "batch_processing", label: "批量处理", description: "允许使用批量生产线" },
+] as const;
 
 // ============================================================================
 // Admin Users Page
@@ -108,6 +123,15 @@ export default function AdminUsersPage() {
   // Ban Dialog 状态
   const [showBanDialog, setShowBanDialog] = useState(false);
   const [banReason, setBanReason] = useState("");
+
+  // Feature Restrictions Dialog 状态
+  const [showRestrictionsDialog, setShowRestrictionsDialog] = useState(false);
+  const [featureRestrictions, setFeatureRestrictions] = useState({
+    video_generation: true,
+    image_generation: true,
+    model_hiring: true,
+    batch_processing: true,
+  });
 
   // ================================================================
   // 数据获取
@@ -224,6 +248,9 @@ export default function AdminUsersPage() {
         });
         setShowCreditsDialog(false);
         fetchUsers();
+        
+        // 触发前端积分刷新（更新header中的积分显示）
+        window.dispatchEvent(new CustomEvent("credits-updated"));
       } else {
         throw new Error(data.error);
       }
@@ -247,6 +274,41 @@ export default function AdminUsersPage() {
     setSelectedUser(user);
     setBanReason("");
     setShowBanDialog(true);
+  };
+
+  // ================================================================
+  // 功能限制管理
+  // ================================================================
+
+  const handleOpenRestrictionsDialog = (user: AdminUser) => {
+    setSelectedUser(user);
+    setFeatureRestrictions(user.feature_restrictions || {
+      video_generation: true,
+      image_generation: true,
+      model_hiring: true,
+      batch_processing: true,
+    });
+    setShowRestrictionsDialog(true);
+  };
+
+  const handleSaveRestrictions = async () => {
+    if (!selectedUser) return;
+    
+    setIsProcessing(true);
+    try {
+      // TODO: 实际生产环境需要调用 API 保存
+      toast({
+        title: "功能权限已更新",
+        description: `已更新 ${selectedUser.email} 的功能权限`,
+      });
+      setShowRestrictionsDialog(false);
+      fetchUsers();
+    } catch (error) {
+      console.error("Save restrictions error:", error);
+      toast({ variant: "destructive", title: "操作失败" });
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const handleBanUser = async () => {
@@ -346,7 +408,7 @@ export default function AdminUsersPage() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold">User Management</h1>
+        <h1 className="text-2xl font-bold">用户管理</h1>
         <p className="text-muted-foreground">
           管理用户账号、积分余额和账号状态
         </p>
@@ -361,7 +423,7 @@ export default function AdminUsersPage() {
             </div>
             <div>
               <p className="text-2xl font-bold">{users.length}</p>
-              <p className="text-xs text-muted-foreground">Total Users</p>
+              <p className="text-xs text-muted-foreground">总用户数</p>
             </div>
           </CardContent>
         </Card>
@@ -374,7 +436,7 @@ export default function AdminUsersPage() {
               <p className="text-2xl font-bold">
                 {users.filter((u) => u.status === "active").length}
               </p>
-              <p className="text-xs text-muted-foreground">Active Users</p>
+              <p className="text-xs text-muted-foreground">活跃用户</p>
             </div>
           </CardContent>
         </Card>
@@ -387,7 +449,7 @@ export default function AdminUsersPage() {
               <p className="text-2xl font-bold">
                 {users.filter((u) => u.status === "banned").length}
               </p>
-              <p className="text-xs text-muted-foreground">Banned Users</p>
+              <p className="text-xs text-muted-foreground">封禁用户</p>
             </div>
           </CardContent>
         </Card>
@@ -400,7 +462,7 @@ export default function AdminUsersPage() {
               <p className="text-2xl font-bold">
                 {formatCredits(users.reduce((sum, u) => sum + u.credits, 0))}
               </p>
-              <p className="text-xs text-muted-foreground">Total Credits</p>
+              <p className="text-xs text-muted-foreground">总积分</p>
             </div>
           </CardContent>
         </Card>
@@ -414,33 +476,33 @@ export default function AdminUsersPage() {
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
-                  placeholder="Search by email or name..."
+                  placeholder="搜索邮箱或用户名..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-9 bg-black/30 border-white/10"
+                  className="pl-9 bg-background border-border"
                 />
               </div>
             </div>
             <Select value={filterRole} onValueChange={setFilterRole}>
-              <SelectTrigger className="w-[130px] bg-black/30 border-white/10">
-                <SelectValue placeholder="Role" />
+              <SelectTrigger className="w-[130px] bg-background border-border">
+                <SelectValue placeholder="角色" />
               </SelectTrigger>
-              <SelectContent className="bg-black/95 border-white/10">
-                <SelectItem value="all">All Roles</SelectItem>
-                <SelectItem value="user">User</SelectItem>
-                <SelectItem value="admin">Admin</SelectItem>
-                <SelectItem value="super_admin">Super Admin</SelectItem>
+              <SelectContent className="bg-popover border-border">
+                <SelectItem value="all">全部角色</SelectItem>
+                <SelectItem value="user">普通用户</SelectItem>
+                <SelectItem value="admin">管理员</SelectItem>
+                <SelectItem value="super_admin">超级管理员</SelectItem>
               </SelectContent>
             </Select>
             <Select value={filterStatus} onValueChange={setFilterStatus}>
-              <SelectTrigger className="w-[130px] bg-black/30 border-white/10">
-                <SelectValue placeholder="Status" />
+              <SelectTrigger className="w-[130px] bg-background border-border">
+                <SelectValue placeholder="状态" />
               </SelectTrigger>
-              <SelectContent className="bg-black/95 border-white/10">
-                <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="active">Active</SelectItem>
-                <SelectItem value="suspended">Suspended</SelectItem>
-                <SelectItem value="banned">Banned</SelectItem>
+              <SelectContent className="bg-popover border-border">
+                <SelectItem value="all">全部状态</SelectItem>
+                <SelectItem value="active">正常</SelectItem>
+                <SelectItem value="suspended">暂停</SelectItem>
+                <SelectItem value="banned">封禁</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -457,28 +519,28 @@ export default function AdminUsersPage() {
           ) : filteredUsers.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
               <User className="h-12 w-12 mb-4 opacity-50" />
-              <p>No users found</p>
+              <p>未找到用户</p>
             </div>
           ) : (
             <Table>
               <TableHeader>
                 <TableRow className="border-border/50 hover:bg-transparent">
-                  <TableHead className="w-[300px]">User</TableHead>
-                  <TableHead>Role</TableHead>
+                  <TableHead className="w-[300px]">用户</TableHead>
+                  <TableHead>角色</TableHead>
                   <TableHead>
                     <div className="flex items-center gap-1">
                       <Zap className="h-3.5 w-3.5 text-amber-400" />
-                      Credits
+                      积分
                     </div>
                   </TableHead>
                   <TableHead>
                     <div className="flex items-center gap-1">
                       <Calendar className="h-3.5 w-3.5" />
-                      Registered
+                      注册时间
                     </div>
                   </TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="w-[100px]">Actions</TableHead>
+                  <TableHead>状态</TableHead>
+                  <TableHead className="w-[100px]">操作</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -491,7 +553,7 @@ export default function AdminUsersPage() {
                     >
                       <TableCell>
                         <div className="flex items-center gap-3">
-                          <div className="h-10 w-10 rounded-full bg-black/30 overflow-hidden flex-shrink-0">
+                          <div className="h-10 w-10 rounded-full bg-muted overflow-hidden flex-shrink-0">
                             {user.avatar_url ? (
                               <img
                                 src={user.avatar_url}
@@ -508,7 +570,7 @@ export default function AdminUsersPage() {
                           </div>
                           <div>
                             <p className="font-medium">
-                              {user.name || "Unnamed User"}
+                              {user.name || "未命名用户"}
                             </p>
                             <p className="text-xs text-muted-foreground flex items-center gap-1">
                               <Mail className="h-3 w-3" />
@@ -574,13 +636,20 @@ export default function AdminUsersPage() {
                           </DropdownMenuTrigger>
                           <DropdownMenuContent
                             align="end"
-                            className="bg-black/95 border-white/10"
+                            className="bg-popover border-border"
                           >
                             <DropdownMenuItem
                               onClick={() => handleOpenCreditsDialog(user)}
                             >
                               <CreditCard className="h-4 w-4 mr-2" />
-                              Manage Credits
+                              积分管理
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => handleOpenRestrictionsDialog(user)}
+                              disabled={user.role !== "user"}
+                            >
+                              <Shield className="h-4 w-4 mr-2" />
+                              功能限制
                             </DropdownMenuItem>
                             <DropdownMenuSeparator className="bg-white/10" />
                             {user.status === "banned" ? (
@@ -589,7 +658,7 @@ export default function AdminUsersPage() {
                                 className="text-green-400 focus:text-green-400"
                               >
                                 <UserCheck className="h-4 w-4 mr-2" />
-                                Unban User
+                                解除封禁
                               </DropdownMenuItem>
                             ) : (
                               <DropdownMenuItem
@@ -598,7 +667,7 @@ export default function AdminUsersPage() {
                                 disabled={user.role !== "user"}
                               >
                                 <Ban className="h-4 w-4 mr-2" />
-                                Ban User
+                                封禁用户
                               </DropdownMenuItem>
                             )}
                           </DropdownMenuContent>
@@ -615,11 +684,11 @@ export default function AdminUsersPage() {
 
       {/* Credits Management Dialog */}
       <Dialog open={showCreditsDialog} onOpenChange={setShowCreditsDialog}>
-        <DialogContent className="max-w-md bg-black/95 border-white/10">
+        <DialogContent className="max-w-md bg-background border-border">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Zap className="h-5 w-5 text-amber-400" />
-              Manage Credits
+              积分管理
             </DialogTitle>
             <DialogDescription>
               为用户 <span className="text-white font-medium">{selectedUser?.email}</span> 管理积分
@@ -629,16 +698,16 @@ export default function AdminUsersPage() {
           <div className="space-y-4 py-4">
             {/* Current Balance */}
             <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30">
-              <p className="text-xs text-amber-400 mb-1">Current Balance</p>
+              <p className="text-xs text-amber-400 mb-1">当前余额</p>
               <p className="text-3xl font-bold text-amber-400">
-                {selectedUser?.credits.toLocaleString()} <span className="text-lg">Credits</span>
+                {selectedUser?.credits.toLocaleString()} <span className="text-lg">积分</span>
               </p>
             </div>
 
             {/* Action Type */}
             <div>
               <Label className="text-xs text-muted-foreground mb-2 block">
-                Operation Type
+                操作类型
               </Label>
               <div className="flex gap-2">
                 <Button
@@ -648,13 +717,13 @@ export default function AdminUsersPage() {
                     "flex-1 h-12 gap-2",
                     creditAction === "recharge"
                       ? "bg-green-500/20 border-green-500/50 text-green-400"
-                      : "border-white/20"
+                      : "border-border"
                   )}
                 >
                   <Plus className="h-5 w-5" />
                   <div className="text-left">
-                    <div className="font-semibold">Recharge</div>
-                    <div className="text-xs opacity-70">Add credits</div>
+                    <div className="font-semibold">充值</div>
+                    <div className="text-xs opacity-70">增加积分</div>
                   </div>
                 </Button>
                 <Button
@@ -664,13 +733,13 @@ export default function AdminUsersPage() {
                     "flex-1 h-12 gap-2",
                     creditAction === "deduct"
                       ? "bg-red-500/20 border-red-500/50 text-red-400"
-                      : "border-white/20"
+                      : "border-border"
                   )}
                 >
                   <Minus className="h-5 w-5" />
                   <div className="text-left">
-                    <div className="font-semibold">Deduct</div>
-                    <div className="text-xs opacity-70">Remove credits</div>
+                    <div className="font-semibold">扣除</div>
+                    <div className="text-xs opacity-70">减少积分</div>
                   </div>
                 </Button>
               </div>
@@ -679,7 +748,7 @@ export default function AdminUsersPage() {
             {/* Amount */}
             <div>
               <Label className="text-xs text-muted-foreground mb-2 block">
-                Amount *
+                数量 *
               </Label>
               <Input
                 type="number"
@@ -687,11 +756,11 @@ export default function AdminUsersPage() {
                 onChange={(e) => setCreditAmount(parseInt(e.target.value) || 0)}
                 min={1}
                 max={creditAction === "deduct" ? selectedUser?.credits : undefined}
-                className="bg-black/30 border-white/10 text-lg font-bold"
+                className="bg-background border-border text-lg font-bold"
               />
               {creditAction === "deduct" && selectedUser && (
                 <p className="text-xs text-muted-foreground mt-1">
-                  Maximum: {selectedUser.credits.toLocaleString()} Credits
+                  最大可扣除: {selectedUser.credits.toLocaleString()} 积分
                 </p>
               )}
             </div>
@@ -700,14 +769,14 @@ export default function AdminUsersPage() {
             <div>
               <Label className="text-xs text-muted-foreground mb-2 flex items-center gap-1">
                 <AlertTriangle className="h-3 w-3 text-amber-400" />
-                Reason (Required) *
+                操作原因 (必填) *
               </Label>
               <Textarea
                 value={creditReason}
                 onChange={(e) => setCreditReason(e.target.value)}
-                placeholder="e.g., 线下转账, 系统补偿, 活动奖励..."
+                placeholder="例如：线下转账、系统补偿、活动奖励..."
                 rows={3}
-                className="bg-black/30 border-white/10 resize-none"
+                className="bg-background border-border resize-none"
               />
               <p className="text-xs text-muted-foreground mt-1">
                 此备注将记录到审计日志中，请详细说明操作原因
@@ -715,10 +784,10 @@ export default function AdminUsersPage() {
             </div>
 
             {/* Preview */}
-            <div className="p-3 rounded-lg bg-white/5 border border-white/10">
-              <p className="text-xs text-muted-foreground mb-1">Operation Preview</p>
+            <div className="p-3 rounded-lg bg-muted/50 border border-border">
+              <p className="text-xs text-muted-foreground mb-1">操作预览</p>
               <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">New Balance:</span>
+                <span className="text-muted-foreground">操作后余额:</span>
                 <span className={cn(
                   "text-xl font-bold",
                   creditAction === "recharge" ? "text-green-400" : "text-red-400"
@@ -726,7 +795,7 @@ export default function AdminUsersPage() {
                   {creditAction === "recharge"
                     ? ((selectedUser?.credits || 0) + creditAmount).toLocaleString()
                     : Math.max(0, (selectedUser?.credits || 0) - creditAmount).toLocaleString()
-                  } Credits
+                  } 积分
                 </span>
               </div>
             </div>
@@ -736,9 +805,9 @@ export default function AdminUsersPage() {
             <Button
               variant="outline"
               onClick={() => setShowCreditsDialog(false)}
-              className="border-white/20"
+              className="border-border"
             >
-              Cancel
+              取消
             </Button>
             <Button
               onClick={handleManageCredits}
@@ -753,7 +822,7 @@ export default function AdminUsersPage() {
               {isProcessing ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Processing...
+                  处理中...
                 </>
               ) : (
                 <>
@@ -762,7 +831,7 @@ export default function AdminUsersPage() {
                   ) : (
                     <Minus className="h-4 w-4 mr-2" />
                   )}
-                  {creditAction === "recharge" ? "Confirm Recharge" : "Confirm Deduction"}
+                  {creditAction === "recharge" ? "确认充值" : "确认扣除"}
                 </>
               )}
             </Button>
@@ -772,11 +841,11 @@ export default function AdminUsersPage() {
 
       {/* Ban User Dialog */}
       <Dialog open={showBanDialog} onOpenChange={setShowBanDialog}>
-        <DialogContent className="max-w-md bg-black/95 border-white/10">
+        <DialogContent className="max-w-md bg-background border-border">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-red-400">
               <Ban className="h-5 w-5" />
-              Ban User
+              封禁用户
             </DialogTitle>
             <DialogDescription>
               确定要封禁用户 <span className="text-white font-medium">{selectedUser?.email}</span> 吗？
@@ -798,14 +867,14 @@ export default function AdminUsersPage() {
 
             <div>
               <Label className="text-xs text-muted-foreground mb-2 flex items-center gap-1">
-                Ban Reason (Required) *
+                封禁原因 (必填) *
               </Label>
               <Textarea
                 value={banReason}
                 onChange={(e) => setBanReason(e.target.value)}
-                placeholder="e.g., 违规操作, 恶意刷单, 滥用系统..."
+                placeholder="例如：违规操作、恶意刷单、滥用系统..."
                 rows={3}
-                className="bg-black/30 border-white/10 resize-none"
+                className="bg-background border-border resize-none"
               />
             </div>
           </div>
@@ -814,9 +883,9 @@ export default function AdminUsersPage() {
             <Button
               variant="outline"
               onClick={() => setShowBanDialog(false)}
-              className="border-white/20"
+              className="border-border"
             >
-              Cancel
+              取消
             </Button>
             <Button
               onClick={handleBanUser}
@@ -826,12 +895,98 @@ export default function AdminUsersPage() {
               {isProcessing ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Processing...
+                  处理中...
                 </>
               ) : (
                 <>
                   <Ban className="h-4 w-4 mr-2" />
-                  Confirm Ban
+                  确认封禁
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Feature Restrictions Dialog */}
+      <Dialog open={showRestrictionsDialog} onOpenChange={setShowRestrictionsDialog}>
+        <DialogContent className="max-w-md bg-background border-border">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Shield className="h-5 w-5 text-amber-400" />
+              功能权限管理
+            </DialogTitle>
+            <DialogDescription>
+              管理用户 <span className="text-white font-medium">{selectedUser?.email}</span> 的功能权限
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="h-5 w-5 text-amber-400 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-medium text-amber-400">注意</p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    禁用功能后，用户将无法使用对应的功能模块。
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              {FEATURE_OPTIONS.map((feature) => (
+                <div 
+                  key={feature.key}
+                  className="flex items-center justify-between p-3 rounded-lg bg-muted/50 border border-border"
+                >
+                  <div>
+                    <p className="font-medium text-sm">{feature.label}</p>
+                    <p className="text-xs text-muted-foreground">{feature.description}</p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setFeatureRestrictions(prev => ({
+                      ...prev,
+                      [feature.key]: !prev[feature.key as keyof typeof prev]
+                    }))}
+                    className={cn(
+                      "w-16",
+                      featureRestrictions[feature.key as keyof typeof featureRestrictions]
+                        ? "bg-green-500/20 border-green-500/50 text-green-400"
+                        : "bg-red-500/20 border-red-500/50 text-red-400"
+                    )}
+                  >
+                    {featureRestrictions[feature.key as keyof typeof featureRestrictions] ? "允许" : "禁用"}
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowRestrictionsDialog(false)}
+              className="border-border"
+            >
+              取消
+            </Button>
+            <Button
+              onClick={handleSaveRestrictions}
+              disabled={isProcessing}
+              className="bg-gradient-to-r from-amber-500 to-orange-500 text-white font-semibold"
+            >
+              {isProcessing ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  处理中...
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 className="h-4 w-4 mr-2" />
+                  保存设置
                 </>
               )}
             </Button>

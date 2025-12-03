@@ -81,12 +81,12 @@ const navItems: NavItem[] = [
     comingSoon: true,
     comingSoonMessage: "即将推出：一键复刻爆款视频风格，快速生成同款内容",
   },
-  // 7. 选品决策室 (原选品中心)
+  // 7. 任务日志 (原选品中心)
   {
-    title: "选品决策室",
+    title: "任务日志",
     href: "/assets",
     icon: Package,
-    description: "智能选品与素材管理",
+    description: "查看生成历史与下载",
   },
 ];
 

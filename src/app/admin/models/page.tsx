@@ -124,20 +124,20 @@ interface FormData {
 }
 
 const CATEGORIES = [
-  "Fashion",
-  "Beauty",
-  "Fitness",
-  "Tech",
-  "Lifestyle",
-  "Food",
-  "Travel",
-  "Entertainment",
+  { value: "Fashion", label: "时尚" },
+  { value: "Beauty", label: "美妆" },
+  { value: "Fitness", label: "健身" },
+  { value: "Tech", label: "科技" },
+  { value: "Lifestyle", label: "生活方式" },
+  { value: "Food", label: "美食" },
+  { value: "Travel", label: "旅行" },
+  { value: "Entertainment", label: "娱乐" },
 ];
 
 const GENDERS = [
-  { value: "female", label: "Female" },
-  { value: "male", label: "Male" },
-  { value: "neutral", label: "Neutral" },
+  { value: "female", label: "女性" },
+  { value: "male", label: "男性" },
+  { value: "neutral", label: "中性" },
 ];
 
 const INITIAL_FORM_DATA: FormData = {
@@ -677,7 +677,7 @@ export default function AdminModelsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">AI Models Management</h1>
+          <h1 className="text-2xl font-bold">AI 模特管理</h1>
           <p className="text-muted-foreground">
             管理 AI 模特库，包含 Trigger Word 等敏感配置
           </p>
@@ -687,7 +687,7 @@ export default function AdminModelsPage() {
           className="bg-gradient-to-r from-red-500 to-orange-500 text-white font-semibold"
         >
           <Plus className="h-4 w-4 mr-2" />
-          Add New Model
+          添加新模特
         </Button>
       </div>
 
@@ -699,34 +699,34 @@ export default function AdminModelsPage() {
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
-                  placeholder="Search models, trigger words..."
+                  placeholder="搜索模特名称、触发词..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-9 bg-black/30 border-white/10"
+                  className="pl-9 bg-background border-border"
                 />
               </div>
             </div>
             <Select value={filterCategory} onValueChange={setFilterCategory}>
-              <SelectTrigger className="w-[150px] bg-black/30 border-white/10">
-                <SelectValue placeholder="Category" />
+              <SelectTrigger className="w-[150px] bg-background border-border">
+                <SelectValue placeholder="分类" />
               </SelectTrigger>
-              <SelectContent className="bg-black/95 border-white/10">
-                <SelectItem value="all">All Categories</SelectItem>
+              <SelectContent className="bg-popover border-border">
+                <SelectItem value="all">全部分类</SelectItem>
                 {CATEGORIES.map((cat) => (
-                  <SelectItem key={cat} value={cat}>
-                    {cat}
+                  <SelectItem key={cat.value} value={cat.value}>
+                    {cat.label}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
             <Select value={filterStatus} onValueChange={setFilterStatus}>
-              <SelectTrigger className="w-[130px] bg-black/30 border-white/10">
-                <SelectValue placeholder="Status" />
+              <SelectTrigger className="w-[130px] bg-background border-border">
+                <SelectValue placeholder="状态" />
               </SelectTrigger>
-              <SelectContent className="bg-black/95 border-white/10">
-                <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="active">Active</SelectItem>
-                <SelectItem value="inactive">Inactive</SelectItem>
+              <SelectContent className="bg-popover border-border">
+                <SelectItem value="all">全部状态</SelectItem>
+                <SelectItem value="active">已上架</SelectItem>
+                <SelectItem value="inactive">已下架</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -743,24 +743,24 @@ export default function AdminModelsPage() {
           ) : filteredModels.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
               <User className="h-12 w-12 mb-4 opacity-50" />
-              <p>No models found</p>
+              <p>未找到模特</p>
             </div>
           ) : (
             <Table>
               <TableHeader>
                 <TableRow className="border-border/50 hover:bg-transparent">
-                  <TableHead className="w-[300px]">Model</TableHead>
-                  <TableHead>Category</TableHead>
+                  <TableHead className="w-[300px]">模特</TableHead>
+                  <TableHead>分类</TableHead>
                   <TableHead>
                     <div className="flex items-center gap-1">
                       <Key className="h-3.5 w-3.5 text-red-400" />
-                      Trigger Word
+                      触发词
                     </div>
                   </TableHead>
-                  <TableHead>Price (Monthly)</TableHead>
-                  <TableHead>Stats</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="w-[80px]">Actions</TableHead>
+                  <TableHead>月租价格</TableHead>
+                  <TableHead>统计</TableHead>
+                  <TableHead>状态</TableHead>
+                  <TableHead className="w-[80px]">操作</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -811,18 +811,18 @@ export default function AdminModelsPage() {
                           {model.trigger_word}
                         </code>
                       ) : (
-                        <span className="text-muted-foreground text-xs">Not set</span>
+                        <span className="text-muted-foreground text-xs">未设置</span>
                       )}
                     </TableCell>
                     <TableCell>
                       <span className="font-semibold text-amber-400">
-                        {model.price_monthly} pts
+                        {model.price_monthly} 积分
                       </span>
                     </TableCell>
                     <TableCell>
                       <div className="text-xs text-muted-foreground">
-                        <div>{model.total_rentals} rentals</div>
-                        <div>{model.total_generations} generations</div>
+                        <div>{model.total_rentals} 次签约</div>
+                        <div>{model.total_generations} 次生成</div>
                       </div>
                     </TableCell>
                     <TableCell>
@@ -838,7 +838,7 @@ export default function AdminModelsPage() {
                             model.is_active ? "text-green-400" : "text-muted-foreground"
                           )}
                         >
-                          {model.is_active ? "Active" : "Inactive"}
+                          {model.is_active ? "已上架" : "已下架"}
                         </span>
                       </div>
                     </TableCell>
@@ -851,32 +851,32 @@ export default function AdminModelsPage() {
                         </DropdownMenuTrigger>
                         <DropdownMenuContent
                           align="end"
-                          className="bg-black/95 border-white/10"
+                          className="bg-popover border-border"
                         >
                           <DropdownMenuItem onClick={() => handleOpenEdit(model)}>
                             <Pencil className="h-4 w-4 mr-2" />
-                            Edit
+                            编辑
                           </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => handleToggleActive(model)}>
                             {model.is_active ? (
                               <>
                                 <EyeOff className="h-4 w-4 mr-2" />
-                                Deactivate
+                                下架
                               </>
                             ) : (
                               <>
                                 <Eye className="h-4 w-4 mr-2" />
-                                Activate
+                                上架
                               </>
                             )}
                           </DropdownMenuItem>
-                          <DropdownMenuSeparator className="bg-white/10" />
+                          <DropdownMenuSeparator className="bg-border" />
                           <DropdownMenuItem
                             onClick={() => handleDelete(model)}
                             className="text-red-400 focus:text-red-400"
                           >
                             <Trash2 className="h-4 w-4 mr-2" />
-                            Delete
+                            删除
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
@@ -891,11 +891,11 @@ export default function AdminModelsPage() {
 
       {/* Edit/Create Dialog */}
       <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
-        <DialogContent className="max-w-3xl bg-black/95 border-white/10 max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-3xl bg-background border-border max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <UserCircle className="h-5 w-5 text-red-400" />
-              {editingModel ? "Edit Model" : "Create New Model"}
+              {editingModel ? "编辑模特" : "创建新模特"}
             </DialogTitle>
             <DialogDescription>
               {editingModel
@@ -909,7 +909,7 @@ export default function AdminModelsPage() {
             <div className="grid grid-cols-2 gap-6">
               {/* Avatar Upload */}
               <FileUpload
-                label="Avatar Image"
+                label="头像图片"
                 accept="image/jpeg,image/png,image/webp,image/gif"
                 bucket={STORAGE_BUCKETS.MODEL_AVATARS}
                 currentUrl={formData.avatar_url}
@@ -925,12 +925,12 @@ export default function AdminModelsPage() {
                   setFormData((prev) => ({ ...prev, avatar_url: url }))
                 }
                 icon={<Camera className="h-3.5 w-3.5" />}
-                description="JPG, PNG, WebP (Max 5MB)"
+                description="JPG, PNG, WebP (最大 5MB)"
               />
 
               {/* Demo Video Upload */}
               <FileUpload
-                label="Demo Video"
+                label="演示视频"
                 accept="video/mp4,video/webm,video/quicktime"
                 bucket={STORAGE_BUCKETS.MODEL_DEMOS}
                 currentUrl={formData.demo_url}
@@ -946,7 +946,7 @@ export default function AdminModelsPage() {
                   setFormData((prev) => ({ ...prev, demo_url: url }))
                 }
                 icon={<FileVideo className="h-3.5 w-3.5" />}
-                description="MP4, WebM (Max 100MB)"
+                description="MP4, WebM (最大 100MB)"
               />
             </div>
 
@@ -954,21 +954,21 @@ export default function AdminModelsPage() {
             <div className="grid grid-cols-2 gap-4">
               <div className="col-span-2">
                 <Label className="text-xs text-muted-foreground mb-2 block">
-                  Model Name *
+                  模特名称 *
                 </Label>
                 <Input
                   value={formData.name}
                   onChange={(e) =>
                     setFormData((prev) => ({ ...prev, name: e.target.value }))
                   }
-                  placeholder="e.g., Sophia"
-                  className="bg-black/30 border-white/10"
+                  placeholder="例如：小美"
+                  className="bg-background border-border"
                 />
               </div>
 
               <div>
                 <Label className="text-xs text-muted-foreground mb-2 block">
-                  Category
+                  分类
                 </Label>
                 <Select
                   value={formData.category}
@@ -976,13 +976,13 @@ export default function AdminModelsPage() {
                     setFormData((prev) => ({ ...prev, category: v }))
                   }
                 >
-                  <SelectTrigger className="bg-black/30 border-white/10">
+                  <SelectTrigger className="bg-background border-border">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent className="bg-black/95 border-white/10">
+                  <SelectContent className="bg-popover border-border">
                     {CATEGORIES.map((cat) => (
-                      <SelectItem key={cat} value={cat}>
-                        {cat}
+                      <SelectItem key={cat.value} value={cat.value}>
+                        {cat.label}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -991,7 +991,7 @@ export default function AdminModelsPage() {
 
               <div>
                 <Label className="text-xs text-muted-foreground mb-2 block">
-                  Gender
+                  性别
                 </Label>
                 <Select
                   value={formData.gender}
@@ -999,10 +999,10 @@ export default function AdminModelsPage() {
                     setFormData((prev) => ({ ...prev, gender: v }))
                   }
                 >
-                  <SelectTrigger className="bg-black/30 border-white/10">
+                  <SelectTrigger className="bg-background border-border">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent className="bg-black/95 border-white/10">
+                  <SelectContent className="bg-popover border-border">
                     {GENDERS.map((g) => (
                       <SelectItem key={g.value} value={g.value}>
                         {g.label}
@@ -1016,16 +1016,16 @@ export default function AdminModelsPage() {
             {/* Description */}
             <div>
               <Label className="text-xs text-muted-foreground mb-2 block">
-                Description
+                简介
               </Label>
               <Textarea
                 value={formData.description}
                 onChange={(e) =>
                   setFormData((prev) => ({ ...prev, description: e.target.value }))
                 }
-                placeholder="Model description..."
+                placeholder="模特简介..."
                 rows={3}
-                className="bg-black/30 border-white/10 resize-none"
+                className="bg-background border-border resize-none"
               />
             </div>
 
@@ -1033,25 +1033,25 @@ export default function AdminModelsPage() {
             <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/30">
               <Label className="text-xs text-red-400 mb-2 flex items-center gap-2">
                 <Shield className="h-4 w-4" />
-                Trigger Word (Confidential) *
+                触发词 (机密) *
               </Label>
               <Input
                 value={formData.trigger_word}
                 onChange={(e) =>
                   setFormData((prev) => ({ ...prev, trigger_word: e.target.value }))
                 }
-                placeholder="e.g., @sophia_v1"
-                className="bg-black/30 border-red-500/30 font-mono"
+                placeholder="例如：@xiaomei_v1"
+                className="bg-background border-red-500/30 font-mono"
               />
               <p className="text-xs text-red-400/70 mt-2">
-                ⚠️ 此字段仅在 Admin 后台可见，不会暴露给前端用户。用于 Sora API 的 Prompt 注入。
+                ⚠️ 此字段仅在管理后台可见，不会暴露给前端用户。用于 Sora API 的 Prompt 注入。
               </p>
             </div>
 
             {/* Style Tags */}
             <div>
               <Label className="text-xs text-muted-foreground mb-2 block">
-                Style Tags (逗号分隔)
+                风格标签 (逗号分隔)
               </Label>
               <div className="flex gap-2 mb-2 flex-wrap min-h-[32px]">
                 {formData.style_tags.map((tag) => (
@@ -1084,16 +1084,16 @@ export default function AdminModelsPage() {
                       handleAddTag();
                     }
                   }}
-                  placeholder="e.g., Cyberpunk, Fashion, Street"
-                  className="bg-black/30 border-white/10"
+                  placeholder="例如：赛博朋克, 时尚, 街头"
+                  className="bg-background border-border"
                 />
                 <Button
                   type="button"
                   variant="outline"
                   onClick={handleAddTag}
-                  className="border-white/20"
+                  className="border-border"
                 >
-                  Add
+                  添加
                 </Button>
               </div>
             </div>
@@ -1101,11 +1101,11 @@ export default function AdminModelsPage() {
             {/* Pricing */}
             <div>
               <Label className="text-xs text-muted-foreground mb-2 block">
-                Pricing (Credits)
+                定价 (积分)
               </Label>
               <div className="grid grid-cols-4 gap-3">
                 <div>
-                  <span className="text-xs text-muted-foreground block mb-1">Daily</span>
+                  <span className="text-xs text-muted-foreground block mb-1">日租</span>
                   <Input
                     type="number"
                     value={formData.price_daily}
@@ -1115,11 +1115,11 @@ export default function AdminModelsPage() {
                         price_daily: parseInt(e.target.value) || 0,
                       }))
                     }
-                    className="bg-black/30 border-white/10"
+                    className="bg-background border-border"
                   />
                 </div>
                 <div>
-                  <span className="text-xs text-muted-foreground block mb-1">Weekly</span>
+                  <span className="text-xs text-muted-foreground block mb-1">周租</span>
                   <Input
                     type="number"
                     value={formData.price_weekly}
@@ -1129,11 +1129,11 @@ export default function AdminModelsPage() {
                         price_weekly: parseInt(e.target.value) || 0,
                       }))
                     }
-                    className="bg-black/30 border-white/10"
+                    className="bg-background border-border"
                   />
                 </div>
                 <div>
-                  <span className="text-xs text-muted-foreground block mb-1">Monthly</span>
+                  <span className="text-xs text-muted-foreground block mb-1">月租</span>
                   <Input
                     type="number"
                     value={formData.price_monthly}
@@ -1143,11 +1143,11 @@ export default function AdminModelsPage() {
                         price_monthly: parseInt(e.target.value) || 0,
                       }))
                     }
-                    className="bg-black/30 border-white/10"
+                    className="bg-background border-border"
                   />
                 </div>
                 <div>
-                  <span className="text-xs text-muted-foreground block mb-1">Yearly</span>
+                  <span className="text-xs text-muted-foreground block mb-1">年租</span>
                   <Input
                     type="number"
                     value={formData.price_yearly}
@@ -1157,7 +1157,7 @@ export default function AdminModelsPage() {
                         price_yearly: parseInt(e.target.value) || 0,
                       }))
                     }
-                    className="bg-black/30 border-white/10"
+                    className="bg-background border-border"
                   />
                 </div>
               </div>
@@ -1173,7 +1173,7 @@ export default function AdminModelsPage() {
                   }
                   className="data-[state=checked]:bg-green-500"
                 />
-                <Label className="text-sm">Active (上架)</Label>
+                <Label className="text-sm">上架</Label>
               </div>
               <div className="flex items-center gap-2">
                 <Switch
@@ -1185,7 +1185,7 @@ export default function AdminModelsPage() {
                 />
                 <Label className="text-sm flex items-center gap-1">
                   <Star className="h-3.5 w-3.5 text-amber-400" />
-                  Featured
+                  精选推荐
                 </Label>
               </div>
               <div className="flex items-center gap-2">
@@ -1198,7 +1198,7 @@ export default function AdminModelsPage() {
                 />
                 <Label className="text-sm flex items-center gap-1">
                   <TrendingUp className="h-3.5 w-3.5 text-green-400" />
-                  Trending
+                  热门
                 </Label>
               </div>
             </div>
@@ -1209,9 +1209,9 @@ export default function AdminModelsPage() {
               variant="outline"
               onClick={() => setShowEditDialog(false)}
               disabled={isSaving}
-              className="border-white/20"
+              className="border-border"
             >
-              Cancel
+              取消
             </Button>
             <Button
               onClick={handleSave}
@@ -1221,12 +1221,12 @@ export default function AdminModelsPage() {
               {isSaving ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  {uploadProgress || "Saving..."}
+                  {uploadProgress || "保存中..."}
                 </>
               ) : (
                 <>
                   <CheckCircle2 className="h-4 w-4 mr-2" />
-                  {editingModel ? "Update Model" : "Create Model"}
+                  {editingModel ? "更新模特" : "创建模特"}
                 </>
               )}
             </Button>

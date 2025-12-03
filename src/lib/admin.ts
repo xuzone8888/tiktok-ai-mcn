@@ -130,12 +130,12 @@ export function canPerformAction(
 export function getRoleDisplayName(role: UserRole): string {
   switch (role) {
     case "super_admin":
-      return "Super Admin";
+      return "超级管理员";
     case "admin":
-      return "Admin";
+      return "管理员";
     case "user":
     default:
-      return "User";
+      return "普通用户";
   }
 }
 
@@ -148,13 +148,13 @@ export function getStatusDisplay(status: UserStatus): {
 } {
   switch (status) {
     case "active":
-      return { label: "Active", color: "green" };
+      return { label: "正常", color: "green" };
     case "suspended":
-      return { label: "Suspended", color: "yellow" };
+      return { label: "暂停", color: "yellow" };
     case "banned":
-      return { label: "Banned", color: "red" };
+      return { label: "封禁", color: "red" };
     default:
-      return { label: "Unknown", color: "gray" };
+      return { label: "未知", color: "gray" };
   }
 }
 

@@ -2,10 +2,14 @@
  * Image Batch Store - 图片批量处理状态管理
  * 
  * 专门用于图片批量处理单元的 Zustand Store
+ * 
+ * 特性：
+ * - 使用 persist 中间件持久化任务状态到 localStorage
+ * - 页面切换时任务不会丢失
  */
 
 import { create } from "zustand";
-import { devtools } from "zustand/middleware";
+import { devtools, persist, createJSONStorage } from "zustand/middleware";
 import { immer } from "zustand/middleware/immer";
 
 import {
@@ -75,6 +79,15 @@ export interface ImageBatchActions {
     status: ImageBatchTaskStatus,
     extra?: Partial<Pick<ImageBatchTask, "apiTaskId" | "resultUrl" | "error" | "progress" | "startedAt" | "completedAt">>
   ) => void;
+  
+  /** 更新任务结果 (简化的状态更新) */
+  updateTaskResult: (
+    id: string,
+    update: Partial<Pick<ImageBatchTask, "status" | "resultUrl" | "error" | "apiTaskId">>
+  ) => void;
+  
+  /** 设置作业状态 */
+  setJobStatus: (status: ImageBatchJobStatus) => void;
   
   /** 删除任务 */
   removeTask: (id: string) => void;
@@ -189,7 +202,7 @@ const initialState: ImageBatchState = {
   jobStatus: "idle",
   globalSettings: {
     model: "nano-banana",
-    action: "generate",
+    action: "upscale",  // 默认使用高清放大，更实用
     aspectRatio: "auto",
     resolution: "1k",
     prompt: "",
@@ -205,8 +218,9 @@ const initialState: ImageBatchState = {
 
 export const useImageBatchStore = create<ImageBatchState & ImageBatchActions>()(
   devtools(
-    immer((set, get) => ({
-      ...initialState,
+    persist(
+      immer((set, get) => ({
+        ...initialState,
 
       // ==================== 任务管理 ====================
 
@@ -214,8 +228,10 @@ export const useImageBatchStore = create<ImageBatchState & ImageBatchActions>()(
         const { globalSettings, tasks, jobStatus } = get();
         const newIds: string[] = [];
 
-        // 使用全局提示词，如果没有设置则使用默认提示词
-        const prompt = globalSettings.prompt?.trim() || getActionPromptHint(globalSettings.model, globalSettings.action);
+        // 只有 AI 生成模式才使用提示词，高清放大和九宫格不需要
+        const prompt = globalSettings.action === "generate"
+          ? (globalSettings.prompt?.trim() || getActionPromptHint(globalSettings.model, globalSettings.action))
+          : "";
 
         const newTasks: ImageBatchTask[] = files
           .filter((f) => f.type.startsWith("image/"))
@@ -244,9 +260,16 @@ export const useImageBatchStore = create<ImageBatchState & ImageBatchActions>()(
 
         set((state) => {
           state.tasks.push(...newTasks);
-          // 如果已完成或取消，自动重置为 idle 状态以允许新任务
+          // 如果已完成、取消或 running 但没有 pending/processing 任务，重置为 idle 状态以允许新任务
           if (jobStatus === "completed" || jobStatus === "cancelled") {
             state.jobStatus = "idle";
+          } else if (jobStatus === "running") {
+            // 检查是否有正在处理的任务
+            const hasProcessing = state.tasks.some(t => t.status === "processing");
+            if (!hasProcessing) {
+              // 没有正在处理的任务，重置为 idle
+              state.jobStatus = "idle";
+            }
           }
         });
 
@@ -274,6 +297,27 @@ export const useImageBatchStore = create<ImageBatchState & ImageBatchActions>()(
         });
       },
 
+      updateTaskResult: (id, update) => {
+        set((state) => {
+          const task = state.tasks.find((t) => t.id === id);
+          if (task) {
+            if (update.status) task.status = update.status;
+            if (update.resultUrl) task.resultUrl = update.resultUrl;
+            if (update.error) task.error = update.error;
+            if (update.apiTaskId) task.apiTaskId = update.apiTaskId;
+            if (update.status === "completed") {
+              task.completedAt = new Date().toISOString();
+            }
+          }
+        });
+      },
+
+      setJobStatus: (status) => {
+        set((state) => {
+          state.jobStatus = status;
+        });
+      },
+
       removeTask: (id) => {
         set((state) => {
           const task = state.tasks.find((t) => t.id === id);
@@ -284,6 +328,20 @@ export const useImageBatchStore = create<ImageBatchState & ImageBatchActions>()(
             .filter((t) => t.id !== id)
             .map((t, i) => ({ ...t, index: i }));
           delete state.selectedTaskIds[id];
+          
+          // 如果删除后没有任务了，重置状态
+          if (state.tasks.length === 0) {
+            state.jobStatus = "idle";
+            state.processingCount = 0;
+          }
+          // 如果没有 pending 任务且没有 processing 任务，也重置为 idle
+          else {
+            const hasPending = state.tasks.some(t => t.status === "pending");
+            const hasProcessing = state.tasks.some(t => t.status === "processing");
+            if (!hasPending && !hasProcessing && state.jobStatus === "running") {
+              state.jobStatus = "completed";
+            }
+          }
         });
       },
 
@@ -438,8 +496,10 @@ export const useImageBatchStore = create<ImageBatchState & ImageBatchActions>()(
         set((state) => {
           state.tasks.forEach((t) => {
             if (t.status === "pending") {
-              // 使用全局提示词，如果没有设置则使用默认提示词
-              const prompt = globalSettings.prompt?.trim() || getActionPromptHint(globalSettings.model, globalSettings.action);
+              // 只有 AI 生成模式才使用提示词
+              const prompt = globalSettings.action === "generate"
+                ? (globalSettings.prompt?.trim() || getActionPromptHint(globalSettings.model, globalSettings.action))
+                : "";
               t.config = {
                 ...t.config,
                 model: globalSettings.model,
@@ -453,7 +513,44 @@ export const useImageBatchStore = create<ImageBatchState & ImageBatchActions>()(
         });
       },
     })),
-    { name: "ImageBatchStore" }
+    {
+      name: "image-batch-storage",
+      storage: createJSONStorage(() => {
+        if (typeof window !== "undefined") {
+          return localStorage;
+        }
+        return {
+          getItem: () => null,
+          setItem: () => {},
+          removeItem: () => {},
+        };
+      }),
+      // 只持久化已完成的任务和设置
+      partialize: (state) => ({
+        tasks: state.tasks
+          .filter(task => task.status === "completed" || task.resultUrl)
+          .map(task => ({
+            ...task,
+            config: {
+              ...task.config,
+              // 不持久化 blob URLs
+              sourceImageUrl: task.config.sourceImageUrl?.startsWith("blob:") ? "" : task.config.sourceImageUrl,
+            },
+          }))
+          .filter(task => task.config.sourceImageUrl || task.resultUrl),
+        globalSettings: state.globalSettings,
+        jobStatus: state.jobStatus === "running" ? "idle" : state.jobStatus,
+      }),
+      onRehydrateStorage: () => (state) => {
+        if (state) {
+          console.log("[ImageBatchStore] Rehydrated from localStorage:", {
+            taskCount: state.tasks.length,
+          });
+        }
+      },
+    }
+  ),
+  { name: "ImageBatchStore" }
   )
 );
 

@@ -37,6 +37,8 @@ export interface PublicModel {
   total_rentals: number;     // 总签约次数
   total_generations: number; // 总生成次数
   created_at: string;
+  is_hired_by_others?: boolean;  // 是否已被其他人聘用
+  hired_count?: number;          // 当前被聘用数量
 }
 
 /**
@@ -236,6 +238,10 @@ export async function getMarketplaceModels(options?: {
     const supabase = createClient();
     const { category, featured, trending, limit = 50, offset = 0, search } = options || {};
 
+    // 0. 获取当前用户
+    const { data: { user } } = await supabase.auth.getUser();
+    const currentUserId = user?.id;
+
     // 1. 构建查询 - 只选择安全字段
     let query = supabase
       .from("ai_models")
@@ -272,10 +278,41 @@ export async function getMarketplaceModels(options?: {
       throw error;
     }
 
-    // 5. 转换为安全的公开格式
-    const publicModels = (models || []).map(toPublicModel);
+    // 5. 查询每个模特的有效签约数量 (所有用户)
+    const modelIds = (models || []).map((m: any) => m.id);
+    const { data: allContracts } = await supabase
+      .from("contracts")
+      .select("ai_model_id, user_id")
+      .in("ai_model_id", modelIds)
+      .eq("status", "active")
+      .gt("end_date", new Date().toISOString());
+    
+    // 统计每个模特的签约数量和当前用户是否已签约
+    const hiredCountMap: Record<string, number> = {};
+    const userContractsSet = new Set<string>(); // 当前用户签约的模特ID
+    
+    (allContracts || []).forEach((c: any) => {
+      hiredCountMap[c.ai_model_id] = (hiredCountMap[c.ai_model_id] || 0) + 1;
+      if (currentUserId && c.user_id === currentUserId) {
+        userContractsSet.add(c.ai_model_id);
+      }
+    });
 
-    console.log(`[Models Action] Fetched ${publicModels.length} marketplace models`);
+    // 6. 转换为安全的公开格式，并添加签约状态
+    const publicModels = (models || []).map((model: any) => {
+      const publicModel = toPublicModel(model);
+      const hiredCount = hiredCountMap[model.id] || 0;
+      const hasActiveContract = userContractsSet.has(model.id);
+      
+      return {
+        ...publicModel,
+        has_active_contract: hasActiveContract,
+        is_hired_by_others: !hasActiveContract && hiredCount > 0,
+        hired_count: hiredCount,
+      };
+    });
+
+    console.log(`[Models Action] Fetched ${publicModels.length} marketplace models (user: ${currentUserId || 'anonymous'})`);
 
     return {
       success: true,
@@ -313,47 +350,48 @@ export async function getUserHiredModels(
 
     const supabase = createClient();
 
-    // 1. 联表查询 contracts + ai_models (通过 model_id 外键)
-    // 只选择安全字段，不选择 trigger_word
-    const { data: contracts, error } = await supabase
+    // 1. 查询用户的有效合约
+    const { data: contracts, error: contractsError } = await supabase
       .from("contracts")
-      .select(`
-        id,
-        end_date,
-        status,
-        ai_models:model_id (
-          id,
-          name,
-          description,
-          avatar_url,
-          sample_videos,
-          style_tags,
-          category,
-          gender,
-          price_monthly,
-          rating,
-          total_rentals,
-          total_generations,
-          is_featured,
-          is_trending,
-          created_at
-        )
-      `)
+      .select("id, ai_model_id, end_date, status, created_at")
       .eq("user_id", userId)
       .eq("status", "active")
       .gt("end_date", new Date().toISOString())
       .order("end_date", { ascending: true });
 
-    if (error) {
-      console.error("[Models Action] Database error:", error);
-      throw error;
+    if (contractsError) {
+      console.error("[Models Action] Contracts query error:", contractsError);
+      throw contractsError;
     }
 
-    // 2. 转换数据格式
-    const hiredModels: HiredModel[] = (contracts || [])
-      .filter((contract: any) => contract.ai_models) // 确保模特数据存在
+    if (!contracts || contracts.length === 0) {
+      console.log("[Models Action] No active contracts found for user");
+      return {
+        success: true,
+        data: { models: [], total: 0 },
+      };
+    }
+
+    // 2. 获取关联的模特信息
+    const modelIds = contracts.map((c: any) => c.ai_model_id).filter(Boolean);
+    
+    const { data: models, error: modelsError } = await supabase
+      .from("ai_models")
+      .select(SAFE_MODEL_FIELDS)
+      .in("id", modelIds);
+
+    if (modelsError) {
+      console.error("[Models Action] Models query error:", modelsError);
+      throw modelsError;
+    }
+
+    // 3. 合并数据并转换格式
+    const modelsMap = new Map(models?.map((m: any) => [m.id, m]) || []);
+
+    const hiredModels: HiredModel[] = contracts
+      .filter((contract: any) => modelsMap.has(contract.ai_model_id))
       .map((contract: any) => {
-        const model = contract.ai_models;
+        const model = modelsMap.get(contract.ai_model_id);
         const publicModel = toPublicModel(model);
 
         return {

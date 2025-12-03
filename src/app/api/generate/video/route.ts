@@ -11,13 +11,35 @@ import { createAdminClient } from "@/lib/supabase/admin";
 
 // ============================================================================
 // 积分配置
+// 快速单个视频功能扣分机制：
+// - 标准款（10秒/15秒 横/竖屏）：20 积分/条
+// - PRO 款（25秒 横/竖屏）：320 积分/条
+// - PRO 高清款（15秒 横/竖屏）：320 积分/条
 // ============================================================================
 
+function getVideoCreditCost(duration: number, quality: string): number {
+  // PRO 高清款 15秒
+  if (duration === 15 && quality === "hd") {
+    return 320;
+  }
+  // PRO 款 25秒
+  if (duration === 25) {
+    return 320;
+  }
+  // 标准款 10秒/15秒
+  if (duration === 10 || duration === 15) {
+    return 20;
+  }
+  // 默认
+  return 20;
+}
+
+// 保留旧的映射用于兼容
 const CREDIT_COST_MAP: Record<number, number> = {
-  10: 30,   // 10s = 30积分
-  15: 50,   // 15s = 50积分
-  20: 200,  // 20s = 200积分
-  25: 350,  // 25s = 350积分
+  10: 20,   // 标准款 10s = 20积分
+  15: 20,   // 标准款 15s = 20积分
+  20: 320,  // PRO款 20s = 320积分 (如果支持)
+  25: 320,  // PRO款 25s = 320积分
 };
 
 const ESTIMATED_TIME_MAP: Record<number, string> = {
@@ -37,9 +59,10 @@ export async function POST(request: Request) {
     
     const { 
       prompt, 
-      duration = 10, 
+      duration = 15, 
       aspectRatio = "9:16",
-      size = "small",
+      quality = "standard",
+      apiModel,
       modelId,
       sourceImageUrl,
       userId,
@@ -63,7 +86,7 @@ export async function POST(request: Request) {
     // ============================================
     // 计算费用并扣除积分
     // ============================================
-    const creditCost = CREDIT_COST_MAP[duration] || 50;
+    const creditCost = getVideoCreditCost(duration, quality);
     
     if (userId) {
       const supabase = createAdminClient();
@@ -137,23 +160,27 @@ export async function POST(request: Request) {
     // 添加质量提升词
     finalPrompt += ". High quality, cinematic, professional lighting.";
 
+    // 确定使用的 Sora2 模型
+    const isPro = quality === "hd" || duration === 25;
+    
     console.log("[Generate Video] Submitting task:", {
       originalPrompt: prompt.substring(0, 50) + "...",
       hasTriggerWord: !!triggerWord,
       duration,
       aspectRatio,
-      size,
+      quality,
+      apiModel,
       hasSourceImage: !!sourceImageUrl,
-      usePro: duration >= 20,
+      usePro: isPro,
     });
 
     // 提交到速创 API - 使用新的统一接口
     const result = await submitSora2({
       prompt: finalPrompt,
-      duration: duration as 10 | 15 | 20 | 25,
+      duration: duration as 10 | 15 | 25,
       aspectRatio: aspectRatio as "9:16" | "16:9",
-      size: size as "small" | "large",
       url: sourceImageUrl,
+      model: apiModel, // 直接使用传入的 API 模型名
     });
 
     if (!result.success) {
@@ -191,7 +218,7 @@ export async function POST(request: Request) {
       );
     }
 
-    // 保存任务记录到数据库（可选）
+    // 保存任务记录到数据库
     if (userId) {
       try {
         const supabase = createAdminClient();
@@ -199,16 +226,21 @@ export async function POST(request: Request) {
           user_id: userId,
           model_id: modelId || null,
           task_id: result.taskId,
+          type: "video",
+          source: "quick_gen",
           prompt: prompt,
           final_prompt: finalPrompt,
+          model: apiModel || `sora2-${duration}s`,
           duration,
           aspect_ratio: aspectRatio,
-          size,
+          quality: quality,
           source_image_url: sourceImageUrl || null,
           status: "processing",
           credit_cost: creditCost,
-          use_pro: duration >= 20,
+          use_pro: isPro,
+          created_at: new Date().toISOString(),
         });
+        console.log("[Generate Video] Saved to generations table:", result.taskId);
       } catch (dbError) {
         console.error("[Generate Video] Failed to save to DB:", dbError);
         // 不阻止主流程
@@ -218,7 +250,8 @@ export async function POST(request: Request) {
     console.log("[Generate Video] Task submitted successfully:", {
       taskId: result.taskId,
       duration,
-      usePro: duration >= 20,
+      quality,
+      usePro: isPro,
     });
 
     return NextResponse.json({
@@ -227,7 +260,7 @@ export async function POST(request: Request) {
         taskId: result.taskId,
         status: "processing",
         estimatedTime: ESTIMATED_TIME_MAP[duration] || "5-6 minutes",
-        usePro: duration >= 20,
+        usePro: isPro,
       },
     });
   } catch (error) {

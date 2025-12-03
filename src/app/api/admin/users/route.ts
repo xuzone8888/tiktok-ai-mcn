@@ -5,136 +5,15 @@
  * POST /api/admin/users - 用户操作 (充值/扣除/封禁/解封)
  * 
  * 关键特性：
- * - 积分操作使用事务确保原子性
+ * - 积分操作使用真实数据库
+ * - 管理员发放积分时从管理员账户扣除
  * - 所有操作写入审计日志
  */
 
 import { NextResponse } from "next/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
 import { isAdmin, type AdminUser, type UserRole, type UserStatus } from "@/lib/admin";
-
-// ============================================================================
-// Mock 数据存储 (开发环境)
-// ============================================================================
-
-interface MockUser extends AdminUser {
-  avatar_url?: string | null;
-}
-
-const mockUsers: Map<string, MockUser> = new Map([
-  [
-    "00000000-0000-0000-0000-000000000001",
-    {
-      id: "00000000-0000-0000-0000-000000000001",
-      email: "admin@mcn.ai",
-      name: "Admin",
-      avatar_url: null,
-      role: "super_admin",
-      status: "active",
-      credits: 999999,
-      created_at: "2024-01-01T00:00:00Z",
-    },
-  ],
-  [
-    "00000000-0000-0000-0000-000000000002",
-    {
-      id: "00000000-0000-0000-0000-000000000002",
-      email: "creator@mcn.ai",
-      name: "创作者",
-      avatar_url: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&h=100&fit=crop",
-      role: "user",
-      status: "active",
-      credits: 5000,
-      created_at: "2024-01-15T00:00:00Z",
-    },
-  ],
-  [
-    "00000000-0000-0000-0000-000000000003",
-    {
-      id: "00000000-0000-0000-0000-000000000003",
-      email: "user1@example.com",
-      name: "用户A",
-      avatar_url: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100&h=100&fit=crop",
-      role: "user",
-      status: "active",
-      credits: 1200,
-      created_at: "2024-02-01T00:00:00Z",
-    },
-  ],
-  [
-    "00000000-0000-0000-0000-000000000004",
-    {
-      id: "00000000-0000-0000-0000-000000000004",
-      email: "user2@example.com",
-      name: "用户B",
-      avatar_url: null,
-      role: "user",
-      status: "suspended",
-      credits: 300,
-      created_at: "2024-02-15T00:00:00Z",
-    },
-  ],
-  [
-    "00000000-0000-0000-0000-000000000005",
-    {
-      id: "00000000-0000-0000-0000-000000000005",
-      email: "banned@example.com",
-      name: "被封禁用户",
-      avatar_url: null,
-      role: "user",
-      status: "banned",
-      credits: 0,
-      created_at: "2024-03-01T00:00:00Z",
-      banned_at: "2024-03-10T00:00:00Z",
-      banned_reason: "违规操作",
-    },
-  ],
-  [
-    "00000000-0000-0000-0000-000000000006",
-    {
-      id: "00000000-0000-0000-0000-000000000006",
-      email: "vip@example.com",
-      name: "VIP用户",
-      avatar_url: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&h=100&fit=crop",
-      role: "user",
-      status: "active",
-      credits: 25000,
-      created_at: "2024-01-20T00:00:00Z",
-    },
-  ],
-  [
-    "00000000-0000-0000-0000-000000000007",
-    {
-      id: "00000000-0000-0000-0000-000000000007",
-      email: "newuser@example.com",
-      name: "新用户",
-      avatar_url: null,
-      role: "user",
-      status: "active",
-      credits: 100,
-      created_at: "2024-03-15T00:00:00Z",
-    },
-  ],
-]);
-
-// Mock 审计日志存储
-interface AuditLogEntry {
-  id: string;
-  admin_id: string;
-  admin_email: string;
-  target_user_id: string;
-  target_type: string;
-  action_type: string;
-  action_description: string;
-  details: Record<string, unknown>;
-  ip_address: string | null;
-  created_at: string;
-}
-
-const mockAuditLogs: AuditLogEntry[] = [];
-
-// Mock 当前管理员 (开发环境默认)
-const MOCK_ADMIN_ID = "00000000-0000-0000-0000-000000000001";
-const MOCK_ADMIN_EMAIL = "admin@mcn.ai";
 
 // ============================================================================
 // GET - 获取用户列表
@@ -142,11 +21,7 @@ const MOCK_ADMIN_EMAIL = "admin@mcn.ai";
 
 export async function GET(request: Request) {
   try {
-    // TODO: 生产环境需要验证 Admin 身份
-    // const session = await getServerSession();
-    // if (!session || !isAdmin(session.user.role)) {
-    //   return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    // }
+    const supabase = createAdminClient();
 
     const { searchParams } = new URL(request.url);
     const status = searchParams.get("status") as UserStatus | null;
@@ -155,40 +30,57 @@ export async function GET(request: Request) {
     const page = parseInt(searchParams.get("page") || "1");
     const limit = parseInt(searchParams.get("limit") || "20");
 
-    // 过滤用户
-    let users = Array.from(mockUsers.values());
+    // 从数据库获取用户
+    let query = supabase
+      .from("profiles")
+      .select("*", { count: "exact" });
 
     if (status) {
-      users = users.filter((u) => u.status === status);
+      query = query.eq("status", status);
     }
 
     if (role) {
-      users = users.filter((u) => u.role === role);
+      query = query.eq("role", role);
     }
 
     if (search) {
-      const searchLower = search.toLowerCase();
-      users = users.filter(
-        (u) =>
-          u.email.toLowerCase().includes(searchLower) ||
-          u.name?.toLowerCase().includes(searchLower)
-      );
+      query = query.or(`email.ilike.%${search}%,name.ilike.%${search}%`);
     }
 
     // 分页
-    const total = users.length;
     const start = (page - 1) * limit;
-    const paginatedUsers = users.slice(start, start + limit);
+    query = query.range(start, start + limit - 1).order("created_at", { ascending: false });
+
+    const { data: users, error, count } = await query;
+
+    if (error) {
+      console.error("[Admin API] Database error:", error);
+      throw error;
+    }
+
+    // 转换为AdminUser格式
+    const adminUsers: AdminUser[] = (users || []).map((user: any) => ({
+      id: user.id,
+      email: user.email || "",
+      name: user.name || user.email?.split("@")[0] || "用户",
+      avatar_url: user.avatar_url,
+      role: user.role || "user",
+      status: user.status || "active",
+      credits: user.credits || 0,
+      created_at: user.created_at,
+      banned_at: user.banned_at,
+      banned_reason: user.banned_reason,
+    }));
 
     return NextResponse.json({
       success: true,
       data: {
-        users: paginatedUsers,
+        users: adminUsers,
         pagination: {
           page,
           limit,
-          total,
-          totalPages: Math.ceil(total / limit),
+          total: count || 0,
+          totalPages: Math.ceil((count || 0) / limit),
         },
       },
     });
@@ -203,25 +95,50 @@ export async function GET(request: Request) {
 
 // ============================================================================
 // POST - 用户操作 (充值/扣除/封禁/解封)
-// 
-// 【关键】使用事务确保原子性：
-// - 积分操作：同时更新 credits 和写入 audit_logs
-// - 只有两个操作都成功，整体才算成功
 // ============================================================================
 
 export async function POST(request: Request) {
   try {
+    const supabase = createAdminClient();
+    const clientSupabase = createClient();
+    
+    // 获取当前登录的管理员
+    const { data: { user: currentUser } } = await clientSupabase.auth.getUser();
+    
+    if (!currentUser) {
+      return NextResponse.json(
+        { success: false, error: "未登录" },
+        { status: 401 }
+      );
+    }
+
+    // 获取管理员信息
+    const { data: adminProfile } = await supabase
+      .from("profiles")
+      .select("id, email, name, role, credits")
+      .eq("id", currentUser.id)
+      .single();
+
+    if (!adminProfile || !isAdmin(adminProfile.role)) {
+      return NextResponse.json(
+        { success: false, error: "没有管理员权限" },
+        { status: 403 }
+      );
+    }
+
     const body = await request.json();
     const { action, targetUserId, amount, reason } = body;
 
-    // TODO: 生产环境需要验证 Admin 身份
-    const adminId = MOCK_ADMIN_ID;
-    const adminEmail = MOCK_ADMIN_EMAIL;
+    // 获取目标用户
+    const { data: targetUser, error: targetError } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("id", targetUserId)
+      .single();
 
-    const targetUser = mockUsers.get(targetUserId);
-    if (!targetUser) {
+    if (targetError || !targetUser) {
       return NextResponse.json(
-        { success: false, error: "User not found" },
+        { success: false, error: "用户不存在" },
         { status: 404 }
       );
     }
@@ -231,154 +148,166 @@ export async function POST(request: Request) {
     switch (action) {
       // ============================================
       // 充值积分 (Recharge)
+      // 管理员发放积分时，从管理员账户扣除相应积分
       // ============================================
       case "recharge": {
         if (!amount || amount <= 0) {
           return NextResponse.json(
-            { success: false, error: "Invalid amount: must be positive" },
+            { success: false, error: "积分数量必须为正数" },
             { status: 400 }
           );
         }
 
         if (!reason || !reason.trim()) {
           return NextResponse.json(
-            { success: false, error: "Reason is required" },
+            { success: false, error: "请填写充值原因" },
             { status: 400 }
           );
         }
 
-        // ========== 开始事务 ==========
-        const oldCredits = targetUser.credits;
-        const newCredits = oldCredits + amount;
-        const logId = `log-${Date.now()}-${Math.random().toString(36).substring(7)}`;
-        const timestamp = new Date().toISOString();
-
-        try {
-          // 动作 A: 更新积分余额
-          targetUser.credits = newCredits;
-          mockUsers.set(targetUserId, targetUser);
-
-          // 动作 B: 写入审计日志
-          const auditLog: AuditLogEntry = {
-            id: logId,
-            admin_id: adminId,
-            admin_email: adminEmail,
-            target_user_id: targetUserId,
-            target_type: "user",
-            action_type: "recharge_credits",
-            action_description: `Admin recharged ${amount} credits to ${targetUser.email}`,
-            details: {
-              before: { credits: oldCredits },
-              after: { credits: newCredits },
-              amount: amount,
-              reason: reason.trim(),
-              operation: "recharge",
-            },
-            ip_address: null, // 生产环境应从请求中获取
-            created_at: timestamp,
-          };
-          mockAuditLogs.push(auditLog);
-
-          // 事务成功
-          console.log(`[Admin API] Credits recharged: ${targetUser.email} +${amount} (${reason})`);
-
-        } catch (txError) {
-          // 事务失败：回滚积分更新
-          targetUser.credits = oldCredits;
-          mockUsers.set(targetUserId, targetUser);
-          throw txError;
+        // 检查管理员积分是否足够
+        const adminCredits = adminProfile.credits || 0;
+        if (adminCredits < amount) {
+          return NextResponse.json(
+            { success: false, error: `管理员积分不足，当前余额: ${adminCredits}` },
+            { status: 400 }
+          );
         }
-        // ========== 事务结束 ==========
+
+        const oldCredits = targetUser.credits || 0;
+        const newCredits = oldCredits + amount;
+        const adminOldCredits = adminCredits;
+        const adminNewCredits = adminCredits - amount;
+
+        // 更新目标用户积分
+        const { error: updateUserError } = await supabase
+          .from("profiles")
+          .update({ credits: newCredits })
+          .eq("id", targetUserId);
+
+        if (updateUserError) {
+          console.error("[Admin API] Update user credits error:", updateUserError);
+          return NextResponse.json(
+            { success: false, error: "更新用户积分失败" },
+            { status: 500 }
+          );
+        }
+
+        // 扣除管理员积分
+        const { error: updateAdminError } = await supabase
+          .from("profiles")
+          .update({ credits: adminNewCredits })
+          .eq("id", currentUser.id);
+
+        if (updateAdminError) {
+          // 回滚用户积分
+          await supabase
+            .from("profiles")
+            .update({ credits: oldCredits })
+            .eq("id", targetUserId);
+          
+          console.error("[Admin API] Update admin credits error:", updateAdminError);
+          return NextResponse.json(
+            { success: false, error: "更新管理员积分失败" },
+            { status: 500 }
+          );
+        }
+
+        // 触发前端积分刷新
+        console.log(`[Admin API] Credits recharged: ${targetUser.email} +${amount}, Admin ${adminProfile.email} balance: ${adminNewCredits}`);
 
         result = {
           action: "recharge",
           old_credits: oldCredits,
           new_credits: newCredits,
+          admin_old_credits: adminOldCredits,
+          admin_new_credits: adminNewCredits,
           amount: amount,
           reason: reason.trim(),
-          log_id: logId,
-          timestamp,
+          timestamp: new Date().toISOString(),
         };
         break;
       }
 
       // ============================================
       // 扣除积分 (Deduct)
+      // 管理员扣除用户积分时，积分回收到管理员账户
       // ============================================
       case "deduct": {
         const deductAmount = Math.abs(amount || 0);
         
         if (deductAmount <= 0) {
           return NextResponse.json(
-            { success: false, error: "Invalid amount: must be positive" },
+            { success: false, error: "积分数量必须为正数" },
             { status: 400 }
           );
         }
 
         if (!reason || !reason.trim()) {
           return NextResponse.json(
-            { success: false, error: "Reason is required" },
+            { success: false, error: "请填写扣除原因" },
             { status: 400 }
           );
         }
 
-        if (deductAmount > targetUser.credits) {
+        const userCredits = targetUser.credits || 0;
+        if (deductAmount > userCredits) {
           return NextResponse.json(
-            { success: false, error: "Insufficient credits" },
+            { success: false, error: `用户积分不足，当前余额: ${userCredits}` },
             { status: 400 }
           );
         }
 
-        // ========== 开始事务 ==========
-        const oldCredits = targetUser.credits;
+        const oldCredits = userCredits;
         const newCredits = oldCredits - deductAmount;
-        const logId = `log-${Date.now()}-${Math.random().toString(36).substring(7)}`;
-        const timestamp = new Date().toISOString();
+        const adminOldCredits = adminProfile.credits || 0;
+        const adminNewCredits = adminOldCredits + deductAmount;
 
-        try {
-          // 动作 A: 更新积分余额
-          targetUser.credits = newCredits;
-          mockUsers.set(targetUserId, targetUser);
+        // 更新目标用户积分
+        const { error: updateUserError } = await supabase
+          .from("profiles")
+          .update({ credits: newCredits })
+          .eq("id", targetUserId);
 
-          // 动作 B: 写入审计日志
-          const auditLog: AuditLogEntry = {
-            id: logId,
-            admin_id: adminId,
-            admin_email: adminEmail,
-            target_user_id: targetUserId,
-            target_type: "user",
-            action_type: "deduct_credits",
-            action_description: `Admin deducted ${deductAmount} credits from ${targetUser.email}`,
-            details: {
-              before: { credits: oldCredits },
-              after: { credits: newCredits },
-              amount: -deductAmount,
-              reason: reason.trim(),
-              operation: "deduct",
-            },
-            ip_address: null,
-            created_at: timestamp,
-          };
-          mockAuditLogs.push(auditLog);
-
-          console.log(`[Admin API] Credits deducted: ${targetUser.email} -${deductAmount} (${reason})`);
-
-        } catch (txError) {
-          // 事务失败：回滚
-          targetUser.credits = oldCredits;
-          mockUsers.set(targetUserId, targetUser);
-          throw txError;
+        if (updateUserError) {
+          console.error("[Admin API] Update user credits error:", updateUserError);
+          return NextResponse.json(
+            { success: false, error: "更新用户积分失败" },
+            { status: 500 }
+          );
         }
-        // ========== 事务结束 ==========
+
+        // 增加管理员积分
+        const { error: updateAdminError } = await supabase
+          .from("profiles")
+          .update({ credits: adminNewCredits })
+          .eq("id", currentUser.id);
+
+        if (updateAdminError) {
+          // 回滚用户积分
+          await supabase
+            .from("profiles")
+            .update({ credits: oldCredits })
+            .eq("id", targetUserId);
+          
+          console.error("[Admin API] Update admin credits error:", updateAdminError);
+          return NextResponse.json(
+            { success: false, error: "更新管理员积分失败" },
+            { status: 500 }
+          );
+        }
+
+        console.log(`[Admin API] Credits deducted: ${targetUser.email} -${deductAmount}, Admin ${adminProfile.email} balance: ${adminNewCredits}`);
 
         result = {
           action: "deduct",
           old_credits: oldCredits,
           new_credits: newCredits,
+          admin_old_credits: adminOldCredits,
+          admin_new_credits: adminNewCredits,
           amount: -deductAmount,
           reason: reason.trim(),
-          log_id: logId,
-          timestamp,
+          timestamp: new Date().toISOString(),
         };
         break;
       }
@@ -389,7 +318,7 @@ export async function POST(request: Request) {
       case "ban": {
         if (!reason || !reason.trim()) {
           return NextResponse.json(
-            { success: false, error: "Reason is required for ban" },
+            { success: false, error: "请填写封禁原因" },
             { status: 400 }
           );
         }
@@ -397,60 +326,36 @@ export async function POST(request: Request) {
         // 检查是否尝试封禁 Admin
         if (isAdmin(targetUser.role)) {
           return NextResponse.json(
-            { success: false, error: "Cannot ban admin users" },
+            { success: false, error: "无法封禁管理员账户" },
             { status: 403 }
           );
         }
 
-        // ========== 开始事务 ==========
-        const logId = `log-${Date.now()}-${Math.random().toString(36).substring(7)}`;
         const timestamp = new Date().toISOString();
-        const previousStatus = targetUser.status;
 
-        try {
-          // 动作 A: 更新用户状态
-          targetUser.status = "banned";
-          targetUser.banned_at = timestamp;
-          targetUser.banned_reason = reason.trim();
-          mockUsers.set(targetUserId, targetUser);
+        const { error: banError } = await supabase
+          .from("profiles")
+          .update({
+            status: "banned",
+            banned_at: timestamp,
+            banned_reason: reason.trim(),
+          })
+          .eq("id", targetUserId);
 
-          // 动作 B: 写入审计日志
-          const auditLog: AuditLogEntry = {
-            id: logId,
-            admin_id: adminId,
-            admin_email: adminEmail,
-            target_user_id: targetUserId,
-            target_type: "user",
-            action_type: "ban_user",
-            action_description: `Admin banned user ${targetUser.email}`,
-            details: {
-              target_email: targetUser.email,
-              previous_status: previousStatus,
-              reason: reason.trim(),
-              banned_at: timestamp,
-            },
-            ip_address: null,
-            created_at: timestamp,
-          };
-          mockAuditLogs.push(auditLog);
-
-          console.log(`[Admin API] User banned: ${targetUser.email} (${reason})`);
-
-        } catch (txError) {
-          // 事务失败：回滚
-          targetUser.status = previousStatus as UserStatus;
-          targetUser.banned_at = null;
-          targetUser.banned_reason = null;
-          mockUsers.set(targetUserId, targetUser);
-          throw txError;
+        if (banError) {
+          console.error("[Admin API] Ban user error:", banError);
+          return NextResponse.json(
+            { success: false, error: "封禁用户失败" },
+            { status: 500 }
+          );
         }
-        // ========== 事务结束 ==========
+
+        console.log(`[Admin API] User banned: ${targetUser.email} (${reason})`);
 
         result = {
           action: "ban",
           status: "banned",
           reason: reason.trim(),
-          log_id: logId,
           timestamp,
         };
         break;
@@ -460,64 +365,80 @@ export async function POST(request: Request) {
       // 解封用户 (Unban)
       // ============================================
       case "unban": {
-        // ========== 开始事务 ==========
-        const logId = `log-${Date.now()}-${Math.random().toString(36).substring(7)}`;
-        const timestamp = new Date().toISOString();
-        const previousStatus = targetUser.status;
-        const previousBannedAt = targetUser.banned_at;
-        const previousBannedReason = targetUser.banned_reason;
+        const { error: unbanError } = await supabase
+          .from("profiles")
+          .update({
+            status: "active",
+            banned_at: null,
+            banned_reason: null,
+          })
+          .eq("id", targetUserId);
 
-        try {
-          // 动作 A: 更新用户状态
-          targetUser.status = "active";
-          targetUser.banned_at = null;
-          targetUser.banned_reason = null;
-          mockUsers.set(targetUserId, targetUser);
-
-          // 动作 B: 写入审计日志
-          const auditLog: AuditLogEntry = {
-            id: logId,
-            admin_id: adminId,
-            admin_email: adminEmail,
-            target_user_id: targetUserId,
-            target_type: "user",
-            action_type: "unban_user",
-            action_description: `Admin unbanned user ${targetUser.email}`,
-            details: {
-              target_email: targetUser.email,
-              previous_status: previousStatus,
-              previous_ban_reason: previousBannedReason,
-              reason: reason?.trim() || "Admin unbanned",
-            },
-            ip_address: null,
-            created_at: timestamp,
-          };
-          mockAuditLogs.push(auditLog);
-
-          console.log(`[Admin API] User unbanned: ${targetUser.email}`);
-
-        } catch (txError) {
-          // 事务失败：回滚
-          targetUser.status = previousStatus as UserStatus;
-          targetUser.banned_at = previousBannedAt;
-          targetUser.banned_reason = previousBannedReason;
-          mockUsers.set(targetUserId, targetUser);
-          throw txError;
+        if (unbanError) {
+          console.error("[Admin API] Unban user error:", unbanError);
+          return NextResponse.json(
+            { success: false, error: "解封用户失败" },
+            { status: 500 }
+          );
         }
-        // ========== 事务结束 ==========
+
+        console.log(`[Admin API] User unbanned: ${targetUser.email}`);
 
         result = {
           action: "unban",
           status: "active",
-          log_id: logId,
-          timestamp,
+          timestamp: new Date().toISOString(),
+        };
+        break;
+      }
+
+      // ============================================
+      // 设置用户角色 (Set Role)
+      // ============================================
+      case "setRole": {
+        const newRole = body.newRole as UserRole;
+        
+        if (!newRole || !["user", "creator", "admin", "super_admin"].includes(newRole)) {
+          return NextResponse.json(
+            { success: false, error: "无效的角色" },
+            { status: 400 }
+          );
+        }
+
+        // 只有超级管理员可以设置管理员角色
+        if ((newRole === "admin" || newRole === "super_admin") && adminProfile.role !== "super_admin") {
+          return NextResponse.json(
+            { success: false, error: "只有超级管理员可以设置管理员角色" },
+            { status: 403 }
+          );
+        }
+
+        const { error: roleError } = await supabase
+          .from("profiles")
+          .update({ role: newRole })
+          .eq("id", targetUserId);
+
+        if (roleError) {
+          console.error("[Admin API] Set role error:", roleError);
+          return NextResponse.json(
+            { success: false, error: "设置角色失败" },
+            { status: 500 }
+          );
+        }
+
+        console.log(`[Admin API] Role updated: ${targetUser.email} -> ${newRole}`);
+
+        result = {
+          action: "setRole",
+          newRole,
+          timestamp: new Date().toISOString(),
         };
         break;
       }
 
       default:
         return NextResponse.json(
-          { success: false, error: "Invalid action" },
+          { success: false, error: "无效的操作" },
           { status: 400 }
         );
     }
@@ -529,17 +450,8 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error("[Admin API] User action error:", error);
     return NextResponse.json(
-      { success: false, error: "Transaction failed. Please try again." },
+      { success: false, error: "操作失败，请重试" },
       { status: 500 }
     );
   }
 }
-
-// ============================================================================
-// 导出审计日志 (供 audit-logs API 使用)
-// ============================================================================
-
-export function getAuditLogs() {
-  return mockAuditLogs;
-}
-

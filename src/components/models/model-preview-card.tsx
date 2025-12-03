@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, memo } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -12,18 +12,19 @@ import {
   CheckCircle2,
   Volume2,
   VolumeX,
+  Users,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { PublicModel } from "@/lib/actions/models";
 
 interface ModelPreviewCardProps {
-  model: PublicModel;
+  model: PublicModel & { is_hired_by_others?: boolean; hired_count?: number };
   hasActiveContract?: boolean;
   onHire?: () => void;
   onManage?: () => void;
 }
 
-export function ModelPreviewCard({
+export const ModelPreviewCard = memo(function ModelPreviewCard({
   model,
   hasActiveContract = false,
   onHire,
@@ -139,19 +140,25 @@ export function ModelPreviewCard({
           {model.is_trending && (
             <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-gradient-to-r from-tiktok-cyan to-tiktok-pink text-xs font-semibold text-black shadow-lg">
               <TrendingUp className="h-3 w-3" />
-              Trending
+              热门
             </span>
           )}
           {model.is_featured && !model.is_trending && (
             <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500 text-xs font-semibold text-black shadow-lg">
               <Star className="h-3 w-3" />
-              Featured
+              推荐
             </span>
           )}
           {hasActiveContract && (
             <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500 text-xs font-semibold text-black shadow-lg">
               <CheckCircle2 className="h-3 w-3" />
-              In Team
+              已签约
+            </span>
+          )}
+          {!hasActiveContract && model.is_hired_by_others && (
+            <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-orange-500 text-xs font-semibold text-black shadow-lg">
+              <Users className="h-3 w-3" />
+              已被聘用
             </span>
           )}
         </div>
@@ -207,7 +214,16 @@ export function ModelPreviewCard({
             onClick={onManage}
           >
             <CheckCircle2 className="mr-2 h-4 w-4" />
-            Manage Team
+            管理团队
+          </Button>
+        ) : model.is_hired_by_others ? (
+          <Button
+            variant="outline"
+            className="w-full border-orange-500/50 text-orange-400 cursor-not-allowed opacity-70"
+            disabled
+          >
+            <Users className="mr-2 h-4 w-4" />
+            已被聘用 ({model.hired_count}人)
           </Button>
         ) : (
           <Button
@@ -215,11 +231,11 @@ export function ModelPreviewCard({
             onClick={onHire}
           >
             <Sparkles className="mr-2 h-4 w-4" />
-            Hire Now
+            立即聘用
           </Button>
         )}
       </div>
     </div>
   );
-}
+});
 

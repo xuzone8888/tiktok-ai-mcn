@@ -104,9 +104,15 @@ export function Header() {
     };
     window.addEventListener("credits-updated", handleCreditsUpdate);
 
+    // 定时刷新积分（每30秒）
+    const intervalId = setInterval(() => {
+      fetchUser();
+    }, 30000);
+
     return () => {
       subscription.unsubscribe();
       window.removeEventListener("credits-updated", handleCreditsUpdate);
+      clearInterval(intervalId);
     };
   }, []);
 
@@ -169,7 +175,6 @@ export function Header() {
           className="relative h-10 w-10 rounded-xl hover:bg-muted/50"
         >
           <Bell className="h-5 w-5 text-muted-foreground" />
-          <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-tiktok-pink" />
         </Button>
         
         <Button
@@ -228,7 +233,7 @@ export function Header() {
                     <p className="text-xs text-muted-foreground">{user.email}</p>
                     <p className="text-xs text-amber-400">
                       <Zap className="h-3 w-3 inline mr-1" />
-                      {user.credits.toLocaleString()} Credits
+                      {user.credits.toLocaleString()} 积分
                     </p>
                   </div>
                 </DropdownMenuLabel>
@@ -239,7 +244,7 @@ export function Header() {
                 <DropdownMenuItem asChild>
                   <Link href="/profile" className="cursor-pointer">
                     <UserCircle className="h-4 w-4 mr-2" />
-                    Profile
+                    个人中心
                   </Link>
                 </DropdownMenuItem>
 
@@ -247,7 +252,7 @@ export function Header() {
                 <DropdownMenuItem asChild>
                   <Link href="/settings" className="cursor-pointer">
                     <Settings className="h-4 w-4 mr-2" />
-                    Settings
+                    设置
                   </Link>
                 </DropdownMenuItem>
 
@@ -266,9 +271,9 @@ export function Header() {
                         )}
                       >
                         <Shield className="h-4 w-4 mr-2" />
-                        <span className="font-medium">Admin Portal</span>
+                        <span className="font-medium">管理后台</span>
                         <span className="ml-auto text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 border border-red-500/30">
-                          {user.role === "super_admin" ? "Super" : "Admin"}
+                          {user.role === "super_admin" ? "超管" : "管理"}
                         </span>
                       </Link>
                     </DropdownMenuItem>
@@ -288,7 +293,7 @@ export function Header() {
                   ) : (
                     <LogOut className="h-4 w-4 mr-2" />
                   )}
-                  {loggingOut ? "登出中..." : "Log out"}
+                  {loggingOut ? "登出中..." : "退出登录"}
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

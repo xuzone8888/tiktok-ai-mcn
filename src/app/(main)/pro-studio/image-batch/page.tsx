@@ -43,6 +43,7 @@ import {
   Loader2,
   Download,
   ImageIcon,
+  Video,
   X,
   CheckCircle2,
   XCircle,
@@ -407,13 +408,17 @@ export default function ImageBatchPage() {
       .catch(console.error);
   }, []);
 
-  // 计算属性
+  // 计算属性 - 允许在执行中继续添加任务
+  const hasPendingTasks = tasks.some((t) => t.status === "pending");
   const canStartBatch =
     tasks.length > 0 &&
-    tasks.some((t) => t.status === "pending") &&
-    jobStatus === "idle" &&
+    hasPendingTasks &&
+    (jobStatus === "idle" || jobStatus === "completed" || jobStatus === "cancelled") &&
     userCredits >= stats.totalCost &&
     userId !== null;
+  
+  // 在运行中是否可以继续执行新任务
+  const canContinueBatch = jobStatus === "running" && hasPendingTasks;
 
   // 批量上传
   const handleBatchUpload = useCallback(
@@ -431,6 +436,11 @@ export default function ImageBatchPage() {
         title: "✅ 上传成功",
         description: `已添加 ${ids.length} 张图片`,
       });
+      
+      // 重置文件输入，允许再次选择相同文件
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
     },
     [addTasksFromFiles, toast]
   );
@@ -572,37 +582,60 @@ export default function ImageBatchPage() {
     [userId, userCredits, updateTaskStatus, toast]
   );
 
-  // 批量处理
+  // 批量处理 - 支持在运行中继续执行新任务
   const handleStartBatch = useCallback(async () => {
-    if (!canStartBatch) return;
-
-    startBatch();
-    toast({
-      title: "🚀 批量处理已启动",
-      description: `共 ${stats.pending} 个待处理任务`,
-    });
-
-    const pendingTasks = tasks.filter((t) => t.status === "pending");
+    // 获取当前待处理任务
+    const currentState = useImageBatchStore.getState();
+    const pendingTasks = currentState.tasks.filter((t) => t.status === "pending");
     
-    // 使用简单的串行处理（可以后续优化为并发）
+    if (pendingTasks.length === 0) {
+      toast({ title: "没有待处理的任务" });
+      return;
+    }
+
+    // 如果不是运行状态，先启动
+    if (currentState.jobStatus !== "running") {
+      startBatch();
+      toast({
+        title: "🚀 批量处理已启动",
+        description: `共 ${pendingTasks.length} 个待处理任务`,
+      });
+    } else {
+      toast({
+        title: "➕ 继续处理新任务",
+        description: `新增 ${pendingTasks.length} 个任务`,
+      });
+    }
+    
+    // 串行处理当前批次的待处理任务
     for (const task of pendingTasks) {
-      if (useImageBatchStore.getState().jobStatus !== "running") break;
-      await handleProcessSingleTask(task);
+      const storeState = useImageBatchStore.getState();
+      if (storeState.jobStatus !== "running") break;
+      
+      // 重新获取任务状态，避免重复处理
+      const currentTask = storeState.tasks.find(t => t.id === task.id);
+      if (currentTask && currentTask.status === "pending") {
+        await handleProcessSingleTask(currentTask);
+      }
     }
 
     // 检查是否全部完成
-    const currentState = useImageBatchStore.getState();
-    const allDone = currentState.tasks.every(
+    const finalState = useImageBatchStore.getState();
+    const allDone = finalState.tasks.every(
       (t) => t.status === "completed" || t.status === "failed"
     );
-    if (allDone) {
+    const hasPending = finalState.tasks.some(t => t.status === "pending");
+    
+    if (allDone && !hasPending) {
       useImageBatchStore.setState({ jobStatus: "completed" });
+      const completed = finalState.tasks.filter(t => t.status === "completed").length;
+      const failed = finalState.tasks.filter(t => t.status === "failed").length;
       toast({
         title: "🎉 批量处理完成",
-        description: `成功 ${stats.completed}，失败 ${stats.failed}`,
+        description: `成功 ${completed}，失败 ${failed}`,
       });
     }
-  }, [canStartBatch, tasks, stats, startBatch, handleProcessSingleTask, toast]);
+  }, [startBatch, handleProcessSingleTask, toast]);
 
   // 获取可用的 action 列表
   const getAvailableActions = () => {
@@ -644,6 +677,29 @@ export default function ImageBatchPage() {
               批量上传图片，使用 AI 进行高清放大、九宫格生成等处理
             </p>
           </div>
+          
+          {/* 快捷切换按钮组 */}
+          <div className="flex items-center gap-2 p-1 rounded-xl bg-muted/50 border border-border/50">
+            <Link href="/pro-studio/video-batch">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="hover:bg-tiktok-cyan/10 hover:text-tiktok-cyan"
+              >
+                <Video className="h-4 w-4 mr-1.5" />
+                视频
+              </Button>
+            </Link>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="bg-gradient-to-r from-tiktok-pink/20 to-tiktok-pink/10 text-tiktok-pink border border-tiktok-pink/30"
+            >
+              <ImageIcon className="h-4 w-4 mr-1.5" />
+              图片
+            </Button>
+          </div>
+          
           <div className="flex items-center gap-2">
             <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-500/10 border border-amber-500/30">
               <Zap className="h-4 w-4 text-amber-400" />
@@ -802,25 +858,44 @@ export default function ImageBatchPage() {
               </div>
             )}
 
-            {/* 提示词输入 */}
+            {/* 提示词输入 - 仅在 AI 生成模式下启用 */}
             <div>
               <Label className="text-xs text-muted-foreground mb-2 block">
-                提示词 (可选)
-                <span className="ml-2 text-muted-foreground/60">
-                  为图片生成提供详细描述，不填则使用默认提示词
-                </span>
+                {globalSettings.action === "generate" ? (
+                  <>
+                    提示词
+                    <span className="ml-2 text-muted-foreground/60">
+                      描述您想要生成的图片效果
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    提示词
+                    <span className="ml-2 text-amber-400/80">
+                      {globalSettings.action === "upscale" 
+                        ? "（高清放大模式无需提示词，系统自动处理）" 
+                        : "（九宫格模式无需提示词，自动生成多角度展示）"}
+                    </span>
+                  </>
+                )}
               </Label>
               <textarea
-                value={globalSettings.prompt}
+                value={globalSettings.action === "generate" ? globalSettings.prompt : ""}
                 onChange={(e) => updateGlobalSettings("prompt", e.target.value)}
+                disabled={globalSettings.action !== "generate"}
                 placeholder={
                   globalSettings.action === "generate"
                     ? "描述您想要生成的图片效果，例如：产品展示在白色背景上，柔和的光线，专业摄影风格..."
                     : globalSettings.action === "upscale"
-                    ? "高清放大图片，保持原始细节和色彩..."
-                    : "生成产品的9个不同角度展示图，适合视频生成使用..."
+                    ? "🔒 高清放大模式：自动增强图片清晰度和细节"
+                    : "🔒 九宫格模式：自动生成产品9个不同角度的展示图"
                 }
-                className="w-full h-20 px-3 py-2 text-sm bg-muted/30 border border-border/50 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-tiktok-cyan/50"
+                className={cn(
+                  "w-full h-20 px-3 py-2 text-sm border border-border/50 rounded-lg resize-none focus:outline-none",
+                  globalSettings.action === "generate"
+                    ? "bg-muted/30 focus:ring-2 focus:ring-tiktok-cyan/50"
+                    : "bg-muted/10 text-muted-foreground/50 cursor-not-allowed"
+                )}
               />
             </div>
 
@@ -835,7 +910,13 @@ export default function ImageBatchPage() {
                 ref={fileInputRef}
               />
               <Button
-                onClick={() => fileInputRef.current?.click()}
+                onClick={() => {
+                  // 先重置文件输入，确保可以选择相同文件
+                  if (fileInputRef.current) {
+                    fileInputRef.current.value = "";
+                  }
+                  fileInputRef.current?.click();
+                }}
                 className="flex-1 h-11 bg-gradient-to-r from-tiktok-cyan to-tiktok-pink hover:opacity-90 text-black font-semibold"
               >
                 <FolderUp className="h-5 w-5 mr-2" />
@@ -921,7 +1002,13 @@ export default function ImageBatchPage() {
             {tasks.length === 0 ? (
               <div
                 className="flex flex-col items-center justify-center py-16 border-2 border-dashed border-border/50 rounded-xl cursor-pointer hover:border-tiktok-cyan/30 transition-colors"
-                onClick={() => fileInputRef.current?.click()}
+                onClick={() => {
+                  // 先重置文件输入，确保可以选择相同文件
+                  if (fileInputRef.current) {
+                    fileInputRef.current.value = "";
+                  }
+                  fileInputRef.current?.click();
+                }}
               >
                 <Upload className="h-16 w-16 text-muted-foreground/30 mb-4" />
                 <p className="text-lg font-medium text-muted-foreground">点击或拖拽上传图片</p>
@@ -1000,7 +1087,7 @@ export default function ImageBatchPage() {
 
                 {/* 操作按钮 */}
                 <div className="flex items-center gap-3">
-                  {jobStatus === "idle" && (
+                  {(jobStatus === "idle" || jobStatus === "completed" || jobStatus === "cancelled") && (
                     <Button
                       onClick={handleStartBatch}
                       disabled={!canStartBatch}
@@ -1013,6 +1100,16 @@ export default function ImageBatchPage() {
 
                   {jobStatus === "running" && (
                     <>
+                      {/* 如果有新的待处理任务，显示继续执行按钮 */}
+                      {canContinueBatch && (
+                        <Button
+                          onClick={handleStartBatch}
+                          className="h-11 px-4 bg-emerald-500 hover:bg-emerald-600 text-white font-semibold"
+                        >
+                          <Play className="h-4 w-4 mr-2" />
+                          执行新任务 ({stats.pending})
+                        </Button>
+                      )}
                       <Button
                         onClick={pauseBatch}
                         variant="outline"

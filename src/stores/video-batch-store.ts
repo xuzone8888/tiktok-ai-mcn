@@ -1,9 +1,14 @@
 /**
  * Video Batch Store - 批量视频生产状态管理
+ * 
+ * 特性：
+ * - 使用 persist 中间件持久化任务状态到 localStorage
+ * - 页面切换时任务不会丢失
+ * - 支持恢复正在进行的任务
  */
 
 import { create } from "zustand";
-import { devtools } from "zustand/middleware";
+import { devtools, persist, createJSONStorage } from "zustand/middleware";
 import { immer } from "zustand/middleware/immer";
 
 import {
@@ -13,7 +18,7 @@ import {
   type TaskImageInfo,
   type PipelineStep,
   type VideoBatchGlobalSettings,
-  VIDEO_BATCH_PRICING,
+  getVideoBatchTotalPrice,
 } from "@/types/video-batch";
 
 // ============================================================================
@@ -143,14 +148,23 @@ export interface VideoBatchActions {
 const generateId = () => `vbt-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 const generateImageId = () => `img-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
-/** 计算单个任务的积分消耗 */
-export const getVideoBatchTaskCost = (): number => {
-  return VIDEO_BATCH_PRICING.total;
+/** 计算单个任务的积分消耗（使用全局设置） */
+export const getVideoBatchTaskCost = (globalSettings?: VideoBatchGlobalSettings): number => {
+  if (!globalSettings) {
+    // 默认使用 sora2 15秒标清
+    return getVideoBatchTotalPrice("sora2", 15, "standard");
+  }
+  return getVideoBatchTotalPrice(
+    globalSettings.modelType,
+    globalSettings.duration,
+    globalSettings.quality
+  );
 };
 
 /** 计算所有任务的总积分消耗 */
-export const getVideoBatchTotalCost = (tasks: VideoBatchTask[]): number => {
-  return tasks.length * VIDEO_BATCH_PRICING.total;
+export const getVideoBatchTotalCost = (tasks: VideoBatchTask[], globalSettings?: VideoBatchGlobalSettings): number => {
+  const costPerTask = getVideoBatchTaskCost(globalSettings);
+  return tasks.length * costPerTask;
 };
 
 /** 校验任务图片是否有效 */
@@ -181,8 +195,14 @@ const initialState: VideoBatchState = {
   jobStatus: "idle",
   globalSettings: {
     aspectRatio: "9:16",
+    modelType: "sora2",
+    duration: 15,
+    quality: "standard",
     language: "en",
     autoStart: false,
+    useAiModel: false,
+    aiModelId: null,
+    aiModelTriggerWord: null,
   },
   selectedTaskIds: {},
   editingTaskId: null,
@@ -193,9 +213,10 @@ const initialState: VideoBatchState = {
 // ============================================================================
 
 export const useVideoBatchStore = create<VideoBatchState & VideoBatchActions>()(
-  devtools(
-    immer((set, get) => ({
-      ...initialState,
+  persist(
+    devtools(
+      immer((set, get) => ({
+        ...initialState,
 
       // ==================== 任务管理 ====================
 
@@ -613,6 +634,55 @@ export const useVideoBatchStore = create<VideoBatchState & VideoBatchActions>()(
       },
     })),
     { name: "VideoBatchStore" }
+  ),
+  {
+    name: "video-batch-storage",
+    storage: createJSONStorage(() => {
+      // 只在客户端使用 localStorage
+      if (typeof window !== "undefined") {
+        return localStorage;
+      }
+      // 服务端返回空存储
+      return {
+        getItem: () => null,
+        setItem: () => {},
+        removeItem: () => {},
+      };
+    }),
+    // 只持久化任务和全局设置，不持久化临时状态
+    partialize: (state) => ({
+      tasks: state.tasks.map(task => ({
+        ...task,
+        // 清理 blob URLs，只保留已上传的 http URLs
+        images: task.images.map(img => ({
+          ...img,
+          url: img.url.startsWith("blob:") ? "" : img.url,
+          file: undefined, // 不持久化文件对象
+        })).filter(img => img.url), // 移除空 URL 的图片
+      })),
+      globalSettings: state.globalSettings,
+      // 如果页面刷新时正在运行，标记为需要恢复
+      jobStatus: ["running", "paused"].includes(state.jobStatus) ? "paused" : state.jobStatus,
+    }),
+    // 恢复时处理
+    onRehydrateStorage: () => (state) => {
+      if (state) {
+        console.log("[VideoBatchStore] Rehydrated from localStorage:", {
+          taskCount: state.tasks.length,
+          jobStatus: state.jobStatus,
+        });
+        // 将正在处理中的任务重置为待处理
+        state.tasks.forEach(task => {
+          if (["uploading", "generating_script", "generating_prompt", "generating_video"].includes(task.status)) {
+            task.status = "pending";
+            task.currentStep = 0;
+            task.progress = 0;
+            task.errorMessage = "任务被中断，请重新开始";
+          }
+        });
+      }
+    },
+  }
   )
 );
 
@@ -628,6 +698,7 @@ export const useVideoBatchSelectedCount = () => useVideoBatchStore((state) => Ob
 
 export const useVideoBatchStats = () => {
   const tasks = useVideoBatchStore((state) => state.tasks);
+  const globalSettings = useVideoBatchStore((state) => state.globalSettings);
   return {
     total: tasks.length,
     pending: tasks.filter((t) => t.status === "pending").length,
@@ -636,7 +707,7 @@ export const useVideoBatchStats = () => {
     ).length,
     success: tasks.filter((t) => t.status === "success").length,
     failed: tasks.filter((t) => t.status === "failed").length,
-    totalCost: getVideoBatchTotalCost(tasks),
+    totalCost: getVideoBatchTotalCost(tasks, globalSettings),
   };
 };
 

@@ -38,7 +38,7 @@ export interface HireModelResult {
 
 export interface ContractInfo {
   id: string;
-  model_id: string;
+  ai_model_id: string;
   user_id: string;
   start_date: string;
   end_date: string;
@@ -136,7 +136,7 @@ export async function hireModel(input: HireModelInput): Promise<HireModelResult>
       .from("contracts")
       .select("id, end_date")
       .eq("user_id", userId)
-      .eq("model_id", modelId)
+      .eq("ai_model_id", modelId)
       .eq("status", "active")
       .gt("end_date", new Date().toISOString())
       .maybeSingle();
@@ -218,7 +218,7 @@ export async function hireModel(input: HireModelInput): Promise<HireModelResult>
       .from("contracts")
       .insert({
         user_id: userId,
-        model_id: modelId,
+        ai_model_id: modelId,
         rental_period: rentalPeriod,
         start_date: new Date().toISOString(),
         end_date: endDate,
@@ -320,7 +320,7 @@ export async function getUserActiveContracts(userId: string): Promise<{
 
     const { data: contracts, error } = await supabase
       .from("contracts")
-      .select("id, model_id, user_id, start_date, end_date, status, credits_paid")
+      .select("id, ai_model_id, user_id, start_date, end_date, status, credits_paid")
       .eq("user_id", userId)
       .eq("status", "active")
       .gt("end_date", new Date().toISOString())
@@ -361,7 +361,7 @@ export async function checkModelHired(
       .from("contracts")
       .select("end_date")
       .eq("user_id", userId)
-      .eq("model_id", modelId)
+      .eq("ai_model_id", modelId)
       .eq("status", "active")
       .gt("end_date", new Date().toISOString())
       .maybeSingle();

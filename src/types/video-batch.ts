@@ -17,10 +17,48 @@ export type VideoBatchTaskStatus =
   | "failed";           // 失败
 
 /** 视频比例 */
-export type VideoAspectRatio = "9:16" | "16:9" | "1:1";
+export type VideoAspectRatio = "9:16" | "16:9";
+
+/** 视频时长 */
+export type VideoDuration = 10 | 15 | 25;
+
+/** 视频质量 */
+export type VideoQuality = "standard" | "hd";
+
+/** 视频模型类型 */
+export type VideoModelType = "sora2" | "sora2-pro";
 
 /** 流水线步骤 */
 export type PipelineStep = 0 | 1 | 2 | 3 | 4;
+
+/** 视频模型配置 */
+export interface VideoModelConfig {
+  type: VideoModelType;
+  duration: VideoDuration;
+  quality: VideoQuality;
+  aspectRatio: VideoAspectRatio;
+}
+
+/** 获取可用的时长选项 */
+export function getAvailableDurations(modelType: VideoModelType, quality: VideoQuality): VideoDuration[] {
+  if (modelType === "sora2") {
+    return [10, 15];
+  } else {
+    // sora2-pro
+    if (quality === "hd") {
+      return [15]; // 高清只有 15 秒
+    }
+    return [25]; // Pro 标清只有 25 秒
+  }
+}
+
+/** 获取可用的质量选项 */
+export function getAvailableQualities(modelType: VideoModelType): VideoQuality[] {
+  if (modelType === "sora2") {
+    return ["standard"]; // 标清版只有标清
+  }
+  return ["standard", "hd"]; // Pro 版有标清和高清
+}
 
 // ============================================================================
 // 图片信息
@@ -72,8 +110,15 @@ export interface VideoBatchTask {
 /** 批量视频生产全局设置 */
 export interface VideoBatchGlobalSettings {
   aspectRatio: VideoAspectRatio;
+  modelType: VideoModelType;
+  duration: VideoDuration;
+  quality: VideoQuality;
   language: "en" | "zh";
   autoStart: boolean;
+  // AI 模特配置
+  useAiModel: boolean;
+  aiModelId: string | null;
+  aiModelTriggerWord: string | null;
 }
 
 // ============================================================================
@@ -91,7 +136,7 @@ export const PIPELINE_STEPS: PipelineStepConfig[] = [
   { step: 0, label: "素材上传", description: "上传产品图片", icon: "📷" },
   { step: 1, label: "生成脚本", description: "豆包AI生成口播脚本", icon: "📝" },
   { step: 2, label: "生成提示词", description: "豆包AI生成分镜提示词", icon: "🎬" },
-  { step: 3, label: "生成视频", description: "Sora2 Pro生成15秒视频", icon: "🎥" },
+  { step: 3, label: "生成视频", description: "Sora2生成视频", icon: "🎥" },
   { step: 4, label: "完成", description: "视频生成完成", icon: "✅" },
 ];
 
@@ -154,14 +199,46 @@ export interface GenerateSoraVideoResponse {
 
 // ============================================================================
 // 定价配置
+// 批量生产视频扣分机制：
+// - 标准款（10秒/15秒 横/竖屏）：20 积分/条
+// - PRO 款（25秒 横/竖屏）：350 积分/条
+// - PRO 高清款（15秒 横/竖屏）：350 积分/条
 // ============================================================================
 
+/** 视频生成定价 */
 export const VIDEO_BATCH_PRICING = {
-  doubaoScript: 5,      // 豆包生成脚本 5 Credits
-  doubaoPrompt: 5,      // 豆包生成提示词 5 Credits
-  sora15s: 50,          // Sora2 Pro 15秒视频 50 Credits
-  total: 60,            // 总计 60 Credits
+  doubaoScript: 0,      // 豆包生成脚本（包含在总价中）
+  doubaoPrompt: 0,      // 豆包生成提示词（包含在总价中）
+  // Sora2 标清
+  sora2_10s: 20,        // 10秒 标清 = 20积分
+  sora2_15s: 20,        // 15秒 标清 = 20积分
+  // Sora2 Pro
+  sora2Pro_15s_hd: 350, // 15秒 高清 = 350积分
+  sora2Pro_25s: 350,    // 25秒 标清 = 350积分
 };
+
+/** 获取视频生成总价 */
+export function getVideoBatchTotalPrice(
+  modelType: VideoModelType,
+  duration: VideoDuration,
+  quality: VideoQuality
+): number {
+  // 标准款：10秒/15秒 = 20积分
+  if (modelType === "sora2") {
+    if (duration === 10) return VIDEO_BATCH_PRICING.sora2_10s;
+    if (duration === 15) return VIDEO_BATCH_PRICING.sora2_15s;
+  }
+  
+  // PRO 款
+  if (modelType === "sora2-pro") {
+    // PRO 高清款 15秒 = 350积分
+    if (quality === "hd" && duration === 15) return VIDEO_BATCH_PRICING.sora2Pro_15s_hd;
+    // PRO 款 25秒 = 350积分
+    if (duration === 25) return VIDEO_BATCH_PRICING.sora2Pro_25s;
+  }
+  
+  return VIDEO_BATCH_PRICING.sora2_15s; // 默认
+}
 
 // ============================================================================
 // 工具函数

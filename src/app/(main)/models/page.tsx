@@ -29,13 +29,13 @@ type ModelWithContract = PublicModel & {
 };
 
 const categories = [
-  { id: "all", label: "All", icon: Sparkles },
-  { id: "fashion", label: "Fashion", icon: Star },
-  { id: "beauty", label: "Beauty", icon: Star },
-  { id: "fitness", label: "Fitness", icon: Star },
-  { id: "lifestyle", label: "Lifestyle", icon: Star },
-  { id: "tech", label: "Tech", icon: Star },
-  { id: "food", label: "Food", icon: Star },
+  { id: "all", label: "全部", icon: Sparkles },
+  { id: "fashion", label: "时尚", icon: Star },
+  { id: "beauty", label: "美妆", icon: Star },
+  { id: "fitness", label: "健身", icon: Star },
+  { id: "lifestyle", label: "生活方式", icon: Star },
+  { id: "tech", label: "科技", icon: Star },
+  { id: "food", label: "美食", icon: Star },
 ];
 
 // ============================================================================
@@ -58,9 +58,9 @@ function EmptyState({
       
       {hasFilters ? (
         <>
-          <h3 className="text-xl font-semibold mb-2">No models match your criteria</h3>
+          <h3 className="text-xl font-semibold mb-2">没有找到匹配的模特</h3>
           <p className="text-muted-foreground max-w-sm mb-6">
-            Try adjusting your search terms or filters to find what you&apos;re looking for.
+            尝试调整搜索条件或筛选器来找到您想要的模特。
           </p>
           <Button 
             variant="outline" 
@@ -68,14 +68,14 @@ function EmptyState({
             className="border-border/50 hover:border-tiktok-cyan/50"
           >
             <RefreshCw className="mr-2 h-4 w-4" />
-            Clear All Filters
+            清除所有筛选
           </Button>
         </>
       ) : (
         <>
-          <h3 className="text-xl font-semibold mb-2">No models available yet</h3>
+          <h3 className="text-xl font-semibold mb-2">暂无可用模特</h3>
           <p className="text-muted-foreground max-w-sm">
-            The model marketplace is empty. Please check back later or contact support.
+            模特资源库暂时为空，请稍后再来或联系客服。
           </p>
         </>
       )}
@@ -277,10 +277,10 @@ export default function ModelsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">
-            <span className="gradient-tiktok-text">Model Market</span>
+            <span className="gradient-tiktok-text">模特资源库</span>
           </h1>
           <p className="mt-2 text-muted-foreground">
-            Discover top AI talents and build your creative team
+            发现顶级 AI 模特，打造您的创意团队
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -296,7 +296,7 @@ export default function ModelsPage() {
           <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-tiktok-cyan/10 to-tiktok-pink/10 border border-border/50">
             <Coins className="h-5 w-5 text-tiktok-cyan" />
             <span className="font-bold">{userCredits.toLocaleString()}</span>
-            <span className="text-sm text-muted-foreground">Credits</span>
+            <span className="text-sm text-muted-foreground">积分</span>
           </div>
         </div>
       </div>
@@ -306,7 +306,7 @@ export default function ModelsPage() {
         <div className="relative flex-1 min-w-[200px] max-w-md">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input 
-            placeholder="Search by name, style, category..." 
+            placeholder="搜索名称、风格、类别..." 
             className="pl-10 bg-muted/50 border-border/50 focus:border-tiktok-cyan/50"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
@@ -324,7 +324,7 @@ export default function ModelsPage() {
           onClick={() => setShowTrending(!showTrending)}
         >
           <TrendingUp className="mr-2 h-4 w-4" />
-          Trending
+          热门
         </Button>
         
         <Button 
@@ -338,12 +338,12 @@ export default function ModelsPage() {
           onClick={() => setShowFeatured(!showFeatured)}
         >
           <Star className="mr-2 h-4 w-4" />
-          Featured
+          推荐
         </Button>
         
         <Button variant="outline" className="border-border/50 hover:bg-white/5">
           <Filter className="mr-2 h-4 w-4" />
-          Advanced
+          高级筛选
         </Button>
       </div>
 
@@ -373,7 +373,7 @@ export default function ModelsPage() {
           <Users className="h-5 w-5 text-tiktok-cyan" />
           <span className="text-sm">
             <span className="font-bold text-white">{filteredModels.length}</span>
-            <span className="text-muted-foreground ml-1">models available</span>
+            <span className="text-muted-foreground ml-1">位可用模特</span>
           </span>
         </div>
         <div className="flex items-center gap-2">
@@ -382,7 +382,7 @@ export default function ModelsPage() {
             <span className="font-bold text-white">
               {filteredModels.filter((m) => m.has_active_contract).length}
             </span>
-            <span className="text-muted-foreground ml-1">in your team</span>
+            <span className="text-muted-foreground ml-1">位已签约</span>
           </span>
         </div>
       </div>
