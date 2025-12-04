@@ -7,7 +7,6 @@
 
 import {
   type VideoModel,
-  type VideoAspectRatio,
   type NanoTier,
   type ImageAspectRatio,
   type ImageResolution,
@@ -55,7 +54,14 @@ export async function submitVideoGeneration(params: SubmitVideoParams): Promise<
       }),
     });
 
-    const result = await response.json();
+    const responseText = await response.text();
+    let result;
+    try {
+      result = JSON.parse(responseText);
+    } catch {
+      console.error("[Generation Client] Failed to parse video submit response:", responseText.substring(0, 200));
+      return { success: false, error: "服务器响应格式错误，请稍后重试" };
+    }
 
     if (!result.success) {
       return { success: false, error: result.error };
@@ -95,7 +101,14 @@ export async function queryVideoStatus(
     const response = await fetch(
       `/api/generate/video?taskId=${encodeURIComponent(taskId)}&usePro=${usePro}`
     );
-    const result = await response.json();
+    const responseText = await response.text();
+    let result;
+    try {
+      result = JSON.parse(responseText);
+    } catch {
+      console.error("[Generation Client] Failed to parse video query response:", responseText.substring(0, 200));
+      return { success: false, error: "服务器响应格式错误，请稍后重试" };
+    }
 
     if (!result.success) {
       return { success: false, error: result.error };
@@ -160,7 +173,14 @@ export async function submitImageGeneration(params: SubmitImageParams): Promise<
       }),
     });
 
-    const result = await response.json();
+    const responseText = await response.text();
+    let result;
+    try {
+      result = JSON.parse(responseText);
+    } catch {
+      console.error("[Generation Client] Failed to parse image submit response:", responseText.substring(0, 200));
+      return { success: false, error: "服务器响应格式错误，请稍后重试" };
+    }
 
     if (!result.success) {
       return { success: false, error: result.error };
@@ -200,7 +220,14 @@ export async function queryImageStatus(
     const response = await fetch(
       `/api/generate/image?taskId=${encodeURIComponent(taskId)}&model=${model}`
     );
-    const result = await response.json();
+    const responseText = await response.text();
+    let result;
+    try {
+      result = JSON.parse(responseText);
+    } catch {
+      console.error("[Generation Client] Failed to parse image query response:", responseText.substring(0, 200));
+      return { success: false, error: "服务器响应格式错误，请稍后重试" };
+    }
 
     if (!result.success) {
       return { success: false, error: result.error };
@@ -367,7 +394,14 @@ export async function uploadBlobToStorage(
       body: formData,
     });
     
-    const uploadResult = await uploadResponse.json();
+    const uploadResponseText = await uploadResponse.text();
+    let uploadResult;
+    try {
+      uploadResult = JSON.parse(uploadResponseText);
+    } catch {
+      console.error("[Generation Client] Failed to parse upload response:", uploadResponseText.substring(0, 200));
+      return { success: false, error: "上传服务响应格式错误" };
+    }
     
     if (!uploadResult.success) {
       return { success: false, error: uploadResult.error };

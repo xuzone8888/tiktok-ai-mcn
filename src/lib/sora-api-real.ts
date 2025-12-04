@@ -120,7 +120,14 @@ export async function submitVideoGeneration(
       }),
     });
 
-    const data: SoraSubmitResponse = await response.json();
+    const responseText = await response.text();
+    let data: SoraSubmitResponse;
+    try {
+      data = JSON.parse(responseText);
+    } catch {
+      console.error("[Sora API] Failed to parse response:", responseText.substring(0, 200));
+      return { success: false, error: "视频生成服务响应格式错误，请稍后重试" };
+    }
 
     console.log("[Sora API] Submit response:", {
       code: data.code,
@@ -178,7 +185,14 @@ export async function queryVideoResult(
       }),
     });
 
-    const data: SoraResultResponse = await response.json();
+    const responseText = await response.text();
+    let data: SoraResultResponse;
+    try {
+      data = JSON.parse(responseText);
+    } catch {
+      console.error("[Sora API] Failed to parse query response:", responseText.substring(0, 200));
+      return { success: false, error: "视频任务查询响应格式错误，请稍后重试" };
+    }
 
     console.log("[Sora API] Query response:", {
       code: data.code,
