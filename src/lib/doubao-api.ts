@@ -122,7 +122,14 @@ async function getConfiguredPrompts(): Promise<typeof DEFAULT_PROMPTS> {
     const response = await fetch(`${baseUrl}/api/admin/prompts`, {
       cache: "no-store",
     });
-    const data = await response.json();
+    const responseText = await response.text();
+    let data;
+    try {
+      data = JSON.parse(responseText);
+    } catch {
+      console.error("[Doubao API] Failed to parse prompts response");
+      return cachedPrompts;
+    }
     if (data.success && data.data) {
       cachedPrompts = data.data;
       return data.data;
@@ -301,7 +308,14 @@ async function callDoubaoAPI(
         };
       }
 
-      const data: DoubaoResponse = await response.json();
+      const responseText = await response.text();
+      let data: DoubaoResponse;
+      try {
+        data = JSON.parse(responseText);
+      } catch {
+        console.error("[Doubao API] Failed to parse response:", responseText.substring(0, 200));
+        return { success: false, error: "豆包 API 响应格式错误" };
+      }
 
       if (!data.choices || data.choices.length === 0) {
         console.error("[Doubao API] No choices in response:", data);

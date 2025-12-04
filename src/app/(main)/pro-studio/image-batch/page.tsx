@@ -506,7 +506,14 @@ export default function ImageBatchPage() {
           }),
         });
 
-        const result = await response.json();
+        const responseText = await response.text();
+        let result;
+        try {
+          result = JSON.parse(responseText);
+        } catch {
+          console.error("[Image Batch] Failed to parse submit response:", responseText.substring(0, 200));
+          throw new Error("图片处理服务响应格式错误");
+        }
 
         if (!result.success) {
           throw new Error(result.error || "提交任务失败");

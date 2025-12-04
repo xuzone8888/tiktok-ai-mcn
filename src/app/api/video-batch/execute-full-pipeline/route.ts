@@ -45,7 +45,14 @@ async function callGenerateTalkingScript(images: string[], taskId: string): Prom
     body: JSON.stringify({ images, taskId }),
   });
 
-  const result = await response.json();
+  const responseText = await response.text();
+  let result;
+  try {
+    result = JSON.parse(responseText);
+  } catch {
+    console.error("[Pipeline] Failed to parse script response:", responseText.substring(0, 200));
+    throw new Error("生成脚本服务响应格式错误");
+  }
   if (!result.success) {
     throw new Error(result.error || "生成脚本失败");
   }
@@ -62,7 +69,14 @@ async function callGenerateAiVideoPrompt(talkingScript: string, taskId: string):
     body: JSON.stringify({ talkingScript, taskId }),
   });
 
-  const result = await response.json();
+  const responseText = await response.text();
+  let result;
+  try {
+    result = JSON.parse(responseText);
+  } catch {
+    console.error("[Pipeline] Failed to parse prompt response:", responseText.substring(0, 200));
+    throw new Error("生成提示词服务响应格式错误");
+  }
   if (!result.success) {
     throw new Error(result.error || "生成提示词失败");
   }
@@ -100,7 +114,14 @@ async function callGenerateSoraVideo(
     }),
   });
 
-  const result = await response.json();
+  const responseText = await response.text();
+  let result;
+  try {
+    result = JSON.parse(responseText);
+  } catch {
+    console.error("[Pipeline] Failed to parse video response:", responseText.substring(0, 200));
+    throw new Error("视频生成服务响应格式错误");
+  }
   if (!result.success) {
     throw new Error(result.error || "视频生成失败");
   }
