@@ -181,7 +181,13 @@ export async function deductCredits(params: {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(params),
     });
-    return await response.json();
+    const text = await response.text();
+    try {
+      return JSON.parse(text);
+    } catch (e) {
+      console.error("[deductCredits] Failed to parse response:", text, e);
+      return { success: false, error: "服务响应格式错误" };
+    }
   } catch (error) {
     console.error("[deductCredits] Error:", error);
     return { success: false, error: "网络错误" };
@@ -203,7 +209,13 @@ export async function refundCredits(params: {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(params),
     });
-    return await response.json();
+    const text = await response.text();
+    try {
+      return JSON.parse(text);
+    } catch (e) {
+      console.error("[refundCredits] Failed to parse response:", text, e);
+      return { success: false, error: "服务响应格式错误" };
+    }
   } catch (error) {
     console.error("[refundCredits] Error:", error);
     return { success: false, error: "网络错误" };
@@ -216,7 +228,14 @@ export async function refundCredits(params: {
 export async function getUserCredits(): Promise<{ credits: number; userId: string | null }> {
   try {
     const response = await fetch("/api/user/credits");
-    const data = await response.json();
+    const text = await response.text();
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch (e) {
+      console.error("[getUserCredits] Failed to parse response:", text, e);
+      return { credits: 0, userId: null };
+    }
     return {
       credits: data.credits || 0,
       userId: data.userId || data.user_id || null,

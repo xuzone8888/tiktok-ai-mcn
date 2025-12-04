@@ -37,7 +37,15 @@ function useVideoTaskExecutor() {
   // 获取用户 ID
   useEffect(() => {
     fetch("/api/user/credits")
-      .then(res => res.json())
+      .then(async res => {
+        const text = await res.text();
+        try {
+          return JSON.parse(text);
+        } catch (e) {
+          console.error("[VideoTaskExecutor] Failed to parse credits response:", text, e);
+          return {};
+        }
+      })
       .then(data => {
         if (data.userId) {
           userIdRef.current = data.userId;
@@ -57,7 +65,14 @@ function useVideoTaskExecutor() {
       if (!userIdRef.current) {
         try {
           const creditsRes = await fetch("/api/user/credits");
-          const creditsData = await creditsRes.json();
+          const creditsText = await creditsRes.text();
+          let creditsData;
+          try {
+            creditsData = JSON.parse(creditsText);
+          } catch (e) {
+            console.error("[VideoTaskExecutor] Failed to parse credits response:", creditsText, e);
+            creditsData = {};
+          }
           if (creditsData.userId) {
             userIdRef.current = creditsData.userId;
             console.log("[VideoTaskExecutor] Got userId on demand:", creditsData.userId);
@@ -87,7 +102,14 @@ function useVideoTaskExecutor() {
             method: "POST",
             body: formData,
           });
-          const uploadData = await uploadRes.json();
+          const uploadText = await uploadRes.text();
+          let uploadData;
+          try {
+            uploadData = JSON.parse(uploadText);
+          } catch (e) {
+            console.error("[VideoTaskExecutor] Failed to parse upload response:", uploadText, e);
+            throw new Error("图片上传服务响应格式错误");
+          }
           
           if (!uploadData.success) {
             throw new Error(uploadData.error || "图片上传失败");
@@ -169,7 +191,14 @@ function useVideoTaskExecutor() {
         }
       }
       
-      const scriptResult = await scriptRes.json();
+      const scriptText = await scriptRes.text();
+      let scriptResult;
+      try {
+        scriptResult = JSON.parse(scriptText);
+      } catch (e) {
+        console.error("[VideoTaskExecutor] Failed to parse script response:", scriptText, e);
+        throw new Error("脚本生成服务响应格式错误");
+      }
       if (!scriptResult.success) {
         throw new Error(scriptResult.error || "脚本生成失败");
       }
@@ -202,7 +231,14 @@ function useVideoTaskExecutor() {
         }
       }
       
-      const promptResult = await promptRes.json();
+      const promptText = await promptRes.text();
+      let promptResult;
+      try {
+        promptResult = JSON.parse(promptText);
+      } catch (e) {
+        console.error("[VideoTaskExecutor] Failed to parse prompt response:", promptText, e);
+        throw new Error("提示词生成服务响应格式错误");
+      }
       if (!promptResult.success) {
         throw new Error(promptResult.error || "提示词生成失败");
       }
@@ -251,7 +287,14 @@ function useVideoTaskExecutor() {
         }
       }
       
-      const videoResult = await videoRes.json();
+      const videoText = await videoRes.text();
+      let videoResult;
+      try {
+        videoResult = JSON.parse(videoText);
+      } catch (e) {
+        console.error("[VideoTaskExecutor] Failed to parse video response:", videoText, e);
+        throw new Error("视频生成服务响应格式错误");
+      }
       if (!videoResult.success) {
         throw new Error(videoResult.error || "视频生成失败");
       }
@@ -364,7 +407,15 @@ function useImageTaskExecutor() {
   // 获取用户 ID
   useEffect(() => {
     fetch("/api/user/credits")
-      .then(res => res.json())
+      .then(async res => {
+        const text = await res.text();
+        try {
+          return JSON.parse(text);
+        } catch (e) {
+          console.error("[ImageTaskExecutor] Failed to parse credits response:", text, e);
+          return {};
+        }
+      })
       .then(data => {
         if (data.userId) {
           userIdRef.current = data.userId;
@@ -394,7 +445,14 @@ function useImageTaskExecutor() {
             method: "POST",
             body: formData,
           });
-          const uploadResult = await uploadResponse.json();
+          const uploadText = await uploadResponse.text();
+          let uploadResult;
+          try {
+            uploadResult = JSON.parse(uploadText);
+          } catch (e) {
+            console.error("[ImageTaskExecutor] Failed to parse upload response:", uploadText, e);
+            throw new Error("图片上传服务响应格式错误");
+          }
 
           if (uploadResult.success && uploadResult.data?.url) {
             remoteImageUrl = uploadResult.data.url;
@@ -422,7 +480,14 @@ function useImageTaskExecutor() {
         }),
       });
 
-      const result = await response.json();
+      const responseText = await response.text();
+      let result;
+      try {
+        result = JSON.parse(responseText);
+      } catch (e) {
+        console.error("[ImageTaskExecutor] Failed to parse image generation response:", responseText, e);
+        throw new Error("图片生成服务响应格式错误");
+      }
 
       if (result.success && result.data?.taskId) {
         const apiTaskId = result.data.taskId;
@@ -439,7 +504,14 @@ function useImageTaskExecutor() {
           attempts++;
 
           const statusRes = await fetch(`/api/generate/image?taskId=${apiTaskId}&model=${taskModel}`);
-          const statusData = await statusRes.json();
+          const statusText = await statusRes.text();
+          let statusData;
+          try {
+            statusData = JSON.parse(statusText);
+          } catch (e) {
+            console.error("[ImageTaskExecutor] Failed to parse status response:", statusText, e);
+            continue;
+          }
 
           if (statusData.success && statusData.data) {
             if (statusData.data.status === "completed" && statusData.data.imageUrl) {
@@ -540,7 +612,15 @@ function useQuickGenTaskExecutor() {
   // 获取用户 ID
   useEffect(() => {
     fetch("/api/user/credits")
-      .then(res => res.json())
+      .then(async res => {
+        const text = await res.text();
+        try {
+          return JSON.parse(text);
+        } catch (e) {
+          console.error("[QuickGenTaskExecutor] Failed to parse credits response:", text, e);
+          return {};
+        }
+      })
       .then(data => {
         if (data.userId) {
           userIdRef.current = data.userId;
@@ -581,7 +661,14 @@ function useQuickGenTaskExecutor() {
             }),
           });
 
-          const result = await response.json();
+          const responseText = await response.text();
+          let result;
+          try {
+            result = JSON.parse(responseText);
+          } catch (e) {
+            console.error("[QuickGenTaskExecutor] Failed to parse video generation response:", responseText, e);
+            throw new Error("视频生成服务响应格式错误");
+          }
           if (!result.success) throw new Error(result.error || "提交失败");
 
           updateTaskStatus(activeTask.id, "polling", { 
@@ -602,7 +689,14 @@ function useQuickGenTaskExecutor() {
           updateTaskStatus(task.id, "polling", { progress: Math.min(20 + i * 2, 90) });
 
           const statusRes = await fetch(`/api/generate/video?taskId=${task.taskId}&usePro=${usePro}`);
-          const statusData = await statusRes.json();
+          const statusText = await statusRes.text();
+          let statusData;
+          try {
+            statusData = JSON.parse(statusText);
+          } catch (e) {
+            console.error("[QuickGenTaskExecutor] Failed to parse status response:", statusText, e);
+            continue;
+          }
 
           if (statusData.success && statusData.data) {
             if (statusData.data.status === "completed" && statusData.data.videoUrl) {
@@ -662,7 +756,15 @@ function useQuickGenImageTaskExecutor() {
   // 获取用户 ID
   useEffect(() => {
     fetch("/api/user/credits")
-      .then(res => res.json())
+      .then(async res => {
+        const text = await res.text();
+        try {
+          return JSON.parse(text);
+        } catch (e) {
+          console.error("[QuickGenImageTaskExecutor] Failed to parse credits response:", text, e);
+          return {};
+        }
+      })
       .then(data => {
         if (data.userId) {
           userIdRef.current = data.userId;
@@ -703,7 +805,14 @@ function useQuickGenImageTaskExecutor() {
             }),
           });
 
-          const result = await response.json();
+          const responseText = await response.text();
+          let result;
+          try {
+            result = JSON.parse(responseText);
+          } catch (e) {
+            console.error("[QuickGenImageTaskExecutor] Failed to parse image generation response:", responseText, e);
+            throw new Error("图片生成服务响应格式错误");
+          }
           if (!result.success) throw new Error(result.error || "提交失败");
 
           updateTaskStatus(activeTask.id, "polling", { 
@@ -723,7 +832,14 @@ function useQuickGenImageTaskExecutor() {
           updateTaskStatus(task.id, "polling", { progress: Math.min(20 + i * 2, 90) });
 
           const statusRes = await fetch(`/api/generate/image?taskId=${task.taskId}&model=${task.model}`);
-          const statusData = await statusRes.json();
+          const statusText = await statusRes.text();
+          let statusData;
+          try {
+            statusData = JSON.parse(statusText);
+          } catch (e) {
+            console.error("[QuickGenImageTaskExecutor] Failed to parse status response:", statusText, e);
+            continue;
+          }
 
           if (statusData.success && statusData.data) {
             if (statusData.data.status === "completed" && statusData.data.imageUrl) {

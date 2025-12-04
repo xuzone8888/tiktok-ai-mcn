@@ -1035,7 +1035,15 @@ export default function VideoBatchPage() {
   useEffect(() => {
     // 获取积分
     fetch("/api/user/credits")
-      .then((res) => res.json())
+      .then(async (res) => {
+        const text = await res.text();
+        try {
+          return JSON.parse(text);
+        } catch (e) {
+          console.error("[Video Batch] Failed to parse credits response:", text, e);
+          return {};
+        }
+      })
       .then((data) => {
         if (data.credits !== undefined) setUserCredits(data.credits);
         if (data.userId) setUserId(data.userId);
@@ -1044,7 +1052,15 @@ export default function VideoBatchPage() {
 
     // 获取签约模特
     fetch("/api/contracts")
-      .then((res) => res.json())
+      .then(async (res) => {
+        const text = await res.text();
+        try {
+          return JSON.parse(text);
+        } catch (e) {
+          console.error("[Video Batch] Failed to parse contracts response:", text, e);
+          return { success: false };
+        }
+      })
       .then((data) => {
         console.log("[Video Batch] Contracts API response:", data);
         if (data.success && data.data) {
@@ -1168,7 +1184,14 @@ export default function VideoBatchPage() {
       if (!currentUserId) {
         try {
           const creditsRes = await fetch("/api/user/credits");
-          const creditsData = await creditsRes.json();
+          const creditsText = await creditsRes.text();
+          let creditsData;
+          try {
+            creditsData = JSON.parse(creditsText);
+          } catch (e) {
+            console.error("[Video Batch] Failed to parse credits response:", creditsText, e);
+            creditsData = {};
+          }
           if (creditsData.userId) {
             currentUserId = creditsData.userId;
             setUserId(creditsData.userId);
@@ -1224,7 +1247,14 @@ export default function VideoBatchPage() {
           }),
         });
         
-        const scriptResult = await scriptResponse.json();
+        const scriptText = await scriptResponse.text();
+        let scriptResult;
+        try {
+          scriptResult = JSON.parse(scriptText);
+        } catch (e) {
+          console.error("[Video Batch] Failed to parse script response:", scriptText, e);
+          throw new Error("生成脚本服务响应格式错误");
+        }
         if (!scriptResult.success) {
           throw new Error(scriptResult.error || "生成脚本失败");
         }
@@ -1250,7 +1280,14 @@ export default function VideoBatchPage() {
           }),
         });
         
-        const promptResult = await promptResponse.json();
+        const promptText = await promptResponse.text();
+        let promptResult;
+        try {
+          promptResult = JSON.parse(promptText);
+        } catch (e) {
+          console.error("[Video Batch] Failed to parse prompt response:", promptText, e);
+          throw new Error("生成提示词服务响应格式错误");
+        }
         if (!promptResult.success) {
           throw new Error(promptResult.error || "生成提示词失败");
         }
@@ -1303,7 +1340,14 @@ export default function VideoBatchPage() {
           }),
         });
         
-        const videoResult = await videoResponse.json();
+        const videoText = await videoResponse.text();
+        let videoResult;
+        try {
+          videoResult = JSON.parse(videoText);
+        } catch (e) {
+          console.error("[Video Batch] Failed to parse video response:", videoText, e);
+          throw new Error("视频生成服务响应格式错误");
+        }
         if (!videoResult.success) {
           throw new Error(videoResult.error || "视频生成失败");
         }
