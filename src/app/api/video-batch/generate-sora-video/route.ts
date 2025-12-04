@@ -1,13 +1,13 @@
 /**
- * Sora2 视频生成
+ * Sora2 视频生成 (异步模式)
  * 
  * POST /api/video-batch/generate-sora-video
  * 
- * 支持 Sora2 标清和 Sora2 Pro 模式
+ * 提交任务后立即返回 soraTaskId，前端通过轮询获取状态
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { submitSora2, querySora2Result, waitForTaskCompletion, getSora2ModelName } from "@/lib/suchuang-api";
+import { submitSora2, getSora2ModelName } from "@/lib/suchuang-api";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 // ============================================================================
@@ -74,7 +74,9 @@ export async function POST(request: NextRequest) {
       quality
     );
 
-    console.log("[Video Batch] Generating Sora video:", {
+    const isPro = modelType === "sora2-pro" || quality === "hd" || durationSeconds === 25;
+
+    console.log("[Video Batch] Submitting Sora video (async mode):", {
       taskId,
       model: sora2Model,
       modelType,
@@ -105,79 +107,9 @@ export async function POST(request: NextRequest) {
     }
 
     const soraTaskId = submitResult.taskId;
-    console.log("[Video Batch] Sora task submitted:", soraTaskId);
+    console.log("[Video Batch] Sora task submitted (async):", soraTaskId);
 
-    // 等待视频生成完成
-    // Sora2 标清: 3-5 分钟, Pro: 15-30 分钟
-    const isPro = modelType === "sora2-pro" || quality === "hd" || durationSeconds === 25;
-    const maxWaitTime = isPro ? 35 * 60 * 1000 : 10 * 60 * 1000;  // Pro 35分钟, 标清 10分钟
-    
-    const completionResult = await waitForTaskCompletion(
-      soraTaskId,
-      (id) => querySora2Result(id, isPro),
-      {
-        maxWaitTime,
-        pollInterval: 15 * 1000,       // 15 秒轮询一次
-        onProgress: (task) => {
-          console.log("[Video Batch] Sora progress:", {
-            taskId: soraTaskId,
-            status: task.status,
-          });
-        },
-      }
-    );
-
-    if (!completionResult.success || !completionResult.task) {
-      console.error("[Video Batch] Sora generation failed:", completionResult.error);
-      
-      // 失败时也写入 generations 表
-      if (userId) {
-        try {
-          const supabase = createAdminClient();
-          await supabase.from("generations").insert({
-            user_id: userId,
-            task_id: soraTaskId,
-            type: "video",
-            source: "batch_video",
-            prompt: aiVideoPrompt,
-            model: sora2Model,
-            duration: durationSeconds,
-            aspect_ratio: aspectRatio,
-            quality: quality,
-            source_image_url: mainGridImageUrl,
-            status: "failed",
-            error_message: completionResult.error || "视频生成失败",
-            credit_cost: creditCost,
-            use_pro: isPro,
-            created_at: new Date().toISOString(),
-          });
-        } catch (dbError) {
-          console.error("[Video Batch] Failed to save failed task to DB:", dbError);
-        }
-      }
-      
-      return NextResponse.json(
-        { success: false, error: completionResult.error || "视频生成失败" },
-        { status: 500 }
-      );
-    }
-
-    const videoUrl = completionResult.task.resultUrl;
-
-    if (!videoUrl) {
-      return NextResponse.json(
-        { success: false, error: "视频生成完成但未获取到视频URL" },
-        { status: 500 }
-      );
-    }
-
-    console.log("[Video Batch] Sora video generated successfully:", {
-      taskId,
-      soraTaskId,
-      videoUrl: videoUrl.substring(0, 80) + "...",
-    });
-
-    // 写入 generations 表
+    // 立即在数据库中创建 processing 状态的记录
     if (userId) {
       try {
         const supabase = createAdminClient();
@@ -192,34 +124,33 @@ export async function POST(request: NextRequest) {
           aspect_ratio: aspectRatio,
           quality: quality,
           source_image_url: mainGridImageUrl,
-          status: "completed",
-          result_url: videoUrl,
-          video_url: videoUrl,
+          status: "processing",  // 初始状态为处理中
           credit_cost: creditCost,
           use_pro: isPro,
           created_at: new Date().toISOString(),
-          completed_at: new Date().toISOString(),
         });
-        console.log("[Video Batch] Saved to generations table:", soraTaskId);
+        console.log("[Video Batch] Created processing record in DB:", soraTaskId);
       } catch (dbError) {
-        console.error("[Video Batch] Failed to save to DB:", dbError);
+        console.error("[Video Batch] Failed to create DB record:", dbError);
+        // 不阻塞返回，继续返回成功
       }
     }
 
+    // 立即返回任务 ID，不等待完成
     return NextResponse.json({
       success: true,
       data: {
         soraTaskId,
-        status: "success",
-        videoUrl,
+        status: "processing",
+        message: "视频任务已提交，请通过轮询接口查询状态",
       },
     });
   } catch (error) {
-    console.error("[Video Batch] Error generating Sora video:", error);
+    console.error("[Video Batch] Error submitting Sora video:", error);
     return NextResponse.json(
       { 
         success: false, 
-        error: error instanceof Error ? error.message : "视频生成失败" 
+        error: error instanceof Error ? error.message : "视频提交失败" 
       },
       { status: 500 }
     );

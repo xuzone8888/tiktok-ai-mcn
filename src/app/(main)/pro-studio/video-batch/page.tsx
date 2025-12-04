@@ -1349,15 +1349,100 @@ export default function VideoBatchPage() {
           throw new Error("视频生成服务响应格式错误");
         }
         if (!videoResult.success) {
-          throw new Error(videoResult.error || "视频生成失败");
+          throw new Error(videoResult.error || "视频提交失败");
+        }
+
+        const soraTaskId = videoResult.data.soraTaskId;
+        console.log("[Video Batch] Sora task submitted:", soraTaskId);
+
+        // 更新状态为正在生成视频
+        updateTaskStatus(task.id, "generating_video", {
+          currentStep: 3,
+          progress: 70,
+          soraTaskId: soraTaskId,
+        });
+
+        // ==================== Step 3.5: 轮询 Sora 任务状态 ====================
+        const isPro = taskModelType === "sora2-pro" || taskQuality === "hd" || taskDuration === 25;
+        const maxPollTime = isPro ? 35 * 60 * 1000 : 10 * 60 * 1000; // Pro 35分钟, 标清 10分钟
+        const pollInterval = 10 * 1000; // 10秒轮询一次
+        const startTime = Date.now();
+
+        let videoUrl: string | undefined;
+        let pollError: string | undefined;
+
+        while (Date.now() - startTime < maxPollTime) {
+          // 等待 10 秒
+          await new Promise(resolve => setTimeout(resolve, pollInterval));
+
+          // 检查任务是否被取消（页面刷新等）
+          const currentState = useVideoBatchStore.getState();
+          const currentTask = currentState.tasks.find(t => t.id === task.id);
+          if (!currentTask || currentTask.status === "failed" || currentTask.status === "success") {
+            console.log("[Video Batch] Task state changed, stopping poll");
+            break;
+          }
+
+          // 更新进度（模拟进度）
+          const elapsed = Date.now() - startTime;
+          const progress = Math.min(70 + Math.floor((elapsed / maxPollTime) * 25), 95);
+          updateTaskStatus(task.id, "generating_video", {
+            currentStep: 3,
+            progress: progress,
+          });
+
+          // 轮询任务状态
+          try {
+            const statusResponse = await fetch(
+              `/api/video-batch/sora-status/${soraTaskId}?isPro=${isPro}`
+            );
+            const statusText = await statusResponse.text();
+            let statusResult;
+            try {
+              statusResult = JSON.parse(statusText);
+            } catch {
+              console.error("[Video Batch] Failed to parse status response:", statusText);
+              continue;
+            }
+
+            if (!statusResult.success) {
+              console.log("[Video Batch] Status query failed:", statusResult.error);
+              continue;
+            }
+
+            const taskStatus = statusResult.data.status;
+            console.log("[Video Batch] Sora task status:", taskStatus);
+
+            if (taskStatus === "completed") {
+              videoUrl = statusResult.data.videoUrl;
+              break;
+            } else if (taskStatus === "failed") {
+              pollError = statusResult.data.errorMessage || "视频生成失败";
+              break;
+            }
+            // 继续轮询 (pending/processing)
+          } catch (pollErr) {
+            console.error("[Video Batch] Poll error:", pollErr);
+            // 网络错误，继续尝试
+          }
+        }
+
+        // 检查结果
+        if (pollError) {
+          throw new Error(pollError);
+        }
+
+        if (!videoUrl) {
+          // 超时但可能实际完成了，检查数据库
+          throw new Error("视频生成超时，请在任务日志中查看是否已完成");
         }
 
         // ==================== 完成 ====================
         updateTaskStatus(task.id, "success", {
           currentStep: 4,
           progress: 100,
-          soraTaskId: videoResult.data.soraTaskId,
-          soraVideoUrl: videoResult.data.videoUrl,
+          soraTaskId: soraTaskId,
+          soraVideoUrl: videoUrl,
         });
 
         toast({ title: "✅ 视频生成完成！" });
