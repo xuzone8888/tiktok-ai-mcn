@@ -4,7 +4,7 @@
   "regions": ["sin1", "hkg1", "icn1"],
   "functions": {
     "src/app/api/**/*.ts": {
-      "maxDuration": 60
+      "maxDuration": 300
     }
   },
   "headers": [
