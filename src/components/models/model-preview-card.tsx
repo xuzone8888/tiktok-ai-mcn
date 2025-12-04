@@ -221,9 +221,10 @@ export const ModelPreviewCard = memo(function ModelPreviewCard({
             variant="outline"
             className="w-full border-orange-500/50 text-orange-400 cursor-not-allowed opacity-70"
             disabled
+            title="该模特已被其他用户签约，请等待签约到期后再试"
           >
             <Users className="mr-2 h-4 w-4" />
-            已被聘用 ({model.hired_count}人)
+            暂不可用
           </Button>
         ) : (
           <Button

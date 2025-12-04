@@ -12,7 +12,6 @@ import {
   Save,
   RotateCcw,
   Loader2,
-  CheckCircle2,
   AlertTriangle,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -124,7 +123,7 @@ export default function PromptsConfigPage() {
       } else {
         toast({ variant: "destructive", title: "保存失败", description: data.error });
       }
-    } catch (error) {
+    } catch {
       toast({ variant: "destructive", title: "保存失败", description: "网络错误" });
     } finally {
       setSaving(false);
@@ -277,5 +276,6 @@ export default function PromptsConfigPage() {
     </div>
   );
 }
+
 
 

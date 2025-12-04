@@ -29,7 +29,6 @@ import {
   Bell,
   Link,
   Eye,
-  EyeOff,
   AlertTriangle,
   Info,
   XCircle,
@@ -798,7 +797,7 @@ export default function AdminSettingsPage() {
                 <div>
                   <p className="font-medium text-amber-400">启用维护模式</p>
                   <p className="text-sm text-muted-foreground">
-                    用户将看到"系统维护中"页面，Admin 可正常访问
+                    用户将看到&ldquo;系统维护中&rdquo;页面，Admin 可正常访问
                   </p>
                 </div>
                 <Switch

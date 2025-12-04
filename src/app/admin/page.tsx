@@ -115,8 +115,6 @@ export default function AdminDashboardPage() {
 
   const userChange = calculateChange(stats?.users.newThisMonth || 0, stats?.users.newLastMonth || 0);
   const creditsChange = calculateChange(stats?.credits.usedThisMonth || 0, stats?.credits.usedLastMonth || 0);
-  const videoChange = calculateChange(stats?.generations.videosThisMonth || 0, 0);
-  const imageChange = calculateChange(stats?.generations.imagesThisMonth || 0, 0);
 
   const statCards = [
     {

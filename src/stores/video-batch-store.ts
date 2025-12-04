@@ -236,6 +236,9 @@ export const useVideoBatchStore = create<VideoBatchState & VideoBatchActions>()(
           id,
           images: processedImages,
           aspectRatio: globalSettings.aspectRatio,
+          modelType: globalSettings.modelType,
+          duration: globalSettings.duration,
+          quality: globalSettings.quality,
           doubaoTalkingScript: null,
           doubaoAiVideoPrompt: null,
           soraTaskId: null,
@@ -306,6 +309,9 @@ export const useVideoBatchStore = create<VideoBatchState & VideoBatchActions>()(
           id: newId,
           images: clonedImages,
           aspectRatio: sourceTask.aspectRatio,
+          modelType: sourceTask.modelType,
+          duration: sourceTask.duration,
+          quality: sourceTask.quality,
           doubaoTalkingScript: null,  // 重置生成结果
           doubaoAiVideoPrompt: null,
           soraTaskId: null,
@@ -350,6 +356,9 @@ export const useVideoBatchStore = create<VideoBatchState & VideoBatchActions>()(
             id,
             images: processedImages,
             aspectRatio: globalSettings.aspectRatio,
+            modelType: globalSettings.modelType,
+            duration: globalSettings.duration,
+            quality: globalSettings.quality,
             doubaoTalkingScript: null,
             doubaoAiVideoPrompt: null,
             soraTaskId: null,
@@ -507,6 +516,26 @@ export const useVideoBatchStore = create<VideoBatchState & VideoBatchActions>()(
           }
           state.tasks = state.tasks.filter((t) => t.id !== taskId);
           delete state.selectedTaskIds[taskId];
+          
+          // 如果删除后没有任务了，重置状态
+          if (state.tasks.length === 0) {
+            state.jobStatus = "idle";
+          }
+          // 如果没有 pending 任务且没有正在处理的任务，根据情况重置状态
+          else {
+            const hasPending = state.tasks.some(t => t.status === "pending");
+            const hasProcessing = state.tasks.some(t => 
+              ["uploading", "generating_script", "generating_prompt", "generating_video"].includes(t.status)
+            );
+            
+            if (!hasPending && !hasProcessing && state.jobStatus === "running") {
+              // 所有任务已完成或失败，标记为完成
+              state.jobStatus = "completed";
+            } else if (!hasProcessing && state.jobStatus === "running") {
+              // 没有正在处理的任务，但有 pending 任务，可能被中断了
+              // 这种情况下保持 running 状态
+            }
+          }
         });
       },
 
@@ -671,14 +700,51 @@ export const useVideoBatchStore = create<VideoBatchState & VideoBatchActions>()(
           taskCount: state.tasks.length,
           jobStatus: state.jobStatus,
         });
-        // 将正在处理中的任务重置为待处理
+        // 处理每个任务
         state.tasks.forEach(task => {
+          // 将正在处理中的任务重置为待处理（不显示错误消息，让用户重新开始）
           if (["uploading", "generating_script", "generating_prompt", "generating_video"].includes(task.status)) {
-            task.status = "pending";
-            task.currentStep = 0;
-            task.progress = 0;
-            task.errorMessage = "任务被中断，请重新开始";
+            // 如果有已生成的视频，标记为成功
+            if (task.soraVideoUrl) {
+              task.status = "success";
+              task.currentStep = 4;
+              task.progress = 100;
+            } else {
+              // 否则重置为待处理，让用户可以重新开始
+              task.status = "pending";
+              task.currentStep = 0;
+              task.progress = 0;
+              // 不设置错误消息，因为这是正常的页面刷新行为
+            }
           }
+          
+          // 【重要】确保 isMainGrid 属性正确设置
+          // 恢复后重新标记第一张图片为主图
+          if (task.images.length > 0) {
+            task.images = task.images.map((img, index) => ({
+              ...img,
+              order: index,
+              isMainGrid: index === 0,
+            }));
+          }
+          
+          // 检查图片是否有效（blob URLs 在刷新后会失效）
+          const hasValidImages = task.images.some(img => 
+            img.url && (img.url.startsWith("http://") || img.url.startsWith("https://"))
+          );
+          if (!hasValidImages && task.status === "pending") {
+            task.errorMessage = "图片已失效，请重新上传";
+          }
+        });
+        // 过滤掉没有有效图片的待处理任务
+        state.tasks = state.tasks.filter(task => 
+          task.status !== "pending" || 
+          task.images.some(img => img.url && !img.url.startsWith("blob:"))
+        );
+        
+        console.log("[VideoBatchStore] After rehydration processing:", {
+          taskCount: state.tasks.length,
+          tasksWithValidImages: state.tasks.filter(t => t.images.length > 0 && t.images[0].isMainGrid).length,
         });
       }
     },

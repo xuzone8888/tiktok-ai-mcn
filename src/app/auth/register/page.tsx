@@ -169,7 +169,7 @@ export default function RegisterPage() {
               创建账号
             </CardTitle>
             <CardDescription className="text-muted-foreground">
-              加入 TikTok AI MCN 开始创作
+              加入 Tok Factory 开始创作
             </CardDescription>
           </div>
         </CardHeader>

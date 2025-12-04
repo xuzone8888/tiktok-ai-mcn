@@ -39,7 +39,6 @@ import {
   Zap,
   Upload,
   Play,
-  Pause,
   Loader2,
   Download,
   ImageIcon,
@@ -51,7 +50,6 @@ import {
   Check,
   Trash2,
   MoreVertical,
-  PlayCircle,
   Settings2,
   FolderUp,
   Wand2,
@@ -66,6 +64,7 @@ import {
   LayoutGrid,
   Eye,
   ChevronLeft,
+  Clock,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import Link from "next/link";
@@ -368,11 +367,12 @@ export default function ImageBatchPage() {
 
   // Store
   const tasks = useImageBatchTasks();
-  const jobStatus = useImageBatchJobStatus();
+  const _jobStatus = useImageBatchJobStatus(); // 保留供未来批量功能使用
   const globalSettings = useImageBatchGlobalSettings();
   const selectedTaskIds = useImageBatchSelectedIds();
   const selectedCount = useImageBatchSelectedCount();
   const stats = useImageBatchStats();
+  void _jobStatus; // suppress unused warning
 
   const {
     addTasksFromFiles,
@@ -383,10 +383,6 @@ export default function ImageBatchPage() {
     selectAllTasks,
     clearSelection,
     removeSelectedTasks,
-    startBatch,
-    pauseBatch,
-    resumeBatch,
-    cancelBatch,
     resetBatch,
     updateGlobalSettings,
     applyGlobalSettingsToAllPending,
@@ -407,18 +403,6 @@ export default function ImageBatchPage() {
       })
       .catch(console.error);
   }, []);
-
-  // 计算属性 - 允许在执行中继续添加任务
-  const hasPendingTasks = tasks.some((t) => t.status === "pending");
-  const canStartBatch =
-    tasks.length > 0 &&
-    hasPendingTasks &&
-    (jobStatus === "idle" || jobStatus === "completed" || jobStatus === "cancelled") &&
-    userCredits >= stats.totalCost &&
-    userId !== null;
-  
-  // 在运行中是否可以继续执行新任务
-  const canContinueBatch = jobStatus === "running" && hasPendingTasks;
 
   // 批量上传
   const handleBatchUpload = useCallback(
@@ -459,6 +443,22 @@ export default function ImageBatchPage() {
         toast({ variant: "destructive", title: "积分不足" });
         return;
       }
+      
+      // 确保 userId 已获取，如果没有则先获取
+      let currentUserId = userId;
+      if (!currentUserId) {
+        try {
+          const creditsRes = await fetch("/api/user/credits");
+          const creditsData = await creditsRes.json();
+          if (creditsData.userId) {
+            currentUserId = creditsData.userId;
+            setUserId(creditsData.userId);
+            console.log("[Image Batch] Got userId on demand:", creditsData.userId);
+          }
+        } catch (e) {
+          console.error("[Image Batch] Failed to get userId:", e);
+        }
+      }
 
       updateTaskStatus(task.id, "processing", {
         startedAt: new Date().toISOString(),
@@ -490,6 +490,7 @@ export default function ImageBatchPage() {
         updateTaskStatus(task.id, "processing", { progress: 20 });
 
         // 调用 API
+        console.log("[Image Batch] Calling generate/image with userId:", currentUserId);
         const response = await fetch("/api/generate/image", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -500,7 +501,8 @@ export default function ImageBatchPage() {
             aspectRatio: task.config.aspectRatio,
             resolution: task.config.resolution,
             prompt: task.config.prompt,
-            userId,
+            userId: currentUserId,
+            source: "batch_image", // 标记来源为批量图片处理
           }),
         });
 
@@ -581,61 +583,6 @@ export default function ImageBatchPage() {
     },
     [userId, userCredits, updateTaskStatus, toast]
   );
-
-  // 批量处理 - 支持在运行中继续执行新任务
-  const handleStartBatch = useCallback(async () => {
-    // 获取当前待处理任务
-    const currentState = useImageBatchStore.getState();
-    const pendingTasks = currentState.tasks.filter((t) => t.status === "pending");
-    
-    if (pendingTasks.length === 0) {
-      toast({ title: "没有待处理的任务" });
-      return;
-    }
-
-    // 如果不是运行状态，先启动
-    if (currentState.jobStatus !== "running") {
-      startBatch();
-      toast({
-        title: "🚀 批量处理已启动",
-        description: `共 ${pendingTasks.length} 个待处理任务`,
-      });
-    } else {
-      toast({
-        title: "➕ 继续处理新任务",
-        description: `新增 ${pendingTasks.length} 个任务`,
-      });
-    }
-    
-    // 串行处理当前批次的待处理任务
-    for (const task of pendingTasks) {
-      const storeState = useImageBatchStore.getState();
-      if (storeState.jobStatus !== "running") break;
-      
-      // 重新获取任务状态，避免重复处理
-      const currentTask = storeState.tasks.find(t => t.id === task.id);
-      if (currentTask && currentTask.status === "pending") {
-        await handleProcessSingleTask(currentTask);
-      }
-    }
-
-    // 检查是否全部完成
-    const finalState = useImageBatchStore.getState();
-    const allDone = finalState.tasks.every(
-      (t) => t.status === "completed" || t.status === "failed"
-    );
-    const hasPending = finalState.tasks.some(t => t.status === "pending");
-    
-    if (allDone && !hasPending) {
-      useImageBatchStore.setState({ jobStatus: "completed" });
-      const completed = finalState.tasks.filter(t => t.status === "completed").length;
-      const failed = finalState.tasks.filter(t => t.status === "failed").length;
-      toast({
-        title: "🎉 批量处理完成",
-        description: `成功 ${completed}，失败 ${failed}`,
-      });
-    }
-  }, [startBatch, handleProcessSingleTask, toast]);
 
   // 获取可用的 action 列表
   const getAvailableActions = () => {
@@ -874,7 +821,7 @@ export default function ImageBatchPage() {
                     <span className="ml-2 text-amber-400/80">
                       {globalSettings.action === "upscale" 
                         ? "（高清放大模式无需提示词，系统自动处理）" 
-                        : "（九宫格模式无需提示词，自动生成多角度展示）"}
+                        : "（九宫格适配Sora2视频，纯白背景+多角度）"}
                     </span>
                   </>
                 )}
@@ -888,7 +835,7 @@ export default function ImageBatchPage() {
                     ? "描述您想要生成的图片效果，例如：产品展示在白色背景上，柔和的光线，专业摄影风格..."
                     : globalSettings.action === "upscale"
                     ? "🔒 高清放大模式：自动增强图片清晰度和细节"
-                    : "🔒 九宫格模式：自动生成产品9个不同角度的展示图"
+                    : "🔒 九宫格模式：适配Sora2视频，纯白背景+9角度展示，便于AI精准渲染"
                 }
                 className={cn(
                   "w-full h-20 px-3 py-2 text-sm border border-border/50 rounded-lg resize-none focus:outline-none",
@@ -1035,11 +982,11 @@ export default function ImageBatchPage() {
         </Card>
 
         {/* ============================================ */}
-        {/* 底部控制栏 */}
+        {/* 底部状态栏 - 仅显示统计信息，单个任务手动点击开始 */}
         {/* ============================================ */}
         {tasks.length > 0 && (
           <div className="fixed bottom-0 left-0 right-0 z-50 border-t border-border/50 bg-background/95 backdrop-blur-xl">
-            <div className="container max-w-7xl mx-auto px-6 py-4">
+            <div className="container max-w-7xl mx-auto px-6 py-3">
               <div className="flex items-center justify-between">
                 {/* 统计信息 */}
                 <div className="flex items-center gap-6">
@@ -1064,20 +1011,32 @@ export default function ImageBatchPage() {
                     )}
                   </div>
 
-                  {(stats.completed > 0 || stats.failed > 0) && (
+                  {(stats.completed > 0 || stats.failed > 0 || stats.processing > 0) && (
                     <>
                       <div className="h-5 w-px bg-border/50" />
                       <div className="flex items-center gap-3 text-sm">
+                        {stats.pending > 0 && (
+                          <span className="flex items-center gap-1 text-muted-foreground">
+                            <Clock className="h-4 w-4" />
+                            {stats.pending} 待处理
+                          </span>
+                        )}
+                        {stats.processing > 0 && (
+                          <span className="flex items-center gap-1 text-tiktok-cyan">
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            {stats.processing} 处理中
+                          </span>
+                        )}
                         {stats.completed > 0 && (
                           <span className="flex items-center gap-1 text-emerald-500">
                             <CheckCircle2 className="h-4 w-4" />
-                            {stats.completed}
+                            {stats.completed} 完成
                           </span>
                         )}
                         {stats.failed > 0 && (
                           <span className="flex items-center gap-1 text-red-400">
                             <XCircle className="h-4 w-4" />
-                            {stats.failed}
+                            {stats.failed} 失败
                           </span>
                         )}
                       </div>
@@ -1085,74 +1044,18 @@ export default function ImageBatchPage() {
                   )}
                 </div>
 
-                {/* 操作按钮 */}
-                <div className="flex items-center gap-3">
-                  {(jobStatus === "idle" || jobStatus === "completed" || jobStatus === "cancelled") && (
+                {/* 提示信息 */}
+                <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                  <span>💡 点击每个任务卡片上的播放按钮开始生成</span>
+                  {stats.pending > 0 && (
                     <Button
-                      onClick={handleStartBatch}
-                      disabled={!canStartBatch}
-                      className="h-11 px-6 bg-gradient-to-r from-tiktok-cyan to-tiktok-pink hover:opacity-90 text-black font-semibold"
+                      onClick={resetBatch}
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 text-xs"
                     >
-                      <PlayCircle className="h-5 w-5 mr-2" />
-                      开始批量生成
-                    </Button>
-                  )}
-
-                  {jobStatus === "running" && (
-                    <>
-                      {/* 如果有新的待处理任务，显示继续执行按钮 */}
-                      {canContinueBatch && (
-                        <Button
-                          onClick={handleStartBatch}
-                          className="h-11 px-4 bg-emerald-500 hover:bg-emerald-600 text-white font-semibold"
-                        >
-                          <Play className="h-4 w-4 mr-2" />
-                          执行新任务 ({stats.pending})
-                        </Button>
-                      )}
-                      <Button
-                        onClick={pauseBatch}
-                        variant="outline"
-                        className="h-11 px-4 border-amber-500/50 text-amber-500 hover:bg-amber-500/10"
-                      >
-                        <Pause className="h-4 w-4 mr-2" />
-                        暂停
-                      </Button>
-                      <Button
-                        onClick={cancelBatch}
-                        variant="outline"
-                        className="h-11 px-4 border-red-500/50 text-red-500 hover:bg-red-500/10"
-                      >
-                        <X className="h-4 w-4 mr-2" />
-                        取消
-                      </Button>
-                    </>
-                  )}
-
-                  {jobStatus === "paused" && (
-                    <>
-                      <Button
-                        onClick={resumeBatch}
-                        className="h-11 px-4 bg-gradient-to-r from-tiktok-cyan to-tiktok-pink hover:opacity-90 text-black"
-                      >
-                        <Play className="h-4 w-4 mr-2" />
-                        继续
-                      </Button>
-                      <Button
-                        onClick={cancelBatch}
-                        variant="outline"
-                        className="h-11 px-4 border-red-500/50 text-red-500 hover:bg-red-500/10"
-                      >
-                        <X className="h-4 w-4 mr-2" />
-                        取消
-                      </Button>
-                    </>
-                  )}
-
-                  {(jobStatus === "completed" || jobStatus === "cancelled") && (
-                    <Button onClick={resetBatch} variant="outline" className="h-11 px-4">
-                      <RotateCcw className="h-4 w-4 mr-2" />
-                      重新开始
+                      <RotateCcw className="h-3.5 w-3.5 mr-1" />
+                      重置失败任务
                     </Button>
                   )}
                 </div>
@@ -1162,39 +1065,60 @@ export default function ImageBatchPage() {
         )}
 
         {/* ============================================ */}
-        {/* 预览弹窗 */}
+        {/* 预览弹窗 - 支持4K大图 */}
         {/* ============================================ */}
         <Dialog open={!!previewTask} onOpenChange={() => setPreviewTask(null)}>
-          <DialogContent className="max-w-4xl bg-black/95 border-white/10">
+          <DialogContent className="max-w-[95vw] max-h-[95vh] bg-black/95 border-white/10 overflow-auto">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <Eye className="h-5 w-5 text-tiktok-cyan" />
                 {previewTask?.config.sourceImageName}
+                <span className="text-xs text-muted-foreground ml-2">
+                  (点击图片可在新窗口查看原图)
+                </span>
               </DialogTitle>
             </DialogHeader>
-            <div className="flex gap-4">
+            <div className="flex flex-col lg:flex-row gap-6">
               {/* 原图 */}
-              <div className="flex-1">
-                <p className="text-xs text-muted-foreground mb-2">原图</p>
-                <img
-                  src={previewTask?.config.sourceImageUrl}
-                  alt="Original"
-                  className="w-full rounded-lg border border-white/10"
-                />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm text-muted-foreground mb-2 flex items-center gap-2">
+                  📷 原图
+                </p>
+                <a 
+                  href={previewTask?.config.sourceImageUrl} 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="block"
+                >
+                  <img
+                    src={previewTask?.config.sourceImageUrl}
+                    alt="Original"
+                    className="w-full max-h-[70vh] object-contain rounded-lg border border-white/10 cursor-zoom-in hover:border-white/30 transition-colors"
+                  />
+                </a>
               </div>
               {/* 结果图 */}
               {previewTask?.status === "completed" && previewTask.resultUrl && (
-                <div className="flex-1">
-                  <p className="text-xs text-muted-foreground mb-2">处理结果</p>
-                  <img
-                    src={previewTask.resultUrl}
-                    alt="Result"
-                    className="w-full rounded-lg border border-tiktok-cyan/30"
-                  />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm text-muted-foreground mb-2 flex items-center gap-2">
+                    ✨ 处理结果
+                  </p>
+                  <a 
+                    href={previewTask.resultUrl} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="block"
+                  >
+                    <img
+                      src={previewTask.resultUrl}
+                      alt="Result"
+                      className="w-full max-h-[70vh] object-contain rounded-lg border border-tiktok-cyan/30 cursor-zoom-in hover:border-tiktok-cyan/50 transition-colors"
+                    />
+                  </a>
                 </div>
               )}
             </div>
-            <DialogFooter>
+            <DialogFooter className="flex-row justify-end gap-2">
               {previewTask?.status === "completed" && previewTask.resultUrl && (
                 <a
                   href={previewTask.resultUrl}

@@ -266,7 +266,7 @@ export const NANO_FAST_ACTION_PRICING: Record<ImageProcessAction, NanoFastAction
   nine_grid: {
     credits: 10,
     label: "九宫格",
-    description: "生成产品多角度九宫格展示图（无需提示词）",
+    description: "适配Sora2视频的9宫格高清图，突出产品角度+细节",
     promptHint: "",
   },
 };
@@ -299,8 +299,8 @@ export const NANO_PRO_ACTION_PRICING: Record<"generate" | "nine_grid", NanoProAc
   nine_grid: {
     credits: 28,
     label: "九宫格 (Pro)",
-    description: "高质量产品多角度九宫格展示图",
-    promptHint: "生成高质量的产品多角度展示图",
+    description: "适配Sora2/Pro视频的高清9宫格图，纯白背景，便于AI精准渲染",
+    promptHint: "可选：添加产品描述以提升生成效果",
     resolutionPricing: {
       "1k": 28,
       "2k": 28,

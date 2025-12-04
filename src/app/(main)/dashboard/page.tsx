@@ -147,9 +147,10 @@ export default function DashboardPage() {
     );
   }
 
-  const creditsChange = calculateChange(stats?.credits.thisMonth || 0, stats?.credits.lastMonth || 0);
-  const videosChange = calculateChange(stats?.videos.thisMonth || 0, stats?.videos.lastMonth || 0);
-  const imagesChange = calculateChange(stats?.images.thisMonth || 0, stats?.images.lastMonth || 0);
+  // 计算变化率（保留供将来使用）
+  const _videosChange = calculateChange(stats?.videos.thisMonth || 0, stats?.videos.lastMonth || 0);
+  const _imagesChange = calculateChange(stats?.images.thisMonth || 0, stats?.images.lastMonth || 0);
+  void _videosChange; void _imagesChange; // suppress unused warnings
 
   const statCards = [
     {
@@ -171,16 +172,16 @@ export default function DashboardPage() {
     {
       title: "生成视频",
       value: formatNumber(stats?.videos.total || 0),
-      change: videosChange.value + " vs 上月",
-      trend: videosChange.trend,
+      change: `本月 ${formatNumber(stats?.videos.thisMonth || 0)} 条`,
+      trend: "neutral" as const,
       icon: Video,
       color: "pink",
     },
     {
       title: "生成图片",
       value: formatNumber(stats?.images.total || 0),
-      change: imagesChange.value + " vs 上月",
-      trend: imagesChange.trend,
+      change: `本月 ${formatNumber(stats?.images.thisMonth || 0)} 张`,
+      trend: "neutral" as const,
       icon: ImageIcon,
       color: "cyan",
     },
@@ -192,7 +193,7 @@ export default function DashboardPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">
-            <span className="gradient-tiktok-text">运营驾驶舱</span>
+            <span className="gradient-tiktok-text">工厂中控台</span>
           </h1>
           <p className="mt-2 text-muted-foreground">
             欢迎回来！这是您的个人数据概览
@@ -387,10 +388,10 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent className="grid gap-3">
             {[
-              { title: "快速生成视频", desc: "单条即时工位", href: "/quick-gen", color: "cyan" },
-              { title: "批量生产视频", desc: "批量生产线", href: "/pro-studio/video-batch", color: "pink" },
-              { title: "批量处理图片", desc: "批量生产线", href: "/pro-studio/image-batch", color: "cyan" },
-              { title: "查看任务日志", desc: "历史生成记录", href: "/assets", color: "pink" },
+              { title: "快速生成视频", desc: "即时造片台", href: "/quick-gen", color: "cyan" },
+              { title: "批量生产视频", desc: "批量产线区", href: "/pro-studio/video-batch", color: "pink" },
+              { title: "批量处理图片", desc: "批量产线区", href: "/pro-studio/image-batch", color: "cyan" },
+              { title: "查看生产轨迹", desc: "历史生成记录", href: "/assets", color: "pink" },
             ].map((action, index) => (
               <Link key={index} href={action.href}>
                 <button

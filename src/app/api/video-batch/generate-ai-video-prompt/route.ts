@@ -17,6 +17,10 @@ interface RequestBody {
   talkingScript: string;
   taskId: string;
   modelTriggerWord?: string;
+  customPrompts?: {
+    systemPrompt?: string;
+    userPrompt?: string;
+  };
 }
 
 // ============================================================================
@@ -43,16 +47,17 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { modelTriggerWord } = body;
+    const { modelTriggerWord, customPrompts } = body;
 
     console.log("[Video Batch] Generating AI video prompt:", {
       taskId,
       scriptLength: talkingScript.length,
       hasModelTriggerWord: !!modelTriggerWord,
+      hasCustomPrompts: !!customPrompts,
     });
 
     // 调用豆包 API 生成提示词
-    const result = await generateAiVideoPrompt(talkingScript, modelTriggerWord);
+    const result = await generateAiVideoPrompt(talkingScript, modelTriggerWord, customPrompts);
 
     if (!result.success) {
       console.error("[Video Batch] Prompt generation failed:", result.error);

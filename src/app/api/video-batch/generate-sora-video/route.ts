@@ -7,7 +7,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { submitSora2, querySora2Result, waitForTaskCompletion, getSora2ModelName, type Sora2ModelType } from "@/lib/suchuang-api";
+import { submitSora2, querySora2Result, waitForTaskCompletion, getSora2ModelName } from "@/lib/suchuang-api";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 // ============================================================================
@@ -82,6 +82,8 @@ export async function POST(request: NextRequest) {
       durationSeconds,
       quality,
       promptLength: aiVideoPrompt.length,
+      userId: userId || "(not provided)",
+      creditCost,
       hasMainImage: !!mainGridImageUrl,
     });
 

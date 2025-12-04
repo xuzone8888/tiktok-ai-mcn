@@ -37,53 +37,53 @@ interface NavItem {
 }
 
 const navItems: NavItem[] = [
-  // 1. 运营驾驶舱 (原概览)
+  // 1. 工厂中控台 (原运营驾驶舱)
   {
-    title: "运营驾驶舱",
+    title: "工厂中控台",
     href: "/dashboard",
     icon: LayoutDashboard,
     description: "数据概览与运营分析",
   },
-  // 2. 模特资源库 (原模特市场)
+  // 2. 模特资源库
   {
     title: "模特资源库",
     href: "/models",
     icon: Users,
     description: "浏览全部 AI 模特",
   },
-  // 3. 专属模特仓 (原我的签约模特)
+  // 3. 专属模特仓
   {
     title: "专属模特仓",
     href: "/team",
     icon: UserCheck,
     description: "已签约的专属模特",
   },
-  // 4. 单条即时工位 (原快速生成单个视频)
+  // 4. 即时造片台 (原单条即时工位)
   {
-    title: "单条即时工位",
+    title: "即时造片台",
     href: "/quick-gen",
     icon: Zap,
     description: "快速生成单条视频",
   },
-  // 5. 批量生产线 (原批量生产工坊)
+  // 5. 批量产线区 (原批量生产线)
   {
-    title: "批量生产线",
+    title: "批量产线区",
     href: "/pro-studio",
     icon: Factory,
     description: "批量生产视频与图片",
   },
-  // 6. 多镜合成间 → 爆款复刻 (预留)
+  // 6. 爆款复刻间 (预留)
   {
-    title: "爆款复刻",
+    title: "爆款复刻间",
     href: "/clip-editor",
     icon: Film,
     description: "多镜合成间",
     comingSoon: true,
     comingSoonMessage: "即将推出：一键复刻爆款视频风格，快速生成同款内容",
   },
-  // 7. 任务日志 (原选品中心)
+  // 7. 生产轨迹簿 (原任务日志)
   {
-    title: "任务日志",
+    title: "生产轨迹簿",
     href: "/assets",
     icon: Package,
     description: "查看生成历史与下载",
@@ -120,12 +120,11 @@ export function Sidebar() {
           {!collapsed && (
             <div className="flex flex-col">
               <span className="text-lg font-bold tracking-tight">
-                <span className="text-tiktok-cyan">TikTok</span>{" "}
-                <span className="text-tiktok-pink">AI</span>{" "}
-                <span className="text-foreground">MCN</span>
+                <span className="text-tiktok-cyan">Tok</span>{" "}
+                <span className="text-tiktok-pink">Factory</span>
               </span>
               <span className="text-xs text-muted-foreground">
-                智能创作平台
+                AI 内容智造工厂
               </span>
             </div>
           )}

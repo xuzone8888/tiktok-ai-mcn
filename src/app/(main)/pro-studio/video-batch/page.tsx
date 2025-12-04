@@ -39,7 +39,6 @@ import {
   Zap,
   Upload,
   Play,
-  Pause,
   Loader2,
   Download,
   ImageIcon,
@@ -51,7 +50,6 @@ import {
   Check,
   Trash2,
   MoreVertical,
-  PlayCircle,
   Settings2,
   FolderUp,
   ChevronLeft,
@@ -69,6 +67,7 @@ import {
   Minus,
   Copy,
   UserCircle,
+  Clock,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -83,8 +82,6 @@ import {
   PIPELINE_STEPS,
   getStatusLabel,
   getVideoBatchTotalPrice,
-  getAvailableDurations,
-  getAvailableQualities,
 } from "@/types/video-batch";
 
 // Store
@@ -96,7 +93,6 @@ import {
   useVideoBatchSelectedIds,
   useVideoBatchSelectedCount,
   useVideoBatchStats,
-  getVideoBatchTaskCost,
   validateTaskImages,
 } from "@/stores/video-batch-store";
 
@@ -294,7 +290,7 @@ function ImageUploader({ images, onImagesChange, maxImages = 4, compact = false 
       <div className="flex items-center gap-2 p-2 rounded-lg bg-amber-500/10 border border-amber-500/30">
         <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0" />
         <p className="text-xs text-amber-400">
-          <strong>第一张图片必须是高清九宫格图（3×3 多角度）</strong>，其余最多3张为补充素材（共4张）
+          <strong>第一张图片必须是适配Sora2的九宫格图（纯白背景+3×3多角度）</strong>，其余最多3张为补充素材
         </p>
       </div>
 
@@ -469,23 +465,28 @@ const VideoTaskCard = memo(function VideoTaskCard({
   onViewScript,
   onEditImages,
   onPlayVideo,
-  modelType,
-  duration,
-  quality,
+  modelType: globalModelType,
+  duration: globalDuration,
+  quality: globalQuality,
 }: VideoTaskCardProps) {
   const validation = validateTaskImages(task.images);
   const canStart = task.status === "pending" && validation.valid;
   
+  // 使用任务自身的配置，如果不存在则回退到全局配置（兼容旧任务）
+  const taskModelType = task.modelType || globalModelType;
+  const taskDuration = task.duration || globalDuration;
+  const taskQuality = task.quality || globalQuality;
+  
   // 获取显示标签
   const getModelLabel = () => {
-    if (modelType === "sora2") {
-      return `${duration}秒`;
+    if (taskModelType === "sora2") {
+      return `${taskDuration}秒`;
     } else {
       // sora2-pro
-      if (quality === "hd") {
-        return `${duration}秒 高清`;
+      if (taskQuality === "hd") {
+        return `${taskDuration}秒 高清`;
       }
-      return `${duration}秒`;
+      return `${taskDuration}秒`;
     }
   };
 
@@ -615,7 +616,7 @@ const VideoTaskCard = memo(function VideoTaskCard({
           <Badge variant="outline" className="text-[10px] h-5 px-1.5">
             {getModelLabel()}
           </Badge>
-          {modelType === "sora2-pro" && (
+          {taskModelType === "sora2-pro" && (
             <Badge variant="outline" className="text-[10px] h-5 px-1.5 bg-purple-500/10 border-purple-500/30 text-purple-400">
               Pro
             </Badge>
@@ -816,12 +817,15 @@ function VideoPlayerDialog({ task, open, onClose }: VideoPlayerDialogProps) {
 
   // 获取视频时长和清晰度显示文字
   const getDurationLabel = () => {
-    const { duration, quality } = task;
-    if (duration === "25s") return "25秒 标清";
-    if (duration === "15s" && quality === "hd") return "15秒 高清";
-    if (duration === "15s") return "15秒";
-    if (duration === "10s") return "10秒";
-    return "15秒";
+    const duration = task.duration || 15;
+    const quality = task.quality || "standard";
+    const modelType = task.modelType || "sora2";
+    
+    if (modelType === "sora2-pro") {
+      if (quality === "hd") return `${duration}秒 高清`;
+      return `${duration}秒 标清`;
+    }
+    return `${duration}秒`;
   };
 
   return (
@@ -952,11 +956,12 @@ export default function VideoBatchPage() {
 
   // Store
   const tasks = useVideoBatchTasks();
-  const jobStatus = useVideoBatchJobStatus();
+  const _jobStatus = useVideoBatchJobStatus(); // 保留供未来批量功能使用
   const globalSettings = useVideoBatchGlobalSettings();
   const selectedTaskIds = useVideoBatchSelectedIds();
   const selectedCount = useVideoBatchSelectedCount();
   const stats = useVideoBatchStats();
+  void _jobStatus; // suppress unused warning
 
   const {
     createTask,
@@ -969,10 +974,6 @@ export default function VideoBatchPage() {
     selectAllTasks,
     clearSelection,
     removeSelectedTasks,
-    startBatch,
-    pauseBatch,
-    resumeBatch,
-    cancelBatch,
     resetBatch,
     updateGlobalSettings,
   } = useVideoBatchStore();
@@ -995,6 +996,32 @@ export default function VideoBatchPage() {
   const [selectedModelName, setSelectedModelName] = useState<string>("");
   const [hiredModels, setHiredModels] = useState<Array<{ id: string; name: string; trigger_word: string; avatar_url: string }>>([]);
   const [showModelSelector, setShowModelSelector] = useState(false);
+  
+  // 提示词配置
+  const [showPromptConfig, setShowPromptConfig] = useState(false);
+  const [customPrompts, setCustomPrompts] = useState<{
+    talkingScriptSystem: string;
+    talkingScriptUser: string;
+    aiVideoPromptSystem: string;
+    aiVideoPromptUser: string;
+  }>({
+    talkingScriptSystem: "",
+    talkingScriptUser: "",
+    aiVideoPromptSystem: "",
+    aiVideoPromptUser: "",
+  });
+  
+  // 加载本地存储的提示词配置
+  useEffect(() => {
+    const savedPrompts = localStorage.getItem("video-batch-custom-prompts");
+    if (savedPrompts) {
+      try {
+        setCustomPrompts(JSON.parse(savedPrompts));
+      } catch (e) {
+        console.error("Failed to parse saved prompts:", e);
+      }
+    }
+  }, []);
   
   // AI 模特设置函数
   const setUseAiModel = (value: boolean) => updateGlobalSettings("useAiModel", value);
@@ -1061,20 +1088,6 @@ export default function VideoBatchPage() {
     };
   }, [tasks]);
 
-  // 计算属性 - 使用 useMemo 缓存避免重复计算
-  const pendingTasks = useMemo(() => 
-    tasks.filter((t) => t.status === "pending" && validateTaskImages(t.images).valid),
-    [tasks]
-  );
-  
-  const canStartBatch = useMemo(() =>
-    pendingTasks.length > 0 &&
-    jobStatus === "idle" &&
-    userCredits >= stats.totalCost &&
-    userId !== null,
-    [pendingTasks.length, jobStatus, userCredits, stats.totalCost, userId]
-  );
-
   // 上传单张图片到服务器
   const uploadImageToServer = async (image: TaskImageInfo): Promise<string> => {
     // 如果已经是 http/https URL，直接返回
@@ -1083,7 +1096,24 @@ export default function VideoBatchPage() {
     }
 
     // 如果是 blob URL，需要上传
-    if (image.url.startsWith("blob:") && image.file) {
+    if (image.url.startsWith("blob:")) {
+      // 检查 file 属性是否存在
+      if (!image.file) {
+        console.error("[Video Batch] Image file not found for blob URL:", image.url);
+        throw new Error("图片文件已失效，请重新上传");
+      }
+      
+      // 验证 blob URL 是否仍然有效
+      try {
+        const blobResponse = await fetch(image.url);
+        if (!blobResponse.ok) {
+          throw new Error("Blob URL 已失效");
+        }
+      } catch (blobError) {
+        console.error("[Video Batch] Blob URL invalid:", image.url, blobError);
+        throw new Error("图片链接已失效，请重新上传图片");
+      }
+      
       const formData = new FormData();
       formData.append("file", image.file);
 
@@ -1100,6 +1130,7 @@ export default function VideoBatchPage() {
       return result.data.url;
     }
 
+    console.error("[Video Batch] Unknown image URL format:", image.url);
     throw new Error("无效的图片格式");
   };
 
@@ -1125,6 +1156,22 @@ export default function VideoBatchPage() {
         return;
       }
       
+      // 确保 userId 已获取，如果没有则先获取
+      let currentUserId = userId;
+      if (!currentUserId) {
+        try {
+          const creditsRes = await fetch("/api/user/credits");
+          const creditsData = await creditsRes.json();
+          if (creditsData.userId) {
+            currentUserId = creditsData.userId;
+            setUserId(creditsData.userId);
+            console.log("[Video Batch] Got userId on demand:", creditsData.userId);
+          }
+        } catch (e) {
+          console.error("[Video Batch] Failed to get userId:", e);
+        }
+      }
+      
       // 添加到处理锁
       processingTasksRef.current.add(task.id);
 
@@ -1145,11 +1192,29 @@ export default function VideoBatchPage() {
         // ==================== Step 1: 生成口播脚本 ====================
         updateTaskStatus(task.id, "generating_script", { currentStep: 1, progress: 20 });
         
+        // 获取本地存储的自定义提示词
+        let savedCustomPrompts = null;
+        try {
+          const savedPromptsStr = localStorage.getItem("video-batch-custom-prompts");
+          if (savedPromptsStr) {
+            savedCustomPrompts = JSON.parse(savedPromptsStr);
+          }
+        } catch (e) {
+          console.warn("Failed to parse custom prompts:", e);
+        }
+        
         const imageUrls = uploadedUrls;
         const scriptResponse = await fetch("/api/video-batch/generate-talking-script", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ images: imageUrls, taskId: task.id }),
+          body: JSON.stringify({ 
+            images: imageUrls, 
+            taskId: task.id,
+            customPrompts: savedCustomPrompts ? {
+              systemPrompt: savedCustomPrompts.talkingScriptSystem,
+              userPrompt: savedCustomPrompts.talkingScriptUser,
+            } : undefined,
+          }),
         });
         
         const scriptResult = await scriptResponse.json();
@@ -1171,6 +1236,10 @@ export default function VideoBatchPage() {
             talkingScript: scriptResult.data.script, 
             taskId: task.id,
             modelTriggerWord: useAiModel ? selectedModelTriggerWord : undefined,
+            customPrompts: savedCustomPrompts ? {
+              systemPrompt: savedCustomPrompts.aiVideoPromptSystem,
+              userPrompt: savedCustomPrompts.aiVideoPromptUser,
+            } : undefined,
           }),
         });
         
@@ -1201,17 +1270,29 @@ export default function VideoBatchPage() {
           console.log("[Video Batch] Added AI model trigger word to final prompt");
         }
 
+        // 使用任务自身的配置，兼容旧任务（回退到全局配置）
+        const taskAspectRatio = task.aspectRatio || globalSettings.aspectRatio;
+        const taskDuration = task.duration || globalSettings.duration;
+        const taskQuality = task.quality || globalSettings.quality;
+        const taskModelType = task.modelType || globalSettings.modelType;
+
+        // 计算积分消耗
+        const taskCreditCost = getVideoBatchTotalPrice(taskModelType, taskDuration, taskQuality);
+
+        console.log("[Video Batch] Calling generate-sora-video with userId:", currentUserId);
         const videoResponse = await fetch("/api/video-batch/generate-sora-video", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             aiVideoPrompt: finalVideoPrompt,
             mainGridImageUrl: mainGridImageUrl,
-            aspectRatio: globalSettings.aspectRatio,
-            durationSeconds: globalSettings.duration,
-            quality: globalSettings.quality,
-            modelType: globalSettings.modelType,
+            aspectRatio: taskAspectRatio,
+            durationSeconds: taskDuration,
+            quality: taskQuality,
+            modelType: taskModelType,
             taskId: task.id,
+            userId: currentUserId,  // 传递用户ID以便记录到任务日志
+            creditCost: taskCreditCost,  // 传递积分消耗
           }),
         });
         
@@ -1246,17 +1327,6 @@ export default function VideoBatchPage() {
     },
     [updateTaskStatus, toast, useAiModel, selectedModelTriggerWord]
   );
-
-  // 批量处理 - 只设置状态，后台任务管理器会自动执行
-  const handleStartBatch = useCallback(() => {
-    if (!canStartBatch) return;
-
-    startBatch();
-    toast({
-      title: "🚀 批量处理已启动",
-      description: `共 ${pendingTasks.length} 个任务，可以离开页面，任务会在后台继续执行`,
-    });
-  }, [canStartBatch, pendingTasks, startBatch, toast]);
 
   // 编辑任务图片
   const handleEditTaskImages = useCallback((task: VideoBatchTask) => {
@@ -1520,6 +1590,16 @@ export default function VideoBatchPage() {
 
               <div className="flex-1" />
 
+              {/* 提示词配置按钮 */}
+              <Button
+                variant="outline"
+                onClick={() => setShowPromptConfig(true)}
+                className="h-9 btn-subtle"
+              >
+                <FileText className="h-4 w-4 mr-2" />
+                提示词配置
+              </Button>
+
               {/* 创建任务按钮 */}
               <Button
                 onClick={() => setShowCreateDialog(true)}
@@ -1612,7 +1692,7 @@ export default function VideoBatchPage() {
                 <Video className="h-16 w-16 text-muted-foreground/30 mb-4" />
                 <p className="text-lg font-medium text-muted-foreground">暂无视频任务</p>
                 <p className="text-sm text-muted-foreground/70 mt-1">
-                  点击"创建视频任务"开始批量生产
+                  点击&ldquo;创建视频任务&rdquo;开始批量生产
                 </p>
               </div>
             ) : (
@@ -1644,10 +1724,10 @@ export default function VideoBatchPage() {
           </CardContent>
         </Card>
 
-        {/* 底部控制栏 */}
+        {/* 底部状态栏 - 仅显示统计信息，单个任务手动点击开始 */}
         {tasks.length > 0 && (
           <div className="fixed bottom-0 left-0 right-0 z-50 border-t border-border/50 bg-background/95 backdrop-blur-xl">
-            <div className="container max-w-7xl mx-auto px-6 py-4">
+            <div className="container max-w-7xl mx-auto px-6 py-3">
               <div className="flex items-center justify-between">
                 {/* 统计信息 */}
                 <div className="flex items-center gap-6">
@@ -1669,20 +1749,32 @@ export default function VideoBatchPage() {
                     </span>
                   </div>
 
-                  {(stats.success > 0 || stats.failed > 0) && (
+                  {(stats.pending > 0 || stats.running > 0 || stats.success > 0 || stats.failed > 0) && (
                     <>
                       <div className="h-5 w-px bg-border/50" />
                       <div className="flex items-center gap-3 text-sm">
+                        {stats.pending > 0 && (
+                          <span className="flex items-center gap-1 text-muted-foreground">
+                            <Clock className="h-4 w-4" />
+                            {stats.pending} 待处理
+                          </span>
+                        )}
+                        {stats.running > 0 && (
+                          <span className="flex items-center gap-1 text-tiktok-cyan">
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            {stats.running} 处理中
+                          </span>
+                        )}
                         {stats.success > 0 && (
                           <span className="flex items-center gap-1 text-emerald-500">
                             <CheckCircle2 className="h-4 w-4" />
-                            {stats.success}
+                            {stats.success} 完成
                           </span>
                         )}
                         {stats.failed > 0 && (
                           <span className="flex items-center gap-1 text-red-400">
                             <XCircle className="h-4 w-4" />
-                            {stats.failed}
+                            {stats.failed} 失败
                           </span>
                         )}
                       </div>
@@ -1690,64 +1782,18 @@ export default function VideoBatchPage() {
                   )}
                 </div>
 
-                {/* 操作按钮 */}
-                <div className="flex items-center gap-3">
-                  {jobStatus === "idle" && (
+                {/* 提示信息 */}
+                <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                  <span>💡 点击每个任务卡片上的播放按钮开始生成</span>
+                  {stats.failed > 0 && (
                     <Button
-                      onClick={handleStartBatch}
-                      disabled={!canStartBatch}
-                      className="h-11 px-6 bg-gradient-to-r from-tiktok-cyan to-tiktok-pink hover:opacity-90 text-black font-semibold"
+                      onClick={resetBatch}
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 text-xs"
                     >
-                      <PlayCircle className="h-5 w-5 mr-2" />
-                      开始批量生成
-                    </Button>
-                  )}
-
-                  {jobStatus === "running" && (
-                    <>
-                      <Button
-                        onClick={pauseBatch}
-                        variant="outline"
-                        className="h-11 px-4 border-amber-500/50 text-amber-500 hover:bg-amber-500/10"
-                      >
-                        <Pause className="h-4 w-4 mr-2" />
-                        暂停
-                      </Button>
-                      <Button
-                        onClick={cancelBatch}
-                        variant="outline"
-                        className="h-11 px-4 border-red-500/50 text-red-500 hover:bg-red-500/10"
-                      >
-                        <X className="h-4 w-4 mr-2" />
-                        取消
-                      </Button>
-                    </>
-                  )}
-
-                  {jobStatus === "paused" && (
-                    <>
-                      <Button
-                        onClick={resumeBatch}
-                        className="h-11 px-4 bg-gradient-to-r from-tiktok-cyan to-tiktok-pink hover:opacity-90 text-black"
-                      >
-                        <Play className="h-4 w-4 mr-2" />
-                        继续
-                      </Button>
-                      <Button
-                        onClick={cancelBatch}
-                        variant="outline"
-                        className="h-11 px-4 border-red-500/50 text-red-500 hover:bg-red-500/10"
-                      >
-                        <X className="h-4 w-4 mr-2" />
-                        取消
-                      </Button>
-                    </>
-                  )}
-
-                  {(jobStatus === "completed" || jobStatus === "cancelled") && (
-                    <Button onClick={resetBatch} variant="outline" className="h-11 px-4">
-                      <RotateCcw className="h-4 w-4 mr-2" />
-                      重新开始
+                      <RotateCcw className="h-3.5 w-3.5 mr-1" />
+                      重置失败任务
                     </Button>
                   )}
                 </div>
@@ -1764,7 +1810,7 @@ export default function VideoBatchPage() {
                 <FolderUp className="h-5 w-5 text-tiktok-cyan" />
                 创建视频任务
               </DialogTitle>
-              <DialogDescription>上传产品图片，第一张必须是高清九宫格图</DialogDescription>
+              <DialogDescription>上传产品图片，第一张必须是适配Sora2的九宫格图（纯白背景）</DialogDescription>
             </DialogHeader>
 
             <div className="py-4">
@@ -1775,6 +1821,12 @@ export default function VideoBatchPage() {
               <Button
                 variant="outline"
                 onClick={() => {
+                  // 清理新上传图片的 blob URLs，防止内存泄漏
+                  newTaskImages.forEach((img) => {
+                    if (img.url.startsWith("blob:")) {
+                      URL.revokeObjectURL(img.url);
+                    }
+                  });
                   setNewTaskImages([]);
                   setBatchCreateCount(1);
                   setShowCreateDialog(false);
@@ -1847,7 +1899,7 @@ export default function VideoBatchPage() {
                 <ImageIcon className="h-5 w-5 text-tiktok-pink" />
                 编辑任务素材
               </DialogTitle>
-              <DialogDescription>调整图片顺序，确保第一张是高清九宫格图</DialogDescription>
+              <DialogDescription>调整图片顺序，确保第一张是适配Sora2的九宫格图</DialogDescription>
             </DialogHeader>
 
             <div className="py-4">
@@ -1952,6 +2004,122 @@ export default function VideoBatchPage() {
                   取消使用模特
                 </Button>
               )}
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* 提示词配置弹窗 */}
+        <Dialog open={showPromptConfig} onOpenChange={setShowPromptConfig}>
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto bg-background border-border">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <FileText className="h-5 w-5 text-tiktok-cyan" />
+                提示词配置
+              </DialogTitle>
+              <DialogDescription>
+                自定义 AI 脚本生成和视频提示词，留空则使用默认配置
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-6 py-4">
+              {/* 脚本生成提示词 */}
+              <div className="space-y-4 p-4 rounded-xl bg-muted/30 border border-border/50">
+                <h3 className="text-sm font-semibold flex items-center gap-2">
+                  <Wand2 className="h-4 w-4 text-amber-400" />
+                  口播脚本生成提示词
+                </h3>
+                
+                <div className="space-y-2">
+                  <Label className="text-xs text-muted-foreground">系统提示词 (System Prompt)</Label>
+                  <textarea
+                    value={customPrompts.talkingScriptSystem}
+                    onChange={(e) => setCustomPrompts(prev => ({ ...prev, talkingScriptSystem: e.target.value }))}
+                    placeholder="留空使用默认：You are a professional short-form video script generator..."
+                    className="w-full h-24 px-3 py-2 text-sm bg-background border border-border/50 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-tiktok-cyan/50"
+                  />
+                </div>
+                
+                <div className="space-y-2">
+                  <Label className="text-xs text-muted-foreground">用户提示词 (User Prompt)</Label>
+                  <textarea
+                    value={customPrompts.talkingScriptUser}
+                    onChange={(e) => setCustomPrompts(prev => ({ ...prev, talkingScriptUser: e.target.value }))}
+                    placeholder="留空使用默认：Based on all the product images provided..."
+                    className="w-full h-32 px-3 py-2 text-sm bg-background border border-border/50 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-tiktok-cyan/50"
+                  />
+                </div>
+              </div>
+
+              {/* 视频提示词 */}
+              <div className="space-y-4 p-4 rounded-xl bg-muted/30 border border-border/50">
+                <h3 className="text-sm font-semibold flex items-center gap-2">
+                  <Video className="h-4 w-4 text-tiktok-pink" />
+                  视频生成提示词
+                </h3>
+                
+                <div className="space-y-2">
+                  <Label className="text-xs text-muted-foreground">系统提示词 (System Prompt)</Label>
+                  <textarea
+                    value={customPrompts.aiVideoPromptSystem}
+                    onChange={(e) => setCustomPrompts(prev => ({ ...prev, aiVideoPromptSystem: e.target.value }))}
+                    placeholder="留空使用默认：You are a TikTok e-commerce creator and AI video director..."
+                    className="w-full h-24 px-3 py-2 text-sm bg-background border border-border/50 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-tiktok-cyan/50"
+                  />
+                </div>
+                
+                <div className="space-y-2">
+                  <Label className="text-xs text-muted-foreground">
+                    用户提示词 (User Prompt)
+                    <span className="ml-2 text-amber-400/80">使用 {"{{SCRIPT}}"} 表示脚本内容的占位符</span>
+                  </Label>
+                  <textarea
+                    value={customPrompts.aiVideoPromptUser}
+                    onChange={(e) => setCustomPrompts(prev => ({ ...prev, aiVideoPromptUser: e.target.value }))}
+                    placeholder="留空使用默认：Below is a 7-shot TikTok talking-head product recommendation script..."
+                    className="w-full h-32 px-3 py-2 text-sm bg-background border border-border/50 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-tiktok-cyan/50"
+                  />
+                </div>
+              </div>
+
+              {/* 提示 */}
+              <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30">
+                <AlertTriangle className="h-4 w-4 text-amber-400 mt-0.5 flex-shrink-0" />
+                <p className="text-xs text-amber-400/90">
+                  修改提示词可能影响生成效果。建议先小批量测试后再大规模使用。留空的字段将使用系统默认配置。
+                </p>
+              </div>
+            </div>
+
+            <DialogFooter className="gap-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setCustomPrompts({
+                    talkingScriptSystem: "",
+                    talkingScriptUser: "",
+                    aiVideoPromptSystem: "",
+                    aiVideoPromptUser: "",
+                  });
+                  localStorage.removeItem("video-batch-custom-prompts");
+                  toast({ title: "✅ 已重置为默认配置" });
+                }}
+                className="text-red-400 border-red-400/30 hover:bg-red-400/10"
+              >
+                重置为默认
+              </Button>
+              <Button variant="outline" onClick={() => setShowPromptConfig(false)}>
+                取消
+              </Button>
+              <Button
+                onClick={() => {
+                  localStorage.setItem("video-batch-custom-prompts", JSON.stringify(customPrompts));
+                  setShowPromptConfig(false);
+                  toast({ title: "✅ 提示词配置已保存" });
+                }}
+                className="bg-gradient-to-r from-tiktok-cyan to-tiktok-pink text-black"
+              >
+                保存配置
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>

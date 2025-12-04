@@ -319,11 +319,15 @@ export async function GET(request: Request) {
           .from("generations")
           .update({
             status: task.status,
+            result_url: task.resultUrl || null,
             video_url: task.resultUrl || null,
             error_message: task.errorMessage || null,
+            completed_at: task.status === "completed" ? new Date().toISOString() : null,
             updated_at: new Date().toISOString(),
           })
           .eq("task_id", taskId);
+        
+        console.log("[Generate Video] Updated generations table:", taskId, task.status, task.resultUrl ? "has URL" : "no URL");
         
         // 如果生成失败，退还积分
         if (task.status === "failed" && generation?.user_id && generation?.status !== "failed") {

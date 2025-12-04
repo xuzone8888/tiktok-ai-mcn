@@ -73,7 +73,7 @@ export async function POST(request: Request) {
     }
 
     const body: GenerateRequest = await request.json();
-    const { taskId, imageUrl, prompt, duration, aspectRatio, isAutoDownload, modelId } = body;
+    const { taskId, imageUrl, prompt, duration, isAutoDownload, modelId } = body;
 
     // ============================================
     // 验证参数 - 支持纯文本生成

@@ -84,7 +84,7 @@ export default function LoginPage() {
           </div>
           <div>
             <CardTitle className="text-2xl font-bold bg-gradient-to-r from-tiktok-cyan to-tiktok-pink bg-clip-text text-transparent">
-              TikTok AI MCN
+              Tok Factory
             </CardTitle>
             <CardDescription className="text-muted-foreground">
               登录您的账号以继续

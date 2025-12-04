@@ -1,11 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import type { Contract, AIModel } from "@/types/model";
-
-interface ContractWithModel extends Contract {
-  ai_models: AIModel | null;
-}
 
 // GET: 获取用户合约
 export async function GET(request: NextRequest) {
@@ -122,12 +117,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 检查是否已有有效合约
+    // 检查用户是否已有有效合约
     const { data: existingContract } = await adminSupabase
       .from("contracts")
       .select("*")
       .eq("user_id", user.id)
-      .eq("ai_model_id", model_id)
+      .eq("model_id", model_id)
       .eq("status", "active")
       .single();
 
@@ -137,6 +132,29 @@ export async function POST(request: NextRequest) {
       if (endDate > new Date()) {
         return NextResponse.json(
           { success: false, error: "已有有效合约，请在合约即将过期时续约" },
+          { status: 400 }
+        );
+      }
+    }
+
+    // 【独占签约检查】检查该模特是否已被其他用户签约
+    // 只有当用户没有该模特的有效合约时才需要检查
+    if (!existingContract || new Date(existingContract.end_date) <= new Date()) {
+      const { data: otherContracts } = await adminSupabase
+        .from("contracts")
+        .select("id, user_id, end_date")
+        .eq("model_id", model_id)
+        .eq("status", "active")
+        .neq("user_id", user.id)
+        .gt("end_date", new Date().toISOString())
+        .limit(1);
+
+      if (otherContracts && otherContracts.length > 0) {
+        return NextResponse.json(
+          { 
+            success: false, 
+            error: "该模特已被其他用户签约，暂时无法聘用。请等待当前签约到期后再试。" 
+          },
           { status: 400 }
         );
       }
@@ -264,7 +282,7 @@ export async function POST(request: NextRequest) {
       .from("contracts")
       .insert({
         user_id: user.id,
-        ai_model_id: model_id,
+        model_id: model_id,
         rental_period,
         start_date: startDate.toISOString(),
         end_date: endDate.toISOString(),

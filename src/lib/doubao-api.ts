@@ -92,32 +92,19 @@ Requirements:
 - Output only the script content itself.
 - Each shot should start with the shot code like: 'C01: ...', 'C02: ...', up to 'C07: ...'.`,
 
-  aiVideoPromptSystem: `You are a TikTok e-commerce creator and AI video director. You specialize in turning talking-head product recommendation scripts into detailed shot-by-shot prompts for AI video generation models like Sora.`,
+  aiVideoPromptSystem: `Output ONLY 7 lines. Each line under 50 chars. No intro, no explanation.`,
 
-  aiVideoPromptUser: `Below is a 7-shot TikTok talking-head product recommendation script, with shot codes C01 to C07:
-
+  aiVideoPromptUser: `Convert this script to 7 Sora shots:
 {{SCRIPT}}
 
-Please rewrite this into an English, shot-by-shot AI video generation prompt suitable for a model like Sora2 Pro.
-
-Requirements:
-- Keep exactly 7 shots with the same shot codes: C01, C02, C03, C04, C05, C06, C07.
-- For each shot, describe:
-  - the camera framing and angle (e.g. close-up, medium shot, handheld, selfie angle),
-  - the environment and background (e.g. bedroom, street, studio, etc.),
-  - the lighting style and mood,
-  - the creator's appearance, outfit, and key actions,
-  - how the product is shown in the frame,
-  - timing and pacing so that the total duration is about 15 seconds.
-- Also suggest the style of background music for the entire video (mood, tempo, instruments), integrated into the description.
-- Follow the logic of viral TikTok short videos:
-  - very strong hook in C01,
-  - show clear benefits and key features in the next shots,
-  - end with a strong call-to-action and emotional push to buy.
-- Do NOT output any tables.
-- Do NOT include meta explanations or comments.
-- Output only the final AI video prompt content.
-- Each shot should start with its code like: 'C01: ...', 'C02: ...', etc.`,
+RULES: Output EXACTLY this format, nothing else:
+C01: [camera+action, under 50 chars]
+C02: [camera+action, under 50 chars]
+C03: [camera+action, under 50 chars]
+C04: [camera+action, under 50 chars]
+C05: [camera+action, under 50 chars]
+C06: [camera+action, under 50 chars]
+C07: [camera+action, under 50 chars]`,
 };
 
 // 缓存配置的提示词
@@ -129,7 +116,9 @@ let cachedPrompts = { ...DEFAULT_PROMPTS };
 async function getConfiguredPrompts(): Promise<typeof DEFAULT_PROMPTS> {
   try {
     // 在服务端环境中尝试获取配置
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+    // 使用环境变量或根据当前端口动态获取
+    const port = process.env.PORT || "3000";
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
     const response = await fetch(`${baseUrl}/api/admin/prompts`, {
       cache: "no-store",
     });
@@ -269,6 +258,20 @@ async function callDoubaoAPI(
           return { success: false, error: errorMessage };
         }
         
+        // 400 错误 - 检查是否是图片下载超时，可以重试
+        if (response.status === 400 && errorText.includes("Timeout while downloading")) {
+          if (attempt < maxRetries) {
+            const retryDelay = 5000 * attempt; // 等待更长时间再重试
+            console.log(`[Doubao API] Image download timeout, retrying in ${retryDelay}ms (attempt ${attempt}/${maxRetries})`);
+            await delay(retryDelay);
+            continue;
+          }
+          return { 
+            success: false, 
+            error: "图片下载超时，请检查网络或稍后重试" 
+          };
+        }
+        
         // 其他 5xx 错误，可能重试
         if (response.status >= 500 && attempt < maxRetries) {
           const retryDelay = 3000 * attempt;
@@ -277,9 +280,24 @@ async function callDoubaoAPI(
           continue;
         }
         
+        // 400 错误的中文提示
+        if (response.status === 400) {
+          let errorMsg = "请求参数错误";
+          try {
+            const errorJson = JSON.parse(errorText);
+            if (errorJson.error?.message) {
+              errorMsg = errorJson.error.message;
+            }
+          } catch {}
+          return { 
+            success: false, 
+            error: `API 请求失败: ${errorMsg}` 
+          };
+        }
+        
         return { 
           success: false, 
-          error: `API 请求失败: ${response.status} - ${errorText}` 
+          error: `API 请求失败: ${response.status}` 
         };
       }
 
@@ -331,32 +349,59 @@ async function imageUrlToBase64(url: string): Promise<string | null> {
       return url;
     }
 
-    console.log("[Doubao] Converting image to base64:", url.substring(0, 80) + "...");
+    console.log("[Doubao] Converting image to base64:", url);
+    
+    // 对于 Supabase Storage URL，直接使用原始 URL
+    // Supabase 公开存储桶的 URL 可能在服务端访问时遇到问题
+    // 让豆包 API 直接获取是更可靠的方式
+    if (url.includes("supabase.co/storage/v1/object/public")) {
+      console.log("[Doubao] Supabase public URL detected, using original URL directly");
+      // 直接返回原始URL，让豆包API自己获取
+      return url;
+    }
     
     const response = await fetch(url, {
       headers: {
         "Accept": "image/*",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
       },
+      redirect: "follow",
     });
     
     if (!response.ok) {
-      console.error("[Doubao] Failed to fetch image:", response.status);
-      return null;
+      console.error("[Doubao] Failed to fetch image:", response.status, response.statusText);
+      // 返回原始 URL 作为 fallback
+      return url;
+    }
+    
+    // 获取图片类型
+    const contentType = response.headers.get("content-type") || "";
+    
+    // 验证是否为图片类型
+    if (!contentType.startsWith("image/")) {
+      console.error("[Doubao] Response is not an image, content-type:", contentType);
+      // 返回原始 URL，让豆包 API 尝试获取
+      return url;
     }
     
     const buffer = await response.arrayBuffer();
-    const base64 = Buffer.from(buffer).toString("base64");
     
-    // 获取图片类型
-    const contentType = response.headers.get("content-type") || "image/jpeg";
+    // 检查 buffer 是否为空或太小
+    if (buffer.byteLength < 100) {
+      console.error("[Doubao] Image buffer too small:", buffer.byteLength, "bytes");
+      return url;
+    }
+    
+    const base64 = Buffer.from(buffer).toString("base64");
     const dataUrl = `data:${contentType};base64,${base64}`;
     
-    console.log("[Doubao] Image converted to base64, size:", Math.round(base64.length / 1024), "KB");
+    console.log("[Doubao] Image converted to base64, size:", Math.round(base64.length / 1024), "KB, type:", contentType);
     
     return dataUrl;
   } catch (error) {
     console.error("[Doubao] Error converting image to base64:", error);
-    return null;
+    // 返回原始 URL 作为 fallback
+    return url;
   }
 }
 
@@ -364,9 +409,16 @@ async function imageUrlToBase64(url: string): Promise<string | null> {
  * 生成口播脚本 (Step 1)
  * 
  * 根据产品图片生成 TikTok 达人自拍口播种草脚本 (C01-C07)
+ * 
+ * @param imageUrls 产品图片 URL 列表
+ * @param customPrompts 可选的自定义提示词
  */
 export async function generateTalkingScript(
-  imageUrls: string[]
+  imageUrls: string[],
+  customPrompts?: {
+    systemPrompt?: string;
+    userPrompt?: string;
+  }
 ): Promise<{ success: boolean; script?: string; error?: string }> {
   if (!imageUrls || imageUrls.length === 0) {
     return { success: false, error: "请提供至少一张图片" };
@@ -376,6 +428,10 @@ export async function generateTalkingScript(
 
   // 获取配置的提示词
   const prompts = await getConfiguredPrompts();
+  
+  // 使用自定义提示词或默认配置
+  const systemPrompt = customPrompts?.systemPrompt?.trim() || prompts.talkingScriptSystem;
+  const userPrompt = customPrompts?.userPrompt?.trim() || prompts.talkingScriptUser;
 
   // 将图片URL转换为base64，避免豆包API下载超时
   const base64Images: string[] = [];
@@ -391,7 +447,7 @@ export async function generateTalkingScript(
 
   // 构建消息内容 - 包含文本和图片
   const userContent: DoubaoContentPart[] = [
-    { type: "text", text: prompts.talkingScriptUser },
+    { type: "text", text: userPrompt },
     ...base64Images.map(url => ({
       type: "image_url" as const,
       image_url: { url, detail: "high" as const },
@@ -399,7 +455,7 @@ export async function generateTalkingScript(
   ];
 
   const messages: DoubaoMessage[] = [
-    { role: "system", content: prompts.talkingScriptSystem },
+    { role: "system", content: systemPrompt },
     { role: "user", content: userContent },
   ];
 
@@ -422,10 +478,15 @@ export async function generateTalkingScript(
  * 
  * @param talkingScript 口播脚本
  * @param modelTriggerWord 可选的AI模特触发词，会添加到提示词开头
+ * @param customPrompts 可选的自定义提示词
  */
 export async function generateAiVideoPrompt(
   talkingScript: string,
-  modelTriggerWord?: string
+  modelTriggerWord?: string,
+  customPrompts?: {
+    systemPrompt?: string;
+    userPrompt?: string;
+  }
 ): Promise<{ success: boolean; prompt?: string; error?: string }> {
   if (!talkingScript || talkingScript.trim().length === 0) {
     return { success: false, error: "请提供口播脚本" };
@@ -438,11 +499,14 @@ export async function generateAiVideoPrompt(
 
   // 获取配置的提示词
   const prompts = await getConfiguredPrompts();
-
-  const userPrompt = prompts.aiVideoPromptUser.replace("{{SCRIPT}}", talkingScript);
+  
+  // 使用自定义提示词或默认配置
+  const systemPrompt = customPrompts?.systemPrompt?.trim() || prompts.aiVideoPromptSystem;
+  const userPromptTemplate = customPrompts?.userPrompt?.trim() || prompts.aiVideoPromptUser;
+  const userPrompt = userPromptTemplate.replace("{{SCRIPT}}", talkingScript);
 
   const messages: DoubaoMessage[] = [
-    { role: "system", content: prompts.aiVideoPromptSystem },
+    { role: "system", content: systemPrompt },
     { role: "user", content: userPrompt },
   ];
 
@@ -470,41 +534,60 @@ export async function generateAiVideoPrompt(
   if (finalPrompt.length > MAX_PROMPT_LENGTH) {
     console.warn(`[Doubao] Prompt too long (${finalPrompt.length} chars), truncating to ${MAX_PROMPT_LENGTH}`);
     
-    // 尝试智能截断：优先保留前几个镜头的完整描述
-    const shots = finalPrompt.split(/(?=C0[1-7]:)/);
-    let truncatedPrompt = "";
-    
-    // 如果有模特触发词前缀，先添加
+    // 提取模特前缀
+    let modelPrefix = "";
     const modelPrefixMatch = finalPrompt.match(/^\[AI MODEL APPEARANCE:.*?\]\n\n/);
     if (modelPrefixMatch) {
-      truncatedPrompt = modelPrefixMatch[0];
+      modelPrefix = modelPrefixMatch[0];
     }
     
-    for (const shot of shots) {
-      // 跳过已添加的模特前缀部分
-      if (shot.startsWith("[AI MODEL APPEARANCE:")) continue;
+    // 提取所有镜头 (C01-C07)
+    const shotMatches = finalPrompt.match(/C0[1-7]:[^\n]*/g) || [];
+    
+    if (shotMatches.length >= 7) {
+      // 有足够的镜头，压缩每个镜头到固定长度
+      const prefixLength = modelPrefix.length;
+      const availableLength = MAX_PROMPT_LENGTH - prefixLength - 50; // 留 50 字符余量
+      const maxShotLength = Math.floor(availableLength / 7); // 每个镜头的最大长度
       
-      if ((truncatedPrompt + shot).length <= MAX_PROMPT_LENGTH) {
-        truncatedPrompt += shot;
-      } else {
-        // 如果加上这个镜头会超长，尝试截断这个镜头
-        const remaining = MAX_PROMPT_LENGTH - truncatedPrompt.length;
-        if (remaining > 50) {
-          // 截断当前镜头，保留开头部分
-          const shotCode = shot.match(/^C0[1-7]:/)?.[0] || "";
-          truncatedPrompt += shotCode + shot.substring(shotCode.length, remaining - 3).trim() + "...";
+      const compressedShots = shotMatches.slice(0, 7).map(shot => {
+        if (shot.length <= maxShotLength) return shot;
+        // 截断镜头，保留开头
+        const shotCode = shot.match(/^C0[1-7]:/)?.[0] || "";
+        const content = shot.substring(shotCode.length).trim();
+        const maxContentLength = maxShotLength - shotCode.length - 3;
+        return shotCode + " " + content.substring(0, maxContentLength).trim() + "...";
+      });
+      
+      finalPrompt = modelPrefix + compressedShots.join("\n");
+      console.log(`[Doubao] Compressed all 7 shots to ${finalPrompt.length} chars`);
+    } else {
+      // 镜头不足，使用原来的截断逻辑
+      const shots = finalPrompt.split(/(?=C0[1-7]:)/);
+      let truncatedPrompt = modelPrefix;
+      
+      for (const shot of shots) {
+        if (shot.startsWith("[AI MODEL APPEARANCE:")) continue;
+        if ((truncatedPrompt + shot).length <= MAX_PROMPT_LENGTH) {
+          truncatedPrompt += shot;
+        } else {
+          const remaining = MAX_PROMPT_LENGTH - truncatedPrompt.length;
+          if (remaining > 50) {
+            const shotCode = shot.match(/^C0[1-7]:/)?.[0] || "";
+            truncatedPrompt += shotCode + shot.substring(shotCode.length, remaining - 3).trim() + "...";
+          }
+          break;
         }
-        break;
       }
+      
+      finalPrompt = truncatedPrompt || finalPrompt.substring(0, MAX_PROMPT_LENGTH);
+      console.log(`[Doubao] Truncated prompt to ${finalPrompt.length} chars`);
     }
     
-    // 确保最终长度不超过限制
-    if (truncatedPrompt.length > MAX_PROMPT_LENGTH) {
-      truncatedPrompt = truncatedPrompt.substring(0, MAX_PROMPT_LENGTH - 3) + "...";
+    // 最终长度检查
+    if (finalPrompt.length > MAX_PROMPT_LENGTH) {
+      finalPrompt = finalPrompt.substring(0, MAX_PROMPT_LENGTH - 3) + "...";
     }
-    
-    finalPrompt = truncatedPrompt || finalPrompt.substring(0, MAX_PROMPT_LENGTH);
-    console.log(`[Doubao] Truncated prompt to ${finalPrompt.length} chars`);
   }
 
   return { success: true, prompt: finalPrompt };

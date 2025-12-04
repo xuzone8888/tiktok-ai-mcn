@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -21,7 +21,6 @@ import {
   RefreshCw,
   AlertTriangle,
   Play,
-  Trash2,
   ExternalLink,
 } from "lucide-react";
 import {
@@ -214,7 +213,7 @@ export default function TaskLogPage() {
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">
-            <span className="gradient-tiktok-text">任务日志</span>
+            <span className="gradient-tiktok-text">生产轨迹簿</span>
           </h1>
           <p className="mt-2 text-muted-foreground">
             查看和下载您生成的视频与图片内容

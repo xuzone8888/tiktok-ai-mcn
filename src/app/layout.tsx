@@ -16,8 +16,8 @@ const geistMono = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "TikTok AI MCN - AI 内容创作平台",
-  description: "AI 驱动的 TikTok 内容创作和管理平台",
+  title: "Tok Factory - AI 内容智造工厂",
+  description: "AI 驱动的短视频内容智能生产平台",
 };
 
 export default function RootLayout({

@@ -62,11 +62,17 @@ export async function GET(request: Request) {
     const limit = parseInt(searchParams.get("limit") || "50");
     const offset = parseInt(searchParams.get("offset") || "0");
 
-    // 从 generations 表获取任务记录
+    // 计算 7 天前的时间戳（只保留 7 天内的记录）
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    const sevenDaysAgoISO = sevenDaysAgo.toISOString();
+
+    // 从 generations 表获取任务记录（只返回 7 天内的）
     let query = supabase
       .from("generations")
       .select("*")
       .eq("user_id", user.id)
+      .gte("created_at", sevenDaysAgoISO) // 只返回 7 天内的记录
       .order("created_at", { ascending: false });
 
     // 类型过滤
@@ -83,6 +89,12 @@ export async function GET(request: Request) {
     query = query.range(offset, offset + limit - 1);
 
     const { data: tasks, error } = await query;
+
+    console.log("[Tasks API] Query result:", {
+      userId: user.id,
+      tasksCount: tasks?.length || 0,
+      error: error?.message || null,
+    });
 
     if (error) {
       console.error("[Tasks API] Error fetching tasks:", error);
@@ -104,10 +116,19 @@ export async function GET(request: Request) {
         },
       });
     }
-
-    // 计算7天过期时间
-    const now = new Date();
-    const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    
+    // 打印第一个任务的详细信息用于调试
+    if (tasks && tasks.length > 0) {
+      console.log("[Tasks API] First task sample:", {
+        id: tasks[0].id,
+        type: tasks[0].type,
+        source: tasks[0].source,
+        status: tasks[0].status,
+        result_url: tasks[0].result_url,
+        video_url: tasks[0].video_url,
+        image_url: tasks[0].image_url,
+      });
+    }
 
     // 转换任务数据
     const taskLogs: TaskLogItem[] = (tasks || []).map((task) => {
@@ -130,11 +151,12 @@ export async function GET(request: Request) {
       };
     });
 
-    // 计算统计数据
+    // 计算统计数据（只统计 7 天内的记录）
     const { data: statsData } = await supabase
       .from("generations")
       .select("type, status, credit_cost")
-      .eq("user_id", user.id);
+      .eq("user_id", user.id)
+      .gte("created_at", sevenDaysAgoISO);
 
     const stats: TaskStats = {
       totalTasks: statsData?.length || 0,
@@ -146,11 +168,12 @@ export async function GET(request: Request) {
       totalCreditsUsed: statsData?.reduce((sum, t) => sum + (t.credit_cost || 0), 0) || 0,
     };
 
-    // 获取总数用于分页
+    // 获取总数用于分页（只计算 7 天内的记录）
     const { count } = await supabase
       .from("generations")
       .select("*", { count: "exact", head: true })
-      .eq("user_id", user.id);
+      .eq("user_id", user.id)
+      .gte("created_at", sevenDaysAgoISO);
 
     return NextResponse.json({
       success: true,
@@ -172,4 +195,5 @@ export async function GET(request: Request) {
     );
   }
 }
+
 

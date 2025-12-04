@@ -170,15 +170,15 @@ export async function GET() {
     // 6. 热门模特（从contracts统计）
     const { data: contracts } = await supabase
       .from("contracts")
-      .select("ai_model_id, credit_cost")
+      .select("model_id, credits_paid")
       .eq("status", "active");
 
     const modelStats = new Map<string, { count: number; credits: number }>();
     contracts?.forEach(c => {
-      const current = modelStats.get(c.ai_model_id) || { count: 0, credits: 0 };
+      const current = modelStats.get(c.model_id) || { count: 0, credits: 0 };
       current.count++;
-      current.credits += c.credit_cost || 0;
-      modelStats.set(c.ai_model_id, current);
+      current.credits += c.credits_paid || 0;
+      modelStats.set(c.model_id, current);
     });
 
     // 获取模特名称
@@ -258,4 +258,5 @@ function formatTimeAgo(date: Date): string {
   if (diff < 86400000) return `${Math.floor(diff / 3600000)} 小时前`;
   return `${Math.floor(diff / 86400000)} 天前`;
 }
+
 

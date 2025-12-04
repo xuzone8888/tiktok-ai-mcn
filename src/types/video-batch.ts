@@ -84,6 +84,11 @@ export interface VideoBatchTask {
   images: TaskImageInfo[];
   aspectRatio: VideoAspectRatio;
   
+  // 任务创建时的视频配置（保存以确保显示一致）
+  modelType: VideoModelType;
+  duration: VideoDuration;
+  quality: VideoQuality;
+  
   // 豆包 AI 生成结果
   doubaoTalkingScript: string | null;   // 步骤1: 口播脚本 (C01-C07)
   doubaoAiVideoPrompt: string | null;   // 步骤2: AI视频提示词

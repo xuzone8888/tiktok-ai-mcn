@@ -44,7 +44,7 @@ export async function POST(request: Request) {
 
     // 上传到 Supabase Storage
     const arrayBuffer = await file.arrayBuffer();
-    const { data, error } = await supabase.storage
+    const { error } = await supabase.storage
       .from("uploads")
       .upload(fileName, arrayBuffer, {
         contentType: file.type,
@@ -62,7 +62,7 @@ export async function POST(request: Request) {
         
         if (!createError) {
           // 重试上传
-          const { data: retryData, error: retryError } = await supabase.storage
+          const { error: retryError } = await supabase.storage
             .from("uploads")
             .upload(fileName, arrayBuffer, {
               contentType: file.type,

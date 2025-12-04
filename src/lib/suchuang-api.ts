@@ -142,12 +142,18 @@ export async function submitNanoBanana(
     });
 
     // 构建请求体
-    // 注意：如果有参考图片，需要确保提示词能正确引导图片生成
+    // 注意：如果有参考图片，需要在提示词中明确指出如何基于参考图生成
     let finalPrompt = params.prompt;
     
-    // 如果有参考图片但提示词较短，添加引导语
-    if (params.img_url && params.prompt.length < 20) {
-      finalPrompt = `Based on the reference image provided, ${params.prompt}. Maintain the style, quality and key elements from the reference.`;
+    // 如果有参考图片，增强提示词以确保 AI 理解需要基于参考图进行创作
+    if (params.img_url && params.prompt) {
+      // 检查提示词是否已经包含参考图的相关指令
+      const hasReferenceKeywords = /reference|参考|based on|基于|style of|风格/i.test(params.prompt);
+      
+      if (!hasReferenceKeywords) {
+        // 为提示词添加参考图指令，确保 AI 根据提示词和参考图生成新内容
+        finalPrompt = `Create a new image based on the reference image provided. Transform it according to this description: ${params.prompt}. Use the reference image as a style and composition guide, but generate new creative content following the prompt instructions.`;
+      }
     }
     
     const requestBody: Record<string, unknown> = {
@@ -182,40 +188,61 @@ export async function submitNanoBanana(
 
     console.log("[NanoBanana] Request body:", JSON.stringify(requestBody));
 
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json;charset=utf-8",
-        "Authorization": key,
-      },
-      body: JSON.stringify(requestBody),
-    });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 60000); // 60秒超时
 
-    const responseText = await response.text();
-    console.log("[NanoBanana] Raw response:", responseText);
-
-    let data: NanoBananaResponse;
     try {
-      data = JSON.parse(responseText);
-    } catch {
-      console.error("[NanoBanana] Failed to parse response:", responseText);
-      return { success: false, error: "Invalid API response format" };
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json;charset=utf-8",
+          "Authorization": key,
+        },
+        body: JSON.stringify(requestBody),
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+
+      const responseText = await response.text();
+      console.log("[NanoBanana] Raw response:", responseText);
+
+      let data: NanoBananaResponse;
+      try {
+        data = JSON.parse(responseText);
+      } catch {
+        console.error("[NanoBanana] Failed to parse response:", responseText);
+        return { success: false, error: "API 响应格式错误，请稍后重试" };
+      }
+
+      console.log("[NanoBanana] Submit response:", {
+        code: data.code,
+        msg: data.msg,
+        taskId: data.data?.id,
+      });
+
+      if (data.code === 200 && data.data?.id) {
+        return { success: true, taskId: String(data.data.id) };
+      }
+
+      return { 
+        success: false, 
+        error: data.msg || `API error: code ${data.code}` 
+      };
+    } catch (fetchError) {
+      clearTimeout(timeoutId);
+      console.error("[NanoBanana] Fetch error:", fetchError);
+      
+      // 判断是否是网络超时
+      if (fetchError instanceof Error && fetchError.name === "AbortError") {
+        return { success: false, error: "请求超时，请稍后重试" };
+      }
+      
+      // 网络错误时返回更友好的提示
+      return { 
+        success: false, 
+        error: fetchError instanceof Error ? `网络错误: ${fetchError.message}` : "网络连接失败" 
+      };
     }
-
-    console.log("[NanoBanana] Submit response:", {
-      code: data.code,
-      msg: data.msg,
-      taskId: data.data?.id,
-    });
-
-    if (data.code === 200 && data.data?.id) {
-      return { success: true, taskId: String(data.data.id) };
-    }
-
-    return { 
-      success: false, 
-      error: data.msg || `API error: code ${data.code}` 
-    };
   } catch (error) {
     console.error("[NanoBanana] Submit error:", error);
     return { 
@@ -266,7 +293,7 @@ export async function queryNanoBananaResult(
       data = JSON.parse(responseText);
     } catch {
       console.error("[NanoBanana] Failed to parse query response");
-      return { success: false, error: "Invalid API response format" };
+      return { success: false, error: "任务查询响应格式错误" };
     }
 
     // 获取图片 URL (API 可能返回 image_url 或 remote_url)
@@ -479,7 +506,7 @@ export async function submitSora2(
       data = JSON.parse(responseText);
     } catch {
       console.error("[Sora2] Failed to parse response:", responseText);
-      return { success: false, error: "Invalid API response format" };
+      return { success: false, error: "视频生成服务响应格式错误，请稍后重试" };
     }
 
     console.log("[Sora2] Submit response:", {
@@ -500,7 +527,7 @@ export async function submitSora2(
 
     return { 
       success: false, 
-      error: "Failed to get task ID from API response" 
+      error: "API 未返回任务ID，视频生成服务可能暂时不可用" 
     };
   } catch (error) {
     console.error("[Sora2] Submit error:", error);
@@ -545,7 +572,7 @@ export async function querySora2Result(
       data = JSON.parse(responseText);
     } catch {
       console.error("[Sora2] Failed to parse query response");
-      return { success: false, error: "Invalid API response format" };
+      return { success: false, error: "视频任务查询响应格式错误" };
     }
 
     console.log("[Sora2] Query response:", {
@@ -616,34 +643,48 @@ export async function upscaleImage(
 /**
  * 生成产品九宫格多角度图
  * 使用 NanoBanana 生成产品的多角度展示图
+ * 
+ * 优化适配 Sora2/Sora2 Pro 视频生成：
+ * - 突出产品角度+细节，AI生成友好
+ * - 画面构图简洁、光线均匀（自然光质感）
+ * - 背景纯色（白底），便于 Sora 精准渲染高清细节
  */
 export async function generateNineGrid(
   imageUrl: string,
   productDescription?: string,
   apiKey?: string
 ): Promise<{ success: boolean; taskId?: string; error?: string }> {
-  // 九宫格提示词 - 生成产品的多角度展示
-  const gridPrompt = `Create a professional 3x3 grid layout showing 9 different angles and views of the product in the image. 
-Include:
-- Front view (center)
-- Back view
-- Left side view  
-- Right side view
-- Top view
-- Bottom view
-- 45-degree angle views (2-3 variations)
-- Detail/close-up shot
+  // 九宫格提示词 - 适配 Sora2/Sora2 Pro 视频生成
+  const gridPrompt = `Create a professional 3x3 grid layout (9 cells) optimized for Sora2 AI video generation.
 
-Each view should be:
-- On a clean white/neutral background
-- Professionally lit with soft shadows
-- High quality product photography style
-- Consistent lighting across all views
-- Sharp focus on product details
+【核心要求】
+- 画面构图简洁干净
+- 光线均匀，自然光质感，无强烈阴影
+- 背景纯白色，无杂质无纹理
+- 每个镜头展示产品的不同角度和细节
+- 所有镜头统一分辨率，比例1:1
+- 画面无畸变，边缘清晰
 
-${productDescription ? `Product description: ${productDescription}` : ""}
+【9个角度布局】
+1. 正面全貌（居中，主视角）
+2. 背面全貌
+3. 左侧45度角
+4. 右侧45度角
+5. 俯视角度（顶部视图）
+6. 仰视角度或底部细节
+7. 产品核心细节特写1
+8. 产品核心细节特写2
+9. 使用场景或整体氛围展示
 
-Output as a single image with 3x3 grid layout, each cell showing a different angle of the same product.`;
+【图片质量要求】
+- 高清晰度，细节锐利
+- 产品主体突出，占画面60-80%
+- 色彩真实准确
+- 便于Sora AI精准识别和渲染
+
+${productDescription ? `产品描述: ${productDescription}` : ""}
+
+Output as a single 1:1 square image with perfect 3x3 grid layout, white background, ready for Sora2 video generation.`;
 
   return submitNanoBanana({
     model: "nano-banana-pro",

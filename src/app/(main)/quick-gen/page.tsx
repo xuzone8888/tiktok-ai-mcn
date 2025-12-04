@@ -49,14 +49,12 @@ import {
   ArrowLeft,
   ChevronRight,
   FileImage,
-  Type,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 // 不再使用 Server Action，直接调用 API 路由
 // import { generateVideo, getVideoTaskStatus } from "@/lib/actions/generate-video";
 import { 
   getMarketplaceModels,
-  type PublicModel as ServerPublicModel,
 } from "@/lib/actions/models";
 import { 
   useQuickGenStore, 
@@ -73,7 +71,6 @@ import {
 import {
   type OutputMode,
   type SourceType,
-  type NanoTier,
   type ProcessingType,
   type VideoModel,
   type VideoAspectRatio,
@@ -82,34 +79,16 @@ import {
   type AiCastMode,
   type CanvasState,
   type DisplayModel,
-  type UploadedFile,
-  NANO_PRICING,
   VIDEO_MODEL_PRICING,
   IMAGE_ASPECT_OPTIONS,
   IMAGE_RESOLUTION_OPTIONS,
-  IMAGE_ENHANCEMENT_PRICING,
   calculateVideoCost,
   calculateImageCost,
   calculateEnhancementCost,
-  getVideoEstimatedTime,
 } from "@/types/generation";
 
 // 本地类型 (仅用于此页面)
 type BatchCount = 1 | 2;
-
-// ============================================================================
-// Mock 生成图片
-// ============================================================================
-
-const generateMockGridImages = (count: number): string[] => {
-  const baseImages = [
-    "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=600&h=600&fit=crop",
-    "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=600&h=600&fit=crop",
-    "https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?w=600&h=600&fit=crop",
-    "https://images.unsplash.com/photo-1572635196237-14b3f281503f?w=600&h=600&fit=crop",
-  ];
-  return baseImages.slice(0, count).map((url, i) => `${url}&sig=${Date.now()}-${i}`);
-};
 
 // ============================================================================
 // Quick Generator 页面
@@ -128,7 +107,6 @@ export default function QuickGeneratorPage() {
   // Video Mode: Step 1 - Image Source & Enhancement
   // ================================================================
   const [sourceType, setSourceType] = useState<SourceType>("local_upload");
-  const [nanoTier, setNanoTier] = useState<NanoTier>("fast");
   const [processingType, setProcessingType] = useState<ProcessingType>("9grid");
   const [batchCount, setBatchCount] = useState<BatchCount>(2);
   const [uploadedFile, setUploadedFile] = useState<{ url: string; name: string } | null>(null);
@@ -301,52 +279,98 @@ export default function QuickGeneratorPage() {
   }, []);
   
   // 监听后台视频任务状态变化
+  // 注意：只在视频模式下更新画布状态，让用户可以自由切换模式
   useEffect(() => {
     if (!quickGenActiveTask) return;
     
-    // 同步任务状态到 UI
+    // 同步任务状态到 UI（仅在当前是视频模式时更新画布状态）
     if (quickGenActiveTask.status === "generating" || quickGenActiveTask.status === "polling") {
-      setCanvasState("generating");
-      setGeneratingProgress(quickGenActiveTask.progress);
+      if (outputMode === "video") {
+        setCanvasState("generating");
+        setGeneratingProgress(quickGenActiveTask.progress);
+      }
     } else if (quickGenActiveTask.status === "completed" && quickGenActiveTask.resultUrl) {
-      setResultUrl(quickGenActiveTask.resultUrl);
-      setCanvasState("result");
-      setGeneratingProgress(100);
+      if (outputMode === "video") {
+        setResultUrl(quickGenActiveTask.resultUrl);
+        setCanvasState("result");
+        setGeneratingProgress(100);
+      }
       // 刷新积分
       window.dispatchEvent(new CustomEvent("credits-updated"));
       // 清除已完成的任务
       clearActiveTask();
     } else if (quickGenActiveTask.status === "failed") {
-      setError(quickGenActiveTask.errorMessage || "生成失败");
-      setCanvasState("failed");
+      if (outputMode === "video") {
+        setError(quickGenActiveTask.errorMessage || "生成失败");
+        setCanvasState("failed");
+      }
       // 清除失败的任务
       clearActiveTask();
     }
-  }, [quickGenActiveTask, clearActiveTask]);
+  }, [quickGenActiveTask, clearActiveTask, outputMode]);
 
   // 监听后台图片任务状态变化
+  // 注意：不再强制切换 outputMode，让用户可以自由切换
   useEffect(() => {
     if (!quickGenImageTask) return;
     
-    // 同步任务状态到 UI
+    // 同步任务状态到 UI（仅在当前是图片模式时更新画布状态）
     if (quickGenImageTask.status === "generating" || quickGenImageTask.status === "polling") {
-      setCanvasState("generating");
-      setGeneratingProgress(quickGenImageTask.progress);
+      // 只在图片模式下更新画布状态，不强制切换模式
+      if (outputMode === "image") {
+        setCanvasState("generating");
+        setGeneratingProgress(quickGenImageTask.progress);
+      }
     } else if (quickGenImageTask.status === "completed" && quickGenImageTask.resultUrl) {
-      setResultUrl(quickGenImageTask.resultUrl);
-      setCanvasState("result");
-      setGeneratingProgress(100);
+      // 任务完成时，只在图片模式下显示结果
+      if (outputMode === "image") {
+        setResultUrl(quickGenImageTask.resultUrl);
+        setCanvasState("result");
+        setGeneratingProgress(100);
+      }
       // 刷新积分
       window.dispatchEvent(new CustomEvent("credits-updated"));
       // 清除已完成的任务
       clearActiveImageTask();
     } else if (quickGenImageTask.status === "failed") {
-      setError(quickGenImageTask.errorMessage || "生成失败");
-      setCanvasState("failed");
+      if (outputMode === "image") {
+        setError(quickGenImageTask.errorMessage || "生成失败");
+        setCanvasState("failed");
+      }
       // 清除失败的任务
       clearActiveImageTask();
     }
-  }, [quickGenImageTask, clearActiveImageTask]);
+  }, [quickGenImageTask, clearActiveImageTask, outputMode]);
+  
+  // 页面加载时，恢复最近完成的任务结果
+  const recentTasks = useQuickGenStore((state) => state.recentTasks);
+  useEffect(() => {
+    // 只在初始加载时执行一次
+    if (canvasState !== "empty" || !recentTasks.length) return;
+    
+    // 查找最近完成的任务（30秒内）
+    const recentCompleted = recentTasks.find(t => {
+      if (t.status !== "completed" || !t.resultUrl) return false;
+      const completedTime = new Date(t.completedAt || t.createdAt).getTime();
+      const now = Date.now();
+      return now - completedTime < 30000; // 30秒内完成的任务
+    });
+    
+    if (recentCompleted) {
+      // 恢复结果
+      setResultUrl(recentCompleted.resultUrl!);
+      setCanvasState("result");
+      
+      // 根据任务类型切换模式
+      if ("tier" in recentCompleted) {
+        // 图片任务
+        setOutputMode("image");
+      } else {
+        // 视频任务
+        setOutputMode("video");
+      }
+    }
+  }, []); // 只在组件挂载时执行一次
 
   // 获取模特数据 (My Team + All Models) - 使用 Server Actions
   useEffect(() => {
@@ -549,7 +573,6 @@ export default function QuickGeneratorPage() {
       
       // 九宫格模式：根据 batchCount 生成多张图片
       const tasksToGenerate = processingType === "9grid" ? batchCount : 1;
-      const generatedImages: string[] = [];
       
       console.log(`[Quick Gen] Starting ${tasksToGenerate} ${mode} task(s), batchCount=${batchCount}, processingType=${processingType}`);
       
@@ -569,7 +592,7 @@ export default function QuickGeneratorPage() {
               mode,
               sourceImageUrl: remoteImageUrl,
               resolution: processingType === "upscale" ? "2k" : undefined,
-              prompt: processingType === "9grid" ? "Product photo, multiple angles, professional lighting" : undefined,
+              prompt: processingType === "9grid" ? "高清产品展示，适配Sora2视频生成" : undefined,
               userId,
             }),
           });
@@ -1440,17 +1463,17 @@ export default function QuickGeneratorPage() {
               )}
             </div>
           </div>
-          <Button onClick={handleGenerate} disabled={!canGenerate || canvasState === "generating" || isQuickGenRunning || isQuickGenImageRunning}
+          <Button onClick={handleGenerate} disabled={!canGenerate || canvasState === "generating" || (outputMode === "video" && isQuickGenRunning) || (outputMode === "image" && isQuickGenImageRunning)}
             className={cn("w-full h-12 font-semibold transition-all text-base",
-              canGenerate && !isQuickGenRunning && !isQuickGenImageRunning ? "bg-gradient-to-r from-tiktok-pink to-purple-500 text-white shadow-[0_0_20px_rgba(255,0,80,0.3)]" : "bg-white/10 text-muted-foreground")}>
-            {canvasState === "generating" || isQuickGenRunning || isQuickGenImageRunning ? (
-              <><Loader2 className="h-5 w-5 mr-2 animate-spin" />生成中... {quickGenActiveTask?.progress || quickGenImageTask?.progress || generatingProgress}%</>
+              canGenerate && !(outputMode === "video" && isQuickGenRunning) && !(outputMode === "image" && isQuickGenImageRunning) ? "bg-gradient-to-r from-tiktok-pink to-purple-500 text-white shadow-[0_0_20px_rgba(255,0,80,0.3)]" : "bg-white/10 text-muted-foreground")}>
+            {canvasState === "generating" || (outputMode === "video" && isQuickGenRunning) || (outputMode === "image" && isQuickGenImageRunning) ? (
+              <><Loader2 className="h-5 w-5 mr-2 animate-spin" />生成中... {outputMode === "video" ? (quickGenActiveTask?.progress || generatingProgress) : (quickGenImageTask?.progress || generatingProgress)}%</>
             ) : (
               <><Play className="h-5 w-5 mr-2" />生成 {outputMode === "video" ? "视频" : "图片"}</>
             )}
           </Button>
           {/* 显示禁用原因 */}
-          {!canGenerate && canvasState !== "generating" && !isQuickGenRunning && (
+          {!canGenerate && canvasState !== "generating" && !(outputMode === "video" && isQuickGenRunning) && !(outputMode === "image" && isQuickGenImageRunning) && (
             <p className="text-xs text-center mt-2">
               {!userId ? (
                 <a href="/auth/login" className="text-tiktok-cyan hover:underline">
@@ -1465,13 +1488,13 @@ export default function QuickGeneratorPage() {
               )}
             </p>
           )}
-          {/* 后台任务运行中提示 */}
-          {isQuickGenRunning && (
+          {/* 后台任务运行中提示 - 只在对应模式下显示 */}
+          {outputMode === "video" && isQuickGenRunning && (
             <p className="text-xs text-center mt-2 text-tiktok-cyan">
               🎬 视频正在后台生成中，可以切换到其他页面
             </p>
           )}
-          {isQuickGenImageRunning && (
+          {outputMode === "image" && isQuickGenImageRunning && (
             <p className="text-xs text-center mt-2 text-violet-400">
               🎨 图片正在后台生成中，可以切换到其他页面
             </p>

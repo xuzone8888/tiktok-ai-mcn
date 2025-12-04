@@ -54,8 +54,6 @@ import {
   Shield,
   Star,
   TrendingUp,
-  Video,
-  Image as ImageIcon,
   X,
   CheckCircle2,
   AlertCircle,

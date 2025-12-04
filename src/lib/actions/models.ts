@@ -239,8 +239,14 @@ export async function getMarketplaceModels(options?: {
     const { category, featured, trending, limit = 50, offset = 0, search } = options || {};
 
     // 0. 获取当前用户
-    const { data: { user } } = await supabase.auth.getUser();
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
     const currentUserId = user?.id;
+    
+    console.log("[Models Action] Current user check:", {
+      hasUser: !!user,
+      userId: currentUserId || "anonymous",
+      userError: userError?.message || null,
+    });
 
     // 1. 构建查询 - 只选择安全字段
     let query = supabase
@@ -280,21 +286,28 @@ export async function getMarketplaceModels(options?: {
 
     // 5. 查询每个模特的有效签约数量 (所有用户)
     const modelIds = (models || []).map((m: any) => m.id);
-    const { data: allContracts } = await supabase
+    const { data: allContracts, error: contractsError } = await supabase
       .from("contracts")
-      .select("ai_model_id, user_id")
-      .in("ai_model_id", modelIds)
+      .select("model_id, user_id")
+      .in("model_id", modelIds)
       .eq("status", "active")
       .gt("end_date", new Date().toISOString());
+    
+    console.log("[Models Action] Contracts query result:", {
+      contractsCount: allContracts?.length || 0,
+      contractsError: contractsError?.message || null,
+      allContracts: allContracts?.map(c => ({ model: c.model_id, user: c.user_id })),
+    });
     
     // 统计每个模特的签约数量和当前用户是否已签约
     const hiredCountMap: Record<string, number> = {};
     const userContractsSet = new Set<string>(); // 当前用户签约的模特ID
     
     (allContracts || []).forEach((c: any) => {
-      hiredCountMap[c.ai_model_id] = (hiredCountMap[c.ai_model_id] || 0) + 1;
+      hiredCountMap[c.model_id] = (hiredCountMap[c.model_id] || 0) + 1;
       if (currentUserId && c.user_id === currentUserId) {
-        userContractsSet.add(c.ai_model_id);
+        userContractsSet.add(c.model_id);
+        console.log("[Models Action] User has contract for model:", c.model_id);
       }
     });
 
@@ -353,7 +366,7 @@ export async function getUserHiredModels(
     // 1. 查询用户的有效合约
     const { data: contracts, error: contractsError } = await supabase
       .from("contracts")
-      .select("id, ai_model_id, end_date, status, created_at")
+      .select("id, model_id, end_date, status, created_at")
       .eq("user_id", userId)
       .eq("status", "active")
       .gt("end_date", new Date().toISOString())
@@ -373,7 +386,7 @@ export async function getUserHiredModels(
     }
 
     // 2. 获取关联的模特信息
-    const modelIds = contracts.map((c: any) => c.ai_model_id).filter(Boolean);
+    const modelIds = contracts.map((c: any) => c.model_id).filter(Boolean);
     
     const { data: models, error: modelsError } = await supabase
       .from("ai_models")
@@ -389,9 +402,9 @@ export async function getUserHiredModels(
     const modelsMap = new Map(models?.map((m: any) => [m.id, m]) || []);
 
     const hiredModels: HiredModel[] = contracts
-      .filter((contract: any) => modelsMap.has(contract.ai_model_id))
+      .filter((contract: any) => modelsMap.has(contract.model_id))
       .map((contract: any) => {
-        const model = modelsMap.get(contract.ai_model_id);
+        const model = modelsMap.get(contract.model_id);
         const publicModel = toPublicModel(model);
 
         return {

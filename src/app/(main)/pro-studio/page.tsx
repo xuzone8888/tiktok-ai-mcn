@@ -36,7 +36,7 @@ const MODULES = [
       { icon: Zap, label: "Nano Banana 快速", desc: "快速生成、高清放大、九宫格" },
       { icon: Sparkles, label: "Nano Banana Pro 专业", desc: "高质量输出，1K/2K/4K 分辨率" },
       { icon: ZoomIn, label: "高清放大", desc: "提升产品图片清晰度" },
-      { icon: Grid3X3, label: "九宫格多角度", desc: "9个角度展示，便于 Sora2 生成视频" },
+      { icon: Grid3X3, label: "九宫格多角度", desc: "适配Sora2视频，纯白背景+9角度高清展示" },
     ],
     stats: {
       speed: "15-90秒/张",
@@ -83,7 +83,7 @@ export default function ProStudioPage() {
           <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-tiktok-cyan to-tiktok-pink flex items-center justify-center">
             <Factory className="h-5 w-5 text-white" />
           </div>
-          <span className="gradient-tiktok-text">批量生产线</span>
+          <span className="gradient-tiktok-text">批量产线区</span>
         </h1>
         <p className="text-muted-foreground">
           高效处理大量图片和视频内容的智能生产线

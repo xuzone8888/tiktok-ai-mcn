@@ -61,6 +61,16 @@ export async function POST(request: Request) {
       source = "quick_gen",         // "quick_gen" | "batch_image"
     } = body;
 
+    console.log("[Generate Image] Request received:", {
+      mode,
+      model,
+      source,
+      hasPrompt: !!prompt,
+      promptLength: prompt?.length || 0,
+      promptPreview: prompt?.substring(0, 100) || "(empty)",
+      hasSourceImage: !!sourceImageUrl,
+    });
+
     // ============================================
     // 计算积分消耗
     // ============================================
@@ -176,9 +186,11 @@ export async function POST(request: Request) {
       
     } else {
       // 普通图片生成
-      if (!prompt || prompt.trim().length < 3) {
+      // 如果有源图片，允许空 prompt 或短 prompt
+      // 如果没有源图片，至少需要 2 个字符的 prompt
+      if (!sourceImageUrl && (!prompt || prompt.trim().length < 2)) {
         return NextResponse.json(
-          { success: false, error: "Prompt must be at least 3 characters" },
+          { success: false, error: "请输入至少 2 个字符的提示词" },
           { status: 400 }
         );
       }

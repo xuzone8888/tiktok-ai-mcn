@@ -16,12 +16,10 @@ import {
   AlertTriangle,
   Loader2,
   Users,
-  Coins,
   RefreshCw,
   Play,
   Star,
   Zap,
-  ChevronRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {

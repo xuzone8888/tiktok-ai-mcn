@@ -17,6 +17,10 @@ interface RequestBody {
   images: string[];  // 图片 URL 列表
   taskId: string;
   language?: "en" | "zh";
+  customPrompts?: {
+    systemPrompt?: string;
+    userPrompt?: string;
+  };
 }
 
 // ============================================================================
@@ -26,7 +30,7 @@ interface RequestBody {
 export async function POST(request: NextRequest) {
   try {
     const body: RequestBody = await request.json();
-    const { images, taskId } = body;
+    const { images, taskId, customPrompts } = body;
 
     // 参数校验
     if (!images || images.length === 0) {
@@ -46,10 +50,11 @@ export async function POST(request: NextRequest) {
     console.log("[Video Batch] Generating talking script:", {
       taskId,
       imageCount: images.length,
+      hasCustomPrompts: !!customPrompts,
     });
 
     // 调用豆包 API 生成脚本
-    const result = await generateTalkingScript(images);
+    const result = await generateTalkingScript(images, customPrompts);
 
     if (!result.success) {
       console.error("[Video Batch] Script generation failed:", result.error);
