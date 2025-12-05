@@ -105,9 +105,9 @@ export async function POST() {
 
         // 如果状态有变化，更新数据库
         if (newStatus !== "processing") {
+          // 注意：generations 表没有 updated_at 字段
           const updateData: Record<string, unknown> = {
             status: newStatus,
-            updated_at: new Date().toISOString(),
           };
 
           if (newStatus === "completed" && resultUrl) {
