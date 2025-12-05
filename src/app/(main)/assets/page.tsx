@@ -124,6 +124,7 @@ export default function TaskLogPage() {
   const [stats, setStats] = useState<TaskStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [previewTask, setPreviewTask] = useState<TaskLogItem | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   const fetchTasks = async () => {
     try {
@@ -146,9 +147,36 @@ export default function TaskLogPage() {
     }
   };
 
+  // 刷新处理中的任务状态
+  const refreshProcessingTasks = async () => {
+    try {
+      setRefreshing(true);
+      const response = await fetch("/api/user/tasks/refresh", { method: "POST" });
+      const result = await response.json();
+      
+      if (result.success) {
+        console.log("[TaskLog] Refresh result:", result.data);
+        // 重新获取任务列表
+        await fetchTasks();
+      }
+    } catch (error) {
+      console.error("[TaskLog] Refresh error:", error);
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   useEffect(() => {
     fetchTasks();
   }, [selectedType, selectedStatus]);
+
+  // 页面加载时自动刷新处理中的任务
+  useEffect(() => {
+    if (stats && stats.processingTasks > 0) {
+      refreshProcessingTasks();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const filteredTasks = tasks.filter((task) => {
     if (!searchQuery) return true;
@@ -224,6 +252,18 @@ export default function TaskLogPage() {
             <AlertTriangle className="h-4 w-4 text-amber-400" />
             <span className="text-sm text-amber-400">内容保留7天</span>
           </div>
+          {stats && stats.processingTasks > 0 && (
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={refreshProcessingTasks} 
+              disabled={refreshing}
+              className="gap-2 text-tiktok-cyan border-tiktok-cyan/30 hover:bg-tiktok-cyan/10"
+            >
+              <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+              刷新状态 ({stats.processingTasks})
+            </Button>
+          )}
           <Button variant="outline" size="sm" onClick={fetchTasks} className="gap-2">
             <RefreshCw className="h-4 w-4" />
             刷新
@@ -599,9 +639,9 @@ export default function TaskLogPage() {
         )
       )}
 
-      {/* Preview Dialog */}
+      {/* Preview Dialog - 调小预览框 */}
       <Dialog open={!!previewTask} onOpenChange={() => setPreviewTask(null)}>
-        <DialogContent className="max-w-4xl bg-background border-border">
+        <DialogContent className="max-w-2xl bg-background border-border">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               {previewTask?.type === "video" ? (

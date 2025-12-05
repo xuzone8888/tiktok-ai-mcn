@@ -1365,14 +1365,16 @@ export default function VideoBatchPage() {
         // ==================== Step 3.5: 轮询 Sora 任务状态 ====================
         const isPro = taskModelType === "sora2-pro" || taskQuality === "hd" || taskDuration === 25;
         const maxPollTime = isPro ? 35 * 60 * 1000 : 10 * 60 * 1000; // Pro 35分钟, 标清 10分钟
-        const pollInterval = 10 * 1000; // 10秒轮询一次
+        const pollInterval = 15 * 1000; // 15秒轮询一次（减少请求频率）
         const startTime = Date.now();
 
         let videoUrl: string | undefined;
         let pollError: string | undefined;
+        let consecutiveErrors = 0; // 连续错误计数
+        const maxConsecutiveErrors = 5; // 最多允许5次连续错误
 
         while (Date.now() - startTime < maxPollTime) {
-          // 等待 10 秒
+          // 等待轮询间隔
           await new Promise(resolve => setTimeout(resolve, pollInterval));
 
           // 检查任务是否被取消（页面刷新等）
@@ -1391,19 +1393,33 @@ export default function VideoBatchPage() {
             progress: progress,
           });
 
-          // 轮询任务状态
+          // 轮询任务状态（带重试）
           try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 30000); // 30秒超时
+
             const statusResponse = await fetch(
-              `/api/video-batch/sora-status/${soraTaskId}?isPro=${isPro}`
+              `/api/video-batch/sora-status/${soraTaskId}?isPro=${isPro}`,
+              { signal: controller.signal }
             );
+            clearTimeout(timeoutId);
+
             const statusText = await statusResponse.text();
             let statusResult;
             try {
               statusResult = JSON.parse(statusText);
             } catch {
-              console.error("[Video Batch] Failed to parse status response:", statusText);
+              console.error("[Video Batch] Failed to parse status response:", statusText.substring(0, 200));
+              consecutiveErrors++;
+              if (consecutiveErrors >= maxConsecutiveErrors) {
+                pollError = "连续多次查询失败，请稍后在任务日志中查看结果";
+                break;
+              }
               continue;
             }
+
+            // 成功获取响应，重置错误计数
+            consecutiveErrors = 0;
 
             if (!statusResult.success) {
               console.log("[Video Batch] Status query failed:", statusResult.error);
@@ -1423,7 +1439,22 @@ export default function VideoBatchPage() {
             // 继续轮询 (pending/processing)
           } catch (pollErr) {
             console.error("[Video Batch] Poll error:", pollErr);
-            // 网络错误，继续尝试
+            consecutiveErrors++;
+            
+            // 检查是否是网络错误
+            if (pollErr instanceof Error) {
+              if (pollErr.name === "AbortError") {
+                console.log("[Video Batch] Poll request timeout, retrying...");
+              } else if (pollErr.message.includes("fetch")) {
+                console.log("[Video Batch] Network error, retrying...");
+              }
+            }
+            
+            if (consecutiveErrors >= maxConsecutiveErrors) {
+              pollError = "网络连接不稳定，请稍后在任务日志中查看结果";
+              break;
+            }
+            // 继续尝试
           }
         }
 
@@ -1433,8 +1464,8 @@ export default function VideoBatchPage() {
         }
 
         if (!videoUrl) {
-          // 超时但可能实际完成了，检查数据库
-          throw new Error("视频生成超时，请在任务日志中查看是否已完成");
+          // 超时但可能实际完成了，提示用户查看任务日志
+          throw new Error(`视频生成时间较长（${isPro ? "Pro模式约15-30分钟" : "标清约3-5分钟"}），请稍后在「生产轨迹簿」中查看结果`);
         }
 
         // ==================== 完成 ====================

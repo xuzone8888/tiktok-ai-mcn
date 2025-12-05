@@ -2063,21 +2063,21 @@ export default function QuickGeneratorPage() {
               <X className="h-5 w-5 text-white" />
             </button>
             
-            {/* 内容 */}
-            <div className="flex-1 flex items-center justify-center p-8">
+            {/* 内容 - 增大预览区域 */}
+            <div className="flex-1 flex items-center justify-center p-4">
               {fullscreenPreview.type === "video" ? (
                 <video 
                   src={fullscreenPreview.url} 
                   controls 
                   autoPlay 
                   loop 
-                  className="max-w-[85vw] max-h-[70vh] rounded-xl"
+                  className="max-w-[92vw] max-h-[80vh] rounded-xl"
                 />
               ) : (
                 <img 
                   src={fullscreenPreview.url} 
                   alt="Full preview" 
-                  className="max-w-[85vw] max-h-[70vh] object-contain rounded-xl"
+                  className="max-w-[92vw] max-h-[80vh] object-contain rounded-xl"
                 />
               )}
             </div>
