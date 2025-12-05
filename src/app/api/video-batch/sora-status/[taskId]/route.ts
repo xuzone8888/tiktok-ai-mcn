@@ -79,15 +79,31 @@ export async function GET(
           updateData.error_message = task.errorMessage;
         }
 
-        const { error } = await supabase
+        // 先检查记录是否存在
+        const { data: existingRecord, error: checkError } = await supabase
           .from("generations")
-          .update(updateData)
-          .eq("task_id", taskId);
+          .select("id, status")
+          .eq("task_id", taskId)
+          .single();
 
-        if (error) {
-          console.error("[Sora Status] Failed to update DB:", error);
-        } else {
-          console.log("[Sora Status] Updated DB for task:", taskId, "status:", task.status);
+        if (checkError) {
+          console.log("[Sora Status] No existing record found for task:", taskId, checkError.message);
+        } else if (existingRecord) {
+          // 只有当状态需要更新时才更新
+          if (existingRecord.status !== task.status) {
+            const { error: updateError, count } = await supabase
+              .from("generations")
+              .update(updateData)
+              .eq("task_id", taskId);
+
+            if (updateError) {
+              console.error("[Sora Status] Failed to update DB:", updateError);
+            } else {
+              console.log("[Sora Status] Updated DB for task:", taskId, "status:", task.status, "count:", count);
+            }
+          } else {
+            console.log("[Sora Status] Status already up to date:", taskId, task.status);
+          }
         }
       } catch (dbError) {
         console.error("[Sora Status] DB error:", dbError);

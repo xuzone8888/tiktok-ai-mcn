@@ -113,27 +113,42 @@ export async function POST(request: NextRequest) {
     if (userId) {
       try {
         const supabase = createAdminClient();
-        await supabase.from("generations").insert({
-          user_id: userId,
-          task_id: soraTaskId,
-          type: "video",
-          source: "batch_video",
-          prompt: aiVideoPrompt,
-          model: sora2Model,
-          duration: durationSeconds,
-          aspect_ratio: aspectRatio,
-          quality: quality,
-          source_image_url: mainGridImageUrl,
-          status: "processing",  // 初始状态为处理中
-          credit_cost: creditCost,
-          use_pro: isPro,
-          created_at: new Date().toISOString(),
-        });
-        console.log("[Video Batch] Created processing record in DB:", soraTaskId);
+        const { data: insertedData, error: insertError } = await supabase
+          .from("generations")
+          .insert({
+            user_id: userId,
+            task_id: soraTaskId,
+            type: "video",
+            source: "batch_video",
+            prompt: aiVideoPrompt,
+            model: sora2Model,
+            duration: durationSeconds,
+            aspect_ratio: aspectRatio,
+            quality: quality,
+            source_image_url: mainGridImageUrl,
+            status: "processing",  // 初始状态为处理中
+            credit_cost: creditCost,
+            use_pro: isPro,
+            created_at: new Date().toISOString(),
+          })
+          .select()
+          .single();
+        
+        if (insertError) {
+          console.error("[Video Batch] Failed to create DB record:", insertError);
+        } else {
+          console.log("[Video Batch] Created processing record in DB:", {
+            id: insertedData?.id,
+            taskId: soraTaskId,
+            userId: userId,
+          });
+        }
       } catch (dbError) {
-        console.error("[Video Batch] Failed to create DB record:", dbError);
+        console.error("[Video Batch] Failed to create DB record (exception):", dbError);
         // 不阻塞返回，继续返回成功
       }
+    } else {
+      console.warn("[Video Batch] No userId provided, skipping DB record creation for task:", soraTaskId);
     }
 
     // 立即返回任务 ID，不等待完成

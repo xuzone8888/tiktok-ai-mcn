@@ -320,13 +320,17 @@ export async function queryNanoBananaResult(
 
       let taskStatus = statusMap[data.data.status] || "processing";
       
-      // 如果有图片 URL，即使状态码不是 2，也认为成功
-      if (imageUrl && imageUrl.length > 0) {
+      // 重要修复：只有当状态为 2 (completed) 且有图片 URL 时才认为成功
+      // 不能仅凭有 URL 就认为成功，因为处理中也可能返回源图片 URL
+      if (data.data.status === 2 && imageUrl && imageUrl.length > 0) {
         taskStatus = "completed";
+      } else if (data.data.status === 0) {
+        // 处理中状态，即使有 URL 也不认为完成
+        taskStatus = "processing";
       }
       
       // 如果状态是 1 或有 fail_reason 且没有图片，则认为失败
-      if (data.data.status === 1 || (data.data.fail_reason && !imageUrl)) {
+      if (data.data.status === 1 || (data.data.fail_reason && data.data.status !== 2)) {
         taskStatus = "failed";
         console.log("[NanoBanana] Task failed:", {
           taskId: data.data.id,
@@ -335,12 +339,15 @@ export async function queryNanoBananaResult(
         });
       }
 
+      // 只有在任务完成时才返回结果 URL
+      const finalResultUrl = taskStatus === "completed" ? imageUrl : undefined;
+
       return {
         success: true,
         task: {
           taskId: String(data.data.id),
           status: taskStatus,
-          resultUrl: imageUrl,
+          resultUrl: finalResultUrl,
           errorMessage: data.data.fail_reason,
           createdAt: data.data.created_at,
           updatedAt: data.data.updated_at,
