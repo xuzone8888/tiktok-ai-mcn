@@ -314,7 +314,7 @@ export async function GET(request: Request) {
           .eq("task_id", taskId)
           .single();
         
-        // 更新 generation 状态（注意：generations 表没有 updated_at 字段）
+        // 更新 generation 状态
         await supabase
           .from("generations")
           .update({
@@ -323,6 +323,7 @@ export async function GET(request: Request) {
             video_url: task.resultUrl || null,
             error_message: task.errorMessage || null,
             completed_at: task.status === "completed" ? new Date().toISOString() : null,
+            updated_at: new Date().toISOString(),
           })
           .eq("task_id", taskId);
         
