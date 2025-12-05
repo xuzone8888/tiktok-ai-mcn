@@ -64,9 +64,9 @@ export async function GET(
       try {
         const supabase = createAdminClient();
         
+        // 注意：generations 表没有 updated_at 字段
         const updateData: Record<string, unknown> = {
           status: task.status,
-          updated_at: new Date().toISOString(),
         };
 
         if (task.status === "completed" && task.resultUrl) {

@@ -296,14 +296,16 @@ export async function queryNanoBananaResult(
       return { success: false, error: "任务查询响应格式错误" };
     }
 
-    // 获取图片 URL (API 可能返回 image_url 或 remote_url)
-    const imageUrl = data.data?.image_url || data.data?.remote_url;
+    // 重要修复：只使用 image_url 作为结果 URL，不使用 remote_url
+    // remote_url 是原图，image_url 才是 AI 生成的结果图
+    const imageUrl = data.data?.image_url;
     
     console.log("[NanoBanana] Query response:", {
       code: data.code,
       status: data.data?.status,
-      hasUrl: !!imageUrl,
-      imageUrl: imageUrl,
+      hasGeneratedUrl: !!imageUrl,
+      generatedUrl: imageUrl,
+      sourceUrl: data.data?.remote_url,
       failReason: data.data?.fail_reason,
     });
 
