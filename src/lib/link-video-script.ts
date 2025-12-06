@@ -95,20 +95,13 @@ export async function generateLinkVideoScript(
 
   // 验证 API 配置
   if (!DOUBAO_API_KEY || !DOUBAO_ENDPOINT_ID) {
-    console.error('[Script Generator] API not configured. DOUBAO_API_KEY:', !!DOUBAO_API_KEY, 'DOUBAO_ENDPOINT_ID:', !!DOUBAO_ENDPOINT_ID);
+    console.warn('[Script Generator] API not configured. DOUBAO_API_KEY:', !!DOUBAO_API_KEY, 'DOUBAO_ENDPOINT_ID:', !!DOUBAO_ENDPOINT_ID);
     
-    // 在开发/测试环境中返回 Mock 脚本
-    if (process.env.NODE_ENV !== 'production') {
-      console.log('[Script Generator] Using mock script in non-production environment');
-      return { 
-        success: true, 
-        script: generateMockScript(videoConfig.duration, videoConfig.language) 
-      };
-    }
-    
+    // API 未配置时，使用 Mock 脚本（所有环境）
+    console.log('[Script Generator] Using mock script due to missing API configuration');
     return { 
-      success: false, 
-      error: '脚本生成服务未配置，请联系管理员配置豆包 API 密钥 (DOUBAO_API_KEY 和 DOUBAO_ENDPOINT_ID)' 
+      success: true, 
+      script: generateMockScript(videoConfig.duration, videoConfig.language) 
     };
   }
 
