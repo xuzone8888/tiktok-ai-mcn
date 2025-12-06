@@ -391,54 +391,60 @@ export function Step1LinkInput() {
             </Button>
           </div>
 
-          {/* 🌟 推荐：地址栏一键执行 */}
-          <div className="rounded-lg bg-gradient-to-r from-green-500/10 to-emerald-500/10 border border-green-500/30 p-4 space-y-3">
+          {/* 🌟 推荐：控制台提取（最可靠） */}
+          <div className="rounded-lg bg-gradient-to-r from-green-500/10 to-emerald-500/10 border border-green-500/30 p-4 space-y-4">
             <div className="flex items-center gap-2">
               <Sparkles className="h-4 w-4 text-green-500" />
-              <span className="font-medium text-green-700 dark:text-green-400">最简单：地址栏粘贴执行</span>
+              <span className="font-medium text-green-700 dark:text-green-400">三步完成（推荐方式）</span>
             </div>
             
-            <ol className="text-sm space-y-3 text-muted-foreground">
-              <li className="flex items-start gap-2">
-                <Badge variant="outline" className="shrink-0 mt-0.5 bg-green-500/10 text-green-600">1</Badge>
-                <span>在商品页面，点击下方按钮复制代码</span>
-              </li>
-            </ol>
+            <div className="space-y-4">
+              {/* 步骤 1 */}
+              <div className="flex items-start gap-3">
+                <Badge className="shrink-0 bg-green-500 text-white h-6 w-6 flex items-center justify-center p-0">1</Badge>
+                <div className="flex-1 space-y-2">
+                  <p className="text-sm font-medium">复制提取代码</p>
+                  <Button
+                    variant="default"
+                    size="sm"
+                    className="bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white"
+                    onClick={() => {
+                      const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
+                      const code = `(function(){var d={title:document.title,price:'',imgs:[]};var m=document.body.innerText.match(/[¥$]\\s*([\\d,.]+)/);if(m)d.price=m[1];document.querySelectorAll('img[src*="http"]').forEach(i=>{if(i.width>150&&i.height>150&&d.imgs.length<5)d.imgs.push(i.src)});d.imgs=[...new Set(d.imgs)];window.open('${baseUrl}/link-video?data='+encodeURIComponent(JSON.stringify(d)))})()`;
+                      navigator.clipboard.writeText(code);
+                    }}
+                  >
+                    <Copy className="h-4 w-4 mr-2" />
+                    点击复制代码
+                  </Button>
+                </div>
+              </div>
 
-            {/* 复制代码按钮 */}
-            <div className="flex justify-center">
-              <Button
-                variant="default"
-                className="bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white"
-                onClick={() => {
-                  const code = `javascript:(function(){var d={title:document.title||'',desc:'',price:'',imgs:[]};var m=document.body.innerText.match(/[¥￥$]\\s*([\\d,.]+)/);if(m)d.price=m[1];document.querySelectorAll('img[src*="http"]').forEach(function(i){if(i.width>150&&i.height>150&&d.imgs.length<5)d.imgs.push(i.src)});d.imgs=[...new Set(d.imgs)];window.open('${typeof window !== 'undefined' ? window.location.origin : ''}/link-video?data='+encodeURIComponent(JSON.stringify(d)))})()`;
-                  navigator.clipboard.writeText(code);
-                  alert('代码已复制！\\n\\n请在商品页面的地址栏粘贴，然后按回车');
-                }}
-              >
-                <Copy className="h-4 w-4 mr-2" />
-                复制提取代码
-              </Button>
+              {/* 步骤 2 */}
+              <div className="flex items-start gap-3">
+                <Badge className="shrink-0 bg-green-500 text-white h-6 w-6 flex items-center justify-center p-0">2</Badge>
+                <div className="flex-1">
+                  <p className="text-sm font-medium">在商品页面按 F12 打开控制台</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Mac 用户：<kbd className="px-1.5 py-0.5 bg-muted rounded text-xs">⌘</kbd> + <kbd className="px-1.5 py-0.5 bg-muted rounded text-xs">Option</kbd> + <kbd className="px-1.5 py-0.5 bg-muted rounded text-xs">J</kbd>
+                  </p>
+                </div>
+              </div>
+
+              {/* 步骤 3 */}
+              <div className="flex items-start gap-3">
+                <Badge className="shrink-0 bg-green-500 text-white h-6 w-6 flex items-center justify-center p-0">3</Badge>
+                <div className="flex-1">
+                  <p className="text-sm font-medium">在控制台粘贴代码，按回车</p>
+                  <p className="text-xs text-green-600 dark:text-green-400 mt-1">
+                    ✓ 自动跳转回来，数据已导入！
+                  </p>
+                </div>
+              </div>
             </div>
 
-            <ol start={2} className="text-sm space-y-3 text-muted-foreground">
-              <li className="flex items-start gap-2">
-                <Badge variant="outline" className="shrink-0 mt-0.5 bg-green-500/10 text-green-600">2</Badge>
-                <div>
-                  <span>在商品页面，点击地址栏，</span>
-                  <strong className="text-foreground">全选后粘贴</strong>
-                  <span>，按回车</span>
-                </div>
-              </li>
-              <li className="flex items-start gap-2">
-                <Badge variant="outline" className="shrink-0 mt-0.5 bg-green-500/10 text-green-600">3</Badge>
-                <span>自动跳转回来，数据已导入！</span>
-              </li>
-            </ol>
-
-            <div className="text-xs text-muted-foreground bg-muted/50 rounded p-2 space-y-1">
-              <p>⚠️ <strong>重要</strong>：粘贴后地址栏开头的 <code className="bg-muted px-1 rounded">javascript:</code> 可能会被浏览器删掉</p>
-              <p>如果跳转失败，请手动在开头加上 <code className="bg-muted px-1 rounded">javascript:</code></p>
+            <div className="text-xs text-muted-foreground bg-muted/50 rounded p-2">
+              💡 提示：如看到安全警告，输入 <code className="bg-muted px-1 rounded">allow pasting</code> 后回车
             </div>
           </div>
 
