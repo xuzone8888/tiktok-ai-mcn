@@ -391,162 +391,136 @@ export function Step1LinkInput() {
             </Button>
           </div>
 
-          {/* 🌟 最简单：一次设置，永久使用 */}
-          <div className="rounded-lg bg-gradient-to-r from-amber-500/10 to-orange-500/10 border border-amber-500/30 p-4 space-y-4">
+          {/* 🌟 主推方案：控制台一键提取 */}
+          <div className="rounded-lg bg-gradient-to-r from-blue-500/10 to-cyan-500/10 border border-blue-500/30 p-4 space-y-4">
             <div className="flex items-center gap-2">
-              <Star className="h-4 w-4 text-amber-500 fill-amber-500" />
-              <span className="font-medium text-amber-700 dark:text-amber-400">一次设置，永久使用（推荐）</span>
+              <Sparkles className="h-4 w-4 text-blue-500" />
+              <span className="font-medium text-blue-700 dark:text-blue-400">一键提取（推荐 ⭐）</span>
             </div>
             
             <div className="space-y-4">
-              {/* 步骤 1：添加书签 */}
-              <div className="p-3 bg-muted/50 rounded-lg space-y-3">
-                <p className="text-sm font-medium">📌 第一步：添加书签（只需做一次）</p>
-                <ol className="text-xs text-muted-foreground space-y-2 ml-4 list-decimal">
-                  <li><strong>右键点击</strong>下面的橙色按钮</li>
-                  <li>选择 <strong>&ldquo;将链接添加到书签&rdquo;</strong> 或 <strong>&ldquo;添加到收藏夹&rdquo;</strong></li>
-                  <li>点击确定保存</li>
-                </ol>
-                
-                <div className="flex justify-center py-2">
-                  <a
-                    href={bookmarkletUrl}
-                    onClick={(e) => {
-                      e.preventDefault();
-                      alert('请右键点击此按钮，选择"将链接添加到书签"或"添加到收藏夹"');
-                    }}
-                    className="inline-flex items-center gap-2 px-6 py-3 rounded-lg bg-gradient-to-r from-amber-500 to-orange-500 text-white font-medium shadow-lg hover:shadow-xl transition-all cursor-pointer"
-                  >
-                    <Sparkles className="h-5 w-5" />
-                    Tok 提取器
-                  </a>
-                </div>
-                <p className="text-xs text-center text-muted-foreground">
-                  👆 右键点击上面按钮，添加到书签
-                </p>
-              </div>
-
-              {/* 步骤 2：使用 */}
-              <div className="p-3 bg-green-500/10 rounded-lg space-y-2">
-                <p className="text-sm font-medium text-green-700 dark:text-green-400">✨ 第二步：在商品页面点击书签</p>
-                <p className="text-xs text-muted-foreground">
-                  以后在任何商品页面（淘宝/天猫/京东/抖音等），只需点击书签栏的「Tok 提取器」，商品信息和图片会自动导入！
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* 备选：控制台方式 */}
-          <details className="text-sm border border-blue-500/20 rounded-lg p-3">
-            <summary className="cursor-pointer text-blue-600 dark:text-blue-400 font-medium">
-              备选方案：控制台执行（不想添加书签的话）
-            </summary>
-            <div className="mt-3 space-y-3">
-              <p className="text-xs text-muted-foreground">在商品页面按 F12 打开控制台，粘贴以下代码，回车执行：</p>
-              <div className="relative">
-                <Textarea
-                  readOnly
-                  value={`(function(){var d={title:document.title,price:'',imgs:[]};var m=document.body.innerText.match(/[¥$]\\s*([\\d,.]+)/);if(m)d.price=m[1];document.querySelectorAll('img[src*="http"]').forEach(i=>{if(i.width>150&&i.height>150&&d.imgs.length<5)d.imgs.push(i.src)});d.imgs=[...new Set(d.imgs)];window.open('${typeof window !== 'undefined' ? window.location.origin : ''}/link-video?data='+encodeURIComponent(JSON.stringify(d)))})();`}
-                  className="text-xs font-mono h-20 pr-20"
-                />
+              {/* 大按钮：复制代码 */}
+              <div className="text-center space-y-3">
                 <Button
-                  variant="secondary"
-                  size="sm"
-                  className="absolute right-2 top-2"
+                  size="lg"
+                  className="w-full bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white font-bold py-6 text-lg shadow-lg"
                   onClick={() => {
                     const code = `(function(){var d={title:document.title,price:'',imgs:[]};var m=document.body.innerText.match(/[¥$]\\s*([\\d,.]+)/);if(m)d.price=m[1];document.querySelectorAll('img[src*="http"]').forEach(i=>{if(i.width>150&&i.height>150&&d.imgs.length<5)d.imgs.push(i.src)});d.imgs=[...new Set(d.imgs)];window.open('${typeof window !== 'undefined' ? window.location.origin : ''}/link-video?data='+encodeURIComponent(JSON.stringify(d)))})();`;
                     navigator.clipboard.writeText(code).then(() => {
-                      alert('代码已复制！\\n\\n现在去商品页面：\\n1. 按 F12 打开开发者工具\\n2. 点击 Console（控制台）\\n3. 粘贴代码，按回车');
+                      alert('✅ 代码已复制到剪贴板！\n\n📱 接下来请按照以下步骤操作：\n\n1️⃣ 打开商品页面（淘宝/天猫/京东等）\n2️⃣ 按 F12 键打开开发者工具\n3️⃣ 点击顶部的 Console（控制台）标签\n4️⃣ 在控制台中 Ctrl+V 粘贴\n5️⃣ 按 Enter 回车执行\n\n🎉 商品数据会自动导入！');
                     }).catch(() => {
-                      alert('复制失败，请手动选中代码复制');
+                      alert('复制失败，请手动选中下方代码复制');
                     });
                   }}
                 >
-                  <Copy className="h-3 w-3 mr-1" />
-                  复制
+                  <Copy className="h-5 w-5 mr-2" />
+                  点击复制提取代码
                 </Button>
+                <p className="text-xs text-muted-foreground">
+                  复制后去商品页面按 F12 打开控制台粘贴执行
+                </p>
               </div>
-            </div>
-          </details>
 
-          {/* 备选：书签方式 */}
+              {/* 详细步骤 */}
+              <div className="bg-muted/50 rounded-lg p-3 space-y-2">
+                <p className="text-sm font-medium">📋 详细步骤：</p>
+                <ol className="text-xs text-muted-foreground space-y-1.5 ml-4 list-decimal">
+                  <li>点击上方按钮<strong className="text-foreground">复制代码</strong></li>
+                  <li>打开商品页面（淘宝/天猫/京东/抖音等）</li>
+                  <li>按 <kbd className="px-1.5 py-0.5 bg-muted rounded border text-[10px] font-mono">F12</kbd> 打开开发者工具</li>
+                  <li>点击顶部 <strong className="text-foreground">Console</strong>（控制台）标签</li>
+                  <li className="text-amber-600 dark:text-amber-400 font-medium">
+                    ⚠️ <strong>重要</strong>：如果第一次粘贴被阻止，先输入 <kbd className="px-1.5 py-0.5 bg-amber-100 dark:bg-amber-900 rounded border border-amber-300 text-[10px] font-mono">allow pasting</kbd> 按回车
+                  </li>
+                  <li>按 <kbd className="px-1.5 py-0.5 bg-muted rounded border text-[10px] font-mono">Ctrl</kbd> + <kbd className="px-1.5 py-0.5 bg-muted rounded border text-[10px] font-mono">V</kbd> 粘贴代码</li>
+                  <li>按 <kbd className="px-1.5 py-0.5 bg-muted rounded border text-[10px] font-mono">Enter</kbd> 回车执行</li>
+                </ol>
+                <p className="text-xs text-green-600 dark:text-green-400 mt-2">
+                  ✨ 执行后会自动打开新页面，商品信息和图片都会导入！
+                </p>
+              </div>
+
+              {/* 代码预览 */}
+              <details className="text-xs">
+                <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
+                  查看代码内容
+                </summary>
+                <Textarea
+                  readOnly
+                  value={`(function(){var d={title:document.title,price:'',imgs:[]};var m=document.body.innerText.match(/[¥$]\\s*([\\d,.]+)/);if(m)d.price=m[1];document.querySelectorAll('img[src*="http"]').forEach(i=>{if(i.width>150&&i.height>150&&d.imgs.length<5)d.imgs.push(i.src)});d.imgs=[...new Set(d.imgs)];window.open('${typeof window !== 'undefined' ? window.location.origin : ''}/link-video?data='+encodeURIComponent(JSON.stringify(d)))})();`}
+                  className="mt-2 text-xs font-mono h-16"
+                />
+              </details>
+            </div>
+          </div>
+
+          {/* 备选：书签方式（高级用户） */}
           <details className="text-sm border border-amber-500/20 rounded-lg p-3">
             <summary className="cursor-pointer text-amber-600 dark:text-amber-400 font-medium">
-              备选方案：添加到书签栏（一劳永逸）
+              高级：添加到书签栏（一劳永逸，推荐熟悉浏览器的用户）
             </summary>
-            <div className="mt-3 space-y-3 text-muted-foreground">
-              <p>把下面的按钮拖到书签栏，以后只需点击书签即可：</p>
+            <div className="mt-3 space-y-4">
+              <p className="text-xs text-muted-foreground">
+                添加书签后，以后只需在商品页面点击书签即可，无需每次复制代码。
+              </p>
+              
+              <div className="bg-muted/50 rounded-lg p-3 space-y-2">
+                <p className="text-xs font-medium">添加书签的方法：</p>
+                <ol className="text-xs text-muted-foreground space-y-1 ml-4 list-decimal">
+                  <li>按 <kbd className="px-1 py-0.5 bg-muted rounded border text-[10px] font-mono">Ctrl+Shift+B</kbd> 显示书签栏</li>
+                  <li><strong className="text-foreground">右键点击</strong>下方橙色按钮</li>
+                  <li>选择&ldquo;将链接添加到书签&rdquo;或&ldquo;添加到收藏夹&rdquo;</li>
+                </ol>
+              </div>
+              
               <div className="flex justify-center py-2">
                 <a
                   href={bookmarkletUrl}
-                  onClick={(e) => e.preventDefault()}
-                  draggable="true"
-                  className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-amber-500 to-orange-500 text-white font-medium shadow-lg hover:shadow-xl transition-all cursor-grab active:cursor-grabbing text-sm"
-                  title="拖拽此按钮到书签栏"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    alert('请【右键点击】此按钮，选择"将链接添加到书签"');
+                  }}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-amber-500 to-orange-500 text-white font-medium shadow-lg hover:shadow-xl transition-all text-sm"
                 >
                   <Star className="h-4 w-4" />
-                  提取商品数据
+                  Tok 提取器（右键添加）
                 </a>
               </div>
+              <p className="text-xs text-center text-muted-foreground">
+                添加后，在任何商品页面点击书签栏的「Tok 提取器」即可
+              </p>
             </div>
           </details>
 
-          {/* 备选：手动复制脚本方式 */}
-          <details className="text-sm">
-            <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
-              备选方案：手动复制脚本
-            </summary>
-            <div className="mt-3 space-y-3 pl-4 border-l-2 border-muted">
-              <ol className="space-y-2 text-muted-foreground">
-                <li className="flex items-start gap-2">
-                  <Badge variant="secondary" className="shrink-0 mt-0.5">1</Badge>
-                  <div>
-                    <span>打开商品页面</span>
-                    {inputUrl && (
-                      <a
-                        href={inputUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="ml-1 text-blue-500 hover:underline inline-flex items-center gap-1"
-                      >
-                        前往 <ExternalLink className="h-3 w-3" />
-                      </a>
-                    )}
-                  </div>
-                </li>
-                <li className="flex items-start gap-2">
-                  <Badge variant="secondary" className="shrink-0 mt-0.5">2</Badge>
-                  <div className="flex-1">
-                    <span>按 F12 → Console → 粘贴执行</span>
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      className="ml-2"
-                      onClick={copyExtractScript}
-                    >
-                      <Copy className="h-3 w-3 mr-1" />
-                      复制脚本
-                    </Button>
-                  </div>
-                </li>
-                <li className="flex items-start gap-2">
-                  <Badge variant="secondary" className="shrink-0 mt-0.5">3</Badge>
-                  <div className="flex-1">
-                    <span>返回粘贴</span>
-                    <Button
-                      variant="default"
-                      size="sm"
-                      className="ml-2 bg-blue-500 hover:bg-blue-600"
-                      onClick={handlePasteExtractedData}
-                    >
-                      <Sparkles className="h-3 w-3 mr-1" />
-                      粘贴数据
-                    </Button>
-                  </div>
-                </li>
-              </ol>
-            </div>
-          </details>
+          {/* 推荐：安装扩展 */}
+          <div className="text-center pt-4 border-t space-y-2">
+            <p className="text-sm text-muted-foreground">想要更简单？</p>
+            <Button
+              variant="default"
+              size="sm"
+              asChild
+              className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600"
+            >
+              <a href="/link-video/extension" target="_blank">
+                <Sparkles className="h-4 w-4 mr-1" />
+                安装 Chrome 扩展（一键提取）
+              </a>
+            </Button>
+            <p className="text-xs text-muted-foreground">安装后，点一下就能导入数据</p>
+          </div>
+
+          {/* 备选：手动输入 */}
+          <div className="text-center pt-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={enableManualMode}
+              className="text-muted-foreground hover:text-foreground"
+            >
+              <Upload className="h-4 w-4 mr-1" />
+              以上都不行？手动输入商品信息
+            </Button>
+          </div>
         </Card>
       )}
 
@@ -555,9 +529,27 @@ export function Step1LinkInput() {
         <Card className="p-4 border-tiktok-cyan/30 bg-tiktok-cyan/5">
           <div className="flex items-start gap-4">
             <div className="flex-1 space-y-3">
-              <div className="flex items-center gap-2">
-                <Check className="h-5 w-5 text-tiktok-cyan" />
-                <span className="font-medium text-tiktok-cyan">解析成功</span>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Check className="h-5 w-5 text-tiktok-cyan" />
+                  <span className="font-medium text-tiktok-cyan">解析成功</span>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    useLinkVideoStore.getState().reset();
+                    setShowBrowserMode(false);
+                    setManualTitle("");
+                    setManualPoints("");
+                    setManualPrice("");
+                    setManualImages([]);
+                  }}
+                  className="text-muted-foreground hover:text-destructive"
+                >
+                  <X className="h-4 w-4 mr-1" />
+                  清空重选
+                </Button>
               </div>
               
               <h3 className="font-semibold line-clamp-2">{parsedData.title}</h3>

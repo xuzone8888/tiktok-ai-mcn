@@ -245,3 +245,4 @@ async function getProductInfo(supabase: ReturnType<typeof createAdminClient>, li
   return data?.parsed_data;
 }
 
+

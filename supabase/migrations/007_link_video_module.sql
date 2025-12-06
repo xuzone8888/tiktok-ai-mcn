@@ -292,3 +292,4 @@ BEGIN
     RAISE NOTICE '  - link_video_pricing (积分定价)';
 END $$;
 
+
