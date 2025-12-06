@@ -9,7 +9,7 @@
  * 3. 手动输入
  */
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { useLinkVideoStore } from "@/stores/link-video-store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -75,6 +75,16 @@ const EXTRACT_SCRIPT = `
 })();
 `;
 
+// 一键书签脚本 - 拖到书签栏，点击自动提取并跳转
+const BOOKMARKLET_CODE = `javascript:(function(){var d={title:document.title||'',desc:document.querySelector('meta[name="description"]')?.content||'',price:'',imgs:[]};var m=document.body.innerText.match(/[¥￥$]\\s*([\\d,.]+)/);if(m)d.price=m[1];document.querySelectorAll('img[src*="http"]').forEach(function(i){if(i.width>150&&i.height>150&&d.imgs.length<5)d.imgs.push(i.src)});d.imgs=[...new Set(d.imgs)];var u='TOKFACTORY_IMPORT_URL/link-video?data='+encodeURIComponent(JSON.stringify(d));window.open(u,'_blank')})();`;
+
+// 获取当前站点的 Bookmarklet URL
+const getBookmarkletUrl = () => {
+  if (typeof window === 'undefined') return '';
+  const baseUrl = window.location.origin;
+  return BOOKMARKLET_CODE.replace('TOKFACTORY_IMPORT_URL', baseUrl);
+};
+
 export function Step1LinkInput() {
   const {
     inputUrl,
@@ -102,7 +112,44 @@ export function Step1LinkInput() {
   const [manualImages, setManualImages] = useState<string[]>([]);
   const [showBrowserMode, setShowBrowserMode] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [bookmarkletUrl, setBookmarkletUrl] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // 初始化书签 URL 并检查 URL 参数（从书签跳转回来）
+  useEffect(() => {
+    // 设置书签 URL
+    setBookmarkletUrl(getBookmarkletUrl());
+
+    // 检查 URL 参数，处理从书签跳转回来的数据
+    const params = new URLSearchParams(window.location.search);
+    const dataParam = params.get('data');
+    
+    if (dataParam) {
+      try {
+        const importedData = JSON.parse(decodeURIComponent(dataParam));
+        
+        // 转换为 ParsedProductData 格式
+        const parsedData: ParsedProductData = {
+          title: importedData.title || '商品',
+          selling_points: importedData.desc ? importedData.desc.split(/[。，,;；]/).filter((s: string) => s.trim()) : [],
+          price: { current: importedData.price || '0' },
+          images: (importedData.imgs || []).map((url: string, idx: number) => ({
+            url,
+            type: idx === 0 ? 'main' : 'detail',
+            selected: true,
+            is_primary: idx === 0,
+          })),
+        };
+
+        setParsedData(parsedData, null);
+        
+        // 清除 URL 参数
+        window.history.replaceState({}, '', window.location.pathname);
+      } catch (e) {
+        console.error('Failed to parse imported data:', e);
+      }
+    }
+  }, [setParsedData]);
 
   // 从剪贴板粘贴提取的数据
   const handlePasteExtractedData = useCallback(async () => {
@@ -344,63 +391,106 @@ export function Step1LinkInput() {
             </Button>
           </div>
 
-          <div className="text-sm space-y-3">
-            <p className="text-muted-foreground">
-              通过您的浏览器直接提取商品数据，像平时浏览一样获取信息：
-            </p>
-
-            <ol className="space-y-3 text-muted-foreground">
+          {/* 🌟 推荐：一键书签方式 */}
+          <div className="rounded-lg bg-gradient-to-r from-amber-500/10 to-orange-500/10 border border-amber-500/30 p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <Star className="h-4 w-4 text-amber-500 fill-amber-500" />
+              <span className="font-medium text-amber-700 dark:text-amber-400">推荐：一键书签（只需设置一次）</span>
+            </div>
+            
+            <ol className="text-sm space-y-2 text-muted-foreground">
               <li className="flex items-start gap-2">
-                <Badge className="shrink-0 mt-0.5">1</Badge>
+                <Badge variant="outline" className="shrink-0 mt-0.5 bg-amber-500/10">1</Badge>
                 <div>
-                  <span>打开商品页面（</span>
-                  {inputUrl ? (
-                    <a
-                      href={inputUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-blue-500 hover:underline inline-flex items-center gap-1"
-                    >
-                      点击前往 <ExternalLink className="h-3 w-3" />
-                    </a>
-                  ) : (
-                    <span>淘宝、京东、TikTok Shop 等</span>
-                  )}
-                  <span>）</span>
-                </div>
-              </li>
-              <li className="flex items-start gap-2">
-                <Badge className="shrink-0 mt-0.5">2</Badge>
-                <div className="flex-1">
-                  <span>按 F12 打开控制台，粘贴脚本并执行</span>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    className="ml-2"
-                    onClick={copyExtractScript}
-                  >
-                    <Copy className="h-3 w-3 mr-1" />
-                    复制脚本
-                  </Button>
-                </div>
-              </li>
-              <li className="flex items-start gap-2">
-                <Badge className="shrink-0 mt-0.5">3</Badge>
-                <div className="flex-1">
-                  <span>回到这里点击粘贴数据</span>
-                  <Button
-                    variant="default"
-                    size="sm"
-                    className="ml-2 bg-blue-500 hover:bg-blue-600"
-                    onClick={handlePasteExtractedData}
-                  >
-                    <Sparkles className="h-3 w-3 mr-1" />
-                    粘贴数据
-                  </Button>
+                  <span>把下面的按钮 </span>
+                  <strong className="text-foreground">拖拽</strong>
+                  <span> 到您的书签栏：</span>
                 </div>
               </li>
             </ol>
+
+            {/* 可拖拽的书签按钮 */}
+            <div className="flex justify-center py-2">
+              <a
+                href={bookmarkletUrl}
+                onClick={(e) => e.preventDefault()}
+                draggable="true"
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-amber-500 to-orange-500 text-white font-medium shadow-lg hover:shadow-xl transition-all cursor-grab active:cursor-grabbing"
+                title="拖拽此按钮到书签栏"
+              >
+                <Sparkles className="h-4 w-4" />
+                提取商品数据
+              </a>
+            </div>
+
+            <ol start={2} className="text-sm space-y-2 text-muted-foreground">
+              <li className="flex items-start gap-2">
+                <Badge variant="outline" className="shrink-0 mt-0.5 bg-amber-500/10">2</Badge>
+                <span>在任意商品页面点击书签，数据自动导入！</span>
+              </li>
+            </ol>
+
+            <p className="text-xs text-muted-foreground bg-muted/50 rounded p-2">
+              💡 设置一次后，以后在任何商品页面只需点击书签即可
+            </p>
           </div>
+
+          {/* 备选：手动复制脚本方式 */}
+          <details className="text-sm">
+            <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
+              备选方案：手动复制脚本
+            </summary>
+            <div className="mt-3 space-y-3 pl-4 border-l-2 border-muted">
+              <ol className="space-y-2 text-muted-foreground">
+                <li className="flex items-start gap-2">
+                  <Badge variant="secondary" className="shrink-0 mt-0.5">1</Badge>
+                  <div>
+                    <span>打开商品页面</span>
+                    {inputUrl && (
+                      <a
+                        href={inputUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="ml-1 text-blue-500 hover:underline inline-flex items-center gap-1"
+                      >
+                        前往 <ExternalLink className="h-3 w-3" />
+                      </a>
+                    )}
+                  </div>
+                </li>
+                <li className="flex items-start gap-2">
+                  <Badge variant="secondary" className="shrink-0 mt-0.5">2</Badge>
+                  <div className="flex-1">
+                    <span>按 F12 → Console → 粘贴执行</span>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      className="ml-2"
+                      onClick={copyExtractScript}
+                    >
+                      <Copy className="h-3 w-3 mr-1" />
+                      复制脚本
+                    </Button>
+                  </div>
+                </li>
+                <li className="flex items-start gap-2">
+                  <Badge variant="secondary" className="shrink-0 mt-0.5">3</Badge>
+                  <div className="flex-1">
+                    <span>返回粘贴</span>
+                    <Button
+                      variant="default"
+                      size="sm"
+                      className="ml-2 bg-blue-500 hover:bg-blue-600"
+                      onClick={handlePasteExtractedData}
+                    >
+                      <Sparkles className="h-3 w-3 mr-1" />
+                      粘贴数据
+                    </Button>
+                  </div>
+                </li>
+              </ol>
+            </div>
+          </details>
         </Card>
       )}
 
