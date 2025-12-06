@@ -391,79 +391,83 @@ export function Step1LinkInput() {
             </Button>
           </div>
 
-          {/* 🌟 最简单：复制粘贴页面内容 */}
-          <div className="rounded-lg bg-gradient-to-r from-green-500/10 to-emerald-500/10 border border-green-500/30 p-4 space-y-4">
+          {/* 🌟 最简单：一次设置，永久使用 */}
+          <div className="rounded-lg bg-gradient-to-r from-amber-500/10 to-orange-500/10 border border-amber-500/30 p-4 space-y-4">
             <div className="flex items-center gap-2">
-              <Sparkles className="h-4 w-4 text-green-500" />
-              <span className="font-medium text-green-700 dark:text-green-400">超简单！两步搞定</span>
+              <Star className="h-4 w-4 text-amber-500 fill-amber-500" />
+              <span className="font-medium text-amber-700 dark:text-amber-400">一次设置，永久使用（推荐）</span>
             </div>
             
             <div className="space-y-4">
-              {/* 步骤 1 */}
-              <div className="flex items-start gap-3">
-                <Badge className="shrink-0 bg-green-500 text-white h-6 w-6 flex items-center justify-center p-0">1</Badge>
-                <div className="flex-1">
-                  <p className="text-sm font-medium">在商品页面全选复制</p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    按 <kbd className="px-1.5 py-0.5 bg-muted rounded text-xs">Ctrl</kbd>+<kbd className="px-1.5 py-0.5 bg-muted rounded text-xs">A</kbd> 全选，
-                    再按 <kbd className="px-1.5 py-0.5 bg-muted rounded text-xs">Ctrl</kbd>+<kbd className="px-1.5 py-0.5 bg-muted rounded text-xs">C</kbd> 复制
-                  </p>
+              {/* 步骤 1：添加书签 */}
+              <div className="p-3 bg-muted/50 rounded-lg space-y-3">
+                <p className="text-sm font-medium">📌 第一步：添加书签（只需做一次）</p>
+                <ol className="text-xs text-muted-foreground space-y-2 ml-4 list-decimal">
+                  <li><strong>右键点击</strong>下面的橙色按钮</li>
+                  <li>选择 <strong>&ldquo;将链接添加到书签&rdquo;</strong> 或 <strong>&ldquo;添加到收藏夹&rdquo;</strong></li>
+                  <li>点击确定保存</li>
+                </ol>
+                
+                <div className="flex justify-center py-2">
+                  <a
+                    href={bookmarkletUrl}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      alert('请右键点击此按钮，选择"将链接添加到书签"或"添加到收藏夹"');
+                    }}
+                    className="inline-flex items-center gap-2 px-6 py-3 rounded-lg bg-gradient-to-r from-amber-500 to-orange-500 text-white font-medium shadow-lg hover:shadow-xl transition-all cursor-pointer"
+                  >
+                    <Sparkles className="h-5 w-5" />
+                    Tok 提取器
+                  </a>
                 </div>
+                <p className="text-xs text-center text-muted-foreground">
+                  👆 右键点击上面按钮，添加到书签
+                </p>
               </div>
 
-              {/* 步骤 2 */}
-              <div className="flex items-start gap-3">
-                <Badge className="shrink-0 bg-green-500 text-white h-6 w-6 flex items-center justify-center p-0">2</Badge>
-                <div className="flex-1 space-y-2">
-                  <p className="text-sm font-medium">在下面框里粘贴（Ctrl+V），然后点击解析</p>
-                  <Textarea
-                    placeholder="点击这里，然后按 Ctrl+V 粘贴商品页面内容..."
-                    className="min-h-[100px] text-xs"
-                    id="paste-area"
-                  />
-                  <Button
-                    variant="default"
-                    size="lg"
-                    className="w-full bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white text-base"
-                    onClick={() => {
-                      const textarea = document.getElementById('paste-area') as HTMLTextAreaElement;
-                      const text = textarea?.value || '';
-                      
-                      if (!text || text.length < 50) {
-                        alert('请先粘贴商品页面内容！\\n\\n操作步骤：\\n1. 去商品页面按 Ctrl+A 全选\\n2. 按 Ctrl+C 复制\\n3. 回来点击上面的框\\n4. 按 Ctrl+V 粘贴\\n5. 点击此按钮');
-                        return;
-                      }
-                      
-                      // 解析页面文本内容
-                      const titleMatch = text.match(/^(.{10,100}?)[\n\r]/m) || 
-                                        text.match(/(.{10,80}?)(官方|旗舰|专卖|正品)/);
-                      const priceMatch = text.match(/[¥￥]\s*([\d,]+\.?\d*)/);
-                      
-                      const extractedData: ParsedProductData = {
-                        title: titleMatch ? titleMatch[1].trim() : text.substring(0, 60),
-                        selling_points: [],
-                        price: priceMatch ? { current: priceMatch[1] } : undefined,
-                        images: [],
-                      };
-                      
-                      // 尝试提取卖点
-                      const pointsMatch = text.match(/(包邮|正品|官方|新款|热卖|限时|优惠|折扣|秒杀|免运费)/g);
-                      if (pointsMatch) {
-                        extractedData.selling_points = [...new Set(pointsMatch)].slice(0, 5);
-                      }
-                      
-                      setParsedData(extractedData, null);
-                      setShowBrowserMode(false);
-                      alert('✅ 商品信息已提取！\\n\\n标题：' + extractedData.title.substring(0, 30) + '...\\n价格：¥' + (extractedData.price?.current || '未识别'));
-                    }}
-                  >
-                    <Sparkles className="h-5 w-5 mr-2" />
-                    解析商品信息
-                  </Button>
-                </div>
+              {/* 步骤 2：使用 */}
+              <div className="p-3 bg-green-500/10 rounded-lg space-y-2">
+                <p className="text-sm font-medium text-green-700 dark:text-green-400">✨ 第二步：在商品页面点击书签</p>
+                <p className="text-xs text-muted-foreground">
+                  以后在任何商品页面（淘宝/天猫/京东/抖音等），只需点击书签栏的「Tok 提取器」，商品信息和图片会自动导入！
+                </p>
               </div>
             </div>
           </div>
+
+          {/* 备选：控制台方式 */}
+          <details className="text-sm border border-blue-500/20 rounded-lg p-3">
+            <summary className="cursor-pointer text-blue-600 dark:text-blue-400 font-medium">
+              备选方案：控制台执行（不想添加书签的话）
+            </summary>
+            <div className="mt-3 space-y-3">
+              <p className="text-xs text-muted-foreground">在商品页面按 F12 打开控制台，粘贴以下代码，回车执行：</p>
+              <div className="relative">
+                <Textarea
+                  readOnly
+                  value={`(function(){var d={title:document.title,price:'',imgs:[]};var m=document.body.innerText.match(/[¥$]\\s*([\\d,.]+)/);if(m)d.price=m[1];document.querySelectorAll('img[src*="http"]').forEach(i=>{if(i.width>150&&i.height>150&&d.imgs.length<5)d.imgs.push(i.src)});d.imgs=[...new Set(d.imgs)];window.open('${typeof window !== 'undefined' ? window.location.origin : ''}/link-video?data='+encodeURIComponent(JSON.stringify(d)))})();`}
+                  className="text-xs font-mono h-20 pr-20"
+                />
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="absolute right-2 top-2"
+                  onClick={() => {
+                    const code = `(function(){var d={title:document.title,price:'',imgs:[]};var m=document.body.innerText.match(/[¥$]\\s*([\\d,.]+)/);if(m)d.price=m[1];document.querySelectorAll('img[src*="http"]').forEach(i=>{if(i.width>150&&i.height>150&&d.imgs.length<5)d.imgs.push(i.src)});d.imgs=[...new Set(d.imgs)];window.open('${typeof window !== 'undefined' ? window.location.origin : ''}/link-video?data='+encodeURIComponent(JSON.stringify(d)))})();`;
+                    navigator.clipboard.writeText(code).then(() => {
+                      alert('代码已复制！\\n\\n现在去商品页面：\\n1. 按 F12 打开开发者工具\\n2. 点击 Console（控制台）\\n3. 粘贴代码，按回车');
+                    }).catch(() => {
+                      alert('复制失败，请手动选中代码复制');
+                    });
+                  }}
+                >
+                  <Copy className="h-3 w-3 mr-1" />
+                  复制
+                </Button>
+              </div>
+            </div>
+          </details>
 
           {/* 备选：书签方式 */}
           <details className="text-sm border border-amber-500/20 rounded-lg p-3">
