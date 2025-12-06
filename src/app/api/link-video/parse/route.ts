@@ -38,27 +38,34 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 3. 检查缓存
+    // 3. 尝试检查缓存（如果表存在）
     const urlHash = generateUrlHash(url);
     const adminSupabase = createAdminClient();
+    let cachedLink = null;
 
-    const { data: cachedLink } = await adminSupabase
-      .from('product_link_cache')
-      .select('*')
-      .eq('url_hash', urlHash)
-      .eq('parse_status', 'success')
-      .single();
+    try {
+      const { data, error } = await adminSupabase
+        .from('product_link_cache')
+        .select('*')
+        .eq('url_hash', urlHash)
+        .eq('parse_status', 'success')
+        .single();
 
-    if (cachedLink && cachedLink.parsed_data) {
-      console.log('[Parse API] Cache hit for URL hash:', urlHash);
-      return NextResponse.json({
-        success: true,
-        data: {
-          product_link_id: cachedLink.id,
-          parsed_data: cachedLink.parsed_data as ParsedProductData,
-          from_cache: true,
-        },
-      });
+      if (!error && data && data.parsed_data) {
+        console.log('[Parse API] Cache hit for URL hash:', urlHash);
+        return NextResponse.json({
+          success: true,
+          data: {
+            product_link_id: data.id,
+            parsed_data: data.parsed_data as ParsedProductData,
+            from_cache: true,
+          },
+        });
+      }
+      cachedLink = data;
+    } catch (cacheError) {
+      // 缓存表可能不存在，忽略错误继续
+      console.log('[Parse API] Cache check skipped:', cacheError);
     }
 
     // 4. 解析链接
@@ -71,17 +78,21 @@ export async function POST(request: NextRequest) {
       : await parseProductLink(url, forcePlatform);
 
     if (!parseResult.success || !parseResult.data) {
-      // 解析失败，但仍然保存记录
-      await adminSupabase.from('product_link_cache').upsert({
-        url,
-        url_hash: urlHash,
-        platform: parseResult.platform,
-        parse_status: 'failed',
-        parse_error: parseResult.error || '解析失败',
-        updated_at: new Date().toISOString(),
-      }, {
-        onConflict: 'url_hash',
-      });
+      // 解析失败，尝试保存记录（如果表存在）
+      try {
+        await adminSupabase.from('product_link_cache').upsert({
+          url,
+          url_hash: urlHash,
+          platform: parseResult.platform,
+          parse_status: 'failed',
+          parse_error: parseResult.error || '解析失败',
+          updated_at: new Date().toISOString(),
+        }, {
+          onConflict: 'url_hash',
+        });
+      } catch {
+        // 忽略缓存保存错误
+      }
 
       return NextResponse.json({
         success: false,
@@ -90,38 +101,44 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // 5. 保存到缓存
-    const { data: savedLink, error: saveError } = await adminSupabase
-      .from('product_link_cache')
-      .upsert({
-        url,
-        url_hash: urlHash,
-        platform: parseResult.platform,
-        raw_title: parseResult.rawData?.title,
-        raw_description: parseResult.rawData?.description,
-        raw_price: parseResult.rawData?.price,
-        raw_promo_info: parseResult.rawData?.promoInfo,
-        raw_images: parseResult.rawData?.images || [],
-        parsed_data: parseResult.data,
-        parse_status: 'success',
-        parse_error: null,
-        last_fetched_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      }, {
-        onConflict: 'url_hash',
-      })
-      .select()
-      .single();
+    // 5. 尝试保存到缓存（如果表存在）
+    let savedLinkId = null;
+    try {
+      const { data: savedLink, error: saveError } = await adminSupabase
+        .from('product_link_cache')
+        .upsert({
+          url,
+          url_hash: urlHash,
+          platform: parseResult.platform,
+          raw_title: parseResult.rawData?.title,
+          raw_description: parseResult.rawData?.description,
+          raw_price: parseResult.rawData?.price,
+          raw_promo_info: parseResult.rawData?.promoInfo,
+          raw_images: parseResult.rawData?.images || [],
+          parsed_data: parseResult.data,
+          parse_status: 'success',
+          parse_error: null,
+          last_fetched_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        }, {
+          onConflict: 'url_hash',
+        })
+        .select()
+        .single();
 
-    if (saveError) {
-      console.error('[Parse API] Save error:', saveError);
-      // 即使保存失败，仍然返回解析结果
+      if (!saveError && savedLink) {
+        savedLinkId = savedLink.id;
+      } else if (saveError) {
+        console.error('[Parse API] Save error:', saveError);
+      }
+    } catch {
+      // 忽略缓存保存错误
     }
 
     return NextResponse.json({
       success: true,
       data: {
-        product_link_id: savedLink?.id || null,
+        product_link_id: savedLinkId,
         parsed_data: parseResult.data,
         from_cache: false,
       },

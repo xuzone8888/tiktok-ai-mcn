@@ -2,9 +2,14 @@
 
 /**
  * Step 1: 链接输入与解析
+ * 
+ * 支持三种模式：
+ * 1. 自动解析（服务端）
+ * 2. 浏览器提取（用户打开商品页面，点击提取）
+ * 3. 手动输入
  */
 
-import { useState } from "react";
+import { useState, useRef, useCallback } from "react";
 import { useLinkVideoStore } from "@/stores/link-video-store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,10 +28,52 @@ import {
   ArrowRight,
   ImageIcon,
   Star,
+  Globe,
+  Copy,
+  ExternalLink,
+  Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { PLATFORM_NAMES, detectPlatform } from "@/types/link-video";
-import type { ProductImage } from "@/types/link-video";
+import type { ProductImage, ParsedProductData } from "@/types/link-video";
+
+// 浏览器提取脚本 - 用户复制到浏览器控制台执行
+const EXTRACT_SCRIPT = `
+(function() {
+  const data = {
+    title: document.title || document.querySelector('h1')?.innerText || '',
+    description: document.querySelector('meta[name="description"]')?.content || '',
+    price: '',
+    images: []
+  };
+  
+  // 提取价格
+  const pricePatterns = [
+    /[¥$]\\s*([\\d,.]+)/,
+    /price[^>]*>([^<]*[\\d,.]+[^<]*)</i
+  ];
+  const bodyText = document.body.innerText;
+  for (const p of pricePatterns) {
+    const m = bodyText.match(p);
+    if (m) { data.price = m[1]; break; }
+  }
+  
+  // 提取图片
+  const imgs = document.querySelectorAll('img[src*="http"]');
+  imgs.forEach(img => {
+    if (img.width > 200 && img.height > 200) {
+      data.images.push(img.src);
+    }
+  });
+  data.images = [...new Set(data.images)].slice(0, 5);
+  
+  // 复制到剪贴板
+  const json = JSON.stringify(data, null, 2);
+  navigator.clipboard.writeText('TOKFACTORY_DATA:' + json);
+  alert('商品数据已复制！请返回 Tok Factory 粘贴');
+  return data;
+})();
+`;
 
 export function Step1LinkInput() {
   const {
@@ -53,6 +100,105 @@ export function Step1LinkInput() {
   const [manualPoints, setManualPoints] = useState("");
   const [manualPrice, setManualPrice] = useState("");
   const [manualImages, setManualImages] = useState<string[]>([]);
+  const [showBrowserMode, setShowBrowserMode] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // 从剪贴板粘贴提取的数据
+  const handlePasteExtractedData = useCallback(async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      if (text.startsWith('TOKFACTORY_DATA:')) {
+        const jsonStr = text.replace('TOKFACTORY_DATA:', '');
+        const data = JSON.parse(jsonStr);
+        
+        // 转换为 ParsedProductData 格式
+        const parsedData: ParsedProductData = {
+          title: data.title || '商品',
+          selling_points: data.description ? data.description.split(/[。，,;；]/).filter((s: string) => s.trim()) : [],
+          price: { current: data.price || '0' },
+          images: (data.images || []).map((url: string, idx: number) => ({
+            url,
+            type: idx === 0 ? 'main' : 'detail',
+            selected: true,
+            is_primary: idx === 0,
+          })),
+        };
+
+        setParsedData(parsedData, null);
+        setShowBrowserMode(false);
+      } else {
+        alert('剪贴板中没有检测到商品数据，请先在商品页面执行提取脚本');
+      }
+    } catch (error) {
+      alert('读取剪贴板失败，请检查浏览器权限');
+    }
+  }, [setParsedData]);
+
+  // 复制提取脚本
+  const copyExtractScript = useCallback(() => {
+    navigator.clipboard.writeText(EXTRACT_SCRIPT);
+    alert('脚本已复制！请在商品页面按 F12 打开控制台，粘贴执行');
+  }, []);
+
+  // 处理图片上传
+  const handleImageUpload = useCallback(async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    
+    setUploadingImage(true);
+    const newImages: string[] = [...manualImages];
+
+    for (const file of Array.from(files).slice(0, 3 - manualImages.length)) {
+      try {
+        // 上传到服务器
+        const formData = new FormData();
+        formData.append('file', file);
+        
+        const response = await fetch('/api/upload/image', {
+          method: 'POST',
+          body: formData,
+        });
+
+        const result = await response.json();
+        if (result.success && result.data?.url) {
+          newImages.push(result.data.url);
+        }
+      } catch (error) {
+        console.error('Upload error:', error);
+      }
+    }
+
+    setManualImages(newImages);
+    
+    // 更新 selectedImages
+    const productImages: ProductImage[] = newImages.map((url, idx) => ({
+      url,
+      type: idx === 0 ? 'main' : 'detail',
+      selected: true,
+      is_primary: idx === 0,
+    }));
+    setSelectedImages(productImages);
+    
+    setUploadingImage(false);
+  }, [manualImages, setSelectedImages]);
+
+  // 处理图片 URL 输入
+  const handleImageUrlAdd = useCallback((url: string) => {
+    if (!url.trim() || manualImages.length >= 3) return;
+    
+    const newImages = [...manualImages, url.trim()];
+    setManualImages(newImages);
+    
+    const productImages: ProductImage[] = newImages.map((u, idx) => ({
+      url: u,
+      type: idx === 0 ? 'main' : 'detail',
+      selected: true,
+      is_primary: idx === 0,
+    }));
+    setSelectedImages(productImages);
+  }, [manualImages, setSelectedImages]);
+
+  const [imageUrlInput, setImageUrlInput] = useState("");
 
   // 解析链接
   const handleParseLink = async () => {
@@ -145,24 +291,117 @@ export function Step1LinkInput() {
             </Button>
           </div>
 
-          {/* 错误提示 */}
+          {/* 错误提示 - 增强版 */}
           {parseError && (
-            <div className="flex items-start gap-2 rounded-lg bg-destructive/10 p-3 text-sm text-destructive">
-              <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
-              <div>
+            <div className="rounded-lg bg-destructive/10 p-4 space-y-3">
+              <div className="flex items-start gap-2 text-sm text-destructive">
+                <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
                 <p>{parseError}</p>
-                <Button
-                  variant="link"
-                  size="sm"
-                  className="h-auto p-0 text-destructive underline"
-                  onClick={enableManualMode}
-                >
-                  改用手动输入
-                </Button>
+              </div>
+              
+              <div className="text-sm text-muted-foreground">
+                <p className="font-medium mb-2">无法解析？试试以下方法：</p>
+                <div className="grid gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="justify-start"
+                    onClick={() => setShowBrowserMode(true)}
+                  >
+                    <Globe className="h-4 w-4 mr-2" />
+                    方法1：浏览器提取（推荐）
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="justify-start"
+                    onClick={enableManualMode}
+                  >
+                    <Upload className="h-4 w-4 mr-2" />
+                    方法2：手动输入
+                  </Button>
+                </div>
               </div>
             </div>
           )}
         </div>
+      )}
+
+      {/* 浏览器提取模式 */}
+      {showBrowserMode && (
+        <Card className="p-4 border-blue-500/30 bg-blue-500/5 space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Globe className="h-5 w-5 text-blue-500" />
+              <span className="font-medium">浏览器提取模式</span>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowBrowserMode(false)}
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+
+          <div className="text-sm space-y-3">
+            <p className="text-muted-foreground">
+              通过您的浏览器直接提取商品数据，像平时浏览一样获取信息：
+            </p>
+
+            <ol className="space-y-3 text-muted-foreground">
+              <li className="flex items-start gap-2">
+                <Badge className="shrink-0 mt-0.5">1</Badge>
+                <div>
+                  <span>打开商品页面（</span>
+                  {inputUrl ? (
+                    <a
+                      href={inputUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-500 hover:underline inline-flex items-center gap-1"
+                    >
+                      点击前往 <ExternalLink className="h-3 w-3" />
+                    </a>
+                  ) : (
+                    <span>淘宝、京东、TikTok Shop 等</span>
+                  )}
+                  <span>）</span>
+                </div>
+              </li>
+              <li className="flex items-start gap-2">
+                <Badge className="shrink-0 mt-0.5">2</Badge>
+                <div className="flex-1">
+                  <span>按 F12 打开控制台，粘贴脚本并执行</span>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="ml-2"
+                    onClick={copyExtractScript}
+                  >
+                    <Copy className="h-3 w-3 mr-1" />
+                    复制脚本
+                  </Button>
+                </div>
+              </li>
+              <li className="flex items-start gap-2">
+                <Badge className="shrink-0 mt-0.5">3</Badge>
+                <div className="flex-1">
+                  <span>回到这里点击粘贴数据</span>
+                  <Button
+                    variant="default"
+                    size="sm"
+                    className="ml-2 bg-blue-500 hover:bg-blue-600"
+                    onClick={handlePasteExtractedData}
+                  >
+                    <Sparkles className="h-3 w-3 mr-1" />
+                    粘贴数据
+                  </Button>
+                </div>
+              </li>
+            </ol>
+          </div>
+        </Card>
       )}
 
       {/* 解析结果 */}
@@ -315,18 +554,85 @@ export function Step1LinkInput() {
             </div>
 
             <div>
-              <Label>上传商品图片</Label>
-              <div className="mt-2 flex items-center justify-center rounded-lg border border-dashed p-6 text-center">
-                <div className="space-y-2">
-                  <Upload className="mx-auto h-8 w-8 text-muted-foreground" />
-                  <p className="text-sm text-muted-foreground">
-                    点击上传或拖拽图片到此处
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    支持 JPG、PNG，最多 3 张
-                  </p>
+              <Label>商品图片（最多 3 张）</Label>
+              
+              {/* 已上传的图片预览 */}
+              {manualImages.length > 0 && (
+                <div className="mt-2 grid grid-cols-3 gap-2">
+                  {manualImages.map((img, idx) => (
+                    <div key={idx} className="relative aspect-square rounded-lg overflow-hidden border">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={img} alt={`商品图 ${idx + 1}`} className="h-full w-full object-cover" />
+                      <button
+                        className="absolute top-1 right-1 h-5 w-5 rounded-full bg-black/60 text-white flex items-center justify-center"
+                        onClick={() => {
+                          const newImages = manualImages.filter((_, i) => i !== idx);
+                          setManualImages(newImages);
+                          setSelectedImages(newImages.map((u, i) => ({
+                            url: u, type: i === 0 ? 'main' : 'detail', selected: true, is_primary: i === 0
+                          })));
+                        }}
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                      {idx === 0 && (
+                        <span className="absolute bottom-1 left-1 text-[10px] bg-amber-500 text-white px-1 rounded">主图</span>
+                      )}
+                    </div>
+                  ))}
                 </div>
-              </div>
+              )}
+
+              {/* 上传区域 */}
+              {manualImages.length < 3 && (
+                <div className="mt-2 space-y-3">
+                  {/* 文件上传 */}
+                  <div 
+                    className="flex items-center justify-center rounded-lg border border-dashed p-4 text-center cursor-pointer hover:border-primary transition-colors"
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      className="hidden"
+                      onChange={(e) => handleImageUpload(e.target.files)}
+                    />
+                    <div className="space-y-1">
+                      {uploadingImage ? (
+                        <Loader2 className="mx-auto h-6 w-6 animate-spin text-muted-foreground" />
+                      ) : (
+                        <Upload className="mx-auto h-6 w-6 text-muted-foreground" />
+                      )}
+                      <p className="text-xs text-muted-foreground">
+                        点击上传图片 (JPG/PNG)
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* 图片URL输入 */}
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="或粘贴图片 URL"
+                      value={imageUrlInput}
+                      onChange={(e) => setImageUrlInput(e.target.value)}
+                      className="text-sm"
+                    />
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        handleImageUrlAdd(imageUrlInput);
+                        setImageUrlInput("");
+                      }}
+                      disabled={!imageUrlInput.trim()}
+                    >
+                      添加
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
 
             <Button onClick={handleManualSubmit} disabled={!manualTitle.trim()}>

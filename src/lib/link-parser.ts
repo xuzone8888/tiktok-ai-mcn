@@ -389,6 +389,118 @@ export async function parseProductLink(
 // Mock 解析器 (开发测试用)
 // ============================================================================
 
+// ============================================================================
+// TikTok Shop 特殊处理
+// ============================================================================
+
+/**
+ * TikTok Shop 链接解析
+ * 
+ * 注意：TikTok Shop API 需要 Partner 资质和卖家授权
+ * 参考：https://partner.tiktokshop.com/docv2/page/get-product-202309
+ * 
+ * 当前实现：提取链接中的商品 ID，并提示用户手动补充信息
+ */
+export async function parseTikTokShopLink(url: string): Promise<ParseResult> {
+  // 提取商品 ID (从 URL 中)
+  // 典型格式: https://shop.tiktok.com/view/product/1234567890
+  const productIdMatch = url.match(/product\/(\d+)/i);
+  const productId = productIdMatch ? productIdMatch[1] : null;
+
+  // 提取商品名称 (从 URL 中)
+  // 某些链接包含商品名: https://shop.tiktok.com/product/xxx-product-name-xxx
+  const urlParts = url.split('/').pop()?.split('-') || [];
+  const possibleName = urlParts.filter(p => p.length > 2 && !/^\d+$/.test(p)).join(' ');
+
+  return {
+    success: productId !== null,
+    data: {
+      title: possibleName || `TikTok Shop 商品 ${productId || ''}`,
+      description: '检测到 TikTok Shop 链接，建议手动补充商品信息以获得最佳效果',
+      price: '',
+      images: [],
+    },
+    error: productId ? undefined : '无法从链接中提取商品 ID，请使用手动输入',
+  };
+}
+
+/**
+ * AI 智能补全商品信息
+ * 使用豆包 API 从不完整信息推断完整商品信息
+ */
+export async function aiEnhanceProductInfo(
+  partialInfo: {
+    title?: string;
+    description?: string;
+    url?: string;
+    platform?: string;
+  }
+): Promise<{
+  title: string;
+  sellingPoints: string[];
+  category: string;
+}> {
+  const DOUBAO_API_KEY = process.env.DOUBAO_API_KEY;
+  const DOUBAO_ENDPOINT_ID = process.env.DOUBAO_ENDPOINT_ID;
+
+  if (!DOUBAO_API_KEY || !DOUBAO_ENDPOINT_ID) {
+    return {
+      title: partialInfo.title || '商品',
+      sellingPoints: ['优质商品', '值得购买'],
+      category: '其他',
+    };
+  }
+
+  try {
+    const response = await fetch('https://ark.cn-beijing.volces.com/api/v3/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${DOUBAO_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: DOUBAO_ENDPOINT_ID,
+        messages: [{
+          role: 'user',
+          content: `根据以下不完整的商品信息，推断并补充完整的商品描述：
+
+商品标题: ${partialInfo.title || '未知'}
+商品描述: ${partialInfo.description || '无'}
+来源平台: ${partialInfo.platform || '电商平台'}
+
+请返回 JSON 格式：
+{
+  "title": "优化后的商品标题",
+  "sellingPoints": ["卖点1", "卖点2", "卖点3"],
+  "category": "商品分类"
+}
+
+只返回 JSON，不要其他内容。`,
+        }],
+        max_tokens: 500,
+        temperature: 0.7,
+      }),
+    });
+
+    const data = await response.json();
+    const content = data.choices?.[0]?.message?.content || '';
+    
+    // 尝试解析 JSON
+    const match = content.match(/\{[\s\S]*\}/);
+    if (match) {
+      return JSON.parse(match[0]);
+    }
+  } catch (error) {
+    console.error('[AI Enhance] Error:', error);
+  }
+
+  return {
+    title: partialInfo.title || '商品',
+    sellingPoints: ['品质保证', '性价比高', '值得推荐'],
+    category: '其他',
+  };
+}
+
 /**
  * Mock 解析结果 (用于开发测试)
  */
