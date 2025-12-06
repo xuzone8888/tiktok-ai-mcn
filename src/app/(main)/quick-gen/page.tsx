@@ -62,6 +62,8 @@ import {
   useQuickGenIsGenerating,
   useQuickGenActiveImageTask,
   useQuickGenIsImageGenerating,
+  useQuickGenProcessedGridImages,
+  useQuickGenSelectedGridIndex,
 } from "@/stores/quick-gen-store";
 
 // ============================================================================
@@ -165,6 +167,13 @@ export default function QuickGeneratorPage() {
   const isQuickGenImageRunning = useQuickGenIsImageGenerating();
   const createImageTask = useQuickGenStore((state) => state.createImageTask);
   const clearActiveImageTask = useQuickGenStore((state) => state.clearActiveImageTask);
+  
+  // 九宫格处理结果（从 store 恢复）
+  const storedGridImages = useQuickGenProcessedGridImages();
+  const storedGridIndex = useQuickGenSelectedGridIndex();
+  const setStoredGridImages = useQuickGenStore((state) => state.setProcessedGridImages);
+  const setStoredGridIndex = useQuickGenStore((state) => state.setSelectedGridIndex);
+  const clearStoredGridImages = useQuickGenStore((state) => state.clearProcessedGridImages);
   
   // 全屏预览弹窗
   const [fullscreenPreview, setFullscreenPreview] = useState<{
@@ -348,12 +357,12 @@ export default function QuickGeneratorPage() {
     // 只在初始加载时执行一次
     if (canvasState !== "empty" || !recentTasks.length) return;
     
-    // 查找最近完成的任务（30秒内）
+    // 查找最近完成的任务（1小时内）
     const recentCompleted = recentTasks.find(t => {
       if (t.status !== "completed" || !t.resultUrl) return false;
       const completedTime = new Date(t.completedAt || t.createdAt).getTime();
       const now = Date.now();
-      return now - completedTime < 30000; // 30秒内完成的任务
+      return now - completedTime < 3600000; // 1小时内完成的任务
     });
     
     if (recentCompleted) {
@@ -369,6 +378,16 @@ export default function QuickGeneratorPage() {
         // 视频任务
         setOutputMode("video");
       }
+      return;
+    }
+    
+    // 如果没有最近完成的任务，尝试恢复九宫格处理结果
+    if (storedGridImages.length > 0) {
+      setProcessedImages(storedGridImages);
+      setCurrentImageIndex(storedGridIndex);
+      setCanvasState("selection");
+      setOutputMode("video"); // 九宫格是视频模式的前置步骤
+      console.log("[QuickGen] Restored grid images from store:", storedGridImages.length);
     }
   }, []); // 只在组件挂载时执行一次
 
@@ -511,6 +530,7 @@ export default function QuickGeneratorPage() {
     if (uploadedFile?.url) URL.revokeObjectURL(uploadedFile.url);
     setUploadedFile(null);
     setProcessedImages([]);
+    clearStoredGridImages(); // 清除 store 中的九宫格图片
     setSelectedImage(null);
     setResultUrl(null);
     setCanvasState("empty");
@@ -679,12 +699,15 @@ export default function QuickGeneratorPage() {
         
         if (processingType === "upscale") {
           setProcessedImages(successfulImages);
+          setStoredGridImages(successfulImages); // 保存到 store
           setSelectedImage(successfulImages[0]);
           setCanvasState("selected");
           toast({ title: "✨ Ultra-HD 高清放大完成！" });
         } else {
           setProcessedImages(successfulImages);
+          setStoredGridImages(successfulImages); // 保存到 store
           setCurrentImageIndex(0);
+          setStoredGridIndex(0); // 保存选中索引到 store
           setCanvasState("selection");
           toast({ title: `🎨 已生成 ${successfulImages.length} 张九宫格图片，点击选择使用` });
         }
@@ -748,6 +771,7 @@ export default function QuickGeneratorPage() {
   const handleDeleteContent = useCallback(() => {
     setResultUrl(null);
     setProcessedImages([]);
+    clearStoredGridImages(); // 清除 store 中的九宫格图片
     setSelectedImage(null);
     setCanvasState("empty");
     setFullscreenPreview({ open: false, url: "", type: "image" });

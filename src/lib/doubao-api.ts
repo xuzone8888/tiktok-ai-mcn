@@ -109,35 +109,45 @@ C07: [camera+action, under 50 chars]`,
 
 // 缓存配置的提示词
 let cachedPrompts = { ...DEFAULT_PROMPTS };
+let lastCacheTime = 0;
+const CACHE_TTL = 60000; // 缓存 1 分钟
 
 /**
  * 获取配置的提示词
+ * 直接从数据库读取，避免服务端自调用 API 的问题
  */
 async function getConfiguredPrompts(): Promise<typeof DEFAULT_PROMPTS> {
+  // 检查缓存是否有效
+  const now = Date.now();
+  if (now - lastCacheTime < CACHE_TTL && cachedPrompts !== DEFAULT_PROMPTS) {
+    console.log("[Doubao API] Using cached prompts (TTL valid)");
+    return cachedPrompts;
+  }
+
   try {
-    // 在服务端环境中尝试获取配置
-    // 使用环境变量或根据当前端口动态获取
-    const port = process.env.PORT || "3000";
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
-    const response = await fetch(`${baseUrl}/api/admin/prompts`, {
-      cache: "no-store",
-    });
-    const responseText = await response.text();
-    let data;
-    try {
-      data = JSON.parse(responseText);
-    } catch {
-      console.error("[Doubao API] Failed to parse prompts response");
-      return cachedPrompts;
-    }
-    if (data.success && data.data) {
-      cachedPrompts = data.data;
-      return data.data;
+    // 直接从数据库读取提示词配置
+    const { createAdminClient } = await import("@/lib/supabase/admin");
+    const supabase = createAdminClient();
+    
+    const { data, error } = await supabase
+      .from("system_settings")
+      .select("value")
+      .eq("key", "video_batch_prompts")
+      .single();
+
+    if (!error && data?.value) {
+      console.log("[Doubao API] Loaded prompts from database");
+      cachedPrompts = data.value;
+      lastCacheTime = now;
+      return data.value;
+    } else {
+      console.log("[Doubao API] No prompts in database, using defaults. Error:", error?.message);
     }
   } catch (error) {
-    console.log("[Doubao API] Using cached/default prompts");
+    console.log("[Doubao API] Failed to load prompts from database:", error);
   }
-  return cachedPrompts;
+  
+  return DEFAULT_PROMPTS;
 }
 
 // ============================================================================

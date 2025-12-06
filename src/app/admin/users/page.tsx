@@ -88,7 +88,7 @@ interface AdminUser {
   };
 }
 
-type CreditActionType = "recharge" | "deduct";
+type CreditActionType = "recharge" | "deduct" | "system_grant";
 
 // 功能限制选项
 const FEATURE_OPTIONS = [
@@ -123,6 +123,9 @@ export default function AdminUsersPage() {
   // Ban Dialog 状态
   const [showBanDialog, setShowBanDialog] = useState(false);
   const [banReason, setBanReason] = useState("");
+
+  // Delete User Dialog 状态
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
   // Feature Restrictions Dialog 状态
   const [showRestrictionsDialog, setShowRestrictionsDialog] = useState(false);
@@ -199,7 +202,7 @@ export default function AdminUsersPage() {
 
   const handleOpenCreditsDialog = (user: AdminUser) => {
     setSelectedUser(user);
-    setCreditAction("recharge");
+    setCreditAction("system_grant"); // 默认使用系统发放
     setCreditAmount(100);
     setCreditReason("");
     setShowCreditsDialog(true);
@@ -228,13 +231,20 @@ export default function AdminUsersPage() {
     setIsProcessing(true);
 
     try {
+      // 根据操作类型决定 amount 的值
+      let finalAmount = creditAmount;
+      if (creditAction === "deduct") {
+        finalAmount = -creditAmount;
+      }
+      // system_grant 和 recharge 都是正数
+
       const res = await fetch("/api/admin/users", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: creditAction,
           targetUserId: selectedUser.id,
-          amount: creditAction === "recharge" ? creditAmount : -creditAmount,
+          amount: creditAction === "deduct" ? -creditAmount : creditAmount,
           reason: creditReason.trim(),
         }),
       });
@@ -242,9 +252,15 @@ export default function AdminUsersPage() {
       const data = await res.json();
 
       if (data.success) {
+        const actionText = {
+          recharge: "转账成功",
+          deduct: "扣除成功",
+          system_grant: "系统发放成功",
+        }[creditAction];
+        
         toast({
-          title: creditAction === "recharge" ? "充值成功" : "扣除成功",
-          description: `${creditAction === "recharge" ? "+" : "-"}${creditAmount} Credits`,
+          title: actionText,
+          description: `${creditAction === "deduct" ? "-" : "+"}${creditAmount} Credits`,
         });
         setShowCreditsDialog(false);
         fetchUsers();
@@ -254,12 +270,12 @@ export default function AdminUsersPage() {
       } else {
         throw new Error(data.error);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Credit operation error:", error);
       toast({
         variant: "destructive",
         title: "操作失败",
-        description: "请稍后重试",
+        description: error.message || "请稍后重试",
       });
     } finally {
       setIsProcessing(false);
@@ -274,6 +290,53 @@ export default function AdminUsersPage() {
     setSelectedUser(user);
     setBanReason("");
     setShowBanDialog(true);
+  };
+
+  // ================================================================
+  // 删除用户
+  // ================================================================
+
+  const handleOpenDeleteDialog = (user: AdminUser) => {
+    setSelectedUser(user);
+    setShowDeleteDialog(true);
+  };
+
+  const handleDeleteUser = async () => {
+    if (!selectedUser) return;
+    
+    setIsProcessing(true);
+    try {
+      const res = await fetch("/api/admin/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "delete",
+          targetUserId: selectedUser.id,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (data.success) {
+        toast({
+          title: "用户已删除",
+          description: `${selectedUser.email} 的账户已被删除`,
+        });
+        setShowDeleteDialog(false);
+        fetchUsers();
+      } else {
+        throw new Error(data.error);
+      }
+    } catch (error: any) {
+      console.error("Delete user error:", error);
+      toast({
+        variant: "destructive",
+        title: "删除失败",
+        description: error.message || "请稍后重试",
+      });
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   // ================================================================
@@ -670,6 +733,15 @@ export default function AdminUsersPage() {
                                 封禁用户
                               </DropdownMenuItem>
                             )}
+                            <DropdownMenuSeparator className="bg-white/10" />
+                            <DropdownMenuItem
+                              onClick={() => handleOpenDeleteDialog(user)}
+                              className="text-red-500 focus:text-red-500"
+                              disabled={user.role !== "user"}
+                            >
+                              <UserX className="h-4 w-4 mr-2" />
+                              删除用户
+                            </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </TableCell>
@@ -709,40 +781,66 @@ export default function AdminUsersPage() {
               <Label className="text-xs text-muted-foreground mb-2 block">
                 操作类型
               </Label>
-              <div className="flex gap-2">
+              <div className="grid grid-cols-3 gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setCreditAction("system_grant")}
+                  className={cn(
+                    "h-14 gap-1 flex-col",
+                    creditAction === "system_grant"
+                      ? "bg-tiktok-cyan/20 border-tiktok-cyan/50 text-tiktok-cyan"
+                      : "border-border"
+                  )}
+                >
+                  <Zap className="h-5 w-5" />
+                  <div className="text-center">
+                    <div className="font-semibold text-xs">系统发放</div>
+                    <div className="text-[10px] opacity-70">不扣管理员</div>
+                  </div>
+                </Button>
                 <Button
                   variant="outline"
                   onClick={() => setCreditAction("recharge")}
                   className={cn(
-                    "flex-1 h-12 gap-2",
+                    "h-14 gap-1 flex-col",
                     creditAction === "recharge"
                       ? "bg-green-500/20 border-green-500/50 text-green-400"
                       : "border-border"
                   )}
                 >
                   <Plus className="h-5 w-5" />
-                  <div className="text-left">
-                    <div className="font-semibold">充值</div>
-                    <div className="text-xs opacity-70">增加积分</div>
+                  <div className="text-center">
+                    <div className="font-semibold text-xs">转账</div>
+                    <div className="text-[10px] opacity-70">从我转入</div>
                   </div>
                 </Button>
                 <Button
                   variant="outline"
                   onClick={() => setCreditAction("deduct")}
                   className={cn(
-                    "flex-1 h-12 gap-2",
+                    "h-14 gap-1 flex-col",
                     creditAction === "deduct"
                       ? "bg-red-500/20 border-red-500/50 text-red-400"
                       : "border-border"
                   )}
                 >
                   <Minus className="h-5 w-5" />
-                  <div className="text-left">
-                    <div className="font-semibold">扣除</div>
-                    <div className="text-xs opacity-70">减少积分</div>
+                  <div className="text-center">
+                    <div className="font-semibold text-xs">扣除</div>
+                    <div className="text-[10px] opacity-70">回收积分</div>
                   </div>
                 </Button>
               </div>
+              {creditAction === "system_grant" && (
+                <p className="text-xs text-tiktok-cyan mt-2">
+                  💡 系统发放：直接增加用户积分，不从管理员账户扣除
+                </p>
+              )}
+              {creditAction === "recharge" && (
+                <p className="text-xs text-green-400 mt-2">
+                  💸 转账：从您的账户转移积分给该用户
+                </p>
+              )}
             </div>
 
             {/* Amount */}
@@ -790,11 +888,11 @@ export default function AdminUsersPage() {
                 <span className="text-muted-foreground">操作后余额:</span>
                 <span className={cn(
                   "text-xl font-bold",
-                  creditAction === "recharge" ? "text-green-400" : "text-red-400"
+                  creditAction === "deduct" ? "text-red-400" : creditAction === "system_grant" ? "text-tiktok-cyan" : "text-green-400"
                 )}>
-                  {creditAction === "recharge"
-                    ? ((selectedUser?.credits || 0) + creditAmount).toLocaleString()
-                    : Math.max(0, (selectedUser?.credits || 0) - creditAmount).toLocaleString()
+                  {creditAction === "deduct"
+                    ? Math.max(0, (selectedUser?.credits || 0) - creditAmount).toLocaleString()
+                    : ((selectedUser?.credits || 0) + creditAmount).toLocaleString()
                   } 积分
                 </span>
               </div>
@@ -814,7 +912,9 @@ export default function AdminUsersPage() {
               disabled={isProcessing || creditAmount <= 0 || !creditReason.trim()}
               className={cn(
                 "font-semibold",
-                creditAction === "recharge"
+                creditAction === "system_grant"
+                  ? "bg-gradient-to-r from-tiktok-cyan to-tiktok-pink text-black"
+                  : creditAction === "recharge"
                   ? "bg-gradient-to-r from-green-500 to-emerald-500 text-white"
                   : "bg-gradient-to-r from-red-500 to-orange-500 text-white"
               )}
@@ -826,12 +926,14 @@ export default function AdminUsersPage() {
                 </>
               ) : (
                 <>
-                  {creditAction === "recharge" ? (
+                  {creditAction === "system_grant" ? (
+                    <Zap className="h-4 w-4 mr-2" />
+                  ) : creditAction === "recharge" ? (
                     <Plus className="h-4 w-4 mr-2" />
                   ) : (
                     <Minus className="h-4 w-4 mr-2" />
                   )}
-                  {creditAction === "recharge" ? "确认充值" : "确认扣除"}
+                  {creditAction === "system_grant" ? "确认发放" : creditAction === "recharge" ? "确认转账" : "确认扣除"}
                 </>
               )}
             </Button>
@@ -901,6 +1003,71 @@ export default function AdminUsersPage() {
                 <>
                   <Ban className="h-4 w-4 mr-2" />
                   确认封禁
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete User Dialog */}
+      <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <DialogContent className="max-w-md bg-background border-border">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-500">
+              <UserX className="h-5 w-5" />
+              删除用户
+            </DialogTitle>
+            <DialogDescription>
+              确定要永久删除用户 <span className="text-white font-medium">{selectedUser?.email}</span> 吗？
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/30">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="h-5 w-5 text-red-500 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-medium text-red-500">⚠️ 危险操作</p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    此操作将永久删除用户的所有数据，包括：
+                  </p>
+                  <ul className="text-sm text-muted-foreground mt-2 list-disc list-inside space-y-1">
+                    <li>用户账户和个人资料</li>
+                    <li>所有合约记录</li>
+                    <li>生成历史记录</li>
+                    <li>积分交易记录</li>
+                  </ul>
+                  <p className="text-sm text-red-400 mt-2 font-medium">
+                    此操作不可撤销！
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowDeleteDialog(false)}
+              className="border-border"
+            >
+              取消
+            </Button>
+            <Button
+              onClick={handleDeleteUser}
+              disabled={isProcessing}
+              className="bg-red-600 hover:bg-red-700 text-white font-semibold"
+            >
+              {isProcessing ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  删除中...
+                </>
+              ) : (
+                <>
+                  <UserX className="h-4 w-4 mr-2" />
+                  确认删除
                 </>
               )}
             </Button>

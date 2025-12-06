@@ -121,25 +121,42 @@ export default function RegisterPage() {
         <Card className="w-full max-w-md border-white/10 bg-black/60 backdrop-blur-xl">
           <CardContent className="pt-10 pb-10 text-center space-y-6">
             <div className="flex justify-center">
-              <div className="h-20 w-20 rounded-full bg-gradient-to-br from-green-400 to-emerald-500 flex items-center justify-center">
-                <CheckCircle2 className="h-10 w-10 text-white" />
+              <div className="h-20 w-20 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center animate-bounce">
+                <Mail className="h-10 w-10 text-white" />
               </div>
             </div>
-            <div>
-              <h2 className="text-2xl font-bold text-white mb-2">注册成功！</h2>
+            <div className="space-y-3">
+              <h2 className="text-2xl font-bold text-white">📧 请验证邮箱</h2>
+              <div className="p-4 rounded-lg bg-amber-500/10 border border-amber-500/30">
+                <p className="text-amber-200 text-sm font-medium">
+                  ⚠️ 重要提示：您必须点击邮件中的确认链接才能登录
+                </p>
+              </div>
               <p className="text-muted-foreground">
-                请检查您的邮箱 <span className="text-tiktok-cyan">{email}</span> 并点击确认链接完成注册。
+                验证邮件已发送至：
+              </p>
+              <p className="text-tiktok-cyan font-semibold text-lg break-all">
+                {email}
               </p>
             </div>
-            <div className="space-y-3">
+            <div className="space-y-4 pt-2">
+              <div className="p-4 rounded-lg bg-white/5 border border-white/10 text-left space-y-2">
+                <p className="text-sm text-muted-foreground">📋 验证步骤：</p>
+                <ol className="text-sm text-muted-foreground space-y-1 list-decimal list-inside">
+                  <li>打开您的邮箱（包括垃圾邮件文件夹）</li>
+                  <li>找到来自 Tok Factory 的验证邮件</li>
+                  <li>点击邮件中的 &ldquo;确认邮箱&rdquo; 链接</li>
+                  <li>验证成功后即可登录</li>
+                </ol>
+              </div>
               <Button
                 onClick={() => router.push("/auth/login")}
                 className="w-full bg-gradient-to-r from-tiktok-cyan to-tiktok-pink text-black font-semibold"
               >
-                前往登录
+                我已验证，前往登录
               </Button>
               <p className="text-xs text-muted-foreground">
-                没有收到邮件？请检查垃圾邮件文件夹
+                💡 没有收到邮件？请检查垃圾邮件文件夹，或等待1-2分钟后刷新邮箱
               </p>
             </div>
           </CardContent>

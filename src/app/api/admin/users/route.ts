@@ -313,6 +313,122 @@ export async function POST(request: Request) {
       }
 
       // ============================================
+      // 系统发放积分 (System Grant)
+      // 直接增加用户积分，不从管理员账户扣除
+      // 用于测试或系统奖励
+      // ============================================
+      case "system_grant": {
+        if (!amount || amount <= 0) {
+          return NextResponse.json(
+            { success: false, error: "积分数量必须为正数" },
+            { status: 400 }
+          );
+        }
+
+        if (!reason || !reason.trim()) {
+          return NextResponse.json(
+            { success: false, error: "请填写发放原因" },
+            { status: 400 }
+          );
+        }
+
+        const oldCredits = targetUser.credits || 0;
+        const newCredits = oldCredits + amount;
+
+        // 直接更新目标用户积分（不影响管理员积分）
+        const { error: updateUserError } = await supabase
+          .from("profiles")
+          .update({ credits: newCredits })
+          .eq("id", targetUserId);
+
+        if (updateUserError) {
+          console.error("[Admin API] System grant credits error:", updateUserError);
+          return NextResponse.json(
+            { success: false, error: "发放积分失败" },
+            { status: 500 }
+          );
+        }
+
+        console.log(`[Admin API] System granted: ${targetUser.email} +${amount} (by ${adminProfile.email})`);
+
+        result = {
+          action: "system_grant",
+          old_credits: oldCredits,
+          new_credits: newCredits,
+          amount: amount,
+          reason: reason.trim(),
+          timestamp: new Date().toISOString(),
+        };
+        break;
+      }
+
+      // ============================================
+      // 删除用户 (Delete)
+      // 从数据库中删除用户（用于测试）
+      // ============================================
+      case "delete": {
+        // 检查是否尝试删除管理员
+        if (isAdmin(targetUser.role)) {
+          return NextResponse.json(
+            { success: false, error: "无法删除管理员账户" },
+            { status: 403 }
+          );
+        }
+
+        // 检查是否尝试删除自己
+        if (targetUserId === currentUser.id) {
+          return NextResponse.json(
+            { success: false, error: "无法删除自己的账户" },
+            { status: 403 }
+          );
+        }
+
+        // 删除用户的相关数据（按顺序删除以避免外键约束）
+        // 1. 删除用户的合约
+        await supabase.from("contracts").delete().eq("user_id", targetUserId);
+        
+        // 2. 删除用户的生成记录
+        await supabase.from("generations").delete().eq("user_id", targetUserId);
+        
+        // 3. 删除用户的积分交易记录
+        await supabase.from("credit_transactions").delete().eq("user_id", targetUserId);
+        
+        // 4. 删除用户的 profile
+        const { error: deleteProfileError } = await supabase
+          .from("profiles")
+          .delete()
+          .eq("id", targetUserId);
+
+        if (deleteProfileError) {
+          console.error("[Admin API] Delete profile error:", deleteProfileError);
+          return NextResponse.json(
+            { success: false, error: "删除用户资料失败" },
+            { status: 500 }
+          );
+        }
+
+        // 5. 尝试删除 auth.users 中的用户（需要 service role）
+        try {
+          const { error: deleteAuthError } = await supabase.auth.admin.deleteUser(targetUserId);
+          if (deleteAuthError) {
+            console.error("[Admin API] Delete auth user error:", deleteAuthError);
+            // 继续执行，不阻塞（profile 已删除）
+          }
+        } catch (authErr) {
+          console.error("[Admin API] Delete auth user exception:", authErr);
+        }
+
+        console.log(`[Admin API] User deleted: ${targetUser.email} (by ${adminProfile.email})`);
+
+        result = {
+          action: "delete",
+          deleted_user: targetUser.email,
+          timestamp: new Date().toISOString(),
+        };
+        break;
+      }
+
+      // ============================================
       // 封禁用户 (Ban)
       // ============================================
       case "ban": {

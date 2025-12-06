@@ -76,6 +76,10 @@ export interface QuickGenState {
   
   // 历史任务（最近10个）
   recentTasks: (QuickGenVideoTask | QuickGenImageTask)[];
+  
+  // 九宫格处理结果（用于页面返回时恢复）
+  processedGridImages: string[];
+  selectedGridIndex: number;
 }
 
 export interface QuickGenActions {
@@ -105,6 +109,11 @@ export interface QuickGenActions {
   
   // 清除历史
   clearHistory: () => void;
+  
+  // 九宫格处理结果
+  setProcessedGridImages: (images: string[]) => void;
+  setSelectedGridIndex: (index: number) => void;
+  clearProcessedGridImages: () => void;
 }
 
 // ============================================================================
@@ -117,6 +126,8 @@ const initialState: QuickGenState = {
   activeVideoTask: null,
   activeImageTask: null,
   recentTasks: [],
+  processedGridImages: [],
+  selectedGridIndex: 0,
 };
 
 export const useQuickGenStore = create<QuickGenState & QuickGenActions>()(
@@ -230,6 +241,25 @@ export const useQuickGenStore = create<QuickGenState & QuickGenActions>()(
             state.recentTasks = [];
           });
         },
+
+        setProcessedGridImages: (images) => {
+          set((state) => {
+            state.processedGridImages = images;
+          });
+        },
+
+        setSelectedGridIndex: (index) => {
+          set((state) => {
+            state.selectedGridIndex = index;
+          });
+        },
+
+        clearProcessedGridImages: () => {
+          set((state) => {
+            state.processedGridImages = [];
+            state.selectedGridIndex = 0;
+          });
+        },
       })),
       { name: "quick-gen-store" }
     ),
@@ -267,4 +297,6 @@ export const useQuickGenIsImageGenerating = () => useQuickGenStore((state) =>
   state.activeImageTask !== null && 
   !["completed", "failed", "idle"].includes(state.activeImageTask.status)
 );
+export const useQuickGenProcessedGridImages = () => useQuickGenStore((state) => state.processedGridImages);
+export const useQuickGenSelectedGridIndex = () => useQuickGenStore((state) => state.selectedGridIndex);
 

@@ -10,6 +10,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 // ============================================================================
 // 类型定义 - 安全的公开模特数据
@@ -285,8 +286,10 @@ export async function getMarketplaceModels(options?: {
     }
 
     // 5. 查询每个模特的有效签约数量 (所有用户)
+    // 使用 admin 客户端绕过 RLS，确保能查询所有用户的合约
+    const adminSupabase = createAdminClient();
     const modelIds = (models || []).map((m: any) => m.id);
-    const { data: allContracts, error: contractsError } = await supabase
+    const { data: allContracts, error: contractsError } = await adminSupabase
       .from("contracts")
       .select("model_id, user_id")
       .in("model_id", modelIds)
