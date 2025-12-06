@@ -16,6 +16,7 @@ import {
   Lock,
   Zap,
   Factory,
+  Link2,
 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -64,6 +65,13 @@ const navItems: NavItem[] = [
     href: "/quick-gen",
     icon: Zap,
     description: "快速生成单条视频",
+  },
+  // 4.5 链接秒变视频 (新功能)
+  {
+    title: "链接秒变视频",
+    href: "/link-video",
+    icon: Link2,
+    description: "粘贴链接，AI 生成带货视频",
   },
   // 5. 批量产线区 (原批量生产线)
   {
