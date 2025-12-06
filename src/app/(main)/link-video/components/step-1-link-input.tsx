@@ -391,49 +391,78 @@ export function Step1LinkInput() {
             </Button>
           </div>
 
-          {/* 🌟 推荐：一键书签方式 */}
-          <div className="rounded-lg bg-gradient-to-r from-amber-500/10 to-orange-500/10 border border-amber-500/30 p-4 space-y-3">
+          {/* 🌟 推荐：地址栏一键执行 */}
+          <div className="rounded-lg bg-gradient-to-r from-green-500/10 to-emerald-500/10 border border-green-500/30 p-4 space-y-3">
             <div className="flex items-center gap-2">
-              <Star className="h-4 w-4 text-amber-500 fill-amber-500" />
-              <span className="font-medium text-amber-700 dark:text-amber-400">推荐：一键书签（只需设置一次）</span>
+              <Sparkles className="h-4 w-4 text-green-500" />
+              <span className="font-medium text-green-700 dark:text-green-400">最简单：地址栏粘贴执行</span>
             </div>
             
-            <ol className="text-sm space-y-2 text-muted-foreground">
+            <ol className="text-sm space-y-3 text-muted-foreground">
               <li className="flex items-start gap-2">
-                <Badge variant="outline" className="shrink-0 mt-0.5 bg-amber-500/10">1</Badge>
-                <div>
-                  <span>把下面的按钮 </span>
-                  <strong className="text-foreground">拖拽</strong>
-                  <span> 到您的书签栏：</span>
-                </div>
+                <Badge variant="outline" className="shrink-0 mt-0.5 bg-green-500/10 text-green-600">1</Badge>
+                <span>在商品页面，点击下方按钮复制代码</span>
               </li>
             </ol>
 
-            {/* 可拖拽的书签按钮 */}
-            <div className="flex justify-center py-2">
-              <a
-                href={bookmarkletUrl}
-                onClick={(e) => e.preventDefault()}
-                draggable="true"
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-amber-500 to-orange-500 text-white font-medium shadow-lg hover:shadow-xl transition-all cursor-grab active:cursor-grabbing"
-                title="拖拽此按钮到书签栏"
+            {/* 复制代码按钮 */}
+            <div className="flex justify-center">
+              <Button
+                variant="default"
+                className="bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white"
+                onClick={() => {
+                  const code = `javascript:(function(){var d={title:document.title||'',desc:'',price:'',imgs:[]};var m=document.body.innerText.match(/[¥￥$]\\s*([\\d,.]+)/);if(m)d.price=m[1];document.querySelectorAll('img[src*="http"]').forEach(function(i){if(i.width>150&&i.height>150&&d.imgs.length<5)d.imgs.push(i.src)});d.imgs=[...new Set(d.imgs)];window.open('${typeof window !== 'undefined' ? window.location.origin : ''}/link-video?data='+encodeURIComponent(JSON.stringify(d)))})()`;
+                  navigator.clipboard.writeText(code);
+                  alert('代码已复制！\\n\\n请在商品页面的地址栏粘贴，然后按回车');
+                }}
               >
-                <Sparkles className="h-4 w-4" />
-                提取商品数据
-              </a>
+                <Copy className="h-4 w-4 mr-2" />
+                复制提取代码
+              </Button>
             </div>
 
-            <ol start={2} className="text-sm space-y-2 text-muted-foreground">
+            <ol start={2} className="text-sm space-y-3 text-muted-foreground">
               <li className="flex items-start gap-2">
-                <Badge variant="outline" className="shrink-0 mt-0.5 bg-amber-500/10">2</Badge>
-                <span>在任意商品页面点击书签，数据自动导入！</span>
+                <Badge variant="outline" className="shrink-0 mt-0.5 bg-green-500/10 text-green-600">2</Badge>
+                <div>
+                  <span>在商品页面，点击地址栏，</span>
+                  <strong className="text-foreground">全选后粘贴</strong>
+                  <span>，按回车</span>
+                </div>
+              </li>
+              <li className="flex items-start gap-2">
+                <Badge variant="outline" className="shrink-0 mt-0.5 bg-green-500/10 text-green-600">3</Badge>
+                <span>自动跳转回来，数据已导入！</span>
               </li>
             </ol>
 
-            <p className="text-xs text-muted-foreground bg-muted/50 rounded p-2">
-              💡 设置一次后，以后在任何商品页面只需点击书签即可
-            </p>
+            <div className="text-xs text-muted-foreground bg-muted/50 rounded p-2 space-y-1">
+              <p>⚠️ <strong>重要</strong>：粘贴后地址栏开头的 <code className="bg-muted px-1 rounded">javascript:</code> 可能会被浏览器删掉</p>
+              <p>如果跳转失败，请手动在开头加上 <code className="bg-muted px-1 rounded">javascript:</code></p>
+            </div>
           </div>
+
+          {/* 备选：书签方式 */}
+          <details className="text-sm border border-amber-500/20 rounded-lg p-3">
+            <summary className="cursor-pointer text-amber-600 dark:text-amber-400 font-medium">
+              备选方案：添加到书签栏（一劳永逸）
+            </summary>
+            <div className="mt-3 space-y-3 text-muted-foreground">
+              <p>把下面的按钮拖到书签栏，以后只需点击书签即可：</p>
+              <div className="flex justify-center py-2">
+                <a
+                  href={bookmarkletUrl}
+                  onClick={(e) => e.preventDefault()}
+                  draggable="true"
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-amber-500 to-orange-500 text-white font-medium shadow-lg hover:shadow-xl transition-all cursor-grab active:cursor-grabbing text-sm"
+                  title="拖拽此按钮到书签栏"
+                >
+                  <Star className="h-4 w-4" />
+                  提取商品数据
+                </a>
+              </div>
+            </div>
+          </details>
 
           {/* 备选：手动复制脚本方式 */}
           <details className="text-sm">
