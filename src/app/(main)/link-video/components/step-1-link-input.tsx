@@ -408,10 +408,6 @@ export function Step1LinkInput() {
                     按 <kbd className="px-1.5 py-0.5 bg-muted rounded text-xs">Ctrl</kbd>+<kbd className="px-1.5 py-0.5 bg-muted rounded text-xs">A</kbd> 全选，
                     再按 <kbd className="px-1.5 py-0.5 bg-muted rounded text-xs">Ctrl</kbd>+<kbd className="px-1.5 py-0.5 bg-muted rounded text-xs">C</kbd> 复制
                   </p>
-                  <p className="text-xs text-muted-foreground">
-                    Mac：<kbd className="px-1.5 py-0.5 bg-muted rounded text-xs">⌘</kbd>+<kbd className="px-1.5 py-0.5 bg-muted rounded text-xs">A</kbd>，
-                    <kbd className="px-1.5 py-0.5 bg-muted rounded text-xs">⌘</kbd>+<kbd className="px-1.5 py-0.5 bg-muted rounded text-xs">C</kbd>
-                  </p>
                 </div>
               </div>
 
@@ -419,51 +415,51 @@ export function Step1LinkInput() {
               <div className="flex items-start gap-3">
                 <Badge className="shrink-0 bg-green-500 text-white h-6 w-6 flex items-center justify-center p-0">2</Badge>
                 <div className="flex-1 space-y-2">
-                  <p className="text-sm font-medium">回来点击下面按钮</p>
+                  <p className="text-sm font-medium">在下面框里粘贴（Ctrl+V），然后点击解析</p>
+                  <Textarea
+                    placeholder="点击这里，然后按 Ctrl+V 粘贴商品页面内容..."
+                    className="min-h-[100px] text-xs"
+                    id="paste-area"
+                  />
                   <Button
                     variant="default"
                     size="lg"
                     className="w-full bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white text-base"
-                    onClick={async () => {
-                      try {
-                        const text = await navigator.clipboard.readText();
-                        if (!text || text.length < 50) {
-                          alert('剪贴板内容太少，请先在商品页面按 Ctrl+A 全选，Ctrl+C 复制');
-                          return;
-                        }
-                        
-                        // 解析页面文本内容
-                        const titleMatch = text.match(/^(.{10,100}?)[\n\r]/m) || 
-                                          text.match(/(.{10,80}?)(官方|旗舰|专卖|正品)/);
-                        const priceMatch = text.match(/[¥￥]\s*([\d,]+\.?\d*)/);
-                        
-                        const extractedData: ParsedProductData = {
-                          title: titleMatch ? titleMatch[1].trim() : text.substring(0, 60),
-                          selling_points: [],
-                          price: priceMatch ? { current: priceMatch[1] } : undefined,
-                          images: [],
-                        };
-                        
-                        // 尝试提取卖点
-                        const pointsMatch = text.match(/(包邮|正品|官方|新款|热卖|限时|优惠|折扣|秒杀)/g);
-                        if (pointsMatch) {
-                          extractedData.selling_points = [...new Set(pointsMatch)].slice(0, 5);
-                        }
-                        
-                        setParsedData(extractedData, null);
-                        setShowBrowserMode(false);
-                        alert('✅ 商品信息已提取！\\n\\n标题：' + extractedData.title.substring(0, 30) + '...\\n价格：' + (extractedData.price?.current || '未识别'));
-                      } catch (err) {
-                        alert('无法读取剪贴板，请允许剪贴板权限后重试');
+                    onClick={() => {
+                      const textarea = document.getElementById('paste-area') as HTMLTextAreaElement;
+                      const text = textarea?.value || '';
+                      
+                      if (!text || text.length < 50) {
+                        alert('请先粘贴商品页面内容！\\n\\n操作步骤：\\n1. 去商品页面按 Ctrl+A 全选\\n2. 按 Ctrl+C 复制\\n3. 回来点击上面的框\\n4. 按 Ctrl+V 粘贴\\n5. 点击此按钮');
+                        return;
                       }
+                      
+                      // 解析页面文本内容
+                      const titleMatch = text.match(/^(.{10,100}?)[\n\r]/m) || 
+                                        text.match(/(.{10,80}?)(官方|旗舰|专卖|正品)/);
+                      const priceMatch = text.match(/[¥￥]\s*([\d,]+\.?\d*)/);
+                      
+                      const extractedData: ParsedProductData = {
+                        title: titleMatch ? titleMatch[1].trim() : text.substring(0, 60),
+                        selling_points: [],
+                        price: priceMatch ? { current: priceMatch[1] } : undefined,
+                        images: [],
+                      };
+                      
+                      // 尝试提取卖点
+                      const pointsMatch = text.match(/(包邮|正品|官方|新款|热卖|限时|优惠|折扣|秒杀|免运费)/g);
+                      if (pointsMatch) {
+                        extractedData.selling_points = [...new Set(pointsMatch)].slice(0, 5);
+                      }
+                      
+                      setParsedData(extractedData, null);
+                      setShowBrowserMode(false);
+                      alert('✅ 商品信息已提取！\\n\\n标题：' + extractedData.title.substring(0, 30) + '...\\n价格：¥' + (extractedData.price?.current || '未识别'));
                     }}
                   >
                     <Sparkles className="h-5 w-5 mr-2" />
-                    粘贴页面内容
+                    解析商品信息
                   </Button>
-                  <p className="text-xs text-green-600 dark:text-green-400 text-center">
-                    ✓ 自动识别商品标题和价格
-                  </p>
                 </div>
               </div>
             </div>
