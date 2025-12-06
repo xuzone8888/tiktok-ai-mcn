@@ -391,60 +391,81 @@ export function Step1LinkInput() {
             </Button>
           </div>
 
-          {/* 🌟 推荐：控制台提取（最可靠） */}
+          {/* 🌟 最简单：复制粘贴页面内容 */}
           <div className="rounded-lg bg-gradient-to-r from-green-500/10 to-emerald-500/10 border border-green-500/30 p-4 space-y-4">
             <div className="flex items-center gap-2">
               <Sparkles className="h-4 w-4 text-green-500" />
-              <span className="font-medium text-green-700 dark:text-green-400">三步完成（推荐方式）</span>
+              <span className="font-medium text-green-700 dark:text-green-400">超简单！两步搞定</span>
             </div>
             
             <div className="space-y-4">
               {/* 步骤 1 */}
               <div className="flex items-start gap-3">
                 <Badge className="shrink-0 bg-green-500 text-white h-6 w-6 flex items-center justify-center p-0">1</Badge>
-                <div className="flex-1 space-y-2">
-                  <p className="text-sm font-medium">复制提取代码</p>
-                  <Button
-                    variant="default"
-                    size="sm"
-                    className="bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white"
-                    onClick={() => {
-                      const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
-                      const code = `(function(){var d={title:document.title,price:'',imgs:[]};var m=document.body.innerText.match(/[¥$]\\s*([\\d,.]+)/);if(m)d.price=m[1];document.querySelectorAll('img[src*="http"]').forEach(i=>{if(i.width>150&&i.height>150&&d.imgs.length<5)d.imgs.push(i.src)});d.imgs=[...new Set(d.imgs)];window.open('${baseUrl}/link-video?data='+encodeURIComponent(JSON.stringify(d)))})()`;
-                      navigator.clipboard.writeText(code);
-                    }}
-                  >
-                    <Copy className="h-4 w-4 mr-2" />
-                    点击复制代码
-                  </Button>
+                <div className="flex-1">
+                  <p className="text-sm font-medium">在商品页面全选复制</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    按 <kbd className="px-1.5 py-0.5 bg-muted rounded text-xs">Ctrl</kbd>+<kbd className="px-1.5 py-0.5 bg-muted rounded text-xs">A</kbd> 全选，
+                    再按 <kbd className="px-1.5 py-0.5 bg-muted rounded text-xs">Ctrl</kbd>+<kbd className="px-1.5 py-0.5 bg-muted rounded text-xs">C</kbd> 复制
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Mac：<kbd className="px-1.5 py-0.5 bg-muted rounded text-xs">⌘</kbd>+<kbd className="px-1.5 py-0.5 bg-muted rounded text-xs">A</kbd>，
+                    <kbd className="px-1.5 py-0.5 bg-muted rounded text-xs">⌘</kbd>+<kbd className="px-1.5 py-0.5 bg-muted rounded text-xs">C</kbd>
+                  </p>
                 </div>
               </div>
 
               {/* 步骤 2 */}
               <div className="flex items-start gap-3">
                 <Badge className="shrink-0 bg-green-500 text-white h-6 w-6 flex items-center justify-center p-0">2</Badge>
-                <div className="flex-1">
-                  <p className="text-sm font-medium">在商品页面按 F12 打开控制台</p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Mac 用户：<kbd className="px-1.5 py-0.5 bg-muted rounded text-xs">⌘</kbd> + <kbd className="px-1.5 py-0.5 bg-muted rounded text-xs">Option</kbd> + <kbd className="px-1.5 py-0.5 bg-muted rounded text-xs">J</kbd>
+                <div className="flex-1 space-y-2">
+                  <p className="text-sm font-medium">回来点击下面按钮</p>
+                  <Button
+                    variant="default"
+                    size="lg"
+                    className="w-full bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white text-base"
+                    onClick={async () => {
+                      try {
+                        const text = await navigator.clipboard.readText();
+                        if (!text || text.length < 50) {
+                          alert('剪贴板内容太少，请先在商品页面按 Ctrl+A 全选，Ctrl+C 复制');
+                          return;
+                        }
+                        
+                        // 解析页面文本内容
+                        const titleMatch = text.match(/^(.{10,100}?)[\n\r]/m) || 
+                                          text.match(/(.{10,80}?)(官方|旗舰|专卖|正品)/);
+                        const priceMatch = text.match(/[¥￥]\s*([\d,]+\.?\d*)/);
+                        
+                        const extractedData: ParsedProductData = {
+                          title: titleMatch ? titleMatch[1].trim() : text.substring(0, 60),
+                          selling_points: [],
+                          price: priceMatch ? { current: priceMatch[1] } : undefined,
+                          images: [],
+                        };
+                        
+                        // 尝试提取卖点
+                        const pointsMatch = text.match(/(包邮|正品|官方|新款|热卖|限时|优惠|折扣|秒杀)/g);
+                        if (pointsMatch) {
+                          extractedData.selling_points = [...new Set(pointsMatch)].slice(0, 5);
+                        }
+                        
+                        setParsedData(extractedData, null);
+                        setShowBrowserMode(false);
+                        alert('✅ 商品信息已提取！\\n\\n标题：' + extractedData.title.substring(0, 30) + '...\\n价格：' + (extractedData.price?.current || '未识别'));
+                      } catch (err) {
+                        alert('无法读取剪贴板，请允许剪贴板权限后重试');
+                      }
+                    }}
+                  >
+                    <Sparkles className="h-5 w-5 mr-2" />
+                    粘贴页面内容
+                  </Button>
+                  <p className="text-xs text-green-600 dark:text-green-400 text-center">
+                    ✓ 自动识别商品标题和价格
                   </p>
                 </div>
               </div>
-
-              {/* 步骤 3 */}
-              <div className="flex items-start gap-3">
-                <Badge className="shrink-0 bg-green-500 text-white h-6 w-6 flex items-center justify-center p-0">3</Badge>
-                <div className="flex-1">
-                  <p className="text-sm font-medium">在控制台粘贴代码，按回车</p>
-                  <p className="text-xs text-green-600 dark:text-green-400 mt-1">
-                    ✓ 自动跳转回来，数据已导入！
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="text-xs text-muted-foreground bg-muted/50 rounded p-2">
-              💡 提示：如看到安全警告，输入 <code className="bg-muted px-1 rounded">allow pasting</code> 后回车
             </div>
           </div>
 
