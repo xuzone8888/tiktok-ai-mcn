@@ -58,12 +58,27 @@ export function Step3Script() {
       if (!jobId) {
         // 从 store 获取数据创建 job
         const store = useLinkVideoStore.getState();
+        
+        // 如果没有 productLinkId（浏览器提取模式），需要将 parsedData 转换为 manual_product_info
+        let manualProductInfo = store.manualProductInfo;
+        if (!store.productLinkId && store.parsedData && !manualProductInfo) {
+          // 将浏览器提取的 parsedData 转换为 manual_product_info 格式
+          manualProductInfo = {
+            title: store.parsedData.title,
+            selling_points: store.parsedData.selling_points?.join(',') || '',
+            price: typeof store.parsedData.price === 'object' 
+              ? store.parsedData.price.current 
+              : String(store.parsedData.price || ''),
+            images: store.parsedData.images?.map(img => img.url) || [],
+          };
+        }
+        
         const createResponse = await fetch("/api/link-video/jobs", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             product_link_id: store.productLinkId,
-            manual_product_info: store.manualProductInfo,
+            manual_product_info: manualProductInfo,
             video_config: store.videoConfig,
             ai_model_id: store.selectedModelId,
             selected_main_image_url: store.primaryImageUrl,

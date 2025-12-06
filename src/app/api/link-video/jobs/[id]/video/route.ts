@@ -40,7 +40,7 @@ export async function POST(
       .from('link_video_jobs')
       .select(`
         *,
-        ai_model:ai_models(trigger_word)
+        ai_model:ai_models(id, name, trigger_word, avatar_url)
       `)
       .eq('id', jobId)
       .eq('user_id', user.id)
@@ -130,17 +130,23 @@ export async function POST(
       .eq('id', jobId);
 
     // 7. 构建 Prompt
-    // 组合脚本 + AI 模特触发词
-    let finalPrompt = job.script_text;
+    // 组合脚本 + AI 模特触发词 (参考 generate-video 模块的实现)
+    let finalPrompt = '';
     
+    // 如果有 AI 模特，注入触发词到 prompt 开头
     if (job.ai_model?.trigger_word) {
-      finalPrompt = `[AI MODEL: ${job.ai_model.trigger_word}]\n\n${finalPrompt}`;
+      finalPrompt = `Professional video featuring ${job.ai_model.trigger_word}. `;
+      console.log('[Video API] Injected AI model trigger word:', job.ai_model.trigger_word);
     }
 
-    // 限制 Prompt 长度
-    if (finalPrompt.length > 1000) {
-      finalPrompt = finalPrompt.substring(0, 1000);
-    }
+    // 添加脚本内容 (截取前800字符，为其他修饰词留空间)
+    const scriptContent = job.script_text.length > 800 
+      ? job.script_text.substring(0, 800) + '...'
+      : job.script_text;
+    finalPrompt += scriptContent;
+
+    // 添加质量提升词
+    finalPrompt += '. High quality, cinematic, professional lighting, viral TikTok style.';
 
     // 8. 确定 Sora 模型
     const duration = job.video_config.duration;
