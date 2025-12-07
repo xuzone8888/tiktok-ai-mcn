@@ -492,7 +492,34 @@ export async function generateTalkingScript(
     return { success: false, error: result.error };
   }
 
-  return { success: true, script: result.content };
+  // 清理脚本：只保留第一组完整的 C01-C07 脚本
+  let cleanedScript = result.content || "";
+  
+  // 查找 C01 开头的位置
+  const c01Match = cleanedScript.match(/C01\s*:/i);
+  if (c01Match && c01Match.index !== undefined) {
+    // 从 C01 开始截取
+    cleanedScript = cleanedScript.substring(c01Match.index);
+    
+    // 查找 C07 后是否有第二个 C01（表示重复脚本）
+    const secondC01Match = cleanedScript.match(/C07[\s\S]*?(C01\s*:)/i);
+    if (secondC01Match && secondC01Match.index !== undefined) {
+      // 截取到 C07 后，去掉重复的部分
+      const c07End = cleanedScript.indexOf("C07");
+      if (c07End !== -1) {
+        // 找到 C07 那行的末尾
+        const c07LineEnd = cleanedScript.indexOf("\n", c07End + 100); // C07行通常很长，往后找100字符后的换行
+        if (c07LineEnd !== -1 && c07LineEnd < (secondC01Match.index || cleanedScript.length)) {
+          // 保留到 C07 行结束
+          cleanedScript = cleanedScript.substring(0, c07LineEnd).trim();
+        }
+      }
+    }
+  }
+  
+  console.log("[Doubao] Script cleaned, length:", cleanedScript.length);
+
+  return { success: true, script: cleanedScript };
 }
 
 /**

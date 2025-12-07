@@ -1603,8 +1603,10 @@ C07: [story CTA, inspiring, <50 chars]`,
         }
 
         if (!videoUrl) {
-          // 超时但可能实际完成了，提示用户查看任务日志
-          throw new Error(`视频生成时间较长（${isPro ? "Pro模式约15-30分钟" : "标清约3-5分钟"}），请稍后在「生产轨迹簿」中查看结果`);
+          // 超时但任务可能仍在后台运行
+          // 标记为需要后台检查的状态，而不是直接失败
+          console.log("[Video Batch] Poll timeout for task:", task.id, "soraTaskId:", soraTaskId);
+          throw new Error(`视频生成耗时较长（${isPro ? "Pro高清约10-25分钟" : "标清约3-8分钟"}），任务已提交成功。请稍后在「生产轨迹簿」中查看结果，或刷新页面后重试。`);
         }
 
         // ==================== 完成 ====================

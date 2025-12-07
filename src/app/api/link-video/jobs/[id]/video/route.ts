@@ -342,9 +342,8 @@ export async function GET(
     const raw = taskResult.raw as { progress?: number };
 
     if (task?.status === 'completed' && task.resultUrl) {
-      // 仅当使用主任务 ID 时才更新数据库 & 同步日志；批量变体只返回结果
+      // 主任务：更新数据库状态
       if (!externalTaskId) {
-        // 更新数据库
         await adminSupabase
           .from('link_video_jobs')
           .update({
@@ -354,36 +353,41 @@ export async function GET(
             progress: 100,
           })
           .eq('id', jobId);
+      }
 
-        // 同步到 generations 表（用于生产轨迹簿显示）
-        try {
-          // 获取完整的 job 信息
-          const { data: fullJob } = await adminSupabase
-            .from('link_video_jobs')
-            .select('*, ai_model:ai_models(name)')
-            .eq('id', jobId)
-            .single();
+      // 所有完成的视频都同步到 generations 表（包括批量变体）
+      try {
+        const { data: fullJob } = await adminSupabase
+          .from('link_video_jobs')
+          .select('*, ai_model:ai_models(name)')
+          .eq('id', jobId)
+          .single();
 
-          if (fullJob) {
-            await adminSupabase.from('generations').insert({
-              user_id: user.id,
-              type: 'video',
-              source: 'link_video',
-              status: 'completed',
-              prompt: fullJob.script_text?.substring(0, 200) || '链接秒变视频',
-              model: fullJob.ai_model?.name || 'Sora2',
-              result_url: task.resultUrl,
-              video_url: task.resultUrl,
-              credit_cost: fullJob.credits_used || 0,
-              created_at: fullJob.created_at,
-              completed_at: new Date().toISOString(),
-            });
-            console.log('[Video API] Synced to generations table');
+        if (fullJob) {
+          const batchLabel = externalTaskId ? ` #${(parseInt(externalTaskId.slice(-2), 16) % 10) + 1}` : '';
+          const { error: insertError } = await adminSupabase.from('generations').insert({
+            user_id: user.id,
+            task_id: targetTaskId,
+            type: 'video',
+            source: 'link_video',
+            status: 'completed',
+            prompt: (fullJob.script_text?.substring(0, 200) || '链接秒变视频') + batchLabel,
+            model: fullJob.ai_model?.name || 'Sora2',
+            result_url: task.resultUrl,
+            video_url: task.resultUrl,
+            credit_cost: externalTaskId ? getLinkVideoCredits(fullJob.video_config?.duration || 15) : (fullJob.credits_used || 0),
+            created_at: new Date().toISOString(),
+            completed_at: new Date().toISOString(),
+          });
+          
+          if (insertError) {
+            console.error('[Video API] Failed to insert generation:', insertError);
+          } else {
+            console.log('[Video API] Synced to generations table:', { taskId: targetTaskId, isBatch: !!externalTaskId });
           }
-        } catch (syncError) {
-          // 同步失败不影响主流程
-          console.error('[Video API] Failed to sync to generations:', syncError);
         }
+      } catch (syncError) {
+        console.error('[Video API] Failed to sync to generations:', syncError);
       }
 
       return NextResponse.json({
