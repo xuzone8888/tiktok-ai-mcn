@@ -236,7 +236,7 @@ export async function getMarketplaceModels(options?: {
   search?: string;
 }): Promise<ModelsListResponse> {
   try {
-    const supabase = createClient();
+    const supabase = await createClient();
     const { category, featured, trending, limit = 50, offset = 0, search } = options || {};
 
     // 0. 获取当前用户
@@ -364,7 +364,7 @@ export async function getUserHiredModels(
       };
     }
 
-    const supabase = createClient();
+    const supabase = await createClient();
 
     // 1. 查询用户的有效合约
     const { data: contracts, error: contractsError } = await supabase
@@ -453,7 +453,7 @@ export async function getPublicModelById(
       };
     }
 
-    const supabase = createClient();
+    const supabase = await createClient();
 
     // 只选择安全字段
     const { data: model, error } = await supabase
@@ -510,7 +510,7 @@ export async function searchModels(
       };
     }
 
-    const supabase = createClient();
+    const supabase = await createClient();
     const searchTerm = `%${query.trim()}%`;
 
     // 只选择安全字段

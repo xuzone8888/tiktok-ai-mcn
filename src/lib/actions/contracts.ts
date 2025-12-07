@@ -101,7 +101,7 @@ export async function hireModel(input: HireModelInput): Promise<HireModelResult>
   console.log(`[Contracts] Starting hire process: model=${modelId}, user=${userId}, period=${rentalPeriod}`);
 
   try {
-    const supabase = createClient();
+    const supabase = await createClient();
 
     // ========================================================================
     // Step 1: 获取模特信息
@@ -316,7 +316,7 @@ export async function getUserActiveContracts(userId: string): Promise<{
   error?: string;
 }> {
   try {
-    const supabase = createClient();
+    const supabase = await createClient();
 
     const { data: contracts, error } = await supabase
       .from("contracts")
@@ -355,7 +355,7 @@ export async function checkModelHired(
   modelId: string
 ): Promise<{ hired: boolean; endDate?: string }> {
   try {
-    const supabase = createClient();
+    const supabase = await createClient();
 
     const { data: contract } = await supabase
       .from("contracts")
@@ -385,7 +385,7 @@ export async function getUserCredits(userId: string): Promise<{
   error?: string;
 }> {
   try {
-    const supabase = createClient();
+    const supabase = await createClient();
 
     const { data: profile, error } = await supabase
       .from("profiles")

@@ -14,7 +14,7 @@ import { createClient } from "@/lib/supabase/server";
 export async function DELETE() {
   try {
     // 验证管理员权限
-    const supabase = createClient();
+    const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     
     if (!user) {
@@ -85,7 +85,7 @@ export async function DELETE() {
 // GET 方法用于查看过期记录数量（不删除）
 export async function GET() {
   try {
-    const supabase = createClient();
+    const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     
     if (!user) {

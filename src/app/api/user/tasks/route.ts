@@ -44,7 +44,7 @@ export interface TaskStats {
 
 export async function GET(request: Request) {
   try {
-    const supabase = createClient();
+    const supabase = await createClient();
     
     // 获取当前登录用户
     const { data: { user } } = await supabase.auth.getUser();

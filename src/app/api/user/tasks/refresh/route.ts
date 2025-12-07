@@ -13,7 +13,7 @@ import { querySora2Result, queryNanoBananaResult } from "@/lib/suchuang-api";
 
 export async function POST() {
   try {
-    const supabase = createClient();
+    const supabase = await createClient();
     
     // 获取当前登录用户
     const { data: { user } } = await supabase.auth.getUser();
