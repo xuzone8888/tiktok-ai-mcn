@@ -110,6 +110,8 @@ function getSourceLabel(source: string): string {
       return "批量视频";
     case "batch_image":
       return "批量图片";
+    case "link_video":
+      return "链接秒变";
     default:
       return "未知来源";
   }

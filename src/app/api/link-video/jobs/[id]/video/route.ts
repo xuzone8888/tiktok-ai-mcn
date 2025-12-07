@@ -301,6 +301,36 @@ export async function GET(
         })
         .eq('id', jobId);
 
+      // 同步到 generations 表（用于生产轨迹簿显示）
+      try {
+        // 获取完整的 job 信息
+        const { data: fullJob } = await adminSupabase
+          .from('link_video_jobs')
+          .select('*, ai_model:ai_models(name)')
+          .eq('id', jobId)
+          .single();
+
+        if (fullJob) {
+          await adminSupabase.from('generations').insert({
+            user_id: user.id,
+            type: 'video',
+            source: 'link_video',
+            status: 'completed',
+            prompt: fullJob.script_text?.substring(0, 200) || '链接秒变视频',
+            model: fullJob.ai_model?.name || 'Sora2',
+            result_url: task.resultUrl,
+            video_url: task.resultUrl,
+            credit_cost: fullJob.credits_used || 0,
+            created_at: fullJob.created_at,
+            completed_at: new Date().toISOString(),
+          });
+          console.log('[Video API] Synced to generations table');
+        }
+      } catch (syncError) {
+        // 同步失败不影响主流程
+        console.error('[Video API] Failed to sync to generations:', syncError);
+      }
+
       return NextResponse.json({
         success: true,
         status: 'completed',

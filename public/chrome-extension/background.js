@@ -52,3 +52,5 @@ function extractProductData() {
   return data;
 }
 
+
+

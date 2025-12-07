@@ -16,7 +16,7 @@ import { createClient } from "@/lib/supabase/server";
 export interface TaskLogItem {
   id: string;
   type: "video" | "image";
-  source: "quick_gen" | "batch_video" | "batch_image";
+  source: "quick_gen" | "batch_video" | "batch_image" | "link_video";
   status: "completed" | "failed" | "processing" | "pending";
   resultUrl: string | null;
   thumbnailUrl: string | null;

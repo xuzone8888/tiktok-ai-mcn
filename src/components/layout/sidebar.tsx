@@ -59,19 +59,19 @@ const navItems: NavItem[] = [
     icon: UserCheck,
     description: "已签约的专属模特",
   },
-  // 4. 即时造片台 (原单条即时工位)
-  {
-    title: "即时造片台",
-    href: "/quick-gen",
-    icon: Zap,
-    description: "快速生成单条视频",
-  },
-  // 4.5 链接秒变视频 (新功能)
+  // 4. 链接秒变视频 (主推功能)
   {
     title: "链接秒变视频",
     href: "/link-video",
     icon: Link2,
     description: "粘贴链接，AI 生成带货视频",
+  },
+  // 5. 即时造片台 (原单条即时工位)
+  {
+    title: "即时造片台",
+    href: "/quick-gen",
+    icon: Zap,
+    description: "快速生成单条视频",
   },
   // 5. 批量产线区 (原批量生产线)
   {

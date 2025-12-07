@@ -1584,56 +1584,59 @@ export default function VideoBatchPage() {
           </CardContent>
         </Card>
 
-        {/* 全局配置 */}
+        {/* 全局配置 - 简化版 */}
         <Card className="glass-card">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm flex items-center gap-2">
-              <Settings2 className="h-4 w-4 text-tiktok-cyan" />
-              全局配置
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="py-4">
             <div className="flex flex-wrap items-center gap-4">
-              {/* 视频模型 */}
+              {/* 模型选择 - 简化为标签组 */}
               <div className="flex items-center gap-2">
                 <Label className="text-xs text-muted-foreground whitespace-nowrap">模型</Label>
-                <div className="flex gap-1">
-                  {(["sora2", "sora2-pro"] as VideoModelType[]).map((model) => (
-                    <Button
-                      key={model}
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        updateGlobalSettings("modelType", model);
-                        // 切换模型时重置时长和质量
-                        if (model === "sora2") {
-                          updateGlobalSettings("duration", 15);
-                          updateGlobalSettings("quality", "standard");
-                        } else {
-                          // sora2-pro 默认 15秒高清
-                          updateGlobalSettings("duration", 15);
-                          updateGlobalSettings("quality", "hd");
-                        }
-                      }}
-                      className={cn(
-                        "h-8 px-3 text-xs",
-                        globalSettings.modelType === model
-                          ? "bg-purple-500/20 border-purple-500/50 text-purple-400"
-                          : "btn-subtle"
-                      )}
-                    >
-                      {model === "sora2" ? "Sora2 标清" : "Sora2 Pro"}
-                    </Button>
-                  ))}
+                <div className="flex gap-1 p-1 rounded-lg bg-muted/30">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      updateGlobalSettings("modelType", "sora2");
+                      updateGlobalSettings("duration", 15);
+                      updateGlobalSettings("quality", "standard");
+                    }}
+                    className={cn(
+                      "h-7 px-3 text-xs",
+                      globalSettings.modelType === "sora2"
+                        ? "bg-purple-500/30 text-purple-300"
+                        : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    标清
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      updateGlobalSettings("modelType", "sora2-pro");
+                      updateGlobalSettings("duration", 15);
+                      updateGlobalSettings("quality", "hd");
+                    }}
+                    className={cn(
+                      "h-7 px-3 text-xs",
+                      globalSettings.modelType === "sora2-pro"
+                        ? "bg-purple-500/30 text-purple-300"
+                        : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    Pro
+                  </Button>
                 </div>
               </div>
 
-              {/* 视频时长 + 质量 */}
+              {/* 分隔 */}
+              <div className="h-6 w-px bg-border/50" />
+
+              {/* 时长选择 - 简化 */}
               <div className="flex items-center gap-2">
                 <Label className="text-xs text-muted-foreground whitespace-nowrap">时长</Label>
                 <div className="flex gap-1">
                   {globalSettings.modelType === "sora2" ? (
-                    // Sora2 标清: 10秒、15秒
                     <>
                       {([10, 15] as VideoDuration[]).map((dur) => (
                         <Button
@@ -1645,7 +1648,7 @@ export default function VideoBatchPage() {
                             updateGlobalSettings("quality", "standard");
                           }}
                           className={cn(
-                            "h-8 px-3 text-xs",
+                            "h-7 px-3 text-xs",
                             globalSettings.duration === dur
                               ? "bg-amber-500/20 border-amber-500/50 text-amber-400"
                               : "btn-subtle"
@@ -1656,7 +1659,6 @@ export default function VideoBatchPage() {
                       ))}
                     </>
                   ) : (
-                    // Sora2 Pro: 15秒高清、25秒标清
                     <>
                       <Button
                         variant="outline"
@@ -1666,13 +1668,13 @@ export default function VideoBatchPage() {
                           updateGlobalSettings("quality", "hd");
                         }}
                         className={cn(
-                          "h-8 px-3 text-xs",
+                          "h-7 px-3 text-xs",
                           globalSettings.duration === 15 && globalSettings.quality === "hd"
                             ? "bg-emerald-500/20 border-emerald-500/50 text-emerald-400"
                             : "btn-subtle"
                         )}
                       >
-                        15秒 高清
+                        15秒高清
                       </Button>
                       <Button
                         variant="outline"
@@ -1682,20 +1684,23 @@ export default function VideoBatchPage() {
                           updateGlobalSettings("quality", "standard");
                         }}
                         className={cn(
-                          "h-8 px-3 text-xs",
+                          "h-7 px-3 text-xs",
                           globalSettings.duration === 25 && globalSettings.quality === "standard"
                             ? "bg-amber-500/20 border-amber-500/50 text-amber-400"
                             : "btn-subtle"
                         )}
                       >
-                        25秒 标清
+                        25秒
                       </Button>
                     </>
                   )}
                 </div>
               </div>
 
-              {/* 视频比例 */}
+              {/* 分隔 */}
+              <div className="h-6 w-px bg-border/50" />
+
+              {/* 比例选择 - 图标化 */}
               <div className="flex items-center gap-2">
                 <Label className="text-xs text-muted-foreground whitespace-nowrap">比例</Label>
                 <div className="flex gap-1">
@@ -1706,91 +1711,75 @@ export default function VideoBatchPage() {
                       size="sm"
                       onClick={() => updateGlobalSettings("aspectRatio", ratio)}
                       className={cn(
-                        "h-8 px-3 text-xs gap-1",
+                        "h-7 w-9 p-0",
                         globalSettings.aspectRatio === ratio
                           ? "bg-tiktok-cyan/20 border-tiktok-cyan/50 text-tiktok-cyan"
                           : "btn-subtle"
                       )}
+                      title={ratio === "9:16" ? "竖屏" : "横屏"}
                     >
-                      {ratio === "9:16" && <Smartphone className="h-3 w-3" />}
-                      {ratio === "16:9" && <Monitor className="h-3 w-3" />}
-                      {ratio}
+                      {ratio === "9:16" ? <Smartphone className="h-3.5 w-3.5" /> : <Monitor className="h-3.5 w-3.5" />}
                     </Button>
                   ))}
                 </div>
               </div>
 
-              {/* AI模特选择 */}
-              <div className="flex items-center gap-2">
-                <Label className="text-xs text-muted-foreground whitespace-nowrap">AI模特</Label>
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      if (!useAiModel) {
-                        setShowModelSelector(true);
-                      } else {
-                        setUseAiModel(false);
-                        setSelectedModelId(null);
-                        setSelectedModelName("");
-                        setSelectedModelTriggerWord("");
-                      }
-                    }}
-                    className={cn(
-                      "h-8 px-3 text-xs gap-1",
-                      useAiModel
-                        ? "bg-purple-500/20 border-purple-500/50 text-purple-400"
-                        : "btn-subtle"
-                    )}
-                  >
-                    <UserCircle className="h-3 w-3" />
-                    {useAiModel ? selectedModelName || "已选择" : "选择模特"}
-                  </Button>
-                  {useAiModel && (
-                    <Badge className="bg-purple-500/20 text-purple-400 border-purple-500/30 text-[10px]">
-                      已启用
-                    </Badge>
-                  )}
-                </div>
+              {/* 分隔 */}
+              <div className="h-6 w-px bg-border/50" />
+
+              {/* AI模特 - 简化显示 */}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  if (!useAiModel) {
+                    setShowModelSelector(true);
+                  } else {
+                    setUseAiModel(false);
+                    setSelectedModelId(null);
+                    setSelectedModelName("");
+                    setSelectedModelTriggerWord("");
+                  }
+                }}
+                className={cn(
+                  "h-7 px-3 text-xs gap-1",
+                  useAiModel
+                    ? "bg-purple-500/20 border-purple-500/50 text-purple-400"
+                    : "btn-subtle"
+                )}
+              >
+                <UserCircle className="h-3 w-3" />
+                {useAiModel ? selectedModelName || "模特" : "AI模特"}
+              </Button>
+
+              {/* 费用显示 */}
+              <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/30">
+                <Zap className="h-3 w-3 text-amber-400" />
+                <span className="text-xs font-semibold text-amber-400">
+                  {getVideoBatchTotalPrice(globalSettings.modelType, globalSettings.duration, globalSettings.quality)} pts
+                </span>
               </div>
 
               <div className="flex-1" />
 
-              {/* 提示词配置按钮 */}
+              {/* 操作按钮 */}
               <Button
                 variant="outline"
+                size="sm"
                 onClick={() => setShowPromptConfig(true)}
-                className="h-9 btn-subtle"
+                className="h-8 btn-subtle"
               >
-                <FileText className="h-4 w-4 mr-2" />
-                提示词配置
+                <FileText className="h-3.5 w-3.5 mr-1" />
+                提示词
               </Button>
 
-              {/* 创建任务按钮 */}
               <Button
                 onClick={() => setShowCreateDialog(true)}
-                className="h-9 bg-gradient-to-r from-tiktok-cyan to-tiktok-pink hover:opacity-90 text-black font-semibold"
+                className="h-8 px-4 bg-gradient-to-r from-tiktok-cyan to-tiktok-pink hover:opacity-90 text-black font-semibold"
               >
-                <FolderUp className="h-4 w-4 mr-2" />
-                创建视频任务
+                <FolderUp className="h-3.5 w-3.5 mr-1" />
+                创建任务
               </Button>
-            </div>
-
-            {/* 费用说明 */}
-            <div className="flex items-center gap-4 text-xs text-muted-foreground p-2 rounded-lg bg-muted/30">
-              <span className="flex items-center gap-1">
-                <Video className="h-3 w-3" />
-                {globalSettings.modelType === "sora2" ? "Sora2" : "Sora2 Pro"} {globalSettings.duration}秒
-                {globalSettings.modelType === "sora2-pro" && globalSettings.quality === "hd" && " 高清"}
-              </span>
-              <span className="flex items-center gap-1">
-                {globalSettings.aspectRatio === "9:16" ? <Smartphone className="h-3 w-3" /> : <Monitor className="h-3 w-3" />}
-                {globalSettings.aspectRatio === "9:16" ? "竖屏" : "横屏"}
-              </span>
-              <span className="font-semibold text-amber-400">
-                总计: {getVideoBatchTotalPrice(globalSettings.modelType, globalSettings.duration, globalSettings.quality)} pts/任务
-              </span>
             </div>
           </CardContent>
         </Card>

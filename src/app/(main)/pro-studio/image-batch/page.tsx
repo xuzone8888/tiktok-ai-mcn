@@ -665,196 +665,156 @@ export default function ImageBatchPage() {
         </div>
 
         {/* ============================================ */}
-        {/* 全局配置工具栏 */}
+        {/* 全局配置工具栏 - 简化版 */}
         {/* ============================================ */}
         <Card className="glass-card">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm flex items-center gap-2">
-              <Settings2 className="h-4 w-4 text-tiktok-cyan" />
-              全局配置
-            </CardTitle>
-            <CardDescription className="text-xs">
-              设置默认处理参数，将自动应用到新上传的图片
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {/* 模型选择 */}
-            <div className="grid grid-cols-2 gap-3">
-              <Button
-                variant="outline"
-                onClick={() => updateGlobalSettings("model", "nano-banana")}
-                className={cn(
-                  "h-auto py-4 flex flex-col items-start gap-1",
-                  globalSettings.model === "nano-banana"
-                    ? "bg-tiktok-cyan/10 border-tiktok-cyan/50 text-tiktok-cyan"
-                    : "btn-subtle"
-                )}
-              >
-                <div className="flex items-center gap-2 w-full">
-                  <Zap className="h-5 w-5" />
-                  <span className="font-semibold">Nano Banana</span>
-                  <Badge className="ml-auto bg-tiktok-cyan/20 text-tiktok-cyan text-[10px]">
-                    快速
-                  </Badge>
-                </div>
-                <p className="text-[11px] text-muted-foreground text-left">
-                  快速生成、高清放大、九宫格
-                </p>
-              </Button>
-
-              <Button
-                variant="outline"
-                onClick={() => updateGlobalSettings("model", "nano-banana-pro")}
-                className={cn(
-                  "h-auto py-4 flex flex-col items-start gap-1",
-                  globalSettings.model === "nano-banana-pro"
-                    ? "bg-tiktok-pink/10 border-tiktok-pink/50 text-tiktok-pink"
-                    : "btn-subtle"
-                )}
-              >
-                <div className="flex items-center gap-2 w-full">
-                  <Sparkles className="h-5 w-5" />
-                  <span className="font-semibold">Nano Banana Pro</span>
-                  <Badge className="ml-auto bg-tiktok-pink/20 text-tiktok-pink text-[10px]">
-                    专业
-                  </Badge>
-                </div>
-                <p className="text-[11px] text-muted-foreground text-left">
-                  高质量输出，支持 1K/2K/4K 分辨率
-                </p>
-              </Button>
-            </div>
-
-            {/* 处理动作 */}
-            <div>
-              <Label className="text-xs text-muted-foreground mb-2 block">处理类型</Label>
-              <div className="grid grid-cols-3 gap-2">
-                {getAvailableActions().map((action) => (
+          <CardContent className="py-4 space-y-4">
+            {/* 第一行：模型和处理类型 */}
+            <div className="flex flex-wrap items-center gap-4">
+              {/* 模型选择 - 简化为标签 */}
+              <div className="flex items-center gap-2">
+                <Label className="text-xs text-muted-foreground whitespace-nowrap">模型</Label>
+                <div className="flex gap-1 p-1 rounded-lg bg-muted/30">
                   <Button
-                    key={action.value}
-                    variant="outline"
-                    onClick={() => updateGlobalSettings("action", action.value)}
-                    className={cn(
-                      "h-auto py-3 flex flex-col items-center gap-1",
-                      globalSettings.action === action.value
-                        ? globalSettings.model === "nano-banana"
-                          ? "bg-tiktok-cyan/10 border-tiktok-cyan/50"
-                          : "bg-tiktok-pink/10 border-tiktok-pink/50"
-                        : "btn-subtle"
-                    )}
-                  >
-                    {action.value === "generate" && <Wand2 className="h-5 w-5" />}
-                    {action.value === "upscale" && <ZoomIn className="h-5 w-5" />}
-                    {action.value === "nine_grid" && <Grid3X3 className="h-5 w-5" />}
-                    <span className="text-xs font-medium">{action.label}</span>
-                    <span className="text-[10px] text-amber-400">{action.credits} pts</span>
-                  </Button>
-                ))}
-              </div>
-              {/* 动作描述 */}
-              <p className="text-xs text-muted-foreground mt-2 p-2 rounded bg-muted/30">
-                {getAvailableActions().find((a) => a.value === globalSettings.action)?.description}
-              </p>
-            </div>
-
-            {/* 尺寸比例 */}
-            <div>
-              <Label className="text-xs text-muted-foreground mb-2 block">尺寸比例</Label>
-              <div className="flex flex-wrap gap-2">
-                {(globalSettings.model === "nano-banana"
-                  ? NANO_FAST_ASPECT_OPTIONS
-                  : NANO_PRO_ASPECT_OPTIONS
-                ).map((opt) => (
-                  <Button
-                    key={opt.value}
-                    variant="outline"
+                    variant="ghost"
                     size="sm"
-                    onClick={() => updateGlobalSettings("aspectRatio", opt.value)}
+                    onClick={() => updateGlobalSettings("model", "nano-banana")}
                     className={cn(
-                      "h-9 px-3 gap-1.5",
-                      globalSettings.aspectRatio === opt.value
-                        ? globalSettings.model === "nano-banana"
-                          ? "bg-tiktok-cyan/10 border-tiktok-cyan/50 text-tiktok-cyan"
-                          : "bg-tiktok-pink/10 border-tiktok-pink/50 text-tiktok-pink"
-                        : "btn-subtle"
+                      "h-8 px-3 text-xs",
+                      globalSettings.model === "nano-banana"
+                        ? "bg-tiktok-cyan/20 text-tiktok-cyan"
+                        : "text-muted-foreground hover:text-foreground"
                     )}
                   >
-                    {AspectRatioIcons[opt.value]}
-                    <span className="text-xs">{opt.label}</span>
+                    <Zap className="h-3.5 w-3.5 mr-1" />
+                    快速
                   </Button>
-                ))}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => updateGlobalSettings("model", "nano-banana-pro")}
+                    className={cn(
+                      "h-8 px-3 text-xs",
+                      globalSettings.model === "nano-banana-pro"
+                        ? "bg-tiktok-pink/20 text-tiktok-pink"
+                        : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    <Sparkles className="h-3.5 w-3.5 mr-1" />
+                    专业
+                  </Button>
+                </div>
               </div>
-            </div>
 
-            {/* 输出分辨率 (仅 Pro 模式) */}
-            {globalSettings.model === "nano-banana-pro" && (
-              <div>
-                <Label className="text-xs text-muted-foreground mb-2 block">输出分辨率</Label>
-                <div className="flex gap-2">
-                  {IMAGE_RESOLUTION_OPTIONS.map((opt) => (
+              {/* 分隔线 */}
+              <div className="h-6 w-px bg-border/50" />
+
+              {/* 处理类型 - 简化为一排 */}
+              <div className="flex items-center gap-2">
+                <Label className="text-xs text-muted-foreground whitespace-nowrap">处理</Label>
+                <div className="flex gap-1">
+                  {getAvailableActions().map((action) => (
                     <Button
-                      key={opt.value}
+                      key={action.value}
                       variant="outline"
                       size="sm"
-                      onClick={() => updateGlobalSettings("resolution", opt.value)}
+                      onClick={() => updateGlobalSettings("action", action.value)}
                       className={cn(
-                        "flex-1 h-10 flex-col gap-0.5",
-                        globalSettings.resolution === opt.value
-                          ? "bg-tiktok-pink/10 border-tiktok-pink/50 text-tiktok-pink"
+                        "h-8 px-3 text-xs gap-1.5",
+                        globalSettings.action === action.value
+                          ? globalSettings.model === "nano-banana"
+                            ? "bg-tiktok-cyan/20 border-tiktok-cyan/50 text-tiktok-cyan"
+                            : "bg-tiktok-pink/20 border-tiktok-pink/50 text-tiktok-pink"
                           : "btn-subtle"
                       )}
                     >
-                      <span className="font-semibold">{opt.label}</span>
-                      <span className="text-[10px] opacity-70">{opt.description}</span>
+                      {action.value === "generate" && <Wand2 className="h-3.5 w-3.5" />}
+                      {action.value === "upscale" && <ZoomIn className="h-3.5 w-3.5" />}
+                      {action.value === "nine_grid" && <Grid3X3 className="h-3.5 w-3.5" />}
+                      {action.label}
+                      <span className="text-amber-400">{action.credits}pts</span>
                     </Button>
                   ))}
                 </div>
               </div>
-            )}
 
-            {/* 提示词输入 - 仅在 AI 生成模式下启用 */}
-            <div>
-              <Label className="text-xs text-muted-foreground mb-2 block">
-                {globalSettings.action === "generate" ? (
-                  <>
-                    提示词
-                    <span className="ml-2 text-muted-foreground/60">
-                      描述您想要生成的图片效果
-                    </span>
-                  </>
-                ) : (
-                  <>
-                    提示词
-                    <span className="ml-2 text-amber-400/80">
-                      {globalSettings.action === "upscale" 
-                        ? "（高清放大模式无需提示词，系统自动处理）" 
-                        : "（九宫格适配Sora2视频，纯白背景+多角度）"}
-                    </span>
-                  </>
-                )}
-              </Label>
-              <textarea
-                value={globalSettings.action === "generate" ? globalSettings.prompt : ""}
-                onChange={(e) => updateGlobalSettings("prompt", e.target.value)}
-                disabled={globalSettings.action !== "generate"}
-                placeholder={
-                  globalSettings.action === "generate"
-                    ? "描述您想要生成的图片效果，例如：产品展示在白色背景上，柔和的光线，专业摄影风格..."
-                    : globalSettings.action === "upscale"
-                    ? "🔒 高清放大模式：自动增强图片清晰度和细节"
-                    : "🔒 九宫格模式：适配Sora2视频，纯白背景+9角度展示，便于AI精准渲染"
-                }
-                className={cn(
-                  "w-full h-20 px-3 py-2 text-sm border border-border/50 rounded-lg resize-none focus:outline-none",
-                  globalSettings.action === "generate"
-                    ? "bg-muted/30 focus:ring-2 focus:ring-tiktok-cyan/50"
-                    : "bg-muted/10 text-muted-foreground/50 cursor-not-allowed"
-                )}
-              />
+              {/* 分隔线 */}
+              <div className="h-6 w-px bg-border/50" />
+
+              {/* 尺寸比例 */}
+              <div className="flex items-center gap-2">
+                <Label className="text-xs text-muted-foreground whitespace-nowrap">尺寸</Label>
+                <div className="flex gap-1">
+                  {(globalSettings.model === "nano-banana"
+                    ? NANO_FAST_ASPECT_OPTIONS
+                    : NANO_PRO_ASPECT_OPTIONS
+                  ).slice(0, 4).map((opt) => (
+                    <Button
+                      key={opt.value}
+                      variant="outline"
+                      size="sm"
+                      onClick={() => updateGlobalSettings("aspectRatio", opt.value)}
+                      className={cn(
+                        "h-8 w-8 p-0",
+                        globalSettings.aspectRatio === opt.value
+                          ? globalSettings.model === "nano-banana"
+                            ? "bg-tiktok-cyan/20 border-tiktok-cyan/50 text-tiktok-cyan"
+                            : "bg-tiktok-pink/20 border-tiktok-pink/50 text-tiktok-pink"
+                          : "btn-subtle"
+                      )}
+                      title={opt.label}
+                    >
+                      {AspectRatioIcons[opt.value]}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Pro 模式分辨率 */}
+              {globalSettings.model === "nano-banana-pro" && (
+                <>
+                  <div className="h-6 w-px bg-border/50" />
+                  <div className="flex items-center gap-2">
+                    <Label className="text-xs text-muted-foreground whitespace-nowrap">画质</Label>
+                    <div className="flex gap-1">
+                      {IMAGE_RESOLUTION_OPTIONS.map((opt) => (
+                        <Button
+                          key={opt.value}
+                          variant="outline"
+                          size="sm"
+                          onClick={() => updateGlobalSettings("resolution", opt.value)}
+                          className={cn(
+                            "h-8 px-2 text-xs",
+                            globalSettings.resolution === opt.value
+                              ? "bg-tiktok-pink/20 border-tiktok-pink/50 text-tiktok-pink"
+                              : "btn-subtle"
+                          )}
+                        >
+                          {opt.label}
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
 
-            {/* 操作按钮 */}
-            <div className="flex items-center gap-2 pt-2">
+            {/* 第二行：提示词 + 上传按钮 */}
+            <div className="flex items-center gap-3">
+              {globalSettings.action === "generate" ? (
+                <input
+                  type="text"
+                  value={globalSettings.prompt}
+                  onChange={(e) => updateGlobalSettings("prompt", e.target.value)}
+                  placeholder="输入提示词描述想要的效果..."
+                  className="flex-1 h-10 px-4 text-sm bg-muted/30 border border-border/50 rounded-lg focus:outline-none focus:ring-2 focus:ring-tiktok-cyan/50"
+                />
+              ) : (
+                <div className="flex-1 h-10 px-4 text-sm text-muted-foreground flex items-center bg-muted/20 rounded-lg border border-border/30">
+                  {globalSettings.action === "upscale" ? "🔒 高清放大模式 - 自动增强清晰度" : "🔒 九宫格模式 - 纯白背景+多角度展示"}
+                </div>
+              )}
+              
               <input
                 type="file"
                 accept="image/*"
@@ -865,25 +825,18 @@ export default function ImageBatchPage() {
               />
               <Button
                 onClick={() => {
-                  // 先重置文件输入，确保可以选择相同文件
-                  if (fileInputRef.current) {
-                    fileInputRef.current.value = "";
-                  }
+                  if (fileInputRef.current) fileInputRef.current.value = "";
                   fileInputRef.current?.click();
                 }}
-                className="flex-1 h-11 bg-gradient-to-r from-tiktok-cyan to-tiktok-pink hover:opacity-90 text-black font-semibold"
+                className="h-10 px-6 bg-gradient-to-r from-tiktok-cyan to-tiktok-pink hover:opacity-90 text-black font-semibold"
               >
-                <FolderUp className="h-5 w-5 mr-2" />
-                批量上传图片
+                <FolderUp className="h-4 w-4 mr-2" />
+                上传图片
               </Button>
               {tasks.length > 0 && (
-                <Button
-                  variant="outline"
-                  onClick={handleApplyToAll}
-                  className="h-11 btn-subtle"
-                >
-                  <Wand2 className="h-4 w-4 mr-2" />
-                  应用到全部
+                <Button variant="outline" onClick={handleApplyToAll} className="h-10 btn-subtle">
+                  <Wand2 className="h-4 w-4 mr-1" />
+                  应用全部
                 </Button>
               )}
             </div>
