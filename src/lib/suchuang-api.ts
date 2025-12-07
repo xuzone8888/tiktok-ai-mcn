@@ -373,7 +373,8 @@ export async function queryNanoBananaResult(
 // ============================================================================
 
 // 新版 Sora2 API 端点 (生产队API)
-const SORA2_API_BASE = "https://api_scddl.scd666.com";
+// 从环境变量读取，支持动态切换
+const SORA2_API_BASE = process.env.SORA2_API_ENDPOINT || "https://api.scd666.com";
 const SORA2_API_KEY = process.env.SORA2_API_KEY || "";
 
 /**
