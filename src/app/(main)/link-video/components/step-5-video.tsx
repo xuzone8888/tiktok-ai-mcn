@@ -4,7 +4,7 @@
  * Step 5: 生成最终视频（支持批量生成）
  */
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useLinkVideoStore } from "@/stores/link-video-store";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -64,6 +64,9 @@ export function Step5Video() {
   const [batchTasks, setBatchTasks] = useState<BatchVideoTask[]>([]);
   const [isBatchMode, setIsBatchMode] = useState(false);
   const [completedVideos, setCompletedVideos] = useState<string[]>([]);
+  
+  // 用于取消轮询的 ref
+  const pollAbortRef = useRef<boolean>(false);
 
   // 生成视频
   const handleGenerateVideo = async (retry = false) => {
@@ -129,7 +132,7 @@ export function Step5Video() {
   const credits = getLinkVideoCredits(videoConfig.duration);
   const totalCredits = credits * batchCount;
 
-  // 批量生成视频
+  // 批量生成视频 - 并行启动所有任务
   const handleBatchGenerate = async () => {
     if (!currentJob?.id) {
       setVideoError("任务不存在，请返回上一步");
@@ -137,27 +140,24 @@ export function Step5Video() {
     }
 
     if (batchCount === 1) {
-      // 单个生成走原来逻辑
       handleGenerateVideo(false);
       return;
     }
 
-    // 批量模式
+    // 重置取消标志
+    pollAbortRef.current = false;
     setIsBatchMode(true);
+    
     const tasks: BatchVideoTask[] = Array.from({ length: batchCount }, (_, i) => ({
       id: i + 1,
-      status: "pending" as const,
+      status: "generating" as const,
       progress: 0,
     }));
     setBatchTasks(tasks);
 
-    // 依次启动生成任务
-    for (let i = 0; i < tasks.length; i++) {
+    // 并行启动所有任务
+    const startPromises = tasks.map(async (_, i) => {
       try {
-        setBatchTasks(prev => prev.map((t, idx) => 
-          idx === i ? { ...t, status: "generating" } : t
-        ));
-
         const response = await fetch(`/api/link-video/jobs/${currentJob.id}/video`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -170,37 +170,65 @@ export function Step5Video() {
           setBatchTasks(prev => prev.map((t, idx) => 
             idx === i ? { ...t, taskId: result.task_id } : t
           ));
-          
-          // 开始轮询此任务
-          pollBatchTask(i, result.task_id);
+          return { index: i, taskId: result.task_id, success: true };
         } else {
           setBatchTasks(prev => prev.map((t, idx) => 
             idx === i ? { ...t, status: "failed", error: result.error } : t
           ));
+          return { index: i, success: false };
         }
-      } catch (error) {
+      } catch {
         setBatchTasks(prev => prev.map((t, idx) => 
           idx === i ? { ...t, status: "failed", error: "网络错误" } : t
         ));
+        return { index: i, success: false };
       }
-    }
+    });
+
+    // 等待所有任务启动完成
+    const results = await Promise.all(startPromises);
+    
+    // 对成功启动的任务开始轮询
+    results.forEach(({ index, taskId, success }) => {
+      if (success && taskId) {
+        pollBatchTask(index, taskId);
+      }
+    });
   };
 
-  // 轮询批量任务状态
+  // 组件卸载时取消轮询
+  useEffect(() => {
+    return () => {
+      pollAbortRef.current = true;
+    };
+  }, []);
+
+  // 轮询批量任务状态 - 优化版
   const pollBatchTask = async (index: number, taskId: string) => {
-    const maxAttempts = 120; // 最多20分钟
+    const maxAttempts = 120;
     let attempts = 0;
 
     const poll = async () => {
-      if (attempts >= maxAttempts) {
-        setBatchTasks(prev => prev.map((t, idx) => 
-          idx === index ? { ...t, status: "failed", error: "生成超时" } : t
-        ));
+      // 检查是否应该停止
+      if (pollAbortRef.current || attempts >= maxAttempts) {
+        if (attempts >= maxAttempts) {
+          setBatchTasks(prev => prev.map((t, idx) => 
+            idx === index ? { ...t, status: "failed", error: "生成超时" } : t
+          ));
+        }
         return;
       }
 
       try {
-        const response = await fetch(`/api/link-video/jobs/${currentJob?.id}/video?taskId=${taskId}`);
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+        const response = await fetch(
+          `/api/link-video/jobs/${currentJob?.id}/video?taskId=${taskId}`,
+          { signal: controller.signal }
+        );
+        clearTimeout(timeoutId);
+
         const result = await response.json();
 
         if (result.status === "completed" && result.video_url) {
@@ -208,7 +236,6 @@ export function Step5Video() {
             idx === index ? { ...t, status: "completed", videoUrl: result.video_url, progress: 100 } : t
           ));
           setCompletedVideos(prev => [...prev, result.video_url]);
-          // 如果是第一个完成的，也设置到主状态
           if (index === 0) {
             setVideoGenerated(result.video_url);
           }
@@ -217,15 +244,21 @@ export function Step5Video() {
             idx === index ? { ...t, status: "failed", error: result.error } : t
           ));
         } else {
+          // 更新进度
+          const progress = result.progress || Math.min(95, 10 + attempts * 1.5);
           setBatchTasks(prev => prev.map((t, idx) => 
-            idx === index ? { ...t, progress: result.progress || Math.min(95, 10 + attempts * 2) } : t
+            idx === index ? { ...t, progress } : t
           ));
           attempts++;
-          setTimeout(poll, 10000);
+          // 动态轮询间隔：前期10秒，后期15秒
+          const interval = attempts < 30 ? 10000 : 15000;
+          setTimeout(poll, interval);
         }
       } catch (error) {
-        attempts++;
-        setTimeout(poll, 10000);
+        if (!pollAbortRef.current) {
+          attempts++;
+          setTimeout(poll, 15000);
+        }
       }
     };
 

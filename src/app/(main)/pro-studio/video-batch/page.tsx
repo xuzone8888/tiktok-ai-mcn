@@ -1012,7 +1012,7 @@ export default function VideoBatchPage() {
     aiVideoPromptUser: "",
   });
   
-  // 预设视频风格
+  // 预设视频风格 - 简化版提示词
   const VIDEO_STYLES = [
     {
       id: "default",
@@ -1032,10 +1032,10 @@ export default function VideoBatchPage() {
       description: "热情活泼，快节奏卖点展示",
       icon: "🔥",
       prompts: {
-        talkingScriptSystem: "You are an energetic, enthusiastic TikTok content creator known for your high-energy product recommendations. Your style is fast-paced, exciting, and uses lots of emphatic language.",
-        talkingScriptUser: "Create a high-energy, exciting product showcase script. Use lots of emphasis, exclamation marks, and persuasive language. Make viewers feel the excitement and urgency to buy.",
-        aiVideoPromptSystem: "You are creating a fast-paced, high-energy TikTok video with quick cuts, dynamic movements, and enthusiastic presentation.",
-        aiVideoPromptUser: "Generate an energetic video prompt with: quick camera movements, bright lighting, enthusiastic gestures, and dynamic product showcasing. {{SCRIPT}}",
+        talkingScriptSystem: "Energetic TikTok creator with high-energy style.",
+        talkingScriptUser: "Create exciting, fast-paced product script with urgency.",
+        aiVideoPromptSystem: "Fast-paced video with dynamic movements.",
+        aiVideoPromptUser: "Energetic video: quick cuts, bright lighting, dynamic gestures. {{SCRIPT}}",
       }
     },
     {
@@ -1044,10 +1044,10 @@ export default function VideoBatchPage() {
       description: "奢华精致，强调品质感",
       icon: "💎",
       prompts: {
-        talkingScriptSystem: "You are a sophisticated luxury product presenter. Your tone is elegant, refined, and emphasizes quality, craftsmanship, and premium value.",
-        talkingScriptUser: "Create an elegant, sophisticated product presentation script. Emphasize quality, attention to detail, premium materials, and exclusive value proposition.",
-        aiVideoPromptSystem: "You are creating a premium, luxury-style video with soft lighting, elegant compositions, and refined aesthetics.",
-        aiVideoPromptUser: "Generate a luxury video prompt with: soft diffused lighting, slow elegant movements, close-up detail shots, minimalist backdrop. {{SCRIPT}}",
+        talkingScriptSystem: "Sophisticated luxury presenter emphasizing premium quality.",
+        talkingScriptUser: "Create elegant script focusing on quality and exclusivity.",
+        aiVideoPromptSystem: "Premium luxury video with refined aesthetics.",
+        aiVideoPromptUser: "Luxury video: soft lighting, elegant movements, detail shots. {{SCRIPT}}",
       }
     },
     {
@@ -1056,10 +1056,10 @@ export default function VideoBatchPage() {
       description: "亲切自然，像朋友推荐",
       icon: "💕",
       prompts: {
-        talkingScriptSystem: "You are a friendly, relatable TikTok creator who shares product recommendations like talking to a best friend. Your tone is warm, casual, and genuine.",
-        talkingScriptUser: "Create a warm, friendly product recommendation script as if talking to a close friend. Use casual language, share personal experience, and be genuinely helpful.",
-        aiVideoPromptSystem: "You are creating a cozy, friendly video with natural lighting and a relaxed, approachable vibe.",
-        aiVideoPromptUser: "Generate a friendly video prompt with: natural warm lighting, relaxed poses, genuine smile, casual home or lifestyle setting. {{SCRIPT}}",
+        talkingScriptSystem: "Friendly creator sharing like talking to best friend.",
+        talkingScriptUser: "Create warm, casual script with personal experience.",
+        aiVideoPromptSystem: "Cozy video with natural lighting and relaxed vibe.",
+        aiVideoPromptUser: "Friendly video: warm lighting, relaxed poses, genuine smile. {{SCRIPT}}",
       }
     },
     {
@@ -1068,10 +1068,10 @@ export default function VideoBatchPage() {
       description: "客观详细，专业角度分析",
       icon: "📊",
       prompts: {
-        talkingScriptSystem: "You are a professional product reviewer who provides detailed, objective analysis. Your tone is informative, credible, and data-driven.",
-        talkingScriptUser: "Create a professional, detailed product review script. Include specifications, comparisons, pros and cons, and expert recommendations.",
-        aiVideoPromptSystem: "You are creating a professional review video with clean visuals, clear product demonstrations, and informative overlays.",
-        aiVideoPromptUser: "Generate a professional review video prompt with: clean white background, clear product demonstrations, steady camera work, professional lighting. {{SCRIPT}}",
+        talkingScriptSystem: "Professional reviewer with objective analysis.",
+        talkingScriptUser: "Create detailed review with specs and recommendations.",
+        aiVideoPromptSystem: "Professional review with clean visuals.",
+        aiVideoPromptUser: "Pro review: clean background, steady camera, clear demo. {{SCRIPT}}",
       }
     },
     {
@@ -1080,10 +1080,10 @@ export default function VideoBatchPage() {
       description: "情感共鸣，讲述使用场景",
       icon: "📖",
       prompts: {
-        talkingScriptSystem: "You are a storyteller who weaves product recommendations into relatable life scenarios. Your style creates emotional connections through narratives.",
-        talkingScriptUser: "Create a story-driven product recommendation that places the product in a relatable life scenario. Build emotional connection and show how it solves real problems.",
-        aiVideoPromptSystem: "You are creating a cinematic, story-driven video with emotional lighting and narrative compositions.",
-        aiVideoPromptUser: "Generate a storytelling video prompt with: cinematic lighting, emotional moments, lifestyle scenarios, narrative flow. {{SCRIPT}}",
+        talkingScriptSystem: "Storyteller creating emotional product narratives.",
+        talkingScriptUser: "Create story-driven script with relatable scenarios.",
+        aiVideoPromptSystem: "Cinematic story-driven video.",
+        aiVideoPromptUser: "Story video: cinematic lighting, lifestyle scenarios. {{SCRIPT}}",
       }
     },
   ];
