@@ -497,17 +497,41 @@ export async function submitSora2(
       requestBody.image_url = params.url;
     }
 
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${key}`,
-        "Accept": "application/json",
-      },
-      body: JSON.stringify(requestBody),
-    });
+    // 添加超时控制和重试
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 60000); // 60秒超时
+    
+    let response: Response;
+    let retryCount = 0;
+    const maxRetries = 2;
+    
+    while (retryCount <= maxRetries) {
+      try {
+        response = await fetch(endpoint, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${key}`,
+            "Accept": "application/json",
+          },
+          body: JSON.stringify(requestBody),
+          signal: controller.signal,
+        });
+        break; // 成功则跳出循环
+      } catch (fetchError) {
+        retryCount++;
+        if (retryCount > maxRetries) {
+          clearTimeout(timeoutId);
+          throw fetchError;
+        }
+        console.log(`[Sora2] Retry ${retryCount}/${maxRetries} after error:`, fetchError);
+        await new Promise(resolve => setTimeout(resolve, 2000)); // 等待2秒后重试
+      }
+    }
+    
+    clearTimeout(timeoutId);
 
-    const responseText = await response.text();
+    const responseText = await response!.text();
     console.log("[Sora2] Raw response:", responseText.substring(0, 500));
 
     let data: Sora2SubmitResponse;
@@ -566,13 +590,20 @@ export async function querySora2Result(
   try {
     const endpoint = `${SORA2_API_BASE}/v1/videos/${taskId}`;
 
+    // 添加超时控制
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30秒超时
+
     const response = await fetch(endpoint, {
       method: "GET",
       headers: {
         "Authorization": `Bearer ${key}`,
         "Accept": "application/json",
       },
+      signal: controller.signal,
     });
+    
+    clearTimeout(timeoutId);
 
     const responseText = await response.text();
     

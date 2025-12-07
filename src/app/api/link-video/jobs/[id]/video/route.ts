@@ -31,7 +31,10 @@ export async function POST(
 
     // 2. 解析请求
     const body = await request.json().catch(() => ({}));
-    const { retry = false } = body;
+    const { retry = false, batchIndex = 0 } = body;
+    
+    // batchIndex > 0 表示批量生成的第2个及以后的任务
+    const isBatchExtra = batchIndex > 0;
 
     const adminSupabase = createAdminClient();
 
@@ -68,10 +71,17 @@ export async function POST(
       }, { status: 400 });
     }
 
-    // 5. 检查/扣除积分 (首次生成时预扣)
+    // 5. 检查/扣除积分
+    // 批量生成时，每个视频都需要单独扣除积分
     const creditsNeeded = getLinkVideoCredits(job.video_config.duration);
     
-    if (!retry && job.credits_used === 0) {
+    // 决定是否需要扣积分：
+    // - 首次生成(batchIndex=0, retry=false, credits_used=0)：扣
+    // - 批量额外(batchIndex>0)：每个都扣
+    // - 重试(retry=true)：不扣
+    const shouldDeductCredits = !retry && (isBatchExtra || job.credits_used === 0);
+    
+    if (shouldDeductCredits) {
       // 检查用户积分
       const { data: profile } = await adminSupabase
         .from('profiles')
@@ -86,7 +96,7 @@ export async function POST(
         }, { status: 400 });
       }
 
-      // 预扣积分
+      // 扣除积分
       const { error: deductError } = await adminSupabase
         .from('profiles')
         .update({ credits: profile.credits - creditsNeeded })
@@ -100,34 +110,37 @@ export async function POST(
       }
 
       // 记录交易
+      const batchLabel = isBatchExtra ? ` (批量#${batchIndex + 1})` : '';
       await adminSupabase.from('credit_transactions').insert({
         user_id: user.id,
         amount: -creditsNeeded,
         type: 'usage',
-        description: `链接秒变视频 - ${job.video_config.duration}秒视频`,
+        description: `链接秒变视频 - ${job.video_config.duration}秒视频${batchLabel}`,
         reference_type: 'link_video_job',
         reference_id: jobId,
         balance_before: profile.credits,
         balance_after: profile.credits - creditsNeeded,
       });
 
-      // 更新任务积分
+      // 更新任务积分（累加）
       await adminSupabase
         .from('link_video_jobs')
-        .update({ credits_used: creditsNeeded })
+        .update({ credits_used: (job.credits_used || 0) + creditsNeeded })
         .eq('id', jobId);
     }
 
-    // 6. 更新状态为生成中
-    await adminSupabase
-      .from('link_video_jobs')
-      .update({
-        status: 'generating_video',
-        current_step: 5,
-        started_at: job.started_at || new Date().toISOString(),
-        video_retry_count: retry ? job.video_retry_count + 1 : job.video_retry_count,
-      })
-      .eq('id', jobId);
+    // 6. 更新状态为生成中（只有主任务更新 job 状态）
+    if (!isBatchExtra) {
+      await adminSupabase
+        .from('link_video_jobs')
+        .update({
+          status: 'generating_video',
+          current_step: 5,
+          started_at: job.started_at || new Date().toISOString(),
+          video_retry_count: retry ? job.video_retry_count + 1 : job.video_retry_count,
+        })
+        .eq('id', jobId);
+    }
 
     // 7. 构建 Prompt
     // 组合脚本 + AI 模特触发词 (参考 generate-video 模块的实现)
@@ -180,17 +193,20 @@ export async function POST(
 
     if (!videoResult.success || !videoResult.taskId) {
       // 视频生成失败，退还积分
-      if (!retry) {
+      if (shouldDeductCredits) {
         await refundCredits(adminSupabase, user.id, jobId, creditsNeeded);
       }
 
-      await adminSupabase
-        .from('link_video_jobs')
-        .update({
-          status: 'failed',
-          error_message: videoResult.error || '视频生成任务创建失败',
-        })
-        .eq('id', jobId);
+      // 只有主任务(batchIndex=0)失败才更新 job 状态
+      if (!isBatchExtra) {
+        await adminSupabase
+          .from('link_video_jobs')
+          .update({
+            status: 'failed',
+            error_message: videoResult.error || '视频生成任务创建失败',
+          })
+          .eq('id', jobId);
+      }
 
       return NextResponse.json({
         success: false,
@@ -198,17 +214,26 @@ export async function POST(
       }, { status: 500 });
     }
 
-    // 10. 保存任务 ID
-    await adminSupabase
-      .from('link_video_jobs')
-      .update({
-        video_task_id: videoResult.taskId,
-      })
-      .eq('id', jobId);
+    // 10. 保存任务 ID（只有主任务更新）
+    if (!isBatchExtra) {
+      await adminSupabase
+        .from('link_video_jobs')
+        .update({
+          video_task_id: videoResult.taskId,
+        })
+        .eq('id', jobId);
+    }
+
+    console.log('[Video API] Task submitted:', {
+      taskId: videoResult.taskId,
+      batchIndex,
+      isBatchExtra,
+    });
 
     return NextResponse.json({
       success: true,
       task_id: videoResult.taskId,
+      batch_index: batchIndex,
       message: '视频生成任务已提交，请轮询状态',
     });
 
