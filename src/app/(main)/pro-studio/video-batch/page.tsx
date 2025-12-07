@@ -999,6 +999,7 @@ export default function VideoBatchPage() {
   
   // 提示词配置
   const [showPromptConfig, setShowPromptConfig] = useState(false);
+  const [selectedStyle, setSelectedStyle] = useState<string>("default");
   const [customPrompts, setCustomPrompts] = useState<{
     talkingScriptSystem: string;
     talkingScriptUser: string;
@@ -1010,6 +1011,82 @@ export default function VideoBatchPage() {
     aiVideoPromptSystem: "",
     aiVideoPromptUser: "",
   });
+  
+  // 预设视频风格
+  const VIDEO_STYLES = [
+    {
+      id: "default",
+      name: "默认风格",
+      description: "标准口播带货风格",
+      icon: "🎬",
+      prompts: {
+        talkingScriptSystem: "",
+        talkingScriptUser: "",
+        aiVideoPromptSystem: "",
+        aiVideoPromptUser: "",
+      }
+    },
+    {
+      id: "energetic",
+      name: "活力种草",
+      description: "热情活泼，快节奏卖点展示",
+      icon: "🔥",
+      prompts: {
+        talkingScriptSystem: "You are an energetic, enthusiastic TikTok content creator known for your high-energy product recommendations. Your style is fast-paced, exciting, and uses lots of emphatic language.",
+        talkingScriptUser: "Create a high-energy, exciting product showcase script. Use lots of emphasis, exclamation marks, and persuasive language. Make viewers feel the excitement and urgency to buy.",
+        aiVideoPromptSystem: "You are creating a fast-paced, high-energy TikTok video with quick cuts, dynamic movements, and enthusiastic presentation.",
+        aiVideoPromptUser: "Generate an energetic video prompt with: quick camera movements, bright lighting, enthusiastic gestures, and dynamic product showcasing. {{SCRIPT}}",
+      }
+    },
+    {
+      id: "luxury",
+      name: "高端质感",
+      description: "奢华精致，强调品质感",
+      icon: "💎",
+      prompts: {
+        talkingScriptSystem: "You are a sophisticated luxury product presenter. Your tone is elegant, refined, and emphasizes quality, craftsmanship, and premium value.",
+        talkingScriptUser: "Create an elegant, sophisticated product presentation script. Emphasize quality, attention to detail, premium materials, and exclusive value proposition.",
+        aiVideoPromptSystem: "You are creating a premium, luxury-style video with soft lighting, elegant compositions, and refined aesthetics.",
+        aiVideoPromptUser: "Generate a luxury video prompt with: soft diffused lighting, slow elegant movements, close-up detail shots, minimalist backdrop. {{SCRIPT}}",
+      }
+    },
+    {
+      id: "friendly",
+      name: "闺蜜分享",
+      description: "亲切自然，像朋友推荐",
+      icon: "💕",
+      prompts: {
+        talkingScriptSystem: "You are a friendly, relatable TikTok creator who shares product recommendations like talking to a best friend. Your tone is warm, casual, and genuine.",
+        talkingScriptUser: "Create a warm, friendly product recommendation script as if talking to a close friend. Use casual language, share personal experience, and be genuinely helpful.",
+        aiVideoPromptSystem: "You are creating a cozy, friendly video with natural lighting and a relaxed, approachable vibe.",
+        aiVideoPromptUser: "Generate a friendly video prompt with: natural warm lighting, relaxed poses, genuine smile, casual home or lifestyle setting. {{SCRIPT}}",
+      }
+    },
+    {
+      id: "professional",
+      name: "专业测评",
+      description: "客观详细，专业角度分析",
+      icon: "📊",
+      prompts: {
+        talkingScriptSystem: "You are a professional product reviewer who provides detailed, objective analysis. Your tone is informative, credible, and data-driven.",
+        talkingScriptUser: "Create a professional, detailed product review script. Include specifications, comparisons, pros and cons, and expert recommendations.",
+        aiVideoPromptSystem: "You are creating a professional review video with clean visuals, clear product demonstrations, and informative overlays.",
+        aiVideoPromptUser: "Generate a professional review video prompt with: clean white background, clear product demonstrations, steady camera work, professional lighting. {{SCRIPT}}",
+      }
+    },
+    {
+      id: "storytelling",
+      name: "故事叙述",
+      description: "情感共鸣，讲述使用场景",
+      icon: "📖",
+      prompts: {
+        talkingScriptSystem: "You are a storyteller who weaves product recommendations into relatable life scenarios. Your style creates emotional connections through narratives.",
+        talkingScriptUser: "Create a story-driven product recommendation that places the product in a relatable life scenario. Build emotional connection and show how it solves real problems.",
+        aiVideoPromptSystem: "You are creating a cinematic, story-driven video with emotional lighting and narrative compositions.",
+        aiVideoPromptUser: "Generate a storytelling video prompt with: cinematic lighting, emotional moments, lifestyle scenarios, narrative flow. {{SCRIPT}}",
+      }
+    },
+  ];
   
   // 加载本地存储的提示词配置
   useEffect(() => {
@@ -2173,35 +2250,77 @@ export default function VideoBatchPage() {
                 提示词配置
               </DialogTitle>
               <DialogDescription>
-                自定义 AI 脚本生成和视频提示词，留空则使用默认配置
+                选择预设风格或自定义提示词，打造不同风格的带货视频
               </DialogDescription>
             </DialogHeader>
 
             <div className="space-y-6 py-4">
+              {/* 视频风格选择 */}
+              <div className="space-y-3">
+                <Label className="text-sm font-semibold flex items-center gap-2">
+                  <Wand2 className="h-4 w-4 text-amber-400" />
+                  选择视频风格
+                </Label>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                  {VIDEO_STYLES.map((style) => (
+                    <button
+                      key={style.id}
+                      onClick={() => {
+                        setSelectedStyle(style.id);
+                        setCustomPrompts(style.prompts);
+                      }}
+                      className={cn(
+                        "p-3 rounded-xl border text-left transition-all",
+                        selectedStyle === style.id
+                          ? "bg-tiktok-cyan/10 border-tiktok-cyan/50 ring-2 ring-tiktok-cyan/20"
+                          : "bg-muted/30 border-border/50 hover:border-border"
+                      )}
+                    >
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-lg">{style.icon}</span>
+                        <span className="font-medium text-sm">{style.name}</span>
+                      </div>
+                      <p className="text-[11px] text-muted-foreground line-clamp-1">
+                        {style.description}
+                      </p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               {/* 脚本生成提示词 */}
               <div className="space-y-4 p-4 rounded-xl bg-muted/30 border border-border/50">
                 <h3 className="text-sm font-semibold flex items-center gap-2">
-                  <Wand2 className="h-4 w-4 text-amber-400" />
-                  口播脚本生成提示词
+                  <FileText className="h-4 w-4 text-amber-400" />
+                  口播脚本提示词
+                  <Badge variant="outline" className="text-[10px]">
+                    {selectedStyle === "default" ? "默认" : "自定义"}
+                  </Badge>
                 </h3>
                 
                 <div className="space-y-2">
-                  <Label className="text-xs text-muted-foreground">系统提示词 (System Prompt)</Label>
+                  <Label className="text-xs text-muted-foreground">系统提示词</Label>
                   <textarea
                     value={customPrompts.talkingScriptSystem}
-                    onChange={(e) => setCustomPrompts(prev => ({ ...prev, talkingScriptSystem: e.target.value }))}
-                    placeholder="留空使用默认：You are a professional short-form video script generator..."
-                    className="w-full h-24 px-3 py-2 text-sm bg-background border border-border/50 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-tiktok-cyan/50"
+                    onChange={(e) => {
+                      setSelectedStyle("custom");
+                      setCustomPrompts(prev => ({ ...prev, talkingScriptSystem: e.target.value }));
+                    }}
+                    placeholder="留空使用默认提示词..."
+                    className="w-full h-20 px-3 py-2 text-sm bg-background border border-border/50 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-tiktok-cyan/50"
                   />
                 </div>
                 
                 <div className="space-y-2">
-                  <Label className="text-xs text-muted-foreground">用户提示词 (User Prompt)</Label>
+                  <Label className="text-xs text-muted-foreground">用户提示词</Label>
                   <textarea
                     value={customPrompts.talkingScriptUser}
-                    onChange={(e) => setCustomPrompts(prev => ({ ...prev, talkingScriptUser: e.target.value }))}
-                    placeholder="留空使用默认：Based on all the product images provided..."
-                    className="w-full h-32 px-3 py-2 text-sm bg-background border border-border/50 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-tiktok-cyan/50"
+                    onChange={(e) => {
+                      setSelectedStyle("custom");
+                      setCustomPrompts(prev => ({ ...prev, talkingScriptUser: e.target.value }));
+                    }}
+                    placeholder="留空使用默认提示词..."
+                    className="w-full h-24 px-3 py-2 text-sm bg-background border border-border/50 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-tiktok-cyan/50"
                   />
                 </div>
               </div>
@@ -2214,25 +2333,31 @@ export default function VideoBatchPage() {
                 </h3>
                 
                 <div className="space-y-2">
-                  <Label className="text-xs text-muted-foreground">系统提示词 (System Prompt)</Label>
+                  <Label className="text-xs text-muted-foreground">系统提示词</Label>
                   <textarea
                     value={customPrompts.aiVideoPromptSystem}
-                    onChange={(e) => setCustomPrompts(prev => ({ ...prev, aiVideoPromptSystem: e.target.value }))}
-                    placeholder="留空使用默认：You are a TikTok e-commerce creator and AI video director..."
-                    className="w-full h-24 px-3 py-2 text-sm bg-background border border-border/50 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-tiktok-cyan/50"
+                    onChange={(e) => {
+                      setSelectedStyle("custom");
+                      setCustomPrompts(prev => ({ ...prev, aiVideoPromptSystem: e.target.value }));
+                    }}
+                    placeholder="留空使用默认提示词..."
+                    className="w-full h-20 px-3 py-2 text-sm bg-background border border-border/50 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-tiktok-cyan/50"
                   />
                 </div>
                 
                 <div className="space-y-2">
                   <Label className="text-xs text-muted-foreground">
-                    用户提示词 (User Prompt)
-                    <span className="ml-2 text-amber-400/80">使用 {"{{SCRIPT}}"} 表示脚本内容的占位符</span>
+                    用户提示词
+                    <span className="ml-2 text-amber-400/80 text-[10px]">{"{{SCRIPT}}"} = 脚本占位符</span>
                   </Label>
                   <textarea
                     value={customPrompts.aiVideoPromptUser}
-                    onChange={(e) => setCustomPrompts(prev => ({ ...prev, aiVideoPromptUser: e.target.value }))}
-                    placeholder="留空使用默认：Below is a 7-shot TikTok talking-head product recommendation script..."
-                    className="w-full h-32 px-3 py-2 text-sm bg-background border border-border/50 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-tiktok-cyan/50"
+                    onChange={(e) => {
+                      setSelectedStyle("custom");
+                      setCustomPrompts(prev => ({ ...prev, aiVideoPromptUser: e.target.value }));
+                    }}
+                    placeholder="留空使用默认提示词..."
+                    className="w-full h-24 px-3 py-2 text-sm bg-background border border-border/50 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-tiktok-cyan/50"
                   />
                 </div>
               </div>
@@ -2241,7 +2366,7 @@ export default function VideoBatchPage() {
               <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30">
                 <AlertTriangle className="h-4 w-4 text-amber-400 mt-0.5 flex-shrink-0" />
                 <p className="text-xs text-amber-400/90">
-                  修改提示词可能影响生成效果。建议先小批量测试后再大规模使用。留空的字段将使用系统默认配置。
+                  不同风格会影响脚本语气和视频呈现效果。建议先小批量测试后再大规模使用。
                 </p>
               </div>
             </div>

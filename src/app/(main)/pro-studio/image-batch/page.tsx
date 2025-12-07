@@ -386,6 +386,7 @@ export default function ImageBatchPage() {
     resetBatch,
     updateGlobalSettings,
     applyGlobalSettingsToAllPending,
+    applyGlobalSettingsToSelected,
   } = useImageBatchStore();
 
   // Local State
@@ -429,11 +430,17 @@ export default function ImageBatchPage() {
     [addTasksFromFiles, toast]
   );
 
-  // 应用全局设置
+  // 应用全局设置到所有待处理任务
   const handleApplyToAll = useCallback(() => {
     applyGlobalSettingsToAllPending();
     toast({ title: "✅ 已应用设置到所有待处理任务" });
   }, [applyGlobalSettingsToAllPending, toast]);
+
+  // 应用全局设置到选中的任务
+  const handleApplyToSelected = useCallback(() => {
+    applyGlobalSettingsToSelected();
+    toast({ title: `✅ 已应用设置到 ${selectedCount} 个选中任务` });
+  }, [applyGlobalSettingsToSelected, selectedCount, toast]);
 
   // 处理单个任务
   const handleProcessSingleTask = useCallback(
@@ -865,15 +872,26 @@ export default function ImageBatchPage() {
               </div>
               <div className="flex items-center gap-2">
                 {selectedCount > 0 && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={removeSelectedTasks}
-                    className="h-8 text-xs text-red-400 border-red-400/30 hover:bg-red-400/10"
-                  >
-                    <Trash2 className="h-3 w-3 mr-1" />
-                    删除选中 ({selectedCount})
-                  </Button>
+                  <>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleApplyToSelected}
+                      className="h-8 text-xs text-tiktok-cyan border-tiktok-cyan/30 hover:bg-tiktok-cyan/10"
+                    >
+                      <Wand2 className="h-3 w-3 mr-1" />
+                      应用到选中 ({selectedCount})
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={removeSelectedTasks}
+                      className="h-8 text-xs text-red-400 border-red-400/30 hover:bg-red-400/10"
+                    >
+                      <Trash2 className="h-3 w-3 mr-1" />
+                      删除 ({selectedCount})
+                    </Button>
+                  </>
                 )}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>

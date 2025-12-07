@@ -641,9 +641,9 @@ export default function TaskLogPage() {
         )
       )}
 
-      {/* Preview Dialog - 调小预览框 */}
+      {/* Preview Dialog - 优化尺寸，避免被遮挡 */}
       <Dialog open={!!previewTask} onOpenChange={() => setPreviewTask(null)}>
-        <DialogContent className="max-w-2xl bg-background border-border">
+        <DialogContent className="max-w-xl max-h-[85vh] overflow-y-auto bg-background border-border">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               {previewTask?.type === "video" ? (
@@ -655,26 +655,26 @@ export default function TaskLogPage() {
             </DialogTitle>
           </DialogHeader>
           
-          <div className="space-y-4">
+          <div className="space-y-3">
             {previewTask?.type === "video" && previewTask.resultUrl ? (
               <video 
                 src={previewTask.resultUrl} 
                 controls 
                 autoPlay
-                className="w-full rounded-lg"
+                className="w-full max-h-[50vh] rounded-lg object-contain bg-black"
               />
             ) : previewTask?.resultUrl ? (
               <img 
                 src={previewTask.resultUrl} 
                 alt={previewTask.prompt || "预览图片"}
-                className="w-full rounded-lg"
+                className="w-full max-h-[50vh] rounded-lg object-contain"
               />
             ) : null}
             
-            <div className="space-y-2 text-sm">
+            <div className="space-y-1.5 text-sm p-3 rounded-lg bg-muted/30">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">提示词</span>
-                <span className="max-w-md truncate">{previewTask?.prompt || "无"}</span>
+                <span className="max-w-[200px] truncate text-right">{previewTask?.prompt || "无"}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">来源</span>
@@ -685,21 +685,22 @@ export default function TaskLogPage() {
                 <span>{previewTask?.model}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted-foreground">消耗积分</span>
-                <span>{previewTask?.credits} 积分</span>
+                <span className="text-muted-foreground">积分</span>
+                <span>{previewTask?.credits}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted-foreground">创建时间</span>
+                <span className="text-muted-foreground">时间</span>
                 <span>{previewTask?.createdAt && formatDate(previewTask.createdAt)}</span>
               </div>
             </div>
             
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setPreviewTask(null)}>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="outline" size="sm" onClick={() => setPreviewTask(null)}>
                 关闭
               </Button>
               {previewTask?.resultUrl && (
                 <Button 
+                  size="sm"
                   className="gap-2 bg-gradient-to-r from-tiktok-cyan to-tiktok-pink"
                   onClick={() => handleDownload(previewTask)}
                 >

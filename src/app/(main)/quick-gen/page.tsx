@@ -353,9 +353,15 @@ export default function QuickGeneratorPage() {
   
   // 页面加载时，恢复最近完成的任务结果
   const recentTasks = useQuickGenStore((state) => state.recentTasks);
+  const isInitialMount = useRef(true);
+  
   useEffect(() => {
     // 只在初始加载时执行一次
-    if (canvasState !== "empty" || !recentTasks.length) return;
+    if (!isInitialMount.current) return;
+    isInitialMount.current = false;
+    
+    // 如果已经有结果URL（从其他地方设置的），不需要恢复
+    if (resultUrl) return;
     
     // 查找最近完成的任务（1小时内）
     const recentCompleted = recentTasks.find(t => {
@@ -367,6 +373,7 @@ export default function QuickGeneratorPage() {
     
     if (recentCompleted) {
       // 恢复结果
+      console.log("[QuickGen] Restoring recent completed task:", recentCompleted.id);
       setResultUrl(recentCompleted.resultUrl!);
       setCanvasState("result");
       
@@ -389,7 +396,7 @@ export default function QuickGeneratorPage() {
       setOutputMode("video"); // 九宫格是视频模式的前置步骤
       console.log("[QuickGen] Restored grid images from store:", storedGridImages.length);
     }
-  }, []); // 只在组件挂载时执行一次
+  }, [recentTasks, storedGridImages, storedGridIndex]); // 依赖 recentTasks 以便数据加载后触发
 
   // 获取模特数据 (My Team + All Models) - 使用 Server Actions
   useEffect(() => {

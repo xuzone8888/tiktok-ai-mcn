@@ -148,6 +148,9 @@ export interface ImageBatchActions {
   
   /** 应用全局设置到所有待处理任务 */
   applyGlobalSettingsToAllPending: () => void;
+  
+  /** 应用全局设置到选中的任务（包括 pending 和 failed 任务）*/
+  applyGlobalSettingsToSelected: () => void;
 }
 
 // ============================================================================
@@ -508,6 +511,35 @@ export const useImageBatchStore = create<ImageBatchState & ImageBatchActions>()(
                 resolution: globalSettings.resolution,
                 prompt,
               };
+            }
+          });
+        });
+      },
+      
+      applyGlobalSettingsToSelected: () => {
+        const { globalSettings, selectedTaskIds } = get();
+        set((state) => {
+          state.tasks.forEach((t) => {
+            // 应用到选中的 pending 或 failed 任务
+            if (selectedTaskIds[t.id] && (t.status === "pending" || t.status === "failed")) {
+              // 只有 AI 生成模式才使用提示词
+              const prompt = globalSettings.action === "generate"
+                ? (globalSettings.prompt?.trim() || getActionPromptHint(globalSettings.model, globalSettings.action))
+                : "";
+              t.config = {
+                ...t.config,
+                model: globalSettings.model,
+                action: globalSettings.action,
+                aspectRatio: globalSettings.aspectRatio,
+                resolution: globalSettings.resolution,
+                prompt,
+              };
+              // 如果是 failed 任务，重置为 pending
+              if (t.status === "failed") {
+                t.status = "pending";
+                t.error = undefined;
+                t.apiTaskId = undefined;
+              }
             }
           });
         });
