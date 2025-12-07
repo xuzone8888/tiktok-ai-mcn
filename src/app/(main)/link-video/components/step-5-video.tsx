@@ -2,6 +2,11 @@
 
 /**
  * Step 5: 生成最终视频（支持批量生成）
+ * 
+ * 特性：
+ * - 支持批量生成 1-5 个视频
+ * - 任务持久化：离开页面后任务继续，回来可见进度
+ * - 与任务日志接通：完成的视频会保存到生产轨迹薄
  */
 
 import { useState, useEffect, useCallback, useRef } from "react";
@@ -67,6 +72,9 @@ export function Step5Video() {
   
   // 用于取消轮询的 ref
   const pollAbortRef = useRef<boolean>(false);
+  
+  // 恢复状态标记
+  const hasRestoredRef = useRef(false);
 
   // 生成视频
   const handleGenerateVideo = async (retry = false) => {
@@ -202,6 +210,24 @@ export function Step5Video() {
       pollAbortRef.current = true;
     };
   }, []);
+
+  // 页面加载时恢复正在进行的任务
+  useEffect(() => {
+    if (hasRestoredRef.current) return;
+    hasRestoredRef.current = true;
+    
+    // 如果有视频已完成，直接显示
+    if (videoUrl) {
+      console.log('[Step5] Restored completed video:', videoUrl);
+      return;
+    }
+    
+    // 如果有进行中的视频任务，恢复轮询
+    if (videoTaskId && isGeneratingVideo && !isPolling && currentJob?.id) {
+      console.log('[Step5] Restoring video task polling:', videoTaskId);
+      setIsPolling(true);
+    }
+  }, [videoUrl, videoTaskId, isGeneratingVideo, isPolling, currentJob?.id]);
 
   // 轮询批量任务状态 - 优化版
   const pollBatchTask = async (index: number, taskId: string) => {

@@ -450,9 +450,9 @@ export const useLinkVideoStore = create<LinkVideoStore>()(
     }),
     {
       name: 'link-video-store',
-      storage: createJSONStorage(() => sessionStorage), // 使用 sessionStorage，刷新页面清除
+      storage: createJSONStorage(() => localStorage), // 使用 localStorage，持久化保存
       partialize: (state) => ({
-        // 只持久化部分状态
+        // 持久化所有关键状态，确保离开页面后任务可以恢复
         currentStep: state.currentStep,
         inputUrl: state.inputUrl,
         parsedData: state.parsedData,
@@ -466,6 +466,15 @@ export const useLinkVideoStore = create<LinkVideoStore>()(
         isManualMode: state.isManualMode,
         manualProductInfo: state.manualProductInfo,
         currentJob: state.currentJob,
+        // 新增：持久化生成状态
+        gridImageUrl: state.gridImageUrl,
+        gridTaskId: state.gridTaskId,
+        videoUrl: state.videoUrl,
+        videoTaskId: state.videoTaskId,
+        videoProgress: state.videoProgress,
+        // 持久化生成中状态，便于恢复轮询
+        isGeneratingGrid: state.isGeneratingGrid,
+        isGeneratingVideo: state.isGeneratingVideo,
       }),
     }
   )

@@ -1012,7 +1012,9 @@ export default function VideoBatchPage() {
     aiVideoPromptUser: "",
   });
   
-  // 预设视频风格 - 遵循默认提示词格式（输出7行C01-C07，每行<50字符，无解释）
+  // 预设视频风格 - 统一限制条件
+  // 第二步脚本生成：7行(C01-C07)，每行<150字符，解释<300字符
+  // 第三步视频提示：7行(C01-C07)，每行<50字符，无解释
   const VIDEO_STYLES = [
     {
       id: "default",
@@ -1032,8 +1034,10 @@ export default function VideoBatchPage() {
       description: "热情活泼，快节奏卖点展示",
       icon: "🔥",
       prompts: {
-        talkingScriptSystem: "Professional TikTok script writer. High-energy, fast-paced style.",
-        talkingScriptUser: "Write 7 shots (C01-C07). Energetic, exciting, urgent tone. 15 seconds total.",
+        talkingScriptSystem: `TikTok script writer. High-energy style.
+OUTPUT RULES: Exactly 7 shots (C01-C07). Each shot <150 chars. Total explanation <300 chars.`,
+        talkingScriptUser: `Write energetic product script. Fast-paced, urgent, exciting.
+FORMAT: C01: [visual] [action] [line] ... up to C07. Each shot under 150 characters.`,
         aiVideoPromptSystem: "Output ONLY 7 lines. Each line under 50 chars. No intro, no explanation.",
         aiVideoPromptUser: `Convert to 7 Sora shots with energetic style:
 {{SCRIPT}}
@@ -1054,8 +1058,10 @@ C07: [strong CTA, urgency, <50 chars]`,
       description: "奢华精致，强调品质感",
       icon: "💎",
       prompts: {
-        talkingScriptSystem: "Professional TikTok script writer. Elegant, sophisticated luxury style.",
-        talkingScriptUser: "Write 7 shots (C01-C07). Premium, refined, exclusive tone. 15 seconds total.",
+        talkingScriptSystem: `TikTok script writer. Luxury, elegant style.
+OUTPUT RULES: Exactly 7 shots (C01-C07). Each shot <150 chars. Total explanation <300 chars.`,
+        talkingScriptUser: `Write premium product script. Sophisticated, refined, exclusive.
+FORMAT: C01: [visual] [action] [line] ... up to C07. Each shot under 150 characters.`,
         aiVideoPromptSystem: "Output ONLY 7 lines. Each line under 50 chars. No intro, no explanation.",
         aiVideoPromptUser: `Convert to 7 Sora shots with luxury style:
 {{SCRIPT}}
@@ -1076,8 +1082,10 @@ C07: [premium CTA, refined, <50 chars]`,
       description: "亲切自然，像朋友推荐",
       icon: "💕",
       prompts: {
-        talkingScriptSystem: "Professional TikTok script writer. Warm, friendly, relatable style.",
-        talkingScriptUser: "Write 7 shots (C01-C07). Like chatting with best friend. 15 seconds total.",
+        talkingScriptSystem: `TikTok script writer. Warm, friendly style.
+OUTPUT RULES: Exactly 7 shots (C01-C07). Each shot <150 chars. Total explanation <300 chars.`,
+        talkingScriptUser: `Write friendly product script. Like chatting with best friend, casual, warm.
+FORMAT: C01: [visual] [action] [line] ... up to C07. Each shot under 150 characters.`,
         aiVideoPromptSystem: "Output ONLY 7 lines. Each line under 50 chars. No intro, no explanation.",
         aiVideoPromptUser: `Convert to 7 Sora shots with friendly style:
 {{SCRIPT}}
@@ -1098,8 +1106,10 @@ C07: [soft CTA, friendly invite, <50 chars]`,
       description: "客观详细，专业角度分析",
       icon: "📊",
       prompts: {
-        talkingScriptSystem: "Professional TikTok script writer. Expert reviewer, objective analysis.",
-        talkingScriptUser: "Write 7 shots (C01-C07). Professional, informative, credible. 15 seconds total.",
+        talkingScriptSystem: `TikTok script writer. Professional reviewer style.
+OUTPUT RULES: Exactly 7 shots (C01-C07). Each shot <150 chars. Total explanation <300 chars.`,
+        talkingScriptUser: `Write professional review script. Objective, informative, credible.
+FORMAT: C01: [visual] [action] [line] ... up to C07. Each shot under 150 characters.`,
         aiVideoPromptSystem: "Output ONLY 7 lines. Each line under 50 chars. No intro, no explanation.",
         aiVideoPromptUser: `Convert to 7 Sora shots with professional style:
 {{SCRIPT}}
@@ -1120,8 +1130,10 @@ C07: [professional CTA, trustworthy, <50 chars]`,
       description: "情感共鸣，讲述使用场景",
       icon: "📖",
       prompts: {
-        talkingScriptSystem: "Professional TikTok script writer. Storyteller, emotional narrative.",
-        talkingScriptUser: "Write 7 shots (C01-C07). Story-driven, emotional connection. 15 seconds total.",
+        talkingScriptSystem: `TikTok script writer. Storyteller, emotional style.
+OUTPUT RULES: Exactly 7 shots (C01-C07). Each shot <150 chars. Total explanation <300 chars.`,
+        talkingScriptUser: `Write story-driven product script. Emotional narrative, relatable scenarios.
+FORMAT: C01: [visual] [action] [line] ... up to C07. Each shot under 150 characters.`,
         aiVideoPromptSystem: "Output ONLY 7 lines. Each line under 50 chars. No intro, no explanation.",
         aiVideoPromptUser: `Convert to 7 Sora shots with storytelling style:
 {{SCRIPT}}
