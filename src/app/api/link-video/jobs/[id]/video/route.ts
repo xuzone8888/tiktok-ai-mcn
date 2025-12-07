@@ -275,6 +275,8 @@ export async function GET(
 ) {
   try {
     const { id: jobId } = await params;
+    const searchParams = new URL(request.url).searchParams;
+    const externalTaskId = searchParams.get("taskId") || null;
     
     const supabase = await createServerClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
@@ -321,8 +323,11 @@ export async function GET(
       });
     }
 
+    // 如果传入 taskId（批量变体），使用该 taskId 查询，避免多个变体共用同一结果
+    const targetTaskId = externalTaskId || job.video_task_id;
+
     // 查询外部任务状态
-    const taskResult = await querySora2Result(job.video_task_id);
+    const taskResult = await querySora2Result(targetTaskId);
 
     if (!taskResult.success) {
       return NextResponse.json({
@@ -337,45 +342,48 @@ export async function GET(
     const raw = taskResult.raw as { progress?: number };
 
     if (task?.status === 'completed' && task.resultUrl) {
-      // 更新数据库
-      await adminSupabase
-        .from('link_video_jobs')
-        .update({
-          final_video_url: task.resultUrl,
-          status: 'success',
-          completed_at: new Date().toISOString(),
-          progress: 100,
-        })
-        .eq('id', jobId);
-
-      // 同步到 generations 表（用于生产轨迹簿显示）
-      try {
-        // 获取完整的 job 信息
-        const { data: fullJob } = await adminSupabase
+      // 仅当使用主任务 ID 时才更新数据库 & 同步日志；批量变体只返回结果
+      if (!externalTaskId) {
+        // 更新数据库
+        await adminSupabase
           .from('link_video_jobs')
-          .select('*, ai_model:ai_models(name)')
-          .eq('id', jobId)
-          .single();
-
-        if (fullJob) {
-          await adminSupabase.from('generations').insert({
-            user_id: user.id,
-            type: 'video',
-            source: 'link_video',
-            status: 'completed',
-            prompt: fullJob.script_text?.substring(0, 200) || '链接秒变视频',
-            model: fullJob.ai_model?.name || 'Sora2',
-            result_url: task.resultUrl,
-            video_url: task.resultUrl,
-            credit_cost: fullJob.credits_used || 0,
-            created_at: fullJob.created_at,
+          .update({
+            final_video_url: task.resultUrl,
+            status: 'success',
             completed_at: new Date().toISOString(),
-          });
-          console.log('[Video API] Synced to generations table');
+            progress: 100,
+          })
+          .eq('id', jobId);
+
+        // 同步到 generations 表（用于生产轨迹簿显示）
+        try {
+          // 获取完整的 job 信息
+          const { data: fullJob } = await adminSupabase
+            .from('link_video_jobs')
+            .select('*, ai_model:ai_models(name)')
+            .eq('id', jobId)
+            .single();
+
+          if (fullJob) {
+            await adminSupabase.from('generations').insert({
+              user_id: user.id,
+              type: 'video',
+              source: 'link_video',
+              status: 'completed',
+              prompt: fullJob.script_text?.substring(0, 200) || '链接秒变视频',
+              model: fullJob.ai_model?.name || 'Sora2',
+              result_url: task.resultUrl,
+              video_url: task.resultUrl,
+              credit_cost: fullJob.credits_used || 0,
+              created_at: fullJob.created_at,
+              completed_at: new Date().toISOString(),
+            });
+            console.log('[Video API] Synced to generations table');
+          }
+        } catch (syncError) {
+          // 同步失败不影响主流程
+          console.error('[Video API] Failed to sync to generations:', syncError);
         }
-      } catch (syncError) {
-        // 同步失败不影响主流程
-        console.error('[Video API] Failed to sync to generations:', syncError);
       }
 
       return NextResponse.json({
@@ -387,18 +395,21 @@ export async function GET(
     }
 
     if (task?.status === 'failed') {
-      // 失败时退还积分
-      if (job.credits_used > 0) {
-        await refundCredits(adminSupabase, user.id, jobId, job.credits_used);
-      }
+      // 仅主任务才执行积分退还和状态更新
+      if (!externalTaskId) {
+        // 失败时退还积分
+        if (job.credits_used > 0) {
+          await refundCredits(adminSupabase, user.id, jobId, job.credits_used);
+        }
 
-      await adminSupabase
-        .from('link_video_jobs')
-        .update({
-          status: 'failed',
-          error_message: task.errorMessage || '视频生成失败',
-        })
-        .eq('id', jobId);
+        await adminSupabase
+          .from('link_video_jobs')
+          .update({
+            status: 'failed',
+            error_message: task.errorMessage || '视频生成失败',
+          })
+          .eq('id', jobId);
+      }
 
       return NextResponse.json({
         success: false,
@@ -409,7 +420,7 @@ export async function GET(
 
     // 更新进度
     const progress = raw?.progress || 0;
-    if (progress > 0) {
+    if (progress > 0 && !externalTaskId) {
       await adminSupabase
         .from('link_video_jobs')
         .update({ progress })

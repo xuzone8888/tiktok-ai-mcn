@@ -75,6 +75,8 @@ export function Step5Video() {
   
   // 恢复状态标记
   const hasRestoredRef = useRef(false);
+  // 是否存在活跃任务（即使组件重新挂载也视为活跃）
+  const hasActiveTask = !!videoTaskId && !videoUrl;
 
   // 生成视频
   const handleGenerateVideo = async (retry = false) => {
@@ -222,8 +224,8 @@ export function Step5Video() {
       return;
     }
     
-    // 如果有进行中的视频任务，恢复轮询
-    if (videoTaskId && isGeneratingVideo && !isPolling && currentJob?.id) {
+    // 如果有进行中的视频任务或已有 taskId，恢复轮询
+    if (videoTaskId && !isPolling && currentJob?.id) {
       console.log('[Step5] Restoring video task polling:', videoTaskId);
       setIsPolling(true);
     }
@@ -324,7 +326,7 @@ export function Step5Video() {
       </Card>
 
       {/* 生成状态 */}
-      {!videoUrl && !isGeneratingVideo && !isPolling && !isBatchMode && (
+      {!videoUrl && !isGeneratingVideo && !isPolling && !isBatchMode && !hasActiveTask && (
         <div className="space-y-6">
           {/* 批量数量选择 */}
           <Card className="p-4 bg-gradient-to-r from-tiktok-cyan/5 to-tiktok-pink/5 border-tiktok-cyan/20">
@@ -386,7 +388,7 @@ export function Step5Video() {
       )}
 
       {/* 单个生成进度 */}
-      {(isGeneratingVideo || isPolling) && !isBatchMode && (
+      {(isGeneratingVideo || isPolling || hasActiveTask) && !isBatchMode && (
         <div className="flex flex-col items-center justify-center rounded-lg border p-8">
           <Loader2 className="h-10 w-10 animate-spin text-tiktok-cyan mb-4" />
           <p className="font-medium mb-2">正在生成视频...</p>
