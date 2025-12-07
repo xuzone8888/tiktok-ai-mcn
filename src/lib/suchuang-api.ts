@@ -8,12 +8,17 @@
  * - Sora2 Pro: https://api.wuyinkeji.com/doc/41
  */
 
+import https from 'https';
+
 // ============================================================================
 // 配置
 // ============================================================================
 
 const API_BASE_URL = process.env.SUCHUANG_API_ENDPOINT || "https://api.wuyinkeji.com";
 const API_KEY = process.env.SUCHUANG_API_KEY || "";
+
+// 注意：Sora2 API 使用 https.request 并强制 IPv4
+// 因为 Cloudflare 的 IPv6 在阿里云服务器上不可达
 
 // ============================================================================
 // 类型定义
@@ -498,43 +503,57 @@ export async function submitSora2(
       requestBody.image_url = params.url;
     }
 
-    // 添加超时控制和重试（增加重试次数和超时时间）
-    let response: Response | undefined;
+    // 使用 https.request 并强制 IPv4（解决 IPv6 超时问题）
+    const bodyStr = JSON.stringify(requestBody);
     let retryCount = 0;
-    const maxRetries = 3; // 增加到3次重试
-    const timeouts = [60000, 90000, 120000, 150000]; // 递增超时时间
+    const maxRetries = 3;
+    let responseText = '';
     
     while (retryCount <= maxRetries) {
-      const controller = new AbortController();
-      const timeoutMs = timeouts[retryCount] || 120000;
-      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-      
       try {
-        response = await fetch(endpoint, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${key}`,
-            "Accept": "application/json",
-          },
-          body: JSON.stringify(requestBody),
-          signal: controller.signal,
+        responseText = await new Promise<string>((resolve, reject) => {
+          const url = new URL(endpoint);
+          const options = {
+            hostname: url.hostname,
+            port: 443,
+            path: url.pathname,
+            method: 'POST',
+            family: 4, // 强制 IPv4
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${key}`,
+              'Accept': 'application/json',
+              'Content-Length': Buffer.byteLength(bodyStr),
+            },
+            timeout: 120000, // 2分钟超时
+          };
+          
+          const req = https.request(options, (res) => {
+            let data = '';
+            res.on('data', chunk => data += chunk);
+            res.on('end', () => resolve(data));
+          });
+          
+          req.on('error', reject);
+          req.on('timeout', () => {
+            req.destroy();
+            reject(new Error('Request timeout'));
+          });
+          
+          req.write(bodyStr);
+          req.end();
         });
-        clearTimeout(timeoutId);
         break; // 成功则跳出循环
       } catch (fetchError) {
-        clearTimeout(timeoutId);
         retryCount++;
         if (retryCount > maxRetries) {
           throw fetchError;
         }
-        const waitTime = 3000 * retryCount; // 递增等待时间
+        const waitTime = 3000 * retryCount;
         console.log(`[Sora2] Retry ${retryCount}/${maxRetries} after error, waiting ${waitTime}ms:`, fetchError);
         await new Promise(resolve => setTimeout(resolve, waitTime));
       }
     }
-
-    const responseText = await response!.text();
     console.log("[Sora2] Raw response:", responseText.substring(0, 500));
 
     let data: Sora2SubmitResponse;
@@ -593,28 +612,44 @@ export async function querySora2Result(
   try {
     const endpoint = `${SORA2_API_BASE}/v1/videos/${taskId}`;
 
-    // 添加超时控制和重试
-    let response: Response | undefined;
+    // 使用 https.request 并强制 IPv4（解决 IPv6 超时问题）
     let retryCount = 0;
     const maxRetries = 2;
+    let responseText = '';
     
     while (retryCount <= maxRetries) {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 45000); // 45秒超时
-      
       try {
-        response = await fetch(endpoint, {
-          method: "GET",
-          headers: {
-            "Authorization": `Bearer ${key}`,
-            "Accept": "application/json",
-          },
-          signal: controller.signal,
+        responseText = await new Promise<string>((resolve, reject) => {
+          const url = new URL(endpoint);
+          const options = {
+            hostname: url.hostname,
+            port: 443,
+            path: url.pathname,
+            method: 'GET',
+            family: 4, // 强制 IPv4
+            headers: {
+              'Authorization': `Bearer ${key}`,
+              'Accept': 'application/json',
+            },
+            timeout: 45000, // 45秒超时
+          };
+          
+          const req = https.request(options, (res) => {
+            let data = '';
+            res.on('data', chunk => data += chunk);
+            res.on('end', () => resolve(data));
+          });
+          
+          req.on('error', reject);
+          req.on('timeout', () => {
+            req.destroy();
+            reject(new Error('Request timeout'));
+          });
+          
+          req.end();
         });
-        clearTimeout(timeoutId);
         break;
       } catch (fetchError) {
-        clearTimeout(timeoutId);
         retryCount++;
         if (retryCount > maxRetries) {
           throw fetchError;
@@ -624,11 +659,9 @@ export async function querySora2Result(
       }
     }
     
-    if (!response) {
+    if (!responseText) {
       return { success: false, error: "网络请求失败，请稍后重试" };
     }
-
-    const responseText = await response.text();
     
     let data: Sora2SubmitResponse;
     try {
