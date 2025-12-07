@@ -494,30 +494,55 @@ export async function generateTalkingScript(
 
   // 清理脚本：只保留第一组完整的 C01-C07 脚本
   let cleanedScript = result.content || "";
+  const originalLength = cleanedScript.length;
   
-  // 查找 C01 开头的位置
-  const c01Match = cleanedScript.match(/C01\s*:/i);
-  if (c01Match && c01Match.index !== undefined) {
-    // 从 C01 开始截取
-    cleanedScript = cleanedScript.substring(c01Match.index);
+  // 方法1：按行提取，只保留 C01-C07 的有效行
+  const lines = cleanedScript.split('\n');
+  const validLines: string[] = [];
+  let foundC01 = false;
+  let foundC07 = false;
+  
+  for (const line of lines) {
+    const trimmedLine = line.trim();
+    // 检查是否是 C01-C07 开头的行
+    const shotMatch = trimmedLine.match(/^C0([1-7])\s*:/i);
     
-    // 查找 C07 后是否有第二个 C01（表示重复脚本）
-    const secondC01Match = cleanedScript.match(/C07[\s\S]*?(C01\s*:)/i);
-    if (secondC01Match && secondC01Match.index !== undefined) {
-      // 截取到 C07 后，去掉重复的部分
-      const c07End = cleanedScript.indexOf("C07");
-      if (c07End !== -1) {
-        // 找到 C07 那行的末尾
-        const c07LineEnd = cleanedScript.indexOf("\n", c07End + 100); // C07行通常很长，往后找100字符后的换行
-        if (c07LineEnd !== -1 && c07LineEnd < (secondC01Match.index || cleanedScript.length)) {
-          // 保留到 C07 行结束
-          cleanedScript = cleanedScript.substring(0, c07LineEnd).trim();
+    if (shotMatch) {
+      const shotNum = parseInt(shotMatch[1]);
+      
+      if (shotNum === 1) {
+        // 遇到 C01
+        if (foundC07) {
+          // 已经找到过完整的 C01-C07，遇到新的 C01 说明是重复，停止
+          console.log("[Doubao] Found duplicate C01, stopping at line:", validLines.length);
+          break;
+        }
+        foundC01 = true;
+        validLines.push(line);
+      } else if (foundC01) {
+        // 在 C01 之后的 C02-C07
+        validLines.push(line);
+        if (shotNum === 7) {
+          foundC07 = true;
         }
       }
+    } else if (foundC01 && !foundC07 && trimmedLine.length > 0) {
+      // C01 到 C07 之间的非空行（可能是续行内容）
+      validLines.push(line);
     }
   }
   
-  console.log("[Doubao] Script cleaned, length:", cleanedScript.length);
+  if (validLines.length > 0) {
+    cleanedScript = validLines.join('\n').trim();
+  }
+  
+  console.log("[Doubao] Script cleaned:", { 
+    original: originalLength, 
+    cleaned: cleanedScript.length,
+    foundC01,
+    foundC07,
+    linesKept: validLines.length 
+  });
 
   return { success: true, script: cleanedScript };
 }

@@ -497,15 +497,17 @@ export async function submitSora2(
       requestBody.image_url = params.url;
     }
 
-    // 添加超时控制和重试
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 60000); // 60秒超时
-    
-    let response: Response;
+    // 添加超时控制和重试（增加重试次数和超时时间）
+    let response: Response | undefined;
     let retryCount = 0;
-    const maxRetries = 2;
+    const maxRetries = 3; // 增加到3次重试
+    const timeouts = [60000, 90000, 120000, 150000]; // 递增超时时间
     
     while (retryCount <= maxRetries) {
+      const controller = new AbortController();
+      const timeoutMs = timeouts[retryCount] || 120000;
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+      
       try {
         response = await fetch(endpoint, {
           method: "POST",
@@ -517,19 +519,19 @@ export async function submitSora2(
           body: JSON.stringify(requestBody),
           signal: controller.signal,
         });
+        clearTimeout(timeoutId);
         break; // 成功则跳出循环
       } catch (fetchError) {
+        clearTimeout(timeoutId);
         retryCount++;
         if (retryCount > maxRetries) {
-          clearTimeout(timeoutId);
           throw fetchError;
         }
-        console.log(`[Sora2] Retry ${retryCount}/${maxRetries} after error:`, fetchError);
-        await new Promise(resolve => setTimeout(resolve, 2000)); // 等待2秒后重试
+        const waitTime = 3000 * retryCount; // 递增等待时间
+        console.log(`[Sora2] Retry ${retryCount}/${maxRetries} after error, waiting ${waitTime}ms:`, fetchError);
+        await new Promise(resolve => setTimeout(resolve, waitTime));
       }
     }
-    
-    clearTimeout(timeoutId);
 
     const responseText = await response!.text();
     console.log("[Sora2] Raw response:", responseText.substring(0, 500));
@@ -590,20 +592,40 @@ export async function querySora2Result(
   try {
     const endpoint = `${SORA2_API_BASE}/v1/videos/${taskId}`;
 
-    // 添加超时控制
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30秒超时
-
-    const response = await fetch(endpoint, {
-      method: "GET",
-      headers: {
-        "Authorization": `Bearer ${key}`,
-        "Accept": "application/json",
-      },
-      signal: controller.signal,
-    });
+    // 添加超时控制和重试
+    let response: Response | undefined;
+    let retryCount = 0;
+    const maxRetries = 2;
     
-    clearTimeout(timeoutId);
+    while (retryCount <= maxRetries) {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 45000); // 45秒超时
+      
+      try {
+        response = await fetch(endpoint, {
+          method: "GET",
+          headers: {
+            "Authorization": `Bearer ${key}`,
+            "Accept": "application/json",
+          },
+          signal: controller.signal,
+        });
+        clearTimeout(timeoutId);
+        break;
+      } catch (fetchError) {
+        clearTimeout(timeoutId);
+        retryCount++;
+        if (retryCount > maxRetries) {
+          throw fetchError;
+        }
+        console.log(`[Sora2] Query retry ${retryCount}/${maxRetries}:`, fetchError);
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      }
+    }
+    
+    if (!response) {
+      return { success: false, error: "网络请求失败，请稍后重试" };
+    }
 
     const responseText = await response.text();
     

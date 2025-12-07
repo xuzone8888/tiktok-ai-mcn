@@ -307,6 +307,44 @@ export async function GET(
 
     // 如果已有结果
     if (job.final_video_url) {
+      // 确保同步到 generations 表（如果之前同步失败）
+      try {
+        const { data: existingGen } = await adminSupabase
+          .from('generations')
+          .select('id')
+          .eq('task_id', job.video_task_id)
+          .single();
+        
+        if (!existingGen) {
+          // 尝试补同步
+          const { data: fullJob } = await adminSupabase
+            .from('link_video_jobs')
+            .select('*, ai_model:ai_models(name)')
+            .eq('id', jobId)
+            .single();
+          
+          if (fullJob) {
+            await adminSupabase.from('generations').insert({
+              user_id: user.id,
+              task_id: job.video_task_id,
+              type: 'video',
+              source: 'link_video',
+              status: 'completed',
+              prompt: fullJob.script_text?.substring(0, 200) || '链接秒变视频',
+              model: fullJob.ai_model?.name || 'Sora2',
+              result_url: job.final_video_url,
+              video_url: job.final_video_url,
+              credit_cost: fullJob.credits_used || 0,
+              created_at: fullJob.created_at,
+              completed_at: fullJob.completed_at || new Date().toISOString(),
+            });
+            console.log('[Video API] Backfilled generations record for completed job:', jobId);
+          }
+        }
+      } catch (syncError) {
+        console.error('[Video API] Failed to backfill generations:', syncError);
+      }
+      
       return NextResponse.json({
         success: true,
         status: 'completed',
@@ -327,9 +365,11 @@ export async function GET(
     const targetTaskId = externalTaskId || job.video_task_id;
 
     // 查询外部任务状态
+    console.log('[Video API] Polling task status:', { jobId, targetTaskId, externalTaskId });
     const taskResult = await querySora2Result(targetTaskId);
 
     if (!taskResult.success) {
+      console.log('[Video API] Task not ready:', taskResult.error);
       return NextResponse.json({
         success: true,
         status: 'processing',
@@ -340,6 +380,8 @@ export async function GET(
 
     const task = taskResult.task;
     const raw = taskResult.raw as { progress?: number };
+    
+    console.log('[Video API] Task result:', { status: task?.status, hasUrl: !!task?.resultUrl });
 
     if (task?.status === 'completed' && task.resultUrl) {
       // 主任务：更新数据库状态
