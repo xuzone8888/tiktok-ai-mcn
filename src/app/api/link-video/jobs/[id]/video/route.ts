@@ -146,20 +146,42 @@ export async function POST(
     // 组合脚本 + AI 模特触发词 (参考 generate-video 模块的实现)
     let finalPrompt = '';
     
+    // 批量变体修饰词 - 为每个批量任务生成不同风格的视频
+    const variationStyles = [
+      '', // 第一个保持原样
+      'Dynamic camera movements, energetic pacing. ',
+      'Smooth transitions, elegant style. ',
+      'Close-up details, intimate feel. ',
+      'Wide shots, cinematic composition. ',
+    ];
+    
+    // 如果是批量任务，添加变体修饰词
+    if (batchIndex > 0 && batchIndex < variationStyles.length) {
+      finalPrompt = variationStyles[batchIndex];
+      console.log('[Video API] Added batch variation modifier:', variationStyles[batchIndex], 'for batch index:', batchIndex);
+    }
+    
     // 如果有 AI 模特，注入触发词到 prompt 开头
     if (job.ai_model?.trigger_word) {
-      finalPrompt = `Professional video featuring ${job.ai_model.trigger_word}. `;
+      finalPrompt += `Professional video featuring ${job.ai_model.trigger_word}. `;
       console.log('[Video API] Injected AI model trigger word:', job.ai_model.trigger_word);
     }
 
-    // 添加脚本内容 (截取前800字符，为其他修饰词留空间)
-    const scriptContent = job.script_text.length > 800 
-      ? job.script_text.substring(0, 800) + '...'
+    // 添加脚本内容 (截取前750字符，为其他修饰词留空间)
+    const scriptContent = job.script_text.length > 750 
+      ? job.script_text.substring(0, 750) + '...'
       : job.script_text;
     finalPrompt += scriptContent;
 
-    // 添加质量提升词
-    finalPrompt += '. High quality, cinematic, professional lighting, viral TikTok style.';
+    // 添加质量提升词 - 批量任务使用不同的结尾修饰
+    const qualityModifiers = [
+      '. High quality, cinematic, professional lighting, viral TikTok style.',
+      '. Premium quality, dynamic movements, trending aesthetic.',
+      '. Studio quality, smooth camera work, engaging visuals.',
+      '. Professional production, natural lighting, authentic feel.',
+      '. Broadcast quality, creative angles, captivating style.',
+    ];
+    finalPrompt += qualityModifiers[batchIndex % qualityModifiers.length];
 
     // 8. 确定 Sora 模型
     const duration = job.video_config.duration;

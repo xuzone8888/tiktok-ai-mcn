@@ -1012,7 +1012,7 @@ export default function VideoBatchPage() {
     aiVideoPromptUser: "",
   });
   
-  // 预设视频风格 - 简化版提示词
+  // 预设视频风格 - 遵循默认提示词格式（输出7行C01-C07，每行<50字符，无解释）
   const VIDEO_STYLES = [
     {
       id: "default",
@@ -1032,10 +1032,20 @@ export default function VideoBatchPage() {
       description: "热情活泼，快节奏卖点展示",
       icon: "🔥",
       prompts: {
-        talkingScriptSystem: "Energetic TikTok creator with high-energy style.",
-        talkingScriptUser: "Create exciting, fast-paced product script with urgency.",
-        aiVideoPromptSystem: "Fast-paced video with dynamic movements.",
-        aiVideoPromptUser: "Energetic video: quick cuts, bright lighting, dynamic gestures. {{SCRIPT}}",
+        talkingScriptSystem: "Professional TikTok script writer. High-energy, fast-paced style.",
+        talkingScriptUser: "Write 7 shots (C01-C07). Energetic, exciting, urgent tone. 15 seconds total.",
+        aiVideoPromptSystem: "Output ONLY 7 lines. Each line under 50 chars. No intro, no explanation.",
+        aiVideoPromptUser: `Convert to 7 Sora shots with energetic style:
+{{SCRIPT}}
+
+RULES: Output EXACTLY this format, nothing else:
+C01: [quick camera move, energetic action, <50 chars]
+C02: [dynamic gesture, bright lighting, <50 chars]
+C03: [fast cut, excited expression, <50 chars]
+C04: [product highlight, enthusiasm, <50 chars]
+C05: [demo action, energy, <50 chars]
+C06: [benefit showcase, upbeat, <50 chars]
+C07: [strong CTA, urgency, <50 chars]`,
       }
     },
     {
@@ -1044,10 +1054,20 @@ export default function VideoBatchPage() {
       description: "奢华精致，强调品质感",
       icon: "💎",
       prompts: {
-        talkingScriptSystem: "Sophisticated luxury presenter emphasizing premium quality.",
-        talkingScriptUser: "Create elegant script focusing on quality and exclusivity.",
-        aiVideoPromptSystem: "Premium luxury video with refined aesthetics.",
-        aiVideoPromptUser: "Luxury video: soft lighting, elegant movements, detail shots. {{SCRIPT}}",
+        talkingScriptSystem: "Professional TikTok script writer. Elegant, sophisticated luxury style.",
+        talkingScriptUser: "Write 7 shots (C01-C07). Premium, refined, exclusive tone. 15 seconds total.",
+        aiVideoPromptSystem: "Output ONLY 7 lines. Each line under 50 chars. No intro, no explanation.",
+        aiVideoPromptUser: `Convert to 7 Sora shots with luxury style:
+{{SCRIPT}}
+
+RULES: Output EXACTLY this format, nothing else:
+C01: [elegant opening, soft lighting, <50 chars]
+C02: [slow reveal, premium feel, <50 chars]
+C03: [detail closeup, quality focus, <50 chars]
+C04: [refined movement, sophistication, <50 chars]
+C05: [luxury demo, grace, <50 chars]
+C06: [exclusive appeal, elegance, <50 chars]
+C07: [premium CTA, refined, <50 chars]`,
       }
     },
     {
@@ -1056,10 +1076,20 @@ export default function VideoBatchPage() {
       description: "亲切自然，像朋友推荐",
       icon: "💕",
       prompts: {
-        talkingScriptSystem: "Friendly creator sharing like talking to best friend.",
-        talkingScriptUser: "Create warm, casual script with personal experience.",
-        aiVideoPromptSystem: "Cozy video with natural lighting and relaxed vibe.",
-        aiVideoPromptUser: "Friendly video: warm lighting, relaxed poses, genuine smile. {{SCRIPT}}",
+        talkingScriptSystem: "Professional TikTok script writer. Warm, friendly, relatable style.",
+        talkingScriptUser: "Write 7 shots (C01-C07). Like chatting with best friend. 15 seconds total.",
+        aiVideoPromptSystem: "Output ONLY 7 lines. Each line under 50 chars. No intro, no explanation.",
+        aiVideoPromptUser: `Convert to 7 Sora shots with friendly style:
+{{SCRIPT}}
+
+RULES: Output EXACTLY this format, nothing else:
+C01: [casual greeting, warm smile, <50 chars]
+C02: [natural pose, cozy vibe, <50 chars]
+C03: [genuine reaction, relatable, <50 chars]
+C04: [friendly demo, personal touch, <50 chars]
+C05: [honest review, warmth, <50 chars]
+C06: [recommendation, caring tone, <50 chars]
+C07: [soft CTA, friendly invite, <50 chars]`,
       }
     },
     {
@@ -1068,10 +1098,20 @@ export default function VideoBatchPage() {
       description: "客观详细，专业角度分析",
       icon: "📊",
       prompts: {
-        talkingScriptSystem: "Professional reviewer with objective analysis.",
-        talkingScriptUser: "Create detailed review with specs and recommendations.",
-        aiVideoPromptSystem: "Professional review with clean visuals.",
-        aiVideoPromptUser: "Pro review: clean background, steady camera, clear demo. {{SCRIPT}}",
+        talkingScriptSystem: "Professional TikTok script writer. Expert reviewer, objective analysis.",
+        talkingScriptUser: "Write 7 shots (C01-C07). Professional, informative, credible. 15 seconds total.",
+        aiVideoPromptSystem: "Output ONLY 7 lines. Each line under 50 chars. No intro, no explanation.",
+        aiVideoPromptUser: `Convert to 7 Sora shots with professional style:
+{{SCRIPT}}
+
+RULES: Output EXACTLY this format, nothing else:
+C01: [clean intro, professional setup, <50 chars]
+C02: [product overview, clear framing, <50 chars]
+C03: [spec highlight, steady shot, <50 chars]
+C04: [detailed demo, informative, <50 chars]
+C05: [comparison point, objective, <50 chars]
+C06: [expert verdict, credible, <50 chars]
+C07: [professional CTA, trustworthy, <50 chars]`,
       }
     },
     {
@@ -1080,10 +1120,20 @@ export default function VideoBatchPage() {
       description: "情感共鸣，讲述使用场景",
       icon: "📖",
       prompts: {
-        talkingScriptSystem: "Storyteller creating emotional product narratives.",
-        talkingScriptUser: "Create story-driven script with relatable scenarios.",
-        aiVideoPromptSystem: "Cinematic story-driven video.",
-        aiVideoPromptUser: "Story video: cinematic lighting, lifestyle scenarios. {{SCRIPT}}",
+        talkingScriptSystem: "Professional TikTok script writer. Storyteller, emotional narrative.",
+        talkingScriptUser: "Write 7 shots (C01-C07). Story-driven, emotional connection. 15 seconds total.",
+        aiVideoPromptSystem: "Output ONLY 7 lines. Each line under 50 chars. No intro, no explanation.",
+        aiVideoPromptUser: `Convert to 7 Sora shots with storytelling style:
+{{SCRIPT}}
+
+RULES: Output EXACTLY this format, nothing else:
+C01: [scene setting, mood establish, <50 chars]
+C02: [problem intro, relatable, <50 chars]
+C03: [discovery moment, cinematic, <50 chars]
+C04: [solution demo, emotional, <50 chars]
+C05: [transformation, lifestyle, <50 chars]
+C06: [happy ending, satisfaction, <50 chars]
+C07: [story CTA, inspiring, <50 chars]`,
       }
     },
   ];
