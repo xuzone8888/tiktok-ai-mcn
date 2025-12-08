@@ -16,7 +16,7 @@ import { createClient } from "@/lib/supabase/server";
 export interface TaskLogItem {
   id: string;
   type: "video" | "image";
-  source: "quick_gen" | "batch_video" | "batch_image" | "link_video";
+  source: "quick_gen" | "batch_video" | "batch_image" | "link_video" | "ecom_image";
   status: "completed" | "failed" | "processing" | "pending";
   resultUrl: string | null;
   thumbnailUrl: string | null;
@@ -67,71 +67,114 @@ export async function GET(request: Request) {
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
     const sevenDaysAgoISO = sevenDaysAgo.toISOString();
 
-    // 从 generations 表获取任务记录（只返回 7 天内的）
-    let query = supabase
+    // ============================================================================
+    // 1. 从 generations 表获取任务记录
+    // ============================================================================
+    let generationsQuery = supabase
       .from("generations")
       .select("*")
       .eq("user_id", user.id)
-      .gte("created_at", sevenDaysAgoISO) // 只返回 7 天内的记录
+      .gte("created_at", sevenDaysAgoISO)
       .order("created_at", { ascending: false });
 
     // 类型过滤
-    if (type !== "all") {
-      query = query.eq("type", type);
+    if (type === "video") {
+      generationsQuery = generationsQuery.eq("type", "video");
+    } else if (type === "image") {
+      generationsQuery = generationsQuery.eq("type", "image");
     }
 
     // 状态过滤
     if (status !== "all") {
-      query = query.eq("status", status);
+      generationsQuery = generationsQuery.eq("status", status);
     }
 
-    // 分页
-    query = query.range(offset, offset + limit - 1);
+    const { data: generationsTasks, error: generationsError } = await generationsQuery;
 
-    const { data: tasks, error } = await query;
-
-    console.log("[Tasks API] Query result:", {
-      userId: user.id,
-      tasksCount: tasks?.length || 0,
-      error: error?.message || null,
-    });
-
-    if (error) {
-      console.error("[Tasks API] Error fetching tasks:", error);
-      // 如果表不存在，返回空数据
-      return NextResponse.json({
-        success: true,
-        data: {
-          tasks: [],
-          stats: {
-            totalTasks: 0,
-            completedTasks: 0,
-            failedTasks: 0,
-            processingTasks: 0,
-            totalVideos: 0,
-            totalImages: 0,
-            totalCreditsUsed: 0,
-          },
-          pagination: { total: 0, limit, offset },
-        },
-      });
+    if (generationsError) {
+      console.error("[Tasks API] Error fetching generations:", generationsError);
     }
+
+    // ============================================================================
+    // 2. 从 ecom_image_tasks 表获取电商图片任务
+    // ============================================================================
+    let ecomTasks: TaskLogItem[] = [];
     
-    // 打印第一个任务的详细信息用于调试
-    if (tasks && tasks.length > 0) {
-      console.log("[Tasks API] First task sample:", {
-        id: tasks[0].id,
-        type: tasks[0].type,
-        source: tasks[0].source,
-        status: tasks[0].status,
-        result_url: tasks[0].result_url,
-        video_url: tasks[0].video_url,
-        image_url: tasks[0].image_url,
-      });
+    // 只有在查询所有类型或图片类型时才查询 ecom_image_tasks
+    if (type === "all" || type === "image") {
+      let ecomQuery = supabase
+        .from("ecom_image_tasks")
+        .select("*")
+        .eq("user_id", user.id)
+        .gte("created_at", sevenDaysAgoISO)
+        .order("created_at", { ascending: false });
+
+      // 状态过滤 - 映射状态
+      if (status === "completed") {
+        ecomQuery = ecomQuery.in("status", ["success", "partial_success"]);
+      } else if (status === "failed") {
+        ecomQuery = ecomQuery.eq("status", "failed");
+      } else if (status === "processing") {
+        ecomQuery = ecomQuery.in("status", ["created", "generating_prompts", "generating_images"]);
+      }
+
+      const { data: ecomData, error: ecomError } = await ecomQuery;
+
+      if (ecomError) {
+        console.error("[Tasks API] Error fetching ecom tasks:", ecomError);
+      } else if (ecomData) {
+        // 转换电商图片任务数据
+        ecomTasks = ecomData.map((task) => {
+          const createdAt = new Date(task.created_at);
+          const expiresAt = new Date(createdAt.getTime() + 7 * 24 * 60 * 60 * 1000);
+          
+          // 获取第一个成功的输出图片作为结果 URL
+          const outputItems = task.output_items as Array<{ url?: string; status?: string }> || [];
+          const firstCompletedItem = outputItems.find(item => item.status === "completed" && item.url);
+          
+          // 映射状态
+          let mappedStatus: "completed" | "failed" | "processing" | "pending" = "processing";
+          if (task.status === "success" || task.status === "partial_success") {
+            mappedStatus = "completed";
+          } else if (task.status === "failed") {
+            mappedStatus = "failed";
+          } else {
+            mappedStatus = "processing";
+          }
+
+          // 获取模式标签
+          const modeLabels: Record<string, string> = {
+            ecom_five_pack: "电商五图套装",
+            white_background: "一键白底图",
+            scene_image: "一键场景图",
+            try_on: "一键试穿",
+            buyer_show: "一键买家秀",
+          };
+
+          return {
+            id: task.id,
+            type: "image" as const,
+            source: "ecom_image" as const,
+            status: mappedStatus,
+            resultUrl: firstCompletedItem?.url || null,
+            thumbnailUrl: firstCompletedItem?.url || null,
+            prompt: modeLabels[task.mode] || task.mode,
+            model: task.model_type || "nano-banana",
+            credits: task.credits_cost || 0,
+            createdAt: task.created_at,
+            completedAt: task.completed_at || null,
+            expiresAt: expiresAt.toISOString(),
+          };
+        });
+      }
     }
 
-    // 转换任务数据
-    const taskLogs: TaskLogItem[] = (tasks || []).map((task) => {
+    // ============================================================================
+    // 3. 合并和排序任务
+    // ============================================================================
+    
+    // 转换 generations 任务数据
+    const generationsLogs: TaskLogItem[] = (generationsTasks || []).map((task) => {
       const createdAt = new Date(task.created_at);
       const expiresAt = new Date(createdAt.getTime() + 7 * 24 * 60 * 60 * 1000);
       
@@ -151,29 +194,61 @@ export async function GET(request: Request) {
       };
     });
 
-    // 计算统计数据（只统计 7 天内的记录）
-    const { data: statsData } = await supabase
+    // 合并两个来源的任务
+    const allTasks = [...generationsLogs, ...ecomTasks];
+    
+    // 按创建时间降序排序
+    allTasks.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    
+    // 应用分页
+    const taskLogs = allTasks.slice(offset, offset + limit);
+
+    console.log("[Tasks API] Query result:", {
+      userId: user.id,
+      generationsCount: generationsTasks?.length || 0,
+      ecomCount: ecomTasks.length,
+      totalCount: allTasks.length,
+    });
+
+    // ============================================================================
+    // 4. 计算统计数据
+    // ============================================================================
+    
+    // generations 统计
+    const { data: generationsStats } = await supabase
       .from("generations")
       .select("type, status, credit_cost")
       .eq("user_id", user.id)
       .gte("created_at", sevenDaysAgoISO);
 
-    const stats: TaskStats = {
-      totalTasks: statsData?.length || 0,
-      completedTasks: statsData?.filter(t => t.status === "completed").length || 0,
-      failedTasks: statsData?.filter(t => t.status === "failed").length || 0,
-      processingTasks: statsData?.filter(t => t.status === "processing" || t.status === "pending").length || 0,
-      totalVideos: statsData?.filter(t => t.type === "video").length || 0,
-      totalImages: statsData?.filter(t => t.type === "image").length || 0,
-      totalCreditsUsed: statsData?.reduce((sum, t) => sum + (t.credit_cost || 0), 0) || 0,
-    };
-
-    // 获取总数用于分页（只计算 7 天内的记录）
-    const { count } = await supabase
-      .from("generations")
-      .select("*", { count: "exact", head: true })
+    // ecom_image_tasks 统计
+    const { data: ecomStats } = await supabase
+      .from("ecom_image_tasks")
+      .select("status, credits_cost")
       .eq("user_id", user.id)
       .gte("created_at", sevenDaysAgoISO);
+
+    // 合并统计
+    const genStats = generationsStats || [];
+    const ecomStatsData = ecomStats || [];
+
+    const stats: TaskStats = {
+      totalTasks: genStats.length + ecomStatsData.length,
+      completedTasks: 
+        genStats.filter(t => t.status === "completed").length + 
+        ecomStatsData.filter(t => t.status === "success" || t.status === "partial_success").length,
+      failedTasks: 
+        genStats.filter(t => t.status === "failed").length + 
+        ecomStatsData.filter(t => t.status === "failed").length,
+      processingTasks: 
+        genStats.filter(t => t.status === "processing" || t.status === "pending").length +
+        ecomStatsData.filter(t => ["created", "generating_prompts", "generating_images"].includes(t.status)).length,
+      totalVideos: genStats.filter(t => t.type === "video").length,
+      totalImages: genStats.filter(t => t.type === "image").length + ecomStatsData.length,
+      totalCreditsUsed: 
+        genStats.reduce((sum, t) => sum + (t.credit_cost || 0), 0) +
+        ecomStatsData.reduce((sum, t) => sum + (t.credits_cost || 0), 0),
+    };
 
     return NextResponse.json({
       success: true,
@@ -181,7 +256,7 @@ export async function GET(request: Request) {
         tasks: taskLogs,
         stats,
         pagination: {
-          total: count || 0,
+          total: allTasks.length,
           limit,
           offset,
         },
