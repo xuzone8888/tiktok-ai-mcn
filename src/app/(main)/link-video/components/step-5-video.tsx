@@ -511,8 +511,8 @@ export function Step5Video() {
         </div>
       )}
 
-      {/* 视频结果 */}
-      {videoUrl && (
+      {/* 视频结果 - 仅在非批量模式下显示 */}
+      {videoUrl && !isBatchMode && (
         <div className="space-y-4">
           {/* 成功提示 */}
           <div className="flex items-center justify-center gap-2 text-green-500">

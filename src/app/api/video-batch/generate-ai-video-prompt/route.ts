@@ -10,7 +10,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { generateAiVideoPrompt } from "@/lib/doubao-api";
 
 // 延长 Vercel 函数超时时间
-export const maxDuration = 60; // 60秒
+export const maxDuration = 120; // 120秒，豆包服务有时响应较慢
 
 // ============================================================================
 // 请求/响应类型
@@ -88,18 +88,47 @@ export async function POST(request: NextRequest) {
       hasCustomPrompts: !!customPrompts,
     });
 
-    // 调用豆包 API 生成提示词（带超时）
+    // 调用豆包 API 生成提示词（带超时和重试）
     let result;
-    try {
-      result = await withTimeout(
-        generateAiVideoPrompt(talkingScript, modelTriggerWord, customPrompts),
-        50000, // 50秒超时
-        "AI提示词生成超时，豆包服务响应较慢，请稍后重试"
-      );
-    } catch (timeoutError) {
-      console.error("[Video Batch] Prompt generation timeout:", timeoutError);
+    let lastError: Error | null = null;
+    const maxRetries = 2; // 最多重试2次（共3次尝试）
+    
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        console.log(`[Video Batch] Attempt ${attempt + 1}/${maxRetries + 1} for task ${taskId}`);
+        
+        result = await withTimeout(
+          generateAiVideoPrompt(talkingScript, modelTriggerWord, customPrompts),
+          90000, // 90秒超时，给豆包服务更多时间
+          `AI提示词生成超时（尝试 ${attempt + 1}/${maxRetries + 1}）`
+        );
+        
+        // 成功则跳出循环
+        if (result.success) {
+          break;
+        }
+        
+        lastError = new Error(result.error || "生成失败");
+      } catch (timeoutError) {
+        lastError = timeoutError instanceof Error ? timeoutError : new Error("未知错误");
+        console.error(`[Video Batch] Attempt ${attempt + 1} failed:`, lastError.message);
+        
+        // 如果不是最后一次尝试，等待一会儿再重试
+        if (attempt < maxRetries) {
+          console.log(`[Video Batch] Waiting 3s before retry...`);
+          await new Promise(resolve => setTimeout(resolve, 3000));
+        }
+      }
+    }
+    
+    // 所有尝试都失败
+    if (!result?.success) {
+      console.error("[Video Batch] All attempts failed:", lastError?.message);
       return NextResponse.json(
-        { success: false, error: timeoutError instanceof Error ? timeoutError.message : "生成提示词超时" },
+        { 
+          success: false, 
+          error: lastError?.message || "AI提示词生成失败，豆包服务响应较慢，请稍后重试" 
+        },
         { status: 504 }
       );
     }
