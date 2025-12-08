@@ -305,8 +305,13 @@ export async function GET(
       );
     }
 
-    // 如果已有结果
-    if (job.final_video_url) {
+    // 如果传入了外部 taskId（批量变体），必须使用该 taskId 查询
+    // 不能使用 job.final_video_url，因为那是主任务的结果
+    const targetTaskId = externalTaskId || job.video_task_id;
+    
+    // 只有当没有外部 taskId 且已有结果时，才返回缓存的结果
+    // 批量任务必须独立查询各自的结果
+    if (!externalTaskId && job.final_video_url) {
       // 确保同步到 generations 表（如果之前同步失败）
       try {
         const { data: existingGen } = await adminSupabase
@@ -352,17 +357,14 @@ export async function GET(
       });
     }
 
-    // 如果没有任务 ID
-    if (!job.video_task_id) {
+    // 如果没有任务 ID（主任务也没有，批量任务也没有传入）
+    if (!targetTaskId) {
       return NextResponse.json({
         success: true,
         status: 'pending',
         message: '尚未开始生成',
       });
     }
-
-    // 如果传入 taskId（批量变体），使用该 taskId 查询，避免多个变体共用同一结果
-    const targetTaskId = externalTaskId || job.video_task_id;
 
     // 查询外部任务状态
     console.log('[Video API] Polling task status:', { jobId, targetTaskId, externalTaskId });
