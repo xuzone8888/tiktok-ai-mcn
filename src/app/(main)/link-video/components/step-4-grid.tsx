@@ -4,10 +4,11 @@
  * Step 4: 生成九宫格图片
  */
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useLinkVideoStore } from "@/stores/link-video-store";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
 import {
   ArrowLeft,
   ArrowRight,
@@ -18,7 +19,11 @@ import {
   AlertCircle,
   Download,
   ZoomIn,
+  Clock,
 } from "lucide-react";
+
+// 预计生成时间（秒）
+const ESTIMATED_TOTAL_TIME = 45;
 
 export function Step4Grid() {
   const {
@@ -38,6 +43,8 @@ export function Step4Grid() {
 
   const [isPolling, setIsPolling] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
+  const [elapsedTime, setElapsedTime] = useState(0);
+  const startTimeRef = useRef<number | null>(null);
 
   // 生成九宫格
   const handleGenerateGrid = async (retry = false) => {
@@ -47,6 +54,9 @@ export function Step4Grid() {
     }
 
     startGenerateGrid();
+    // 重置计时器
+    startTimeRef.current = Date.now();
+    setElapsedTime(0);
 
     try {
       const response = await fetch(`/api/link-video/jobs/${currentJob.id}/grid`, {
@@ -62,9 +72,11 @@ export function Step4Grid() {
         setIsPolling(true);
       } else {
         setGridError(result.error || "九宫格生成失败");
+        startTimeRef.current = null;
       }
     } catch (error) {
       setGridError("网络错误，请稍后重试");
+      startTimeRef.current = null;
     }
   };
 
@@ -79,9 +91,11 @@ export function Step4Grid() {
       if (result.status === "completed" && result.grid_image_url) {
         setGridGenerated(result.grid_image_url);
         setIsPolling(false);
+        startTimeRef.current = null;
       } else if (result.status === "failed") {
         setGridError(result.error || "九宫格生成失败");
         setIsPolling(false);
+        startTimeRef.current = null;
       }
       // processing 状态继续轮询
     } catch (error) {
@@ -99,6 +113,34 @@ export function Step4Grid() {
 
     return () => clearInterval(interval);
   }, [isPolling, pollStatus]);
+
+  // 计时器效果
+  useEffect(() => {
+    if (!isPolling && !isGeneratingGrid) {
+      return;
+    }
+
+    const timer = setInterval(() => {
+      if (startTimeRef.current) {
+        const elapsed = Math.floor((Date.now() - startTimeRef.current) / 1000);
+        setElapsedTime(elapsed);
+      }
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [isPolling, isGeneratingGrid]);
+
+  // 计算进度和剩余时间
+  const progress = Math.min((elapsedTime / ESTIMATED_TOTAL_TIME) * 100, 95);
+  const remainingTime = Math.max(ESTIMATED_TOTAL_TIME - elapsedTime, 0);
+  
+  const formatTime = (seconds: number) => {
+    if (seconds <= 0) return "即将完成...";
+    if (seconds < 60) return `约 ${seconds} 秒`;
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `约 ${mins} 分 ${secs} 秒`;
+  };
 
   const canProceed = gridImageUrl !== null;
 
@@ -150,9 +192,24 @@ export function Step4Grid() {
       {(isGeneratingGrid || isPolling) && (
         <div className="flex flex-col items-center justify-center rounded-lg border p-8">
           <Loader2 className="h-8 w-8 animate-spin text-tiktok-pink mb-4" />
-          <p className="text-muted-foreground">正在生成九宫格图片...</p>
-          <p className="text-xs text-muted-foreground mt-1">
-            使用 Nano Banana Pro 生成，预计 30-60 秒
+          <p className="text-muted-foreground font-medium">正在生成九宫格图片...</p>
+          
+          {/* 进度条 */}
+          <div className="w-full max-w-xs mt-4 space-y-2">
+            <Progress value={progress} className="h-2" />
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <span className="flex items-center gap-1">
+                <Clock className="h-3 w-3" />
+                已用时 {elapsedTime} 秒
+              </span>
+              <span className="text-tiktok-pink font-medium">
+                {remainingTime > 0 ? formatTime(remainingTime) : "即将完成..."}
+              </span>
+            </div>
+          </div>
+          
+          <p className="text-xs text-muted-foreground mt-3">
+            使用 Nano Banana Pro 生成多角度产品图
           </p>
         </div>
       )}
