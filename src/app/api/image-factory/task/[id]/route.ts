@@ -40,19 +40,23 @@ export async function GET(
 
     // 2. 获取任务信息
     const adminClient = createAdminClient();
-    const { data: task, error: taskError } = await adminClient
+    const { data: taskData, error: taskError } = await adminClient
       .from("ecom_image_tasks")
       .select("*")
       .eq("id", taskId)
       .eq("user_id", user.id)
       .single();
 
-    if (taskError || !task) {
+    if (taskError || !taskData) {
       return NextResponse.json(
         { success: false, error: "任务不存在或无权访问" },
         { status: 404 }
       );
     }
+
+    // 使用明确的类型
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const task = taskData as any;
 
     // 3. 如果任务正在生成图片，检查 Nano Banana 任务状态
     if (task.status === "generating_images") {
@@ -61,12 +65,21 @@ export async function GET(
       let completedCount = 0;
       let failedCount = 0;
 
+      console.log("[Task Status] Checking task:", taskId, "with", outputItems.length, "items");
+
       for (let i = 0; i < outputItems.length; i++) {
         const item = outputItems[i];
         
         // 只检查正在处理中的项
         if (item.status === "processing" && item.task_id) {
+          console.log("[Task Status] Querying NanoBanana task:", item.task_id);
           const result = await queryNanoBananaResult(item.task_id);
+          
+          console.log("[Task Status] NanoBanana result for", item.task_id, ":", {
+            success: result.success,
+            status: result.task?.status,
+            hasUrl: !!result.task?.resultUrl,
+          });
           
           // 修复：正确读取返回格式 { success, task: { status, resultUrl } }
           if (result.success && result.task?.status === "completed" && result.task?.resultUrl) {
@@ -77,6 +90,7 @@ export async function GET(
             };
             hasUpdates = true;
             completedCount++;
+            console.log("[Task Status] Item", i, "completed with URL:", result.task.resultUrl.substring(0, 50));
           } else if (result.task?.status === "failed" || !result.success) {
             outputItems[i] = {
               ...item,
@@ -85,8 +99,10 @@ export async function GET(
             };
             hasUpdates = true;
             failedCount++;
+            console.log("[Task Status] Item", i, "failed:", result.task?.errorMessage || result.error);
           } else {
             // 仍在处理中
+            console.log("[Task Status] Item", i, "still processing");
           }
         } else if (item.status === "completed") {
           completedCount++;
@@ -114,6 +130,14 @@ export async function GET(
           }
         }
 
+        console.log("[Task Status] Updating task status:", {
+          taskId,
+          newStatus,
+          completedCount,
+          failedCount,
+          processingCount,
+        });
+
         const updateData: Record<string, unknown> = {
           output_items: outputItems,
           status: newStatus,
@@ -131,10 +155,16 @@ export async function GET(
           updateData.error_message = null;
         }
 
-        await adminClient
+        const { error: updateError } = await (adminClient as any)
           .from("ecom_image_tasks")
           .update(updateData)
           .eq("id", taskId);
+
+        if (updateError) {
+          console.error("[Task Status] Failed to update task:", updateError);
+        } else {
+          console.log("[Task Status] Task updated successfully");
+        }
 
         // 更新返回的任务对象
         Object.assign(task, updateData);
