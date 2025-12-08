@@ -68,106 +68,114 @@ export async function GET(request: Request) {
     const sevenDaysAgoISO = sevenDaysAgo.toISOString();
 
     // ============================================================================
-    // 1. 从 generations 表获取任务记录
+    // 1. 并行查询 generations 和 ecom_image_tasks
     // ============================================================================
-    let generationsQuery = supabase
-      .from("generations")
-      .select("*")
-      .eq("user_id", user.id)
-      .gte("created_at", sevenDaysAgoISO)
-      .order("created_at", { ascending: false });
-
-    // 类型过滤
-    if (type === "video") {
-      generationsQuery = generationsQuery.eq("type", "video");
-    } else if (type === "image") {
-      generationsQuery = generationsQuery.eq("type", "image");
-    }
-
-    // 状态过滤
-    if (status !== "all") {
-      generationsQuery = generationsQuery.eq("status", status);
-    }
-
-    const { data: generationsTasks, error: generationsError } = await generationsQuery;
-
-    if (generationsError) {
-      console.error("[Tasks API] Error fetching generations:", generationsError);
-    }
-
-    // ============================================================================
-    // 2. 从 ecom_image_tasks 表获取电商图片任务
-    // ============================================================================
-    let ecomTasks: TaskLogItem[] = [];
     
-    // 只有在查询所有类型或图片类型时才查询 ecom_image_tasks
-    if (type === "all" || type === "image") {
-      let ecomQuery = supabase
+    // 构建 generations 查询
+    const buildGenerationsQuery = () => {
+      let query = supabase
+        .from("generations")
+        .select("*")
+        .eq("user_id", user.id)
+        .gte("created_at", sevenDaysAgoISO)
+        .order("created_at", { ascending: false })
+        .limit(limit + offset);
+
+      if (type === "video") {
+        query = query.eq("type", "video");
+      } else if (type === "image") {
+        query = query.eq("type", "image");
+      }
+
+      if (status !== "all") {
+        query = query.eq("status", status);
+      }
+
+      return query;
+    };
+
+    // 构建 ecom_image_tasks 查询
+    const buildEcomQuery = () => {
+      if (type === "video") return Promise.resolve({ data: null, error: null });
+
+      let query = supabase
         .from("ecom_image_tasks")
         .select("*")
         .eq("user_id", user.id)
         .gte("created_at", sevenDaysAgoISO)
-        .order("created_at", { ascending: false });
+        .order("created_at", { ascending: false })
+        .limit(limit + offset);
 
-      // 状态过滤 - 映射状态
       if (status === "completed") {
-        ecomQuery = ecomQuery.in("status", ["success", "partial_success"]);
+        query = query.in("status", ["success", "partial_success"]);
       } else if (status === "failed") {
-        ecomQuery = ecomQuery.eq("status", "failed");
+        query = query.eq("status", "failed");
       } else if (status === "processing") {
-        ecomQuery = ecomQuery.in("status", ["created", "generating_prompts", "generating_images"]);
+        query = query.in("status", ["created", "generating_prompts", "generating_images"]);
       }
 
-      const { data: ecomData, error: ecomError } = await ecomQuery;
+      return query;
+    };
 
-      if (ecomError) {
-        console.error("[Tasks API] Error fetching ecom tasks:", ecomError);
-      } else if (ecomData) {
-        // 转换电商图片任务数据
-        ecomTasks = ecomData.map((task) => {
-          const createdAt = new Date(task.created_at);
-          const expiresAt = new Date(createdAt.getTime() + 7 * 24 * 60 * 60 * 1000);
-          
-          // 获取第一个成功的输出图片作为结果 URL
-          const outputItems = task.output_items as Array<{ url?: string; status?: string }> || [];
-          const firstCompletedItem = outputItems.find(item => item.status === "completed" && item.url);
-          
-          // 映射状态
-          let mappedStatus: "completed" | "failed" | "processing" | "pending" = "processing";
-          if (task.status === "success" || task.status === "partial_success") {
-            mappedStatus = "completed";
-          } else if (task.status === "failed") {
-            mappedStatus = "failed";
-          } else {
-            mappedStatus = "processing";
-          }
+    // 并行执行查询
+    const [generationsResult, ecomResult] = await Promise.all([
+      buildGenerationsQuery(),
+      buildEcomQuery(),
+    ]);
 
-          // 获取模式标签
-          const modeLabels: Record<string, string> = {
-            ecom_five_pack: "电商五图套装",
-            white_background: "一键白底图",
-            scene_image: "一键场景图",
-            try_on: "一键试穿",
-            buyer_show: "一键买家秀",
-          };
+    const { data: generationsTasks, error: generationsError } = generationsResult;
+    const { data: ecomData, error: ecomError } = ecomResult;
 
-          return {
-            id: task.id,
-            type: "image" as const,
-            source: "ecom_image" as const,
-            status: mappedStatus,
-            resultUrl: firstCompletedItem?.url || null,
-            thumbnailUrl: firstCompletedItem?.url || null,
-            prompt: modeLabels[task.mode] || task.mode,
-            model: task.model_type || "nano-banana",
-            credits: task.credits_cost || 0,
-            createdAt: task.created_at,
-            completedAt: task.completed_at || null,
-            expiresAt: expiresAt.toISOString(),
-          };
-        });
-      }
+    if (generationsError) {
+      console.error("[Tasks API] Error fetching generations:", generationsError);
     }
+    if (ecomError) {
+      console.error("[Tasks API] Error fetching ecom tasks:", ecomError);
+    }
+
+    // ============================================================================
+    // 2. 转换电商图片任务数据
+    // ============================================================================
+    const ecomTasks: TaskLogItem[] = (ecomData || []).map((task) => {
+      const createdAt = new Date(task.created_at);
+      const expiresAt = new Date(createdAt.getTime() + 7 * 24 * 60 * 60 * 1000);
+      
+      // 获取第一个成功的输出图片作为结果 URL
+      const outputItems = task.output_items as Array<{ url?: string; status?: string }> || [];
+      const firstCompletedItem = outputItems.find(item => item.status === "completed" && item.url);
+      
+      // 映射状态
+      let mappedStatus: "completed" | "failed" | "processing" | "pending" = "processing";
+      if (task.status === "success" || task.status === "partial_success") {
+        mappedStatus = "completed";
+      } else if (task.status === "failed") {
+        mappedStatus = "failed";
+      }
+
+      // 获取模式标签
+      const modeLabels: Record<string, string> = {
+        ecom_five_pack: "电商五图套装",
+        white_background: "一键白底图",
+        scene_image: "一键场景图",
+        try_on: "一键试穿",
+        buyer_show: "一键买家秀",
+      };
+
+      return {
+        id: task.id,
+        type: "image" as const,
+        source: "ecom_image" as const,
+        status: mappedStatus,
+        resultUrl: firstCompletedItem?.url || null,
+        thumbnailUrl: firstCompletedItem?.url || null,
+        prompt: modeLabels[task.mode] || task.mode,
+        model: task.model_type || "nano-banana",
+        credits: task.credits_cost || 0,
+        createdAt: task.created_at,
+        completedAt: task.completed_at || null,
+        expiresAt: expiresAt.toISOString(),
+      };
+    });
 
     // ============================================================================
     // 3. 合并和排序任务
@@ -211,26 +219,11 @@ export async function GET(request: Request) {
     });
 
     // ============================================================================
-    // 4. 计算统计数据
+    // 4. 计算统计数据（从已获取的数据中计算，避免额外查询）
     // ============================================================================
     
-    // generations 统计
-    const { data: generationsStats } = await supabase
-      .from("generations")
-      .select("type, status, credit_cost")
-      .eq("user_id", user.id)
-      .gte("created_at", sevenDaysAgoISO);
-
-    // ecom_image_tasks 统计
-    const { data: ecomStats } = await supabase
-      .from("ecom_image_tasks")
-      .select("status, credits_cost")
-      .eq("user_id", user.id)
-      .gte("created_at", sevenDaysAgoISO);
-
-    // 合并统计
-    const genStats = generationsStats || [];
-    const ecomStatsData = ecomStats || [];
+    const genStats = generationsTasks || [];
+    const ecomStatsData = ecomData || [];
 
     const stats: TaskStats = {
       totalTasks: genStats.length + ecomStatsData.length,

@@ -527,3 +527,4 @@ export const useTaskCredits = () => {
   return calculateTaskCredits(currentMode, modelType, uploadedImages.length);
 };
 
+
