@@ -25,6 +25,10 @@ export type CreditTransactionType = "purchase" | "consume" | "refund" | "bonus" 
 
 // 新增枚举类型 - 备料台和任务队列
 export type AspectRatio = "9:16" | "16:9" | "1:1";
+
+// 电商图片工厂枚举
+export type EcomImageMode = "ecom_five_pack" | "white_background" | "scene_image" | "try_on" | "buyer_show";
+export type EcomTaskStatus = "created" | "generating_prompts" | "generating_images" | "success" | "partial_success" | "failed";
 export type TaskStatus = "draft" | "queued" | "processing" | "completed" | "failed";
 export type VideoDuration = "5s" | "10s" | "15s" | "20s";
 
@@ -620,6 +624,82 @@ export interface Database {
         };
         Relationships: [];
       };
+
+      // -----------------------------------------------------------------------
+      // Ecom Image Tasks 表 - 电商图片工厂任务
+      // -----------------------------------------------------------------------
+      ecom_image_tasks: {
+        Row: {
+          id: string;
+          user_id: string;
+          mode: EcomImageMode;
+          model_type: string;
+          language: string;
+          ratio: string;
+          resolution: string | null;
+          input_image_urls: Json;
+          mode_config: Json;
+          prompts: Json;
+          output_items: Json;
+          status: EcomTaskStatus;
+          current_step: number;
+          error_message: string | null;
+          credits_cost: number;
+          credits_charged: boolean;
+          credits_charged_at: string | null;
+          created_at: string;
+          updated_at: string;
+          completed_at: string | null;
+          metadata: Json;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          mode: EcomImageMode;
+          model_type: string;
+          language?: string;
+          ratio?: string;
+          resolution?: string | null;
+          input_image_urls?: Json;
+          mode_config?: Json;
+          prompts?: Json;
+          output_items?: Json;
+          status?: EcomTaskStatus;
+          current_step?: number;
+          error_message?: string | null;
+          credits_cost?: number;
+          credits_charged?: boolean;
+          credits_charged_at?: string | null;
+          metadata?: Json;
+        };
+        Update: {
+          mode?: EcomImageMode;
+          model_type?: string;
+          language?: string;
+          ratio?: string;
+          resolution?: string | null;
+          input_image_urls?: Json;
+          mode_config?: Json;
+          prompts?: Json;
+          output_items?: Json;
+          status?: EcomTaskStatus;
+          current_step?: number;
+          error_message?: string | null;
+          credits_cost?: number;
+          credits_charged?: boolean;
+          credits_charged_at?: string | null;
+          completed_at?: string | null;
+          metadata?: Json;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "ecom_image_tasks_user_id_fkey";
+            columns: ["user_id"];
+            referencedRelation: "users";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
     };
 
     Views: {
@@ -897,6 +977,11 @@ export type TaskUpdate = Database["public"]["Tables"]["task_queue"]["Update"];
 
 // Credit Pricing 表
 export type CreditPricingRow = Database["public"]["Tables"]["credit_pricing"]["Row"];
+
+// Ecom Image Tasks 表（电商图片工厂）
+export type EcomImageTaskRow = Database["public"]["Tables"]["ecom_image_tasks"]["Row"];
+export type EcomImageTaskInsert = Database["public"]["Tables"]["ecom_image_tasks"]["Insert"];
+export type EcomImageTaskUpdate = Database["public"]["Tables"]["ecom_image_tasks"]["Update"];
 
 // ============================================================================
 // 扩展类型（带关联数据）

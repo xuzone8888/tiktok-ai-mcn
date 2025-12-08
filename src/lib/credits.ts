@@ -48,6 +48,17 @@ export const IMAGE_CREDITS = {
   "nano-banana-pro": 28,  // Nano Banana Pro
 } as const;
 
+/** 电商图片工厂定价 */
+export const ECOM_IMAGE_CREDITS = {
+  // 电商五图套装（固定生成5张）
+  "ecom_five_pack_nano": 50,        // 5 × 10 = 50
+  "ecom_five_pack_nano_pro": 140,   // 5 × 28 = 140
+  
+  // 其他模式（按图片数量计费，使用 IMAGE_CREDITS）
+  "per_image_nano": 10,
+  "per_image_nano_pro": 28,
+} as const;
+
 /** 视频模型类型 */
 export type VideoModelKey = keyof typeof QUICK_VIDEO_CREDITS;
 
@@ -80,11 +91,39 @@ export function getImageCost(model: ImageModelKey): number {
 }
 
 /**
+ * 获取电商图片工厂任务的积分消耗
+ * 
+ * @param mode 任务模式
+ * @param model 图片模型
+ * @param imageCount 输入图片数量（非五图套装模式时使用）
+ */
+export function getEcomImageCost(
+  mode: "ecom_five_pack" | "white_background" | "scene_image" | "try_on" | "buyer_show",
+  model: ImageModelKey,
+  imageCount: number = 1
+): number {
+  if (mode === "ecom_five_pack") {
+    // 电商五图套装固定生成5张
+    return model === "nano-banana-pro" 
+      ? ECOM_IMAGE_CREDITS["ecom_five_pack_nano_pro"]
+      : ECOM_IMAGE_CREDITS["ecom_five_pack_nano"];
+  }
+  
+  // 其他模式按输入图片数量计费
+  const unitCost = IMAGE_CREDITS[model];
+  return unitCost * imageCount;
+}
+
+/** 电商图片模式类型 */
+export type EcomImageModeKey = "ecom_five_pack" | "white_background" | "scene_image" | "try_on" | "buyer_show";
+
+/**
  * 根据操作类型和模型获取积分消耗
  */
 export function getCreditCost(
-  operationType: "quick_video" | "batch_video" | "quick_image" | "batch_image",
-  model: string
+  operationType: "quick_video" | "batch_video" | "quick_image" | "batch_image" | EcomImageModeKey,
+  model: string,
+  quantity: number = 1
 ): number {
   switch (operationType) {
     case "quick_video":
@@ -94,6 +133,14 @@ export function getCreditCost(
     case "quick_image":
     case "batch_image":
       return IMAGE_CREDITS[model as ImageModelKey] || 10;
+    // 电商图片工厂模式
+    case "ecom_five_pack":
+      return getEcomImageCost("ecom_five_pack", model as ImageModelKey, quantity);
+    case "white_background":
+    case "scene_image":
+    case "try_on":
+    case "buyer_show":
+      return getEcomImageCost(operationType, model as ImageModelKey, quantity);
     default:
       return 10;
   }

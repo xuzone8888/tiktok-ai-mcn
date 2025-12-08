@@ -17,6 +17,7 @@ import {
   Zap,
   Factory,
   Link2,
+  ImageIcon,
 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -80,7 +81,14 @@ const navItems: NavItem[] = [
     icon: Link2,
     description: "粘贴链接，批量生成带货视频",
   },
-  // 6. 爆款复刻间 (预留)
+  // 7. 电商图片工厂
+  {
+    title: "电商图片工厂",
+    href: "/image-factory",
+    icon: ImageIcon,
+    description: "AI 驱动的电商图片生成",
+  },
+  // 8. 爆款复刻间 (预留)
   {
     title: "爆款复刻间",
     href: "/clip-editor",
