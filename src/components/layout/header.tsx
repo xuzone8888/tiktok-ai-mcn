@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Bell, Search, Settings, User, Shield, LogOut, UserCircle, Zap, ChevronDown, Loader2 } from "lucide-react";
+import { Search, Settings, User, Shield, LogOut, UserCircle, Zap, ChevronDown, Loader2, Globe, Plane } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -14,6 +14,20 @@ import {
   DropdownMenuTrigger,
   DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { type UserRole, isAdmin } from "@/lib/admin";
 import { createClient } from "@/lib/supabase/client";
@@ -36,11 +50,45 @@ interface CurrentUser {
 // Header Component
 // ============================================================================
 
+// 版本配置
+const VERSION_CONFIG = {
+  domestic: {
+    name: "国内版",
+    url: "https://tokfactoryai.com",
+    icon: Globe,
+    description: "适合国内用户，访问更稳定",
+  },
+  overseas: {
+    name: "海外版",
+    url: "https://tiktok-ai-mcn.vercel.app",
+    icon: Plane,
+    description: "适合海外用户，需要科学上网",
+  },
+};
+
+// 检测当前版本
+const getCurrentVersion = (): "domestic" | "overseas" => {
+  if (typeof window === "undefined") return "domestic";
+  const hostname = window.location.hostname;
+  if (hostname.includes("vercel.app") || hostname.includes("localhost")) {
+    return "overseas";
+  }
+  return "domestic";
+};
+
 export function Header() {
   const router = useRouter();
   const [user, setUser] = useState<CurrentUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [loggingOut, setLoggingOut] = useState(false);
+  const [showVersionDialog, setShowVersionDialog] = useState(false);
+  const [targetVersion, setTargetVersion] = useState<"domestic" | "overseas">("overseas");
+  const [currentVersion, setCurrentVersion] = useState<"domestic" | "overseas">("domestic");
+
+  // 检测当前版本
+  useEffect(() => {
+    setCurrentVersion(getCurrentVersion());
+  }, []);
 
   // 获取用户信息的函数
   const fetchUser = async () => {
@@ -166,24 +214,41 @@ export function Header() {
           </Button>
         )}
 
+        {/* Version Switch */}
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  const target = currentVersion === "domestic" ? "overseas" : "domestic";
+                  setTargetVersion(target);
+                  setShowVersionDialog(true);
+                }}
+                className="h-9 gap-2 rounded-xl px-3 hover:bg-muted/50 border border-border/50"
+              >
+                {currentVersion === "domestic" ? (
+                  <>
+                    <Globe className="h-4 w-4 text-tiktok-cyan" />
+                    <span className="text-xs font-medium hidden sm:inline">国内版</span>
+                  </>
+                ) : (
+                  <>
+                    <Plane className="h-4 w-4 text-tiktok-pink" />
+                    <span className="text-xs font-medium hidden sm:inline">海外版</span>
+                  </>
+                )}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>点击切换到{currentVersion === "domestic" ? "海外版" : "国内版"}</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+
         {/* Theme Toggle */}
         <ThemeToggle />
-
-        <Button
-          variant="ghost"
-          size="icon"
-          className="relative h-10 w-10 rounded-xl hover:bg-muted/50"
-        >
-          <Bell className="h-5 w-5 text-muted-foreground" />
-        </Button>
-        
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-10 w-10 rounded-xl hover:bg-muted/50"
-        >
-          <Settings className="h-5 w-5 text-muted-foreground" />
-        </Button>
 
         {user && (
           <>
@@ -207,17 +272,14 @@ export function Header() {
                       <User className="h-4 w-4 text-primary-foreground" />
                     )}
                   </div>
-                  <div className="flex flex-col items-start">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-sm font-medium">{user.name}</span>
-                      {/* Admin Badge */}
-                      {isAdmin(user.role) && (
-                        <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-500/20 text-red-400 border border-red-500/30">
-                          {user.role === "super_admin" ? "SA" : "A"}
-                        </span>
-                      )}
-                    </div>
-                    <span className="text-xs text-muted-foreground">{user.email}</span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-sm font-medium">{user.name}</span>
+                    {/* Admin Badge */}
+                    {isAdmin(user.role) && (
+                      <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-500/20 text-red-400 border border-red-500/30">
+                        {user.role === "super_admin" ? "SA" : "A"}
+                      </span>
+                    )}
                   </div>
                   <ChevronDown className="h-4 w-4 text-muted-foreground ml-1" />
                 </Button>
@@ -300,6 +362,66 @@ export function Header() {
           </>
         )}
       </div>
+
+      {/* Version Switch Dialog */}
+      <Dialog open={showVersionDialog} onOpenChange={setShowVersionDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {targetVersion === "overseas" ? (
+                <Plane className="h-5 w-5 text-tiktok-pink" />
+              ) : (
+                <Globe className="h-5 w-5 text-tiktok-cyan" />
+              )}
+              切换到{VERSION_CONFIG[targetVersion].name}
+            </DialogTitle>
+            <DialogDescription className="text-left">
+              {targetVersion === "overseas" ? (
+                <div className="space-y-2 mt-2">
+                  <p>您即将切换到<span className="font-semibold text-tiktok-pink">海外版</span>服务器。</p>
+                  <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30">
+                    <p className="text-amber-400 text-sm font-medium">⚠️ 网络提示</p>
+                    <p className="text-amber-400/80 text-xs mt-1">
+                      海外版需要科学上网才能正常访问，请确保您的网络环境已配置好。
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-2 mt-2">
+                  <p>您即将切换到<span className="font-semibold text-tiktok-cyan">国内版</span>服务器。</p>
+                  <div className="p-3 rounded-lg bg-tiktok-cyan/10 border border-tiktok-cyan/30">
+                    <p className="text-tiktok-cyan text-sm font-medium">✓ 国内访问</p>
+                    <p className="text-tiktok-cyan/80 text-xs mt-1">
+                      国内版服务器部署在阿里云，访问更快更稳定。
+                    </p>
+                  </div>
+                </div>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex gap-2 sm:gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setShowVersionDialog(false)}
+            >
+              取消
+            </Button>
+            <Button
+              onClick={() => {
+                window.location.href = VERSION_CONFIG[targetVersion].url;
+              }}
+              className={cn(
+                "font-medium",
+                targetVersion === "overseas"
+                  ? "bg-gradient-to-r from-tiktok-pink to-purple-500 hover:from-tiktok-pink/90 hover:to-purple-500/90"
+                  : "bg-gradient-to-r from-tiktok-cyan to-blue-500 hover:from-tiktok-cyan/90 hover:to-blue-500/90"
+              )}
+            >
+              确认切换
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </header>
   );
 }
