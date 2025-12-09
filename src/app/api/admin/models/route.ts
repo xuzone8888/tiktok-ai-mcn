@@ -82,9 +82,13 @@ export async function GET(request: Request) {
 // ============================================================================
 
 export async function POST(request: Request) {
+  console.log("[Admin API] POST /api/admin/models - Creating new model");
+  
   try {
     const supabase = createAdminClient();
     const body = await request.json();
+    
+    console.log("[Admin API] Request body:", JSON.stringify(body, null, 2));
 
     const {
       name,
@@ -106,6 +110,7 @@ export async function POST(request: Request) {
     } = body;
 
     if (!name || !category) {
+      console.log("[Admin API] Validation failed: name or category missing", { name, category });
       return NextResponse.json(
         { success: false, error: "Name and category are required" },
         { status: 400 }
@@ -136,6 +141,8 @@ export async function POST(request: Request) {
       total_generations: 0,
     };
 
+    console.log("[Admin API] Inserting model data:", JSON.stringify(insertData, null, 2));
+
     const { data: newModel, error } = await supabase
       .from("ai_models")
       .insert(insertData)
@@ -144,10 +151,14 @@ export async function POST(request: Request) {
 
     if (error) {
       console.error("[Admin API] Insert error:", error);
-      throw error;
+      console.error("[Admin API] Error details:", JSON.stringify(error, null, 2));
+      return NextResponse.json(
+        { success: false, error: `Database error: ${error.message}` },
+        { status: 500 }
+      );
     }
 
-    console.log("[Admin API] Model created:", newModel.id, newModel.name);
+    console.log("[Admin API] Model created successfully:", newModel.id, newModel.name);
 
     return NextResponse.json({
       success: true,
@@ -157,8 +168,9 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     console.error("[Admin API] Create model error:", error);
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
     return NextResponse.json(
-      { success: false, error: "Failed to create model" },
+      { success: false, error: `Failed to create model: ${errorMessage}` },
       { status: 500 }
     );
   }

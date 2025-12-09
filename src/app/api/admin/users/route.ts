@@ -100,7 +100,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const supabase = createAdminClient();
-    const clientSupabase = createClient();
+    const clientSupabase = await createClient();
     
     // 获取当前登录的管理员
     const { data: { user: currentUser } } = await clientSupabase.auth.getUser();
