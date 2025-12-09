@@ -46,6 +46,45 @@ export async function POST(request: Request) {
 
     const supabase = createAdminClient();
 
+    console.log("[Upload API] Starting upload:", {
+      bucket,
+      path,
+      fileSize: file.size,
+      fileType: file.type,
+    });
+
+    // 检查 bucket 是否存在
+    const { data: buckets, error: listError } = await supabase.storage.listBuckets();
+    
+    if (listError) {
+      console.error("[Upload API] Failed to list buckets:", listError);
+      return NextResponse.json(
+        { success: false, error: `Storage service error: ${listError.message}` },
+        { status: 500 }
+      );
+    }
+
+    const bucketExists = buckets?.some(b => b.name === bucket);
+    if (!bucketExists) {
+      console.error("[Upload API] Bucket not found:", bucket, "Available buckets:", buckets?.map(b => b.name));
+      
+      // 尝试创建 bucket
+      const { error: createError } = await supabase.storage.createBucket(bucket, {
+        public: bucket !== "user-uploads",
+        fileSizeLimit: maxSizes[bucket],
+      });
+      
+      if (createError && !createError.message.includes("already exists")) {
+        console.error("[Upload API] Failed to create bucket:", createError);
+        return NextResponse.json(
+          { success: false, error: `Bucket "${bucket}" not found and could not be created: ${createError.message}` },
+          { status: 500 }
+        );
+      }
+      
+      console.log("[Upload API] Bucket created:", bucket);
+    }
+
     // 将 File 转换为 Buffer
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
@@ -62,7 +101,7 @@ export async function POST(request: Request) {
     if (error) {
       console.error("[Upload API] Storage error:", error);
       return NextResponse.json(
-        { success: false, error: error.message },
+        { success: false, error: `Upload failed: ${error.message}` },
         { status: 500 }
       );
     }
