@@ -351,47 +351,6 @@
   }
 }
 
-/* 登录页面浮动动画 */
-@keyframes float {
-  0%, 100% {
-    transform: translateY(0) rotate(0deg);
-    opacity: 0.15;
-  }
-  25% {
-    transform: translateY(-20px) rotate(5deg);
-    opacity: 0.25;
-  }
-  50% {
-    transform: translateY(-10px) rotate(-3deg);
-    opacity: 0.2;
-  }
-  75% {
-    transform: translateY(-25px) rotate(3deg);
-    opacity: 0.3;
-  }
-}
-
-.animate-float {
-  animation: float 8s ease-in-out infinite;
-}
-
-/* 波浪动画 */
-@keyframes wave {
-  0% {
-    transform: translateX(0) translateY(0);
-  }
-  50% {
-    transform: translateX(-25px) translateY(10px);
-  }
-  100% {
-    transform: translateX(0) translateY(0);
-  }
-}
-
-.animate-wave {
-  animation: wave 6s ease-in-out infinite;
-}
-
 /* 滚动条样式 */
 ::-webkit-scrollbar {
   width: 8px;

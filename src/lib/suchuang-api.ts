@@ -150,23 +150,14 @@ export async function submitNanoBanana(
     // 注意：如果有参考图片，需要在提示词中明确指出如何基于参考图生成
     let finalPrompt = params.prompt;
     
-    // 如果有参考图片，增强提示词以确保 AI 保持原图产品不变
+    // 如果有参考图片，增强提示词以确保 AI 理解需要基于参考图进行创作
     if (params.img_url && params.prompt) {
-      // 检查提示词是否已经包含保持产品的相关指令
-      const hasProductKeywords = /keep.*product|preserve.*product|same.*product|identical.*product|保持.*产品|原.*产品/i.test(params.prompt);
+      // 检查提示词是否已经包含参考图的相关指令
+      const hasReferenceKeywords = /reference|参考|based on|基于|style of|风格/i.test(params.prompt);
       
-      if (!hasProductKeywords) {
-        // 为提示词添加保持产品的指令 - 这是电商图片生成的关键
-        // 必须明确告诉 AI：保持参考图中的产品完全不变，只改变环境/背景/场景
-        finalPrompt = `IMPORTANT: You MUST keep the EXACT SAME product from the reference image. Do NOT change the product's shape, color, design, or any details. The product must be IDENTICAL to the reference image.
-
-Task: ${params.prompt}
-
-Requirements:
-1. The product in the output must be the EXACT SAME as in the reference image
-2. Only change the background, lighting, scene, or camera angle as requested
-3. Maintain all product details, textures, colors, and features exactly as shown in the reference
-4. The product should be clearly visible and be the main focus of the image`;
+      if (!hasReferenceKeywords) {
+        // 为提示词添加参考图指令，确保 AI 根据提示词和参考图生成新内容
+        finalPrompt = `Create a new image based on the reference image provided. Transform it according to this description: ${params.prompt}. Use the reference image as a style and composition guide, but generate new creative content following the prompt instructions.`;
       }
     }
     

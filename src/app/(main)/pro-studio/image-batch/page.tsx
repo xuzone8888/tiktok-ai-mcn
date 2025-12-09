@@ -564,13 +564,16 @@ export default function ImageBatchPage() {
                 toast({ title: `✅ ${task.config.sourceImageName} 处理完成` });
               } else if (taskData.status === "failed") {
                 clearInterval(pollTimer);
+                const errorMsg = taskData.errorMessage || "处理失败";
                 updateTaskStatus(task.id, "failed", {
-                  error: taskData.errorMessage || "处理失败",
+                  error: errorMsg,
                   completedAt: new Date().toISOString(),
                 });
                 toast({
                   variant: "destructive",
                   title: `❌ ${task.config.sourceImageName} 处理失败`,
+                  description: errorMsg,
+                  duration: 6000,
                 });
               }
             }

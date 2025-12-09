@@ -39,7 +39,7 @@ import {
 interface TaskLogItem {
   id: string;
   type: "video" | "image";
-  source: "quick_gen" | "batch_video" | "batch_image" | "link_video" | "ecom_image";
+  source: "quick_gen" | "batch_video" | "batch_image";
   status: "completed" | "failed" | "processing" | "pending";
   resultUrl: string | null;
   thumbnailUrl: string | null;
@@ -112,8 +112,6 @@ function getSourceLabel(source: string): string {
       return "批量图片";
     case "link_video":
       return "链接秒变";
-    case "ecom_image":
-      return "电商图片";
     default:
       return "未知来源";
   }

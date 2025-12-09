@@ -331,13 +331,59 @@ export async function GET(request: Request) {
     if (task.status === "completed" || task.status === "failed") {
       try {
         const supabase = createAdminClient();
+        
+        // 获取任务信息以便退款
+        const { data: genData } = await supabase
+          .from("generations")
+          .select("user_id, credit_cost, status")
+          .eq("task_id", taskId)
+          .single();
+        
+        // 如果任务失败且之前状态是 processing，则退还积分
+        if (task.status === "failed" && genData && genData.status === "processing") {
+          const userId = genData.user_id;
+          const creditCost = genData.credit_cost || 0;
+          
+          if (userId && creditCost > 0) {
+            const { data: profileData } = await supabase
+              .from("profiles")
+              .select("credits")
+              .eq("id", userId)
+              .single();
+            
+            if (profileData) {
+              const currentCredits = (profileData as { credits: number }).credits;
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              await (supabase as any)
+                .from("profiles")
+                .update({ credits: currentCredits + creditCost })
+                .eq("id", userId);
+              
+              console.log("[Generate Image] Credits refunded on task failure:", {
+                taskId,
+                userId,
+                refunded: creditCost,
+                newBalance: currentCredits + creditCost,
+              });
+            }
+          }
+        }
+        
+        // 生成更友好的错误信息
+        let friendlyErrorMessage = task.errorMessage;
+        if (task.errorMessage?.includes("google gemini timeout")) {
+          friendlyErrorMessage = "第三方 AI 服务暂时繁忙，积分已自动退还，请稍后重试或使用 Nano Banana Fast 模式";
+        } else if (task.errorMessage?.includes("timeout")) {
+          friendlyErrorMessage = "生成超时，积分已自动退还，请稍后重试";
+        }
+        
         await supabase
           .from("generations")
           .update({
             status: task.status,
             result_url: task.resultUrl || null,
             image_url: task.resultUrl || null,
-            error_message: task.errorMessage || null,
+            error_message: friendlyErrorMessage || null,
             completed_at: task.status === "completed" ? new Date().toISOString() : null,
           })
           .eq("task_id", taskId);
@@ -347,13 +393,25 @@ export async function GET(request: Request) {
       }
     }
 
+    // 生成更友好的错误信息返回给前端
+    let displayErrorMessage = task.errorMessage;
+    if (task.status === "failed") {
+      if (task.errorMessage?.includes("google gemini timeout")) {
+        displayErrorMessage = "第三方 AI 服务暂时繁忙，积分已自动退还，请稍后重试或使用 Nano Banana Fast 模式";
+      } else if (task.errorMessage?.includes("timeout")) {
+        displayErrorMessage = "生成超时，积分已自动退还，请稍后重试";
+      } else {
+        displayErrorMessage = task.errorMessage || "生成失败，积分已自动退还";
+      }
+    }
+
     return NextResponse.json({
       success: true,
       data: {
         taskId: task.taskId,
         status: task.status,
         imageUrl: task.resultUrl,
-        errorMessage: task.errorMessage,
+        errorMessage: displayErrorMessage,
         createdAt: task.createdAt,
         updatedAt: task.updatedAt,
       },

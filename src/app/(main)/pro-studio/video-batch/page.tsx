@@ -1405,43 +1405,27 @@ C07: [story CTA, inspiring, <50 chars]`,
         });
 
         // ==================== Step 2: 生成 AI 视频提示词 ====================
-        let promptResponse;
-        try {
-          promptResponse = await fetch("/api/video-batch/generate-ai-video-prompt", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ 
-              talkingScript: scriptResult.data.script, 
-              taskId: task.id,
-              modelTriggerWord: useAiModel ? selectedModelTriggerWord : undefined,
-              customPrompts: savedCustomPrompts ? {
-                systemPrompt: savedCustomPrompts.aiVideoPromptSystem,
-                userPrompt: savedCustomPrompts.aiVideoPromptUser,
-              } : undefined,
-            }),
-          });
-        } catch (fetchError) {
-          console.error("[Video Batch] Prompt API fetch error:", fetchError);
-          throw new Error("网络请求失败，请检查网络连接后重试");
-        }
+        const promptResponse = await fetch("/api/video-batch/generate-ai-video-prompt", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ 
+            talkingScript: scriptResult.data.script, 
+            taskId: task.id,
+            modelTriggerWord: useAiModel ? selectedModelTriggerWord : undefined,
+            customPrompts: savedCustomPrompts ? {
+              systemPrompt: savedCustomPrompts.aiVideoPromptSystem,
+              userPrompt: savedCustomPrompts.aiVideoPromptUser,
+            } : undefined,
+          }),
+        });
         
         const promptText = await promptResponse.text();
         let promptResult;
         try {
           promptResult = JSON.parse(promptText);
         } catch (e) {
-          console.error("[Video Batch] Failed to parse prompt response:", promptText.substring(0, 500), e);
-          // 尝试从响应中提取有用信息
-          if (promptText.includes("504") || promptText.includes("timeout")) {
-            throw new Error("服务响应超时，请稍后重试");
-          } else if (promptText.includes("502") || promptText.includes("Bad Gateway")) {
-            throw new Error("服务暂时不可用，请稍后重试");
-          } else if (promptResponse.status === 504) {
-            throw new Error("豆包 AI 响应超时，请稍后重试");
-          } else if (promptResponse.status >= 500) {
-            throw new Error(`服务器错误(${promptResponse.status})，请稍后重试`);
-          }
-          throw new Error("生成提示词服务响应异常，请稍后重试");
+          console.error("[Video Batch] Failed to parse prompt response:", promptText, e);
+          throw new Error("生成提示词服务响应格式错误");
         }
         if (!promptResult.success) {
           throw new Error(promptResult.error || "生成提示词失败");

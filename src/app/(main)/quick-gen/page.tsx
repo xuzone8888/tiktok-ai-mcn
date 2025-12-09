@@ -1798,11 +1798,14 @@ export default function QuickGeneratorPage() {
 
         {/* Failed State */}
         {canvasState === "failed" && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center">
-            <XCircle className="h-20 w-20 text-red-500 mb-6" />
-            <p className="text-2xl font-semibold text-red-500 mb-2">Failed</p>
-            <p className="text-muted-foreground mb-6">{error || "Please try again"}</p>
-            <Button variant="outline" onClick={handleRemoveUpload}><RotateCcw className="h-4 w-4 mr-2" />Try Again</Button>
+          <div className="absolute inset-0 flex flex-col items-center justify-center p-4">
+            <XCircle className="h-16 w-16 text-red-500 mb-4" />
+            <p className="text-xl font-semibold text-red-500 mb-2">生成失败</p>
+            <p className="text-muted-foreground mb-4 text-center max-w-md text-sm">{error || "请稍后重试"}</p>
+            {error?.includes("积分已自动退还") && (
+              <p className="text-green-500 text-sm mb-4">💰 积分已自动退还到您的账户</p>
+            )}
+            <Button variant="outline" onClick={handleRemoveUpload}><RotateCcw className="h-4 w-4 mr-2" />重新开始</Button>
           </div>
         )}
       </div>

@@ -17,7 +17,6 @@ import {
   Zap,
   Factory,
   Link2,
-  ImageIcon,
 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -81,14 +80,7 @@ const navItems: NavItem[] = [
     icon: Link2,
     description: "粘贴链接，批量生成带货视频",
   },
-  // 7. 电商图片工厂
-  {
-    title: "电商图片工厂",
-    href: "/image-factory",
-    icon: ImageIcon,
-    description: "AI 驱动的电商图片生成",
-  },
-  // 8. 爆款复刻间 (预留)
+  // 6. 爆款复刻间 (预留)
   {
     title: "爆款复刻间",
     href: "/clip-editor",
@@ -253,6 +245,26 @@ export function Sidebar() {
           })}
         </nav>
 
+      {/* Footer */}
+      <div className="border-t border-border/50 p-3 space-y-3">
+        {/* Pro Plan Badge */}
+        <div
+          className={cn(
+            "flex items-center gap-3 rounded-xl bg-gradient-to-r from-tiktok-cyan/5 to-tiktok-pink/5 p-3",
+            collapsed && "justify-center"
+          )}
+        >
+          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-tiktok-cyan to-tiktok-pink">
+            <span className="text-sm font-bold text-primary-foreground">AI</span>
+          </div>
+          {!collapsed && (
+            <div className="flex-1">
+              <p className="text-sm font-medium">专业版</p>
+              <p className="text-xs text-muted-foreground">无限创作额度</p>
+            </div>
+          )}
+        </div>
+      </div>
 
         {/* Collapse button */}
         <Button
