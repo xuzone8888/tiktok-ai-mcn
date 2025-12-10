@@ -1572,7 +1572,10 @@ C07: [story CTA, inspiring, <50 chars]`,
               videoUrl = statusResult.data.videoUrl;
               break;
             } else if (taskStatus === "failed") {
-              pollError = statusResult.data.errorMessage || "视频生成失败";
+              // 包含退款提示
+              const baseError = statusResult.data.errorMessage || "第三方 AI 视频服务暂时繁忙";
+              const refundNote = statusResult.data.refundNote;
+              pollError = refundNote ? `${baseError}。${refundNote}` : baseError;
               break;
             }
             // 继续轮询 (pending/processing)

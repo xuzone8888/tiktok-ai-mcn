@@ -4,11 +4,57 @@
  * GET /api/video-batch/sora-status/[taskId]
  * 
  * 查询 Sora2 任务状态，如果完成则更新数据库
+ * 如果失败则自动退还积分
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { querySora2Result } from "@/lib/suchuang-api";
 import { createAdminClient } from "@/lib/supabase/admin";
+
+// 退还积分的辅助函数
+async function refundCredits(userId: string, amount: number, taskId: string, reason: string) {
+  try {
+    const supabase = createAdminClient();
+    
+    // 获取用户当前积分
+    const { data: profile, error: profileError } = await supabase
+      .from("profiles")
+      .select("credits")
+      .eq("id", userId)
+      .single();
+
+    if (profileError || !profile) {
+      console.error("[Sora Status] Refund failed - user not found:", userId);
+      return false;
+    }
+
+    const newCredits = profile.credits + amount;
+
+    // 退还积分
+    const { error: updateError } = await supabase
+      .from("profiles")
+      .update({ credits: newCredits })
+      .eq("id", userId);
+
+    if (updateError) {
+      console.error("[Sora Status] Refund failed - update error:", updateError);
+      return false;
+    }
+
+    console.log("[Sora Status] Credits refunded:", {
+      userId,
+      amount,
+      taskId,
+      reason,
+      newBalance: newCredits,
+    });
+
+    return true;
+  } catch (error) {
+    console.error("[Sora Status] Refund exception:", error);
+    return false;
+  }
+}
 
 // ============================================================================
 // API Handler
@@ -82,7 +128,7 @@ export async function GET(
         // 先检查记录是否存在
         const { data: existingRecord, error: checkError } = await supabase
           .from("generations")
-          .select("id, status")
+          .select("id, status, user_id, credit_cost")
           .eq("task_id", taskId)
           .single();
 
@@ -100,6 +146,19 @@ export async function GET(
               console.error("[Sora Status] Failed to update DB:", updateError);
             } else {
               console.log("[Sora Status] Updated DB for task:", taskId, "status:", task.status, "count:", count);
+              
+              // 🔥 如果任务失败，自动退还积分
+              if (task.status === "failed" && existingRecord.user_id && existingRecord.credit_cost > 0) {
+                const refunded = await refundCredits(
+                  existingRecord.user_id,
+                  existingRecord.credit_cost,
+                  taskId,
+                  `视频生成失败自动退款: ${task.errorMessage || "第三方服务返回失败"}`
+                );
+                if (refunded) {
+                  console.log("[Sora Status] Auto refund successful for task:", taskId, "amount:", existingRecord.credit_cost);
+                }
+              }
             }
           } else {
             console.log("[Sora Status] Status already up to date:", taskId, task.status);
@@ -110,13 +169,24 @@ export async function GET(
       }
     }
 
+    // 为失败的任务添加更友好的错误提示
+    let errorMessage = task.errorMessage;
+    let refundNote = "";
+    if (task.status === "failed") {
+      if (!errorMessage || errorMessage === "failed") {
+        errorMessage = "第三方 AI 视频服务暂时繁忙，请稍后重试";
+      }
+      refundNote = "积分已自动退还到您的账户";
+    }
+
     return NextResponse.json({
       success: true,
       data: {
         taskId: task.taskId,
         status: task.status,
         videoUrl: task.resultUrl,
-        errorMessage: task.errorMessage,
+        errorMessage: errorMessage,
+        refundNote: task.status === "failed" ? refundNote : undefined,
       },
     });
   } catch (error) {
