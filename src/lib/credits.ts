@@ -48,6 +48,19 @@ export const IMAGE_CREDITS = {
   "nano-banana-pro": 28,  // Nano Banana Pro
 } as const;
 
+/** 电商图片工厂定价 */
+export const ECOM_IMAGE_CREDITS = {
+  base: {
+    "nano-banana": 10,      // 快速模式基础价
+    "nano-banana-pro": 28,  // Pro模式基础价
+  },
+  // 五图套装固定5张
+  ecom_five_pack: {
+    "nano-banana": 50,      // 5 * 10
+    "nano-banana-pro": 140, // 5 * 28
+  },
+} as const;
+
 /** 视频模型类型 */
 export type VideoModelKey = keyof typeof QUICK_VIDEO_CREDITS;
 
@@ -77,6 +90,27 @@ export function getBatchVideoCost(model: VideoModelKey): number {
  */
 export function getImageCost(model: ImageModelKey): number {
   return IMAGE_CREDITS[model] || 10;
+}
+
+/**
+ * 获取电商图片工厂的积分消耗
+ * @param mode 电商图片模式
+ * @param modelType 模型类型
+ * @param imageCount 图片数量（五图套装固定5张）
+ */
+export function getEcomImageCost(
+  mode: string,
+  modelType: "nano-banana" | "nano-banana-pro",
+  imageCount: number = 1
+): number {
+  // 五图套装固定价格
+  if (mode === "ecom_five_pack") {
+    return ECOM_IMAGE_CREDITS.ecom_five_pack[modelType];
+  }
+  
+  // 其他模式按图片数量计算
+  const basePrice = ECOM_IMAGE_CREDITS.base[modelType];
+  return basePrice * imageCount;
 }
 
 /**
