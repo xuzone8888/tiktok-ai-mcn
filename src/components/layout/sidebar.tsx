@@ -17,6 +17,7 @@ import {
   Zap,
   Factory,
   Link2,
+  ImageIcon,
 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -73,7 +74,14 @@ const navItems: NavItem[] = [
     icon: Factory,
     description: "批量生产视频与图片",
   },
-  // 6. 链接秒变视频 (批量带货视频)
+  // 6. 电商图片工厂
+  {
+    title: "电商图片工厂",
+    href: "/image-factory",
+    icon: ImageIcon,
+    description: "电商五图套装/白底图/场景图",
+  },
+  // 7. 链接秒变视频 (批量带货视频)
   {
     title: "链接秒变视频",
     href: "/link-video",
