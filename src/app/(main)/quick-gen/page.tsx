@@ -24,6 +24,13 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+} from "@/components/ui/sheet";
+import {
   Zap,
   Sparkles,
   Upload,
@@ -49,6 +56,8 @@ import {
   ArrowLeft,
   ChevronRight,
   FileImage,
+  History,
+  RefreshCw,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 // 不再使用 Server Action，直接调用 API 路由
@@ -276,6 +285,148 @@ export default function QuickGeneratorPage() {
   // 数据获取
   // ================================================================
 
+  // ================================================================
+  // 历史记录
+  // ================================================================
+  const [showHistoryPanel, setShowHistoryPanel] = useState(false);
+  const [historyList, setHistoryList] = useState<Array<{
+    id: string;
+    mode: "video" | "image";
+    input_images: string[];
+    prompt: string | null;
+    image_model: string | null;
+    image_quality_tier: string | null;
+    image_aspect_ratio: string | null;
+    image_resolution: string | null;
+    video_model: string | null;
+    video_aspect_ratio: string | null;
+    video_use_ai_model: boolean;
+    video_ai_model_id: string | null;
+    output_url: string | null;
+    thumbnail_url: string | null;
+    credits_cost: number;
+    created_at: string;
+  }>>([]);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+
+  // 保存历史到服务器（静默失败，不影响主流程）
+  const saveHistoryToServer = useCallback(async (params: {
+    mode: "video" | "image";
+    input_images?: string[];
+    prompt?: string;
+    image_model?: string;
+    image_quality_tier?: string;
+    image_aspect_ratio?: string;
+    image_resolution?: string;
+    video_model?: string;
+    video_aspect_ratio?: string;
+    video_use_ai_model?: boolean;
+    video_ai_model_id?: string;
+    output_url?: string;
+    status?: "completed" | "failed";
+    credits_cost?: number;
+  }) => {
+    try {
+      const response = await fetch("/api/quick-gen/history", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(params),
+      });
+      const result = await response.json();
+      if (result.success) {
+        console.log("[QuickGen] History saved:", result.data?.id);
+      }
+    } catch (error) {
+      // 静默失败，不影响主流程
+      console.warn("[QuickGen] Failed to save history:", error);
+    }
+  }, []);
+
+  // 获取历史记录
+  const fetchHistory = useCallback(async () => {
+    setIsLoadingHistory(true);
+    try {
+      const response = await fetch("/api/quick-gen/history?limit=30");
+      const result = await response.json();
+      if (result.success && result.data) {
+        setHistoryList(result.data);
+      }
+    } catch (error) {
+      console.error("[QuickGen] Failed to fetch history:", error);
+    } finally {
+      setIsLoadingHistory(false);
+    }
+  }, []);
+
+  // 打开历史面板时加载数据
+  useEffect(() => {
+    if (showHistoryPanel && historyList.length === 0) {
+      fetchHistory();
+    }
+  }, [showHistoryPanel, historyList.length, fetchHistory]);
+
+  // 加载历史配置到当前表单
+  const loadHistoryConfig = useCallback((item: typeof historyList[0]) => {
+    // 切换到对应模式
+    if (item.mode === "image") {
+      setOutputMode("image");
+      
+      // 设置图片参数
+      if (item.prompt) setPrompt(item.prompt);
+      if (item.image_quality_tier) setImageNanoTier(item.image_quality_tier as "fast" | "pro");
+      if (item.image_aspect_ratio) setImageAspectRatio(item.image_aspect_ratio as ImageAspectRatio);
+      if (item.image_resolution) setImageResolution(item.image_resolution as ImageResolution);
+      
+      // 设置参考图片（如果有）
+      if (item.input_images && item.input_images.length > 0) {
+        const newFiles = item.input_images.map((url, index) => ({
+          url,
+          name: `history-image-${index + 1}.jpg`,
+        }));
+        setImageUploadedFiles(newFiles);
+        setCanvasState("preview");
+      } else {
+        setImageUploadedFiles([]);
+        setCanvasState("empty");
+      }
+      
+    } else {
+      setOutputMode("video");
+      
+      // 设置视频参数
+      if (item.prompt) setPrompt(item.prompt);
+      if (item.video_model) setVideoModel(item.video_model as VideoModel);
+      if (item.video_aspect_ratio) setVideoAspectRatio(item.video_aspect_ratio as VideoAspectRatio);
+      if (item.video_use_ai_model !== undefined) setUseAiModel(item.video_use_ai_model);
+      if (item.video_ai_model_id) {
+        setSelectedModelId(item.video_ai_model_id);
+        setAiCastMode("team"); // 假设是 team 模特
+      }
+      
+      // 设置底图（如果有）
+      if (item.input_images && item.input_images.length > 0) {
+        setUploadedFile({
+          url: item.input_images[0],
+          name: "history-image.jpg",
+        });
+        setSelectedImage(item.input_images[0]);
+        setCanvasState("selected");
+      } else {
+        setUploadedFile(null);
+        setSelectedImage(null);
+        setCanvasState("empty");
+      }
+    }
+    
+    // 关闭历史面板
+    setShowHistoryPanel(false);
+    
+    toast({
+      title: "✅ 配置已加载",
+      description: `已从历史记录加载 ${item.mode === "image" ? "图片" : "视频"} 配置`,
+    });
+  }, [toast]);
+
   // 获取用户积分和 userId
   useEffect(() => {
     fetch("/api/user/credits")
@@ -304,6 +455,19 @@ export default function QuickGeneratorPage() {
         setCanvasState("result");
         setGeneratingProgress(100);
       }
+      // 🆕 保存历史记录
+      saveHistoryToServer({
+        mode: "video",
+        input_images: quickGenActiveTask.sourceImageUrl ? [quickGenActiveTask.sourceImageUrl] : [],
+        prompt: quickGenActiveTask.prompt,
+        video_model: quickGenActiveTask.model,
+        video_aspect_ratio: quickGenActiveTask.aspectRatio,
+        video_use_ai_model: !!quickGenActiveTask.modelId,
+        video_ai_model_id: quickGenActiveTask.modelId || undefined,
+        output_url: quickGenActiveTask.resultUrl,
+        status: "completed",
+        credits_cost: quickGenActiveTask.creditCost,
+      });
       // 刷新积分
       window.dispatchEvent(new CustomEvent("credits-updated"));
       // 清除已完成的任务
@@ -313,10 +477,20 @@ export default function QuickGeneratorPage() {
         setError(quickGenActiveTask.errorMessage || "生成失败");
         setCanvasState("failed");
       }
+      // 🆕 保存失败记录（可选）
+      saveHistoryToServer({
+        mode: "video",
+        input_images: quickGenActiveTask.sourceImageUrl ? [quickGenActiveTask.sourceImageUrl] : [],
+        prompt: quickGenActiveTask.prompt,
+        video_model: quickGenActiveTask.model,
+        video_aspect_ratio: quickGenActiveTask.aspectRatio,
+        status: "failed",
+        credits_cost: 0,
+      });
       // 清除失败的任务
       clearActiveTask();
     }
-  }, [quickGenActiveTask, clearActiveTask, outputMode]);
+  }, [quickGenActiveTask, clearActiveTask, outputMode, saveHistoryToServer]);
 
   // 监听后台图片任务状态变化
   // 注意：不再强制切换 outputMode，让用户可以自由切换
@@ -337,6 +511,19 @@ export default function QuickGeneratorPage() {
         setCanvasState("result");
         setGeneratingProgress(100);
       }
+      // 🆕 保存历史记录
+      saveHistoryToServer({
+        mode: "image",
+        input_images: quickGenImageTask.sourceImageUrls || [],
+        prompt: quickGenImageTask.prompt,
+        image_model: quickGenImageTask.model,
+        image_quality_tier: quickGenImageTask.tier,
+        image_aspect_ratio: quickGenImageTask.aspectRatio,
+        image_resolution: quickGenImageTask.resolution,
+        output_url: quickGenImageTask.resultUrl,
+        status: "completed",
+        credits_cost: quickGenImageTask.creditCost,
+      });
       // 刷新积分
       window.dispatchEvent(new CustomEvent("credits-updated"));
       // 清除已完成的任务
@@ -346,10 +533,22 @@ export default function QuickGeneratorPage() {
         setError(quickGenImageTask.errorMessage || "生成失败");
         setCanvasState("failed");
       }
+      // 🆕 保存失败记录（可选）
+      saveHistoryToServer({
+        mode: "image",
+        input_images: quickGenImageTask.sourceImageUrls || [],
+        prompt: quickGenImageTask.prompt,
+        image_model: quickGenImageTask.model,
+        image_quality_tier: quickGenImageTask.tier,
+        image_aspect_ratio: quickGenImageTask.aspectRatio,
+        image_resolution: quickGenImageTask.resolution,
+        status: "failed",
+        credits_cost: 0,
+      });
       // 清除失败的任务
       clearActiveImageTask();
     }
-  }, [quickGenImageTask, clearActiveImageTask, outputMode]);
+  }, [quickGenImageTask, clearActiveImageTask, outputMode, saveHistoryToServer]);
   
   // 页面加载时，恢复最近完成的任务结果
   const recentTasks = useQuickGenStore((state) => state.recentTasks);
@@ -1025,9 +1224,25 @@ export default function QuickGeneratorPage() {
             </h1>
             <p className="text-xs text-muted-foreground">AI 内容创作工作流</p>
           </div>
-          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/10 border border-amber-500/30">
-            <Zap className="h-3.5 w-3.5 text-amber-500" />
-            <span className="font-semibold text-amber-400 text-sm">{userCredits}</span>
+          <div className="flex items-center gap-2">
+            {/* 历史记录按钮 */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowHistoryPanel(!showHistoryPanel)}
+              className={cn(
+                "h-8 px-2.5 gap-1.5 border-white/20",
+                showHistoryPanel && "bg-purple-500/20 border-purple-500/50 text-purple-400"
+              )}
+            >
+              <History className="h-3.5 w-3.5" />
+              <span className="text-xs">历史</span>
+            </Button>
+            {/* 积分显示 */}
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/10 border border-amber-500/30">
+              <Zap className="h-3.5 w-3.5 text-amber-500" />
+              <span className="font-semibold text-amber-400 text-sm">{userCredits}</span>
+            </div>
           </div>
         </div>
 
@@ -2145,6 +2360,179 @@ export default function QuickGeneratorPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* ============================================================ */}
+      {/* 历史记录面板 (Sheet) */}
+      {/* ============================================================ */}
+      <Sheet open={showHistoryPanel} onOpenChange={setShowHistoryPanel}>
+        <SheetContent side="right" className="w-[400px] sm:w-[480px] bg-black/95 border-white/10 overflow-hidden flex flex-col">
+          <SheetHeader className="pb-4 border-b border-white/10">
+            <SheetTitle className="flex items-center gap-2 text-lg">
+              <History className="h-5 w-5 text-purple-400" />
+              操作历史记录
+            </SheetTitle>
+            <SheetDescription className="text-xs text-muted-foreground">
+              最近 7 天的生成记录，点击可快速加载配置
+            </SheetDescription>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={fetchHistory}
+              disabled={isLoadingHistory}
+              className="absolute top-4 right-12 h-8 w-8 p-0"
+            >
+              <RefreshCw className={cn("h-4 w-4", isLoadingHistory && "animate-spin")} />
+            </Button>
+          </SheetHeader>
+          
+          {/* 历史列表 */}
+          <div className="flex-1 overflow-y-auto py-4 space-y-3">
+            {isLoadingHistory ? (
+              <div className="flex items-center justify-center h-40">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+              </div>
+            ) : historyList.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-40 text-center">
+                <History className="h-12 w-12 text-muted-foreground/30 mb-3" />
+                <p className="text-muted-foreground text-sm">暂无历史记录</p>
+                <p className="text-muted-foreground/70 text-xs mt-1">生成内容后会自动保存</p>
+              </div>
+            ) : (
+              historyList.map((item) => {
+                const isImage = item.mode === "image";
+                const timeAgo = getTimeAgo(item.created_at);
+                
+                return (
+                  <div
+                    key={item.id}
+                    className="p-3 rounded-xl panel-surface hover:bg-white/10 transition-colors cursor-pointer group"
+                    onClick={() => loadHistoryConfig(item)}
+                  >
+                    <div className="flex gap-3">
+                      {/* 缩略图 */}
+                      <div className="relative h-16 w-16 rounded-lg overflow-hidden flex-shrink-0 thumb-surface">
+                        {item.output_url ? (
+                          isImage ? (
+                            <img src={item.output_url} alt="" className="w-full h-full object-cover" />
+                          ) : (
+                            <video src={item.output_url} className="w-full h-full object-cover" muted />
+                          )
+                        ) : item.input_images && item.input_images.length > 0 ? (
+                          <img src={item.input_images[0]} alt="" className="w-full h-full object-cover opacity-60" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center">
+                            {isImage ? <ImageIcon className="h-6 w-6 text-muted-foreground/50" /> : <Video className="h-6 w-6 text-muted-foreground/50" />}
+                          </div>
+                        )}
+                        {/* 类型标签 */}
+                        <div className={cn(
+                          "absolute top-1 left-1 px-1.5 py-0.5 rounded text-[10px] font-medium",
+                          isImage ? "bg-purple-500/90 text-white" : "bg-tiktok-cyan/90 text-black"
+                        )}>
+                          {isImage ? "图片" : "视频"}
+                        </div>
+                      </div>
+                      
+                      {/* 信息 */}
+                      <div className="flex-1 min-w-0">
+                        {/* 提示词 */}
+                        <p className="text-sm font-medium line-clamp-2 mb-1">
+                          {item.prompt || (isImage ? "无提示词" : "无提示词")}
+                        </p>
+                        
+                        {/* 参数标签 */}
+                        <div className="flex flex-wrap gap-1 mb-1.5">
+                          {isImage ? (
+                            <>
+                              {item.image_quality_tier && (
+                                <span className="text-[10px] px-1.5 py-0.5 rounded tag-surface">
+                                  {item.image_quality_tier === "pro" ? "Pro" : "Fast"}
+                                </span>
+                              )}
+                              {item.image_aspect_ratio && item.image_aspect_ratio !== "auto" && (
+                                <span className="text-[10px] px-1.5 py-0.5 rounded tag-surface">
+                                  {item.image_aspect_ratio}
+                                </span>
+                              )}
+                              {item.image_resolution && (
+                                <span className="text-[10px] px-1.5 py-0.5 rounded tag-surface">
+                                  {item.image_resolution.toUpperCase()}
+                                </span>
+                              )}
+                            </>
+                          ) : (
+                            <>
+                              {item.video_model && (
+                                <span className="text-[10px] px-1.5 py-0.5 rounded tag-surface">
+                                  {item.video_model.replace("sora2-", "").replace("-", " ")}
+                                </span>
+                              )}
+                              {item.video_aspect_ratio && (
+                                <span className="text-[10px] px-1.5 py-0.5 rounded tag-surface">
+                                  {item.video_aspect_ratio}
+                                </span>
+                              )}
+                            </>
+                          )}
+                          {item.input_images && item.input_images.length > 0 && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded tag-surface">
+                              📷 {item.input_images.length}张
+                            </span>
+                          )}
+                        </div>
+                        
+                        {/* 底部信息 */}
+                        <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+                          <span>{timeAgo}</span>
+                          <span className="flex items-center gap-1">
+                            <Zap className="h-2.5 w-2.5 text-amber-500" />
+                            {item.credits_cost}
+                          </span>
+                        </div>
+                      </div>
+                      
+                      {/* 加载按钮 */}
+                      <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 px-2 text-xs bg-purple-500/20 text-purple-400 hover:bg-purple-500/30"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            loadHistoryConfig(item);
+                          }}
+                        >
+                          加载
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   );
+}
+
+// ============================================================================
+// 辅助函数
+// ============================================================================
+
+function getTimeAgo(dateString: string): string {
+  const date = new Date(dateString);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+  
+  if (diffMins < 1) return "刚刚";
+  if (diffMins < 60) return `${diffMins}分钟前`;
+  if (diffHours < 24) return `${diffHours}小时前`;
+  if (diffDays === 1) return "昨天";
+  if (diffDays < 7) return `${diffDays}天前`;
+  return date.toLocaleDateString("zh-CN", { month: "short", day: "numeric" });
 }
