@@ -1537,7 +1537,7 @@ C07: [story CTA, inspiring, <50 chars]`,
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             aiVideoPrompt: finalVideoPrompt,
-            mainGridImageUrl: mainGridImageUrl,
+            mainGridImageUrl: mainGridImageUrl || undefined, // 纯提示词模式下可能为空
             aspectRatio: taskAspectRatio,
             durationSeconds: taskDuration,
             quality: taskQuality,
@@ -1545,6 +1545,7 @@ C07: [story CTA, inspiring, <50 chars]`,
             taskId: task.id,
             userId: currentUserId,  // 传递用户ID以便记录到任务日志
             creditCost: taskCreditCost,  // 传递积分消耗
+            mode: isPromptMode ? "prompt_to_video" : "image_to_video", // 传递任务模式
           }),
         });
         

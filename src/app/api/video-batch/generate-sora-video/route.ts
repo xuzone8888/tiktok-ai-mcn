@@ -16,7 +16,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 
 interface RequestBody {
   aiVideoPrompt: string;
-  mainGridImageUrl: string;
+  mainGridImageUrl?: string; // 纯提示词模式下可选
   aspectRatio: "9:16" | "16:9";
   durationSeconds?: number;
   quality?: "standard" | "hd";
@@ -24,6 +24,7 @@ interface RequestBody {
   taskId: string;
   userId?: string;
   creditCost?: number;
+  mode?: "image_to_video" | "prompt_to_video"; // 任务模式
 }
 
 // ============================================================================
@@ -43,7 +44,10 @@ export async function POST(request: NextRequest) {
       taskId,
       userId,
       creditCost = 0,
+      mode = "image_to_video",
     } = body;
+
+    const isPromptMode = mode === "prompt_to_video";
 
     // 参数校验
     if (!aiVideoPrompt || aiVideoPrompt.trim().length === 0) {
@@ -53,7 +57,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!mainGridImageUrl) {
+    // 图片模式下必须提供主图，提示词模式下可选
+    if (!isPromptMode && !mainGridImageUrl) {
       return NextResponse.json(
         { success: false, error: "请提供九宫格主图 URL" },
         { status: 400 }
@@ -87,14 +92,16 @@ export async function POST(request: NextRequest) {
       userId: userId || "(not provided)",
       creditCost,
       hasMainImage: !!mainGridImageUrl,
+      mode,
     });
 
     // 提交 Sora2 视频生成任务
+    // 纯提示词模式下不传 url，Sora2 API 支持纯文本生成
     const submitResult = await submitSora2({
       prompt: aiVideoPrompt,
       duration: durationSeconds as 10 | 15 | 25,
       aspectRatio: aspectRatio,
-      url: mainGridImageUrl,
+      ...(mainGridImageUrl && { url: mainGridImageUrl }), // 有图片时才传
       model: sora2Model,
     });
 
@@ -119,13 +126,13 @@ export async function POST(request: NextRequest) {
             user_id: userId,
             task_id: soraTaskId,
             type: "video",
-            source: "batch_video",
+            source: isPromptMode ? "batch_video_prompt" : "batch_video",
             prompt: aiVideoPrompt,
             model: sora2Model,
             duration: durationSeconds,
             aspect_ratio: aspectRatio,
             quality: quality,
-            source_image_url: mainGridImageUrl,
+            source_image_url: mainGridImageUrl || null, // 纯提示词模式下为空
             status: "processing",  // 初始状态为处理中
             credit_cost: creditCost,
             use_pro: isPro,
