@@ -208,7 +208,7 @@ export const IMAGE_ENHANCEMENT_PRICING = {
 
 /** 图片批量任务配置 */
 export interface ImageBatchTaskConfig {
-  sourceImageUrl: string;
+  sourceImageUrl: string; // 纯提示词模式下为空字符串
   sourceImageName: string;
   model: "nano-banana" | "nano-banana-pro";
   action: ImageProcessAction;

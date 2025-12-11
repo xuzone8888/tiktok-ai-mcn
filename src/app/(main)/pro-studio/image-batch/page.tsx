@@ -50,7 +50,6 @@ import {
   Check,
   Trash2,
   MoreVertical,
-  Settings2,
   FolderUp,
   Wand2,
   Sparkles,
@@ -65,6 +64,10 @@ import {
   Eye,
   ChevronLeft,
   Clock,
+  Plus,
+  Minus,
+  FileText,
+  PackageOpen,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import Link from "next/link";
@@ -196,11 +199,20 @@ function TaskCard({
         className="relative aspect-square bg-muted/30 cursor-pointer"
         onClick={onPreview}
       >
-        <img
-          src={task.config.sourceImageUrl}
-          alt={task.config.sourceImageName}
-          className="w-full h-full object-cover"
-        />
+        {task.config.sourceImageUrl ? (
+          <img
+            src={task.config.sourceImageUrl}
+            alt={task.config.sourceImageName}
+            className="w-full h-full object-cover"
+          />
+        ) : (
+          <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-purple-500/20 to-pink-500/20">
+            <FileText className="h-10 w-10 text-purple-400 mb-2" />
+            <span className="text-xs text-purple-300 text-center px-2 line-clamp-2">
+              {task.config.prompt.slice(0, 30)}...
+            </span>
+          </div>
+        )}
         
         {/* 悬浮操作层 */}
         <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-all flex items-center justify-center opacity-0 group-hover:opacity-100">
@@ -376,6 +388,7 @@ export default function ImageBatchPage() {
 
   const {
     addTasksFromFiles,
+    addTaskFromPrompt,
     updateTaskStatus,
     removeTask,
     clearAllTasks,
@@ -393,6 +406,14 @@ export default function ImageBatchPage() {
   const [userId, setUserId] = useState<string | null>(null);
   const [userCredits, setUserCredits] = useState(0);
   const [previewTask, setPreviewTask] = useState<ImageBatchTask | null>(null);
+  
+  // 创建任务弹窗状态
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [createPrompt, setCreatePrompt] = useState("");
+  const [createCount, setCreateCount] = useState(1);
+  
+  // 批量下载状态
+  const [isDownloading, setIsDownloading] = useState(false);
 
   // 获取用户积分
   useEffect(() => {
@@ -473,28 +494,32 @@ export default function ImageBatchPage() {
       });
 
       try {
-        // 上传图片
+        // 上传图片（如果有源图片）
         let remoteImageUrl = task.config.sourceImageUrl;
-        if (task.config.sourceImageUrl.startsWith("blob:")) {
-          const blobResponse = await fetch(task.config.sourceImageUrl);
-          const blob = await blobResponse.blob();
-          const formData = new FormData();
-          formData.append("file", blob, task.config.sourceImageName);
+        if (task.config.sourceImageUrl) {
+          if (task.config.sourceImageUrl.startsWith("blob:")) {
+            const blobResponse = await fetch(task.config.sourceImageUrl);
+            const blob = await blobResponse.blob();
+            const formData = new FormData();
+            formData.append("file", blob, task.config.sourceImageName);
 
-          const uploadResponse = await fetch("/api/upload/image", {
-            method: "POST",
-            body: formData,
-          });
-          const uploadResult = await uploadResponse.json();
+            const uploadResponse = await fetch("/api/upload/image", {
+              method: "POST",
+              body: formData,
+            });
+            const uploadResult = await uploadResponse.json();
 
-          if (uploadResult.success && uploadResult.data?.url) {
-            remoteImageUrl = uploadResult.data.url;
-          } else {
-            throw new Error("图片上传失败");
+            if (uploadResult.success && uploadResult.data?.url) {
+              remoteImageUrl = uploadResult.data.url;
+            } else {
+              throw new Error("图片上传失败");
+            }
           }
+          updateTaskStatus(task.id, "processing", { progress: 20 });
+        } else {
+          // 纯提示词模式，跳过上传步骤
+          updateTaskStatus(task.id, "processing", { progress: 10 });
         }
-
-        updateTaskStatus(task.id, "processing", { progress: 20 });
 
         // 调用 API
         console.log("[Image Batch] Calling generate/image with userId:", currentUserId);
@@ -809,22 +834,29 @@ export default function ImageBatchPage() {
               )}
             </div>
 
-            {/* 第二行：提示词 + 上传按钮 */}
-            <div className="flex items-center gap-3">
-              {globalSettings.action === "generate" ? (
-                <input
-                  type="text"
+            {/* 第二行：提示词输入区 */}
+            {globalSettings.action === "generate" && (
+              <div className="space-y-2">
+                <Label className="text-xs text-muted-foreground">提示词（用于 AI 生成）</Label>
+                <textarea
                   value={globalSettings.prompt}
                   onChange={(e) => updateGlobalSettings("prompt", e.target.value)}
-                  placeholder="输入提示词描述想要的效果..."
-                  className="flex-1 h-10 px-4 text-sm bg-muted/30 border border-border/50 rounded-lg focus:outline-none focus:ring-2 focus:ring-tiktok-cyan/50"
+                  placeholder="详细描述你想要生成的图片内容，例如：一个时尚的女性穿着红色连衣裙，站在城市街头，阳光照射，专业摄影..."
+                  className="w-full h-24 px-4 py-3 text-sm bg-muted/30 border border-border/50 rounded-lg focus:outline-none focus:ring-2 focus:ring-tiktok-cyan/50 resize-none"
                 />
-              ) : (
-                <div className="flex-1 h-10 px-4 text-sm text-muted-foreground flex items-center bg-muted/20 rounded-lg border border-border/30">
-                  {globalSettings.action === "upscale" ? "🔒 高清放大模式 - 自动增强清晰度" : "🔒 九宫格模式 - 纯白背景+多角度展示"}
-                </div>
-              )}
-              
+              </div>
+            )}
+            
+            {globalSettings.action !== "generate" && (
+              <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/20 border border-border/30">
+                <span className="text-sm text-muted-foreground">
+                  {globalSettings.action === "upscale" ? "🔒 高清放大模式 - 自动增强清晰度，无需提示词" : "🔒 九宫格模式 - 纯白背景+多角度展示，无需提示词"}
+                </span>
+              </div>
+            )}
+
+            {/* 第三行：操作按钮 */}
+            <div className="flex items-center gap-3">
               <input
                 type="file"
                 accept="image/*"
@@ -843,6 +875,18 @@ export default function ImageBatchPage() {
                 <FolderUp className="h-4 w-4 mr-2" />
                 上传图片
               </Button>
+              
+              {globalSettings.action === "generate" && (
+                <Button
+                  variant="outline"
+                  onClick={() => setShowCreateDialog(true)}
+                  className="h-10 px-4 border-tiktok-cyan/50 text-tiktok-cyan hover:bg-tiktok-cyan/10"
+                >
+                  <FileText className="h-4 w-4 mr-2" />
+                  纯提示词创建
+                </Button>
+              )}
+              
               {tasks.length > 0 && (
                 <Button variant="outline" onClick={handleApplyToAll} className="h-10 btn-subtle">
                   <Wand2 className="h-4 w-4 mr-1" />
@@ -876,6 +920,57 @@ export default function ImageBatchPage() {
               <div className="flex items-center gap-2">
                 {selectedCount > 0 && (
                   <>
+                    {/* 批量下载选中的已完成任务 */}
+                    {tasks.filter(t => selectedTaskIds[t.id] && t.status === "completed" && t.resultUrl).length > 0 && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={async () => {
+                          const completedSelectedTasks = tasks.filter(
+                            t => selectedTaskIds[t.id] && t.status === "completed" && t.resultUrl
+                          );
+                          if (completedSelectedTasks.length === 0) {
+                            toast({ variant: "destructive", title: "没有可下载的图片" });
+                            return;
+                          }
+                          
+                          setIsDownloading(true);
+                          toast({ title: `开始下载 ${completedSelectedTasks.length} 张图片...` });
+                          
+                          // 逐个下载
+                          for (let i = 0; i < completedSelectedTasks.length; i++) {
+                            const task = completedSelectedTasks[i];
+                            if (task.resultUrl) {
+                              try {
+                                const link = document.createElement("a");
+                                link.href = task.resultUrl;
+                                link.download = `image-${task.id}.png`;
+                                link.target = "_blank";
+                                document.body.appendChild(link);
+                                link.click();
+                                document.body.removeChild(link);
+                                // 间隔 500ms 避免浏览器阻止
+                                await new Promise(r => setTimeout(r, 500));
+                              } catch (err) {
+                                console.error("Download failed:", err);
+                              }
+                            }
+                          }
+                          
+                          setIsDownloading(false);
+                          toast({ title: `✅ 已触发 ${completedSelectedTasks.length} 张图片下载` });
+                        }}
+                        disabled={isDownloading}
+                        className="h-8 text-xs text-emerald-400 border-emerald-400/30 hover:bg-emerald-400/10"
+                      >
+                        {isDownloading ? (
+                          <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                        ) : (
+                          <Download className="h-3 w-3 mr-1" />
+                        )}
+                        下载选中 ({tasks.filter(t => selectedTaskIds[t.id] && t.status === "completed" && t.resultUrl).length})
+                      </Button>
+                    )}
                     <Button
                       variant="outline"
                       size="sm"
@@ -1115,6 +1210,119 @@ export default function ImageBatchPage() {
               )}
               <Button variant="outline" onClick={() => setPreviewTask(null)}>
                 关闭
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* 创建任务弹窗 - 纯提示词模式 */}
+        <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
+          <DialogContent className="max-w-2xl bg-background border-border">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <FileText className="h-5 w-5 text-tiktok-cyan" />
+                纯提示词创建图片任务
+              </DialogTitle>
+            </DialogHeader>
+
+            <div className="space-y-4 py-4">
+              {/* 提示词输入 */}
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">提示词 *</Label>
+                <textarea
+                  value={createPrompt}
+                  onChange={(e) => setCreatePrompt(e.target.value)}
+                  placeholder="详细描述你想要生成的图片内容，例如：&#10;&#10;一个时尚的亚洲女性穿着优雅的白色连衣裙，站在现代简约的室内环境中，柔和的自然光从落地窗照射进来，专业时尚摄影，高清画质..."
+                  className="w-full h-40 px-4 py-3 text-sm bg-muted/30 border border-border/50 rounded-lg focus:outline-none focus:ring-2 focus:ring-tiktok-cyan/50 resize-none"
+                />
+                <p className="text-xs text-muted-foreground">
+                  提示：详细的描述可以获得更好的生成效果。可以包含场景、人物、光线、风格等信息。
+                </p>
+              </div>
+
+              {/* 任务数量 */}
+              <div className="flex items-center gap-4">
+                <Label className="text-sm font-medium whitespace-nowrap">创建数量</Label>
+                <div className="flex items-center border border-border/50 rounded-lg overflow-hidden">
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    onClick={() => setCreateCount(Math.max(1, createCount - 1))}
+                    className="h-9 w-9 rounded-none border-r border-border/50"
+                    disabled={createCount <= 1}
+                  >
+                    <Minus className="h-4 w-4" />
+                  </Button>
+                  <span className="w-12 text-center text-sm font-medium">{createCount}</span>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    onClick={() => setCreateCount(Math.min(20, createCount + 1))}
+                    className="h-9 w-9 rounded-none border-l border-border/50"
+                    disabled={createCount >= 20}
+                  >
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </div>
+                <span className="text-xs text-muted-foreground">
+                  使用相同提示词创建多个任务（适合生成多个变体）
+                </span>
+              </div>
+
+              {/* 当前配置显示 */}
+              <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/30 border border-border/30">
+                <span className="text-xs text-muted-foreground">当前配置：</span>
+                <Badge variant="outline" className="text-xs">
+                  {globalSettings.model === "nano-banana" ? "快速" : "Pro"}
+                </Badge>
+                <Badge variant="outline" className="text-xs">
+                  {globalSettings.aspectRatio}
+                </Badge>
+                {globalSettings.model === "nano-banana-pro" && (
+                  <Badge variant="outline" className="text-xs">
+                    {globalSettings.resolution.toUpperCase()}
+                  </Badge>
+                )}
+                <Badge className="bg-amber-500/10 text-amber-500 border-amber-500/30 text-xs">
+                  {getImageTaskCost({
+                    ...globalSettings,
+                    sourceImageUrl: "",
+                    sourceImageName: "",
+                    action: "generate",
+                    prompt: "",
+                  }) * createCount} Credits
+                </Badge>
+              </div>
+            </div>
+
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setCreatePrompt("");
+                  setCreateCount(1);
+                  setShowCreateDialog(false);
+                }}
+              >
+                取消
+              </Button>
+              <Button
+                onClick={() => {
+                  if (!createPrompt.trim()) {
+                    toast({ variant: "destructive", title: "请输入提示词" });
+                    return;
+                  }
+                  const ids = addTaskFromPrompt(createPrompt, createCount);
+                  toast({ title: `✅ 已创建 ${ids.length} 个任务` });
+                  setCreatePrompt("");
+                  setCreateCount(1);
+                  setShowCreateDialog(false);
+                }}
+                disabled={!createPrompt.trim()}
+                className="bg-gradient-to-r from-tiktok-cyan to-tiktok-pink text-black"
+              >
+                <Check className="h-4 w-4 mr-2" />
+                创建 {createCount > 1 ? `${createCount} 个任务` : "任务"}
               </Button>
             </DialogFooter>
           </DialogContent>

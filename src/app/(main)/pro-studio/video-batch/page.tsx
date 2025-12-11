@@ -94,7 +94,11 @@ import {
   useVideoBatchSelectedCount,
   useVideoBatchStats,
   validateTaskImages,
+  validatePromptTask,
 } from "@/stores/video-batch-store";
+
+// Textarea
+import { Textarea } from "@/components/ui/textarea";
 
 // ============================================================================
 // PipelineProgress 组件 - 流水线进度指示器
@@ -469,7 +473,9 @@ const VideoTaskCard = memo(function VideoTaskCard({
   duration: globalDuration,
   quality: globalQuality,
 }: VideoTaskCardProps) {
-  const validation = validateTaskImages(task.images);
+  // 判断任务类型并验证
+  const isPromptMode = task.mode === "prompt_to_video";
+  const validation = isPromptMode ? validatePromptTask(task) : validateTaskImages(task.images);
   const canStart = task.status === "pending" && validation.valid;
   
   // 使用任务自身的配置，如果不存在则回退到全局配置（兼容旧任务）
@@ -563,9 +569,22 @@ const VideoTaskCard = memo(function VideoTaskCard({
             </div>
           </div>
         ) : (
-          /* 图片预览 */
-          <div className="absolute inset-0" onClick={onEditImages}>
-            {task.images.length > 0 ? (
+          /* 图片预览或提示词预览 */
+          <div className="absolute inset-0" onClick={isPromptMode ? undefined : onEditImages}>
+            {isPromptMode ? (
+              /* 纯提示词模式显示 */
+              <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-br from-purple-500/20 to-pink-500/20 p-4">
+                <FileText className="h-8 w-8 text-purple-400 mb-2" />
+                <p className="text-xs text-purple-300 text-center line-clamp-3">
+                  {task.customPrompt?.slice(0, 80)}...
+                </p>
+                {task.referenceImageUrl && (
+                  <Badge variant="outline" className="mt-2 text-[10px] bg-purple-500/20 border-purple-500/30 text-purple-300">
+                    含参考图
+                  </Badge>
+                )}
+              </div>
+            ) : task.images.length > 0 ? (
               <div className="absolute inset-0 grid grid-cols-3 gap-0.5 p-1">
                 {task.images.slice(0, 6).map((img, index) => (
                   <div key={img.id} className="relative overflow-hidden rounded">
@@ -606,10 +625,17 @@ const VideoTaskCard = memo(function VideoTaskCard({
 
         {/* 任务配置信息 */}
         <div className="flex flex-wrap gap-1.5">
-          <Badge variant="outline" className="text-[10px] h-5 px-1.5 gap-1">
-            <ImageIcon className="h-2.5 w-2.5" />
-            {task.images.length} 张图片
-          </Badge>
+          {isPromptMode ? (
+            <Badge variant="outline" className="text-[10px] h-5 px-1.5 gap-1 bg-purple-500/10 border-purple-500/30 text-purple-300">
+              <FileText className="h-2.5 w-2.5" />
+              提示词模式
+            </Badge>
+          ) : (
+            <Badge variant="outline" className="text-[10px] h-5 px-1.5 gap-1">
+              <ImageIcon className="h-2.5 w-2.5" />
+              {task.images.length} 张图片
+            </Badge>
+          )}
           <Badge variant="outline" className="text-[10px] h-5 px-1.5">
             {task.aspectRatio}
           </Badge>
@@ -965,6 +991,7 @@ export default function VideoBatchPage() {
 
   const {
     createTask,
+    createTaskFromPrompt,
     cloneTask,
     updateTaskStatus,
     updateTaskImages,
@@ -988,6 +1015,15 @@ export default function VideoBatchPage() {
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [newTaskImages, setNewTaskImages] = useState<TaskImageInfo[]>([]);
   const [batchCreateCount, setBatchCreateCount] = useState(1);
+  
+  // 纯提示词创建模式
+  const [createMode, setCreateMode] = useState<"image" | "prompt">("image");
+  const [promptInput, setPromptInput] = useState("");
+  const [referenceImageFile, setReferenceImageFile] = useState<File | null>(null);
+  const [referenceImageUrl, setReferenceImageUrl] = useState("");
+  
+  // 批量下载状态
+  const [isDownloading, setIsDownloading] = useState(false);
   
   // AI模特功能 - 使用 store 中的全局设置
   const useAiModel = globalSettings.useAiModel;
@@ -1299,9 +1335,19 @@ C07: [story CTA, inspiring, <50 chars]`,
   // 单个任务处理 - 调用实际 API
   const handleStartSingleTask = useCallback(
     async (task: VideoBatchTask) => {
-      if (!validateTaskImages(task.images).valid) {
-        toast({ variant: "destructive", title: "请先完善任务图片" });
-        return;
+      const isPromptMode = task.mode === "prompt_to_video";
+      
+      // 验证任务
+      if (isPromptMode) {
+        if (!task.customPrompt || task.customPrompt.trim().length < 10) {
+          toast({ variant: "destructive", title: "提示词至少需要10个字符" });
+          return;
+        }
+      } else {
+        if (!validateTaskImages(task.images).valid) {
+          toast({ variant: "destructive", title: "请先完善任务图片" });
+          return;
+        }
       }
 
       // 检查任务是否已经在处理中（防止重复执行）
@@ -1345,107 +1391,130 @@ C07: [story CTA, inspiring, <50 chars]`,
       processingTasksRef.current.add(task.id);
 
       try {
-        // ==================== Step 0: 上传图片 ====================
-        updateTaskStatus(task.id, "uploading", { currentStep: 0, progress: 5 });
+        let finalVideoPrompt = "";
+        let mainGridImageUrl = "";
         
-        const uploadedUrls: string[] = [];
-        for (let i = 0; i < task.images.length; i++) {
-          const url = await uploadImageToServer(task.images[i]);
-          uploadedUrls.push(url);
-          updateTaskStatus(task.id, "uploading", { 
-            progress: 5 + Math.round((i + 1) / task.images.length * 15) 
+        if (isPromptMode) {
+          // ==================== 纯提示词模式 ====================
+          // 跳过图片上传和脚本生成，直接使用用户提示词
+          updateTaskStatus(task.id, "generating_video", { currentStep: 3, progress: 20 });
+          
+          finalVideoPrompt = task.customPrompt || "";
+          mainGridImageUrl = task.referenceImageUrl || "";
+          
+          // 保存用户提示词到任务
+          updateTaskStatus(task.id, "generating_video", {
+            currentStep: 3,
+            progress: 30,
+            doubaoTalkingScript: "【纯提示词模式 - 无口播脚本】",
+            doubaoAiVideoPrompt: task.customPrompt,
           });
-        }
-        console.log("[Video Batch] Images uploaded:", uploadedUrls);
-
-        // ==================== Step 1: 生成口播脚本 ====================
-        updateTaskStatus(task.id, "generating_script", { currentStep: 1, progress: 20 });
-        
-        // 获取本地存储的自定义提示词
-        let savedCustomPrompts = null;
-        try {
-          const savedPromptsStr = localStorage.getItem("video-batch-custom-prompts");
-          if (savedPromptsStr) {
-            savedCustomPrompts = JSON.parse(savedPromptsStr);
+          
+          console.log("[Video Batch] Prompt mode - using custom prompt directly");
+        } else {
+          // ==================== 图片到视频模式 ====================
+          // ==================== Step 0: 上传图片 ====================
+          updateTaskStatus(task.id, "uploading", { currentStep: 0, progress: 5 });
+          
+          const uploadedUrls: string[] = [];
+          for (let i = 0; i < task.images.length; i++) {
+            const url = await uploadImageToServer(task.images[i]);
+            uploadedUrls.push(url);
+            updateTaskStatus(task.id, "uploading", { 
+              progress: 5 + Math.round((i + 1) / task.images.length * 15) 
+            });
           }
-        } catch (e) {
-          console.warn("Failed to parse custom prompts:", e);
-        }
-        
-        const imageUrls = uploadedUrls;
-        const scriptResponse = await fetch("/api/video-batch/generate-talking-script", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ 
-            images: imageUrls, 
-            taskId: task.id,
-            customPrompts: savedCustomPrompts ? {
-              systemPrompt: savedCustomPrompts.talkingScriptSystem,
-              userPrompt: savedCustomPrompts.talkingScriptUser,
-            } : undefined,
-          }),
-        });
-        
-        const scriptText = await scriptResponse.text();
-        let scriptResult;
-        try {
-          scriptResult = JSON.parse(scriptText);
-        } catch (e) {
-          console.error("[Video Batch] Failed to parse script response:", scriptText, e);
-          throw new Error("生成脚本服务响应格式错误");
-        }
-        if (!scriptResult.success) {
-          throw new Error(scriptResult.error || "生成脚本失败");
-        }
+          console.log("[Video Batch] Images uploaded:", uploadedUrls);
 
-        updateTaskStatus(task.id, "generating_prompt", {
-          currentStep: 2,
-          progress: 45,
-          doubaoTalkingScript: scriptResult.data.script,
-        });
+          // ==================== Step 1: 生成口播脚本 ====================
+          updateTaskStatus(task.id, "generating_script", { currentStep: 1, progress: 20 });
+          
+          // 获取本地存储的自定义提示词
+          let savedCustomPrompts = null;
+          try {
+            const savedPromptsStr = localStorage.getItem("video-batch-custom-prompts");
+            if (savedPromptsStr) {
+              savedCustomPrompts = JSON.parse(savedPromptsStr);
+            }
+          } catch (e) {
+            console.warn("Failed to parse custom prompts:", e);
+          }
+          
+          const imageUrls = uploadedUrls;
+          const scriptResponse = await fetch("/api/video-batch/generate-talking-script", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ 
+              images: imageUrls, 
+              taskId: task.id,
+              customPrompts: savedCustomPrompts ? {
+                systemPrompt: savedCustomPrompts.talkingScriptSystem,
+                userPrompt: savedCustomPrompts.talkingScriptUser,
+              } : undefined,
+            }),
+          });
+          
+          const scriptText = await scriptResponse.text();
+          let scriptResult;
+          try {
+            scriptResult = JSON.parse(scriptText);
+          } catch (e) {
+            console.error("[Video Batch] Failed to parse script response:", scriptText, e);
+            throw new Error("生成脚本服务响应格式错误");
+          }
+          if (!scriptResult.success) {
+            throw new Error(scriptResult.error || "生成脚本失败");
+          }
 
-        // ==================== Step 2: 生成 AI 视频提示词 ====================
-        const promptResponse = await fetch("/api/video-batch/generate-ai-video-prompt", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ 
-            talkingScript: scriptResult.data.script, 
-            taskId: task.id,
-            modelTriggerWord: useAiModel ? selectedModelTriggerWord : undefined,
-            customPrompts: savedCustomPrompts ? {
-              systemPrompt: savedCustomPrompts.aiVideoPromptSystem,
-              userPrompt: savedCustomPrompts.aiVideoPromptUser,
-            } : undefined,
-          }),
-        });
-        
-        const promptText = await promptResponse.text();
-        let promptResult;
-        try {
-          promptResult = JSON.parse(promptText);
-        } catch (e) {
-          console.error("[Video Batch] Failed to parse prompt response:", promptText, e);
-          throw new Error("生成提示词服务响应格式错误");
-        }
-        if (!promptResult.success) {
-          throw new Error(promptResult.error || "生成提示词失败");
-        }
+          updateTaskStatus(task.id, "generating_prompt", {
+            currentStep: 2,
+            progress: 45,
+            doubaoTalkingScript: scriptResult.data.script,
+          });
 
-        updateTaskStatus(task.id, "generating_video", {
-          currentStep: 3,
-          progress: 65,
-          doubaoAiVideoPrompt: promptResult.data.prompt,
-        });
+          // ==================== Step 2: 生成 AI 视频提示词 ====================
+          const promptResponse = await fetch("/api/video-batch/generate-ai-video-prompt", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ 
+              talkingScript: scriptResult.data.script, 
+              taskId: task.id,
+              modelTriggerWord: useAiModel ? selectedModelTriggerWord : undefined,
+              customPrompts: savedCustomPrompts ? {
+                systemPrompt: savedCustomPrompts.aiVideoPromptSystem,
+                userPrompt: savedCustomPrompts.aiVideoPromptUser,
+              } : undefined,
+            }),
+          });
+          
+          const promptText = await promptResponse.text();
+          let promptResult;
+          try {
+            promptResult = JSON.parse(promptText);
+          } catch (e) {
+            console.error("[Video Batch] Failed to parse prompt response:", promptText, e);
+            throw new Error("生成提示词服务响应格式错误");
+          }
+          if (!promptResult.success) {
+            throw new Error(promptResult.error || "生成提示词失败");
+          }
+
+          updateTaskStatus(task.id, "generating_video", {
+            currentStep: 3,
+            progress: 65,
+            doubaoAiVideoPrompt: promptResult.data.prompt,
+          });
+
+          // 设置最终提示词和主图
+          finalVideoPrompt = promptResult.data.prompt;
+          mainGridImageUrl = uploadedUrls[0];
+          
+          if (!mainGridImageUrl) {
+            throw new Error("缺少九宫格主图");
+          }
+        }
 
         // ==================== Step 3: 生成 Sora 视频 ====================
-        // 使用上传后的主图 URL（第一张图）
-        const mainGridImageUrl = uploadedUrls[0];
-        if (!mainGridImageUrl) {
-          throw new Error("缺少九宫格主图");
-        }
-
-        // 最终提示词（已包含AI模特触发词）
-        let finalVideoPrompt = promptResult.data.prompt;
         
         // 如果使用AI模特且有trigger word，确保它在最终提示词中
         if (useAiModel && selectedModelTriggerWord && !finalVideoPrompt.includes(selectedModelTriggerWord)) {
@@ -1943,15 +2012,68 @@ C07: [story CTA, inspiring, <50 chars]`,
               </div>
               <div className="flex items-center gap-2">
                 {selectedCount > 0 && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={removeSelectedTasks}
-                    className="h-8 text-xs text-red-400 border-red-400/30 hover:bg-red-400/10"
-                  >
-                    <Trash2 className="h-3 w-3 mr-1" />
-                    删除选中 ({selectedCount})
-                  </Button>
+                  <>
+                    {/* 批量下载选中的已完成任务 */}
+                    {tasks.filter(t => selectedTaskIds[t.id] && t.status === "success" && t.soraVideoUrl).length > 0 && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={async () => {
+                          const completedSelectedTasks = tasks.filter(
+                            t => selectedTaskIds[t.id] && t.status === "success" && t.soraVideoUrl
+                          );
+                          if (completedSelectedTasks.length === 0) {
+                            toast({ variant: "destructive", title: "没有可下载的视频" });
+                            return;
+                          }
+                          
+                          setIsDownloading(true);
+                          toast({ title: `开始下载 ${completedSelectedTasks.length} 个视频...` });
+                          
+                          // 逐个下载
+                          for (let i = 0; i < completedSelectedTasks.length; i++) {
+                            const task = completedSelectedTasks[i];
+                            if (task.soraVideoUrl) {
+                              try {
+                                const link = document.createElement("a");
+                                link.href = task.soraVideoUrl;
+                                link.download = `video-${task.id}.mp4`;
+                                link.target = "_blank";
+                                document.body.appendChild(link);
+                                link.click();
+                                document.body.removeChild(link);
+                                // 间隔 800ms 避免浏览器阻止
+                                await new Promise(r => setTimeout(r, 800));
+                              } catch (err) {
+                                console.error("Download failed:", err);
+                              }
+                            }
+                          }
+                          
+                          setIsDownloading(false);
+                          toast({ title: `✅ 已触发 ${completedSelectedTasks.length} 个视频下载` });
+                        }}
+                        disabled={isDownloading}
+                        className="h-8 text-xs text-emerald-400 border-emerald-400/30 hover:bg-emerald-400/10"
+                      >
+                        {isDownloading ? (
+                          <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                        ) : (
+                          <Download className="h-3 w-3 mr-1" />
+                        )}
+                        下载选中 ({tasks.filter(t => selectedTaskIds[t.id] && t.status === "success" && t.soraVideoUrl).length})
+                      </Button>
+                    )}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={removeSelectedTasks}
+                      className="h-8 text-xs text-red-400 border-red-400/30 hover:bg-red-400/10"
+                    >
+                      <Trash2 className="h-3 w-3 mr-1" />
+                      删除选中 ({selectedCount})
+                    </Button>
+                  </>
                 )}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
@@ -2104,64 +2226,185 @@ C07: [story CTA, inspiring, <50 chars]`,
 
         {/* 创建任务弹窗 */}
         <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
-          <DialogContent className="max-w-2xl bg-background border-border">
+          <DialogContent className="max-w-2xl bg-background border-border max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <FolderUp className="h-5 w-5 text-tiktok-cyan" />
                 创建视频任务
               </DialogTitle>
-              <DialogDescription>上传产品图片，第一张必须是适配Sora2的九宫格图（纯白背景）</DialogDescription>
+              <DialogDescription>
+                选择创建模式：图片到视频 或 纯提示词生成
+              </DialogDescription>
             </DialogHeader>
 
-            <div className="py-4">
-              <ImageUploader images={newTaskImages} onImagesChange={setNewTaskImages} maxImages={4} />
+            {/* 模式切换 */}
+            <div className="flex gap-2 p-1 rounded-xl bg-muted/50">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setCreateMode("image")}
+                className={cn(
+                  "flex-1 h-9",
+                  createMode === "image"
+                    ? "bg-tiktok-cyan/20 text-tiktok-cyan"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <ImageIcon className="h-4 w-4 mr-2" />
+                图片到视频
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setCreateMode("prompt")}
+                className={cn(
+                  "flex-1 h-9",
+                  createMode === "prompt"
+                    ? "bg-purple-500/20 text-purple-400"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <FileText className="h-4 w-4 mr-2" />
+                纯提示词生成
+              </Button>
+            </div>
+
+            <div className="py-4 space-y-4">
+              {createMode === "image" ? (
+                /* 图片模式 */
+                <ImageUploader images={newTaskImages} onImagesChange={setNewTaskImages} maxImages={4} />
+              ) : (
+                /* 纯提示词模式 */
+                <div className="space-y-4">
+                  {/* 提示词输入 */}
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium">
+                      视频提示词 <span className="text-red-400">*</span>
+                    </Label>
+                    <textarea
+                      value={promptInput}
+                      onChange={(e) => setPromptInput(e.target.value)}
+                      placeholder="详细描述你想要生成的视频内容，例如：&#10;&#10;一个时尚的亚洲女性模特手持产品，在简约的白色背景前展示产品细节，镜头从正面缓缓移动到侧面，柔和的打光突出产品质感..."
+                      className="w-full h-32 px-4 py-3 text-sm bg-muted/30 border border-border/50 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500/50 resize-none"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      提示：详细的描述可以获得更好的视频效果。可以包含场景、动作、镜头运动、光线等信息。
+                    </p>
+                  </div>
+
+                  {/* 可选参考图片 */}
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium">参考图片（可选）</Label>
+                    <div className="flex items-center gap-4">
+                      {referenceImageUrl ? (
+                        <div className="relative w-24 h-24 rounded-lg overflow-hidden border border-border/50">
+                          <img src={referenceImageUrl} alt="Reference" className="w-full h-full object-cover" />
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            onClick={() => {
+                              if (referenceImageUrl.startsWith("blob:")) {
+                                URL.revokeObjectURL(referenceImageUrl);
+                              }
+                              setReferenceImageUrl("");
+                              setReferenceImageFile(null);
+                            }}
+                            className="absolute top-1 right-1 h-6 w-6 bg-black/50 hover:bg-black/70"
+                          >
+                            <X className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      ) : (
+                        <label className="flex flex-col items-center justify-center w-24 h-24 border-2 border-dashed border-border/50 rounded-lg cursor-pointer hover:border-purple-500/50 transition-colors">
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                setReferenceImageFile(file);
+                                setReferenceImageUrl(URL.createObjectURL(file));
+                              }
+                            }}
+                            className="hidden"
+                          />
+                          <Upload className="h-6 w-6 text-muted-foreground" />
+                          <span className="text-xs text-muted-foreground mt-1">添加图片</span>
+                        </label>
+                      )}
+                      <p className="text-xs text-muted-foreground flex-1">
+                        上传参考图片可以帮助 AI 更好地理解你想要的视觉风格
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* 任务数量选择器 */}
+              <div className="flex items-center gap-4 pt-2">
+                <Label className="text-sm font-medium whitespace-nowrap">创建数量</Label>
+                <div className="flex items-center border border-border/50 rounded-lg overflow-hidden">
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    onClick={() => setBatchCreateCount(Math.max(1, batchCreateCount - 1))}
+                    className="h-9 w-9 rounded-none border-r border-border/50"
+                    disabled={batchCreateCount <= 1}
+                  >
+                    <Minus className="h-4 w-4" />
+                  </Button>
+                  <span className="w-12 text-center text-sm font-medium">{batchCreateCount}</span>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    onClick={() => setBatchCreateCount(Math.min(20, batchCreateCount + 1))}
+                    className="h-9 w-9 rounded-none border-l border-border/50"
+                    disabled={batchCreateCount >= 20}
+                  >
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </div>
+                <span className="text-xs text-muted-foreground">
+                  {createMode === "image" ? "创建多个相同素材的任务" : "创建多个相同提示词的任务（可生成不同变体）"}
+                </span>
+              </div>
+
+              {/* 费用显示 */}
+              <div className="flex items-center gap-2 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30">
+                <Zap className="h-4 w-4 text-amber-400" />
+                <span className="text-sm text-amber-400">
+                  预计消耗：<strong>{getVideoBatchTotalPrice(globalSettings.modelType, globalSettings.duration, globalSettings.quality) * batchCreateCount}</strong> Credits
+                </span>
+              </div>
             </div>
 
             <DialogFooter className="flex-col sm:flex-row gap-3">
               <Button
                 variant="outline"
                 onClick={() => {
-                  // 清理新上传图片的 blob URLs，防止内存泄漏
+                  // 清理
                   newTaskImages.forEach((img) => {
                     if (img.url.startsWith("blob:")) {
                       URL.revokeObjectURL(img.url);
                     }
                   });
+                  if (referenceImageUrl.startsWith("blob:")) {
+                    URL.revokeObjectURL(referenceImageUrl);
+                  }
                   setNewTaskImages([]);
+                  setPromptInput("");
+                  setReferenceImageUrl("");
+                  setReferenceImageFile(null);
                   setBatchCreateCount(1);
                   setShowCreateDialog(false);
                 }}
               >
                 取消
               </Button>
-              <div className="flex items-center gap-3">
-                {/* 任务数量选择器 */}
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-muted-foreground whitespace-nowrap">创建数量:</span>
-                  <div className="flex items-center border border-border/50 rounded-lg overflow-hidden">
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      onClick={() => setBatchCreateCount(Math.max(1, batchCreateCount - 1))}
-                      className="h-8 w-8 rounded-none border-r border-border/50"
-                      disabled={batchCreateCount <= 1}
-                    >
-                      <Minus className="h-3 w-3" />
-                    </Button>
-                    <span className="w-10 text-center text-sm font-medium">{batchCreateCount}</span>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      onClick={() => setBatchCreateCount(Math.min(20, batchCreateCount + 1))}
-                      className="h-8 w-8 rounded-none border-l border-border/50"
-                      disabled={batchCreateCount >= 20}
-                    >
-                      <Plus className="h-3 w-3" />
-                    </Button>
-                  </div>
-                </div>
-                <Button
-                  onClick={() => {
+              <Button
+                onClick={async () => {
+                  if (createMode === "image") {
+                    // 图片模式
                     if (newTaskImages.length === 0) {
                       toast({ variant: "destructive", title: "请至少上传一张图片" });
                       return;
@@ -2171,22 +2414,55 @@ C07: [story CTA, inspiring, <50 chars]`,
                       toast({ variant: "destructive", title: validation.error || "图片校验失败" });
                       return;
                     }
-                    // 批量创建相同图片的任务
                     for (let i = 0; i < batchCreateCount; i++) {
                       createTask([...newTaskImages]);
                     }
                     setNewTaskImages([]);
-                    setBatchCreateCount(1);
-                    setShowCreateDialog(false);
-                    toast({ title: `✅ 已创建 ${batchCreateCount} 个任务` });
-                  }}
-                  disabled={newTaskImages.length === 0}
-                  className="bg-gradient-to-r from-tiktok-cyan to-tiktok-pink text-black"
-                >
-                  <Check className="h-4 w-4 mr-2" />
-                  创建 {batchCreateCount > 1 ? `${batchCreateCount} 个任务` : "任务"}
-                </Button>
-              </div>
+                  } else {
+                    // 纯提示词模式
+                    if (!promptInput.trim() || promptInput.trim().length < 10) {
+                      toast({ variant: "destructive", title: "提示词至少需要10个字符" });
+                      return;
+                    }
+                    
+                    // 如果有参考图片，先上传
+                    let uploadedRefUrl = "";
+                    if (referenceImageFile) {
+                      try {
+                        const formData = new FormData();
+                        formData.append("file", referenceImageFile);
+                        const uploadRes = await fetch("/api/upload/image", {
+                          method: "POST",
+                          body: formData,
+                        });
+                        const uploadResult = await uploadRes.json();
+                        if (uploadResult.success && uploadResult.data?.url) {
+                          uploadedRefUrl = uploadResult.data.url;
+                        }
+                      } catch (e) {
+                        console.error("Upload reference image failed:", e);
+                      }
+                    }
+                    
+                    createTaskFromPrompt(promptInput, uploadedRefUrl || undefined, batchCreateCount);
+                    setPromptInput("");
+                    if (referenceImageUrl.startsWith("blob:")) {
+                      URL.revokeObjectURL(referenceImageUrl);
+                    }
+                    setReferenceImageUrl("");
+                    setReferenceImageFile(null);
+                  }
+                  
+                  setBatchCreateCount(1);
+                  setShowCreateDialog(false);
+                  toast({ title: `✅ 已创建 ${batchCreateCount} 个任务` });
+                }}
+                disabled={createMode === "image" ? newTaskImages.length === 0 : !promptInput.trim()}
+                className="bg-gradient-to-r from-tiktok-cyan to-tiktok-pink text-black"
+              >
+                <Check className="h-4 w-4 mr-2" />
+                创建 {batchCreateCount > 1 ? `${batchCreateCount} 个任务` : "任务"}
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>

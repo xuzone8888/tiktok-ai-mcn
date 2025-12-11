@@ -66,6 +66,9 @@ export interface ImageBatchActions {
   /** 从文件批量添加任务 */
   addTasksFromFiles: (files: File[]) => Promise<string[]>;
   
+  /** 从提示词创建任务（无需图片） */
+  addTaskFromPrompt: (prompt: string, count?: number) => string[];
+  
   /** 更新任务配置 */
   updateTaskConfig: <K extends keyof ImageBatchTaskConfig>(
     id: string,
@@ -273,6 +276,44 @@ export const useImageBatchStore = create<ImageBatchState & ImageBatchActions>()(
               // 没有正在处理的任务，重置为 idle
               state.jobStatus = "idle";
             }
+          }
+        });
+
+        return newIds;
+      },
+
+      addTaskFromPrompt: (prompt, count = 1) => {
+        const { globalSettings, tasks, jobStatus } = get();
+        const newIds: string[] = [];
+
+        // 纯提示词模式只能用于 AI 生成
+        const action: ImageProcessAction = "generate";
+
+        const newTasks: ImageBatchTask[] = Array.from({ length: count }, (_, i) => {
+          const id = generateId();
+          newIds.push(id);
+
+          return {
+            id,
+            index: tasks.length + i,
+            status: "pending" as const,
+            config: {
+              sourceImageUrl: "", // 纯提示词模式无源图片
+              sourceImageName: `提示词任务 ${tasks.length + i + 1}`,
+              model: globalSettings.model,
+              action,
+              aspectRatio: globalSettings.aspectRatio,
+              resolution: globalSettings.resolution,
+              prompt: prompt.trim(),
+            },
+            createdAt: new Date().toISOString(),
+          };
+        });
+
+        set((state) => {
+          state.tasks.push(...newTasks);
+          if (jobStatus === "completed" || jobStatus === "cancelled") {
+            state.jobStatus = "idle";
           }
         });
 

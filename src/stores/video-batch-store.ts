@@ -18,6 +18,7 @@ import {
   type TaskImageInfo,
   type PipelineStep,
   type VideoBatchGlobalSettings,
+  type VideoBatchTaskMode,
   getVideoBatchTotalPrice,
 } from "@/types/video-batch";
 
@@ -53,6 +54,9 @@ export interface VideoBatchActions {
   
   /** 创建新任务 */
   createTask: (images: TaskImageInfo[]) => string;
+  
+  /** 从提示词创建任务（纯提示词模式） */
+  createTaskFromPrompt: (prompt: string, referenceImageUrl?: string, count?: number) => string[];
   
   /** 批量创建空任务 */
   createEmptyTasks: (count: number) => string[];
@@ -167,7 +171,7 @@ export const getVideoBatchTotalCost = (tasks: VideoBatchTask[], globalSettings?:
   return tasks.length * costPerTask;
 };
 
-/** 校验任务图片是否有效 */
+/** 校验任务图片是否有效（图片模式） */
 export const validateTaskImages = (images: TaskImageInfo[]): { valid: boolean; error?: string } => {
   if (images.length === 0) {
     return { valid: false, error: "请至少上传一张图片" };
@@ -181,6 +185,19 @@ export const validateTaskImages = (images: TaskImageInfo[]): { valid: boolean; e
   const mainGridImage = images.find(img => img.isMainGrid);
   if (mainGridImage && mainGridImage.order !== 0) {
     return { valid: false, error: "高清九宫格图必须是第一张" };
+  }
+  
+  return { valid: true };
+};
+
+/** 校验纯提示词任务是否有效 */
+export const validatePromptTask = (task: VideoBatchTask): { valid: boolean; error?: string } => {
+  if (task.mode !== "prompt_to_video") {
+    return validateTaskImages(task.images);
+  }
+  
+  if (!task.customPrompt || task.customPrompt.trim().length < 10) {
+    return { valid: false, error: "提示词至少需要10个字符" };
   }
   
   return { valid: true };
@@ -256,6 +273,44 @@ export const useVideoBatchStore = create<VideoBatchState & VideoBatchActions>()(
         });
 
         return id;
+      },
+
+      createTaskFromPrompt: (prompt, referenceImageUrl, count = 1) => {
+        const { globalSettings } = get();
+        const newIds: string[] = [];
+
+        const newTasks: VideoBatchTask[] = Array.from({ length: count }, () => {
+          const id = generateId();
+          newIds.push(id);
+
+          return {
+            id,
+            images: [], // 纯提示词模式无图片
+            mode: "prompt_to_video" as VideoBatchTaskMode,
+            customPrompt: prompt.trim(),
+            referenceImageUrl: referenceImageUrl || undefined,
+            aspectRatio: globalSettings.aspectRatio,
+            modelType: globalSettings.modelType,
+            duration: globalSettings.duration,
+            quality: globalSettings.quality,
+            doubaoTalkingScript: null,
+            doubaoAiVideoPrompt: null,
+            soraTaskId: null,
+            soraVideoUrl: null,
+            status: "pending" as const,
+            currentStep: 0 as PipelineStep,
+            progress: 0,
+            errorMessage: null,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          };
+        });
+
+        set((state) => {
+          state.tasks.push(...newTasks);
+        });
+
+        return newIds;
       },
 
       createEmptyTasks: (count) => {

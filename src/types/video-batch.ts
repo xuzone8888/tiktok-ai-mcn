@@ -78,11 +78,21 @@ export interface TaskImageInfo {
 // 视频任务
 // ============================================================================
 
+/** 视频批量任务模式 */
+export type VideoBatchTaskMode = "image_to_video" | "prompt_to_video";
+
 /** 视频批量任务 */
 export interface VideoBatchTask {
   id: string;
   images: TaskImageInfo[];
   aspectRatio: VideoAspectRatio;
+  
+  // 任务模式
+  mode?: VideoBatchTaskMode;  // 默认 "image_to_video"
+  
+  // 纯提示词模式的自定义提示词
+  customPrompt?: string;      // 用户输入的提示词
+  referenceImageUrl?: string; // 可选的参考图片
   
   // 任务创建时的视频配置（保存以确保显示一致）
   modelType: VideoModelType;
