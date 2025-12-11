@@ -1402,15 +1402,26 @@ C07: [story CTA, inspiring, <50 chars]`,
           finalVideoPrompt = task.customPrompt || "";
           mainGridImageUrl = task.referenceImageUrl || "";
           
+          // 如果使用AI模特且有trigger word，添加到提示词中
+          if (useAiModel && selectedModelTriggerWord) {
+            finalVideoPrompt = `[AI MODEL: ${selectedModelTriggerWord}]\n\n${finalVideoPrompt}`;
+            console.log("[Video Batch] Prompt mode - Added AI model trigger word:", selectedModelTriggerWord);
+          }
+          
           // 保存用户提示词到任务
           updateTaskStatus(task.id, "generating_video", {
             currentStep: 3,
             progress: 30,
-            doubaoTalkingScript: "【纯提示词模式 - 无口播脚本】",
-            doubaoAiVideoPrompt: task.customPrompt,
+            doubaoTalkingScript: useAiModel && selectedModelTriggerWord 
+              ? `【纯提示词模式 - AI模特: ${selectedModelTriggerWord}】` 
+              : "【纯提示词模式 - 无口播脚本】",
+            doubaoAiVideoPrompt: finalVideoPrompt,
           });
           
-          console.log("[Video Batch] Prompt mode - using custom prompt directly");
+          console.log("[Video Batch] Prompt mode - using custom prompt directly", {
+            hasAiModel: useAiModel,
+            triggerWord: selectedModelTriggerWord,
+          });
         } else {
           // ==================== 图片到视频模式 ====================
           // ==================== Step 0: 上传图片 ====================
@@ -2370,6 +2381,16 @@ C07: [story CTA, inspiring, <50 chars]`,
                 </span>
               </div>
 
+              {/* AI模特配置提示 */}
+              {createMode === "prompt" && useAiModel && selectedModelTriggerWord && (
+                <div className="flex items-center gap-2 p-3 rounded-lg bg-purple-500/10 border border-purple-500/30">
+                  <UserCircle className="h-4 w-4 text-purple-400" />
+                  <span className="text-sm text-purple-400">
+                    已启用 AI 模特：<strong>{selectedModelName || selectedModelTriggerWord}</strong>
+                  </span>
+                </div>
+              )}
+              
               {/* 费用显示 */}
               <div className="flex items-center gap-2 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30">
                 <Zap className="h-4 w-4 text-amber-400" />
