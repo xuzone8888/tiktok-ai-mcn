@@ -508,10 +508,11 @@ export async function submitSora2(
     let retryCount = 0;
     const maxRetries = 3;
     let responseText = '';
+    let statusCode = 0;
     
     while (retryCount <= maxRetries) {
       try {
-        responseText = await new Promise<string>((resolve, reject) => {
+        const result = await new Promise<{ data: string; statusCode: number }>((resolve, reject) => {
           const url = new URL(endpoint);
           const options = {
             hostname: url.hostname,
@@ -531,7 +532,7 @@ export async function submitSora2(
           const req = https.request(options, (res) => {
             let data = '';
             res.on('data', chunk => data += chunk);
-            res.on('end', () => resolve(data));
+            res.on('end', () => resolve({ data, statusCode: res.statusCode || 0 }));
           });
           
           req.on('error', reject);
@@ -543,6 +544,15 @@ export async function submitSora2(
           req.write(bodyStr);
           req.end();
         });
+        
+        responseText = result.data;
+        statusCode = result.statusCode;
+        
+        // 如果是 5xx 服务器错误，进行重试
+        if (statusCode >= 500 && statusCode < 600) {
+          throw new Error(`Server error: ${statusCode}`);
+        }
+        
         break; // 成功则跳出循环
       } catch (fetchError) {
         retryCount++;
@@ -554,13 +564,26 @@ export async function submitSora2(
         await new Promise(resolve => setTimeout(resolve, waitTime));
       }
     }
-    console.log("[Sora2] Raw response:", responseText.substring(0, 500));
+    console.log("[Sora2] Raw response (status: " + statusCode + "):", responseText.substring(0, 500));
+
+    // 检查 HTTP 状态码
+    if (statusCode >= 500) {
+      console.error(`[Sora2] Server error ${statusCode}:`, responseText.substring(0, 200));
+      return { 
+        success: false, 
+        error: `视频服务暂时繁忙 (${statusCode})，请稍后重试` 
+      };
+    }
 
     let data: Sora2SubmitResponse;
     try {
       data = JSON.parse(responseText);
     } catch {
-      console.error("[Sora2] Failed to parse response:", responseText);
+      console.error("[Sora2] Failed to parse response:", responseText.substring(0, 500));
+      // 检查是否是 HTML 错误页面
+      if (responseText.includes("<!DOCTYPE") || responseText.includes("<html")) {
+        return { success: false, error: "视频服务网关错误，请稍后重试" };
+      }
       return { success: false, error: "视频生成服务响应格式错误，请稍后重试" };
     }
 
@@ -616,10 +639,11 @@ export async function querySora2Result(
     let retryCount = 0;
     const maxRetries = 2;
     let responseText = '';
+    let statusCode = 0;
     
     while (retryCount <= maxRetries) {
       try {
-        responseText = await new Promise<string>((resolve, reject) => {
+        const result = await new Promise<{ data: string; statusCode: number }>((resolve, reject) => {
           const url = new URL(endpoint);
           const options = {
             hostname: url.hostname,
@@ -637,7 +661,7 @@ export async function querySora2Result(
           const req = https.request(options, (res) => {
             let data = '';
             res.on('data', chunk => data += chunk);
-            res.on('end', () => resolve(data));
+            res.on('end', () => resolve({ data, statusCode: res.statusCode || 0 }));
           });
           
           req.on('error', reject);
@@ -648,6 +672,15 @@ export async function querySora2Result(
           
           req.end();
         });
+        
+        responseText = result.data;
+        statusCode = result.statusCode;
+        
+        // 如果是 5xx 服务器错误，进行重试
+        if (statusCode >= 500 && statusCode < 600) {
+          throw new Error(`Server error: ${statusCode}`);
+        }
+        
         break;
       } catch (fetchError) {
         retryCount++;
@@ -663,11 +696,21 @@ export async function querySora2Result(
       return { success: false, error: "网络请求失败，请稍后重试" };
     }
     
+    // 检查 HTTP 状态码
+    if (statusCode >= 500) {
+      console.error(`[Sora2] Query server error ${statusCode}:`, responseText.substring(0, 200));
+      return { success: false, error: `视频服务暂时繁忙 (${statusCode})，请稍后重试` };
+    }
+    
     let data: Sora2SubmitResponse;
     try {
       data = JSON.parse(responseText);
     } catch {
-      console.error("[Sora2] Failed to parse query response");
+      console.error("[Sora2] Failed to parse query response:", responseText.substring(0, 200));
+      // 检查是否是 HTML 错误页面
+      if (responseText.includes("<!DOCTYPE") || responseText.includes("<html")) {
+        return { success: false, error: "视频服务网关错误，请稍后重试" };
+      }
       return { success: false, error: "视频任务查询响应格式错误" };
     }
 
