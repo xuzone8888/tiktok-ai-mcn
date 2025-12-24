@@ -453,6 +453,7 @@ interface VideoTaskCardProps {
   onViewScript: () => void;
   onEditImages: () => void;
   onPlayVideo: () => void;
+  onDownload: () => void;
   // 全局配置信息
   modelType: VideoModelType;
   duration: VideoDuration;
@@ -469,6 +470,7 @@ const VideoTaskCard = memo(function VideoTaskCard({
   onViewScript,
   onEditImages,
   onPlayVideo,
+  onDownload,
   modelType: globalModelType,
   duration: globalDuration,
   quality: globalQuality,
@@ -781,21 +783,17 @@ const VideoTaskCard = memo(function VideoTaskCard({
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <a
-                      href={task.soraVideoUrl}
-                      download
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      onClick={(e) => e.stopPropagation()}
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onDownload();
+                      }}
+                      className="h-7 w-7 text-emerald-500 hover:text-emerald-500 hover:bg-emerald-500/10"
                     >
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="h-7 w-7 text-emerald-500 hover:text-emerald-500 hover:bg-emerald-500/10"
-                      >
-                        <Download className="h-3.5 w-3.5" />
-                      </Button>
-                    </a>
+                      <Download className="h-3.5 w-3.5" />
+                    </Button>
                   </TooltipTrigger>
                   <TooltipContent>下载视频</TooltipContent>
                 </Tooltip>
@@ -836,9 +834,12 @@ interface VideoPlayerDialogProps {
   task: VideoBatchTask | null;
   open: boolean;
   onClose: () => void;
+  onDownload: (task: VideoBatchTask) => void;
 }
 
-function VideoPlayerDialog({ task, open, onClose }: VideoPlayerDialogProps) {
+function VideoPlayerDialog({ task, open, onClose, onDownload }: VideoPlayerDialogProps) {
+  const [downloading, setDownloading] = useState(false);
+  
   if (!task || !task.soraVideoUrl) return null;
 
   // 获取视频时长和清晰度显示文字
@@ -852,6 +853,12 @@ function VideoPlayerDialog({ task, open, onClose }: VideoPlayerDialogProps) {
       return `${duration}秒 标清`;
     }
     return `${duration}秒`;
+  };
+
+  const handleDownload = async () => {
+    setDownloading(true);
+    await onDownload(task);
+    setDownloading(false);
   };
 
   return (
@@ -883,16 +890,18 @@ function VideoPlayerDialog({ task, open, onClose }: VideoPlayerDialogProps) {
               </div>
               
               {/* 下载按钮 */}
-              <a
-                href={task.soraVideoUrl}
-                download={`video-${task.id}.mp4`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-tiktok-cyan to-tiktok-pink text-black font-semibold rounded-lg hover:opacity-90 transition-opacity"
+              <button
+                onClick={handleDownload}
+                disabled={downloading}
+                className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-tiktok-cyan to-tiktok-pink text-black font-semibold rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50"
               >
-                <Download className="h-4 w-4" />
-                下载视频
-              </a>
+                {downloading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Download className="h-4 w-4" />
+                )}
+                {downloading ? "下载中..." : "下载视频"}
+              </button>
             </div>
           </div>
         </div>
@@ -1024,6 +1033,53 @@ export default function VideoBatchPage() {
   
   // 批量下载状态
   const [isDownloading, setIsDownloading] = useState(false);
+  // 批量开始状态
+  const [isBatchStarting, setIsBatchStarting] = useState(false);
+  
+  // 生成简化文件名的辅助函数
+  const generateSimpleFilename = useCallback((task: VideoBatchTask, index?: number) => {
+    const aspectStr = task.aspectRatio.replace(":", "x");
+    const durationStr = `${task.duration || 15}s`;
+    const seq = index !== undefined ? index + 1 : tasks.findIndex(t => t.id === task.id) + 1;
+    return `视频-${seq}-${aspectStr}-${durationStr}.mp4`;
+  }, [tasks]);
+  
+  // 直接下载视频（无弹窗）
+  const downloadVideo = useCallback(async (url: string, filename: string) => {
+    try {
+      const response = await fetch(url);
+      if (!response.ok) throw new Error("下载失败");
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = blobUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(blobUrl);
+      return true;
+    } catch (error) {
+      console.error("Download failed:", error);
+      return false;
+    }
+  }, []);
+  
+  // 下载单个任务的视频
+  const handleDownloadTask = useCallback(async (task: VideoBatchTask) => {
+    if (!task.soraVideoUrl) {
+      toast({ variant: "destructive", title: "视频未生成" });
+      return;
+    }
+    const filename = generateSimpleFilename(task);
+    toast({ title: `正在下载: ${filename}` });
+    const success = await downloadVideo(task.soraVideoUrl, filename);
+    if (success) {
+      toast({ title: `✅ 下载完成: ${filename}` });
+    } else {
+      toast({ variant: "destructive", title: `下载失败: ${filename}` });
+    }
+  }, [downloadVideo, generateSimpleFilename, toast]);
   
   // AI模特功能 - 使用 store 中的全局设置
   const useAiModel = globalSettings.useAiModel;
@@ -2040,30 +2096,23 @@ C07: [story CTA, inspiring, <50 chars]`,
                           }
                           
                           setIsDownloading(true);
-                          toast({ title: `开始下载 ${completedSelectedTasks.length} 个视频...` });
+                          toast({ title: `🚀 正在下载 ${completedSelectedTasks.length} 个视频...` });
                           
-                          // 逐个下载
+                          let successCount = 0;
+                          // 逐个使用 fetch blob 下载
                           for (let i = 0; i < completedSelectedTasks.length; i++) {
                             const task = completedSelectedTasks[i];
                             if (task.soraVideoUrl) {
-                              try {
-                                const link = document.createElement("a");
-                                link.href = task.soraVideoUrl;
-                                link.download = `video-${task.id}.mp4`;
-                                link.target = "_blank";
-                                document.body.appendChild(link);
-                                link.click();
-                                document.body.removeChild(link);
-                                // 间隔 800ms 避免浏览器阻止
-                                await new Promise(r => setTimeout(r, 800));
-                              } catch (err) {
-                                console.error("Download failed:", err);
-                              }
+                              const filename = generateSimpleFilename(task, tasks.indexOf(task));
+                              const success = await downloadVideo(task.soraVideoUrl, filename);
+                              if (success) successCount++;
+                              // 间隔 500ms 避免浏览器阻止
+                              await new Promise(r => setTimeout(r, 500));
                             }
                           }
                           
                           setIsDownloading(false);
-                          toast({ title: `✅ 已触发 ${completedSelectedTasks.length} 个视频下载` });
+                          toast({ title: `✅ 已下载 ${successCount}/${completedSelectedTasks.length} 个视频` });
                         }}
                         disabled={isDownloading}
                         className="h-8 text-xs text-emerald-400 border-emerald-400/30 hover:bg-emerald-400/10"
@@ -2148,6 +2197,7 @@ C07: [story CTA, inspiring, <50 chars]`,
                     onViewScript={() => setPreviewTask(task)}
                     onEditImages={() => handleEditTaskImages(task)}
                     onPlayVideo={() => setPlayingVideoTask(task)}
+                    onDownload={() => handleDownloadTask(task)}
                     modelType={globalSettings.modelType}
                     duration={globalSettings.duration}
                     quality={globalSettings.quality}
@@ -2216,9 +2266,8 @@ C07: [story CTA, inspiring, <50 chars]`,
                   )}
                 </div>
 
-                {/* 提示信息 */}
-                <div className="flex items-center gap-3 text-sm text-muted-foreground">
-                  <span>💡 点击每个任务卡片上的播放按钮开始生成</span>
+                {/* 操作按钮 */}
+                <div className="flex items-center gap-3">
                   {stats.failed > 0 && (
                     <Button
                       onClick={resetBatch}
@@ -2228,6 +2277,55 @@ C07: [story CTA, inspiring, <50 chars]`,
                     >
                       <RotateCcw className="h-3.5 w-3.5 mr-1" />
                       重置失败任务
+                    </Button>
+                  )}
+                  
+                  {/* 批量开始按钮 */}
+                  {stats.pending > 0 && (
+                    <Button
+                      onClick={async () => {
+                        if (!userId) {
+                          toast({ variant: "destructive", title: "请先登录" });
+                          return;
+                        }
+                        
+                        const pendingTasks = tasks.filter(t => t.status === "pending");
+                        if (pendingTasks.length === 0) {
+                          toast({ title: "没有待处理任务", variant: "default" });
+                          return;
+                        }
+                        
+                        // 检查积分
+                        if (userCredits < stats.totalCost) {
+                          toast({ variant: "destructive", title: `积分不足，需要 ${stats.totalCost} 积分，当前余额 ${userCredits}` });
+                          return;
+                        }
+                        
+                        setIsBatchStarting(true);
+                        toast({ title: `🚀 正在启动 ${pendingTasks.length} 个视频任务...` });
+                        
+                        // 批量启动待处理任务，错开 1 秒避免瞬间大量请求
+                        for (const task of pendingTasks) {
+                          handleStartSingleTask(task);
+                          await new Promise(r => setTimeout(r, 1000));
+                        }
+                        
+                        setIsBatchStarting(false);
+                      }}
+                      disabled={isBatchStarting || stats.pending === 0}
+                      className="h-9 px-6 bg-gradient-to-r from-tiktok-cyan to-tiktok-pink text-black font-semibold"
+                    >
+                      {isBatchStarting ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          启动中...
+                        </>
+                      ) : (
+                        <>
+                          <Play className="h-4 w-4 mr-2" />
+                          开始所有任务 ({stats.pending})
+                        </>
+                      )}
                     </Button>
                   )}
                 </div>
@@ -2359,25 +2457,35 @@ C07: [story CTA, inspiring, <50 chars]`,
                   <Button
                     size="icon"
                     variant="ghost"
-                    onClick={() => setBatchCreateCount(Math.max(1, batchCreateCount - 1))}
+                    onClick={() => setBatchCreateCount(Math.max(1, batchCreateCount - 10))}
                     className="h-9 w-9 rounded-none border-r border-border/50"
                     disabled={batchCreateCount <= 1}
                   >
                     <Minus className="h-4 w-4" />
                   </Button>
-                  <span className="w-12 text-center text-sm font-medium">{batchCreateCount}</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={300}
+                    value={batchCreateCount}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value) || 1;
+                      setBatchCreateCount(Math.min(300, Math.max(1, val)));
+                    }}
+                    className="w-16 h-9 text-center text-sm font-medium bg-transparent border-none focus:outline-none focus:ring-0"
+                  />
                   <Button
                     size="icon"
                     variant="ghost"
-                    onClick={() => setBatchCreateCount(Math.min(20, batchCreateCount + 1))}
+                    onClick={() => setBatchCreateCount(Math.min(300, batchCreateCount + 10))}
                     className="h-9 w-9 rounded-none border-l border-border/50"
-                    disabled={batchCreateCount >= 20}
+                    disabled={batchCreateCount >= 300}
                   >
                     <Plus className="h-4 w-4" />
                   </Button>
                 </div>
                 <span className="text-xs text-muted-foreground">
-                  {createMode === "image" ? "创建多个相同素材的任务" : "创建多个相同提示词的任务（可生成不同变体）"}
+                  最多 300 个 | {createMode === "image" ? "创建多个相同素材的任务" : "创建多个相同提示词的任务"}
                 </span>
               </div>
 
@@ -2523,7 +2631,12 @@ C07: [story CTA, inspiring, <50 chars]`,
         <ScriptPreviewDialog task={previewTask} open={!!previewTask} onClose={() => setPreviewTask(null)} />
 
         {/* 视频播放弹窗 */}
-        <VideoPlayerDialog task={playingVideoTask} open={!!playingVideoTask} onClose={() => setPlayingVideoTask(null)} />
+        <VideoPlayerDialog 
+          task={playingVideoTask} 
+          open={!!playingVideoTask} 
+          onClose={() => setPlayingVideoTask(null)} 
+          onDownload={handleDownloadTask}
+        />
 
         {/* AI模特选择弹窗 */}
         <Dialog open={showModelSelector} onOpenChange={setShowModelSelector}>
