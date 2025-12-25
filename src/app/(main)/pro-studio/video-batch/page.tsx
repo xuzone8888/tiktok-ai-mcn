@@ -983,6 +983,168 @@ function ScriptPreviewDialog({ task, open, onClose }: ScriptPreviewDialogProps) 
 }
 
 // ============================================================================
+// 批量下载进度对话框
+// ============================================================================
+
+interface DownloadProgressDialogProps {
+  progress: {
+    show: boolean;
+    total: number;
+    current: number;
+    success: number;
+    failed: number;
+    currentFilename: string;
+    startTime: number;
+    cancelled: boolean;
+  };
+  onCancel: () => void;
+  onClose: () => void;
+}
+
+function DownloadProgressDialog({ progress, onCancel, onClose }: DownloadProgressDialogProps) {
+  const percentage = progress.total > 0 ? Math.round((progress.current / progress.total) * 100) : 0;
+  const isComplete = progress.current >= progress.total;
+  
+  // 计算预估剩余时间
+  const getEstimatedTime = () => {
+    if (progress.current === 0 || progress.startTime === 0) return "计算中...";
+    const elapsed = Date.now() - progress.startTime;
+    const avgTimePerItem = elapsed / progress.current;
+    const remaining = progress.total - progress.current;
+    const estimatedMs = remaining * avgTimePerItem;
+    
+    if (estimatedMs < 60000) {
+      return `约 ${Math.ceil(estimatedMs / 1000)} 秒`;
+    } else {
+      return `约 ${Math.ceil(estimatedMs / 60000)} 分钟`;
+    }
+  };
+
+  return (
+    <Dialog open={progress.show} onOpenChange={(open) => !open && isComplete && onClose()}>
+      <DialogContent className="max-w-md bg-black/95 border-white/10">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            {isComplete ? (
+              <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+            ) : progress.cancelled ? (
+              <XCircle className="h-5 w-5 text-red-500" />
+            ) : (
+              <Download className="h-5 w-5 text-tiktok-cyan animate-pulse" />
+            )}
+            {isComplete ? "下载完成" : progress.cancelled ? "下载已取消" : "批量下载中"}
+          </DialogTitle>
+          <DialogDescription>
+            {isComplete 
+              ? `成功下载 ${progress.success} 个视频${progress.failed > 0 ? `，${progress.failed} 个失败` : ""}`
+              : progress.cancelled 
+                ? `已下载 ${progress.success} 个视频`
+                : "正在通过服务器代理下载，请勿关闭此窗口"
+            }
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4 py-4">
+          {/* 进度条 */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">下载进度</span>
+              <span className="font-mono font-semibold text-tiktok-cyan">
+                {progress.current} / {progress.total}
+              </span>
+            </div>
+            <div className="h-3 bg-muted/30 rounded-full overflow-hidden">
+              <div 
+                className={cn(
+                  "h-full rounded-full transition-all duration-300",
+                  isComplete 
+                    ? "bg-gradient-to-r from-emerald-500 to-emerald-400"
+                    : progress.cancelled
+                      ? "bg-gradient-to-r from-red-500 to-red-400"
+                      : "bg-gradient-to-r from-tiktok-cyan to-tiktok-pink"
+                )}
+                style={{ width: `${percentage}%` }}
+              />
+            </div>
+            <div className="text-center text-2xl font-bold text-white">
+              {percentage}%
+            </div>
+          </div>
+
+          {/* 统计信息 */}
+          <div className="grid grid-cols-3 gap-3">
+            <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-center">
+              <div className="text-2xl font-bold text-emerald-400">{progress.success}</div>
+              <div className="text-xs text-muted-foreground">成功</div>
+            </div>
+            <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-center">
+              <div className="text-2xl font-bold text-red-400">{progress.failed}</div>
+              <div className="text-xs text-muted-foreground">失败</div>
+            </div>
+            <div className="p-3 rounded-lg bg-muted/30 border border-border/50 text-center">
+              <div className="text-2xl font-bold text-muted-foreground">
+                {progress.total - progress.current}
+              </div>
+              <div className="text-xs text-muted-foreground">剩余</div>
+            </div>
+          </div>
+
+          {/* 当前文件名 & 预估时间 */}
+          {!isComplete && !progress.cancelled && (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 text-sm">
+                <Loader2 className="h-3 w-3 animate-spin text-tiktok-cyan" />
+                <span className="text-muted-foreground truncate flex-1">
+                  {progress.currentFilename || "准备中..."}
+                </span>
+              </div>
+              <div className="flex items-center gap-2 text-sm">
+                <Clock className="h-3 w-3 text-amber-400" />
+                <span className="text-muted-foreground">
+                  预计剩余: <span className="text-amber-400 font-medium">{getEstimatedTime()}</span>
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* 失败提示 */}
+          {progress.failed > 0 && (
+            <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
+              <div className="flex items-start gap-2">
+                <AlertTriangle className="h-4 w-4 text-amber-400 mt-0.5 flex-shrink-0" />
+                <p className="text-xs text-amber-200">
+                  {progress.failed} 个视频下载失败，已自动在新窗口打开，您可以手动保存
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <DialogFooter>
+          {isComplete || progress.cancelled ? (
+            <Button 
+              onClick={onClose}
+              className="w-full bg-gradient-to-r from-tiktok-cyan to-tiktok-pink text-black font-semibold"
+            >
+              关闭
+            </Button>
+          ) : (
+            <Button 
+              variant="destructive" 
+              onClick={onCancel}
+              className="w-full"
+            >
+              <X className="h-4 w-4 mr-2" />
+              取消下载
+            </Button>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ============================================================================
 // 主页面
 // ============================================================================
 
@@ -1037,6 +1199,30 @@ export default function VideoBatchPage() {
   const [isBatchStarting, setIsBatchStarting] = useState(false);
   // 单个下载进度状态
   const [downloadingTaskId, setDownloadingTaskId] = useState<string | null>(null);
+  
+  // 批量下载进度状态
+  const [downloadProgress, setDownloadProgress] = useState<{
+    show: boolean;
+    total: number;
+    current: number;
+    success: number;
+    failed: number;
+    currentFilename: string;
+    startTime: number;
+    cancelled: boolean;
+  }>({
+    show: false,
+    total: 0,
+    current: 0,
+    success: 0,
+    failed: 0,
+    currentFilename: "",
+    startTime: 0,
+    cancelled: false,
+  });
+  
+  // 取消下载的ref
+  const cancelDownloadRef = useRef(false);
   
   // 生成简化文件名的辅助函数
   const generateSimpleFilename = useCallback((task: VideoBatchTask, index?: number) => {
@@ -2176,28 +2362,42 @@ C07: [story CTA, inspiring, <50 chars]`,
                             return;
                           }
                           
-                          setIsDownloading(true);
-                          toast({ 
-                            title: `🚀 开始批量下载 ${completedSelectedTasks.length} 个视频`,
-                            description: "通过服务器代理下载，请耐心等待..."
+                          // 重置取消标志
+                          cancelDownloadRef.current = false;
+                          
+                          // 初始化进度状态并显示对话框
+                          setDownloadProgress({
+                            show: true,
+                            total: completedSelectedTasks.length,
+                            current: 0,
+                            success: 0,
+                            failed: 0,
+                            currentFilename: "准备中...",
+                            startTime: Date.now(),
+                            cancelled: false,
                           });
+                          setIsDownloading(true);
                           
                           let successCount = 0;
                           let failedCount = 0;
                           
                           // 逐个通过代理下载
                           for (let i = 0; i < completedSelectedTasks.length; i++) {
+                            // 检查是否取消
+                            if (cancelDownloadRef.current) {
+                              setDownloadProgress(prev => ({ ...prev, cancelled: true }));
+                              break;
+                            }
+                            
                             const task = completedSelectedTasks[i];
                             if (task.soraVideoUrl) {
                               const filename = generateSimpleFilename(task, tasks.indexOf(task));
                               
-                              // 显示当前下载进度
-                              if (i > 0 && i % 3 === 0) {
-                                toast({ 
-                                  title: `📦 下载进度: ${i}/${completedSelectedTasks.length}`,
-                                  description: `已完成 ${successCount} 个，失败 ${failedCount} 个`
-                                });
-                              }
+                              // 更新当前下载文件名
+                              setDownloadProgress(prev => ({
+                                ...prev,
+                                currentFilename: filename,
+                              }));
                               
                               const success = await downloadVideo(task.soraVideoUrl, filename);
                               if (success) {
@@ -2207,21 +2407,21 @@ C07: [story CTA, inspiring, <50 chars]`,
                                 // 下载失败的在新窗口打开
                                 openVideoInNewTab(task.soraVideoUrl);
                               }
+                              
+                              // 更新进度状态
+                              setDownloadProgress(prev => ({
+                                ...prev,
+                                current: i + 1,
+                                success: successCount,
+                                failed: failedCount,
+                              }));
+                              
                               // 间隔 800ms 避免服务器压力过大
                               await new Promise(r => setTimeout(r, 800));
                             }
                           }
                           
                           setIsDownloading(false);
-                          
-                          if (failedCount > 0) {
-                            toast({ 
-                              title: `📦 批量下载完成`,
-                              description: `成功 ${successCount} 个，${failedCount} 个已在新窗口打开`
-                            });
-                          } else {
-                            toast({ title: `✅ 全部下载完成: ${successCount} 个视频` });
-                          }
                         }}
                         disabled={isDownloading}
                         className="h-8 text-xs text-emerald-400 border-emerald-400/30 hover:bg-emerald-400/10"
@@ -2745,6 +2945,17 @@ C07: [story CTA, inspiring, <50 chars]`,
           open={!!playingVideoTask} 
           onClose={() => setPlayingVideoTask(null)} 
           onDownload={handleDownloadTask}
+        />
+
+        {/* 批量下载进度弹窗 */}
+        <DownloadProgressDialog
+          progress={downloadProgress}
+          onCancel={() => {
+            cancelDownloadRef.current = true;
+          }}
+          onClose={() => {
+            setDownloadProgress(prev => ({ ...prev, show: false }));
+          }}
         />
 
         {/* AI模特选择弹窗 */}
