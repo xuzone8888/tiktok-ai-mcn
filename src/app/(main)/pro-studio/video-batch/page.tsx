@@ -68,6 +68,7 @@ import {
   Copy,
   UserCircle,
   Clock,
+  Wifi,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -99,6 +100,10 @@ import {
 
 // Textarea
 import { Textarea } from "@/components/ui/textarea";
+
+// 线路检测组件
+import { SpeedTestDialog } from "@/components/speed-test-dialog";
+import { getCachedSpeedTestResults, getBestRouteId } from "@/lib/download-manager";
 
 // ============================================================================
 // PipelineProgress 组件 - 流水线进度指示器
@@ -1199,6 +1204,8 @@ export default function VideoBatchPage() {
   const [isBatchStarting, setIsBatchStarting] = useState(false);
   // 单个下载进度状态
   const [downloadingTaskId, setDownloadingTaskId] = useState<string | null>(null);
+  // 线路检测弹窗状态
+  const [showSpeedTest, setShowSpeedTest] = useState(false);
   
   // 批量下载进度状态
   const [downloadProgress, setDownloadProgress] = useState<{
@@ -1232,10 +1239,16 @@ export default function VideoBatchPage() {
     return `视频-${seq}-${aspectStr}-${durationStr}.mp4`;
   }, [tasks]);
   
-  // 通过代理下载视频（解决CORS问题）
-  const downloadVideoViaProxy = useCallback(async (url: string, filename: string): Promise<boolean> => {
+  // 通过代理下载视频（解决CORS问题，支持线路选择）
+  const downloadVideoViaProxy = useCallback(async (url: string, filename: string, routeId?: string): Promise<boolean> => {
     try {
-      const proxyUrl = `/api/download-proxy?url=${encodeURIComponent(url)}&filename=${encodeURIComponent(filename)}`;
+      // 构建代理URL，包含线路参数
+      const params = new URLSearchParams({
+        url,
+        filename,
+        ...(routeId && { route: routeId }),
+      });
+      const proxyUrl = `/api/download-proxy?${params}`;
       const response = await fetch(proxyUrl);
       
       if (!response.ok) {
@@ -1295,17 +1308,31 @@ export default function VideoBatchPage() {
     window.open(url, "_blank");
   }, []);
   
-  // 智能下载视频 - 自动选择最佳下载方式
+  // 智能下载视频 - 自动选择最佳线路和下载方式
   const downloadVideo = useCallback(async (url: string, filename: string): Promise<boolean> => {
-    // 方案1：尝试通过代理下载（解决CORS问题）
-    console.log("[Download] Trying proxy download...");
-    let success = await downloadVideoViaProxy(url, filename);
+    // 获取最佳线路（如果有缓存的测速结果）
+    const cachedResults = getCachedSpeedTestResults();
+    const bestRoute = getBestRouteId(cachedResults);
+    
+    // 方案1：尝试通过代理下载（解决CORS问题），使用最佳线路
+    console.log(`[Download] Trying proxy download with route: ${bestRoute || "default"}...`);
+    let success = await downloadVideoViaProxy(url, filename, bestRoute || undefined);
     if (success) {
       console.log("[Download] Proxy download succeeded");
       return true;
     }
     
-    // 方案2：尝试直接下载（如果代理失败）
+    // 方案2：如果首选线路失败，尝试备用线路
+    if (bestRoute && bestRoute !== "backup") {
+      console.log("[Download] Primary route failed, trying backup route...");
+      success = await downloadVideoViaProxy(url, filename, "backup");
+      if (success) {
+        console.log("[Download] Backup route succeeded");
+        return true;
+      }
+    }
+    
+    // 方案3：尝试直接下载（如果代理都失败）
     console.log("[Download] Proxy failed, trying direct download...");
     success = await downloadVideoDirect(url, filename);
     if (success) {
@@ -1313,7 +1340,7 @@ export default function VideoBatchPage() {
       return true;
     }
     
-    // 方案3：所有方式都失败，返回false让调用者决定是否打开新窗口
+    // 方案4：所有方式都失败，返回false让调用者决定是否打开新窗口
     console.log("[Download] All download methods failed");
     return false;
   }, [downloadVideoViaProxy, downloadVideoDirect]);
@@ -2346,6 +2373,17 @@ C07: [story CTA, inspiring, <50 chars]`,
                 </Badge>
               </div>
               <div className="flex items-center gap-2">
+                {/* 线路检测按钮 - 始终显示 */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowSpeedTest(true)}
+                  className="h-8 text-xs"
+                >
+                  <Wifi className="h-3 w-3 mr-1" />
+                  检测线路
+                </Button>
+                
                 {selectedCount > 0 && (
                   <>
                     {/* 批量下载选中的已完成任务 */}
@@ -2955,6 +2993,21 @@ C07: [story CTA, inspiring, <50 chars]`,
           }}
           onClose={() => {
             setDownloadProgress(prev => ({ ...prev, show: false }));
+          }}
+        />
+
+        {/* 线路检测弹窗 */}
+        <SpeedTestDialog
+          open={showSpeedTest}
+          onClose={() => setShowSpeedTest(false)}
+          onComplete={(results) => {
+            const bestRoute = getBestRouteId(results);
+            if (bestRoute) {
+              toast({
+                title: "✅ 线路检测完成",
+                description: `推荐使用 ${results.find(r => r.routeId === bestRoute)?.routeId || bestRoute} 线路，后续下载将自动使用最快线路`,
+              });
+            }
           }}
         />
 

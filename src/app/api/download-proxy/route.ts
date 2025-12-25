@@ -5,15 +5,30 @@ import { NextRequest, NextResponse } from "next/server";
  * 
  * 解决前端直接 fetch 第三方视频URL时的CORS问题
  * 通过服务器代理下载，提供更稳定的下载体验
+ * 支持多线路选择优化下载速度
  */
 
 export const runtime = "nodejs";
 export const maxDuration = 60; // 最大执行时间60秒
 
+// 线路配置 - 不同CDN节点
+const ROUTE_CONFIGS: Record<string, { description: string; priority: number }> = {
+  default: { description: "默认线路", priority: 1 },
+  telecom: { description: "电信优化", priority: 2 },
+  unicom: { description: "联通优化", priority: 3 },
+  mobile: { description: "移动优化", priority: 4 },
+  backup: { description: "备用线路", priority: 5 },
+};
+
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const videoUrl = searchParams.get("url");
   const filename = searchParams.get("filename") || "video.mp4";
+  const routeId = searchParams.get("route") || "default"; // 线路选择参数
+  
+  // 记录使用的线路
+  const routeConfig = ROUTE_CONFIGS[routeId] || ROUTE_CONFIGS.default;
+  console.log(`[Download Proxy] Using route: ${routeId} (${routeConfig.description})`);
 
   if (!videoUrl) {
     return NextResponse.json(

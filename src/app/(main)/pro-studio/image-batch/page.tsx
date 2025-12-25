@@ -68,9 +68,14 @@ import {
   Minus,
   FileText,
   PackageOpen,
+  Wifi,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import Link from "next/link";
+
+// 线路检测组件
+import { SpeedTestDialog } from "@/components/speed-test-dialog";
+import { getCachedSpeedTestResults, getBestRouteId } from "@/lib/download-manager";
 
 // Types
 import {
@@ -414,6 +419,17 @@ export default function ImageBatchPage() {
   
   // 批量下载状态
   const [isDownloading, setIsDownloading] = useState(false);
+  // 线路检测弹窗状态
+  const [showSpeedTest, setShowSpeedTest] = useState(false);
+  // 下载进度状态
+  const [downloadProgress, setDownloadProgress] = useState({
+    show: false,
+    total: 0,
+    current: 0,
+    success: 0,
+    failed: 0,
+    currentFilename: "",
+  });
 
   // 获取用户积分
   useEffect(() => {
@@ -918,6 +934,17 @@ export default function ImageBatchPage() {
                 )}
               </div>
               <div className="flex items-center gap-2">
+                {/* 线路检测按钮 */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowSpeedTest(true)}
+                  className="h-8 text-xs"
+                >
+                  <Wifi className="h-3 w-3 mr-1" />
+                  检测线路
+                </Button>
+                
                 {selectedCount > 0 && (
                   <>
                     {/* 批量下载选中的已完成任务 */}
@@ -934,31 +961,92 @@ export default function ImageBatchPage() {
                             return;
                           }
                           
-                          setIsDownloading(true);
-                          toast({ title: `开始下载 ${completedSelectedTasks.length} 张图片...` });
+                          // 获取最佳线路
+                          const cachedResults = getCachedSpeedTestResults();
+                          const bestRoute = getBestRouteId(cachedResults);
                           
-                          // 逐个下载
+                          setIsDownloading(true);
+                          setDownloadProgress({
+                            show: true,
+                            total: completedSelectedTasks.length,
+                            current: 0,
+                            success: 0,
+                            failed: 0,
+                            currentFilename: "准备中...",
+                          });
+                          
+                          let successCount = 0;
+                          let failedCount = 0;
+                          
+                          // 逐个通过代理下载
                           for (let i = 0; i < completedSelectedTasks.length; i++) {
                             const task = completedSelectedTasks[i];
                             if (task.resultUrl) {
+                              const filename = `图片-${i + 1}.png`;
+                              setDownloadProgress(prev => ({
+                                ...prev,
+                                currentFilename: filename,
+                              }));
+                              
                               try {
-                                const link = document.createElement("a");
-                                link.href = task.resultUrl;
-                                link.download = `image-${task.id}.png`;
-                                link.target = "_blank";
-                                document.body.appendChild(link);
-                                link.click();
-                                document.body.removeChild(link);
-                                // 间隔 500ms 避免浏览器阻止
-                                await new Promise(r => setTimeout(r, 500));
+                                // 构建代理URL
+                                const params = new URLSearchParams({
+                                  url: task.resultUrl,
+                                  filename,
+                                  ...(bestRoute && { route: bestRoute }),
+                                });
+                                const proxyUrl = `/api/download-proxy?${params}`;
+                                const response = await fetch(proxyUrl);
+                                
+                                if (response.ok) {
+                                  const blob = await response.blob();
+                                  const blobUrl = URL.createObjectURL(blob);
+                                  const link = document.createElement("a");
+                                  link.href = blobUrl;
+                                  link.download = filename;
+                                  document.body.appendChild(link);
+                                  link.click();
+                                  document.body.removeChild(link);
+                                  URL.revokeObjectURL(blobUrl);
+                                  successCount++;
+                                } else {
+                                  // 代理失败，尝试直接下载
+                                  const link = document.createElement("a");
+                                  link.href = task.resultUrl;
+                                  link.download = filename;
+                                  link.target = "_blank";
+                                  document.body.appendChild(link);
+                                  link.click();
+                                  document.body.removeChild(link);
+                                  successCount++;
+                                }
                               } catch (err) {
                                 console.error("Download failed:", err);
+                                failedCount++;
                               }
+                              
+                              setDownloadProgress(prev => ({
+                                ...prev,
+                                current: i + 1,
+                                success: successCount,
+                                failed: failedCount,
+                              }));
+                              
+                              // 间隔 600ms 避免浏览器阻止
+                              await new Promise(r => setTimeout(r, 600));
                             }
                           }
                           
                           setIsDownloading(false);
-                          toast({ title: `✅ 已触发 ${completedSelectedTasks.length} 张图片下载` });
+                          toast({ 
+                            title: `✅ 下载完成`,
+                            description: `成功 ${successCount} 张${failedCount > 0 ? `，失败 ${failedCount} 张` : ""}`,
+                          });
+                          
+                          // 3秒后关闭进度弹窗
+                          setTimeout(() => {
+                            setDownloadProgress(prev => ({ ...prev, show: false }));
+                          }, 3000);
                         }}
                         disabled={isDownloading}
                         className="h-8 text-xs text-emerald-400 border-emerald-400/30 hover:bg-emerald-400/10"
@@ -1325,6 +1413,52 @@ export default function ImageBatchPage() {
                 创建 {createCount > 1 ? `${createCount} 个任务` : "任务"}
               </Button>
             </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* 线路检测弹窗 */}
+        <SpeedTestDialog
+          open={showSpeedTest}
+          onClose={() => setShowSpeedTest(false)}
+          onComplete={(results) => {
+            const bestRoute = getBestRouteId(results);
+            if (bestRoute) {
+              toast({
+                title: "✅ 线路检测完成",
+                description: `推荐使用 ${results.find(r => r.routeId === bestRoute)?.routeId || bestRoute} 线路`,
+              });
+            }
+          }}
+        />
+
+        {/* 批量下载进度弹窗 */}
+        <Dialog open={downloadProgress.show} onOpenChange={(open) => !open && setDownloadProgress(prev => ({ ...prev, show: false }))}>
+          <DialogContent className="max-w-md bg-black/95 border-white/10">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                {downloadProgress.current >= downloadProgress.total ? (
+                  <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+                ) : (
+                  <Download className="h-5 w-5 text-tiktok-cyan animate-pulse" />
+                )}
+                {downloadProgress.current >= downloadProgress.total ? "下载完成" : "批量下载中"}
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <Progress 
+                value={(downloadProgress.current / downloadProgress.total) * 100} 
+                className="h-3"
+              />
+              <div className="flex justify-between text-sm text-muted-foreground">
+                <span>进度: {downloadProgress.current} / {downloadProgress.total}</span>
+                <span>成功: {downloadProgress.success} / 失败: {downloadProgress.failed}</span>
+              </div>
+              {downloadProgress.currentFilename && (
+                <div className="text-xs text-muted-foreground truncate">
+                  当前: {downloadProgress.currentFilename}
+                </div>
+              )}
+            </div>
           </DialogContent>
         </Dialog>
       </div>
