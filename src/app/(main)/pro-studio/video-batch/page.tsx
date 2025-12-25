@@ -1035,6 +1035,8 @@ export default function VideoBatchPage() {
   const [isDownloading, setIsDownloading] = useState(false);
   // 批量开始状态
   const [isBatchStarting, setIsBatchStarting] = useState(false);
+  // 单个下载进度状态
+  const [downloadingTaskId, setDownloadingTaskId] = useState<string | null>(null);
   
   // 生成简化文件名的辅助函数
   const generateSimpleFilename = useCallback((task: VideoBatchTask, index?: number) => {
@@ -1044,10 +1046,43 @@ export default function VideoBatchPage() {
     return `视频-${seq}-${aspectStr}-${durationStr}.mp4`;
   }, [tasks]);
   
-  // 直接下载视频（无弹窗）
-  const downloadVideo = useCallback(async (url: string, filename: string) => {
+  // 通过代理下载视频（解决CORS问题）
+  const downloadVideoViaProxy = useCallback(async (url: string, filename: string): Promise<boolean> => {
     try {
-      const response = await fetch(url);
+      const proxyUrl = `/api/download-proxy?url=${encodeURIComponent(url)}&filename=${encodeURIComponent(filename)}`;
+      const response = await fetch(proxyUrl);
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: "下载失败" }));
+        throw new Error(errorData.error || `下载失败: ${response.status}`);
+      }
+      
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = blobUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(blobUrl);
+      return true;
+    } catch (error) {
+      console.error("[Proxy Download] Failed:", error);
+      return false;
+    }
+  }, []);
+  
+  // 直接下载视频（备选方案，可能受CORS限制）
+  const downloadVideoDirect = useCallback(async (url: string, filename: string): Promise<boolean> => {
+    try {
+      // 设置超时控制
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30秒超时
+      
+      const response = await fetch(url, { signal: controller.signal });
+      clearTimeout(timeoutId);
+      
       if (!response.ok) throw new Error("下载失败");
       const blob = await response.blob();
       const blobUrl = URL.createObjectURL(blob);
@@ -1060,10 +1095,42 @@ export default function VideoBatchPage() {
       URL.revokeObjectURL(blobUrl);
       return true;
     } catch (error) {
-      console.error("Download failed:", error);
+      if (error instanceof Error && error.name === "AbortError") {
+        console.error("[Direct Download] Timeout");
+      } else {
+        console.error("[Direct Download] Failed:", error);
+      }
       return false;
     }
   }, []);
+  
+  // 在新窗口打开视频（最后备选方案）
+  const openVideoInNewTab = useCallback((url: string) => {
+    window.open(url, "_blank");
+  }, []);
+  
+  // 智能下载视频 - 自动选择最佳下载方式
+  const downloadVideo = useCallback(async (url: string, filename: string): Promise<boolean> => {
+    // 方案1：尝试通过代理下载（解决CORS问题）
+    console.log("[Download] Trying proxy download...");
+    let success = await downloadVideoViaProxy(url, filename);
+    if (success) {
+      console.log("[Download] Proxy download succeeded");
+      return true;
+    }
+    
+    // 方案2：尝试直接下载（如果代理失败）
+    console.log("[Download] Proxy failed, trying direct download...");
+    success = await downloadVideoDirect(url, filename);
+    if (success) {
+      console.log("[Download] Direct download succeeded");
+      return true;
+    }
+    
+    // 方案3：所有方式都失败，返回false让调用者决定是否打开新窗口
+    console.log("[Download] All download methods failed");
+    return false;
+  }, [downloadVideoViaProxy, downloadVideoDirect]);
   
   // 下载单个任务的视频
   const handleDownloadTask = useCallback(async (task: VideoBatchTask) => {
@@ -1071,15 +1138,29 @@ export default function VideoBatchPage() {
       toast({ variant: "destructive", title: "视频未生成" });
       return;
     }
+    
     const filename = generateSimpleFilename(task);
-    toast({ title: `正在下载: ${filename}` });
+    setDownloadingTaskId(task.id);
+    toast({ title: `🚀 正在下载: ${filename}`, description: "通过服务器代理下载中..." });
+    
     const success = await downloadVideo(task.soraVideoUrl, filename);
+    setDownloadingTaskId(null);
+    
     if (success) {
       toast({ title: `✅ 下载完成: ${filename}` });
     } else {
-      toast({ variant: "destructive", title: `下载失败: ${filename}` });
+      // 下载失败，提供在新窗口打开的选项
+      toast({ 
+        variant: "destructive", 
+        title: `下载失败: ${filename}`,
+        description: "正在尝试在新窗口打开视频...",
+      });
+      // 延迟一下再打开新窗口，让用户看到提示
+      setTimeout(() => {
+        openVideoInNewTab(task.soraVideoUrl!);
+      }, 1000);
     }
-  }, [downloadVideo, generateSimpleFilename, toast]);
+  }, [downloadVideo, generateSimpleFilename, toast, openVideoInNewTab]);
   
   // AI模特功能 - 使用 store 中的全局设置
   const useAiModel = globalSettings.useAiModel;
@@ -2096,23 +2177,51 @@ C07: [story CTA, inspiring, <50 chars]`,
                           }
                           
                           setIsDownloading(true);
-                          toast({ title: `🚀 正在下载 ${completedSelectedTasks.length} 个视频...` });
+                          toast({ 
+                            title: `🚀 开始批量下载 ${completedSelectedTasks.length} 个视频`,
+                            description: "通过服务器代理下载，请耐心等待..."
+                          });
                           
                           let successCount = 0;
-                          // 逐个使用 fetch blob 下载
+                          let failedCount = 0;
+                          
+                          // 逐个通过代理下载
                           for (let i = 0; i < completedSelectedTasks.length; i++) {
                             const task = completedSelectedTasks[i];
                             if (task.soraVideoUrl) {
                               const filename = generateSimpleFilename(task, tasks.indexOf(task));
+                              
+                              // 显示当前下载进度
+                              if (i > 0 && i % 3 === 0) {
+                                toast({ 
+                                  title: `📦 下载进度: ${i}/${completedSelectedTasks.length}`,
+                                  description: `已完成 ${successCount} 个，失败 ${failedCount} 个`
+                                });
+                              }
+                              
                               const success = await downloadVideo(task.soraVideoUrl, filename);
-                              if (success) successCount++;
-                              // 间隔 500ms 避免浏览器阻止
-                              await new Promise(r => setTimeout(r, 500));
+                              if (success) {
+                                successCount++;
+                              } else {
+                                failedCount++;
+                                // 下载失败的在新窗口打开
+                                openVideoInNewTab(task.soraVideoUrl);
+                              }
+                              // 间隔 800ms 避免服务器压力过大
+                              await new Promise(r => setTimeout(r, 800));
                             }
                           }
                           
                           setIsDownloading(false);
-                          toast({ title: `✅ 已下载 ${successCount}/${completedSelectedTasks.length} 个视频` });
+                          
+                          if (failedCount > 0) {
+                            toast({ 
+                              title: `📦 批量下载完成`,
+                              description: `成功 ${successCount} 个，${failedCount} 个已在新窗口打开`
+                            });
+                          } else {
+                            toast({ title: `✅ 全部下载完成: ${successCount} 个视频` });
+                          }
                         }}
                         disabled={isDownloading}
                         className="h-8 text-xs text-emerald-400 border-emerald-400/30 hover:bg-emerald-400/10"
