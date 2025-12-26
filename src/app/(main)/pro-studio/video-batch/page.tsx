@@ -69,6 +69,8 @@ import {
   UserCircle,
   Clock,
   Wifi,
+  FileDown,
+  Square,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -537,13 +539,13 @@ const VideoTaskCard = memo(function VideoTaskCard({
       <div
         onClick={onToggleSelect}
         className={cn(
-          "absolute top-3 left-3 z-10 flex h-5 w-5 items-center justify-center rounded border cursor-pointer transition-all",
+          "absolute top-2 left-2 z-10 flex h-8 w-8 items-center justify-center rounded-lg border-2 cursor-pointer transition-all group/checkbox",
           isSelected
-            ? "bg-tiktok-pink border-tiktok-pink text-white"
-            : "border-white/30 bg-black/50 hover:border-tiktok-pink/50"
+            ? "bg-tiktok-pink border-tiktok-pink text-white shadow-lg shadow-tiktok-pink/40"
+            : "border-white/40 bg-black/60 hover:border-tiktok-pink hover:bg-black/80 hover:scale-105"
         )}
       >
-        {isSelected && <Check className="h-3 w-3" />}
+        {isSelected && <Check className="h-4 w-4" />}
       </div>
 
       {/* 预览区 - 视频成功时显示视频缩略图，否则显示图片 */}
@@ -2386,91 +2388,146 @@ C07: [story CTA, inspiring, <50 chars]`,
                 
                 {selectedCount > 0 && (
                   <>
-                    {/* 批量下载选中的已完成任务 */}
+                    {/* 批量下载选中的已完成任务 - 下拉菜单提供两种方式 */}
                     {tasks.filter(t => selectedTaskIds[t.id] && t.status === "success" && t.soraVideoUrl).length > 0 && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={async () => {
-                          const completedSelectedTasks = tasks.filter(
-                            t => selectedTaskIds[t.id] && t.status === "success" && t.soraVideoUrl
-                          );
-                          if (completedSelectedTasks.length === 0) {
-                            toast({ variant: "destructive", title: "没有可下载的视频" });
-                            return;
-                          }
-                          
-                          // 重置取消标志
-                          cancelDownloadRef.current = false;
-                          
-                          // 初始化进度状态并显示对话框
-                          setDownloadProgress({
-                            show: true,
-                            total: completedSelectedTasks.length,
-                            current: 0,
-                            success: 0,
-                            failed: 0,
-                            currentFilename: "准备中...",
-                            startTime: Date.now(),
-                            cancelled: false,
-                          });
-                          setIsDownloading(true);
-                          
-                          let successCount = 0;
-                          let failedCount = 0;
-                          
-                          // 逐个通过代理下载
-                          for (let i = 0; i < completedSelectedTasks.length; i++) {
-                            // 检查是否取消
-                            if (cancelDownloadRef.current) {
-                              setDownloadProgress(prev => ({ ...prev, cancelled: true }));
-                              break;
-                            }
-                            
-                            const task = completedSelectedTasks[i];
-                            if (task.soraVideoUrl) {
-                              const filename = generateSimpleFilename(task, tasks.indexOf(task));
-                              
-                              // 更新当前下载文件名
-                              setDownloadProgress(prev => ({
-                                ...prev,
-                                currentFilename: filename,
-                              }));
-                              
-                              const success = await downloadVideo(task.soraVideoUrl, filename);
-                              if (success) {
-                                successCount++;
-                              } else {
-                                failedCount++;
-                                // 下载失败的在新窗口打开
-                                openVideoInNewTab(task.soraVideoUrl);
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={isDownloading}
+                            className="h-8 text-xs text-emerald-400 border-emerald-400/30 hover:bg-emerald-400/10"
+                          >
+                            {isDownloading ? (
+                              <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                            ) : (
+                              <Download className="h-3 w-3 mr-1" />
+                            )}
+                            下载选中 ({tasks.filter(t => selectedTaskIds[t.id] && t.status === "success" && t.soraVideoUrl).length})
+                            <ChevronDown className="h-3 w-3 ml-1" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-48">
+                          {/* 方式1: 直接下载视频 */}
+                          <DropdownMenuItem
+                            onClick={async () => {
+                              const completedSelectedTasks = tasks.filter(
+                                t => selectedTaskIds[t.id] && t.status === "success" && t.soraVideoUrl
+                              );
+                              if (completedSelectedTasks.length === 0) {
+                                toast({ variant: "destructive", title: "没有可下载的视频" });
+                                return;
                               }
                               
-                              // 更新进度状态
-                              setDownloadProgress(prev => ({
-                                ...prev,
-                                current: i + 1,
-                                success: successCount,
-                                failed: failedCount,
-                              }));
+                              // 重置取消标志
+                              cancelDownloadRef.current = false;
                               
-                              // 间隔 800ms 避免服务器压力过大
-                              await new Promise(r => setTimeout(r, 800));
-                            }
-                          }
+                              // 初始化进度状态并显示对话框
+                              setDownloadProgress({
+                                show: true,
+                                total: completedSelectedTasks.length,
+                                current: 0,
+                                success: 0,
+                                failed: 0,
+                                currentFilename: "准备中...",
+                                startTime: Date.now(),
+                                cancelled: false,
+                              });
+                              setIsDownloading(true);
+                              
+                              let successCount = 0;
+                              let failedCount = 0;
+                              
+                              // 逐个通过代理下载
+                              for (let i = 0; i < completedSelectedTasks.length; i++) {
+                                // 检查是否取消
+                                if (cancelDownloadRef.current) {
+                                  setDownloadProgress(prev => ({ ...prev, cancelled: true }));
+                                  break;
+                                }
+                                
+                                const task = completedSelectedTasks[i];
+                                if (task.soraVideoUrl) {
+                                  const filename = generateSimpleFilename(task, tasks.indexOf(task));
+                                  
+                                  // 更新当前下载文件名
+                                  setDownloadProgress(prev => ({
+                                    ...prev,
+                                    currentFilename: filename,
+                                  }));
+                                  
+                                  const success = await downloadVideo(task.soraVideoUrl, filename);
+                                  if (success) {
+                                    successCount++;
+                                  } else {
+                                    failedCount++;
+                                    // 下载失败的在新窗口打开
+                                    openVideoInNewTab(task.soraVideoUrl);
+                                  }
+                                  
+                                  // 更新进度状态
+                                  setDownloadProgress(prev => ({
+                                    ...prev,
+                                    current: i + 1,
+                                    success: successCount,
+                                    failed: failedCount,
+                                  }));
+                                  
+                                  // 间隔 800ms 避免服务器压力过大
+                                  await new Promise(r => setTimeout(r, 800));
+                                }
+                              }
+                              
+                              setIsDownloading(false);
+                            }}
+                            className="cursor-pointer"
+                          >
+                            <Download className="h-4 w-4 mr-2 text-emerald-400" />
+                            <span>直接下载视频</span>
+                          </DropdownMenuItem>
                           
-                          setIsDownloading(false);
-                        }}
-                        disabled={isDownloading}
-                        className="h-8 text-xs text-emerald-400 border-emerald-400/30 hover:bg-emerald-400/10"
-                      >
-                        {isDownloading ? (
-                          <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                        ) : (
-                          <Download className="h-3 w-3 mr-1" />
-                        )}
-                        下载选中 ({tasks.filter(t => selectedTaskIds[t.id] && t.status === "success" && t.soraVideoUrl).length})
-                      </Button>
+                          <DropdownMenuSeparator />
+                          
+                          {/* 方式2: 导出视频地址 */}
+                          <DropdownMenuItem
+                            onClick={() => {
+                              const completedSelectedTasks = tasks.filter(
+                                t => selectedTaskIds[t.id] && t.status === "success" && t.soraVideoUrl
+                              );
+                              if (completedSelectedTasks.length === 0) {
+                                toast({ variant: "destructive", title: "没有可下载的视频" });
+                                return;
+                              }
+                              
+                              // 生成视频地址列表
+                              const urls = completedSelectedTasks
+                                .map((task) => task.soraVideoUrl)
+                                .filter(Boolean)
+                                .join("\n");
+                              
+                              // 创建并下载 TXT 文件
+                              const blob = new Blob([urls], { type: "text/plain;charset=utf-8" });
+                              const url = URL.createObjectURL(blob);
+                              const a = document.createElement("a");
+                              a.href = url;
+                              a.download = `video_urls_${new Date().toISOString().slice(0, 10)}.txt`;
+                              document.body.appendChild(a);
+                              a.click();
+                              document.body.removeChild(a);
+                              URL.revokeObjectURL(url);
+                              
+                              toast({ 
+                                title: "✅ 导出成功",
+                                description: `已导出 ${completedSelectedTasks.length} 个视频地址`
+                              });
+                            }}
+                            className="cursor-pointer"
+                          >
+                            <FileDown className="h-4 w-4 mr-2 text-blue-400" />
+                            <span>导出视频地址 (TXT)</span>
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     )}
                     <Button
                       variant="outline"
@@ -2834,6 +2891,77 @@ C07: [story CTA, inspiring, <50 chars]`,
                 <span className="text-xs text-muted-foreground">
                   最多 300 个 | {createMode === "image" ? "创建多个相同素材的任务" : "创建多个相同提示词的任务"}
                 </span>
+              </div>
+
+              {/* 视频参数配置摘要 - 优化显示 */}
+              <div className="p-4 rounded-xl bg-gradient-to-br from-slate-800/50 to-slate-900/50 border border-slate-700/50">
+                <div className="flex items-center gap-2 mb-3">
+                  <Settings2 className="h-4 w-4 text-tiktok-cyan" />
+                  <span className="text-sm font-medium text-white">视频参数配置</span>
+                  <span className="text-xs text-muted-foreground">(在上方全局配置中修改)</span>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  {/* 视频模型 */}
+                  <div className="flex items-center gap-3 p-2.5 rounded-lg bg-slate-800/50">
+                    <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-purple-500/20 flex items-center justify-center">
+                      <Film className="h-4 w-4 text-purple-400" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-[10px] text-muted-foreground uppercase tracking-wider">模型</p>
+                      <p className="text-sm font-semibold text-white truncate">
+                        {globalSettings.modelType === "sora2" ? "Sora 2.0" : "Sora 2.0 Pro"}
+                      </p>
+                    </div>
+                  </div>
+                  
+                  {/* 视频时长 */}
+                  <div className="flex items-center gap-3 p-2.5 rounded-lg bg-slate-800/50">
+                    <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-tiktok-cyan/20 flex items-center justify-center">
+                      <Clock className="h-4 w-4 text-tiktok-cyan" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-[10px] text-muted-foreground uppercase tracking-wider">时长</p>
+                      <p className="text-sm font-semibold text-white">
+                        {globalSettings.duration} 秒
+                      </p>
+                    </div>
+                  </div>
+                  
+                  {/* 视频比例 */}
+                  <div className="flex items-center gap-3 p-2.5 rounded-lg bg-slate-800/50">
+                    <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-emerald-500/20 flex items-center justify-center">
+                      {globalSettings.aspectRatio === "16:9" ? (
+                        <Monitor className="h-4 w-4 text-emerald-400" />
+                      ) : globalSettings.aspectRatio === "9:16" ? (
+                        <Smartphone className="h-4 w-4 text-emerald-400" />
+                      ) : (
+                        <Square className="h-4 w-4 text-emerald-400" />
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-[10px] text-muted-foreground uppercase tracking-wider">比例</p>
+                      <p className="text-sm font-semibold text-white">
+                        {globalSettings.aspectRatio === "16:9" ? "横屏 16:9" : 
+                         globalSettings.aspectRatio === "9:16" ? "竖屏 9:16" : "方形 1:1"}
+                      </p>
+                    </div>
+                  </div>
+                  
+                  {/* AI模特 */}
+                  <div className="flex items-center gap-3 p-2.5 rounded-lg bg-slate-800/50">
+                    <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-pink-500/20 flex items-center justify-center">
+                      <UserCircle className="h-4 w-4 text-pink-400" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-[10px] text-muted-foreground uppercase tracking-wider">AI模特</p>
+                      <p className="text-sm font-semibold text-white truncate">
+                        {useAiModel && selectedModelTriggerWord 
+                          ? (selectedModelName || selectedModelTriggerWord) 
+                          : "未选择"}
+                      </p>
+                    </div>
+                  </div>
+                </div>
               </div>
 
               {/* AI模特配置提示 */}
