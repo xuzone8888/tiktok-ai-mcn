@@ -2451,8 +2451,8 @@ C07: [story CTA, inspiring, <50 chars]`,
                             <ChevronDown className="h-3 w-3 ml-1" />
                           </Button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-56">
-                          {/* 方式1: 极速下载 - 直连CDN */}
+                        <DropdownMenuContent align="end" className="w-64">
+                          {/* 方式1: 直链下载 - 直接打开CDN地址（最快） */}
                           <DropdownMenuItem
                             onClick={async () => {
                               const completedSelectedTasks = tasks.filter(
@@ -2463,75 +2463,42 @@ C07: [story CTA, inspiring, <50 chars]`,
                                 return;
                               }
                               
-                              // 重置取消标志
-                              cancelDownloadRef.current = false;
-                              
-                              // 初始化进度状态
-                              setDownloadProgress({
-                                show: true,
-                                total: completedSelectedTasks.length,
-                                current: 0,
-                                success: 0,
-                                failed: 0,
-                                currentFilename: "准备中...",
-                                startTime: Date.now(),
-                                cancelled: false,
+                              toast({ 
+                                title: `🚀 直链下载`,
+                                description: `正在打开 ${completedSelectedTasks.length} 个视频，请在弹出页面右键"另存为"或等待自动下载`
                               });
-                              setIsDownloading(true);
                               
-                              let successCount = 0;
-                              let failedCount = 0;
-                              
-                              // 逐个下载（优先直连CDN，失败则自动回退代理）
+                              // 直接打开 CDN 链接，让浏览器原生处理
+                              // 这是最快的方式，和生产队的驴一样
                               for (let i = 0; i < completedSelectedTasks.length; i++) {
-                                if (cancelDownloadRef.current) {
-                                  setDownloadProgress(prev => ({ ...prev, cancelled: true }));
-                                  break;
-                                }
-                                
                                 const task = completedSelectedTasks[i];
                                 if (task.soraVideoUrl) {
-                                  const filename = generateSimpleFilename(task, tasks.indexOf(task));
+                                  // 使用 <a> 标签尝试触发下载
+                                  const link = document.createElement("a");
+                                  link.href = task.soraVideoUrl;
+                                  link.target = "_blank";
+                                  link.rel = "noopener noreferrer";
+                                  document.body.appendChild(link);
+                                  link.click();
+                                  document.body.removeChild(link);
                                   
-                                  setDownloadProgress(prev => ({
-                                    ...prev,
-                                    currentFilename: filename,
-                                  }));
-                                  
-                                  // 使用智能下载（优先直连CDN，失败回退代理）
-                                  const success = await downloadVideo(task.soraVideoUrl, filename, "fast");
-                                  if (success) {
-                                    successCount++;
-                                  } else {
-                                    failedCount++;
-                                  }
-                                  
-                                  setDownloadProgress(prev => ({
-                                    ...prev,
-                                    current: i + 1,
-                                    success: successCount,
-                                    failed: failedCount,
-                                  }));
-                                  
-                                  // 间隔 500ms 避免请求过快
-                                  await new Promise(r => setTimeout(r, 500));
+                                  // 间隔 400ms 避免浏览器拦截弹窗
+                                  await new Promise(r => setTimeout(r, 400));
                                 }
                               }
-                              
-                              setIsDownloading(false);
                             }}
                             className="cursor-pointer"
                           >
                             <Zap className="h-4 w-4 mr-2 text-yellow-400" />
                             <div className="flex flex-col">
-                              <span>极速下载（直连CDN）</span>
-                              <span className="text-xs text-muted-foreground">自动选择最快线路</span>
+                              <span>直链下载（最快⚡）</span>
+                              <span className="text-xs text-muted-foreground">直接打开CDN，右键另存为</span>
                             </div>
                           </DropdownMenuItem>
                           
                           <DropdownMenuSeparator />
                           
-                          {/* 方式2: 命名下载 - 走代理 */}
+                          {/* 方式2: 代理下载 - 走服务器 */}
                           <DropdownMenuItem
                             onClick={async () => {
                               const completedSelectedTasks = tasks.filter(
@@ -2607,8 +2574,8 @@ C07: [story CTA, inspiring, <50 chars]`,
                           >
                             <Download className="h-4 w-4 mr-2 text-emerald-400" />
                             <div className="flex flex-col">
-                              <span>命名下载（走代理）</span>
-                              <span className="text-xs text-muted-foreground">可指定文件名，速度较慢</span>
+                              <span>代理下载（可命名）</span>
+                              <span className="text-xs text-muted-foreground">经服务器中转，速度较慢</span>
                             </div>
                           </DropdownMenuItem>
                           
