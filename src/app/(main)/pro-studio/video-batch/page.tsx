@@ -1290,6 +1290,45 @@ export default function VideoBatchPage() {
     window.open(url, "_blank");
   }, []);
   
+  // 极速下载 - 前端直接 fetch CDN + blob（绕过服务器，直连CDN）
+  const downloadFastViaCDN = useCallback(async (url: string, filename: string): Promise<boolean> => {
+    try {
+      console.log("[Fast Download] Fetching from CDN directly...");
+      
+      // 直接 fetch CDN（不经过我们的服务器）
+      const response = await fetch(url, {
+        mode: "cors",
+        credentials: "omit",
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      
+      // 将响应转换为 blob
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      
+      // 使用 <a> 标签触发下载
+      const link = document.createElement("a");
+      link.href = blobUrl;
+      link.download = filename;
+      link.style.display = "none";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      // 清理 blob URL
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+      
+      console.log("[Fast Download] Success via direct CDN fetch");
+      return true;
+    } catch (error) {
+      console.warn("[Fast Download] CDN fetch failed (likely CORS), will fallback to proxy:", error);
+      return false;
+    }
+  }, []);
+  
   // 智能下载视频 - 优先直连CDN，速度最快
   const downloadVideo = useCallback(async (url: string, filename: string, mode: "fast" | "named" = "fast"): Promise<boolean> => {
     if (mode === "named") {
@@ -1298,14 +1337,19 @@ export default function VideoBatchPage() {
       return await downloadVideoViaProxy(url, filename);
     }
     
-    // 极速下载模式：直连CDN，速度最快
-    console.log("[Download] Fast mode: direct CDN connection...");
+    // 极速下载模式：优先尝试直连CDN
+    console.log("[Download] Fast mode: trying direct CDN fetch...");
     
-    // 直接在新窗口打开CDN链接，让浏览器原生下载
-    // 这样完全绕过我们的服务器，直接利用CDN的高速带宽
-    window.open(url, "_blank");
-    return true;
-  }, [downloadVideoViaProxy]);
+    // 先尝试直接 fetch CDN（速度最快）
+    const fastSuccess = await downloadFastViaCDN(url, filename);
+    if (fastSuccess) {
+      return true;
+    }
+    
+    // 如果直连失败（CORS问题），回退到代理下载
+    console.log("[Download] Falling back to proxy download...");
+    return await downloadVideoViaProxy(url, filename);
+  }, [downloadVideoViaProxy, downloadFastViaCDN]);
   
   // 下载单个任务的视频
   const handleDownloadTask = useCallback(async (task: VideoBatchTask, mode: "fast" | "named" = "fast") => {
@@ -1319,20 +1363,25 @@ export default function VideoBatchPage() {
     
     if (mode === "fast") {
       toast({ 
-        title: `🚀 极速下载`, 
-        description: `正在直连CDN下载，速度最快！` 
+        title: `🚀 极速下载中...`, 
+        description: `正在直连CDN获取视频` 
       });
     } else {
       toast({ 
         title: `📁 命名下载`, 
-        description: `正在下载: ${filename}（速度较慢）` 
+        description: `正在下载: ${filename}（通过代理）` 
       });
     }
     
     const success = await downloadVideo(task.soraVideoUrl, filename, mode);
     setDownloadingTaskId(null);
     
-    if (!success) {
+    if (success) {
+      toast({ 
+        title: `✅ 下载成功`,
+        description: filename,
+      });
+    } else {
       toast({ 
         variant: "destructive", 
         title: `下载失败`,
@@ -2383,27 +2432,69 @@ C07: [story CTA, inspiring, <50 chars]`,
                                 return;
                               }
                               
-                              toast({ 
-                                title: `🚀 极速下载`,
-                                description: `正在打开 ${completedSelectedTasks.length} 个视频直链...`
-                              });
+                              // 重置取消标志
+                              cancelDownloadRef.current = false;
                               
-                              // 直接打开所有 CDN 链接，让浏览器原生下载
-                              // 每个间隔 300ms 避免浏览器拦截
+                              // 初始化进度状态
+                              setDownloadProgress({
+                                show: true,
+                                total: completedSelectedTasks.length,
+                                current: 0,
+                                success: 0,
+                                failed: 0,
+                                currentFilename: "准备中...",
+                                startTime: Date.now(),
+                                cancelled: false,
+                              });
+                              setIsDownloading(true);
+                              
+                              let successCount = 0;
+                              let failedCount = 0;
+                              
+                              // 逐个下载（优先直连CDN，失败则自动回退代理）
                               for (let i = 0; i < completedSelectedTasks.length; i++) {
+                                if (cancelDownloadRef.current) {
+                                  setDownloadProgress(prev => ({ ...prev, cancelled: true }));
+                                  break;
+                                }
+                                
                                 const task = completedSelectedTasks[i];
                                 if (task.soraVideoUrl) {
-                                  window.open(task.soraVideoUrl, "_blank");
-                                  await new Promise(r => setTimeout(r, 300));
+                                  const filename = generateSimpleFilename(task, tasks.indexOf(task));
+                                  
+                                  setDownloadProgress(prev => ({
+                                    ...prev,
+                                    currentFilename: filename,
+                                  }));
+                                  
+                                  // 使用智能下载（优先直连CDN，失败回退代理）
+                                  const success = await downloadVideo(task.soraVideoUrl, filename, "fast");
+                                  if (success) {
+                                    successCount++;
+                                  } else {
+                                    failedCount++;
+                                  }
+                                  
+                                  setDownloadProgress(prev => ({
+                                    ...prev,
+                                    current: i + 1,
+                                    success: successCount,
+                                    failed: failedCount,
+                                  }));
+                                  
+                                  // 间隔 500ms 避免请求过快
+                                  await new Promise(r => setTimeout(r, 500));
                                 }
                               }
+                              
+                              setIsDownloading(false);
                             }}
                             className="cursor-pointer"
                           >
                             <Zap className="h-4 w-4 mr-2 text-yellow-400" />
                             <div className="flex flex-col">
                               <span>极速下载（直连CDN）</span>
-                              <span className="text-xs text-muted-foreground">速度最快，文件名随机</span>
+                              <span className="text-xs text-muted-foreground">自动选择最快线路</span>
                             </div>
                           </DropdownMenuItem>
                           
