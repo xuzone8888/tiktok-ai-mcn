@@ -3,32 +3,21 @@ import { NextRequest, NextResponse } from "next/server";
 /**
  * 视频下载代理 API
  * 
- * 解决前端直接 fetch 第三方视频URL时的CORS问题
- * 通过服务器代理下载，提供更稳定的下载体验
- * 支持多线路选择优化下载速度
+ * 使用流式代理（Stream Pipe）模式：
+ * - 服务器作为管道，直接转发源站数据流
+ * - 不会把整个视频加载到内存，延迟低
+ * - 能正确设置文件名和下载头
  */
 
 export const runtime = "nodejs";
-export const maxDuration = 60; // 最大执行时间60秒
-
-// 线路配置 - 不同CDN节点
-const ROUTE_CONFIGS: Record<string, { description: string; priority: number }> = {
-  default: { description: "默认线路", priority: 1 },
-  telecom: { description: "电信优化", priority: 2 },
-  unicom: { description: "联通优化", priority: 3 },
-  mobile: { description: "移动优化", priority: 4 },
-  backup: { description: "备用线路", priority: 5 },
-};
+export const maxDuration = 120; // 最大执行时间120秒，适合大文件
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const videoUrl = searchParams.get("url");
   const filename = searchParams.get("filename") || "video.mp4";
-  const routeId = searchParams.get("route") || "default"; // 线路选择参数
   
-  // 记录使用的线路
-  const routeConfig = ROUTE_CONFIGS[routeId] || ROUTE_CONFIGS.default;
-  console.log(`[Download Proxy] Using route: ${routeId} (${routeConfig.description})`);
+  console.log(`[Download Proxy] Request for: ${filename}`);
 
   if (!videoUrl) {
     return NextResponse.json(
@@ -71,18 +60,59 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    console.log("[Download Proxy] Redirecting to:", videoUrl.substring(0, 100) + "...");
+    console.log("[Download Proxy] Fetching stream from:", videoUrl.substring(0, 100) + "...");
     
-    // 方案 1: 直接重定向 (302)
-    // 这种方式最快，利用源站 CDN 的原始带宽
-    // 缺点是可能无法强制重命名，但可以通过 302 解决大部分 CORS 问题
-    return NextResponse.redirect(videoUrl, {
-      status: 302,
+    // 使用流式代理 - 直接转发源站的响应流
+    const response = await fetch(videoUrl, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "Accept": "*/*",
+      },
+    });
+
+    if (!response.ok) {
+      console.error("[Download Proxy] Upstream error:", response.status, response.statusText);
+      return NextResponse.json(
+        { error: `视频源服务器错误: ${response.status}` },
+        { status: 502 }
+      );
+    }
+
+    // 获取内容类型和大小
+    const contentType = response.headers.get("content-type") || "video/mp4";
+    const contentLength = response.headers.get("content-length");
+
+    console.log("[Download Proxy] Streaming:", {
+      contentType,
+      contentLength: contentLength ? `${Math.round(parseInt(contentLength) / 1024 / 1024)}MB` : "unknown",
+      filename,
+    });
+
+    // 构建响应头
+    const headers: HeadersInit = {
+      "Content-Type": contentType,
+      "Content-Disposition": `attachment; filename="${encodeURIComponent(filename)}"`,
+      "Cache-Control": "no-cache",
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "GET, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type",
+    };
+
+    // 如果有内容长度，添加到头中（让浏览器显示下载进度）
+    if (contentLength) {
+      headers["Content-Length"] = contentLength;
+    }
+
+    // 直接返回源站的响应体（流式传输）
+    // response.body 是一个 ReadableStream，会被直接管道传输给客户端
+    return new NextResponse(response.body, {
+      status: 200,
+      headers,
     });
   } catch (error) {
     console.error("[Download Proxy] Error:", error);
     return NextResponse.json(
-      { error: "下载重定向失败，请尝试直接下载" },
+      { error: "下载失败，请稍后重试" },
       { status: 500 }
     );
   }
