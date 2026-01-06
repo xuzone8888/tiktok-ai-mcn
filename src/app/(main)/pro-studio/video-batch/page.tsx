@@ -71,6 +71,7 @@ import {
   Wifi,
   FileDown,
   Square,
+  Zap,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -1290,30 +1291,25 @@ export default function VideoBatchPage() {
     window.open(url, "_blank");
   }, []);
   
-  // 智能下载视频 - 自动选择最佳线路和下载方式
-  const downloadVideo = useCallback(async (url: string, filename: string): Promise<boolean> => {
-    // 检查是否为生产队的驴 (scd666.com) 的地址
-    const isScd = url.includes("scd666.com");
-    
-    if (isScd) {
-      console.log("[Download] Detected SCD666 (驴) source, using direct CDN path...");
-      // 如果是驴的地址，直接走代理重定向，这样最稳定且快
+  // 智能下载视频 - 优先直连CDN，速度最快
+  const downloadVideo = useCallback(async (url: string, filename: string, mode: "fast" | "named" = "fast"): Promise<boolean> => {
+    if (mode === "named") {
+      // 命名下载模式：走代理，可以指定文件名，但较慢
+      console.log("[Download] Named mode: using proxy for custom filename...");
       return await downloadVideoViaProxy(url, filename);
     }
-
-    // 方案1：尝试通过代理下载
-    let success = await downloadVideoViaProxy(url, filename);
-    if (success) return true;
     
-    // 方案2：尝试直接下载
-    success = await downloadVideoDirect(url, filename);
-    if (success) return true;
+    // 极速下载模式：直连CDN，速度最快
+    console.log("[Download] Fast mode: direct CDN connection...");
     
-    return false;
-  }, [downloadVideoViaProxy, downloadVideoDirect]);
+    // 直接在新窗口打开CDN链接，让浏览器原生下载
+    // 这样完全绕过我们的服务器，直接利用CDN的高速带宽
+    window.open(url, "_blank");
+    return true;
+  }, [downloadVideoViaProxy]);
   
   // 下载单个任务的视频
-  const handleDownloadTask = useCallback(async (task: VideoBatchTask) => {
+  const handleDownloadTask = useCallback(async (task: VideoBatchTask, mode: "fast" | "named" = "fast") => {
     if (!task.soraVideoUrl) {
       toast({ variant: "destructive", title: "视频未生成" });
       return;
@@ -1322,28 +1318,29 @@ export default function VideoBatchPage() {
     const filename = generateSimpleFilename(task);
     setDownloadingTaskId(task.id);
     
-    // 更新提示语
-    toast({ 
-      title: `🚀 启动高速下载`, 
-      description: `正在通过 CDN 优选线路下载: ${filename}` 
-    });
-    
-    const success = await downloadVideo(task.soraVideoUrl, filename);
-    setDownloadingTaskId(null);
-    
-    if (success) {
-      toast({ title: `✅ 已调起下载任务` });
+    if (mode === "fast") {
+      toast({ 
+        title: `🚀 极速下载`, 
+        description: `正在直连CDN下载，速度最快！` 
+      });
     } else {
       toast({ 
+        title: `📁 命名下载`, 
+        description: `正在下载: ${filename}（速度较慢）` 
+      });
+    }
+    
+    const success = await downloadVideo(task.soraVideoUrl, filename, mode);
+    setDownloadingTaskId(null);
+    
+    if (!success) {
+      toast({ 
         variant: "destructive", 
-        title: `下载失败: ${filename}`,
+        title: `下载失败`,
         description: "请尝试右键视频另存为...",
       });
-      setTimeout(() => {
-        openVideoInNewTab(task.soraVideoUrl!);
-      }, 500);
     }
-  }, [downloadVideo, generateSimpleFilename, toast, openVideoInNewTab]);
+  }, [downloadVideo, generateSimpleFilename, toast]);
   
   // AI模特功能 - 使用 store 中的全局设置
   const useAiModel = globalSettings.useAiModel;
@@ -2375,8 +2372,45 @@ C07: [story CTA, inspiring, <50 chars]`,
                             <ChevronDown className="h-3 w-3 ml-1" />
                           </Button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-48">
-                          {/* 方式1: 直接下载视频 */}
+                        <DropdownMenuContent align="end" className="w-56">
+                          {/* 方式1: 极速下载 - 直连CDN */}
+                          <DropdownMenuItem
+                            onClick={async () => {
+                              const completedSelectedTasks = tasks.filter(
+                                t => selectedTaskIds[t.id] && t.status === "success" && t.soraVideoUrl
+                              );
+                              if (completedSelectedTasks.length === 0) {
+                                toast({ variant: "destructive", title: "没有可下载的视频" });
+                                return;
+                              }
+                              
+                              toast({ 
+                                title: `🚀 极速下载`,
+                                description: `正在打开 ${completedSelectedTasks.length} 个视频直链...`
+                              });
+                              
+                              // 直接打开所有 CDN 链接，让浏览器原生下载
+                              // 每个间隔 300ms 避免浏览器拦截
+                              for (let i = 0; i < completedSelectedTasks.length; i++) {
+                                const task = completedSelectedTasks[i];
+                                if (task.soraVideoUrl) {
+                                  window.open(task.soraVideoUrl, "_blank");
+                                  await new Promise(r => setTimeout(r, 300));
+                                }
+                              }
+                            }}
+                            className="cursor-pointer"
+                          >
+                            <Zap className="h-4 w-4 mr-2 text-yellow-400" />
+                            <div className="flex flex-col">
+                              <span>极速下载（直连CDN）</span>
+                              <span className="text-xs text-muted-foreground">速度最快，文件名随机</span>
+                            </div>
+                          </DropdownMenuItem>
+                          
+                          <DropdownMenuSeparator />
+                          
+                          {/* 方式2: 命名下载 - 走代理 */}
                           <DropdownMenuItem
                             onClick={async () => {
                               const completedSelectedTasks = tasks.filter(
@@ -2424,7 +2458,7 @@ C07: [story CTA, inspiring, <50 chars]`,
                                     currentFilename: filename,
                                   }));
                                   
-                                  const success = await downloadVideo(task.soraVideoUrl, filename);
+                                  const success = await downloadVideo(task.soraVideoUrl, filename, "named");
                                   if (success) {
                                     successCount++;
                                   } else {
@@ -2451,12 +2485,15 @@ C07: [story CTA, inspiring, <50 chars]`,
                             className="cursor-pointer"
                           >
                             <Download className="h-4 w-4 mr-2 text-emerald-400" />
-                            <span>直接下载视频</span>
+                            <div className="flex flex-col">
+                              <span>命名下载（走代理）</span>
+                              <span className="text-xs text-muted-foreground">可指定文件名，速度较慢</span>
+                            </div>
                           </DropdownMenuItem>
                           
                           <DropdownMenuSeparator />
                           
-                          {/* 方式2: 导出视频地址 */}
+                          {/* 方式3: 导出视频地址 */}
                           <DropdownMenuItem
                             onClick={() => {
                               const completedSelectedTasks = tasks.filter(
