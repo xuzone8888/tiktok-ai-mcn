@@ -1054,10 +1054,10 @@ function DownloadProgressDialog({ progress, onCancel, onClose }: DownloadProgres
           </DialogTitle>
           <DialogDescription>
             {isComplete 
-              ? `成功下载 ${progress.success} 个视频${progress.failed > 0 ? `，${progress.failed} 个失败` : ""}`
+              ? `成功调起 ${progress.success} 个下载任务${progress.failed > 0 ? `，${progress.failed} 个失败` : ""}，请在浏览器下载列表查看进度`
               : progress.cancelled 
-                ? `已下载 ${progress.success} 个视频`
-                : "正在通过服务器代理下载，请勿关闭此窗口"
+                ? `已调起 ${progress.success} 个下载任务`
+                : "正在调起下载任务，实际下载进度请查看浏览器下载列表"
             }
           </DialogDescription>
         </DialogHeader>
@@ -2452,7 +2452,87 @@ C07: [story CTA, inspiring, <50 chars]`,
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="w-64">
-                          {/* 方式1: 直链下载 - 直接打开CDN地址（最快） */}
+                          {/* 方式1: 复制地址到剪贴板（推荐！） */}
+                          <DropdownMenuItem
+                            onClick={async () => {
+                              const completedSelectedTasks = tasks.filter(
+                                t => selectedTaskIds[t.id] && t.status === "success" && t.soraVideoUrl
+                              );
+                              if (completedSelectedTasks.length === 0) {
+                                toast({ variant: "destructive", title: "没有可下载的视频" });
+                                return;
+                              }
+                              
+                              // 生成视频地址列表
+                              const urls = completedSelectedTasks
+                                .map((task) => task.soraVideoUrl)
+                                .filter(Boolean)
+                                .join("\n");
+                              
+                              // 复制到剪贴板
+                              await navigator.clipboard.writeText(urls);
+                              
+                              toast({ 
+                                title: "✅ 已复制到剪贴板",
+                                description: `${completedSelectedTasks.length} 个视频地址已复制，请粘贴到 IDM/迅雷 批量下载`
+                              });
+                            }}
+                            className="cursor-pointer bg-gradient-to-r from-tiktok-cyan/10 to-tiktok-pink/10"
+                          >
+                            <Copy className="h-4 w-4 mr-2 text-tiktok-cyan" />
+                            <div className="flex flex-col">
+                              <span className="font-medium">复制地址（推荐⭐）</span>
+                              <span className="text-xs text-muted-foreground">粘贴到 IDM/迅雷，极速下载</span>
+                            </div>
+                          </DropdownMenuItem>
+                          
+                          <DropdownMenuSeparator />
+                          
+                          {/* 方式2: 导出视频地址 TXT */}
+                          <DropdownMenuItem
+                            onClick={() => {
+                              const completedSelectedTasks = tasks.filter(
+                                t => selectedTaskIds[t.id] && t.status === "success" && t.soraVideoUrl
+                              );
+                              if (completedSelectedTasks.length === 0) {
+                                toast({ variant: "destructive", title: "没有可下载的视频" });
+                                return;
+                              }
+                              
+                              // 生成视频地址列表
+                              const urls = completedSelectedTasks
+                                .map((task) => task.soraVideoUrl)
+                                .filter(Boolean)
+                                .join("\n");
+                              
+                              // 创建并下载 TXT 文件
+                              const blob = new Blob([urls], { type: "text/plain;charset=utf-8" });
+                              const url = URL.createObjectURL(blob);
+                              const a = document.createElement("a");
+                              a.href = url;
+                              a.download = `video_urls_${new Date().toISOString().slice(0, 10)}.txt`;
+                              document.body.appendChild(a);
+                              a.click();
+                              document.body.removeChild(a);
+                              URL.revokeObjectURL(url);
+                              
+                              toast({ 
+                                title: "✅ 导出成功",
+                                description: `已导出 ${completedSelectedTasks.length} 个视频地址，用 IDM 导入下载`
+                              });
+                            }}
+                            className="cursor-pointer"
+                          >
+                            <FileDown className="h-4 w-4 mr-2 text-blue-400" />
+                            <div className="flex flex-col">
+                              <span>导出地址 (TXT)</span>
+                              <span className="text-xs text-muted-foreground">导入 IDM/迅雷 批量下载</span>
+                            </div>
+                          </DropdownMenuItem>
+                          
+                          <DropdownMenuSeparator />
+                          
+                          {/* 方式3: 直链下载 - 直接打开CDN地址 */}
                           <DropdownMenuItem
                             onClick={async () => {
                               const completedSelectedTasks = tasks.filter(
@@ -2464,16 +2544,14 @@ C07: [story CTA, inspiring, <50 chars]`,
                               }
                               
                               toast({ 
-                                title: `🚀 直链下载`,
-                                description: `正在打开 ${completedSelectedTasks.length} 个视频，请在弹出页面右键"另存为"或等待自动下载`
+                                title: `🔗 打开直链`,
+                                description: `正在打开 ${completedSelectedTasks.length} 个视频，请右键"视频另存为"`
                               });
                               
-                              // 直接打开 CDN 链接，让浏览器原生处理
-                              // 这是最快的方式，和生产队的驴一样
+                              // 直接打开 CDN 链接
                               for (let i = 0; i < completedSelectedTasks.length; i++) {
                                 const task = completedSelectedTasks[i];
                                 if (task.soraVideoUrl) {
-                                  // 使用 <a> 标签尝试触发下载
                                   const link = document.createElement("a");
                                   link.href = task.soraVideoUrl;
                                   link.target = "_blank";
@@ -2481,8 +2559,6 @@ C07: [story CTA, inspiring, <50 chars]`,
                                   document.body.appendChild(link);
                                   link.click();
                                   document.body.removeChild(link);
-                                  
-                                  // 间隔 400ms 避免浏览器拦截弹窗
                                   await new Promise(r => setTimeout(r, 400));
                                 }
                               }
@@ -2491,14 +2567,14 @@ C07: [story CTA, inspiring, <50 chars]`,
                           >
                             <Zap className="h-4 w-4 mr-2 text-yellow-400" />
                             <div className="flex flex-col">
-                              <span>直链下载（最快⚡）</span>
-                              <span className="text-xs text-muted-foreground">直接打开CDN，右键另存为</span>
+                              <span>打开直链</span>
+                              <span className="text-xs text-muted-foreground">右键视频"另存为"下载</span>
                             </div>
                           </DropdownMenuItem>
                           
                           <DropdownMenuSeparator />
                           
-                          {/* 方式2: 代理下载 - 走服务器 */}
+                          {/* 方式4: 代理下载 - 走服务器 */}
                           <DropdownMenuItem
                             onClick={async () => {
                               const completedSelectedTasks = tasks.filter(
@@ -2551,7 +2627,6 @@ C07: [story CTA, inspiring, <50 chars]`,
                                     successCount++;
                                   } else {
                                     failedCount++;
-                                    // 下载失败的在新窗口打开
                                     openVideoInNewTab(task.soraVideoUrl);
                                   }
                                   
@@ -2572,52 +2647,11 @@ C07: [story CTA, inspiring, <50 chars]`,
                             }}
                             className="cursor-pointer"
                           >
-                            <Download className="h-4 w-4 mr-2 text-emerald-400" />
+                            <Download className="h-4 w-4 mr-2 text-muted-foreground" />
                             <div className="flex flex-col">
-                              <span>代理下载（可命名）</span>
-                              <span className="text-xs text-muted-foreground">经服务器中转，速度较慢</span>
+                              <span className="text-muted-foreground">代理下载（慢）</span>
+                              <span className="text-xs text-muted-foreground">经服务器中转，带宽有限</span>
                             </div>
-                          </DropdownMenuItem>
-                          
-                          <DropdownMenuSeparator />
-                          
-                          {/* 方式3: 导出视频地址 */}
-                          <DropdownMenuItem
-                            onClick={() => {
-                              const completedSelectedTasks = tasks.filter(
-                                t => selectedTaskIds[t.id] && t.status === "success" && t.soraVideoUrl
-                              );
-                              if (completedSelectedTasks.length === 0) {
-                                toast({ variant: "destructive", title: "没有可下载的视频" });
-                                return;
-                              }
-                              
-                              // 生成视频地址列表
-                              const urls = completedSelectedTasks
-                                .map((task) => task.soraVideoUrl)
-                                .filter(Boolean)
-                                .join("\n");
-                              
-                              // 创建并下载 TXT 文件
-                              const blob = new Blob([urls], { type: "text/plain;charset=utf-8" });
-                              const url = URL.createObjectURL(blob);
-                              const a = document.createElement("a");
-                              a.href = url;
-                              a.download = `video_urls_${new Date().toISOString().slice(0, 10)}.txt`;
-                              document.body.appendChild(a);
-                              a.click();
-                              document.body.removeChild(a);
-                              URL.revokeObjectURL(url);
-                              
-                              toast({ 
-                                title: "✅ 导出成功",
-                                description: `已导出 ${completedSelectedTasks.length} 个视频地址`
-                              });
-                            }}
-                            className="cursor-pointer"
-                          >
-                            <FileDown className="h-4 w-4 mr-2 text-blue-400" />
-                            <span>导出视频地址 (TXT)</span>
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
