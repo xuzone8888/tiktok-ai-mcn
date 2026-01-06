@@ -44,6 +44,10 @@ export async function GET(request: NextRequest) {
     "supabase.co",
     "openpt.wuyinkeji.com",
     "wuyinkeji.com",
+    "ss3.life",           // 生产队的驴视频CDN（日本节点等）
+    "videos-jp.ss3.life", // 日本视频节点
+    "videos-us.ss3.life", // 美国视频节点  
+    "videos-sg.ss3.life", // 新加坡视频节点
   ];
 
   const urlObj = new URL(videoUrl);
