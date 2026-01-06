@@ -1028,7 +1028,18 @@ function DownloadProgressDialog({ progress, onCancel, onClose }: DownloadProgres
   };
 
   return (
-    <Dialog open={progress.show} onOpenChange={(open) => !open && isComplete && onClose()}>
+    <Dialog 
+      open={progress.show} 
+      onOpenChange={(open) => {
+        if (!open) {
+          // 允许在任何时候关闭对话框
+          if (!isComplete && !progress.cancelled) {
+            onCancel(); // 同时取消下载
+          }
+          onClose();
+        }
+      }}
+    >
       <DialogContent className="max-w-md bg-black/95 border-white/10">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -1138,7 +1149,10 @@ function DownloadProgressDialog({ progress, onCancel, onClose }: DownloadProgres
           ) : (
             <Button 
               variant="destructive" 
-              onClick={onCancel}
+              onClick={() => {
+                onCancel();
+                onClose();
+              }}
               className="w-full"
             >
               <X className="h-4 w-4 mr-2" />
@@ -1291,22 +1305,34 @@ export default function VideoBatchPage() {
   }, []);
   
   // 极速下载 - 前端直接 fetch CDN + blob（绕过服务器，直连CDN）
+  // 添加超时机制，避免卡住
   const downloadFastViaCDN = useCallback(async (url: string, filename: string): Promise<boolean> => {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000); // 8秒超时
+    
     try {
-      console.log("[Fast Download] Fetching from CDN directly...");
+      console.log("[Fast Download] Fetching from CDN directly (8s timeout)...");
       
       // 直接 fetch CDN（不经过我们的服务器）
       const response = await fetch(url, {
         mode: "cors",
         credentials: "omit",
+        signal: controller.signal,
       });
+      
+      clearTimeout(timeoutId);
       
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
       }
       
-      // 将响应转换为 blob
-      const blob = await response.blob();
+      // 将响应转换为 blob（设置额外超时）
+      const blobPromise = response.blob();
+      const blobTimeoutPromise = new Promise<never>((_, reject) => 
+        setTimeout(() => reject(new Error("Blob timeout")), 30000) // 30秒 blob 超时
+      );
+      
+      const blob = await Promise.race([blobPromise, blobTimeoutPromise]);
       const blobUrl = URL.createObjectURL(blob);
       
       // 使用 <a> 标签触发下载
@@ -1324,7 +1350,12 @@ export default function VideoBatchPage() {
       console.log("[Fast Download] Success via direct CDN fetch");
       return true;
     } catch (error) {
-      console.warn("[Fast Download] CDN fetch failed (likely CORS), will fallback to proxy:", error);
+      clearTimeout(timeoutId);
+      if (error instanceof Error && error.name === "AbortError") {
+        console.warn("[Fast Download] Timeout - CDN too slow or blocked");
+      } else {
+        console.warn("[Fast Download] CDN fetch failed:", error);
+      }
       return false;
     }
   }, []);
