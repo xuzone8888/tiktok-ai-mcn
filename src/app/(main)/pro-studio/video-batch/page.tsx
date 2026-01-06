@@ -1241,7 +1241,7 @@ export default function VideoBatchPage() {
     return `视频-${seq}-${aspectStr}-${durationStr}.mp4`;
   }, [tasks]);
   
-  // 通过代理下载视频（解决CORS问题，支持线路选择）
+  // 通过代理下载视频（现在改为利用后端的302重定向直连）
   const downloadVideoViaProxy = useCallback(async (url: string, filename: string, routeId?: string): Promise<boolean> => {
     try {
       // 构建代理URL，包含线路参数
@@ -1251,22 +1251,16 @@ export default function VideoBatchPage() {
         ...(routeId && { route: routeId }),
       });
       const proxyUrl = `/api/download-proxy?${params}`;
-      const response = await fetch(proxyUrl);
       
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: "下载失败" }));
-        throw new Error(errorData.error || `下载失败: ${response.status}`);
-      }
-      
-      const blob = await response.blob();
-      const blobUrl = URL.createObjectURL(blob);
+      // 直接触发浏览器下载行为，而不是 fetch 到内存中
+      // 这样可以利用浏览器原生下载管理器，支持断点续传且速度极快
       const link = document.createElement("a");
-      link.href = blobUrl;
+      link.href = proxyUrl;
       link.download = filename;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      URL.revokeObjectURL(blobUrl);
+      
       return true;
     } catch (error) {
       console.error("[Proxy Download] Failed:", error);
@@ -1274,33 +1268,19 @@ export default function VideoBatchPage() {
     }
   }, []);
   
-  // 直接下载视频（备选方案，可能受CORS限制）
+  // 直接下载视频（备选方案，尝试直接请求源站）
   const downloadVideoDirect = useCallback(async (url: string, filename: string): Promise<boolean> => {
     try {
-      // 设置超时控制
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30秒超时
-      
-      const response = await fetch(url, { signal: controller.signal });
-      clearTimeout(timeoutId);
-      
-      if (!response.ok) throw new Error("下载失败");
-      const blob = await response.blob();
-      const blobUrl = URL.createObjectURL(blob);
       const link = document.createElement("a");
-      link.href = blobUrl;
+      link.href = url;
       link.download = filename;
+      link.target = "_blank"; // 增加 target="_blank" 确保不影响当前页面
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      URL.revokeObjectURL(blobUrl);
       return true;
     } catch (error) {
-      if (error instanceof Error && error.name === "AbortError") {
-        console.error("[Direct Download] Timeout");
-      } else {
-        console.error("[Direct Download] Failed:", error);
-      }
+      console.error("[Direct Download] Failed:", error);
       return false;
     }
   }, []);
@@ -1312,38 +1292,23 @@ export default function VideoBatchPage() {
   
   // 智能下载视频 - 自动选择最佳线路和下载方式
   const downloadVideo = useCallback(async (url: string, filename: string): Promise<boolean> => {
-    // 获取最佳线路（如果有缓存的测速结果）
-    const cachedResults = getCachedSpeedTestResults();
-    const bestRoute = getBestRouteId(cachedResults);
+    // 检查是否为生产队的驴 (scd666.com) 的地址
+    const isScd = url.includes("scd666.com");
     
-    // 方案1：尝试通过代理下载（解决CORS问题），使用最佳线路
-    console.log(`[Download] Trying proxy download with route: ${bestRoute || "default"}...`);
-    let success = await downloadVideoViaProxy(url, filename, bestRoute || undefined);
-    if (success) {
-      console.log("[Download] Proxy download succeeded");
-      return true;
+    if (isScd) {
+      console.log("[Download] Detected SCD666 (驴) source, using direct CDN path...");
+      // 如果是驴的地址，直接走代理重定向，这样最稳定且快
+      return await downloadVideoViaProxy(url, filename);
     }
+
+    // 方案1：尝试通过代理下载
+    let success = await downloadVideoViaProxy(url, filename);
+    if (success) return true;
     
-    // 方案2：如果首选线路失败，尝试备用线路
-    if (bestRoute && bestRoute !== "backup") {
-      console.log("[Download] Primary route failed, trying backup route...");
-      success = await downloadVideoViaProxy(url, filename, "backup");
-      if (success) {
-        console.log("[Download] Backup route succeeded");
-        return true;
-      }
-    }
-    
-    // 方案3：尝试直接下载（如果代理都失败）
-    console.log("[Download] Proxy failed, trying direct download...");
+    // 方案2：尝试直接下载
     success = await downloadVideoDirect(url, filename);
-    if (success) {
-      console.log("[Download] Direct download succeeded");
-      return true;
-    }
+    if (success) return true;
     
-    // 方案4：所有方式都失败，返回false让调用者决定是否打开新窗口
-    console.log("[Download] All download methods failed");
     return false;
   }, [downloadVideoViaProxy, downloadVideoDirect]);
   
@@ -1356,24 +1321,27 @@ export default function VideoBatchPage() {
     
     const filename = generateSimpleFilename(task);
     setDownloadingTaskId(task.id);
-    toast({ title: `🚀 正在下载: ${filename}`, description: "通过服务器代理下载中..." });
+    
+    // 更新提示语
+    toast({ 
+      title: `🚀 启动高速下载`, 
+      description: `正在通过 CDN 优选线路下载: ${filename}` 
+    });
     
     const success = await downloadVideo(task.soraVideoUrl, filename);
     setDownloadingTaskId(null);
     
     if (success) {
-      toast({ title: `✅ 下载完成: ${filename}` });
+      toast({ title: `✅ 已调起下载任务` });
     } else {
-      // 下载失败，提供在新窗口打开的选项
       toast({ 
         variant: "destructive", 
         title: `下载失败: ${filename}`,
-        description: "正在尝试在新窗口打开视频...",
+        description: "请尝试右键视频另存为...",
       });
-      // 延迟一下再打开新窗口，让用户看到提示
       setTimeout(() => {
         openVideoInNewTab(task.soraVideoUrl!);
-      }, 1000);
+      }, 500);
     }
   }, [downloadVideo, generateSimpleFilename, toast, openVideoInNewTab]);
   

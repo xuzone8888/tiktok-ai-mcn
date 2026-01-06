@@ -71,70 +71,18 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    console.log("[Download Proxy] Fetching:", videoUrl.substring(0, 100) + "...");
+    console.log("[Download Proxy] Redirecting to:", videoUrl.substring(0, 100) + "...");
     
-    // 设置超时控制
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 55000); // 55秒超时
-
-    const response = await fetch(videoUrl, {
-      signal: controller.signal,
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        "Accept": "*/*",
-        "Accept-Encoding": "identity", // 不压缩，直接传输
-      },
-    });
-
-    clearTimeout(timeoutId);
-
-    if (!response.ok) {
-      console.error("[Download Proxy] Upstream error:", response.status, response.statusText);
-      return NextResponse.json(
-        { error: `视频源服务器错误: ${response.status}` },
-        { status: 502 }
-      );
-    }
-
-    // 获取内容类型和大小
-    const contentType = response.headers.get("content-type") || "video/mp4";
-    const contentLength = response.headers.get("content-length");
-
-    console.log("[Download Proxy] Success:", {
-      contentType,
-      contentLength,
-      filename,
-    });
-
-    // 获取视频数据
-    const videoData = await response.arrayBuffer();
-
-    // 返回视频流，设置正确的下载头
-    return new NextResponse(videoData, {
-      status: 200,
-      headers: {
-        "Content-Type": contentType,
-        "Content-Length": videoData.byteLength.toString(),
-        "Content-Disposition": `attachment; filename="${encodeURIComponent(filename)}"`,
-        "Cache-Control": "no-cache",
-        // 允许前端访问
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "GET, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type",
-      },
+    // 方案 1: 直接重定向 (302)
+    // 这种方式最快，利用源站 CDN 的原始带宽
+    // 缺点是可能无法强制重命名，但可以通过 302 解决大部分 CORS 问题
+    return NextResponse.redirect(videoUrl, {
+      status: 302,
     });
   } catch (error) {
-    if (error instanceof Error && error.name === "AbortError") {
-      console.error("[Download Proxy] Timeout:", videoUrl.substring(0, 100));
-      return NextResponse.json(
-        { error: "下载超时，请稍后重试或使用直接下载" },
-        { status: 504 }
-      );
-    }
-
     console.error("[Download Proxy] Error:", error);
     return NextResponse.json(
-      { error: "下载失败，请稍后重试" },
+      { error: "下载重定向失败，请尝试直接下载" },
       { status: 500 }
     );
   }
