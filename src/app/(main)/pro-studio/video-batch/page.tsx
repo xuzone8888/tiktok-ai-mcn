@@ -1304,6 +1304,114 @@ export default function VideoBatchPage() {
     window.open(url, "_blank");
   }, []);
   
+  // ========== 内置多线程下载（类似 IDM） ==========
+  const [multiThreadProgress, setMultiThreadProgress] = useState<{
+    show: boolean;
+    filename: string;
+    totalSize: number;
+    downloadedSize: number;
+    threads: number;
+    speed: number;
+    startTime: number;
+  }>({
+    show: false,
+    filename: "",
+    totalSize: 0,
+    downloadedSize: 0,
+    threads: 4,
+    speed: 0,
+    startTime: 0,
+  });
+
+  // 多线程下载单个视频
+  const downloadWithMultiThread = useCallback(async (
+    url: string, 
+    filename: string, 
+    threads: number = 4,
+    onProgress?: (downloaded: number, total: number) => void
+  ): Promise<boolean> => {
+    try {
+      console.log(`[Multi-Thread] Starting download: ${filename} with ${threads} threads`);
+      
+      // 1. 获取文件信息
+      const infoParams = new URLSearchParams({ url, mode: "info" });
+      const infoRes = await fetch(`/api/download-proxy?${infoParams}`);
+      const info = await infoRes.json();
+      
+      if (!info.size || info.size === 0) {
+        console.log("[Multi-Thread] Cannot get file size, falling back to normal download");
+        return await downloadVideoViaProxy(url, filename);
+      }
+      
+      const fileSize = info.size;
+      console.log(`[Multi-Thread] File size: ${(fileSize / 1024 / 1024).toFixed(2)} MB`);
+      
+      // 2. 计算分片
+      const chunkSize = Math.ceil(fileSize / threads);
+      const chunks: { start: number; end: number; index: number }[] = [];
+      
+      for (let i = 0; i < threads; i++) {
+        const start = i * chunkSize;
+        const end = Math.min(start + chunkSize - 1, fileSize - 1);
+        chunks.push({ start, end, index: i });
+      }
+      
+      // 3. 并行下载所有分片
+      let totalDownloaded = 0;
+      const chunkData: ArrayBuffer[] = new Array(threads);
+      
+      const downloadChunk = async (chunk: { start: number; end: number; index: number }) => {
+        const params = new URLSearchParams({
+          url,
+          mode: "chunk",
+          start: chunk.start.toString(),
+          end: chunk.end.toString(),
+        });
+        
+        const response = await fetch(`/api/download-proxy?${params}`);
+        if (!response.ok) throw new Error(`Chunk ${chunk.index} failed`);
+        
+        const data = await response.arrayBuffer();
+        chunkData[chunk.index] = data;
+        
+        totalDownloaded += data.byteLength;
+        onProgress?.(totalDownloaded, fileSize);
+        
+        return data;
+      };
+      
+      await Promise.all(chunks.map(downloadChunk));
+      
+      // 4. 合并分片
+      const totalLength = chunkData.reduce((acc, arr) => acc + arr.byteLength, 0);
+      const mergedData = new Uint8Array(totalLength);
+      let offset = 0;
+      for (const chunk of chunkData) {
+        mergedData.set(new Uint8Array(chunk), offset);
+        offset += chunk.byteLength;
+      }
+      
+      // 5. 触发下载
+      const blob = new Blob([mergedData], { type: "video/mp4" });
+      const blobUrl = URL.createObjectURL(blob);
+      
+      const link = document.createElement("a");
+      link.href = blobUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+      
+      console.log(`[Multi-Thread] Download complete: ${filename}`);
+      return true;
+    } catch (error) {
+      console.error("[Multi-Thread] Error:", error);
+      return false;
+    }
+  }, [downloadVideoViaProxy]);
+  
   // 极速下载 - 前端直接 fetch CDN + blob（绕过服务器，直连CDN）
   // 添加超时机制，避免卡住
   const downloadFastViaCDN = useCallback(async (url: string, filename: string): Promise<boolean> => {
@@ -2452,7 +2560,7 @@ C07: [story CTA, inspiring, <50 chars]`,
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="w-64">
-                          {/* 方式0: 插件下载（最快！） */}
+                          {/* 方式0: 内置多线程下载（最快！） */}
                           <DropdownMenuItem
                             onClick={async () => {
                               const completedSelectedTasks = tasks.filter(
@@ -2463,51 +2571,88 @@ C07: [story CTA, inspiring, <50 chars]`,
                                 return;
                               }
                               
-                              // 检查扩展是否安装
-                              const extensionReady = await new Promise<boolean>((resolve) => {
-                                const timeout = setTimeout(() => resolve(false), 500);
-                                const handler = (event: MessageEvent) => {
-                                  if (event.data.type === 'TOK_FACTORY_EXTENSION_STATUS') {
-                                    clearTimeout(timeout);
-                                    window.removeEventListener('message', handler);
-                                    resolve(event.data.installed);
-                                  }
-                                };
-                                window.addEventListener('message', handler);
-                                window.postMessage({ type: 'TOK_FACTORY_CHECK_EXTENSION' }, '*');
-                              });
+                              // 重置取消标志
+                              cancelDownloadRef.current = false;
                               
-                              if (!extensionReady) {
-                                toast({ 
-                                  variant: "destructive", 
-                                  title: "未检测到扩展",
-                                  description: "请先安装 Tok Factory 助手扩展，下载地址在 /chrome-extension 文件夹"
-                                });
-                                return;
+                              // 初始化进度状态
+                              setDownloadProgress({
+                                show: true,
+                                total: completedSelectedTasks.length,
+                                current: 0,
+                                success: 0,
+                                failed: 0,
+                                currentFilename: "准备中...",
+                                startTime: Date.now(),
+                                cancelled: false,
+                              });
+                              setIsDownloading(true);
+                              
+                              let successCount = 0;
+                              let failedCount = 0;
+                              
+                              // 逐个使用多线程下载
+                              for (let i = 0; i < completedSelectedTasks.length; i++) {
+                                if (cancelDownloadRef.current) {
+                                  setDownloadProgress(prev => ({ ...prev, cancelled: true }));
+                                  break;
+                                }
+                                
+                                const task = completedSelectedTasks[i];
+                                if (task.soraVideoUrl) {
+                                  const filename = generateSimpleFilename(task, tasks.indexOf(task));
+                                  
+                                  setDownloadProgress(prev => ({
+                                    ...prev,
+                                    currentFilename: `${filename} (4线程加速中...)`,
+                                  }));
+                                  
+                                  // 使用 4 线程并行下载
+                                  const success = await downloadWithMultiThread(
+                                    task.soraVideoUrl, 
+                                    filename, 
+                                    4,
+                                    (downloaded, total) => {
+                                      const percent = Math.round((downloaded / total) * 100);
+                                      setDownloadProgress(prev => ({
+                                        ...prev,
+                                        currentFilename: `${filename} (${percent}%)`,
+                                      }));
+                                    }
+                                  );
+                                  
+                                  if (success) {
+                                    successCount++;
+                                  } else {
+                                    failedCount++;
+                                  }
+                                  
+                                  setDownloadProgress(prev => ({
+                                    ...prev,
+                                    current: i + 1,
+                                    success: successCount,
+                                    failed: failedCount,
+                                  }));
+                                  
+                                  // 间隔 300ms
+                                  await new Promise(r => setTimeout(r, 300));
+                                }
                               }
                               
-                              // 发送批量下载请求到扩展
-                              const downloadList = completedSelectedTasks.map((task, i) => ({
-                                url: task.soraVideoUrl,
-                                filename: generateSimpleFilename(task, tasks.indexOf(task))
-                              }));
+                              setIsDownloading(false);
                               
-                              window.postMessage({
-                                type: 'TOK_FACTORY_BATCH_DOWNLOAD',
-                                urls: downloadList
-                              }, '*');
-                              
-                              toast({ 
-                                title: "🚀 已发送到扩展",
-                                description: `${completedSelectedTasks.length} 个视频正在多线程下载，点击扩展图标查看进度`
-                              });
+                              if (successCount > 0) {
+                                toast({ 
+                                  title: "✅ 多线程下载完成",
+                                  description: `成功下载 ${successCount} 个视频`
+                                });
+                              }
                             }}
                             className="cursor-pointer bg-gradient-to-r from-yellow-500/10 to-orange-500/10 border border-yellow-500/20"
                           >
                             <Zap className="h-4 w-4 mr-2 text-yellow-400" />
                             <div className="flex flex-col">
-                              <span className="font-medium">插件下载（最快🚀）</span>
-                              <span className="text-xs text-muted-foreground">多线程加速，需安装扩展</span>
+                              <span className="font-medium">多线程下载（最快🚀）</span>
+                              <span className="text-xs text-muted-foreground">4线程并行，内置加速</span>
                             </div>
                           </DropdownMenuItem>
                           

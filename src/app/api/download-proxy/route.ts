@@ -3,70 +3,101 @@ import { NextRequest, NextResponse } from "next/server";
 /**
  * 视频下载代理 API
  * 
- * 使用流式代理（Stream Pipe）模式：
- * - 服务器作为管道，直接转发源站数据流
- * - 不会把整个视频加载到内存，延迟低
- * - 能正确设置文件名和下载头
+ * 支持两种模式：
+ * 1. 普通下载：流式转发整个文件
+ * 2. 分片下载：支持 Range 请求，用于多线程下载
  */
 
 export const runtime = "nodejs";
-export const maxDuration = 120; // 最大执行时间120秒，适合大文件
+export const maxDuration = 120;
+
+// 允许的域名白名单
+const allowedDomains = [
+  "scd666.com",
+  "api.scd666.com",
+  "cdn.scd666.com",
+  "supabase.co",
+  "openpt.wuyinkeji.com",
+  "wuyinkeji.com",
+  "ss3.life",
+  "videos-jp.ss3.life",
+  "videos-us.ss3.life",
+  "videos-sg.ss3.life",
+];
+
+function isAllowedDomain(url: string): boolean {
+  try {
+    const urlObj = new URL(url);
+    return allowedDomains.some(
+      (domain) => urlObj.hostname === domain || urlObj.hostname.endsWith(`.${domain}`)
+    );
+  } catch {
+    return false;
+  }
+}
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const videoUrl = searchParams.get("url");
   const filename = searchParams.get("filename") || "video.mp4";
-  
-  console.log(`[Download Proxy] Request for: ${filename}`);
+  const mode = searchParams.get("mode") || "stream"; // stream | chunk | info
 
   if (!videoUrl) {
-    return NextResponse.json(
-      { error: "缺少视频URL参数" },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: "缺少视频URL参数" }, { status: 400 });
   }
 
-  // 验证URL格式
-  try {
-    new URL(videoUrl);
-  } catch {
-    return NextResponse.json(
-      { error: "无效的视频URL" },
-      { status: 400 }
-    );
-  }
-
-  // 限制只允许下载视频相关的URL（安全检查）
-  const allowedDomains = [
-    "scd666.com",
-    "api.scd666.com",
-    "cdn.scd666.com",
-    "supabase.co",
-    "openpt.wuyinkeji.com",
-    "wuyinkeji.com",
-    "ss3.life",           // 生产队的驴视频CDN（日本节点等）
-    "videos-jp.ss3.life", // 日本视频节点
-    "videos-us.ss3.life", // 美国视频节点  
-    "videos-sg.ss3.life", // 新加坡视频节点
-  ];
-
-  const urlObj = new URL(videoUrl);
-  const isAllowed = allowedDomains.some(
-    (domain) => urlObj.hostname === domain || urlObj.hostname.endsWith(`.${domain}`)
-  );
-
-  if (!isAllowed) {
-    console.log("[Download Proxy] Blocked domain:", urlObj.hostname);
-    return NextResponse.json(
-      { error: "不支持的下载源" },
-      { status: 403 }
-    );
+  if (!isAllowedDomain(videoUrl)) {
+    return NextResponse.json({ error: "不支持的下载源" }, { status: 403 });
   }
 
   try {
-    console.log("[Download Proxy] Fetching stream from:", videoUrl.substring(0, 100) + "...");
+    // 模式1: 获取文件信息（用于多线程下载前获取文件大小）
+    if (mode === "info") {
+      const response = await fetch(videoUrl, { method: "HEAD" });
+      const contentLength = response.headers.get("content-length");
+      const acceptRanges = response.headers.get("accept-ranges");
+      
+      return NextResponse.json({
+        size: contentLength ? parseInt(contentLength) : 0,
+        supportsRange: acceptRanges === "bytes",
+        contentType: response.headers.get("content-type") || "video/mp4",
+      });
+    }
+
+    // 模式2: 分片下载（支持 Range 请求）
+    if (mode === "chunk") {
+      const start = searchParams.get("start");
+      const end = searchParams.get("end");
+      
+      if (!start || !end) {
+        return NextResponse.json({ error: "缺少 start/end 参数" }, { status: 400 });
+      }
+
+      const response = await fetch(videoUrl, {
+        headers: {
+          "Range": `bytes=${start}-${end}`,
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        },
+      });
+
+      if (!response.ok && response.status !== 206) {
+        return NextResponse.json({ error: `分片请求失败: ${response.status}` }, { status: 502 });
+      }
+
+      // 直接返回分片数据
+      return new NextResponse(response.body, {
+        status: 206,
+        headers: {
+          "Content-Type": "application/octet-stream",
+          "Content-Length": response.headers.get("content-length") || "",
+          "Access-Control-Allow-Origin": "*",
+        },
+      });
+    }
+
+    // 模式3: 普通流式下载（默认）
+    console.log(`[Download Proxy] Streaming: ${filename}`);
     
-    // 使用流式代理 - 直接转发源站的响应流
     const response = await fetch(videoUrl, {
       headers: {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
@@ -75,62 +106,37 @@ export async function GET(request: NextRequest) {
     });
 
     if (!response.ok) {
-      console.error("[Download Proxy] Upstream error:", response.status, response.statusText);
-      return NextResponse.json(
-        { error: `视频源服务器错误: ${response.status}` },
-        { status: 502 }
-      );
+      return NextResponse.json({ error: `视频源服务器错误: ${response.status}` }, { status: 502 });
     }
 
-    // 获取内容类型和大小
     const contentType = response.headers.get("content-type") || "video/mp4";
     const contentLength = response.headers.get("content-length");
 
-    console.log("[Download Proxy] Streaming:", {
-      contentType,
-      contentLength: contentLength ? `${Math.round(parseInt(contentLength) / 1024 / 1024)}MB` : "unknown",
-      filename,
-    });
-
-    // 构建响应头
     const headers: HeadersInit = {
       "Content-Type": contentType,
       "Content-Disposition": `attachment; filename="${encodeURIComponent(filename)}"`,
       "Cache-Control": "no-cache",
       "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "GET, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type",
     };
 
-    // 如果有内容长度，添加到头中（让浏览器显示下载进度）
     if (contentLength) {
       headers["Content-Length"] = contentLength;
     }
 
-    // 直接返回源站的响应体（流式传输）
-    // response.body 是一个 ReadableStream，会被直接管道传输给客户端
-    return new NextResponse(response.body, {
-      status: 200,
-      headers,
-    });
+    return new NextResponse(response.body, { status: 200, headers });
   } catch (error) {
     console.error("[Download Proxy] Error:", error);
-    return NextResponse.json(
-      { error: "下载失败，请稍后重试" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "下载失败，请稍后重试" }, { status: 500 });
   }
 }
 
-// 处理 OPTIONS 预检请求
 export async function OPTIONS() {
   return new NextResponse(null, {
     status: 200,
     headers: {
       "Access-Control-Allow-Origin": "*",
       "Access-Control-Allow-Methods": "GET, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type",
+      "Access-Control-Allow-Headers": "Content-Type, Range",
     },
   });
 }
-
