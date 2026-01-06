@@ -2593,7 +2593,7 @@ C07: [story CTA, inspiring, <50 chars]`,
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="w-64">
-                          {/* 方式0: 内置多线程下载（最快！） */}
+                          {/* 方式1: 复制地址到剪贴板（推荐！） */}
                           <DropdownMenuItem
                             onClick={async () => {
                               const completedSelectedTasks = tasks.filter(
@@ -2604,88 +2604,26 @@ C07: [story CTA, inspiring, <50 chars]`,
                                 return;
                               }
                               
-                              // 重置取消标志
-                              cancelDownloadRef.current = false;
+                              // 生成视频地址列表
+                              const urls = completedSelectedTasks
+                                .map((task) => task.soraVideoUrl)
+                                .filter(Boolean)
+                                .join("\n");
                               
-                              // 初始化进度状态
-                              setDownloadProgress({
-                                show: true,
-                                total: completedSelectedTasks.length,
-                                current: 0,
-                                success: 0,
-                                failed: 0,
-                                currentFilename: "准备中...",
-                                startTime: Date.now(),
-                                cancelled: false,
+                              // 复制到剪贴板
+                              await navigator.clipboard.writeText(urls);
+                              
+                              toast({ 
+                                title: "✅ 已复制到剪贴板",
+                                description: `${completedSelectedTasks.length} 个视频地址已复制，请粘贴到 IDM/迅雷 批量下载`
                               });
-                              setIsDownloading(true);
-                              
-                              let successCount = 0;
-                              let failedCount = 0;
-                              
-                              // 逐个使用多线程下载
-                              for (let i = 0; i < completedSelectedTasks.length; i++) {
-                                if (cancelDownloadRef.current) {
-                                  setDownloadProgress(prev => ({ ...prev, cancelled: true }));
-                                  break;
-                                }
-                                
-                                const task = completedSelectedTasks[i];
-                                if (task.soraVideoUrl) {
-                                  const filename = generateSimpleFilename(task, tasks.indexOf(task));
-                                  
-                                  setDownloadProgress(prev => ({
-                                    ...prev,
-                                    currentFilename: `${filename} (4线程加速中...)`,
-                                  }));
-                                  
-                                  // 使用 4 线程并行下载
-                                  const success = await downloadWithMultiThread(
-                                    task.soraVideoUrl, 
-                                    filename, 
-                                    4,
-                                    (downloaded, total) => {
-                                      const percent = Math.round((downloaded / total) * 100);
-                                      setDownloadProgress(prev => ({
-                                        ...prev,
-                                        currentFilename: `${filename} (${percent}%)`,
-                                      }));
-                                    }
-                                  );
-                                  
-                                  if (success) {
-                                    successCount++;
-                                  } else {
-                                    failedCount++;
-                                  }
-                                  
-                                  setDownloadProgress(prev => ({
-                                    ...prev,
-                                    current: i + 1,
-                                    success: successCount,
-                                    failed: failedCount,
-                                  }));
-                                  
-                                  // 间隔 300ms
-                                  await new Promise(r => setTimeout(r, 300));
-                                }
-                              }
-                              
-                              setIsDownloading(false);
-                              
-                              if (successCount > 0) {
-                                toast({ 
-                                  title: "✅ 多线程下载完成",
-                                  description: `成功下载 ${successCount} 个视频`
-                                });
-                              }
                             }}
                             className="cursor-pointer bg-gradient-to-r from-yellow-500/10 to-orange-500/10 border border-yellow-500/20"
                           >
                             <Zap className="h-4 w-4 mr-2 text-yellow-400" />
                             <div className="flex flex-col">
-                              <span className="font-medium">多线程下载（最快🚀）</span>
-                              <span className="text-xs text-muted-foreground">4线程并行，内置加速</span>
+                              <span className="font-medium">复制地址（最快🚀）</span>
+                              <span className="text-xs text-muted-foreground">粘贴到 IDM/迅雷，极速下载</span>
                             </div>
                           </DropdownMenuItem>
                           
