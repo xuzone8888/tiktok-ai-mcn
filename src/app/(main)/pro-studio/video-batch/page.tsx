@@ -1335,8 +1335,16 @@ export default function VideoBatchPage() {
       
       // 1. 获取文件信息
       const infoParams = new URLSearchParams({ url, mode: "info" });
-      const infoRes = await fetch(`/api/download-proxy?${infoParams}`);
-      const info = await infoRes.json();
+      let info;
+      try {
+        const infoRes = await fetch(`/api/download-proxy?${infoParams}`);
+        info = await infoRes.json();
+        console.log(`[Multi-Thread] File info:`, info);
+      } catch (e) {
+        console.error("[Multi-Thread] Failed to get file info:", e);
+        // 回退到普通下载
+        return await downloadVideoViaProxy(url, filename);
+      }
       
       if (!info.size || info.size === 0) {
         console.log("[Multi-Thread] Cannot get file size, falling back to normal download");
@@ -1345,6 +1353,12 @@ export default function VideoBatchPage() {
       
       const fileSize = info.size;
       console.log(`[Multi-Thread] File size: ${(fileSize / 1024 / 1024).toFixed(2)} MB`);
+      
+      // 如果文件小于 2MB，直接普通下载
+      if (fileSize < 2 * 1024 * 1024) {
+        console.log("[Multi-Thread] File too small, using normal download");
+        return await downloadVideoViaProxy(url, filename);
+      }
       
       // 2. 计算分片
       const chunkSize = Math.ceil(fileSize / threads);
@@ -1356,11 +1370,15 @@ export default function VideoBatchPage() {
         chunks.push({ start, end, index: i });
       }
       
+      console.log(`[Multi-Thread] Chunks:`, chunks.map(c => `${c.start}-${c.end}`));
+      
       // 3. 并行下载所有分片
       let totalDownloaded = 0;
       const chunkData: ArrayBuffer[] = new Array(threads);
       
       const downloadChunk = async (chunk: { start: number; end: number; index: number }) => {
+        console.log(`[Multi-Thread] Downloading chunk ${chunk.index}: ${chunk.start}-${chunk.end}`);
+        
         const params = new URLSearchParams({
           url,
           mode: "chunk",
@@ -1369,29 +1387,43 @@ export default function VideoBatchPage() {
         });
         
         const response = await fetch(`/api/download-proxy?${params}`);
-        if (!response.ok) throw new Error(`Chunk ${chunk.index} failed`);
+        if (!response.ok) {
+          console.error(`[Multi-Thread] Chunk ${chunk.index} failed: ${response.status}`);
+          throw new Error(`Chunk ${chunk.index} failed: ${response.status}`);
+        }
         
         const data = await response.arrayBuffer();
         chunkData[chunk.index] = data;
         
         totalDownloaded += data.byteLength;
+        console.log(`[Multi-Thread] Chunk ${chunk.index} done: ${data.byteLength} bytes, total: ${totalDownloaded}/${fileSize}`);
         onProgress?.(totalDownloaded, fileSize);
         
         return data;
       };
       
-      await Promise.all(chunks.map(downloadChunk));
+      try {
+        await Promise.all(chunks.map(downloadChunk));
+      } catch (e) {
+        console.error("[Multi-Thread] Chunk download failed:", e);
+        // 回退到普通下载
+        return await downloadVideoViaProxy(url, filename);
+      }
       
       // 4. 合并分片
-      const totalLength = chunkData.reduce((acc, arr) => acc + arr.byteLength, 0);
+      console.log("[Multi-Thread] Merging chunks...");
+      const totalLength = chunkData.reduce((acc, arr) => acc + (arr?.byteLength || 0), 0);
       const mergedData = new Uint8Array(totalLength);
       let offset = 0;
       for (const chunk of chunkData) {
-        mergedData.set(new Uint8Array(chunk), offset);
-        offset += chunk.byteLength;
+        if (chunk) {
+          mergedData.set(new Uint8Array(chunk), offset);
+          offset += chunk.byteLength;
+        }
       }
       
       // 5. 触发下载
+      console.log("[Multi-Thread] Creating blob and downloading...");
       const blob = new Blob([mergedData], { type: "video/mp4" });
       const blobUrl = URL.createObjectURL(blob);
       
@@ -1408,7 +1440,8 @@ export default function VideoBatchPage() {
       return true;
     } catch (error) {
       console.error("[Multi-Thread] Error:", error);
-      return false;
+      // 最后回退
+      return await downloadVideoViaProxy(url, filename);
     }
   }, [downloadVideoViaProxy]);
   
