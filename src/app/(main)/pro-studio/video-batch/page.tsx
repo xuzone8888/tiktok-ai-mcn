@@ -71,7 +71,6 @@ import {
   Wifi,
   FileDown,
   Square,
-  Zap,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
