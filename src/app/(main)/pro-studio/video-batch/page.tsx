@@ -2751,7 +2751,91 @@ C07: [story CTA, inspiring, <50 chars]`,
                           
                           <DropdownMenuSeparator />
                           
-                          {/* 方式4: 代理下载 - 走服务器 */}
+                          {/* 方式4: 直连CDN测试 - 模拟生产队的驴的下载方式 */}
+                          <DropdownMenuItem
+                            onClick={async () => {
+                              const completedSelectedTasks = tasks.filter(
+                                t => selectedTaskIds[t.id] && t.status === "success" && t.soraVideoUrl
+                              );
+                              if (completedSelectedTasks.length === 0) {
+                                toast({ variant: "destructive", title: "没有可下载的视频" });
+                                return;
+                              }
+                              
+                              toast({
+                                title: "🧪 直连CDN测试下载",
+                                description: `正在测试 ${completedSelectedTasks.length} 个视频，请打开F12查看网络请求`,
+                              });
+                              
+                              // 逐个直连CDN下载（和生产队的驴一样的方式）
+                              for (let i = 0; i < completedSelectedTasks.length; i++) {
+                                const task = completedSelectedTasks[i];
+                                if (task.soraVideoUrl) {
+                                  const filename = generateSimpleFilename(task, tasks.indexOf(task));
+                                  
+                                  console.log(`[CDN Test] Downloading: ${task.soraVideoUrl}`);
+                                  console.log(`[CDN Test] Filename: ${filename}`);
+                                  
+                                  try {
+                                    // 和生产队的驴完全一样的 fetch 方式
+                                    const response = await fetch(task.soraVideoUrl, {
+                                      method: "GET",
+                                      mode: "cors",
+                                      credentials: "omit",
+                                      // 不设置超时，让它自然完成或失败
+                                    });
+                                    
+                                    console.log(`[CDN Test] Response status: ${response.status}`);
+                                    console.log(`[CDN Test] Content-Type: ${response.headers.get("content-type")}`);
+                                    console.log(`[CDN Test] Content-Length: ${response.headers.get("content-length")}`);
+                                    
+                                    if (!response.ok) {
+                                      throw new Error(`HTTP ${response.status}`);
+                                    }
+                                    
+                                    // 转blob下载
+                                    const blob = await response.blob();
+                                    const blobUrl = URL.createObjectURL(blob);
+                                    
+                                    const link = document.createElement("a");
+                                    link.href = blobUrl;
+                                    link.download = filename;
+                                    document.body.appendChild(link);
+                                    link.click();
+                                    document.body.removeChild(link);
+                                    
+                                    setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+                                    
+                                    toast({
+                                      title: `✅ 下载成功`,
+                                      description: filename,
+                                    });
+                                  } catch (error) {
+                                    console.error(`[CDN Test] Error:`, error);
+                                    toast({
+                                      variant: "destructive",
+                                      title: "直连CDN失败",
+                                      description: error instanceof Error ? error.message : "未知错误",
+                                    });
+                                  }
+                                  
+                                  // 间隔 500ms
+                                  await new Promise(r => setTimeout(r, 500));
+                                }
+                              }
+                            }}
+                            className="cursor-pointer"
+                          >
+                            <Zap className="h-4 w-4 mr-2 text-orange-400" />
+                            <div className="flex flex-col">
+                              <span className="text-orange-400 font-medium">直连CDN测试 🧪</span>
+                              <span className="text-xs text-muted-foreground">模拟生产队的驴，用于对比测试</span>
+                            </div>
+                          </DropdownMenuItem>
+                          
+                          <DropdownMenuSeparator />
+                          
+                          {/* 方式5: 代理下载 - 走服务器 */}
                           <DropdownMenuItem
                             onClick={async () => {
                               const completedSelectedTasks = tasks.filter(
