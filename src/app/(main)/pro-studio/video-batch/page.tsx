@@ -2452,6 +2452,67 @@ C07: [story CTA, inspiring, <50 chars]`,
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="w-64">
+                          {/* 方式0: 插件下载（最快！） */}
+                          <DropdownMenuItem
+                            onClick={async () => {
+                              const completedSelectedTasks = tasks.filter(
+                                t => selectedTaskIds[t.id] && t.status === "success" && t.soraVideoUrl
+                              );
+                              if (completedSelectedTasks.length === 0) {
+                                toast({ variant: "destructive", title: "没有可下载的视频" });
+                                return;
+                              }
+                              
+                              // 检查扩展是否安装
+                              const extensionReady = await new Promise<boolean>((resolve) => {
+                                const timeout = setTimeout(() => resolve(false), 500);
+                                const handler = (event: MessageEvent) => {
+                                  if (event.data.type === 'TOK_FACTORY_EXTENSION_STATUS') {
+                                    clearTimeout(timeout);
+                                    window.removeEventListener('message', handler);
+                                    resolve(event.data.installed);
+                                  }
+                                };
+                                window.addEventListener('message', handler);
+                                window.postMessage({ type: 'TOK_FACTORY_CHECK_EXTENSION' }, '*');
+                              });
+                              
+                              if (!extensionReady) {
+                                toast({ 
+                                  variant: "destructive", 
+                                  title: "未检测到扩展",
+                                  description: "请先安装 Tok Factory 助手扩展，下载地址在 /chrome-extension 文件夹"
+                                });
+                                return;
+                              }
+                              
+                              // 发送批量下载请求到扩展
+                              const downloadList = completedSelectedTasks.map((task, i) => ({
+                                url: task.soraVideoUrl,
+                                filename: generateSimpleFilename(task, tasks.indexOf(task))
+                              }));
+                              
+                              window.postMessage({
+                                type: 'TOK_FACTORY_BATCH_DOWNLOAD',
+                                urls: downloadList
+                              }, '*');
+                              
+                              toast({ 
+                                title: "🚀 已发送到扩展",
+                                description: `${completedSelectedTasks.length} 个视频正在多线程下载，点击扩展图标查看进度`
+                              });
+                            }}
+                            className="cursor-pointer bg-gradient-to-r from-yellow-500/10 to-orange-500/10 border border-yellow-500/20"
+                          >
+                            <Zap className="h-4 w-4 mr-2 text-yellow-400" />
+                            <div className="flex flex-col">
+                              <span className="font-medium">插件下载（最快🚀）</span>
+                              <span className="text-xs text-muted-foreground">多线程加速，需安装扩展</span>
+                            </div>
+                          </DropdownMenuItem>
+                          
+                          <DropdownMenuSeparator />
+                          
                           {/* 方式1: 复制地址到剪贴板（推荐！） */}
                           <DropdownMenuItem
                             onClick={async () => {

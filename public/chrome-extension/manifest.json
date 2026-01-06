@@ -1,11 +1,27 @@
 {
   "manifest_version": 3,
-  "name": "Tok Factory 商品提取器",
-  "version": "1.0",
-  "description": "一键提取商品信息到 Tok Factory",
-  "permissions": ["activeTab", "scripting"],
+  "name": "Tok Factory 助手",
+  "version": "2.0",
+  "description": "商品提取 + 视频下载加速",
+  "permissions": [
+    "activeTab", 
+    "scripting",
+    "downloads",
+    "storage"
+  ],
+  "host_permissions": [
+    "https://videos-jp.ss3.life/*",
+    "https://videos-us.ss3.life/*",
+    "https://videos-sg.ss3.life/*",
+    "https://*.ss3.life/*",
+    "https://*.scd666.com/*",
+    "http://localhost:3000/*",
+    "http://123.56.75.68:3000/*",
+    "https://tokfactory.cn/*"
+  ],
   "action": {
-    "default_title": "提取商品数据",
+    "default_title": "Tok Factory 助手",
+    "default_popup": "popup.html",
     "default_icon": {
       "16": "icon16.png",
       "48": "icon48.png",
@@ -19,10 +35,15 @@
   },
   "background": {
     "service_worker": "background.js"
-  }
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "http://localhost:3000/*",
+        "http://123.56.75.68:3000/*",
+        "https://tokfactory.cn/*"
+      ],
+      "js": ["content.js"]
+    }
+  ]
 }
-
-
-
-
-
