@@ -56,7 +56,7 @@ export interface VideoBatchActions {
   createTask: (images: TaskImageInfo[]) => string;
   
   /** 从提示词创建任务（纯提示词模式） */
-  createTaskFromPrompt: (prompt: string, referenceImageUrl?: string, count?: number) => string[];
+  createTaskFromPrompt: (prompt: string, referenceImageUrl?: string, count?: number, groupName?: string) => string[];
   
   /** 批量创建空任务 */
   createEmptyTasks: (count: number) => string[];
@@ -219,6 +219,7 @@ const initialState: VideoBatchState = {
     autoStart: false,
     useAiModel: false,
     aiModelId: null,
+    aiModelName: null,
     aiModelTriggerWord: null,
   },
   selectedTaskIds: {},
@@ -256,6 +257,9 @@ export const useVideoBatchStore = create<VideoBatchState & VideoBatchActions>()(
           modelType: globalSettings.modelType,
           duration: globalSettings.duration,
           quality: globalSettings.quality,
+          // AI 模特配置
+          useAiModel: globalSettings.useAiModel,
+          aiModelId: globalSettings.aiModelId || undefined,
           doubaoTalkingScript: null,
           doubaoAiVideoPrompt: null,
           soraTaskId: null,
@@ -275,7 +279,7 @@ export const useVideoBatchStore = create<VideoBatchState & VideoBatchActions>()(
         return id;
       },
 
-      createTaskFromPrompt: (prompt, referenceImageUrl, count = 1) => {
+      createTaskFromPrompt: (prompt, referenceImageUrl, count = 1, groupName) => {
         const { globalSettings } = get();
         const newIds: string[] = [];
 
@@ -289,10 +293,14 @@ export const useVideoBatchStore = create<VideoBatchState & VideoBatchActions>()(
             mode: "prompt_to_video" as VideoBatchTaskMode,
             customPrompt: prompt.trim(),
             referenceImageUrl: referenceImageUrl || undefined,
+            groupName: groupName?.trim() || undefined, // 分组名称
             aspectRatio: globalSettings.aspectRatio,
             modelType: globalSettings.modelType,
             duration: globalSettings.duration,
             quality: globalSettings.quality,
+            // AI 模特配置
+            useAiModel: globalSettings.useAiModel,
+            aiModelId: globalSettings.aiModelId || undefined,
             doubaoTalkingScript: null,
             doubaoAiVideoPrompt: null,
             soraTaskId: null,

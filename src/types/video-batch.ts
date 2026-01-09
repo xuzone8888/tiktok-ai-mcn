@@ -26,7 +26,7 @@ export type VideoDuration = 10 | 15 | 25;
 export type VideoQuality = "standard" | "hd";
 
 /** 视频模型类型 */
-export type VideoModelType = "sora2" | "sora2-pro";
+export type VideoModelType = "sora2" | "sora2-pro" | "veo3" | "veo3-quality";
 
 /** 流水线步骤 */
 export type PipelineStep = 0 | 1 | 2 | 3 | 4;
@@ -43,21 +43,29 @@ export interface VideoModelConfig {
 export function getAvailableDurations(modelType: VideoModelType, quality: VideoQuality): VideoDuration[] {
   if (modelType === "sora2") {
     return [10, 15];
-  } else {
-    // sora2-pro
+  } else if (modelType === "sora2-pro") {
     if (quality === "hd") {
       return [15]; // 高清只有 15 秒
     }
     return [25]; // Pro 标清只有 25 秒
+  } else if (modelType === "veo3" || modelType === "veo3-quality") {
+    return [10]; // VEO3 固定 8 秒，这里显示为最接近的选项
   }
+  return [15]; // 默认
 }
 
 /** 获取可用的质量选项 */
 export function getAvailableQualities(modelType: VideoModelType): VideoQuality[] {
   if (modelType === "sora2") {
     return ["standard"]; // 标清版只有标清
+  } else if (modelType === "sora2-pro") {
+    return ["standard", "hd"]; // Pro 版有标清和高清
+  } else if (modelType === "veo3") {
+    return ["standard"]; // VEO3 快速版
+  } else if (modelType === "veo3-quality") {
+    return ["hd"]; // VEO3 高清版
   }
-  return ["standard", "hd"]; // Pro 版有标清和高清
+  return ["standard"];
 }
 
 // ============================================================================
@@ -87,12 +95,20 @@ export interface VideoBatchTask {
   images: TaskImageInfo[];
   aspectRatio: VideoAspectRatio;
   
+  // 分组名称（用于批量下载时区分不同组）
+  groupName?: string;
+  
   // 任务模式
   mode?: VideoBatchTaskMode;  // 默认 "image_to_video"
   
   // 纯提示词模式的自定义提示词
   customPrompt?: string;      // 用户输入的提示词
   referenceImageUrl?: string; // 可选的参考图片
+  
+  // AI 模特配置（任务创建时保存）
+  useAiModel?: boolean;       // 是否使用 AI 模特
+  aiModelId?: string;         // AI 模特 ID（不暴露给用户）
+  aiModelName?: string;       // AI 模特显示名称（用户可见）
   
   // 任务创建时的视频配置（保存以确保显示一致）
   modelType: VideoModelType;
@@ -133,7 +149,8 @@ export interface VideoBatchGlobalSettings {
   // AI 模特配置
   useAiModel: boolean;
   aiModelId: string | null;
-  aiModelTriggerWord: string | null;
+  aiModelName: string | null;        // 显示名称（用户可见）
+  aiModelTriggerWord: string | null; // 触发词（后台使用，不暴露给用户）
 }
 
 // ============================================================================
@@ -230,6 +247,9 @@ export const VIDEO_BATCH_PRICING = {
   // Sora2 Pro
   sora2Pro_15s_hd: 350, // 15秒 高清 = 350积分
   sora2Pro_25s: 350,    // 25秒 标清 = 350积分
+  // VEO3 (固定 8 秒)
+  veo3_fast: 30,        // VEO3 快速版 = 30积分
+  veo3_quality: 80,     // VEO3 高清版 = 80积分
 };
 
 /** 获取视频生成总价 */
@@ -250,6 +270,16 @@ export function getVideoBatchTotalPrice(
     if (quality === "hd" && duration === 15) return VIDEO_BATCH_PRICING.sora2Pro_15s_hd;
     // PRO 款 25秒 = 350积分
     if (duration === 25) return VIDEO_BATCH_PRICING.sora2Pro_25s;
+  }
+  
+  // VEO3 快速版
+  if (modelType === "veo3") {
+    return VIDEO_BATCH_PRICING.veo3_fast;
+  }
+  
+  // VEO3 高清版
+  if (modelType === "veo3-quality") {
+    return VIDEO_BATCH_PRICING.veo3_quality;
   }
   
   return VIDEO_BATCH_PRICING.sora2_15s; // 默认

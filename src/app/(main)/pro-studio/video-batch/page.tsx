@@ -49,7 +49,6 @@ import {
   RotateCcw,
   Check,
   Trash2,
-  MoreVertical,
   Settings2,
   FolderUp,
   ChevronLeft,
@@ -68,7 +67,6 @@ import {
   Copy,
   UserCircle,
   Clock,
-  Wifi,
   FileDown,
   Square,
 } from "lucide-react";
@@ -103,8 +101,7 @@ import {
 // Textarea
 import { Textarea } from "@/components/ui/textarea";
 
-// 线路检测组件
-import { SpeedTestDialog } from "@/components/speed-test-dialog";
+// 下载管理
 import { getCachedSpeedTestResults, getBestRouteId } from "@/lib/download-manager";
 
 // ============================================================================
@@ -465,6 +462,10 @@ interface VideoTaskCardProps {
   modelType: VideoModelType;
   duration: VideoDuration;
   quality: VideoQuality;
+  // 下载状态
+  downloadProgress?: number; // 0-100 下载进度
+  isDownloading?: boolean;
+  isDownloaded?: boolean;
 }
 
 const VideoTaskCard = memo(function VideoTaskCard({
@@ -481,11 +482,21 @@ const VideoTaskCard = memo(function VideoTaskCard({
   modelType: globalModelType,
   duration: globalDuration,
   quality: globalQuality,
+  downloadProgress = 0,
+  isDownloading = false,
+  isDownloaded = false,
 }: VideoTaskCardProps) {
   // 判断任务类型并验证
   const isPromptMode = task.mode === "prompt_to_video";
   const validation = isPromptMode ? validatePromptTask(task) : validateTaskImages(task.images);
   const canStart = task.status === "pending" && validation.valid;
+  
+  // 检测是否使用了 AI 模特（优先使用任务配置，兼容旧任务检测脚本内容）
+  const hasAiModel = !!(
+    task.useAiModel ||
+    (task.doubaoTalkingScript && task.doubaoTalkingScript.includes('AI模特')) ||
+    (task.doubaoAiVideoPrompt && task.doubaoAiVideoPrompt.includes('[AI MODEL:'))
+  );
   
   // 使用任务自身的配置，如果不存在则回退到全局配置（兼容旧任务）
   const taskModelType = task.modelType || globalModelType;
@@ -494,7 +505,11 @@ const VideoTaskCard = memo(function VideoTaskCard({
   
   // 获取显示标签
   const getModelLabel = () => {
-    if (taskModelType === "sora2") {
+    if (taskModelType === "veo3") {
+      return "8秒";
+    } else if (taskModelType === "veo3-quality") {
+      return "8秒 高清";
+    } else if (taskModelType === "sora2") {
       return `${taskDuration}秒`;
     } else {
       // sora2-pro
@@ -571,11 +586,38 @@ const VideoTaskCard = memo(function VideoTaskCard({
                 <Play className="h-7 w-7 text-black ml-1" />
               </div>
             </div>
-            {/* 视频标识 */}
-            <div className="absolute top-2 right-2 bg-emerald-500 text-white text-[10px] px-2 py-0.5 rounded-full font-medium flex items-center gap-1">
-              <Video className="h-3 w-3" />
-              已生成
+            {/* 视频标识和下载状态 */}
+            <div className="absolute top-2 right-2 flex items-center gap-1.5">
+              {isDownloaded ? (
+                <div className="bg-tiktok-cyan text-white text-[10px] px-2 py-0.5 rounded-full font-medium flex items-center gap-1 shadow-lg shadow-tiktok-cyan/30">
+                  <CheckCircle2 className="h-3 w-3" />
+                  已下载
+                </div>
+              ) : (
+                <div className="bg-emerald-500 text-white text-[10px] px-2 py-0.5 rounded-full font-medium flex items-center gap-1">
+                  <Video className="h-3 w-3" />
+                  已生成
+                </div>
+              )}
             </div>
+            
+            {/* 下载进度条 */}
+            {isDownloading && (
+              <div className="absolute bottom-0 left-0 right-0 bg-black/60 p-2">
+                <div className="flex items-center gap-2">
+                  <Loader2 className="h-3 w-3 text-tiktok-cyan animate-spin shrink-0" />
+                  <div className="flex-1 h-1.5 bg-white/20 rounded-full overflow-hidden">
+                    <div 
+                      className="h-full bg-gradient-to-r from-tiktok-cyan to-tiktok-pink rounded-full transition-all duration-300"
+                      style={{ width: `${downloadProgress}%` }}
+                    />
+                  </div>
+                  <span className="text-[10px] text-white/80 font-medium min-w-[32px] text-right">
+                    {downloadProgress}%
+                  </span>
+                </div>
+              </div>
+            )}
           </div>
         ) : (
           /* 图片预览或提示词预览 */
@@ -654,6 +696,17 @@ const VideoTaskCard = memo(function VideoTaskCard({
           {taskModelType === "sora2-pro" && (
             <Badge variant="outline" className="text-[10px] h-5 px-1.5 bg-purple-500/10 border-purple-500/30 text-purple-400">
               Pro
+            </Badge>
+          )}
+          {(taskModelType === "veo3" || taskModelType === "veo3-quality") && (
+            <Badge variant="outline" className="text-[10px] h-5 px-1.5 bg-teal-500/10 border-teal-500/30 text-teal-400">
+              VEO3
+            </Badge>
+          )}
+          {hasAiModel && (
+            <Badge variant="outline" className="text-[10px] h-5 px-1.5 gap-1 bg-pink-500/10 border-pink-500/30 text-pink-400">
+              <span className="text-[10px]">👤</span>
+              AI模特
             </Badge>
           )}
         </div>
@@ -855,7 +908,11 @@ function VideoPlayerDialog({ task, open, onClose, onDownload }: VideoPlayerDialo
     const quality = task.quality || "standard";
     const modelType = task.modelType || "sora2";
     
-    if (modelType === "sora2-pro") {
+    if (modelType === "veo3") {
+      return "8秒";
+    } else if (modelType === "veo3-quality") {
+      return "8秒 高清";
+    } else if (modelType === "sora2-pro") {
       if (quality === "hd") return `${duration}秒 高清`;
       return `${duration}秒 标清`;
     }
@@ -1211,6 +1268,7 @@ export default function VideoBatchPage() {
   // 纯提示词创建模式
   const [createMode, setCreateMode] = useState<"image" | "prompt">("image");
   const [promptInput, setPromptInput] = useState("");
+  const [groupNameInput, setGroupNameInput] = useState(""); // 分组名称
   const [referenceImageFile, setReferenceImageFile] = useState<File | null>(null);
   const [referenceImageUrl, setReferenceImageUrl] = useState("");
   
@@ -1220,8 +1278,13 @@ export default function VideoBatchPage() {
   const [isBatchStarting, setIsBatchStarting] = useState(false);
   // 单个下载进度状态
   const [downloadingTaskId, setDownloadingTaskId] = useState<string | null>(null);
-  // 线路检测弹窗状态
-  const [showSpeedTest, setShowSpeedTest] = useState(false);
+  
+  // 每个任务的下载进度 { taskId: progress (0-100) }
+  const [taskDownloadProgress, setTaskDownloadProgress] = useState<Record<string, number>>({});
+  // 正在下载的任务ID集合
+  const [downloadingTaskIds, setDownloadingTaskIds] = useState<Set<string>>(new Set());
+  // 已下载的任务ID集合（从 localStorage 恢复）
+  const [downloadedTaskIds, setDownloadedTaskIds] = useState<Set<string>>(new Set());
   
   // 批量下载进度状态
   const [downloadProgress, setDownloadProgress] = useState<{
@@ -1247,11 +1310,23 @@ export default function VideoBatchPage() {
   // 取消下载的ref
   const cancelDownloadRef = useRef(false);
   
-  // 生成简化文件名的辅助函数
+  // 生成简化文件名的辅助函数（支持分组前缀）
   const generateSimpleFilename = useCallback((task: VideoBatchTask, index?: number) => {
     const aspectStr = task.aspectRatio.replace(":", "x");
     const durationStr = `${task.duration || 15}s`;
-    const seq = index !== undefined ? index + 1 : tasks.findIndex(t => t.id === task.id) + 1;
+    
+    // 如果有分组名，计算组内序号；否则使用全局序号
+    let seq: number;
+    if (task.groupName) {
+      // 获取同组任务，计算组内序号
+      const groupTasks = tasks.filter(t => t.groupName === task.groupName);
+      seq = index !== undefined ? index + 1 : groupTasks.findIndex(t => t.id === task.id) + 1;
+      // 返回带分组前缀的文件名
+      return `${task.groupName}-视频${seq}-${aspectStr}-${durationStr}.mp4`;
+    }
+    
+    // 无分组时使用全局序号
+    seq = index !== undefined ? index + 1 : tasks.findIndex(t => t.id === task.id) + 1;
     return `视频-${seq}-${aspectStr}-${durationStr}.mp4`;
   }, [tasks]);
   
@@ -1565,8 +1640,8 @@ export default function VideoBatchPage() {
   // AI模特功能 - 使用 store 中的全局设置
   const useAiModel = globalSettings.useAiModel;
   const selectedModelId = globalSettings.aiModelId;
-  const selectedModelTriggerWord = globalSettings.aiModelTriggerWord;
-  const [selectedModelName, setSelectedModelName] = useState<string>("");
+  const selectedModelName = globalSettings.aiModelName;  // 显示名称（从 store 获取）
+  const selectedModelTriggerWord = globalSettings.aiModelTriggerWord;  // 触发词（后台使用）
   const [hiredModels, setHiredModels] = useState<Array<{ id: string; name: string; trigger_word: string; avatar_url: string }>>([]);
   const [showModelSelector, setShowModelSelector] = useState(false);
   
@@ -1735,9 +1810,36 @@ C07: [story CTA, inspiring, <50 chars]`,
     }
   }, []);
   
+  // 从 localStorage 恢复已下载的任务
+  useEffect(() => {
+    const savedDownloaded = localStorage.getItem("video-batch-downloaded-tasks");
+    if (savedDownloaded) {
+      try {
+        const ids = JSON.parse(savedDownloaded);
+        if (Array.isArray(ids)) {
+          setDownloadedTaskIds(new Set(ids));
+        }
+      } catch (e) {
+        console.error("Failed to parse downloaded tasks:", e);
+      }
+    }
+  }, []);
+  
+  // 保存已下载任务到 localStorage
+  const markTaskAsDownloaded = useCallback((taskId: string) => {
+    setDownloadedTaskIds(prev => {
+      const newSet = new Set(prev);
+      newSet.add(taskId);
+      // 保存到 localStorage
+      localStorage.setItem("video-batch-downloaded-tasks", JSON.stringify([...newSet]));
+      return newSet;
+    });
+  }, []);
+  
   // AI 模特设置函数
   const setUseAiModel = (value: boolean) => updateGlobalSettings("useAiModel", value);
   const setSelectedModelId = (value: string | null) => updateGlobalSettings("aiModelId", value);
+  const setSelectedModelName = (value: string | null) => updateGlobalSettings("aiModelName", value);
   const setSelectedModelTriggerWord = (value: string | null) => updateGlobalSettings("aiModelTriggerWord", value);
   
   // 任务处理锁，防止重复执行
@@ -1945,14 +2047,15 @@ C07: [story CTA, inspiring, <50 chars]`,
             console.log("[Video Batch] Prompt mode - Added AI model trigger word:", selectedModelTriggerWord);
           }
           
-          // 保存用户提示词到任务
+          // 保存用户提示词到任务（不暴露 trigger_word）
           updateTaskStatus(task.id, "generating_video", {
             currentStep: 3,
             progress: 30,
             doubaoTalkingScript: useAiModel && selectedModelTriggerWord 
-              ? `【纯提示词模式 - AI模特: ${selectedModelTriggerWord}】` 
+              ? `【纯提示词模式 - 已启用AI模特】` 
               : "【纯提示词模式 - 无口播脚本】",
-            doubaoAiVideoPrompt: finalVideoPrompt,
+            // 保存给用户看的提示词不包含 trigger_word
+            doubaoAiVideoPrompt: task.customPrompt || "",
           });
           
           console.log("[Video Batch] Prompt mode - using custom prompt directly", {
@@ -2050,10 +2153,11 @@ C07: [story CTA, inspiring, <50 chars]`,
           updateTaskStatus(task.id, "generating_video", {
             currentStep: 3,
             progress: 65,
-            doubaoAiVideoPrompt: promptResult.data.prompt,
+            // 保存展示提示词（不含 trigger word）给用户看
+            doubaoAiVideoPrompt: promptResult.data.displayPrompt || promptResult.data.prompt,
           });
 
-          // 设置最终提示词和主图
+          // 设置最终提示词（含 trigger word）用于发送给视频 API
           finalVideoPrompt = promptResult.data.prompt;
           mainGridImageUrl = uploadedUrls[0];
           
@@ -2079,8 +2183,14 @@ C07: [story CTA, inspiring, <50 chars]`,
         // 计算积分消耗
         const taskCreditCost = getVideoBatchTotalPrice(taskModelType, taskDuration, taskQuality);
 
-        console.log("[Video Batch] Calling generate-sora-video with userId:", currentUserId);
-        const videoResponse = await fetch("/api/video-batch/generate-sora-video", {
+        // 判断是否使用 VEO3 模型
+        const isVeo3Model = taskModelType === "veo3" || taskModelType === "veo3-quality";
+        const apiEndpoint = isVeo3Model 
+          ? "/api/video-batch/generate-veo-video" 
+          : "/api/video-batch/generate-sora-video";
+
+        console.log(`[Video Batch] Calling ${isVeo3Model ? 'VEO3' : 'Sora2'} API with userId:`, currentUserId);
+        const videoResponse = await fetch(apiEndpoint, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -2088,7 +2198,7 @@ C07: [story CTA, inspiring, <50 chars]`,
             mainGridImageUrl: mainGridImageUrl || undefined, // 纯提示词模式下可能为空
             aspectRatio: taskAspectRatio,
             durationSeconds: taskDuration,
-            quality: taskQuality,
+            quality: isVeo3Model ? (taskModelType === "veo3-quality" ? "quality" : "fast") : taskQuality,
             modelType: taskModelType,
             taskId: task.id,
             userId: currentUserId,  // 传递用户ID以便记录到任务日志
@@ -2109,8 +2219,9 @@ C07: [story CTA, inspiring, <50 chars]`,
           throw new Error(videoResult.error || "视频提交失败");
         }
 
-        const soraTaskId = videoResult.data.soraTaskId;
-        console.log("[Video Batch] Sora task submitted:", soraTaskId);
+        // 获取任务 ID（VEO3 返回 veoTaskId，Sora2 返回 soraTaskId）
+        const soraTaskId = isVeo3Model ? videoResult.data.veoTaskId : videoResult.data.soraTaskId;
+        console.log(`[Video Batch] ${isVeo3Model ? 'VEO3' : 'Sora2'} task submitted:`, soraTaskId);
 
         // 更新状态为正在生成视频
         updateTaskStatus(task.id, "generating_video", {
@@ -2119,9 +2230,14 @@ C07: [story CTA, inspiring, <50 chars]`,
           soraTaskId: soraTaskId,
         });
 
-        // ==================== Step 3.5: 轮询 Sora 任务状态 ====================
+        // ==================== Step 3.5: 轮询视频任务状态 ====================
         const isPro = taskModelType === "sora2-pro" || taskQuality === "hd" || taskDuration === 25;
-        const maxPollTime = isPro ? 35 * 60 * 1000 : 10 * 60 * 1000; // Pro 35分钟, 标清 10分钟
+        // VEO3 通常需要 3-5 分钟，设置 10 分钟超时
+        const maxPollTime = isVeo3Model ? 10 * 60 * 1000 : (isPro ? 35 * 60 * 1000 : 10 * 60 * 1000);
+        // 轮询状态接口路径
+        const statusApiPath = isVeo3Model 
+          ? `/api/video-batch/veo-status/${soraTaskId}`
+          : `/api/video-batch/sora-status/${soraTaskId}?isPro=${isPro}`;
         const pollInterval = 15 * 1000; // 15秒轮询一次（减少请求频率）
         const startTime = Date.now();
 
@@ -2156,7 +2272,7 @@ C07: [story CTA, inspiring, <50 chars]`,
             const timeoutId = setTimeout(() => controller.abort(), 30000); // 30秒超时
 
             const statusResponse = await fetch(
-              `/api/video-batch/sora-status/${soraTaskId}?isPro=${isPro}`,
+              statusApiPath,
               { signal: controller.signal }
             );
             clearTimeout(timeoutId);
@@ -2369,7 +2485,7 @@ C07: [story CTA, inspiring, <50 chars]`,
                         : "text-muted-foreground hover:text-foreground"
                     )}
                   >
-                    标清
+                    Sora2
                   </Button>
                   <Button
                     variant="ghost"
@@ -2386,7 +2502,41 @@ C07: [story CTA, inspiring, <50 chars]`,
                         : "text-muted-foreground hover:text-foreground"
                     )}
                   >
-                    Pro
+                    Sora2 Pro
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      updateGlobalSettings("modelType", "veo3");
+                      updateGlobalSettings("duration", 10);
+                      updateGlobalSettings("quality", "standard");
+                    }}
+                    className={cn(
+                      "h-7 px-3 text-xs",
+                      globalSettings.modelType === "veo3"
+                        ? "bg-teal-500/30 text-teal-300"
+                        : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    VEO3
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      updateGlobalSettings("modelType", "veo3-quality");
+                      updateGlobalSettings("duration", 10);
+                      updateGlobalSettings("quality", "hd");
+                    }}
+                    className={cn(
+                      "h-7 px-3 text-xs",
+                      globalSettings.modelType === "veo3-quality"
+                        ? "bg-teal-500/30 text-teal-300"
+                        : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    VEO3 HD
                   </Button>
                 </div>
               </div>
@@ -2420,7 +2570,7 @@ C07: [story CTA, inspiring, <50 chars]`,
                         </Button>
                       ))}
                     </>
-                  ) : (
+                  ) : globalSettings.modelType === "sora2-pro" ? (
                     <>
                       <Button
                         variant="outline"
@@ -2455,6 +2605,11 @@ C07: [story CTA, inspiring, <50 chars]`,
                         25秒
                       </Button>
                     </>
+                  ) : (
+                    // VEO3 系列 - 固定 8 秒
+                    <div className="h-7 px-3 flex items-center text-xs text-teal-400 bg-teal-500/10 border border-teal-500/30 rounded-md">
+                      8秒 (固定)
+                    </div>
                   )}
                 </div>
               </div>
@@ -2494,24 +2649,25 @@ C07: [story CTA, inspiring, <50 chars]`,
                 variant="outline"
                 size="sm"
                 onClick={() => {
-                  if (!useAiModel) {
-                    setShowModelSelector(true);
-                  } else {
+                  // 只有当有效选择了模特时，点击才会取消选择；否则打开选择器
+                  if (useAiModel && selectedModelId) {
                     setUseAiModel(false);
                     setSelectedModelId(null);
-                    setSelectedModelName("");
-                    setSelectedModelTriggerWord("");
+                    setSelectedModelName(null);
+                    setSelectedModelTriggerWord(null);
+                  } else {
+                    setShowModelSelector(true);
                   }
                 }}
                 className={cn(
                   "h-7 px-3 text-xs gap-1",
-                  useAiModel
+                  useAiModel && selectedModelId
                     ? "bg-purple-500/20 border-purple-500/50 text-purple-400"
                     : "btn-subtle"
                 )}
               >
                 <UserCircle className="h-3 w-3" />
-                {useAiModel ? selectedModelName || "模特" : "AI模特"}
+                {useAiModel && selectedModelId ? (selectedModelName || "已选择") : "模特"}
               </Button>
 
               {/* 费用显示 */}
@@ -2560,17 +2716,6 @@ C07: [story CTA, inspiring, <50 chars]`,
                 </Badge>
               </div>
               <div className="flex items-center gap-2">
-                {/* 线路检测按钮 - 始终显示 */}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShowSpeedTest(true)}
-                  className="h-8 text-xs"
-                >
-                  <Wifi className="h-3 w-3 mr-1" />
-                  检测线路
-                </Button>
-                
                 {selectedCount > 0 && (
                   <>
                     {/* 批量下载选中的已完成任务 - 下拉菜单提供两种方式 */}
@@ -2593,73 +2738,158 @@ C07: [story CTA, inspiring, <50 chars]`,
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="w-64">
-                          {/* 方式1: 复制地址到剪贴板（推荐！） */}
+                          {/* 方式1: 直连CDN推荐 - 最快下载方式 */}
                           <DropdownMenuItem
                             onClick={async () => {
                               const completedSelectedTasks = tasks.filter(
-                                t => selectedTaskIds[t.id] && t.status === "success" && t.soraVideoUrl
+                                t => selectedTaskIds[t.id] && t.status === "success" && t.soraVideoUrl && !downloadedTaskIds.has(t.id)
                               );
                               if (completedSelectedTasks.length === 0) {
-                                toast({ variant: "destructive", title: "没有可下载的视频" });
+                                // 检查是否所有选中的都已下载
+                                const allDownloaded = tasks.filter(
+                                  t => selectedTaskIds[t.id] && t.status === "success" && t.soraVideoUrl
+                                ).every(t => downloadedTaskIds.has(t.id));
+                                
+                                if (allDownloaded) {
+                                  toast({ title: "✅ 所有选中视频已下载", description: "无需重复下载" });
+                                } else {
+                                  toast({ variant: "destructive", title: "没有可下载的视频" });
+                                }
                                 return;
                               }
                               
-                              // 生成视频地址列表
-                              const urls = completedSelectedTasks
-                                .map((task) => task.soraVideoUrl)
-                                .filter(Boolean)
-                                .join("\n");
+                              // 重置取消标志
+                              cancelDownloadRef.current = false;
                               
-                              // 复制到剪贴板
-                              await navigator.clipboard.writeText(urls);
-                              
-                              toast({ 
-                                title: "✅ 已复制到剪贴板",
-                                description: `${completedSelectedTasks.length} 个视频地址已复制，请粘贴到 IDM/迅雷 批量下载`
+                              // 初始化进度状态并显示对话框
+                              setDownloadProgress({
+                                show: true,
+                                total: completedSelectedTasks.length,
+                                current: 0,
+                                success: 0,
+                                failed: 0,
+                                currentFilename: "准备中...",
+                                startTime: Date.now(),
+                                cancelled: false,
                               });
-                            }}
-                            className="cursor-pointer bg-gradient-to-r from-yellow-500/10 to-orange-500/10 border border-yellow-500/20"
-                          >
-                            <Zap className="h-4 w-4 mr-2 text-yellow-400" />
-                            <div className="flex flex-col">
-                              <span className="font-medium">复制地址（最快🚀）</span>
-                              <span className="text-xs text-muted-foreground">粘贴到 IDM/迅雷，极速下载</span>
-                            </div>
-                          </DropdownMenuItem>
-                          
-                          <DropdownMenuSeparator />
-                          
-                          {/* 方式1: 复制地址到剪贴板（推荐！） */}
-                          <DropdownMenuItem
-                            onClick={async () => {
-                              const completedSelectedTasks = tasks.filter(
-                                t => selectedTaskIds[t.id] && t.status === "success" && t.soraVideoUrl
-                              );
-                              if (completedSelectedTasks.length === 0) {
-                                toast({ variant: "destructive", title: "没有可下载的视频" });
-                                return;
+                              setIsDownloading(true);
+                              
+                              let successCount = 0;
+                              let failedCount = 0;
+                              
+                              // 逐个直连CDN下载（带进度追踪）
+                              for (let i = 0; i < completedSelectedTasks.length; i++) {
+                                // 检查是否取消
+                                if (cancelDownloadRef.current) {
+                                  setDownloadProgress(prev => ({ ...prev, cancelled: true }));
+                                  break;
+                                }
+                                
+                                const task = completedSelectedTasks[i];
+                                if (task.soraVideoUrl) {
+                                  const filename = generateSimpleFilename(task, tasks.indexOf(task));
+                                  
+                                  // 更新当前下载文件名
+                                  setDownloadProgress(prev => ({
+                                    ...prev,
+                                    currentFilename: filename,
+                                  }));
+                                  
+                                  // 标记任务正在下载
+                                  setDownloadingTaskIds(prev => new Set(prev).add(task.id));
+                                  setTaskDownloadProgress(prev => ({ ...prev, [task.id]: 0 }));
+                                  
+                                  try {
+                                    // 直连CDN下载（带进度追踪）
+                                    const response = await fetch(task.soraVideoUrl, {
+                                      method: "GET",
+                                      mode: "cors",
+                                      credentials: "omit",
+                                    });
+                                    
+                                    if (!response.ok) {
+                                      throw new Error(`HTTP ${response.status}`);
+                                    }
+                                    
+                                    // 获取文件大小
+                                    const contentLength = response.headers.get("content-length");
+                                    const totalSize = contentLength ? parseInt(contentLength, 10) : 0;
+                                    
+                                    // 使用 ReadableStream 追踪进度
+                                    const reader = response.body?.getReader();
+                                    if (!reader) throw new Error("无法读取响应流");
+                                    
+                                    const chunks: Uint8Array[] = [];
+                                    let receivedLength = 0;
+                                    
+                                    while (true) {
+                                      const { done, value } = await reader.read();
+                                      if (done) break;
+                                      
+                                      chunks.push(value);
+                                      receivedLength += value.length;
+                                      
+                                      // 更新下载进度
+                                      if (totalSize > 0) {
+                                        const progress = Math.round((receivedLength / totalSize) * 100);
+                                        setTaskDownloadProgress(prev => ({ ...prev, [task.id]: progress }));
+                                      }
+                                    }
+                                    
+                                    // 合并chunks为blob
+                                    const blob = new Blob(chunks, { type: "video/mp4" });
+                                    const blobUrl = URL.createObjectURL(blob);
+                                    
+                                    const link = document.createElement("a");
+                                    link.href = blobUrl;
+                                    link.download = filename;
+                                    document.body.appendChild(link);
+                                    link.click();
+                                    document.body.removeChild(link);
+                                    
+                                    setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+                                    successCount++;
+                                    
+                                    // 标记任务已下载
+                                    markTaskAsDownloaded(task.id);
+                                    setTaskDownloadProgress(prev => ({ ...prev, [task.id]: 100 }));
+                                  } catch (error) {
+                                    console.error(`[CDN Download] Error:`, error);
+                                    failedCount++;
+                                    // 失败时打开新标签页让用户手动下载
+                                    openVideoInNewTab(task.soraVideoUrl);
+                                  }
+                                  
+                                  // 移除下载中状态
+                                  setDownloadingTaskIds(prev => {
+                                    const newSet = new Set(prev);
+                                    newSet.delete(task.id);
+                                    return newSet;
+                                  });
+                                  
+                                  // 更新进度状态
+                                  setDownloadProgress(prev => ({
+                                    ...prev,
+                                    current: i + 1,
+                                    success: successCount,
+                                    failed: failedCount,
+                                  }));
+                                  
+                                  // 间隔 200ms
+                                  await new Promise(r => setTimeout(r, 200));
+                                }
                               }
                               
-                              // 生成视频地址列表
-                              const urls = completedSelectedTasks
-                                .map((task) => task.soraVideoUrl)
-                                .filter(Boolean)
-                                .join("\n");
-                              
-                              // 复制到剪贴板
-                              await navigator.clipboard.writeText(urls);
-                              
-                              toast({ 
-                                title: "✅ 已复制到剪贴板",
-                                description: `${completedSelectedTasks.length} 个视频地址已复制，请粘贴到 IDM/迅雷 批量下载`
-                              });
+                              setIsDownloading(false);
+                              // 清理所有任务的下载进度
+                              setTaskDownloadProgress({});
                             }}
-                            className="cursor-pointer bg-gradient-to-r from-tiktok-cyan/10 to-tiktok-pink/10"
+                            className="cursor-pointer bg-gradient-to-r from-emerald-500/10 to-teal-500/10 border border-emerald-500/20"
                           >
-                            <Copy className="h-4 w-4 mr-2 text-tiktok-cyan" />
+                            <Zap className="h-4 w-4 mr-2 text-emerald-400" />
                             <div className="flex flex-col">
-                              <span className="font-medium">复制地址（推荐⭐）</span>
-                              <span className="text-xs text-muted-foreground">粘贴到 IDM/迅雷，极速下载</span>
+                              <span className="font-medium text-emerald-400">直连CDN推荐 🧪</span>
+                              <span className="text-xs text-muted-foreground">直连CDN，速度最快，显示进度</span>
                             </div>
                           </DropdownMenuItem>
                           
@@ -2709,140 +2939,22 @@ C07: [story CTA, inspiring, <50 chars]`,
                           
                           <DropdownMenuSeparator />
                           
-                          {/* 方式3: 直链下载 - 直接打开CDN地址 */}
+                          {/* 方式3: 代理下载 - 走服务器 */}
                           <DropdownMenuItem
                             onClick={async () => {
                               const completedSelectedTasks = tasks.filter(
-                                t => selectedTaskIds[t.id] && t.status === "success" && t.soraVideoUrl
+                                t => selectedTaskIds[t.id] && t.status === "success" && t.soraVideoUrl && !downloadedTaskIds.has(t.id)
                               );
                               if (completedSelectedTasks.length === 0) {
-                                toast({ variant: "destructive", title: "没有可下载的视频" });
-                                return;
-                              }
-                              
-                              toast({ 
-                                title: `🔗 打开直链`,
-                                description: `正在打开 ${completedSelectedTasks.length} 个视频，请右键"视频另存为"`
-                              });
-                              
-                              // 直接打开 CDN 链接
-                              for (let i = 0; i < completedSelectedTasks.length; i++) {
-                                const task = completedSelectedTasks[i];
-                                if (task.soraVideoUrl) {
-                                  const link = document.createElement("a");
-                                  link.href = task.soraVideoUrl;
-                                  link.target = "_blank";
-                                  link.rel = "noopener noreferrer";
-                                  document.body.appendChild(link);
-                                  link.click();
-                                  document.body.removeChild(link);
-                                  await new Promise(r => setTimeout(r, 400));
+                                const allDownloaded = tasks.filter(
+                                  t => selectedTaskIds[t.id] && t.status === "success" && t.soraVideoUrl
+                                ).every(t => downloadedTaskIds.has(t.id));
+                                
+                                if (allDownloaded) {
+                                  toast({ title: "✅ 所有选中视频已下载", description: "无需重复下载" });
+                                } else {
+                                  toast({ variant: "destructive", title: "没有可下载的视频" });
                                 }
-                              }
-                            }}
-                            className="cursor-pointer"
-                          >
-                            <Zap className="h-4 w-4 mr-2 text-yellow-400" />
-                            <div className="flex flex-col">
-                              <span>打开直链</span>
-                              <span className="text-xs text-muted-foreground">右键视频"另存为"下载</span>
-                            </div>
-                          </DropdownMenuItem>
-                          
-                          <DropdownMenuSeparator />
-                          
-                          {/* 方式4: 直连CDN测试 - 模拟生产队的驴的下载方式 */}
-                          <DropdownMenuItem
-                            onClick={async () => {
-                              const completedSelectedTasks = tasks.filter(
-                                t => selectedTaskIds[t.id] && t.status === "success" && t.soraVideoUrl
-                              );
-                              if (completedSelectedTasks.length === 0) {
-                                toast({ variant: "destructive", title: "没有可下载的视频" });
-                                return;
-                              }
-                              
-                              toast({
-                                title: "🧪 直连CDN测试下载",
-                                description: `正在测试 ${completedSelectedTasks.length} 个视频，请打开F12查看网络请求`,
-                              });
-                              
-                              // 逐个直连CDN下载（和生产队的驴一样的方式）
-                              for (let i = 0; i < completedSelectedTasks.length; i++) {
-                                const task = completedSelectedTasks[i];
-                                if (task.soraVideoUrl) {
-                                  const filename = generateSimpleFilename(task, tasks.indexOf(task));
-                                  
-                                  console.log(`[CDN Test] Downloading: ${task.soraVideoUrl}`);
-                                  console.log(`[CDN Test] Filename: ${filename}`);
-                                  
-                                  try {
-                                    // 和生产队的驴完全一样的 fetch 方式
-                                    const response = await fetch(task.soraVideoUrl, {
-                                      method: "GET",
-                                      mode: "cors",
-                                      credentials: "omit",
-                                      // 不设置超时，让它自然完成或失败
-                                    });
-                                    
-                                    console.log(`[CDN Test] Response status: ${response.status}`);
-                                    console.log(`[CDN Test] Content-Type: ${response.headers.get("content-type")}`);
-                                    console.log(`[CDN Test] Content-Length: ${response.headers.get("content-length")}`);
-                                    
-                                    if (!response.ok) {
-                                      throw new Error(`HTTP ${response.status}`);
-                                    }
-                                    
-                                    // 转blob下载
-                                    const blob = await response.blob();
-                                    const blobUrl = URL.createObjectURL(blob);
-                                    
-                                    const link = document.createElement("a");
-                                    link.href = blobUrl;
-                                    link.download = filename;
-                                    document.body.appendChild(link);
-                                    link.click();
-                                    document.body.removeChild(link);
-                                    
-                                    setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
-                                    
-                                    toast({
-                                      title: `✅ 下载成功`,
-                                      description: filename,
-                                    });
-                                  } catch (error) {
-                                    console.error(`[CDN Test] Error:`, error);
-                                    toast({
-                                      variant: "destructive",
-                                      title: "直连CDN失败",
-                                      description: error instanceof Error ? error.message : "未知错误",
-                                    });
-                                  }
-                                  
-                                  // 间隔 500ms
-                                  await new Promise(r => setTimeout(r, 500));
-                                }
-                              }
-                            }}
-                            className="cursor-pointer"
-                          >
-                            <Zap className="h-4 w-4 mr-2 text-orange-400" />
-                            <div className="flex flex-col">
-                              <span className="text-orange-400 font-medium">直连CDN测试 🧪</span>
-                              <span className="text-xs text-muted-foreground">模拟生产队的驴，用于对比测试</span>
-                            </div>
-                          </DropdownMenuItem>
-                          
-                          <DropdownMenuSeparator />
-                          
-                          {/* 方式5: 代理下载 - 走服务器 */}
-                          <DropdownMenuItem
-                            onClick={async () => {
-                              const completedSelectedTasks = tasks.filter(
-                                t => selectedTaskIds[t.id] && t.status === "success" && t.soraVideoUrl
-                              );
-                              if (completedSelectedTasks.length === 0) {
-                                toast({ variant: "destructive", title: "没有可下载的视频" });
                                 return;
                               }
                               
@@ -2883,13 +2995,25 @@ C07: [story CTA, inspiring, <50 chars]`,
                                     currentFilename: filename,
                                   }));
                                   
+                                  // 标记任务正在下载
+                                  setDownloadingTaskIds(prev => new Set(prev).add(task.id));
+                                  
                                   const success = await downloadVideo(task.soraVideoUrl, filename, "named");
                                   if (success) {
                                     successCount++;
+                                    // 标记任务已下载
+                                    markTaskAsDownloaded(task.id);
                                   } else {
                                     failedCount++;
                                     openVideoInNewTab(task.soraVideoUrl);
                                   }
+                                  
+                                  // 移除下载中状态
+                                  setDownloadingTaskIds(prev => {
+                                    const newSet = new Set(prev);
+                                    newSet.delete(task.id);
+                                    return newSet;
+                                  });
                                   
                                   // 更新进度状态
                                   setDownloadProgress(prev => ({
@@ -2930,26 +3054,27 @@ C07: [story CTA, inspiring, <50 chars]`,
                 )}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="sm" className="h-8 btn-subtle">
-                      <MoreVertical className="h-3.5 w-3.5" />
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      className="h-8 px-3 text-xs font-medium bg-gradient-to-r from-violet-500/10 to-purple-500/10 border-violet-500/30 hover:border-violet-500/50 hover:bg-violet-500/20 transition-all"
+                    >
+                      <Settings2 className="h-3.5 w-3.5 mr-1.5 text-violet-400" />
+                      <span className="text-violet-300">选择管理</span>
+                      <ChevronDown className="h-3 w-3 ml-1.5 text-violet-400" />
                     </Button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={() => selectAllTasks(true)}>
-                      <Check className="h-4 w-4 mr-2" />
+                  <DropdownMenuContent align="end" className="w-40">
+                    <DropdownMenuItem onClick={() => selectAllTasks(true)} className="cursor-pointer">
+                      <Check className="h-4 w-4 mr-2 text-emerald-400" />
                       全选
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={clearSelection}>
-                      <X className="h-4 w-4 mr-2" />
+                    <DropdownMenuItem onClick={clearSelection} className="cursor-pointer">
+                      <X className="h-4 w-4 mr-2 text-orange-400" />
                       取消选择
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={resetBatch}>
-                      <RotateCcw className="h-4 w-4 mr-2" />
-                      重置所有任务
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={clearAllTasks} className="text-red-400">
+                    <DropdownMenuItem onClick={clearAllTasks} className="text-red-400 cursor-pointer">
                       <Trash2 className="h-4 w-4 mr-2" />
                       清空所有
                     </DropdownMenuItem>
@@ -2971,8 +3096,27 @@ C07: [story CTA, inspiring, <50 chars]`,
                 </p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {tasks.map((task) => (
+              (() => {
+                // 按分组整理任务
+                const groupedTasks: Record<string, VideoBatchTask[]> = {};
+                const ungroupedTasks: VideoBatchTask[] = [];
+                
+                tasks.forEach(task => {
+                  if (task.groupName) {
+                    if (!groupedTasks[task.groupName]) {
+                      groupedTasks[task.groupName] = [];
+                    }
+                    groupedTasks[task.groupName].push(task);
+                  } else {
+                    ungroupedTasks.push(task);
+                  }
+                });
+                
+                const groupNames = Object.keys(groupedTasks);
+                const hasGroups = groupNames.length > 0;
+                
+                // 渲染单个任务卡片的辅助函数
+                const renderTaskCard = (task: VideoBatchTask) => (
                   <VideoTaskCard
                     key={task.id}
                     task={task}
@@ -2993,9 +3137,58 @@ C07: [story CTA, inspiring, <50 chars]`,
                     modelType={globalSettings.modelType}
                     duration={globalSettings.duration}
                     quality={globalSettings.quality}
+                    downloadProgress={taskDownloadProgress[task.id] || 0}
+                    isDownloading={downloadingTaskIds.has(task.id)}
+                    isDownloaded={downloadedTaskIds.has(task.id)}
                   />
-                ))}
-              </div>
+                );
+                
+                return (
+                  <div className="space-y-6">
+                    {/* 分组任务 */}
+                    {groupNames.map(groupName => {
+                      const groupTaskList = groupedTasks[groupName];
+                      const groupSuccessCount = groupTaskList.filter(t => t.status === "success").length;
+                      const groupTotalCount = groupTaskList.length;
+                      
+                      return (
+                        <div key={groupName} className="space-y-3">
+                          {/* 分组标题 */}
+                          <div className="flex items-center gap-3 py-2 px-3 bg-amber-500/10 rounded-lg border border-amber-500/20">
+                            <FolderUp className="h-4 w-4 text-amber-400" />
+                            <span className="font-semibold text-amber-400">{groupName}</span>
+                            <Badge variant="outline" className="text-xs border-amber-500/30 text-amber-400">
+                              {groupSuccessCount}/{groupTotalCount} 完成
+                            </Badge>
+                          </div>
+                          {/* 分组内任务 */}
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {groupTaskList.map(renderTaskCard)}
+                          </div>
+                        </div>
+                      );
+                    })}
+                    
+                    {/* 未分组任务 */}
+                    {ungroupedTasks.length > 0 && (
+                      <div className="space-y-3">
+                        {hasGroups && (
+                          <div className="flex items-center gap-3 py-2 px-3 bg-muted/30 rounded-lg border border-border/50">
+                            <Video className="h-4 w-4 text-muted-foreground" />
+                            <span className="font-medium text-muted-foreground">未分组</span>
+                            <Badge variant="outline" className="text-xs">
+                              {ungroupedTasks.filter(t => t.status === "success").length}/{ungroupedTasks.length} 完成
+                            </Badge>
+                          </div>
+                        )}
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                          {ungroupedTasks.map(renderTaskCard)}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()
             )}
           </CardContent>
         </Card>
@@ -3239,6 +3432,24 @@ C07: [story CTA, inspiring, <50 chars]`,
                       </p>
                     </div>
                   </div>
+
+                  {/* 分组名称（用于批量下载时区分） */}
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium flex items-center gap-2">
+                      <FolderUp className="h-4 w-4 text-amber-400" />
+                      分组名称（可选）
+                    </Label>
+                    <input
+                      type="text"
+                      value={groupNameInput}
+                      onChange={(e) => setGroupNameInput(e.target.value)}
+                      placeholder="如：护肤品、饮料、服装..."
+                      className="w-full px-4 py-2 text-sm bg-muted/30 border border-border/50 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      设置分组名称后，下载的视频文件名会带上此前缀，方便区分不同批次的视频
+                    </p>
+                  </div>
                 </div>
               )}
 
@@ -3297,7 +3508,9 @@ C07: [story CTA, inspiring, <50 chars]`,
                     <div className="min-w-0">
                       <p className="text-[10px] text-muted-foreground uppercase tracking-wider">模型</p>
                       <p className="text-sm font-semibold text-white truncate">
-                        {globalSettings.modelType === "sora2" ? "Sora 2.0" : "Sora 2.0 Pro"}
+                        {globalSettings.modelType === "sora2" ? "Sora 2.0" : 
+                         globalSettings.modelType === "sora2-pro" ? "Sora 2.0 Pro" :
+                         globalSettings.modelType === "veo3" ? "VEO3 快速版" : "VEO3 高清版"}
                       </p>
                     </div>
                   </div>
@@ -3343,8 +3556,8 @@ C07: [story CTA, inspiring, <50 chars]`,
                     <div className="min-w-0">
                       <p className="text-[10px] text-muted-foreground uppercase tracking-wider">AI模特</p>
                       <p className="text-sm font-semibold text-white truncate">
-                        {useAiModel && selectedModelTriggerWord 
-                          ? (selectedModelName || selectedModelTriggerWord) 
+                        {useAiModel && selectedModelId 
+                          ? (selectedModelName || "已选择") 
                           : "未选择"}
                       </p>
                     </div>
@@ -3353,11 +3566,11 @@ C07: [story CTA, inspiring, <50 chars]`,
               </div>
 
               {/* AI模特配置提示 */}
-              {createMode === "prompt" && useAiModel && selectedModelTriggerWord && (
+              {createMode === "prompt" && useAiModel && selectedModelId && (
                 <div className="flex items-center gap-2 p-3 rounded-lg bg-purple-500/10 border border-purple-500/30">
                   <UserCircle className="h-4 w-4 text-purple-400" />
                   <span className="text-sm text-purple-400">
-                    已启用 AI 模特：<strong>{selectedModelName || selectedModelTriggerWord}</strong>
+                    已启用 AI 模特：<strong>{selectedModelName || "已选择"}</strong>
                   </span>
                 </div>
               )}
@@ -3386,6 +3599,7 @@ C07: [story CTA, inspiring, <50 chars]`,
                   }
                   setNewTaskImages([]);
                   setPromptInput("");
+                  setGroupNameInput(""); // 清空分组名称
                   setReferenceImageUrl("");
                   setReferenceImageFile(null);
                   setBatchCreateCount(1);
@@ -3437,8 +3651,9 @@ C07: [story CTA, inspiring, <50 chars]`,
                       }
                     }
                     
-                    createTaskFromPrompt(promptInput, uploadedRefUrl || undefined, batchCreateCount);
+                    createTaskFromPrompt(promptInput, uploadedRefUrl || undefined, batchCreateCount, groupNameInput || undefined);
                     setPromptInput("");
+                    setGroupNameInput(""); // 清空分组名称
                     if (referenceImageUrl.startsWith("blob:")) {
                       URL.revokeObjectURL(referenceImageUrl);
                     }
@@ -3512,21 +3727,6 @@ C07: [story CTA, inspiring, <50 chars]`,
           }}
         />
 
-        {/* 线路检测弹窗 */}
-        <SpeedTestDialog
-          open={showSpeedTest}
-          onClose={() => setShowSpeedTest(false)}
-          onComplete={(results) => {
-            const bestRoute = getBestRouteId(results);
-            if (bestRoute) {
-              toast({
-                title: "✅ 线路检测完成",
-                description: `推荐使用 ${results.find(r => r.routeId === bestRoute)?.routeId || bestRoute} 线路，后续下载将自动使用最快线路`,
-              });
-            }
-          }}
-        />
-
         {/* AI模特选择弹窗 */}
         <Dialog open={showModelSelector} onOpenChange={setShowModelSelector}>
           <DialogContent className="max-w-2xl bg-black/95 border-white/10">
@@ -3596,8 +3796,8 @@ C07: [story CTA, inspiring, <50 chars]`,
                   onClick={() => {
                     setUseAiModel(false);
                     setSelectedModelId(null);
-                    setSelectedModelName("");
-                    setSelectedModelTriggerWord("");
+                    setSelectedModelName(null);
+                    setSelectedModelTriggerWord(null);
                     setShowModelSelector(false);
                   }}
                 >
