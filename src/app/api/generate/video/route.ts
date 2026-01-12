@@ -138,22 +138,63 @@ export async function POST(request: Request) {
     // 组装最终 prompt（如果有模特 ID，注入 trigger word）
     let finalPrompt = prompt;
     let triggerWord: string | null = null;
+    let actualModelId: string | null = null;
 
     if (modelId) {
       const supabase = createAdminClient();
-      const { data: model } = await supabase
-        .from("ai_models")
-        .select("trigger_word, name")
-        .eq("id", modelId)
-        .single();
+      
+      // 处理 "auto" 模式：从用户已签约的模特中随机选择一个
+      if (modelId === "auto" && userId) {
+        console.log("[Generate Video] Auto mode: selecting random model for user:", userId);
+        
+        // 查询用户已签约且未过期的模特
+        const { data: contracts } = await supabase
+          .from("contracts")
+          .select("model_id, ai_models!inner(id, name, trigger_word)")
+          .eq("user_id", userId)
+          .eq("status", "active")
+          .gt("end_date", new Date().toISOString());
+        
+        if (contracts && contracts.length > 0) {
+          // 随机选择一个模特
+          const randomIndex = Math.floor(Math.random() * contracts.length);
+          const selectedContract = contracts[randomIndex];
+          const modelData = selectedContract.ai_models as { id: string; name: string; trigger_word: string | null };
+          
+          if (modelData?.trigger_word) {
+            triggerWord = modelData.trigger_word;
+            actualModelId = modelData.id;
+            finalPrompt = `Professional video featuring ${triggerWord}. ${prompt}`;
+            console.log("[Generate Video] Auto mode - Injected trigger word:", {
+              modelName: modelData.name,
+              triggerWord: triggerWord,
+              selectedFromCount: contracts.length,
+            });
+          } else {
+            console.log("[Generate Video] Auto mode - Selected model has no trigger_word:", modelData?.name);
+          }
+        } else {
+          console.log("[Generate Video] Auto mode - No active contracts found for user");
+        }
+      } else if (modelId !== "auto") {
+        // 直接使用指定的模特 ID
+        const { data: model } = await supabase
+          .from("ai_models")
+          .select("trigger_word, name")
+          .eq("id", modelId)
+          .single();
 
-      if (model?.trigger_word) {
-        triggerWord = model.trigger_word;
-        finalPrompt = `Professional video featuring ${triggerWord}. ${prompt}`;
-        console.log("[Generate Video] Injected trigger word:", {
-          modelName: model.name,
-          triggerWord: triggerWord,
-        });
+        if (model?.trigger_word) {
+          triggerWord = model.trigger_word;
+          actualModelId = modelId;
+          finalPrompt = `Professional video featuring ${triggerWord}. ${prompt}`;
+          console.log("[Generate Video] Injected trigger word:", {
+            modelName: model.name,
+            triggerWord: triggerWord,
+          });
+        } else {
+          console.log("[Generate Video] Model not found or has no trigger_word:", modelId);
+        }
       }
     }
 
@@ -224,7 +265,7 @@ export async function POST(request: Request) {
         const supabase = createAdminClient();
         await supabase.from("generations").insert({
           user_id: userId,
-          model_id: modelId || null,
+          model_id: actualModelId || null, // 使用实际选中的模特 ID，而不是 "auto"
           task_id: result.taskId,
           type: "video",
           source: "quick_gen",
