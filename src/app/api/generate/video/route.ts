@@ -140,6 +140,9 @@ export async function POST(request: Request) {
     let triggerWord: string | null = null;
     let actualModelId: string | null = null;
 
+    // 调试日志：记录收到的 modelId
+    console.log("[Generate Video] Received modelId:", modelId, "userId:", userId);
+
     if (modelId) {
       const supabase = createAdminClient();
       

@@ -70,12 +70,14 @@ export async function POST(request: NextRequest) {
     console.log("[Video Batch] AI video prompt generated successfully:", {
       taskId,
       promptLength: result.prompt?.length || 0,
+      hasDisplayPrompt: !!result.displayPrompt,
     });
 
     return NextResponse.json({
       success: true,
       data: {
-        prompt: result.prompt,
+        prompt: result.prompt,  // 完整提示词（含 trigger word，用于发送给视频 API）
+        displayPrompt: result.displayPrompt || result.prompt,  // 展示提示词（不含 trigger word）
         taskId,
       },
     });

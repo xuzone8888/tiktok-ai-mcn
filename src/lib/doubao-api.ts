@@ -596,12 +596,16 @@ export async function generateAiVideoPrompt(
   }
 
   let finalPrompt = result.content || "";
+  
+  // 保存原始提示词（不含 trigger word，用于展示给用户）
+  const rawPrompt = finalPrompt;
 
-  // 如果有AI模特触发词，添加到提示词开头
+  // 如果有AI模特触发词，添加到提示词开头（仅用于发送给视频生成 API）
+  // 注意：trigger word 不应该暴露给用户
   if (modelTriggerWord) {
     const modelPrefix = `[AI MODEL APPEARANCE: The creator/influencer in this video should have the appearance of ${modelTriggerWord}. Maintain this consistent appearance throughout all 7 shots.]\n\n`;
     finalPrompt = modelPrefix + finalPrompt;
-    console.log("[Doubao] Added model trigger word to prompt");
+    console.log("[Doubao] Added model trigger word to prompt (hidden from user)");
   }
 
   // 限制提示词长度，避免 Sora API 报错 "提示词过长"
@@ -666,7 +670,10 @@ export async function generateAiVideoPrompt(
     }
   }
 
-  return { success: true, prompt: finalPrompt };
+  // 返回两个版本：
+  // - prompt: 完整提示词（含 trigger word，用于发送给视频生成 API）
+  // - displayPrompt: 展示提示词（不含 trigger word，用于展示给用户）
+  return { success: true, prompt: finalPrompt, displayPrompt: rawPrompt };
 }
 
 /**
