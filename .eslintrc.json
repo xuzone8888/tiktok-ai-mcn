@@ -1,3 +1,74 @@
 {
-  "extends": ["next/core-web-vitals", "next/typescript"]
+  "extends": [
+    "next/core-web-vitals",
+    "next/typescript"
+  ],
+  "rules": {
+    // ==================== 代码质量 ====================
+    "no-console": ["warn", { "allow": ["warn", "error"] }],
+    "no-unused-vars": "off",
+    "@typescript-eslint/no-unused-vars": ["warn", {
+      "argsIgnorePattern": "^_",
+      "varsIgnorePattern": "^_",
+      "caughtErrorsIgnorePattern": "^_"
+    }],
+    "no-debugger": "warn",
+    
+    // ==================== React 优化 ====================
+    "react/display-name": "off",
+    "react/jsx-no-useless-fragment": "warn",
+    "react-hooks/rules-of-hooks": "error",
+    "react-hooks/exhaustive-deps": "warn",
+    
+    // ==================== TypeScript ====================
+    "@typescript-eslint/no-explicit-any": "warn",
+    "@typescript-eslint/explicit-function-return-type": "off",
+    "@typescript-eslint/no-non-null-assertion": "off",
+    "@typescript-eslint/ban-ts-comment": "off",
+    
+    // ==================== 导入排序 ====================
+    "import/order": ["warn", {
+      "groups": [
+        "builtin",
+        "external",
+        "internal",
+        ["parent", "sibling"],
+        "index"
+      ],
+      "newlines-between": "always",
+      "alphabetize": {
+        "order": "asc",
+        "caseInsensitive": true
+      }
+    }],
+    
+    // ==================== 最佳实践 ====================
+    "prefer-const": "warn",
+    "no-var": "error",
+    "eqeqeq": ["warn", "always", { "null": "ignore" }],
+    "no-nested-ternary": "warn"
+  },
+  "overrides": [
+    {
+      // API 路由允许使用 console.log
+      "files": ["src/app/api/**/*.ts"],
+      "rules": {
+        "no-console": "off"
+      }
+    },
+    {
+      // 脚本文件允许使用 console.log
+      "files": ["scripts/**/*.js", "scripts/**/*.ts"],
+      "rules": {
+        "no-console": "off"
+      }
+    }
+  ],
+  "settings": {
+    "import/resolver": {
+      "typescript": {
+        "project": "./tsconfig.json"
+      }
+    }
+  }
 }

@@ -52,6 +52,10 @@ export async function GET(request: NextRequest) {
       // 默认只返回 active 状态的合约
       query = query.eq("status", "active");
     }
+    
+    // ⚠️ 重要：必须检查合约是否过期！
+    // 只返回未过期的合约（end_date > 当前时间）
+    query = query.gt("end_date", new Date().toISOString());
 
     const { data: contracts, error } = await query;
 
@@ -275,6 +279,22 @@ export async function POST(request: NextRequest) {
         new_end_date: endDate.toISOString(),
         new_balance: profile.credits - price,
       });
+    }
+
+    // 【重要】在创建新合约前，先将该模特的所有过期合约标记为 expired
+    // 这是为了避免唯一约束 (user_id, model_id, status) 冲突
+    // 注意：更新所有用户的过期合约，不仅仅是当前用户的
+    const { error: expireError, count: expiredCount } = await adminSupabase
+      .from("contracts")
+      .update({ status: "expired", updated_at: new Date().toISOString() })
+      .eq("model_id", model_id)
+      .eq("status", "active")
+      .lt("end_date", new Date().toISOString());
+    
+    if (expireError) {
+      console.warn("[Contracts API] Failed to expire old contracts:", expireError);
+    } else if (expiredCount && expiredCount > 0) {
+      console.log("[Contracts API] Expired", expiredCount, "old contracts for model:", model_id);
     }
 
     // 创建新合约

@@ -2306,10 +2306,16 @@ C07: [story CTA, inspiring, <50 chars]`,
               videoUrl = statusResult.data.videoUrl;
               break;
             } else if (taskStatus === "failed") {
-              // 包含退款提示
+              // 包含退款提示和建议
               const baseError = statusResult.data.errorMessage || "第三方 AI 视频服务暂时繁忙";
               const refundNote = statusResult.data.refundNote;
-              pollError = refundNote ? `${baseError}。${refundNote}` : baseError;
+              const suggestion = statusResult.data.suggestion;
+              
+              let errorParts = [baseError];
+              if (suggestion) errorParts.push(suggestion);
+              if (refundNote) errorParts.push(refundNote);
+              
+              pollError = errorParts.join("。");
               break;
             }
             // 继续轮询 (pending/processing)
@@ -2698,6 +2704,55 @@ C07: [story CTA, inspiring, <50 chars]`,
                 <FolderUp className="h-3.5 w-3.5 mr-1" />
                 创建任务
               </Button>
+
+              {/* 开始所有任务按钮 - 有待处理任务时显示 */}
+              {stats.pending > 0 && (
+                <Button
+                  onClick={async () => {
+                    if (!userId) {
+                      toast({ variant: "destructive", title: "请先登录" });
+                      return;
+                    }
+                    
+                    const pendingTasks = tasks.filter(t => t.status === "pending");
+                    if (pendingTasks.length === 0) {
+                      toast({ title: "没有待处理任务", variant: "default" });
+                      return;
+                    }
+                    
+                    // 检查积分
+                    if (userCredits < stats.totalCost) {
+                      toast({ variant: "destructive", title: `积分不足，需要 ${stats.totalCost} 积分，当前余额 ${userCredits}` });
+                      return;
+                    }
+                    
+                    setIsBatchStarting(true);
+                    toast({ title: `🚀 正在启动 ${pendingTasks.length} 个视频任务...` });
+                    
+                    // 批量启动待处理任务，错开 1 秒避免瞬间大量请求
+                    for (const task of pendingTasks) {
+                      handleStartSingleTask(task);
+                      await new Promise(r => setTimeout(r, 1000));
+                    }
+                    
+                    setIsBatchStarting(false);
+                  }}
+                  disabled={isBatchStarting || stats.pending === 0}
+                  className="h-8 px-4 bg-emerald-500 hover:bg-emerald-600 text-white font-semibold animate-pulse shadow-lg shadow-emerald-500/30"
+                >
+                  {isBatchStarting ? (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                      启动中...
+                    </>
+                  ) : (
+                    <>
+                      <Play className="h-3.5 w-3.5 mr-1" />
+                      开始全部 ({stats.pending})
+                    </>
+                  )}
+                </Button>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -3112,7 +3167,13 @@ C07: [story CTA, inspiring, <50 chars]`,
                   }
                 });
                 
-                const groupNames = Object.keys(groupedTasks);
+                // 反转任务顺序，让最新创建的任务显示在前面
+                Object.keys(groupedTasks).forEach(groupName => {
+                  groupedTasks[groupName].reverse();
+                });
+                ungroupedTasks.reverse();
+                
+                const groupNames = Object.keys(groupedTasks).reverse(); // 分组也按最新的在前
                 const hasGroups = groupNames.length > 0;
                 
                 // 渲染单个任务卡片的辅助函数
@@ -3251,69 +3312,18 @@ C07: [story CTA, inspiring, <50 chars]`,
                   )}
                 </div>
 
-                {/* 操作按钮 */}
-                <div className="flex items-center gap-3">
-                  {stats.failed > 0 && (
-                    <Button
-                      onClick={resetBatch}
-                      variant="ghost"
-                      size="sm"
-                      className="h-8 text-xs"
-                    >
-                      <RotateCcw className="h-3.5 w-3.5 mr-1" />
-                      重置失败任务
-                    </Button>
-                  )}
-                  
-                  {/* 批量开始按钮 */}
-                  {stats.pending > 0 && (
-                    <Button
-                      onClick={async () => {
-                        if (!userId) {
-                          toast({ variant: "destructive", title: "请先登录" });
-                          return;
-                        }
-                        
-                        const pendingTasks = tasks.filter(t => t.status === "pending");
-                        if (pendingTasks.length === 0) {
-                          toast({ title: "没有待处理任务", variant: "default" });
-                          return;
-                        }
-                        
-                        // 检查积分
-                        if (userCredits < stats.totalCost) {
-                          toast({ variant: "destructive", title: `积分不足，需要 ${stats.totalCost} 积分，当前余额 ${userCredits}` });
-                          return;
-                        }
-                        
-                        setIsBatchStarting(true);
-                        toast({ title: `🚀 正在启动 ${pendingTasks.length} 个视频任务...` });
-                        
-                        // 批量启动待处理任务，错开 1 秒避免瞬间大量请求
-                        for (const task of pendingTasks) {
-                          handleStartSingleTask(task);
-                          await new Promise(r => setTimeout(r, 1000));
-                        }
-                        
-                        setIsBatchStarting(false);
-                      }}
-                      disabled={isBatchStarting || stats.pending === 0}
-                      className="h-9 px-6 bg-gradient-to-r from-tiktok-cyan to-tiktok-pink text-black font-semibold"
-                    >
-                      {isBatchStarting ? (
-                        <>
-                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          启动中...
-                        </>
-                      ) : (
-                        <>
-                          <Play className="h-4 w-4 mr-2" />
-                          开始所有任务 ({stats.pending})
-                        </>
-                      )}
-                    </Button>
-                  )}
-                </div>
+                {/* 操作按钮 - 只保留重置失败任务，开始按钮已移至顶部 */}
+                {stats.failed > 0 && (
+                  <Button
+                    onClick={resetBatch}
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 text-xs"
+                  >
+                    <RotateCcw className="h-3.5 w-3.5 mr-1" />
+                    重置失败任务
+                  </Button>
+                )}
               </div>
             </div>
           </div>
@@ -3610,8 +3620,8 @@ C07: [story CTA, inspiring, <50 chars]`,
               </Button>
               <Button
                 onClick={async () => {
+                  // 验证输入
                   if (createMode === "image") {
-                    // 图片模式
                     if (newTaskImages.length === 0) {
                       toast({ variant: "destructive", title: "请至少上传一张图片" });
                       return;
@@ -3621,49 +3631,72 @@ C07: [story CTA, inspiring, <50 chars]`,
                       toast({ variant: "destructive", title: validation.error || "图片校验失败" });
                       return;
                     }
-                    for (let i = 0; i < batchCreateCount; i++) {
-                      createTask([...newTaskImages]);
-                    }
-                    setNewTaskImages([]);
                   } else {
-                    // 纯提示词模式
                     if (!promptInput.trim() || promptInput.trim().length < 10) {
                       toast({ variant: "destructive", title: "提示词至少需要10个字符" });
                       return;
                     }
-                    
-                    // 如果有参考图片，先上传
-                    let uploadedRefUrl = "";
-                    if (referenceImageFile) {
-                      try {
-                        const formData = new FormData();
-                        formData.append("file", referenceImageFile);
-                        const uploadRes = await fetch("/api/upload/image", {
-                          method: "POST",
-                          body: formData,
-                        });
-                        const uploadResult = await uploadRes.json();
-                        if (uploadResult.success && uploadResult.data?.url) {
-                          uploadedRefUrl = uploadResult.data.url;
-                        }
-                      } catch (e) {
-                        console.error("Upload reference image failed:", e);
-                      }
-                    }
-                    
-                    createTaskFromPrompt(promptInput, uploadedRefUrl || undefined, batchCreateCount, groupNameInput || undefined);
-                    setPromptInput("");
-                    setGroupNameInput(""); // 清空分组名称
-                    if (referenceImageUrl.startsWith("blob:")) {
-                      URL.revokeObjectURL(referenceImageUrl);
-                    }
-                    setReferenceImageUrl("");
-                    setReferenceImageFile(null);
                   }
                   
-                  setBatchCreateCount(1);
+                  // 保存当前值（在关闭对话框前）
+                  const currentMode = createMode;
+                  const currentCount = batchCreateCount;
+                  const currentPrompt = promptInput;
+                  const currentGroup = groupNameInput;
+                  const currentImages = [...newTaskImages];
+                  const currentRefFile = referenceImageFile;
+                  const currentRefUrl = referenceImageUrl;
+                  
+                  // 立即关闭对话框，给用户即时反馈
                   setShowCreateDialog(false);
-                  toast({ title: `✅ 已创建 ${batchCreateCount} 个任务` });
+                  toast({ title: `⏳ 正在创建 ${currentCount} 个任务...` });
+                  
+                  // 异步处理任务创建（使用 setTimeout 让 UI 先更新）
+                  setTimeout(async () => {
+                    try {
+                      if (currentMode === "image") {
+                        // 图片模式
+                        for (let i = 0; i < currentCount; i++) {
+                          createTask([...currentImages]);
+                        }
+                        setNewTaskImages([]);
+                      } else {
+                        // 纯提示词模式
+                        let uploadedRefUrl = "";
+                        if (currentRefFile) {
+                          try {
+                            const formData = new FormData();
+                            formData.append("file", currentRefFile);
+                            const uploadRes = await fetch("/api/upload/image", {
+                              method: "POST",
+                              body: formData,
+                            });
+                            const uploadResult = await uploadRes.json();
+                            if (uploadResult.success && uploadResult.data?.url) {
+                              uploadedRefUrl = uploadResult.data.url;
+                            }
+                          } catch (e) {
+                            console.error("Upload reference image failed:", e);
+                          }
+                        }
+                        
+                        createTaskFromPrompt(currentPrompt, uploadedRefUrl || undefined, currentCount, currentGroup || undefined);
+                        setPromptInput("");
+                        setGroupNameInput("");
+                        if (currentRefUrl.startsWith("blob:")) {
+                          URL.revokeObjectURL(currentRefUrl);
+                        }
+                        setReferenceImageUrl("");
+                        setReferenceImageFile(null);
+                      }
+                      
+                      setBatchCreateCount(1);
+                      toast({ title: `✅ 已创建 ${currentCount} 个任务` });
+                    } catch (error) {
+                      console.error("Create tasks error:", error);
+                      toast({ variant: "destructive", title: "创建任务失败，请重试" });
+                    }
+                  }, 50); // 延迟 50ms 让 UI 先关闭对话框
                 }}
                 disabled={createMode === "image" ? newTaskImages.length === 0 : !promptInput.trim()}
                 className="bg-gradient-to-r from-tiktok-cyan to-tiktok-pink text-black"

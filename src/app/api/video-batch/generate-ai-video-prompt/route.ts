@@ -4,10 +4,13 @@
  * POST /api/video-batch/generate-ai-video-prompt
  * 
  * 将口播脚本转换为 Sora2 Pro 可用的分镜提示词
+ * 
+ * 优化：支持后端验证用户合约并获取触发词
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { generateAiVideoPrompt } from "@/lib/doubao-api";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 // ============================================================================
 // 请求/响应类型
@@ -16,7 +19,10 @@ import { generateAiVideoPrompt } from "@/lib/doubao-api";
 interface RequestBody {
   talkingScript: string;
   taskId: string;
-  modelTriggerWord?: string;
+  modelTriggerWord?: string;  // 前端传入的触发词（向后兼容）
+  // 新增：用于后端验证的参数
+  userId?: string;
+  modelId?: string;
   customPrompts?: {
     systemPrompt?: string;
     userPrompt?: string;
@@ -30,7 +36,7 @@ interface RequestBody {
 export async function POST(request: NextRequest) {
   try {
     const body: RequestBody = await request.json();
-    const { talkingScript, taskId } = body;
+    const { talkingScript, taskId, userId, modelId, customPrompts } = body;
 
     // 参数校验
     if (!talkingScript || talkingScript.trim().length === 0) {
@@ -47,17 +53,52 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { modelTriggerWord, customPrompts } = body;
+    // 优先使用后端验证获取触发词
+    let verifiedTriggerWord: string | undefined = body.modelTriggerWord;
+    let modelName: string | undefined;
+
+    // 如果提供了 userId 和 modelId，从数据库验证并获取触发词
+    if (userId && modelId) {
+      const supabase = createAdminClient();
+      
+      // 验证用户是否有该模特的有效合约
+      const { data: contract } = await supabase
+        .from("contracts")
+        .select("id, model_id, ai_models!inner(id, name, trigger_word)")
+        .eq("user_id", userId)
+        .eq("model_id", modelId)
+        .eq("status", "active")
+        .gt("end_date", new Date().toISOString())
+        .single();
+
+      if (contract) {
+        const modelData = contract.ai_models as { id: string; name: string; trigger_word: string | null };
+        if (modelData?.trigger_word) {
+          verifiedTriggerWord = modelData.trigger_word;
+          modelName = modelData.name;
+          console.log("[Video Batch] Verified trigger word from DB:", {
+            modelId,
+            modelName,
+            triggerWord: verifiedTriggerWord,
+          });
+        }
+      } else {
+        console.warn("[Video Batch] No valid contract found for user:", userId, "model:", modelId);
+        // 合约无效时，清除前端传入的触发词
+        verifiedTriggerWord = undefined;
+      }
+    }
 
     console.log("[Video Batch] Generating AI video prompt:", {
       taskId,
       scriptLength: talkingScript.length,
-      hasModelTriggerWord: !!modelTriggerWord,
+      hasTriggerWord: !!verifiedTriggerWord,
+      modelName: modelName || "(not specified)",
       hasCustomPrompts: !!customPrompts,
     });
 
     // 调用豆包 API 生成提示词
-    const result = await generateAiVideoPrompt(talkingScript, modelTriggerWord, customPrompts);
+    const result = await generateAiVideoPrompt(talkingScript, verifiedTriggerWord, customPrompts);
 
     if (!result.success) {
       console.error("[Video Batch] Prompt generation failed:", result.error);

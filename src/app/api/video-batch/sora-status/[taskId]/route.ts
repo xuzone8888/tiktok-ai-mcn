@@ -172,8 +172,17 @@ export async function GET(
     // 为失败的任务添加更友好的错误提示
     let errorMessage = task.errorMessage;
     let refundNote = "";
+    let suggestion = "";
+    
     if (task.status === "failed") {
-      if (!errorMessage || errorMessage === "failed") {
+      // 分析错误类型并提供针对性建议
+      if (errorMessage?.includes("内容政策") || errorMessage?.includes("E-1103")) {
+        // 内容审核失败
+        suggestion = "建议：1)更换更正式的产品图 2)修改提示词描述 3)避免过于贴身的服装展示";
+        errorMessage = "内容审核未通过：图片或提示词可能包含敏感内容";
+      } else if (errorMessage?.includes("timeout") || errorMessage?.includes("超时")) {
+        suggestion = "建议：稍后重试，或选择标清模式以加快生成速度";
+      } else if (!errorMessage || errorMessage === "failed") {
         errorMessage = "第三方 AI 视频服务暂时繁忙，请稍后重试";
       }
       refundNote = "积分已自动退还到您的账户";
@@ -187,6 +196,7 @@ export async function GET(
         videoUrl: task.resultUrl,
         errorMessage: errorMessage,
         refundNote: task.status === "failed" ? refundNote : undefined,
+        suggestion: task.status === "failed" && suggestion ? suggestion : undefined,
       },
     });
   } catch (error) {

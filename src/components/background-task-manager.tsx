@@ -81,6 +81,36 @@ function useVideoTaskExecutor() {
           console.error("[VideoTaskExecutor] Failed to get userId:", e);
         }
       }
+
+      // 【优化】如果启用了 AI 模特，在任务开始前验证合约是否有效
+      if (globalSettings.useAiModel && globalSettings.aiModelId) {
+        try {
+          const verifyRes = await fetch("/api/contracts/verify", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ modelId: globalSettings.aiModelId }),
+          });
+          const verifyData = await verifyRes.json();
+          
+          if (!verifyData.valid) {
+            console.warn("[VideoTaskExecutor] AI model contract invalid:", {
+              modelId: globalSettings.aiModelId,
+              reason: verifyData.reason,
+            });
+            // 合约无效时，继续执行但不使用 AI 模特
+            // 可选：也可以直接报错让用户知道
+          } else {
+            console.log("[VideoTaskExecutor] AI model contract verified:", {
+              modelId: globalSettings.aiModelId,
+              modelName: verifyData.model?.name,
+              daysRemaining: verifyData.contract?.daysRemaining,
+            });
+          }
+        } catch (e) {
+          console.error("[VideoTaskExecutor] Failed to verify contract:", e);
+          // 验证失败时不阻止任务执行
+        }
+      }
       
       // 上传图片
       updateTaskStatus(taskId, "uploading", { currentStep: 1, progress: 10 });
@@ -218,6 +248,10 @@ function useVideoTaskExecutor() {
         body: JSON.stringify({
           talkingScript: scriptResult.data.script,
           taskId: taskId,
+          // 传递用户ID和模特ID，让后端验证合约并获取触发词
+          userId: userIdRef.current,
+          modelId: globalSettings.useAiModel ? globalSettings.aiModelId : undefined,
+          // 保留前端触发词作为后备（向后兼容）
           modelTriggerWord: globalSettings.useAiModel ? globalSettings.aiModelTriggerWord : undefined,
         }),
       });

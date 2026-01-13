@@ -13,10 +13,14 @@ import { createServerClient, type CookieOptions } from "@supabase/ssr";
 
 // 公开路由（不需要登录）
 const PUBLIC_ROUTES = [
+  "/",
   "/auth/login",
   "/auth/register",
   "/auth/forgot-password",
   "/auth/callback",
+  "/terms",
+  "/privacy",
+  "/legal",
 ];
 
 // 需要登录的路由

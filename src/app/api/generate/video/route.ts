@@ -266,14 +266,16 @@ export async function POST(request: Request) {
     if (userId) {
       try {
         const supabase = createAdminClient();
+        // 注意：数据库的 "model" 字段存储 API 模型名称
+        // actualModelId 存储选中的 AI 模特 ID（等数据库添加 ai_model_id 字段后启用）
+        // finalPrompt 包含注入的唤醒词（等数据库添加 final_prompt 字段后启用）
         await supabase.from("generations").insert({
           user_id: userId,
-          model_id: actualModelId || null, // 使用实际选中的模特 ID，而不是 "auto"
           task_id: result.taskId,
           type: "video",
           source: "quick_gen",
           prompt: prompt,
-          final_prompt: finalPrompt,
+          // 将模特信息暂存在 metadata 中，方便日后迁移
           model: apiModel || `sora2-${duration}s`,
           duration,
           aspect_ratio: aspectRatio,
@@ -282,9 +284,14 @@ export async function POST(request: Request) {
           status: "processing",
           credit_cost: creditCost,
           use_pro: isPro,
+          metadata: {
+            ai_model_id: actualModelId,
+            final_prompt: finalPrompt,
+            trigger_word: triggerWord,
+          },
           created_at: new Date().toISOString(),
         });
-        console.log("[Generate Video] Saved to generations table:", result.taskId);
+        console.log("[Generate Video] Saved to generations table:", result.taskId, actualModelId ? `with model ${actualModelId}` : "no model");
       } catch (dbError) {
         console.error("[Generate Video] Failed to save to DB:", dbError);
         // 不阻止主流程
