@@ -82,26 +82,40 @@ function useVideoTaskExecutor() {
         }
       }
 
+      // 【修复】优先使用任务创建时保存的模特ID，而不是当前全局设置
+      const taskModelId = task.aiModelId || globalSettings.aiModelId;
+      const taskUseAiModel = task.useAiModel ?? globalSettings.useAiModel;
+      
+      console.log("[VideoTaskExecutor] Task AI model config:", {
+        taskId: task.id,
+        taskModelId: task.aiModelId,
+        taskUseAiModel: task.useAiModel,
+        globalModelId: globalSettings.aiModelId,
+        globalUseAiModel: globalSettings.useAiModel,
+        finalModelId: taskModelId,
+        finalUseAiModel: taskUseAiModel,
+      });
+      
       // 【优化】如果启用了 AI 模特，在任务开始前验证合约是否有效
-      if (globalSettings.useAiModel && globalSettings.aiModelId) {
+      if (taskUseAiModel && taskModelId) {
         try {
           const verifyRes = await fetch("/api/contracts/verify", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ modelId: globalSettings.aiModelId }),
+            body: JSON.stringify({ modelId: taskModelId }),
           });
           const verifyData = await verifyRes.json();
           
           if (!verifyData.valid) {
             console.warn("[VideoTaskExecutor] AI model contract invalid:", {
-              modelId: globalSettings.aiModelId,
+              modelId: taskModelId,
               reason: verifyData.reason,
             });
             // 合约无效时，继续执行但不使用 AI 模特
             // 可选：也可以直接报错让用户知道
           } else {
             console.log("[VideoTaskExecutor] AI model contract verified:", {
-              modelId: globalSettings.aiModelId,
+              modelId: taskModelId,
               modelName: verifyData.model?.name,
               daysRemaining: verifyData.contract?.daysRemaining,
             });
@@ -248,11 +262,11 @@ function useVideoTaskExecutor() {
         body: JSON.stringify({
           talkingScript: scriptResult.data.script,
           taskId: taskId,
-          // 传递用户ID和模特ID，让后端验证合约并获取触发词
+          // 【修复】传递任务创建时保存的模特ID，而不是当前全局设置
           userId: userIdRef.current,
-          modelId: globalSettings.useAiModel ? globalSettings.aiModelId : undefined,
+          modelId: taskUseAiModel ? taskModelId : undefined,
           // 保留前端触发词作为后备（向后兼容）
-          modelTriggerWord: globalSettings.useAiModel ? globalSettings.aiModelTriggerWord : undefined,
+          modelTriggerWord: taskUseAiModel ? globalSettings.aiModelTriggerWord : undefined,
         }),
       });
       
@@ -278,8 +292,9 @@ function useVideoTaskExecutor() {
       }
 
       // 最终提示词（包含 AI 模特触发词）
+      // 【修复】使用任务中保存的设置，而不是当前全局设置
       let finalVideoPrompt = promptResult.data.prompt;
-      if (globalSettings.useAiModel && globalSettings.aiModelTriggerWord && !finalVideoPrompt.includes(globalSettings.aiModelTriggerWord)) {
+      if (taskUseAiModel && globalSettings.aiModelTriggerWord && !finalVideoPrompt.includes(globalSettings.aiModelTriggerWord)) {
         finalVideoPrompt = `[AI MODEL: ${globalSettings.aiModelTriggerWord}]\n\n${finalVideoPrompt}`;
       }
 
