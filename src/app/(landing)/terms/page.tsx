@@ -2,9 +2,12 @@
 
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Sparkles, Shield } from "lucide-react";
+import { ArrowLeft, Sparkles, Shield, Globe } from "lucide-react";
+import { useState } from "react";
 
 export default function TermsPage() {
+  const [lang, setLang] = useState<"en" | "zh">("en");
+
   return (
     <div className="min-h-screen bg-[#0a0a0f] text-white">
       {/* 背景装饰 */}
@@ -22,15 +25,35 @@ export default function TermsPage() {
                 <Sparkles className="h-5 w-5 text-white" />
               </div>
               <span className="text-xl font-bold bg-gradient-to-r from-cyan-400 to-pink-400 bg-clip-text text-transparent">
-                TikTok AI MCN
+                Tok Factory
               </span>
             </Link>
-            <Link href="/">
-              <Button variant="ghost" className="text-gray-300 hover:text-white">
-                <ArrowLeft className="h-4 w-4 mr-2" />
-                返回首页
-              </Button>
-            </Link>
+            <div className="flex items-center gap-4">
+              {/* 语言切换 */}
+              <div className="flex items-center gap-2 bg-white/10 rounded-lg p-1">
+                <button
+                  onClick={() => setLang("en")}
+                  className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors flex items-center gap-1.5 ${lang === "en" ? "bg-white/20 text-white" : "text-gray-400 hover:text-white"
+                    }`}
+                >
+                  <Globe className="h-4 w-4" />
+                  English
+                </button>
+                <button
+                  onClick={() => setLang("zh")}
+                  className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${lang === "zh" ? "bg-white/20 text-white" : "text-gray-400 hover:text-white"
+                    }`}
+                >
+                  中文
+                </button>
+              </div>
+              <Link href="/">
+                <Button variant="ghost" className="text-gray-300 hover:text-white">
+                  <ArrowLeft className="h-4 w-4 mr-2" />
+                  {lang === "en" ? "Back to Home" : "返回首页"}
+                </Button>
+              </Link>
+            </div>
           </nav>
         </div>
       </header>
@@ -38,104 +61,7 @@ export default function TermsPage() {
       {/* 内容 */}
       <main className="relative z-10 py-16">
         <div className="container max-w-4xl mx-auto px-6">
-          <div className="mb-12">
-            <h1 className="text-4xl font-bold mb-4">服务条款</h1>
-            <p className="text-gray-400">最后更新日期：{new Date().toLocaleDateString("zh-CN")}</p>
-          </div>
-
-          <div className="prose prose-invert prose-lg max-w-none">
-            <div className="space-y-8 text-gray-300">
-              <section>
-                <h2 className="text-2xl font-semibold text-white mb-4">一、总则</h2>
-                <p className="leading-relaxed">
-                  欢迎您使用 TikTok AI MCN 平台（以下简称"本平台"）。本服务条款（以下简称"本条款"）是您与【请填写公司名称】（以下简称"我们"或"本公司"）之间关于使用本平台服务的法律协议。
-                </p>
-                <p className="leading-relaxed">
-                  在使用本平台服务之前，请您仔细阅读并充分理解本条款的全部内容。如您不同意本条款的任何内容，请勿使用本平台服务。一旦您开始使用本平台服务，即表示您已阅读、理解并同意接受本条款的约束。
-                </p>
-              </section>
-
-              <section>
-                <h2 className="text-2xl font-semibold text-white mb-4">二、服务内容</h2>
-                <p className="leading-relaxed">本平台提供以下主要服务：</p>
-                <ul className="list-disc pl-6 space-y-2 mt-4">
-                  <li>AI 视频生成服务：基于人工智能技术将图片或文字转化为视频内容</li>
-                  <li>电商图片生成服务：提供商品展示图、模特换装图等电商图片生成服务</li>
-                  <li>AI 数字人模特服务：提供虚拟数字人模特签约和使用服务</li>
-                  <li>批量内容处理服务：支持批量创建和处理视频、图片任务</li>
-                  <li>链接解析生成服务：通过商品链接自动生成营销内容</li>
-                  <li>团队协作服务：提供多人团队管理和协作功能</li>
-                </ul>
-              </section>
-
-              <section>
-                <h2 className="text-2xl font-semibold text-white mb-4">三、用户注册与账户</h2>
-                <p className="leading-relaxed">3.1 您在使用本平台服务前需要注册账户。注册时，您应提供真实、准确、完整的个人信息，并在信息发生变更时及时更新。</p>
-                <p className="leading-relaxed mt-4">3.2 您应妥善保管账户信息和密码，对账户下的所有活动承担责任。如发现账户被未经授权使用，应立即通知我们。</p>
-                <p className="leading-relaxed mt-4">3.3 您不得将账户转让、出借或以任何方式提供给第三方使用。</p>
-              </section>
-
-              <section>
-                <h2 className="text-2xl font-semibold text-white mb-4">四、积分与付费</h2>
-                <p className="leading-relaxed">4.1 本平台采用积分制计费方式。您可以通过购买获得积分，用于消费本平台的各项服务。</p>
-                <p className="leading-relaxed mt-4">4.2 积分一经购买，除法律规定的情形外，不予退款。</p>
-                <p className="leading-relaxed mt-4">4.3 不同服务所需积分数量以页面显示为准，我们有权根据运营情况调整积分价格，调整前会提前公告。</p>
-                <p className="leading-relaxed mt-4">4.4 积分有效期为自购买之日起一年，逾期未使用的积分将自动失效。</p>
-              </section>
-
-              <section>
-                <h2 className="text-2xl font-semibold text-white mb-4">五、用户行为规范</h2>
-                <p className="leading-relaxed">您在使用本平台服务时，不得：</p>
-                <ul className="list-disc pl-6 space-y-2 mt-4">
-                  <li>上传、生成或传播违反法律法规的内容</li>
-                  <li>侵犯他人知识产权、肖像权、隐私权等合法权益</li>
-                  <li>上传或生成涉及色情、暴力、恐怖、赌博等违规内容</li>
-                  <li>使用自动化工具或程序恶意访问、攻击本平台</li>
-                  <li>进行任何可能损害本平台正常运营的行为</li>
-                  <li>将平台服务用于任何非法目的</li>
-                </ul>
-              </section>
-
-              <section>
-                <h2 className="text-2xl font-semibold text-white mb-4">六、知识产权</h2>
-                <p className="leading-relaxed">6.1 本平台的所有技术、软件、界面设计、商标、标识等知识产权归本公司所有。</p>
-                <p className="leading-relaxed mt-4">6.2 您通过本平台生成的内容，在不违反法律法规和本条款的前提下，您可以自由使用。</p>
-                <p className="leading-relaxed mt-4">6.3 您应确保上传的素材拥有合法的使用权，因素材权属问题导致的纠纷由您自行承担。</p>
-              </section>
-
-              <section>
-                <h2 className="text-2xl font-semibold text-white mb-4">七、免责声明</h2>
-                <p className="leading-relaxed">7.1 本平台基于人工智能技术提供服务，生成内容可能存在不准确或不完善之处，您应自行判断和审核生成内容。</p>
-                <p className="leading-relaxed mt-4">7.2 对于因网络状况、第三方服务等不可控因素导致的服务中断或延迟，我们不承担责任。</p>
-                <p className="leading-relaxed mt-4">7.3 您使用本平台生成的内容用于商业或其他用途所产生的后果，由您自行承担。</p>
-              </section>
-
-              <section>
-                <h2 className="text-2xl font-semibold text-white mb-4">八、服务变更与终止</h2>
-                <p className="leading-relaxed">8.1 我们有权根据业务需要变更、暂停或终止部分或全部服务，并会提前通知用户。</p>
-                <p className="leading-relaxed mt-4">8.2 如您违反本条款，我们有权暂停或终止向您提供服务，并有权追究相关法律责任。</p>
-              </section>
-
-              <section>
-                <h2 className="text-2xl font-semibold text-white mb-4">九、法律适用与争议解决</h2>
-                <p className="leading-relaxed">9.1 本条款的订立、效力、解释、履行和争议解决均适用中华人民共和国法律。</p>
-                <p className="leading-relaxed mt-4">9.2 因本条款产生的争议，双方应友好协商解决；协商不成的，任何一方均可向本公司所在地有管辖权的人民法院提起诉讼。</p>
-              </section>
-
-              <section>
-                <h2 className="text-2xl font-semibold text-white mb-4">十、联系方式</h2>
-                <p className="leading-relaxed">
-                  如您对本条款有任何疑问，请通过以下方式联系我们：
-                </p>
-                <p className="leading-relaxed mt-4">
-                  公司名称：【请填写公司名称】<br />
-                  联系邮箱：【请填写联系邮箱】<br />
-                  联系电话：【请填写联系电话】<br />
-                  公司地址：【请填写公司地址】
-                </p>
-              </section>
-            </div>
-          </div>
+          {lang === "en" ? <EnglishContent /> : <ChineseContent />}
         </div>
       </main>
 
@@ -144,20 +70,428 @@ export default function TermsPage() {
         <div className="container max-w-7xl mx-auto px-6">
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
             <div className="text-gray-500 text-sm">
-              © {new Date().getFullYear()} 【请填写公司名称】 版权所有
+              © {new Date().getFullYear()} Wuhan Guanxing Cultural Media Co., Ltd. All Rights Reserved.
             </div>
             <div className="flex items-center gap-6 text-gray-500 text-sm">
-              <Link href="/terms" className="hover:text-white transition-colors">服务条款</Link>
-              <Link href="/privacy" className="hover:text-white transition-colors">隐私政策</Link>
-              <Link href="/legal" className="hover:text-white transition-colors">法律声明</Link>
+              <Link href="/terms" className="hover:text-white transition-colors">
+                {lang === "en" ? "Terms of Service" : "服务条款"}
+              </Link>
+              <Link href="/privacy" className="hover:text-white transition-colors">
+                {lang === "en" ? "Privacy Policy" : "隐私政策"}
+              </Link>
               <Link href="https://beian.miit.gov.cn/" target="_blank" className="hover:text-white transition-colors flex items-center gap-1">
                 <Shield className="h-4 w-4" />
-                【请填写ICP备案号】
+                鄂ICP备2024072250号-2
               </Link>
             </div>
           </div>
         </div>
       </footer>
     </div>
+  );
+}
+
+function EnglishContent() {
+  return (
+    <>
+      <div className="mb-12">
+        <h1 className="text-4xl font-bold mb-4">Terms of Service</h1>
+        <p className="text-gray-400">Last Updated: January 16, 2026</p>
+        <p className="text-gray-400 mt-2">Effective Date: January 16, 2026</p>
+      </div>
+
+      <div className="prose prose-invert prose-lg max-w-none">
+        <div className="space-y-8 text-gray-300">
+          <section>
+            <h2 className="text-2xl font-semibold text-white mb-4">1. Agreement to Terms</h2>
+            <p className="leading-relaxed">
+              Welcome to Tok Factory, operated by Wuhan Guanxing Cultural Media Co., Ltd. (&quot;Company&quot;, &quot;we&quot;, &quot;us&quot;, or &quot;our&quot;).
+              These Terms of Service (&quot;Terms&quot;) govern your access to and use of the Tok Factory platform at www.tokfactoryai.com,
+              including our AI-powered content creation services and social media publishing features.
+            </p>
+            <p className="leading-relaxed mt-4">
+              By accessing or using our services, you agree to be bound by these Terms. If you disagree with any part of these Terms,
+              you may not access our services.
+            </p>
+          </section>
+
+          <section>
+            <h2 className="text-2xl font-semibold text-white mb-4">2. Description of Services</h2>
+            <p className="leading-relaxed">Tok Factory provides the following AI-powered services:</p>
+            <ul className="list-disc pl-6 space-y-2 mt-4">
+              <li><strong>AI Video Generation:</strong> Create videos from images, text prompts, and templates using advanced AI models</li>
+              <li><strong>AI Image Generation:</strong> Generate e-commerce product images, virtual try-on images, and marketing visuals</li>
+              <li><strong>Digital Model Services:</strong> Access to AI-generated digital human models for content creation</li>
+              <li><strong>Batch Processing:</strong> Create multiple pieces of content efficiently through our batch production pipeline</li>
+              <li><strong>Social Media Publishing:</strong> Publish generated content directly to connected TikTok accounts</li>
+              <li><strong>Asset Management:</strong> Store, organize, and manage your generated content</li>
+            </ul>
+          </section>
+
+          <section className="bg-gradient-to-r from-cyan-500/10 to-pink-500/10 border border-cyan-500/20 rounded-xl p-6">
+            <h2 className="text-2xl font-semibold text-white mb-4 flex items-center gap-2">
+              <svg className="w-6 h-6" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-5.2 1.74 2.89 2.89 0 012.31-4.64 2.93 2.93 0 01.88.13V9.4a6.84 6.84 0 00-1-.05A6.33 6.33 0 005 20.1a6.34 6.34 0 0010.86-4.43v-7a8.16 8.16 0 004.77 1.52v-3.4a4.85 4.85 0 01-1-.1z" />
+              </svg>
+              3. TikTok Integration Terms
+            </h2>
+            <p className="leading-relaxed text-white/90">
+              <strong>IMPORTANT:</strong> Our platform integrates with TikTok&apos;s Content Posting API. By using this feature, you agree to the following additional terms:
+            </p>
+
+            <h3 className="text-xl font-medium text-white mt-6 mb-3">3.1 TikTok Account Connection</h3>
+            <ul className="list-disc pl-6 space-y-2">
+              <li>You may connect your TikTok account(s) to Tok Factory to enable video publishing</li>
+              <li>By connecting your account, you authorize us to publish content on your behalf</li>
+              <li>You remain fully responsible for all content published to your TikTok account through our platform</li>
+              <li>You must comply with TikTok&apos;s Terms of Service and Community Guidelines</li>
+            </ul>
+
+            <h3 className="text-xl font-medium text-white mt-6 mb-3">3.2 Content Publishing Responsibility</h3>
+            <ul className="list-disc pl-6 space-y-2">
+              <li>You are solely responsible for ensuring published content complies with TikTok&apos;s policies</li>
+              <li>We do not guarantee that published content will remain on TikTok (TikTok may remove content)</li>
+              <li>Any violations of TikTok&apos;s policies are your responsibility, not ours</li>
+              <li>We are not liable for any account restrictions or bans imposed by TikTok</li>
+            </ul>
+
+            <h3 className="text-xl font-medium text-white mt-6 mb-3">3.3 Disconnecting Your Account</h3>
+            <ul className="list-disc pl-6 space-y-2">
+              <li>You may disconnect your TikTok account at any time through our Account Management page</li>
+              <li>Disconnection stops all future publishing but does not remove already published content</li>
+              <li>You can also revoke access through TikTok&apos;s app settings</li>
+            </ul>
+          </section>
+
+          <section>
+            <h2 className="text-2xl font-semibold text-white mb-4">4. Account Registration</h2>
+            <p className="leading-relaxed">4.1 To use our services, you must create an account by providing accurate and complete information.</p>
+            <p className="leading-relaxed mt-4">4.2 You are responsible for maintaining the confidentiality of your account credentials and for all activities under your account.</p>
+            <p className="leading-relaxed mt-4">4.3 You must be at least 18 years old to create an account and use our services.</p>
+            <p className="leading-relaxed mt-4">4.4 You may not transfer, sell, or share your account with third parties.</p>
+          </section>
+
+          <section>
+            <h2 className="text-2xl font-semibold text-white mb-4">5. Credits and Payment</h2>
+            <p className="leading-relaxed">5.1 Tok Factory operates on a credit-based system. You purchase credits to use our AI generation services.</p>
+            <p className="leading-relaxed mt-4">5.2 Credit prices and consumption rates for each service are displayed on our platform and are subject to change with prior notice.</p>
+            <p className="leading-relaxed mt-4">5.3 All credit purchases are final. Refunds are only provided as required by applicable law or at our sole discretion.</p>
+            <p className="leading-relaxed mt-4">5.4 Credits expire one year from the date of purchase unless otherwise stated.</p>
+            <p className="leading-relaxed mt-4">5.5 We reserve the right to modify pricing with 30 days&apos; advance notice.</p>
+          </section>
+
+          <section>
+            <h2 className="text-2xl font-semibold text-white mb-4">6. Acceptable Use Policy</h2>
+            <p className="leading-relaxed">You agree NOT to use our services to:</p>
+            <ul className="list-disc pl-6 space-y-2 mt-4">
+              <li>Create, upload, or distribute content that is illegal, harmful, threatening, abusive, harassing, defamatory, or otherwise objectionable</li>
+              <li>Generate content that infringes on intellectual property rights, privacy rights, or publicity rights of others</li>
+              <li>Create pornographic, sexually explicit, violent, or hateful content</li>
+              <li>Impersonate any person or entity or misrepresent your affiliation</li>
+              <li>Use automated systems or bots to abuse our services</li>
+              <li>Attempt to bypass any security measures or access restrictions</li>
+              <li>Use our platform for any fraudulent or deceptive purposes</li>
+              <li>Violate any applicable laws or regulations</li>
+            </ul>
+            <p className="leading-relaxed mt-4">
+              <strong>Violation of these terms may result in immediate account termination without refund.</strong>
+            </p>
+          </section>
+
+          <section>
+            <h2 className="text-2xl font-semibold text-white mb-4">7. Intellectual Property</h2>
+            <h3 className="text-xl font-medium text-white mt-6 mb-3">7.1 Our Intellectual Property</h3>
+            <p className="leading-relaxed">
+              All technology, software, algorithms, trademarks, logos, and platform design are owned by Wuhan Guanxing Cultural Media Co., Ltd.
+              You may not copy, modify, or distribute any part of our platform without written permission.
+            </p>
+
+            <h3 className="text-xl font-medium text-white mt-6 mb-3">7.2 Your Content</h3>
+            <p className="leading-relaxed">
+              You retain ownership of content you create through our platform. By using our services, you grant us a limited license to
+              process, store, and display your content as necessary to provide our services.
+            </p>
+
+            <h3 className="text-xl font-medium text-white mt-6 mb-3">7.3 Uploaded Materials</h3>
+            <p className="leading-relaxed">
+              You represent and warrant that you have all necessary rights to any materials you upload. You are solely responsible for
+              any claims arising from your uploaded content.
+            </p>
+          </section>
+
+          <section>
+            <h2 className="text-2xl font-semibold text-white mb-4">8. AI-Generated Content Disclaimer</h2>
+            <p className="leading-relaxed">8.1 Our services use artificial intelligence to generate content. AI-generated content may not always be accurate, appropriate, or suitable for your intended purpose.</p>
+            <p className="leading-relaxed mt-4">8.2 You are responsible for reviewing all generated content before use or publication.</p>
+            <p className="leading-relaxed mt-4">8.3 We do not guarantee any specific results or outcomes from our AI services.</p>
+            <p className="leading-relaxed mt-4">8.4 AI model performance may vary and is subject to continuous improvement and modification.</p>
+          </section>
+
+          <section>
+            <h2 className="text-2xl font-semibold text-white mb-4">9. Limitation of Liability</h2>
+            <p className="leading-relaxed">
+              TO THE MAXIMUM EXTENT PERMITTED BY LAW:
+            </p>
+            <ul className="list-disc pl-6 space-y-2 mt-4">
+              <li>Our services are provided &quot;AS IS&quot; without warranties of any kind</li>
+              <li>We are not liable for any indirect, incidental, special, or consequential damages</li>
+              <li>Our total liability shall not exceed the amount you paid us in the 12 months preceding the claim</li>
+              <li>We are not responsible for third-party actions, including TikTok&apos;s moderation decisions</li>
+              <li>We are not liable for service interruptions due to factors beyond our control</li>
+            </ul>
+          </section>
+
+          <section>
+            <h2 className="text-2xl font-semibold text-white mb-4">10. Indemnification</h2>
+            <p className="leading-relaxed">
+              You agree to indemnify and hold harmless Wuhan Guanxing Cultural Media Co., Ltd. and its officers, directors, employees,
+              and agents from any claims, damages, losses, or expenses (including legal fees) arising from:
+            </p>
+            <ul className="list-disc pl-6 space-y-2 mt-4">
+              <li>Your use of our services</li>
+              <li>Your violation of these Terms</li>
+              <li>Content you create, upload, or publish through our platform</li>
+              <li>Your violation of any third-party rights</li>
+            </ul>
+          </section>
+
+          <section>
+            <h2 className="text-2xl font-semibold text-white mb-4">11. Service Modifications and Termination</h2>
+            <p className="leading-relaxed">11.1 We reserve the right to modify, suspend, or discontinue any part of our services at any time with reasonable notice.</p>
+            <p className="leading-relaxed mt-4">11.2 We may terminate your account if you violate these Terms, with or without notice.</p>
+            <p className="leading-relaxed mt-4">11.3 Upon termination, your right to use our services ceases immediately. Unused credits may be forfeited.</p>
+          </section>
+
+          <section>
+            <h2 className="text-2xl font-semibold text-white mb-4">12. Governing Law and Dispute Resolution</h2>
+            <p className="leading-relaxed">12.1 These Terms are governed by the laws of the People&apos;s Republic of China.</p>
+            <p className="leading-relaxed mt-4">12.2 Any disputes shall first be resolved through good-faith negotiation.</p>
+            <p className="leading-relaxed mt-4">12.3 If negotiation fails, disputes shall be submitted to the competent court in Wuhan, Hubei Province, China.</p>
+          </section>
+
+          <section>
+            <h2 className="text-2xl font-semibold text-white mb-4">13. Changes to Terms</h2>
+            <p className="leading-relaxed">
+              We may update these Terms from time to time. We will notify you of material changes via email or prominent notice on our platform.
+              Continued use of our services after changes constitutes acceptance of the new Terms.
+            </p>
+          </section>
+
+          <section>
+            <h2 className="text-2xl font-semibold text-white mb-4">14. Contact Information</h2>
+            <p className="leading-relaxed">
+              For questions about these Terms, please contact us:
+            </p>
+            <div className="mt-4 p-4 bg-white/5 rounded-lg">
+              <p><strong>Wuhan Guanxing Cultural Media Co., Ltd.</strong></p>
+              <p className="mt-2">Email: legal@tokfactoryai.com</p>
+              <p>Website: www.tokfactoryai.com</p>
+              <p>Address: Wuhan, Hubei Province, China</p>
+            </div>
+          </section>
+        </div>
+      </div>
+    </>
+  );
+}
+
+function ChineseContent() {
+  return (
+    <>
+      <div className="mb-12">
+        <h1 className="text-4xl font-bold mb-4">服务条款</h1>
+        <p className="text-gray-400">最后更新日期：2026年1月16日</p>
+        <p className="text-gray-400 mt-2">生效日期：2026年1月16日</p>
+      </div>
+
+      <div className="prose prose-invert prose-lg max-w-none">
+        <div className="space-y-8 text-gray-300">
+          <section>
+            <h2 className="text-2xl font-semibold text-white mb-4">一、条款接受</h2>
+            <p className="leading-relaxed">
+              欢迎您使用 Tok Factory 平台，该平台由武汉冠星文化传媒有限公司（以下简称&ldquo;本公司&rdquo;、&ldquo;我们&rdquo;）运营。
+              本服务条款（以下简称&ldquo;本条款&rdquo;）约束您对 Tok Factory 平台 (www.tokfactoryai.com) 的访问和使用，
+              包括我们的 AI 内容创作服务和社交媒体发布功能。
+            </p>
+            <p className="leading-relaxed mt-4">
+              访问或使用我们的服务即表示您同意受本条款约束。如您不同意本条款的任何部分，请勿使用我们的服务。
+            </p>
+          </section>
+
+          <section>
+            <h2 className="text-2xl font-semibold text-white mb-4">二、服务内容</h2>
+            <p className="leading-relaxed">Tok Factory 提供以下 AI 驱动的服务：</p>
+            <ul className="list-disc pl-6 space-y-2 mt-4">
+              <li><strong>AI 视频生成：</strong>使用先进的 AI 模型从图片、文字提示和模板创建视频</li>
+              <li><strong>AI 图片生成：</strong>生成电商产品图、虚拟试穿图和营销视觉素材</li>
+              <li><strong>数字人模特服务：</strong>获取用于内容创作的 AI 生成数字人模特</li>
+              <li><strong>批量处理：</strong>通过批量生产流水线高效创建多个内容</li>
+              <li><strong>社交媒体发布：</strong>将生成的内容直接发布到已连接的 TikTok 账号</li>
+              <li><strong>资产管理：</strong>存储、组织和管理您生成的内容</li>
+            </ul>
+          </section>
+
+          <section className="bg-gradient-to-r from-cyan-500/10 to-pink-500/10 border border-cyan-500/20 rounded-xl p-6">
+            <h2 className="text-2xl font-semibold text-white mb-4 flex items-center gap-2">
+              <svg className="w-6 h-6" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-5.2 1.74 2.89 2.89 0 012.31-4.64 2.93 2.93 0 01.88.13V9.4a6.84 6.84 0 00-1-.05A6.33 6.33 0 005 20.1a6.34 6.34 0 0010.86-4.43v-7a8.16 8.16 0 004.77 1.52v-3.4a4.85 4.85 0 01-1-.1z" />
+              </svg>
+              三、TikTok 集成条款
+            </h2>
+            <p className="leading-relaxed text-white/90">
+              <strong>重要提示：</strong>我们的平台集成了 TikTok 的 Content Posting API。使用此功能即表示您同意以下附加条款：
+            </p>
+
+            <h3 className="text-xl font-medium text-white mt-6 mb-3">3.1 TikTok 账号连接</h3>
+            <ul className="list-disc pl-6 space-y-2">
+              <li>您可以将 TikTok 账号连接到 Tok Factory 以启用视频发布功能</li>
+              <li>连接账号即表示您授权我们代您发布内容</li>
+              <li>您对通过我们平台发布到 TikTok 账号的所有内容承担全部责任</li>
+              <li>您必须遵守 TikTok 的服务条款和社区准则</li>
+            </ul>
+
+            <h3 className="text-xl font-medium text-white mt-6 mb-3">3.2 内容发布责任</h3>
+            <ul className="list-disc pl-6 space-y-2">
+              <li>您独自负责确保发布的内容符合 TikTok 的政策</li>
+              <li>我们不保证发布的内容会保留在 TikTok 上（TikTok 可能会删除内容）</li>
+              <li>任何违反 TikTok 政策的行为由您负责，与我们无关</li>
+              <li>我们不对 TikTok 施加的任何账号限制或封禁承担责任</li>
+            </ul>
+
+            <h3 className="text-xl font-medium text-white mt-6 mb-3">3.3 断开账号连接</h3>
+            <ul className="list-disc pl-6 space-y-2">
+              <li>您可以随时通过账号管理页面断开 TikTok 账号连接</li>
+              <li>断开连接将停止所有未来的发布，但不会删除已发布的内容</li>
+              <li>您也可以通过 TikTok 应用的设置撤销访问权限</li>
+            </ul>
+          </section>
+
+          <section>
+            <h2 className="text-2xl font-semibold text-white mb-4">四、账户注册</h2>
+            <p className="leading-relaxed">4.1 使用我们的服务需要创建账户，并提供准确完整的信息。</p>
+            <p className="leading-relaxed mt-4">4.2 您负责保护账户凭据的机密性，并对账户下的所有活动负责。</p>
+            <p className="leading-relaxed mt-4">4.3 您必须年满 18 周岁才能创建账户并使用我们的服务。</p>
+            <p className="leading-relaxed mt-4">4.4 您不得将账户转让、出售或与第三方共享。</p>
+          </section>
+
+          <section>
+            <h2 className="text-2xl font-semibold text-white mb-4">五、积分与付费</h2>
+            <p className="leading-relaxed">5.1 Tok Factory 采用积分制。您购买积分来使用我们的 AI 生成服务。</p>
+            <p className="leading-relaxed mt-4">5.2 每项服务的积分价格和消耗量在平台上显示，可能会在提前通知后进行调整。</p>
+            <p className="leading-relaxed mt-4">5.3 所有积分购买均为最终销售。仅在适用法律要求或我们自行决定的情况下提供退款。</p>
+            <p className="leading-relaxed mt-4">5.4 积分自购买之日起一年内有效，除非另有说明。</p>
+            <p className="leading-relaxed mt-4">5.5 我们保留在提前 30 天通知后修改定价的权利。</p>
+          </section>
+
+          <section>
+            <h2 className="text-2xl font-semibold text-white mb-4">六、使用规范</h2>
+            <p className="leading-relaxed">您同意不使用我们的服务：</p>
+            <ul className="list-disc pl-6 space-y-2 mt-4">
+              <li>创建、上传或传播违法、有害、威胁、辱骂、骚扰、诽谤或其他令人反感的内容</li>
+              <li>生成侵犯他人知识产权、隐私权或肖像权的内容</li>
+              <li>创建色情、性暗示、暴力或仇恨内容</li>
+              <li>冒充任何个人或实体或虚假陈述您的关系</li>
+              <li>使用自动化系统或机器人滥用我们的服务</li>
+              <li>试图绑过任何安全措施或访问限制</li>
+              <li>将我们的平台用于任何欺诈或欺骗目的</li>
+              <li>违反任何适用法律或法规</li>
+            </ul>
+            <p className="leading-relaxed mt-4">
+              <strong>违反这些条款可能导致立即终止账户且不予退款。</strong>
+            </p>
+          </section>
+
+          <section>
+            <h2 className="text-2xl font-semibold text-white mb-4">七、知识产权</h2>
+            <h3 className="text-xl font-medium text-white mt-6 mb-3">7.1 我们的知识产权</h3>
+            <p className="leading-relaxed">
+              所有技术、软件、算法、商标、标识和平台设计均归武汉冠星文化传媒有限公司所有。
+              未经书面许可，您不得复制、修改或分发我们平台的任何部分。
+            </p>
+
+            <h3 className="text-xl font-medium text-white mt-6 mb-3">7.2 您的内容</h3>
+            <p className="leading-relaxed">
+              您通过我们平台创建的内容归您所有。使用我们的服务即表示您授予我们有限的许可，
+              以处理、存储和显示您的内容，以便提供我们的服务。
+            </p>
+
+            <h3 className="text-xl font-medium text-white mt-6 mb-3">7.3 上传素材</h3>
+            <p className="leading-relaxed">
+              您声明并保证您拥有上传的任何素材的所有必要权利。您对因上传内容引起的任何索赔承担全部责任。
+            </p>
+          </section>
+
+          <section>
+            <h2 className="text-2xl font-semibold text-white mb-4">八、AI 生成内容免责声明</h2>
+            <p className="leading-relaxed">8.1 我们的服务使用人工智能生成内容。AI 生成的内容可能并不总是准确、适当或适合您的预期目的。</p>
+            <p className="leading-relaxed mt-4">8.2 您负责在使用或发布之前审核所有生成的内容。</p>
+            <p className="leading-relaxed mt-4">8.3 我们不保证 AI 服务会产生任何特定结果或成果。</p>
+            <p className="leading-relaxed mt-4">8.4 AI 模型的性能可能会有所不同，并会持续改进和修改。</p>
+          </section>
+
+          <section>
+            <h2 className="text-2xl font-semibold text-white mb-4">九、责任限制</h2>
+            <p className="leading-relaxed">
+              在法律允许的最大范围内：
+            </p>
+            <ul className="list-disc pl-6 space-y-2 mt-4">
+              <li>我们的服务按&ldquo;现状&rdquo;提供，不提供任何形式的保证</li>
+              <li>我们不对任何间接、附带、特殊或后果性损害承担责任</li>
+              <li>我们的总责任不超过您在索赔前 12 个月内向我们支付的金额</li>
+              <li>我们不对第三方行为负责，包括 TikTok 的审核决定</li>
+              <li>我们不对超出我们控制范围的因素导致的服务中断负责</li>
+            </ul>
+          </section>
+
+          <section>
+            <h2 className="text-2xl font-semibold text-white mb-4">十、赔偿</h2>
+            <p className="leading-relaxed">
+              您同意赔偿并使武汉冠星文化传媒有限公司及其管理人员、董事、员工和代理人免受因以下原因引起的任何索赔、损害、损失或费用（包括法律费用）：
+            </p>
+            <ul className="list-disc pl-6 space-y-2 mt-4">
+              <li>您使用我们的服务</li>
+              <li>您违反本条款</li>
+              <li>您通过我们平台创建、上传或发布的内容</li>
+              <li>您侵犯任何第三方权利</li>
+            </ul>
+          </section>
+
+          <section>
+            <h2 className="text-2xl font-semibold text-white mb-4">十一、服务变更与终止</h2>
+            <p className="leading-relaxed">11.1 我们保留随时修改、暂停或终止我们服务任何部分的权利，并会合理通知。</p>
+            <p className="leading-relaxed mt-4">11.2 如您违反本条款，我们可以终止您的账户，无论是否通知。</p>
+            <p className="leading-relaxed mt-4">11.3 终止后，您使用我们服务的权利立即停止。未使用的积分可能被没收。</p>
+          </section>
+
+          <section>
+            <h2 className="text-2xl font-semibold text-white mb-4">十二、适用法律与争议解决</h2>
+            <p className="leading-relaxed">12.1 本条款受中华人民共和国法律管辖。</p>
+            <p className="leading-relaxed mt-4">12.2 任何争议应首先通过善意协商解决。</p>
+            <p className="leading-relaxed mt-4">12.3 如协商失败，争议应提交至中国湖北省武汉市有管辖权的法院。</p>
+          </section>
+
+          <section>
+            <h2 className="text-2xl font-semibold text-white mb-4">十三、条款变更</h2>
+            <p className="leading-relaxed">
+              我们可能会不时更新本条款。对于重大变更，我们将通过电子邮件或在平台上显著通知您。
+              变更后继续使用我们的服务即表示接受新条款。
+            </p>
+          </section>
+
+          <section>
+            <h2 className="text-2xl font-semibold text-white mb-4">十四、联系方式</h2>
+            <p className="leading-relaxed">
+              如对本条款有任何疑问，请联系我们：
+            </p>
+            <div className="mt-4 p-4 bg-white/5 rounded-lg">
+              <p><strong>武汉冠星文化传媒有限公司</strong></p>
+              <p className="mt-2">邮箱：legal@tokfactoryai.com</p>
+              <p>网站：www.tokfactoryai.com</p>
+              <p>地址：中国湖北省武汉市</p>
+            </div>
+          </section>
+        </div>
+      </div>
+    </>
   );
 }
