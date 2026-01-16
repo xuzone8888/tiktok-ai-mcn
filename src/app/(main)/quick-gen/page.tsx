@@ -110,9 +110,9 @@ export default function QuickGeneratorPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // ================================================================
-  // 全局模式
+  // 全局模式 - 固定为图片模式
   // ================================================================
-  const [outputMode, setOutputMode] = useState<OutputMode>("video");
+  const [outputMode] = useState<OutputMode>("image");
 
   // ================================================================
   // Video Mode: Step 1 - Image Source & Enhancement
@@ -1220,9 +1220,9 @@ export default function QuickGeneratorPage() {
           <div>
             <h1 className="text-xl font-bold flex items-center gap-2">
               <Zap className="h-5 w-5 text-amber-400" />
-              Quick Generator
+              极速造片机
             </h1>
-            <p className="text-xs text-muted-foreground">AI 内容创作工作流</p>
+            <p className="text-xs text-muted-foreground">AI 快速图片生成</p>
           </div>
           <div className="flex items-center gap-2">
             {/* 历史记录按钮 */}
@@ -1246,38 +1246,11 @@ export default function QuickGeneratorPage() {
           </div>
         </div>
 
-        {/* Global Mode Switcher */}
+        {/* Mode Indicator - 纯图片模式 */}
         <div className="flex p-1 rounded-xl panel-surface">
-          <Button
-            variant="ghost"
-            onClick={() => {
-              setOutputMode("image");
-              setCanvasState(imageUploadedFiles.length > 0 ? "preview" : "empty");
-            }}
-            className={cn(
-              "flex-1 py-2 rounded-lg gap-2",
-              outputMode === "image"
-                ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white font-semibold"
-                : "text-muted-foreground"
-            )}
-          >
-            <ImageIcon className="h-4 w-4" /> Image
-          </Button>
-          <Button
-            variant="ghost"
-            onClick={() => {
-              setOutputMode("video");
-              setCanvasState(uploadedFile ? (sourceType === "local_upload" ? "selected" : "preview") : "empty");
-            }}
-            className={cn(
-              "flex-1 py-2 rounded-lg gap-2",
-              outputMode === "video"
-                ? "bg-gradient-to-r from-tiktok-cyan to-tiktok-pink text-black font-semibold"
-                : "text-muted-foreground"
-            )}
-          >
-            <Video className="h-4 w-4" /> Video
-          </Button>
+          <div className="flex-1 py-2 rounded-lg gap-2 flex items-center justify-center bg-gradient-to-r from-purple-500 to-pink-500 text-white font-semibold">
+            <ImageIcon className="h-4 w-4" /> 图片模式
+          </div>
         </div>
 
         {/* ======================================== */}

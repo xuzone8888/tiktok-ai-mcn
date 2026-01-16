@@ -2407,7 +2407,7 @@ C07: [story CTA, inspiring, <50 chars]`,
           <div className="flex-1">
             <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
               <Video className="h-6 w-6 text-tiktok-cyan" />
-              <span className="gradient-tiktok-text">批量视频生产</span>
+              <span className="gradient-tiktok-text">批量流水线</span>
             </h1>
             <p className="text-sm text-muted-foreground mt-1">
               上传产品图片 → 生成口播脚本 → 生成AI提示词 → Sora2生成15秒视频

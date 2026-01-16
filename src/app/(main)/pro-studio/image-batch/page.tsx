@@ -676,7 +676,7 @@ export default function ImageBatchPage() {
           <div className="flex-1">
             <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
               <ImageIcon className="h-6 w-6 text-tiktok-pink" />
-              <span className="gradient-tiktok-text">图片批量处理</span>
+              <span className="gradient-tiktok-text">批量制图线</span>
             </h1>
             <p className="text-sm text-muted-foreground mt-1">
               批量上传图片，使用 AI 进行高清放大、九宫格生成等处理

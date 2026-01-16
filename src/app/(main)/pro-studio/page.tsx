@@ -25,7 +25,7 @@ import {
 const MODULES = [
   {
     id: "image-batch",
-    title: "图片批量处理",
+    title: "批量制图线",
     description: "批量上传图片，使用 AI 进行高清放大、九宫格生成等处理",
     href: "/pro-studio/image-batch",
     icon: ImageIcon,
@@ -47,7 +47,7 @@ const MODULES = [
   },
   {
     id: "video-batch",
-    title: "视频批量生成",
+    title: "批量流水线",
     description: "上传产品图片 → 豆包生成脚本 → Sora2 生成15秒视频",
     href: "/pro-studio/video-batch",
     icon: Video,
@@ -83,10 +83,10 @@ export default function ProStudioPage() {
           <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-tiktok-cyan to-tiktok-pink flex items-center justify-center">
             <Factory className="h-5 w-5 text-white" />
           </div>
-          <span className="gradient-tiktok-text">批量产线区</span>
+          <span className="gradient-tiktok-text">批量生产中心</span>
         </h1>
         <p className="text-muted-foreground">
-          高效处理大量图片和视频内容的智能生产线
+          选择您需要的批量生产模式
         </p>
       </div>
 

@@ -368,3 +368,105 @@
 ::-webkit-scrollbar-thumb:hover {
   @apply bg-muted-foreground/50;
 }
+
+/* ============================================================================
+ * Custom Cursor - Soft Cartoon Glove Style
+ * 卡通手套风格光标 (圆润柔软)
+ * ============================================================================ */
+
+/* 默认光标 - 圆润柔软箭头 */
+*,
+*::before,
+*::after {
+  cursor: url("data:image/svg+xml,%3Csvg width='28' height='28' viewBox='0 0 28 28' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M5 2C4 2 3.5 3 4 4L9 24C9.5 25.5 11.5 25.5 12 24L15 17L22 14C23.5 13.5 23.5 11.5 22 11L6 3C5.5 2.5 5.5 2 5 2Z' fill='white' stroke='black' stroke-width='2' stroke-linejoin='round'/%3E%3C/svg%3E") 5 3, auto;
+}
+
+/* 悬停光标 - 保持与默认一致 */
+a,
+button,
+[role="button"],
+.clickable,
+.nav-interactive,
+input[type="checkbox"],
+input[type="radio"],
+input[type="submit"],
+input[type="button"],
+select {
+  cursor: url("data:image/svg+xml,%3Csvg width='28' height='28' viewBox='0 0 28 28' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M5 2C4 2 3.5 3 4 4L9 24C9.5 25.5 11.5 25.5 12 24L15 17L22 14C23.5 13.5 23.5 11.5 22 11L6 3C5.5 2.5 5.5 2 5 2Z' fill='white' stroke='black' stroke-width='2' stroke-linejoin='round'/%3E%3C/svg%3E") 5 3, pointer;
+}
+
+/* 文本光标 */
+input[type="text"],
+input[type="email"],
+input[type="password"],
+input[type="number"],
+input[type="search"],
+input[type="url"],
+input[type="tel"],
+textarea,
+[contenteditable="true"] {
+  cursor: text;
+}
+
+/* 禁用光标 */
+[disabled],
+.disabled {
+  cursor: not-allowed;
+}
+
+/* ============================================================================
+ * Micro-Interactions - 微交互效果
+ * ============================================================================ */
+
+/* 悬停右移效果 */
+.hover-slide-right {
+  @apply transition-transform duration-200 ease-out;
+}
+
+.hover-slide-right:hover {
+  @apply translate-x-1;
+}
+
+/* 点击果冻/缩放效果 */
+.click-scale {
+  @apply transition-transform duration-100 ease-out;
+}
+
+.click-scale:active {
+  transform: scale(0.98);
+}
+
+/* 组合交互效果 - 用于侧边栏菜单项 */
+.nav-interactive {
+  @apply transition-all duration-150 ease-out;
+}
+
+.nav-interactive:hover {
+  @apply translate-x-0.5;
+}
+
+.nav-interactive:active {
+  transform: scale(0.97) translateX(2px);
+}
+
+/* ============================================================================
+ * Soft Squish Animation - 软挤压点击动画
+ * 模拟柔软物体被按压的效果
+ * ============================================================================ */
+
+/* 全局按钮点击动画 */
+button,
+a,
+[role="button"],
+.clickable,
+.nav-interactive {
+  transition: transform 0.1s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+button:active,
+a:active,
+[role="button"]:active,
+.clickable:active,
+.nav-interactive:active {
+  transform: scale(0.94);
+}

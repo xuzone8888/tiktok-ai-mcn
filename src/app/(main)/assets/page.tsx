@@ -243,7 +243,7 @@ export default function TaskLogPage() {
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">
-            <span className="gradient-tiktok-text">生产轨迹簿</span>
+            <span className="gradient-tiktok-text">成品交付单</span>
           </h1>
           <p className="mt-2 text-muted-foreground">
             查看和下载您生成的视频与图片内容

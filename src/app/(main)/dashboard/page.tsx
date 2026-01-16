@@ -193,10 +193,10 @@ export default function DashboardPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">
-            <span className="gradient-tiktok-text">工厂中控台</span>
+            <span className="gradient-tiktok-text">数据驾驶舱</span>
           </h1>
           <p className="mt-2 text-muted-foreground">
-            欢迎回来！这是您的个人数据概览
+            欢迎回来！这是您的运营数据概览
           </p>
         </div>
         <Button variant="outline" size="sm" onClick={fetchStats} className="gap-2">

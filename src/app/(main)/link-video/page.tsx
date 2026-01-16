@@ -42,7 +42,7 @@ export default function LinkVideoPage() {
             </div>
             <div>
               <h1 className="text-2xl font-bold tracking-tight">
-                链接秒变视频
+                链接转化机
               </h1>
               <p className="text-muted-foreground">
                 粘贴商品链接，AI 自动生成带货短视频

@@ -73,9 +73,9 @@ export default function ImageFactoryPage() {
               <Sparkles className="h-5 w-5 text-white" />
             </div>
             <div>
-              <h1 className="text-xl font-bold">电商图片工厂</h1>
+              <h1 className="text-xl font-bold">商图精修台</h1>
               <p className="text-sm text-muted-foreground">
-                AI 驱动的电商图片一站式生成工具
+                AI 驱动的电商图片精修工具
               </p>
             </div>
           </div>

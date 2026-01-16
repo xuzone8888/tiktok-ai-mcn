@@ -405,7 +405,7 @@ function ChineseContent() {
             <h2 className="text-2xl font-semibold text-white mb-4">七、知识产权</h2>
             <h3 className="text-xl font-medium text-white mt-6 mb-3">7.1 我们的知识产权</h3>
             <p className="leading-relaxed">
-              所有技术、软件、算法、商标、标识和平台设计均归武汉冠星文化传媒有限公司所有。
+              所有技术、软件、算法、商标、标识和平台设计均归武汉观星文化传媒有限公司所有。
               未经书面许可，您不得复制、修改或分发我们平台的任何部分。
             </p>
 
@@ -446,7 +446,7 @@ function ChineseContent() {
           <section>
             <h2 className="text-2xl font-semibold text-white mb-4">十、赔偿</h2>
             <p className="leading-relaxed">
-              您同意赔偿并使武汉冠星文化传媒有限公司及其管理人员、董事、员工和代理人免受因以下原因引起的任何索赔、损害、损失或费用（包括法律费用）：
+              您同意赔偿并使武汉观星文化传媒有限公司及其管理人员、董事、员工和代理人免受因以下原因引起的任何索赔、损害、损失或费用（包括法律费用）：
             </p>
             <ul className="list-disc pl-6 space-y-2 mt-4">
               <li>您使用我们的服务</li>
