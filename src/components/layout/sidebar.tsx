@@ -144,8 +144,12 @@ const navGroups: NavGroup[] = [
         href: "/publish",
         icon: Send,
         description: "多平台视频分发",
-        comingSoon: true,
-        comingSoonMessage: "即将推出：视频矩阵账号绑定与一键分发",
+      },
+      {
+        title: "账号管理",
+        href: "/publish/accounts",
+        icon: Users,
+        description: "TikTok 账号绑定",
       },
     ],
   },
@@ -209,7 +213,7 @@ export function Sidebar() {
                   <Lock className="h-2 w-2 text-amber-400/80" />
                 </div>
               </div>
-              
+
               {!collapsed && (
                 <div className="flex flex-1 flex-col">
                   <div className="flex items-center gap-1.5">
@@ -249,7 +253,7 @@ export function Sidebar() {
         {isActive && (
           <div className="absolute left-0 top-1/2 h-9 w-[3px] -translate-y-1/2 rounded-r-full bg-tiktok-cyan shadow-[0_0_8px_rgba(0,242,234,0.5)]" />
         )}
-        
+
         <div
           className={cn(
             "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-all duration-150",
@@ -260,7 +264,7 @@ export function Sidebar() {
         >
           <Icon className="h-4 w-4 transition-transform duration-150 group-hover:scale-105" />
         </div>
-        
+
         {!collapsed && (
           <span className={cn(
             "text-sm transition-all duration-150 group-hover:translate-x-0.5",
