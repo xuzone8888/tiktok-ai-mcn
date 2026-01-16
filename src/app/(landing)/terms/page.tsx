@@ -309,7 +309,7 @@ function ChineseContent() {
           <section>
             <h2 className="text-2xl font-semibold text-white mb-4">一、条款接受</h2>
             <p className="leading-relaxed">
-              欢迎您使用 Tok Factory 平台，该平台由武汉冠星文化传媒有限公司（以下简称&ldquo;本公司&rdquo;、&ldquo;我们&rdquo;）运营。
+              欢迎您使用 Tok Factory 平台，该平台由武汉观星文化传媒有限公司（以下简称&ldquo;本公司&rdquo;、&ldquo;我们&rdquo;）运营。
               本服务条款（以下简称&ldquo;本条款&rdquo;）约束您对 Tok Factory 平台 (www.tokfactoryai.com) 的访问和使用，
               包括我们的 AI 内容创作服务和社交媒体发布功能。
             </p>
@@ -484,7 +484,7 @@ function ChineseContent() {
               如对本条款有任何疑问，请联系我们：
             </p>
             <div className="mt-4 p-4 bg-white/5 rounded-lg">
-              <p><strong>武汉冠星文化传媒有限公司</strong></p>
+              <p><strong>武汉观星文化传媒有限公司</strong></p>
               <p className="mt-2">邮箱：legal@tokfactoryai.com</p>
               <p>网站：www.tokfactoryai.com</p>
               <p>地址：中国湖北省武汉市</p>

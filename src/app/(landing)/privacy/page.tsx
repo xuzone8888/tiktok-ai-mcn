@@ -33,18 +33,16 @@ export default function PrivacyPage() {
               <div className="flex items-center gap-2 bg-white/10 rounded-lg p-1">
                 <button
                   onClick={() => setLang("en")}
-                  className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors flex items-center gap-1.5 ${
-                    lang === "en" ? "bg-white/20 text-white" : "text-gray-400 hover:text-white"
-                  }`}
+                  className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors flex items-center gap-1.5 ${lang === "en" ? "bg-white/20 text-white" : "text-gray-400 hover:text-white"
+                    }`}
                 >
                   <Globe className="h-4 w-4" />
                   English
                 </button>
                 <button
                   onClick={() => setLang("zh")}
-                  className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                    lang === "zh" ? "bg-white/20 text-white" : "text-gray-400 hover:text-white"
-                  }`}
+                  className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${lang === "zh" ? "bg-white/20 text-white" : "text-gray-400 hover:text-white"
+                    }`}
                 >
                   中文
                 </button>
@@ -107,12 +105,12 @@ function EnglishContent() {
           <section>
             <h2 className="text-2xl font-semibold text-white mb-4">1. Introduction</h2>
             <p className="leading-relaxed">
-              Wuhan Guanxing Cultural Media Co., Ltd. (&quot;Tok Factory&quot;, &quot;we&quot;, &quot;us&quot;, or &quot;our&quot;) operates the Tok Factory platform 
-              (www.tokfactoryai.com). This Privacy Policy explains how we collect, use, disclose, and safeguard your information 
+              Wuhan Guanxing Cultural Media Co., Ltd. (&quot;Tok Factory&quot;, &quot;we&quot;, &quot;us&quot;, or &quot;our&quot;) operates the Tok Factory platform
+              (www.tokfactoryai.com). This Privacy Policy explains how we collect, use, disclose, and safeguard your information
               when you use our AI-powered content creation services, including our integration with the TikTok platform.
             </p>
             <p className="leading-relaxed mt-4">
-              By using Tok Factory, you agree to the collection and use of information in accordance with this Privacy Policy. 
+              By using Tok Factory, you agree to the collection and use of information in accordance with this Privacy Policy.
               If you do not agree with this policy, please do not use our services.
             </p>
           </section>
@@ -120,15 +118,15 @@ function EnglishContent() {
           <section className="bg-gradient-to-r from-cyan-500/10 to-pink-500/10 border border-cyan-500/20 rounded-xl p-6">
             <h2 className="text-2xl font-semibold text-white mb-4 flex items-center gap-2">
               <svg className="w-6 h-6" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-5.2 1.74 2.89 2.89 0 012.31-4.64 2.93 2.93 0 01.88.13V9.4a6.84 6.84 0 00-1-.05A6.33 6.33 0 005 20.1a6.34 6.34 0 0010.86-4.43v-7a8.16 8.16 0 004.77 1.52v-3.4a4.85 4.85 0 01-1-.1z"/>
+                <path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-5.2 1.74 2.89 2.89 0 012.31-4.64 2.93 2.93 0 01.88.13V9.4a6.84 6.84 0 00-1-.05A6.33 6.33 0 005 20.1a6.34 6.34 0 0010.86-4.43v-7a8.16 8.16 0 004.77 1.52v-3.4a4.85 4.85 0 01-1-.1z" />
               </svg>
               2. TikTok Integration & Data Handling
             </h2>
             <p className="leading-relaxed text-white/90">
-              <strong>IMPORTANT:</strong> Tok Factory integrates with TikTok&apos;s Content Posting API to enable you to publish 
+              <strong>IMPORTANT:</strong> Tok Factory integrates with TikTok&apos;s Content Posting API to enable you to publish
               AI-generated videos directly to your TikTok account. This section specifically covers how we handle your TikTok data.
             </p>
-            
+
             <h3 className="text-xl font-medium text-white mt-6 mb-3">2.1 TikTok Data We Collect</h3>
             <p className="leading-relaxed">When you connect your TikTok account, we collect:</p>
             <ul className="list-disc pl-6 space-y-2 mt-4">
@@ -163,14 +161,14 @@ function EnglishContent() {
 
             <h3 className="text-xl font-medium text-white mt-6 mb-3">2.5 Revoking TikTok Access</h3>
             <p className="leading-relaxed">
-              You can disconnect your TikTok account at any time through our Account Management page. Additionally, 
+              You can disconnect your TikTok account at any time through our Account Management page. Additionally,
               you can revoke Tok Factory&apos;s access directly from your TikTok app under Settings → Security → Manage App Permissions.
             </p>
           </section>
 
           <section>
             <h2 className="text-2xl font-semibold text-white mb-4">3. Information We Collect</h2>
-            
+
             <h3 className="text-xl font-medium text-white mt-6 mb-3">3.1 Information You Provide</h3>
             <ul className="list-disc pl-6 space-y-2">
               <li><strong>Account Information:</strong> Email address, username, password (encrypted)</li>
@@ -251,8 +249,8 @@ function EnglishContent() {
           <section>
             <h2 className="text-2xl font-semibold text-white mb-4">9. Children&apos;s Privacy</h2>
             <p className="leading-relaxed">
-              Tok Factory is not intended for users under 18 years of age. We do not knowingly collect personal 
-              information from children. If we discover that a child under 18 has provided us with personal information, 
+              Tok Factory is not intended for users under 18 years of age. We do not knowingly collect personal
+              information from children. If we discover that a child under 18 has provided us with personal information,
               we will delete it immediately.
             </p>
           </section>
@@ -260,8 +258,8 @@ function EnglishContent() {
           <section>
             <h2 className="text-2xl font-semibold text-white mb-4">10. International Data Transfers</h2>
             <p className="leading-relaxed">
-              Our servers are located in the People&apos;s Republic of China. If you access our services from outside China, 
-              your data may be transferred to and processed in China. We ensure appropriate safeguards are in place for 
+              Our servers are located in the People&apos;s Republic of China. If you access our services from outside China,
+              your data may be transferred to and processed in China. We ensure appropriate safeguards are in place for
               international data transfers.
             </p>
           </section>
@@ -269,8 +267,8 @@ function EnglishContent() {
           <section>
             <h2 className="text-2xl font-semibold text-white mb-4">11. Changes to This Policy</h2>
             <p className="leading-relaxed">
-              We may update this Privacy Policy from time to time. We will notify you of significant changes via email 
-              or prominent notice on our platform. Your continued use of our services after such modifications constitutes 
+              We may update this Privacy Policy from time to time. We will notify you of significant changes via email
+              or prominent notice on our platform. Your continued use of our services after such modifications constitutes
               your acceptance of the updated policy.
             </p>
           </section>
@@ -310,7 +308,7 @@ function ChineseContent() {
           <section>
             <h2 className="text-2xl font-semibold text-white mb-4">一、引言</h2>
             <p className="leading-relaxed">
-              武汉冠星文化传媒有限公司（以下简称&ldquo;Tok Factory&rdquo;、&ldquo;我们&rdquo;或&ldquo;本公司&rdquo;）运营 Tok Factory 平台 
+              武汉观星文化传媒有限公司（以下简称&ldquo;Tok Factory&rdquo;、&ldquo;我们&rdquo;或&ldquo;本公司&rdquo;）运营 Tok Factory 平台
               (www.tokfactoryai.com)。本隐私政策旨在向您说明我们如何收集、使用、披露和保护您在使用我们的 AI 内容创作服务时的信息，
               包括我们与 TikTok 平台的集成。
             </p>
@@ -322,7 +320,7 @@ function ChineseContent() {
           <section className="bg-gradient-to-r from-cyan-500/10 to-pink-500/10 border border-cyan-500/20 rounded-xl p-6">
             <h2 className="text-2xl font-semibold text-white mb-4 flex items-center gap-2">
               <svg className="w-6 h-6" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-5.2 1.74 2.89 2.89 0 012.31-4.64 2.93 2.93 0 01.88.13V9.4a6.84 6.84 0 00-1-.05A6.33 6.33 0 005 20.1a6.34 6.34 0 0010.86-4.43v-7a8.16 8.16 0 004.77 1.52v-3.4a4.85 4.85 0 01-1-.1z"/>
+                <path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-5.2 1.74 2.89 2.89 0 012.31-4.64 2.93 2.93 0 01.88.13V9.4a6.84 6.84 0 00-1-.05A6.33 6.33 0 005 20.1a6.34 6.34 0 0010.86-4.43v-7a8.16 8.16 0 004.77 1.52v-3.4a4.85 4.85 0 01-1-.1z" />
               </svg>
               二、TikTok 集成与数据处理
             </h2>
@@ -330,7 +328,7 @@ function ChineseContent() {
               <strong>重要提示：</strong>Tok Factory 集成了 TikTok 的 Content Posting API，使您能够将 AI 生成的视频直接发布到您的 TikTok 账号。
               本节专门说明我们如何处理您的 TikTok 数据。
             </p>
-            
+
             <h3 className="text-xl font-medium text-white mt-6 mb-3">2.1 我们收集的 TikTok 数据</h3>
             <p className="leading-relaxed">当您连接 TikTok 账号时，我们会收集：</p>
             <ul className="list-disc pl-6 space-y-2 mt-4">
@@ -365,14 +363,14 @@ function ChineseContent() {
 
             <h3 className="text-xl font-medium text-white mt-6 mb-3">2.5 撤销 TikTok 访问权限</h3>
             <p className="leading-relaxed">
-              您可以随时通过我们的账号管理页面断开 TikTok 账号连接。此外，您也可以直接在 TikTok 应用的 
+              您可以随时通过我们的账号管理页面断开 TikTok 账号连接。此外，您也可以直接在 TikTok 应用的
               设置 → 安全 → 管理应用权限 中撤销 Tok Factory 的访问权限。
             </p>
           </section>
 
           <section>
             <h2 className="text-2xl font-semibold text-white mb-4">三、我们收集的信息</h2>
-            
+
             <h3 className="text-xl font-medium text-white mt-6 mb-3">3.1 您主动提供的信息</h3>
             <ul className="list-disc pl-6 space-y-2">
               <li><strong>账户信息：</strong>邮箱地址、用户名、密码（加密存储）</li>
@@ -480,7 +478,7 @@ function ChineseContent() {
               如果您对本隐私政策或我们的数据处理有任何疑问，请联系我们：
             </p>
             <div className="mt-4 p-4 bg-white/5 rounded-lg">
-              <p><strong>武汉冠星文化传媒有限公司</strong></p>
+              <p><strong>武汉观星文化传媒有限公司</strong></p>
               <p className="mt-2">邮箱：privacy@tokfactoryai.com</p>
               <p>网站：www.tokfactoryai.com</p>
               <p>地址：中国湖北省武汉市</p>
