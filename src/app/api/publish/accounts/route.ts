@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/server';
 interface TikTokAccountRow {
     id: string;
     open_id: string;
+    username: string | null;  // Actual TikTok @handle
     display_name: string | null;
     avatar_url: string | null;
     follower_count: number;
@@ -58,6 +59,7 @@ export async function GET() {
         const safeAccounts = accounts.map(account => ({
             id: account.id,
             open_id: account.open_id,
+            username: account.username,  // Include the TikTok @handle
             display_name: account.display_name,
             avatar_url: account.avatar_url,
             follower_count: account.follower_count,

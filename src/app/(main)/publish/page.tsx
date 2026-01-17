@@ -1,23 +1,18 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
 import {
     Rocket,
     Video,
     Upload,
-    Link as LinkIcon,
     Check,
     Plus,
     Clock,
     AlertCircle,
-    ChevronRight,
     Settings,
-    Globe,
     Users,
-    MessageCircle,
-    Sparkles,
     Calendar,
     Play,
     Trash2,
@@ -26,15 +21,33 @@ import {
     CheckCircle2,
     XCircle,
     Loader2,
-    History,
+    X,
+    FileVideo,
     Timer,
-    ShoppingBag,
-    Lock,
-    Eye,
-    EyeOff
+    History,
+    ImageIcon,
+    Sliders,
+    Sparkles
 } from 'lucide-react'
 import { format, addMinutes } from 'date-fns'
 import { zhCN } from 'date-fns/locale'
+
+// TikTok supported video formats
+const TIKTOK_VIDEO_FORMATS = ['.mp4', '.webm', '.mov']
+const TIKTOK_MAX_FILE_SIZE = 4 * 1024 * 1024 * 1024 // 4GB
+const TIKTOK_MAX_DURATION = 10 * 60 * 1000 // 10 minutes in ms
+
+// Asset from delivery order
+interface AssetItem {
+    id: string
+    type: 'video' | 'image'
+    resultUrl: string | null
+    thumbnailUrl: string | null
+    prompt: string | null
+    model: string
+    createdAt: string
+    source: string
+}
 
 // Types
 interface TikTokAccount {
@@ -46,8 +59,10 @@ interface TikTokAccount {
     following_count: number
     likes_count: number
     video_count: number
-    is_verified: boolean
-    access_token_expires_at: string
+    account_type: string
+    status: string
+    token_expires_at: string
+    scopes: string[]
 }
 
 interface SelectedVideo {
@@ -57,11 +72,14 @@ interface SelectedVideo {
     thumbnail: string
     url?: string
     duration?: number
+    cover?: string           // Custom cover image URL or data URL
+    title?: string           // Individual title for this video
+    coverOptions?: string[]  // Auto-generated cover options at different time points
 }
 
 interface PublishTask {
     id: string
-    status: 'pending' | 'processing' | 'completed' | 'failed'
+    status: 'pending' | 'processing' | 'completed' | 'failed' | 'scheduled' | 'partial_failed'
     video_count: number
     account_count: number
     total_items: number
@@ -72,18 +90,17 @@ interface PublishTask {
 }
 
 type TabType = 'create' | 'history' | 'scheduled'
-type PrivacyLevel = 'PUBLIC_TO_EVERYONE' | 'MUTUAL_FOLLOW_FRIENDS' | 'SELF_ONLY'
-type VideoSourceType = 'asset' | 'upload' | 'url'
+type VideoSourceType = 'upload' | 'asset'  // Only support local upload and asset library
 
 export default function PublishPage() {
     const router = useRouter()
+    const fileInputRef = useRef<HTMLInputElement>(null)
 
     // Tab state
     const [activeTab, setActiveTab] = useState<TabType>('create')
 
     // Create publish form state
-    const [publishType, setPublishType] = useState<'normal' | 'product'>('normal')
-    const [videoSource, setVideoSource] = useState<VideoSourceType>('asset')
+    const [videoSource, setVideoSource] = useState<VideoSourceType>('upload')  // Default to local upload
     const [selectedVideos, setSelectedVideos] = useState<SelectedVideo[]>([])
     const [selectedAccounts, setSelectedAccounts] = useState<string[]>([])
     const [accounts, setAccounts] = useState<TikTokAccount[]>([])
@@ -91,18 +108,21 @@ export default function PublishPage() {
 
     // Publish settings
     const [caption, setCaption] = useState('')
-    const [privacyLevel, setPrivacyLevel] = useState<PrivacyLevel>('PUBLIC_TO_EVERYONE')
-    const [allowComments, setAllowComments] = useState(true)
-    const [allowDuet, setAllowDuet] = useState(true)
-    const [allowStitch, setAllowStitch] = useState(true)
-    const [isBrandContent, setIsBrandContent] = useState(false)
-    const [isAIGenerated, setIsAIGenerated] = useState(true)
+    const [taskGroupName, setTaskGroupName] = useState('')  // Task group name for tracking
+    const [useDefaultCover, setUseDefaultCover] = useState(true)  // Use video first frame as cover (default ON)
 
     // Schedule settings
     const [publishMode, setPublishMode] = useState<'now' | 'scheduled'>('now')
     const [scheduledDate, setScheduledDate] = useState('')
     const [scheduledTime, setScheduledTime] = useState('09:00')
-    const [batchInterval, setBatchInterval] = useState(5)
+    // Interval mode: preset values or custom (all in minutes)
+    const [intervalMode, setIntervalMode] = useState<'0' | '3' | '5' | '10' | '30' | '60' | '120' | '360' | '720' | '1440' | 'custom'>('5')
+    const [customInterval, setCustomInterval] = useState(5)
+
+    // Task creation modal states
+    const [showCreatingModal, setShowCreatingModal] = useState(false)
+    const [creatingStep, setCreatingStep] = useState<'verifying' | 'creating' | 'done' | 'error'>('verifying')
+    const [createdTaskId, setCreatedTaskId] = useState<string | null>(null)
 
     // History and scheduled tasks
     const [tasks, setTasks] = useState<PublishTask[]>([])
@@ -112,7 +132,57 @@ export default function PublishPage() {
     const [isPublishing, setIsPublishing] = useState(false)
     const [publishError, setPublishError] = useState<string | null>(null)
 
-    // Fetch accounts
+    // Asset library state (成品库)
+    const [showAssetModal, setShowAssetModal] = useState(false)
+    const [assets, setAssets] = useState<AssetItem[]>([])
+    const [loadingAssets, setLoadingAssets] = useState(false)
+    const [selectedAssetIds, setSelectedAssetIds] = useState<string[]>([])  // Multi-select in asset library
+
+    // Upload state
+    const [uploadProgress, setUploadProgress] = useState<number | null>(null)
+    const [uploadError, setUploadError] = useState<string | null>(null)
+
+    // Delete task state
+    const [deleteTaskId, setDeleteTaskId] = useState<string | null>(null)
+    const [deletingTask, setDeletingTask] = useState(false)
+
+    // Title mode: 'uniform' = same title for all, 'individual' = different titles per video
+    const [titleMode, setTitleMode] = useState<'uniform' | 'individual'>('uniform')
+
+    // Expanded video for editing (shows cover options inline)
+    const [expandedVideoId, setExpandedVideoId] = useState<string | null>(null)
+
+    // Cover selection state (simplified)
+    const coverInputRef = useRef<HTMLInputElement>(null)
+    const [coverUploadVideoId, setCoverUploadVideoId] = useState<string | null>(null)
+
+    // Clear task confirmation
+    const [showClearConfirm, setShowClearConfirm] = useState(false)
+
+    // Clear all task function
+    const clearAllTask = () => {
+        setSelectedVideos([])
+        setSelectedAccounts([])
+        setCaption('')
+        setTaskGroupName('')
+        setPublishMode('now')
+        setScheduledDate('')
+        setScheduledTime('09:00')
+        setExpandedVideoId(null)
+        setShowClearConfirm(false)
+    }
+
+    // AI Title Assistant state
+    const [showTitleAssistant, setShowTitleAssistant] = useState(false)
+    const [titleDescription, setTitleDescription] = useState('')
+    const [titleLanguage, setTitleLanguage] = useState<'zh' | 'en'>('en')
+    const [generatedTitles, setGeneratedTitles] = useState<{
+        index: number
+        content: string
+        selected: boolean
+    }[]>([])
+    const [generatingTitles, setGeneratingTitles] = useState(false)
+    const [regeneratingIndex, setRegeneratingIndex] = useState<number | null>(null)
     const fetchAccounts = useCallback(async () => {
         setLoadingAccounts(true)
         try {
@@ -128,30 +198,44 @@ export default function PublishPage() {
         }
     }, [])
 
+    // Fetch tasks for history/scheduled tabs
+    const fetchTasks = useCallback(async () => {
+        setLoadingTasks(true)
+        try {
+            const response = await fetch('/api/publish/tasks')
+            if (response.ok) {
+                const data = await response.json()
+                setTasks(data.tasks || [])
+            }
+        } catch (error) {
+            console.error('Failed to fetch tasks:', error)
+        } finally {
+            setLoadingTasks(false)
+        }
+    }, [])
+
     useEffect(() => {
         fetchAccounts()
     }, [fetchAccounts])
 
+    // Fetch tasks when switching to history or scheduled tab
+    useEffect(() => {
+        if (activeTab === 'history' || activeTab === 'scheduled') {
+            fetchTasks()
+        }
+    }, [activeTab, fetchTasks])
+
     // Check if account is authorized
     const isAccountAuthorized = (account: TikTokAccount) => {
-        return new Date(account.access_token_expires_at) > new Date()
+        return new Date(account.token_expires_at) > new Date()
     }
 
-    // Toggle account selection
+    // Toggle account selection (single select mode - only one account at a time)
     const toggleAccountSelection = (accountId: string) => {
+        // Single select: if already selected, deselect; otherwise select only this one
         setSelectedAccounts(prev =>
-            prev.includes(accountId)
-                ? prev.filter(id => id !== accountId)
-                : [...prev, accountId]
+            prev.includes(accountId) ? [] : [accountId]
         )
-    }
-
-    // Select all authorized accounts
-    const selectAllAccounts = () => {
-        const authorizedAccountIds = accounts
-            .filter(isAccountAuthorized)
-            .map(a => a.id)
-        setSelectedAccounts(authorizedAccountIds)
     }
 
     // Remove selected video
@@ -162,16 +246,370 @@ export default function PublishPage() {
     // Calculate total tasks
     const totalTasks = selectedVideos.length * selectedAccounts.length
 
-    // Mock video data for demo (will be replaced with actual asset library integration)
-    const addDemoVideo = () => {
+    // Fetch assets from delivery order (成品交付单)
+    const fetchAssets = useCallback(async () => {
+        setLoadingAssets(true)
+        try {
+            const response = await fetch('/api/user/tasks?type=video&status=completed&limit=50')
+            if (response.ok) {
+                const result = await response.json()
+                // API returns { success: true, data: { tasks: [...] } }
+                const tasks = result.data?.tasks || result.tasks || []
+                setAssets(tasks.filter((t: AssetItem) => t.type === 'video' && t.resultUrl) || [])
+            }
+        } catch (error) {
+            console.error('Failed to fetch assets:', error)
+        } finally {
+            setLoadingAssets(false)
+        }
+    }, [])
+
+    // Open asset selector modal
+    const openAssetSelector = () => {
+        setShowAssetModal(true)
+        fetchAssets()
+    }
+
+    // Add video from asset library
+    const addVideoFromAsset = (asset: AssetItem) => {
+        if (selectedVideos.some(v => v.id === asset.id)) return // Already selected
+
         const newVideo: SelectedVideo = {
-            id: `demo-${Date.now()}`,
+            id: asset.id,
             type: 'asset',
-            name: `示例视频 ${selectedVideos.length + 1}`,
-            thumbnail: '/placeholder-video.jpg',
+            name: asset.prompt?.slice(0, 30) || `视频 ${format(new Date(asset.createdAt), 'MM/dd HH:mm')}`,
+            thumbnail: asset.thumbnailUrl || '',  // Empty string to trigger video fallback
+            url: asset.resultUrl || undefined,
             duration: 30
         }
         setSelectedVideos(prev => [...prev, newVideo])
+    }
+
+    // Generate video thumbnail from first frame
+    const generateVideoThumbnail = (videoFile: File): Promise<string> => {
+        return new Promise((resolve) => {
+            const video = document.createElement('video')
+            video.preload = 'metadata'
+            video.muted = true
+            video.playsInline = true
+
+            video.onloadeddata = () => {
+                // Seek to 1 second or 0 if video is shorter
+                video.currentTime = Math.min(1, video.duration / 2)
+            }
+
+            video.onseeked = () => {
+                const canvas = document.createElement('canvas')
+                canvas.width = video.videoWidth
+                canvas.height = video.videoHeight
+                const ctx = canvas.getContext('2d')
+                if (ctx) {
+                    ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+                    const thumbnail = canvas.toDataURL('image/jpeg', 0.7)
+                    URL.revokeObjectURL(video.src)
+                    resolve(thumbnail)
+                } else {
+                    URL.revokeObjectURL(video.src)
+                    resolve('')
+                }
+            }
+
+            video.onerror = () => {
+                URL.revokeObjectURL(video.src)
+                resolve('')
+            }
+
+            video.src = URL.createObjectURL(videoFile)
+        })
+    }
+
+    // Handle local file upload
+    const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+        const files = event.target.files
+        if (!files || files.length === 0) return
+
+        setUploadError(null)
+
+        for (const file of Array.from(files)) {
+            // Validate file extension
+            const ext = '.' + file.name.split('.').pop()?.toLowerCase()
+            if (!TIKTOK_VIDEO_FORMATS.includes(ext)) {
+                setUploadError(`不支持的格式: ${ext}。TikTok支持: ${TIKTOK_VIDEO_FORMATS.join(', ')}`)
+                continue
+            }
+
+            // Validate file size
+            if (file.size > TIKTOK_MAX_FILE_SIZE) {
+                setUploadError(`文件过大: ${(file.size / (1024 * 1024 * 1024)).toFixed(2)}GB。最大: 4GB`)
+                continue
+            }
+
+            // Show progress
+            setUploadProgress(10)
+
+            // Create object URL for video playback
+            const objectUrl = URL.createObjectURL(file)
+
+            // Simulate progress while generating thumbnail
+            setUploadProgress(30)
+
+            // Generate thumbnail from video
+            const thumbnail = await generateVideoThumbnail(file)
+
+            setUploadProgress(80)
+
+            const newVideo: SelectedVideo = {
+                id: `upload-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                type: 'upload',
+                name: file.name,
+                thumbnail: thumbnail || '',  // Use generated thumbnail
+                url: objectUrl,
+                duration: 0
+            }
+            setSelectedVideos(prev => [...prev, newVideo])
+
+            // Complete progress
+            setUploadProgress(100)
+
+            // Clear progress after short delay
+            setTimeout(() => {
+                setUploadProgress(null)
+            }, 500)
+        }
+
+        // Reset input
+        if (fileInputRef.current) {
+            fileInputRef.current.value = ''
+        }
+    }
+
+
+    // Delete task
+    const deleteTask = async (taskId: string) => {
+        setDeletingTask(true)
+        try {
+            const response = await fetch(`/api/publish/tasks/${taskId}`, {
+                method: 'DELETE'
+            })
+            if (response.ok) {
+                setTasks(prev => prev.filter(t => t.id !== taskId))
+                setDeleteTaskId(null)
+            } else {
+                const data = await response.json()
+                alert(data.error || '删除失败')
+            }
+        } catch (error) {
+            console.error('Failed to delete task:', error)
+            alert('删除失败')
+        } finally {
+            setDeletingTask(false)
+        }
+    }
+
+    // Generate cover options from video at different time points
+    const generateCoverOptions = async (videoUrl: string): Promise<string[]> => {
+        return new Promise((resolve) => {
+            const video = document.createElement('video')
+            video.crossOrigin = 'anonymous'
+            video.src = videoUrl
+            video.muted = true
+            video.playsInline = true
+
+            const covers: string[] = []
+            const timePoints = [0.1, 0.25, 0.5, 0.75] // 10%, 25%, 50%, 75% of duration
+
+            video.onloadedmetadata = () => {
+                let currentIndex = 0
+
+                const captureFrame = () => {
+                    if (currentIndex >= timePoints.length) {
+                        resolve(covers)
+                        return
+                    }
+
+                    video.currentTime = video.duration * timePoints[currentIndex]
+                }
+
+                video.onseeked = () => {
+                    const canvas = document.createElement('canvas')
+                    canvas.width = video.videoWidth
+                    canvas.height = video.videoHeight
+                    const ctx = canvas.getContext('2d')
+                    if (ctx) {
+                        ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+                        covers.push(canvas.toDataURL('image/jpeg', 0.7))
+                    }
+                    currentIndex++
+                    captureFrame()
+                }
+
+                captureFrame()
+            }
+
+            video.onerror = () => resolve([])
+        })
+    }
+
+    // Handle custom cover upload
+    const handleCoverUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0]
+        if (!file || !coverUploadVideoId) return
+
+        // Validate file type
+        if (!file.type.startsWith('image/')) {
+            alert('请上传图片文件')
+            return
+        }
+
+        const reader = new FileReader()
+        reader.onload = (e) => {
+            const dataUrl = e.target?.result as string
+            updateVideoCover(coverUploadVideoId, dataUrl)
+            setCoverUploadVideoId(null)
+        }
+        reader.readAsDataURL(file)
+
+        // Reset input
+        if (coverInputRef.current) {
+            coverInputRef.current.value = ''
+        }
+    }
+
+    // Update a video's cover
+    const updateVideoCover = (videoId: string, coverDataUrl: string) => {
+        setSelectedVideos(prev => prev.map(v =>
+            v.id === videoId ? { ...v, cover: coverDataUrl } : v
+        ))
+    }
+
+    // Update a video's title
+    const updateVideoTitle = (videoId: string, title: string) => {
+        setSelectedVideos(prev => prev.map(v =>
+            v.id === videoId ? { ...v, title } : v
+        ))
+    }
+
+    // Toggle expanded video for inline editing
+    const toggleVideoExpanded = async (videoId: string) => {
+        if (expandedVideoId === videoId) {
+            setExpandedVideoId(null)
+        } else {
+            setExpandedVideoId(videoId)
+            // Generate cover options if not already generated
+            const video = selectedVideos.find(v => v.id === videoId)
+            if (video?.url && (!video.coverOptions || video.coverOptions.length === 0)) {
+                const options = await generateCoverOptions(video.url)
+                setSelectedVideos(prev => prev.map(v =>
+                    v.id === videoId ? { ...v, coverOptions: options } : v
+                ))
+            }
+        }
+    }
+
+    // =========================================================================
+    // AI Title Assistant Functions
+    // =========================================================================
+
+    // Generate all titles
+    const generateAllTitles = async () => {
+        if (!titleDescription.trim()) return
+        if (selectedVideos.length === 0) return
+
+        setGeneratingTitles(true)
+        try {
+            const response = await fetch('/api/publish/generate-titles', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    description: titleDescription,
+                    count: selectedVideos.length,
+                    language: titleLanguage
+                })
+            })
+
+            const data = await response.json()
+
+            if (data.success && data.titles) {
+                setGeneratedTitles(data.titles.map((t: { index: number; combined: string }) => ({
+                    index: t.index,
+                    content: t.combined,
+                    selected: true
+                })))
+            } else {
+                alert(data.error || '生成失败，请重试')
+            }
+        } catch (error) {
+            console.error('Generate titles error:', error)
+            alert('生成失败，请检查网络连接')
+        } finally {
+            setGeneratingTitles(false)
+        }
+    }
+
+    // Regenerate single title
+    const regenerateSingleTitle = async (index: number) => {
+        if (!titleDescription.trim()) return
+
+        setRegeneratingIndex(index)
+        try {
+            // Get existing titles to avoid duplicates
+            const existingTitles = generatedTitles
+                .filter((_, i) => i !== index)
+                .map(t => t.content)
+
+            const response = await fetch('/api/publish/generate-titles', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    description: titleDescription,
+                    count: 1,
+                    language: titleLanguage,
+                    regenerateIndex: index,
+                    existingTitles
+                })
+            })
+
+            const data = await response.json()
+
+            if (data.success && data.titles?.[0]) {
+                setGeneratedTitles(prev => prev.map((t, i) =>
+                    i === index ? { ...t, content: data.titles[0].combined, selected: true } : t
+                ))
+            } else {
+                alert(data.error || '重新生成失败')
+            }
+        } catch (error) {
+            console.error('Regenerate title error:', error)
+        } finally {
+            setRegeneratingIndex(null)
+        }
+    }
+
+    // Toggle title selection
+    const toggleTitleSelection = (index: number) => {
+        setGeneratedTitles(prev => prev.map((t, i) =>
+            i === index ? { ...t, selected: !t.selected } : t
+        ))
+    }
+
+    // Update title content (manual edit)
+    const updateTitleContent = (index: number, content: string) => {
+        setGeneratedTitles(prev => prev.map((t, i) =>
+            i === index ? { ...t, content } : t
+        ))
+    }
+
+    // Apply selected titles to videos
+    const applySelectedTitles = () => {
+        generatedTitles.forEach((title, index) => {
+            if (title.selected && selectedVideos[index]) {
+                updateVideoTitle(selectedVideos[index].id, title.content)
+            }
+        })
+        setShowTitleAssistant(false)
+        setGeneratedTitles([])
+        // Switch to individual title mode to show the results
+        setTitleMode('individual')
     }
 
     // Handle publish
@@ -196,17 +634,18 @@ export default function PublishPage() {
                     videos: selectedVideos,
                     account_ids: selectedAccounts,
                     caption,
-                    privacy_level: privacyLevel,
-                    allow_comments: allowComments,
-                    allow_duet: allowDuet,
-                    allow_stitch: allowStitch,
-                    is_brand_content: isBrandContent,
-                    is_ai_generated: isAIGenerated,
+                    // Use sensible defaults for removed settings
+                    privacy_level: 'PUBLIC_TO_EVERYONE',
+                    allow_comments: true,
+                    allow_duet: true,
+                    allow_stitch: true,
+                    is_brand_content: false,
+                    is_ai_generated: true,  // Default to AI-generated since this is AI MCN platform
                     publish_mode: publishMode,
                     scheduled_at: publishMode === 'scheduled'
                         ? new Date(`${scheduledDate}T${scheduledTime}`).toISOString()
                         : null,
-                    batch_interval: batchInterval
+                    batch_interval: intervalMode === 'custom' ? customInterval : parseInt(intervalMode)
                 })
             })
 
@@ -220,7 +659,7 @@ export default function PublishPage() {
             setSelectedAccounts([])
             setCaption('')
             setActiveTab('history')
-            // fetchTasks()
+            fetchTasks()
         } catch (error) {
             setPublishError(error instanceof Error ? error.message : '创建发布任务失败')
         } finally {
@@ -229,7 +668,7 @@ export default function PublishPage() {
     }
 
     return (
-        <div className="space-y-6 p-6 max-w-7xl mx-auto">
+        <div className="space-y-6 p-6 max-w-7xl mx-auto min-h-full pb-20">
             {/* Header */}
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
@@ -240,7 +679,6 @@ export default function PublishPage() {
                         <h1 className="text-2xl font-bold bg-gradient-to-r from-cyan-400 to-pink-400 bg-clip-text text-transparent">
                             智能分发站
                         </h1>
-                        <p className="text-sm text-gray-400">一键发布视频到多个 TikTok 账号</p>
                     </div>
                 </div>
 
@@ -264,8 +702,8 @@ export default function PublishPage() {
                         key={tab.id}
                         onClick={() => setActiveTab(tab.id)}
                         className={`flex items-center gap-2 px-4 py-2.5 rounded-lg transition-all ${activeTab === tab.id
-                                ? 'bg-gradient-to-r from-cyan-500 to-pink-500 text-white shadow-lg'
-                                : 'text-gray-400 hover:text-white hover:bg-white/5'
+                            ? 'bg-gradient-to-r from-cyan-500 to-pink-500 text-white shadow-lg'
+                            : 'text-gray-400 hover:text-white hover:bg-white/5'
                             }`}
                     >
                         <tab.icon className="w-4 h-4" />
@@ -277,59 +715,64 @@ export default function PublishPage() {
             {/* Tab Content */}
             {activeTab === 'create' && (
                 <div className="space-y-6">
-                    {/* Publish Type */}
-                    <section className="bg-white/5 rounded-2xl border border-white/10 p-6">
-                        <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                            <Video className="w-5 h-5 text-cyan-400" />
-                            发布类型
-                        </h2>
-                        <div className="flex gap-4">
-                            <label className={`flex items-center gap-3 px-4 py-3 rounded-xl border cursor-pointer transition-all ${publishType === 'normal'
-                                    ? 'border-cyan-500 bg-cyan-500/10'
-                                    : 'border-white/10 bg-white/5 hover:bg-white/10'
-                                }`}>
-                                <input
-                                    type="radio"
-                                    name="publishType"
-                                    checked={publishType === 'normal'}
-                                    onChange={() => setPublishType('normal')}
-                                    className="sr-only"
-                                />
-                                <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${publishType === 'normal' ? 'border-cyan-400' : 'border-gray-500'
-                                    }`}>
-                                    {publishType === 'normal' && <div className="w-2 h-2 rounded-full bg-cyan-400" />}
-                                </div>
-                                <span>普通视频</span>
-                            </label>
-
-                            <label className="flex items-center gap-3 px-4 py-3 rounded-xl border border-white/10 bg-white/5 opacity-50 cursor-not-allowed">
-                                <div className="w-4 h-4 rounded-full border-2 border-gray-500" />
-                                <span>商品视频</span>
-                                <span className="text-xs px-2 py-0.5 rounded-full bg-pink-500/20 text-pink-400">即将推出</span>
-                            </label>
-                        </div>
-                    </section>
 
                     {/* Step 1: Select Videos */}
                     <section className="bg-white/5 rounded-2xl border border-white/10 p-6">
-                        <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                            <div className="w-6 h-6 rounded-full bg-cyan-500/20 flex items-center justify-center text-sm text-cyan-400">1</div>
-                            选择视频
-                        </h2>
+                        <div className="flex items-center justify-between mb-4">
+                            <h2 className="text-lg font-semibold flex items-center gap-2">
+                                <div className="w-6 h-6 rounded-full bg-cyan-500/20 flex items-center justify-center text-sm text-cyan-400">1</div>
+                                选择视频
+                            </h2>
+
+                            <div className="flex items-center gap-4">
+                                {/* Clear task button - show when videos exist */}
+                                {selectedVideos.length > 0 && (
+                                    <button
+                                        onClick={() => setShowClearConfirm(true)}
+                                        className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs text-red-400 hover:bg-red-500/10 transition-colors"
+                                    >
+                                        <Trash2 className="w-3 h-3" />
+                                        清空任务
+                                    </button>
+                                )}
+
+                                {/* Default cover toggle */}
+                                <div className="flex items-center gap-2">
+                                    <span className="text-xs text-gray-400">使用默认封面</span>
+                                    <button
+                                        onClick={() => setUseDefaultCover(!useDefaultCover)}
+                                        className={`relative w-10 h-5 rounded-full transition-colors ${useDefaultCover ? 'bg-cyan-500' : 'bg-gray-600'
+                                            }`}
+                                    >
+                                        <div className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${useDefaultCover ? 'translate-x-5' : 'translate-x-0'
+                                            }`} />
+                                    </button>
+                                    <span className={`text-xs ${useDefaultCover ? 'text-cyan-400' : 'text-gray-500'}`}>
+                                        {useDefaultCover ? '首帧' : '自定义'}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Tip for cover setting */}
+                        {useDefaultCover && selectedVideos.length > 0 && (
+                            <p className="text-xs text-gray-500 mb-4 bg-gray-800/50 px-3 py-2 rounded-lg">
+                                💡 默认使用视频首帧作为封面。关闭开关可自定义每个视频的封面。
+                            </p>
+                        )}
 
                         {/* Video source tabs */}
                         <div className="flex gap-2 mb-4">
                             {[
-                                { id: 'asset' as VideoSourceType, label: '从成品库选择', icon: Video },
                                 { id: 'upload' as VideoSourceType, label: '本地上传', icon: Upload },
-                                { id: 'url' as VideoSourceType, label: '输入视频URL', icon: LinkIcon }
+                                { id: 'asset' as VideoSourceType, label: '从成品库选择', icon: Video }
                             ].map(source => (
                                 <button
                                     key={source.id}
                                     onClick={() => setVideoSource(source.id)}
                                     className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all ${videoSource === source.id
-                                            ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/50'
-                                            : 'bg-white/5 text-gray-400 border border-white/10 hover:bg-white/10'
+                                        ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/50'
+                                        : 'bg-white/5 text-gray-400 border border-white/10 hover:bg-white/10'
                                         }`}
                                 >
                                     <source.icon className="w-4 h-4" />
@@ -338,6 +781,46 @@ export default function PublishPage() {
                             ))}
                         </div>
 
+                        {/* Hidden file input for upload */}
+                        <input
+                            ref={fileInputRef}
+                            type="file"
+                            accept={TIKTOK_VIDEO_FORMATS.join(',')}
+                            multiple
+                            onChange={handleFileUpload}
+                            className="hidden"
+                        />
+
+                        {/* Upload error message */}
+                        {uploadError && (
+                            <div className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-sm flex items-center gap-2">
+                                <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                                {uploadError}
+                                <button onClick={() => setUploadError(null)} className="ml-auto">
+                                    <X className="w-4 h-4" />
+                                </button>
+                            </div>
+                        )}
+
+
+
+                        {/* Upload Progress Bar */}
+                        {uploadProgress !== null && (
+                            <div className="mb-4 p-4 rounded-xl bg-white/5 border border-cyan-500/30">
+                                <div className="flex items-center gap-3 mb-2">
+                                    <Loader2 className="w-4 h-4 animate-spin text-cyan-400" />
+                                    <span className="text-sm text-cyan-400">正在处理视频...</span>
+                                    <span className="ml-auto text-sm font-medium text-cyan-400">{uploadProgress}%</span>
+                                </div>
+                                <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
+                                    <div
+                                        className="h-full bg-gradient-to-r from-cyan-500 to-pink-500 transition-all duration-300 ease-out"
+                                        style={{ width: `${uploadProgress}%` }}
+                                    />
+                                </div>
+                            </div>
+                        )}
+
                         {/* Selected videos grid */}
                         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
                             {selectedVideos.map(video => (
@@ -345,35 +828,236 @@ export default function PublishPage() {
                                     key={video.id}
                                     className="relative group aspect-[9/16] rounded-xl bg-white/5 border border-white/10 overflow-hidden"
                                 >
-                                    <div className="absolute inset-0 flex items-center justify-center text-gray-500">
-                                        <Play className="w-8 h-8" />
+                                    {/* Show custom cover if set, otherwise show thumbnail or video */}
+                                    {video.cover ? (
+                                        <img
+                                            src={video.cover}
+                                            alt={`${video.name} 封面`}
+                                            className="absolute inset-0 w-full h-full object-cover"
+                                        />
+                                    ) : video.thumbnail && video.thumbnail.length > 0 ? (
+                                        <img
+                                            src={video.thumbnail}
+                                            alt={video.name}
+                                            className="absolute inset-0 w-full h-full object-cover"
+                                        />
+                                    ) : video.url ? (
+                                        /* Show video preview if URL available but no thumbnail */
+                                        <video
+                                            src={video.url}
+                                            className="absolute inset-0 w-full h-full object-cover"
+                                            muted
+                                            playsInline
+                                            preload="metadata"
+                                        />
+                                    ) : (
+                                        <div className="absolute inset-0 flex items-center justify-center text-gray-500">
+                                            <Play className="w-8 h-8" />
+                                        </div>
+                                    )}
+                                    {/* Success indicator overlay */}
+                                    <div className="absolute top-2 left-2 bg-green-500/90 rounded-full p-1">
+                                        <Check className="w-3 h-3 text-white" />
                                     </div>
+                                    {/* Cover indicator */}
+                                    {video.cover && (
+                                        <div className="absolute top-2 left-8 bg-pink-500/90 rounded-full px-2 py-0.5">
+                                            <span className="text-[10px] text-white">已设封面</span>
+                                        </div>
+                                    )}
                                     <div className="absolute bottom-0 left-0 right-0 p-2 bg-gradient-to-t from-black/80 to-transparent">
                                         <p className="text-xs truncate">{video.name}</p>
+                                        <div className="flex items-center gap-1 mt-1">
+                                            <span className={`text-[10px] px-1.5 py-0.5 rounded ${video.type === 'asset' ? 'bg-cyan-500/30 text-cyan-300' : 'bg-green-500/30 text-green-300'}`}>
+                                                {video.type === 'asset' ? '成品库' : '本地'}
+                                            </span>
+                                        </div>
                                     </div>
-                                    <button
-                                        onClick={() => removeVideo(video.id)}
-                                        className="absolute top-2 right-2 p-1.5 rounded-full bg-red-500/80 text-white opacity-0 group-hover:opacity-100 transition-opacity"
-                                    >
-                                        <Trash2 className="w-3 h-3" />
-                                    </button>
+
+                                    {/* Bottom action bar - appears on hover */}
+                                    <div className="absolute bottom-0 left-0 right-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <div className="flex items-center justify-center gap-1 p-2 bg-black/70 backdrop-blur-sm">
+                                            {/* Cover edit button - only show when useDefaultCover is OFF */}
+                                            {!useDefaultCover && video.url && (
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); toggleVideoExpanded(video.id); }}
+                                                    className="flex items-center gap-1 px-2 py-1 rounded-lg bg-white/10 text-white hover:bg-cyan-500/50 transition-colors text-xs"
+                                                >
+                                                    <ImageIcon className="w-3 h-3" />
+                                                    封面
+                                                </button>
+                                            )}
+                                            {/* Delete button */}
+                                            <button
+                                                onClick={(e) => { e.stopPropagation(); removeVideo(video.id); }}
+                                                className="flex items-center gap-1 px-2 py-1 rounded-lg bg-white/10 text-white hover:bg-red-500/50 transition-colors text-xs"
+                                            >
+                                                <Trash2 className="w-3 h-3" />
+                                                删除
+                                            </button>
+                                        </div>
+                                    </div>
                                 </div>
                             ))}
 
-                            {/* Add video button */}
+                            {/* Add video button - changes based on source type */}
                             <button
-                                onClick={addDemoVideo}
+                                onClick={() => {
+                                    if (videoSource === 'asset') {
+                                        openAssetSelector()
+                                    } else if (videoSource === 'upload') {
+                                        fileInputRef.current?.click()
+                                    }
+                                    // URL handled by input above
+                                }}
                                 className="aspect-[9/16] rounded-xl border-2 border-dashed border-white/20 flex flex-col items-center justify-center gap-2 text-gray-400 hover:text-cyan-400 hover:border-cyan-500/50 transition-colors"
                             >
-                                <Plus className="w-8 h-8" />
-                                <span className="text-xs">添加视频</span>
+                                {videoSource === 'asset' ? (
+                                    <>
+                                        <FileVideo className="w-8 h-8" />
+                                        <span className="text-xs text-center px-2">从成品库选择</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <Upload className="w-8 h-8" />
+                                        <span className="text-xs text-center px-2">上传视频<br /><span className="text-[10px] text-gray-500">.mp4 .webm .mov</span></span>
+                                    </>
+                                )}
                             </button>
                         </div>
 
                         {selectedVideos.length > 0 && (
                             <p className="mt-4 text-sm text-gray-400">
                                 已选择 <span className="text-cyan-400 font-semibold">{selectedVideos.length}</span> 个视频
+                                {expandedVideoId && <span className="ml-2 text-pink-400">· 正在编辑封面</span>}
                             </p>
+                        )}
+
+                        {/* Expanded video editor - timeline cover selection */}
+                        {expandedVideoId && selectedVideos.find(v => v.id === expandedVideoId) && (
+                            <div className="mt-4 p-4 bg-gradient-to-r from-cyan-500/5 to-pink-500/5 rounded-xl border border-white/10">
+                                {(() => {
+                                    const video = selectedVideos.find(v => v.id === expandedVideoId)!
+                                    return (
+                                        <div className="space-y-4">
+                                            <div className="flex items-center justify-between">
+                                                <h4 className="font-medium text-sm flex items-center gap-2">
+                                                    <ImageIcon className="w-4 h-4 text-pink-400" />
+                                                    选择封面: <span className="text-gray-400 font-normal truncate max-w-[200px]">{video.name}</span>
+                                                </h4>
+                                                <button
+                                                    onClick={() => setExpandedVideoId(null)}
+                                                    className="p-1.5 hover:bg-white/10 rounded-lg transition-colors"
+                                                >
+                                                    <X className="w-4 h-4" />
+                                                </button>
+                                            </div>
+
+                                            {/* Video preview and timeline */}
+                                            {video.url ? (
+                                                <div className="space-y-3">
+                                                    {/* Video preview */}
+                                                    <div className="flex gap-4 items-start">
+                                                        <div className="w-32 h-56 rounded-xl overflow-hidden bg-black flex-shrink-0 relative">
+                                                            <video
+                                                                id={`cover-video-${video.id}`}
+                                                                src={video.url}
+                                                                className="w-full h-full object-cover"
+                                                                muted
+                                                                playsInline
+                                                                preload="metadata"
+                                                                onLoadedMetadata={(e) => {
+                                                                    // Seek to current cover time or 0
+                                                                    e.currentTarget.currentTime = 0.1
+                                                                }}
+                                                            />
+                                                            <div className="absolute bottom-2 left-2 right-2 bg-black/70 rounded-lg px-2 py-1">
+                                                                <p className="text-[10px] text-center text-gray-300">预览帧</p>
+                                                            </div>
+                                                        </div>
+
+                                                        <div className="flex-1 space-y-3">
+                                                            <p className="text-xs text-gray-400">拖动滑块选择视频中的任意帧作为封面</p>
+
+                                                            {/* Timeline slider */}
+                                                            <div className="space-y-2">
+                                                                <input
+                                                                    type="range"
+                                                                    min="0"
+                                                                    max="100"
+                                                                    defaultValue="1"
+                                                                    onChange={(e) => {
+                                                                        const videoEl = document.getElementById(`cover-video-${video.id}`) as HTMLVideoElement
+                                                                        if (videoEl && videoEl.duration) {
+                                                                            videoEl.currentTime = (parseInt(e.target.value) / 100) * videoEl.duration
+                                                                        }
+                                                                    }}
+                                                                    className="w-full h-2 bg-white/10 rounded-full appearance-none cursor-pointer accent-pink-500 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-pink-500 [&::-webkit-slider-thumb]:cursor-grab"
+                                                                />
+                                                                <div className="flex justify-between text-[10px] text-gray-500">
+                                                                    <span>0:00</span>
+                                                                    <span>视频结束</span>
+                                                                </div>
+                                                            </div>
+
+                                                            {/* Action buttons */}
+                                                            <div className="flex gap-2">
+                                                                <button
+                                                                    onClick={() => {
+                                                                        const videoEl = document.getElementById(`cover-video-${video.id}`) as HTMLVideoElement
+                                                                        if (videoEl) {
+                                                                            const canvas = document.createElement('canvas')
+                                                                            canvas.width = videoEl.videoWidth
+                                                                            canvas.height = videoEl.videoHeight
+                                                                            const ctx = canvas.getContext('2d')
+                                                                            if (ctx) {
+                                                                                ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height)
+                                                                                const frameData = canvas.toDataURL('image/jpeg', 0.9)
+                                                                                updateVideoCover(video.id, frameData)
+                                                                                setExpandedVideoId(null)
+                                                                            }
+                                                                        }
+                                                                    }}
+                                                                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-gradient-to-r from-cyan-500 to-pink-500 rounded-lg font-medium text-sm hover:opacity-90 transition-opacity"
+                                                                >
+                                                                    <Check className="w-4 h-4" />
+                                                                    使用当前帧
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => {
+                                                                        setCoverUploadVideoId(video.id)
+                                                                        coverInputRef.current?.click()
+                                                                    }}
+                                                                    className="px-4 py-2 border border-pink-500/30 text-pink-400 rounded-lg text-sm hover:bg-pink-500/10 transition-colors"
+                                                                >
+                                                                    上传图片
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    <p className="text-[10px] text-gray-500">
+                                                        💡 拖动滑块可预览不同时间点的画面，点击"使用当前帧"确认选择。
+                                                    </p>
+                                                </div>
+                                            ) : (
+                                                <div className="text-center py-8">
+                                                    <p className="text-sm text-gray-400">视频加载中或不可用</p>
+                                                    <button
+                                                        onClick={() => {
+                                                            setCoverUploadVideoId(video.id)
+                                                            coverInputRef.current?.click()
+                                                        }}
+                                                        className="mt-3 px-4 py-2 border border-pink-500/30 text-pink-400 rounded-lg text-sm hover:bg-pink-500/10 transition-colors"
+                                                    >
+                                                        上传自定义封面
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )
+                                })()}
+                            </div>
                         )}
                     </section>
 
@@ -384,14 +1068,15 @@ export default function PublishPage() {
                                 <div className="w-6 h-6 rounded-full bg-cyan-500/20 flex items-center justify-center text-sm text-cyan-400">2</div>
                                 选择发布账号
                             </h2>
-                            {accounts.length > 0 && (
+                            <div className="flex items-center gap-3">
                                 <button
-                                    onClick={selectAllAccounts}
-                                    className="text-sm text-cyan-400 hover:text-cyan-300 transition-colors"
+                                    onClick={() => router.push('/publish/accounts')}
+                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-cyan-500/20 to-pink-500/20 border border-cyan-500/30 text-cyan-400 hover:from-cyan-500/30 hover:to-pink-500/30 transition-all text-sm"
                                 >
-                                    全选已授权账号
+                                    <Plus className="w-3.5 h-3.5" />
+                                    去绑定
                                 </button>
-                            )}
+                            </div>
                         </div>
 
                         {loadingAccounts ? (
@@ -419,45 +1104,51 @@ export default function PublishPage() {
                                         <label
                                             key={account.id}
                                             className={`flex items-center gap-4 p-4 rounded-xl border cursor-pointer transition-all ${isSelected
-                                                    ? 'border-cyan-500 bg-cyan-500/10'
-                                                    : isAuthorized
-                                                        ? 'border-white/10 bg-white/5 hover:bg-white/10'
-                                                        : 'border-orange-500/30 bg-orange-500/5 cursor-not-allowed'
+                                                ? 'border-cyan-500 bg-cyan-500/10'
+                                                : isAuthorized
+                                                    ? 'border-white/10 bg-white/5 hover:bg-white/10'
+                                                    : 'border-orange-500/30 bg-orange-500/5 cursor-not-allowed'
                                                 }`}
                                         >
                                             <input
-                                                type="checkbox"
+                                                type="radio"
+                                                name="publishAccount"
                                                 checked={isSelected}
                                                 onChange={() => isAuthorized && toggleAccountSelection(account.id)}
                                                 disabled={!isAuthorized}
                                                 className="sr-only"
                                             />
 
-                                            <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${isSelected
-                                                    ? 'border-cyan-400 bg-cyan-500'
-                                                    : 'border-gray-500'
+                                            {/* Radio button visual (circle) */}
+                                            <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors ${isSelected
+                                                ? 'border-cyan-400 bg-cyan-500'
+                                                : 'border-gray-500'
                                                 }`}>
-                                                {isSelected && <Check className="w-3 h-3 text-white" />}
+                                                {isSelected && <div className="w-2 h-2 rounded-full bg-white" />}
                                             </div>
 
                                             {account.avatar_url ? (
-                                                <Image
+                                                <img
                                                     src={account.avatar_url}
                                                     alt={account.display_name}
                                                     width={40}
                                                     height={40}
-                                                    className="rounded-full"
+                                                    className="w-10 h-10 rounded-full object-cover"
+                                                    onError={(e) => {
+                                                        // Fallback to gradient on error
+                                                        e.currentTarget.style.display = 'none'
+                                                        e.currentTarget.nextElementSibling?.classList.remove('hidden')
+                                                    }}
                                                 />
-                                            ) : (
-                                                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-cyan-500 to-pink-500 flex items-center justify-center text-white font-bold">
-                                                    {account.display_name.charAt(0).toUpperCase()}
-                                                </div>
-                                            )}
+                                            ) : null}
+                                            <div className={`w-10 h-10 rounded-full bg-gradient-to-br from-cyan-500 to-pink-500 flex items-center justify-center text-white font-bold ${account.avatar_url ? 'hidden' : ''}`}>
+                                                {account.display_name.charAt(0).toUpperCase()}
+                                            </div>
 
                                             <div className="flex-1">
                                                 <div className="flex items-center gap-2">
                                                     <span className="font-medium">@{account.display_name}</span>
-                                                    {account.is_verified && (
+                                                    {account.status === 'active' && (
                                                         <CheckCircle2 className="w-4 h-4 text-cyan-400" />
                                                     )}
                                                 </div>
@@ -501,136 +1192,139 @@ export default function PublishPage() {
                             发布设置
                         </h2>
 
-                        <div className="space-y-6">
-                            {/* Caption */}
+                        <div className="space-y-4">
+                            {/* Task Group Name */}
                             <div>
                                 <label className="block text-sm font-medium text-gray-300 mb-2">
-                                    视频描述
+                                    任务组名称 <span className="text-gray-500 font-normal">(可选)</span>
                                 </label>
-                                <textarea
-                                    value={caption}
-                                    onChange={(e) => setCaption(e.target.value)}
-                                    placeholder="输入视频描述... 支持变量: {n} 序号, {date} 日期"
-                                    rows={3}
-                                    className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500/50 transition-all resize-none"
+                                <input
+                                    type="text"
+                                    value={taskGroupName}
+                                    onChange={(e) => setTaskGroupName(e.target.value)}
+                                    placeholder="例如：今日穿搭分享、产品推广第3期..."
+                                    className="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500/50 transition-all text-sm"
                                 />
-                                <p className="mt-1 text-xs text-gray-500">
-                                    支持变量: {'{n}'} 为视频序号, {'{date}'} 为当前日期
-                                </p>
+                                <p className="text-xs text-gray-500 mt-1">为本次发布任务起个名字，方便后续在"发布记录"中查找</p>
                             </div>
 
-                            {/* Privacy */}
+                            {/* Title Mode Selector */}
                             <div>
-                                <label className="block text-sm font-medium text-gray-300 mb-2">
-                                    隐私设置
-                                </label>
-                                <div className="flex flex-wrap gap-3">
-                                    {[
-                                        { value: 'PUBLIC_TO_EVERYONE' as PrivacyLevel, label: '公开', icon: Globe },
-                                        { value: 'MUTUAL_FOLLOW_FRIENDS' as PrivacyLevel, label: '好友可见', icon: Users },
-                                        { value: 'SELF_ONLY' as PrivacyLevel, label: '仅自己', icon: Lock }
-                                    ].map(option => (
-                                        <label
-                                            key={option.value}
-                                            className={`flex items-center gap-2 px-4 py-2 rounded-lg border cursor-pointer transition-all ${privacyLevel === option.value
-                                                    ? 'border-cyan-500 bg-cyan-500/10 text-cyan-400'
-                                                    : 'border-white/10 bg-white/5 text-gray-400 hover:bg-white/10'
-                                                }`}
-                                        >
-                                            <input
-                                                type="radio"
-                                                name="privacy"
-                                                value={option.value}
-                                                checked={privacyLevel === option.value}
-                                                onChange={() => setPrivacyLevel(option.value)}
-                                                className="sr-only"
-                                            />
-                                            <option.icon className="w-4 h-4" />
-                                            <span className="text-sm">{option.label}</span>
-                                        </label>
-                                    ))}
-                                </div>
-                            </div>
+                                <div className="flex items-center justify-between mb-2">
+                                    <label className="block text-sm font-medium text-gray-300">
+                                        视频标题
+                                    </label>
+                                    <div className="flex items-center gap-2">
+                                        {/* AI Title Assistant Button */}
+                                        {selectedVideos.length > 0 && (
+                                            <button
+                                                onClick={() => setShowTitleAssistant(true)}
+                                                className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-gradient-to-r from-purple-500/20 to-pink-500/20 border border-purple-500/30 text-purple-400 hover:from-purple-500/30 hover:to-pink-500/30 transition-all text-xs"
+                                            >
+                                                <Sparkles className="w-3.5 h-3.5" />
+                                                AI助手
+                                            </button>
+                                        )}
 
-                            {/* Interaction settings */}
-                            <div>
-                                <label className="block text-sm font-medium text-gray-300 mb-2">
-                                    互动设置
-                                </label>
-                                <div className="flex flex-wrap gap-4">
-                                    {[
-                                        { key: 'comments', label: '允许评论', checked: allowComments, onChange: setAllowComments },
-                                        { key: 'duet', label: '允许合拍', checked: allowDuet, onChange: setAllowDuet },
-                                        { key: 'stitch', label: '允许拼接', checked: allowStitch, onChange: setAllowStitch }
-                                    ].map(option => (
-                                        <label
-                                            key={option.key}
-                                            className="flex items-center gap-2 cursor-pointer"
-                                        >
-                                            <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${option.checked
-                                                    ? 'border-cyan-400 bg-cyan-500'
-                                                    : 'border-gray-500 bg-transparent'
-                                                }`}>
-                                                {option.checked && <Check className="w-3 h-3 text-white" />}
+                                        {/* Title Mode Toggle */}
+                                        {selectedVideos.length > 1 && (
+                                            <div className="flex items-center gap-1 text-xs">
+                                                <button
+                                                    onClick={() => setTitleMode('uniform')}
+                                                    className={`px-2 py-1 rounded-lg transition-colors ${titleMode === 'uniform'
+                                                        ? 'bg-cyan-500/20 text-cyan-400'
+                                                        : 'text-gray-400 hover:text-white'
+                                                        }`}
+                                                >
+                                                    统一标题
+                                                </button>
+                                                <button
+                                                    onClick={() => setTitleMode('individual')}
+                                                    className={`px-2 py-1 rounded-lg transition-colors ${titleMode === 'individual'
+                                                        ? 'bg-pink-500/20 text-pink-400'
+                                                        : 'text-gray-400 hover:text-white'
+                                                        }`}
+                                                >
+                                                    独立标题
+                                                </button>
                                             </div>
-                                            <input
-                                                type="checkbox"
-                                                checked={option.checked}
-                                                onChange={(e) => option.onChange(e.target.checked)}
-                                                className="sr-only"
-                                            />
-                                            <span className="text-sm text-gray-300">{option.label}</span>
-                                        </label>
-                                    ))}
+                                        )}
+                                    </div>
                                 </div>
+
+                                {titleMode === 'uniform' ? (
+                                    /* Uniform title - single input for all */
+                                    <textarea
+                                        value={caption}
+                                        onChange={(e) => setCaption(e.target.value)}
+                                        placeholder="输入视频标题..."
+                                        rows={3}
+                                        className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500/50 transition-all resize-none"
+                                    />
+                                ) : (
+                                    /* Individual titles - one input per video */
+                                    <div className="space-y-3">
+                                        {selectedVideos.map((video, index) => (
+                                            <div key={video.id} className="flex gap-3 items-start">
+                                                <div className="flex-shrink-0 w-12 h-12 rounded-lg overflow-hidden bg-white/5 border border-white/10">
+                                                    {video.cover ? (
+                                                        <img
+                                                            src={video.cover}
+                                                            alt=""
+                                                            className="w-full h-full object-cover"
+                                                        />
+                                                    ) : video.thumbnail ? (
+                                                        <img
+                                                            src={video.thumbnail}
+                                                            alt=""
+                                                            className="w-full h-full object-cover"
+                                                        />
+                                                    ) : video.url ? (
+                                                        /* Use video element to show first frame if no thumbnail */
+                                                        <video
+                                                            src={video.url}
+                                                            className="w-full h-full object-cover"
+                                                            muted
+                                                            playsInline
+                                                            preload="metadata"
+                                                        />
+                                                    ) : (
+                                                        <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-cyan-500/20 to-pink-500/20">
+                                                            <span className="text-white/50 font-medium">{index + 1}</span>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                                <div className="flex-1">
+                                                    <input
+                                                        type="text"
+                                                        value={video.title || ''}
+                                                        onChange={(e) => updateVideoTitle(video.id, e.target.value)}
+                                                        placeholder={`视频 ${index + 1} 的标题...`}
+                                                        className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-pink-500/50 focus:border-pink-500/50 transition-all text-sm"
+                                                    />
+                                                    <p className="text-[10px] text-gray-500 mt-1 truncate">{video.name}</p>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
 
-                            {/* Content disclosure */}
-                            <div>
-                                <label className="block text-sm font-medium text-gray-300 mb-2">
-                                    内容声明
-                                </label>
-                                <div className="flex flex-wrap gap-4">
-                                    <label className="flex items-center gap-2 cursor-pointer">
-                                        <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${isBrandContent
-                                                ? 'border-cyan-400 bg-cyan-500'
-                                                : 'border-gray-500 bg-transparent'
-                                            }`}>
-                                            {isBrandContent && <Check className="w-3 h-3 text-white" />}
-                                        </div>
-                                        <input
-                                            type="checkbox"
-                                            checked={isBrandContent}
-                                            onChange={(e) => setIsBrandContent(e.target.checked)}
-                                            className="sr-only"
-                                        />
-                                        <span className="text-sm text-gray-300">品牌推广内容</span>
-                                    </label>
-
-                                    <label className="flex items-center gap-2 cursor-pointer">
-                                        <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${isAIGenerated
-                                                ? 'border-cyan-400 bg-cyan-500'
-                                                : 'border-gray-500 bg-transparent'
-                                            }`}>
-                                            {isAIGenerated && <Check className="w-3 h-3 text-white" />}
-                                        </div>
-                                        <input
-                                            type="checkbox"
-                                            checked={isAIGenerated}
-                                            onChange={(e) => setIsAIGenerated(e.target.checked)}
-                                            className="sr-only"
-                                        />
-                                        <span className="text-sm text-gray-300 flex items-center gap-1">
-                                            <Sparkles className="w-3 h-3" />
-                                            AI 生成内容
-                                        </span>
-                                    </label>
-                                </div>
+                            {/* Quick action buttons */}
+                            <div className="flex gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setCaption(prev => prev + ' #')}
+                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-gray-400 hover:text-cyan-400 hover:border-cyan-500/50 transition-colors text-sm"
+                                >
+                                    <span className="text-cyan-400 font-bold">#</span>
+                                    添加话题
+                                </button>
                             </div>
                         </div>
                     </section>
 
-                    {/* Step 4: Schedule */}
+                    {/* Step 3: Schedule */}
                     <section className="bg-white/5 rounded-2xl border border-white/10 p-6">
                         <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
                             <div className="w-6 h-6 rounded-full bg-cyan-500/20 flex items-center justify-center text-sm text-cyan-400">4</div>
@@ -640,8 +1334,8 @@ export default function PublishPage() {
                         <div className="space-y-4">
                             <div className="flex gap-4">
                                 <label className={`flex items-center gap-3 px-4 py-3 rounded-xl border cursor-pointer transition-all ${publishMode === 'now'
-                                        ? 'border-cyan-500 bg-cyan-500/10'
-                                        : 'border-white/10 bg-white/5 hover:bg-white/10'
+                                    ? 'border-cyan-500 bg-cyan-500/10'
+                                    : 'border-white/10 bg-white/5 hover:bg-white/10'
                                     }`}>
                                     <input
                                         type="radio"
@@ -659,8 +1353,8 @@ export default function PublishPage() {
                                 </label>
 
                                 <label className={`flex items-center gap-3 px-4 py-3 rounded-xl border cursor-pointer transition-all ${publishMode === 'scheduled'
-                                        ? 'border-cyan-500 bg-cyan-500/10'
-                                        : 'border-white/10 bg-white/5 hover:bg-white/10'
+                                    ? 'border-cyan-500 bg-cyan-500/10'
+                                    : 'border-white/10 bg-white/5 hover:bg-white/10'
                                     }`}>
                                     <input
                                         type="radio"
@@ -674,52 +1368,123 @@ export default function PublishPage() {
                                         {publishMode === 'scheduled' && <div className="w-2 h-2 rounded-full bg-cyan-400" />}
                                     </div>
                                     <Calendar className="w-4 h-4" />
-                                    <span>定时发布</span>
+                                    <span>预约发布</span>
                                 </label>
                             </div>
 
                             {publishMode === 'scheduled' && (
-                                <div className="flex gap-4 flex-wrap">
-                                    <div>
-                                        <label className="block text-sm text-gray-400 mb-1">日期</label>
-                                        <input
-                                            type="date"
-                                            value={scheduledDate}
-                                            onChange={(e) => setScheduledDate(e.target.value)}
-                                            min={format(new Date(), 'yyyy-MM-dd')}
-                                            className="px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
-                                        />
+                                <div className="space-y-3">
+                                    <div className="flex gap-4 flex-wrap items-end">
+                                        <div>
+                                            <label className="block text-sm text-gray-400 mb-1">日期</label>
+                                            <input
+                                                type="date"
+                                                value={scheduledDate}
+                                                onChange={(e) => setScheduledDate(e.target.value)}
+                                                min={format(new Date(), 'yyyy-MM-dd')}
+                                                className="px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm text-gray-400 mb-1">时间</label>
+                                            <input
+                                                type="time"
+                                                value={scheduledTime}
+                                                onChange={(e) => setScheduledTime(e.target.value)}
+                                                className="px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
+                                            />
+                                        </div>
                                     </div>
-                                    <div>
-                                        <label className="block text-sm text-gray-400 mb-1">时间</label>
-                                        <input
-                                            type="time"
-                                            value={scheduledTime}
-                                            onChange={(e) => setScheduledTime(e.target.value)}
-                                            className="px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
-                                        />
-                                    </div>
+                                    <p className="text-xs text-gray-500">* 以上时间均为北京时间 (UTC+8)</p>
                                 </div>
                             )}
 
-                            {totalTasks > 1 && (
-                                <div className="flex items-center gap-4 p-4 bg-white/5 rounded-xl border border-white/10">
-                                    <Clock className="w-5 h-5 text-cyan-400" />
-                                    <div className="flex-1">
-                                        <p className="text-sm font-medium">批量发布间隔</p>
-                                        <p className="text-xs text-gray-400">多视频时，间隔发布避免被限流</p>
-                                    </div>
+                            {/* Publish Interval - Always show for multiple videos */}
+                            {selectedVideos.length > 1 && (
+                                <div className="space-y-3 p-4 bg-white/5 rounded-xl border border-white/10">
                                     <div className="flex items-center gap-2">
-                                        <input
-                                            type="number"
-                                            value={batchInterval}
-                                            onChange={(e) => setBatchInterval(Math.max(1, parseInt(e.target.value) || 1))}
-                                            min={1}
-                                            max={60}
-                                            className="w-16 px-3 py-2 bg-white/10 border border-white/10 rounded-lg text-center text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
-                                        />
-                                        <span className="text-gray-400">分钟</span>
+                                        <Clock className="w-5 h-5 text-cyan-400" />
+                                        <div>
+                                            <p className="text-sm font-medium">发布间隔</p>
+                                            <p className="text-xs text-gray-400">多视频发布时，各视频间隔发布避免被限流</p>
+                                        </div>
                                     </div>
+
+                                    {/* Interval Preset Buttons */}
+                                    <div className="flex flex-wrap gap-2">
+                                        {[
+                                            { value: '0', label: '不间隔' },
+                                            { value: '3', label: '3分钟' },
+                                            { value: '5', label: '5分钟' },
+                                            { value: '10', label: '10分钟' },
+                                            { value: '30', label: '30分钟' },
+                                            { value: '60', label: '1小时' },
+                                            { value: '120', label: '2小时' },
+                                            { value: '360', label: '6小时' },
+                                            { value: '720', label: '12小时' },
+                                            { value: '1440', label: '24小时' },
+                                        ].map(({ value, label }) => (
+                                            <button
+                                                key={value}
+                                                type="button"
+                                                onClick={() => setIntervalMode(value as typeof intervalMode)}
+                                                className={`px-3 py-1.5 rounded-lg text-xs transition-all ${intervalMode === value
+                                                    ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/50'
+                                                    : 'bg-white/5 text-gray-400 border border-white/10 hover:bg-white/10'
+                                                    }`}
+                                            >
+                                                {label}
+                                            </button>
+                                        ))}
+                                        <button
+                                            type="button"
+                                            onClick={() => setIntervalMode('custom')}
+                                            className={`px-3 py-1.5 rounded-lg text-xs transition-all ${intervalMode === 'custom'
+                                                ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/50'
+                                                : 'bg-white/5 text-gray-400 border border-white/10 hover:bg-white/10'
+                                                }`}
+                                        >
+                                            ⚙️ 自定义
+                                        </button>
+                                    </div>
+
+                                    {/* Custom Interval Input */}
+                                    {intervalMode === 'custom' && (
+                                        <div className="flex items-center gap-2">
+                                            <input
+                                                type="number"
+                                                value={customInterval}
+                                                onChange={(e) => setCustomInterval(Math.max(1, Math.min(1440, parseInt(e.target.value) || 1)))}
+                                                min={1}
+                                                max={1440}
+                                                className="w-20 px-3 py-2 bg-white/10 border border-white/10 rounded-lg text-center text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
+                                            />
+                                            <span className="text-gray-400 text-sm">分钟 (最长24小时)</span>
+                                        </div>
+                                    )}
+
+                                    {/* Publish Time Preview */}
+                                    {publishMode === 'scheduled' && scheduledDate && (
+                                        <div className="mt-3 p-3 bg-white/5 rounded-lg">
+                                            <p className="text-xs text-gray-400 mb-2">📊 发布时间预览：</p>
+                                            <div className="space-y-1 max-h-32 overflow-y-auto">
+                                                {selectedVideos.slice(0, 10).map((video, index) => {
+                                                    const effectiveInterval = intervalMode === 'custom' ? customInterval : parseInt(intervalMode)
+                                                    const baseTime = new Date(`${scheduledDate}T${scheduledTime}`)
+                                                    const publishTime = addMinutes(baseTime, index * effectiveInterval)
+                                                    return (
+                                                        <div key={video.id} className="flex items-center gap-2 text-xs">
+                                                            <span className="text-gray-500">视频{index + 1}:</span>
+                                                            <span className="text-cyan-400">{format(publishTime, 'MM月dd日 HH:mm')}</span>
+                                                        </div>
+                                                    )
+                                                })}
+                                                {selectedVideos.length > 10 && (
+                                                    <p className="text-xs text-gray-500">... 更多 {selectedVideos.length - 10} 个视频</p>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             )}
                         </div>
@@ -728,13 +1493,32 @@ export default function PublishPage() {
                     {/* Task Preview & Submit */}
                     <section className="bg-gradient-to-r from-cyan-500/10 to-pink-500/10 rounded-2xl border border-cyan-500/20 p-6">
                         <div className="flex items-center justify-between flex-wrap gap-4">
-                            <div>
-                                <h3 className="text-lg font-semibold mb-1">任务预览</h3>
-                                <p className="text-gray-300">
-                                    <span className="text-cyan-400 font-bold">{selectedVideos.length}</span> 个视频 ×
-                                    <span className="text-pink-400 font-bold"> {selectedAccounts.length}</span> 个账号 =
-                                    <span className="text-white font-bold"> {totalTasks}</span> 条发布任务
-                                </p>
+                            <div className="space-y-2">
+                                <h3 className="text-lg font-semibold">任务预览</h3>
+                                <div className="space-y-1 text-sm">
+                                    <p className="flex items-center gap-2">
+                                        <span className="text-gray-400">📼</span>
+                                        <span className="text-cyan-400 font-bold">{selectedVideos.length}</span>
+                                        <span className="text-gray-300">个视频</span>
+                                        {selectedAccounts.length > 0 && (
+                                            <>
+                                                <span className="text-gray-500">→</span>
+                                                <span className="text-pink-400 font-medium">
+                                                    @{accounts.find(a => a.id === selectedAccounts[0])?.display_name || '账号'}
+                                                </span>
+                                            </>
+                                        )}
+                                    </p>
+                                    <p className="flex items-center gap-2 text-xs text-gray-400">
+                                        <span>⏱️</span>
+                                        <span>
+                                            {publishMode === 'now' ? '立即发布' : `预约发布 ${scheduledDate} ${scheduledTime}`}
+                                            {selectedVideos.length > 1 && (
+                                                <>, 间隔 {intervalMode === 'custom' ? customInterval : intervalMode} 分钟</>
+                                            )}
+                                        </span>
+                                    </p>
+                                </div>
                             </div>
 
                             <div className="flex items-center gap-3">
@@ -756,7 +1540,7 @@ export default function PublishPage() {
                                 </button>
                                 <button
                                     onClick={handlePublish}
-                                    disabled={isPublishing || totalTasks === 0}
+                                    disabled={isPublishing || selectedVideos.length === 0 || selectedAccounts.length === 0}
                                     className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-pink-500 font-semibold hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                                 >
                                     {isPublishing ? (
@@ -782,17 +1566,80 @@ export default function PublishPage() {
                 <div className="bg-white/5 rounded-2xl border border-white/10 p-6">
                     <div className="flex items-center justify-between mb-6">
                         <h2 className="text-lg font-semibold">发布记录</h2>
-                        <button className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-sm text-gray-400 hover:text-white hover:bg-white/10 transition-colors">
-                            <RefreshCw className="w-4 h-4" />
+                        <button
+                            onClick={fetchTasks}
+                            disabled={loadingTasks}
+                            className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-sm text-gray-400 hover:text-white hover:bg-white/10 transition-colors disabled:opacity-50"
+                        >
+                            <RefreshCw className={`w-4 h-4 ${loadingTasks ? 'animate-spin' : ''}`} />
                             刷新
                         </button>
                     </div>
 
-                    <div className="text-center py-12">
-                        <History className="w-16 h-16 mx-auto mb-4 text-gray-600" />
-                        <p className="text-gray-400 mb-2">暂无发布记录</p>
-                        <p className="text-sm text-gray-500">创建发布任务后，记录将显示在这里</p>
-                    </div>
+                    {loadingTasks ? (
+                        <div className="flex items-center justify-center py-12">
+                            <Loader2 className="w-8 h-8 animate-spin text-cyan-400" />
+                        </div>
+                    ) : tasks.filter(t => t.status !== 'scheduled').length === 0 ? (
+                        <div className="text-center py-12">
+                            <History className="w-16 h-16 mx-auto mb-4 text-gray-600" />
+                            <p className="text-gray-400 mb-2">暂无发布记录</p>
+                            <p className="text-sm text-gray-500">创建发布任务后，记录将显示在这里</p>
+                        </div>
+                    ) : (
+                        <div className="space-y-3">
+                            {tasks.filter(t => t.status !== 'scheduled').map(task => (
+                                <div key={task.id} className="flex items-center gap-4 p-4 rounded-xl bg-white/5 border border-white/10 group">
+                                    <div className={`w-10 h-10 rounded-full flex items-center justify-center ${task.status === 'completed' ? 'bg-green-500/20' :
+                                        task.status === 'failed' ? 'bg-red-500/20' :
+                                            task.status === 'partial_failed' ? 'bg-orange-500/20' :
+                                                'bg-cyan-500/20'
+                                        }`}>
+                                        {task.status === 'completed' ? <CheckCircle2 className="w-5 h-5 text-green-400" /> :
+                                            task.status === 'failed' ? <XCircle className="w-5 h-5 text-red-400" /> :
+                                                task.status === 'partial_failed' ? <AlertCircle className="w-5 h-5 text-orange-400" /> :
+                                                    <Loader2 className="w-5 h-5 text-cyan-400 animate-spin" />}
+                                    </div>
+                                    <div className="flex-1">
+                                        <div className="flex items-center gap-2">
+                                            <span className="font-medium">发布任务</span>
+                                            <span className={`px-2 py-0.5 text-xs rounded-full ${task.status === 'completed' ? 'bg-green-500/20 text-green-400' :
+                                                task.status === 'failed' ? 'bg-red-500/20 text-red-400' :
+                                                    task.status === 'partial_failed' ? 'bg-orange-500/20 text-orange-400' :
+                                                        'bg-cyan-500/20 text-cyan-400'
+                                                }`}>
+                                                {task.status === 'completed' ? '已完成' :
+                                                    task.status === 'failed' ? '失败' :
+                                                        task.status === 'partial_failed' ? '部分失败' :
+                                                            task.status === 'pending' ? '等待中' : '处理中'}
+                                            </span>
+                                        </div>
+                                        <p className="text-sm text-gray-400">
+                                            {task.total_items} 个任务项 ·
+                                            成功 {task.completed_items || 0} ·
+                                            失败 {task.failed_items || 0}
+                                        </p>
+                                    </div>
+                                    <div className="text-right text-sm text-gray-500">
+                                        {format(new Date(task.created_at), 'MM/dd HH:mm', { locale: zhCN })}
+                                    </div>
+                                    {/* Delete button - always visible */}
+                                    {task.status !== 'processing' && (
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation()
+                                                setDeleteTaskId(task.id)
+                                            }}
+                                            className="p-2 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 hover:text-red-300 transition-colors"
+                                            title="删除记录"
+                                        >
+                                            <Trash2 className="w-4 h-4" />
+                                        </button>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    )}
                 </div>
             )}
 
@@ -801,19 +1648,535 @@ export default function PublishPage() {
                 <div className="bg-white/5 rounded-2xl border border-white/10 p-6">
                     <div className="flex items-center justify-between mb-6">
                         <h2 className="text-lg font-semibold">定时队列</h2>
-                        <button className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-sm text-gray-400 hover:text-white hover:bg-white/10 transition-colors">
-                            <RefreshCw className="w-4 h-4" />
+                        <button
+                            onClick={fetchTasks}
+                            disabled={loadingTasks}
+                            className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-sm text-gray-400 hover:text-white hover:bg-white/10 transition-colors disabled:opacity-50"
+                        >
+                            <RefreshCw className={`w-4 h-4 ${loadingTasks ? 'animate-spin' : ''}`} />
                             刷新
                         </button>
                     </div>
 
-                    <div className="text-center py-12">
-                        <Timer className="w-16 h-16 mx-auto mb-4 text-gray-600" />
-                        <p className="text-gray-400 mb-2">暂无定时任务</p>
-                        <p className="text-sm text-gray-500">设置定时发布后，任务将显示在这里</p>
+                    {loadingTasks ? (
+                        <div className="flex items-center justify-center py-12">
+                            <Loader2 className="w-8 h-8 animate-spin text-cyan-400" />
+                        </div>
+                    ) : tasks.filter(t => t.status === 'scheduled').length === 0 ? (
+                        <div className="text-center py-12">
+                            <Timer className="w-16 h-16 mx-auto mb-4 text-gray-600" />
+                            <p className="text-gray-400 mb-2">暂无定时任务</p>
+                            <p className="text-sm text-gray-500">设置定时发布后，任务将显示在这里</p>
+                        </div>
+                    ) : (
+                        <div className="space-y-3">
+                            {tasks.filter(t => t.status === 'scheduled').map(task => (
+                                <div key={task.id} className="flex items-center gap-4 p-4 rounded-xl bg-white/5 border border-white/10">
+                                    <div className="w-10 h-10 rounded-full bg-cyan-500/20 flex items-center justify-center">
+                                        <Calendar className="w-5 h-5 text-cyan-400" />
+                                    </div>
+                                    <div className="flex-1">
+                                        <div className="flex items-center gap-2">
+                                            <span className="font-medium">定时任务</span>
+                                            <span className="px-2 py-0.5 text-xs rounded-full bg-cyan-500/20 text-cyan-400">
+                                                待发布
+                                            </span>
+                                        </div>
+                                        <p className="text-sm text-gray-400">
+                                            {task.total_items} 个任务项
+                                        </p>
+                                    </div>
+                                    <div className="text-right">
+                                        <p className="text-sm text-cyan-400">
+                                            {task.scheduled_at && format(new Date(task.scheduled_at), 'MM/dd HH:mm', { locale: zhCN })}
+                                        </p>
+                                        <p className="text-xs text-gray-500">计划发布时间</p>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {/* Asset Selector Modal (成品库选择器) */}
+            {showAssetModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+                    <div className="bg-gray-900 rounded-2xl border border-white/10 w-full max-w-4xl max-h-[80vh] overflow-hidden shadow-2xl">
+                        <div className="flex items-center justify-between p-4 border-b border-white/10">
+                            <div>
+                                <h3 className="text-lg font-semibold">从成品库选择视频</h3>
+                                <p className="text-xs text-gray-400 mt-1">💡 单击多选，双击快速选择单个视频</p>
+                            </div>
+                            <button
+                                onClick={() => {
+                                    setShowAssetModal(false)
+                                    setSelectedAssetIds([])
+                                }}
+                                className="p-2 rounded-lg hover:bg-white/10 transition-colors"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+                        <div className="p-4 overflow-y-auto max-h-[60vh]">
+                            {loadingAssets ? (
+                                <div className="flex items-center justify-center py-12">
+                                    <Loader2 className="w-8 h-8 animate-spin text-cyan-400" />
+                                </div>
+                            ) : assets.length === 0 ? (
+                                <div className="text-center py-12">
+                                    <Video className="w-16 h-16 mx-auto mb-4 text-gray-600" />
+                                    <p className="text-gray-400 mb-2">成品库暂无视频</p>
+                                    <p className="text-sm text-gray-500">请先在快速生成或批量工坊生成视频</p>
+                                    <button
+                                        onClick={() => {
+                                            setShowAssetModal(false)
+                                            router.push('/quick-gen')
+                                        }}
+                                        className="mt-4 px-4 py-2 bg-gradient-to-r from-cyan-500 to-pink-500 rounded-lg font-medium hover:opacity-90 transition-opacity"
+                                    >
+                                        去生成视频
+                                    </button>
+                                </div>
+                            ) : (
+                                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                                    {assets.map(asset => {
+                                        const isAlreadyAdded = selectedVideos.some(v => v.id === asset.id)
+                                        const isSelectedInModal = selectedAssetIds.includes(asset.id)
+                                        return (
+                                            <button
+                                                key={asset.id}
+                                                onClick={() => {
+                                                    if (isAlreadyAdded) return
+                                                    // Toggle selection for multi-select
+                                                    setSelectedAssetIds(prev =>
+                                                        prev.includes(asset.id)
+                                                            ? prev.filter(id => id !== asset.id)
+                                                            : [...prev, asset.id]
+                                                    )
+                                                }}
+                                                onDoubleClick={() => {
+                                                    if (isAlreadyAdded) return
+                                                    // Double-click: select and close immediately
+                                                    addVideoFromAsset(asset)
+                                                    setShowAssetModal(false)
+                                                    setSelectedAssetIds([])
+                                                }}
+                                                disabled={isAlreadyAdded}
+                                                className={`relative aspect-[9/16] rounded-xl overflow-hidden border-2 transition-all ${isAlreadyAdded
+                                                    ? 'border-gray-500 opacity-30 cursor-not-allowed'
+                                                    : isSelectedInModal
+                                                        ? 'border-cyan-500 ring-2 ring-cyan-500/30'
+                                                        : 'border-transparent hover:border-cyan-500/50'
+                                                    }`}
+                                            >
+                                                {asset.thumbnailUrl ? (
+                                                    <img
+                                                        src={asset.thumbnailUrl}
+                                                        alt={asset.prompt || '视频'}
+                                                        className="absolute inset-0 w-full h-full object-cover"
+                                                    />
+                                                ) : asset.resultUrl ? (
+                                                    /* Show video preview if URL available but no thumbnail */
+                                                    <video
+                                                        src={asset.resultUrl}
+                                                        className="absolute inset-0 w-full h-full object-cover"
+                                                        muted
+                                                        playsInline
+                                                        preload="metadata"
+                                                        onMouseEnter={(e) => e.currentTarget.play()}
+                                                        onMouseLeave={(e) => {
+                                                            e.currentTarget.pause()
+                                                            e.currentTarget.currentTime = 0
+                                                        }}
+                                                    />
+                                                ) : (
+                                                    <div className="absolute inset-0 bg-white/5 flex items-center justify-center">
+                                                        <Play className="w-8 h-8 text-gray-500" />
+                                                    </div>
+                                                )}
+                                                <div className="absolute bottom-0 left-0 right-0 p-2 bg-gradient-to-t from-black/80 to-transparent">
+                                                    <p className="text-xs truncate">{asset.prompt?.slice(0, 20) || '视频'}</p>
+                                                    <p className="text-[10px] text-gray-400">{format(new Date(asset.createdAt), 'MM/dd', { locale: zhCN })}</p>
+                                                </div>
+                                                {/* Already added indicator */}
+                                                {isAlreadyAdded && (
+                                                    <div className="absolute inset-0 flex items-center justify-center bg-black/50">
+                                                        <span className="text-xs text-gray-300">已添加</span>
+                                                    </div>
+                                                )}
+                                                {/* Selection checkbox indicator */}
+                                                {!isAlreadyAdded && (
+                                                    <div className={`absolute top-2 right-2 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors ${isSelectedInModal
+                                                        ? 'bg-cyan-500 border-cyan-500'
+                                                        : 'border-white/50 bg-black/30'
+                                                        }`}>
+                                                        {isSelectedInModal && <Check className="w-3 h-3 text-white" />}
+                                                    </div>
+                                                )}
+                                            </button>
+                                        )
+                                    })}
+                                </div>
+                            )}
+                        </div>
+                        <div className="flex items-center justify-between p-4 border-t border-white/10 bg-white/5">
+                            <p className="text-sm text-gray-400">
+                                已选择 <span className="text-cyan-400 font-semibold">{selectedAssetIds.length}</span> 个视频
+                                {selectedVideos.filter(v => v.type === 'asset').length > 0 && (
+                                    <span className="text-gray-500 ml-2">（已添加 {selectedVideos.filter(v => v.type === 'asset').length} 个）</span>
+                                )}
+                            </p>
+                            <div className="flex gap-2">
+                                <button
+                                    onClick={() => {
+                                        setShowAssetModal(false)
+                                        setSelectedAssetIds([])
+                                    }}
+                                    className="px-4 py-2 rounded-lg border border-white/10 text-gray-400 hover:bg-white/5 transition-colors"
+                                >
+                                    取消
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        // Add all selected assets
+                                        selectedAssetIds.forEach(assetId => {
+                                            const asset = assets.find(a => a.id === assetId)
+                                            if (asset && !selectedVideos.some(v => v.id === asset.id)) {
+                                                addVideoFromAsset(asset)
+                                            }
+                                        })
+                                        setShowAssetModal(false)
+                                        setSelectedAssetIds([])
+                                    }}
+                                    disabled={selectedAssetIds.length === 0}
+                                    className="px-4 py-2 bg-gradient-to-r from-cyan-500 to-pink-500 rounded-lg font-medium hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    确认添加 ({selectedAssetIds.length})
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             )}
-        </div>
+
+            {/* Clear Task Confirmation Dialog */}
+            {showClearConfirm && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+                    <div className="bg-gray-900 rounded-2xl border border-white/10 p-6 w-full max-w-md shadow-2xl">
+                        <div className="text-center">
+                            <div className="w-12 h-12 mx-auto mb-4 rounded-full bg-orange-500/20 flex items-center justify-center">
+                                <Trash2 className="w-6 h-6 text-orange-400" />
+                            </div>
+                            <h3 className="text-lg font-semibold mb-2">确认清空任务？</h3>
+                            <div className="text-gray-400 mb-6 text-sm text-left bg-white/5 rounded-lg p-3">
+                                <p className="mb-2">这将清空以下内容：</p>
+                                <ul className="list-disc list-inside space-y-1 text-gray-500">
+                                    <li>{selectedVideos.length} 个已选视频</li>
+                                    <li>任务组名称</li>
+                                    <li>视频标题</li>
+                                    <li>发布时间设置</li>
+                                </ul>
+                            </div>
+                            <div className="flex gap-3">
+                                <button
+                                    onClick={() => setShowClearConfirm(false)}
+                                    className="flex-1 px-4 py-2 rounded-xl border border-white/10 text-gray-400 hover:bg-white/5 transition-colors"
+                                >
+                                    取消
+                                </button>
+                                <button
+                                    onClick={clearAllTask}
+                                    className="flex-1 px-4 py-2 rounded-xl bg-orange-500 text-white hover:bg-orange-600 transition-colors flex items-center justify-center gap-2"
+                                >
+                                    <Trash2 className="w-4 h-4" />
+                                    确认清空
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Delete Confirmation Dialog */}
+            {deleteTaskId && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+                    <div className="bg-gray-900 rounded-2xl border border-white/10 p-6 w-full max-w-md shadow-2xl">
+                        <div className="text-center">
+                            <div className="w-12 h-12 mx-auto mb-4 rounded-full bg-red-500/20 flex items-center justify-center">
+                                <Trash2 className="w-6 h-6 text-red-400" />
+                            </div>
+                            <h3 className="text-lg font-semibold mb-2">确认删除</h3>
+                            <p className="text-gray-400 mb-6">确定要删除这条发布记录吗？此操作无法撤销。</p>
+                            <div className="flex gap-3">
+                                <button
+                                    onClick={() => setDeleteTaskId(null)}
+                                    disabled={deletingTask}
+                                    className="flex-1 px-4 py-2 rounded-xl border border-white/10 text-gray-400 hover:bg-white/5 transition-colors"
+                                >
+                                    取消
+                                </button>
+                                <button
+                                    onClick={() => deleteTaskId && deleteTask(deleteTaskId)}
+                                    disabled={deletingTask}
+                                    className="flex-1 px-4 py-2 rounded-xl bg-red-500 text-white hover:bg-red-600 transition-colors flex items-center justify-center gap-2"
+                                >
+                                    {deletingTask ? (
+                                        <>
+                                            <Loader2 className="w-4 h-4 animate-spin" />
+                                            删除中...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Trash2 className="w-4 h-4" />
+                                            确认删除
+                                        </>
+                                    )}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* AI Title Assistant Modal */}
+            {showTitleAssistant && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+                    <div className="bg-gray-900 rounded-2xl border border-white/10 w-full max-w-2xl max-h-[90vh] overflow-hidden shadow-2xl flex flex-col">
+                        {/* Header */}
+                        <div className="flex items-center justify-between p-4 border-b border-white/10">
+                            <h3 className="text-lg font-semibold flex items-center gap-2">
+                                <Sparkles className="w-5 h-5 text-purple-400" />
+                                AI 标题助手
+                            </h3>
+                            <button
+                                onClick={() => {
+                                    setShowTitleAssistant(false)
+                                    setGeneratedTitles([])
+                                }}
+                                className="p-1.5 hover:bg-white/10 rounded-lg transition-colors"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+
+                        {/* Body */}
+                        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                            {/* Input Section */}
+                            {generatedTitles.length === 0 && !generatingTitles && (
+                                <>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-300 mb-2">
+                                            📝 描述你的视频内容
+                                        </label>
+                                        <textarea
+                                            value={titleDescription}
+                                            onChange={(e) => setTitleDescription(e.target.value)}
+                                            placeholder="例如：美妆教程，分享适合夏天的清爽淡妆技巧，针对年轻女性群体，强调快速上手和日常实用性..."
+                                            rows={4}
+                                            className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500/50 transition-all resize-none"
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-300 mb-2">
+                                            🌐 输出语言
+                                        </label>
+                                        <div className="flex gap-3">
+                                            <button
+                                                onClick={() => setTitleLanguage('zh')}
+                                                className={`flex-1 p-3 rounded-xl border transition-all ${titleLanguage === 'zh'
+                                                    ? 'border-purple-500 bg-purple-500/10 text-purple-400'
+                                                    : 'border-white/10 text-gray-400 hover:border-white/20'
+                                                    }`}
+                                            >
+                                                <div className="text-lg mb-1">🇨🇳</div>
+                                                <div className="text-sm font-medium">中文</div>
+                                                <div className="text-xs text-gray-500">适合国内平台</div>
+                                            </button>
+                                            <button
+                                                onClick={() => setTitleLanguage('en')}
+                                                className={`flex-1 p-3 rounded-xl border transition-all ${titleLanguage === 'en'
+                                                    ? 'border-purple-500 bg-purple-500/10 text-purple-400'
+                                                    : 'border-white/10 text-gray-400 hover:border-white/20'
+                                                    }`}
+                                            >
+                                                <div className="text-lg mb-1">🇺🇸</div>
+                                                <div className="text-sm font-medium">English</div>
+                                                <div className="text-xs text-gray-500">适合TikTok海外</div>
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <div className="bg-white/5 rounded-lg p-3 text-sm text-gray-400">
+                                        📊 将为 <span className="text-purple-400 font-semibold">{selectedVideos.length}</span> 个视频生成标题
+                                    </div>
+                                </>
+                            )}
+
+                            {/* Generating State */}
+                            {generatingTitles && (
+                                <div className="py-12 text-center">
+                                    <Loader2 className="w-12 h-12 animate-spin text-purple-400 mx-auto mb-4" />
+                                    <p className="text-gray-300 mb-2">AI 正在生成标题...</p>
+                                    <p className="text-xs text-gray-500">正在为 {selectedVideos.length} 个视频生成标题</p>
+                                </div>
+                            )}
+
+                            {/* Results Section */}
+                            {generatedTitles.length > 0 && !generatingTitles && (
+                                <>
+                                    <div className="flex items-center justify-between">
+                                        <p className="text-sm text-gray-300">
+                                            ✅ 已生成 <span className="text-purple-400 font-semibold">{generatedTitles.length}</span> 条标题
+                                        </p>
+                                        <button
+                                            onClick={() => {
+                                                setGeneratedTitles([])
+                                            }}
+                                            className="text-xs text-gray-400 hover:text-white flex items-center gap-1"
+                                        >
+                                            <RefreshCw className="w-3 h-3" />
+                                            全部重新生成
+                                        </button>
+                                    </div>
+
+                                    <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2">
+                                        {generatedTitles.map((title, index) => (
+                                            <div
+                                                key={index}
+                                                className={`p-3 rounded-xl border transition-all ${title.selected
+                                                    ? 'border-purple-500/30 bg-purple-500/5'
+                                                    : 'border-white/10 bg-white/5 opacity-60'
+                                                    }`}
+                                            >
+                                                <div className="flex items-start gap-3">
+                                                    {/* Checkbox */}
+                                                    <button
+                                                        onClick={() => toggleTitleSelection(index)}
+                                                        className={`flex-shrink-0 w-5 h-5 rounded border transition-all mt-2 ${title.selected
+                                                            ? 'bg-purple-500 border-purple-500'
+                                                            : 'border-white/30 hover:border-white/50'
+                                                            }`}
+                                                    >
+                                                        {title.selected && <Check className="w-4 h-4 text-white" />}
+                                                    </button>
+
+                                                    {/* Title Input */}
+                                                    <div className="flex-1">
+                                                        <div className="flex items-center gap-2 mb-1">
+                                                            <span className="text-xs text-gray-500">视频 {index + 1}</span>
+                                                        </div>
+                                                        <textarea
+                                                            value={title.content}
+                                                            onChange={(e) => updateTitleContent(index, e.target.value)}
+                                                            rows={2}
+                                                            className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50 resize-none"
+                                                        />
+                                                    </div>
+
+                                                    {/* Regenerate Button */}
+                                                    <button
+                                                        onClick={() => regenerateSingleTitle(index)}
+                                                        disabled={regeneratingIndex !== null}
+                                                        className="flex-shrink-0 p-2 text-gray-400 hover:text-purple-400 hover:bg-purple-500/10 rounded-lg transition-colors mt-1"
+                                                        title="重新生成"
+                                                    >
+                                                        {regeneratingIndex === index ? (
+                                                            <Loader2 className="w-4 h-4 animate-spin" />
+                                                        ) : (
+                                                            <RefreshCw className="w-4 h-4" />
+                                                        )}
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+
+                                    <p className="text-xs text-gray-500">
+                                        💡 点击标题可直接编辑 | 勾选满意的标题 | 🔄 重新生成不满意的
+                                    </p>
+                                </>
+                            )}
+                        </div>
+
+                        {/* Footer */}
+                        <div className="p-4 border-t border-white/10 flex items-center justify-between">
+                            {generatedTitles.length === 0 ? (
+                                <>
+                                    <button
+                                        onClick={() => {
+                                            setShowTitleAssistant(false)
+                                            setGeneratedTitles([])
+                                        }}
+                                        className="px-4 py-2 rounded-xl border border-white/10 text-gray-400 hover:bg-white/5 transition-colors"
+                                    >
+                                        取消
+                                    </button>
+                                    <button
+                                        onClick={generateAllTitles}
+                                        disabled={!titleDescription.trim() || generatingTitles}
+                                        className="px-6 py-2 bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl font-medium hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                                    >
+                                        <Sparkles className="w-4 h-4" />
+                                        开始生成
+                                    </button>
+                                </>
+                            ) : (
+                                <>
+                                    <div className="flex items-center gap-2">
+                                        {generatedTitles.filter(t => !t.selected).length > 0 && (
+                                            <button
+                                                onClick={async () => {
+                                                    const unselectedIndices = generatedTitles
+                                                        .map((t, i) => !t.selected ? i : -1)
+                                                        .filter(i => i !== -1)
+                                                    for (const idx of unselectedIndices) {
+                                                        await regenerateSingleTitle(idx)
+                                                    }
+                                                }}
+                                                disabled={regeneratingIndex !== null}
+                                                className="px-3 py-2 rounded-xl border border-white/10 text-gray-400 hover:bg-white/5 transition-colors text-sm flex items-center gap-1"
+                                            >
+                                                <RefreshCw className="w-3 h-3" />
+                                                重新生成未选中 ({generatedTitles.filter(t => !t.selected).length})
+                                            </button>
+                                        )}
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <button
+                                            onClick={() => {
+                                                setShowTitleAssistant(false)
+                                                setGeneratedTitles([])
+                                            }}
+                                            className="px-4 py-2 rounded-xl border border-white/10 text-gray-400 hover:bg-white/5 transition-colors"
+                                        >
+                                            取消
+                                        </button>
+                                        <button
+                                            onClick={applySelectedTitles}
+                                            disabled={generatedTitles.filter(t => t.selected).length === 0}
+                                            className="px-6 py-2 bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl font-medium hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                                        >
+                                            <Check className="w-4 h-4" />
+                                            应用选中标题 ({generatedTitles.filter(t => t.selected).length})
+                                        </button>
+                                    </div>
+                                </>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Hidden file input for cover upload */}
+            <input
+                ref={coverInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleCoverUpload}
+                className="hidden"
+            />
+        </div >
     )
 }

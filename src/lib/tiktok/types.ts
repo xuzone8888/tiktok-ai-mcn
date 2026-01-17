@@ -44,6 +44,7 @@ export interface TikTokUserInfo {
     avatar_url_200?: string;
     avatar_large_url?: string;
     display_name?: string;
+    username?: string;  // The actual TikTok @handle
     bio_description?: string;
     profile_deep_link?: string;
     is_verified?: boolean;

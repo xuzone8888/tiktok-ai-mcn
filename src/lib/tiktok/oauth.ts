@@ -179,6 +179,7 @@ export async function getUserInfo(accessToken: string): Promise<TikTokUserInfo> 
         'bio_description',
         'profile_deep_link',
         'is_verified',
+        'username',  // Add username to get the actual @handle
         'follower_count',
         'following_count',
         'likes_count',

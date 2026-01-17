@@ -331,13 +331,32 @@ export function Sidebar() {
               {/* Group Items */}
               <div className="space-y-0.5">
                 {group.items.map((item) => {
-                  const isActive = pathname === item.href || pathname?.startsWith(`${item.href}/`);
+                  // Fix: Use exact match to prevent parent highlighting when on child page
+                  // e.g., /publish should not be active when on /publish/accounts
+                  const isActive = pathname === item.href;
                   return renderNavItem(item, isActive);
                 })}
               </div>
             </div>
           ))}
         </nav>
+
+        {/* Sidebar Footer - 底部装饰区 */}
+        <div className={cn(
+          "mt-auto border-t border-border/50 p-4",
+          collapsed && "px-2"
+        )}>
+          {!collapsed ? (
+            <div className="flex items-center justify-between text-[10px] text-white/30">
+              <span>© 2026 Tok Factory</span>
+              <span>v1.0</span>
+            </div>
+          ) : (
+            <div className="text-center text-[10px] text-white/20">
+              v1.0
+            </div>
+          )}
+        </div>
 
         {/* Collapse button */}
         <Button

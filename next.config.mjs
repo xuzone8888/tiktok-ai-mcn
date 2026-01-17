@@ -35,6 +35,15 @@ const nextConfig = {
         protocol: 'https',
         hostname: '**.cloudflare.com',
       },
+      // TikTok CDN for avatars
+      {
+        protocol: 'https',
+        hostname: '**.tiktokcdn.com',
+      },
+      {
+        protocol: 'https',
+        hostname: '**.tiktokcdn-us.com',
+      },
     ],
     // 允许更大的图片优化
     deviceSizes: [640, 750, 828, 1080, 1200, 1920, 2048, 3840],

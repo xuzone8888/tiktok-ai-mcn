@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { getTikTokUserInfo } from '@/lib/tiktok/oauth'
-import { initializeVideoUpload, uploadVideoFromUrl, publishVideo, VideoPrivacyLevel } from '@/lib/tiktok/content-posting'
+import { initVideoPublishFromUrl, waitForPublishComplete } from '@/lib/tiktok/content-posting'
+
+// TikTok content posting types - define locally since we're not using the actual upload functions yet
+type VideoPrivacyLevel = 'PUBLIC_TO_EVERYONE' | 'MUTUAL_FOLLOW_FRIENDS' | 'SELF_ONLY'
 
 // Types for request body
 interface CreateTaskRequest {
@@ -105,13 +107,13 @@ export async function POST(request: NextRequest) {
         // Verify all accounts belong to the user and are authorized
         const { data: accounts, error: accountsError } = await supabase
             .from('tiktok_accounts')
-            .select('id, open_id, access_token, access_token_expires_at')
+            .select('id, open_id, access_token, token_expires_at')
             .eq('user_id', user.id)
             .in('id', body.account_ids)
 
         if (accountsError) {
             console.error('Failed to fetch accounts:', accountsError)
-            return NextResponse.json({ error: '获取账号信息失败' }, { status: 500 })
+            return NextResponse.json({ error: '获取账号信息失败: ' + accountsError.message }, { status: 500 })
         }
 
         if (!accounts || accounts.length !== body.account_ids.length) {
@@ -120,7 +122,7 @@ export async function POST(request: NextRequest) {
 
         // Check authorization status
         const now = new Date()
-        const expiredAccounts = accounts.filter(a => new Date(a.access_token_expires_at) <= now)
+        const expiredAccounts = accounts.filter(a => new Date(a.token_expires_at) <= now)
         if (expiredAccounts.length > 0) {
             return NextResponse.json({
                 error: '部分账号授权已过期，请先刷新授权',
@@ -133,40 +135,44 @@ export async function POST(request: NextRequest) {
             ? new Date(body.scheduled_at)
             : new Date()
 
-        // Create the main task
+        // Create the main task (field names match database schema)
+        // Calculate total items upfront: videos × accounts
+        const totalItemsCount = body.videos.length * body.account_ids.length
+
         const { data: task, error: taskError } = await supabase
             .from('publish_tasks')
             .insert({
                 user_id: user.id,
                 status: body.publish_mode === 'scheduled' ? 'scheduled' : 'pending',
                 scheduled_at: body.publish_mode === 'scheduled' ? body.scheduled_at : null,
-                caption_template: body.caption,
+                title_template: body.caption,  // Database uses title_template, not caption_template
                 privacy_level: body.privacy_level,
-                allow_comments: body.allow_comments,
+                allow_comment: body.allow_comments,  // Database uses allow_comment (singular)
                 allow_duet: body.allow_duet,
                 allow_stitch: body.allow_stitch,
-                is_brand_content: body.is_brand_content,
-                is_ai_generated: body.is_ai_generated,
-                batch_interval_minutes: body.batch_interval
+                brand_content_toggle: body.is_brand_content,  // Database uses brand_content_toggle
+                is_aigc: body.is_ai_generated,  // Database uses is_aigc
+                batch_interval_seconds: body.batch_interval * 60,  // Database uses seconds, convert from minutes
+                total_items: totalItemsCount  // Set total items count upfront
             })
             .select()
             .single()
 
         if (taskError) {
             console.error('Failed to create task:', taskError)
-            return NextResponse.json({ error: '创建任务失败' }, { status: 500 })
+            return NextResponse.json({ error: '创建任务失败: ' + taskError.message }, { status: 500 })
         }
 
         // Create task items for each video x account combination
+        // Field names match database schema: account_id, title, video_url
         const items: Array<{
             task_id: string
-            video_id: string
-            video_name: string
-            video_url: string | null
-            tiktok_account_id: string
+            account_id: string  // Database uses account_id, not tiktok_account_id
+            video_url: string  // Database requires video_url (NOT NULL)
+            video_source: string
+            title: string  // Database uses title, not caption
             status: string
             scheduled_at: string | null
-            caption: string
         }> = []
 
         let itemIndex = 0
@@ -176,19 +182,21 @@ export async function POST(request: NextRequest) {
                 const scheduledTime = new Date(baseTime.getTime() + (itemIndex * body.batch_interval * 60 * 1000))
 
                 // Replace template variables in caption
-                let caption = body.caption
-                caption = caption.replace(/{n}/g, String(itemIndex + 1))
-                caption = caption.replace(/{date}/g, new Date().toLocaleDateString('zh-CN'))
+                let title = body.caption
+                title = title.replace(/{n}/g, String(itemIndex + 1))
+                title = title.replace(/{date}/g, new Date().toLocaleDateString('zh-CN'))
+
+                // Ensure video_url is not null - use a placeholder if not provided
+                const videoUrl = video.url || `placeholder://asset/${video.id}`
 
                 items.push({
                     task_id: task.id,
-                    video_id: video.id,
-                    video_name: video.name,
-                    video_url: video.url || null,
-                    tiktok_account_id: accountId,
+                    account_id: accountId,  // Correct field name
+                    video_url: videoUrl,  // Required field
+                    video_source: video.type === 'asset' ? 'assets' : video.type,
+                    title,  // Correct field name
                     status: body.publish_mode === 'scheduled' ? 'scheduled' : 'pending',
-                    scheduled_at: scheduledTime.toISOString(),
-                    caption
+                    scheduled_at: scheduledTime.toISOString()
                 })
 
                 itemIndex++
@@ -241,11 +249,12 @@ async function processPublishItems(
     taskId: string,
     items: Array<{
         task_id: string
-        video_id: string
-        video_name: string
-        video_url: string | null
-        tiktok_account_id: string
-        caption: string
+        account_id: string  // Fixed field name
+        video_url: string
+        video_source: string
+        title: string  // Fixed field name
+        status: string
+        scheduled_at: string | null
     }>,
     accounts: Array<{ id: string; access_token: string }>,
     supabase: Awaited<ReturnType<typeof createClient>>
@@ -256,7 +265,7 @@ async function processPublishItems(
 
     for (const item of items) {
         try {
-            const account = accountMap.get(item.tiktok_account_id)
+            const account = accountMap.get(item.account_id)
             if (!account) {
                 throw new Error('账号不存在')
             }
@@ -266,34 +275,70 @@ async function processPublishItems(
                 .from('publish_task_items')
                 .update({ status: 'processing' })
                 .eq('task_id', item.task_id)
-                .eq('video_id', item.video_id)
-                .eq('tiktok_account_id', item.tiktok_account_id)
+                .eq('account_id', item.account_id)
+                .eq('video_url', item.video_url)
 
-            // For demo purposes, we're using URL upload
-            // In production, you'd handle different video sources (local files, asset library, etc.)
-            if (item.video_url) {
-                const uploadResult = await uploadVideoFromUrl(account.access_token, item.video_url)
-
-                if (uploadResult.error) {
-                    throw new Error(uploadResult.error.message)
-                }
-
-                // Note: TikTok's Content Posting API creates the video as a draft or directly posts
-                // The exact flow depends on the API version and permissions
+            // Check if video URL is valid for TikTok publishing
+            if (!item.video_url || item.video_url.startsWith('placeholder://')) {
+                throw new Error('视频URL无效，无法发布到TikTok')
             }
 
-            // Update item status to completed
+            // Validate URL is HTTPS (required by TikTok)
+            if (!item.video_url.startsWith('https://')) {
+                throw new Error('TikTok要求视频URL必须使用HTTPS协议')
+            }
+
+            console.log(`Publishing video to TikTok: ${item.video_url}`)
+
+            // Call actual TikTok publish API
+            const publishId = await initVideoPublishFromUrl(
+                account.access_token,
+                item.video_url,
+                {
+                    title: item.title,
+                    privacyLevel: 'SELF_ONLY',  // Use SELF_ONLY for sandbox testing to avoid content issues
+                    disableDuet: false,
+                    disableComment: false,
+                    disableStitch: false,
+                    isAigc: true,  // Mark as AI-generated content
+                }
+            )
+
+            console.log(`TikTok publish initiated, publish_id: ${publishId}`)
+
+            // Update item with publish_id
             await supabase
                 .from('publish_task_items')
                 .update({
-                    status: 'completed',
-                    published_at: new Date().toISOString()
+                    status: 'uploading',
+                    tiktok_publish_id: publishId
                 })
                 .eq('task_id', item.task_id)
-                .eq('video_id', item.video_id)
-                .eq('tiktok_account_id', item.tiktok_account_id)
+                .eq('account_id', item.account_id)
+                .eq('video_url', item.video_url)
 
-            completedCount++
+            // Wait for publish to complete (with timeout)
+            const result = await waitForPublishComplete(account.access_token, publishId, 120000, 5000)
+
+            if (result.success) {
+                console.log(`TikTok publish successful! Post ID: ${result.postId}`)
+
+                // Update item status to published
+                await supabase
+                    .from('publish_task_items')
+                    .update({
+                        status: 'published',
+                        tiktok_share_id: result.postId,
+                        published_at: new Date().toISOString()
+                    })
+                    .eq('task_id', item.task_id)
+                    .eq('account_id', item.account_id)
+                    .eq('video_url', item.video_url)
+
+                completedCount++
+            } else {
+                throw new Error(result.error || 'TikTok发布失败')
+            }
         } catch (error) {
             console.error(`Failed to publish item:`, error)
 
@@ -305,8 +350,8 @@ async function processPublishItems(
                     error_message: error instanceof Error ? error.message : '发布失败'
                 })
                 .eq('task_id', item.task_id)
-                .eq('video_id', item.video_id)
-                .eq('tiktok_account_id', item.tiktok_account_id)
+                .eq('account_id', item.account_id)
+                .eq('video_url', item.video_url)
 
             failedCount++
         }
@@ -316,14 +361,16 @@ async function processPublishItems(
     const finalStatus = failedCount === items.length
         ? 'failed'
         : failedCount > 0
-            ? 'partial'
+            ? 'partial_failed'  // Schema uses 'partial_failed' not 'partial'
             : 'completed'
 
     await supabase
         .from('publish_tasks')
         .update({
             status: finalStatus,
-            completed_at: new Date().toISOString()
+            completed_at: new Date().toISOString(),
+            success_count: completedCount,
+            failed_count: failedCount
         })
         .eq('id', taskId)
 }

@@ -80,6 +80,7 @@ export async function GET(request: NextRequest) {
                 .from('tiktok_accounts')
                 .update({
                     display_name: userInfo.display_name,
+                    username: userInfo.username,  // Store actual @handle
                     avatar_url: userInfo.avatar_url,
                     follower_count: userInfo.follower_count || 0,
                     following_count: userInfo.following_count || 0,
@@ -106,6 +107,7 @@ export async function GET(request: NextRequest) {
                     open_id: userInfo.open_id,
                     union_id: userInfo.union_id,
                     display_name: userInfo.display_name,
+                    username: userInfo.username,  // Store actual @handle
                     avatar_url: userInfo.avatar_url,
                     follower_count: userInfo.follower_count || 0,
                     following_count: userInfo.following_count || 0,
