@@ -1,11 +1,20 @@
 /**
  * Admin API - 文件上传
  * 
- * POST /api/admin/upload - 上传文件到 Supabase Storage
+ * POST /api/admin/upload - 上传文件到阿里云 OSS
+ * 
+ * 已迁移：Supabase Storage -> 阿里云 OSS
+ * 支持的文件夹：model-avatars, model-demos, user-uploads
  */
 
 import { NextResponse } from "next/server";
-import { createAdminClient } from "@/lib/supabase/admin";
+import {
+  uploadBuffer,
+  generateMediaPath,
+  isOSSConfigured,
+  getContentType,
+  StorageFolder
+} from "@/lib/oss";
 
 export async function POST(request: Request) {
   try {
@@ -21,7 +30,7 @@ export async function POST(request: Request) {
       );
     }
 
-    // 验证 bucket
+    // 验证 bucket（现在映射到 OSS folder）
     const validBuckets = ["model-avatars", "model-demos", "user-uploads"];
     if (!validBuckets.includes(bucket)) {
       return NextResponse.json(
@@ -44,7 +53,14 @@ export async function POST(request: Request) {
       );
     }
 
-    const supabase = createAdminClient();
+    // 检查 OSS 配置
+    if (!isOSSConfigured()) {
+      console.error("[Upload API] OSS not configured");
+      return NextResponse.json(
+        { success: false, error: "Storage service not configured" },
+        { status: 500 }
+      );
+    }
 
     console.log("[Upload API] Starting upload:", {
       bucket,
@@ -53,75 +69,39 @@ export async function POST(request: Request) {
       fileType: file.type,
     });
 
-    // 检查 bucket 是否存在
-    const { data: buckets, error: listError } = await supabase.storage.listBuckets();
-    
-    if (listError) {
-      console.error("[Upload API] Failed to list buckets:", listError);
-      return NextResponse.json(
-        { success: false, error: `Storage service error: ${listError.message}` },
-        { status: 500 }
-      );
-    }
-
-    const bucketExists = buckets?.some(b => b.name === bucket);
-    if (!bucketExists) {
-      console.error("[Upload API] Bucket not found:", bucket, "Available buckets:", buckets?.map(b => b.name));
-      
-      // 尝试创建 bucket
-      const { error: createError } = await supabase.storage.createBucket(bucket, {
-        public: bucket !== "user-uploads",
-        fileSizeLimit: maxSizes[bucket],
-      });
-      
-      if (createError && !createError.message.includes("already exists")) {
-        console.error("[Upload API] Failed to create bucket:", createError);
-        return NextResponse.json(
-          { success: false, error: `Bucket "${bucket}" not found and could not be created: ${createError.message}` },
-          { status: 500 }
-        );
-      }
-      
-      console.log("[Upload API] Bucket created:", bucket);
-    }
-
     // 将 File 转换为 Buffer
     const arrayBuffer = await file.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
 
-    // 上传到 Supabase Storage
-    const { data, error } = await supabase.storage
-      .from(bucket)
-      .upload(path, buffer, {
-        contentType: file.type,
-        cacheControl: "3600",
-        upsert: true,
-      });
+    // 生成 OSS 路径：使用原始 path 中的信息或生成新路径
+    // 如果 path 包含用户 ID 或其他结构，保留原有结构
+    const ossFolder = bucket as StorageFolder;
+    let objectPath: string;
 
-    if (error) {
-      console.error("[Upload API] Storage error:", error);
-      return NextResponse.json(
-        { success: false, error: `Upload failed: ${error.message}` },
-        { status: 500 }
-      );
+    if (path.includes('/')) {
+      // 保留原有路径结构，但加上 bucket 前缀
+      objectPath = `${bucket}/${path}`;
+    } else {
+      // 简单文件名，生成完整路径
+      objectPath = generateMediaPath(ossFolder, 'admin', file.name);
     }
 
-    // 获取公开 URL
-    const { data: urlData } = supabase.storage
-      .from(bucket)
-      .getPublicUrl(data.path);
+    // 获取正确的 Content-Type
+    const contentType = file.type || getContentType(file.name);
+
+    // 上传到阿里云 OSS
+    const publicUrl = await uploadBuffer(arrayBuffer, objectPath, contentType);
 
     console.log("[Upload API] File uploaded:", {
       bucket,
-      path: data.path,
-      publicUrl: urlData.publicUrl,
+      path: objectPath,
+      publicUrl,
     });
 
     return NextResponse.json({
       success: true,
       data: {
-        path: data.path,
-        publicUrl: urlData.publicUrl,
+        path: objectPath,
+        publicUrl,
       },
     });
   } catch (error) {

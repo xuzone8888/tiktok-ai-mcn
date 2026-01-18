@@ -1,16 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import { mockProductStore } from "@/lib/mock-store";
+import {
+  uploadImageBuffer,
+  generateProductPath,
+  isOSSConfigured
+} from "@/lib/oss";
 
-// 创建 Supabase 客户端（仅在配置存在时）
+// 创建 Supabase 客户端（仅在配置存在时，用于数据库操作）
 function getSupabaseClient(): SupabaseClient | null {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.SUPABASE_SERVICE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  
+
   if (!supabaseUrl || !supabaseKey) {
     return null;
   }
-  
+
   return createClient(supabaseUrl, supabaseKey);
 }
 
@@ -40,50 +45,35 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 生成唯一文件名
-    const fileExt = file.name.split(".").pop();
-    const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
-    const filePath = `products/${fileName}`;
-
     // 将 File 转换为 ArrayBuffer
     const arrayBuffer = await file.arrayBuffer();
-    const buffer = new Uint8Array(arrayBuffer);
-
-    // 获取 Supabase 客户端
-    const supabase = getSupabaseClient();
-
-    // 上传到 Supabase Storage（如果 Supabase 已配置）
-    let imageUrl: string = MOCK_GRID_IMAGES[0];
-    
-    if (supabase) {
-      try {
-        const { error: uploadError } = await supabase.storage
-          .from("assets")
-          .upload(filePath, buffer, {
-            contentType: file.type,
-            upsert: false,
-          });
-
-        if (uploadError) {
-          console.warn("Storage upload failed, using mock URL:", uploadError.message);
-        } else {
-          // 获取公共 URL
-          const { data: urlData } = supabase.storage
-            .from("assets")
-            .getPublicUrl(filePath);
-          imageUrl = urlData.publicUrl;
-        }
-      } catch {
-        console.warn("Storage not configured, using mock URL");
-      }
-    }
 
     // 模拟用户 ID（实际项目中从 session 获取）
     const mockUserId = "00000000-0000-0000-0000-000000000001";
 
+    // 上传到阿里云 OSS（优先）或使用 mock URL
+    let imageUrl: string = MOCK_GRID_IMAGES[0];
+
+    if (isOSSConfigured()) {
+      try {
+        // 生成 OSS 路径
+        const objectPath = generateProductPath(mockUserId, file.name);
+        // 上传到 OSS
+        imageUrl = await uploadImageBuffer(arrayBuffer, objectPath, file.type);
+        console.log("[Products Upload] Uploaded to OSS:", imageUrl);
+      } catch (error) {
+        console.warn("[Products Upload] OSS upload failed, using mock URL:", error);
+      }
+    } else {
+      console.warn("[Products Upload] OSS not configured, using mock URL");
+    }
+
+    // 获取 Supabase 客户端（仅用于数据库操作）
+    const supabase = getSupabaseClient();
+
     // 创建产品记录
     let product;
-    
+
     if (supabase) {
       try {
         const { data: productData, error: productError } = await supabase
@@ -172,7 +162,7 @@ async function simulateAIProcessing(productId: string) {
   };
 
   const supabase = getSupabaseClient();
-  
+
   if (supabase) {
     try {
       const { error } = await supabase

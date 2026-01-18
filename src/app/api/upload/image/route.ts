@@ -1,10 +1,37 @@
 /**
  * 图片上传 API
- * 将本地图片上传到 Supabase Storage，返回公网 URL
+ * 将本地图片上传到阿里云 OSS，返回公网 URL
+ * 
+ * 已迁移：Supabase Storage -> 阿里云 OSS
  */
 
 import { NextResponse } from "next/server";
+import {
+  uploadImageBuffer,
+  generateImagePath,
+  isOSSConfigured
+} from "@/lib/oss";
 import { createAdminClient } from "@/lib/supabase/admin";
+
+// 从用户 session 获取 userId（如果有的话）
+async function getUserId(request: Request): Promise<string> {
+  try {
+    // 尝试从 cookie 获取 session
+    const supabase = createAdminClient();
+    const authHeader = request.headers.get('authorization');
+    if (authHeader?.startsWith('Bearer ')) {
+      const token = authHeader.slice(7);
+      const { data } = await supabase.auth.getUser(token);
+      if (data.user?.id) {
+        return data.user.id;
+      }
+    }
+  } catch {
+    // 忽略错误，使用默认 ID
+  }
+  // 默认用户 ID（未登录时使用）
+  return 'anonymous';
+}
 
 export async function POST(request: Request) {
   try {
@@ -36,79 +63,32 @@ export async function POST(request: Request) {
       );
     }
 
-    const supabase = createAdminClient();
-
-    // 生成唯一文件名
-    const ext = file.name.split(".").pop() || "jpg";
-    const fileName = `quick-gen/${Date.now()}-${Math.random().toString(36).substring(7)}.${ext}`;
-
-    // 上传到 Supabase Storage
-    const arrayBuffer = await file.arrayBuffer();
-    const { error } = await supabase.storage
-      .from("uploads")
-      .upload(fileName, arrayBuffer, {
-        contentType: file.type,
-        upsert: false,
-      });
-
-    if (error) {
-      console.error("[Upload Image] Storage error:", error);
-      
-      // 如果 bucket 不存在，尝试创建
-      if (error.message.includes("not found")) {
-        const { error: createError } = await supabase.storage.createBucket("uploads", {
-          public: true,
-        });
-        
-        if (!createError) {
-          // 重试上传
-          const { error: retryError } = await supabase.storage
-            .from("uploads")
-            .upload(fileName, arrayBuffer, {
-              contentType: file.type,
-              upsert: false,
-            });
-          
-          if (retryError) {
-            return NextResponse.json(
-              { success: false, error: retryError.message },
-              { status: 500 }
-            );
-          }
-          
-          // 获取公网 URL
-          const { data: urlData } = supabase.storage
-            .from("uploads")
-            .getPublicUrl(fileName);
-          
-          return NextResponse.json({
-            success: true,
-            data: {
-              url: urlData.publicUrl,
-              path: fileName,
-            },
-          });
-        }
-      }
-      
+    // 检查 OSS 配置
+    if (!isOSSConfigured()) {
+      console.error("[Upload Image] OSS not configured");
       return NextResponse.json(
-        { success: false, error: error.message },
+        { success: false, error: "Storage service not configured" },
         { status: 500 }
       );
     }
 
-    // 获取公网 URL
-    const { data: urlData } = supabase.storage
-      .from("uploads")
-      .getPublicUrl(fileName);
+    // 获取用户 ID
+    const userId = await getUserId(request);
 
-    console.log("[Upload Image] Success:", urlData.publicUrl);
+    // 生成 OSS 路径
+    const objectPath = generateImagePath(userId, file.name);
+
+    // 上传到阿里云 OSS
+    const arrayBuffer = await file.arrayBuffer();
+    const publicUrl = await uploadImageBuffer(arrayBuffer, objectPath, file.type);
+
+    console.log("[Upload Image] Success:", publicUrl);
 
     return NextResponse.json({
       success: true,
       data: {
-        url: urlData.publicUrl,
-        path: fileName,
+        url: publicUrl,
+        path: objectPath,
       },
     });
   } catch (error) {
