@@ -323,7 +323,7 @@ export default function PublishPage() {
         })
     }
 
-    // Handle local file upload
+    // Handle local file upload - uploads to OSS and gets public URL
     const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
         const files = event.target.files
         if (!files || files.length === 0) return
@@ -344,37 +344,69 @@ export default function PublishPage() {
                 continue
             }
 
-            // Show progress
-            setUploadProgress(10)
+            try {
+                // Show initial progress
+                setUploadProgress(5)
 
-            // Create object URL for video playback
-            const objectUrl = URL.createObjectURL(file)
+                // Generate thumbnail while preparing upload
+                const thumbnailPromise = generateVideoThumbnail(file)
 
-            // Simulate progress while generating thumbnail
-            setUploadProgress(30)
+                // Create FormData for upload
+                const formData = new FormData()
+                formData.append('file', file)
 
-            // Generate thumbnail from video
-            const thumbnail = await generateVideoThumbnail(file)
+                setUploadProgress(10)
 
-            setUploadProgress(80)
+                // Upload to OSS
+                const response = await fetch('/api/upload/video', {
+                    method: 'POST',
+                    body: formData,
+                })
 
-            const newVideo: SelectedVideo = {
-                id: `upload-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-                type: 'upload',
-                name: file.name,
-                thumbnail: thumbnail || '',  // Use generated thumbnail
-                url: objectUrl,
-                duration: 0
-            }
-            setSelectedVideos(prev => [...prev, newVideo])
+                setUploadProgress(70)
 
-            // Complete progress
-            setUploadProgress(100)
+                if (!response.ok) {
+                    const errorData = await response.json()
+                    throw new Error(errorData.error || '上传失败')
+                }
 
-            // Clear progress after short delay
-            setTimeout(() => {
+                const result = await response.json()
+
+                if (!result.success || !result.url) {
+                    throw new Error('上传失败：未获取到视频URL')
+                }
+
+                setUploadProgress(85)
+
+                // Wait for thumbnail
+                const thumbnail = await thumbnailPromise
+
+                setUploadProgress(95)
+
+                // Create video entry with OSS URL
+                const newVideo: SelectedVideo = {
+                    id: `upload-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                    type: 'upload',
+                    name: file.name,
+                    thumbnail: thumbnail || '',
+                    url: result.url,  // Use OSS public URL instead of blob URL
+                    duration: 0
+                }
+                setSelectedVideos(prev => [...prev, newVideo])
+
+                // Complete progress
+                setUploadProgress(100)
+
+                // Clear progress after short delay
+                setTimeout(() => {
+                    setUploadProgress(null)
+                }, 500)
+
+            } catch (error) {
+                console.error('Video upload error:', error)
+                setUploadError(error instanceof Error ? error.message : '视频上传失败')
                 setUploadProgress(null)
-            }, 500)
+            }
         }
 
         // Reset input

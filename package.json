@@ -29,6 +29,7 @@
     "@radix-ui/react-tooltip": "^1.2.8",
     "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.86.0",
+    "ali-oss": "^6.23.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
@@ -46,6 +47,7 @@
     "zustand": "^5.0.9"
   },
   "devDependencies": {
+    "@types/ali-oss": "^6.23.0",
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",
