@@ -997,6 +997,7 @@ export default function PublishPage() {
                                                             <video
                                                                 id={`cover-video-${video.id}`}
                                                                 src={video.url}
+                                                                crossOrigin="anonymous"
                                                                 className="w-full h-full object-cover"
                                                                 muted
                                                                 playsInline
@@ -1041,15 +1042,21 @@ export default function PublishPage() {
                                                                     onClick={() => {
                                                                         const videoEl = document.getElementById(`cover-video-${video.id}`) as HTMLVideoElement
                                                                         if (videoEl) {
-                                                                            const canvas = document.createElement('canvas')
-                                                                            canvas.width = videoEl.videoWidth
-                                                                            canvas.height = videoEl.videoHeight
-                                                                            const ctx = canvas.getContext('2d')
-                                                                            if (ctx) {
-                                                                                ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height)
-                                                                                const frameData = canvas.toDataURL('image/jpeg', 0.9)
-                                                                                updateVideoCover(video.id, frameData)
-                                                                                setExpandedVideoId(null)
+                                                                            try {
+                                                                                const canvas = document.createElement('canvas')
+                                                                                canvas.width = videoEl.videoWidth || 720
+                                                                                canvas.height = videoEl.videoHeight || 1280
+                                                                                const ctx = canvas.getContext('2d')
+                                                                                if (ctx) {
+                                                                                    ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height)
+                                                                                    const frameData = canvas.toDataURL('image/jpeg', 0.9)
+                                                                                    updateVideoCover(video.id, frameData)
+                                                                                    setExpandedVideoId(null)
+                                                                                }
+                                                                            } catch (error) {
+                                                                                console.error('Failed to capture frame:', error)
+                                                                                // CORS error - suggest using upload instead
+                                                                                setUploadError('无法从该视频捕获帧（跨域限制），请使用"上传图片"按钮选择封面')
                                                                             }
                                                                         }
                                                                     }}
@@ -1374,8 +1381,8 @@ export default function PublishPage() {
                                             type="button"
                                             onClick={() => setPrivacyLevel(value as typeof privacyLevel)}
                                             className={`flex flex-col items-center gap-1 px-3 py-3 rounded-xl text-center transition-all ${privacyLevel === value
-                                                    ? 'bg-cyan-500/20 border-cyan-500 text-cyan-400'
-                                                    : 'bg-white/5 border-white/10 text-gray-400 hover:bg-white/10'
+                                                ? 'bg-cyan-500/20 border-cyan-500 text-cyan-400'
+                                                : 'bg-white/5 border-white/10 text-gray-400 hover:bg-white/10'
                                                 } border`}
                                         >
                                             <span className="text-lg">{icon}</span>
