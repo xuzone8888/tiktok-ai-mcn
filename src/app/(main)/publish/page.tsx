@@ -71,6 +71,7 @@ interface SelectedVideo {
     name: string
     thumbnail: string
     url?: string
+    localUrl?: string        // Local blob URL for frame capture (avoids CORS issues)
     duration?: number
     cover?: string           // Custom cover image URL or data URL
     title?: string           // Individual title for this video
@@ -386,13 +387,15 @@ export default function PublishPage() {
 
                 setUploadProgress(95)
 
-                // Create video entry with OSS URL
+                // Create video entry with OSS URL and local blob URL for frame capture
+                const localBlobUrl = URL.createObjectURL(file)
                 const newVideo: SelectedVideo = {
                     id: `upload-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
                     type: 'upload',
                     name: file.name,
                     thumbnail: thumbnail || '',
-                    url: result.url,  // Use OSS public URL instead of blob URL
+                    url: result.url,  // Use OSS public URL for publishing
+                    localUrl: localBlobUrl,  // Use blob URL for frame capture (no CORS issues)
                     duration: 0
                 }
                 setSelectedVideos(prev => [...prev, newVideo])
@@ -996,8 +999,8 @@ export default function PublishPage() {
                                                         <div className="w-32 h-56 rounded-xl overflow-hidden bg-black flex-shrink-0 relative">
                                                             <video
                                                                 id={`cover-video-${video.id}`}
-                                                                src={video.url}
-                                                                crossOrigin="anonymous"
+                                                                src={video.localUrl || video.url}
+                                                                crossOrigin={video.localUrl ? undefined : "anonymous"}
                                                                 className="w-full h-full object-cover"
                                                                 muted
                                                                 playsInline
