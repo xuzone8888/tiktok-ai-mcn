@@ -149,6 +149,9 @@ export default function PublishPage() {
     // Title mode: 'uniform' = same title for all, 'individual' = different titles per video
     const [titleMode, setTitleMode] = useState<'uniform' | 'individual'>('uniform')
 
+    // Privacy level for TikTok publishing
+    const [privacyLevel, setPrivacyLevel] = useState<'PUBLIC_TO_EVERYONE' | 'MUTUAL_FOLLOW_FRIENDS' | 'FOLLOWER_OF_CREATOR' | 'SELF_ONLY'>('SELF_ONLY')
+
     // Expanded video for editing (shows cover options inline)
     const [expandedVideoId, setExpandedVideoId] = useState<string | null>(null)
 
@@ -666,8 +669,8 @@ export default function PublishPage() {
                     videos: selectedVideos,
                     account_ids: selectedAccounts,
                     caption,
-                    // Use sensible defaults for removed settings
-                    privacy_level: 'PUBLIC_TO_EVERYONE',
+                    // Privacy and interaction settings
+                    privacy_level: privacyLevel,
                     allow_comments: true,
                     allow_duet: true,
                     allow_stitch: true,
@@ -1352,6 +1355,41 @@ export default function PublishPage() {
                                     <span className="text-cyan-400 font-bold">#</span>
                                     添加话题
                                 </button>
+                            </div>
+
+                            {/* Privacy Level Selection */}
+                            <div className="mt-4">
+                                <label className="block text-sm font-medium text-gray-300 mb-2">
+                                    可见范围
+                                </label>
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                                    {[
+                                        { value: 'PUBLIC_TO_EVERYONE', label: '公开', icon: '🌍', desc: '所有人可见' },
+                                        { value: 'FOLLOWER_OF_CREATOR', label: '粉丝可见', icon: '👥', desc: '仅粉丝' },
+                                        { value: 'MUTUAL_FOLLOW_FRIENDS', label: '好友可见', icon: '🤝', desc: '互关好友' },
+                                        { value: 'SELF_ONLY', label: '仅自己', icon: '🔒', desc: '私密' },
+                                    ].map(({ value, label, icon, desc }) => (
+                                        <button
+                                            key={value}
+                                            type="button"
+                                            onClick={() => setPrivacyLevel(value as typeof privacyLevel)}
+                                            className={`flex flex-col items-center gap-1 px-3 py-3 rounded-xl text-center transition-all ${privacyLevel === value
+                                                    ? 'bg-cyan-500/20 border-cyan-500 text-cyan-400'
+                                                    : 'bg-white/5 border-white/10 text-gray-400 hover:bg-white/10'
+                                                } border`}
+                                        >
+                                            <span className="text-lg">{icon}</span>
+                                            <span className="text-sm font-medium">{label}</span>
+                                            <span className="text-[10px] text-gray-500">{desc}</span>
+                                        </button>
+                                    ))}
+                                </div>
+                                {privacyLevel === 'SELF_ONLY' && (
+                                    <p className="text-xs text-yellow-500/80 mt-2 flex items-center gap-1">
+                                        <span>⚠️</span>
+                                        沙盒测试期间建议使用"仅自己"可见，审核通过后可选择公开发布
+                                    </p>
+                                )}
                             </div>
                         </div>
                     </section>
