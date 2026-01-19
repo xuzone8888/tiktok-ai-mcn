@@ -380,8 +380,8 @@ export default function PublishPage() {
             ))
         }
 
-        // Upload files sequentially
-        for (const { file, id } of validFiles) {
+        // Upload single file helper
+        const uploadSingleFile = async ({ file, id }: { file: File; id: string }) => {
             updateFileStatus(id, { status: 'uploading', progress: 5 })
 
             try {
@@ -443,6 +443,13 @@ export default function PublishPage() {
                     error: error instanceof Error ? error.message : '上传失败'
                 })
             }
+        }
+
+        // Concurrent upload with batch limit (max 3 at a time)
+        const CONCURRENT_LIMIT = 3
+        for (let i = 0; i < validFiles.length; i += CONCURRENT_LIMIT) {
+            const batch = validFiles.slice(i, i + CONCURRENT_LIMIT)
+            await Promise.all(batch.map(uploadSingleFile))
         }
 
         // Clear upload status after delay
@@ -913,14 +920,14 @@ export default function PublishPage() {
                                                 <Clock className="w-3.5 h-3.5 text-gray-500 flex-shrink-0" />
                                             )}
                                             <span className={`truncate flex-1 ${file.status === 'done' ? 'text-green-400' :
-                                                    file.status === 'error' ? 'text-red-400' :
-                                                        file.status === 'uploading' ? 'text-white' : 'text-gray-500'
+                                                file.status === 'error' ? 'text-red-400' :
+                                                    file.status === 'uploading' ? 'text-white' : 'text-gray-500'
                                                 }`}>
                                                 {file.name}
                                             </span>
                                             <span className={`text-xs ${file.status === 'done' ? 'text-green-400' :
-                                                    file.status === 'error' ? 'text-red-400' :
-                                                        file.status === 'uploading' ? 'text-cyan-400' : 'text-gray-500'
+                                                file.status === 'error' ? 'text-red-400' :
+                                                    file.status === 'uploading' ? 'text-cyan-400' : 'text-gray-500'
                                                 }`}>
                                                 {file.status === 'done' ? '完成' :
                                                     file.status === 'error' ? '失败' :
