@@ -74,6 +74,7 @@ interface SelectedVideo {
     localUrl?: string        // Local blob URL for frame capture (avoids CORS issues)
     duration?: number
     cover?: string           // Custom cover image URL or data URL
+    coverTimestampMs?: number  // Cover frame timestamp in milliseconds
     title?: string           // Individual title for this video
     coverOptions?: string[]  // Auto-generated cover options at different time points
 }
@@ -514,9 +515,9 @@ export default function PublishPage() {
     }
 
     // Update a video's cover
-    const updateVideoCover = (videoId: string, coverDataUrl: string) => {
+    const updateVideoCover = (videoId: string, coverDataUrl: string, timestampMs?: number) => {
         setSelectedVideos(prev => prev.map(v =>
-            v.id === videoId ? { ...v, cover: coverDataUrl } : v
+            v.id === videoId ? { ...v, cover: coverDataUrl, coverTimestampMs: timestampMs } : v
         ))
     }
 
@@ -1053,7 +1054,9 @@ export default function PublishPage() {
                                                                                 if (ctx) {
                                                                                     ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height)
                                                                                     const frameData = canvas.toDataURL('image/jpeg', 0.9)
-                                                                                    updateVideoCover(video.id, frameData)
+                                                                                    // 保存封面数据和时间戳（毫秒）
+                                                                                    const timestampMs = Math.round(videoEl.currentTime * 1000)
+                                                                                    updateVideoCover(video.id, frameData, timestampMs)
                                                                                     setExpandedVideoId(null)
                                                                                 }
                                                                             } catch (error) {

@@ -60,6 +60,7 @@ export async function initVideoPublishFromUrl(
         brandContentToggle?: boolean;
         brandOrganicToggle?: boolean;
         isAigc?: boolean;
+        videoCoverTimestampMs?: number;  // 封面帧时间戳（毫秒）
     }
 ): Promise<string> {
     const requestBody: TikTokPublishVideoRequest = {
@@ -72,6 +73,7 @@ export async function initVideoPublishFromUrl(
             brand_content_toggle: postInfo.brandContentToggle ?? false,
             brand_organic_toggle: postInfo.brandOrganicToggle ?? false,
             is_aigc: postInfo.isAigc ?? false,
+            ...(postInfo.videoCoverTimestampMs !== undefined && { video_cover_timestamp_ms: postInfo.videoCoverTimestampMs }),
         },
         source_info: {
             source: 'PULL_FROM_URL',

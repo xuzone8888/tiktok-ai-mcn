@@ -12,6 +12,7 @@ interface CreateTaskRequest {
         type: 'asset' | 'upload' | 'url'
         name: string
         url?: string
+        coverTimestampMs?: number  // 封面帧时间戳（毫秒）
     }>
     account_ids: string[]
     caption: string
@@ -173,6 +174,7 @@ export async function POST(request: NextRequest) {
             title: string  // Database uses title, not caption
             status: string
             scheduled_at: string | null
+            cover_timestamp_ms?: number  // 封面帧时间戳
         }> = []
 
         let itemIndex = 0
@@ -196,7 +198,8 @@ export async function POST(request: NextRequest) {
                     video_source: video.type === 'asset' ? 'assets' : video.type,
                     title,  // Correct field name
                     status: body.publish_mode === 'scheduled' ? 'scheduled' : 'pending',
-                    scheduled_at: scheduledTime.toISOString()
+                    scheduled_at: scheduledTime.toISOString(),
+                    cover_timestamp_ms: video.coverTimestampMs,
                 })
 
                 itemIndex++
@@ -255,6 +258,7 @@ async function processPublishItems(
         title: string  // Fixed field name
         status: string
         scheduled_at: string | null
+        cover_timestamp_ms?: number  // 封面帧时间戳
     }>,
     accounts: Array<{ id: string; access_token: string }>,
     supabase: Awaited<ReturnType<typeof createClient>>
@@ -301,6 +305,7 @@ async function processPublishItems(
                     disableComment: false,
                     disableStitch: false,
                     isAigc: true,  // Mark as AI-generated content
+                    videoCoverTimestampMs: item.cover_timestamp_ms,  // 传递封面帧时间戳
                 }
             )
 
