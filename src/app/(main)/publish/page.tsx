@@ -2006,22 +2006,32 @@ export default function PublishPage() {
                                                         src={asset.thumbnailUrl}
                                                         alt={asset.prompt || '视频'}
                                                         className="absolute inset-0 w-full h-full object-cover"
+                                                        onError={(e) => {
+                                                            // If thumbnail fails, hide image to show video fallback
+                                                            e.currentTarget.style.display = 'none'
+                                                        }}
                                                     />
-                                                ) : asset.resultUrl ? (
-                                                    /* Show video preview if URL available but no thumbnail */
+                                                ) : null}
+                                                {/* Always show video for frame capture, hide if thumbnail loaded */}
+                                                {asset.resultUrl && (
                                                     <video
-                                                        src={asset.resultUrl}
-                                                        className="absolute inset-0 w-full h-full object-cover"
+                                                        src={`${asset.resultUrl}#t=0.1`}
+                                                        className={`absolute inset-0 w-full h-full object-cover ${asset.thumbnailUrl ? 'opacity-0' : ''}`}
                                                         muted
                                                         playsInline
-                                                        preload="metadata"
+                                                        preload="auto"
                                                         onMouseEnter={(e) => e.currentTarget.play()}
                                                         onMouseLeave={(e) => {
                                                             e.currentTarget.pause()
-                                                            e.currentTarget.currentTime = 0
+                                                            e.currentTarget.currentTime = 0.1
+                                                        }}
+                                                        onLoadedData={(e) => {
+                                                            // Show video once first frame is loaded
+                                                            e.currentTarget.classList.remove('opacity-0')
                                                         }}
                                                     />
-                                                ) : (
+                                                )}
+                                                {!asset.resultUrl && !asset.thumbnailUrl && (
                                                     <div className="absolute inset-0 bg-white/5 flex items-center justify-center">
                                                         <Play className="w-8 h-8 text-gray-500" />
                                                     </div>
