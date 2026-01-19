@@ -1062,7 +1062,7 @@ export default function PublishPage() {
                                                                             } catch (error) {
                                                                                 console.error('Failed to capture frame:', error)
                                                                                 // CORS error - suggest using upload instead
-                                                                                setUploadError('无法从该视频捕获帧（跨域限制），请使用"上传图片"按钮选择封面')
+                                                                                setUploadError('无法从该视频捕获帧，请重新上传视频')
                                                                             }
                                                                         }
                                                                     }}
@@ -1070,15 +1070,6 @@ export default function PublishPage() {
                                                                 >
                                                                     <Check className="w-4 h-4" />
                                                                     使用当前帧
-                                                                </button>
-                                                                <button
-                                                                    onClick={() => {
-                                                                        setCoverUploadVideoId(video.id)
-                                                                        coverInputRef.current?.click()
-                                                                    }}
-                                                                    className="px-4 py-2 border border-pink-500/30 text-pink-400 rounded-lg text-sm hover:bg-pink-500/10 transition-colors"
-                                                                >
-                                                                    上传图片
                                                                 </button>
                                                             </div>
                                                         </div>
@@ -1090,16 +1081,7 @@ export default function PublishPage() {
                                                 </div>
                                             ) : (
                                                 <div className="text-center py-8">
-                                                    <p className="text-sm text-gray-400">视频加载中或不可用</p>
-                                                    <button
-                                                        onClick={() => {
-                                                            setCoverUploadVideoId(video.id)
-                                                            coverInputRef.current?.click()
-                                                        }}
-                                                        className="mt-3 px-4 py-2 border border-pink-500/30 text-pink-400 rounded-lg text-sm hover:bg-pink-500/10 transition-colors"
-                                                    >
-                                                        上传自定义封面
-                                                    </button>
+                                                    <p className="text-sm text-gray-400">视频加载中或不可用，请重新上传视频</p>
                                                 </div>
                                             )}
                                         </div>
