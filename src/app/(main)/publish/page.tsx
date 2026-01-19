@@ -380,7 +380,7 @@ export default function PublishPage() {
             ))
         }
 
-        // Upload single file helper with retry logic
+        // Upload single file directly to OSS with retry logic
         const uploadSingleFile = async ({ file, id }: { file: File; id: string }) => {
             const MAX_RETRIES = 2
             let lastError: Error | null = null
@@ -392,21 +392,38 @@ export default function PublishPage() {
                     // Generate thumbnail while preparing upload (only on first attempt)
                     const thumbnailPromise = attempt === 1 ? generateVideoThumbnail(file) : Promise.resolve('')
 
-                    // Create FormData for upload
-                    const formData = new FormData()
-                    formData.append('file', file)
+                    // Step 1: Get presigned upload URL from server
+                    updateFileStatus(id, { progress: 5 })
+                    const credentialsRes = await fetch('/api/upload/oss-credentials', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            filename: file.name,
+                            contentType: file.type || 'video/mp4'
+                        })
+                    })
 
-                    // Use XMLHttpRequest for real upload progress
-                    const result = await new Promise<{ success: boolean; url: string }>((resolve, reject) => {
+                    if (!credentialsRes.ok) {
+                        const errData = await credentialsRes.json().catch(() => ({}))
+                        throw new Error(errData.error || '获取上传凭证失败')
+                    }
+
+                    const { success, data: credentials } = await credentialsRes.json()
+                    if (!success || !credentials?.uploadUrl) {
+                        throw new Error('获取上传凭证失败')
+                    }
+
+                    // Step 2: Upload directly to OSS using presigned URL
+                    const ossUrl = await new Promise<string>((resolve, reject) => {
                         const xhr = new XMLHttpRequest()
 
-                        // Track upload progress (0-90%) with throttle to reduce UI flicker
-                        let lastReportedProgress = 0
+                        // Track upload progress (10-95%) with throttle
+                        let lastReportedProgress = 10
                         xhr.upload.onprogress = (event) => {
                             if (event.lengthComputable) {
-                                const percent = Math.round((event.loaded / event.total) * 90)
-                                // Only update every 5% to reduce UI flickering
-                                if (percent >= lastReportedProgress + 5 || percent === 90) {
+                                // Map 0-100% to 10-95% (leave room for completion steps)
+                                const percent = Math.round(10 + (event.loaded / event.total) * 85)
+                                if (percent >= lastReportedProgress + 5 || percent >= 95) {
                                     lastReportedProgress = percent
                                     updateFileStatus(id, { progress: percent })
                                 }
@@ -414,36 +431,25 @@ export default function PublishPage() {
                         }
 
                         xhr.onload = () => {
+                            // OSS returns 200 on success for PUT
                             if (xhr.status >= 200 && xhr.status < 300) {
-                                try {
-                                    const data = JSON.parse(xhr.responseText)
-                                    resolve(data)
-                                } catch {
-                                    reject(new Error('解析响应失败'))
-                                }
+                                resolve(credentials.publicUrl)
                             } else {
-                                try {
-                                    const errorData = JSON.parse(xhr.responseText)
-                                    reject(new Error(errorData.error || '上传失败'))
-                                } catch {
-                                    reject(new Error(`上传失败 (${xhr.status})`))
-                                }
+                                reject(new Error(`OSS上传失败 (${xhr.status})`))
                             }
                         }
 
                         xhr.onerror = () => reject(new Error('网络错误'))
                         xhr.ontimeout = () => reject(new Error('上传超时'))
 
-                        xhr.open('POST', '/api/upload/video')
-                        xhr.timeout = 300000 // 5 minutes timeout
-                        xhr.send(formData)
+                        // PUT file directly to OSS
+                        xhr.open('PUT', credentials.uploadUrl)
+                        xhr.setRequestHeader('Content-Type', file.type || 'video/mp4')
+                        xhr.timeout = 600000 // 10 minutes for large files
+                        xhr.send(file)
                     })
 
-                    if (!result.success || !result.url) {
-                        throw new Error('上传失败：未获取到视频URL')
-                    }
-
-                    updateFileStatus(id, { progress: 95 })
+                    updateFileStatus(id, { progress: 98 })
 
                     // Wait for thumbnail
                     const thumbnail = await thumbnailPromise
@@ -455,7 +461,7 @@ export default function PublishPage() {
                         type: 'upload',
                         name: file.name,
                         thumbnail: thumbnail || '',
-                        url: result.url,
+                        url: ossUrl,
                         localUrl: localBlobUrl,
                         duration: 0
                     }
@@ -469,7 +475,6 @@ export default function PublishPage() {
                     console.error(`Video upload error (attempt ${attempt}/${MAX_RETRIES}):`, error)
 
                     if (attempt < MAX_RETRIES) {
-                        // Wait before retry (exponential backoff: 1s, 2s, etc.)
                         updateFileStatus(id, { progress: 0, error: `重试中 (${attempt}/${MAX_RETRIES})...` })
                         await new Promise(resolve => setTimeout(resolve, attempt * 1000))
                     }
@@ -484,13 +489,9 @@ export default function PublishPage() {
             })
         }
 
-        // Controlled concurrent upload (max 2 at a time)
-        // Too many concurrent uploads overwhelm the server-to-OSS connection
-        const CONCURRENT_LIMIT = 2
-        for (let i = 0; i < validFiles.length; i += CONCURRENT_LIMIT) {
-            const batch = validFiles.slice(i, i + CONCURRENT_LIMIT)
-            await Promise.all(batch.map(uploadSingleFile))
-        }
+        // ✅ True concurrent upload - all files at once!
+        // Browser uploads directly to OSS, no server bottleneck
+        await Promise.all(validFiles.map(uploadSingleFile))
 
         // Clear upload status after delay
         setTimeout(() => {
