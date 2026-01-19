@@ -247,6 +247,11 @@ export async function POST(request: NextRequest) {
     }
 }
 
+// Helper function for delay
+function sleep(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms))
+}
+
 // Background processing function
 async function processPublishItems(
     taskId: string,
@@ -269,6 +274,18 @@ async function processPublishItems(
 
     for (const item of items) {
         try {
+            // 等待直到计划发布时间
+            if (item.scheduled_at) {
+                const scheduledTime = new Date(item.scheduled_at).getTime()
+                const now = Date.now()
+                const waitMs = scheduledTime - now
+
+                if (waitMs > 0) {
+                    console.log(`等待 ${Math.round(waitMs / 1000)} 秒后发布下一个视频...`)
+                    await sleep(waitMs)
+                }
+            }
+
             const account = accountMap.get(item.account_id)
             if (!account) {
                 throw new Error('账号不存在')
