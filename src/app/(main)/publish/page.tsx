@@ -380,93 +380,108 @@ export default function PublishPage() {
             ))
         }
 
-        // Upload single file helper
+        // Upload single file helper with retry logic
         const uploadSingleFile = async ({ file, id }: { file: File; id: string }) => {
-            updateFileStatus(id, { status: 'uploading', progress: 0 })
+            const MAX_RETRIES = 2
+            let lastError: Error | null = null
 
-            try {
-                // Generate thumbnail while preparing upload
-                const thumbnailPromise = generateVideoThumbnail(file)
+            for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+                updateFileStatus(id, { status: 'uploading', progress: 0, error: undefined })
 
-                // Create FormData for upload
-                const formData = new FormData()
-                formData.append('file', file)
+                try {
+                    // Generate thumbnail while preparing upload (only on first attempt)
+                    const thumbnailPromise = attempt === 1 ? generateVideoThumbnail(file) : Promise.resolve('')
 
-                // Use XMLHttpRequest for real upload progress
-                const result = await new Promise<{ success: boolean; url: string }>((resolve, reject) => {
-                    const xhr = new XMLHttpRequest()
+                    // Create FormData for upload
+                    const formData = new FormData()
+                    formData.append('file', file)
 
-                    // Track upload progress (0-90%) with throttle to reduce UI flicker
-                    let lastReportedProgress = 0
-                    xhr.upload.onprogress = (event) => {
-                        if (event.lengthComputable) {
-                            const percent = Math.round((event.loaded / event.total) * 90)
-                            // Only update every 5% to reduce UI flickering
-                            if (percent >= lastReportedProgress + 5 || percent === 90) {
-                                lastReportedProgress = percent
-                                updateFileStatus(id, { progress: percent })
+                    // Use XMLHttpRequest for real upload progress
+                    const result = await new Promise<{ success: boolean; url: string }>((resolve, reject) => {
+                        const xhr = new XMLHttpRequest()
+
+                        // Track upload progress (0-90%) with throttle to reduce UI flicker
+                        let lastReportedProgress = 0
+                        xhr.upload.onprogress = (event) => {
+                            if (event.lengthComputable) {
+                                const percent = Math.round((event.loaded / event.total) * 90)
+                                // Only update every 5% to reduce UI flickering
+                                if (percent >= lastReportedProgress + 5 || percent === 90) {
+                                    lastReportedProgress = percent
+                                    updateFileStatus(id, { progress: percent })
+                                }
                             }
                         }
-                    }
 
-                    xhr.onload = () => {
-                        if (xhr.status >= 200 && xhr.status < 300) {
-                            try {
-                                const data = JSON.parse(xhr.responseText)
-                                resolve(data)
-                            } catch {
-                                reject(new Error('解析响应失败'))
-                            }
-                        } else {
-                            try {
-                                const errorData = JSON.parse(xhr.responseText)
-                                reject(new Error(errorData.error || '上传失败'))
-                            } catch {
-                                reject(new Error(`上传失败 (${xhr.status})`))
+                        xhr.onload = () => {
+                            if (xhr.status >= 200 && xhr.status < 300) {
+                                try {
+                                    const data = JSON.parse(xhr.responseText)
+                                    resolve(data)
+                                } catch {
+                                    reject(new Error('解析响应失败'))
+                                }
+                            } else {
+                                try {
+                                    const errorData = JSON.parse(xhr.responseText)
+                                    reject(new Error(errorData.error || '上传失败'))
+                                } catch {
+                                    reject(new Error(`上传失败 (${xhr.status})`))
+                                }
                             }
                         }
+
+                        xhr.onerror = () => reject(new Error('网络错误'))
+                        xhr.ontimeout = () => reject(new Error('上传超时'))
+
+                        xhr.open('POST', '/api/upload/video')
+                        xhr.timeout = 300000 // 5 minutes timeout
+                        xhr.send(formData)
+                    })
+
+                    if (!result.success || !result.url) {
+                        throw new Error('上传失败：未获取到视频URL')
                     }
 
-                    xhr.onerror = () => reject(new Error('网络错误'))
-                    xhr.ontimeout = () => reject(new Error('上传超时'))
+                    updateFileStatus(id, { progress: 95 })
 
-                    xhr.open('POST', '/api/upload/video')
-                    xhr.timeout = 300000 // 5 minutes timeout
-                    xhr.send(formData)
-                })
+                    // Wait for thumbnail
+                    const thumbnail = await thumbnailPromise
 
-                if (!result.success || !result.url) {
-                    throw new Error('上传失败：未获取到视频URL')
+                    // Create video entry with OSS URL and local blob URL for frame capture
+                    const localBlobUrl = URL.createObjectURL(file)
+                    const newVideo: SelectedVideo = {
+                        id,
+                        type: 'upload',
+                        name: file.name,
+                        thumbnail: thumbnail || '',
+                        url: result.url,
+                        localUrl: localBlobUrl,
+                        duration: 0
+                    }
+                    setSelectedVideos(prev => [...prev, newVideo])
+
+                    updateFileStatus(id, { status: 'done', progress: 100 })
+                    return // Success, exit retry loop
+
+                } catch (error) {
+                    lastError = error instanceof Error ? error : new Error('上传失败')
+                    console.error(`Video upload error (attempt ${attempt}/${MAX_RETRIES}):`, error)
+
+                    if (attempt < MAX_RETRIES) {
+                        // Wait before retry (exponential backoff: 1s, 2s, etc.)
+                        updateFileStatus(id, { progress: 0, error: `重试中 (${attempt}/${MAX_RETRIES})...` })
+                        await new Promise(resolve => setTimeout(resolve, attempt * 1000))
+                    }
                 }
-
-                updateFileStatus(id, { progress: 95 })
-
-                // Wait for thumbnail
-                const thumbnail = await thumbnailPromise
-
-                // Create video entry with OSS URL and local blob URL for frame capture
-                const localBlobUrl = URL.createObjectURL(file)
-                const newVideo: SelectedVideo = {
-                    id,
-                    type: 'upload',
-                    name: file.name,
-                    thumbnail: thumbnail || '',
-                    url: result.url,
-                    localUrl: localBlobUrl,
-                    duration: 0
-                }
-                setSelectedVideos(prev => [...prev, newVideo])
-
-                updateFileStatus(id, { status: 'done', progress: 100 })
-
-            } catch (error) {
-                console.error('Video upload error:', error)
-                updateFileStatus(id, {
-                    status: 'error',
-                    progress: 0,
-                    error: error instanceof Error ? error.message : '上传失败'
-                })
             }
+
+            // All retries failed
+            updateFileStatus(id, {
+                status: 'error',
+                progress: 0,
+                error: lastError?.message || '上传失败'
+            })
         }
 
         // True concurrent upload - all files at once (no batch limit)
