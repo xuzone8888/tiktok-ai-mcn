@@ -484,9 +484,13 @@ export default function PublishPage() {
             })
         }
 
-        // True concurrent upload - all files at once (no batch limit)
-        // Browsers handle their own connection limits (typically 6 per domain)
-        await Promise.all(validFiles.map(uploadSingleFile))
+        // Controlled concurrent upload (max 2 at a time)
+        // Too many concurrent uploads overwhelm the server-to-OSS connection
+        const CONCURRENT_LIMIT = 2
+        for (let i = 0; i < validFiles.length; i += CONCURRENT_LIMIT) {
+            const batch = validFiles.slice(i, i + CONCURRENT_LIMIT)
+            await Promise.all(batch.map(uploadSingleFile))
+        }
 
         // Clear upload status after delay
         setTimeout(() => {
