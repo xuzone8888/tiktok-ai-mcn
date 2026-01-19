@@ -19,10 +19,17 @@ const allowedDomains = [
   "supabase.co",
   "openpt.wuyinkeji.com",
   "wuyinkeji.com",
+  // ss3.life CDN (10-15秒视频)
   "ss3.life",
   "videos-jp.ss3.life",
   "videos-us.ss3.life",
   "videos-sg.ss3.life",
+  // ss2.life CDN (25秒 Pro 视频)
+  "ss2.life",
+  "videos-us3.ss2.life",
+  "videos-jp.ss2.life",
+  "videos-us.ss2.life",
+  "videos-sg.ss2.life",
 ];
 
 function isAllowedDomain(url: string): boolean {
@@ -56,7 +63,7 @@ export async function GET(request: NextRequest) {
       const response = await fetch(videoUrl, { method: "HEAD" });
       const contentLength = response.headers.get("content-length");
       const acceptRanges = response.headers.get("accept-ranges");
-      
+
       return NextResponse.json({
         size: contentLength ? parseInt(contentLength) : 0,
         supportsRange: acceptRanges === "bytes",
@@ -68,7 +75,7 @@ export async function GET(request: NextRequest) {
     if (mode === "chunk") {
       const start = searchParams.get("start");
       const end = searchParams.get("end");
-      
+
       if (!start || !end) {
         return NextResponse.json({ error: "缺少 start/end 参数" }, { status: 400 });
       }
@@ -97,7 +104,7 @@ export async function GET(request: NextRequest) {
 
     // 模式3: 普通流式下载（默认）
     console.log(`[Download Proxy] Streaming: ${filename}`);
-    
+
     const response = await fetch(videoUrl, {
       headers: {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
