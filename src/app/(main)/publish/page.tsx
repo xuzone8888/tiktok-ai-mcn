@@ -260,6 +260,27 @@ export default function PublishPage() {
 
     // Calculate total tasks
     const totalTasks = selectedVideos.length * selectedAccounts.length
+    // Check if video URL is still accessible (not expired)
+    const checkUrlAccessible = async (url: string): Promise<boolean> => {
+        try {
+            const controller = new AbortController()
+            const timeoutId = setTimeout(() => controller.abort(), 5000) // 5s timeout
+
+            const response = await fetch(url, {
+                method: 'HEAD',
+                signal: controller.signal,
+                mode: 'no-cors' // Avoid CORS issues, we just check if request succeeds
+            })
+            clearTimeout(timeoutId)
+
+            // no-cors mode returns opaque response, status is 0
+            // If we get here without error, URL is accessible
+            return true
+        } catch {
+            // Network error, timeout, or blocked = URL not accessible
+            return false
+        }
+    }
 
     // Fetch assets from delivery order (成品交付单)
     const fetchAssets = useCallback(async () => {
@@ -270,14 +291,38 @@ export default function PublishPage() {
                 const result = await response.json()
                 // API returns { success: true, data: { tasks: [...] } }
                 const tasks = result.data?.tasks || result.tasks || []
-                setAssets(tasks.filter((t: AssetItem) => t.type === 'video' && t.resultUrl) || [])
+                const videoTasks = tasks.filter((t: AssetItem) => t.type === 'video' && t.resultUrl)
+
+                // Check URL accessibility in parallel for better performance
+                const accessibilityChecks = await Promise.all(
+                    videoTasks.map(async (task: AssetItem) => {
+                        const isAccessible = await checkUrlAccessible(task.resultUrl!)
+                        return { task, isAccessible }
+                    })
+                )
+
+                // Filter out expired/inaccessible videos
+                const validVideos = accessibilityChecks
+                    .filter(({ isAccessible }) => isAccessible)
+                    .map(({ task }) => task)
+
+                const expiredCount = videoTasks.length - validVideos.length
+                if (expiredCount > 0) {
+                    console.log(`[Assets] Filtered out ${expiredCount} expired videos`)
+                    toast({
+                        title: '提示',
+                        description: `${expiredCount} 个视频已过期，已自动隐藏`,
+                    })
+                }
+
+                setAssets(validVideos)
             }
         } catch (error) {
             console.error('Failed to fetch assets:', error)
         } finally {
             setLoadingAssets(false)
         }
-    }, [])
+    }, [toast])
 
     // Open asset selector modal
     const openAssetSelector = () => {
