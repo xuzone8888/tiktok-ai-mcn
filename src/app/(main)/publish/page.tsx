@@ -1235,7 +1235,7 @@ export default function PublishPage() {
                                                             <video
                                                                 id={`cover-video-${video.id}`}
                                                                 src={video.localUrl || video.url}
-                                                                crossOrigin={video.localUrl ? undefined : "anonymous"}
+                                                                crossOrigin="anonymous"
                                                                 className="w-full h-full object-cover"
                                                                 muted
                                                                 playsInline
@@ -2115,12 +2115,20 @@ export default function PublishPage() {
                                                     </div>
                                                 )}
                                                 {/* Selection checkbox indicator */}
-                                                {!isAlreadyAdded && (
+                                                {!isAlreadyAdded && !transferringAssets.has(asset.id) && (
                                                     <div className={`absolute top-2 right-2 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors ${isSelectedInModal
                                                         ? 'bg-cyan-500 border-cyan-500'
                                                         : 'border-white/50 bg-black/30'
                                                         }`}>
                                                         {isSelectedInModal && <Check className="w-3 h-3 text-white" />}
+                                                    </div>
+                                                )}
+                                                {/* Transfer progress overlay */}
+                                                {transferringAssets.has(asset.id) && (
+                                                    <div className="absolute inset-0 z-30 bg-black/80 flex flex-col items-center justify-center">
+                                                        <Loader2 className="w-8 h-8 animate-spin text-cyan-400 mb-2" />
+                                                        <span className="text-xs text-cyan-400 font-medium">转存中...</span>
+                                                        <span className="text-[10px] text-gray-400 mt-1">请稍候</span>
                                                     </div>
                                                 )}
                                             </button>
