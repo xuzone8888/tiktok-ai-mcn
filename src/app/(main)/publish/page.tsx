@@ -91,6 +91,14 @@ interface PublishTask {
     scheduled_at: string | null
 }
 
+interface FileUploadStatus {
+    id: string
+    name: string
+    progress: number  // 0-100
+    status: 'pending' | 'uploading' | 'done' | 'error'
+    error?: string
+}
+
 type TabType = 'create' | 'history' | 'scheduled'
 type VideoSourceType = 'upload' | 'asset'  // Only support local upload and asset library
 
@@ -140,8 +148,8 @@ export default function PublishPage() {
     const [loadingAssets, setLoadingAssets] = useState(false)
     const [selectedAssetIds, setSelectedAssetIds] = useState<string[]>([])  // Multi-select in asset library
 
-    // Upload state
-    const [uploadProgress, setUploadProgress] = useState<number | null>(null)
+    // Upload state - tracks each file's upload progress
+    const [uploadingFiles, setUploadingFiles] = useState<FileUploadStatus[]>([])
     const [uploadError, setUploadError] = useState<string | null>(null)
 
     // Delete task state
@@ -334,25 +342,49 @@ export default function PublishPage() {
         if (!files || files.length === 0) return
 
         setUploadError(null)
+        const fileList = Array.from(files)
 
-        for (const file of Array.from(files)) {
-            // Validate file extension
+        // Validate all files first
+        const validFiles: { file: File; id: string }[] = []
+        for (const file of fileList) {
             const ext = '.' + file.name.split('.').pop()?.toLowerCase()
             if (!TIKTOK_VIDEO_FORMATS.includes(ext)) {
                 setUploadError(`不支持的格式: ${ext}。TikTok支持: ${TIKTOK_VIDEO_FORMATS.join(', ')}`)
                 continue
             }
-
-            // Validate file size
             if (file.size > TIKTOK_MAX_FILE_SIZE) {
                 setUploadError(`文件过大: ${(file.size / (1024 * 1024 * 1024)).toFixed(2)}GB。最大: 4GB`)
                 continue
             }
+            validFiles.push({
+                file,
+                id: `upload-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+            })
+        }
+
+        if (validFiles.length === 0) return
+
+        // Initialize all files as pending
+        const initialStatus: FileUploadStatus[] = validFiles.map(({ file, id }) => ({
+            id,
+            name: file.name,
+            progress: 0,
+            status: 'pending' as const
+        }))
+        setUploadingFiles(initialStatus)
+
+        // Helper to update a single file's status
+        const updateFileStatus = (fileId: string, updates: Partial<FileUploadStatus>) => {
+            setUploadingFiles(prev => prev.map(f =>
+                f.id === fileId ? { ...f, ...updates } : f
+            ))
+        }
+
+        // Upload files sequentially
+        for (const { file, id } of validFiles) {
+            updateFileStatus(id, { status: 'uploading', progress: 5 })
 
             try {
-                // Show initial progress
-                setUploadProgress(5)
-
                 // Generate thumbnail while preparing upload
                 const thumbnailPromise = generateVideoThumbnail(file)
 
@@ -360,7 +392,7 @@ export default function PublishPage() {
                 const formData = new FormData()
                 formData.append('file', file)
 
-                setUploadProgress(10)
+                updateFileStatus(id, { progress: 10 })
 
                 // Upload to OSS
                 const response = await fetch('/api/upload/video', {
@@ -368,7 +400,7 @@ export default function PublishPage() {
                     body: formData,
                 })
 
-                setUploadProgress(70)
+                updateFileStatus(id, { progress: 70 })
 
                 if (!response.ok) {
                     const errorData = await response.json()
@@ -381,40 +413,42 @@ export default function PublishPage() {
                     throw new Error('上传失败：未获取到视频URL')
                 }
 
-                setUploadProgress(85)
+                updateFileStatus(id, { progress: 85 })
 
                 // Wait for thumbnail
                 const thumbnail = await thumbnailPromise
 
-                setUploadProgress(95)
+                updateFileStatus(id, { progress: 95 })
 
                 // Create video entry with OSS URL and local blob URL for frame capture
                 const localBlobUrl = URL.createObjectURL(file)
                 const newVideo: SelectedVideo = {
-                    id: `upload-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                    id,
                     type: 'upload',
                     name: file.name,
                     thumbnail: thumbnail || '',
-                    url: result.url,  // Use OSS public URL for publishing
-                    localUrl: localBlobUrl,  // Use blob URL for frame capture (no CORS issues)
+                    url: result.url,
+                    localUrl: localBlobUrl,
                     duration: 0
                 }
                 setSelectedVideos(prev => [...prev, newVideo])
 
-                // Complete progress
-                setUploadProgress(100)
-
-                // Clear progress after short delay
-                setTimeout(() => {
-                    setUploadProgress(null)
-                }, 500)
+                updateFileStatus(id, { status: 'done', progress: 100 })
 
             } catch (error) {
                 console.error('Video upload error:', error)
-                setUploadError(error instanceof Error ? error.message : '视频上传失败')
-                setUploadProgress(null)
+                updateFileStatus(id, {
+                    status: 'error',
+                    progress: 0,
+                    error: error instanceof Error ? error.message : '上传失败'
+                })
             }
         }
+
+        // Clear upload status after delay
+        setTimeout(() => {
+            setUploadingFiles([])
+        }, 2000)
 
         // Reset input
         if (fileInputRef.current) {
@@ -843,19 +877,57 @@ export default function PublishPage() {
 
 
 
-                        {/* Upload Progress Bar */}
-                        {uploadProgress !== null && (
+                        {/* Upload Progress List */}
+                        {uploadingFiles.length > 0 && (
                             <div className="mb-4 p-4 rounded-xl bg-white/5 border border-cyan-500/30">
-                                <div className="flex items-center gap-3 mb-2">
+                                <div className="flex items-center gap-2 mb-3">
                                     <Loader2 className="w-4 h-4 animate-spin text-cyan-400" />
-                                    <span className="text-sm text-cyan-400">正在处理视频...</span>
-                                    <span className="ml-auto text-sm font-medium text-cyan-400">{uploadProgress}%</span>
+                                    <span className="text-sm text-cyan-400">
+                                        正在上传 {uploadingFiles.length} 个视频
+                                        ({uploadingFiles.filter(f => f.status === 'done').length}/{uploadingFiles.length} 完成)
+                                    </span>
+                                    <span className="ml-auto text-sm font-medium text-cyan-400">
+                                        {Math.round(uploadingFiles.reduce((sum, f) => sum + f.progress, 0) / uploadingFiles.length)}%
+                                    </span>
                                 </div>
-                                <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
+
+                                {/* Total progress bar */}
+                                <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden mb-3">
                                     <div
-                                        className="h-full bg-gradient-to-r from-cyan-500 to-pink-500 transition-all duration-300 ease-out"
-                                        style={{ width: `${uploadProgress}%` }}
+                                        className="h-full bg-gradient-to-r from-cyan-500 to-pink-500 transition-all duration-300"
+                                        style={{ width: `${uploadingFiles.reduce((sum, f) => sum + f.progress, 0) / uploadingFiles.length}%` }}
                                     />
+                                </div>
+
+                                {/* Individual file status list */}
+                                <div className="space-y-1.5 max-h-40 overflow-y-auto">
+                                    {uploadingFiles.map(file => (
+                                        <div key={file.id} className="flex items-center gap-2 text-xs">
+                                            {file.status === 'done' ? (
+                                                <CheckCircle2 className="w-3.5 h-3.5 text-green-400 flex-shrink-0" />
+                                            ) : file.status === 'error' ? (
+                                                <XCircle className="w-3.5 h-3.5 text-red-400 flex-shrink-0" />
+                                            ) : file.status === 'uploading' ? (
+                                                <Loader2 className="w-3.5 h-3.5 text-cyan-400 animate-spin flex-shrink-0" />
+                                            ) : (
+                                                <Clock className="w-3.5 h-3.5 text-gray-500 flex-shrink-0" />
+                                            )}
+                                            <span className={`truncate flex-1 ${file.status === 'done' ? 'text-green-400' :
+                                                    file.status === 'error' ? 'text-red-400' :
+                                                        file.status === 'uploading' ? 'text-white' : 'text-gray-500'
+                                                }`}>
+                                                {file.name}
+                                            </span>
+                                            <span className={`text-xs ${file.status === 'done' ? 'text-green-400' :
+                                                    file.status === 'error' ? 'text-red-400' :
+                                                        file.status === 'uploading' ? 'text-cyan-400' : 'text-gray-500'
+                                                }`}>
+                                                {file.status === 'done' ? '完成' :
+                                                    file.status === 'error' ? '失败' :
+                                                        file.status === 'uploading' ? `${file.progress}%` : '等待中'}
+                                            </span>
+                                        </div>
+                                    ))}
                                 </div>
                             </div>
                         )}
