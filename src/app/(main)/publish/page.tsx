@@ -260,25 +260,32 @@ export default function PublishPage() {
 
     // Calculate total tasks
     const totalTasks = selectedVideos.length * selectedAccounts.length
-    // Check if video URL is still accessible (not expired)
+
+    // Check if video URL is still accessible (using server-side API for accurate detection)
     const checkUrlAccessible = async (url: string): Promise<boolean> => {
         try {
-            const controller = new AbortController()
-            const timeoutId = setTimeout(() => controller.abort(), 5000) // 5s timeout
-
-            const response = await fetch(url, {
-                method: 'HEAD',
-                signal: controller.signal,
-                mode: 'no-cors' // Avoid CORS issues, we just check if request succeeds
+            const response = await fetch('/api/upload/check-url', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url })
             })
-            clearTimeout(timeoutId)
-
-            // no-cors mode returns opaque response, status is 0
-            // If we get here without error, URL is accessible
-            return true
+            const result = await response.json()
+            return result.accessible === true
         } catch {
-            // Network error, timeout, or blocked = URL not accessible
+            // API error, assume URL is not accessible
             return false
+        }
+    }
+
+    // Delete expired video from database
+    const deleteExpiredTask = async (taskId: string) => {
+        try {
+            await fetch(`/api/user/tasks/${taskId}`, {
+                method: 'DELETE',
+            })
+            console.log(`[Assets] Deleted expired task: ${taskId}`)
+        } catch (error) {
+            console.error(`[Assets] Failed to delete task ${taskId}:`, error)
         }
     }
 
@@ -301,18 +308,34 @@ export default function PublishPage() {
                     })
                 )
 
-                // Filter out expired/inaccessible videos
-                const validVideos = accessibilityChecks
-                    .filter(({ isAccessible }) => isAccessible)
-                    .map(({ task }) => task)
+                // Separate valid and expired videos
+                const validVideos: AssetItem[] = []
+                const expiredVideos: AssetItem[] = []
 
-                const expiredCount = videoTasks.length - validVideos.length
-                if (expiredCount > 0) {
-                    console.log(`[Assets] Filtered out ${expiredCount} expired videos`)
+                accessibilityChecks.forEach(({ task, isAccessible }) => {
+                    if (isAccessible) {
+                        validVideos.push(task)
+                    } else {
+                        expiredVideos.push(task)
+                    }
+                })
+
+                // Delete expired videos from database (async, don't wait)
+                if (expiredVideos.length > 0) {
+                    console.log(`[Assets] Deleting ${expiredVideos.length} expired videos`)
                     toast({
-                        title: '提示',
-                        description: `${expiredCount} 个视频已过期，已自动隐藏`,
+                        title: '清理过期视频',
+                        description: `正在删除 ${expiredVideos.length} 个已过期的视频...`,
                     })
+
+                    // Delete in background
+                    Promise.all(expiredVideos.map(v => deleteExpiredTask(v.id)))
+                        .then(() => {
+                            toast({
+                                title: '清理完成',
+                                description: `已删除 ${expiredVideos.length} 个过期视频`,
+                            })
+                        })
                 }
 
                 setAssets(validVideos)

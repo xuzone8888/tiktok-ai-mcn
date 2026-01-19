@@ -87,9 +87,24 @@ export async function POST(request: NextRequest) {
         })
 
         if (!downloadResponse.ok) {
-            console.error('[Transfer OSS] Download failed:', downloadResponse.status)
+            console.error('[Transfer OSS] Download failed:', downloadResponse.status, sourceUrl)
+
+            // Provide specific error messages based on status code
+            let errorMessage = '下载视频失败'
+            if (downloadResponse.status === 403) {
+                errorMessage = '视频已过期或无访问权限 (403)'
+            } else if (downloadResponse.status === 404) {
+                errorMessage = '视频不存在 (404)'
+            } else if (downloadResponse.status === 410) {
+                errorMessage = '视频已被删除 (410)'
+            } else if (downloadResponse.status >= 500) {
+                errorMessage = '源服务器错误，请稍后重试'
+            } else {
+                errorMessage = `下载失败 (HTTP ${downloadResponse.status})`
+            }
+
             return NextResponse.json(
-                { success: false, error: `下载视频失败 (${downloadResponse.status})` },
+                { success: false, error: errorMessage, expired: downloadResponse.status === 403 || downloadResponse.status === 404 || downloadResponse.status === 410 },
                 { status: 502 }
             )
         }
