@@ -31,6 +31,7 @@ import {
 } from 'lucide-react'
 import { format, addMinutes } from 'date-fns'
 import { zhCN } from 'date-fns/locale'
+import { useToast } from '@/hooks/use-toast'
 
 // TikTok supported video formats
 const TIKTOK_VIDEO_FORMATS = ['.mp4', '.webm', '.mov']
@@ -104,6 +105,7 @@ type VideoSourceType = 'upload' | 'asset'  // Only support local upload and asse
 
 export default function PublishPage() {
     const router = useRouter()
+    const { toast } = useToast()
     const fileInputRef = useRef<HTMLInputElement>(null)
 
     // Tab state
@@ -283,19 +285,63 @@ export default function PublishPage() {
         fetchAssets()
     }
 
-    // Add video from asset library
-    const addVideoFromAsset = (asset: AssetItem) => {
-        if (selectedVideos.some(v => v.id === asset.id)) return // Already selected
+    // Add video from asset library - transfer to OSS first for permanent storage
+    const [transferringAssets, setTransferringAssets] = useState<Set<string>>(new Set())
 
-        const newVideo: SelectedVideo = {
-            id: asset.id,
-            type: 'asset',
-            name: asset.prompt?.slice(0, 30) || `视频 ${format(new Date(asset.createdAt), 'MM/dd HH:mm')}`,
-            thumbnail: asset.thumbnailUrl || '',  // Empty string to trigger video fallback
-            url: asset.resultUrl || undefined,
-            duration: 30
+    const addVideoFromAsset = async (asset: AssetItem) => {
+        if (selectedVideos.some(v => v.id === asset.id)) return // Already selected
+        if (transferringAssets.has(asset.id)) return // Already transferring
+
+        // Mark as transferring
+        setTransferringAssets(prev => new Set(prev).add(asset.id))
+
+        try {
+            // Transfer video from third-party URL to our OSS
+            const response = await fetch('/api/upload/transfer-to-oss', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    sourceUrl: asset.resultUrl,
+                    filename: asset.prompt?.slice(0, 30) || 'video'
+                })
+            })
+
+            const result = await response.json()
+
+            if (!result.success || !result.data?.url) {
+                throw new Error(result.error || '视频转存失败')
+            }
+
+            // Create video entry with OSS URL (permanent)
+            const newVideo: SelectedVideo = {
+                id: asset.id,
+                type: 'asset',
+                name: asset.prompt?.slice(0, 30) || `视频 ${format(new Date(asset.createdAt), 'MM/dd HH:mm')}`,
+                thumbnail: asset.thumbnailUrl || '',
+                url: result.data.url,  // Use permanent OSS URL instead of temporary URL
+                localUrl: result.data.url, // Also set localUrl for cover frame capture
+                duration: 30
+            }
+            setSelectedVideos(prev => [...prev, newVideo])
+
+            toast({
+                title: '✅ 视频已转存',
+                description: `${newVideo.name} 已添加到发布列表`,
+            })
+        } catch (error) {
+            console.error('Transfer asset failed:', error)
+            toast({
+                variant: 'destructive',
+                title: '转存失败',
+                description: error instanceof Error ? error.message : '请重试',
+            })
+        } finally {
+            setTransferringAssets(prev => {
+                const next = new Set(prev)
+                next.delete(asset.id)
+                return next
+            })
         }
-        setSelectedVideos(prev => [...prev, newVideo])
     }
 
     // Generate video thumbnail from first frame
