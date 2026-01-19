@@ -116,4 +116,4 @@ export async function POST(request: NextRequest) {
 
 // Next.js 14 route segment config for large file uploads
 export const runtime = 'nodejs'
-export const maxDuration = 60 // 60 seconds timeout for video upload
+export const maxDuration = 300 // 5 minutes timeout for large video uploads

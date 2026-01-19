@@ -396,11 +396,16 @@ export default function PublishPage() {
                 const result = await new Promise<{ success: boolean; url: string }>((resolve, reject) => {
                     const xhr = new XMLHttpRequest()
 
-                    // Track upload progress (0-90%)
+                    // Track upload progress (0-90%) with throttle to reduce UI flicker
+                    let lastReportedProgress = 0
                     xhr.upload.onprogress = (event) => {
                         if (event.lengthComputable) {
                             const percent = Math.round((event.loaded / event.total) * 90)
-                            updateFileStatus(id, { progress: percent })
+                            // Only update every 5% to reduce UI flickering
+                            if (percent >= lastReportedProgress + 5 || percent === 90) {
+                                lastReportedProgress = percent
+                                updateFileStatus(id, { progress: percent })
+                            }
                         }
                     }
 
@@ -464,12 +469,9 @@ export default function PublishPage() {
             }
         }
 
-        // Concurrent upload with batch limit (max 3 at a time)
-        const CONCURRENT_LIMIT = 3
-        for (let i = 0; i < validFiles.length; i += CONCURRENT_LIMIT) {
-            const batch = validFiles.slice(i, i + CONCURRENT_LIMIT)
-            await Promise.all(batch.map(uploadSingleFile))
-        }
+        // True concurrent upload - all files at once (no batch limit)
+        // Browsers handle their own connection limits (typically 6 per domain)
+        await Promise.all(validFiles.map(uploadSingleFile))
 
         // Clear upload status after delay
         setTimeout(() => {
