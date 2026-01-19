@@ -382,7 +382,7 @@ export default function PublishPage() {
 
         // Upload single file helper
         const uploadSingleFile = async ({ file, id }: { file: File; id: string }) => {
-            updateFileStatus(id, { status: 'uploading', progress: 5 })
+            updateFileStatus(id, { status: 'uploading', progress: 0 })
 
             try {
                 // Generate thumbnail while preparing upload
@@ -392,33 +392,52 @@ export default function PublishPage() {
                 const formData = new FormData()
                 formData.append('file', file)
 
-                updateFileStatus(id, { progress: 10 })
+                // Use XMLHttpRequest for real upload progress
+                const result = await new Promise<{ success: boolean; url: string }>((resolve, reject) => {
+                    const xhr = new XMLHttpRequest()
 
-                // Upload to OSS
-                const response = await fetch('/api/upload/video', {
-                    method: 'POST',
-                    body: formData,
+                    // Track upload progress (0-90%)
+                    xhr.upload.onprogress = (event) => {
+                        if (event.lengthComputable) {
+                            const percent = Math.round((event.loaded / event.total) * 90)
+                            updateFileStatus(id, { progress: percent })
+                        }
+                    }
+
+                    xhr.onload = () => {
+                        if (xhr.status >= 200 && xhr.status < 300) {
+                            try {
+                                const data = JSON.parse(xhr.responseText)
+                                resolve(data)
+                            } catch {
+                                reject(new Error('解析响应失败'))
+                            }
+                        } else {
+                            try {
+                                const errorData = JSON.parse(xhr.responseText)
+                                reject(new Error(errorData.error || '上传失败'))
+                            } catch {
+                                reject(new Error(`上传失败 (${xhr.status})`))
+                            }
+                        }
+                    }
+
+                    xhr.onerror = () => reject(new Error('网络错误'))
+                    xhr.ontimeout = () => reject(new Error('上传超时'))
+
+                    xhr.open('POST', '/api/upload/video')
+                    xhr.timeout = 300000 // 5 minutes timeout
+                    xhr.send(formData)
                 })
-
-                updateFileStatus(id, { progress: 70 })
-
-                if (!response.ok) {
-                    const errorData = await response.json()
-                    throw new Error(errorData.error || '上传失败')
-                }
-
-                const result = await response.json()
 
                 if (!result.success || !result.url) {
                     throw new Error('上传失败：未获取到视频URL')
                 }
 
-                updateFileStatus(id, { progress: 85 })
+                updateFileStatus(id, { progress: 95 })
 
                 // Wait for thumbnail
                 const thumbnail = await thumbnailPromise
-
-                updateFileStatus(id, { progress: 95 })
 
                 // Create video entry with OSS URL and local blob URL for frame capture
                 const localBlobUrl = URL.createObjectURL(file)

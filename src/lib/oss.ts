@@ -23,6 +23,7 @@ const ossConfig = {
     bucket: process.env.ALIYUN_OSS_BUCKET || 'tokfactory-videos',
     endpoint: process.env.ALIYUN_OSS_ENDPOINT || 'https://oss-cn-beijing.aliyuncs.com',
     secure: true, // Use HTTPS
+    timeout: 300000, // 5 minutes timeout for large file uploads
 }
 
 // Custom domain for public URLs
