@@ -63,7 +63,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     }
 }
 
-// DELETE - Cancel and delete a task
+// DELETE - Delete a task group (local only, TikTok videos must be deleted manually)
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
     try {
         const { id } = await params
@@ -93,7 +93,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
             }, { status: 400 })
         }
 
-        // Delete task items first (cascade should handle this, but being explicit)
+        // Delete task items first
         await supabase
             .from('publish_task_items')
             .delete()

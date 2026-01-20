@@ -41,8 +41,35 @@ export async function GET(request: NextRequest) {
         // Get query params for filtering
         const searchParams = request.nextUrl.searchParams
         const status = searchParams.get('status')
+        const dateRange = searchParams.get('dateRange') || 'today' // 默认只显示今天
         const limit = parseInt(searchParams.get('limit') || '50')
         const offset = parseInt(searchParams.get('offset') || '0')
+
+        // Calculate date range
+        const now = new Date()
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+        let startDate: Date
+        let endDate: Date | null = null
+
+        switch (dateRange) {
+            case 'yesterday':
+                startDate = new Date(today)
+                startDate.setDate(startDate.getDate() - 1)
+                endDate = new Date(today)
+                break
+            case '3days':
+                startDate = new Date(today)
+                startDate.setDate(startDate.getDate() - 2) // 今天 + 前2天 = 3天
+                break
+            case '7days':
+                startDate = new Date(today)
+                startDate.setDate(startDate.getDate() - 6) // 今天 + 前6天 = 7天
+                break
+            case 'today':
+            default:
+                startDate = today
+                break
+        }
 
         let query = supabase
             .from('publish_tasks')
@@ -51,8 +78,14 @@ export async function GET(request: NextRequest) {
         items:publish_task_items(*)
       `)
             .eq('user_id', user.id)
+            .gte('created_at', startDate.toISOString())
             .order('created_at', { ascending: false })
             .range(offset, offset + limit - 1)
+
+        // Add end date filter for 'yesterday'
+        if (endDate) {
+            query = query.lt('created_at', endDate.toISOString())
+        }
 
         if (status) {
             query = query.eq('status', status)

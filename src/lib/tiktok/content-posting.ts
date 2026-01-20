@@ -204,3 +204,39 @@ export function isValidVideoUrl(url: string): boolean {
         return false;
     }
 }
+// Delete video (Note: TikTok API access required)
+export async function deleteVideo(
+    accessToken: string,
+    tiktokShareId: string
+): Promise<boolean> {
+    // Note: As of current TikTok API version, programmatic deletion might be restricted
+    // We attempt to call the delete endpoint if available, or throw not supported
+
+    // 假设的 Endpoint，实际可能需要根据官方文档调整
+    const TIKTOK_VIDEO_DELETE = 'https://open.tiktokapis.com/v2/video/delete/';
+
+    try {
+        const response = await fetch(TIKTOK_VIDEO_DELETE, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${accessToken}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                share_id: tiktokShareId
+            }),
+        });
+
+        if (!response.ok) {
+            // Log warning but don't crash flow - API might not exist
+            console.warn('TikTok delete API failed or not supported:', await response.text());
+            return false;
+        }
+
+        const data = await response.json();
+        return data.data?.error_code === 0;
+    } catch (error) {
+        console.warn('Failed to delete TikTok video:', error);
+        return false;
+    }
+}

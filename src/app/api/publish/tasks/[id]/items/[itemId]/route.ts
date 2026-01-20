@@ -49,7 +49,8 @@ export async function DELETE(
         }
 
         // 检查状态
-        const status = item.status
+        const itemData = item as any
+        const status = itemData.status
         const isPublished = status === 'published'
         const isProcessing = ['processing', 'uploading'].includes(status)
 
@@ -70,10 +71,26 @@ export async function DELETE(
             }
         }
 
-        // TODO: 如果需要删除 TikTok 视频，调用 TikTok API
-        // if (deleteTikTokVideo && item.tiktok_share_id) {
-        //     await deleteTikTokVideo(accessToken, item.tiktok_share_id)
-        // }
+        let tiktokDeleteResult = null
+
+        // 如果需要删除 TikTok 视频，调用 TikTok API
+        if (deleteTikTokVideo && itemData.tiktok_share_id) {
+            // 获取账号 access_token
+            const { data: account } = await supabase
+                .from('tiktok_accounts')
+                .select('access_token')
+                .eq('id', itemData.account_id)
+                .single()
+
+            const accountData = account as any
+            if (accountData?.access_token) {
+                const { deleteVideo } = await import('@/lib/tiktok/content-posting')
+                const success = await deleteVideo(accountData.access_token, itemData.tiktok_share_id)
+                tiktokDeleteResult = success ? 'success' : 'failed'
+            } else {
+                tiktokDeleteResult = 'no_token'
+            }
+        }
 
         // 删除任务项
         const { error: deleteError } = await supabase
@@ -91,7 +108,8 @@ export async function DELETE(
 
         return NextResponse.json({
             success: true,
-            deletedTikTokVideo: deleteTikTokVideo
+            deletedTikTokVideo: deleteTikTokVideo,
+            tiktokDeleteStatus: tiktokDeleteResult
         })
 
     } catch (error) {
@@ -114,9 +132,10 @@ async function updateTaskStatistics(
 
     if (!items) return
 
-    const publishedCount = items.filter(i => i.status === 'published').length
-    const pendingCount = items.filter(i => ['pending', 'scheduled'].includes(i.status)).length
-    const failedCount = items.filter(i => i.status === 'failed').length
+    const itemsList = items as any[]
+    const publishedCount = itemsList.filter(i => i.status === 'published').length
+    const pendingCount = itemsList.filter(i => ['pending', 'scheduled'].includes(i.status)).length
+    const failedCount = itemsList.filter(i => i.status === 'failed').length
 
     await supabase
         .from('publish_tasks')
@@ -124,7 +143,7 @@ async function updateTaskStatistics(
             published_count: publishedCount,
             pending_count: pendingCount,
             failed_count: failedCount,
-            total_items: items.length
-        })
+            total_items: itemsList.length
+        } as any)
         .eq('id', taskId)
 }

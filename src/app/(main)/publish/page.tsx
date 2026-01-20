@@ -27,12 +27,13 @@ import {
     History,
     ImageIcon,
     Sliders,
-    Sparkles
+    Sparkles,
+    ListFilter
 } from 'lucide-react'
 import { format, addMinutes } from 'date-fns'
 import { zhCN } from 'date-fns/locale'
 import { useToast } from '@/hooks/use-toast'
-import { TaskHistory, ScheduledQueue } from '@/components/publish'
+import { TaskManager } from '@/components/publish/TaskManager'
 
 // TikTok supported video formats
 const TIKTOK_VIDEO_FORMATS = ['.mp4', '.webm', '.mov']
@@ -101,7 +102,7 @@ interface FileUploadStatus {
     error?: string
 }
 
-type TabType = 'create' | 'history' | 'scheduled'
+type TabType = 'create' | 'tasks'
 type VideoSourceType = 'upload' | 'asset'  // Only support local upload and asset library
 
 export default function PublishPage() {
@@ -137,10 +138,6 @@ export default function PublishPage() {
     const [creatingStep, setCreatingStep] = useState<'verifying' | 'creating' | 'done' | 'error'>('verifying')
     const [createdTaskId, setCreatedTaskId] = useState<string | null>(null)
 
-    // History and scheduled tasks
-    const [tasks, setTasks] = useState<PublishTask[]>([])
-    const [loadingTasks, setLoadingTasks] = useState(false)
-
     // Publishing state
     const [isPublishing, setIsPublishing] = useState(false)
     const [publishError, setPublishError] = useState<string | null>(null)
@@ -169,10 +166,6 @@ export default function PublishPage() {
     // Upload state - tracks each file's upload progress
     const [uploadingFiles, setUploadingFiles] = useState<FileUploadStatus[]>([])
     const [uploadError, setUploadError] = useState<string | null>(null)
-
-    // Delete task state
-    const [deleteTaskId, setDeleteTaskId] = useState<string | null>(null)
-    const [deletingTask, setDeletingTask] = useState(false)
 
     // Title mode: 'uniform' = same title for all, 'individual' = different titles per video
     const [titleMode, setTitleMode] = useState<'uniform' | 'individual'>('uniform')
@@ -229,32 +222,11 @@ export default function PublishPage() {
         }
     }, [])
 
-    // Fetch tasks for history/scheduled tabs
-    const fetchTasks = useCallback(async () => {
-        setLoadingTasks(true)
-        try {
-            const response = await fetch('/api/publish/tasks')
-            if (response.ok) {
-                const data = await response.json()
-                setTasks(data.tasks || [])
-            }
-        } catch (error) {
-            console.error('Failed to fetch tasks:', error)
-        } finally {
-            setLoadingTasks(false)
-        }
-    }, [])
+
 
     useEffect(() => {
         fetchAccounts()
     }, [fetchAccounts])
-
-    // Fetch tasks when switching to history or scheduled tab
-    useEffect(() => {
-        if (activeTab === 'history' || activeTab === 'scheduled') {
-            fetchTasks()
-        }
-    }, [activeTab, fetchTasks])
 
     // Check if account is authorized
     const isAccountAuthorized = (account: TikTokAccount) => {
@@ -727,27 +699,7 @@ export default function PublishPage() {
     }
 
 
-    // Delete task
-    const deleteTask = async (taskId: string) => {
-        setDeletingTask(true)
-        try {
-            const response = await fetch(`/api/publish/tasks/${taskId}`, {
-                method: 'DELETE'
-            })
-            if (response.ok) {
-                setTasks(prev => prev.filter(t => t.id !== taskId))
-                setDeleteTaskId(null)
-            } else {
-                const data = await response.json()
-                alert(data.error || '删除失败')
-            }
-        } catch (error) {
-            console.error('Failed to delete task:', error)
-            alert('删除失败')
-        } finally {
-            setDeletingTask(false)
-        }
-    }
+
 
     // Generate cover options from video at different time points
     const generateCoverOptions = async (videoUrl: string): Promise<string[]> => {
@@ -1001,8 +953,7 @@ export default function PublishPage() {
             setSelectedVideos([])
             setSelectedAccounts([])
             setCaption('')
-            setActiveTab('history')
-            fetchTasks()
+            setActiveTab('tasks')
         } catch (error) {
             setPublishError(error instanceof Error ? error.message : '创建发布任务失败')
         } finally {
@@ -1038,8 +989,7 @@ export default function PublishPage() {
             <div className="flex gap-2 p-1 bg-white/5 rounded-xl border border-white/10 w-fit">
                 {[
                     { id: 'create' as TabType, label: '创建发布', icon: Send },
-                    { id: 'history' as TabType, label: '发布记录', icon: History },
-                    { id: 'scheduled' as TabType, label: '定时队列', icon: Timer }
+                    { id: 'tasks' as TabType, label: '任务管理', icon: ListFilter }
                 ].map(tab => (
                     <button
                         key={tab.id}
@@ -1968,92 +1918,10 @@ export default function PublishPage() {
                 </div>
             )}
 
-            {/* History Tab */}
-            {activeTab === 'history' && (
+            {/* Task Manager Tab */}
+            {activeTab === 'tasks' && (
                 <div className="bg-white/5 rounded-2xl border border-white/10 p-6">
-                    <div className="flex items-center justify-between mb-6">
-                        <h2 className="text-lg font-semibold">发布记录</h2>
-                        <button
-                            onClick={fetchTasks}
-                            disabled={loadingTasks}
-                            className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-sm text-gray-400 hover:text-white hover:bg-white/10 transition-colors disabled:opacity-50"
-                        >
-                            <RefreshCw className={`w-4 h-4 ${loadingTasks ? 'animate-spin' : ''}`} />
-                            刷新
-                        </button>
-                    </div>
-
-                    {loadingTasks ? (
-                        <div className="flex items-center justify-center py-12">
-                            <Loader2 className="w-8 h-8 animate-spin text-cyan-400" />
-                        </div>
-                    ) : tasks.filter(t => t.status !== 'scheduled').length === 0 ? (
-                        <div className="text-center py-12">
-                            <History className="w-16 h-16 mx-auto mb-4 text-gray-600" />
-                            <p className="text-gray-400 mb-2">暂无发布记录</p>
-                            <p className="text-sm text-gray-500">创建发布任务后，记录将显示在这里</p>
-                        </div>
-                    ) : (
-                        <div className="space-y-3">
-                            {tasks.filter(t => t.status !== 'scheduled').map(task => (
-                                <div key={task.id} className="flex items-center gap-4 p-4 rounded-xl bg-white/5 border border-white/10 group">
-                                    <div className={`w-10 h-10 rounded-full flex items-center justify-center ${task.status === 'completed' ? 'bg-green-500/20' :
-                                        task.status === 'failed' ? 'bg-red-500/20' :
-                                            task.status === 'partial_failed' ? 'bg-orange-500/20' :
-                                                'bg-cyan-500/20'
-                                        }`}>
-                                        {task.status === 'completed' ? <CheckCircle2 className="w-5 h-5 text-green-400" /> :
-                                            task.status === 'failed' ? <XCircle className="w-5 h-5 text-red-400" /> :
-                                                task.status === 'partial_failed' ? <AlertCircle className="w-5 h-5 text-orange-400" /> :
-                                                    <Loader2 className="w-5 h-5 text-cyan-400 animate-spin" />}
-                                    </div>
-                                    <div className="flex-1">
-                                        <div className="flex items-center gap-2">
-                                            <span className="font-medium">发布任务</span>
-                                            <span className={`px-2 py-0.5 text-xs rounded-full ${task.status === 'completed' ? 'bg-green-500/20 text-green-400' :
-                                                task.status === 'failed' ? 'bg-red-500/20 text-red-400' :
-                                                    task.status === 'partial_failed' ? 'bg-orange-500/20 text-orange-400' :
-                                                        'bg-cyan-500/20 text-cyan-400'
-                                                }`}>
-                                                {task.status === 'completed' ? '已完成' :
-                                                    task.status === 'failed' ? '失败' :
-                                                        task.status === 'partial_failed' ? '部分失败' :
-                                                            task.status === 'pending' ? '等待中' : '处理中'}
-                                            </span>
-                                        </div>
-                                        <p className="text-sm text-gray-400">
-                                            {task.total_items} 个任务项 ·
-                                            成功 {task.completed_items || 0} ·
-                                            失败 {task.failed_items || 0}
-                                        </p>
-                                    </div>
-                                    <div className="text-right text-sm text-gray-500">
-                                        {format(new Date(task.created_at), 'MM/dd HH:mm', { locale: zhCN })}
-                                    </div>
-                                    {/* Delete button - always visible */}
-                                    {task.status !== 'processing' && (
-                                        <button
-                                            onClick={(e) => {
-                                                e.stopPropagation()
-                                                setDeleteTaskId(task.id)
-                                            }}
-                                            className="p-2 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 hover:text-red-300 transition-colors"
-                                            title="删除记录"
-                                        >
-                                            <Trash2 className="w-4 h-4" />
-                                        </button>
-                                    )}
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                </div>
-            )}
-
-            {/* Scheduled Tab */}
-            {activeTab === 'scheduled' && (
-                <div className="bg-white/5 rounded-2xl border border-white/10 p-6">
-                    <ScheduledQueue />
+                    <TaskManager />
                 </div>
             )}
 
@@ -2296,46 +2164,6 @@ export default function PublishPage() {
                 </div>
             )}
 
-            {/* Delete Confirmation Dialog */}
-            {deleteTaskId && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
-                    <div className="bg-gray-900 rounded-2xl border border-white/10 p-6 w-full max-w-md shadow-2xl">
-                        <div className="text-center">
-                            <div className="w-12 h-12 mx-auto mb-4 rounded-full bg-red-500/20 flex items-center justify-center">
-                                <Trash2 className="w-6 h-6 text-red-400" />
-                            </div>
-                            <h3 className="text-lg font-semibold mb-2">确认删除</h3>
-                            <p className="text-gray-400 mb-6">确定要删除这条发布记录吗？此操作无法撤销。</p>
-                            <div className="flex gap-3">
-                                <button
-                                    onClick={() => setDeleteTaskId(null)}
-                                    disabled={deletingTask}
-                                    className="flex-1 px-4 py-2 rounded-xl border border-white/10 text-gray-400 hover:bg-white/5 transition-colors"
-                                >
-                                    取消
-                                </button>
-                                <button
-                                    onClick={() => deleteTaskId && deleteTask(deleteTaskId)}
-                                    disabled={deletingTask}
-                                    className="flex-1 px-4 py-2 rounded-xl bg-red-500 text-white hover:bg-red-600 transition-colors flex items-center justify-center gap-2"
-                                >
-                                    {deletingTask ? (
-                                        <>
-                                            <Loader2 className="w-4 h-4 animate-spin" />
-                                            删除中...
-                                        </>
-                                    ) : (
-                                        <>
-                                            <Trash2 className="w-4 h-4" />
-                                            确认删除
-                                        </>
-                                    )}
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
 
             {/* AI Title Assistant Modal */}
             {showTitleAssistant && (
