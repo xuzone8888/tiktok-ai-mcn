@@ -125,28 +125,28 @@ export async function processPublishQueue(options: ProcessOptions): Promise<Proc
         const taskIds = [...new Set(items.map(item => item.task_id))]
         await updateTasksToProcessing(supabase, taskIds)
 
-        // 5. 动态并发处理
-        const concurrency = getConcurrency(items.length)
-        console.log(`[Publisher] Using concurrency: ${concurrency}`)
+        // 5. 按 scheduled_at 时间顺序处理（支持间隔发布）
+        // 在"立即发布+间隔"模式下，等待直到每个任务的 scheduled_at 时间
+        for (const item of items) {
+            // 计算需要等待的时间
+            const scheduledAt = new Date(item.scheduled_at || Date.now())
+            const waitMs = Math.max(0, scheduledAt.getTime() - Date.now())
 
-        for (let i = 0; i < items.length; i += concurrency) {
-            const batch = items.slice(i, i + concurrency)
+            if (waitMs > 0 && waitMs < 30 * 60 * 1000) { // 最多等待30分钟
+                console.log(`[Publisher] Waiting ${Math.round(waitMs / 1000)}s for item ${item.id}`)
+                await new Promise(resolve => setTimeout(resolve, waitMs))
+            }
 
-            const batchResults = await Promise.allSettled(
-                batch.map(item => publishItem(supabase, item, accounts))
-            )
-
-            for (const batchResult of batchResults) {
-                if (batchResult.status === 'fulfilled') {
-                    if (batchResult.value) {
-                        result.success++
-                    } else {
-                        result.failed++
-                    }
+            // 处理单个任务项
+            try {
+                const success = await publishItem(supabase, item, accounts)
+                if (success) {
+                    result.success++
                 } else {
                     result.failed++
-                    result.errors.push(batchResult.reason?.message || 'Unknown error')
                 }
+            } catch (error) {
+                result.failed++
             }
         }
 
