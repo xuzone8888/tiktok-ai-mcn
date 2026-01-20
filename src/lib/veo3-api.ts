@@ -99,7 +99,7 @@ export async function submitVeo3(
   apiKey?: string
 ): Promise<{ success: boolean; taskId?: string; error?: string }> {
   const key = apiKey || VEO3_API_KEY;
-  
+
   if (!key) {
     return { success: false, error: "VEO3 API key not configured" };
   }
@@ -135,7 +135,7 @@ export async function submitVeo3(
     const maxRetries = 3;
     let responseText = '';
     let statusCode = 0;
-    
+
     while (retryCount <= maxRetries) {
       try {
         const result = await new Promise<{ data: string; statusCode: number }>((resolve, reject) => {
@@ -154,31 +154,31 @@ export async function submitVeo3(
             },
             timeout: 120000, // 2分钟超时
           };
-          
+
           const req = https.request(options, (res) => {
             let data = '';
             res.on('data', chunk => data += chunk);
             res.on('end', () => resolve({ data, statusCode: res.statusCode || 0 }));
           });
-          
+
           req.on('error', reject);
           req.on('timeout', () => {
             req.destroy();
             reject(new Error('Request timeout'));
           });
-          
+
           req.write(bodyStr);
           req.end();
         });
-        
+
         responseText = result.data;
         statusCode = result.statusCode;
-        
+
         // 如果是 5xx 服务器错误，进行重试
         if (statusCode >= 500 && statusCode < 600) {
           throw new Error(`Server error: ${statusCode}`);
         }
-        
+
         break;
       } catch (fetchError) {
         retryCount++;
@@ -190,15 +190,15 @@ export async function submitVeo3(
         await new Promise(resolve => setTimeout(resolve, waitTime));
       }
     }
-    
+
     console.log("[VEO3] Raw response (status: " + statusCode + "):", responseText.substring(0, 500));
 
     // 检查 HTTP 状态码
     if (statusCode >= 500) {
       console.error(`[VEO3] Server error ${statusCode}:`, responseText.substring(0, 200));
-      return { 
-        success: false, 
-        error: `VEO3 服务暂时繁忙 (${statusCode})，请稍后重试` 
+      return {
+        success: false,
+        error: `VEO3 服务暂时繁忙 (${statusCode})，请稍后重试`
       };
     }
 
@@ -219,12 +219,30 @@ export async function submitVeo3(
       status: data.data?.[0]?.status,
     });
 
-    // 检查响应
+    // 检查响应 - 支持多种可能的响应格式
     if (data.code === 200 && data.data && data.data.length > 0) {
       const taskId = data.data[0].task_id;
       if (taskId) {
         return { success: true, taskId };
       }
+    }
+
+    // 检查是否是没有 code 字段的响应格式 (某些 API 版本)
+    if (data.code === undefined) {
+      // 尝试直接从 data 获取 task_id
+      const anyData = data as unknown as { task_id?: string; id?: string; data?: { task_id?: string } };
+      const taskId = anyData.task_id || anyData.id || anyData.data?.task_id;
+      if (taskId) {
+        console.log("[VEO3] Found taskId in alternative format:", taskId);
+        return { success: true, taskId };
+      }
+
+      // 打印完整响应以便调试
+      console.error("[VEO3] Response has no code field. Full response:", JSON.stringify(data).substring(0, 1000));
+      return {
+        success: false,
+        error: data.message || "VEO3 API 响应格式异常，请联系管理员"
+      };
     }
 
     // 处理错误码
@@ -238,15 +256,15 @@ export async function submitVeo3(
       502: "VEO3 服务网关错误",
     };
 
-    return { 
-      success: false, 
-      error: errorMessages[data.code] || data.message || `API error: code ${data.code}` 
+    return {
+      success: false,
+      error: errorMessages[data.code] || data.message || `API error: code ${data.code}`
     };
   } catch (error) {
     console.error("[VEO3] Submit error:", error);
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : "Network error" 
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Network error"
     };
   }
 }
@@ -261,7 +279,7 @@ export async function queryVeo3Result(
   apiKey?: string
 ): Promise<{ success: boolean; task?: Veo3TaskStatus; error?: string; raw?: unknown }> {
   const key = apiKey || VEO3_API_KEY;
-  
+
   if (!key) {
     return { success: false, error: "VEO3 API key not configured" };
   }
@@ -274,7 +292,7 @@ export async function queryVeo3Result(
     const maxRetries = 2;
     let responseText = '';
     let statusCode = 0;
-    
+
     while (retryCount <= maxRetries) {
       try {
         const result = await new Promise<{ data: string; statusCode: number }>((resolve, reject) => {
@@ -291,29 +309,29 @@ export async function queryVeo3Result(
             },
             timeout: 45000, // 45秒超时
           };
-          
+
           const req = https.request(options, (res) => {
             let data = '';
             res.on('data', chunk => data += chunk);
             res.on('end', () => resolve({ data, statusCode: res.statusCode || 0 }));
           });
-          
+
           req.on('error', reject);
           req.on('timeout', () => {
             req.destroy();
             reject(new Error('Request timeout'));
           });
-          
+
           req.end();
         });
-        
+
         responseText = result.data;
         statusCode = result.statusCode;
-        
+
         if (statusCode >= 500 && statusCode < 600) {
           throw new Error(`Server error: ${statusCode}`);
         }
-        
+
         break;
       } catch (fetchError) {
         retryCount++;
@@ -324,17 +342,17 @@ export async function queryVeo3Result(
         await new Promise(resolve => setTimeout(resolve, 2000));
       }
     }
-    
+
     if (!responseText) {
       return { success: false, error: "网络请求失败，请稍后重试" };
     }
-    
+
     // 检查 HTTP 状态码
     if (statusCode >= 500) {
       console.error(`[VEO3] Query server error ${statusCode}:`, responseText.substring(0, 200));
       return { success: false, error: `VEO3 服务暂时繁忙 (${statusCode})，请稍后重试` };
     }
-    
+
     let data: Veo3QueryResponse;
     try {
       data = JSON.parse(responseText);
@@ -368,7 +386,7 @@ export async function queryVeo3Result(
       };
 
       const taskStatus = statusMap[data.data.status] || "processing";
-      
+
       // 从 result.videos 数组中提取视频 URL
       let videoUrl: string | undefined;
       if (data.data.result?.videos && data.data.result.videos.length > 0) {
@@ -377,7 +395,7 @@ export async function queryVeo3Result(
           videoUrl = firstVideo.url[0];
         }
       }
-      
+
       // 获取错误信息 - 优先使用 data.error.message，其次使用 result.error
       let errorMessage: string | undefined;
       if (data.data.error?.message) {
@@ -423,9 +441,9 @@ export async function queryVeo3Result(
     return { success: false, error: data.message || "Query failed" };
   } catch (error) {
     console.error("[VEO3] Query error:", error);
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : "Network error" 
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Network error"
     };
   }
 }
@@ -449,7 +467,7 @@ export async function testVeo3Connection(apiKey?: string): Promise<{
   message: string;
 }> {
   const key = apiKey || VEO3_API_KEY;
-  
+
   if (!key) {
     return { success: false, message: "VEO3 API key not configured" };
   }
@@ -457,7 +475,7 @@ export async function testVeo3Connection(apiKey?: string): Promise<{
   try {
     // 简单测试 - 不实际提交任务，只检查认证
     const endpoint = `${VEO3_API_BASE}/v1/models`;
-    
+
     const result = await new Promise<{ data: string; statusCode: number }>((resolve, reject) => {
       const url = new URL(endpoint);
       const options = {
@@ -472,19 +490,19 @@ export async function testVeo3Connection(apiKey?: string): Promise<{
         },
         timeout: 10000,
       };
-      
+
       const req = https.request(options, (res) => {
         let data = '';
         res.on('data', chunk => data += chunk);
         res.on('end', () => resolve({ data, statusCode: res.statusCode || 0 }));
       });
-      
+
       req.on('error', reject);
       req.on('timeout', () => {
         req.destroy();
         reject(new Error('Request timeout'));
       });
-      
+
       req.end();
     });
 
