@@ -371,11 +371,11 @@ export default function PublishPage() {
     // Add video from asset library - transfer to OSS first for permanent storage
     const [transferringAssets, setTransferringAssets] = useState<Set<string>>(new Set())
 
-    // Concurrent transfer limit to avoid server overload
-    const CONCURRENT_TRANSFER_LIMIT = 2
+    // Concurrent transfer limit - increased to 5 with stream-based transfer (minimal memory usage)
+    const CONCURRENT_TRANSFER_LIMIT = 5
 
-    // Single asset transfer (internal helper)
-    const transferSingleAsset = async (asset: AssetItem): Promise<boolean> => {
+    // Single asset transfer with 1 retry
+    const transferSingleAsset = async (asset: AssetItem, retryCount = 0): Promise<boolean> => {
         if (selectedVideos.some(v => v.id === asset.id)) return true // Already added
 
         setTransferringAssets(prev => new Set(prev).add(asset.id))
@@ -409,6 +409,19 @@ export default function PublishPage() {
             return true
         } catch (error) {
             console.error('Transfer asset failed:', error)
+
+            // Retry once on failure
+            if (retryCount < 1) {
+                console.log('[Transfer] Retrying:', asset.id)
+                setTransferringAssets(prev => {
+                    const next = new Set(prev)
+                    next.delete(asset.id)
+                    return next
+                })
+                await new Promise(r => setTimeout(r, 1000)) // Wait 1s before retry
+                return transferSingleAsset(asset, retryCount + 1)
+            }
+
             return false
         } finally {
             setTransferringAssets(prev => {

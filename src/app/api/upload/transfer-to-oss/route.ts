@@ -79,7 +79,7 @@ export async function POST(request: NextRequest) {
             sourceUrl: sourceUrl.substring(0, 100) + '...',
         })
 
-        // Step 1: Download video from source URL
+        // Step 1: Fetch video stream (not buffer!)
         const downloadResponse = await fetch(sourceUrl, {
             headers: {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
@@ -109,12 +109,12 @@ export async function POST(request: NextRequest) {
             )
         }
 
-        const videoBuffer = await downloadResponse.arrayBuffer()
         const contentType = downloadResponse.headers.get('content-type') || 'video/mp4'
+        const contentLength = downloadResponse.headers.get('content-length')
 
-        console.log('[Transfer OSS] Downloaded:', {
-            size: `${(videoBuffer.byteLength / 1024 / 1024).toFixed(2)} MB`,
+        console.log('[Transfer OSS] Starting stream transfer:', {
             contentType,
+            contentLength: contentLength ? `${(parseInt(contentLength) / 1024 / 1024).toFixed(2)} MB` : 'unknown',
         })
 
         // Step 2: Generate unique file path
@@ -126,14 +126,19 @@ export async function POST(request: NextRequest) {
             : 'video'
         const key = `videos/${user.id}/${timestamp}-${randomStr}-${safeFilename}.${ext}`
 
-        // Step 3: Upload to OSS
+        // Step 3: Stream upload to OSS (no memory buffering!)
         const client = new OSS(ossConfig)
 
-        const result = await client.put(key, Buffer.from(videoBuffer), {
+        // Convert Web ReadableStream to Node.js Readable
+        const { Readable } = await import('stream')
+        const nodeStream = Readable.fromWeb(downloadResponse.body as import('stream/web').ReadableStream)
+
+        const result = await client.putStream(key, nodeStream, {
             mime: contentType,
             headers: {
                 'Content-Type': contentType,
                 'x-oss-storage-class': 'Standard',
+                ...(contentLength ? { 'Content-Length': contentLength } : {}),
             },
         })
 
@@ -148,10 +153,11 @@ export async function POST(request: NextRequest) {
         // Generate public URL with custom domain
         const publicUrl = `https://${CUSTOM_DOMAIN}/${key}`
 
-        console.log('[Transfer OSS] Transfer complete:', {
+        console.log('[Transfer OSS] Stream transfer complete:', {
             userId: user.id,
             key,
             url: publicUrl,
+            size: contentLength ? `${(parseInt(contentLength) / 1024 / 1024).toFixed(2)} MB` : 'unknown',
         })
 
         return NextResponse.json({
@@ -159,7 +165,7 @@ export async function POST(request: NextRequest) {
             data: {
                 url: publicUrl,
                 key,
-                size: videoBuffer.byteLength,
+                size: contentLength ? parseInt(contentLength) : 0,
             }
         })
 
