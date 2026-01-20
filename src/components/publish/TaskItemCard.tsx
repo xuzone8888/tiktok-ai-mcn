@@ -146,6 +146,7 @@ export function TaskItemCard({ item, onDelete, onViewDetail }: TaskItemCardProps
                                         width={16}
                                         height={16}
                                         className="rounded-full border border-white/10"
+                                        unoptimized
                                     />
                                 )}
                                 <span className="text-xs text-zinc-500 truncate">
