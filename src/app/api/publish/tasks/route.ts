@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { initVideoPublishFromUrl, waitForPublishComplete } from '@/lib/tiktok/content-posting'
+import { processPublishQueue } from '@/lib/publish-processor'
 
 // TikTok content posting types - define locally since we're not using the actual upload functions yet
 type VideoPrivacyLevel = 'PUBLIC_TO_EVERYONE' | 'MUTUAL_FOLLOW_FRIENDS' | 'SELF_ONLY'
@@ -218,17 +218,12 @@ export async function POST(request: NextRequest) {
         }
 
         // If immediate publishing, start processing in the background
-        // Note: In production, this would be handled by a background job/queue
         if (body.publish_mode === 'now') {
-            // Update task status to processing
-            await supabase
-                .from('publish_tasks')
-                .update({ status: 'processing' })
-                .eq('id', task.id)
-
-            // Start processing (fire and forget for now)
-            // In production, use a proper job queue
-            processPublishItems(task.id, items, accounts, supabase).catch(err => {
+            // Start processing using shared module (fire and forget)
+            processPublishQueue({
+                taskId: task.id,
+                mode: 'immediate'
+            }).catch(err => {
                 console.error('Background publish processing failed:', err)
             })
         }
@@ -247,152 +242,4 @@ export async function POST(request: NextRequest) {
     }
 }
 
-// Helper function for delay
-function sleep(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms))
-}
-
-// Background processing function
-async function processPublishItems(
-    taskId: string,
-    items: Array<{
-        task_id: string
-        account_id: string  // Fixed field name
-        video_url: string
-        video_source: string
-        title: string  // Fixed field name
-        status: string
-        scheduled_at: string | null
-        cover_timestamp_ms?: number  // 封面帧时间戳
-    }>,
-    accounts: Array<{ id: string; access_token: string }>,
-    supabase: Awaited<ReturnType<typeof createClient>>
-) {
-    const accountMap = new Map(accounts.map(a => [a.id, a]))
-    let completedCount = 0
-    let failedCount = 0
-
-    for (const item of items) {
-        try {
-            // 等待直到计划发布时间
-            if (item.scheduled_at) {
-                const scheduledTime = new Date(item.scheduled_at).getTime()
-                const now = Date.now()
-                const waitMs = scheduledTime - now
-
-                if (waitMs > 0) {
-                    console.log(`等待 ${Math.round(waitMs / 1000)} 秒后发布下一个视频...`)
-                    await sleep(waitMs)
-                }
-            }
-
-            const account = accountMap.get(item.account_id)
-            if (!account) {
-                throw new Error('账号不存在')
-            }
-
-            // Update item status to processing
-            await supabase
-                .from('publish_task_items')
-                .update({ status: 'processing' })
-                .eq('task_id', item.task_id)
-                .eq('account_id', item.account_id)
-                .eq('video_url', item.video_url)
-
-            // Check if video URL is valid for TikTok publishing
-            if (!item.video_url || item.video_url.startsWith('placeholder://')) {
-                throw new Error('视频URL无效，无法发布到TikTok')
-            }
-
-            // Validate URL is HTTPS (required by TikTok)
-            if (!item.video_url.startsWith('https://')) {
-                throw new Error('TikTok要求视频URL必须使用HTTPS协议')
-            }
-
-            console.log(`Publishing video to TikTok: ${item.video_url}`)
-
-            // Call actual TikTok publish API
-            const publishId = await initVideoPublishFromUrl(
-                account.access_token,
-                item.video_url,
-                {
-                    title: item.title,
-                    privacyLevel: 'SELF_ONLY',  // Use SELF_ONLY for sandbox testing to avoid content issues
-                    disableDuet: false,
-                    disableComment: false,
-                    disableStitch: false,
-                    isAigc: true,  // Mark as AI-generated content
-                    videoCoverTimestampMs: item.cover_timestamp_ms,  // 传递封面帧时间戳
-                }
-            )
-
-            console.log(`TikTok publish initiated, publish_id: ${publishId}`)
-
-            // Update item with publish_id
-            await supabase
-                .from('publish_task_items')
-                .update({
-                    status: 'uploading',
-                    tiktok_publish_id: publishId
-                })
-                .eq('task_id', item.task_id)
-                .eq('account_id', item.account_id)
-                .eq('video_url', item.video_url)
-
-            // Wait for publish to complete (with timeout)
-            const result = await waitForPublishComplete(account.access_token, publishId, 120000, 5000)
-
-            if (result.success) {
-                console.log(`TikTok publish successful! Post ID: ${result.postId}`)
-
-                // Update item status to published
-                await supabase
-                    .from('publish_task_items')
-                    .update({
-                        status: 'published',
-                        tiktok_share_id: result.postId,
-                        published_at: new Date().toISOString()
-                    })
-                    .eq('task_id', item.task_id)
-                    .eq('account_id', item.account_id)
-                    .eq('video_url', item.video_url)
-
-                completedCount++
-            } else {
-                throw new Error(result.error || 'TikTok发布失败')
-            }
-        } catch (error) {
-            console.error(`Failed to publish item:`, error)
-
-            // Update item status to failed
-            await supabase
-                .from('publish_task_items')
-                .update({
-                    status: 'failed',
-                    error_message: error instanceof Error ? error.message : '发布失败'
-                })
-                .eq('task_id', item.task_id)
-                .eq('account_id', item.account_id)
-                .eq('video_url', item.video_url)
-
-            failedCount++
-        }
-    }
-
-    // Update task status based on results
-    const finalStatus = failedCount === items.length
-        ? 'failed'
-        : failedCount > 0
-            ? 'partial_failed'  // Schema uses 'partial_failed' not 'partial'
-            : 'completed'
-
-    await supabase
-        .from('publish_tasks')
-        .update({
-            status: finalStatus,
-            completed_at: new Date().toISOString(),
-            success_count: completedCount,
-            failed_count: failedCount
-        })
-        .eq('id', taskId)
-}
+// Note: processPublishItems moved to lib/publish-processor.ts for shared use
