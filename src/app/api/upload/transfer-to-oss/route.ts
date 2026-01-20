@@ -126,19 +126,21 @@ export async function POST(request: NextRequest) {
             : 'video'
         const key = `videos/${user.id}/${timestamp}-${randomStr}-${safeFilename}.${ext}`
 
-        // Step 3: Stream upload to OSS (no memory buffering!)
+        // Step 3: Download and upload to OSS
+        // Note: Using arrayBuffer instead of stream due to Next.js bundling compatibility
         const client = new OSS(ossConfig)
 
-        // Convert Web ReadableStream to Node.js Readable
-        const { Readable } = await import('stream')
-        const nodeStream = Readable.fromWeb(downloadResponse.body as import('stream/web').ReadableStream)
+        const videoBuffer = await downloadResponse.arrayBuffer()
 
-        const result = await client.putStream(key, nodeStream, {
+        console.log('[Transfer OSS] Downloaded buffer:', {
+            size: `${(videoBuffer.byteLength / 1024 / 1024).toFixed(2)} MB`,
+        })
+
+        const result = await client.put(key, Buffer.from(videoBuffer), {
             mime: contentType,
             headers: {
                 'Content-Type': contentType,
                 'x-oss-storage-class': 'Standard',
-                ...(contentLength ? { 'Content-Length': contentLength } : {}),
             },
         })
 
