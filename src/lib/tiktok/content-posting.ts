@@ -47,6 +47,31 @@ export async function getCreatorInfo(accessToken: string): Promise<CreatorInfo> 
     return data.data as CreatorInfo;
 }
 
+// Helper for fetch with retry
+async function fetchWithRetry(url: string, options: RequestInit, retries = 3): Promise<Response> {
+    let lastError;
+    for (let i = 0; i < retries; i++) {
+        try {
+            const res = await fetch(url, options);
+            // Only retry on network errors or 5xx server errors
+            if (res.ok || (res.status < 500 && res.status !== 429)) {
+                return res;
+            }
+            // Log warning for error status
+            console.warn(`Fetch attempt ${i + 1} failed with status ${res.status}`);
+        } catch (error) {
+            lastError = error;
+            console.warn(`Fetch attempt ${i + 1} failed with network error:`, error);
+        }
+
+        // Wait before retry (exponential backoff: 1s, 2s, 3s)
+        if (i < retries - 1) {
+            await new Promise(r => setTimeout(r, 1000 * (i + 1)));
+        }
+    }
+    throw lastError || new Error('Fetch failed after retries');
+}
+
 // Initialize video publish from URL
 export async function initVideoPublishFromUrl(
     accessToken: string,
@@ -60,7 +85,7 @@ export async function initVideoPublishFromUrl(
         brandContentToggle?: boolean;
         brandOrganicToggle?: boolean;
         isAigc?: boolean;
-        videoCoverTimestampMs?: number;  // 封面帧时间戳（毫秒）
+        videoCoverTimestampMs?: number;
     }
 ): Promise<string> {
     const requestBody: TikTokPublishVideoRequest = {
@@ -81,7 +106,7 @@ export async function initVideoPublishFromUrl(
         },
     };
 
-    const response = await fetch(TIKTOK_PUBLISH_VIDEO_INIT, {
+    const response = await fetchWithRetry(TIKTOK_PUBLISH_VIDEO_INIT, {
         method: 'POST',
         headers: {
             'Authorization': `Bearer ${accessToken}`,
