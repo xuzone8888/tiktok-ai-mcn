@@ -71,7 +71,7 @@ export async function GET(request: NextRequest) {
             video_count: new Set(task.items?.map((i: { video_id: string }) => i.video_id)).size,
             account_count: new Set(task.items?.map((i: { tiktok_account_id: string }) => i.tiktok_account_id)).size,
             total_items: task.items?.length || 0,
-            completed_items: task.items?.filter((i: { status: string }) => i.status === 'completed').length || 0,
+            completed_items: task.items?.filter((i: { status: string }) => i.status === 'published').length || 0,
             failed_items: task.items?.filter((i: { status: string }) => i.status === 'failed').length || 0
         }))
 
