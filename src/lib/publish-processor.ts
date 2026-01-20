@@ -384,15 +384,16 @@ async function updateTaskFinalStatus(
             return
         }
 
-        // 计算成功/失败数量
-        const successCount = statuses.filter(s => s === 'published').length
+        // 计算各状态数量（for cache）
+        const publishedCount = statuses.filter(s => s === 'published').length
+        const pendingCount = statuses.filter(s => s === 'pending' || s === 'scheduled').length
         const failedCount = statuses.filter(s => s === 'failed').length
 
         // 确定最终状态
         let finalStatus: string
         if (failedCount === 0) {
             finalStatus = 'completed'
-        } else if (successCount === 0) {
+        } else if (publishedCount === 0) {
             finalStatus = 'failed'
         } else {
             finalStatus = 'partial_failed'
@@ -403,8 +404,10 @@ async function updateTaskFinalStatus(
             .update({
                 status: finalStatus,
                 completed_at: new Date().toISOString(),
-                success_count: successCount,
-                failed_count: failedCount
+                success_count: publishedCount,
+                failed_count: failedCount,
+                published_count: publishedCount,
+                pending_count: pendingCount
             })
             .eq('id', taskId)
 

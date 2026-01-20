@@ -7,6 +7,7 @@ type VideoPrivacyLevel = 'PUBLIC_TO_EVERYONE' | 'MUTUAL_FOLLOW_FRIENDS' | 'SELF_
 
 // Types for request body
 interface CreateTaskRequest {
+    name: string  // 任务组名称（必填）
     videos: Array<{
         id: string
         type: 'asset' | 'upload' | 'url'
@@ -144,6 +145,7 @@ export async function POST(request: NextRequest) {
             .from('publish_tasks')
             .insert({
                 user_id: user.id,
+                name: body.name || '未命名任务组',  // 任务组名称
                 status: body.publish_mode === 'scheduled' ? 'scheduled' : 'pending',
                 scheduled_at: body.publish_mode === 'scheduled' ? body.scheduled_at : null,
                 title_template: body.caption,  // Database uses title_template, not caption_template
@@ -154,7 +156,10 @@ export async function POST(request: NextRequest) {
                 brand_content_toggle: body.is_brand_content,  // Database uses brand_content_toggle
                 is_aigc: body.is_ai_generated,  // Database uses is_aigc
                 batch_interval_seconds: body.batch_interval * 60,  // Database uses seconds, convert from minutes
-                total_items: totalItemsCount  // Set total items count upfront
+                total_items: totalItemsCount,  // Set total items count upfront
+                pending_count: totalItemsCount,  // 初始化统计
+                published_count: 0,
+                failed_count: 0
             })
             .select()
             .single()
