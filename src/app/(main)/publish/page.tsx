@@ -32,6 +32,7 @@ import {
 import { format, addMinutes } from 'date-fns'
 import { zhCN } from 'date-fns/locale'
 import { useToast } from '@/hooks/use-toast'
+import { TaskHistory, ScheduledQueue } from '@/components/publish'
 
 // TikTok supported video formats
 const TIKTOK_VIDEO_FORMATS = ['.mp4', '.webm', '.mov']
@@ -2052,56 +2053,7 @@ export default function PublishPage() {
             {/* Scheduled Tab */}
             {activeTab === 'scheduled' && (
                 <div className="bg-white/5 rounded-2xl border border-white/10 p-6">
-                    <div className="flex items-center justify-between mb-6">
-                        <h2 className="text-lg font-semibold">定时队列</h2>
-                        <button
-                            onClick={fetchTasks}
-                            disabled={loadingTasks}
-                            className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-sm text-gray-400 hover:text-white hover:bg-white/10 transition-colors disabled:opacity-50"
-                        >
-                            <RefreshCw className={`w-4 h-4 ${loadingTasks ? 'animate-spin' : ''}`} />
-                            刷新
-                        </button>
-                    </div>
-
-                    {loadingTasks ? (
-                        <div className="flex items-center justify-center py-12">
-                            <Loader2 className="w-8 h-8 animate-spin text-cyan-400" />
-                        </div>
-                    ) : tasks.filter(t => t.status === 'scheduled').length === 0 ? (
-                        <div className="text-center py-12">
-                            <Timer className="w-16 h-16 mx-auto mb-4 text-gray-600" />
-                            <p className="text-gray-400 mb-2">暂无定时任务</p>
-                            <p className="text-sm text-gray-500">设置定时发布后，任务将显示在这里</p>
-                        </div>
-                    ) : (
-                        <div className="space-y-3">
-                            {tasks.filter(t => t.status === 'scheduled').map(task => (
-                                <div key={task.id} className="flex items-center gap-4 p-4 rounded-xl bg-white/5 border border-white/10">
-                                    <div className="w-10 h-10 rounded-full bg-cyan-500/20 flex items-center justify-center">
-                                        <Calendar className="w-5 h-5 text-cyan-400" />
-                                    </div>
-                                    <div className="flex-1">
-                                        <div className="flex items-center gap-2">
-                                            <span className="font-medium">定时任务</span>
-                                            <span className="px-2 py-0.5 text-xs rounded-full bg-cyan-500/20 text-cyan-400">
-                                                待发布
-                                            </span>
-                                        </div>
-                                        <p className="text-sm text-gray-400">
-                                            {task.total_items} 个任务项
-                                        </p>
-                                    </div>
-                                    <div className="text-right">
-                                        <p className="text-sm text-cyan-400">
-                                            {task.scheduled_at && format(new Date(task.scheduled_at), 'MM/dd HH:mm', { locale: zhCN })}
-                                        </p>
-                                        <p className="text-xs text-gray-500">计划发布时间</p>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    )}
+                    <ScheduledQueue />
                 </div>
             )}
 
