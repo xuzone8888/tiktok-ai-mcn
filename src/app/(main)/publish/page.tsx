@@ -1156,7 +1156,7 @@ export default function PublishPage() {
                                         正在上传 {uploadingFiles.length} 个视频
                                         ({uploadingFiles.filter(f => f.status === 'done').length}/{uploadingFiles.length} 完成)
                                     </span>
-                                    <span className="ml-auto text-sm font-medium text-cyan-400">
+                                    <span className="ml-auto text-sm font-medium text-cyan-400 tabular-nums transition-all duration-500">
                                         {Math.round(uploadingFiles.reduce((sum, f) => sum + f.progress, 0) / uploadingFiles.length)}%
                                     </span>
                                 </div>
@@ -1188,13 +1188,13 @@ export default function PublishPage() {
                                                 }`}>
                                                 {file.name}
                                             </span>
-                                            <span className={`text-xs ${file.status === 'done' ? 'text-green-400' :
+                                            <span className={`text-xs min-w-[36px] text-right ${file.status === 'done' ? 'text-green-400' :
                                                 file.status === 'error' ? 'text-red-400' :
                                                     file.status === 'uploading' ? 'text-cyan-400' : 'text-gray-500'
                                                 }`}>
                                                 {file.status === 'done' ? '完成' :
                                                     file.status === 'error' ? '失败' :
-                                                        file.status === 'uploading' ? `${file.progress}%` : '等待中'}
+                                                        file.status === 'uploading' ? `${file.progress}%` : '等待'}
                                             </span>
                                         </div>
                                     ))}

@@ -125,9 +125,20 @@ export function ScheduledQueue() {
 
     if (tasks.length === 0) {
         return (
-            <div className="text-center py-12">
+            <div className="text-center py-12 px-4">
                 <Timer className="w-12 h-12 text-gray-500 mx-auto mb-3" />
-                <p className="text-gray-400">暂无定时任务</p>
+                <p className="text-gray-400 mb-2">暂无进行中的定时任务</p>
+                <p className="text-sm text-gray-500 mb-4">
+                    所有任务已完成或尚未创建定时任务
+                </p>
+                <div className="flex flex-col gap-2 items-center">
+                    <p className="text-xs text-gray-600">
+                        💡 提示：创建发布任务时选择"定时发布"或设置发布间隔
+                    </p>
+                    <p className="text-xs text-gray-600">
+                        📋 已完成的任务可在"发布记录"中查看
+                    </p>
+                </div>
             </div>
         )
     }
