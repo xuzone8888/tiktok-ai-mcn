@@ -202,8 +202,29 @@ export function VideoUploader({ onVideosAdded, disabled }: VideoUploaderProps) {
             })
         }
 
-        // 并发上传
-        await Promise.all(validFiles.map(uploadSingleFile))
+        // 并发控制函数
+        const asyncPool = async <T,>(poolLimit: number, array: T[], iteratorFn: (item: T) => Promise<void>) => {
+            const ret = []
+            const executing: Promise<void>[] = []
+            for (const item of array) {
+                const p = Promise.resolve().then(() => iteratorFn(item))
+                ret.push(p)
+
+                if (poolLimit <= array.length) {
+                    const e = p.then(() => {
+                        executing.splice(executing.indexOf(e as any), 1)
+                    }) as any
+                    executing.push(e)
+                    if (executing.length >= poolLimit) {
+                        await Promise.race(executing)
+                    }
+                }
+            }
+            return Promise.all(ret)
+        }
+
+        // 限制并发上传数为 2，避免带宽拥塞
+        await asyncPool(2, validFiles, uploadSingleFile)
 
         // 清理状态
         setTimeout(() => {
