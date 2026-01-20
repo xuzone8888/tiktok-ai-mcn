@@ -170,9 +170,45 @@ export async function POST(request: NextRequest) {
         })
 
     } catch (error) {
-        console.error('[Transfer OSS] Error:', error)
+        // Enhanced diagnostic logging
+        const errorDetails = {
+            type: 'UNKNOWN',
+            message: '',
+            code: '',
+        }
+
+        if (error instanceof Error) {
+            errorDetails.message = error.message
+
+            // Classify error type
+            if (error.message.includes('timeout') || error.message.includes('ETIMEDOUT')) {
+                errorDetails.type = 'TIMEOUT'
+            } else if (error.message.includes('ECONNRESET') || error.message.includes('ECONNREFUSED')) {
+                errorDetails.type = 'CONNECTION_ERROR'
+            } else if (error.message.includes('memory') || error.message.includes('heap')) {
+                errorDetails.type = 'MEMORY_ERROR'
+            } else if (error.message.includes('stream') || error.message.includes('pipe')) {
+                errorDetails.type = 'STREAM_ERROR'
+            } else if (error.message.includes('OSS') || error.message.includes('oss')) {
+                errorDetails.type = 'OSS_ERROR'
+            }
+
+            // Extract error code if available
+            if ('code' in error) {
+                errorDetails.code = String((error as NodeJS.ErrnoException).code)
+            }
+        }
+
+        console.error('[Transfer OSS] DIAGNOSTIC ERROR:', {
+            errorType: errorDetails.type,
+            errorMessage: errorDetails.message,
+            errorCode: errorDetails.code,
+            timestamp: new Date().toISOString(),
+            stack: error instanceof Error ? error.stack?.split('\n').slice(0, 3).join('\n') : undefined,
+        })
+
         return NextResponse.json(
-            { success: false, error: error instanceof Error ? error.message : "视频转存失败" },
+            { success: false, error: error instanceof Error ? error.message : "视频转存失败", errorType: errorDetails.type },
             { status: 500 }
         )
     }
