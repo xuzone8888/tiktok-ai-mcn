@@ -150,6 +150,21 @@ export default function PublishPage() {
     const [loadingAssets, setLoadingAssets] = useState(false)
     const [selectedAssetIds, setSelectedAssetIds] = useState<string[]>([])  // Multi-select in asset library
 
+    // Batch transfer state (for controlled concurrency)
+    const [batchTransfer, setBatchTransfer] = useState<{
+        isTransferring: boolean
+        total: number
+        completed: number
+        failed: number
+        currentBatch: string[]
+    }>({
+        isTransferring: false,
+        total: 0,
+        completed: 0,
+        failed: 0,
+        currentBatch: []
+    })
+
     // Upload state - tracks each file's upload progress
     const [uploadingFiles, setUploadingFiles] = useState<FileUploadStatus[]>([])
     const [uploadError, setUploadError] = useState<string | null>(null)
@@ -356,15 +371,16 @@ export default function PublishPage() {
     // Add video from asset library - transfer to OSS first for permanent storage
     const [transferringAssets, setTransferringAssets] = useState<Set<string>>(new Set())
 
-    const addVideoFromAsset = async (asset: AssetItem) => {
-        if (selectedVideos.some(v => v.id === asset.id)) return // Already selected
-        if (transferringAssets.has(asset.id)) return // Already transferring
+    // Concurrent transfer limit to avoid server overload
+    const CONCURRENT_TRANSFER_LIMIT = 2
 
-        // Mark as transferring
+    // Single asset transfer (internal helper)
+    const transferSingleAsset = async (asset: AssetItem): Promise<boolean> => {
+        if (selectedVideos.some(v => v.id === asset.id)) return true // Already added
+
         setTransferringAssets(prev => new Set(prev).add(asset.id))
 
         try {
-            // Transfer video from third-party URL to our OSS
             const response = await fetch('/api/upload/transfer-to-oss', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -380,35 +396,113 @@ export default function PublishPage() {
                 throw new Error(result.error || '视频转存失败')
             }
 
-            // Create video entry with OSS URL (permanent)
             const newVideo: SelectedVideo = {
                 id: asset.id,
                 type: 'asset',
                 name: asset.prompt?.slice(0, 30) || `视频 ${format(new Date(asset.createdAt), 'MM/dd HH:mm')}`,
                 thumbnail: asset.thumbnailUrl || '',
-                url: result.data.url,  // Use permanent OSS URL instead of temporary URL
-                localUrl: result.data.url, // Also set localUrl for cover frame capture
+                url: result.data.url,
+                localUrl: result.data.url,
                 duration: 30
             }
             setSelectedVideos(prev => [...prev, newVideo])
-
-            toast({
-                title: '✅ 视频已转存',
-                description: `${newVideo.name} 已添加到发布列表`,
-            })
+            return true
         } catch (error) {
             console.error('Transfer asset failed:', error)
-            toast({
-                variant: 'destructive',
-                title: '转存失败',
-                description: error instanceof Error ? error.message : '请重试',
-            })
+            return false
         } finally {
             setTransferringAssets(prev => {
                 const next = new Set(prev)
                 next.delete(asset.id)
                 return next
             })
+        }
+    }
+
+    // Batch transfer with controlled concurrency
+    const startBatchTransfer = async (assetIds: string[]) => {
+        const assetsToTransfer = assetIds
+            .map(id => assets.find(a => a.id === id))
+            .filter((a): a is AssetItem => !!a && !selectedVideos.some(v => v.id === a.id))
+
+        if (assetsToTransfer.length === 0) {
+            setShowAssetModal(false)
+            setSelectedAssetIds([])
+            return
+        }
+
+        setBatchTransfer({
+            isTransferring: true,
+            total: assetsToTransfer.length,
+            completed: 0,
+            failed: 0,
+            currentBatch: []
+        })
+
+        let completed = 0
+        let failed = 0
+
+        // Process in chunks of CONCURRENT_TRANSFER_LIMIT
+        for (let i = 0; i < assetsToTransfer.length; i += CONCURRENT_TRANSFER_LIMIT) {
+            const chunk = assetsToTransfer.slice(i, i + CONCURRENT_TRANSFER_LIMIT)
+            const chunkIds = chunk.map(a => a.id)
+
+            setBatchTransfer(prev => ({ ...prev, currentBatch: chunkIds }))
+
+            // Process chunk in parallel
+            const results = await Promise.all(chunk.map(asset => transferSingleAsset(asset)))
+
+            // Update counts
+            results.forEach(success => {
+                if (success) completed++
+                else failed++
+            })
+
+            setBatchTransfer(prev => ({
+                ...prev,
+                completed,
+                failed,
+            }))
+        }
+
+        // All done
+        setBatchTransfer(prev => ({ ...prev, isTransferring: false, currentBatch: [] }))
+
+        // Show summary toast
+        if (failed > 0) {
+            toast({
+                variant: 'destructive',
+                title: '批量转存完成',
+                description: `成功 ${completed} 个，失败 ${failed} 个`,
+            })
+        } else {
+            toast({
+                title: '✅ 批量转存完成',
+                description: `已添加 ${completed} 个视频到发布列表`,
+            })
+        }
+
+        setShowAssetModal(false)
+        setSelectedAssetIds([])
+    }
+
+    // Legacy single add (for double-click)
+    const addVideoFromAsset = async (asset: AssetItem) => {
+        if (selectedVideos.some(v => v.id === asset.id)) return
+        if (transferringAssets.has(asset.id)) return
+
+        setBatchTransfer({ isTransferring: true, total: 1, completed: 0, failed: 0, currentBatch: [asset.id] })
+
+        const success = await transferSingleAsset(asset)
+
+        setBatchTransfer({ isTransferring: false, total: 1, completed: success ? 1 : 0, failed: success ? 0 : 1, currentBatch: [] })
+
+        if (success) {
+            toast({ title: '✅ 视频已转存', description: `已添加到发布列表` })
+            setShowAssetModal(false)
+            setSelectedAssetIds([])
+        } else {
+            toast({ variant: 'destructive', title: '转存失败', description: '请重试' })
         }
     }
 
@@ -2137,6 +2231,33 @@ export default function PublishPage() {
                                 </div>
                             )}
                         </div>
+                        {/* Batch Transfer Progress */}
+                        {batchTransfer.isTransferring && (
+                            <div className="p-4 bg-cyan-500/10 border-t border-cyan-500/30">
+                                <div className="flex items-center gap-3 mb-2">
+                                    <Loader2 className="w-5 h-5 animate-spin text-cyan-400" />
+                                    <span className="text-sm text-cyan-400 font-medium">
+                                        正在转存 {batchTransfer.completed}/{batchTransfer.total}
+                                    </span>
+                                    {batchTransfer.failed > 0 && (
+                                        <span className="text-xs text-red-400">
+                                            ({batchTransfer.failed} 失败)
+                                        </span>
+                                    )}
+                                </div>
+                                <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
+                                    <div
+                                        className="h-full bg-gradient-to-r from-cyan-500 to-pink-500 transition-all duration-300"
+                                        style={{ width: `${batchTransfer.total > 0 ? (batchTransfer.completed / batchTransfer.total) * 100 : 0}%` }}
+                                    />
+                                </div>
+                                <p className="text-xs text-gray-500 mt-2">
+                                    每次同时处理 {CONCURRENT_TRANSFER_LIMIT} 个视频，请耐心等待...
+                                </p>
+                            </div>
+                        )}
+
+                        {/* Footer */}
                         <div className="flex items-center justify-between p-4 border-t border-white/10 bg-white/5">
                             <p className="text-sm text-gray-400">
                                 已选择 <span className="text-cyan-400 font-semibold">{selectedAssetIds.length}</span> 个视频
@@ -2147,29 +2268,24 @@ export default function PublishPage() {
                             <div className="flex gap-2">
                                 <button
                                     onClick={() => {
-                                        setShowAssetModal(false)
-                                        setSelectedAssetIds([])
+                                        if (!batchTransfer.isTransferring) {
+                                            setShowAssetModal(false)
+                                            setSelectedAssetIds([])
+                                        }
                                     }}
-                                    className="px-4 py-2 rounded-lg border border-white/10 text-gray-400 hover:bg-white/5 transition-colors"
+                                    disabled={batchTransfer.isTransferring}
+                                    className="px-4 py-2 rounded-lg border border-white/10 text-gray-400 hover:bg-white/5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
-                                    取消
+                                    {batchTransfer.isTransferring ? '请等待...' : '取消'}
                                 </button>
                                 <button
-                                    onClick={() => {
-                                        // Add all selected assets
-                                        selectedAssetIds.forEach(assetId => {
-                                            const asset = assets.find(a => a.id === assetId)
-                                            if (asset && !selectedVideos.some(v => v.id === asset.id)) {
-                                                addVideoFromAsset(asset)
-                                            }
-                                        })
-                                        setShowAssetModal(false)
-                                        setSelectedAssetIds([])
-                                    }}
-                                    disabled={selectedAssetIds.length === 0}
+                                    onClick={() => startBatchTransfer(selectedAssetIds)}
+                                    disabled={selectedAssetIds.length === 0 || batchTransfer.isTransferring}
                                     className="px-4 py-2 bg-gradient-to-r from-cyan-500 to-pink-500 rounded-lg font-medium hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
-                                    确认添加 ({selectedAssetIds.length})
+                                    {batchTransfer.isTransferring
+                                        ? `转存中 (${batchTransfer.completed}/${batchTransfer.total})`
+                                        : `确认添加 (${selectedAssetIds.length})`}
                                 </button>
                             </div>
                         </div>
