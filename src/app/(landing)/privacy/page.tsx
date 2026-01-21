@@ -96,8 +96,8 @@ function EnglishContent() {
     <>
       <div className="mb-12">
         <h1 className="text-4xl font-bold mb-4">Privacy Policy</h1>
-        <p className="text-gray-400">Last Updated: January 16, 2026</p>
-        <p className="text-gray-400 mt-2">Effective Date: January 16, 2026</p>
+        <p className="text-gray-400">Last Updated: January 21, 2026</p>
+        <p className="text-gray-400 mt-2">Effective Date: January 21, 2026</p>
       </div>
 
       <div className="prose prose-invert prose-lg max-w-none">
@@ -120,7 +120,7 @@ function EnglishContent() {
               <svg className="w-6 h-6" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-5.2 1.74 2.89 2.89 0 012.31-4.64 2.93 2.93 0 01.88.13V9.4a6.84 6.84 0 00-1-.05A6.33 6.33 0 005 20.1a6.34 6.34 0 0010.86-4.43v-7a8.16 8.16 0 004.77 1.52v-3.4a4.85 4.85 0 01-1-.1z" />
               </svg>
-              2. TikTok Integration & Data Handling
+              2. TikTok Integration &amp; Data Handling
             </h2>
             <p className="leading-relaxed text-white/90">
               <strong>IMPORTANT:</strong> Tok Factory integrates with TikTok&apos;s Content Posting API to enable you to publish
@@ -131,7 +131,7 @@ function EnglishContent() {
             <p className="leading-relaxed">When you connect your TikTok account, we collect:</p>
             <ul className="list-disc pl-6 space-y-2 mt-4">
               <li><strong>TikTok User ID (Open ID):</strong> To identify your account and publish content on your behalf</li>
-              <li><strong>Display Name & Avatar:</strong> To display your account information within our platform</li>
+              <li><strong>Display Name &amp; Avatar:</strong> To display your account information within our platform</li>
               <li><strong>Basic Profile Information:</strong> Follower count, following count, and video count for display purposes</li>
               <li><strong>OAuth Access Tokens:</strong> To authenticate API requests to TikTok (encrypted and stored securely)</li>
             </ul>
@@ -151,7 +151,7 @@ function EnglishContent() {
               <li>We do NOT share your TikTok data with third parties for advertising purposes</li>
             </ul>
 
-            <h3 className="text-xl font-medium text-white mt-6 mb-3">2.4 TikTok Data Retention & Deletion</h3>
+            <h3 className="text-xl font-medium text-white mt-6 mb-3">2.4 TikTok Data Retention &amp; Deletion</h3>
             <ul className="list-disc pl-6 space-y-2">
               <li>OAuth tokens are stored only while your account is connected</li>
               <li>When you disconnect your TikTok account, we delete all associated tokens within 24 hours</li>
@@ -164,6 +164,15 @@ function EnglishContent() {
               You can disconnect your TikTok account at any time through our Account Management page. Additionally,
               you can revoke Tok Factory&apos;s access directly from your TikTok app under Settings → Security → Manage App Permissions.
             </p>
+
+            <h3 className="text-xl font-medium text-white mt-6 mb-3">2.6 TikTok Policy Links</h3>
+            <p className="leading-relaxed">
+              By using our TikTok publishing feature, you acknowledge that you have read and agree to TikTok&apos;s official policies:
+            </p>
+            <ul className="list-disc pl-6 space-y-2 mt-2">
+              <li><a href="https://www.tiktok.com/legal/page/row/privacy-policy/en" target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline">TikTok Privacy Policy</a></li>
+              <li><a href="https://www.tiktok.com/legal/page/row/terms-of-service/en" target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline">TikTok Terms of Service</a></li>
+            </ul>
           </section>
 
           <section>
@@ -218,6 +227,9 @@ function EnglishContent() {
               <li>Access controls and employee training</li>
               <li>OAuth tokens are encrypted and never exposed in logs or UI</li>
             </ul>
+            <p className="leading-relaxed mt-4">
+              <strong>Data Storage Location:</strong> Your data is stored on Alibaba Cloud servers within the People&apos;s Republic of China.
+            </p>
           </section>
 
           <section>
@@ -236,8 +248,22 @@ function EnglishContent() {
             </p>
           </section>
 
+          <section className="bg-white/5 border border-white/10 rounded-xl p-6">
+            <h2 className="text-2xl font-semibold text-white mb-4">8. Account Deletion</h2>
+            <p className="leading-relaxed">You have the right to delete your account at any time. The deletion process:</p>
+            <ol className="list-decimal pl-6 space-y-2 mt-4">
+              <li>Log in to your account, go to &quot;Settings&quot; → &quot;Account Security&quot; → &quot;Delete Account&quot;</li>
+              <li>Verify your identity and submit the deletion request</li>
+              <li>We will process the deletion within 15 business days</li>
+              <li>After deletion, your personal data will be removed within 30 days</li>
+            </ol>
+            <p className="leading-relaxed mt-4 text-white/80">
+              Note: Some data may be retained for legal compliance purposes (e.g., transaction records for 3 years as required by tax law).
+            </p>
+          </section>
+
           <section>
-            <h2 className="text-2xl font-semibold text-white mb-4">8. Data Retention</h2>
+            <h2 className="text-2xl font-semibold text-white mb-4">9. Data Retention</h2>
             <ul className="list-disc pl-6 space-y-2">
               <li><strong>Account Data:</strong> Retained while your account is active, deleted within 30 days of account deletion</li>
               <li><strong>Generated Content:</strong> Stored for 90 days unless you delete it earlier</li>
@@ -246,17 +272,21 @@ function EnglishContent() {
             </ul>
           </section>
 
-          <section>
-            <h2 className="text-2xl font-semibold text-white mb-4">9. Children&apos;s Privacy</h2>
+          <section className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-6">
+            <h2 className="text-2xl font-semibold text-white mb-4">10. Protection of Minors</h2>
             <p className="leading-relaxed">
               Tok Factory is not intended for users under 18 years of age. We do not knowingly collect personal
               information from children. If we discover that a child under 18 has provided us with personal information,
-              we will delete it immediately.
+              we will delete it within 24 hours.
+            </p>
+            <p className="leading-relaxed mt-4">
+              <strong>For Guardians:</strong> If you are the guardian of a minor and discover that they have used our services without consent,
+              please contact us immediately at privacy@tokfactoryai.com. We will delete the account and associated data promptly.
             </p>
           </section>
 
           <section>
-            <h2 className="text-2xl font-semibold text-white mb-4">10. International Data Transfers</h2>
+            <h2 className="text-2xl font-semibold text-white mb-4">11. International Data Transfers</h2>
             <p className="leading-relaxed">
               Our servers are located in the People&apos;s Republic of China. If you access our services from outside China,
               your data may be transferred to and processed in China. We ensure appropriate safeguards are in place for
@@ -265,7 +295,7 @@ function EnglishContent() {
           </section>
 
           <section>
-            <h2 className="text-2xl font-semibold text-white mb-4">11. Changes to This Policy</h2>
+            <h2 className="text-2xl font-semibold text-white mb-4">12. Changes to This Policy</h2>
             <p className="leading-relaxed">
               We may update this Privacy Policy from time to time. We will notify you of significant changes via email
               or prominent notice on our platform. Your continued use of our services after such modifications constitutes
@@ -274,15 +304,17 @@ function EnglishContent() {
           </section>
 
           <section>
-            <h2 className="text-2xl font-semibold text-white mb-4">12. Contact Us</h2>
+            <h2 className="text-2xl font-semibold text-white mb-4">13. Contact Us</h2>
             <p className="leading-relaxed">
               If you have any questions about this Privacy Policy or our data practices, please contact us:
             </p>
             <div className="mt-4 p-4 bg-white/5 rounded-lg">
               <p><strong>武汉观星文化传媒有限公司</strong></p>
+              <p className="mt-1">Wuhan Guanxing Cultural Media Co., Ltd.</p>
               <p className="mt-2">Email: privacy@tokfactoryai.com</p>
               <p>Website: www.tokfactoryai.com</p>
               <p>Address: Wuhan, Hubei Province, China</p>
+              <p className="mt-2 text-gray-400">ICP License: 鄂ICP备2023007484号</p>
             </div>
             <p className="leading-relaxed mt-4">
               We will respond to your inquiry within 15 business days.
@@ -299,8 +331,8 @@ function ChineseContent() {
     <>
       <div className="mb-12">
         <h1 className="text-4xl font-bold mb-4">隐私政策</h1>
-        <p className="text-gray-400">最后更新日期：2026年1月16日</p>
-        <p className="text-gray-400 mt-2">生效日期：2026年1月16日</p>
+        <p className="text-gray-400">最后更新日期：2026年1月21日</p>
+        <p className="text-gray-400 mt-2">生效日期：2026年1月21日</p>
       </div>
 
       <div className="prose prose-invert prose-lg max-w-none">
@@ -366,6 +398,15 @@ function ChineseContent() {
               您可以随时通过我们的账号管理页面断开 TikTok 账号连接。此外，您也可以直接在 TikTok 应用的
               设置 → 安全 → 管理应用权限 中撤销 Tok Factory 的访问权限。
             </p>
+
+            <h3 className="text-xl font-medium text-white mt-6 mb-3">2.6 TikTok 政策链接</h3>
+            <p className="leading-relaxed">
+              使用我们的 TikTok 发布功能，即表示您已阅读并同意 TikTok 的官方政策：
+            </p>
+            <ul className="list-disc pl-6 space-y-2 mt-2">
+              <li><a href="https://www.tiktok.com/legal/page/row/privacy-policy/en" target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline">TikTok 隐私政策</a></li>
+              <li><a href="https://www.tiktok.com/legal/page/row/terms-of-service/en" target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline">TikTok 服务条款</a></li>
+            </ul>
           </section>
 
           <section>
@@ -420,6 +461,9 @@ function ChineseContent() {
               <li>访问控制和员工培训</li>
               <li>OAuth 令牌加密存储，永不在日志或界面中暴露</li>
             </ul>
+            <p className="leading-relaxed mt-4">
+              <strong>数据存储位置：</strong>您的数据存储于中华人民共和国境内的阿里云服务器。
+            </p>
           </section>
 
           <section>
@@ -438,8 +482,22 @@ function ChineseContent() {
             </p>
           </section>
 
+          <section className="bg-white/5 border border-white/10 rounded-xl p-6">
+            <h2 className="text-2xl font-semibold text-white mb-4">八、账户注销</h2>
+            <p className="leading-relaxed">您有权随时注销账户。注销流程：</p>
+            <ol className="list-decimal pl-6 space-y-2 mt-4">
+              <li>登录账户，进入「设置」→「账户安全」→「注销账户」</li>
+              <li>验证身份后提交注销申请</li>
+              <li>我们将在 15 个工作日内完成注销处理</li>
+              <li>注销后，您的个人数据将在 30 天内被删除</li>
+            </ol>
+            <p className="leading-relaxed mt-4 text-white/80">
+              注：部分数据可能因法律合规要求保留（如交易记录依税法保留3年）。
+            </p>
+          </section>
+
           <section>
-            <h2 className="text-2xl font-semibold text-white mb-4">八、数据保留</h2>
+            <h2 className="text-2xl font-semibold text-white mb-4">九、数据保留</h2>
             <ul className="list-disc pl-6 space-y-2">
               <li><strong>账户数据：</strong>在账户有效期间保留，账户删除后 30 天内删除</li>
               <li><strong>生成内容：</strong>存储 90 天，除非您提前删除</li>
@@ -448,16 +506,20 @@ function ChineseContent() {
             </ul>
           </section>
 
-          <section>
-            <h2 className="text-2xl font-semibold text-white mb-4">九、未成年人保护</h2>
+          <section className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-6">
+            <h2 className="text-2xl font-semibold text-white mb-4">十、未成年人保护</h2>
             <p className="leading-relaxed">
               Tok Factory 不面向 18 岁以下用户。我们不会故意收集儿童的个人信息。如果我们发现 18 岁以下的儿童向我们提供了个人信息，
-              我们将立即删除。
+              我们将在 24 小时内删除。
+            </p>
+            <p className="leading-relaxed mt-4">
+              <strong>监护人通道：</strong>如果您是未成年人的监护人，发现被监护人未经同意使用本服务，请立即通过 privacy@tokfactoryai.com 联系我们，
+              我们将及时删除相关账户和数据。
             </p>
           </section>
 
           <section>
-            <h2 className="text-2xl font-semibold text-white mb-4">十、国际数据传输</h2>
+            <h2 className="text-2xl font-semibold text-white mb-4">十一、国际数据传输</h2>
             <p className="leading-relaxed">
               我们的服务器位于中华人民共和国境内。如果您从中国境外访问我们的服务，您的数据可能会被传输到中国并在中国处理。
               我们确保对国际数据传输采取适当的保障措施。
@@ -465,7 +527,7 @@ function ChineseContent() {
           </section>
 
           <section>
-            <h2 className="text-2xl font-semibold text-white mb-4">十一、政策变更</h2>
+            <h2 className="text-2xl font-semibold text-white mb-4">十二、政策变更</h2>
             <p className="leading-relaxed">
               我们可能会不时更新本隐私政策。对于重大变更，我们将通过电子邮件或在平台上显著通知您。
               在此类修改后继续使用我们的服务即表示您接受更新后的政策。
@@ -473,15 +535,17 @@ function ChineseContent() {
           </section>
 
           <section>
-            <h2 className="text-2xl font-semibold text-white mb-4">十二、联系我们</h2>
+            <h2 className="text-2xl font-semibold text-white mb-4">十三、联系我们</h2>
             <p className="leading-relaxed">
               如果您对本隐私政策或我们的数据处理有任何疑问，请联系我们：
             </p>
             <div className="mt-4 p-4 bg-white/5 rounded-lg">
               <p><strong>武汉观星文化传媒有限公司</strong></p>
+              <p className="mt-1">Wuhan Guanxing Cultural Media Co., Ltd.</p>
               <p className="mt-2">邮箱：privacy@tokfactoryai.com</p>
               <p>网站：www.tokfactoryai.com</p>
               <p>地址：中国湖北省武汉市</p>
+              <p className="mt-2 text-gray-400">ICP备案号：鄂ICP备2023007484号</p>
             </div>
             <p className="leading-relaxed mt-4">
               我们将在收到您的请求后 15 个工作日内予以回复。

@@ -96,8 +96,8 @@ function EnglishContent() {
     <>
       <div className="mb-12">
         <h1 className="text-4xl font-bold mb-4">Terms of Service</h1>
-        <p className="text-gray-400">Last Updated: January 16, 2026</p>
-        <p className="text-gray-400 mt-2">Effective Date: January 16, 2026</p>
+        <p className="text-gray-400">Last Updated: January 21, 2026</p>
+        <p className="text-gray-400 mt-2">Effective Date: January 21, 2026</p>
       </div>
 
       <div className="prose prose-invert prose-lg max-w-none">
@@ -155,7 +155,14 @@ function EnglishContent() {
               <li>We are not liable for any account restrictions or bans imposed by TikTok</li>
             </ul>
 
-            <h3 className="text-xl font-medium text-white mt-6 mb-3">3.3 Disconnecting Your Account</h3>
+            <h3 className="text-xl font-medium text-white mt-6 mb-3">3.3 API Limitations</h3>
+            <ul className="list-disc pl-6 space-y-2">
+              <li>Service availability depends on TikTok API functionality; we are not liable for API outages</li>
+              <li>TikTok may modify or discontinue API features at any time without notice to us</li>
+              <li>We reserve the right to adjust our TikTok integration features accordingly</li>
+            </ul>
+
+            <h3 className="text-xl font-medium text-white mt-6 mb-3">3.4 Disconnecting Your Account</h3>
             <ul className="list-disc pl-6 space-y-2">
               <li>You may disconnect your TikTok account at any time through our Account Management page</li>
               <li>Disconnection stops all future publishing but does not remove already published content</li>
@@ -180,21 +187,24 @@ function EnglishContent() {
             <p className="leading-relaxed mt-4">5.5 We reserve the right to modify pricing with 30 days&apos; advance notice.</p>
           </section>
 
-          <section>
+          <section className="bg-red-500/10 border border-red-500/20 rounded-xl p-6">
             <h2 className="text-2xl font-semibold text-white mb-4">6. Acceptable Use Policy</h2>
             <p className="leading-relaxed">You agree NOT to use our services to:</p>
-            <ul className="list-disc pl-6 space-y-2 mt-4">
-              <li>Create, upload, or distribute content that is illegal, harmful, threatening, abusive, harassing, defamatory, or otherwise objectionable</li>
-              <li>Generate content that infringes on intellectual property rights, privacy rights, or publicity rights of others</li>
-              <li>Create pornographic, sexually explicit, violent, or hateful content</li>
-              <li>Impersonate any person or entity or misrepresent your affiliation</li>
-              <li>Use automated systems or bots to abuse our services</li>
-              <li>Attempt to bypass any security measures or access restrictions</li>
-              <li>Use our platform for any fraudulent or deceptive purposes</li>
-              <li>Violate any applicable laws or regulations</li>
-            </ul>
-            <p className="leading-relaxed mt-4">
-              <strong>Violation of these terms may result in immediate account termination without refund.</strong>
+            <ol className="list-decimal pl-6 space-y-2 mt-4">
+              <li>Create, upload, or distribute content that violates any laws or regulations</li>
+              <li>Publish content that endangers national security or discloses state secrets</li>
+              <li>Create content that undermines national unity or sovereignty</li>
+              <li>Damage national honor and interests</li>
+              <li>Incite ethnic hatred or discrimination, or undermine national unity</li>
+              <li>Undermine national religious policies or promote cults</li>
+              <li>Spread rumors or disrupt social order and stability</li>
+              <li>Create pornographic, sexually explicit, or violent content</li>
+              <li>Publish content that insults, defames, or infringes upon the rights of others</li>
+              <li>Infringe upon intellectual property rights, portrait rights, or privacy rights of others</li>
+              <li>Create any other content that violates public morals or social ethics</li>
+            </ol>
+            <p className="leading-relaxed mt-4 text-white font-medium">
+              Violation of these terms may result in immediate account termination without refund.
             </p>
           </section>
 
@@ -212,7 +222,17 @@ function EnglishContent() {
               process, store, and display your content as necessary to provide our services.
             </p>
 
-            <h3 className="text-xl font-medium text-white mt-6 mb-3">7.3 Uploaded Materials</h3>
+            <h3 className="text-xl font-medium text-white mt-6 mb-3">7.3 Content License Grant</h3>
+            <p className="leading-relaxed">
+              For content you publicly post through our platform, you grant us a non-exclusive, royalty-free, worldwide license to:
+            </p>
+            <ul className="list-disc pl-6 space-y-2 mt-2">
+              <li>Display and distribute within the platform</li>
+              <li>Use for platform promotion and marketing</li>
+              <li>Analyze for service improvement</li>
+            </ul>
+
+            <h3 className="text-xl font-medium text-white mt-6 mb-3">7.4 Uploaded Materials</h3>
             <p className="leading-relaxed">
               You represent and warrant that you have all necessary rights to any materials you upload. You are solely responsible for
               any claims arising from your uploaded content.
@@ -238,6 +258,8 @@ function EnglishContent() {
               <li>Our total liability shall not exceed the amount you paid us in the 12 months preceding the claim</li>
               <li>We are not responsible for third-party actions, including TikTok&apos;s moderation decisions</li>
               <li>We are not liable for service interruptions due to factors beyond our control</li>
+              <li>We are not liable for damages caused by third-party API changes (including TikTok API)</li>
+              <li>We are not liable for force majeure events including network outages, hacker attacks, or natural disasters</li>
             </ul>
           </section>
 
@@ -283,10 +305,12 @@ function EnglishContent() {
               For questions about these Terms, please contact us:
             </p>
             <div className="mt-4 p-4 bg-white/5 rounded-lg">
-              <p><strong>Wuhan Guanxing Cultural Media Co., Ltd.</strong></p>
+              <p><strong>武汉观星文化传媒有限公司</strong></p>
+              <p className="mt-1">Wuhan Guanxing Cultural Media Co., Ltd.</p>
               <p className="mt-2">Email: legal@tokfactoryai.com</p>
               <p>Website: www.tokfactoryai.com</p>
               <p>Address: Wuhan, Hubei Province, China</p>
+              <p className="mt-2 text-gray-400">ICP License: 鄂ICP备2023007484号</p>
             </div>
           </section>
         </div>
@@ -300,8 +324,8 @@ function ChineseContent() {
     <>
       <div className="mb-12">
         <h1 className="text-4xl font-bold mb-4">服务条款</h1>
-        <p className="text-gray-400">最后更新日期：2026年1月16日</p>
-        <p className="text-gray-400 mt-2">生效日期：2026年1月16日</p>
+        <p className="text-gray-400">最后更新日期：2026年1月21日</p>
+        <p className="text-gray-400 mt-2">生效日期：2026年1月21日</p>
       </div>
 
       <div className="prose prose-invert prose-lg max-w-none">
@@ -358,7 +382,14 @@ function ChineseContent() {
               <li>我们不对 TikTok 施加的任何账号限制或封禁承担责任</li>
             </ul>
 
-            <h3 className="text-xl font-medium text-white mt-6 mb-3">3.3 断开账号连接</h3>
+            <h3 className="text-xl font-medium text-white mt-6 mb-3">3.3 API 限制说明</h3>
+            <ul className="list-disc pl-6 space-y-2">
+              <li>服务可用性取决于 TikTok API 功能；我们不对 API 中断负责</li>
+              <li>TikTok 可能随时修改或停止 API 功能，无需提前通知我们</li>
+              <li>我们保留相应调整 TikTok 集成功能的权利</li>
+            </ul>
+
+            <h3 className="text-xl font-medium text-white mt-6 mb-3">3.4 断开账号连接</h3>
             <ul className="list-disc pl-6 space-y-2">
               <li>您可以随时通过账号管理页面断开 TikTok 账号连接</li>
               <li>断开连接将停止所有未来的发布，但不会删除已发布的内容</li>
@@ -383,21 +414,24 @@ function ChineseContent() {
             <p className="leading-relaxed mt-4">5.5 我们保留在提前 30 天通知后修改定价的权利。</p>
           </section>
 
-          <section>
+          <section className="bg-red-500/10 border border-red-500/20 rounded-xl p-6">
             <h2 className="text-2xl font-semibold text-white mb-4">六、使用规范</h2>
             <p className="leading-relaxed">您同意不使用我们的服务：</p>
-            <ul className="list-disc pl-6 space-y-2 mt-4">
-              <li>创建、上传或传播违法、有害、威胁、辱骂、骚扰、诽谤或其他令人反感的内容</li>
-              <li>生成侵犯他人知识产权、隐私权或肖像权的内容</li>
-              <li>创建色情、性暗示、暴力或仇恨内容</li>
-              <li>冒充任何个人或实体或虚假陈述您的关系</li>
-              <li>使用自动化系统或机器人滥用我们的服务</li>
-              <li>试图绑过任何安全措施或访问限制</li>
-              <li>将我们的平台用于任何欺诈或欺骗目的</li>
-              <li>违反任何适用法律或法规</li>
-            </ul>
-            <p className="leading-relaxed mt-4">
-              <strong>违反这些条款可能导致立即终止账户且不予退款。</strong>
+            <ol className="list-decimal pl-6 space-y-2 mt-4">
+              <li>创建、上传或传播违反国家法律法规的内容</li>
+              <li>发布危害国家安全、泄露国家秘密的内容</li>
+              <li>颠覆国家政权、破坏国家统一的内容</li>
+              <li>损害国家荣誉和利益的内容</li>
+              <li>煽动民族仇恨、破坏民族团结的内容</li>
+              <li>破坏国家宗教政策、宣扬邪教的内容</li>
+              <li>散布谣言、扰乱社会秩序的内容</li>
+              <li>淫秽、色情、暴力的内容</li>
+              <li>侮辱、诽谤他人的内容</li>
+              <li>侵犯他人知识产权、肖像权、隐私权的内容</li>
+              <li>其他违反公序良俗的内容</li>
+            </ol>
+            <p className="leading-relaxed mt-4 text-white font-medium">
+              违反上述规定可能导致账户立即封禁且不予退款。
             </p>
           </section>
 
@@ -415,7 +449,17 @@ function ChineseContent() {
               以处理、存储和显示您的内容，以便提供我们的服务。
             </p>
 
-            <h3 className="text-xl font-medium text-white mt-6 mb-3">7.3 上传素材</h3>
+            <h3 className="text-xl font-medium text-white mt-6 mb-3">7.3 内容授权许可</h3>
+            <p className="leading-relaxed">
+              对于您通过本平台公开发布的内容，您授予我们非排他的、免费的、全球范围内的使用许可，用于：
+            </p>
+            <ul className="list-disc pl-6 space-y-2 mt-2">
+              <li>在平台内展示和分发</li>
+              <li>用于平台宣传和推广</li>
+              <li>用于服务分析和改进</li>
+            </ul>
+
+            <h3 className="text-xl font-medium text-white mt-6 mb-3">7.4 上传素材</h3>
             <p className="leading-relaxed">
               您声明并保证您拥有上传的任何素材的所有必要权利。您对因上传内容引起的任何索赔承担全部责任。
             </p>
@@ -440,6 +484,8 @@ function ChineseContent() {
               <li>我们的总责任不超过您在索赔前 12 个月内向我们支付的金额</li>
               <li>我们不对第三方行为负责，包括 TikTok 的审核决定</li>
               <li>我们不对超出我们控制范围的因素导致的服务中断负责</li>
+              <li>由于第三方 API（如 TikTok API）变更导致的服务调整，我们不承担责任</li>
+              <li>由于网络环境、黑客攻击、自然灾害等不可抗力导致的损失，我们不承担责任</li>
             </ul>
           </section>
 
@@ -485,9 +531,11 @@ function ChineseContent() {
             </p>
             <div className="mt-4 p-4 bg-white/5 rounded-lg">
               <p><strong>武汉观星文化传媒有限公司</strong></p>
+              <p className="mt-1">Wuhan Guanxing Cultural Media Co., Ltd.</p>
               <p className="mt-2">邮箱：legal@tokfactoryai.com</p>
               <p>网站：www.tokfactoryai.com</p>
               <p>地址：中国湖北省武汉市</p>
+              <p className="mt-2 text-gray-400">ICP备案号：鄂ICP备2023007484号</p>
             </div>
           </section>
         </div>
