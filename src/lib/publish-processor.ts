@@ -36,6 +36,15 @@ interface PublishItem {
     scheduled_at: string | null
     cover_timestamp_ms?: number
     status: string
+    publish_tasks: {
+        privacy_level: 'PUBLIC_TO_EVERYONE' | 'MUTUAL_FOLLOW_FRIENDS' | 'FOLLOWER_OF_CREATOR' | 'SELF_ONLY'
+        allow_comment: boolean
+        allow_duet: boolean
+        allow_stitch: boolean
+        brand_content_toggle: boolean
+        brand_organic_toggle: boolean
+        is_aigc: boolean
+    }
 }
 
 /** 账号信息 */
@@ -183,7 +192,17 @@ async function queryPendingItems(
 
     let query = supabase
         .from('publish_task_items')
-        .select('id, task_id, account_id, video_url, title, scheduled_at, cover_timestamp_ms, status')
+        .select(`
+            id, task_id, account_id, video_url, title, scheduled_at, cover_timestamp_ms, status,
+            publish_tasks (
+                privacy_level,
+                allow_comment,
+                allow_duet,
+                allow_stitch,
+                brand_content_toggle,
+                is_aigc
+            )
+        `)
 
     if (options.mode === 'immediate' && options.taskId) {
         // 立即发布：查询指定任务的所有 pending 项
@@ -297,11 +316,12 @@ async function publishItem(
             item.video_url,
             {
                 title: item.title,
-                privacyLevel: 'SELF_ONLY',  // 沙盒模式
-                disableDuet: false,
-                disableComment: false,
-                disableStitch: false,
-                isAigc: true,
+                privacyLevel: item.publish_tasks?.privacy_level || 'SELF_ONLY',
+                disableDuet: !item.publish_tasks?.allow_duet,
+                disableComment: !item.publish_tasks?.allow_comment,
+                disableStitch: !item.publish_tasks?.allow_stitch,
+                brandContentToggle: item.publish_tasks?.brand_content_toggle,
+                isAigc: item.publish_tasks?.is_aigc ?? true,
                 videoCoverTimestampMs: item.cover_timestamp_ms,
             }
         )

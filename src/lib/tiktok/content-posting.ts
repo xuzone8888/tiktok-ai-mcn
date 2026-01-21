@@ -117,7 +117,13 @@ export async function initVideoPublishFromUrl(
 
     if (!response.ok) {
         const errorText = await response.text();
-        throw new Error(`Failed to init video publish: ${errorText}`);
+        try {
+            const errorJson = JSON.parse(errorText);
+            const message = errorJson.error?.message || errorJson.message || errorText;
+            throw new Error(`TikTok API Error: ${message}`);
+        } catch (e) {
+            throw new Error(`Failed to init video publish: ${errorText.substring(0, 100)}...`);
+        }
     }
 
     const data: TikTokVideoUploadInitResponse = await response.json();
