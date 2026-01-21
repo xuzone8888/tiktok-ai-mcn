@@ -34,6 +34,13 @@ import { format, addMinutes } from 'date-fns'
 import { zhCN } from 'date-fns/locale'
 import { useToast } from '@/hooks/use-toast'
 import { TaskManager } from '@/components/publish/TaskManager'
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogFooter, // Make sure to export Footer if available, otherwise just use div
+} from "@/components/ui/dialog"
 
 // TikTok supported video formats
 const TIKTOK_VIDEO_FORMATS = ['.mp4', '.webm', '.mov']
@@ -1097,55 +1104,85 @@ export default function PublishPage() {
 
 
 
-                        {/* Upload Progress List */}
+                        {/* Upload Progress List - Optimized UI */}
                         {uploadingFiles.length > 0 && (
-                            <div className="mb-4 p-4 rounded-xl bg-white/5 border border-cyan-500/30">
-                                <div className="flex items-center gap-2 mb-3">
-                                    <Loader2 className="w-4 h-4 animate-spin text-cyan-400" />
-                                    <span className="text-sm text-cyan-400">
-                                        正在上传 {uploadingFiles.length} 个视频
-                                        ({uploadingFiles.filter(f => f.status === 'done').length}/{uploadingFiles.length} 完成)
-                                    </span>
-                                    <span className="ml-auto text-sm font-medium text-cyan-400 tabular-nums transition-all duration-500">
-                                        {Math.round(uploadingFiles.reduce((sum, f) => sum + f.progress, 0) / uploadingFiles.length)}%
-                                    </span>
+                            <div className="mb-6 p-5 rounded-2xl bg-gradient-to-br from-gray-900/90 to-black/90 border border-white/10 backdrop-blur-md shadow-xl">
+                                <div className="flex items-center justify-between mb-4">
+                                    <div className="flex items-center gap-3">
+                                        <div className="p-2 rounded-full bg-cyan-500/10">
+                                            {uploadingFiles.every(f => f.status === 'done') ? (
+                                                <CheckCircle2 className="w-5 h-5 text-cyan-400" />
+                                            ) : (
+                                                <Loader2 className="w-5 h-5 animate-spin text-cyan-400" />
+                                            )}
+                                        </div>
+                                        <div>
+                                            <h3 className="text-sm font-semibold text-white">
+                                                正在上传 {uploadingFiles.length} 个视频
+                                            </h3>
+                                            <p className="text-xs text-gray-400 mt-0.5">
+                                                {uploadingFiles.filter(f => f.status === 'done').length}/{uploadingFiles.length} 完成
+                                                <span className="mx-1.5 text-white/10">|</span>
+                                                <span className="text-cyan-400 font-medium">{Math.round(uploadingFiles.reduce((sum, f) => sum + f.progress, 0) / uploadingFiles.length)}%</span>
+                                            </p>
+                                        </div>
+                                    </div>
+
+
                                 </div>
 
                                 {/* Total progress bar */}
-                                <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden mb-3">
+                                <div className="relative w-full h-1.5 bg-white/5 rounded-full overflow-hidden mb-4">
                                     <div
-                                        className="h-full bg-gradient-to-r from-cyan-500 to-pink-500 transition-all duration-300"
+                                        className="absolute top-0 left-0 h-full bg-gradient-to-r from-cyan-500 via-blue-500 to-purple-500 transition-all duration-300 ease-out shadow-[0_0_10px_rgba(6,182,212,0.5)]"
                                         style={{ width: `${uploadingFiles.reduce((sum, f) => sum + f.progress, 0) / uploadingFiles.length}%` }}
                                     />
                                 </div>
 
-                                {/* Individual file status list */}
-                                <div className="space-y-1.5 max-h-40 overflow-y-auto">
+                                {/* Individual file status list - Grid for better density */}
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
                                     {uploadingFiles.map(file => (
-                                        <div key={file.id} className="flex items-center gap-2 text-xs">
-                                            {file.status === 'done' ? (
-                                                <CheckCircle2 className="w-3.5 h-3.5 text-green-400 flex-shrink-0" />
-                                            ) : file.status === 'error' ? (
-                                                <XCircle className="w-3.5 h-3.5 text-red-400 flex-shrink-0" />
-                                            ) : file.status === 'uploading' ? (
-                                                <Loader2 className="w-3.5 h-3.5 text-cyan-400 animate-spin flex-shrink-0" />
-                                            ) : (
-                                                <Clock className="w-3.5 h-3.5 text-gray-500 flex-shrink-0" />
-                                            )}
-                                            <span className={`truncate flex-1 ${file.status === 'done' ? 'text-green-400' :
-                                                file.status === 'error' ? 'text-red-400' :
-                                                    file.status === 'uploading' ? 'text-white' : 'text-gray-500'
-                                                }`}>
-                                                {file.name}
-                                            </span>
-                                            <span className={`text-xs min-w-[36px] text-right ${file.status === 'done' ? 'text-green-400' :
-                                                file.status === 'error' ? 'text-red-400' :
-                                                    file.status === 'uploading' ? 'text-cyan-400' : 'text-gray-500'
-                                                }`}>
-                                                {file.status === 'done' ? '完成' :
-                                                    file.status === 'error' ? '失败' :
-                                                        file.status === 'uploading' ? `${file.progress}%` : '等待'}
-                                            </span>
+                                        <div key={file.id} className="group flex items-center gap-3 p-2 rounded-lg bg-white/5 hover:bg-white/10 transition-colors border border-transparent hover:border-white/5">
+                                            <div className="flex-shrink-0">
+                                                {file.status === 'done' ? (
+                                                    <div className="w-6 h-6 rounded-full bg-green-500/20 flex items-center justify-center">
+                                                        <Check className="w-3.5 h-3.5 text-green-400" />
+                                                    </div>
+                                                ) : file.status === 'error' ? (
+                                                    <div className="w-6 h-6 rounded-full bg-red-500/20 flex items-center justify-center">
+                                                        <X className="w-3.5 h-3.5 text-red-400" />
+                                                    </div>
+                                                ) : (
+                                                    <div className="relative w-6 h-6 flex items-center justify-center">
+                                                        <svg className="w-full h-full transform -rotate-90">
+                                                            <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" fill="none" className="text-white/10" />
+                                                            <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" fill="none" className="text-cyan-500 transition-all duration-300" strokeDasharray={62.8} strokeDashoffset={62.8 - (62.8 * file.progress) / 100} />
+                                                        </svg>
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            <div className="flex-1 min-w-0">
+                                                <div className="flex items-center justify-between mb-0.5">
+                                                    <span className={`text-xs font-medium truncate ${file.status === 'done' ? 'text-gray-300 group-hover:text-white' : 'text-white'}`}>
+                                                        {file.name}
+                                                    </span>
+                                                    <span className={`text-[10px] tabular-nums ${file.status === 'done' ? 'text-green-400' :
+                                                        file.status === 'error' ? 'text-red-400' :
+                                                            'text-cyan-400'
+                                                        }`}>
+                                                        {file.status === 'done' ? '完成' :
+                                                            file.status === 'error' ? '失败' :
+                                                                `${file.progress}%`}
+                                                    </span>
+                                                </div>
+                                                {/* Mini individual bar for active uploads */}
+                                                {file.status === 'uploading' && (
+                                                    <div className="w-full h-0.5 bg-white/10 rounded-full overflow-hidden">
+                                                        <div className="h-full bg-cyan-500 transition-all duration-300" style={{ width: `${file.progress}%` }} />
+                                                    </div>
+                                                )}
+                                            </div>
                                         </div>
                                     ))}
                                 </div>
@@ -1264,123 +1301,7 @@ export default function PublishPage() {
                             </p>
                         )}
 
-                        {/* Expanded video editor - timeline cover selection */}
-                        {expandedVideoId && selectedVideos.find(v => v.id === expandedVideoId) && (
-                            <div className="mt-4 p-4 bg-gradient-to-r from-cyan-500/5 to-pink-500/5 rounded-xl border border-white/10">
-                                {(() => {
-                                    const video = selectedVideos.find(v => v.id === expandedVideoId)!
-                                    return (
-                                        <div className="space-y-4">
-                                            <div className="flex items-center justify-between">
-                                                <h4 className="font-medium text-sm flex items-center gap-2">
-                                                    <ImageIcon className="w-4 h-4 text-pink-400" />
-                                                    选择封面: <span className="text-gray-400 font-normal truncate max-w-[200px]">{video.name}</span>
-                                                </h4>
-                                                <button
-                                                    onClick={() => setExpandedVideoId(null)}
-                                                    className="p-1.5 hover:bg-white/10 rounded-lg transition-colors"
-                                                >
-                                                    <X className="w-4 h-4" />
-                                                </button>
-                                            </div>
 
-                                            {/* Video preview and timeline */}
-                                            {video.url ? (
-                                                <div className="space-y-3">
-                                                    {/* Video preview */}
-                                                    <div className="flex gap-4 items-start">
-                                                        <div className="w-32 h-56 rounded-xl overflow-hidden bg-black flex-shrink-0 relative">
-                                                            <video
-                                                                id={`cover-video-${video.id}`}
-                                                                src={video.localUrl || video.url}
-                                                                crossOrigin="anonymous"
-                                                                className="w-full h-full object-cover"
-                                                                muted
-                                                                playsInline
-                                                                preload="metadata"
-                                                                onLoadedMetadata={(e) => {
-                                                                    // Seek to current cover time or 0
-                                                                    e.currentTarget.currentTime = 0.1
-                                                                }}
-                                                            />
-                                                            <div className="absolute bottom-2 left-2 right-2 bg-black/70 rounded-lg px-2 py-1">
-                                                                <p className="text-[10px] text-center text-gray-300">预览帧</p>
-                                                            </div>
-                                                        </div>
-
-                                                        <div className="flex-1 space-y-3">
-                                                            <p className="text-xs text-gray-400">拖动滑块选择视频中的任意帧作为封面</p>
-
-                                                            {/* Timeline slider */}
-                                                            <div className="space-y-2">
-                                                                <input
-                                                                    type="range"
-                                                                    min="0"
-                                                                    max="100"
-                                                                    defaultValue="1"
-                                                                    onChange={(e) => {
-                                                                        const videoEl = document.getElementById(`cover-video-${video.id}`) as HTMLVideoElement
-                                                                        if (videoEl && videoEl.duration) {
-                                                                            videoEl.currentTime = (parseInt(e.target.value) / 100) * videoEl.duration
-                                                                        }
-                                                                    }}
-                                                                    className="w-full h-2 bg-white/10 rounded-full appearance-none cursor-pointer accent-pink-500 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-pink-500 [&::-webkit-slider-thumb]:cursor-grab"
-                                                                />
-                                                                <div className="flex justify-between text-[10px] text-gray-500">
-                                                                    <span>0:00</span>
-                                                                    <span>视频结束</span>
-                                                                </div>
-                                                            </div>
-
-                                                            {/* Action buttons */}
-                                                            <div className="flex gap-2">
-                                                                <button
-                                                                    onClick={() => {
-                                                                        const videoEl = document.getElementById(`cover-video-${video.id}`) as HTMLVideoElement
-                                                                        if (videoEl) {
-                                                                            try {
-                                                                                const canvas = document.createElement('canvas')
-                                                                                canvas.width = videoEl.videoWidth || 720
-                                                                                canvas.height = videoEl.videoHeight || 1280
-                                                                                const ctx = canvas.getContext('2d')
-                                                                                if (ctx) {
-                                                                                    ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height)
-                                                                                    const frameData = canvas.toDataURL('image/jpeg', 0.9)
-                                                                                    // 保存封面数据和时间戳（毫秒）
-                                                                                    const timestampMs = Math.round(videoEl.currentTime * 1000)
-                                                                                    updateVideoCover(video.id, frameData, timestampMs)
-                                                                                    setExpandedVideoId(null)
-                                                                                }
-                                                                            } catch (error) {
-                                                                                console.error('Failed to capture frame:', error)
-                                                                                // CORS error - suggest using upload instead
-                                                                                setUploadError('无法从该视频捕获帧，请重新上传视频')
-                                                                            }
-                                                                        }
-                                                                    }}
-                                                                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-gradient-to-r from-cyan-500 to-pink-500 rounded-lg font-medium text-sm hover:opacity-90 transition-opacity"
-                                                                >
-                                                                    <Check className="w-4 h-4" />
-                                                                    使用当前帧
-                                                                </button>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-
-                                                    <p className="text-[10px] text-gray-500">
-                                                        💡 拖动滑块可预览不同时间点的画面，点击"使用当前帧"确认选择。
-                                                    </p>
-                                                </div>
-                                            ) : (
-                                                <div className="text-center py-8">
-                                                    <p className="text-sm text-gray-400">视频加载中或不可用，请重新上传视频</p>
-                                                </div>
-                                            )}
-                                        </div>
-                                    )
-                                })()}
-                            </div>
-                        )}
                     </section>
 
                     {/* Step 2: Select Accounts */}
@@ -2403,6 +2324,144 @@ export default function PublishPage() {
                 onChange={handleCoverUpload}
                 className="hidden"
             />
-        </div >
+
+            {/* Cover Selection Modal - Fixed Position Overlay */}
+            <Dialog open={!!expandedVideoId} onOpenChange={(open) => !open && setExpandedVideoId(null)}>
+                <DialogContent className="sm:max-w-4xl bg-[#0f0f12] border-white/10 text-white p-0 overflow-hidden shadow-2xl shadow-black/50 gap-0 block">
+                    <DialogHeader className="p-5 border-b border-white/10 bg-white/5">
+                        <DialogTitle className="flex items-center gap-2 text-lg">
+                            <ImageIcon className="w-5 h-5 text-pink-400" />
+                            编辑视频封面
+                            {expandedVideoId && selectedVideos.find(v => v.id === expandedVideoId) && (
+                                <span className="text-sm font-normal text-gray-400 ml-2 truncate max-w-[300px] opacity-70">
+                                    {selectedVideos.find(v => v.id === expandedVideoId)?.name}
+                                </span>
+                            )}
+                        </DialogTitle>
+                    </DialogHeader>
+
+                    <div className="p-6">
+                        {expandedVideoId && selectedVideos.find(v => v.id === expandedVideoId) && (() => {
+                            const video = selectedVideos.find(v => v.id === expandedVideoId)!
+                            return (
+                                <div className="space-y-4">
+                                    {/* Video preview and timeline */}
+                                    {video.url ? (
+                                        <div className="space-y-6">
+                                            {/* Video preview */}
+                                            <div className="flex flex-col md:flex-row gap-8 items-start">
+                                                {/* Left: Video Player */}
+                                                <div className="mx-auto md:mx-0 w-[240px] aspect-[9/16] rounded-xl overflow-hidden bg-black flex-shrink-0 relative shadow-2xl border border-white/10 ring-1 ring-white/5">
+                                                    <video
+                                                        id={`cover-video-${video.id}-modal`}
+                                                        src={video.localUrl || video.url}
+                                                        crossOrigin="anonymous"
+                                                        className="w-full h-full object-cover"
+                                                        muted
+                                                        playsInline
+                                                        preload="metadata"
+                                                        onLoadedMetadata={(e) => {
+                                                            e.currentTarget.currentTime = 0.1
+                                                        }}
+                                                    />
+                                                    <div className="absolute bottom-3 left-3 right-3 bg-black/70 backdrop-blur-md rounded-lg px-2 py-1.5 border border-white/10">
+                                                        <p className="text-[10px] text-center text-gray-200 font-medium tracking-wide">当前预览帧</p>
+                                                    </div>
+                                                </div>
+
+                                                {/* Right: Controls */}
+                                                <div className="flex-1 space-y-6 w-full pt-2">
+                                                    <div className="space-y-2">
+                                                        <h4 className="text-base font-medium text-white flex items-center gap-2">
+                                                            <Sliders className="w-4 h-4 text-cyan-400" />
+                                                            选择封面帧
+                                                        </h4>
+                                                        <p className="text-sm text-gray-400 leading-relaxed">
+                                                            拖动下方滑块精确选择视频中的精彩瞬间作为封面，或者直接上传一张本地图片。
+                                                        </p>
+                                                    </div>
+
+                                                    {/* Timeline slider */}
+                                                    <div className="space-y-4 p-5 bg-white/5 rounded-xl border border-white/10">
+                                                        <div className="flex justify-between text-xs text-gray-400 font-medium uppercase tracking-wider">
+                                                            <span>0:00</span>
+                                                            <span>视频进度</span>
+                                                            <span>END</span>
+                                                        </div>
+                                                        <div className="relative h-6 flex items-center">
+                                                            <input
+                                                                type="range"
+                                                                min="0"
+                                                                max="100"
+                                                                defaultValue="1"
+                                                                onChange={(e) => {
+                                                                    const videoEl = document.getElementById(`cover-video-${video.id}-modal`) as HTMLVideoElement
+                                                                    if (videoEl && videoEl.duration) {
+                                                                        videoEl.currentTime = (parseInt(e.target.value) / 100) * videoEl.duration
+                                                                    }
+                                                                }}
+                                                                className="w-full h-2 bg-gray-700/50 rounded-full appearance-none cursor-pointer accent-pink-500 hover:accent-pink-400 transition-colors [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-gradient-to-tr [&::-webkit-slider-thumb]:from-pink-500 [&::-webkit-slider-thumb]:to-purple-500 [&::-webkit-slider-thumb]:cursor-grab [&::-webkit-slider-thumb]:shadow-lg [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white [&::-webkit-slider-thumb]:transition-transform [&::-webkit-slider-thumb]:hover:scale-110"
+                                                            />
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Action buttons */}
+                                                    <div className="grid grid-cols-1 gap-3 pt-2">
+                                                        <button
+                                                            onClick={() => {
+                                                                const videoEl = document.getElementById(`cover-video-${video.id}-modal`) as HTMLVideoElement
+                                                                if (videoEl) {
+                                                                    try {
+                                                                        const canvas = document.createElement('canvas')
+                                                                        canvas.width = videoEl.videoWidth || 720
+                                                                        canvas.height = videoEl.videoHeight || 1280
+                                                                        const ctx = canvas.getContext('2d')
+                                                                        if (ctx) {
+                                                                            ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height)
+                                                                            const frameData = canvas.toDataURL('image/jpeg', 0.9)
+                                                                            const timestampMs = Math.round(videoEl.currentTime * 1000)
+                                                                            updateVideoCover(video.id, frameData, timestampMs)
+                                                                            setExpandedVideoId(null)
+                                                                            toast({ title: "封面已更新", description: "✅ 已成功设置选定帧为视频封面" })
+                                                                        }
+                                                                    } catch (error) {
+                                                                        console.error('Failed to capture frame:', error)
+                                                                        setUploadError('无法从该视频捕获帧，请重新上传视频')
+                                                                    }
+                                                                }
+                                                            }}
+                                                            className="w-full flex items-center justify-center gap-2 px-6 py-3.5 bg-gradient-to-r from-cyan-500 to-pink-500 rounded-xl font-bold text-white hover:opacity-90 hover:shadow-lg hover:shadow-cyan-500/25 transition-all active:scale-[0.98]"
+                                                        >
+                                                            <Check className="w-5 h-5" />
+                                                            确认使用当前帧
+                                                        </button>
+
+                                                        <button
+                                                            onClick={() => {
+                                                                setCoverUploadVideoId(video.id)
+                                                                coverInputRef.current?.click()
+                                                            }}
+                                                            className="w-full flex items-center justify-center gap-2 px-6 py-3.5 bg-white/5 border border-white/10 rounded-xl font-medium text-gray-300 hover:bg-white/10 hover:text-white transition-all active:scale-[0.98]"
+                                                        >
+                                                            <Upload className="w-4 h-4" />
+                                                            上传本地图片作为封面
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div className="text-center py-20 bg-white/5 rounded-xl border border-white/10 border-dashed">
+                                            <Loader2 className="w-10 h-10 mx-auto text-cyan-500/50 animate-spin mb-4" />
+                                            <p className="text-base text-gray-400 font-medium">视频资源加载中，请稍候...</p>
+                                        </div>
+                                    )}
+                                </div>
+                            )
+                        })()}
+                    </div>
+                </DialogContent>
+            </Dialog>
+        </div>
     )
 }
