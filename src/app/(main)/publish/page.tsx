@@ -1067,24 +1067,27 @@ export default function PublishPage() {
                             </p>
                         )}
 
-                        {/* Video source tabs */}
-                        <div className="flex gap-2 mb-4">
+                        {/* Video source tabs - Segmented Control */}
+                        <div className="bg-black/40 p-1.5 rounded-xl inline-flex gap-1 mb-4">
                             {[
-                                { id: 'upload' as VideoSourceType, label: '本地上传', icon: Upload },
-                                { id: 'asset' as VideoSourceType, label: '从成品库选择', icon: Video }
-                            ].map(source => (
-                                <button
-                                    key={source.id}
-                                    onClick={() => setVideoSource(source.id)}
-                                    className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all ${videoSource === source.id
-                                        ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/50'
-                                        : 'bg-white/5 text-gray-400 border border-white/10 hover:bg-white/10'
-                                        }`}
-                                >
-                                    <source.icon className="w-4 h-4" />
-                                    <span className="text-sm">{source.label}</span>
-                                </button>
-                            ))}
+                                { id: 'upload' as VideoSourceType, label: '本地上传', Icon: Upload },
+                                { id: 'asset' as VideoSourceType, label: '从成品库选择', Icon: FileVideo }
+                            ].map(({ id, label, Icon }) => {
+                                const isActive = videoSource === id
+                                return (
+                                    <button
+                                        key={id}
+                                        onClick={() => setVideoSource(id)}
+                                        className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium transition-all duration-300 ${isActive
+                                            ? 'bg-white/10 text-white shadow-lg shadow-black/20 ring-1 ring-white/10'
+                                            : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'
+                                            }`}
+                                    >
+                                        <Icon className={`w-4 h-4 ${isActive ? 'text-cyan-400' : ''}`} />
+                                        <span>{label}</span>
+                                    </button>
+                                )
+                            })}
                         </div>
 
                         {/* Hidden file input for upload */}
@@ -1462,16 +1465,6 @@ export default function PublishPage() {
                                         视频标题
                                     </label>
                                     <div className="flex items-center gap-2">
-                                        {/* AI Title Assistant Button */}
-                                        {selectedVideos.length > 0 && (
-                                            <button
-                                                onClick={() => setShowTitleAssistant(true)}
-                                                className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-gradient-to-r from-purple-500/20 to-pink-500/20 border border-purple-500/30 text-purple-400 hover:from-purple-500/30 hover:to-pink-500/30 transition-all text-xs"
-                                            >
-                                                <Sparkles className="w-3.5 h-3.5" />
-                                                AI助手
-                                            </button>
-                                        )}
 
                                         {/* Title Mode Toggle */}
                                         {selectedVideos.length > 1 && (
@@ -1637,44 +1630,31 @@ export default function PublishPage() {
                         </h2>
 
                         <div className="space-y-4">
-                            <div className="flex gap-4">
-                                <label className={`flex items-center gap-3 px-4 py-3 rounded-xl border cursor-pointer transition-all ${publishMode === 'now'
-                                    ? 'border-cyan-500 bg-cyan-500/10'
-                                    : 'border-white/10 bg-white/5 hover:bg-white/10'
-                                    }`}>
-                                    <input
-                                        type="radio"
-                                        name="publishMode"
-                                        checked={publishMode === 'now'}
-                                        onChange={() => setPublishMode('now')}
-                                        className="sr-only"
-                                    />
-                                    <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${publishMode === 'now' ? 'border-cyan-400' : 'border-gray-500'
-                                        }`}>
-                                        {publishMode === 'now' && <div className="w-2 h-2 rounded-full bg-cyan-400" />}
-                                    </div>
-                                    <Rocket className="w-4 h-4" />
-                                    <span>立即发布</span>
-                                </label>
-
-                                <label className={`flex items-center gap-3 px-4 py-3 rounded-xl border cursor-pointer transition-all ${publishMode === 'scheduled'
-                                    ? 'border-cyan-500 bg-cyan-500/10'
-                                    : 'border-white/10 bg-white/5 hover:bg-white/10'
-                                    }`}>
-                                    <input
-                                        type="radio"
-                                        name="publishMode"
-                                        checked={publishMode === 'scheduled'}
-                                        onChange={() => setPublishMode('scheduled')}
-                                        className="sr-only"
-                                    />
-                                    <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${publishMode === 'scheduled' ? 'border-cyan-400' : 'border-gray-500'
-                                        }`}>
-                                        {publishMode === 'scheduled' && <div className="w-2 h-2 rounded-full bg-cyan-400" />}
-                                    </div>
-                                    <Calendar className="w-4 h-4" />
-                                    <span>预约发布</span>
-                                </label>
+                            {/* Publish Mode - Segmented Control */}
+                            <div className="bg-black/40 p-1.5 rounded-xl inline-flex gap-1">
+                                {[
+                                    { id: 'now' as const, label: '立即发布', Icon: Rocket, activeColor: 'cyan' },
+                                    { id: 'scheduled' as const, label: '预约发布', Icon: Calendar, activeColor: 'pink' },
+                                ].map(({ id, label, Icon, activeColor }) => {
+                                    const isActive = publishMode === id
+                                    const colorClass = activeColor === 'cyan'
+                                        ? 'text-cyan-400'
+                                        : 'text-pink-400'
+                                    return (
+                                        <button
+                                            key={id}
+                                            type="button"
+                                            onClick={() => setPublishMode(id)}
+                                            className={`flex items-center gap-2 px-6 py-2.5 rounded-lg text-sm font-medium transition-all duration-300 ${isActive
+                                                ? 'bg-white/10 text-white shadow-lg shadow-black/20 ring-1 ring-white/10'
+                                                : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'
+                                                }`}
+                                        >
+                                            <Icon className={`w-4 h-4 ${isActive ? colorClass : ''}`} />
+                                            <span>{label}</span>
+                                        </button>
+                                    )
+                                })}
                             </div>
 
                             {publishMode === 'scheduled' && (
@@ -2155,8 +2135,8 @@ export default function PublishPage() {
             {/* AI Title Assistant Modal */}
             {
                 showTitleAssistant && (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-                        <div className="bg-gray-900 rounded-2xl border border-white/10 w-full max-w-2xl max-h-[90vh] overflow-hidden shadow-2xl flex flex-col">
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xl p-4">
+                        <div className="bg-gray-900/95 backdrop-blur-2xl rounded-2xl border border-white/10 shadow-[0_20px_60px_-15px_rgba(168,85,247,0.3)] w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
                             {/* Header */}
                             <div className="flex items-center justify-between p-4 border-b border-white/10">
                                 <h3 className="text-lg font-semibold flex items-center gap-2">
@@ -2188,7 +2168,7 @@ export default function PublishPage() {
                                                 onChange={(e) => setTitleDescription(e.target.value)}
                                                 placeholder="例如：美妆教程，分享适合夏天的清爽淡妆技巧，针对年轻女性群体，强调快速上手和日常实用性..."
                                                 rows={4}
-                                                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500/50 transition-all resize-none"
+                                                className="w-full px-4 py-3 bg-black/40 border-0 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500/30 focus:shadow-[0_0_20px_rgba(168,85,247,0.15)] transition-all resize-none"
                                             />
                                         </div>
 
@@ -2199,25 +2179,25 @@ export default function PublishPage() {
                                             <div className="flex gap-3">
                                                 <button
                                                     onClick={() => setTitleLanguage('zh')}
-                                                    className={`flex-1 p-3 rounded-xl border transition-all ${titleLanguage === 'zh'
-                                                        ? 'border-purple-500 bg-purple-500/10 text-purple-400'
-                                                        : 'border-white/10 text-gray-400 hover:border-white/20'
+                                                    className={`flex-1 p-4 rounded-xl border-2 transition-all duration-300 ${titleLanguage === 'zh'
+                                                        ? 'border-purple-500/50 bg-gradient-to-br from-purple-500/10 to-pink-500/10 text-white shadow-[0_0_20px_rgba(168,85,247,0.2)]'
+                                                        : 'border-white/5 bg-white/5 text-gray-500 hover:text-gray-300 hover:border-white/10 grayscale hover:grayscale-0'
                                                         }`}
                                                 >
-                                                    <div className="text-lg mb-1">🇨🇳</div>
-                                                    <div className="text-sm font-medium">中文</div>
-                                                    <div className="text-xs text-gray-500">适合国内平台</div>
+                                                    <div className="text-2xl mb-2">🇨🇳</div>
+                                                    <div className="text-sm font-semibold">中文</div>
+                                                    <div className="text-xs text-gray-500 mt-1">适合国内平台</div>
                                                 </button>
                                                 <button
                                                     onClick={() => setTitleLanguage('en')}
-                                                    className={`flex-1 p-3 rounded-xl border transition-all ${titleLanguage === 'en'
-                                                        ? 'border-purple-500 bg-purple-500/10 text-purple-400'
-                                                        : 'border-white/10 text-gray-400 hover:border-white/20'
+                                                    className={`flex-1 p-4 rounded-xl border-2 transition-all duration-300 ${titleLanguage === 'en'
+                                                        ? 'border-purple-500/50 bg-gradient-to-br from-purple-500/10 to-pink-500/10 text-white shadow-[0_0_20px_rgba(168,85,247,0.2)]'
+                                                        : 'border-white/5 bg-white/5 text-gray-500 hover:text-gray-300 hover:border-white/10 grayscale hover:grayscale-0'
                                                         }`}
                                                 >
-                                                    <div className="text-lg mb-1">🇺🇸</div>
-                                                    <div className="text-sm font-medium">English</div>
-                                                    <div className="text-xs text-gray-500">适合TikTok海外</div>
+                                                    <div className="text-2xl mb-2">🇺🇸</div>
+                                                    <div className="text-sm font-semibold">English</div>
+                                                    <div className="text-xs text-gray-500 mt-1">适合TikTok海外</div>
                                                 </button>
                                             </div>
                                         </div>
