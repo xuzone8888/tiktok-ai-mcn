@@ -28,7 +28,12 @@ import {
     ImageIcon,
     Sliders,
     Sparkles,
-    ListFilter
+    ListFilter,
+    Globe2,
+    Lock,
+    UserCheck,
+    Hash,
+    Zap
 } from 'lucide-react'
 import { format, addMinutes } from 'date-fns'
 import { zhCN } from 'date-fns/locale'
@@ -1335,91 +1340,93 @@ export default function PublishPage() {
                                 </button>
                             </div>
                         ) : (
-                            <div className="space-y-3">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                                 {accounts.map(account => {
                                     const isAuthorized = isAccountAuthorized(account)
                                     const isSelected = selectedAccounts.includes(account.id)
 
                                     return (
-                                        <label
+                                        <div
                                             key={account.id}
-                                            className={`flex items-center gap-4 p-4 rounded-xl border cursor-pointer transition-all ${isSelected
-                                                ? 'border-cyan-500 bg-cyan-500/10'
+                                            onClick={() => isAuthorized && toggleAccountSelection(account.id)}
+                                            className={`group relative p-4 rounded-xl border transition-all duration-300 cursor-pointer overflow-hidden ${isSelected
+                                                ? 'bg-cyan-500/10 border-cyan-500/50 shadow-[0_0_20px_rgba(6,182,212,0.15)] ring-1 ring-cyan-500/30'
                                                 : isAuthorized
-                                                    ? 'border-white/10 bg-white/5 hover:bg-white/10'
-                                                    : 'border-orange-500/30 bg-orange-500/5 cursor-not-allowed'
+                                                    ? 'bg-white/5 border-white/5 hover:bg-white/10 hover:border-white/10 hover:-translate-y-1'
+                                                    : 'bg-white/5 border-white/5 opacity-50 cursor-not-allowed'
                                                 }`}
                                         >
-                                            <input
-                                                type="radio"
-                                                name="publishAccount"
-                                                checked={isSelected}
-                                                onChange={() => isAuthorized && toggleAccountSelection(account.id)}
-                                                disabled={!isAuthorized}
-                                                className="sr-only"
-                                            />
-
-                                            {/* Radio button visual (circle) */}
-                                            <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors ${isSelected
-                                                ? 'border-cyan-400 bg-cyan-500'
-                                                : 'border-gray-500'
-                                                }`}>
-                                                {isSelected && <div className="w-2 h-2 rounded-full bg-white" />}
-                                            </div>
-
-                                            {account.avatar_url ? (
-                                                <img
-                                                    src={account.avatar_url}
-                                                    alt={account.display_name}
-                                                    width={40}
-                                                    height={40}
-                                                    className="w-10 h-10 rounded-full object-cover"
-                                                    onError={(e) => {
-                                                        // Fallback to gradient on error
-                                                        e.currentTarget.style.display = 'none'
-                                                        e.currentTarget.nextElementSibling?.classList.remove('hidden')
-                                                    }}
-                                                />
-                                            ) : null}
-                                            <div className={`w-10 h-10 rounded-full bg-gradient-to-br from-cyan-500 to-pink-500 flex items-center justify-center text-white font-bold ${account.avatar_url ? 'hidden' : ''}`}>
-                                                {account.display_name.charAt(0).toUpperCase()}
-                                            </div>
-
-                                            <div className="flex-1">
-                                                <div className="flex items-center gap-2">
-                                                    <span className="font-medium">@{account.display_name}</span>
-                                                    {account.status === 'active' && (
-                                                        <CheckCircle2 className="w-4 h-4 text-cyan-400" />
-                                                    )}
-                                                </div>
-                                                <p className="text-sm text-gray-400">
-                                                    粉丝 {account.follower_count >= 1000
-                                                        ? `${(account.follower_count / 1000).toFixed(1)}K`
-                                                        : account.follower_count}
-                                                </p>
-                                            </div>
-
-                                            {isAuthorized ? (
-                                                <span className="px-2 py-1 text-xs rounded-full bg-green-500/20 text-green-400 flex items-center gap-1">
-                                                    <CheckCircle2 className="w-3 h-3" />
-                                                    已授权
-                                                </span>
-                                            ) : (
-                                                <span className="px-2 py-1 text-xs rounded-full bg-orange-500/20 text-orange-400 flex items-center gap-1">
-                                                    <AlertCircle className="w-3 h-3" />
-                                                    需重新授权
-                                                </span>
+                                            {/* Background Gradient Effect */}
+                                            {isSelected && (
+                                                <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/10 via-transparent to-transparent opacity-50" />
                                             )}
-                                        </label>
+
+                                            <div className="relative flex items-center gap-3">
+                                                {/* Avatar with Status Ring */}
+                                                <div className="relative">
+                                                    <div className={`w-12 h-12 rounded-full p-0.5 ${isSelected ? 'bg-gradient-to-r from-cyan-400 to-blue-500' : 'bg-white/10'
+                                                        }`}>
+                                                        {account.avatar_url ? (
+                                                            <img
+                                                                src={account.avatar_url}
+                                                                alt={account.display_name}
+                                                                className="w-full h-full rounded-full object-cover border border-black/50"
+                                                                onError={(e) => {
+                                                                    e.currentTarget.style.display = 'none'
+                                                                    e.currentTarget.nextElementSibling?.classList.remove('hidden')
+                                                                }}
+                                                            />
+                                                        ) : null}
+                                                        <div className={`w-full h-full rounded-full bg-gradient-to-br from-cyan-500 to-pink-500 flex items-center justify-center text-white font-bold ${account.avatar_url ? 'hidden' : ''}`}>
+                                                            {account.display_name.charAt(0).toUpperCase()}
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                {/* Info */}
+                                                <div className="flex-1 min-w-0">
+                                                    <div className="flex items-center gap-1.5">
+                                                        <h3 className={`font-semibold text-sm truncate ${isSelected ? 'text-white' : 'text-gray-200'}`}>
+                                                            @{account.display_name}
+                                                        </h3>
+                                                        {account.status === 'active' && <CheckCircle2 className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" />}
+                                                    </div>
+                                                    <p className="text-xs text-gray-400 mt-0.5">
+                                                        粉丝 {account.follower_count >= 1000
+                                                            ? `${(account.follower_count / 1000).toFixed(1)}K`
+                                                            : account.follower_count}
+                                                    </p>
+                                                </div>
+
+                                                {/* Selection Checkbox */}
+                                                <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all flex-shrink-0 ${isSelected ? 'border-cyan-400 bg-cyan-500' : 'border-white/20 group-hover:border-white/40'
+                                                    }`}>
+                                                    {isSelected && <Check className="w-3.5 h-3.5 text-white" />}
+                                                </div>
+                                            </div>
+
+                                            {/* Authorization Status Badge */}
+                                            {!isAuthorized && (
+                                                <div className="absolute top-2 right-2">
+                                                    <span className="px-2 py-0.5 text-[10px] rounded-full bg-orange-500/20 text-orange-400 flex items-center gap-1">
+                                                        <AlertCircle className="w-2.5 h-2.5" />
+                                                        需授权
+                                                    </span>
+                                                </div>
+                                            )}
+                                        </div>
                                     )
                                 })}
 
+                                {/* Add New Button */}
                                 <button
                                     onClick={() => router.push('/publish/accounts')}
-                                    className="flex items-center gap-2 w-full p-4 rounded-xl border border-dashed border-white/20 text-gray-400 hover:text-cyan-400 hover:border-cyan-500/50 transition-colors"
+                                    className="flex flex-col items-center justify-center gap-2 p-4 rounded-xl border border-dashed border-white/10 hover:border-cyan-500/50 hover:bg-cyan-500/5 transition-all group min-h-[80px]"
                                 >
-                                    <Plus className="w-5 h-5" />
-                                    <span>绑定新账号</span>
+                                    <div className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center group-hover:bg-cyan-500/20 group-hover:scale-110 transition-all">
+                                        <Plus className="w-5 h-5 text-gray-400 group-hover:text-cyan-400" />
+                                    </div>
+                                    <span className="text-sm text-gray-400 group-hover:text-cyan-400">绑定新账号</span>
                                 </button>
                             </div>
                         )}
@@ -1493,23 +1500,48 @@ export default function PublishPage() {
                                 </div>
 
                                 {titleMode === 'uniform' ? (
-                                    /* Uniform title - single input with absolute action button */
-                                    <div className="relative">
+                                    /* Uniform title - single input with integrated toolbar */
+                                    <div className="relative group">
                                         <textarea
                                             value={caption}
                                             onChange={(e) => setCaption(e.target.value)}
                                             placeholder="输入视频标题..."
-                                            rows={4}
-                                            className="w-full px-4 py-3 pb-10 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500/50 transition-all resize-none"
+                                            rows={5}
+                                            className="w-full pl-4 pr-4 pt-4 pb-14 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500/50 transition-all resize-none"
                                         />
-                                        <button
-                                            type="button"
-                                            onClick={() => setCaption(prev => prev + ' #')}
-                                            className="absolute bottom-3 right-3 flex items-center gap-1 px-2 py-1 rounded-md bg-white/10 hover:bg-white/20 text-xs text-cyan-400 font-medium transition-colors"
-                                        >
-                                            <span className="font-bold">#</span>
-                                            添加话题
-                                        </button>
+
+                                        {/* Floating Toolbar */}
+                                        <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between">
+                                            {/* Character Count */}
+                                            <div className="text-xs text-gray-600 font-mono">
+                                                {caption.length}/150
+                                            </div>
+
+                                            {/* Action Buttons */}
+                                            <div className="flex items-center gap-2">
+                                                {/* Topic Button */}
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setCaption(prev => prev + ' #')}
+                                                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-white/5 text-gray-400 hover:text-white hover:bg-white/10 transition-colors text-xs font-medium border border-transparent hover:border-white/10"
+                                                >
+                                                    <Hash className="w-3.5 h-3.5" />
+                                                    话题
+                                                </button>
+
+                                                {/* AI Assistant Button */}
+                                                {selectedVideos.length > 0 && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setShowTitleAssistant(true)}
+                                                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-purple-500/20 to-pink-500/20 hover:from-purple-500/30 hover:to-pink-500/30 text-pink-300 transition-all text-xs font-medium border border-pink-500/20 hover:border-pink-500/40 shadow-lg shadow-pink-500/5"
+                                                    >
+                                                        <Sparkles className="w-3.5 h-3.5" />
+                                                        AI 写标题
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </div>
                                     </div>
                                 ) : (
                                     /* Individual titles - one input per video */
@@ -1565,29 +1597,32 @@ export default function PublishPage() {
 
                             {/* Privacy Level Selection */}
                             <div className="mt-4">
-                                <label className="block text-sm font-medium text-gray-300 mb-2">
+                                <label className="block text-sm font-medium text-gray-300 mb-3">
                                     可见范围
                                 </label>
-                                <div className="bg-black/20 p-1 rounded-xl flex gap-1">
+                                <div className="bg-black/40 p-1.5 rounded-xl inline-flex gap-1 w-full">
                                     {[
-                                        { value: 'PUBLIC_TO_EVERYONE', label: '公开', icon: '🌍' },
-                                        { value: 'FOLLOWER_OF_CREATOR', label: '粉丝', icon: '👥' },
-                                        { value: 'MUTUAL_FOLLOW_FRIENDS', label: '好友', icon: '🤝' },
-                                        { value: 'SELF_ONLY', label: '仅自己', icon: '🔒' },
-                                    ].map(({ value, label, icon }) => (
-                                        <button
-                                            key={value}
-                                            type="button"
-                                            onClick={() => setPrivacyLevel(value as typeof privacyLevel)}
-                                            className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium transition-all ${privacyLevel === value
-                                                ? 'bg-white/10 text-cyan-400 shadow-sm border border-white/5'
-                                                : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'
-                                                }`}
-                                        >
-                                            <span className="text-base">{icon}</span>
-                                            <span>{label}</span>
-                                        </button>
-                                    ))}
+                                        { value: 'PUBLIC_TO_EVERYONE', label: '公开', Icon: Globe2 },
+                                        { value: 'FOLLOWER_OF_CREATOR', label: '粉丝', Icon: Users },
+                                        { value: 'MUTUAL_FOLLOW_FRIENDS', label: '好友', Icon: UserCheck },
+                                        { value: 'SELF_ONLY', label: '仅自己', Icon: Lock },
+                                    ].map(({ value, label, Icon }) => {
+                                        const isActive = privacyLevel === value
+                                        return (
+                                            <button
+                                                key={value}
+                                                type="button"
+                                                onClick={() => setPrivacyLevel(value as typeof privacyLevel)}
+                                                className={`relative flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-300 ${isActive
+                                                    ? 'bg-white/10 text-white shadow-lg shadow-black/20 ring-1 ring-white/10'
+                                                    : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'
+                                                    }`}
+                                            >
+                                                <Icon className={`w-4 h-4 ${isActive ? 'text-cyan-400' : ''}`} />
+                                                <span className="hidden sm:inline">{label}</span>
+                                            </button>
+                                        )
+                                    })}
                                 </div>
 
                             </div>
@@ -1760,74 +1795,106 @@ export default function PublishPage() {
                         </div>
                     </section >
 
-                    {/* Task Preview & Submit */}
-                    < section className="bg-gradient-to-r from-cyan-500/10 to-pink-500/10 rounded-2xl border border-cyan-500/20 p-6" >
-                        <div className="flex items-center justify-between flex-wrap gap-4">
-                            <div className="space-y-2">
-                                <h3 className="text-lg font-semibold">任务预览</h3>
-                                <div className="space-y-1 text-sm">
-                                    <p className="flex items-center gap-2">
-                                        <span className="text-gray-400">📼</span>
-                                        <span className="text-cyan-400 font-bold">{selectedVideos.length}</span>
-                                        <span className="text-gray-300">个视频</span>
-                                        {selectedAccounts.length > 0 && (
-                                            <>
-                                                <span className="text-gray-500">→</span>
-                                                <span className="text-pink-400 font-medium">
-                                                    @{accounts.find(a => a.id === selectedAccounts[0])?.display_name || '账号'}
+                    {/* Task Preview & Submit - Premium Glass Bar */}
+                    <div className="sticky bottom-4 z-10 mt-6">
+                        <div className="bg-gray-900/80 backdrop-blur-xl rounded-2xl border border-white/10 shadow-2xl p-1.5 flex items-center justify-between">
+                            {/* Left: Info Sections */}
+                            <div className="flex items-center h-16">
+                                {/* Video Count */}
+                                <div className="flex flex-col justify-center px-5 border-r border-white/5 h-full">
+                                    <span className="text-[10px] text-gray-500 uppercase tracking-wider font-bold">视频</span>
+                                    <div className="flex items-baseline gap-1">
+                                        <span className="text-2xl font-bold text-white font-mono">{selectedVideos.length}</span>
+                                        <span className="text-xs text-gray-500">个</span>
+                                    </div>
+                                </div>
+
+                                {/* Account Info */}
+                                <div className="flex items-center gap-3 px-5 border-r border-white/5 h-full">
+                                    {selectedAccounts.length > 0 ? (
+                                        <>
+                                            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center text-white text-xs font-bold">
+                                                {accounts.find(a => a.id === selectedAccounts[0])?.display_name?.charAt(0).toUpperCase() || 'T'}
+                                            </div>
+                                            <div className="flex flex-col">
+                                                <span className="text-[10px] text-gray-500 uppercase tracking-wider font-bold">账号</span>
+                                                <span className="text-sm font-medium text-white truncate max-w-[100px]">
+                                                    @{accounts.find(a => a.id === selectedAccounts[0])?.display_name || '未选择'}
                                                 </span>
+                                            </div>
+                                        </>
+                                    ) : (
+                                        <div className="flex flex-col">
+                                            <span className="text-[10px] text-gray-500 uppercase tracking-wider font-bold">账号</span>
+                                            <span className="text-sm text-gray-400">未选择</span>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Schedule Info */}
+                                <div className="hidden md:flex flex-col justify-center px-5 h-full">
+                                    <span className="text-[10px] text-gray-500 uppercase tracking-wider font-bold">发布时间</span>
+                                    <div className="flex items-center gap-2 text-sm font-medium">
+                                        {publishMode === 'now' ? (
+                                            <>
+                                                <Rocket className="w-3.5 h-3.5 text-cyan-400" />
+                                                <span className="text-cyan-400">立即发布</span>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Calendar className="w-3.5 h-3.5 text-pink-400" />
+                                                <span className="text-pink-400">{scheduledDate} {scheduledTime}</span>
                                             </>
                                         )}
-                                    </p>
-                                    <p className="flex items-center gap-2 text-xs text-gray-400">
-                                        <span>⏱️</span>
-                                        <span>
-                                            {publishMode === 'now' ? '立即发布' : `预约发布 ${scheduledDate} ${scheduledTime}`}
-                                            {selectedVideos.length > 1 && (
-                                                <>, 间隔 {intervalMode === 'custom' ? customInterval : intervalMode} 分钟</>
-                                            )}
-                                        </span>
-                                    </p>
+                                    </div>
                                 </div>
                             </div>
 
-                            <div className="flex items-center gap-3">
+                            {/* Right: Action Buttons */}
+                            <div className="flex items-center gap-2 pr-1.5">
                                 {publishError && (
-                                    <p className="text-sm text-red-400 flex items-center gap-1">
-                                        <XCircle className="w-4 h-4" />
-                                        {publishError}
+                                    <p className="text-xs text-red-400 flex items-center gap-1 mr-2">
+                                        <XCircle className="w-3.5 h-3.5" />
+                                        <span className="hidden sm:inline">{publishError}</span>
                                     </p>
                                 )}
+
                                 <button
                                     onClick={() => {
                                         setSelectedVideos([])
                                         setSelectedAccounts([])
                                         setCaption('')
                                     }}
-                                    className="px-4 py-2.5 rounded-xl border border-white/10 text-gray-400 hover:bg-white/5 transition-colors"
+                                    className="px-4 py-2.5 rounded-xl border border-white/10 text-gray-400 hover:bg-white/5 transition-colors text-sm"
                                 >
                                     取消
                                 </button>
+
                                 <button
                                     onClick={handlePublish}
                                     disabled={isPublishing || selectedVideos.length === 0 || selectedAccounts.length === 0}
-                                    className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-pink-500 font-semibold hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                                    className="relative overflow-hidden group h-12 px-6 rounded-xl bg-gradient-to-r from-cyan-500 via-blue-500 to-purple-600 hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50 disabled:hover:scale-100"
                                 >
-                                    {isPublishing ? (
-                                        <>
-                                            <Loader2 className="w-4 h-4 animate-spin" />
-                                            创建中...
-                                        </>
-                                    ) : (
-                                        <>
-                                            <Send className="w-4 h-4" />
-                                            创建发布任务
-                                        </>
-                                    )}
+                                    <div className="relative z-10 flex items-center gap-2 text-white font-bold">
+                                        {isPublishing ? (
+                                            <>
+                                                <Loader2 className="w-4 h-4 animate-spin" />
+                                                <span>创建中...</span>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <span>创建任务</span>
+                                                <Zap className="w-4 h-4" />
+                                            </>
+                                        )}
+                                    </div>
+
+                                    {/* Shine Effect */}
+                                    <div className="absolute inset-0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000 bg-gradient-to-r from-transparent via-white/20 to-transparent skew-x-12" />
                                 </button>
                             </div>
                         </div>
-                    </section >
+                    </div>
                 </div >
             )
             }
