@@ -69,6 +69,8 @@ import {
   Clock,
   FileDown,
   Square,
+  Sparkles,
+  FolderDown,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -3519,387 +3521,311 @@ C07: [story CTA, inspiring, <50 chars]`,
 
         {/* 创建任务弹窗 */}
         <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
-          <DialogContent className="max-w-2xl bg-background border-border max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <FolderUp className="h-5 w-5 text-tiktok-cyan" />
-                创建视频任务
-              </DialogTitle>
-              <DialogDescription>
-                选择创建模式：图片到视频 或 纯提示词生成
-              </DialogDescription>
-            </DialogHeader>
-
-            {/* 模式切换 */}
-            <div className="flex gap-2 p-1 rounded-xl bg-muted/50">
+          <DialogContent className="max-w-2xl bg-black/95 border-white/10 text-white backdrop-blur-xl gap-0 p-0 overflow-hidden">
+            {/* Header: 标题 + 加载方案按钮 */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 bg-white/5">
+              <div className="flex flex-col gap-0.5">
+                <DialogTitle className="text-lg font-semibold flex items-center gap-2">
+                  <Sparkles className="h-5 w-5 text-tiktok-pink" />
+                  创建视频任务
+                </DialogTitle>
+                <DialogDescription className="text-xs text-muted-foreground">
+                  配置参数并批量生成视频
+                </DialogDescription>
+              </div>
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => setCreateMode("image")}
-                className={cn(
-                  "flex-1 h-9",
-                  createMode === "image"
-                    ? "bg-tiktok-cyan/20 text-tiktok-cyan"
-                    : "text-muted-foreground hover:text-foreground"
-                )}
+                onClick={() => setShowTemplateManager(true)}
+                className="h-8 gap-1.5 text-tiktok-cyan hover:text-tiktok-cyan hover:bg-tiktok-cyan/10 rounded-full px-3"
               >
-                <ImageIcon className="h-4 w-4 mr-2" />
-                图片到视频
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setCreateMode("prompt")}
-                className={cn(
-                  "flex-1 h-9",
-                  createMode === "prompt"
-                    ? "bg-purple-500/20 text-purple-400"
-                    : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                <FileText className="h-4 w-4 mr-2" />
-                纯提示词生成
+                <FolderDown className="h-4 w-4" />
+                <span className="text-xs font-medium">加载方案</span>
               </Button>
             </div>
 
-            <div className="py-4 space-y-4">
-              {createMode === "image" ? (
-                /* 图片模式 */
-                <ImageUploader images={newTaskImages} onImagesChange={setNewTaskImages} maxImages={4} />
-              ) : (
-                /* 纯提示词模式 */
-                <div className="space-y-4">
-                  {/* 提示词输入 */}
-                  <div className="space-y-2">
-                    <Label className="text-sm font-medium">
-                      视频提示词 <span className="text-red-400">*</span>
-                    </Label>
-                    <textarea
-                      value={promptInput}
-                      onChange={(e) => setPromptInput(e.target.value)}
-                      placeholder="详细描述你想要生成的视频内容，例如：&#10;&#10;一个时尚的亚洲女性模特手持产品，在简约的白色背景前展示产品细节，镜头从正面缓缓移动到侧面，柔和的打光突出产品质感..."
-                      className="w-full h-32 px-4 py-3 text-sm bg-muted/30 border border-border/50 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500/50 resize-none"
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      提示：详细的描述可以获得更好的视频效果。可以包含场景、动作、镜头运动、光线等信息。
-                    </p>
-                  </div>
+            <div className="p-6 space-y-6">
+              {/* 1. 模式切换 (胶囊样式) */}
+              <div className="flex p-1 bg-white/5 rounded-full border border-white/10 w-fit mx-auto">
+                <button
+                  onClick={() => setCreateMode("image")}
+                  className={cn(
+                    "px-6 py-1.5 rounded-full text-sm font-medium transition-all duration-300 flex items-center gap-2",
+                    createMode === "image"
+                      ? "bg-gradient-to-r from-tiktok-cyan/20 to-tiktok-blue/20 text-tiktok-cyan shadow-sm border border-tiktok-cyan/20"
+                      : "text-muted-foreground hover:text-white"
+                  )}
+                >
+                  <ImageIcon className="h-4 w-4" />
+                  图片转视频
+                </button>
+                <button
+                  onClick={() => setCreateMode("prompt")}
+                  className={cn(
+                    "px-6 py-1.5 rounded-full text-sm font-medium transition-all duration-300 flex items-center gap-2",
+                    createMode === "prompt"
+                      ? "bg-gradient-to-r from-tiktok-pink/20 to-purple-500/20 text-tiktok-pink shadow-sm border border-tiktok-pink/20"
+                      : "text-muted-foreground hover:text-white"
+                  )}
+                >
+                  <FileText className="h-4 w-4" />
+                  纯提示词生成
+                </button>
+              </div>
 
-                  {/* 可选参考图片 */}
-                  <div className="space-y-2">
-                    <Label className="text-sm font-medium">参考图片（可选）</Label>
-                    <div className="flex items-center gap-4">
-                      {referenceImageUrl ? (
-                        <div className="relative w-24 h-24 rounded-lg overflow-hidden border border-border/50">
-                          <img src={referenceImageUrl} alt="Reference" className="w-full h-full object-cover" />
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            onClick={() => {
-                              if (referenceImageUrl.startsWith("blob:")) {
-                                URL.revokeObjectURL(referenceImageUrl);
-                              }
-                              setReferenceImageUrl("");
-                              setReferenceImageFile(null);
-                            }}
-                            className="absolute top-1 right-1 h-6 w-6 bg-black/50 hover:bg-black/70"
-                          >
-                            <X className="h-3 w-3" />
-                          </Button>
+              {/* 2. 核心输入区域 */}
+              <div className="min-h-[200px]">
+                {createMode === "image" ? (
+                  <div className="space-y-3 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-sm text-gray-300">上传素材图片</Label>
+                      <span className="text-xs text-muted-foreground">支持批量上传，自动识别主图</span>
+                    </div>
+                    <ImageUploader
+                      images={newTaskImages}
+                      onImagesChange={setNewTaskImages}
+                      maxImages={10}
+                    />
+                  </div>
+                ) : (
+                  <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                    <div className="space-y-2">
+                      <Label className="text-sm text-gray-300">
+                        视频提示词 <span className="text-red-400">*</span>
+                      </Label>
+                      <Textarea
+                        placeholder="详细描述你想要生成的视频内容，例如：一个时尚的亚洲女性模特手持产品..."
+                        value={promptInput}
+                        onChange={(e) => setPromptInput(e.target.value)}
+                        className="min-h-[120px] bg-white/5 border-white/10 focus:border-tiktok-pink/50 resize-none text-sm leading-relaxed rounded-xl text-white placeholder:text-gray-500"
+                      />
+                    </div>
+
+                    {/* 参考图 & 分组 (紧凑布局) */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label className="text-xs text-gray-400">参考图片 (可选)</Label>
+                        <div className="relative group">
+                          {referenceImageUrl ? (
+                            <div className="relative h-10 w-full flex items-center gap-3 bg-white/5 rounded-lg border border-white/10 px-3 overflow-hidden">
+                              <img src={referenceImageUrl} className="h-8 w-8 object-cover rounded-md" alt="Ref" />
+                              <span className="text-xs text-gray-300 truncate flex-1">
+                                {referenceImageFile?.name || "Reference Image"}
+                              </span>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-6 w-6 rounded-full hover:bg-white/20"
+                                onClick={() => {
+                                  if (referenceImageUrl.startsWith("blob:")) URL.revokeObjectURL(referenceImageUrl);
+                                  setReferenceImageUrl("");
+                                  setReferenceImageFile(null);
+                                }}
+                              >
+                                <X className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          ) : (
+                            <label className="flex items-center justify-center gap-2 h-10 w-full bg-white/5 border border-white/10 border-dashed rounded-lg cursor-pointer hover:bg-white/10 hover:border-tiktok-pink/30 transition-all">
+                              <Upload className="h-3.5 w-3.5 text-gray-400" />
+                              <span className="text-xs text-gray-400">上传参考图</span>
+                              <input
+                                type="file"
+                                accept="image/*"
+                                className="hidden"
+                                onChange={(e) => {
+                                  const file = e.target.files?.[0];
+                                  if (file) {
+                                    setReferenceImageFile(file);
+                                    setReferenceImageUrl(URL.createObjectURL(file));
+                                  }
+                                }}
+                              />
+                            </label>
+                          )}
                         </div>
-                      ) : (
-                        <label className="flex flex-col items-center justify-center w-24 h-24 border-2 border-dashed border-border/50 rounded-lg cursor-pointer hover:border-purple-500/50 transition-colors">
-                          <input
-                            type="file"
-                            accept="image/*"
-                            onChange={(e) => {
-                              const file = e.target.files?.[0];
-                              if (file) {
-                                setReferenceImageFile(file);
-                                setReferenceImageUrl(URL.createObjectURL(file));
-                              }
-                            }}
-                            className="hidden"
-                          />
-                          <Upload className="h-6 w-6 text-muted-foreground" />
-                          <span className="text-xs text-muted-foreground mt-1">添加图片</span>
-                        </label>
-                      )}
-                      <p className="text-xs text-muted-foreground flex-1">
-                        上传参考图片可以帮助 AI 更好地理解你想要的视觉风格
-                      </p>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label className="text-xs text-gray-400">分组名称 (可选)</Label>
+                        <input
+                          type="text"
+                          value={groupNameInput}
+                          onChange={(e) => setGroupNameInput(e.target.value)}
+                          placeholder="如：夏季新品..."
+                          className="w-full h-10 px-3 bg-white/5 border border-white/10 rounded-lg text-xs text-white placeholder:text-gray-500 focus:outline-none focus:border-tiktok-pink/50 transition-all"
+                        />
+                      </div>
                     </div>
                   </div>
-
-                  {/* 分组名称（用于批量下载时区分） */}
-                  <div className="space-y-2">
-                    <Label className="text-sm font-medium flex items-center gap-2">
-                      <FolderUp className="h-4 w-4 text-amber-400" />
-                      分组名称（可选）
-                    </Label>
-                    <input
-                      type="text"
-                      value={groupNameInput}
-                      onChange={(e) => setGroupNameInput(e.target.value)}
-                      placeholder="如：护肤品、饮料、服装..."
-                      className="w-full px-4 py-2 text-sm bg-muted/30 border border-border/50 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500/50"
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      设置分组名称后，下载的视频文件名会带上此前缀，方便区分不同批次的视频
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {/* 任务数量选择器 */}
-              <div className="flex items-center gap-4 pt-2">
-                <Label className="text-sm font-medium whitespace-nowrap">创建数量</Label>
-                <div className="flex items-center border border-border/50 rounded-lg overflow-hidden">
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    onClick={() => setBatchCreateCount(Math.max(1, batchCreateCount - 10))}
-                    className="h-9 w-9 rounded-none border-r border-border/50"
-                    disabled={batchCreateCount <= 1}
-                  >
-                    <Minus className="h-4 w-4" />
-                  </Button>
-                  <input
-                    type="number"
-                    min={1}
-                    max={300}
-                    value={batchCreateCount}
-                    onChange={(e) => {
-                      const val = parseInt(e.target.value) || 1;
-                      setBatchCreateCount(Math.min(300, Math.max(1, val)));
-                    }}
-                    className="w-16 h-9 text-center text-sm font-medium bg-transparent border-none focus:outline-none focus:ring-0"
-                  />
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    onClick={() => setBatchCreateCount(Math.min(300, batchCreateCount + 10))}
-                    className="h-9 w-9 rounded-none border-l border-border/50"
-                    disabled={batchCreateCount >= 300}
-                  >
-                    <Plus className="h-4 w-4" />
-                  </Button>
-                </div>
-                <span className="text-xs text-muted-foreground">
-                  最多 300 个 | {createMode === "image" ? "创建多个相同素材的任务" : "创建多个相同提示词的任务"}
-                </span>
+                )}
               </div>
 
-              {/* 视频参数配置摘要 - 优化显示 */}
-              <div className="p-4 rounded-xl bg-gradient-to-br from-slate-800/50 to-slate-900/50 border border-slate-700/50">
-                <div className="flex items-center gap-2 mb-3">
-                  <Settings2 className="h-4 w-4 text-tiktok-cyan" />
-                  <span className="text-sm font-medium text-white">视频参数配置</span>
-                  <span className="text-xs text-muted-foreground">(在上方全局配置中修改)</span>
+              {/* 3. 参数状态栏 & 数量控制 */}
+              <div className="bg-white/5 rounded-xl border border-white/10 p-4 space-y-4">
+                {/* 状态栏 */}
+                <div className="flex flex-wrap items-center gap-2 text-xs">
+                  <div className="px-2.5 py-1 rounded-md bg-purple-500/10 text-purple-400 border border-purple-500/20 flex items-center gap-1.5">
+                    <Film className="h-3 w-3" />
+                    {globalSettings.modelType === "sora2" ? "Sora 2.0" : globalSettings.modelType === "sora2-pro" ? "Sora 2.0 Pro" : globalSettings.modelType === "veo3" ? "VEO3 快速版" : "VEO3 高清版"}
+                  </div>
+                  <div className="px-2.5 py-1 rounded-md bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 flex items-center gap-1.5">
+                    <Clock className="h-3 w-3" />
+                    {globalSettings.duration}s
+                  </div>
+                  <div className="px-2.5 py-1 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center gap-1.5">
+                    <Monitor className="h-3 w-3" />
+                    {globalSettings.aspectRatio}
+                  </div>
+                  {useAiModel && selectedModelName && (
+                    <div className="px-2.5 py-1 rounded-md bg-pink-500/10 text-pink-400 border border-pink-500/20 flex items-center gap-1.5">
+                      <UserCircle className="h-3 w-3" />
+                      {selectedModelName}
+                    </div>
+                  )}
+                  <div className="ml-auto flex items-center gap-1 text-amber-400 font-medium">
+                    <Zap className="h-3.5 w-3.5" />
+                    {getVideoBatchTotalPrice(globalSettings.modelType, globalSettings.duration, globalSettings.quality) * batchCreateCount} pts
+                  </div>
                 </div>
-                <div className="grid grid-cols-2 gap-3">
-                  {/* 视频模型 */}
-                  <div className="flex items-center gap-3 p-2.5 rounded-lg bg-slate-800/50">
-                    <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-purple-500/20 flex items-center justify-center">
-                      <Film className="h-4 w-4 text-purple-400" />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-[10px] text-muted-foreground uppercase tracking-wider">模型</p>
-                      <p className="text-sm font-semibold text-white truncate">
-                        {globalSettings.modelType === "sora2" ? "Sora 2.0" :
-                          globalSettings.modelType === "sora2-pro" ? "Sora 2.0 Pro" :
-                            globalSettings.modelType === "veo3" ? "VEO3 快速版" : "VEO3 高清版"}
-                      </p>
-                    </div>
-                  </div>
 
-                  {/* 视频时长 */}
-                  <div className="flex items-center gap-3 p-2.5 rounded-lg bg-slate-800/50">
-                    <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-tiktok-cyan/20 flex items-center justify-center">
-                      <Clock className="h-4 w-4 text-tiktok-cyan" />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-[10px] text-muted-foreground uppercase tracking-wider">时长</p>
-                      <p className="text-sm font-semibold text-white">
-                        {globalSettings.duration} 秒
-                      </p>
-                    </div>
-                  </div>
+                <div className="h-px bg-white/10 w-full" />
 
-                  {/* 视频比例 */}
-                  <div className="flex items-center gap-3 p-2.5 rounded-lg bg-slate-800/50">
-                    <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-emerald-500/20 flex items-center justify-center">
-                      {globalSettings.aspectRatio === "16:9" ? (
-                        <Monitor className="h-4 w-4 text-emerald-400" />
-                      ) : globalSettings.aspectRatio === "9:16" ? (
-                        <Smartphone className="h-4 w-4 text-emerald-400" />
-                      ) : (
-                        <Square className="h-4 w-4 text-emerald-400" />
-                      )}
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-[10px] text-muted-foreground uppercase tracking-wider">比例</p>
-                      <p className="text-sm font-semibold text-white">
-                        {globalSettings.aspectRatio === "16:9" ? "横屏 16:9" :
-                          globalSettings.aspectRatio === "9:16" ? "竖屏 9:16" : "方形 1:1"}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* AI模特 */}
-                  <div className="flex items-center gap-3 p-2.5 rounded-lg bg-slate-800/50">
-                    <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-pink-500/20 flex items-center justify-center">
-                      <UserCircle className="h-4 w-4 text-pink-400" />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-[10px] text-muted-foreground uppercase tracking-wider">AI模特</p>
-                      <p className="text-sm font-semibold text-white truncate">
-                        {useAiModel && selectedModelId
-                          ? (selectedModelName || "已选择")
-                          : "未选择"}
-                      </p>
+                {/* 数量控制 */}
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-gray-300">创建数量</span>
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs text-muted-foreground mr-2">
+                      {createMode === "image" ? "为每张图创建" : "重复生成"}
+                    </span>
+                    <div className="flex items-center bg-black/20 rounded-lg border border-white/10 h-8">
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-8 w-8 rounded-none rounded-l-lg hover:bg-white/10 text-gray-400 hover:text-white"
+                        onClick={() => setBatchCreateCount(Math.max(1, batchCreateCount - 1))}
+                        disabled={batchCreateCount <= 1}
+                      >
+                        <Minus className="h-3 w-3" />
+                      </Button>
+                      <div className="w-12 text-center text-sm font-semibold text-white">{batchCreateCount}</div>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-8 w-8 rounded-none rounded-r-lg hover:bg-white/10 text-gray-400 hover:text-white"
+                        onClick={() => setBatchCreateCount(Math.min(300, batchCreateCount + 1))}
+                        disabled={batchCreateCount >= 300}
+                      >
+                        <Plus className="h-3 w-3" />
+                      </Button>
                     </div>
                   </div>
                 </div>
-              </div>
-
-              {/* AI模特配置提示 */}
-              {createMode === "prompt" && useAiModel && selectedModelId && (
-                <div className="flex items-center gap-2 p-3 rounded-lg bg-purple-500/10 border border-purple-500/30">
-                  <UserCircle className="h-4 w-4 text-purple-400" />
-                  <span className="text-sm text-purple-400">
-                    已启用 AI 模特：<strong>{selectedModelName || "已选择"}</strong>
-                  </span>
-                </div>
-              )}
-
-              {/* 费用显示 */}
-              <div className="flex items-center gap-2 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30">
-                <Zap className="h-4 w-4 text-amber-400" />
-                <span className="text-sm text-amber-400">
-                  预计消耗：<strong>{getVideoBatchTotalPrice(globalSettings.modelType, globalSettings.duration, globalSettings.quality) * batchCreateCount}</strong> Credits
-                </span>
               </div>
             </div>
 
-            <DialogFooter className="flex-col sm:flex-row gap-3">
+            {/* Footer Actions */}
+            <DialogFooter className="p-6 pt-0 sm:justify-between bg-transparent border-none">
               <Button
-                variant="outline"
-                onClick={() => {
-                  // 清理
-                  newTaskImages.forEach((img) => {
-                    if (img.url.startsWith("blob:")) {
-                      URL.revokeObjectURL(img.url);
-                    }
-                  });
-                  if (referenceImageUrl.startsWith("blob:")) {
-                    URL.revokeObjectURL(referenceImageUrl);
-                  }
-                  setNewTaskImages([]);
-                  setPromptInput("");
-                  setGroupNameInput(""); // 清空分组名称
-                  setReferenceImageUrl("");
-                  setReferenceImageFile(null);
-                  setBatchCreateCount(1);
-                  setShowCreateDialog(false);
-                }}
-              >
-                取消
-              </Button>
-              <Button
-                onClick={async () => {
-                  // 验证输入
-                  if (createMode === "image") {
-                    if (newTaskImages.length === 0) {
-                      toast({ variant: "destructive", title: "请至少上传一张图片" });
-                      return;
-                    }
-                    const validation = validateTaskImages(newTaskImages);
-                    if (!validation.valid) {
-                      toast({ variant: "destructive", title: validation.error || "图片校验失败" });
-                      return;
-                    }
-                  } else {
-                    if (!promptInput.trim() || promptInput.trim().length < 10) {
-                      toast({ variant: "destructive", title: "提示词至少需要10个字符" });
-                      return;
-                    }
-                  }
-
-                  // 保存当前值（在关闭对话框前）
-                  const currentMode = createMode;
-                  const currentCount = batchCreateCount;
-                  const currentPrompt = promptInput;
-                  const currentGroup = groupNameInput;
-                  const currentImages = [...newTaskImages];
-                  const currentRefFile = referenceImageFile;
-                  const currentRefUrl = referenceImageUrl;
-
-                  // 立即关闭对话框，给用户即时反馈
-                  setShowCreateDialog(false);
-                  toast({ title: `⏳ 正在创建 ${currentCount} 个任务...` });
-
-                  // 异步处理任务创建（使用 setTimeout 让 UI 先更新）
-                  setTimeout(async () => {
-                    try {
-                      if (currentMode === "image") {
-                        // 图片模式
-                        for (let i = 0; i < currentCount; i++) {
-                          createTask([...currentImages]);
-                        }
-                        setNewTaskImages([]);
-                      } else {
-                        // 纯提示词模式
-                        let uploadedRefUrl = "";
-                        if (currentRefFile) {
-                          try {
-                            const formData = new FormData();
-                            formData.append("file", currentRefFile);
-                            const uploadRes = await fetch("/api/upload/image", {
-                              method: "POST",
-                              body: formData,
-                            });
-                            const uploadResult = await uploadRes.json();
-                            if (uploadResult.success && uploadResult.data?.url) {
-                              uploadedRefUrl = uploadResult.data.url;
-                            }
-                          } catch (e) {
-                            console.error("Upload reference image failed:", e);
-                          }
-                        }
-
-                        createTaskFromPrompt(currentPrompt, uploadedRefUrl || undefined, currentCount, currentGroup || undefined);
-                        setPromptInput("");
-                        setGroupNameInput("");
-                        if (currentRefUrl.startsWith("blob:")) {
-                          URL.revokeObjectURL(currentRefUrl);
-                        }
-                        setReferenceImageUrl("");
-                        setReferenceImageFile(null);
-                      }
-
-                      setBatchCreateCount(1);
-                      toast({ title: `✅ 已创建 ${currentCount} 个任务` });
-                    } catch (error) {
-                      console.error("Create tasks error:", error);
-                      toast({ variant: "destructive", title: "创建任务失败，请重试" });
-                    }
-                  }, 50); // 延迟 50ms 让 UI 先关闭对话框
-                }}
-                disabled={createMode === "image" ? newTaskImages.length === 0 : !promptInput.trim()}
-                className="bg-gradient-to-r from-tiktok-cyan to-tiktok-pink text-black"
-              >
-                <Check className="h-4 w-4 mr-2" />
-                创建 {batchCreateCount > 1 ? `${batchCreateCount} 个任务` : "任务"}
-              </Button>
-              <Button
-                variant="outline"
+                variant="ghost"
                 onClick={() => setShowSaveTemplate(true)}
-                className="border-tiktok-cyan/30 text-tiktok-cyan hover:bg-tiktok-cyan/10"
+                className="text-gray-400 hover:text-white hover:bg-white/5 gap-2"
               >
-                <Save className="h-4 w-4 mr-2" />
-                保存为方案
+                <Save className="h-4 w-4" />
+                <span className="underline decoration-dashed underline-offset-4">保存为方案</span>
               </Button>
+
+              <div className="flex gap-3">
+                <Button
+                  variant="ghost"
+                  onClick={() => {
+                    newTaskImages.forEach((img) => {
+                      if (img.url.startsWith("blob:")) URL.revokeObjectURL(img.url);
+                    });
+                    if (referenceImageUrl.startsWith("blob:")) URL.revokeObjectURL(referenceImageUrl);
+                    setNewTaskImages([]);
+                    setPromptInput("");
+                    setGroupNameInput("");
+                    setReferenceImageUrl("");
+                    setReferenceImageFile(null);
+                    setBatchCreateCount(1);
+                    setShowCreateDialog(false);
+                  }}
+                  className="text-gray-400 hover:text-white hover:bg-white/10"
+                >
+                  取消
+                </Button>
+                <Button
+                  onClick={async () => {
+                    if (createMode === "image") {
+                      if (newTaskImages.length === 0) {
+                        toast({ variant: "destructive", title: "请至少上传一张图片" });
+                        return;
+                      }
+                      const validation = validateTaskImages(newTaskImages);
+                      if (!validation.valid) {
+                        toast({ variant: "destructive", title: validation.error || "图片校验失败" });
+                        return;
+                      }
+                    } else {
+                      if (!promptInput.trim() || promptInput.trim().length < 10) {
+                        toast({ variant: "destructive", title: "提示词至少需要10个字符" });
+                        return;
+                      }
+                    }
+
+                    const currentMode = createMode;
+                    const currentCount = batchCreateCount;
+                    const currentPrompt = promptInput;
+                    const currentGroup = groupNameInput;
+                    const currentImages = [...newTaskImages];
+                    const currentRefFile = referenceImageFile;
+                    const currentRefUrl = referenceImageUrl;
+
+                    setShowCreateDialog(false);
+                    toast({ title: `⏳ 正在创建 ${currentCount} 个任务...` });
+
+                    setTimeout(async () => {
+                      try {
+                        if (currentMode === "image") {
+                          for (let i = 0; i < currentCount; i++) createTask([...currentImages]);
+                          setNewTaskImages([]);
+                        } else {
+                          let uploadedRefUrl = "";
+                          if (currentRefFile) {
+                            try {
+                              const formData = new FormData();
+                              formData.append("file", currentRefFile);
+                              const uploadRes = await fetch("/api/upload/image", { method: "POST", body: formData });
+                              const uploadResult = await uploadRes.json();
+                              if (uploadResult.success && uploadResult.data?.url) uploadedRefUrl = uploadResult.data.url;
+                            } catch (e) {
+                              console.error("Upload reference image failed:", e);
+                            }
+                          }
+
+                          createTaskFromPrompt(currentPrompt, uploadedRefUrl || undefined, currentCount, currentGroup || undefined);
+                          setPromptInput("");
+                          setGroupNameInput("");
+                          if (currentRefUrl.startsWith("blob:")) URL.revokeObjectURL(currentRefUrl);
+                          setReferenceImageUrl("");
+                          setReferenceImageFile(null);
+                        }
+                        setBatchCreateCount(1);
+                        toast({ title: `✅ 已创建 ${currentCount} 个任务` });
+                      } catch (error) {
+                        console.error("Create tasks error:", error);
+                        toast({ variant: "destructive", title: "创建任务失败，请重试" });
+                      }
+                    }, 50);
+                  }}
+                  disabled={createMode === "image" ? newTaskImages.length === 0 : !promptInput.trim()}
+                  className="bg-gradient-to-r from-tiktok-cyan to-tiktok-pink text-black font-semibold shadow-[0_0_20px_rgba(6,182,212,0.3)] hover:shadow-[0_0_30px_rgba(6,182,212,0.5)] transition-all px-8 border-none"
+                >
+                  <Sparkles className="h-4 w-4 mr-2" />
+                  立即创建 {batchCreateCount > 1 && `(${batchCreateCount})`}
+                </Button>
+              </div>
             </DialogFooter>
           </DialogContent>
         </Dialog>

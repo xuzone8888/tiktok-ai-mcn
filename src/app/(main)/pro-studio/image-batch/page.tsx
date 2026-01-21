@@ -34,6 +34,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import {
   Zap,
@@ -70,6 +71,7 @@ import {
   PackageOpen,
   Wifi,
   Film,
+  FolderDown,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import Link from "next/link";
@@ -1421,113 +1423,153 @@ export default function ImageBatchPage() {
 
         {/* 创建任务弹窗 - 纯提示词模式 */}
         <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
-          <DialogContent className="max-w-2xl bg-background border-border">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <FileText className="h-5 w-5 text-tiktok-cyan" />
-                纯提示词创建图片任务
-              </DialogTitle>
-            </DialogHeader>
-
-            <div className="space-y-4 py-4">
-              {/* 提示词输入 */}
-              <div className="space-y-2">
-                <Label className="text-sm font-medium">提示词 *</Label>
-                <textarea
-                  value={createPrompt}
-                  onChange={(e) => setCreatePrompt(e.target.value)}
-                  placeholder="详细描述你想要生成的图片内容，例如：&#10;&#10;一个时尚的亚洲女性穿着优雅的白色连衣裙，站在现代简约的室内环境中，柔和的自然光从落地窗照射进来，专业时尚摄影，高清画质..."
-                  className="w-full h-40 px-4 py-3 text-sm bg-muted/30 border border-border/50 rounded-lg focus:outline-none focus:ring-2 focus:ring-tiktok-cyan/50 resize-none"
-                />
-                <p className="text-xs text-muted-foreground">
-                  提示：详细的描述可以获得更好的生成效果。可以包含场景、人物、光线、风格等信息。
-                </p>
+          <DialogContent className="max-w-2xl bg-black/95 border-white/10 text-white backdrop-blur-xl gap-0 p-0 overflow-hidden">
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 bg-white/5">
+              <div className="flex flex-col gap-0.5">
+                <DialogTitle className="text-lg font-semibold flex items-center gap-2">
+                  <Sparkles className="h-5 w-5 text-tiktok-pink" />
+                  纯提示词创建
+                </DialogTitle>
+                <DialogDescription className="text-xs text-muted-foreground">
+                  直接通过 AI 生成图片，无需上传素材
+                </DialogDescription>
               </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowTemplateManager(true)}
+                className="h-8 gap-1.5 text-tiktok-cyan hover:text-tiktok-cyan hover:bg-tiktok-cyan/10 rounded-full px-3"
+              >
+                <FolderDown className="h-4 w-4" />
+                <span className="text-xs font-medium">加载方案</span>
+              </Button>
+            </div>
 
-              {/* 任务数量 */}
-              <div className="flex items-center gap-4">
-                <Label className="text-sm font-medium whitespace-nowrap">创建数量</Label>
-                <div className="flex items-center border border-border/50 rounded-lg overflow-hidden">
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    onClick={() => setCreateCount(Math.max(1, createCount - 1))}
-                    className="h-9 w-9 rounded-none border-r border-border/50"
-                    disabled={createCount <= 1}
-                  >
-                    <Minus className="h-4 w-4" />
-                  </Button>
-                  <span className="w-12 text-center text-sm font-medium">{createCount}</span>
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    onClick={() => setCreateCount(Math.min(20, createCount + 1))}
-                    className="h-9 w-9 rounded-none border-l border-border/50"
-                    disabled={createCount >= 20}
-                  >
-                    <Plus className="h-4 w-4" />
-                  </Button>
+            <div className="p-6 space-y-6">
+              {/* Prompt Input */}
+              <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                <div className="space-y-2">
+                  <Label className="text-sm text-gray-300">
+                    提示词 <span className="text-red-400">*</span>
+                  </Label>
+                  <textarea
+                    value={createPrompt}
+                    onChange={(e) => setCreatePrompt(e.target.value)}
+                    placeholder="详细描述你想要生成的图片内容，例如：一个时尚的亚洲女性穿着优雅的白色连衣裙..."
+                    className="w-full h-40 px-4 py-3 text-sm bg-white/5 border border-white/10 rounded-xl text-white placeholder:text-gray-500 focus:outline-none focus:border-tiktok-cyan/50 resize-none leading-relaxed"
+                  />
                 </div>
-                <span className="text-xs text-muted-foreground">
-                  使用相同提示词创建多个任务（适合生成多个变体）
-                </span>
               </div>
 
-              {/* 当前配置显示 */}
-              <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/30 border border-border/30">
-                <span className="text-xs text-muted-foreground">当前配置：</span>
-                <Badge variant="outline" className="text-xs">
-                  {globalSettings.model === "nano-banana" ? "快速" : "Pro"}
-                </Badge>
-                <Badge variant="outline" className="text-xs">
-                  {globalSettings.aspectRatio}
-                </Badge>
-                {globalSettings.model === "nano-banana-pro" && (
-                  <Badge variant="outline" className="text-xs">
-                    {globalSettings.resolution.toUpperCase()}
-                  </Badge>
-                )}
-                <Badge className="bg-amber-500/10 text-amber-500 border-amber-500/30 text-xs">
-                  {getImageTaskCost({
-                    ...globalSettings,
-                    sourceImageUrl: "",
-                    sourceImageName: "",
-                    action: "generate",
-                    prompt: "",
-                  }) * createCount} Credits
-                </Badge>
+              {/* Status Bar */}
+              <div className="bg-white/5 rounded-xl border border-white/10 p-4 space-y-4">
+                <div className="flex flex-wrap items-center gap-2 text-xs">
+                  <div className="px-2.5 py-1 rounded-md bg-purple-500/10 text-purple-400 border border-purple-500/20 flex items-center gap-1.5">
+                    <Film className="h-3 w-3" />
+                    {globalSettings.model === "nano-banana" ? "快速版" : "专业版"}
+                  </div>
+                  <div className="px-2.5 py-1 rounded-md bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 flex items-center gap-1.5">
+                    <Wand2 className="h-3 w-3" />
+                    {globalSettings.action === "generate" ? "AI生成" : globalSettings.action === "upscale" ? "高清放大" : "九宫格"}
+                  </div>
+                  <div className="px-2.5 py-1 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center gap-1.5">
+                    <Square className="h-3 w-3" />
+                    {globalSettings.aspectRatio}
+                  </div>
+                  {globalSettings.model === "nano-banana-pro" && (
+                    <div className="px-2.5 py-1 rounded-md bg-pink-500/10 text-pink-400 border border-pink-500/20 flex items-center gap-1.5">
+                      <Monitor className="h-3 w-3" />
+                      {globalSettings.resolution?.toUpperCase()}
+                    </div>
+                  )}
+                  <div className="ml-auto flex items-center gap-1 text-amber-400 font-medium">
+                    <Zap className="h-3.5 w-3.5" />
+                    {getImageTaskCost({
+                      ...globalSettings,
+                      sourceImageUrl: "",
+                      sourceImageName: "",
+                      action: "generate",
+                      prompt: "",
+                    }) * createCount} pts
+                  </div>
+                </div>
+
+                <div className="h-px bg-white/10 w-full" />
+
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-gray-300">创建数量</span>
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs text-muted-foreground mr-2">
+                      生成多个变体
+                    </span>
+                    <div className="flex items-center bg-black/20 rounded-lg border border-white/10 h-8">
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-8 w-8 rounded-none rounded-l-lg hover:bg-white/10 text-gray-400 hover:text-white"
+                        onClick={() => setCreateCount(Math.max(1, createCount - 1))}
+                        disabled={createCount <= 1}
+                      >
+                        <Minus className="h-3 w-3" />
+                      </Button>
+                      <div className="w-12 text-center text-sm font-semibold text-white">{createCount}</div>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-8 w-8 rounded-none rounded-r-lg hover:bg-white/10 text-gray-400 hover:text-white"
+                        onClick={() => setCreateCount(Math.min(20, createCount + 1))}
+                        disabled={createCount >= 20}
+                      >
+                        <Plus className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
 
-            <DialogFooter>
+            <DialogFooter className="p-6 pt-0 sm:justify-between bg-transparent border-none">
               <Button
-                variant="outline"
-                onClick={() => {
-                  setCreatePrompt("");
-                  setCreateCount(1);
-                  setShowCreateDialog(false);
-                }}
+                variant="ghost"
+                onClick={() => setShowSaveTemplate(true)}
+                className="text-gray-400 hover:text-white hover:bg-white/5 gap-2"
               >
-                取消
+                <Save className="h-4 w-4" />
+                <span className="underline decoration-dashed underline-offset-4">保存为方案</span>
               </Button>
-              <Button
-                onClick={() => {
-                  if (!createPrompt.trim()) {
-                    toast({ variant: "destructive", title: "请输入提示词" });
-                    return;
-                  }
-                  const ids = addTaskFromPrompt(createPrompt, createCount);
-                  toast({ title: `✅ 已创建 ${ids.length} 个任务` });
-                  setCreatePrompt("");
-                  setCreateCount(1);
-                  setShowCreateDialog(false);
-                }}
-                disabled={!createPrompt.trim()}
-                className="bg-gradient-to-r from-tiktok-cyan to-tiktok-pink text-black"
-              >
-                <Check className="h-4 w-4 mr-2" />
-                创建 {createCount > 1 ? `${createCount} 个任务` : "任务"}
-              </Button>
+
+              <div className="flex gap-3">
+                <Button
+                  variant="ghost"
+                  onClick={() => {
+                    setCreatePrompt("");
+                    setCreateCount(1);
+                    setShowCreateDialog(false);
+                  }}
+                  className="text-gray-400 hover:text-white hover:bg-white/10"
+                >
+                  取消
+                </Button>
+                <Button
+                  onClick={() => {
+                    if (!createPrompt.trim()) {
+                      toast({ variant: "destructive", title: "请输入提示词" });
+                      return;
+                    }
+                    const ids = addTaskFromPrompt(createPrompt, createCount);
+                    toast({ title: `✅ 已创建 ${ids.length} 个任务` });
+                    setCreatePrompt("");
+                    setCreateCount(1);
+                    setShowCreateDialog(false);
+                  }}
+                  disabled={!createPrompt.trim()}
+                  className="bg-gradient-to-r from-tiktok-cyan to-tiktok-pink text-black font-semibold shadow-[0_0_20px_rgba(6,182,212,0.3)] hover:shadow-[0_0_30px_rgba(6,182,212,0.5)] transition-all px-8 border-none"
+                >
+                  <Sparkles className="h-4 w-4 mr-2" />
+                  立即创建 {createCount > 1 && `(${createCount})`}
+                </Button>
+              </div>
             </DialogFooter>
           </DialogContent>
         </Dialog>

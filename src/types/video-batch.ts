@@ -7,7 +7,7 @@
 // ============================================================================
 
 /** 视频任务状态 */
-export type VideoBatchTaskStatus = 
+export type VideoBatchTaskStatus =
   | "pending"           // 待处理
   | "uploading"         // 上传中
   | "generating_script" // 生成口播脚本中 (豆包 Step 1)
@@ -94,41 +94,41 @@ export interface VideoBatchTask {
   id: string;
   images: TaskImageInfo[];
   aspectRatio: VideoAspectRatio;
-  
+
   // 分组名称（用于批量下载时区分不同组）
   groupName?: string;
-  
+
   // 任务模式
   mode?: VideoBatchTaskMode;  // 默认 "image_to_video"
-  
+
   // 纯提示词模式的自定义提示词
   customPrompt?: string;      // 用户输入的提示词
   referenceImageUrl?: string; // 可选的参考图片
-  
+
   // AI 模特配置（任务创建时保存）
   useAiModel?: boolean;       // 是否使用 AI 模特
   aiModelId?: string;         // AI 模特 ID（不暴露给用户）
   aiModelName?: string;       // AI 模特显示名称（用户可见）
-  
+
   // 任务创建时的视频配置（保存以确保显示一致）
   modelType: VideoModelType;
   duration: VideoDuration;
   quality: VideoQuality;
-  
+
   // 豆包 AI 生成结果
   doubaoTalkingScript: string | null;   // 步骤1: 口播脚本 (C01-C07)
   doubaoAiVideoPrompt: string | null;   // 步骤2: AI视频提示词
-  
+
   // Sora2 Pro 生成结果
   soraTaskId: string | null;
   soraVideoUrl: string | null;
-  
+
   // 状态
   status: VideoBatchTaskStatus;
   currentStep: PipelineStep;  // 0-4 表示当前步骤
   progress: number;           // 0-100
   errorMessage: string | null;
-  
+
   // 时间戳
   createdAt: string;
   updatedAt: string;
@@ -151,6 +151,7 @@ export interface VideoBatchGlobalSettings {
   aiModelId: string | null;
   aiModelName: string | null;        // 显示名称（用户可见）
   aiModelTriggerWord: string | null; // 触发词（后台使用，不暴露给用户）
+  aiModelCover: string | null;       // AI 模特封面图URL
 }
 
 // ============================================================================
@@ -263,7 +264,7 @@ export function getVideoBatchTotalPrice(
     if (duration === 10) return VIDEO_BATCH_PRICING.sora2_10s;
     if (duration === 15) return VIDEO_BATCH_PRICING.sora2_15s;
   }
-  
+
   // PRO 款
   if (modelType === "sora2-pro") {
     // PRO 高清款 15秒 = 350积分
@@ -271,17 +272,17 @@ export function getVideoBatchTotalPrice(
     // PRO 款 25秒 = 350积分
     if (duration === 25) return VIDEO_BATCH_PRICING.sora2Pro_25s;
   }
-  
+
   // VEO3 快速版
   if (modelType === "veo3") {
     return VIDEO_BATCH_PRICING.veo3_fast;
   }
-  
+
   // VEO3 高清版
   if (modelType === "veo3-quality") {
     return VIDEO_BATCH_PRICING.veo3_quality;
   }
-  
+
   return VIDEO_BATCH_PRICING.sora2_15s; // 默认
 }
 
