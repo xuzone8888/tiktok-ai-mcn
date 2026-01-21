@@ -1287,21 +1287,68 @@ export default function VideoBatchPage() {
   // Template State
   const [showSaveTemplate, setShowSaveTemplate] = useState(false);
   const [showTemplateManager, setShowTemplateManager] = useState(false);
+  const [isUploadingTemplate, setIsUploadingTemplate] = useState(false);
 
   // Template Handlers
   const handleSaveTemplate = async (name: string, description: string) => {
     try {
-      // Prepare config to save
+      setIsUploadingTemplate(true);
+
+      // 上传素材图片到 OSS（如果有 blob URL）
+      const uploadedImages: Array<{ url: string; name: string; order: number; isMainGrid: boolean }> = [];
+      for (const img of newTaskImages) {
+        if (img.url.startsWith('blob:')) {
+          // 需要上传
+          try {
+            const blobResponse = await fetch(img.url);
+            const blob = await blobResponse.blob();
+            const formData = new FormData();
+            formData.append('file', blob, img.name);
+            const uploadRes = await fetch('/api/upload/image', {
+              method: 'POST',
+              body: formData,
+            });
+            const uploadResult = await uploadRes.json();
+            if (uploadResult.success && uploadResult.data?.url) {
+              uploadedImages.push({
+                url: uploadResult.data.url,
+                name: img.name,
+                order: img.order,
+                isMainGrid: img.isMainGrid,
+              });
+            }
+          } catch (uploadErr) {
+            console.error('Upload image failed:', uploadErr);
+          }
+        } else {
+          // 已经是远程 URL，直接使用
+          uploadedImages.push({
+            url: img.url,
+            name: img.name,
+            order: img.order,
+            isMainGrid: img.isMainGrid,
+          });
+        }
+      }
+
+      // 准备保存配置
       const configToSave = {
-        globalSettings,
-        createPrompt: promptInput, // Assuming promptInput is the current create prompt
-        createCount: batchCreateCount, // Assuming batchCreateCount is the current create count
-        // Save current AI model state if any
-        aiModel: globalSettings.useAiModel && globalSettings.aiModelId ? {
-          id: globalSettings.aiModelId,
-          name: globalSettings.aiModelName,
-          triggerWord: globalSettings.aiModelTriggerWord,
-        } : null
+        globalSettings: {
+          modelType: globalSettings.modelType,
+          duration: globalSettings.duration,
+          quality: globalSettings.quality,
+          aspectRatio: globalSettings.aspectRatio,
+          useAiModel: useAiModel,
+          aiModelId: selectedModelId,
+          aiModelName: selectedModelName,
+          aiModelTriggerWord: selectedModelTriggerWord,
+        },
+        createMode,
+        createPrompt: promptInput,
+        createCount: batchCreateCount,
+        groupNameTemplate: groupNameInput,
+        templateImages: uploadedImages,
+        savedAt: new Date().toISOString(),
       };
 
       const res = await fetch('/api/templates', {
@@ -1318,16 +1365,19 @@ export default function VideoBatchPage() {
       if (!res.ok) throw new Error('保存失败');
 
       toast({
-        title: "保存成功",
-        description: `方案 "${name}" 已保存`,
+        title: "✅ 方案已保存",
+        description: `"${name}" 包含 ${uploadedImages.length} 张图片`,
       });
       setShowSaveTemplate(false);
     } catch (e) {
+      console.error('Save template error:', e);
       toast({
         variant: "destructive",
         title: "保存失败",
         description: "无法保存您的方案，请重试"
       });
+    } finally {
+      setIsUploadingTemplate(false);
     }
   };
 
@@ -1335,40 +1385,64 @@ export default function VideoBatchPage() {
     try {
       const config = template.config;
 
-      // Restore Global Settings
-      // We do this individually to ensure store updates trigger correctly
+      // 恢复全局设置
       if (config.globalSettings) {
-        Object.entries(config.globalSettings).forEach(([key, value]) => {
-          // Skip invalid keys
-          if (key === 'aiModelCover') return;
-          updateGlobalSettings(key as any, value);
-        });
+        const gs = config.globalSettings;
+        if (gs.modelType) updateGlobalSettings('modelType', gs.modelType);
+        if (gs.duration) updateGlobalSettings('duration', gs.duration);
+        if (gs.quality) updateGlobalSettings('quality', gs.quality);
+        if (gs.aspectRatio) updateGlobalSettings('aspectRatio', gs.aspectRatio);
       }
 
-      // Restore Prompt & Count
+      // 恢复 AI 模特
+      if (config.globalSettings?.useAiModel && config.globalSettings?.aiModelId) {
+        setUseAiModel(true);
+        setSelectedModelId(config.globalSettings.aiModelId);
+        setSelectedModelName(config.globalSettings.aiModelName);
+        setSelectedModelTriggerWord(config.globalSettings.aiModelTriggerWord);
+      } else {
+        setUseAiModel(false);
+        setSelectedModelId(null);
+        setSelectedModelName(null);
+        setSelectedModelTriggerWord(null);
+      }
+
+      // 恢复创建模式
+      if (config.createMode) setCreateMode(config.createMode);
+
+      // 恢复提示词
       if (config.createPrompt) setPromptInput(config.createPrompt);
+
+      // 恢复批量数量
       if (config.createCount) setBatchCreateCount(config.createCount);
 
-      // Restore AI Model
-      if (config.aiModel) {
-        updateGlobalSettings("useAiModel", true);
-        updateGlobalSettings("aiModelId", config.aiModel.id);
-        updateGlobalSettings("aiModelName", config.aiModel.name);
-        updateGlobalSettings("aiModelTriggerWord", config.aiModel.triggerWord);
-      } else {
-        updateGlobalSettings("useAiModel", false);
-        updateGlobalSettings("aiModelId", null);
-        updateGlobalSettings("aiModelName", null);
-        updateGlobalSettings("aiModelTriggerWord", null);
+      // 恢复分组名称
+      if (config.groupNameTemplate) setGroupNameInput(config.groupNameTemplate);
+
+      // 恢复素材图片（从 OSS URL）
+      if (config.templateImages && config.templateImages.length > 0) {
+        const restoredImages: TaskImageInfo[] = config.templateImages.map((img: any, index: number) => ({
+          id: `restored-${Date.now()}-${index}`,
+          url: img.url,
+          name: img.name,
+          order: img.order ?? index,
+          isMainGrid: img.isMainGrid ?? (index === 0),
+        }));
+        setNewTaskImages(restoredImages);
       }
-      toast({
-        title: "加载成功",
-        description: `方案 "${template.name}" 已加载`,
-      });
+
+      // 关闭方案管理器
       setShowTemplateManager(false);
 
+      // 自动打开创建任务弹窗
+      setShowCreateDialog(true);
+
+      toast({
+        title: "✅ 方案已加载",
+        description: `"${template.name}" 的配置已填充，可直接创建任务`,
+      });
     } catch (e) {
-      console.error("Load template error", e);
+      console.error('Load template error:', e);
       toast({
         variant: "destructive",
         title: "加载失败",
@@ -2818,16 +2892,6 @@ C07: [story CTA, inspiring, <50 chars]`,
                 创建任务
               </Button>
 
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowSaveTemplate(true)}
-                className="h-8 px-3 text-xs border-tiktok-cyan/30 text-tiktok-cyan hover:bg-tiktok-cyan/10"
-                title="保存当前配置为方案"
-              >
-                <Save className="h-3.5 w-3.5 mr-1" />
-                保存方案
-              </Button>
 
               {/* 开始所有任务按钮 - 有待处理任务时显示 */}
               {stats.pending > 0 && (
@@ -3828,6 +3892,14 @@ C07: [story CTA, inspiring, <50 chars]`,
                 <Check className="h-4 w-4 mr-2" />
                 创建 {batchCreateCount > 1 ? `${batchCreateCount} 个任务` : "任务"}
               </Button>
+              <Button
+                variant="outline"
+                onClick={() => setShowSaveTemplate(true)}
+                className="border-tiktok-cyan/30 text-tiktok-cyan hover:bg-tiktok-cyan/10"
+              >
+                <Save className="h-4 w-4 mr-2" />
+                保存为方案
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -4135,7 +4207,16 @@ C07: [story CTA, inspiring, <50 chars]`,
         open={showSaveTemplate}
         onOpenChange={setShowSaveTemplate}
         onSave={handleSaveTemplate}
-        defaultName="我的视频方案"
+        defaultName={`${globalSettings.modelType}-${globalSettings.duration}s-${globalSettings.aspectRatio}`}
+        isUploading={isUploadingTemplate}
+        configPreview={[
+          { icon: <Film className="h-3.5 w-3.5" />, label: "模型", value: globalSettings.modelType === "sora2" ? "Sora 2.0" : globalSettings.modelType === "sora2-pro" ? "Sora 2.0 Pro" : globalSettings.modelType === "veo3" ? "VEO3 快速版" : "VEO3 高清版" },
+          { icon: <Clock className="h-3.5 w-3.5" />, label: "时长", value: `${globalSettings.duration}秒` },
+          { icon: <Monitor className="h-3.5 w-3.5" />, label: "比例", value: globalSettings.aspectRatio },
+          { icon: <UserCircle className="h-3.5 w-3.5" />, label: "AI模特", value: useAiModel && selectedModelName ? selectedModelName : "未使用" },
+          { icon: <ImageIcon className="h-3.5 w-3.5" />, label: "数量", value: `${batchCreateCount}个` },
+        ]}
+        imagePreview={newTaskImages.map(img => ({ url: img.url, name: img.name }))}
       />
       <TemplateManager
         open={showTemplateManager}

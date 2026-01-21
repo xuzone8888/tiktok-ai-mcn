@@ -69,6 +69,7 @@ import {
   FileText,
   PackageOpen,
   Wifi,
+  Film,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import Link from "next/link";
@@ -378,19 +379,6 @@ function TaskCard({
           </div>
         </div>
       </div>
-      {/* Templates */}
-      <SaveTemplateDialog
-        open={showSaveTemplate}
-        onOpenChange={setShowSaveTemplate}
-        onSave={handleSaveTemplate}
-        defaultName={createPrompt ? (createPrompt.substring(0, 10) + "...") : "我的视频方案"}
-      />
-      <TemplateManager
-        open={showTemplateManager}
-        onOpenChange={setShowTemplateManager}
-        type="video_batch"
-        onSelect={handleLoadTemplate}
-      />
     </div>
   );
 }
@@ -460,7 +448,16 @@ export default function ImageBatchPage() {
   const handleSaveTemplate = async (name: string, description: string) => {
     try {
       const configToSave = {
-        globalSettings,
+        globalSettings: {
+          model: globalSettings.model,
+          action: globalSettings.action,
+          aspectRatio: globalSettings.aspectRatio,
+          resolution: globalSettings.resolution,
+          prompt: globalSettings.prompt,
+        },
+        createPrompt,
+        createCount,
+        savedAt: new Date().toISOString(),
       };
 
       const res = await fetch('/api/templates', {
@@ -477,11 +474,12 @@ export default function ImageBatchPage() {
       if (!res.ok) throw new Error('保存失败');
 
       toast({
-        title: "保存成功",
-        description: `方案 "${name}" 已保存`,
+        title: "✅ 方案已保存",
+        description: `"${name}" 配置已成功保存`,
       });
       setShowSaveTemplate(false);
     } catch (e) {
+      console.error('Save template error:', e);
       toast({
         variant: "destructive",
         title: "保存失败",
@@ -493,17 +491,33 @@ export default function ImageBatchPage() {
   const handleLoadTemplate = (template: Template) => {
     try {
       const config = template.config;
+
+      // 恢复全局设置
       if (config.globalSettings) {
-        Object.entries(config.globalSettings).forEach(([key, value]) => {
-          updateGlobalSettings(key as any, value);
-        });
+        const gs = config.globalSettings;
+        if (gs.model) updateGlobalSettings('model', gs.model);
+        if (gs.action) updateGlobalSettings('action', gs.action);
+        if (gs.aspectRatio) updateGlobalSettings('aspectRatio', gs.aspectRatio);
+        if (gs.resolution) updateGlobalSettings('resolution', gs.resolution);
+        if (gs.prompt) updateGlobalSettings('prompt', gs.prompt);
       }
-      toast({
-        title: "加载成功",
-        description: `方案 "${template.name}" 已加载`,
-      });
+
+      // 恢复创建参数
+      if (config.createPrompt) setCreatePrompt(config.createPrompt);
+      if (config.createCount) setCreateCount(config.createCount);
+
+      // 关闭方案管理器
       setShowTemplateManager(false);
+
+      // 自动打开创建任务弹窗
+      setShowCreateDialog(true);
+
+      toast({
+        title: "✅ 方案已加载",
+        description: `"${template.name}" 的配置已填充，可直接创建任务`,
+      });
     } catch (e) {
+      console.error('Load template error:', e);
       toast({
         variant: "destructive",
         title: "加载失败",
@@ -1569,7 +1583,13 @@ export default function ImageBatchPage() {
         open={showSaveTemplate}
         onOpenChange={setShowSaveTemplate}
         onSave={handleSaveTemplate}
-        defaultName="我的制图方案"
+        defaultName={`${globalSettings.model}-${globalSettings.action}-${globalSettings.aspectRatio}`}
+        configPreview={[
+          { icon: <Film className="h-3.5 w-3.5" />, label: "模型", value: globalSettings.model === "nano-banana-pro" ? "专业版" : "快速版" },
+          { icon: <Wand2 className="h-3.5 w-3.5" />, label: "处理", value: globalSettings.action === "upscale" ? "高清放大" : globalSettings.action === "generate" ? "AI生成" : "九宫格" },
+          { icon: <Square className="h-3.5 w-3.5" />, label: "比例", value: globalSettings.aspectRatio || "自动" },
+          { icon: <Monitor className="h-3.5 w-3.5" />, label: "分辨率", value: globalSettings.resolution?.toUpperCase() || "1K" },
+        ]}
       />
       <TemplateManager
         open={showTemplateManager}
