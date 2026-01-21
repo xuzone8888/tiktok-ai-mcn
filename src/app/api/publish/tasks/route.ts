@@ -13,6 +13,7 @@ interface CreateTaskRequest {
         type: 'asset' | 'upload' | 'url'
         name: string
         url?: string
+        title?: string  // 视频独立标题（优先级高于全局 caption）
         coverTimestampMs?: number  // 封面帧时间戳（毫秒）
     }>
     account_ids: string[]
@@ -225,10 +226,18 @@ export async function POST(request: NextRequest) {
                 // Calculate scheduled time with interval
                 const scheduledTime = new Date(baseTime.getTime() + (itemIndex * body.batch_interval * 60 * 1000))
 
-                // Replace template variables in caption
-                let title = body.caption
-                title = title.replace(/{n}/g, String(itemIndex + 1))
-                title = title.replace(/{date}/g, new Date().toLocaleDateString('zh-CN'))
+                // 优先使用视频独立标题，否则使用全局 caption 模板
+                // Priority: video.title > body.caption (with template variables)
+                let title: string
+                if (video.title && video.title.trim()) {
+                    // 使用视频独立标题
+                    title = video.title.trim()
+                } else {
+                    // 使用全局 caption 模板，并替换变量
+                    title = body.caption || ''
+                    title = title.replace(/{n}/g, String(itemIndex + 1))
+                    title = title.replace(/{date}/g, new Date().toLocaleDateString('zh-CN'))
+                }
 
                 // Ensure video_url is not null - use a placeholder if not provided
                 const videoUrl = video.url || `placeholder://asset/${video.id}`

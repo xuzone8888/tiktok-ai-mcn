@@ -106,6 +106,14 @@ export async function initVideoPublishFromUrl(
         },
     };
 
+    // 记录请求详情用于调试
+    console.log('[TikTok Publish] Initiating publish:', {
+        videoUrl: videoUrl.substring(0, 80) + '...',
+        title: postInfo.title?.substring(0, 50),
+        privacyLevel: postInfo.privacyLevel,
+        isAigc: postInfo.isAigc,
+    })
+
     const response = await fetchWithRetry(TIKTOK_PUBLISH_VIDEO_INIT, {
         method: 'POST',
         headers: {
@@ -117,12 +125,22 @@ export async function initVideoPublishFromUrl(
 
     if (!response.ok) {
         const errorText = await response.text();
+        // 记录完整错误信息
+        console.error('[TikTok Publish] API Error:', {
+            status: response.status,
+            statusText: response.statusText,
+            errorBody: errorText.substring(0, 500),
+            videoUrl: videoUrl.substring(0, 80),
+        })
         try {
             const errorJson = JSON.parse(errorText);
             const message = errorJson.error?.message || errorJson.message || errorText;
-            throw new Error(`TikTok API Error: ${message}`);
+            throw new Error(`TikTok API Error (${response.status}): ${message}`);
         } catch (e) {
-            throw new Error(`Failed to init video publish: ${errorText.substring(0, 100)}...`);
+            if (e instanceof Error && e.message.startsWith('TikTok API Error')) {
+                throw e
+            }
+            throw new Error(`Failed to init video publish (${response.status}): ${errorText.substring(0, 200)}`);
         }
     }
 
