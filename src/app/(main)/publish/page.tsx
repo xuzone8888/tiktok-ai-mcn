@@ -1177,11 +1177,7 @@ export default function PublishPage() {
                                                     </span>
                                                 </div>
                                                 {/* Mini individual bar for active uploads */}
-                                                {file.status === 'uploading' && (
-                                                    <div className="w-full h-0.5 bg-white/10 rounded-full overflow-hidden">
-                                                        <div className="h-full bg-cyan-500 transition-all duration-300" style={{ width: `${file.progress}%` }} />
-                                                    </div>
-                                                )}
+
                                             </div>
                                         </div>
                                     ))}
