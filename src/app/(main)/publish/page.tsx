@@ -1503,107 +1503,88 @@ export default function PublishPage() {
                                         placeholder="输入视频标题..."
                                         rows={3}
                                         className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500/50 transition-all resize-none"
+```
                                     />
                                 ) : (
                                     /* Individual titles - one input per video */
                                     <div className="space-y-3">
                                         {selectedVideos.map((video, index) => (
-                                            <div key={video.id} className="flex gap-3 items-start">
-                                                <div className="flex-shrink-0 w-12 h-12 rounded-lg overflow-hidden bg-white/5 border border-white/10">
-                                                    {video.cover ? (
-                                                        <img
-                                                            src={video.cover}
-                                                            alt=""
-                                                            className="w-full h-full object-cover"
-                                                        />
-                                                    ) : video.thumbnail ? (
-                                                        <img
-                                                            src={video.thumbnail}
-                                                            alt=""
-                                                            className="w-full h-full object-cover"
-                                                        />
-                                                    ) : video.url ? (
-                                                        /* Use video element to show first frame if no thumbnail */
-                                                        <video
-                                                            src={video.url}
-                                                            className="w-full h-full object-cover"
-                                                            muted
-                                                            playsInline
-                                                            preload="metadata"
-                                                        />
+                                            <div
+                                                key={video.id}
+                                                className="flex items-center justify-between p-3 rounded-lg bg-white/5 border border-white/5"
+                                            >
+                                                <div className="flex items-center gap-3 min-w-0 flex-1">
+                                                    {video.status === 'done' ? (
+                                                        <CheckCircle2 className="w-4 h-4 text-green-400 flex-shrink-0" />
+                                                    ) : video.status === 'error' ? (
+                                                        <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
                                                     ) : (
-                                                        <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-cyan-500/20 to-pink-500/20">
-                                                            <span className="text-white/50 font-medium">{index + 1}</span>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                                <div className="flex-1">
                                                     <input
                                                         type="text"
                                                         value={video.title || ''}
                                                         onChange={(e) => updateVideoTitle(video.id, e.target.value)}
                                                         placeholder={`视频 ${index + 1} 的标题...`}
-                                                        className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-pink-500/50 focus:border-pink-500/50 transition-all text-sm"
+                                className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-pink-500/50 focus:border-pink-500/50 transition-all text-sm"
                                                     />
-                                                    <p className="text-[10px] text-gray-500 mt-1 truncate">{video.name}</p>
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* Quick action buttons */}
-                            <div className="flex gap-2">
-                                <button
-                                    type="button"
-                                    onClick={() => setCaption(prev => prev + ' #')}
-                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-gray-400 hover:text-cyan-400 hover:border-cyan-500/50 transition-colors text-sm"
-                                >
-                                    <span className="text-cyan-400 font-bold">#</span>
-                                    添加话题
-                                </button>
-                            </div>
-
-                            {/* Privacy Level Selection */}
-                            <div className="mt-4">
-                                <label className="block text-sm font-medium text-gray-300 mb-2">
-                                    可见范围
-                                </label>
-                                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                                    {[
-                                        { value: 'PUBLIC_TO_EVERYONE', label: '公开', icon: '🌍', desc: '所有人可见' },
-                                        { value: 'FOLLOWER_OF_CREATOR', label: '粉丝可见', icon: '👥', desc: '仅粉丝' },
-                                        { value: 'MUTUAL_FOLLOW_FRIENDS', label: '好友可见', icon: '🤝', desc: '互关好友' },
-                                        { value: 'SELF_ONLY', label: '仅自己', icon: '🔒', desc: '私密' },
-                                    ].map(({ value, label, icon, desc }) => (
-                                        <button
-                                            key={value}
-                                            type="button"
-                                            onClick={() => setPrivacyLevel(value as typeof privacyLevel)}
-                                            className={`flex flex-col items-center gap-1 px-3 py-3 rounded-xl text-center transition-all ${privacyLevel === value
-                                                ? 'bg-cyan-500/20 border-cyan-500 text-cyan-400'
-                                                : 'bg-white/5 border-white/10 text-gray-400 hover:bg-white/10'
-                                                } border`}
-                                        >
-                                            <span className="text-lg">{icon}</span>
-                                            <span className="text-sm font-medium">{label}</span>
-                                            <span className="text-[10px] text-gray-500">{desc}</span>
-                                        </button>
-                                    ))}
-                                </div>
-                                {privacyLevel === 'SELF_ONLY' && (
-                                    <p className="text-xs text-yellow-500/80 mt-2 flex items-center gap-1">
-                                        <span>⚠️</span>
-                                        沙盒测试期间建议使用"仅自己"可见，审核通过后可选择公开发布
-                                    </p>
-                                )}
+                                <p className="text-[10px] text-gray-500 mt-1 truncate">{video.name}</p>
                             </div>
                         </div>
-                    </section>
+                                        ))}
+                </div>
+            )}
+        </div>
 
-                    {/* Step 3: Schedule */}
-                    <section className="bg-white/5 rounded-2xl border border-white/10 p-6">
+                            {/* Quick action buttons */ }
+    <div className="flex gap-2">
+        <button
+            type="button"
+            onClick={() => setCaption(prev => prev + ' #')}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-gray-400 hover:text-cyan-400 hover:border-cyan-500/50 transition-colors text-sm"
+        >
+            <span className="text-cyan-400 font-bold">#</span>
+            添加话题
+        </button>
+    </div>
+
+    {/* Privacy Level Selection */ }
+    <div className="mt-4">
+        <label className="block text-sm font-medium text-gray-300 mb-2">
+            可见范围
+        </label>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+            {[
+                { value: 'PUBLIC_TO_EVERYONE', label: '公开', icon: '🌍', desc: '所有人可见' },
+                { value: 'FOLLOWER_OF_CREATOR', label: '粉丝可见', icon: '👥', desc: '仅粉丝' },
+                { value: 'MUTUAL_FOLLOW_FRIENDS', label: '好友可见', icon: '🤝', desc: '互关好友' },
+                { value: 'SELF_ONLY', label: '仅自己', icon: '🔒', desc: '私密' },
+            ].map(({ value, label, icon, desc }) => (
+                <button
+                    key={value}
+                    type="button"
+                    onClick={() => setPrivacyLevel(value as typeof privacyLevel)}
+                    className={`flex flex-col items-center gap-1 px-3 py-3 rounded-xl text-center transition-all ${privacyLevel === value
+                        ? 'bg-cyan-500/20 border-cyan-500 text-cyan-400'
+                        : 'bg-white/5 border-white/10 text-gray-400 hover:bg-white/10'
+                        } border`}
+                >
+                    <span className="text-lg">{icon}</span>
+                    <span className="text-sm font-medium">{label}</span>
+                    <span className="text-[10px] text-gray-500">{desc}</span>
+                </button>
+            ))}
+        </div>
+        {privacyLevel === 'SELF_ONLY' && (
+            <p className="text-xs text-yellow-500/80 mt-2 flex items-center gap-1">
+                <span>⚠️</span>
+                沙盒测试期间建议使用"仅自己"可见，审核通过后可选择公开发布
+            </p>
+        )}
+    </div>
+                        </div >
+                    </section >
+
+        {/* Step 3: Schedule */ }
+        < section className = "bg-white/5 rounded-2xl border border-white/10 p-6" >
                         <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
                             <div className="w-6 h-6 rounded-full bg-cyan-500/20 flex items-center justify-center text-sm text-cyan-400">4</div>
                             发布时间
@@ -1766,702 +1747,702 @@ export default function PublishPage() {
                                 </div>
                             )}
                         </div>
-                    </section>
+                    </section >
 
-                    {/* Task Preview & Submit */}
-                    <section className="bg-gradient-to-r from-cyan-500/10 to-pink-500/10 rounded-2xl border border-cyan-500/20 p-6">
-                        <div className="flex items-center justify-between flex-wrap gap-4">
-                            <div className="space-y-2">
-                                <h3 className="text-lg font-semibold">任务预览</h3>
-                                <div className="space-y-1 text-sm">
-                                    <p className="flex items-center gap-2">
-                                        <span className="text-gray-400">📼</span>
-                                        <span className="text-cyan-400 font-bold">{selectedVideos.length}</span>
-                                        <span className="text-gray-300">个视频</span>
-                                        {selectedAccounts.length > 0 && (
-                                            <>
-                                                <span className="text-gray-500">→</span>
-                                                <span className="text-pink-400 font-medium">
-                                                    @{accounts.find(a => a.id === selectedAccounts[0])?.display_name || '账号'}
-                                                </span>
-                                            </>
-                                        )}
-                                    </p>
-                                    <p className="flex items-center gap-2 text-xs text-gray-400">
-                                        <span>⏱️</span>
-                                        <span>
-                                            {publishMode === 'now' ? '立即发布' : `预约发布 ${scheduledDate} ${scheduledTime}`}
-                                            {selectedVideos.length > 1 && (
-                                                <>, 间隔 {intervalMode === 'custom' ? customInterval : intervalMode} 分钟</>
-                                            )}
-                                        </span>
-                                    </p>
-                                </div>
-                            </div>
-
-                            <div className="flex items-center gap-3">
-                                {publishError && (
-                                    <p className="text-sm text-red-400 flex items-center gap-1">
-                                        <XCircle className="w-4 h-4" />
-                                        {publishError}
-                                    </p>
+        {/* Task Preview & Submit */ }
+        < section className = "bg-gradient-to-r from-cyan-500/10 to-pink-500/10 rounded-2xl border border-cyan-500/20 p-6" >
+            <div className="flex items-center justify-between flex-wrap gap-4">
+                <div className="space-y-2">
+                    <h3 className="text-lg font-semibold">任务预览</h3>
+                    <div className="space-y-1 text-sm">
+                        <p className="flex items-center gap-2">
+                            <span className="text-gray-400">📼</span>
+                            <span className="text-cyan-400 font-bold">{selectedVideos.length}</span>
+                            <span className="text-gray-300">个视频</span>
+                            {selectedAccounts.length > 0 && (
+                                <>
+                                    <span className="text-gray-500">→</span>
+                                    <span className="text-pink-400 font-medium">
+                                        @{accounts.find(a => a.id === selectedAccounts[0])?.display_name || '账号'}
+                                    </span>
+                                </>
+                            )}
+                        </p>
+                        <p className="flex items-center gap-2 text-xs text-gray-400">
+                            <span>⏱️</span>
+                            <span>
+                                {publishMode === 'now' ? '立即发布' : `预约发布 ${scheduledDate} ${scheduledTime}`}
+                                {selectedVideos.length > 1 && (
+                                    <>, 间隔 {intervalMode === 'custom' ? customInterval : intervalMode} 分钟</>
                                 )}
-                                <button
-                                    onClick={() => {
-                                        setSelectedVideos([])
-                                        setSelectedAccounts([])
-                                        setCaption('')
-                                    }}
-                                    className="px-4 py-2.5 rounded-xl border border-white/10 text-gray-400 hover:bg-white/5 transition-colors"
-                                >
-                                    取消
-                                </button>
-                                <button
-                                    onClick={handlePublish}
-                                    disabled={isPublishing || selectedVideos.length === 0 || selectedAccounts.length === 0}
-                                    className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-pink-500 font-semibold hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                                >
-                                    {isPublishing ? (
-                                        <>
-                                            <Loader2 className="w-4 h-4 animate-spin" />
-                                            创建中...
-                                        </>
-                                    ) : (
-                                        <>
-                                            <Send className="w-4 h-4" />
-                                            创建发布任务
-                                        </>
-                                    )}
-                                </button>
-                            </div>
+                            </span>
+                        </p>
+                    </div>
+                </div>
+
+                <div className="flex items-center gap-3">
+                    {publishError && (
+                        <p className="text-sm text-red-400 flex items-center gap-1">
+                            <XCircle className="w-4 h-4" />
+                            {publishError}
+                        </p>
+                    )}
+                    <button
+                        onClick={() => {
+                            setSelectedVideos([])
+                            setSelectedAccounts([])
+                            setCaption('')
+                        }}
+                        className="px-4 py-2.5 rounded-xl border border-white/10 text-gray-400 hover:bg-white/5 transition-colors"
+                    >
+                        取消
+                    </button>
+                    <button
+                        onClick={handlePublish}
+                        disabled={isPublishing || selectedVideos.length === 0 || selectedAccounts.length === 0}
+                        className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-pink-500 font-semibold hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                    >
+                        {isPublishing ? (
+                            <>
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                                创建中...
+                            </>
+                        ) : (
+                            <>
+                                <Send className="w-4 h-4" />
+                                创建发布任务
+                            </>
+                        )}
+                    </button>
+                </div>
+            </div>
+                    </section >
+                </div >
+            )
+}
+
+{/* Task Manager Tab */ }
+{
+    activeTab === 'tasks' && (
+        <div className="bg-white/5 rounded-2xl border border-white/10 p-6">
+            <TaskManager />
+        </div>
+    )
+}
+
+{/* Asset Selector Modal (成品库选择器) */ }
+{
+    showAssetModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+            <div className="bg-gray-900 rounded-2xl border border-white/10 w-full max-w-4xl max-h-[80vh] overflow-hidden shadow-2xl">
+                <div className="flex items-center justify-between p-4 border-b border-white/10">
+                    <div>
+                        <h3 className="text-lg font-semibold">从成品库选择视频</h3>
+                        <p className="text-xs text-gray-400 mt-1">💡 单击多选，双击快速选择单个视频</p>
+                    </div>
+                    <button
+                        onClick={() => {
+                            setShowAssetModal(false)
+                            setSelectedAssetIds([])
+                        }}
+                        className="p-2 rounded-lg hover:bg-white/10 transition-colors"
+                    >
+                        <X className="w-5 h-5" />
+                    </button>
+                </div>
+                <div className="p-4 overflow-y-auto max-h-[60vh]">
+                    {loadingAssets ? (
+                        <div className="flex items-center justify-center py-12">
+                            <Loader2 className="w-8 h-8 animate-spin text-cyan-400" />
                         </div>
-                    </section>
-                </div>
-            )}
-
-            {/* Task Manager Tab */}
-            {activeTab === 'tasks' && (
-                <div className="bg-white/5 rounded-2xl border border-white/10 p-6">
-                    <TaskManager />
-                </div>
-            )}
-
-            {/* Asset Selector Modal (成品库选择器) */}
-            {showAssetModal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
-                    <div className="bg-gray-900 rounded-2xl border border-white/10 w-full max-w-4xl max-h-[80vh] overflow-hidden shadow-2xl">
-                        <div className="flex items-center justify-between p-4 border-b border-white/10">
-                            <div>
-                                <h3 className="text-lg font-semibold">从成品库选择视频</h3>
-                                <p className="text-xs text-gray-400 mt-1">💡 单击多选，双击快速选择单个视频</p>
-                            </div>
+                    ) : assets.length === 0 ? (
+                        <div className="text-center py-12">
+                            <Video className="w-16 h-16 mx-auto mb-4 text-gray-600" />
+                            <p className="text-gray-400 mb-2">成品库暂无视频</p>
+                            <p className="text-sm text-gray-500">请先在快速生成或批量工坊生成视频</p>
                             <button
                                 onClick={() => {
                                     setShowAssetModal(false)
-                                    setSelectedAssetIds([])
+                                    router.push('/quick-gen')
                                 }}
-                                className="p-2 rounded-lg hover:bg-white/10 transition-colors"
+                                className="mt-4 px-4 py-2 bg-gradient-to-r from-cyan-500 to-pink-500 rounded-lg font-medium hover:opacity-90 transition-opacity"
                             >
-                                <X className="w-5 h-5" />
+                                去生成视频
                             </button>
                         </div>
-                        <div className="p-4 overflow-y-auto max-h-[60vh]">
-                            {loadingAssets ? (
-                                <div className="flex items-center justify-center py-12">
-                                    <Loader2 className="w-8 h-8 animate-spin text-cyan-400" />
-                                </div>
-                            ) : assets.length === 0 ? (
-                                <div className="text-center py-12">
-                                    <Video className="w-16 h-16 mx-auto mb-4 text-gray-600" />
-                                    <p className="text-gray-400 mb-2">成品库暂无视频</p>
-                                    <p className="text-sm text-gray-500">请先在快速生成或批量工坊生成视频</p>
+                    ) : (
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                            {assets.map(asset => {
+                                const isAlreadyAdded = selectedVideos.some(v => v.id === asset.id)
+                                const isSelectedInModal = selectedAssetIds.includes(asset.id)
+                                return (
                                     <button
+                                        key={asset.id}
                                         onClick={() => {
-                                            setShowAssetModal(false)
-                                            router.push('/quick-gen')
+                                            if (isAlreadyAdded) return
+                                            // Toggle selection for multi-select
+                                            setSelectedAssetIds(prev =>
+                                                prev.includes(asset.id)
+                                                    ? prev.filter(id => id !== asset.id)
+                                                    : [...prev, asset.id]
+                                            )
                                         }}
-                                        className="mt-4 px-4 py-2 bg-gradient-to-r from-cyan-500 to-pink-500 rounded-lg font-medium hover:opacity-90 transition-opacity"
-                                    >
-                                        去生成视频
-                                    </button>
-                                </div>
-                            ) : (
-                                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-                                    {assets.map(asset => {
-                                        const isAlreadyAdded = selectedVideos.some(v => v.id === asset.id)
-                                        const isSelectedInModal = selectedAssetIds.includes(asset.id)
-                                        return (
-                                            <button
-                                                key={asset.id}
-                                                onClick={() => {
-                                                    if (isAlreadyAdded) return
-                                                    // Toggle selection for multi-select
-                                                    setSelectedAssetIds(prev =>
-                                                        prev.includes(asset.id)
-                                                            ? prev.filter(id => id !== asset.id)
-                                                            : [...prev, asset.id]
-                                                    )
-                                                }}
-                                                onDoubleClick={() => {
-                                                    if (isAlreadyAdded) return
-                                                    // Double-click: select and close immediately
-                                                    addVideoFromAsset(asset)
-                                                    setShowAssetModal(false)
-                                                    setSelectedAssetIds([])
-                                                }}
-                                                disabled={isAlreadyAdded}
-                                                className={`relative aspect-[9/16] rounded-xl overflow-hidden border-2 transition-all ${isAlreadyAdded
-                                                    ? 'border-gray-500 opacity-30 cursor-not-allowed'
-                                                    : isSelectedInModal
-                                                        ? 'border-cyan-500 ring-2 ring-cyan-500/30'
-                                                        : 'border-transparent hover:border-cyan-500/50'
-                                                    }`}
-                                            >
-                                                {asset.thumbnailUrl ? (
-                                                    <img
-                                                        src={asset.thumbnailUrl}
-                                                        alt={asset.prompt || '视频'}
-                                                        className="absolute inset-0 w-full h-full object-cover"
-                                                        onError={(e) => {
-                                                            // If thumbnail fails, hide image to show video fallback
-                                                            e.currentTarget.style.display = 'none'
-                                                        }}
-                                                    />
-                                                ) : null}
-                                                {/* Always show video for frame capture, hide if thumbnail loaded */}
-                                                {asset.resultUrl && (
-                                                    <video
-                                                        src={`${asset.resultUrl}#t=0.1`}
-                                                        className={`absolute inset-0 w-full h-full object-cover ${asset.thumbnailUrl ? 'opacity-0' : ''}`}
-                                                        muted
-                                                        playsInline
-                                                        preload="auto"
-                                                        onMouseEnter={(e) => e.currentTarget.play()}
-                                                        onMouseLeave={(e) => {
-                                                            e.currentTarget.pause()
-                                                            e.currentTarget.currentTime = 0.1
-                                                        }}
-                                                        onLoadedData={(e) => {
-                                                            // Show video once first frame is loaded
-                                                            e.currentTarget.classList.remove('opacity-0')
-                                                        }}
-                                                    />
-                                                )}
-                                                {!asset.resultUrl && !asset.thumbnailUrl && (
-                                                    <div className="absolute inset-0 bg-white/5 flex items-center justify-center">
-                                                        <Play className="w-8 h-8 text-gray-500" />
-                                                    </div>
-                                                )}
-                                                <div className="absolute bottom-0 left-0 right-0 p-2 bg-gradient-to-t from-black/80 to-transparent">
-                                                    <p className="text-xs truncate">{asset.prompt?.slice(0, 20) || '视频'}</p>
-                                                    <p className="text-[10px] text-gray-400">{format(new Date(asset.createdAt), 'MM/dd', { locale: zhCN })}</p>
-                                                </div>
-                                                {/* Already added indicator */}
-                                                {isAlreadyAdded && (
-                                                    <div className="absolute inset-0 flex items-center justify-center bg-black/50">
-                                                        <span className="text-xs text-gray-300">已添加</span>
-                                                    </div>
-                                                )}
-                                                {/* Selection checkbox indicator */}
-                                                {!isAlreadyAdded && !transferringAssets.has(asset.id) && (
-                                                    <div className={`absolute top-2 right-2 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors ${isSelectedInModal
-                                                        ? 'bg-cyan-500 border-cyan-500'
-                                                        : 'border-white/50 bg-black/30'
-                                                        }`}>
-                                                        {isSelectedInModal && <Check className="w-3 h-3 text-white" />}
-                                                    </div>
-                                                )}
-                                                {/* Transfer progress overlay */}
-                                                {transferringAssets.has(asset.id) && (
-                                                    <div className="absolute inset-0 z-30 bg-black/80 flex flex-col items-center justify-center">
-                                                        <Loader2 className="w-8 h-8 animate-spin text-cyan-400 mb-2" />
-                                                        <span className="text-xs text-cyan-400 font-medium">转存中...</span>
-                                                        <span className="text-[10px] text-gray-400 mt-1">请稍候</span>
-                                                    </div>
-                                                )}
-                                            </button>
-                                        )
-                                    })}
-                                </div>
-                            )}
-                        </div>
-                        {/* Batch Transfer Progress */}
-                        {batchTransfer.isTransferring && (
-                            <div className="p-4 bg-cyan-500/10 border-t border-cyan-500/30">
-                                <div className="flex items-center gap-3 mb-2">
-                                    <Loader2 className="w-5 h-5 animate-spin text-cyan-400" />
-                                    <span className="text-sm text-cyan-400 font-medium">
-                                        正在转存 {batchTransfer.completed}/{batchTransfer.total}
-                                    </span>
-                                    {batchTransfer.failed > 0 && (
-                                        <span className="text-xs text-red-400">
-                                            ({batchTransfer.failed} 失败)
-                                        </span>
-                                    )}
-                                </div>
-                                <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
-                                    <div
-                                        className="h-full bg-gradient-to-r from-cyan-500 to-pink-500 transition-all duration-300"
-                                        style={{ width: `${batchTransfer.total > 0 ? (batchTransfer.completed / batchTransfer.total) * 100 : 0}%` }}
-                                    />
-                                </div>
-                                <p className="text-xs text-gray-500 mt-2">
-                                    每次同时处理 {CONCURRENT_TRANSFER_LIMIT} 个视频，请耐心等待...
-                                </p>
-                            </div>
-                        )}
-
-                        {/* Footer */}
-                        <div className="flex items-center justify-between p-4 border-t border-white/10 bg-white/5">
-                            <p className="text-sm text-gray-400">
-                                已选择 <span className="text-cyan-400 font-semibold">{selectedAssetIds.length}</span> 个视频
-                                {selectedVideos.filter(v => v.type === 'asset').length > 0 && (
-                                    <span className="text-gray-500 ml-2">（已添加 {selectedVideos.filter(v => v.type === 'asset').length} 个）</span>
-                                )}
-                            </p>
-                            <div className="flex gap-2">
-                                <button
-                                    onClick={() => {
-                                        if (!batchTransfer.isTransferring) {
+                                        onDoubleClick={() => {
+                                            if (isAlreadyAdded) return
+                                            // Double-click: select and close immediately
+                                            addVideoFromAsset(asset)
                                             setShowAssetModal(false)
                                             setSelectedAssetIds([])
-                                        }
+                                        }}
+                                        disabled={isAlreadyAdded}
+                                        className={`relative aspect-[9/16] rounded-xl overflow-hidden border-2 transition-all ${isAlreadyAdded
+                                            ? 'border-gray-500 opacity-30 cursor-not-allowed'
+                                            : isSelectedInModal
+                                                ? 'border-cyan-500 ring-2 ring-cyan-500/30'
+                                                : 'border-transparent hover:border-cyan-500/50'
+                                            }`}
+                                    >
+                                        {asset.thumbnailUrl ? (
+                                            <img
+                                                src={asset.thumbnailUrl}
+                                                alt={asset.prompt || '视频'}
+                                                className="absolute inset-0 w-full h-full object-cover"
+                                                onError={(e) => {
+                                                    // If thumbnail fails, hide image to show video fallback
+                                                    e.currentTarget.style.display = 'none'
+                                                }}
+                                            />
+                                        ) : null}
+                                        {/* Always show video for frame capture, hide if thumbnail loaded */}
+                                        {asset.resultUrl && (
+                                            <video
+                                                src={`${asset.resultUrl}#t=0.1`}
+                                                className={`absolute inset-0 w-full h-full object-cover ${asset.thumbnailUrl ? 'opacity-0' : ''}`}
+                                                muted
+                                                playsInline
+                                                preload="auto"
+                                                onMouseEnter={(e) => e.currentTarget.play()}
+                                                onMouseLeave={(e) => {
+                                                    e.currentTarget.pause()
+                                                    e.currentTarget.currentTime = 0.1
+                                                }}
+                                                onLoadedData={(e) => {
+                                                    // Show video once first frame is loaded
+                                                    e.currentTarget.classList.remove('opacity-0')
+                                                }}
+                                            />
+                                        )}
+                                        {!asset.resultUrl && !asset.thumbnailUrl && (
+                                            <div className="absolute inset-0 bg-white/5 flex items-center justify-center">
+                                                <Play className="w-8 h-8 text-gray-500" />
+                                            </div>
+                                        )}
+                                        <div className="absolute bottom-0 left-0 right-0 p-2 bg-gradient-to-t from-black/80 to-transparent">
+                                            <p className="text-xs truncate">{asset.prompt?.slice(0, 20) || '视频'}</p>
+                                            <p className="text-[10px] text-gray-400">{format(new Date(asset.createdAt), 'MM/dd', { locale: zhCN })}</p>
+                                        </div>
+                                        {/* Already added indicator */}
+                                        {isAlreadyAdded && (
+                                            <div className="absolute inset-0 flex items-center justify-center bg-black/50">
+                                                <span className="text-xs text-gray-300">已添加</span>
+                                            </div>
+                                        )}
+                                        {/* Selection checkbox indicator */}
+                                        {!isAlreadyAdded && !transferringAssets.has(asset.id) && (
+                                            <div className={`absolute top-2 right-2 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors ${isSelectedInModal
+                                                ? 'bg-cyan-500 border-cyan-500'
+                                                : 'border-white/50 bg-black/30'
+                                                }`}>
+                                                {isSelectedInModal && <Check className="w-3 h-3 text-white" />}
+                                            </div>
+                                        )}
+                                        {/* Transfer progress overlay */}
+                                        {transferringAssets.has(asset.id) && (
+                                            <div className="absolute inset-0 z-30 bg-black/80 flex flex-col items-center justify-center">
+                                                <Loader2 className="w-8 h-8 animate-spin text-cyan-400 mb-2" />
+                                                <span className="text-xs text-cyan-400 font-medium">转存中...</span>
+                                                <span className="text-[10px] text-gray-400 mt-1">请稍候</span>
+                                            </div>
+                                        )}
+                                    </button>
+                                )
+                            })}
+                        </div>
+                    )}
+                </div>
+                {/* Batch Transfer Progress */}
+                {batchTransfer.isTransferring && (
+                    <div className="p-4 bg-cyan-500/10 border-t border-cyan-500/30">
+                        <div className="flex items-center gap-3 mb-2">
+                            <Loader2 className="w-5 h-5 animate-spin text-cyan-400" />
+                            <span className="text-sm text-cyan-400 font-medium">
+                                正在转存 {batchTransfer.completed}/{batchTransfer.total}
+                            </span>
+                            {batchTransfer.failed > 0 && (
+                                <span className="text-xs text-red-400">
+                                    ({batchTransfer.failed} 失败)
+                                </span>
+                            )}
+                        </div>
+                        <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
+                            <div
+                                className="h-full bg-gradient-to-r from-cyan-500 to-pink-500 transition-all duration-300"
+                                style={{ width: `${batchTransfer.total > 0 ? (batchTransfer.completed / batchTransfer.total) * 100 : 0}%` }}
+                            />
+                        </div>
+                        <p className="text-xs text-gray-500 mt-2">
+                            每次同时处理 {CONCURRENT_TRANSFER_LIMIT} 个视频，请耐心等待...
+                        </p>
+                    </div>
+                )}
+
+                {/* Footer */}
+                <div className="flex items-center justify-between p-4 border-t border-white/10 bg-white/5">
+                    <p className="text-sm text-gray-400">
+                        已选择 <span className="text-cyan-400 font-semibold">{selectedAssetIds.length}</span> 个视频
+                        {selectedVideos.filter(v => v.type === 'asset').length > 0 && (
+                            <span className="text-gray-500 ml-2">（已添加 {selectedVideos.filter(v => v.type === 'asset').length} 个）</span>
+                        )}
+                    </p>
+                    <div className="flex gap-2">
+                        <button
+                            onClick={() => {
+                                if (!batchTransfer.isTransferring) {
+                                    setShowAssetModal(false)
+                                    setSelectedAssetIds([])
+                                }
+                            }}
+                            disabled={batchTransfer.isTransferring}
+                            className="px-4 py-2 rounded-lg border border-white/10 text-gray-400 hover:bg-white/5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            {batchTransfer.isTransferring ? '请等待...' : '取消'}
+                        </button>
+                        <button
+                            onClick={() => startBatchTransfer(selectedAssetIds)}
+                            disabled={selectedAssetIds.length === 0 || batchTransfer.isTransferring}
+                            className="px-4 py-2 bg-gradient-to-r from-cyan-500 to-pink-500 rounded-lg font-medium hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            {batchTransfer.isTransferring
+                                ? `转存中 (${batchTransfer.completed}/${batchTransfer.total})`
+                                : `确认添加 (${selectedAssetIds.length})`}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    )
+}
+
+{/* Clear Task Confirmation Dialog */ }
+{
+    showClearConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+            <div className="bg-gray-900 rounded-2xl border border-white/10 p-6 w-full max-w-md shadow-2xl">
+                <div className="text-center">
+                    <div className="w-12 h-12 mx-auto mb-4 rounded-full bg-orange-500/20 flex items-center justify-center">
+                        <Trash2 className="w-6 h-6 text-orange-400" />
+                    </div>
+                    <h3 className="text-lg font-semibold mb-2">确认清空任务？</h3>
+                    <div className="text-gray-400 mb-6 text-sm text-left bg-white/5 rounded-lg p-3">
+                        <p className="mb-2">这将清空以下内容：</p>
+                        <ul className="list-disc list-inside space-y-1 text-gray-500">
+                            <li>{selectedVideos.length} 个已选视频</li>
+                            <li>任务组名称</li>
+                            <li>视频标题</li>
+                            <li>发布时间设置</li>
+                        </ul>
+                    </div>
+                    <div className="flex gap-3">
+                        <button
+                            onClick={() => setShowClearConfirm(false)}
+                            className="flex-1 px-4 py-2 rounded-xl border border-white/10 text-gray-400 hover:bg-white/5 transition-colors"
+                        >
+                            取消
+                        </button>
+                        <button
+                            onClick={clearAllTask}
+                            className="flex-1 px-4 py-2 rounded-xl bg-orange-500 text-white hover:bg-orange-600 transition-colors flex items-center justify-center gap-2"
+                        >
+                            <Trash2 className="w-4 h-4" />
+                            确认清空
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    )
+}
+
+
+{/* AI Title Assistant Modal */ }
+{
+    showTitleAssistant && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+            <div className="bg-gray-900 rounded-2xl border border-white/10 w-full max-w-2xl max-h-[90vh] overflow-hidden shadow-2xl flex flex-col">
+                {/* Header */}
+                <div className="flex items-center justify-between p-4 border-b border-white/10">
+                    <h3 className="text-lg font-semibold flex items-center gap-2">
+                        <Sparkles className="w-5 h-5 text-purple-400" />
+                        AI 标题助手
+                    </h3>
+                    <button
+                        onClick={() => {
+                            setShowTitleAssistant(false)
+                            setGeneratedTitles([])
+                        }}
+                        className="p-1.5 hover:bg-white/10 rounded-lg transition-colors"
+                    >
+                        <X className="w-5 h-5" />
+                    </button>
+                </div>
+
+                {/* Body */}
+                <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                    {/* Input Section */}
+                    {generatedTitles.length === 0 && !generatingTitles && (
+                        <>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-300 mb-2">
+                                    📝 描述你的视频内容
+                                </label>
+                                <textarea
+                                    value={titleDescription}
+                                    onChange={(e) => setTitleDescription(e.target.value)}
+                                    placeholder="例如：美妆教程，分享适合夏天的清爽淡妆技巧，针对年轻女性群体，强调快速上手和日常实用性..."
+                                    rows={4}
+                                    className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500/50 transition-all resize-none"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-300 mb-2">
+                                    🌐 输出语言
+                                </label>
+                                <div className="flex gap-3">
+                                    <button
+                                        onClick={() => setTitleLanguage('zh')}
+                                        className={`flex-1 p-3 rounded-xl border transition-all ${titleLanguage === 'zh'
+                                            ? 'border-purple-500 bg-purple-500/10 text-purple-400'
+                                            : 'border-white/10 text-gray-400 hover:border-white/20'
+                                            }`}
+                                    >
+                                        <div className="text-lg mb-1">🇨🇳</div>
+                                        <div className="text-sm font-medium">中文</div>
+                                        <div className="text-xs text-gray-500">适合国内平台</div>
+                                    </button>
+                                    <button
+                                        onClick={() => setTitleLanguage('en')}
+                                        className={`flex-1 p-3 rounded-xl border transition-all ${titleLanguage === 'en'
+                                            ? 'border-purple-500 bg-purple-500/10 text-purple-400'
+                                            : 'border-white/10 text-gray-400 hover:border-white/20'
+                                            }`}
+                                    >
+                                        <div className="text-lg mb-1">🇺🇸</div>
+                                        <div className="text-sm font-medium">English</div>
+                                        <div className="text-xs text-gray-500">适合TikTok海外</div>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div className="bg-white/5 rounded-lg p-3 text-sm text-gray-400">
+                                📊 将为 <span className="text-purple-400 font-semibold">{selectedVideos.length}</span> 个视频生成标题
+                            </div>
+                        </>
+                    )}
+
+                    {/* Generating State */}
+                    {generatingTitles && (
+                        <div className="py-12 text-center">
+                            <Loader2 className="w-12 h-12 animate-spin text-purple-400 mx-auto mb-4" />
+                            <p className="text-gray-300 mb-2">AI 正在生成标题...</p>
+                            <p className="text-xs text-gray-500">正在为 {selectedVideos.length} 个视频生成标题</p>
+                        </div>
+                    )}
+
+                    {/* Results Section */}
+                    {generatedTitles.length > 0 && !generatingTitles && (
+                        <>
+                            <div className="flex items-center justify-between">
+                                <p className="text-sm text-gray-300">
+                                    ✅ 已生成 <span className="text-purple-400 font-semibold">{generatedTitles.length}</span> 条标题
+                                </p>
+                                <button
+                                    onClick={() => {
+                                        setGeneratedTitles([])
                                     }}
-                                    disabled={batchTransfer.isTransferring}
-                                    className="px-4 py-2 rounded-lg border border-white/10 text-gray-400 hover:bg-white/5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                    className="text-xs text-gray-400 hover:text-white flex items-center gap-1"
                                 >
-                                    {batchTransfer.isTransferring ? '请等待...' : '取消'}
-                                </button>
-                                <button
-                                    onClick={() => startBatchTransfer(selectedAssetIds)}
-                                    disabled={selectedAssetIds.length === 0 || batchTransfer.isTransferring}
-                                    className="px-4 py-2 bg-gradient-to-r from-cyan-500 to-pink-500 rounded-lg font-medium hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
-                                >
-                                    {batchTransfer.isTransferring
-                                        ? `转存中 (${batchTransfer.completed}/${batchTransfer.total})`
-                                        : `确认添加 (${selectedAssetIds.length})`}
+                                    <RefreshCw className="w-3 h-3" />
+                                    全部重新生成
                                 </button>
                             </div>
-                        </div>
-                    </div>
+
+                            <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2">
+                                {generatedTitles.map((title, index) => (
+                                    <div
+                                        key={index}
+                                        className={`p-3 rounded-xl border transition-all ${title.selected
+                                            ? 'border-purple-500/30 bg-purple-500/5'
+                                            : 'border-white/10 bg-white/5 opacity-60'
+                                            }`}
+                                    >
+                                        <div className="flex items-start gap-3">
+                                            {/* Checkbox */}
+                                            <button
+                                                onClick={() => toggleTitleSelection(index)}
+                                                className={`flex-shrink-0 w-5 h-5 rounded border transition-all mt-2 ${title.selected
+                                                    ? 'bg-purple-500 border-purple-500'
+                                                    : 'border-white/30 hover:border-white/50'
+                                                    }`}
+                                            >
+                                                {title.selected && <Check className="w-4 h-4 text-white" />}
+                                            </button>
+
+                                            {/* Title Input */}
+                                            <div className="flex-1">
+                                                <div className="flex items-center gap-2 mb-1">
+                                                    <span className="text-xs text-gray-500">视频 {index + 1}</span>
+                                                </div>
+                                                <textarea
+                                                    value={title.content}
+                                                    onChange={(e) => updateTitleContent(index, e.target.value)}
+                                                    rows={2}
+                                                    className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50 resize-none"
+                                                />
+                                            </div>
+
+                                            {/* Regenerate Button */}
+                                            <button
+                                                onClick={() => regenerateSingleTitle(index)}
+                                                disabled={regeneratingIndex !== null}
+                                                className="flex-shrink-0 p-2 text-gray-400 hover:text-purple-400 hover:bg-purple-500/10 rounded-lg transition-colors mt-1"
+                                                title="重新生成"
+                                            >
+                                                {regeneratingIndex === index ? (
+                                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                                ) : (
+                                                    <RefreshCw className="w-4 h-4" />
+                                                )}
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+
+                            <p className="text-xs text-gray-500">
+                                💡 点击标题可直接编辑 | 勾选满意的标题 | 🔄 重新生成不满意的
+                            </p>
+                        </>
+                    )}
                 </div>
-            )}
 
-            {/* Clear Task Confirmation Dialog */}
-            {showClearConfirm && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
-                    <div className="bg-gray-900 rounded-2xl border border-white/10 p-6 w-full max-w-md shadow-2xl">
-                        <div className="text-center">
-                            <div className="w-12 h-12 mx-auto mb-4 rounded-full bg-orange-500/20 flex items-center justify-center">
-                                <Trash2 className="w-6 h-6 text-orange-400" />
-                            </div>
-                            <h3 className="text-lg font-semibold mb-2">确认清空任务？</h3>
-                            <div className="text-gray-400 mb-6 text-sm text-left bg-white/5 rounded-lg p-3">
-                                <p className="mb-2">这将清空以下内容：</p>
-                                <ul className="list-disc list-inside space-y-1 text-gray-500">
-                                    <li>{selectedVideos.length} 个已选视频</li>
-                                    <li>任务组名称</li>
-                                    <li>视频标题</li>
-                                    <li>发布时间设置</li>
-                                </ul>
-                            </div>
-                            <div className="flex gap-3">
-                                <button
-                                    onClick={() => setShowClearConfirm(false)}
-                                    className="flex-1 px-4 py-2 rounded-xl border border-white/10 text-gray-400 hover:bg-white/5 transition-colors"
-                                >
-                                    取消
-                                </button>
-                                <button
-                                    onClick={clearAllTask}
-                                    className="flex-1 px-4 py-2 rounded-xl bg-orange-500 text-white hover:bg-orange-600 transition-colors flex items-center justify-center gap-2"
-                                >
-                                    <Trash2 className="w-4 h-4" />
-                                    确认清空
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-
-            {/* AI Title Assistant Modal */}
-            {showTitleAssistant && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-                    <div className="bg-gray-900 rounded-2xl border border-white/10 w-full max-w-2xl max-h-[90vh] overflow-hidden shadow-2xl flex flex-col">
-                        {/* Header */}
-                        <div className="flex items-center justify-between p-4 border-b border-white/10">
-                            <h3 className="text-lg font-semibold flex items-center gap-2">
-                                <Sparkles className="w-5 h-5 text-purple-400" />
-                                AI 标题助手
-                            </h3>
+                {/* Footer */}
+                <div className="p-4 border-t border-white/10 flex items-center justify-between">
+                    {generatedTitles.length === 0 ? (
+                        <>
                             <button
                                 onClick={() => {
                                     setShowTitleAssistant(false)
                                     setGeneratedTitles([])
                                 }}
-                                className="p-1.5 hover:bg-white/10 rounded-lg transition-colors"
+                                className="px-4 py-2 rounded-xl border border-white/10 text-gray-400 hover:bg-white/5 transition-colors"
                             >
-                                <X className="w-5 h-5" />
+                                取消
                             </button>
-                        </div>
+                            <button
+                                onClick={generateAllTitles}
+                                disabled={!titleDescription.trim() || generatingTitles}
+                                className="px-6 py-2 bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl font-medium hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                            >
+                                <Sparkles className="w-4 h-4" />
+                                开始生成
+                            </button>
+                        </>
+                    ) : (
+                        <>
+                            <div className="flex items-center gap-2">
+                                {generatedTitles.filter(t => !t.selected).length > 0 && (
+                                    <button
+                                        onClick={async () => {
+                                            const unselectedIndices = generatedTitles
+                                                .map((t, i) => !t.selected ? i : -1)
+                                                .filter(i => i !== -1)
+                                            for (const idx of unselectedIndices) {
+                                                await regenerateSingleTitle(idx)
+                                            }
+                                        }}
+                                        disabled={regeneratingIndex !== null}
+                                        className="px-3 py-2 rounded-xl border border-white/10 text-gray-400 hover:bg-white/5 transition-colors text-sm flex items-center gap-1"
+                                    >
+                                        <RefreshCw className="w-3 h-3" />
+                                        重新生成未选中 ({generatedTitles.filter(t => !t.selected).length})
+                                    </button>
+                                )}
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <button
+                                    onClick={() => {
+                                        setShowTitleAssistant(false)
+                                        setGeneratedTitles([])
+                                    }}
+                                    className="px-4 py-2 rounded-xl border border-white/10 text-gray-400 hover:bg-white/5 transition-colors"
+                                >
+                                    取消
+                                </button>
+                                <button
+                                    onClick={applySelectedTitles}
+                                    disabled={generatedTitles.filter(t => t.selected).length === 0}
+                                    className="px-6 py-2 bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl font-medium hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                                >
+                                    <Check className="w-4 h-4" />
+                                    应用选中标题 ({generatedTitles.filter(t => t.selected).length})
+                                </button>
+                            </div>
+                        </>
+                    )}
+                </div>
+            </div>
+        </div>
+    )
+}
 
-                        {/* Body */}
-                        <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                            {/* Input Section */}
-                            {generatedTitles.length === 0 && !generatingTitles && (
-                                <>
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-300 mb-2">
-                                            📝 描述你的视频内容
-                                        </label>
-                                        <textarea
-                                            value={titleDescription}
-                                            onChange={(e) => setTitleDescription(e.target.value)}
-                                            placeholder="例如：美妆教程，分享适合夏天的清爽淡妆技巧，针对年轻女性群体，强调快速上手和日常实用性..."
-                                            rows={4}
-                                            className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500/50 transition-all resize-none"
+{/* Hidden file input for cover upload */ }
+<input
+    ref={coverInputRef}
+    type="file"
+    accept="image/*"
+    onChange={handleCoverUpload}
+    className="hidden"
+/>
+
+{/* Cover Selection Modal - Fixed Position Overlay */ }
+<Dialog open={!!expandedVideoId} onOpenChange={(open) => !open && setExpandedVideoId(null)}>
+    <DialogContent className="sm:max-w-4xl bg-[#0f0f12] border-white/10 text-white p-0 overflow-hidden shadow-2xl shadow-black/50 gap-0 block">
+        <DialogHeader className="p-5 border-b border-white/10 bg-white/5">
+            <DialogTitle className="flex items-center gap-2 text-lg">
+                <ImageIcon className="w-5 h-5 text-pink-400" />
+                编辑视频封面
+                {expandedVideoId && selectedVideos.find(v => v.id === expandedVideoId) && (
+                    <span className="text-sm font-normal text-gray-400 ml-2 truncate max-w-[300px] opacity-70">
+                        {selectedVideos.find(v => v.id === expandedVideoId)?.name}
+                    </span>
+                )}
+            </DialogTitle>
+        </DialogHeader>
+
+        <div className="p-6">
+            {expandedVideoId && selectedVideos.find(v => v.id === expandedVideoId) && (() => {
+                const video = selectedVideos.find(v => v.id === expandedVideoId)!
+                return (
+                    <div className="space-y-4">
+                        {/* Video preview and timeline */}
+                        {video.url ? (
+                            <div className="space-y-6">
+                                {/* Video preview */}
+                                <div className="flex flex-col md:flex-row gap-8 items-start">
+                                    {/* Left: Video Player */}
+                                    <div className="mx-auto md:mx-0 w-[240px] aspect-[9/16] rounded-xl overflow-hidden bg-black flex-shrink-0 relative shadow-2xl border border-white/10 ring-1 ring-white/5">
+                                        <video
+                                            id={`cover-video-${video.id}-modal`}
+                                            src={video.localUrl || video.url}
+                                            crossOrigin="anonymous"
+                                            className="w-full h-full object-cover"
+                                            muted
+                                            playsInline
+                                            preload="metadata"
+                                            onLoadedMetadata={(e) => {
+                                                e.currentTarget.currentTime = 0.1
+                                            }}
                                         />
-                                    </div>
-
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-300 mb-2">
-                                            🌐 输出语言
-                                        </label>
-                                        <div className="flex gap-3">
-                                            <button
-                                                onClick={() => setTitleLanguage('zh')}
-                                                className={`flex-1 p-3 rounded-xl border transition-all ${titleLanguage === 'zh'
-                                                    ? 'border-purple-500 bg-purple-500/10 text-purple-400'
-                                                    : 'border-white/10 text-gray-400 hover:border-white/20'
-                                                    }`}
-                                            >
-                                                <div className="text-lg mb-1">🇨🇳</div>
-                                                <div className="text-sm font-medium">中文</div>
-                                                <div className="text-xs text-gray-500">适合国内平台</div>
-                                            </button>
-                                            <button
-                                                onClick={() => setTitleLanguage('en')}
-                                                className={`flex-1 p-3 rounded-xl border transition-all ${titleLanguage === 'en'
-                                                    ? 'border-purple-500 bg-purple-500/10 text-purple-400'
-                                                    : 'border-white/10 text-gray-400 hover:border-white/20'
-                                                    }`}
-                                            >
-                                                <div className="text-lg mb-1">🇺🇸</div>
-                                                <div className="text-sm font-medium">English</div>
-                                                <div className="text-xs text-gray-500">适合TikTok海外</div>
-                                            </button>
+                                        <div className="absolute bottom-3 left-3 right-3 bg-black/70 backdrop-blur-md rounded-lg px-2 py-1.5 border border-white/10">
+                                            <p className="text-[10px] text-center text-gray-200 font-medium tracking-wide">当前预览帧</p>
                                         </div>
                                     </div>
 
-                                    <div className="bg-white/5 rounded-lg p-3 text-sm text-gray-400">
-                                        📊 将为 <span className="text-purple-400 font-semibold">{selectedVideos.length}</span> 个视频生成标题
-                                    </div>
-                                </>
-                            )}
+                                    {/* Right: Controls */}
+                                    <div className="flex-1 space-y-6 w-full pt-2">
+                                        <div className="space-y-2">
+                                            <h4 className="text-base font-medium text-white flex items-center gap-2">
+                                                <Sliders className="w-4 h-4 text-cyan-400" />
+                                                选择封面帧
+                                            </h4>
+                                            <p className="text-sm text-gray-400 leading-relaxed">
+                                                拖动下方滑块精确选择视频中的精彩瞬间作为封面。
+                                            </p>
+                                        </div>
 
-                            {/* Generating State */}
-                            {generatingTitles && (
-                                <div className="py-12 text-center">
-                                    <Loader2 className="w-12 h-12 animate-spin text-purple-400 mx-auto mb-4" />
-                                    <p className="text-gray-300 mb-2">AI 正在生成标题...</p>
-                                    <p className="text-xs text-gray-500">正在为 {selectedVideos.length} 个视频生成标题</p>
-                                </div>
-                            )}
-
-                            {/* Results Section */}
-                            {generatedTitles.length > 0 && !generatingTitles && (
-                                <>
-                                    <div className="flex items-center justify-between">
-                                        <p className="text-sm text-gray-300">
-                                            ✅ 已生成 <span className="text-purple-400 font-semibold">{generatedTitles.length}</span> 条标题
-                                        </p>
-                                        <button
-                                            onClick={() => {
-                                                setGeneratedTitles([])
-                                            }}
-                                            className="text-xs text-gray-400 hover:text-white flex items-center gap-1"
-                                        >
-                                            <RefreshCw className="w-3 h-3" />
-                                            全部重新生成
-                                        </button>
-                                    </div>
-
-                                    <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2">
-                                        {generatedTitles.map((title, index) => (
-                                            <div
-                                                key={index}
-                                                className={`p-3 rounded-xl border transition-all ${title.selected
-                                                    ? 'border-purple-500/30 bg-purple-500/5'
-                                                    : 'border-white/10 bg-white/5 opacity-60'
-                                                    }`}
-                                            >
-                                                <div className="flex items-start gap-3">
-                                                    {/* Checkbox */}
-                                                    <button
-                                                        onClick={() => toggleTitleSelection(index)}
-                                                        className={`flex-shrink-0 w-5 h-5 rounded border transition-all mt-2 ${title.selected
-                                                            ? 'bg-purple-500 border-purple-500'
-                                                            : 'border-white/30 hover:border-white/50'
-                                                            }`}
-                                                    >
-                                                        {title.selected && <Check className="w-4 h-4 text-white" />}
-                                                    </button>
-
-                                                    {/* Title Input */}
-                                                    <div className="flex-1">
-                                                        <div className="flex items-center gap-2 mb-1">
-                                                            <span className="text-xs text-gray-500">视频 {index + 1}</span>
-                                                        </div>
-                                                        <textarea
-                                                            value={title.content}
-                                                            onChange={(e) => updateTitleContent(index, e.target.value)}
-                                                            rows={2}
-                                                            className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50 resize-none"
-                                                        />
-                                                    </div>
-
-                                                    {/* Regenerate Button */}
-                                                    <button
-                                                        onClick={() => regenerateSingleTitle(index)}
-                                                        disabled={regeneratingIndex !== null}
-                                                        className="flex-shrink-0 p-2 text-gray-400 hover:text-purple-400 hover:bg-purple-500/10 rounded-lg transition-colors mt-1"
-                                                        title="重新生成"
-                                                    >
-                                                        {regeneratingIndex === index ? (
-                                                            <Loader2 className="w-4 h-4 animate-spin" />
-                                                        ) : (
-                                                            <RefreshCw className="w-4 h-4" />
-                                                        )}
-                                                    </button>
-                                                </div>
+                                        {/* Timeline slider */}
+                                        <div className="space-y-4 p-5 bg-white/5 rounded-xl border border-white/10">
+                                            <div className="flex justify-between text-xs text-gray-400 font-medium uppercase tracking-wider">
+                                                <span>0:00</span>
+                                                <span>视频进度</span>
+                                                <span>END</span>
                                             </div>
-                                        ))}
-                                    </div>
+                                            <div className="relative h-6 flex items-center">
+                                                <input
+                                                    type="range"
+                                                    min="0"
+                                                    max="100"
+                                                    defaultValue="1"
+                                                    onChange={(e) => {
+                                                        const videoEl = document.getElementById(`cover-video-${video.id}-modal`) as HTMLVideoElement
+                                                        if (videoEl && videoEl.duration) {
+                                                            videoEl.currentTime = (parseInt(e.target.value) / 100) * videoEl.duration
+                                                        }
+                                                    }}
+                                                    className="w-full h-2 bg-gray-700/50 rounded-full appearance-none cursor-pointer accent-pink-500 hover:accent-pink-400 transition-colors [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-gradient-to-tr [&::-webkit-slider-thumb]:from-pink-500 [&::-webkit-slider-thumb]:to-purple-500 [&::-webkit-slider-thumb]:cursor-grab [&::-webkit-slider-thumb]:shadow-lg [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white [&::-webkit-slider-thumb]:transition-transform [&::-webkit-slider-thumb]:hover:scale-110"
+                                                />
+                                            </div>
+                                        </div>
 
-                                    <p className="text-xs text-gray-500">
-                                        💡 点击标题可直接编辑 | 勾选满意的标题 | 🔄 重新生成不满意的
-                                    </p>
-                                </>
-                            )}
-                        </div>
-
-                        {/* Footer */}
-                        <div className="p-4 border-t border-white/10 flex items-center justify-between">
-                            {generatedTitles.length === 0 ? (
-                                <>
-                                    <button
-                                        onClick={() => {
-                                            setShowTitleAssistant(false)
-                                            setGeneratedTitles([])
-                                        }}
-                                        className="px-4 py-2 rounded-xl border border-white/10 text-gray-400 hover:bg-white/5 transition-colors"
-                                    >
-                                        取消
-                                    </button>
-                                    <button
-                                        onClick={generateAllTitles}
-                                        disabled={!titleDescription.trim() || generatingTitles}
-                                        className="px-6 py-2 bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl font-medium hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                                    >
-                                        <Sparkles className="w-4 h-4" />
-                                        开始生成
-                                    </button>
-                                </>
-                            ) : (
-                                <>
-                                    <div className="flex items-center gap-2">
-                                        {generatedTitles.filter(t => !t.selected).length > 0 && (
+                                        {/* Action buttons */}
+                                        <div className="grid grid-cols-1 gap-3 pt-2">
                                             <button
-                                                onClick={async () => {
-                                                    const unselectedIndices = generatedTitles
-                                                        .map((t, i) => !t.selected ? i : -1)
-                                                        .filter(i => i !== -1)
-                                                    for (const idx of unselectedIndices) {
-                                                        await regenerateSingleTitle(idx)
+                                                onClick={() => {
+                                                    const videoEl = document.getElementById(`cover-video-${video.id}-modal`) as HTMLVideoElement
+                                                    if (videoEl) {
+                                                        try {
+                                                            const canvas = document.createElement('canvas')
+                                                            canvas.width = videoEl.videoWidth || 720
+                                                            canvas.height = videoEl.videoHeight || 1280
+                                                            const ctx = canvas.getContext('2d')
+                                                            if (ctx) {
+                                                                ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height)
+                                                                const frameData = canvas.toDataURL('image/jpeg', 0.9)
+                                                                const timestampMs = Math.round(videoEl.currentTime * 1000)
+                                                                updateVideoCover(video.id, frameData, timestampMs)
+                                                                setExpandedVideoId(null)
+                                                                toast({ title: "封面已更新", description: "✅ 已成功设置选定帧为视频封面" })
+                                                            }
+                                                        } catch (error) {
+                                                            console.error('Failed to capture frame:', error)
+                                                            setUploadError('无法从该视频捕获帧，请重新上传视频')
+                                                        }
                                                     }
                                                 }}
-                                                disabled={regeneratingIndex !== null}
-                                                className="px-3 py-2 rounded-xl border border-white/10 text-gray-400 hover:bg-white/5 transition-colors text-sm flex items-center gap-1"
+                                                className="w-full flex items-center justify-center gap-2 px-6 py-3.5 bg-gradient-to-r from-cyan-500 to-pink-500 rounded-xl font-bold text-white hover:opacity-90 hover:shadow-lg hover:shadow-cyan-500/25 transition-all active:scale-[0.98]"
                                             >
-                                                <RefreshCw className="w-3 h-3" />
-                                                重新生成未选中 ({generatedTitles.filter(t => !t.selected).length})
+                                                <Check className="w-5 h-5" />
+                                                确认使用当前帧
                                             </button>
-                                        )}
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                        <button
-                                            onClick={() => {
-                                                setShowTitleAssistant(false)
-                                                setGeneratedTitles([])
-                                            }}
-                                            className="px-4 py-2 rounded-xl border border-white/10 text-gray-400 hover:bg-white/5 transition-colors"
-                                        >
-                                            取消
-                                        </button>
-                                        <button
-                                            onClick={applySelectedTitles}
-                                            disabled={generatedTitles.filter(t => t.selected).length === 0}
-                                            className="px-6 py-2 bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl font-medium hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                                        >
-                                            <Check className="w-4 h-4" />
-                                            应用选中标题 ({generatedTitles.filter(t => t.selected).length})
-                                        </button>
-                                    </div>
-                                </>
-                            )}
-                        </div>
-                    </div>
-                </div>
-            )}
 
-            {/* Hidden file input for cover upload */}
-            <input
-                ref={coverInputRef}
-                type="file"
-                accept="image/*"
-                onChange={handleCoverUpload}
-                className="hidden"
-            />
 
-            {/* Cover Selection Modal - Fixed Position Overlay */}
-            <Dialog open={!!expandedVideoId} onOpenChange={(open) => !open && setExpandedVideoId(null)}>
-                <DialogContent className="sm:max-w-4xl bg-[#0f0f12] border-white/10 text-white p-0 overflow-hidden shadow-2xl shadow-black/50 gap-0 block">
-                    <DialogHeader className="p-5 border-b border-white/10 bg-white/5">
-                        <DialogTitle className="flex items-center gap-2 text-lg">
-                            <ImageIcon className="w-5 h-5 text-pink-400" />
-                            编辑视频封面
-                            {expandedVideoId && selectedVideos.find(v => v.id === expandedVideoId) && (
-                                <span className="text-sm font-normal text-gray-400 ml-2 truncate max-w-[300px] opacity-70">
-                                    {selectedVideos.find(v => v.id === expandedVideoId)?.name}
-                                </span>
-                            )}
-                        </DialogTitle>
-                    </DialogHeader>
-
-                    <div className="p-6">
-                        {expandedVideoId && selectedVideos.find(v => v.id === expandedVideoId) && (() => {
-                            const video = selectedVideos.find(v => v.id === expandedVideoId)!
-                            return (
-                                <div className="space-y-4">
-                                    {/* Video preview and timeline */}
-                                    {video.url ? (
-                                        <div className="space-y-6">
-                                            {/* Video preview */}
-                                            <div className="flex flex-col md:flex-row gap-8 items-start">
-                                                {/* Left: Video Player */}
-                                                <div className="mx-auto md:mx-0 w-[240px] aspect-[9/16] rounded-xl overflow-hidden bg-black flex-shrink-0 relative shadow-2xl border border-white/10 ring-1 ring-white/5">
-                                                    <video
-                                                        id={`cover-video-${video.id}-modal`}
-                                                        src={video.localUrl || video.url}
-                                                        crossOrigin="anonymous"
-                                                        className="w-full h-full object-cover"
-                                                        muted
-                                                        playsInline
-                                                        preload="metadata"
-                                                        onLoadedMetadata={(e) => {
-                                                            e.currentTarget.currentTime = 0.1
-                                                        }}
-                                                    />
-                                                    <div className="absolute bottom-3 left-3 right-3 bg-black/70 backdrop-blur-md rounded-lg px-2 py-1.5 border border-white/10">
-                                                        <p className="text-[10px] text-center text-gray-200 font-medium tracking-wide">当前预览帧</p>
-                                                    </div>
-                                                </div>
-
-                                                {/* Right: Controls */}
-                                                <div className="flex-1 space-y-6 w-full pt-2">
-                                                    <div className="space-y-2">
-                                                        <h4 className="text-base font-medium text-white flex items-center gap-2">
-                                                            <Sliders className="w-4 h-4 text-cyan-400" />
-                                                            选择封面帧
-                                                        </h4>
-                                                        <p className="text-sm text-gray-400 leading-relaxed">
-                                                            拖动下方滑块精确选择视频中的精彩瞬间作为封面，或者直接上传一张本地图片。
-                                                        </p>
-                                                    </div>
-
-                                                    {/* Timeline slider */}
-                                                    <div className="space-y-4 p-5 bg-white/5 rounded-xl border border-white/10">
-                                                        <div className="flex justify-between text-xs text-gray-400 font-medium uppercase tracking-wider">
-                                                            <span>0:00</span>
-                                                            <span>视频进度</span>
-                                                            <span>END</span>
-                                                        </div>
-                                                        <div className="relative h-6 flex items-center">
-                                                            <input
-                                                                type="range"
-                                                                min="0"
-                                                                max="100"
-                                                                defaultValue="1"
-                                                                onChange={(e) => {
-                                                                    const videoEl = document.getElementById(`cover-video-${video.id}-modal`) as HTMLVideoElement
-                                                                    if (videoEl && videoEl.duration) {
-                                                                        videoEl.currentTime = (parseInt(e.target.value) / 100) * videoEl.duration
-                                                                    }
-                                                                }}
-                                                                className="w-full h-2 bg-gray-700/50 rounded-full appearance-none cursor-pointer accent-pink-500 hover:accent-pink-400 transition-colors [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-gradient-to-tr [&::-webkit-slider-thumb]:from-pink-500 [&::-webkit-slider-thumb]:to-purple-500 [&::-webkit-slider-thumb]:cursor-grab [&::-webkit-slider-thumb]:shadow-lg [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white [&::-webkit-slider-thumb]:transition-transform [&::-webkit-slider-thumb]:hover:scale-110"
-                                                            />
-                                                        </div>
-                                                    </div>
-
-                                                    {/* Action buttons */}
-                                                    <div className="grid grid-cols-1 gap-3 pt-2">
-                                                        <button
-                                                            onClick={() => {
-                                                                const videoEl = document.getElementById(`cover-video-${video.id}-modal`) as HTMLVideoElement
-                                                                if (videoEl) {
-                                                                    try {
-                                                                        const canvas = document.createElement('canvas')
-                                                                        canvas.width = videoEl.videoWidth || 720
-                                                                        canvas.height = videoEl.videoHeight || 1280
-                                                                        const ctx = canvas.getContext('2d')
-                                                                        if (ctx) {
-                                                                            ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height)
-                                                                            const frameData = canvas.toDataURL('image/jpeg', 0.9)
-                                                                            const timestampMs = Math.round(videoEl.currentTime * 1000)
-                                                                            updateVideoCover(video.id, frameData, timestampMs)
-                                                                            setExpandedVideoId(null)
-                                                                            toast({ title: "封面已更新", description: "✅ 已成功设置选定帧为视频封面" })
-                                                                        }
-                                                                    } catch (error) {
-                                                                        console.error('Failed to capture frame:', error)
-                                                                        setUploadError('无法从该视频捕获帧，请重新上传视频')
-                                                                    }
-                                                                }
-                                                            }}
-                                                            className="w-full flex items-center justify-center gap-2 px-6 py-3.5 bg-gradient-to-r from-cyan-500 to-pink-500 rounded-xl font-bold text-white hover:opacity-90 hover:shadow-lg hover:shadow-cyan-500/25 transition-all active:scale-[0.98]"
-                                                        >
-                                                            <Check className="w-5 h-5" />
-                                                            确认使用当前帧
-                                                        </button>
-
-                                                        <button
-                                                            onClick={() => {
-                                                                setCoverUploadVideoId(video.id)
-                                                                coverInputRef.current?.click()
-                                                            }}
-                                                            className="w-full flex items-center justify-center gap-2 px-6 py-3.5 bg-white/5 border border-white/10 rounded-xl font-medium text-gray-300 hover:bg-white/10 hover:text-white transition-all active:scale-[0.98]"
-                                                        >
-                                                            <Upload className="w-4 h-4" />
-                                                            上传本地图片作为封面
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            </div>
                                         </div>
-                                    ) : (
-                                        <div className="text-center py-20 bg-white/5 rounded-xl border border-white/10 border-dashed">
-                                            <Loader2 className="w-10 h-10 mx-auto text-cyan-500/50 animate-spin mb-4" />
-                                            <p className="text-base text-gray-400 font-medium">视频资源加载中，请稍候...</p>
-                                        </div>
-                                    )}
+                                    </div>
                                 </div>
-                            )
-                        })()}
+                            </div>
+                        ) : (
+                            <div className="text-center py-20 bg-white/5 rounded-xl border border-white/10 border-dashed">
+                                <Loader2 className="w-10 h-10 mx-auto text-cyan-500/50 animate-spin mb-4" />
+                                <p className="text-base text-gray-400 font-medium">视频资源加载中，请稍候...</p>
+                            </div>
+                        )}
                     </div>
-                </DialogContent>
-            </Dialog>
+                )
+            })()}
         </div>
+    </DialogContent>
+</Dialog>
+        </div >
     )
 }
