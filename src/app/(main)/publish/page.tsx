@@ -2184,9 +2184,8 @@ export default function PublishPage() {
                                                         : 'border-white/5 bg-white/5 text-gray-500 hover:text-gray-300 hover:border-white/10 grayscale hover:grayscale-0'
                                                         }`}
                                                 >
-                                                    <div className="text-2xl mb-2">🇨🇳</div>
+                                                    <div className="text-2xl mb-1">🇨🇳</div>
                                                     <div className="text-sm font-semibold">中文</div>
-                                                    <div className="text-xs text-gray-500 mt-1">适合国内平台</div>
                                                 </button>
                                                 <button
                                                     onClick={() => setTitleLanguage('en')}
@@ -2195,9 +2194,8 @@ export default function PublishPage() {
                                                         : 'border-white/5 bg-white/5 text-gray-500 hover:text-gray-300 hover:border-white/10 grayscale hover:grayscale-0'
                                                         }`}
                                                 >
-                                                    <div className="text-2xl mb-2">🇺🇸</div>
+                                                    <div className="text-2xl mb-1">🇺🇸</div>
                                                     <div className="text-sm font-semibold">English</div>
-                                                    <div className="text-xs text-gray-500 mt-1">适合TikTok海外</div>
                                                 </button>
                                             </div>
                                         </div>
