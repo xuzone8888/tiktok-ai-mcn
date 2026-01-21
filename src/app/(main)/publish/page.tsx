@@ -1493,15 +1493,24 @@ export default function PublishPage() {
                                 </div>
 
                                 {titleMode === 'uniform' ? (
-                                    /* Uniform title - single input for all */
-                                    <textarea
-                                        value={caption}
-                                        onChange={(e) => setCaption(e.target.value)}
-                                        placeholder="输入视频标题..."
-                                        rows={3}
-                                        className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500/50 transition-all resize-none"
-
-                                    />
+                                    /* Uniform title - single input with absolute action button */
+                                    <div className="relative">
+                                        <textarea
+                                            value={caption}
+                                            onChange={(e) => setCaption(e.target.value)}
+                                            placeholder="输入视频标题..."
+                                            rows={4}
+                                            className="w-full px-4 py-3 pb-10 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500/50 transition-all resize-none"
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() => setCaption(prev => prev + ' #')}
+                                            className="absolute bottom-3 right-3 flex items-center gap-1 px-2 py-1 rounded-md bg-white/10 hover:bg-white/20 text-xs text-cyan-400 font-medium transition-colors"
+                                        >
+                                            <span className="font-bold">#</span>
+                                            添加话题
+                                        </button>
+                                    </div>
                                 ) : (
                                     /* Individual titles - one input per video */
                                     <div className="space-y-3">
@@ -1540,42 +1549,43 @@ export default function PublishPage() {
                                 )}
                             </div>
 
-                            {/* Quick action buttons */}
-                            <div className="flex gap-2">
-                                <button
-                                    type="button"
-                                    onClick={() => setCaption(prev => prev + ' #')}
-                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-gray-400 hover:text-cyan-400 hover:border-cyan-500/50 transition-colors text-sm"
-                                >
-                                    <span className="text-cyan-400 font-bold">#</span>
-                                    添加话题
-                                </button>
-                            </div>
+                            {/* Quick action buttons - Only show for individual mode */}
+                            {titleMode === 'individual' && (
+                                <div className="flex gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => setCaption(prev => prev + ' #')}
+                                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-gray-400 hover:text-cyan-400 hover:border-cyan-500/50 transition-colors text-sm"
+                                    >
+                                        <span className="text-cyan-400 font-bold">#</span>
+                                        添加话题
+                                    </button>
+                                </div>
+                            )}
 
                             {/* Privacy Level Selection */}
                             <div className="mt-4">
                                 <label className="block text-sm font-medium text-gray-300 mb-2">
                                     可见范围
                                 </label>
-                                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                                <div className="bg-black/20 p-1 rounded-xl flex gap-1">
                                     {[
-                                        { value: 'PUBLIC_TO_EVERYONE', label: '公开', icon: '🌍', desc: '所有人可见' },
-                                        { value: 'FOLLOWER_OF_CREATOR', label: '粉丝可见', icon: '👥', desc: '仅粉丝' },
-                                        { value: 'MUTUAL_FOLLOW_FRIENDS', label: '好友可见', icon: '🤝', desc: '互关好友' },
-                                        { value: 'SELF_ONLY', label: '仅自己', icon: '🔒', desc: '私密' },
-                                    ].map(({ value, label, icon, desc }) => (
+                                        { value: 'PUBLIC_TO_EVERYONE', label: '公开', icon: '🌍' },
+                                        { value: 'FOLLOWER_OF_CREATOR', label: '粉丝', icon: '👥' },
+                                        { value: 'MUTUAL_FOLLOW_FRIENDS', label: '好友', icon: '🤝' },
+                                        { value: 'SELF_ONLY', label: '仅自己', icon: '🔒' },
+                                    ].map(({ value, label, icon }) => (
                                         <button
                                             key={value}
                                             type="button"
                                             onClick={() => setPrivacyLevel(value as typeof privacyLevel)}
-                                            className={`flex flex-col items-center gap-1 px-3 py-3 rounded-xl text-center transition-all ${privacyLevel === value
-                                                ? 'bg-cyan-500/20 border-cyan-500 text-cyan-400'
-                                                : 'bg-white/5 border-white/10 text-gray-400 hover:bg-white/10'
-                                                } border`}
+                                            className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium transition-all ${privacyLevel === value
+                                                ? 'bg-white/10 text-cyan-400 shadow-sm border border-white/5'
+                                                : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'
+                                                }`}
                                         >
-                                            <span className="text-lg">{icon}</span>
-                                            <span className="text-sm font-medium">{label}</span>
-                                            <span className="text-[10px] text-gray-500">{desc}</span>
+                                            <span className="text-base">{icon}</span>
+                                            <span>{label}</span>
                                         </button>
                                     ))}
                                 </div>
