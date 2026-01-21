@@ -88,7 +88,11 @@ export async function GET(request: NextRequest) {
         }
 
         if (status) {
-            query = query.eq('status', status)
+            if (status === 'in_progress') {
+                query = query.in('status', ['pending', 'processing', 'scheduled'])
+            } else {
+                query = query.eq('status', status)
+            }
         }
 
         const { data: tasks, error, count } = await query

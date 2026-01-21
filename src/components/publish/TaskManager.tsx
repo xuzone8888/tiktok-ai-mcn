@@ -223,7 +223,7 @@ export function TaskManager() {
                     <Tabs value={activeTab} onValueChange={setActiveTab} className="w-auto">
                         <TabsList>
                             <TabsTrigger value="all">全部</TabsTrigger>
-                            <TabsTrigger value="scheduled">进行中</TabsTrigger>
+                            <TabsTrigger value="in_progress">进行中</TabsTrigger>
                             <TabsTrigger value="completed">已完成</TabsTrigger>
                             <TabsTrigger value="failed">失败</TabsTrigger>
                         </TabsList>

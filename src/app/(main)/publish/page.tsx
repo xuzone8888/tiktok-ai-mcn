@@ -933,6 +933,7 @@ export default function PublishPage() {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
+                    name: taskGroupName,  // Add task group name
                     videos: selectedVideos,
                     account_ids: selectedAccounts,
                     caption,
@@ -1578,12 +1579,7 @@ export default function PublishPage() {
                                         </button>
                                     ))}
                                 </div>
-                                {privacyLevel === 'SELF_ONLY' && (
-                                    <p className="text-xs text-yellow-500/80 mt-2 flex items-center gap-1">
-                                        <span>⚠️</span>
-                                        沙盒测试期间建议使用"仅自己"可见，审核通过后可选择公开发布
-                                    </p>
-                                )}
+
                             </div>
                         </div >
                     </section >
