@@ -4129,6 +4129,20 @@ C07: [story CTA, inspiring, <50 chars]`,
           </DialogContent>
         </Dialog>
       </div>
+
+      {/* Template Dialogs */}
+      <SaveTemplateDialog
+        open={showSaveTemplate}
+        onOpenChange={setShowSaveTemplate}
+        onSave={handleSaveTemplate}
+        defaultName="我的视频方案"
+      />
+      <TemplateManager
+        open={showTemplateManager}
+        onOpenChange={setShowTemplateManager}
+        type="video_batch"
+        onSelect={handleLoadTemplate}
+      />
     </TooltipProvider>
   );
 }
