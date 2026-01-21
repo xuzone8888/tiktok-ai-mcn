@@ -81,7 +81,7 @@ export default function TermsPage() {
               </Link>
               <Link href="https://beian.miit.gov.cn/" target="_blank" className="hover:text-white transition-colors flex items-center gap-1">
                 <Shield className="h-4 w-4" />
-                鄂ICP备2024072250号-2
+                鄂ICP备2023007484号
               </Link>
             </div>
           </div>

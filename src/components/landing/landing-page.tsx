@@ -482,7 +482,7 @@ export default function LandingPage() {
             <div className="flex items-center gap-6 text-gray-500 text-sm">
               <Link href="https://beian.miit.gov.cn/" target="_blank" className="hover:text-white transition-colors flex items-center gap-1.5">
                 <Shield className="h-4 w-4" />
-                鄂ICP备2024072250号-2
+                鄂ICP备2023007484号
               </Link>
             </div>
           </div>

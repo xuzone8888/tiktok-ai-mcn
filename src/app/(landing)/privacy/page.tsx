@@ -81,7 +81,7 @@ export default function PrivacyPage() {
               </Link>
               <Link href="https://beian.miit.gov.cn/" target="_blank" className="hover:text-white transition-colors flex items-center gap-1">
                 <Shield className="h-4 w-4" />
-                鄂ICP备2024072250号-2
+                鄂ICP备2023007484号
               </Link>
             </div>
           </div>
@@ -279,7 +279,7 @@ function EnglishContent() {
               If you have any questions about this Privacy Policy or our data practices, please contact us:
             </p>
             <div className="mt-4 p-4 bg-white/5 rounded-lg">
-              <p><strong>Wuhan Guanxing Cultural Media Co., Ltd.</strong></p>
+              <p><strong>武汉观星文化传媒有限公司</strong></p>
               <p className="mt-2">Email: privacy@tokfactoryai.com</p>
               <p>Website: www.tokfactoryai.com</p>
               <p>Address: Wuhan, Hubei Province, China</p>
