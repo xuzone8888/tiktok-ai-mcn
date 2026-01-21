@@ -104,6 +104,11 @@ import { Textarea } from "@/components/ui/textarea";
 // 下载管理
 import { getCachedSpeedTestResults, getBestRouteId } from "@/lib/download-manager";
 
+// Templates
+import { SaveTemplateDialog } from "@/components/studio/SaveTemplateDialog";
+import { TemplateManager, type Template } from "@/components/studio/TemplateManager";
+import { LayoutTemplate, Save } from "lucide-react";
+
 // ============================================================================
 // PipelineProgress 组件 - 流水线进度指示器
 // ============================================================================
@@ -1276,6 +1281,102 @@ export default function VideoBatchPage() {
   const [isDownloading, setIsDownloading] = useState(false);
   // 批量开始状态
   const [isBatchStarting, setIsBatchStarting] = useState(false);
+  // 线路检测弹窗状态
+  const [showSpeedTest, setShowSpeedTest] = useState(false);
+
+  // Template State
+  const [showSaveTemplate, setShowSaveTemplate] = useState(false);
+  const [showTemplateManager, setShowTemplateManager] = useState(false);
+
+  // Template Handlers
+  const handleSaveTemplate = async (name: string, description: string) => {
+    try {
+      // Prepare config to save
+      const configToSave = {
+        globalSettings,
+        createPrompt: promptInput, // Assuming promptInput is the current create prompt
+        createCount: batchCreateCount, // Assuming batchCreateCount is the current create count
+        // Save current AI model state if any
+        aiModel: globalSettings.useAiModel && globalSettings.aiModelId ? {
+          id: globalSettings.aiModelId,
+          name: globalSettings.aiModelName,
+          triggerWord: globalSettings.aiModelTriggerWord,
+        } : null
+      };
+
+      const res = await fetch('/api/templates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name,
+          description,
+          type: 'video_batch',
+          config: configToSave
+        })
+      });
+
+      if (!res.ok) throw new Error('保存失败');
+
+      toast({
+        title: "保存成功",
+        description: `方案 "${name}" 已保存`,
+      });
+      setShowSaveTemplate(false);
+    } catch (e) {
+      toast({
+        variant: "destructive",
+        title: "保存失败",
+        description: "无法保存您的方案，请重试"
+      });
+    }
+  };
+
+  const handleLoadTemplate = (template: Template) => {
+    try {
+      const config = template.config;
+
+      // Restore Global Settings
+      // We do this individually to ensure store updates trigger correctly
+      if (config.globalSettings) {
+        Object.entries(config.globalSettings).forEach(([key, value]) => {
+          // Skip invalid keys
+          if (key === 'aiModelCover') return;
+          updateGlobalSettings(key as any, value);
+        });
+      }
+
+      // Restore Prompt & Count
+      if (config.createPrompt) setPromptInput(config.createPrompt);
+      if (config.createCount) setBatchCreateCount(config.createCount);
+
+      // Restore AI Model
+      if (config.aiModel) {
+        updateGlobalSettings("useAiModel", true);
+        updateGlobalSettings("aiModelId", config.aiModel.id);
+        updateGlobalSettings("aiModelName", config.aiModel.name);
+        updateGlobalSettings("aiModelTriggerWord", config.aiModel.triggerWord);
+      } else {
+        updateGlobalSettings("useAiModel", false);
+        updateGlobalSettings("aiModelId", null);
+        updateGlobalSettings("aiModelName", null);
+        updateGlobalSettings("aiModelTriggerWord", null);
+      }
+      toast({
+        title: "加载成功",
+        description: `方案 "${template.name}" 已加载`,
+      });
+      setShowTemplateManager(false);
+
+    } catch (e) {
+      console.error("Load template error", e);
+      toast({
+        variant: "destructive",
+        title: "加载失败",
+        description: "方案数据格式可能已过期"
+      });
+    }
+  };
+
   // 单个下载进度状态
   const [downloadingTaskId, setDownloadingTaskId] = useState<string | null>(null);
 
@@ -1642,6 +1743,7 @@ export default function VideoBatchPage() {
   const selectedModelId = globalSettings.aiModelId;
   const selectedModelName = globalSettings.aiModelName;  // 显示名称（从 store 获取）
   const selectedModelTriggerWord = globalSettings.aiModelTriggerWord;  // 触发词（后台使用）
+  const selectedModelCover = globalSettings.aiModelCover; // Assuming this exists in globalSettings
   const [hiredModels, setHiredModels] = useState<Array<{ id: string; name: string; trigger_word: string; avatar_url: string }>>([]);
   const [showModelSelector, setShowModelSelector] = useState(false);
 
@@ -1841,6 +1943,7 @@ C07: [story CTA, inspiring, <50 chars]`,
   const setSelectedModelId = (value: string | null) => updateGlobalSettings("aiModelId", value);
   const setSelectedModelName = (value: string | null) => updateGlobalSettings("aiModelName", value);
   const setSelectedModelTriggerWord = (value: string | null) => updateGlobalSettings("aiModelTriggerWord", value);
+  const setSelectedModelCover = (value: string | null) => updateGlobalSettings("aiModelCover", value); // Added this line
 
   // 任务处理锁，防止重复执行
   const processingTasksRef = useRef<Set<string>>(new Set());
@@ -2376,7 +2479,7 @@ C07: [story CTA, inspiring, <50 chars]`,
         processingTasksRef.current.delete(task.id);
       }
     },
-    [updateTaskStatus, toast, useAiModel, selectedModelTriggerWord]
+    [updateTaskStatus, toast, useAiModel, selectedModelTriggerWord, promptInput, batchCreateCount, globalSettings.aiModelId, globalSettings.aiModelName, globalSettings.aiModelTriggerWord]
   );
 
   // 编辑任务图片
@@ -2406,11 +2509,21 @@ C07: [story CTA, inspiring, <50 chars]`,
           </Link>
           <div className="flex-1">
             <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-              <Video className="h-6 w-6 text-tiktok-cyan" />
-              <span className="gradient-tiktok-text">批量流水线</span>
+              <Film className="h-6 w-6 text-tiktok-cyan" />
+              <span className="gradient-tiktok-text">批量视频流水线</span>
+              {/* Load Template Button */}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowTemplateManager(true)}
+                className="ml-2 h-7 px-3 text-xs bg-white/5 border-white/10 hover:bg-white/10 text-gray-400 hover:text-cyan-400 gap-1.5 transition-all"
+              >
+                <LayoutTemplate className="h-3.5 w-3.5" />
+                <span>加载方案</span>
+              </Button>
             </h1>
             <p className="text-sm text-muted-foreground mt-1">
-              上传产品图片 → 生成口播脚本 → 生成AI提示词 → Sora2生成15秒视频
+              一键生成多个视频，支持 SORA2 Pro / VEO3 多模型流水线处理
             </p>
           </div>
 
@@ -2703,6 +2816,17 @@ C07: [story CTA, inspiring, <50 chars]`,
               >
                 <FolderUp className="h-3.5 w-3.5 mr-1" />
                 创建任务
+              </Button>
+
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowSaveTemplate(true)}
+                className="h-8 px-3 text-xs border-tiktok-cyan/30 text-tiktok-cyan hover:bg-tiktok-cyan/10"
+                title="保存当前配置为方案"
+              >
+                <Save className="h-3.5 w-3.5 mr-1" />
+                保存方案
               </Button>
 
               {/* 开始所有任务按钮 - 有待处理任务时显示 */}

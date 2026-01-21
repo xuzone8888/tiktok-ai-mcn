@@ -97,8 +97,16 @@ import {
   useImageBatchSelectedCount,
   useImageBatchStats,
   getImageTaskCost,
-  type ImageBatchTask,
 } from "@/stores/image-batch-store";
+
+import {
+  type ImageBatchTask,
+} from "@/types/generation";
+
+// Templates
+import { SaveTemplateDialog } from "@/components/studio/SaveTemplateDialog";
+import { TemplateManager, type Template } from "@/components/studio/TemplateManager";
+import { LayoutTemplate, Save } from "lucide-react";
 
 // ============================================================================
 // 图标映射
@@ -200,7 +208,7 @@ function TaskCard({
       </div>
 
       {/* 图片预览 */}
-      <div 
+      <div
         className="relative aspect-square bg-muted/30 cursor-pointer"
         onClick={onPreview}
       >
@@ -218,7 +226,7 @@ function TaskCard({
             </span>
           </div>
         )}
-        
+
         {/* 悬浮操作层 */}
         <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-all flex items-center justify-center opacity-0 group-hover:opacity-100">
           <Eye className="h-8 w-8 text-white" />
@@ -370,6 +378,19 @@ function TaskCard({
           </div>
         </div>
       </div>
+      {/* Templates */}
+      <SaveTemplateDialog
+        open={showSaveTemplate}
+        onOpenChange={setShowSaveTemplate}
+        onSave={handleSaveTemplate}
+        defaultName={createPrompt ? (createPrompt.substring(0, 10) + "...") : "我的视频方案"}
+      />
+      <TemplateManager
+        open={showTemplateManager}
+        onOpenChange={setShowTemplateManager}
+        type="video_batch"
+        onSelect={handleLoadTemplate}
+      />
     </div>
   );
 }
@@ -411,12 +432,12 @@ export default function ImageBatchPage() {
   const [userId, setUserId] = useState<string | null>(null);
   const [userCredits, setUserCredits] = useState(0);
   const [previewTask, setPreviewTask] = useState<ImageBatchTask | null>(null);
-  
+
   // 创建任务弹窗状态
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [createPrompt, setCreatePrompt] = useState("");
   const [createCount, setCreateCount] = useState(1);
-  
+
   // 批量下载状态
   const [isDownloading, setIsDownloading] = useState(false);
   // 线路检测弹窗状态
@@ -430,6 +451,66 @@ export default function ImageBatchPage() {
     failed: 0,
     currentFilename: "",
   });
+
+  // Template State
+  const [showSaveTemplate, setShowSaveTemplate] = useState(false);
+  const [showTemplateManager, setShowTemplateManager] = useState(false);
+
+  // Template Handlers
+  const handleSaveTemplate = async (name: string, description: string) => {
+    try {
+      const configToSave = {
+        globalSettings,
+      };
+
+      const res = await fetch('/api/templates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name,
+          description,
+          type: 'image_batch',
+          config: configToSave
+        })
+      });
+
+      if (!res.ok) throw new Error('保存失败');
+
+      toast({
+        title: "保存成功",
+        description: `方案 "${name}" 已保存`,
+      });
+      setShowSaveTemplate(false);
+    } catch (e) {
+      toast({
+        variant: "destructive",
+        title: "保存失败",
+        description: "无法保存您的方案"
+      });
+    }
+  };
+
+  const handleLoadTemplate = (template: Template) => {
+    try {
+      const config = template.config;
+      if (config.globalSettings) {
+        Object.entries(config.globalSettings).forEach(([key, value]) => {
+          updateGlobalSettings(key as any, value);
+        });
+      }
+      toast({
+        title: "加载成功",
+        description: `方案 "${template.name}" 已加载`,
+      });
+      setShowTemplateManager(false);
+    } catch (e) {
+      toast({
+        variant: "destructive",
+        title: "加载失败",
+        description: "方案数据可能已损坏"
+      });
+    }
+  };
 
   // 获取用户积分
   useEffect(() => {
@@ -458,7 +539,7 @@ export default function ImageBatchPage() {
         title: "✅ 上传成功",
         description: `已添加 ${ids.length} 张图片`,
       });
-      
+
       // 重置文件输入，允许再次选择相同文件
       if (fileInputRef.current) {
         fileInputRef.current.value = "";
@@ -487,7 +568,7 @@ export default function ImageBatchPage() {
         toast({ variant: "destructive", title: "积分不足" });
         return;
       }
-      
+
       // 确保 userId 已获取，如果没有则先获取
       let currentUserId = userId;
       if (!currentUserId) {
@@ -677,12 +758,21 @@ export default function ImageBatchPage() {
             <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
               <ImageIcon className="h-6 w-6 text-tiktok-pink" />
               <span className="gradient-tiktok-text">批量制图线</span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowTemplateManager(true)}
+                className="ml-2 h-7 px-3 text-xs bg-white/5 border-white/10 hover:bg-white/10 text-gray-400 hover:text-cyan-400 gap-1.5 transition-all"
+              >
+                <LayoutTemplate className="h-3.5 w-3.5" />
+                <span>加载方案</span>
+              </Button>
             </h1>
             <p className="text-sm text-muted-foreground mt-1">
               批量上传图片，使用 AI 进行高清放大、九宫格生成等处理
             </p>
           </div>
-          
+
           {/* 快捷切换按钮组 */}
           <div className="flex items-center gap-2 p-1 rounded-xl bg-muted/50 border border-border/50">
             <Link href="/pro-studio/video-batch">
@@ -704,7 +794,7 @@ export default function ImageBatchPage() {
               图片
             </Button>
           </div>
-          
+
           <div className="flex items-center gap-2">
             <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-500/10 border border-amber-500/30">
               <Zap className="h-4 w-4 text-amber-400" />
@@ -862,7 +952,7 @@ export default function ImageBatchPage() {
                 />
               </div>
             )}
-            
+
             {globalSettings.action !== "generate" && (
               <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/20 border border-border/30">
                 <span className="text-sm text-muted-foreground">
@@ -891,7 +981,7 @@ export default function ImageBatchPage() {
                 <FolderUp className="h-4 w-4 mr-2" />
                 上传图片
               </Button>
-              
+
               {globalSettings.action === "generate" && (
                 <Button
                   variant="outline"
@@ -902,13 +992,25 @@ export default function ImageBatchPage() {
                   纯提示词创建
                 </Button>
               )}
-              
+
               {tasks.length > 0 && (
                 <Button variant="outline" onClick={handleApplyToAll} className="h-10 btn-subtle">
                   <Wand2 className="h-4 w-4 mr-1" />
                   应用全部
                 </Button>
               )}
+
+              <div className="flex-1" />
+
+              <Button
+                variant="outline"
+                onClick={() => setShowSaveTemplate(true)}
+                className="h-10 px-4 border-muted hover:bg-muted/50 text-muted-foreground hover:text-foreground"
+                title="保存当前配置为方案"
+              >
+                <Save className="h-4 w-4 mr-2" />
+                保存方案
+              </Button>
             </div>
           </CardContent>
         </Card>
@@ -944,7 +1046,7 @@ export default function ImageBatchPage() {
                   <Wifi className="h-3 w-3 mr-1" />
                   检测线路
                 </Button>
-                
+
                 {selectedCount > 0 && (
                   <>
                     {/* 批量下载选中的已完成任务 */}
@@ -960,11 +1062,11 @@ export default function ImageBatchPage() {
                             toast({ variant: "destructive", title: "没有可下载的图片" });
                             return;
                           }
-                          
+
                           // 获取最佳线路
                           const cachedResults = getCachedSpeedTestResults();
                           const bestRoute = getBestRouteId(cachedResults);
-                          
+
                           setIsDownloading(true);
                           setDownloadProgress({
                             show: true,
@@ -974,10 +1076,10 @@ export default function ImageBatchPage() {
                             failed: 0,
                             currentFilename: "准备中...",
                           });
-                          
+
                           let successCount = 0;
                           let failedCount = 0;
-                          
+
                           // 逐个通过代理下载
                           for (let i = 0; i < completedSelectedTasks.length; i++) {
                             const task = completedSelectedTasks[i];
@@ -987,7 +1089,7 @@ export default function ImageBatchPage() {
                                 ...prev,
                                 currentFilename: filename,
                               }));
-                              
+
                               try {
                                 // 构建代理URL
                                 const params = new URLSearchParams({
@@ -997,7 +1099,7 @@ export default function ImageBatchPage() {
                                 });
                                 const proxyUrl = `/api/download-proxy?${params}`;
                                 const response = await fetch(proxyUrl);
-                                
+
                                 if (response.ok) {
                                   const blob = await response.blob();
                                   const blobUrl = URL.createObjectURL(blob);
@@ -1024,25 +1126,25 @@ export default function ImageBatchPage() {
                                 console.error("Download failed:", err);
                                 failedCount++;
                               }
-                              
+
                               setDownloadProgress(prev => ({
                                 ...prev,
                                 current: i + 1,
                                 success: successCount,
                                 failed: failedCount,
                               }));
-                              
+
                               // 间隔 600ms 避免浏览器阻止
                               await new Promise(r => setTimeout(r, 600));
                             }
                           }
-                          
+
                           setIsDownloading(false);
-                          toast({ 
+                          toast({
                             title: `✅ 下载完成`,
                             description: `成功 ${successCount} 张${failedCount > 0 ? `，失败 ${failedCount} 张` : ""}`,
                           });
-                          
+
                           // 3秒后关闭进度弹窗
                           setTimeout(() => {
                             setDownloadProgress(prev => ({ ...prev, show: false }));
@@ -1248,9 +1350,9 @@ export default function ImageBatchPage() {
                 <p className="text-sm text-muted-foreground mb-2 flex items-center gap-2">
                   📷 原图
                 </p>
-                <a 
-                  href={previewTask?.config.sourceImageUrl} 
-                  target="_blank" 
+                <a
+                  href={previewTask?.config.sourceImageUrl}
+                  target="_blank"
                   rel="noopener noreferrer"
                   className="block"
                 >
@@ -1267,9 +1369,9 @@ export default function ImageBatchPage() {
                   <p className="text-sm text-muted-foreground mb-2 flex items-center gap-2">
                     ✨ 处理结果
                   </p>
-                  <a 
-                    href={previewTask.resultUrl} 
-                    target="_blank" 
+                  <a
+                    href={previewTask.resultUrl}
+                    target="_blank"
                     rel="noopener noreferrer"
                     className="block"
                   >
@@ -1445,8 +1547,8 @@ export default function ImageBatchPage() {
               </DialogTitle>
             </DialogHeader>
             <div className="space-y-4 py-4">
-              <Progress 
-                value={(downloadProgress.current / downloadProgress.total) * 100} 
+              <Progress
+                value={(downloadProgress.current / downloadProgress.total) * 100}
                 className="h-3"
               />
               <div className="flex justify-between text-sm text-muted-foreground">
@@ -1462,6 +1564,19 @@ export default function ImageBatchPage() {
           </DialogContent>
         </Dialog>
       </div>
+      {/* Templates */}
+      <SaveTemplateDialog
+        open={showSaveTemplate}
+        onOpenChange={setShowSaveTemplate}
+        onSave={handleSaveTemplate}
+        defaultName="我的制图方案"
+      />
+      <TemplateManager
+        open={showTemplateManager}
+        onOpenChange={setShowTemplateManager}
+        type="image_batch"
+        onSelect={handleLoadTemplate}
+      />
     </TooltipProvider>
   );
 }
