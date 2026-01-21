@@ -2619,16 +2619,6 @@ C07: [story CTA, inspiring, <50 chars]`,
             <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
               <Film className="h-6 w-6 text-tiktok-cyan" />
               <span className="gradient-tiktok-text">批量视频流水线</span>
-              {/* Load Template Button */}
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowTemplateManager(true)}
-                className="ml-2 h-7 px-3 text-xs bg-white/5 border-white/10 hover:bg-white/10 text-gray-400 hover:text-cyan-400 gap-1.5 transition-all"
-              >
-                <LayoutTemplate className="h-3.5 w-3.5" />
-                <span>加载方案</span>
-              </Button>
             </h1>
             <p className="text-sm text-muted-foreground mt-1">
               一键生成多个视频，支持 SORA2 Pro / VEO3 多模型流水线处理
@@ -3553,7 +3543,7 @@ C07: [story CTA, inspiring, <50 chars]`,
 
         {/* 创建任务弹窗 */}
         <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
-          <DialogContent className="max-w-2xl bg-black/95 border-white/10 text-white backdrop-blur-xl gap-0 p-0 overflow-hidden">
+          <DialogContent className="max-w-2xl bg-black/90 border border-white/[0.08] text-white backdrop-blur-2xl shadow-[0_0_80px_-20px_rgba(6,182,212,0.15)] gap-0 p-0 overflow-hidden">
             {/* Header: 标题 + 加载方案按钮 */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 bg-white/5">
               <div className="flex flex-col gap-0.5">
@@ -3740,7 +3730,17 @@ C07: [story CTA, inspiring, <50 chars]`,
                       >
                         <Minus className="h-3 w-3" />
                       </Button>
-                      <div className="w-12 text-center text-sm font-semibold text-white">{batchCreateCount}</div>
+                      <input
+                        type="number"
+                        min={1}
+                        max={300}
+                        value={batchCreateCount}
+                        onChange={(e) => {
+                          const val = parseInt(e.target.value, 10);
+                          if (!isNaN(val)) setBatchCreateCount(Math.min(300, Math.max(1, val)));
+                        }}
+                        className="w-14 h-full bg-transparent text-center text-sm font-semibold text-white border-none outline-none focus:ring-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                      />
                       <Button
                         size="icon"
                         variant="ghost"
@@ -3759,12 +3759,12 @@ C07: [story CTA, inspiring, <50 chars]`,
             {/* Footer Actions */}
             <DialogFooter className="p-6 pt-0 sm:justify-between bg-transparent border-none">
               <Button
-                variant="ghost"
+                variant="outline"
                 onClick={() => setShowSaveTemplate(true)}
-                className="text-gray-400 hover:text-white hover:bg-white/5 gap-2"
+                className="bg-white/5 border-white/10 text-gray-300 hover:text-cyan-400 hover:border-cyan-500/50 hover:bg-cyan-500/10 gap-2 transition-all"
               >
                 <Save className="h-4 w-4" />
-                <span className="underline decoration-dashed underline-offset-4">保存为方案</span>
+                <span>保存为方案</span>
               </Button>
 
               <div className="flex gap-3">
