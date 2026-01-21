@@ -1333,6 +1333,28 @@ export default function VideoBatchPage() {
         }
       }
 
+      // 上传参考图（纯提示词模式）
+      let savedReferenceImageUrl = "";
+      if (createMode === "prompt" && referenceImageFile) {
+        try {
+          const formData = new FormData();
+          formData.append('file', referenceImageFile);
+          const uploadRes = await fetch('/api/upload/image', {
+            method: 'POST',
+            body: formData,
+          });
+          const uploadResult = await uploadRes.json();
+          if (uploadResult.success && uploadResult.data?.url) {
+            savedReferenceImageUrl = uploadResult.data.url;
+          }
+        } catch (uploadErr) {
+          console.error('Upload reference image failed:', uploadErr);
+        }
+      } else if (createMode === "prompt" && referenceImageUrl && !referenceImageUrl.startsWith('blob:')) {
+        // 已经是远程 URL
+        savedReferenceImageUrl = referenceImageUrl;
+      }
+
       // 准备保存配置
       const configToSave = {
         globalSettings: {
@@ -1350,6 +1372,7 @@ export default function VideoBatchPage() {
         createCount: batchCreateCount,
         groupNameTemplate: groupNameInput,
         templateImages: uploadedImages,
+        referenceImageUrl: savedReferenceImageUrl, // 新增：参考图持久化 URL
         savedAt: new Date().toISOString(),
       };
 
@@ -1431,6 +1454,15 @@ export default function VideoBatchPage() {
           isMainGrid: img.isMainGrid ?? (index === 0),
         }));
         setNewTaskImages(restoredImages);
+      }
+
+      // 恢复参考图（纯提示词模式）
+      if (config.referenceImageUrl) {
+        setReferenceImageUrl(config.referenceImageUrl);
+        setReferenceImageFile(null); // 远程图片没有 File 对象
+      } else {
+        setReferenceImageUrl("");
+        setReferenceImageFile(null);
       }
 
       // 关闭方案管理器
