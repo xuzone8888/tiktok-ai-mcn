@@ -490,19 +490,19 @@ const VideoTaskCard = memo(function VideoTaskCard({
   const isPromptMode = task.mode === "prompt_to_video";
   const validation = isPromptMode ? validatePromptTask(task) : validateTaskImages(task.images);
   const canStart = task.status === "pending" && validation.valid;
-  
+
   // 检测是否使用了 AI 模特（优先使用任务配置，兼容旧任务检测脚本内容）
   const hasAiModel = !!(
     task.useAiModel ||
     (task.doubaoTalkingScript && task.doubaoTalkingScript.includes('AI模特')) ||
     (task.doubaoAiVideoPrompt && task.doubaoAiVideoPrompt.includes('[AI MODEL:'))
   );
-  
+
   // 使用任务自身的配置，如果不存在则回退到全局配置（兼容旧任务）
   const taskModelType = task.modelType || globalModelType;
   const taskDuration = task.duration || globalDuration;
   const taskQuality = task.quality || globalQuality;
-  
+
   // 获取显示标签
   const getModelLabel = () => {
     if (taskModelType === "veo3") {
@@ -567,15 +567,15 @@ const VideoTaskCard = memo(function VideoTaskCard({
       <div className="relative aspect-video bg-muted/30">
         {task.status === "success" && task.soraVideoUrl ? (
           /* 视频预览 - 横屏填满，带播放按钮 */
-          <div 
+          <div
             className="absolute inset-0 cursor-pointer group/video"
             onClick={(e) => {
               e.stopPropagation();
               onPlayVideo();
             }}
           >
-            <video 
-              src={task.soraVideoUrl} 
+            <video
+              src={task.soraVideoUrl}
               className="w-full h-full object-cover"
               muted
               playsInline
@@ -600,14 +600,14 @@ const VideoTaskCard = memo(function VideoTaskCard({
                 </div>
               )}
             </div>
-            
+
             {/* 下载进度条 */}
             {isDownloading && (
               <div className="absolute bottom-0 left-0 right-0 bg-black/60 p-2">
                 <div className="flex items-center gap-2">
                   <Loader2 className="h-3 w-3 text-tiktok-cyan animate-spin shrink-0" />
                   <div className="flex-1 h-1.5 bg-white/20 rounded-full overflow-hidden">
-                    <div 
+                    <div
                       className="h-full bg-gradient-to-r from-tiktok-cyan to-tiktok-pink rounded-full transition-all duration-300"
                       style={{ width: `${downloadProgress}%` }}
                     />
@@ -899,7 +899,7 @@ interface VideoPlayerDialogProps {
 
 function VideoPlayerDialog({ task, open, onClose, onDownload }: VideoPlayerDialogProps) {
   const [downloading, setDownloading] = useState(false);
-  
+
   if (!task || !task.soraVideoUrl) return null;
 
   // 获取视频时长和清晰度显示文字
@@ -907,7 +907,7 @@ function VideoPlayerDialog({ task, open, onClose, onDownload }: VideoPlayerDialo
     const duration = task.duration || 15;
     const quality = task.quality || "standard";
     const modelType = task.modelType || "sora2";
-    
+
     if (modelType === "veo3") {
       return "8秒";
     } else if (modelType === "veo3-quality") {
@@ -930,13 +930,13 @@ function VideoPlayerDialog({ task, open, onClose, onDownload }: VideoPlayerDialo
       <DialogContent className="max-w-4xl p-0 bg-background border-border overflow-hidden">
         <div className="relative">
           {/* 视频播放器 */}
-          <video 
-            src={task.soraVideoUrl} 
-            controls 
+          <video
+            src={task.soraVideoUrl}
+            controls
             autoPlay
             className="w-full max-h-[80vh] bg-black"
           />
-          
+
           {/* 底部操作栏 - 使用不透明背景确保文字可见 */}
           <div className="border-t border-border bg-background p-4">
             <div className="flex items-center justify-between">
@@ -952,7 +952,7 @@ function VideoPlayerDialog({ task, open, onClose, onDownload }: VideoPlayerDialo
                   {getDurationLabel()}
                 </Badge>
               </div>
-              
+
               {/* 下载按钮 */}
               <button
                 onClick={handleDownload}
@@ -1068,7 +1068,7 @@ interface DownloadProgressDialogProps {
 function DownloadProgressDialog({ progress, onCancel, onClose }: DownloadProgressDialogProps) {
   const percentage = progress.total > 0 ? Math.round((progress.current / progress.total) * 100) : 0;
   const isComplete = progress.current >= progress.total;
-  
+
   // 计算预估剩余时间
   const getEstimatedTime = () => {
     if (progress.current === 0 || progress.startTime === 0) return "计算中...";
@@ -1076,7 +1076,7 @@ function DownloadProgressDialog({ progress, onCancel, onClose }: DownloadProgres
     const avgTimePerItem = elapsed / progress.current;
     const remaining = progress.total - progress.current;
     const estimatedMs = remaining * avgTimePerItem;
-    
+
     if (estimatedMs < 60000) {
       return `约 ${Math.ceil(estimatedMs / 1000)} 秒`;
     } else {
@@ -1085,8 +1085,8 @@ function DownloadProgressDialog({ progress, onCancel, onClose }: DownloadProgres
   };
 
   return (
-    <Dialog 
-      open={progress.show} 
+    <Dialog
+      open={progress.show}
       onOpenChange={(open) => {
         if (!open) {
           // 允许在任何时候关闭对话框
@@ -1110,9 +1110,9 @@ function DownloadProgressDialog({ progress, onCancel, onClose }: DownloadProgres
             {isComplete ? "下载完成" : progress.cancelled ? "下载已取消" : "批量下载中"}
           </DialogTitle>
           <DialogDescription>
-            {isComplete 
+            {isComplete
               ? `成功调起 ${progress.success} 个下载任务${progress.failed > 0 ? `，${progress.failed} 个失败` : ""}，请在浏览器下载列表查看进度`
-              : progress.cancelled 
+              : progress.cancelled
                 ? `已调起 ${progress.success} 个下载任务`
                 : "正在调起下载任务，实际下载进度请查看浏览器下载列表"
             }
@@ -1129,10 +1129,10 @@ function DownloadProgressDialog({ progress, onCancel, onClose }: DownloadProgres
               </span>
             </div>
             <div className="h-3 bg-muted/30 rounded-full overflow-hidden">
-              <div 
+              <div
                 className={cn(
                   "h-full rounded-full transition-all duration-300",
-                  isComplete 
+                  isComplete
                     ? "bg-gradient-to-r from-emerald-500 to-emerald-400"
                     : progress.cancelled
                       ? "bg-gradient-to-r from-red-500 to-red-400"
@@ -1197,15 +1197,15 @@ function DownloadProgressDialog({ progress, onCancel, onClose }: DownloadProgres
 
         <DialogFooter>
           {isComplete || progress.cancelled ? (
-            <Button 
+            <Button
               onClick={onClose}
               className="w-full bg-gradient-to-r from-tiktok-cyan to-tiktok-pink text-black font-semibold"
             >
               关闭
             </Button>
           ) : (
-            <Button 
-              variant="destructive" 
+            <Button
+              variant="destructive"
               onClick={() => {
                 onCancel();
                 onClose();
@@ -1264,28 +1264,28 @@ export default function VideoBatchPage() {
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [newTaskImages, setNewTaskImages] = useState<TaskImageInfo[]>([]);
   const [batchCreateCount, setBatchCreateCount] = useState(1);
-  
+
   // 纯提示词创建模式
   const [createMode, setCreateMode] = useState<"image" | "prompt">("image");
   const [promptInput, setPromptInput] = useState("");
   const [groupNameInput, setGroupNameInput] = useState(""); // 分组名称
   const [referenceImageFile, setReferenceImageFile] = useState<File | null>(null);
   const [referenceImageUrl, setReferenceImageUrl] = useState("");
-  
+
   // 批量下载状态
   const [isDownloading, setIsDownloading] = useState(false);
   // 批量开始状态
   const [isBatchStarting, setIsBatchStarting] = useState(false);
   // 单个下载进度状态
   const [downloadingTaskId, setDownloadingTaskId] = useState<string | null>(null);
-  
+
   // 每个任务的下载进度 { taskId: progress (0-100) }
   const [taskDownloadProgress, setTaskDownloadProgress] = useState<Record<string, number>>({});
   // 正在下载的任务ID集合
   const [downloadingTaskIds, setDownloadingTaskIds] = useState<Set<string>>(new Set());
   // 已下载的任务ID集合（从 localStorage 恢复）
   const [downloadedTaskIds, setDownloadedTaskIds] = useState<Set<string>>(new Set());
-  
+
   // 批量下载进度状态
   const [downloadProgress, setDownloadProgress] = useState<{
     show: boolean;
@@ -1306,15 +1306,15 @@ export default function VideoBatchPage() {
     startTime: 0,
     cancelled: false,
   });
-  
+
   // 取消下载的ref
   const cancelDownloadRef = useRef(false);
-  
+
   // 生成简化文件名的辅助函数（支持分组前缀）
   const generateSimpleFilename = useCallback((task: VideoBatchTask, index?: number) => {
     const aspectStr = task.aspectRatio.replace(":", "x");
     const durationStr = `${task.duration || 15}s`;
-    
+
     // 如果有分组名，计算组内序号；否则使用全局序号
     let seq: number;
     if (task.groupName) {
@@ -1324,12 +1324,12 @@ export default function VideoBatchPage() {
       // 返回带分组前缀的文件名
       return `${task.groupName}-视频${seq}-${aspectStr}-${durationStr}.mp4`;
     }
-    
+
     // 无分组时使用全局序号
     seq = index !== undefined ? index + 1 : tasks.findIndex(t => t.id === task.id) + 1;
     return `视频-${seq}-${aspectStr}-${durationStr}.mp4`;
   }, [tasks]);
-  
+
   // 通过代理下载视频（现在改为利用后端的302重定向直连）
   const downloadVideoViaProxy = useCallback(async (url: string, filename: string, routeId?: string): Promise<boolean> => {
     try {
@@ -1340,7 +1340,7 @@ export default function VideoBatchPage() {
         ...(routeId && { route: routeId }),
       });
       const proxyUrl = `/api/download-proxy?${params}`;
-      
+
       // 直接触发浏览器下载行为，而不是 fetch 到内存中
       // 这样可以利用浏览器原生下载管理器，支持断点续传且速度极快
       const link = document.createElement("a");
@@ -1349,14 +1349,14 @@ export default function VideoBatchPage() {
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      
+
       return true;
     } catch (error) {
       console.error("[Proxy Download] Failed:", error);
       return false;
     }
   }, []);
-  
+
   // 直接下载视频（备选方案，尝试直接请求源站）
   const downloadVideoDirect = useCallback(async (url: string, filename: string): Promise<boolean> => {
     try {
@@ -1373,12 +1373,12 @@ export default function VideoBatchPage() {
       return false;
     }
   }, []);
-  
+
   // 在新窗口打开视频（最后备选方案）
   const openVideoInNewTab = useCallback((url: string) => {
     window.open(url, "_blank");
   }, []);
-  
+
   // ========== 内置多线程下载（类似 IDM） ==========
   const [multiThreadProgress, setMultiThreadProgress] = useState<{
     show: boolean;
@@ -1400,14 +1400,14 @@ export default function VideoBatchPage() {
 
   // 多线程下载单个视频
   const downloadWithMultiThread = useCallback(async (
-    url: string, 
-    filename: string, 
+    url: string,
+    filename: string,
     threads: number = 4,
     onProgress?: (downloaded: number, total: number) => void
   ): Promise<boolean> => {
     try {
       console.log(`[Multi-Thread] Starting download: ${filename} with ${threads} threads`);
-      
+
       // 1. 获取文件信息
       const infoParams = new URLSearchParams({ url, mode: "info" });
       let info;
@@ -1420,63 +1420,63 @@ export default function VideoBatchPage() {
         // 回退到普通下载
         return await downloadVideoViaProxy(url, filename);
       }
-      
+
       if (!info.size || info.size === 0) {
         console.log("[Multi-Thread] Cannot get file size, falling back to normal download");
         return await downloadVideoViaProxy(url, filename);
       }
-      
+
       const fileSize = info.size;
       console.log(`[Multi-Thread] File size: ${(fileSize / 1024 / 1024).toFixed(2)} MB`);
-      
+
       // 如果文件小于 2MB，直接普通下载
       if (fileSize < 2 * 1024 * 1024) {
         console.log("[Multi-Thread] File too small, using normal download");
         return await downloadVideoViaProxy(url, filename);
       }
-      
+
       // 2. 计算分片
       const chunkSize = Math.ceil(fileSize / threads);
       const chunks: { start: number; end: number; index: number }[] = [];
-      
+
       for (let i = 0; i < threads; i++) {
         const start = i * chunkSize;
         const end = Math.min(start + chunkSize - 1, fileSize - 1);
         chunks.push({ start, end, index: i });
       }
-      
+
       console.log(`[Multi-Thread] Chunks:`, chunks.map(c => `${c.start}-${c.end}`));
-      
+
       // 3. 并行下载所有分片
       let totalDownloaded = 0;
       const chunkData: ArrayBuffer[] = new Array(threads);
-      
+
       const downloadChunk = async (chunk: { start: number; end: number; index: number }) => {
         console.log(`[Multi-Thread] Downloading chunk ${chunk.index}: ${chunk.start}-${chunk.end}`);
-        
+
         const params = new URLSearchParams({
           url,
           mode: "chunk",
           start: chunk.start.toString(),
           end: chunk.end.toString(),
         });
-        
+
         const response = await fetch(`/api/download-proxy?${params}`);
         if (!response.ok) {
           console.error(`[Multi-Thread] Chunk ${chunk.index} failed: ${response.status}`);
           throw new Error(`Chunk ${chunk.index} failed: ${response.status}`);
         }
-        
+
         const data = await response.arrayBuffer();
         chunkData[chunk.index] = data;
-        
+
         totalDownloaded += data.byteLength;
         console.log(`[Multi-Thread] Chunk ${chunk.index} done: ${data.byteLength} bytes, total: ${totalDownloaded}/${fileSize}`);
         onProgress?.(totalDownloaded, fileSize);
-        
+
         return data;
       };
-      
+
       try {
         await Promise.all(chunks.map(downloadChunk));
       } catch (e) {
@@ -1484,7 +1484,7 @@ export default function VideoBatchPage() {
         // 回退到普通下载
         return await downloadVideoViaProxy(url, filename);
       }
-      
+
       // 4. 合并分片
       console.log("[Multi-Thread] Merging chunks...");
       const totalLength = chunkData.reduce((acc, arr) => acc + (arr?.byteLength || 0), 0);
@@ -1496,21 +1496,21 @@ export default function VideoBatchPage() {
           offset += chunk.byteLength;
         }
       }
-      
+
       // 5. 触发下载
       console.log("[Multi-Thread] Creating blob and downloading...");
       const blob = new Blob([mergedData], { type: "video/mp4" });
       const blobUrl = URL.createObjectURL(blob);
-      
+
       const link = document.createElement("a");
       link.href = blobUrl;
       link.download = filename;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      
+
       setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
-      
+
       console.log(`[Multi-Thread] Download complete: ${filename}`);
       return true;
     } catch (error) {
@@ -1519,38 +1519,38 @@ export default function VideoBatchPage() {
       return await downloadVideoViaProxy(url, filename);
     }
   }, [downloadVideoViaProxy]);
-  
+
   // 极速下载 - 前端直接 fetch CDN + blob（绕过服务器，直连CDN）
   // 添加超时机制，避免卡住
   const downloadFastViaCDN = useCallback(async (url: string, filename: string): Promise<boolean> => {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 8000); // 8秒超时
-    
+
     try {
       console.log("[Fast Download] Fetching from CDN directly (8s timeout)...");
-      
+
       // 直接 fetch CDN（不经过我们的服务器）
       const response = await fetch(url, {
         mode: "cors",
         credentials: "omit",
         signal: controller.signal,
       });
-      
+
       clearTimeout(timeoutId);
-      
+
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
       }
-      
+
       // 将响应转换为 blob（设置额外超时）
       const blobPromise = response.blob();
-      const blobTimeoutPromise = new Promise<never>((_, reject) => 
+      const blobTimeoutPromise = new Promise<never>((_, reject) =>
         setTimeout(() => reject(new Error("Blob timeout")), 30000) // 30秒 blob 超时
       );
-      
+
       const blob = await Promise.race([blobPromise, blobTimeoutPromise]);
       const blobUrl = URL.createObjectURL(blob);
-      
+
       // 使用 <a> 标签触发下载
       const link = document.createElement("a");
       link.href = blobUrl;
@@ -1559,10 +1559,10 @@ export default function VideoBatchPage() {
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      
+
       // 清理 blob URL
       setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
-      
+
       console.log("[Fast Download] Success via direct CDN fetch");
       return true;
     } catch (error) {
@@ -1575,7 +1575,7 @@ export default function VideoBatchPage() {
       return false;
     }
   }, []);
-  
+
   // 智能下载视频 - 优先直连CDN，速度最快
   const downloadVideo = useCallback(async (url: string, filename: string, mode: "fast" | "named" = "fast"): Promise<boolean> => {
     if (mode === "named") {
@@ -1583,60 +1583,60 @@ export default function VideoBatchPage() {
       console.log("[Download] Named mode: using proxy for custom filename...");
       return await downloadVideoViaProxy(url, filename);
     }
-    
+
     // 极速下载模式：优先尝试直连CDN
     console.log("[Download] Fast mode: trying direct CDN fetch...");
-    
+
     // 先尝试直接 fetch CDN（速度最快）
     const fastSuccess = await downloadFastViaCDN(url, filename);
     if (fastSuccess) {
       return true;
     }
-    
+
     // 如果直连失败（CORS问题），回退到代理下载
     console.log("[Download] Falling back to proxy download...");
     return await downloadVideoViaProxy(url, filename);
   }, [downloadVideoViaProxy, downloadFastViaCDN]);
-  
+
   // 下载单个任务的视频
   const handleDownloadTask = useCallback(async (task: VideoBatchTask, mode: "fast" | "named" = "fast") => {
     if (!task.soraVideoUrl) {
       toast({ variant: "destructive", title: "视频未生成" });
       return;
     }
-    
+
     const filename = generateSimpleFilename(task);
     setDownloadingTaskId(task.id);
-    
+
     if (mode === "fast") {
-      toast({ 
-        title: `🚀 极速下载中...`, 
-        description: `正在直连CDN获取视频` 
+      toast({
+        title: `🚀 极速下载中...`,
+        description: `正在直连CDN获取视频`
       });
     } else {
-      toast({ 
-        title: `📁 命名下载`, 
-        description: `正在下载: ${filename}（通过代理）` 
+      toast({
+        title: `📁 命名下载`,
+        description: `正在下载: ${filename}（通过代理）`
       });
     }
-    
+
     const success = await downloadVideo(task.soraVideoUrl, filename, mode);
     setDownloadingTaskId(null);
-    
+
     if (success) {
-      toast({ 
+      toast({
         title: `✅ 下载成功`,
         description: filename,
       });
     } else {
-      toast({ 
-        variant: "destructive", 
+      toast({
+        variant: "destructive",
         title: `下载失败`,
         description: "请尝试右键视频另存为...",
       });
     }
   }, [downloadVideo, generateSimpleFilename, toast]);
-  
+
   // AI模特功能 - 使用 store 中的全局设置
   const useAiModel = globalSettings.useAiModel;
   const selectedModelId = globalSettings.aiModelId;
@@ -1644,7 +1644,7 @@ export default function VideoBatchPage() {
   const selectedModelTriggerWord = globalSettings.aiModelTriggerWord;  // 触发词（后台使用）
   const [hiredModels, setHiredModels] = useState<Array<{ id: string; name: string; trigger_word: string; avatar_url: string }>>([]);
   const [showModelSelector, setShowModelSelector] = useState(false);
-  
+
   // 提示词配置
   const [showPromptConfig, setShowPromptConfig] = useState(false);
   const [selectedStyle, setSelectedStyle] = useState<string>("default");
@@ -1659,7 +1659,7 @@ export default function VideoBatchPage() {
     aiVideoPromptSystem: "",
     aiVideoPromptUser: "",
   });
-  
+
   // 预设视频风格 - 统一限制条件
   // 第二步脚本生成：7行(C01-C07)，每行<150字符，解释<300字符
   // 第三步视频提示：7行(C01-C07)，每行<50字符，无解释
@@ -1797,7 +1797,7 @@ C07: [story CTA, inspiring, <50 chars]`,
       }
     },
   ];
-  
+
   // 加载本地存储的提示词配置
   useEffect(() => {
     const savedPrompts = localStorage.getItem("video-batch-custom-prompts");
@@ -1809,7 +1809,7 @@ C07: [story CTA, inspiring, <50 chars]`,
       }
     }
   }, []);
-  
+
   // 从 localStorage 恢复已下载的任务
   useEffect(() => {
     const savedDownloaded = localStorage.getItem("video-batch-downloaded-tasks");
@@ -1824,7 +1824,7 @@ C07: [story CTA, inspiring, <50 chars]`,
       }
     }
   }, []);
-  
+
   // 保存已下载任务到 localStorage
   const markTaskAsDownloaded = useCallback((taskId: string) => {
     setDownloadedTaskIds(prev => {
@@ -1835,13 +1835,13 @@ C07: [story CTA, inspiring, <50 chars]`,
       return newSet;
     });
   }, []);
-  
+
   // AI 模特设置函数
   const setUseAiModel = (value: boolean) => updateGlobalSettings("useAiModel", value);
   const setSelectedModelId = (value: string | null) => updateGlobalSettings("aiModelId", value);
   const setSelectedModelName = (value: string | null) => updateGlobalSettings("aiModelName", value);
   const setSelectedModelTriggerWord = (value: string | null) => updateGlobalSettings("aiModelTriggerWord", value);
-  
+
   // 任务处理锁，防止重复执行
   const processingTasksRef = useRef<Set<string>>(new Set());
 
@@ -1897,7 +1897,7 @@ C07: [story CTA, inspiring, <50 chars]`,
 
   // 页面离开警告 - 当有任务正在处理时提醒用户
   useEffect(() => {
-    const hasRunningTasks = tasks.some(t => 
+    const hasRunningTasks = tasks.some(t =>
       ["uploading", "generating_script", "generating_prompt", "generating_video"].includes(t.status)
     );
 
@@ -1932,7 +1932,7 @@ C07: [story CTA, inspiring, <50 chars]`,
         console.error("[Video Batch] Image file not found for blob URL:", image.url);
         throw new Error("图片文件已失效，请重新上传");
       }
-      
+
       // 验证 blob URL 是否仍然有效
       try {
         const blobResponse = await fetch(image.url);
@@ -1943,7 +1943,7 @@ C07: [story CTA, inspiring, <50 chars]`,
         console.error("[Video Batch] Blob URL invalid:", image.url, blobError);
         throw new Error("图片链接已失效，请重新上传图片");
       }
-      
+
       const formData = new FormData();
       formData.append("file", image.file);
 
@@ -1975,7 +1975,7 @@ C07: [story CTA, inspiring, <50 chars]`,
   const handleStartSingleTask = useCallback(
     async (task: VideoBatchTask) => {
       const isPromptMode = task.mode === "prompt_to_video";
-      
+
       // 验证任务
       if (isPromptMode) {
         if (!task.customPrompt || task.customPrompt.trim().length < 10) {
@@ -1994,7 +1994,7 @@ C07: [story CTA, inspiring, <50 chars]`,
         console.warn(`[Video Batch] Task ${task.id} is already being processed, skipping...`);
         return;
       }
-      
+
       // 检查任务状态，如果不是 pending 则跳过
       const currentState = useVideoBatchStore.getState();
       const currentTask = currentState.tasks.find(t => t.id === task.id);
@@ -2002,7 +2002,7 @@ C07: [story CTA, inspiring, <50 chars]`,
         console.warn(`[Video Batch] Task ${task.id} status is ${currentTask.status}, skipping...`);
         return;
       }
-      
+
       // 确保 userId 已获取，如果没有则先获取
       let currentUserId = userId;
       if (!currentUserId) {
@@ -2025,39 +2025,39 @@ C07: [story CTA, inspiring, <50 chars]`,
           console.error("[Video Batch] Failed to get userId:", e);
         }
       }
-      
+
       // 添加到处理锁
       processingTasksRef.current.add(task.id);
 
       try {
         let finalVideoPrompt = "";
         let mainGridImageUrl = "";
-        
+
         if (isPromptMode) {
           // ==================== 纯提示词模式 ====================
           // 跳过图片上传和脚本生成，直接使用用户提示词
           updateTaskStatus(task.id, "generating_video", { currentStep: 3, progress: 20 });
-          
+
           finalVideoPrompt = task.customPrompt || "";
           mainGridImageUrl = task.referenceImageUrl || "";
-          
+
           // 如果使用AI模特且有trigger word，添加到提示词中
           if (useAiModel && selectedModelTriggerWord) {
             finalVideoPrompt = `[AI MODEL: ${selectedModelTriggerWord}]\n\n${finalVideoPrompt}`;
             console.log("[Video Batch] Prompt mode - Added AI model trigger word:", selectedModelTriggerWord);
           }
-          
+
           // 保存用户提示词到任务（不暴露 trigger_word）
           updateTaskStatus(task.id, "generating_video", {
             currentStep: 3,
             progress: 30,
-            doubaoTalkingScript: useAiModel && selectedModelTriggerWord 
-              ? `【纯提示词模式 - 已启用AI模特】` 
+            doubaoTalkingScript: useAiModel && selectedModelTriggerWord
+              ? `【纯提示词模式 - 已启用AI模特】`
               : "【纯提示词模式 - 无口播脚本】",
             // 保存给用户看的提示词不包含 trigger_word
             doubaoAiVideoPrompt: task.customPrompt || "",
           });
-          
+
           console.log("[Video Batch] Prompt mode - using custom prompt directly", {
             hasAiModel: useAiModel,
             triggerWord: selectedModelTriggerWord,
@@ -2066,20 +2066,20 @@ C07: [story CTA, inspiring, <50 chars]`,
           // ==================== 图片到视频模式 ====================
           // ==================== Step 0: 上传图片 ====================
           updateTaskStatus(task.id, "uploading", { currentStep: 0, progress: 5 });
-          
+
           const uploadedUrls: string[] = [];
           for (let i = 0; i < task.images.length; i++) {
             const url = await uploadImageToServer(task.images[i]);
             uploadedUrls.push(url);
-            updateTaskStatus(task.id, "uploading", { 
-              progress: 5 + Math.round((i + 1) / task.images.length * 15) 
+            updateTaskStatus(task.id, "uploading", {
+              progress: 5 + Math.round((i + 1) / task.images.length * 15)
             });
           }
           console.log("[Video Batch] Images uploaded:", uploadedUrls);
 
           // ==================== Step 1: 生成口播脚本 ====================
           updateTaskStatus(task.id, "generating_script", { currentStep: 1, progress: 20 });
-          
+
           // 获取本地存储的自定义提示词
           let savedCustomPrompts = null;
           try {
@@ -2090,13 +2090,13 @@ C07: [story CTA, inspiring, <50 chars]`,
           } catch (e) {
             console.warn("Failed to parse custom prompts:", e);
           }
-          
+
           const imageUrls = uploadedUrls;
           const scriptResponse = await fetch("/api/video-batch/generate-talking-script", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ 
-              images: imageUrls, 
+            body: JSON.stringify({
+              images: imageUrls,
               taskId: task.id,
               customPrompts: savedCustomPrompts ? {
                 systemPrompt: savedCustomPrompts.talkingScriptSystem,
@@ -2104,7 +2104,7 @@ C07: [story CTA, inspiring, <50 chars]`,
               } : undefined,
             }),
           });
-          
+
           const scriptText = await scriptResponse.text();
           let scriptResult;
           try {
@@ -2127,8 +2127,8 @@ C07: [story CTA, inspiring, <50 chars]`,
           const promptResponse = await fetch("/api/video-batch/generate-ai-video-prompt", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ 
-              talkingScript: scriptResult.data.script, 
+            body: JSON.stringify({
+              talkingScript: scriptResult.data.script,
               taskId: task.id,
               modelTriggerWord: useAiModel ? selectedModelTriggerWord : undefined,
               customPrompts: savedCustomPrompts ? {
@@ -2137,7 +2137,7 @@ C07: [story CTA, inspiring, <50 chars]`,
               } : undefined,
             }),
           });
-          
+
           const promptText = await promptResponse.text();
           let promptResult;
           try {
@@ -2160,14 +2160,14 @@ C07: [story CTA, inspiring, <50 chars]`,
           // 设置最终提示词（含 trigger word）用于发送给视频 API
           finalVideoPrompt = promptResult.data.prompt;
           mainGridImageUrl = uploadedUrls[0];
-          
+
           if (!mainGridImageUrl) {
             throw new Error("缺少九宫格主图");
           }
         }
 
         // ==================== Step 3: 生成 Sora 视频 ====================
-        
+
         // 如果使用AI模特且有trigger word，确保它在最终提示词中
         if (useAiModel && selectedModelTriggerWord && !finalVideoPrompt.includes(selectedModelTriggerWord)) {
           finalVideoPrompt = `[AI MODEL: ${selectedModelTriggerWord}]\n\n${finalVideoPrompt}`;
@@ -2185,8 +2185,8 @@ C07: [story CTA, inspiring, <50 chars]`,
 
         // 判断是否使用 VEO3 模型
         const isVeo3Model = taskModelType === "veo3" || taskModelType === "veo3-quality";
-        const apiEndpoint = isVeo3Model 
-          ? "/api/video-batch/generate-veo-video" 
+        const apiEndpoint = isVeo3Model
+          ? "/api/video-batch/generate-veo-video"
           : "/api/video-batch/generate-sora-video";
 
         console.log(`[Video Batch] Calling ${isVeo3Model ? 'VEO3' : 'Sora2'} API with userId:`, currentUserId);
@@ -2206,7 +2206,7 @@ C07: [story CTA, inspiring, <50 chars]`,
             mode: isPromptMode ? "prompt_to_video" : "image_to_video", // 传递任务模式
           }),
         });
-        
+
         const videoText = await videoResponse.text();
         let videoResult;
         try {
@@ -2235,7 +2235,7 @@ C07: [story CTA, inspiring, <50 chars]`,
         // VEO3 通常需要 3-5 分钟，设置 10 分钟超时
         const maxPollTime = isVeo3Model ? 10 * 60 * 1000 : (isPro ? 35 * 60 * 1000 : 10 * 60 * 1000);
         // 轮询状态接口路径
-        const statusApiPath = isVeo3Model 
+        const statusApiPath = isVeo3Model
           ? `/api/video-batch/veo-status/${soraTaskId}`
           : `/api/video-batch/sora-status/${soraTaskId}?isPro=${isPro}`;
         const pollInterval = 15 * 1000; // 15秒轮询一次（减少请求频率）
@@ -2244,7 +2244,7 @@ C07: [story CTA, inspiring, <50 chars]`,
         let videoUrl: string | undefined;
         let pollError: string | undefined;
         let consecutiveErrors = 0; // 连续错误计数
-        const maxConsecutiveErrors = 5; // 最多允许5次连续错误
+        const maxConsecutiveErrors = 10; // 最多允许10次连续错误 (Increased from 5)
 
         while (Date.now() - startTime < maxPollTime) {
           // 等待轮询间隔
@@ -2269,7 +2269,7 @@ C07: [story CTA, inspiring, <50 chars]`,
           // 轮询任务状态（带重试）
           try {
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 30000); // 30秒超时
+            const timeoutId = setTimeout(() => controller.abort(), 60000); // 60秒超时 (Increased from 30s)
 
             const statusResponse = await fetch(
               statusApiPath,
@@ -2285,7 +2285,7 @@ C07: [story CTA, inspiring, <50 chars]`,
               console.error("[Video Batch] Failed to parse status response:", statusText.substring(0, 200));
               consecutiveErrors++;
               if (consecutiveErrors >= maxConsecutiveErrors) {
-                pollError = "连续多次查询失败，请稍后在任务日志中查看结果";
+                pollError = "连续多次查询状态失败，请稍后在生产轨迹簿中查看结果";
                 break;
               }
               continue;
@@ -2310,11 +2310,11 @@ C07: [story CTA, inspiring, <50 chars]`,
               const baseError = statusResult.data.errorMessage || "第三方 AI 视频服务暂时繁忙";
               const refundNote = statusResult.data.refundNote;
               const suggestion = statusResult.data.suggestion;
-              
+
               let errorParts = [baseError];
               if (suggestion) errorParts.push(suggestion);
               if (refundNote) errorParts.push(refundNote);
-              
+
               pollError = errorParts.join("。");
               break;
             }
@@ -2322,7 +2322,7 @@ C07: [story CTA, inspiring, <50 chars]`,
           } catch (pollErr) {
             console.error("[Video Batch] Poll error:", pollErr);
             consecutiveErrors++;
-            
+
             // 检查是否是网络错误
             if (pollErr instanceof Error) {
               if (pollErr.name === "AbortError") {
@@ -2331,9 +2331,9 @@ C07: [story CTA, inspiring, <50 chars]`,
                 console.log("[Video Batch] Network error, retrying...");
               }
             }
-            
+
             if (consecutiveErrors >= maxConsecutiveErrors) {
-              pollError = "网络连接不稳定，请稍后在任务日志中查看结果";
+              pollError = "网络连接不稳定，或第三方服务响应超时。任务已在后台运行，请稍后在生产轨迹簿中查看结果。";
               break;
             }
             // 继续尝试
@@ -2413,7 +2413,7 @@ C07: [story CTA, inspiring, <50 chars]`,
               上传产品图片 → 生成口播脚本 → 生成AI提示词 → Sora2生成15秒视频
             </p>
           </div>
-          
+
           {/* 快捷切换按钮组 */}
           <div className="flex items-center gap-2 p-1 rounded-xl bg-muted/50 border border-border/50">
             <Button
@@ -2435,7 +2435,7 @@ C07: [story CTA, inspiring, <50 chars]`,
               </Button>
             </Link>
           </div>
-          
+
           <div className="flex items-center gap-2">
             <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-500/10 border border-amber-500/30">
               <Zap className="h-4 w-4 text-amber-400" />
@@ -2713,28 +2713,28 @@ C07: [story CTA, inspiring, <50 chars]`,
                       toast({ variant: "destructive", title: "请先登录" });
                       return;
                     }
-                    
+
                     const pendingTasks = tasks.filter(t => t.status === "pending");
                     if (pendingTasks.length === 0) {
                       toast({ title: "没有待处理任务", variant: "default" });
                       return;
                     }
-                    
+
                     // 检查积分
                     if (userCredits < stats.totalCost) {
                       toast({ variant: "destructive", title: `积分不足，需要 ${stats.totalCost} 积分，当前余额 ${userCredits}` });
                       return;
                     }
-                    
+
                     setIsBatchStarting(true);
                     toast({ title: `🚀 正在启动 ${pendingTasks.length} 个视频任务...` });
-                    
+
                     // 批量启动待处理任务，错开 1 秒避免瞬间大量请求
                     for (const task of pendingTasks) {
                       handleStartSingleTask(task);
                       await new Promise(r => setTimeout(r, 1000));
                     }
-                    
+
                     setIsBatchStarting(false);
                   }}
                   disabled={isBatchStarting || stats.pending === 0}
@@ -2804,7 +2804,7 @@ C07: [story CTA, inspiring, <50 chars]`,
                                 const allDownloaded = tasks.filter(
                                   t => selectedTaskIds[t.id] && t.status === "success" && t.soraVideoUrl
                                 ).every(t => downloadedTaskIds.has(t.id));
-                                
+
                                 if (allDownloaded) {
                                   toast({ title: "✅ 所有选中视频已下载", description: "无需重复下载" });
                                 } else {
@@ -2812,10 +2812,10 @@ C07: [story CTA, inspiring, <50 chars]`,
                                 }
                                 return;
                               }
-                              
+
                               // 重置取消标志
                               cancelDownloadRef.current = false;
-                              
+
                               // 初始化进度状态并显示对话框
                               setDownloadProgress({
                                 show: true,
@@ -2828,10 +2828,10 @@ C07: [story CTA, inspiring, <50 chars]`,
                                 cancelled: false,
                               });
                               setIsDownloading(true);
-                              
+
                               let successCount = 0;
                               let failedCount = 0;
-                              
+
                               // 逐个直连CDN下载（带进度追踪）
                               for (let i = 0; i < completedSelectedTasks.length; i++) {
                                 // 检查是否取消
@@ -2839,21 +2839,21 @@ C07: [story CTA, inspiring, <50 chars]`,
                                   setDownloadProgress(prev => ({ ...prev, cancelled: true }));
                                   break;
                                 }
-                                
+
                                 const task = completedSelectedTasks[i];
                                 if (task.soraVideoUrl) {
                                   const filename = generateSimpleFilename(task, tasks.indexOf(task));
-                                  
+
                                   // 更新当前下载文件名
                                   setDownloadProgress(prev => ({
                                     ...prev,
                                     currentFilename: filename,
                                   }));
-                                  
+
                                   // 标记任务正在下载
                                   setDownloadingTaskIds(prev => new Set(prev).add(task.id));
                                   setTaskDownloadProgress(prev => ({ ...prev, [task.id]: 0 }));
-                                  
+
                                   try {
                                     // 直连CDN下载（带进度追踪）
                                     const response = await fetch(task.soraVideoUrl, {
@@ -2861,50 +2861,50 @@ C07: [story CTA, inspiring, <50 chars]`,
                                       mode: "cors",
                                       credentials: "omit",
                                     });
-                                    
+
                                     if (!response.ok) {
                                       throw new Error(`HTTP ${response.status}`);
                                     }
-                                    
+
                                     // 获取文件大小
                                     const contentLength = response.headers.get("content-length");
                                     const totalSize = contentLength ? parseInt(contentLength, 10) : 0;
-                                    
+
                                     // 使用 ReadableStream 追踪进度
                                     const reader = response.body?.getReader();
                                     if (!reader) throw new Error("无法读取响应流");
-                                    
+
                                     const chunks: Uint8Array[] = [];
                                     let receivedLength = 0;
-                                    
+
                                     while (true) {
                                       const { done, value } = await reader.read();
                                       if (done) break;
-                                      
+
                                       chunks.push(value);
                                       receivedLength += value.length;
-                                      
+
                                       // 更新下载进度
                                       if (totalSize > 0) {
                                         const progress = Math.round((receivedLength / totalSize) * 100);
                                         setTaskDownloadProgress(prev => ({ ...prev, [task.id]: progress }));
                                       }
                                     }
-                                    
+
                                     // 合并chunks为blob
                                     const blob = new Blob(chunks, { type: "video/mp4" });
                                     const blobUrl = URL.createObjectURL(blob);
-                                    
+
                                     const link = document.createElement("a");
                                     link.href = blobUrl;
                                     link.download = filename;
                                     document.body.appendChild(link);
                                     link.click();
                                     document.body.removeChild(link);
-                                    
+
                                     setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
                                     successCount++;
-                                    
+
                                     // 标记任务已下载
                                     markTaskAsDownloaded(task.id);
                                     setTaskDownloadProgress(prev => ({ ...prev, [task.id]: 100 }));
@@ -2914,14 +2914,14 @@ C07: [story CTA, inspiring, <50 chars]`,
                                     // 失败时打开新标签页让用户手动下载
                                     openVideoInNewTab(task.soraVideoUrl);
                                   }
-                                  
+
                                   // 移除下载中状态
                                   setDownloadingTaskIds(prev => {
                                     const newSet = new Set(prev);
                                     newSet.delete(task.id);
                                     return newSet;
                                   });
-                                  
+
                                   // 更新进度状态
                                   setDownloadProgress(prev => ({
                                     ...prev,
@@ -2929,12 +2929,12 @@ C07: [story CTA, inspiring, <50 chars]`,
                                     success: successCount,
                                     failed: failedCount,
                                   }));
-                                  
+
                                   // 间隔 200ms
                                   await new Promise(r => setTimeout(r, 200));
                                 }
                               }
-                              
+
                               setIsDownloading(false);
                               // 清理所有任务的下载进度
                               setTaskDownloadProgress({});
@@ -2947,9 +2947,9 @@ C07: [story CTA, inspiring, <50 chars]`,
                               <span className="text-xs text-muted-foreground">直连CDN，速度最快，显示进度</span>
                             </div>
                           </DropdownMenuItem>
-                          
+
                           <DropdownMenuSeparator />
-                          
+
                           {/* 方式2: 导出视频地址 TXT */}
                           <DropdownMenuItem
                             onClick={() => {
@@ -2960,13 +2960,13 @@ C07: [story CTA, inspiring, <50 chars]`,
                                 toast({ variant: "destructive", title: "没有可下载的视频" });
                                 return;
                               }
-                              
+
                               // 生成视频地址列表
                               const urls = completedSelectedTasks
                                 .map((task) => task.soraVideoUrl)
                                 .filter(Boolean)
                                 .join("\n");
-                              
+
                               // 创建并下载 TXT 文件
                               const blob = new Blob([urls], { type: "text/plain;charset=utf-8" });
                               const url = URL.createObjectURL(blob);
@@ -2977,8 +2977,8 @@ C07: [story CTA, inspiring, <50 chars]`,
                               a.click();
                               document.body.removeChild(a);
                               URL.revokeObjectURL(url);
-                              
-                              toast({ 
+
+                              toast({
                                 title: "✅ 导出成功",
                                 description: `已导出 ${completedSelectedTasks.length} 个视频地址，用 IDM 导入下载`
                               });
@@ -2991,9 +2991,9 @@ C07: [story CTA, inspiring, <50 chars]`,
                               <span className="text-xs text-muted-foreground">导入 IDM/迅雷 批量下载</span>
                             </div>
                           </DropdownMenuItem>
-                          
+
                           <DropdownMenuSeparator />
-                          
+
                           {/* 方式3: 代理下载 - 走服务器 */}
                           <DropdownMenuItem
                             onClick={async () => {
@@ -3004,7 +3004,7 @@ C07: [story CTA, inspiring, <50 chars]`,
                                 const allDownloaded = tasks.filter(
                                   t => selectedTaskIds[t.id] && t.status === "success" && t.soraVideoUrl
                                 ).every(t => downloadedTaskIds.has(t.id));
-                                
+
                                 if (allDownloaded) {
                                   toast({ title: "✅ 所有选中视频已下载", description: "无需重复下载" });
                                 } else {
@@ -3012,10 +3012,10 @@ C07: [story CTA, inspiring, <50 chars]`,
                                 }
                                 return;
                               }
-                              
+
                               // 重置取消标志
                               cancelDownloadRef.current = false;
-                              
+
                               // 初始化进度状态并显示对话框
                               setDownloadProgress({
                                 show: true,
@@ -3028,10 +3028,10 @@ C07: [story CTA, inspiring, <50 chars]`,
                                 cancelled: false,
                               });
                               setIsDownloading(true);
-                              
+
                               let successCount = 0;
                               let failedCount = 0;
-                              
+
                               // 逐个通过代理下载
                               for (let i = 0; i < completedSelectedTasks.length; i++) {
                                 // 检查是否取消
@@ -3039,20 +3039,20 @@ C07: [story CTA, inspiring, <50 chars]`,
                                   setDownloadProgress(prev => ({ ...prev, cancelled: true }));
                                   break;
                                 }
-                                
+
                                 const task = completedSelectedTasks[i];
                                 if (task.soraVideoUrl) {
                                   const filename = generateSimpleFilename(task, tasks.indexOf(task));
-                                  
+
                                   // 更新当前下载文件名
                                   setDownloadProgress(prev => ({
                                     ...prev,
                                     currentFilename: filename,
                                   }));
-                                  
+
                                   // 标记任务正在下载
                                   setDownloadingTaskIds(prev => new Set(prev).add(task.id));
-                                  
+
                                   const success = await downloadVideo(task.soraVideoUrl, filename, "named");
                                   if (success) {
                                     successCount++;
@@ -3062,14 +3062,14 @@ C07: [story CTA, inspiring, <50 chars]`,
                                     failedCount++;
                                     openVideoInNewTab(task.soraVideoUrl);
                                   }
-                                  
+
                                   // 移除下载中状态
                                   setDownloadingTaskIds(prev => {
                                     const newSet = new Set(prev);
                                     newSet.delete(task.id);
                                     return newSet;
                                   });
-                                  
+
                                   // 更新进度状态
                                   setDownloadProgress(prev => ({
                                     ...prev,
@@ -3077,12 +3077,12 @@ C07: [story CTA, inspiring, <50 chars]`,
                                     success: successCount,
                                     failed: failedCount,
                                   }));
-                                  
+
                                   // 间隔 800ms 避免服务器压力过大
                                   await new Promise(r => setTimeout(r, 800));
                                 }
                               }
-                              
+
                               setIsDownloading(false);
                             }}
                             className="cursor-pointer"
@@ -3109,9 +3109,9 @@ C07: [story CTA, inspiring, <50 chars]`,
                 )}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
+                    <Button
+                      variant="outline"
+                      size="sm"
                       className="h-8 px-3 text-xs font-medium bg-gradient-to-r from-violet-500/10 to-purple-500/10 border-violet-500/30 hover:border-violet-500/50 hover:bg-violet-500/20 transition-all"
                     >
                       <Settings2 className="h-3.5 w-3.5 mr-1.5 text-violet-400" />
@@ -3155,7 +3155,7 @@ C07: [story CTA, inspiring, <50 chars]`,
                 // 按分组整理任务
                 const groupedTasks: Record<string, VideoBatchTask[]> = {};
                 const ungroupedTasks: VideoBatchTask[] = [];
-                
+
                 tasks.forEach(task => {
                   if (task.groupName) {
                     if (!groupedTasks[task.groupName]) {
@@ -3166,16 +3166,16 @@ C07: [story CTA, inspiring, <50 chars]`,
                     ungroupedTasks.push(task);
                   }
                 });
-                
+
                 // 反转任务顺序，让最新创建的任务显示在前面
                 Object.keys(groupedTasks).forEach(groupName => {
                   groupedTasks[groupName].reverse();
                 });
                 ungroupedTasks.reverse();
-                
+
                 const groupNames = Object.keys(groupedTasks).reverse(); // 分组也按最新的在前
                 const hasGroups = groupNames.length > 0;
-                
+
                 // 渲染单个任务卡片的辅助函数
                 const renderTaskCard = (task: VideoBatchTask) => (
                   <VideoTaskCard
@@ -3203,7 +3203,7 @@ C07: [story CTA, inspiring, <50 chars]`,
                     isDownloaded={downloadedTaskIds.has(task.id)}
                   />
                 );
-                
+
                 return (
                   <div className="space-y-6">
                     {/* 分组任务 */}
@@ -3211,7 +3211,7 @@ C07: [story CTA, inspiring, <50 chars]`,
                       const groupTaskList = groupedTasks[groupName];
                       const groupSuccessCount = groupTaskList.filter(t => t.status === "success").length;
                       const groupTotalCount = groupTaskList.length;
-                      
+
                       return (
                         <div key={groupName} className="space-y-3">
                           {/* 分组标题 */}
@@ -3229,7 +3229,7 @@ C07: [story CTA, inspiring, <50 chars]`,
                         </div>
                       );
                     })}
-                    
+
                     {/* 未分组任务 */}
                     {ungroupedTasks.length > 0 && (
                       <div className="space-y-3">
@@ -3518,13 +3518,13 @@ C07: [story CTA, inspiring, <50 chars]`,
                     <div className="min-w-0">
                       <p className="text-[10px] text-muted-foreground uppercase tracking-wider">模型</p>
                       <p className="text-sm font-semibold text-white truncate">
-                        {globalSettings.modelType === "sora2" ? "Sora 2.0" : 
-                         globalSettings.modelType === "sora2-pro" ? "Sora 2.0 Pro" :
-                         globalSettings.modelType === "veo3" ? "VEO3 快速版" : "VEO3 高清版"}
+                        {globalSettings.modelType === "sora2" ? "Sora 2.0" :
+                          globalSettings.modelType === "sora2-pro" ? "Sora 2.0 Pro" :
+                            globalSettings.modelType === "veo3" ? "VEO3 快速版" : "VEO3 高清版"}
                       </p>
                     </div>
                   </div>
-                  
+
                   {/* 视频时长 */}
                   <div className="flex items-center gap-3 p-2.5 rounded-lg bg-slate-800/50">
                     <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-tiktok-cyan/20 flex items-center justify-center">
@@ -3537,7 +3537,7 @@ C07: [story CTA, inspiring, <50 chars]`,
                       </p>
                     </div>
                   </div>
-                  
+
                   {/* 视频比例 */}
                   <div className="flex items-center gap-3 p-2.5 rounded-lg bg-slate-800/50">
                     <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-emerald-500/20 flex items-center justify-center">
@@ -3552,12 +3552,12 @@ C07: [story CTA, inspiring, <50 chars]`,
                     <div className="min-w-0">
                       <p className="text-[10px] text-muted-foreground uppercase tracking-wider">比例</p>
                       <p className="text-sm font-semibold text-white">
-                        {globalSettings.aspectRatio === "16:9" ? "横屏 16:9" : 
-                         globalSettings.aspectRatio === "9:16" ? "竖屏 9:16" : "方形 1:1"}
+                        {globalSettings.aspectRatio === "16:9" ? "横屏 16:9" :
+                          globalSettings.aspectRatio === "9:16" ? "竖屏 9:16" : "方形 1:1"}
                       </p>
                     </div>
                   </div>
-                  
+
                   {/* AI模特 */}
                   <div className="flex items-center gap-3 p-2.5 rounded-lg bg-slate-800/50">
                     <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-pink-500/20 flex items-center justify-center">
@@ -3566,8 +3566,8 @@ C07: [story CTA, inspiring, <50 chars]`,
                     <div className="min-w-0">
                       <p className="text-[10px] text-muted-foreground uppercase tracking-wider">AI模特</p>
                       <p className="text-sm font-semibold text-white truncate">
-                        {useAiModel && selectedModelId 
-                          ? (selectedModelName || "已选择") 
+                        {useAiModel && selectedModelId
+                          ? (selectedModelName || "已选择")
                           : "未选择"}
                       </p>
                     </div>
@@ -3584,7 +3584,7 @@ C07: [story CTA, inspiring, <50 chars]`,
                   </span>
                 </div>
               )}
-              
+
               {/* 费用显示 */}
               <div className="flex items-center gap-2 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30">
                 <Zap className="h-4 w-4 text-amber-400" />
@@ -3637,7 +3637,7 @@ C07: [story CTA, inspiring, <50 chars]`,
                       return;
                     }
                   }
-                  
+
                   // 保存当前值（在关闭对话框前）
                   const currentMode = createMode;
                   const currentCount = batchCreateCount;
@@ -3646,11 +3646,11 @@ C07: [story CTA, inspiring, <50 chars]`,
                   const currentImages = [...newTaskImages];
                   const currentRefFile = referenceImageFile;
                   const currentRefUrl = referenceImageUrl;
-                  
+
                   // 立即关闭对话框，给用户即时反馈
                   setShowCreateDialog(false);
                   toast({ title: `⏳ 正在创建 ${currentCount} 个任务...` });
-                  
+
                   // 异步处理任务创建（使用 setTimeout 让 UI 先更新）
                   setTimeout(async () => {
                     try {
@@ -3679,7 +3679,7 @@ C07: [story CTA, inspiring, <50 chars]`,
                             console.error("Upload reference image failed:", e);
                           }
                         }
-                        
+
                         createTaskFromPrompt(currentPrompt, uploadedRefUrl || undefined, currentCount, currentGroup || undefined);
                         setPromptInput("");
                         setGroupNameInput("");
@@ -3689,7 +3689,7 @@ C07: [story CTA, inspiring, <50 chars]`,
                         setReferenceImageUrl("");
                         setReferenceImageFile(null);
                       }
-                      
+
                       setBatchCreateCount(1);
                       toast({ title: `✅ 已创建 ${currentCount} 个任务` });
                     } catch (error) {
@@ -3742,10 +3742,10 @@ C07: [story CTA, inspiring, <50 chars]`,
         <ScriptPreviewDialog task={previewTask} open={!!previewTask} onClose={() => setPreviewTask(null)} />
 
         {/* 视频播放弹窗 */}
-        <VideoPlayerDialog 
-          task={playingVideoTask} 
-          open={!!playingVideoTask} 
-          onClose={() => setPlayingVideoTask(null)} 
+        <VideoPlayerDialog
+          task={playingVideoTask}
+          open={!!playingVideoTask}
+          onClose={() => setPlayingVideoTask(null)}
           onDownload={handleDownloadTask}
         />
 
@@ -3897,7 +3897,7 @@ C07: [story CTA, inspiring, <50 chars]`,
                     {selectedStyle === "default" ? "默认" : "自定义"}
                   </Badge>
                 </h3>
-                
+
                 <div className="space-y-2">
                   <Label className="text-xs text-muted-foreground">系统提示词</Label>
                   <textarea
@@ -3910,7 +3910,7 @@ C07: [story CTA, inspiring, <50 chars]`,
                     className="w-full h-20 px-3 py-2 text-sm bg-background border border-border/50 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-tiktok-cyan/50"
                   />
                 </div>
-                
+
                 <div className="space-y-2">
                   <Label className="text-xs text-muted-foreground">用户提示词</Label>
                   <textarea
@@ -3931,7 +3931,7 @@ C07: [story CTA, inspiring, <50 chars]`,
                   <Video className="h-4 w-4 text-tiktok-pink" />
                   视频生成提示词
                 </h3>
-                
+
                 <div className="space-y-2">
                   <Label className="text-xs text-muted-foreground">系统提示词</Label>
                   <textarea
@@ -3944,7 +3944,7 @@ C07: [story CTA, inspiring, <50 chars]`,
                     className="w-full h-20 px-3 py-2 text-sm bg-background border border-border/50 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-tiktok-cyan/50"
                   />
                 </div>
-                
+
                 <div className="space-y-2">
                   <Label className="text-xs text-muted-foreground">
                     用户提示词

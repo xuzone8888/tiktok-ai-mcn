@@ -125,7 +125,7 @@ export async function submitNanoBanana(
   apiKey?: string
 ): Promise<{ success: boolean; taskId?: string; error?: string }> {
   const key = apiKey || API_KEY;
-  
+
   if (!key) {
     return { success: false, error: "API key not configured" };
   }
@@ -133,7 +133,7 @@ export async function submitNanoBanana(
   try {
     const isPro = params.model === "nano-banana-pro";
     // 根据 model 选择不同的端点
-    const endpoint = isPro 
+    const endpoint = isPro
       ? `${API_BASE_URL}/api/img/nanoBanana-pro`
       : `${API_BASE_URL}/api/img/nanoBanana`;
 
@@ -149,18 +149,18 @@ export async function submitNanoBanana(
     // 构建请求体
     // 注意：如果有参考图片，需要在提示词中明确指出如何基于参考图生成
     let finalPrompt = params.prompt;
-    
+
     // 如果有参考图片，增强提示词以确保 AI 理解需要基于参考图进行创作
     if (params.img_url && params.prompt) {
       // 检查提示词是否已经包含参考图的相关指令
       const hasReferenceKeywords = /reference|参考|based on|基于|style of|风格/i.test(params.prompt);
-      
+
       if (!hasReferenceKeywords) {
         // 为提示词添加参考图指令，确保 AI 根据提示词和参考图生成新内容
         finalPrompt = `Create a new image based on the reference image provided. Transform it according to this description: ${params.prompt}. Use the reference image as a style and composition guide, but generate new creative content following the prompt instructions.`;
       }
     }
-    
+
     const requestBody: Record<string, unknown> = {
       prompt: finalPrompt,
     };
@@ -229,30 +229,30 @@ export async function submitNanoBanana(
         return { success: true, taskId: String(data.data.id) };
       }
 
-      return { 
-        success: false, 
-        error: data.msg || `API error: code ${data.code}` 
+      return {
+        success: false,
+        error: data.msg || `API error: code ${data.code}`
       };
     } catch (fetchError) {
       clearTimeout(timeoutId);
       console.error("[NanoBanana] Fetch error:", fetchError);
-      
+
       // 判断是否是网络超时
       if (fetchError instanceof Error && fetchError.name === "AbortError") {
         return { success: false, error: "请求超时，请稍后重试" };
       }
-      
+
       // 网络错误时返回更友好的提示
-      return { 
-        success: false, 
-        error: fetchError instanceof Error ? `网络错误: ${fetchError.message}` : "网络连接失败" 
+      return {
+        success: false,
+        error: fetchError instanceof Error ? `网络错误: ${fetchError.message}` : "网络连接失败"
       };
     }
   } catch (error) {
     console.error("[NanoBanana] Submit error:", error);
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : "Network error" 
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Network error"
     };
   }
 }
@@ -272,7 +272,7 @@ export async function queryNanoBananaResult(
   apiKey?: string
 ): Promise<{ success: boolean; task?: TaskStatus; error?: string }> {
   const key = apiKey || API_KEY;
-  
+
   if (!key) {
     return { success: false, error: "API key not configured" };
   }
@@ -304,7 +304,7 @@ export async function queryNanoBananaResult(
     // 重要修复：只使用 image_url 作为结果 URL，不使用 remote_url
     // remote_url 是原图，image_url 才是 AI 生成的结果图
     const imageUrl = data.data?.image_url;
-    
+
     console.log("[NanoBanana] Query response:", {
       code: data.code,
       status: data.data?.status,
@@ -326,7 +326,7 @@ export async function queryNanoBananaResult(
       };
 
       let taskStatus = statusMap[data.data.status] || "processing";
-      
+
       // 重要修复：只有当状态为 2 (completed) 且有图片 URL 时才认为成功
       // 不能仅凭有 URL 就认为成功，因为处理中也可能返回源图片 URL
       if (data.data.status === 2 && imageUrl && imageUrl.length > 0) {
@@ -335,7 +335,7 @@ export async function queryNanoBananaResult(
         // 处理中状态，即使有 URL 也不认为完成
         taskStatus = "processing";
       }
-      
+
       // 如果状态是 1 或有 fail_reason 且没有图片，则认为失败
       if (data.data.status === 1 || (data.data.fail_reason && data.data.status !== 2)) {
         taskStatus = "failed";
@@ -365,9 +365,9 @@ export async function queryNanoBananaResult(
     return { success: false, error: data.msg || "Query failed" };
   } catch (error) {
     console.error("[NanoBanana] Query error:", error);
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : "Network error" 
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Network error"
     };
   }
 }
@@ -397,7 +397,7 @@ const SORA2_API_KEY = process.env.SORA2_API_KEY || "";
  * - sora2-pro-portrait-25s: 竖屏 25秒
  * - sora2-pro-landscape-25s: 横屏 25秒
  */
-export type Sora2ModelType = 
+export type Sora2ModelType =
   | "sora2-portrait"           // 竖屏 10秒 标清
   | "sora2-landscape"          // 横屏 10秒 标清
   | "sora2-portrait-15s"       // 竖屏 15秒 标清
@@ -417,7 +417,7 @@ export function getSora2ModelName(
 ): Sora2ModelType {
   const isPortrait = aspectRatio === "9:16";
   const isPro = quality === "hd" || duration === 25;
-  
+
   if (duration === 10) {
     return isPortrait ? "sora2-portrait" : "sora2-landscape";
   } else if (duration === 15) {
@@ -428,7 +428,7 @@ export function getSora2ModelName(
   } else if (duration === 25) {
     return isPortrait ? "sora2-pro-portrait-25s" : "sora2-pro-landscape-25s";
   }
-  
+
   // 默认返回 15 秒标清
   return isPortrait ? "sora2-portrait-15s" : "sora2-landscape-15s";
 }
@@ -468,7 +468,7 @@ export async function submitSora2(
   apiKey?: string
 ): Promise<{ success: boolean; taskId?: string; error?: string }> {
   const key = apiKey || SORA2_API_KEY || API_KEY;
-  
+
   if (!key) {
     return { success: false, error: "Sora2 API key not configured" };
   }
@@ -480,7 +480,7 @@ export async function submitSora2(
       (params.duration as 10 | 15 | 25) || 15,
       "standard"
     );
-    
+
     const endpoint = `${SORA2_API_BASE}/v1/videos`;
 
     console.log("[Sora2] Submitting task:", {
@@ -509,7 +509,7 @@ export async function submitSora2(
     const maxRetries = 3;
     let responseText = '';
     let statusCode = 0;
-    
+
     while (retryCount <= maxRetries) {
       try {
         const result = await new Promise<{ data: string; statusCode: number }>((resolve, reject) => {
@@ -528,31 +528,31 @@ export async function submitSora2(
             },
             timeout: 120000, // 2分钟超时
           };
-          
+
           const req = https.request(options, (res) => {
             let data = '';
             res.on('data', chunk => data += chunk);
             res.on('end', () => resolve({ data, statusCode: res.statusCode || 0 }));
           });
-          
+
           req.on('error', reject);
           req.on('timeout', () => {
             req.destroy();
             reject(new Error('Request timeout'));
           });
-          
+
           req.write(bodyStr);
           req.end();
         });
-        
+
         responseText = result.data;
         statusCode = result.statusCode;
-        
+
         // 如果是 5xx 服务器错误，进行重试
         if (statusCode >= 500 && statusCode < 600) {
           throw new Error(`Server error: ${statusCode}`);
         }
-        
+
         break; // 成功则跳出循环
       } catch (fetchError) {
         retryCount++;
@@ -569,9 +569,9 @@ export async function submitSora2(
     // 检查 HTTP 状态码
     if (statusCode >= 500) {
       console.error(`[Sora2] Server error ${statusCode}:`, responseText.substring(0, 200));
-      return { 
-        success: false, 
-        error: `视频服务暂时繁忙 (${statusCode})，请稍后重试` 
+      return {
+        success: false,
+        error: `视频服务暂时繁忙 (${statusCode})，请稍后重试`
       };
     }
 
@@ -603,15 +603,15 @@ export async function submitSora2(
       return { success: true, taskId: data.id };
     }
 
-    return { 
-      success: false, 
-      error: "API 未返回任务ID，视频生成服务可能暂时不可用" 
+    return {
+      success: false,
+      error: "API 未返回任务ID，视频生成服务可能暂时不可用"
     };
   } catch (error) {
     console.error("[Sora2] Submit error:", error);
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : "Network error" 
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Network error"
     };
   }
 }
@@ -627,7 +627,7 @@ export async function querySora2Result(
   apiKey?: string
 ): Promise<{ success: boolean; task?: TaskStatus; error?: string; raw?: unknown }> {
   const key = apiKey || SORA2_API_KEY || API_KEY;
-  
+
   if (!key) {
     return { success: false, error: "Sora2 API key not configured" };
   }
@@ -640,7 +640,7 @@ export async function querySora2Result(
     const maxRetries = 2;
     let responseText = '';
     let statusCode = 0;
-    
+
     while (retryCount <= maxRetries) {
       try {
         const result = await new Promise<{ data: string; statusCode: number }>((resolve, reject) => {
@@ -655,32 +655,32 @@ export async function querySora2Result(
               'Authorization': `Bearer ${key}`,
               'Accept': 'application/json',
             },
-            timeout: 45000, // 45秒超时
+            timeout: 60000, // 60秒超时
           };
-          
+
           const req = https.request(options, (res) => {
             let data = '';
             res.on('data', chunk => data += chunk);
             res.on('end', () => resolve({ data, statusCode: res.statusCode || 0 }));
           });
-          
+
           req.on('error', reject);
           req.on('timeout', () => {
             req.destroy();
             reject(new Error('Request timeout'));
           });
-          
+
           req.end();
         });
-        
+
         responseText = result.data;
         statusCode = result.statusCode;
-        
+
         // 如果是 5xx 服务器错误，进行重试
         if (statusCode >= 500 && statusCode < 600) {
           throw new Error(`Server error: ${statusCode}`);
         }
-        
+
         break;
       } catch (fetchError) {
         retryCount++;
@@ -691,17 +691,17 @@ export async function querySora2Result(
         await new Promise(resolve => setTimeout(resolve, 2000));
       }
     }
-    
+
     if (!responseText) {
       return { success: false, error: "网络请求失败，请稍后重试" };
     }
-    
+
     // 检查 HTTP 状态码
     if (statusCode >= 500) {
       console.error(`[Sora2] Query server error ${statusCode}:`, responseText.substring(0, 200));
       return { success: false, error: `视频服务暂时繁忙 (${statusCode})，请稍后重试` };
     }
-    
+
     let data: Sora2SubmitResponse;
     try {
       data = JSON.parse(responseText);
@@ -743,9 +743,9 @@ export async function querySora2Result(
     };
   } catch (error) {
     console.error("[Sora2] Query error:", error);
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : "Network error" 
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Network error"
     };
   }
 }
@@ -765,7 +765,7 @@ export async function upscaleImage(
 ): Promise<{ success: boolean; taskId?: string; error?: string }> {
   // 使用 NanoBanana Pro 进行高清放大
   const upscalePrompt = `Enhance and upscale this image to ${targetResolution} resolution. Maintain all original details, improve sharpness, clarity and quality. Preserve the exact composition, colors, and content. Professional high-resolution enhancement.`;
-  
+
   return submitNanoBanana({
     model: "nano-banana-pro",
     prompt: upscalePrompt,
@@ -911,7 +911,7 @@ export async function testApiConnection(apiKey?: string): Promise<{
   message: string;
 }> {
   const key = apiKey || API_KEY;
-  
+
   if (!key) {
     return { success: false, message: "API key not configured" };
   }
