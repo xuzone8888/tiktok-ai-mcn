@@ -311,7 +311,7 @@ function EnglishContent() {
             <div className="mt-4 p-4 bg-white/5 rounded-lg">
               <p><strong>武汉观星文化传媒有限公司</strong></p>
               <p className="mt-1">Wuhan Guanxing Cultural Media Co., Ltd.</p>
-              <p className="mt-2">Email: privacy@tokfactoryai.com</p>
+              <p className="mt-2">Email: contact@toryx.ai</p>
               <p>Website: www.tokfactoryai.com</p>
               <p>Address: Wuhan, Hubei Province, China</p>
               <p className="mt-2 text-gray-400">ICP License: 鄂ICP备2023007484号</p>
@@ -542,7 +542,7 @@ function ChineseContent() {
             <div className="mt-4 p-4 bg-white/5 rounded-lg">
               <p><strong>武汉观星文化传媒有限公司</strong></p>
               <p className="mt-1">Wuhan Guanxing Cultural Media Co., Ltd.</p>
-              <p className="mt-2">邮箱：privacy@tokfactoryai.com</p>
+              <p className="mt-2">邮箱：contact@toryx.ai</p>
               <p>网站：www.tokfactoryai.com</p>
               <p>地址：中国湖北省武汉市</p>
               <p className="mt-2 text-gray-400">ICP备案号：鄂ICP备2023007484号</p>

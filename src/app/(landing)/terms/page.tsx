@@ -307,7 +307,7 @@ function EnglishContent() {
             <div className="mt-4 p-4 bg-white/5 rounded-lg">
               <p><strong>武汉观星文化传媒有限公司</strong></p>
               <p className="mt-1">Wuhan Guanxing Cultural Media Co., Ltd.</p>
-              <p className="mt-2">Email: legal@tokfactoryai.com</p>
+              <p className="mt-2">Email: contact@toryx.ai</p>
               <p>Website: www.tokfactoryai.com</p>
               <p>Address: Wuhan, Hubei Province, China</p>
               <p className="mt-2 text-gray-400">ICP License: 鄂ICP备2023007484号</p>
@@ -324,8 +324,8 @@ function ChineseContent() {
     <>
       <div className="mb-12">
         <h1 className="text-4xl font-bold mb-4">服务条款</h1>
-        <p className="text-gray-400">最后更新日期：2026年1月21日</p>
-        <p className="text-gray-400 mt-2">生效日期：2026年1月21日</p>
+        <p className="text-gray-400">最后更新日期：2026年1月22日</p>
+        <p className="text-gray-400 mt-2">生效日期：2026年1月22日</p>
       </div>
 
       <div className="prose prose-invert prose-lg max-w-none">
@@ -395,6 +395,12 @@ function ChineseContent() {
               <li>断开连接将停止所有未来的发布，但不会删除已发布的内容</li>
               <li>您也可以通过 TikTok 应用的设置撤销访问权限</li>
             </ul>
+            <div className="mt-4 pt-4 border-t border-white/10">
+              <p className="text-sm text-gray-400">相关链接：</p>
+              <ul className="list-disc pl-6 space-y-1 mt-2 text-sm">
+                <li><a href="https://www.tiktok.com/legal/page/row/terms-of-service/en" target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline">TikTok 服务条款</a></li>
+              </ul>
+            </div>
           </section>
 
           <section>
@@ -414,8 +420,15 @@ function ChineseContent() {
             <p className="leading-relaxed mt-4">5.5 我们保留在提前 30 天通知后修改定价的权利。</p>
           </section>
 
+          <section>
+            <h2 className="text-2xl font-semibold text-white mb-4">六、订阅服务</h2>
+            <p className="leading-relaxed">6.1 <strong>订阅升级和降级：</strong>从一种付费计划更改为另一种付费计划时，通过计算两个计划的剩余天数及其各自的每日费率，对新计划进行按比例分摊。</p>
+            <p className="leading-relaxed mt-4">6.2 <strong>费用变更：</strong>我们可能会不时更改计划的费用，并将提前通知您。价格变更将在下一个订阅期开始时生效。如果您不同意价格变更，则必须在价格变更生效前取消订阅。</p>
+            <p className="leading-relaxed mt-4">6.3 <strong>取消订阅：</strong>您可以随时取消订阅。取消后，您的订阅将在当前周期结束时失效。已支付的费用不予退还。</p>
+          </section>
+
           <section className="bg-red-500/10 border border-red-500/20 rounded-xl p-6">
-            <h2 className="text-2xl font-semibold text-white mb-4">六、使用规范</h2>
+            <h2 className="text-2xl font-semibold text-white mb-4">七、使用规范</h2>
             <p className="leading-relaxed">您同意不使用我们的服务：</p>
             <ol className="list-decimal pl-6 space-y-2 mt-4">
               <li>创建、上传或传播违反国家法律法规的内容</li>
@@ -436,20 +449,20 @@ function ChineseContent() {
           </section>
 
           <section>
-            <h2 className="text-2xl font-semibold text-white mb-4">七、知识产权</h2>
-            <h3 className="text-xl font-medium text-white mt-6 mb-3">7.1 我们的知识产权</h3>
+            <h2 className="text-2xl font-semibold text-white mb-4">八、知识产权</h2>
+            <h3 className="text-xl font-medium text-white mt-6 mb-3">8.1 我们的知识产权</h3>
             <p className="leading-relaxed">
               所有技术、软件、算法、商标、标识和平台设计均归武汉观星文化传媒有限公司所有。
               未经书面许可，您不得复制、修改或分发我们平台的任何部分。
             </p>
 
-            <h3 className="text-xl font-medium text-white mt-6 mb-3">7.2 您的内容</h3>
+            <h3 className="text-xl font-medium text-white mt-6 mb-3">8.2 您的内容</h3>
             <p className="leading-relaxed">
               您通过我们平台创建的内容归您所有。使用我们的服务即表示您授予我们有限的许可，
               以处理、存储和显示您的内容，以便提供我们的服务。
             </p>
 
-            <h3 className="text-xl font-medium text-white mt-6 mb-3">7.3 内容授权许可</h3>
+            <h3 className="text-xl font-medium text-white mt-6 mb-3">8.3 内容授权许可</h3>
             <p className="leading-relaxed">
               对于您通过本平台公开发布的内容，您授予我们非排他的、免费的、全球范围内的使用许可，用于：
             </p>
@@ -459,22 +472,32 @@ function ChineseContent() {
               <li>用于服务分析和改进</li>
             </ul>
 
-            <h3 className="text-xl font-medium text-white mt-6 mb-3">7.4 上传素材</h3>
+            <h3 className="text-xl font-medium text-white mt-6 mb-3">8.4 上传素材</h3>
             <p className="leading-relaxed">
               您声明并保证您拥有上传的任何素材的所有必要权利。您对因上传内容引起的任何索赔承担全部责任。
             </p>
           </section>
 
           <section>
-            <h2 className="text-2xl font-semibold text-white mb-4">八、AI 生成内容免责声明</h2>
-            <p className="leading-relaxed">8.1 我们的服务使用人工智能生成内容。AI 生成的内容可能并不总是准确、适当或适合您的预期目的。</p>
-            <p className="leading-relaxed mt-4">8.2 您负责在使用或发布之前审核所有生成的内容。</p>
-            <p className="leading-relaxed mt-4">8.3 我们不保证 AI 服务会产生任何特定结果或成果。</p>
-            <p className="leading-relaxed mt-4">8.4 AI 模型的性能可能会有所不同，并会持续改进和修改。</p>
+            <h2 className="text-2xl font-semibold text-white mb-4">九、AI 生成内容免责声明</h2>
+            <p className="leading-relaxed">9.1 我们的服务使用人工智能生成内容。AI 生成的内容可能并不总是准确、适当或适合您的预期目的。</p>
+            <p className="leading-relaxed mt-4">9.2 您负责在使用或发布之前审核所有生成的内容。</p>
+            <p className="leading-relaxed mt-4">9.3 我们不保证 AI 服务会产生任何特定结果或成果。</p>
+            <p className="leading-relaxed mt-4">9.4 AI 模型的性能可能会有所不同，并会持续改进和修改。</p>
           </section>
 
           <section>
-            <h2 className="text-2xl font-semibold text-white mb-4">九、责任限制</h2>
+            <h2 className="text-2xl font-semibold text-white mb-4">十、税务</h2>
+            <p className="leading-relaxed">
+              10.1 您在 ToryX 软件及相关服务中的收入（如有）将直接以现金或等值形式提现。
+            </p>
+            <p className="leading-relaxed mt-4">
+              10.2 您理解并同意，公司有权为您代扣代缴税金，并依据国家法律法规之规定向税务机关申报缴纳。
+            </p>
+          </section>
+
+          <section>
+            <h2 className="text-2xl font-semibold text-white mb-4">十一、责任限制</h2>
             <p className="leading-relaxed">
               在法律允许的最大范围内：
             </p>
@@ -490,7 +513,7 @@ function ChineseContent() {
           </section>
 
           <section>
-            <h2 className="text-2xl font-semibold text-white mb-4">十、赔偿</h2>
+            <h2 className="text-2xl font-semibold text-white mb-4">十二、赔偿</h2>
             <p className="leading-relaxed">
               您同意赔偿并使武汉观星文化传媒有限公司及其管理人员、董事、员工和代理人免受因以下原因引起的任何索赔、损害、损失或费用（包括法律费用）：
             </p>
@@ -503,21 +526,21 @@ function ChineseContent() {
           </section>
 
           <section>
-            <h2 className="text-2xl font-semibold text-white mb-4">十一、服务变更与终止</h2>
-            <p className="leading-relaxed">11.1 我们保留随时修改、暂停或终止我们服务任何部分的权利，并会合理通知。</p>
-            <p className="leading-relaxed mt-4">11.2 如您违反本条款，我们可以终止您的账户，无论是否通知。</p>
-            <p className="leading-relaxed mt-4">11.3 终止后，您使用我们服务的权利立即停止。未使用的积分可能被没收。</p>
+            <h2 className="text-2xl font-semibold text-white mb-4">十三、服务变更与终止</h2>
+            <p className="leading-relaxed">13.1 我们保留随时修改、暂停或终止我们服务任何部分的权利，并会合理通知。</p>
+            <p className="leading-relaxed mt-4">13.2 如您违反本条款，我们可以终止您的账户，无论是否通知。</p>
+            <p className="leading-relaxed mt-4">13.3 终止后，您使用我们服务的权利立即停止。未使用的积分可能被没收。</p>
           </section>
 
           <section>
-            <h2 className="text-2xl font-semibold text-white mb-4">十二、适用法律与争议解决</h2>
-            <p className="leading-relaxed">12.1 本条款受中华人民共和国法律管辖。</p>
-            <p className="leading-relaxed mt-4">12.2 任何争议应首先通过善意协商解决。</p>
-            <p className="leading-relaxed mt-4">12.3 如协商失败，争议应提交至中国湖北省武汉市有管辖权的法院。</p>
+            <h2 className="text-2xl font-semibold text-white mb-4">十四、适用法律与争议解决</h2>
+            <p className="leading-relaxed">14.1 本条款受中华人民共和国法律管辖。</p>
+            <p className="leading-relaxed mt-4">14.2 任何争议应首先通过善意协商解决。</p>
+            <p className="leading-relaxed mt-4">14.3 如协商失败，争议应提交至中国湖北省武汉市有管辖权的法院。</p>
           </section>
 
           <section>
-            <h2 className="text-2xl font-semibold text-white mb-4">十三、条款变更</h2>
+            <h2 className="text-2xl font-semibold text-white mb-4">十五、条款变更</h2>
             <p className="leading-relaxed">
               我们可能会不时更新本条款。对于重大变更，我们将通过电子邮件或在平台上显著通知您。
               变更后继续使用我们的服务即表示接受新条款。
@@ -525,14 +548,14 @@ function ChineseContent() {
           </section>
 
           <section>
-            <h2 className="text-2xl font-semibold text-white mb-4">十四、联系方式</h2>
+            <h2 className="text-2xl font-semibold text-white mb-4">十六、联系方式</h2>
             <p className="leading-relaxed">
               如对本条款有任何疑问，请联系我们：
             </p>
             <div className="mt-4 p-4 bg-white/5 rounded-lg">
               <p><strong>武汉观星文化传媒有限公司</strong></p>
               <p className="mt-1">Wuhan Guanxing Cultural Media Co., Ltd.</p>
-              <p className="mt-2">邮箱：legal@tokfactoryai.com</p>
+              <p className="mt-2">邮箱：contact@toryx.ai</p>
               <p>网站：www.tokfactoryai.com</p>
               <p>地址：中国湖北省武汉市</p>
               <p className="mt-2 text-gray-400">ICP备案号：鄂ICP备2023007484号</p>
