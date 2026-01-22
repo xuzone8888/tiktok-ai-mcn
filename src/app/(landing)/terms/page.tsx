@@ -100,29 +100,143 @@ function EnglishContent() {
       <div className="prose prose-invert prose-lg max-w-none">
         <div className="space-y-8 text-gray-300">
           <section>
-            <h2 className="text-2xl font-semibold text-white mb-4">1. Agreement to Terms</h2>
-            <p className="leading-relaxed">
-              Welcome to ToryX, operated by Wuhan Guanxing Cultural Media Co., Ltd. (&quot;Company&quot;, &quot;we&quot;, &quot;us&quot;, or &quot;our&quot;).
-              These Terms of Service (&quot;Terms&quot;) govern your access to and use of the ToryX platform at www.tokfactoryai.com,
-              including our AI-powered content creation services and social media publishing features.
+            <h2 className="text-2xl font-semibold text-white mb-4">1. Introduction</h2>
+            <p className="leading-relaxed">Welcome to &quot;ToryX&quot; software and related services!</p>
+            <p className="leading-relaxed mt-4">
+              &quot;ToryX&quot; software and related services refer to the products and services provided to you by <strong>Wuhan Guanxing Cultural Media Co., Ltd.</strong> and its affiliates (hereinafter referred to as &quot;Company&quot;), which legally own and operate the client application labeled &quot;ToryX&quot; and the related website (www.tokfactoryai.com). This Agreement is entered into between you and the Company regarding your download, installation, registration, login, use of &quot;ToryX&quot; software, and access to related services.
             </p>
             <p className="leading-relaxed mt-4">
-              By accessing or using our services, you agree to be bound by these Terms. If you disagree with any part of these Terms,
-              you may not access our services.
+              To better provide services to you, please strictly read and fully understand this Agreement before you start using &quot;ToryX&quot; software and related services, especially terms involving exemption or limitation of liability, licensing of rights and use of information, terms regarding consent to activate and use special individual services, governing law and dispute resolution terms, etc. <strong>Among them, important contents such as exemption or limitation of liability terms will be prompted in bold for your attention, and you should read them emphatically.</strong> If you are under 18 years old, please carefully read and fully understand this Agreement accompanied by your legal guardian, and use &quot;ToryX&quot; software and related services after obtaining the consent of your legal guardian.
+            </p>
+            <p className="leading-relaxed mt-4">
+              If you do not agree to this Agreement, we will be unable to provide you with complete products and services, and you may choose to stop using them. <strong>If you voluntarily choose to agree to or use &quot;ToryX&quot; software and related services, it shall be deemed that you have fully understood this Agreement and agreed to accept the constraints of this Agreement and other agreements and rules related to &quot;ToryX&quot; software and related services (including but not limited to &quot;ToryX Privacy Policy&quot;) as a party to this Agreement.</strong>
             </p>
           </section>
 
           <section>
-            <h2 className="text-2xl font-semibold text-white mb-4">2. Description of Services</h2>
-            <p className="leading-relaxed">ToryX provides the following AI-powered services:</p>
+            <h2 className="text-2xl font-semibold text-white mb-4">2. &quot;ToryX&quot; Software and Related Services</h2>
+            <p className="leading-relaxed">2.1 You may use &quot;ToryX&quot; software and related services in the form of clients, webpages, etc. on terminals such as computers and mobile phones. The specific form provided by the Company shall prevail.</p>
+            <p className="leading-relaxed mt-4">2.2 The Company grants you a personal, non-transferable, and non-exclusive license to use &quot;ToryX&quot; software and related services. <strong>Without prior written authorization from the Company, you may not use it for commercial purposes.</strong></p>
+            <p className="leading-relaxed mt-4">2.3 You can obtain this software from the Company&apos;s website or a third party authorized by the Company. If you obtain this software from a third party not authorized by the Company, the Company cannot guarantee that the software can be used normally.</p>
+            <p className="leading-relaxed mt-4">2.4 In order to improve user experience and improve service content, the Company will continuously strive to develop new services and provide you with software updates from time to time.</p>
+            <p className="leading-relaxed mt-4">2.5 Unless you have prior written authorization from the Company, you may not access or use &quot;ToryX&quot; software and related services in any unauthorized form.</p>
+          </section>
+
+          <section>
+            <h2 className="text-2xl font-semibold text-white mb-4">3. About &quot;Account&quot;</h2>
+            <p className="leading-relaxed">3.1 &quot;ToryX&quot; software and related services provide you with a registration channel. You have the right to choose a legal character combination as your account and set a password that meets security requirements on your own.</p>
+            <p className="leading-relaxed mt-4">3.2 You understand and assume that the account you set shall not violate national laws and regulations and the relevant rules of the Company. Your account name, avatar, profile, and other registration information shall not contain illegal or undesirable information.</p>
+            <p className="leading-relaxed mt-4">3.3 Your account is limited to your personal use. Without the written consent of the Company, it is prohibited to donate, borrow, rent, transfer, sell, or permit others to use the account in any other way.</p>
+            <p className="leading-relaxed mt-4">3.4 You are responsible for maintaining the security and confidentiality of your personal account and password, and assume full legal responsibility for activities engaged in the name of your registered account.</p>
+            <p className="leading-relaxed mt-4"><strong>3.5 If your account is lost or you forget your password, you can follow the Company&apos;s appeal channel to appeal for retrieval of the account or password.</strong></p>
+            <p className="leading-relaxed mt-4"><strong>3.6 When registering, using, and managing your account, you should ensure the authenticity of the identity information filled in during registration.</strong></p>
+            <p className="leading-relaxed mt-4">3.7 In addition to self-registering an account, users can also authorize the use of user accounts of third-party software legally owned by them to log in and use &quot;ToryX&quot; software and related services.</p>
+            <p className="leading-relaxed mt-4"><strong>3.8 After you complete account registration and login, you can browse and modify the submitted personal identity information at any time. You can also apply to cancel your account.</strong></p>
+            <p className="leading-relaxed mt-4"><strong>3.9 You understand and agree that in order to fully utilize account resources, if you fail to log in for the first time in time after registration or fail to log in and use the account for more than two consecutive months, the Company has the right to recall your account.</strong></p>
+          </section>
+
+          <section>
+            <h2 className="text-2xl font-semibold text-white mb-4">4. User Personal Information Protection</h2>
+            <p className="leading-relaxed">The Company is committed to the protection of your personal information together with you. Protecting user personal information is one of the Company&apos;s basic principles. The Company will protect your rights to browse, modify, delete relevant personal information, withdraw authorization, and cancel your account in accordance with the law, and will use encryption technology, anonymization processing, and other technical measures and other security measures matching &quot;ToryX&quot; software and related services to protect your personal information.</p>
+            <p className="leading-relaxed mt-4"><strong>For more content on your personal information protection, please refer to the &quot;ToryX Privacy Policy&quot;.</strong></p>
+          </section>
+
+          <section className="bg-red-500/10 border border-red-500/20 rounded-xl p-6">
+            <h2 className="text-2xl font-semibold text-white mb-4">5. User Conduct Code</h2>
+            <p className="leading-relaxed"><strong>5.1 User Conduct Requirements</strong></p>
+            <p className="leading-relaxed mt-2">You shall be responsible for your use of &quot;ToryX&quot; software and related services. Unless permitted by law or with prior written permission from the Company, your use of &quot;ToryX&quot; software and related services shall not involve the following behaviors: using any unauthorized tools to interfere with the normal operation of the software, engaging in acts endangering computer network security, maliciously registering accounts, etc.</p>
+            <p className="leading-relaxed mt-4"><strong>5.2 Information Content Norms</strong></p>
+            <p className="leading-relaxed mt-2">The information you create, comment on, publish, and disseminate shall consciously abide by the &quot;Seven Bottom Lines&quot; requirements such as laws and regulations, the socialist system, national interests, legitimate rights and interests of citizens, social public order, moral customs, and information authenticity. You agree and commit not to create, reproduce, publish, or disseminate the following information:</p>
+            <ol className="list-decimal pl-6 space-y-1 mt-2">
+              <li>Opposing the basic principles established by the Constitution</li>
+              <li>Endangering national security or divulging state secrets</li>
+              <li>Subverting state power, overthrowing the socialist system, undermining national unity</li>
+              <li>Advocating terrorism or extremism</li>
+              <li>Inciting ethnic hatred or discrimination, undermining ethnic unity</li>
+              <li>Undermining state religious policies or propagating cults and feudal superstitions</li>
+              <li>Fabricating or spreading rumors or false information to disturb social order</li>
+              <li>Disseminating obscenity, pornography, gambling, violence, terror, or abetting crimes</li>
+              <li>Infringing upon the legitimate rights and interests of minors or harming the physical and mental health of minors</li>
+              <li>Insulting or defaming others or infringing upon the legitimate rights and interests of others</li>
+              <li>Infringing upon others&apos; privacy rights, reputation rights, portrait rights, intellectual property rights, and other legitimate rights and interests</li>
+              <li>Other information violating laws, regulations, policies, and public order and good customs</li>
+            </ol>
+            <p className="leading-relaxed mt-4"><strong>5.3 If the Company has reason to believe that your behavior violates or may violate the above agreement, the Company may verify and handle it independently, and has the right to terminate the provision of services to you without prior notice and pursue relevant legal responsibilities.</strong></p>
+          </section>
+
+          <section>
+            <h2 className="text-2xl font-semibold text-white mb-4">6. &quot;ToryX&quot; Information Content Usage Norms</h2>
+            <p className="leading-relaxed">6.1 Without written permission from the Company, you may not copy, read, adopt, or use the information content in &quot;ToryX&quot; software and related services under this Agreement for commercial purposes, either by yourself or by authorizing, allowing, or assisting any third party.</p>
+            <p className="leading-relaxed mt-4">6.2 With written permission from the Company, your sharing and forwarding of the information content of &quot;ToryX&quot; software and related services shall also comply with relevant norms, and the original content shall not be tampered with or obscured.</p>
+          </section>
+
+          <section>
+            <h2 className="text-2xl font-semibold text-white mb-4">7. Breach Handling</h2>
+            <p className="leading-relaxed"><strong>7.1 In response to your violation of this Agreement or other service terms, the Company has the right to independently judge and take measures such as prior warning, refusal to publish, immediate cessation of information transmission, deletion of posts, short-term prohibition of speaking, restriction of some or all account functions, up to permanent closure of the account.</strong> The Company has the right to announce the processing results and decide whether to restore the use of the relevant account based on the actual situation.</p>
+            <p className="leading-relaxed mt-4"><strong>7.2 If your violation of this Agreement or other service terms causes third-party complaints or litigation claims, you shall handle it yourself and bear all legal responsibilities that may arise therefrom. If your illegal or breach behavior causes the Company and its affiliates to compensate any third party or suffer penalties from state organs, you shall also fully compensate the Company and its affiliates for all losses suffered therefrom.</strong></p>
+            <p className="leading-relaxed mt-4"><strong>7.3 The Company respects and protects the intellectual property rights, reputation rights, name rights, privacy rights, and other legitimate rights and interests of legal persons and citizens. You guarantee that the text, pictures, videos, audio, links, etc. uploaded when using &quot;ToryX&quot; software and related services do not infringe any legitimate rights and interests of any third party.</strong></p>
+          </section>
+
+          <section>
+            <h2 className="text-2xl font-semibold text-white mb-4">8. Changes, Interruption, and Termination of Services</h2>
+            <p className="leading-relaxed">8.1 You understand and agree that &quot;ToryX&quot; software and related services provided by the Company are provided based on the status quo achievable by existing technology and conditions. The Company will do its best to provide you with services and ensure the continuity and security of services. You understand that the Company cannot foresee and prevent legal, technical, and other risks at any time, including but not limited to service interruptions caused by force majeure, network reasons, third-party service defects, etc.</p>
+            <p className="leading-relaxed mt-4">8.2 You understand and agree that for the needs of overall service operation and platform operation security, the Company has the right to decide service/function settings and scope, and to modify, interrupt, suspend, or terminate &quot;ToryX&quot; software and related services based on specific circumstances.</p>
+          </section>
+
+          <section>
+            <h2 className="text-2xl font-semibold text-white mb-4">9. Advertising</h2>
+            <p className="leading-relaxed">9.1 You understand and agree that the Company may push relevant information, advertising releases, or brand promotion services to you during your use of &quot;ToryX&quot; software and related services.</p>
+            <p className="leading-relaxed mt-4">9.2 The Company fulfills relevant obligations for advertising and promotion. You should judge the authenticity and reliability of such advertising or promotion information yourself and be responsible for your own judgment.</p>
+          </section>
+
+          <section>
+            <h2 className="text-2xl font-semibold text-white mb-4">10. Intellectual Property</h2>
+            <p className="leading-relaxed">10.1 The intellectual property rights of the content provided by the Company in &quot;ToryX&quot; software and related services (including but not limited to software, technology, programs, webpages, text, pictures, images, audio, video, charts, layout design, electronic documents, etc.) belong to the Company. No one may use them without the Company&apos;s permission.</p>
+            <p className="leading-relaxed mt-4">10.2 You understand and agree that the text, pictures, videos, audio, etc. you publish and upload when using &quot;ToryX&quot; software and related services are originally created by you or have been legally authorized. The intellectual property rights of any content you upload or publish through &quot;ToryX&quot; belong to you or the original copyright owner.</p>
+            <p className="leading-relaxed mt-4"><strong>10.3 You know, understand, and agree that for the content you publish and upload through &quot;ToryX&quot; software and related services, you grant the Company and its affiliates a worldwide, free, non-exclusive, sublicensable right.</strong></p>
+            <p className="leading-relaxed mt-4"><strong>10.4 You confirm and agree to authorize the Company to defend rights against infringement of the intellectual property rights of the content you upload and publish in the Company&apos;s own name or by entrusting a professional third party.</strong></p>
+          </section>
+
+          <section className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-6">
+            <h2 className="text-2xl font-semibold text-white mb-4">11. Taxation</h2>
+            <p className="leading-relaxed"><strong>11.1 Your income (if any) in &quot;ToryX&quot; software and related services will be withdrawn directly in cash or equivalent form. You understand and agree that the Company has the right to withhold and pay taxes for you, and declare and pay to the tax authorities in accordance with national laws and regulations.</strong></p>
+          </section>
+
+          <section>
+            <h2 className="text-2xl font-semibold text-white mb-4">12. Disclaimer</h2>
+            <p className="leading-relaxed"><strong>12.1 You understand and agree that &quot;ToryX&quot; software and related services may be affected or interfered with by various factors, and the Company does not guarantee that:</strong></p>
             <ul className="list-disc pl-6 space-y-2 mt-4">
-              <li><strong>AI Video Generation:</strong> Create videos from images, text prompts, and templates using advanced AI models</li>
-              <li><strong>AI Image Generation:</strong> Generate e-commerce product images, virtual try-on images, and marketing visuals</li>
-              <li><strong>Digital Model Services:</strong> Access to AI-generated digital human models for content creation</li>
-              <li><strong>Batch Processing:</strong> Create multiple pieces of content efficiently through our batch production pipeline</li>
-              <li><strong>Social Media Publishing:</strong> Publish generated content directly to connected TikTok accounts</li>
-              <li><strong>Asset Management:</strong> Store, organize, and manage your generated content</li>
+              <li><strong>&quot;ToryX&quot; software and related services fully meet user requirements;</strong></li>
+              <li><strong>&quot;ToryX&quot; software and related services are undisturbed, timely, safe, reliable, or error-free;</strong></li>
+              <li><strong>Any errors in &quot;ToryX&quot; software and related services will be corrected.</strong></li>
             </ul>
+            <p className="leading-relaxed mt-4"><strong>12.2 You understand and agree that during the use of &quot;ToryX&quot; software and related services, force majeure factors (force majeure refers to objective events that cannot be foreseen, overcome, and avoided), including but not limited to natural disasters, government actions, wars, strikes, riots, etc., may be encountered. When force majeure occurs, the Company will strive to repair it in time at the first instance, but the Company is exempted from liability for losses caused by force majeure within the scope of laws and regulations.</strong></p>
+            <p className="leading-relaxed mt-4"><strong>12.3 In no event shall the Company be liable for any indirect, consequential, punitive, incidental, special, or penal damages, including loss of profits suffered by you due to your use of &quot;ToryX&quot; software and related services.</strong></p>
+          </section>
+
+          <section>
+            <h2 className="text-2xl font-semibold text-white mb-4">13. Special Agreement on Individual Services and Third-Party Services</h2>
+            <p className="leading-relaxed">13.1 &quot;ToryX&quot; software and related services contain information or information content links obtained by the Company in various legal ways, and also include other individual services legally operated by the Company and its affiliates. Certain individual services may require you to accept agreements or other rules specially formulated for such services at the same time.</p>
+            <p className="leading-relaxed mt-4">13.2 When you use software and related services provided by third parties in &quot;ToryX&quot; software and related services, in addition to abiding by this Agreement, you may also need to agree to and abide by the third party&apos;s agreements, privacy policies, and relevant rules. Disputes, losses, or damages arising from third-party software and related services shall be resolved by you and the third party yourselves.</p>
+            <p className="leading-relaxed mt-4"><strong>13.3 &quot;ToryX&quot; integrates and uses third-party services including but not limited to TikTok and Alibaba Cloud. When you use these services, you agree to abide by their relevant terms of service.</strong></p>
+          </section>
+
+          <section className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-6">
+            <h2 className="text-2xl font-semibold text-white mb-4">14. Minors Use Terms</h2>
+            <p className="leading-relaxed"><strong>14.1 If you are a minor under the age of 18, you should use &quot;ToryX&quot; software and related services under the guardianship and guidance of your guardian and with the consent of your guardian, after carefully reading and agreeing to this Agreement.</strong></p>
+            <p className="leading-relaxed mt-4"><strong>14.2 The Company attaches importance to the protection of minors&apos; personal information. Minor users should strengthen their awareness of personal protection and treat it specifically when filling in personal information.</strong></p>
+            <p className="leading-relaxed mt-4"><strong>14.3 Minor users and their guardians understand and confirm that if you violate laws and regulations or the content of this Agreement, you and your guardians shall bear all legal responsibilities that may result therefrom according to the law.</strong></p>
+            <p className="leading-relaxed mt-4"><strong>14.4 Special Note for Minor Users:</strong> Teenagers should use &quot;ToryX&quot; software and related services correctly within a reasonable range under the supervision and guidance of their guardians, avoid addiction to virtual cyberspace, and develop good internet surfing habits.</p>
+          </section>
+
+          <section>
+            <h2 className="text-2xl font-semibold text-white mb-4">15. Others</h2>
+            <p className="leading-relaxed"><strong>15.1 The conclusion, effectiveness, performance, interpretation, and dispute resolution of this Agreement shall be governed by the laws of the People&apos;s Republic of China. If any provision of this Agreement is invalid or unenforceable due to conflict with the laws of the People&apos;s Republic of China, these terms shall be re-interpreted as closely as possible to the original intent of this Agreement, and other provisions of this Agreement shall still have full force and effect.</strong></p>
+            <p className="leading-relaxed mt-4"><strong>15.2 The signing place of this Agreement is Wuhan, Hubei Province. If any dispute arises between you and the Company, both parties shall try to resolve it through friendly negotiation. If negotiation fails, you agree to submit the dispute to the People&apos;s Court where the Company is located for litigation.</strong></p>
+            <p className="leading-relaxed mt-4"><strong>15.3 In order to provide you with better services or due to adjustments in national laws, regulations, and policies, &quot;ToryX&quot; software and related services will be updated and changed from time to time, and we will revise this Agreement in due course. If you continue to use &quot;ToryX&quot; software and related services, it means you have agreed to accept the revised content of this Agreement.</strong></p>
+            <p className="leading-relaxed mt-4">15.4 The headings in this Agreement are set for convenience and reading only and do not affect the meaning or interpretation of any provision in this Agreement.</p>
+            <p className="leading-relaxed mt-4">15.5 You and the Company are independent subjects. In no case does this Agreement constitute any form of express or implied guarantee or condition by the Company to the user, nor does it constitute an agency, partnership, joint venture, or employment relationship between the parties.</p>
+            <p className="leading-relaxed mt-4">15.6 The copyright of this Agreement belongs to the Company, and the Company reserves all rights of interpretation and modification.</p>
           </section>
 
           <section className="bg-gradient-to-r from-cyan-500/10 to-pink-500/10 border border-cyan-500/20 rounded-xl p-6">
@@ -130,123 +244,29 @@ function EnglishContent() {
               <svg className="w-6 h-6" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-5.2 1.74 2.89 2.89 0 012.31-4.64 2.93 2.93 0 01.88.13V9.4a6.84 6.84 0 00-1-.05A6.33 6.33 0 005 20.1a6.34 6.34 0 0010.86-4.43v-7a8.16 8.16 0 004.77 1.52v-3.4a4.85 4.85 0 01-1-.1z" />
               </svg>
-              3. TikTok Integration Terms
+              16. Other Terms (TikTok Related)
             </h2>
-            <p className="leading-relaxed text-white/90">
-              <strong>IMPORTANT:</strong> Our platform integrates with TikTok&apos;s Content Posting API. By using this feature, you agree to the following additional terms:
-            </p>
-            <h3 className="text-xl font-medium text-white mt-6 mb-3">3.1 TikTok Account Connection</h3>
-            <ul className="list-disc pl-6 space-y-2">
-              <li>You may connect your TikTok account(s) to ToryX to enable video publishing</li>
-              <li>By connecting your account, you authorize us to publish content on your behalf</li>
-              <li>You remain fully responsible for all content published to your TikTok account through our platform</li>
-              <li>You must comply with TikTok&apos;s Terms of Service and Community Guidelines</li>
-            </ul>
-            <h3 className="text-xl font-medium text-white mt-6 mb-3">3.2 Content Publishing Responsibility</h3>
-            <ul className="list-disc pl-6 space-y-2">
-              <li>You are solely responsible for ensuring published content complies with TikTok&apos;s policies</li>
-              <li>We do not guarantee that published content will remain on TikTok (TikTok may remove content)</li>
-              <li>Any violations of TikTok&apos;s policies are your responsibility, not ours</li>
-              <li>We are not liable for any account restrictions or bans imposed by TikTok</li>
-            </ul>
+            <p className="leading-relaxed"><strong>16.1 Your authorization to use your TikTok account in &quot;ToryX&quot; software and related services shall be deemed as your agreement to TikTok&apos;s relevant terms of service.</strong></p>
+            <div className="mt-4 pt-4 border-t border-white/10">
+              <p className="text-sm text-gray-400">Related Links:</p>
+              <ul className="list-disc pl-6 space-y-1 mt-2 text-sm">
+                <li><a href="https://www.tiktok.com/legal/page/row/terms-of-service/en" target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline">TikTok Terms of Service</a></li>
+              </ul>
+            </div>
           </section>
 
           <section>
-            <h2 className="text-2xl font-semibold text-white mb-4">4. Account Registration</h2>
-            <p className="leading-relaxed">4.1 To use our services, you must create an account by providing accurate and complete information.</p>
-            <p className="leading-relaxed mt-4">4.2 You are responsible for maintaining the confidentiality of your account credentials and for all activities under your account.</p>
-            <p className="leading-relaxed mt-4">4.3 You must be at least 18 years old to create an account and use our services.</p>
-            <p className="leading-relaxed mt-4">4.4 You may not transfer, sell, or share your account with third parties.</p>
+            <h2 className="text-2xl font-semibold text-white mb-4">17. Subscription</h2>
+            <p className="leading-relaxed"><strong>17.1 Subscription Upgrade and Downgrade:</strong> When changing from one paid plan to another, the new plan will be prorated by calculating the remaining days of the two plans and their respective daily rates.</p>
+            <p className="leading-relaxed mt-4"><strong>17.2 Fee Changes:</strong> We may change plan fees from time to time and will notify you in advance. Price changes will take effect at the beginning of the next subscription period. If you do not agree to the price change, you must cancel your subscription before the price change takes effect.</p>
+            <p className="leading-relaxed mt-4"><strong>17.3 Subscription Cancellation:</strong> You can cancel your subscription at any time. After cancellation, your subscription will expire at the end of the current cycle. Paid fees are non-refundable.</p>
           </section>
 
-          <section>
-            <h2 className="text-2xl font-semibold text-white mb-4">5. Credits and Payment</h2>
-            <p className="leading-relaxed">5.1 ToryX operates on a credit-based system. You purchase credits to use our AI generation services.</p>
-            <p className="leading-relaxed mt-4">5.2 Credit prices and consumption rates for each service are displayed on our platform and are subject to change with prior notice.</p>
-            <p className="leading-relaxed mt-4">5.3 All credit purchases are final. Refunds are only provided as required by applicable law or at our sole discretion.</p>
-            <p className="leading-relaxed mt-4">5.4 Credits expire one year from the date of purchase unless otherwise stated.</p>
-            <p className="leading-relaxed mt-4">5.5 We reserve the right to modify pricing with 30 days&apos; advance notice.</p>
-          </section>
-
-          <section className="bg-red-500/10 border border-red-500/20 rounded-xl p-6">
-            <h2 className="text-2xl font-semibold text-white mb-4">6. Acceptable Use Policy</h2>
-            <p className="leading-relaxed">You agree NOT to use our services to:</p>
-            <ol className="list-decimal pl-6 space-y-2 mt-4">
-              <li>Create, upload, or distribute content that violates any laws or regulations</li>
-              <li>Publish content that endangers national security or discloses state secrets</li>
-              <li>Create content that undermines national unity or sovereignty</li>
-              <li>Damage national honor and interests</li>
-              <li>Incite ethnic hatred or discrimination, or undermine national unity</li>
-              <li>Undermine national religious policies or promote cults</li>
-              <li>Spread rumors or disrupt social order and stability</li>
-              <li>Create pornographic, sexually explicit, or violent content</li>
-              <li>Publish content that insults, defames, or infringes upon the rights of others</li>
-              <li>Infringe upon intellectual property rights, portrait rights, or privacy rights of others</li>
-              <li>Create any other content that violates public morals or social ethics</li>
-            </ol>
-            <p className="leading-relaxed mt-4 text-white font-medium">
-              Violation of these terms may result in immediate account termination without refund.
-            </p>
-          </section>
-
-          <section>
-            <h2 className="text-2xl font-semibold text-white mb-4">7. Intellectual Property</h2>
-            <p className="leading-relaxed">7.1 All technology, software, algorithms, trademarks, logos, and platform design are owned by Wuhan Guanxing Cultural Media Co., Ltd.</p>
-            <p className="leading-relaxed mt-4">7.2 You retain ownership of content you create through our platform. By using our services, you grant us a limited license to process, store, and display your content as necessary to provide our services.</p>
-            <p className="leading-relaxed mt-4">7.3 For content you publicly post through our platform, you grant us a non-exclusive, royalty-free, worldwide license to display and distribute within the platform.</p>
-          </section>
-
-          <section>
-            <h2 className="text-2xl font-semibold text-white mb-4">8. AI-Generated Content Disclaimer</h2>
-            <p className="leading-relaxed">8.1 Our services use artificial intelligence to generate content. AI-generated content may not always be accurate, appropriate, or suitable for your intended purpose.</p>
-            <p className="leading-relaxed mt-4">8.2 You are responsible for reviewing all generated content before use or publication.</p>
-            <p className="leading-relaxed mt-4">8.3 We do not guarantee any specific results or outcomes from our AI services.</p>
-          </section>
-
-          <section>
-            <h2 className="text-2xl font-semibold text-white mb-4">9. Limitation of Liability</h2>
-            <p className="leading-relaxed">TO THE MAXIMUM EXTENT PERMITTED BY LAW:</p>
-            <ul className="list-disc pl-6 space-y-2 mt-4">
-              <li>Our services are provided &quot;AS IS&quot; without warranties of any kind</li>
-              <li>We are not liable for any indirect, incidental, special, or consequential damages</li>
-              <li>Our total liability shall not exceed the amount you paid us in the 12 months preceding the claim</li>
-              <li>We are not responsible for third-party actions, including TikTok&apos;s moderation decisions</li>
-              <li>We are not liable for service interruptions due to factors beyond our control</li>
-            </ul>
-          </section>
-
-          <section>
-            <h2 className="text-2xl font-semibold text-white mb-4">10. Indemnification</h2>
-            <p className="leading-relaxed">You agree to indemnify and hold harmless Wuhan Guanxing Cultural Media Co., Ltd. from any claims, damages, losses, or expenses arising from your use of our services, your violation of these Terms, or content you create through our platform.</p>
-          </section>
-
-          <section>
-            <h2 className="text-2xl font-semibold text-white mb-4">11. Service Modifications and Termination</h2>
-            <p className="leading-relaxed">11.1 We reserve the right to modify, suspend, or discontinue any part of our services at any time with reasonable notice.</p>
-            <p className="leading-relaxed mt-4">11.2 We may terminate your account if you violate these Terms, with or without notice.</p>
-            <p className="leading-relaxed mt-4">11.3 Upon termination, your right to use our services ceases immediately. Unused credits may be forfeited.</p>
-          </section>
-
-          <section>
-            <h2 className="text-2xl font-semibold text-white mb-4">12. Governing Law and Dispute Resolution</h2>
-            <p className="leading-relaxed">12.1 These Terms are governed by the laws of the People&apos;s Republic of China.</p>
-            <p className="leading-relaxed mt-4">12.2 Any disputes shall first be resolved through good-faith negotiation.</p>
-            <p className="leading-relaxed mt-4">12.3 If negotiation fails, disputes shall be submitted to the competent court in Wuhan, Hubei Province, China.</p>
-          </section>
-
-          <section>
-            <h2 className="text-2xl font-semibold text-white mb-4">13. Changes to Terms</h2>
-            <p className="leading-relaxed">We may update these Terms from time to time. We will notify you of material changes via email or prominent notice on our platform. Continued use of our services after changes constitutes acceptance of the new Terms.</p>
-          </section>
-
-          <section>
-            <h2 className="text-2xl font-semibold text-white mb-4">14. Contact Information</h2>
-            <p className="leading-relaxed">For questions about these Terms, please contact us:</p>
-            <div className="mt-4 p-4 bg-white/5 rounded-lg">
-              <p><strong>武汉观星文化传媒有限公司</strong></p>
-              <p className="mt-1">Wuhan Guanxing Cultural Media Co., Ltd.</p>
-              <p className="mt-2">Email: contact@toryx.ai</p>
-              <p>Website: www.tokfactoryai.com</p>
+          <section className="border-t border-white/10 pt-8 mt-8">
+            <div className="p-4 bg-white/5 rounded-lg">
+              <p><strong>Wuhan Guanxing Cultural Media Co., Ltd.</strong></p>
+              <p className="mt-1">Email: contact@toryx.ai</p>
+              <p className="mt-2">Website: www.tokfactoryai.com</p>
               <p>Address: Wuhan, Hubei Province, China</p>
               <p className="mt-2 text-gray-400">ICP License: 鄂ICP备2023007484号</p>
             </div>

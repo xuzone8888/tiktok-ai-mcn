@@ -96,229 +96,274 @@ function EnglishContent() {
     <>
       <div className="mb-12">
         <h1 className="text-4xl font-bold mb-4">Privacy Policy</h1>
-        <p className="text-gray-400">Last Updated: January 22, 2026</p>
+        <p className="text-gray-400">Updated Date: January 22, 2026</p>
         <p className="text-gray-400 mt-2">Effective Date: January 22, 2026</p>
       </div>
 
       <div className="prose prose-invert prose-lg max-w-none">
         <div className="space-y-8 text-gray-300">
           <section>
-            <h2 className="text-2xl font-semibold text-white mb-4">1. Introduction</h2>
+            <h2 className="text-2xl font-semibold text-white mb-4">Introduction</h2>
             <p className="leading-relaxed">
-              Wuhan Guanxing Cultural Media Co., Ltd. (&quot;ToryX&quot;, &quot;we&quot;, &quot;us&quot;, or &quot;our&quot;) operates the ToryX platform
-              (www.tokfactoryai.com). This Privacy Policy explains how we collect, use, disclose, and safeguard your information
-              when you use our AI-powered content creation services, including our integration with the TikTok platform.
+              &quot;ToryX&quot; refers to the client application labeled &quot;ToryX (AI Content Manufacturing Factory)&quot; and the official website, as well as the Software Development Kit (SDK) and Application Programming Interface (API) for third-party websites and applications, legally owned and operated by <strong>Wuhan Guanxing Cultural Media Co., Ltd.</strong> and its affiliates (hereinafter referred to as &quot;we&quot;).
             </p>
             <p className="leading-relaxed mt-4">
-              By using ToryX, you agree to the collection and use of information in accordance with this Privacy Policy.
-              If you do not agree with this policy, please do not use our services.
-            </p>
-          </section>
-
-          <section className="bg-gradient-to-r from-cyan-500/10 to-pink-500/10 border border-cyan-500/20 rounded-xl p-6">
-            <h2 className="text-2xl font-semibold text-white mb-4 flex items-center gap-2">
-              <svg className="w-6 h-6" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-5.2 1.74 2.89 2.89 0 012.31-4.64 2.93 2.93 0 01.88.13V9.4a6.84 6.84 0 00-1-.05A6.33 6.33 0 005 20.1a6.34 6.34 0 0010.86-4.43v-7a8.16 8.16 0 004.77 1.52v-3.4a4.85 4.85 0 01-1-.1z" />
-              </svg>
-              2. TikTok Integration &amp; Data Handling
-            </h2>
-            <p className="leading-relaxed text-white/90">
-              <strong>IMPORTANT:</strong> ToryX integrates with TikTok&apos;s Content Posting API to enable you to publish
-              AI-generated videos directly to your TikTok account. This section specifically covers how we handle your TikTok data.
-            </p>
-
-            <h3 className="text-xl font-medium text-white mt-6 mb-3">2.1 TikTok Data We Collect</h3>
-            <p className="leading-relaxed">When you connect your TikTok account, we collect:</p>
-            <ul className="list-disc pl-6 space-y-2 mt-4">
-              <li><strong>TikTok User ID (Open ID):</strong> To identify your account and publish content on your behalf</li>
-              <li><strong>Display Name &amp; Avatar:</strong> To display your account information within our platform</li>
-              <li><strong>Basic Profile Information:</strong> Follower count, following count, and video count for display purposes</li>
-              <li><strong>OAuth Access Tokens:</strong> To authenticate API requests to TikTok (encrypted and stored securely)</li>
-            </ul>
-
-            <h3 className="text-xl font-medium text-white mt-6 mb-3">2.2 How We Use Your TikTok Data</h3>
-            <ul className="list-disc pl-6 space-y-2">
-              <li><strong>Video Publishing:</strong> Upload and publish videos you create using our platform to your TikTok account</li>
-              <li><strong>Account Display:</strong> Show your connected TikTok accounts within our dashboard</li>
-              <li><strong>Publishing Status:</strong> Track the status of videos published to TikTok</li>
-            </ul>
-
-            <h3 className="text-xl font-medium text-white mt-6 mb-3">2.3 TikTok Data We Do NOT Collect</h3>
-            <ul className="list-disc pl-6 space-y-2">
-              <li>We do NOT access your TikTok password</li>
-              <li>We do NOT read your private messages or comments</li>
-              <li>We do NOT access videos you did not create through our platform</li>
-              <li>We do NOT share your TikTok data with third parties for advertising purposes</li>
-            </ul>
-
-            <h3 className="text-xl font-medium text-white mt-6 mb-3">2.4 TikTok Data Retention &amp; Deletion</h3>
-            <ul className="list-disc pl-6 space-y-2">
-              <li>OAuth tokens are stored only while your account is connected</li>
-              <li>When you disconnect your TikTok account, we delete all associated tokens within 24 hours</li>
-              <li>Publishing records are retained for 90 days for your reference, then automatically deleted</li>
-              <li>You can request immediate deletion of all your TikTok-related data at any time</li>
-            </ul>
-
-            <h3 className="text-xl font-medium text-white mt-6 mb-3">2.5 Revoking TikTok Access</h3>
-            <p className="leading-relaxed">
-              You can disconnect your TikTok account at any time through our Account Management page. Additionally,
-              you can revoke ToryX&apos;s access directly from your TikTok app under Settings → Security → Manage App Permissions.
-            </p>
-
-            <h3 className="text-xl font-medium text-white mt-6 mb-3">2.6 TikTok Policy Links</h3>
-            <p className="leading-relaxed">
-              By using our TikTok publishing feature, you acknowledge that you have read and agree to TikTok&apos;s official policies:
-            </p>
-            <ul className="list-disc pl-6 space-y-2 mt-2">
-              <li><a href="https://www.tiktok.com/legal/page/row/privacy-policy/en" target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline">TikTok Privacy Policy</a></li>
-              <li><a href="https://www.tiktok.com/legal/page/row/terms-of-service/en" target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline">TikTok Terms of Service</a></li>
-            </ul>
-          </section>
-
-          <section>
-            <h2 className="text-2xl font-semibold text-white mb-4">3. Information We Collect</h2>
-
-            <h3 className="text-xl font-medium text-white mt-6 mb-3">3.1 Information You Provide</h3>
-            <ul className="list-disc pl-6 space-y-2">
-              <li><strong>Account Information:</strong> Email address, username, password (encrypted)</li>
-              <li><strong>Profile Information:</strong> Display name, avatar, preferences</li>
-              <li><strong>Content:</strong> Images, videos, and text you upload for AI processing</li>
-              <li><strong>Payment Information:</strong> Processed securely through third-party payment processors</li>
-            </ul>
-
-            <h3 className="text-xl font-medium text-white mt-6 mb-3">3.2 Automatically Collected Information</h3>
-            <ul className="list-disc pl-6 space-y-2">
-              <li><strong>Device Information:</strong> Browser type, operating system, device identifiers</li>
-              <li><strong>Usage Data:</strong> Pages visited, features used, timestamps</li>
-              <li><strong>Log Data:</strong> IP address, access times, error logs</li>
-            </ul>
-          </section>
-
-          <section>
-            <h2 className="text-2xl font-semibold text-white mb-4">4. How We Use Your Information</h2>
-            <ul className="list-disc pl-6 space-y-2">
-              <li>Provide and maintain our AI content creation services</li>
-              <li>Process your video and image generation requests</li>
-              <li>Publish content to connected social media platforms (with your authorization)</li>
-              <li>Send service notifications and updates</li>
-              <li>Improve our services and develop new features</li>
-              <li>Prevent fraud and ensure platform security</li>
-              <li>Comply with legal obligations</li>
-            </ul>
-          </section>
-
-          <section>
-            <h2 className="text-2xl font-semibold text-white mb-4">5. Information Sharing</h2>
-            <p className="leading-relaxed">We do NOT sell your personal information. We may share information with:</p>
-            <ul className="list-disc pl-6 space-y-2 mt-4">
-              <li><strong>Service Providers:</strong> Cloud hosting, payment processing, analytics (under strict confidentiality agreements)</li>
-              <li><strong>Social Media Platforms:</strong> Only TikTok, only with your explicit authorization, only for publishing your content</li>
-              <li><strong>Legal Requirements:</strong> When required by law or to protect our rights</li>
-            </ul>
-          </section>
-
-          <section>
-            <h2 className="text-2xl font-semibold text-white mb-4">6. Data Security</h2>
-            <p className="leading-relaxed">We implement industry-standard security measures:</p>
-            <ul className="list-disc pl-6 space-y-2 mt-4">
-              <li>SSL/TLS encryption for data in transit</li>
-              <li>AES-256 encryption for sensitive data at rest</li>
-              <li>Regular security audits and vulnerability assessments</li>
-              <li>Access controls and employee training</li>
-              <li>OAuth tokens are encrypted and never exposed in logs or UI</li>
-            </ul>
-            <p className="leading-relaxed mt-4">
-              <strong>Data Storage Location:</strong> Your data is stored on Alibaba Cloud servers within the People&apos;s Republic of China.
-            </p>
-          </section>
-
-          <section>
-            <h2 className="text-2xl font-semibold text-white mb-4">7. Your Rights</h2>
-            <p className="leading-relaxed">You have the right to:</p>
-            <ul className="list-disc pl-6 space-y-2 mt-4">
-              <li><strong>Access:</strong> Request a copy of your personal data</li>
-              <li><strong>Correction:</strong> Update inaccurate information</li>
-              <li><strong>Deletion:</strong> Request deletion of your data (&quot;right to be forgotten&quot;)</li>
-              <li><strong>Portability:</strong> Receive your data in a machine-readable format</li>
-              <li><strong>Withdraw Consent:</strong> Disconnect social media accounts at any time</li>
-              <li><strong>Restriction:</strong> Limit how we process your data</li>
-            </ul>
-            <p className="leading-relaxed mt-4">
-              To exercise these rights, contact us at privacy@tokfactoryai.com
+              As the operator of ToryX, we are fully aware of the importance of personal information to you, and we will protect your personal information and privacy security in accordance with laws and regulations. We have formulated this Privacy Policy and specially prompt you: We hope you carefully read and understand this Privacy Policy before using ToryX and related services so as to make appropriate choices.
             </p>
           </section>
 
           <section className="bg-white/5 border border-white/10 rounded-xl p-6">
-            <h2 className="text-2xl font-semibold text-white mb-4">8. Account Deletion</h2>
-            <p className="leading-relaxed">You have the right to delete your account at any time. The deletion process:</p>
-            <ol className="list-decimal pl-6 space-y-2 mt-4">
-              <li>Log in to your account, go to &quot;Settings&quot; → &quot;Account Security&quot; → &quot;Delete Account&quot;</li>
-              <li>Verify your identity and submit the deletion request</li>
-              <li>We will process the deletion within 15 business days</li>
-              <li>After deletion, your personal data will be removed within 30 days</li>
-            </ol>
-            <p className="leading-relaxed mt-4 text-white/80">
-              Note: Some data may be retained for legal compliance purposes (e.g., transaction records for 3 years as required by tax law).
+            <h2 className="text-2xl font-semibold text-white mb-4">Summary</h2>
+            <p className="leading-relaxed">
+              We will introduce to you how we handle personal information in different scenarios through this Privacy Policy. When you open or use ToryX, to implement the functions and services you choose to use, or to comply with laws and regulations, we will handle relevant information. Except for information necessary for ToryX&apos;s basic functions and services, and information required by laws and regulations, you can refuse our processing of other information, but this may result in our inability to provide corresponding functions and services. We will explain relevant situations item by item in the Privacy Policy. <strong>Important terms regarding your personal information rights and interests are prompted in bold, please pay special attention.</strong>
+            </p>
+            <p className="leading-relaxed mt-4">
+              Actual functions may vary slightly between ToryX and related versions, but if related versions do not have independent privacy policies, we will collect and handle your personal information following this Privacy Policy.
+            </p>
+            <p className="leading-relaxed mt-4">
+              In addition to this Privacy Policy, in specific scenarios, we will also explain to you the purpose, scope, and usage method of corresponding information collection through immediate notifications (including pop-ups, page prompts, etc.), function update descriptions, etc. These immediate notifications and function update descriptions constitute a part of this Privacy Policy and have equal effect with this Privacy Policy.
+            </p>
+            <p className="leading-relaxed mt-4">
+              The following text will help you understand in detail how we collect, use, store, transfer, disclose, and protect personal information; and help you understand the ways to query, correct, supplement, delete, copy, and transfer personal information. Among them, <strong>important content regarding your personal information rights and interests is prompted in bold, please pay special attention.</strong>
             </p>
           </section>
 
           <section>
-            <h2 className="text-2xl font-semibold text-white mb-4">9. Data Retention</h2>
-            <ul className="list-disc pl-6 space-y-2">
-              <li><strong>Account Data:</strong> Retained while your account is active, deleted within 30 days of account deletion</li>
-              <li><strong>Generated Content:</strong> Stored for 90 days unless you delete it earlier</li>
-              <li><strong>TikTok Tokens:</strong> Deleted immediately upon disconnection</li>
-              <li><strong>Log Data:</strong> Retained for 12 months for security purposes</li>
+            <h2 className="text-2xl font-semibold text-white mb-4">1. How We Collect and Use Personal Information</h2>
+
+            <h3 className="text-xl font-medium text-white mt-6 mb-3">1.1 Account Service</h3>
+            <p className="leading-relaxed mb-2"><strong>1.1.1 Registration and Login</strong></p>
+            <p className="leading-relaxed">
+              When you register, log in to ToryX, and use related services, you can create an account via mobile phone number or email, and you can complete relevant network identity identification information (name, avatar, password). We collect this information to help you complete registration. Collecting mobile phone numbers is necessary to perform national laws and regulations on network real-name registration (real identity information authentication). If you refuse to provide a mobile phone number for registration and login, we may not be able to provide you with information publishing (including generating videos, comments, etc.) functions.
+            </p>
+            <p className="leading-relaxed mt-2">
+              Based on our cooperation with communication operators, when you use the &quot;One-Click Login&quot; function, with your consent, we will use the function provided by the operator to use the mobile phone number in your device as your registration and login account and exempt password or dynamic verification code verification, providing you with quick registration and login services. If you do not wish to use the &quot;One-Click Login&quot; function, you can register and log in to ToryX through other methods.
+            </p>
+            <p className="leading-relaxed mt-2">
+              You can register and log in to ToryX using third-party accounts, but you need to authorize us to obtain your information on the third-party platform (avatar, nickname, and other public information as well as other information authorized by you) to generate a ToryX account bound to that third-party account, allowing you to directly register, log in, and use ToryX and related services. In some cases, we need to re-verify and bind your mobile phone number to confirm the authenticity and relevance of that third-party account.
+            </p>
+            <p className="leading-relaxed mt-2">
+              If you forget your login method for ToryX, you can use the password retrieval function. To ensure the security of your account, we may require you to fill in relevant information for verification, and if necessary, verify your identity through real identity information verification methods.
+            </p>
+
+            <p className="leading-relaxed mt-4 mb-2"><strong>1.1.2 Real-name Authentication</strong></p>
+            <p className="leading-relaxed">
+              When you use functions or services requiring real-name authentication, to comply with relevant legal and regulatory requirements, ensure the security of you or other users, or maintain the security and stability of functions/services, you need to provide real identity information (real name, ID number, or facial information, which may vary according to actual conditions) to complete real-name authentication.
+            </p>
+            <p className="leading-relaxed mt-2">
+              During the real-name authentication process, a third-party certification agency providing certification services may need to verify your real identity information. This information is only for the purpose of completing real-name authentication or other purposes stipulated by laws and regulations, and will not be used for other purposes without your express authorization. You can refuse to provide it, but you may effectively be unable to use functions or related services that require real-name authentication. Inability to use such functions or services does not affect your use of other functions and services.
+            </p>
+
+            <p className="leading-relaxed mt-4 mb-2"><strong>1.1.3 Account Public Information</strong></p>
+            <p className="leading-relaxed">
+              We will generate a User ID for your account when you register for ToryX, which is the public identification symbol of your account.
+            </p>
+
+            <p className="leading-relaxed mt-4 mb-2"><strong>1.1.4 Unified Account and Related Versions</strong></p>
+            <p className="leading-relaxed">
+              Unless otherwise specified, related versions of ToryX use unified account services. <strong>You can use the same account to conveniently log in and use ToryX related versions to check corresponding version services or functions.</strong> To provide a consistent service experience across related versions, we use SDKs or related technologies to synchronize accounts and content, which may include: sharing account information you set as public such as nicknames and avatars; synchronizing content published by you using this account; synchronizing other information authorized by you.
+            </p>
+
+            <h3 className="text-xl font-medium text-white mt-6 mb-3">1.2 Content Generation and Browsing</h3>
+            <p className="leading-relaxed">
+              During your use of ToryX to generate or browse content, we will record your usage. If you are not logged in, we will verify your [clicks, browsing, sharing information] through identifier information corresponding to your device. If you are logged in, we will record your [clicks, browsing, feedback, etc.] through your ToryX account.
+            </p>
+            <p className="leading-relaxed mt-2">
+              When providing location-based content or services to you, with your authorization, we will use <strong>geographic location information related to this service (such as the city and/or district/county corresponding to the IP address)</strong> to ensure the quality of content or services.
+            </p>
+            <p className="leading-relaxed mt-2">
+              When you use search, we will collect your search keyword information and log records.
+            </p>
+
+            <h3 className="text-xl font-medium text-white mt-6 mb-3">1.3 Other Functions</h3>
+            <p className="leading-relaxed mb-2"><strong>1.3.1 Message Notifications</strong></p>
+            <p className="leading-relaxed">
+              You acknowledge and agree that during operation, we may use the contact information (e.g., phone number, email) provided by you during the use of products and/or services to send you notifications, such as message notices, identity verification, security verification, user experience surveys; in addition, we may also provide you with commercial information such as services, functions, or activities you may be interested in via SMS or email. If you do not wish to receive this information, you can contact us directly to unsubscribe.
+            </p>
+            <p className="leading-relaxed mt-2 mb-2"><strong>1.3.2 Sharing Interaction</strong></p>
+            <p className="leading-relaxed">
+              When you share or receive shared information, we need to access your clipboard to read the links or share codes contained therein to implement functions such as jumping and sharing. We only upload clipboard content when we identify it as ToryX jump, share, etc. instructions.
+            </p>
+            <p className="leading-relaxed mt-2 mb-2"><strong>1.3.3 Orders and Payments</strong></p>
+            <p className="leading-relaxed">
+              When you purchase memberships or services, we or the third party providing the service will collect your order information. Payment functions are provided to you by third-party payment institutions cooperating with us. Third-party payment institutions may need to collect necessary information such as your name, bank card type and card number, validity period, and mobile phone number. Bank card-related information is sensitive personal information; refusal to provide it will result in your inability to use this function.
+            </p>
+
+            <h3 className="text-xl font-medium text-white mt-6 mb-3">1.4 Operation and Security Running</h3>
+            <p className="leading-relaxed">
+              To maintain the normal and stable operation of products or services, and protect the security and legitimate interests of you or other users or the public, we will collect the following necessary information:
+            </p>
+            <ul className="list-disc pl-6 space-y-2 mt-2">
+              <li>To ensure the secure operation, operational quality, and efficiency of software and services, we will collect your hardware model, operating system version number, device identifier, IP address, software version number, network access method, type, status, network quality data, operation, usage, service log, and other data.</li>
+              <li>To prevent malicious programs and ensure operational quality and efficiency, we will collect the overall operation, usage and frequency of the application, application crash situations, and performance data.</li>
+              <li>We may use your account information, device information, service log information, as well as information authorized by you or legally available to us from our affiliates and partners, to judge account security, transaction security, conduct identity verification, and identify illegal and violation situations.</li>
+            </ul>
+
+            <h3 className="text-xl font-medium text-white mt-6 mb-3">1.5 Use of Cookie and Similar Technologies</h3>
+            <p className="leading-relaxed">
+              We may use Cookie or similar technologies to collect and store your information, which is mainly used to:
+            </p>
+            <ul className="list-disc pl-6 space-y-2 mt-2">
+              <li><strong>Ensure Security</strong>: Confirm whether you have logged in securely and investigate abnormal situations.</li>
+              <li><strong>Improve Experience</strong>: Help you save the steps of repeated filling in personal information.</li>
+              <li><strong>Recommend Content</strong>: Understand your preferences and recommend content or services you are interested in.</li>
+            </ul>
+            <p className="leading-relaxed mt-2">
+              You can clear Cookies in your browser settings, but clearing them may result in the inability to use functions dependent on Cookies.
+            </p>
+
+            <h3 className="text-xl font-medium text-white mt-6 mb-3">1.6 Exemption from Consent for Processing Personal Information According to Law</h3>
+            <p className="leading-relaxed">
+              In the following circumstances, according to laws and regulations, we do not need to obtain your authorized consent to handle your personal information:
+            </p>
+            <ul className="list-disc pl-6 space-y-2 mt-2">
+              <li>Necessary for the conclusion or performance of a contract at your request;</li>
+              <li>Necessary to fulfill statutory duties or obligations;</li>
+              <li>Necessary to respond to sudden public health incidents or protect the life, health, and property safety of natural persons in emergencies;</li>
+              <li>Necessary for public interest implementation of news reporting, public opinion supervision, etc., handling personal information within a reasonable scope;</li>
+              <li>Handling personal information disclosed by yourself or other legally disclosed personal information within a reasonable scope;</li>
+              <li>Other circumstances stipulated by laws and regulations.</li>
             </ul>
           </section>
 
+          <section>
+            <h2 className="text-2xl font-semibold text-white mb-4">2. Partners Involved in Data Use and Transfer and Disclosure of Personal Information</h2>
+
+            <h3 className="text-xl font-medium text-white mt-6 mb-3">2.1 Use by Partners</h3>
+            <p className="leading-relaxed mb-2"><strong>2.1.1 Basic Principles</strong></p>
+            <p className="leading-relaxed">Follow the principles of lawfulness, legitimacy, necessity, and security prudence.</p>
+
+            <p className="leading-relaxed mt-4 mb-2"><strong>2.1.2 Cooperation Scenarios</strong></p>
+            <p className="leading-relaxed">
+              We may cooperate with third parties to provide services (such as payment, message push, real-name authentication, etc.). During the cooperation, we require partners to strictly abide by laws and regulations and data security requirements.
+            </p>
+            <ul className="list-disc pl-6 space-y-2 mt-2">
+              <li><strong>Payment Services</strong>: Provided by third-party payment institutions, requiring collection of necessary payment information.</li>
+              <li><strong>Message Push</strong>: Terminal device manufacturers or push service providers may need to use your device information to complete the push.</li>
+              <li><strong>Login/Bind Account</strong>: With your consent, third-party products may use your public information.</li>
+            </ul>
+
+            <p className="leading-relaxed mt-4 mb-2"><strong>2.1.3 Advertising</strong></p>
+            <p className="leading-relaxed">
+              We may share de-identified statistical information with advertising partners to analyze advertising effectiveness, but will not share information that can identify you personally.
+            </p>
+
+            <h3 className="text-xl font-medium text-white mt-6 mb-3">2.2 Change of Operation Subject</h3>
+            <p className="leading-relaxed">
+              In the event of a merger, acquisition, or asset transfer, your personal information may be transferred. We will require the successor to continue to fulfill the obligations of this Privacy Policy, otherwise we will require them to re-obtain your consent.
+            </p>
+
+            <h3 className="text-xl font-medium text-white mt-6 mb-3">2.3 Cessation of Operation</h3>
+            <p className="leading-relaxed">
+              If operation ceases, we will promptly stop collecting and delete or anonymize your personal information, and send you a notification.
+            </p>
+
+            <h3 className="text-xl font-medium text-white mt-6 mb-3">2.4 Disclosure</h3>
+            <p className="leading-relaxed">
+              Unless complying with laws and regulations or obtaining your consent, we will not actively disclose your personal information.
+            </p>
+          </section>
+
+          <section>
+            <h2 className="text-2xl font-semibold text-white mb-4">3. Managing Your Personal Information</h2>
+            <p className="leading-relaxed">
+              We guarantee your rights to query, copy, correct, supplement, delete, withdraw consent, and cancel your account regarding personal information.
+            </p>
+            <p className="leading-relaxed mt-2">
+              You can manage your personal information through the settings function in the application or by contacting customer service.
+            </p>
+            <p className="leading-relaxed mt-2">
+              Especially for the account cancellation function, you can find the cancellation entrance in &quot;Settings - Account Security&quot;. After cancellation, we will delete or anonymize your relevant data.
+            </p>
+          </section>
+
+          <section>
+            <h2 className="text-2xl font-semibold text-white mb-4">4. How We Protect the Security of Personal Information</h2>
+            <p className="leading-relaxed mb-2"><strong>4.1 Security Measures</strong></p>
+            <p className="leading-relaxed">
+              We adopt technical means such as encryption and de-identification, as well as strict management systems to protect your personal information.
+            </p>
+
+            <p className="leading-relaxed mt-4 mb-2"><strong>4.2 Emergency Plan</strong></p>
+            <p className="leading-relaxed">
+              Establish an emergency plan for security incidents. Once a leakage or other incident occurs, the plan will be launched promptly, and you will be informed of relevant situations.
+            </p>
+
+            <p className="leading-relaxed mt-4 mb-2"><strong>4.3 Security Prompt</strong></p>
+            <p className="leading-relaxed">
+              Please understand that the internet environment is not 100% secure. Please keep your account information properly.
+            </p>
+          </section>
+
+          <section>
+            <h2 className="text-2xl font-semibold text-white mb-4">5. How We Store Personal Information</h2>
+            <p className="leading-relaxed mb-2"><strong>5.1 Storage Location</strong></p>
+            <p className="leading-relaxed">
+              Your personal information will be stored within the <strong>territory of the People&apos;s Republic of China</strong>. If cross-border transmission is required, we will follow relevant laws and regulations.
+            </p>
+
+            <p className="leading-relaxed mt-4 mb-2"><strong>5.2 Storage Period</strong></p>
+            <p className="leading-relaxed">
+              We only retain your personal information for the period necessary to provide services. After account cancellation, we will delete or anonymize your information, unless otherwise stipulated by laws and regulations.
+            </p>
+          </section>
+
           <section className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-6">
-            <h2 className="text-2xl font-semibold text-white mb-4">10. Protection of Minors</h2>
+            <h2 className="text-2xl font-semibold text-white mb-4">6. How We Protect Minors</h2>
             <p className="leading-relaxed">
-              ToryX is not intended for users under 18 years of age. We do not knowingly collect personal
-              information from children. If we discover that a child under 18 has provided us with personal information,
-              we will delete it within 24 hours.
+              We attach great importance to the protection of minors.
             </p>
-            <p className="leading-relaxed mt-4">
-              <strong>For Guardians:</strong> If you are the guardian of a minor and discover that they have used our services without consent,
-              please contact us immediately at privacy@tokfactoryai.com. We will delete the account and associated data promptly.
+            <ul className="list-disc pl-6 space-y-2 mt-2">
+              <li>If you are a minor under the age of 18, you should read and agree to this policy under the guidance of a guardian.</li>
+              <li>We will only process minors&apos; information when permitted by law, consented to by guardians, or necessary to protect minors.</li>
+            </ul>
+          </section>
+
+          <section>
+            <h2 className="text-2xl font-semibold text-white mb-4">7. Access and Revision of Privacy Policy</h2>
+            <p className="leading-relaxed mb-2"><strong>7.1 Access</strong></p>
+            <p className="leading-relaxed">
+              You can view this Privacy Policy in the footer of the ToryX website or in the application settings.
+            </p>
+
+            <p className="leading-relaxed mt-4 mb-2"><strong>7.2 Updates</strong></p>
+            <p className="leading-relaxed">
+              We will revise this policy in due course and notify you through announcements or internal messages.
             </p>
           </section>
 
           <section>
-            <h2 className="text-2xl font-semibold text-white mb-4">11. International Data Transfers</h2>
+            <h2 className="text-2xl font-semibold text-white mb-4">8. Contact Us</h2>
             <p className="leading-relaxed">
-              Our servers are located in the People&apos;s Republic of China. If you access our services from outside China,
-              your data may be transferred to and processed in China. We ensure appropriate safeguards are in place for
-              international data transfers.
-            </p>
-          </section>
-
-          <section>
-            <h2 className="text-2xl font-semibold text-white mb-4">12. Changes to This Policy</h2>
-            <p className="leading-relaxed">
-              We may update this Privacy Policy from time to time. We will notify you of significant changes via email
-              or prominent notice on our platform. Your continued use of our services after such modifications constitutes
-              your acceptance of the updated policy.
-            </p>
-          </section>
-
-          <section>
-            <h2 className="text-2xl font-semibold text-white mb-4">13. Contact Us</h2>
-            <p className="leading-relaxed">
-              If you have any questions about this Privacy Policy or our data practices, please contact us:
+              If you have questions, suggestions, or complaints about personal information protection issues, you can choose to contact us through the following methods:
             </p>
             <div className="mt-4 p-4 bg-white/5 rounded-lg">
-              <p><strong>武汉观星文化传媒有限公司</strong></p>
-              <p className="mt-1">Wuhan Guanxing Cultural Media Co., Ltd.</p>
-              <p className="mt-2">Email: contact@toryx.ai</p>
-              <p>Website: www.tokfactoryai.com</p>
+              <p>Email to: <strong>contact@toryx.ai</strong></p>
+              <p className="mt-2">We will verify your identity and reply within fifteen working days as soon as possible.</p>
+            </div>
+          </section>
+
+          <section className="bg-gradient-to-r from-cyan-500/10 to-pink-500/10 border border-cyan-500/20 rounded-xl p-6">
+            <h2 className="text-2xl font-semibold text-white mb-4">9. Others</h2>
+            <p className="leading-relaxed mb-2"><strong>9.1 Third-Party Service Statement</strong></p>
+            <p className="leading-relaxed">
+              When ToryX integrates third-party services (such as TikTok, YouTube), it will follow the data policies of relevant platforms.
+            </p>
+            <ul className="list-disc pl-6 space-y-2 mt-2">
+              <li>If you authorize a TikTok account, it means you agree to accept the <a href="https://www.tiktok.com/legal/privacy-policy?lang=en" target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline">TikTok Privacy Policy</a>.</li>
+              <li>ToryX will use Google/YouTube API services. If you authorize a YouTube account, it means you agree to accept the <a href="https://www.google.com/policies/privacy" target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline">Google Privacy Policy</a>.</li>
+              <li>If you need to revoke Google/YouTube authorization, you can revoke the application&apos;s data access permission through the <a href="https://security.google.com/settings/security/permissions" target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline">Google Security Settings Page</a>.</li>
+            </ul>
+          </section>
+
+          <section className="border-t border-white/10 pt-8 mt-8">
+            <div className="p-4 bg-white/5 rounded-lg">
+              <p><strong>Wuhan Guanxing Cultural Media Co., Ltd.</strong></p>
+              <p className="mt-1">Email: contact@toryx.ai</p>
+              <p className="mt-2">Website: www.tokfactoryai.com</p>
               <p>Address: Wuhan, Hubei Province, China</p>
               <p className="mt-2 text-gray-400">ICP License: 鄂ICP备2023007484号</p>
             </div>
-            <p className="leading-relaxed mt-4">
-              We will respond to your inquiry within 15 business days.
-            </p>
           </section>
         </div>
       </div>
