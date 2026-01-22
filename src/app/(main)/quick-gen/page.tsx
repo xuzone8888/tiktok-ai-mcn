@@ -62,12 +62,12 @@ import {
 import { useToast } from "@/hooks/use-toast";
 // 不再使用 Server Action，直接调用 API 路由
 // import { generateVideo, getVideoTaskStatus } from "@/lib/actions/generate-video";
-import { 
+import {
   getMarketplaceModels,
 } from "@/lib/actions/models";
-import { 
-  useQuickGenStore, 
-  useQuickGenActiveTask, 
+import {
+  useQuickGenStore,
+  useQuickGenActiveTask,
   useQuickGenIsGenerating,
   useQuickGenActiveImageTask,
   useQuickGenIsImageGenerating,
@@ -90,6 +90,7 @@ import {
   type AiCastMode,
   type CanvasState,
   type DisplayModel,
+  type NanoTier,
   VIDEO_MODEL_PRICING,
   IMAGE_ASPECT_OPTIONS,
   IMAGE_RESOLUTION_OPTIONS,
@@ -110,9 +111,15 @@ export default function QuickGeneratorPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // ================================================================
+  // 客户端挂载检测 - 防止 Hydration 错误
+  // ================================================================
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
+
+  // ================================================================
   // 全局模式 - 固定为图片模式
   // ================================================================
-  const [outputMode] = useState<OutputMode>("image");
+  const [outputMode, setOutputMode] = useState<OutputMode>("image");
 
   // ================================================================
   // Video Mode: Step 1 - Image Source & Enhancement
@@ -128,7 +135,7 @@ export default function QuickGeneratorPage() {
   const [imageNanoTier, setImageNanoTier] = useState<NanoTier>("fast");
   const [imageAspectRatio, setImageAspectRatio] = useState<ImageAspectRatio>("auto");
   const [imageResolution, setImageResolution] = useState<ImageResolution>("1k");
-  
+
   // Image Mode: 多图上传 (最多4张)
   const [imageUploadedFiles, setImageUploadedFiles] = useState<Array<{ url: string; name: string }>>([]);
 
@@ -162,7 +169,7 @@ export default function QuickGeneratorPage() {
   const [generatingProgress, setGeneratingProgress] = useState(0);
   const [resultUrl, setResultUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  
+
   // ================================================================
   // Quick Gen Store - 后台任务状态
   // ================================================================
@@ -170,20 +177,20 @@ export default function QuickGeneratorPage() {
   const isQuickGenRunning = useQuickGenIsGenerating();
   const createVideoTask = useQuickGenStore((state) => state.createVideoTask);
   const clearActiveTask = useQuickGenStore((state) => state.clearActiveTask);
-  
+
   // 图片任务
   const quickGenImageTask = useQuickGenActiveImageTask();
   const isQuickGenImageRunning = useQuickGenIsImageGenerating();
   const createImageTask = useQuickGenStore((state) => state.createImageTask);
   const clearActiveImageTask = useQuickGenStore((state) => state.clearActiveImageTask);
-  
+
   // 九宫格处理结果（从 store 恢复）
   const storedGridImages = useQuickGenProcessedGridImages();
   const storedGridIndex = useQuickGenSelectedGridIndex();
   const setStoredGridImages = useQuickGenStore((state) => state.setProcessedGridImages);
   const setStoredGridIndex = useQuickGenStore((state) => state.setSelectedGridIndex);
   const clearStoredGridImages = useQuickGenStore((state) => state.clearProcessedGridImages);
-  
+
   // 全屏预览弹窗
   const [fullscreenPreview, setFullscreenPreview] = useState<{
     open: boolean;
@@ -194,8 +201,9 @@ export default function QuickGeneratorPage() {
   // ================================================================
   // User Data
   // ================================================================
-  const [userCredits, setUserCredits] = useState(5000);
-  
+  const [userCredits, setUserCredits] = useState<number | null>(null);
+  const [isLoadingCredits, setIsLoadingCredits] = useState(true);
+
   // 模特数据
   const [myTeamModels, setMyTeamModels] = useState<DisplayModel[]>([]);
   const [allModels, setAllModels] = useState<DisplayModel[]>([]);
@@ -205,7 +213,7 @@ export default function QuickGeneratorPage() {
   // ================================================================
   // 计费计算 - 使用共享计费函数
   // ================================================================
-  
+
   // Video Mode: Process Image Cost (图片增强费用)
   const processImageCost = useMemo(() => {
     // 使用共享的计费函数
@@ -234,14 +242,14 @@ export default function QuickGeneratorPage() {
   // ================================================================
   // 状态派生
   // ================================================================
-  
+
   // Video Mode: 是否可以处理图片
-  const canProcessImage = outputMode === "video" && sourceType === "nano_banana" && uploadedFile && 
+  const canProcessImage = outputMode === "video" && sourceType === "nano_banana" && uploadedFile &&
     (canvasState === "preview" || canvasState === "selected" || canvasState === "uploaded");
-  
+
   // 是否有可用底图 (用于显示，不用于禁用生成按钮)
   const hasBaseImage = selectedImage || (sourceType === "local_upload" && uploadedFile);
-  
+
   // ============================================
   // 【修复1】解锁生成按钮：支持纯文本生成
   // 按钮可用条件：(Prompt 不为空) OR (Image 已上传)
@@ -249,16 +257,16 @@ export default function QuickGeneratorPage() {
   const canGenerate = useMemo(() => {
     // 基本条件：不在处理中
     if (canvasState === "processing" || canvasState === "generating") return false;
-    
+
     // 视频模式：后台任务正在运行时禁用
     if (outputMode === "video" && isQuickGenRunning) return false;
-    
+
     // 图片模式：后台任务正在运行时禁用
     if (outputMode === "image" && isQuickGenImageRunning) return false;
-    
-    // 积分检查
-    if (userCredits < totalCost) return false;
-    
+
+    // 积分检查 (加载中或积分不足时禁用)
+    if (userCredits === null || userCredits < totalCost) return false;
+
     if (outputMode === "video") {
       // Video Mode: Prompt 或 Image 至少有一个
       const hasPrompt = prompt.trim().length > 0;
@@ -276,7 +284,7 @@ export default function QuickGeneratorPage() {
   const selectedModel = useMemo(() => {
     if (!selectedModelId) return null;
     // 先从 My Team 找，再从 All Models 找
-    return myTeamModels.find((m) => m.id === selectedModelId) 
+    return myTeamModels.find((m) => m.id === selectedModelId)
       || allModels.find((m) => m.id === selectedModelId)
       || null;
   }, [selectedModelId, myTeamModels, allModels]);
@@ -370,13 +378,13 @@ export default function QuickGeneratorPage() {
     // 切换到对应模式
     if (item.mode === "image") {
       setOutputMode("image");
-      
+
       // 设置图片参数
       if (item.prompt) setPrompt(item.prompt);
       if (item.image_quality_tier) setImageNanoTier(item.image_quality_tier as "fast" | "pro");
       if (item.image_aspect_ratio) setImageAspectRatio(item.image_aspect_ratio as ImageAspectRatio);
       if (item.image_resolution) setImageResolution(item.image_resolution as ImageResolution);
-      
+
       // 设置参考图片（如果有）
       if (item.input_images && item.input_images.length > 0) {
         const newFiles = item.input_images.map((url, index) => ({
@@ -389,10 +397,10 @@ export default function QuickGeneratorPage() {
         setImageUploadedFiles([]);
         setCanvasState("empty");
       }
-      
+
     } else {
       setOutputMode("video");
-      
+
       // 设置视频参数
       if (item.prompt) setPrompt(item.prompt);
       if (item.video_model) setVideoModel(item.video_model as VideoModel);
@@ -402,7 +410,7 @@ export default function QuickGeneratorPage() {
         setSelectedModelId(item.video_ai_model_id);
         setAiCastMode("team"); // 假设是 team 模特
       }
-      
+
       // 设置底图（如果有）
       if (item.input_images && item.input_images.length > 0) {
         setUploadedFile({
@@ -417,10 +425,10 @@ export default function QuickGeneratorPage() {
         setCanvasState("empty");
       }
     }
-    
+
     // 关闭历史面板
     setShowHistoryPanel(false);
-    
+
     toast({
       title: "✅ 配置已加载",
       description: `已从历史记录加载 ${item.mode === "image" ? "图片" : "视频"} 配置`,
@@ -429,20 +437,31 @@ export default function QuickGeneratorPage() {
 
   // 获取用户积分和 userId
   useEffect(() => {
-    fetch("/api/user/credits")
+    const controller = new AbortController();
+    setIsLoadingCredits(true);
+
+    fetch("/api/user/credits", { signal: controller.signal })
       .then((res) => res.json())
       .then((data) => {
         if (data.credits !== undefined) setUserCredits(data.credits);
         if (data.userId) setUserId(data.userId);
       })
-      .catch(console.error);
+      .catch((err) => {
+        if (err.name !== "AbortError") {
+          console.error("[QuickGen] Credits fetch failed:", err);
+          setUserCredits(0);
+        }
+      })
+      .finally(() => setIsLoadingCredits(false));
+
+    return () => controller.abort();
   }, []);
-  
+
   // 监听后台视频任务状态变化
   // 注意：只在视频模式下更新画布状态，让用户可以自由切换模式
   useEffect(() => {
     if (!quickGenActiveTask) return;
-    
+
     // 同步任务状态到 UI（仅在当前是视频模式时更新画布状态）
     if (quickGenActiveTask.status === "generating" || quickGenActiveTask.status === "polling") {
       if (outputMode === "video") {
@@ -496,7 +515,7 @@ export default function QuickGeneratorPage() {
   // 注意：不再强制切换 outputMode，让用户可以自由切换
   useEffect(() => {
     if (!quickGenImageTask) return;
-    
+
     // 同步任务状态到 UI（仅在当前是图片模式时更新画布状态）
     if (quickGenImageTask.status === "generating" || quickGenImageTask.status === "polling") {
       // 只在图片模式下更新画布状态，不强制切换模式
@@ -549,19 +568,19 @@ export default function QuickGeneratorPage() {
       clearActiveImageTask();
     }
   }, [quickGenImageTask, clearActiveImageTask, outputMode, saveHistoryToServer]);
-  
+
   // 页面加载时，恢复最近完成的任务结果
   const recentTasks = useQuickGenStore((state) => state.recentTasks);
   const isInitialMount = useRef(true);
-  
+
   useEffect(() => {
     // 只在初始加载时执行一次
     if (!isInitialMount.current) return;
     isInitialMount.current = false;
-    
+
     // 如果已经有结果URL（从其他地方设置的），不需要恢复
     if (resultUrl) return;
-    
+
     // 查找最近完成的任务（1小时内）
     const recentCompleted = recentTasks.find(t => {
       if (t.status !== "completed" || !t.resultUrl) return false;
@@ -569,13 +588,13 @@ export default function QuickGeneratorPage() {
       const now = Date.now();
       return now - completedTime < 3600000; // 1小时内完成的任务
     });
-    
+
     if (recentCompleted) {
       // 恢复结果
       console.log("[QuickGen] Restoring recent completed task:", recentCompleted.id);
       setResultUrl(recentCompleted.resultUrl!);
       setCanvasState("result");
-      
+
       // 根据任务类型切换模式
       if ("tier" in recentCompleted) {
         // 图片任务
@@ -586,7 +605,7 @@ export default function QuickGeneratorPage() {
       }
       return;
     }
-    
+
     // 如果没有最近完成的任务，尝试恢复九宫格处理结果
     if (storedGridImages.length > 0) {
       setProcessedImages(storedGridImages);
@@ -637,7 +656,7 @@ export default function QuickGeneratorPage() {
       try {
         const response = await fetch("/api/contracts?status=active");
         const result = await response.json();
-        
+
         if (result.success && result.data) {
           // 将合约数据转换为 DisplayModel 格式
           const hiredModels: DisplayModel[] = result.data
@@ -647,7 +666,7 @@ export default function QuickGeneratorPage() {
               const endDate = new Date(contract.end_date);
               const now = new Date();
               const daysRemaining = Math.max(0, Math.ceil((endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
-              
+
               // 处理 style_tags
               let tags: string[] = [];
               if (model.style_tags) {
@@ -657,7 +676,7 @@ export default function QuickGeneratorPage() {
                   tags = model.style_tags;
                 }
               }
-              
+
               return {
                 id: model.id,
                 name: model.name,
@@ -675,7 +694,7 @@ export default function QuickGeneratorPage() {
                 contract_end_date: contract.end_date,
               };
             });
-          
+
           setMyTeamModels(hiredModels);
           console.log(`[Quick Gen] Loaded ${hiredModels.length} hired models (active & not expired)`);
         }
@@ -716,7 +735,7 @@ export default function QuickGeneratorPage() {
       setUploadedFile({ url, name: file.name });
       setProcessedImages([]);
       setResultUrl(null);
-      
+
       if (outputMode === "video") {
         if (sourceType === "local_upload") {
           setSelectedImage(url);
@@ -749,8 +768,8 @@ export default function QuickGeneratorPage() {
 
   const handleProcessImage = useCallback(async () => {
     if (!canProcessImage || !uploadedFile) return;
-    
-    if (userCredits < processImageCost) {
+
+    if (userCredits === null || userCredits < processImageCost) {
       toast({ variant: "destructive", title: "积分不足" });
       return;
     }
@@ -763,22 +782,22 @@ export default function QuickGeneratorPage() {
     try {
       // 先上传图片到 Supabase 获取公网 URL
       let remoteImageUrl = uploadedFile.url;
-      
+
       if (uploadedFile.url.startsWith("blob:")) {
         try {
           const blobResponse = await fetch(uploadedFile.url);
           const blob = await blobResponse.blob();
-          
+
           const formData = new FormData();
           formData.append("file", blob, uploadedFile.name);
-          
+
           const uploadResponse = await fetch("/api/upload/image", {
             method: "POST",
             body: formData,
           });
-          
+
           const uploadResult = await uploadResponse.json();
-          
+
           if (uploadResult.success && uploadResult.data?.url) {
             remoteImageUrl = uploadResult.data.url;
           } else {
@@ -796,13 +815,13 @@ export default function QuickGeneratorPage() {
 
       // 调用图片增强 API
       const mode = processingType === "upscale" ? "upscale" : "nine_grid";
-      
+
       // 九宫格模式：根据 batchCount 生成多张图片
       const tasksToGenerate = processingType === "9grid" ? batchCount : 1;
-      
+
       console.log(`[Quick Gen] Starting ${tasksToGenerate} ${mode} task(s), batchCount=${batchCount}, processingType=${processingType}`);
-      
-      toast({ 
+
+      toast({
         title: mode === "upscale" ? "🔍 正在高清放大..." : `🎨 正在生成 ${tasksToGenerate} 张九宫格...`,
         description: `预计需要 ${tasksToGenerate * 30}-${tasksToGenerate * 60} 秒`,
       });
@@ -841,14 +860,14 @@ export default function QuickGeneratorPage() {
       const pollSingleTask = async (task: { taskId: string; model: string; index: number }): Promise<string | null> => {
         const maxPolls = 60; // 60 * 3s = 180 秒
         const pollIntervalMs = 3000;
-        
+
         for (let pollCount = 0; pollCount < maxPolls; pollCount++) {
           await new Promise(resolve => setTimeout(resolve, pollIntervalMs));
-          
+
           try {
             const statusResponse = await fetch(`/api/generate/image?taskId=${task.taskId}&model=${task.model}`);
             const statusResult = await statusResponse.json();
-            
+
             if (!statusResult.success) {
               console.error(`[Quick Gen] Task ${task.index} status query failed:`, statusResult.error);
               continue;
@@ -868,23 +887,23 @@ export default function QuickGeneratorPage() {
             console.error(`[Quick Gen] Task ${task.index} polling error:`, pollError);
           }
         }
-        
+
         console.error(`[Quick Gen] Task ${task.index} timed out`);
         return null;
       };
 
       // 并行轮询所有任务
       console.log(`[Quick Gen] Starting to poll ${tasks.length} tasks in parallel`);
-      
+
       // 使用 Promise.allSettled 等待所有任务完成
       const progressInterval = setInterval(() => {
         setProcessingProgress(prev => Math.min(90, prev + 1));
       }, 2000);
 
       const results = await Promise.allSettled(tasks.map(task => pollSingleTask(task)));
-      
+
       clearInterval(progressInterval);
-      
+
       // 收集成功的图片
       const successfulImages: string[] = [];
       results.forEach((result, index) => {
@@ -900,9 +919,9 @@ export default function QuickGeneratorPage() {
 
       if (successfulImages.length > 0) {
         setProcessingProgress(100);
-        setUserCredits((prev) => prev - processImageCost);
+        setUserCredits((prev) => (prev ?? 0) - processImageCost);
         window.dispatchEvent(new CustomEvent("credits-updated"));
-        
+
         if (processingType === "upscale") {
           setProcessedImages(successfulImages);
           setStoredGridImages(successfulImages); // 保存到 store
@@ -998,16 +1017,16 @@ export default function QuickGeneratorPage() {
     setAiCastMode(tempSelectedMode);
     setSelectedModelId(tempSelectedMode === "auto" ? null : tempSelectedModelId);
     setShowModelDialog(false);
-    
+
     // 找到选中的模特
-    const foundModel = tempSelectedMode !== "auto" 
-      ? myTeamModels.find(m => m.id === tempSelectedModelId) 
-        || allModels.find(m => m.id === tempSelectedModelId)
+    const foundModel = tempSelectedMode !== "auto"
+      ? myTeamModels.find(m => m.id === tempSelectedModelId)
+      || allModels.find(m => m.id === tempSelectedModelId)
       : null;
-    
-    toast({ 
-      title: tempSelectedMode === "auto" 
-        ? "✨ 已选择自动匹配模式" 
+
+    toast({
+      title: tempSelectedMode === "auto"
+        ? "✨ 已选择自动匹配模式"
         : `✅ 已选择模特: ${foundModel?.name || "Unknown"}`
     });
   }, [tempSelectedMode, tempSelectedModelId, myTeamModels, allModels, toast]);
@@ -1034,7 +1053,7 @@ export default function QuickGeneratorPage() {
         const costCredits = modelConfig.credits;
 
         // 确定模特 ID
-        const modelIdToSend = useAiModel 
+        const modelIdToSend = useAiModel
           ? (aiCastMode === "auto" ? "auto" : selectedModelId)
           : null;
 
@@ -1042,28 +1061,28 @@ export default function QuickGeneratorPage() {
         // 处理图片上传：如果有本地图片，先上传到服务器获取公网 URL
         // ============================================
         let remoteImageUrl: string | undefined = undefined;
-        
+
         if (hasBaseImage && uploadedFile) {
           // 检查是否是本地 blob URL
           if (uploadedFile.url.startsWith("blob:")) {
             console.log("[Quick Gen] Uploading local image to server...");
             setGeneratingProgress(5);
-            
+
             try {
               // 将 blob URL 转换为 File 对象
               const blobResponse = await fetch(uploadedFile.url);
               const blob = await blobResponse.blob();
-              
+
               const formData = new FormData();
               formData.append("file", blob, uploadedFile.name);
-              
+
               const uploadResponse = await fetch("/api/upload/image", {
                 method: "POST",
                 body: formData,
               });
-              
+
               const uploadResult = await uploadResponse.json();
-              
+
               if (uploadResult.success && uploadResult.data?.url) {
                 remoteImageUrl = uploadResult.data.url;
                 console.log("[Quick Gen] Image uploaded:", remoteImageUrl);
@@ -1111,24 +1130,24 @@ export default function QuickGeneratorPage() {
           creditCost: costCredits,
         });
 
-        toast({ 
-          title: "🚀 视频生成已启动", 
+        toast({
+          title: "🚀 视频生成已启动",
           description: "任务将在后台执行，可以切换页面",
         });
 
         // 立即扣除积分（乐观更新）
-        setUserCredits((prev) => prev - costCredits);
+        setUserCredits((prev) => (prev ?? 0) - costCredits);
 
       } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : "Unknown error";
         console.error("[Quick Gen] Generation error:", errorMessage);
-        
+
         setError(errorMessage);
         setCanvasState("failed");
-        
-        toast({ 
+
+        toast({
           variant: "destructive",
-          title: "生成失败", 
+          title: "生成失败",
           description: errorMessage,
         });
       }
@@ -1139,24 +1158,24 @@ export default function QuickGeneratorPage() {
       try {
         // 准备参考图片 URL 数组 (最多4张)
         const sourceImageUrls: string[] = [];
-        
+
         // 上传所有参考图片
         for (const file of imageUploadedFiles) {
           if (file.url.startsWith("blob:")) {
             try {
               const blobResponse = await fetch(file.url);
               const blob = await blobResponse.blob();
-              
+
               const formData = new FormData();
               formData.append("file", blob, file.name || "source-image.jpg");
-              
+
               const uploadResponse = await fetch("/api/upload/image", {
                 method: "POST",
                 body: formData,
               });
-              
+
               const uploadResult = await uploadResponse.json();
-              
+
               if (uploadResult.success && uploadResult.data?.url) {
                 sourceImageUrls.push(uploadResult.data.url);
               }
@@ -1170,7 +1189,7 @@ export default function QuickGeneratorPage() {
 
         // 创建后台任务 - 由 BackgroundTaskManager 执行
         const model = imageNanoTier === "pro" ? "nano-banana-pro" : "nano-banana";
-        
+
         createImageTask({
           prompt: prompt.trim() || "高质量产品照片，专业灯光，干净背景",
           model: model as "nano-banana" | "nano-banana-pro",
@@ -1181,24 +1200,24 @@ export default function QuickGeneratorPage() {
           creditCost: totalCost,
         });
 
-        toast({ 
-          title: "🎨 图片生成已启动", 
+        toast({
+          title: "🎨 图片生成已启动",
           description: "任务将在后台执行，可以切换页面",
         });
 
         // 立即扣除积分（乐观更新）
-        setUserCredits((prev) => prev - totalCost);
+        setUserCredits((prev) => (prev ?? 0) - totalCost);
 
       } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : "Unknown error";
         console.error("[Quick Gen] Image generation error:", errorMessage);
-        
+
         setError(errorMessage);
         setCanvasState("failed");
-        
-        toast({ 
+
+        toast({
           variant: "destructive",
-          title: "生成失败", 
+          title: "生成失败",
           description: errorMessage,
         });
       }
@@ -1208,6 +1227,26 @@ export default function QuickGeneratorPage() {
   // ================================================================
   // 渲染
   // ================================================================
+
+  // 客户端挂载前显示骨架屏，防止 Hydration 错误
+  if (!mounted) {
+    return (
+      <div className="flex h-[calc(100vh-100px)] gap-6 p-6">
+        {/* Skeleton Left Panel */}
+        <div className="w-[400px] flex-shrink-0 space-y-4">
+          <div className="h-10 w-48 bg-white/5 rounded-lg animate-pulse" />
+          <div className="h-12 bg-white/5 rounded-xl animate-pulse" />
+          <div className="h-64 bg-white/5 rounded-xl animate-pulse" />
+          <div className="h-32 bg-white/5 rounded-xl animate-pulse" />
+        </div>
+        {/* Skeleton Right Panel */}
+        <div className="flex-1 space-y-4">
+          <div className="h-10 w-32 bg-white/5 rounded-lg animate-pulse" />
+          <div className="h-96 bg-white/5 rounded-xl animate-pulse" />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-[calc(100vh-100px)] gap-6">
@@ -1241,7 +1280,11 @@ export default function QuickGeneratorPage() {
             {/* 积分显示 */}
             <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/10 border border-amber-500/30">
               <Zap className="h-3.5 w-3.5 text-amber-500" />
-              <span className="font-semibold text-amber-400 text-sm">{userCredits}</span>
+              {isLoadingCredits ? (
+                <span className="w-10 h-4 bg-amber-500/20 rounded animate-pulse" />
+              ) : (
+                <span className="font-semibold text-amber-400 text-sm">{userCredits ?? 0}</span>
+              )}
             </div>
           </div>
         </div>
@@ -1375,12 +1418,12 @@ export default function QuickGeneratorPage() {
                     {!uploadedFile && <span className="text-amber-400 ml-1">(必填)</span>}
                   </Label>
                   <div className="relative">
-                    <Textarea 
-                      value={prompt} 
+                    <Textarea
+                      value={prompt}
                       onChange={(e) => setPrompt(e.target.value)}
                       placeholder={uploadedFile ? "描述你想要生成的视频内容..." : "详细描述你的视频内容（文生视频必填）..."}
-                      disabled={canvasState === "generating"} 
-                      className="input-surface resize-none text-sm pr-16 min-h-[180px]" 
+                      disabled={canvasState === "generating"}
+                      className="input-surface resize-none text-sm pr-16 min-h-[180px]"
                     />
                     <Button size="sm" variant="ghost" onClick={handleEnhancePrompt}
                       disabled={isEnhancingPrompt || !prompt.trim()}
@@ -1429,9 +1472,9 @@ export default function QuickGeneratorPage() {
                     <Switch checked={useAiModel} onCheckedChange={setUseAiModel} className="data-[state=checked]:bg-tiktok-pink scale-90" />
                   </div>
                   {useAiModel && (
-                    <Button 
-                      variant="outline" 
-                      onClick={handleOpenModelDialog} 
+                    <Button
+                      variant="outline"
+                      onClick={handleOpenModelDialog}
                       className={cn(
                         "w-full h-auto min-h-[44px] justify-between border-white/20 hover:border-tiktok-pink/50 py-2",
                         selectedModel && "bg-gradient-to-r from-tiktok-pink/5 to-purple-500/5"
@@ -1451,10 +1494,10 @@ export default function QuickGeneratorPage() {
                         ) : selectedModel ? (
                           <>
                             {selectedModel.avatar_url ? (
-                              <img 
-                                src={selectedModel.avatar_url} 
-                                alt={selectedModel.name} 
-                                className="h-8 w-8 rounded-full object-cover border border-tiktok-pink/30" 
+                              <img
+                                src={selectedModel.avatar_url}
+                                alt={selectedModel.name}
+                                className="h-8 w-8 rounded-full object-cover border border-tiktok-pink/30"
                               />
                             ) : (
                               <div className="h-8 w-8 rounded-full bg-gradient-to-br from-tiktok-pink/30 to-purple-500/30 flex items-center justify-center border border-tiktok-pink/30">
@@ -1555,12 +1598,12 @@ export default function QuickGeneratorPage() {
                           const files = Array.from(e.target.files || []);
                           const remainingSlots = 4 - imageUploadedFiles.length;
                           const filesToAdd = files.slice(0, remainingSlots);
-                          
+
                           const newFiles = filesToAdd.map(file => ({
                             url: URL.createObjectURL(file),
                             name: file.name
                           }));
-                          
+
                           setImageUploadedFiles(prev => {
                             const updated = [...prev, ...newFiles];
                             // 上传图片后设置预览状态
@@ -1595,12 +1638,12 @@ export default function QuickGeneratorPage() {
                   <span className="text-muted-foreground ml-1">(Recommended)</span>
                 </Label>
                 <div className="relative">
-                  <Textarea 
-                    value={prompt} 
+                  <Textarea
+                    value={prompt}
                     onChange={(e) => setPrompt(e.target.value)}
                     placeholder="描述你想要生成的图片效果... (例如：'摄影棚灯光、白色背景、产品摄影')"
-                    disabled={canvasState === "generating"} 
-                    className="input-surface resize-none text-sm pr-16 min-h-[180px]" 
+                    disabled={canvasState === "generating"}
+                    className="input-surface resize-none text-sm pr-16 min-h-[180px]"
                   />
                   <Button size="sm" variant="ghost" onClick={handleEnhancePrompt}
                     disabled={isEnhancingPrompt || !prompt.trim()}
@@ -1677,8 +1720,8 @@ export default function QuickGeneratorPage() {
             <span className="text-muted-foreground">Estimated Cost:</span>
             <div className="flex items-center gap-2">
               <span className="font-bold text-amber-400">{totalCost} Credits</span>
-              {userCredits < totalCost && (
-                <span className="text-xs text-red-400">(余额: {userCredits})</span>
+              {(userCredits ?? 0) < totalCost && (
+                <span className="text-xs text-red-400">(余额: {userCredits ?? 0})</span>
               )}
             </div>
           </div>
@@ -1698,8 +1741,8 @@ export default function QuickGeneratorPage() {
                 <a href="/auth/login" className="text-tiktok-cyan hover:underline">
                   🔐 请先登录以使用生成功能
                 </a>
-              ) : userCredits < totalCost ? (
-                <span className="text-red-400">❌ 积分不足！需要 {totalCost} Credits，当前余额 {userCredits}</span>
+              ) : (userCredits ?? 0) < totalCost ? (
+                <span className="text-red-400">❌ 积分不足！需要 {totalCost} Credits，当前余额 {userCredits ?? 0}</span>
               ) : outputMode === "video" && !uploadedFile && !prompt.trim() ? (
                 <span className="text-amber-400">请输入 Prompt 或上传图片</span>
               ) : (
@@ -1725,7 +1768,7 @@ export default function QuickGeneratorPage() {
       {/* RIGHT PANEL - Canvas/Preview */}
       {/* ============================================================ */}
       <div className="flex-1 rounded-2xl border border-border/50 bg-muted/30 dark:bg-black/30 overflow-hidden relative">
-        
+
         {/* Empty State */}
         {canvasState === "empty" && (
           <div className="absolute inset-0 flex flex-col items-center justify-center">
@@ -1765,18 +1808,18 @@ export default function QuickGeneratorPage() {
             <div className={cn(
               "grid gap-3 max-w-[500px]",
               imageUploadedFiles.length === 1 ? "grid-cols-1" :
-              imageUploadedFiles.length === 2 ? "grid-cols-2" :
-              "grid-cols-2"
+                imageUploadedFiles.length === 2 ? "grid-cols-2" :
+                  "grid-cols-2"
             )}>
               {imageUploadedFiles.map((file, index) => (
                 <div key={index} className="relative rounded-xl overflow-hidden border border-white/20">
-                  <img 
-                    src={file.url} 
-                    alt={`Reference ${index + 1}`} 
+                  <img
+                    src={file.url}
+                    alt={`Reference ${index + 1}`}
                     className={cn(
                       "w-full object-cover",
                       imageUploadedFiles.length === 1 ? "max-h-[400px]" : "h-[180px]"
-                    )} 
+                    )}
                   />
                   <div className="absolute bottom-2 left-2 bg-black/70 px-2 py-0.5 rounded text-xs">
                     #{index + 1}
@@ -1812,24 +1855,24 @@ export default function QuickGeneratorPage() {
         {canvasState === "selection" && processedImages.length > 0 && (
           <div className="absolute inset-0 flex flex-col items-center justify-center p-8">
             <p className="text-xl font-semibold mb-4">选择处理结果</p>
-            
+
             {/* 单图大图预览模式 */}
             {processedImages.length === 1 ? (
               <div className="relative flex flex-col items-center">
-                <div 
+                <div
                   className="relative cursor-pointer group"
                   onClick={() => handleOpenFullscreen(processedImages[0], "image")}
                 >
-                  <img 
-                    src={processedImages[0]} 
-                    alt="Processed" 
-                    className="max-w-full max-h-[400px] object-contain rounded-xl border-2 border-white/20 group-hover:border-tiktok-cyan/50 transition-all" 
+                  <img
+                    src={processedImages[0]}
+                    alt="Processed"
+                    className="max-w-full max-h-[400px] object-contain rounded-xl border-2 border-white/20 group-hover:border-tiktok-cyan/50 transition-all"
                   />
                   <div className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/30 transition-all rounded-xl">
                     <span className="opacity-0 group-hover:opacity-100 text-white text-sm font-medium">点击放大</span>
                   </div>
                 </div>
-                <Button 
+                <Button
                   onClick={() => handleSelectImage(processedImages[0])}
                   className="mt-4 bg-gradient-to-r from-tiktok-cyan to-blue-500 text-black font-semibold"
                 >
@@ -1841,24 +1884,24 @@ export default function QuickGeneratorPage() {
                 {/* 多图轮换模式 */}
                 <div className="relative flex items-center gap-6">
                   {/* 左箭头 - 更醒目 */}
-                  <Button 
-                    variant="outline" 
+                  <Button
+                    variant="outline"
                     size="icon"
                     onClick={() => setCurrentImageIndex(prev => (prev - 1 + processedImages.length) % processedImages.length)}
                     className="h-14 w-14 rounded-full bg-gradient-to-r from-tiktok-cyan/80 to-blue-500/80 border-2 border-white/30 hover:from-tiktok-cyan hover:to-blue-500 shadow-lg shadow-tiktok-cyan/30"
                   >
                     <ArrowLeft className="h-7 w-7 text-white" />
                   </Button>
-                  
+
                   {/* 当前图片 - 点击可全屏预览 */}
-                  <div 
+                  <div
                     className="relative cursor-pointer group"
                     onClick={() => handleOpenFullscreen(processedImages[currentImageIndex], "image")}
                   >
-                    <img 
-                      src={processedImages[currentImageIndex]} 
-                      alt={`Option ${currentImageIndex + 1}`} 
-                      className="max-w-[400px] max-h-[400px] object-contain rounded-xl border-2 border-white/20 group-hover:border-tiktok-cyan/50 transition-all" 
+                    <img
+                      src={processedImages[currentImageIndex]}
+                      alt={`Option ${currentImageIndex + 1}`}
+                      className="max-w-[400px] max-h-[400px] object-contain rounded-xl border-2 border-white/20 group-hover:border-tiktok-cyan/50 transition-all"
                     />
                     <div className="absolute top-3 left-3 bg-black/70 px-3 py-1 rounded-full text-sm font-semibold">
                       {currentImageIndex + 1} / {processedImages.length}
@@ -1867,10 +1910,10 @@ export default function QuickGeneratorPage() {
                       <span className="opacity-0 group-hover:opacity-100 text-white text-sm font-medium">点击放大</span>
                     </div>
                   </div>
-                  
+
                   {/* 右箭头 - 更醒目 */}
-                  <Button 
-                    variant="outline" 
+                  <Button
+                    variant="outline"
                     size="icon"
                     onClick={() => setCurrentImageIndex(prev => (prev + 1) % processedImages.length)}
                     className="h-14 w-14 rounded-full bg-gradient-to-r from-tiktok-pink/80 to-purple-500/80 border-2 border-white/30 hover:from-tiktok-pink hover:to-purple-500 shadow-lg shadow-tiktok-pink/30"
@@ -1878,17 +1921,17 @@ export default function QuickGeneratorPage() {
                     <ChevronRight className="h-7 w-7 text-white" />
                   </Button>
                 </div>
-                
+
                 {/* 缩略图导航 */}
                 <div className="flex gap-3 mt-5">
                   {processedImages.map((img, index) => (
-                    <button 
-                      key={index} 
+                    <button
+                      key={index}
                       onClick={() => setCurrentImageIndex(index)}
                       className={cn(
                         "w-18 h-18 rounded-lg overflow-hidden border-2 transition-all",
-                        currentImageIndex === index 
-                          ? "border-tiktok-cyan ring-2 ring-tiktok-cyan/50 scale-110" 
+                        currentImageIndex === index
+                          ? "border-tiktok-cyan ring-2 ring-tiktok-cyan/50 scale-110"
                           : "border-white/20 hover:border-white/40 opacity-70 hover:opacity-100"
                       )}
                     >
@@ -1896,9 +1939,9 @@ export default function QuickGeneratorPage() {
                     </button>
                   ))}
                 </div>
-                
+
                 {/* 选择按钮 */}
-                <Button 
+                <Button
                   onClick={() => handleSelectImage(processedImages[currentImageIndex])}
                   className="mt-5 bg-gradient-to-r from-tiktok-cyan to-blue-500 text-black font-semibold px-6 py-2"
                 >
@@ -1945,7 +1988,7 @@ export default function QuickGeneratorPage() {
         {canvasState === "result" && resultUrl && (
           <div className="absolute inset-0 flex flex-col items-center justify-center p-8">
             {/* 点击可全屏预览 */}
-            <div 
+            <div
               className="relative max-w-full max-h-[65%] cursor-pointer group"
               onClick={() => handleOpenFullscreen(resultUrl, outputMode)}
             >
@@ -1960,22 +2003,22 @@ export default function QuickGeneratorPage() {
             </div>
             {/* 操作按钮 */}
             <div className="flex gap-3 mt-5">
-              <Button 
+              <Button
                 onClick={() => handleDownloadContent(resultUrl, outputMode)}
                 className="bg-gradient-to-r from-tiktok-cyan to-blue-500 text-black font-semibold px-5"
               >
                 <Download className="h-4 w-4 mr-2" />保留它
               </Button>
-              <Button 
-                variant="outline" 
-                onClick={handleDeleteContent} 
+              <Button
+                variant="outline"
+                onClick={handleDeleteContent}
                 className="border-red-500/50 text-red-400 hover:bg-red-500/10 hover:text-red-300 px-5"
               >
                 <X className="h-4 w-4 mr-2" />删除它
               </Button>
-              <Button 
-                variant="outline" 
-                onClick={handleRemoveUpload} 
+              <Button
+                variant="outline"
+                onClick={handleRemoveUpload}
                 className="border-white/20 px-5"
               >
                 <RotateCcw className="h-4 w-4 mr-2" />重新生成
@@ -2010,7 +2053,7 @@ export default function QuickGeneratorPage() {
             </DialogTitle>
             <DialogDescription>Select a model to present your product</DialogDescription>
           </DialogHeader>
-          
+
           <Tabs value={tempSelectedMode} onValueChange={(v) => setTempSelectedMode(v as AiCastMode)} className="mt-4">
             <TabsList className="grid w-full grid-cols-3 bg-black/30 h-10">
               <TabsTrigger value="auto" className="data-[state=active]:bg-tiktok-cyan/20 data-[state=active]:text-tiktok-cyan">
@@ -2284,46 +2327,46 @@ export default function QuickGeneratorPage() {
             >
               <X className="h-5 w-5 text-white" />
             </button>
-            
+
             {/* 内容 - 增大预览区域 */}
             <div className="flex-1 flex items-center justify-center p-4">
               {fullscreenPreview.type === "video" ? (
-                <video 
-                  src={fullscreenPreview.url} 
-                  controls 
-                  autoPlay 
-                  loop 
+                <video
+                  src={fullscreenPreview.url}
+                  controls
+                  autoPlay
+                  loop
                   className="max-w-[92vw] max-h-[80vh] rounded-xl"
                 />
               ) : (
-                <img 
-                  src={fullscreenPreview.url} 
-                  alt="Full preview" 
+                <img
+                  src={fullscreenPreview.url}
+                  alt="Full preview"
                   className="max-w-[92vw] max-h-[80vh] object-contain rounded-xl"
                 />
               )}
             </div>
-            
+
             {/* 底部操作栏 */}
             <div className="w-full px-8 py-4 bg-black/50 border-t border-white/10 flex items-center justify-center gap-4">
-              <Button 
+              <Button
                 onClick={() => handleDownloadContent(fullscreenPreview.url, fullscreenPreview.type)}
                 className="bg-gradient-to-r from-tiktok-cyan to-blue-500 text-black font-semibold px-6"
               >
                 <Download className="h-4 w-4 mr-2" />保留它 (下载)
               </Button>
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 onClick={() => {
                   handleDeleteContent();
                   handleCloseFullscreen();
-                }} 
+                }}
                 className="border-red-500/50 text-red-400 hover:bg-red-500/10 hover:text-red-300 px-6"
               >
                 <X className="h-4 w-4 mr-2" />删除它
               </Button>
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 onClick={handleCloseFullscreen}
                 className="border-white/20 px-6"
               >
@@ -2357,7 +2400,7 @@ export default function QuickGeneratorPage() {
               <RefreshCw className={cn("h-4 w-4", isLoadingHistory && "animate-spin")} />
             </Button>
           </SheetHeader>
-          
+
           {/* 历史列表 */}
           <div className="flex-1 overflow-y-auto py-4 space-y-3">
             {isLoadingHistory ? (
@@ -2374,7 +2417,7 @@ export default function QuickGeneratorPage() {
               historyList.map((item) => {
                 const isImage = item.mode === "image";
                 const timeAgo = getTimeAgo(item.created_at);
-                
+
                 return (
                   <div
                     key={item.id}
@@ -2405,14 +2448,14 @@ export default function QuickGeneratorPage() {
                           {isImage ? "图片" : "视频"}
                         </div>
                       </div>
-                      
+
                       {/* 信息 */}
                       <div className="flex-1 min-w-0">
                         {/* 提示词 */}
                         <p className="text-sm font-medium line-clamp-2 mb-1">
                           {item.prompt || (isImage ? "无提示词" : "无提示词")}
                         </p>
-                        
+
                         {/* 参数标签 */}
                         <div className="flex flex-wrap gap-1 mb-1.5">
                           {isImage ? (
@@ -2453,7 +2496,7 @@ export default function QuickGeneratorPage() {
                             </span>
                           )}
                         </div>
-                        
+
                         {/* 底部信息 */}
                         <div className="flex items-center justify-between text-[10px] text-muted-foreground">
                           <span>{timeAgo}</span>
@@ -2463,7 +2506,7 @@ export default function QuickGeneratorPage() {
                           </span>
                         </div>
                       </div>
-                      
+
                       {/* 加载按钮 */}
                       <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
                         <Button
@@ -2501,7 +2544,7 @@ function getTimeAgo(dateString: string): string {
   const diffMins = Math.floor(diffMs / 60000);
   const diffHours = Math.floor(diffMs / 3600000);
   const diffDays = Math.floor(diffMs / 86400000);
-  
+
   if (diffMins < 1) return "刚刚";
   if (diffMins < 60) return `${diffMins}分钟前`;
   if (diffHours < 24) return `${diffHours}小时前`;
