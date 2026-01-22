@@ -331,8 +331,8 @@ function ChineseContent() {
     <>
       <div className="mb-12">
         <h1 className="text-4xl font-bold mb-4">隐私政策</h1>
-        <p className="text-gray-400">最后更新日期：2026年1月21日</p>
-        <p className="text-gray-400 mt-2">生效日期：2026年1月21日</p>
+        <p className="text-gray-400">最后更新日期：2026年1月22日</p>
+        <p className="text-gray-400 mt-2">生效日期：2026年1月22日</p>
       </div>
 
       <div className="prose prose-invert prose-lg max-w-none">
@@ -340,12 +340,10 @@ function ChineseContent() {
           <section>
             <h2 className="text-2xl font-semibold text-white mb-4">一、引言</h2>
             <p className="leading-relaxed">
-              武汉观星文化传媒有限公司（以下简称&ldquo;ToryX&rdquo;、&ldquo;我们&rdquo;或&ldquo;本公司&rdquo;）运营 ToryX 平台
-              (www.tokfactoryai.com)。本隐私政策旨在向您说明我们如何收集、使用、披露和保护您在使用我们的 AI 内容创作服务时的信息，
-              包括我们与 TikTok 平台的集成。
+              “ToryX”指<strong>武汉观星文化传媒有限公司</strong>及其关联方（以下简称“我们”）合法拥有并运营的、标注名称为 ToryX (AI 内容智造工厂) 的客户端应用程序、官方网站以及供第三方网站和应用程序使用的软件开发工具包（SDK）和应用程序编程接口（API）。
             </p>
             <p className="leading-relaxed mt-4">
-              使用 ToryX 即表示您同意按照本隐私政策收集和使用信息。如您不同意本政策，请勿使用我们的服务。
+              我们作为 ToryX 的运营者，深知个人信息对你的重要性，我们将按照法律法规的规定，保护你的个人信息及隐私安全。我们制定本隐私政策并特别提示：希望你在使用 ToryX 及相关服务前仔细阅读并理解本隐私政策，以便作出适当的选择。
             </p>
           </section>
 
@@ -452,7 +450,7 @@ function ChineseContent() {
           </section>
 
           <section>
-            <h2 className="text-2xl font-semibold text-white mb-4">六、数据安全</h2>
+            <h2 className="text-2xl font-semibold text-white mb-4">六、数据安全与存储</h2>
             <p className="leading-relaxed">我们采用行业标准的安全措施：</p>
             <ul className="list-disc pl-6 space-y-2 mt-4">
               <li>传输中的数据采用 SSL/TLS 加密</li>
@@ -462,7 +460,7 @@ function ChineseContent() {
               <li>OAuth 令牌加密存储，永不在日志或界面中暴露</li>
             </ul>
             <p className="leading-relaxed mt-4">
-              <strong>数据存储位置：</strong>您的数据存储于中华人民共和国境内的阿里云服务器。
+              <strong>数据存储位置：</strong>您的个人信息将存储于<strong>中华人民共和国境内</strong>。我们仅在提供服务所必需的期间内保留你的个人信息。
             </p>
           </section>
 

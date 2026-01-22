@@ -333,12 +333,10 @@ function ChineseContent() {
           <section>
             <h2 className="text-2xl font-semibold text-white mb-4">一、条款接受</h2>
             <p className="leading-relaxed">
-              欢迎您使用 ToryX 平台，该平台由武汉观星文化传媒有限公司（以下简称&ldquo;本公司&rdquo;、&ldquo;我们&rdquo;）运营。
-              本服务条款（以下简称&ldquo;本条款&rdquo;）约束您对 ToryX 平台 (www.tokfactoryai.com) 的访问和使用，
-              包括我们的 AI 内容创作服务和社交媒体发布功能。
+              “ToryX”软件及相关服务，系指<strong>武汉观星文化传媒有限公司</strong>及其关联方（以下简称“公司”、“我们”或“我们的”）合法拥有并运营的、标注名称为 ToryX (AI 内容智造工厂) 的客户端应用程序、官方网站以及供第三方网站和应用程序使用的软件开发工具包（SDK）和应用程序编程接口（API）。
             </p>
             <p className="leading-relaxed mt-4">
-              访问或使用我们的服务即表示您同意受本条款约束。如您不同意本条款的任何部分，请勿使用我们的服务。
+              本协议是您与公司之间关于您下载、安装、使用、复制“ToryX”软件，及使用“ToryX”相关服务所订立的协议。
             </p>
           </section>
 
