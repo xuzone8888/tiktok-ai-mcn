@@ -96,8 +96,8 @@ function EnglishContent() {
     <>
       <div className="mb-12">
         <h1 className="text-4xl font-bold mb-4">Terms of Service</h1>
-        <p className="text-gray-400">Last Updated: January 21, 2026</p>
-        <p className="text-gray-400 mt-2">Effective Date: January 21, 2026</p>
+        <p className="text-gray-400">Last Updated: January 22, 2026</p>
+        <p className="text-gray-400 mt-2">Effective Date: January 22, 2026</p>
       </div>
 
       <div className="prose prose-invert prose-lg max-w-none">
