@@ -29,20 +29,17 @@ export default function TermsPage() {
               </span>
             </Link>
             <div className="flex items-center gap-4">
-              {/* 语言切换 */}
               <div className="flex items-center gap-2 bg-white/10 rounded-lg p-1">
                 <button
                   onClick={() => setLang("en")}
-                  className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors flex items-center gap-1.5 ${lang === "en" ? "bg-white/20 text-white" : "text-gray-400 hover:text-white"
-                    }`}
+                  className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors flex items-center gap-1.5 ${lang === "en" ? "bg-white/20 text-white" : "text-gray-400 hover:text-white"}`}
                 >
                   <Globe className="h-4 w-4" />
                   English
                 </button>
                 <button
                   onClick={() => setLang("zh")}
-                  className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${lang === "zh" ? "bg-white/20 text-white" : "text-gray-400 hover:text-white"
-                    }`}
+                  className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${lang === "zh" ? "bg-white/20 text-white" : "text-gray-400 hover:text-white"}`}
                 >
                   中文
                 </button>
@@ -56,17 +53,17 @@ export default function TermsPage() {
             </div>
           </nav>
         </div>
-      </header >
+      </header>
 
       {/* 内容 */}
-      < main className="relative z-10 py-16" >
+      <main className="relative z-10 py-16">
         <div className="container max-w-4xl mx-auto px-6">
           {lang === "en" ? <EnglishContent /> : <ChineseContent />}
         </div>
-      </main >
+      </main>
 
       {/* 页脚 */}
-      < footer className="relative z-10 border-t border-white/5 py-8 bg-black/30" >
+      <footer className="relative z-10 border-t border-white/5 py-8 bg-black/30">
         <div className="container max-w-7xl mx-auto px-6">
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
             <div className="text-gray-500 text-sm">
@@ -86,8 +83,8 @@ export default function TermsPage() {
             </div>
           </div>
         </div>
-      </footer >
-    </div >
+      </footer>
+    </div>
   );
 }
 
@@ -138,7 +135,6 @@ function EnglishContent() {
             <p className="leading-relaxed text-white/90">
               <strong>IMPORTANT:</strong> Our platform integrates with TikTok&apos;s Content Posting API. By using this feature, you agree to the following additional terms:
             </p>
-
             <h3 className="text-xl font-medium text-white mt-6 mb-3">3.1 TikTok Account Connection</h3>
             <ul className="list-disc pl-6 space-y-2">
               <li>You may connect your TikTok account(s) to ToryX to enable video publishing</li>
@@ -146,27 +142,12 @@ function EnglishContent() {
               <li>You remain fully responsible for all content published to your TikTok account through our platform</li>
               <li>You must comply with TikTok&apos;s Terms of Service and Community Guidelines</li>
             </ul>
-
             <h3 className="text-xl font-medium text-white mt-6 mb-3">3.2 Content Publishing Responsibility</h3>
             <ul className="list-disc pl-6 space-y-2">
               <li>You are solely responsible for ensuring published content complies with TikTok&apos;s policies</li>
               <li>We do not guarantee that published content will remain on TikTok (TikTok may remove content)</li>
               <li>Any violations of TikTok&apos;s policies are your responsibility, not ours</li>
               <li>We are not liable for any account restrictions or bans imposed by TikTok</li>
-            </ul>
-
-            <h3 className="text-xl font-medium text-white mt-6 mb-3">3.3 API Limitations</h3>
-            <ul className="list-disc pl-6 space-y-2">
-              <li>Service availability depends on TikTok API functionality; we are not liable for API outages</li>
-              <li>TikTok may modify or discontinue API features at any time without notice to us</li>
-              <li>We reserve the right to adjust our TikTok integration features accordingly</li>
-            </ul>
-
-            <h3 className="text-xl font-medium text-white mt-6 mb-3">3.4 Disconnecting Your Account</h3>
-            <ul className="list-disc pl-6 space-y-2">
-              <li>You may disconnect your TikTok account at any time through our Account Management page</li>
-              <li>Disconnection stops all future publishing but does not remove already published content</li>
-              <li>You can also revoke access through TikTok&apos;s app settings</li>
             </ul>
           </section>
 
@@ -210,33 +191,9 @@ function EnglishContent() {
 
           <section>
             <h2 className="text-2xl font-semibold text-white mb-4">7. Intellectual Property</h2>
-            <h3 className="text-xl font-medium text-white mt-6 mb-3">7.1 Our Intellectual Property</h3>
-            <p className="leading-relaxed">
-              All technology, software, algorithms, trademarks, logos, and platform design are owned by Wuhan Guanxing Cultural Media Co., Ltd.
-              You may not copy, modify, or distribute any part of our platform without written permission.
-            </p>
-
-            <h3 className="text-xl font-medium text-white mt-6 mb-3">7.2 Your Content</h3>
-            <p className="leading-relaxed">
-              You retain ownership of content you create through our platform. By using our services, you grant us a limited license to
-              process, store, and display your content as necessary to provide our services.
-            </p>
-
-            <h3 className="text-xl font-medium text-white mt-6 mb-3">7.3 Content License Grant</h3>
-            <p className="leading-relaxed">
-              For content you publicly post through our platform, you grant us a non-exclusive, royalty-free, worldwide license to:
-            </p>
-            <ul className="list-disc pl-6 space-y-2 mt-2">
-              <li>Display and distribute within the platform</li>
-              <li>Use for platform promotion and marketing</li>
-              <li>Analyze for service improvement</li>
-            </ul>
-
-            <h3 className="text-xl font-medium text-white mt-6 mb-3">7.4 Uploaded Materials</h3>
-            <p className="leading-relaxed">
-              You represent and warrant that you have all necessary rights to any materials you upload. You are solely responsible for
-              any claims arising from your uploaded content.
-            </p>
+            <p className="leading-relaxed">7.1 All technology, software, algorithms, trademarks, logos, and platform design are owned by Wuhan Guanxing Cultural Media Co., Ltd.</p>
+            <p className="leading-relaxed mt-4">7.2 You retain ownership of content you create through our platform. By using our services, you grant us a limited license to process, store, and display your content as necessary to provide our services.</p>
+            <p className="leading-relaxed mt-4">7.3 For content you publicly post through our platform, you grant us a non-exclusive, royalty-free, worldwide license to display and distribute within the platform.</p>
           </section>
 
           <section>
@@ -244,37 +201,23 @@ function EnglishContent() {
             <p className="leading-relaxed">8.1 Our services use artificial intelligence to generate content. AI-generated content may not always be accurate, appropriate, or suitable for your intended purpose.</p>
             <p className="leading-relaxed mt-4">8.2 You are responsible for reviewing all generated content before use or publication.</p>
             <p className="leading-relaxed mt-4">8.3 We do not guarantee any specific results or outcomes from our AI services.</p>
-            <p className="leading-relaxed mt-4">8.4 AI model performance may vary and is subject to continuous improvement and modification.</p>
           </section>
 
           <section>
             <h2 className="text-2xl font-semibold text-white mb-4">9. Limitation of Liability</h2>
-            <p className="leading-relaxed">
-              TO THE MAXIMUM EXTENT PERMITTED BY LAW:
-            </p>
+            <p className="leading-relaxed">TO THE MAXIMUM EXTENT PERMITTED BY LAW:</p>
             <ul className="list-disc pl-6 space-y-2 mt-4">
               <li>Our services are provided &quot;AS IS&quot; without warranties of any kind</li>
               <li>We are not liable for any indirect, incidental, special, or consequential damages</li>
               <li>Our total liability shall not exceed the amount you paid us in the 12 months preceding the claim</li>
               <li>We are not responsible for third-party actions, including TikTok&apos;s moderation decisions</li>
               <li>We are not liable for service interruptions due to factors beyond our control</li>
-              <li>We are not liable for damages caused by third-party API changes (including TikTok API)</li>
-              <li>We are not liable for force majeure events including network outages, hacker attacks, or natural disasters</li>
             </ul>
           </section>
 
           <section>
             <h2 className="text-2xl font-semibold text-white mb-4">10. Indemnification</h2>
-            <p className="leading-relaxed">
-              You agree to indemnify and hold harmless Wuhan Guanxing Cultural Media Co., Ltd. and its officers, directors, employees,
-              and agents from any claims, damages, losses, or expenses (including legal fees) arising from:
-            </p>
-            <ul className="list-disc pl-6 space-y-2 mt-4">
-              <li>Your use of our services</li>
-              <li>Your violation of these Terms</li>
-              <li>Content you create, upload, or publish through our platform</li>
-              <li>Your violation of any third-party rights</li>
-            </ul>
+            <p className="leading-relaxed">You agree to indemnify and hold harmless Wuhan Guanxing Cultural Media Co., Ltd. from any claims, damages, losses, or expenses arising from your use of our services, your violation of these Terms, or content you create through our platform.</p>
           </section>
 
           <section>
@@ -293,17 +236,12 @@ function EnglishContent() {
 
           <section>
             <h2 className="text-2xl font-semibold text-white mb-4">13. Changes to Terms</h2>
-            <p className="leading-relaxed">
-              We may update these Terms from time to time. We will notify you of material changes via email or prominent notice on our platform.
-              Continued use of our services after changes constitutes acceptance of the new Terms.
-            </p>
+            <p className="leading-relaxed">We may update these Terms from time to time. We will notify you of material changes via email or prominent notice on our platform. Continued use of our services after changes constitutes acceptance of the new Terms.</p>
           </section>
 
           <section>
             <h2 className="text-2xl font-semibold text-white mb-4">14. Contact Information</h2>
-            <p className="leading-relaxed">
-              For questions about these Terms, please contact us:
-            </p>
+            <p className="leading-relaxed">For questions about these Terms, please contact us:</p>
             <div className="mt-4 p-4 bg-white/5 rounded-lg">
               <p><strong>武汉观星文化传媒有限公司</strong></p>
               <p className="mt-1">Wuhan Guanxing Cultural Media Co., Ltd.</p>
@@ -323,7 +261,7 @@ function ChineseContent() {
   return (
     <>
       <div className="mb-12">
-        <h1 className="text-4xl font-bold mb-4">"ToryX"用户服务协议</h1>
+        <h1 className="text-4xl font-bold mb-4">&quot;ToryX&quot;用户服务协议</h1>
         <p className="text-gray-400">更新日期：2026年01月22日</p>
         <p className="text-gray-400 mt-2">生效日期：2026年01月22日</p>
       </div>
@@ -332,31 +270,136 @@ function ChineseContent() {
         <div className="space-y-8 text-gray-300">
           <section>
             <h2 className="text-2xl font-semibold text-white mb-4">1. 导言</h2>
-            <p className="leading-relaxed">
-              欢迎您使用"ToryX"软件及相关服务！
-            </p>
-            <p className="leading-relaxed mt-4">
-              "ToryX"软件及相关服务，系指<strong>武汉观星文化传媒有限公司</strong>及其关联方（以下简称"公司"）合法拥有并运营的、标注名称为"ToryX"的客户端应用程序以及相关网站（ www.tokfactoryai.com ）向您提供的产品与服务。本协议是您与公司就您下载、安装、注册、登录、使用"ToryX"软件，并获得相关服务所订立的协议。
-            </p>
-            <p className="leading-relaxed mt-4">
-              为了更好地为您提供服务，请您在开始使用"ToryX"软件及相关服务之前，务必认真阅读并充分理解本协议，特别是涉及免除或者限制责任的条款、权利许可和信息使用的条款、同意开通和使用特殊单项服务的条款、法律适用和争议解决条款等。<strong>其中，免除或者限制责任条款等重要内容将以加粗形式提示您注意，您应重点阅读。</strong> 如您未满18周岁，请您在法定监护人陪同下仔细阅读并充分理解本协议，并征得法定监护人的同意后使用"ToryX"软件及相关服务。
-            </p>
-            <p className="leading-relaxed mt-4">
-              如您不同意本协议，这将导致我们无法为您提供完整的产品和服务，您也可以选择停止使用。<strong>如您自主选择同意或使用"ToryX"软件及相关服务，则视为您已充分理解本协议，并同意作为本协议的一方当事人接受本协议以及其他与"ToryX"软件及相关服务相关的协议和规则（包括但不限于《ToryX隐私政策》）的约束。</strong>
-            </p>
+            <p className="leading-relaxed">欢迎您使用&quot;ToryX&quot;软件及相关服务！</p>
+            <p className="leading-relaxed mt-4">&quot;ToryX&quot;软件及相关服务，系指<strong>武汉观星文化传媒有限公司</strong>及其关联方（以下简称&quot;公司&quot;）合法拥有并运营的、标注名称为&quot;ToryX&quot;的客户端应用程序以及相关网站（ www.tokfactoryai.com ）向您提供的产品与服务。本协议是您与公司就您下载、安装、注册、登录、使用&quot;ToryX&quot;软件，并获得相关服务所订立的协议。</p>
+            <p className="leading-relaxed mt-4">为了更好地为您提供服务，请您在开始使用&quot;ToryX&quot;软件及相关服务之前，务必认真阅读并充分理解本协议，特别是涉及免除或者限制责任的条款、权利许可和信息使用的条款、同意开通和使用特殊单项服务的条款、法律适用和争议解决条款等。<strong>其中，免除或者限制责任条款等重要内容将以加粗形式提示您注意，您应重点阅读。</strong>如您未满18周岁，请您在法定监护人陪同下仔细阅读并充分理解本协议，并征得法定监护人的同意后使用&quot;ToryX&quot;软件及相关服务。</p>
+            <p className="leading-relaxed mt-4">如您不同意本协议，这将导致我们无法为您提供完整的产品和服务，您也可以选择停止使用。<strong>如您自主选择同意或使用&quot;ToryX&quot;软件及相关服务，则视为您已充分理解本协议，并同意作为本协议的一方当事人接受本协议以及其他与&quot;ToryX&quot;软件及相关服务相关的协议和规则（包括但不限于《ToryX隐私政策》）的约束。</strong></p>
           </section>
 
           <section>
-            <h2 className="text-2xl font-semibold text-white mb-4">二、服务内容</h2>
-            <p className="leading-relaxed">ToryX 提供以下 AI 驱动的服务：</p>
+            <h2 className="text-2xl font-semibold text-white mb-4">2. &quot;ToryX&quot;软件及相关服务</h2>
+            <p className="leading-relaxed">2.1 您可以使用电脑、手机等终端以客户端、网页等形式使用&quot;ToryX&quot;软件及相关服务。具体以公司提供的为准。</p>
+            <p className="leading-relaxed mt-4">2.2 公司给予您一项个人的、不可转让及非排他性的许可，以使用&quot;ToryX&quot;软件及相关服务。<strong>未经公司事先书面授权，您不得进行商业性使用。</strong></p>
+            <p className="leading-relaxed mt-4">2.3 您可以从公司网站、公司授权的第三方获取本软件。如果您从未经公司授权的第三方获取本软件，公司无法保证该软件能够正常使用。</p>
+            <p className="leading-relaxed mt-4">2.4 为了改善用户体验、完善服务内容，公司将不断努力开发新的服务，并为您不时提供软件更新。</p>
+            <p className="leading-relaxed mt-4">2.5 除非得到公司事先书面授权，您不得以任何形式对&quot;ToryX&quot;软件及相关服务进行未经授权的访问或使用。</p>
+          </section>
+
+          <section>
+            <h2 className="text-2xl font-semibold text-white mb-4">3. 关于&quot;帐号&quot;</h2>
+            <p className="leading-relaxed">3.1 &quot;ToryX&quot;软件及相关服务为您提供了注册通道，您有权选择合法的字符组合作为自己的帐号，并自行设置符合安全要求的密码。</p>
+            <p className="leading-relaxed mt-4">3.2 您理解并承诺，您所设置的帐号不得违反国家法律法规及公司的相关规则，您的帐号名称、头像和简介等注册信息中不得出现违法和不良信息。</p>
+            <p className="leading-relaxed mt-4">3.3 您的帐号仅限于您本人使用，未经公司书面同意，禁止以任何形式赠与、借用、出租、转让、售卖或以其他方式许可他人使用该帐号。</p>
+            <p className="leading-relaxed mt-4">3.4 您有责任维护个人帐号、密码的安全性与保密性，并对您以注册帐号名义所从事的活动承担全部法律责任。</p>
+            <p className="leading-relaxed mt-4"><strong>3.5 您的帐号在丢失或遗忘密码后，可遵照公司申诉途径及时申诉请求找回帐号或密码。</strong></p>
+            <p className="leading-relaxed mt-4"><strong>3.6 在注册、使用和管理帐号时，您应保证注册帐号时填写的身份信息的真实性。</strong></p>
+            <p className="leading-relaxed mt-4">3.7 除自行注册帐号外，用户也可授权使用其合法拥有的第三方软件的用户帐号登录使用&quot;ToryX&quot;软件及相关服务。</p>
+            <p className="leading-relaxed mt-4"><strong>3.8 当您完成帐号注册、登录后，您可随时浏览、修改自己提交的个人身份信息。您也可以申请注销帐号。</strong></p>
+            <p className="leading-relaxed mt-4"><strong>3.9 您理解并同意，为了充分使用帐号资源，如您在注册后未及时进行初次登录使用或连续超过两个月未登录帐号，公司有权收回您的帐号。</strong></p>
+          </section>
+
+          <section>
+            <h2 className="text-2xl font-semibold text-white mb-4">4. 用户个人信息保护</h2>
+            <p className="leading-relaxed">公司与您一同致力于您个人信息的保护，保护用户个人信息是公司的基本原则之一。公司将依法保护您浏览、修改、删除相关个人信息以及撤回授权、注销帐号的权利，并将运用加密技术、匿名化处理等其他与&quot;ToryX&quot;软件及相关服务相匹配的技术措施保护您的个人信息。</p>
+            <p className="leading-relaxed mt-4"><strong>更多关于您个人信息保护的内容，请您参看《ToryX隐私政策》。</strong></p>
+          </section>
+
+          <section className="bg-red-500/10 border border-red-500/20 rounded-xl p-6">
+            <h2 className="text-2xl font-semibold text-white mb-4">5. 用户行为规范</h2>
+            <p className="leading-relaxed"><strong>5.1 用户行为要求</strong></p>
+            <p className="leading-relaxed mt-2">您应当对您使用&quot;ToryX&quot;软件及相关服务的行为负责，除非法律允许或者经公司事先书面许可，您使用&quot;ToryX&quot;软件及相关服务不得具有下列行为：使用未经公司授权的任何工具对软件的正常运行进行干扰、进行危害计算机网络安全的行为、恶意注册帐号等。</p>
+            <p className="leading-relaxed mt-4"><strong>5.2 信息内容规范</strong></p>
+            <p className="leading-relaxed mt-2">您制作、评论、发布、传播的信息应自觉遵守法律法规、社会主义制度、国家利益、公民合法权益、社会公共秩序、道德风尚和信息真实性等&quot;七条底线&quot;要求。您同意并承诺不制作、复制、发布、传播下列信息：</p>
+            <ol className="list-decimal pl-6 space-y-1 mt-2">
+              <li>反对宪法确定的基本原则的</li>
+              <li>危害国家安全，泄露国家秘密的</li>
+              <li>颠覆国家政权，推翻社会主义制度，煽动分裂国家，破坏国家统一的</li>
+              <li>宣扬恐怖主义、极端主义的</li>
+              <li>宣扬民族仇恨、民族歧视，破坏民族团结的</li>
+              <li>破坏国家宗教政策，宣扬邪教和封建迷信的</li>
+              <li>编造、散布谣言、虚假信息，扰乱社会秩序的</li>
+              <li>散布、传播淫秽、色情、赌博、暴力、恐怖或者教唆犯罪的</li>
+              <li>侵害未成年人合法权益或者损害未成年人身心健康的</li>
+              <li>侮辱或者诽谤他人，侵害他人合法权益的</li>
+              <li>侵犯他人隐私权、名誉权、肖像权、知识产权等合法权益内容的</li>
+              <li>其他违反法律法规、政策及公序良俗的信息</li>
+            </ol>
+            <p className="leading-relaxed mt-4"><strong>5.3 如果公司有理由认为您的行为违反或可能违反上述约定的，公司可独立进行判断并处理，且有权在不事先通知的情况下终止向您提供服务，并追究相关法律责任。</strong></p>
+          </section>
+
+          <section>
+            <h2 className="text-2xl font-semibold text-white mb-4">6. &quot;ToryX&quot;信息内容使用规范</h2>
+            <p className="leading-relaxed">6.1 未经公司书面许可，您不得自行或授权、允许、协助任何第三人对本协议&quot;ToryX&quot;软件及相关服务中信息内容进行复制、读取、采用等行为用于商业用途。</p>
+            <p className="leading-relaxed mt-4">6.2 经公司书面许可后，您对&quot;ToryX&quot;软件及相关服务的信息内容的分享、转发等行为，还应符合相关规范，不得对原始内容进行篡改、遮挡等操作。</p>
+          </section>
+
+          <section>
+            <h2 className="text-2xl font-semibold text-white mb-4">7. 违约处理</h2>
+            <p className="leading-relaxed"><strong>7.1 针对您违反本协议或其他服务条款的行为，公司有权独立判断并视情况采取预先警示、拒绝发布、立即停止传输信息、删除跟帖、短期禁止发言、限制帐号部分或者全部功能直至永久关闭帐号等措施。</strong>公司有权公告处理结果，且有权根据实际情况决定是否恢复相关帐号的使用。</p>
+            <p className="leading-relaxed mt-4"><strong>7.2 因您违反本协议或其他服务条款规定，引起第三方投诉或诉讼索赔的，您应当自行处理并承担全部可能由此引起的法律责任。因您的违法或违约行为导致公司及其关联方向任何第三方赔偿或遭受国家机关处罚的，您还应足额赔偿公司及其关联方因此遭受的全部损失。</strong></p>
+            <p className="leading-relaxed mt-4"><strong>7.3 公司尊重并保护法人、公民的知识产权、名誉权、姓名权、隐私权等合法权益。您保证，在使用&quot;ToryX&quot;软件及相关服务时上传的文字、图片、视频、音频、链接等不侵犯任何第三方的合法权益。</strong></p>
+          </section>
+
+          <section>
+            <h2 className="text-2xl font-semibold text-white mb-4">8. 服务的变更、中断和终止</h2>
+            <p className="leading-relaxed">8.1 您理解并同意，公司提供的&quot;ToryX&quot;软件及相关服务是按照现有技术和条件所能达到的现状提供的。公司会尽最大努力向您提供服务，确保服务的连贯性和安全性。您理解，公司不能随时预见和防范不可抗力、网络原因、第三方服务瑕疵等因素可能导致的服务中断。</p>
+            <p className="leading-relaxed mt-4">8.2 您理解并同意，公司为了服务整体运营、平台运营安全的需要，有权视具体情况决定服务/功能设置、范围，修改、中断、中止或终止&quot;ToryX&quot;软件及相关服务。</p>
+          </section>
+
+          <section>
+            <h2 className="text-2xl font-semibold text-white mb-4">9. 广告</h2>
+            <p className="leading-relaxed">9.1 您理解并同意，在使用&quot;ToryX&quot;软件及相关服务过程中公司可能会向您推送具有相关性的信息、广告发布或品牌推广服务。</p>
+            <p className="leading-relaxed mt-4">9.2 公司履行广告及推广相关义务，您应当自行判断该广告或推广信息的真实性和可靠性并为自己的判断行为负责。</p>
+          </section>
+
+          <section>
+            <h2 className="text-2xl font-semibold text-white mb-4">10. 知识产权</h2>
+            <p className="leading-relaxed">10.1 公司在&quot;ToryX&quot;软件及相关服务中提供的内容（包括但不限于软件、技术、程序、网页、文字、图片、图像、音频、视频、图表、版面设计、电子文档等）的知识产权属于公司所有。未经公司许可，任何人不得擅自使用。</p>
+            <p className="leading-relaxed mt-4">10.2 您理解并同意，您在使用&quot;ToryX&quot;软件及相关服务时发布上传的文字、图片、视频、音频等均由您原创或已获合法授权。您通过&quot;ToryX&quot;上传、发布的任何内容的知识产权归属您或原始著作权人所有。</p>
+            <p className="leading-relaxed mt-4"><strong>10.3 您知悉、理解并同意，您通过&quot;ToryX&quot;软件及相关服务发布、上传的内容，授予公司及其关联方一项全球范围内、免费、非独家、可再许可的权利。</strong></p>
+            <p className="leading-relaxed mt-4"><strong>10.4 您确认并同意授权公司以公司自己的名义或委托专业第三方对侵犯您上传发布的享有知识产权的内容进行代维权。</strong></p>
+          </section>
+
+          <section className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-6">
+            <h2 className="text-2xl font-semibold text-white mb-4">11. 税收</h2>
+            <p className="leading-relaxed"><strong>11.1 您在&quot;ToryX&quot;软件及相关服务中的收入（如有）将直接以现金或等值形式提现。您理解并同意，公司有权为您代扣代缴税金，并依据国家法律法规之规定向税务机关申报缴纳。</strong></p>
+          </section>
+
+          <section>
+            <h2 className="text-2xl font-semibold text-white mb-4">12. 免责声明</h2>
+            <p className="leading-relaxed"><strong>12.1 您理解并同意，&quot;ToryX&quot;软件及相关服务可能会受多种因素的影响或干扰，公司不保证：</strong></p>
             <ul className="list-disc pl-6 space-y-2 mt-4">
-              <li><strong>AI 视频生成：</strong>使用先进的 AI 模型从图片、文字提示和模板创建视频</li>
-              <li><strong>AI 图片生成：</strong>生成电商产品图、虚拟试穿图和营销视觉素材</li>
-              <li><strong>数字人模特服务：</strong>获取用于内容创作的 AI 生成数字人模特</li>
-              <li><strong>批量处理：</strong>通过批量生产流水线高效创建多个内容</li>
-              <li><strong>社交媒体发布：</strong>将生成的内容直接发布到已连接的 TikTok 账号</li>
-              <li><strong>资产管理：</strong>存储、组织和管理您生成的内容</li>
+              <li><strong>&quot;ToryX&quot;软件及相关服务完全适合用户的使用要求；</strong></li>
+              <li><strong>&quot;ToryX&quot;软件及相关服务不受干扰，及时、安全、可靠或不出现错误；</strong></li>
+              <li><strong>&quot;ToryX&quot;软件及相关服务中任何错误都将能得到更正。</strong></li>
             </ul>
+            <p className="leading-relaxed mt-4"><strong>12.2 您理解并同意，在使用&quot;ToryX&quot;软件及相关服务过程中，可能遇到不可抗力等因素。出现不可抗力情况时，公司将努力在第一时间及时修复，但因不可抗力造成的损失，公司在法律法规范围内免于承担责任。</strong></p>
+            <p className="leading-relaxed mt-4"><strong>12.3 在任何情况下，公司均不对任何间接性、后果性、惩罚性、偶然性、特殊性或刑罚性的损害，包括因您使用&quot;ToryX&quot;软件及相关服务而遭受的利润损失，承担责任。</strong></p>
+          </section>
+
+          <section>
+            <h2 className="text-2xl font-semibold text-white mb-4">13. 关于单项服务与第三方服务的特殊约定</h2>
+            <p className="leading-relaxed">13.1 &quot;ToryX&quot;软件及相关服务中包含公司以各种合法方式获取的信息或信息内容链接，同时也包括公司及其关联方合法运营的其他单项服务。某些单项服务可能需要您同时接受就该服务特别制订的协议或者其他规则。</p>
+            <p className="leading-relaxed mt-4">13.2 您在&quot;ToryX&quot;软件及相关服务中使用第三方提供的软件及相关服务时，除遵守本协议外，还可能需要同意并遵守第三方的协议、隐私政策及相关规则。如因第三方软件及相关服务产生的争议、损失或损害，由您与第三方自行解决。</p>
+            <p className="leading-relaxed mt-4"><strong>13.3 &quot;ToryX&quot;集成并使用了包括但不限于TikTok、阿里云等第三方服务。当您使用这些服务时，您同意遵守其相关服务条款。</strong></p>
+          </section>
+
+          <section className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-6">
+            <h2 className="text-2xl font-semibold text-white mb-4">14. 未成年人使用条款</h2>
+            <p className="leading-relaxed"><strong>14.1 若您是未满18周岁的未成年人，您应在您的监护人监护、指导下并获得监护人同意的情况下，认真阅读并同意本协议后，方可使用&quot;ToryX&quot;软件及相关服务。</strong></p>
+            <p className="leading-relaxed mt-4"><strong>14.2 公司重视对未成年人个人信息的保护，未成年用户在填写个人信息时，请加强个人保护意识并谨慎对待。</strong></p>
+            <p className="leading-relaxed mt-4"><strong>14.3 未成年人用户及其监护人理解并确认，如您违反法律法规、本协议内容，则您及您的监护人应依照法律规定承担因此而可能导致的全部法律责任。</strong></p>
+            <p className="leading-relaxed mt-4"><strong>14.4 未成年人用户特别提示：</strong>青少年使用&quot;ToryX&quot;软件及相关服务应该在其监护人的监督指导下，在合理范围内正确学习使用网络，避免沉迷虚拟的网络空间，养成良好上网习惯。</p>
+          </section>
+
+          <section>
+            <h2 className="text-2xl font-semibold text-white mb-4">15. 其他</h2>
+            <p className="leading-relaxed"><strong>15.1 本协议的成立、生效、履行、解释及争议的解决均应适用中华人民共和国法律。</strong></p>
+            <p className="leading-relaxed mt-4"><strong>15.2 本协议的签署地为湖北省武汉市。若您与公司发生任何争议，双方应尽量友好协商解决，协商不成，您同意应将争议提交至公司所在地人民法院诉讼解决。</strong></p>
+            <p className="leading-relaxed mt-4"><strong>15.3 为给您提供更好的服务或国家法律法规、政策调整，&quot;ToryX&quot;软件及相关服务将不时更新与变化，我们会适时对本协议进行修订。如您继续使用&quot;ToryX&quot;软件及相关服务，即表示您已同意接受修订后的本协议内容。</strong></p>
+            <p className="leading-relaxed mt-4">15.4 本协议中的标题仅为方便及阅读而设，并不影响本协议中任何规定的含义或解释。</p>
+            <p className="leading-relaxed mt-4">15.5 您和公司均是独立的主体，在任何情况下本协议不构成公司对用户的任何形式的明示或暗示担保或条件，双方之间亦不构成代理、合伙、合营或雇佣关系。</p>
+            <p className="leading-relaxed mt-4">15.6 本协议的版权为公司所有，公司保留一切解释和修改的权利。</p>
           </section>
 
           <section className="bg-gradient-to-r from-cyan-500/10 to-pink-500/10 border border-cyan-500/20 rounded-xl p-6">
@@ -364,41 +407,9 @@ function ChineseContent() {
               <svg className="w-6 h-6" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-5.2 1.74 2.89 2.89 0 012.31-4.64 2.93 2.93 0 01.88.13V9.4a6.84 6.84 0 00-1-.05A6.33 6.33 0 005 20.1a6.34 6.34 0 0010.86-4.43v-7a8.16 8.16 0 004.77 1.52v-3.4a4.85 4.85 0 01-1-.1z" />
               </svg>
-              三、TikTok 集成条款
+              16. TikTok相关条款
             </h2>
-            <p className="leading-relaxed text-white/90">
-              <strong>重要提示：</strong>我们的平台集成了 TikTok 的 Content Posting API。使用此功能即表示您同意以下附加条款：
-            </p>
-
-            <h3 className="text-xl font-medium text-white mt-6 mb-3">3.1 TikTok 账号连接</h3>
-            <ul className="list-disc pl-6 space-y-2">
-              <li>您可以将 TikTok 账号连接到 ToryX 以启用视频发布功能</li>
-              <li>连接账号即表示您授权我们代您发布内容</li>
-              <li>您对通过我们平台发布到 TikTok 账号的所有内容承担全部责任</li>
-              <li>您必须遵守 TikTok 的服务条款和社区准则</li>
-            </ul>
-
-            <h3 className="text-xl font-medium text-white mt-6 mb-3">3.2 内容发布责任</h3>
-            <ul className="list-disc pl-6 space-y-2">
-              <li>您独自负责确保发布的内容符合 TikTok 的政策</li>
-              <li>我们不保证发布的内容会保留在 TikTok 上（TikTok 可能会删除内容）</li>
-              <li>任何违反 TikTok 政策的行为由您负责，与我们无关</li>
-              <li>我们不对 TikTok 施加的任何账号限制或封禁承担责任</li>
-            </ul>
-
-            <h3 className="text-xl font-medium text-white mt-6 mb-3">3.3 API 限制说明</h3>
-            <ul className="list-disc pl-6 space-y-2">
-              <li>服务可用性取决于 TikTok API 功能；我们不对 API 中断负责</li>
-              <li>TikTok 可能随时修改或停止 API 功能，无需提前通知我们</li>
-              <li>我们保留相应调整 TikTok 集成功能的权利</li>
-            </ul>
-
-            <h3 className="text-xl font-medium text-white mt-6 mb-3">3.4 断开账号连接</h3>
-            <ul className="list-disc pl-6 space-y-2">
-              <li>您可以随时通过账号管理页面断开 TikTok 账号连接</li>
-              <li>断开连接将停止所有未来的发布，但不会删除已发布的内容</li>
-              <li>您也可以通过 TikTok 应用的设置撤销访问权限</li>
-            </ul>
+            <p className="leading-relaxed"><strong>16.1 您在&quot;ToryX&quot;软件及相关服务中授权使用您的TikTok帐号，即视为您同意TikTok的相关服务条款。</strong></p>
             <div className="mt-4 pt-4 border-t border-white/10">
               <p className="text-sm text-gray-400">相关链接：</p>
               <ul className="list-disc pl-6 space-y-1 mt-2 text-sm">
@@ -408,155 +419,14 @@ function ChineseContent() {
           </section>
 
           <section>
-            <h2 className="text-2xl font-semibold text-white mb-4">四、账户注册</h2>
-            <p className="leading-relaxed">4.1 使用我们的服务需要创建账户，并提供准确完整的信息。</p>
-            <p className="leading-relaxed mt-4">4.2 您负责保护账户凭据的机密性，并对账户下的所有活动负责。</p>
-            <p className="leading-relaxed mt-4">4.3 您必须年满 18 周岁才能创建账户并使用我们的服务。</p>
-            <p className="leading-relaxed mt-4">4.4 您不得将账户转让、出售或与第三方共享。</p>
+            <h2 className="text-2xl font-semibold text-white mb-4">17. 订阅</h2>
+            <p className="leading-relaxed"><strong>17.1 订阅升级和降级：</strong>从一种付费计划更改为另一种付费计划时，通过计算两个计划的剩余天数及其各自的每日费率，对新计划进行按比例分摊。</p>
+            <p className="leading-relaxed mt-4"><strong>17.2 费用变更：</strong>我们可能会不时更改计划的费用，并将提前通知您。价格变更将在下一个订阅期开始时生效。如果您不同意价格变更，则必须在价格变更生效前取消订阅。</p>
+            <p className="leading-relaxed mt-4"><strong>17.3 取消订阅：</strong>您可以随时取消订阅。取消后，您的订阅将在当前周期结束时失效。已支付的费用不予退还。</p>
           </section>
 
-          <section>
-            <h2 className="text-2xl font-semibold text-white mb-4">五、积分与付费</h2>
-            <p className="leading-relaxed">5.1 ToryX 采用积分制。您购买积分来使用我们的 AI 生成服务。</p>
-            <p className="leading-relaxed mt-4">5.2 每项服务的积分价格和消耗量在平台上显示，可能会在提前通知后进行调整。</p>
-            <p className="leading-relaxed mt-4">5.3 所有积分购买均为最终销售。仅在适用法律要求或我们自行决定的情况下提供退款。</p>
-            <p className="leading-relaxed mt-4">5.4 积分自购买之日起一年内有效，除非另有说明。</p>
-            <p className="leading-relaxed mt-4">5.5 我们保留在提前 30 天通知后修改定价的权利。</p>
-          </section>
-
-          <section>
-            <h2 className="text-2xl font-semibold text-white mb-4">六、订阅服务</h2>
-            <p className="leading-relaxed">6.1 <strong>订阅升级和降级：</strong>从一种付费计划更改为另一种付费计划时，通过计算两个计划的剩余天数及其各自的每日费率，对新计划进行按比例分摊。</p>
-            <p className="leading-relaxed mt-4">6.2 <strong>费用变更：</strong>我们可能会不时更改计划的费用，并将提前通知您。价格变更将在下一个订阅期开始时生效。如果您不同意价格变更，则必须在价格变更生效前取消订阅。</p>
-            <p className="leading-relaxed mt-4">6.3 <strong>取消订阅：</strong>您可以随时取消订阅。取消后，您的订阅将在当前周期结束时失效。已支付的费用不予退还。</p>
-          </section>
-
-          <section className="bg-red-500/10 border border-red-500/20 rounded-xl p-6">
-            <h2 className="text-2xl font-semibold text-white mb-4">七、使用规范</h2>
-            <p className="leading-relaxed">您同意不使用我们的服务：</p>
-            <ol className="list-decimal pl-6 space-y-2 mt-4">
-              <li>创建、上传或传播违反国家法律法规的内容</li>
-              <li>发布危害国家安全、泄露国家秘密的内容</li>
-              <li>颠覆国家政权、破坏国家统一的内容</li>
-              <li>损害国家荣誉和利益的内容</li>
-              <li>煽动民族仇恨、破坏民族团结的内容</li>
-              <li>破坏国家宗教政策、宣扬邪教的内容</li>
-              <li>散布谣言、扰乱社会秩序的内容</li>
-              <li>淫秽、色情、暴力的内容</li>
-              <li>侮辱、诽谤他人的内容</li>
-              <li>侵犯他人知识产权、肖像权、隐私权的内容</li>
-              <li>其他违反公序良俗的内容</li>
-            </ol>
-            <p className="leading-relaxed mt-4 text-white font-medium">
-              违反上述规定可能导致账户立即封禁且不予退款。
-            </p>
-          </section>
-
-          <section>
-            <h2 className="text-2xl font-semibold text-white mb-4">八、知识产权</h2>
-            <h3 className="text-xl font-medium text-white mt-6 mb-3">8.1 我们的知识产权</h3>
-            <p className="leading-relaxed">
-              所有技术、软件、算法、商标、标识和平台设计均归武汉观星文化传媒有限公司所有。
-              未经书面许可，您不得复制、修改或分发我们平台的任何部分。
-            </p>
-
-            <h3 className="text-xl font-medium text-white mt-6 mb-3">8.2 您的内容</h3>
-            <p className="leading-relaxed">
-              您通过我们平台创建的内容归您所有。使用我们的服务即表示您授予我们有限的许可，
-              以处理、存储和显示您的内容，以便提供我们的服务。
-            </p>
-
-            <h3 className="text-xl font-medium text-white mt-6 mb-3">8.3 内容授权许可</h3>
-            <p className="leading-relaxed">
-              对于您通过本平台公开发布的内容，您授予我们非排他的、免费的、全球范围内的使用许可，用于：
-            </p>
-            <ul className="list-disc pl-6 space-y-2 mt-2">
-              <li>在平台内展示和分发</li>
-              <li>用于平台宣传和推广</li>
-              <li>用于服务分析和改进</li>
-            </ul>
-
-            <h3 className="text-xl font-medium text-white mt-6 mb-3">8.4 上传素材</h3>
-            <p className="leading-relaxed">
-              您声明并保证您拥有上传的任何素材的所有必要权利。您对因上传内容引起的任何索赔承担全部责任。
-            </p>
-          </section>
-
-          <section>
-            <h2 className="text-2xl font-semibold text-white mb-4">九、AI 生成内容免责声明</h2>
-            <p className="leading-relaxed">9.1 我们的服务使用人工智能生成内容。AI 生成的内容可能并不总是准确、适当或适合您的预期目的。</p>
-            <p className="leading-relaxed mt-4">9.2 您负责在使用或发布之前审核所有生成的内容。</p>
-            <p className="leading-relaxed mt-4">9.3 我们不保证 AI 服务会产生任何特定结果或成果。</p>
-            <p className="leading-relaxed mt-4">9.4 AI 模型的性能可能会有所不同，并会持续改进和修改。</p>
-          </section>
-
-          <section>
-            <h2 className="text-2xl font-semibold text-white mb-4">十、税务</h2>
-            <p className="leading-relaxed">
-              10.1 您在 ToryX 软件及相关服务中的收入（如有）将直接以现金或等值形式提现。
-            </p>
-            <p className="leading-relaxed mt-4">
-              10.2 您理解并同意，公司有权为您代扣代缴税金，并依据国家法律法规之规定向税务机关申报缴纳。
-            </p>
-          </section>
-
-          <section>
-            <h2 className="text-2xl font-semibold text-white mb-4">十一、责任限制</h2>
-            <p className="leading-relaxed">
-              在法律允许的最大范围内：
-            </p>
-            <ul className="list-disc pl-6 space-y-2 mt-4">
-              <li>我们的服务按&ldquo;现状&rdquo;提供，不提供任何形式的保证</li>
-              <li>我们不对任何间接、附带、特殊或后果性损害承担责任</li>
-              <li>我们的总责任不超过您在索赔前 12 个月内向我们支付的金额</li>
-              <li>我们不对第三方行为负责，包括 TikTok 的审核决定</li>
-              <li>我们不对超出我们控制范围的因素导致的服务中断负责</li>
-              <li>由于第三方 API（如 TikTok API）变更导致的服务调整，我们不承担责任</li>
-              <li>由于网络环境、黑客攻击、自然灾害等不可抗力导致的损失，我们不承担责任</li>
-            </ul>
-          </section>
-
-          <section>
-            <h2 className="text-2xl font-semibold text-white mb-4">十二、赔偿</h2>
-            <p className="leading-relaxed">
-              您同意赔偿并使武汉观星文化传媒有限公司及其管理人员、董事、员工和代理人免受因以下原因引起的任何索赔、损害、损失或费用（包括法律费用）：
-            </p>
-            <ul className="list-disc pl-6 space-y-2 mt-4">
-              <li>您使用我们的服务</li>
-              <li>您违反本条款</li>
-              <li>您通过我们平台创建、上传或发布的内容</li>
-              <li>您侵犯任何第三方权利</li>
-            </ul>
-          </section>
-
-          <section>
-            <h2 className="text-2xl font-semibold text-white mb-4">十三、服务变更与终止</h2>
-            <p className="leading-relaxed">13.1 我们保留随时修改、暂停或终止我们服务任何部分的权利，并会合理通知。</p>
-            <p className="leading-relaxed mt-4">13.2 如您违反本条款，我们可以终止您的账户，无论是否通知。</p>
-            <p className="leading-relaxed mt-4">13.3 终止后，您使用我们服务的权利立即停止。未使用的积分可能被没收。</p>
-          </section>
-
-          <section>
-            <h2 className="text-2xl font-semibold text-white mb-4">十四、适用法律与争议解决</h2>
-            <p className="leading-relaxed">14.1 本条款受中华人民共和国法律管辖。</p>
-            <p className="leading-relaxed mt-4">14.2 任何争议应首先通过善意协商解决。</p>
-            <p className="leading-relaxed mt-4">14.3 如协商失败，争议应提交至中国湖北省武汉市有管辖权的法院。</p>
-          </section>
-
-          <section>
-            <h2 className="text-2xl font-semibold text-white mb-4">十五、条款变更</h2>
-            <p className="leading-relaxed">
-              我们可能会不时更新本条款。对于重大变更，我们将通过电子邮件或在平台上显著通知您。
-              变更后继续使用我们的服务即表示接受新条款。
-            </p>
-          </section>
-
-          <section>
-            <h2 className="text-2xl font-semibold text-white mb-4">十六、联系方式</h2>
-            <p className="leading-relaxed">
-              如对本条款有任何疑问，请联系我们：
-            </p>
-            <div className="mt-4 p-4 bg-white/5 rounded-lg">
+          <section className="border-t border-white/10 pt-8 mt-8">
+            <div className="p-4 bg-white/5 rounded-lg">
               <p><strong>武汉观星文化传媒有限公司</strong></p>
               <p className="mt-1">Wuhan Guanxing Cultural Media Co., Ltd.</p>
               <p className="mt-2">邮箱：contact@toryx.ai</p>
