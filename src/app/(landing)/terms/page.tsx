@@ -323,20 +323,26 @@ function ChineseContent() {
   return (
     <>
       <div className="mb-12">
-        <h1 className="text-4xl font-bold mb-4">服务条款</h1>
-        <p className="text-gray-400">最后更新日期：2026年1月22日</p>
-        <p className="text-gray-400 mt-2">生效日期：2026年1月22日</p>
+        <h1 className="text-4xl font-bold mb-4">"ToryX"用户服务协议</h1>
+        <p className="text-gray-400">更新日期：2026年01月22日</p>
+        <p className="text-gray-400 mt-2">生效日期：2026年01月22日</p>
       </div>
 
       <div className="prose prose-invert prose-lg max-w-none">
         <div className="space-y-8 text-gray-300">
           <section>
-            <h2 className="text-2xl font-semibold text-white mb-4">一、条款接受</h2>
+            <h2 className="text-2xl font-semibold text-white mb-4">1. 导言</h2>
             <p className="leading-relaxed">
-              “ToryX”软件及相关服务，系指<strong>武汉观星文化传媒有限公司</strong>及其关联方（以下简称“公司”、“我们”或“我们的”）合法拥有并运营的、标注名称为 ToryX (AI 内容智造工厂) 的客户端应用程序、官方网站以及供第三方网站和应用程序使用的软件开发工具包（SDK）和应用程序编程接口（API）。
+              欢迎您使用"ToryX"软件及相关服务！
             </p>
             <p className="leading-relaxed mt-4">
-              本协议是您与公司之间关于您下载、安装、使用、复制“ToryX”软件，及使用“ToryX”相关服务所订立的协议。
+              "ToryX"软件及相关服务，系指<strong>武汉观星文化传媒有限公司</strong>及其关联方（以下简称"公司"）合法拥有并运营的、标注名称为"ToryX"的客户端应用程序以及相关网站（ www.tokfactoryai.com ）向您提供的产品与服务。本协议是您与公司就您下载、安装、注册、登录、使用"ToryX"软件，并获得相关服务所订立的协议。
+            </p>
+            <p className="leading-relaxed mt-4">
+              为了更好地为您提供服务，请您在开始使用"ToryX"软件及相关服务之前，务必认真阅读并充分理解本协议，特别是涉及免除或者限制责任的条款、权利许可和信息使用的条款、同意开通和使用特殊单项服务的条款、法律适用和争议解决条款等。<strong>其中，免除或者限制责任条款等重要内容将以加粗形式提示您注意，您应重点阅读。</strong> 如您未满18周岁，请您在法定监护人陪同下仔细阅读并充分理解本协议，并征得法定监护人的同意后使用"ToryX"软件及相关服务。
+            </p>
+            <p className="leading-relaxed mt-4">
+              如您不同意本协议，这将导致我们无法为您提供完整的产品和服务，您也可以选择停止使用。<strong>如您自主选择同意或使用"ToryX"软件及相关服务，则视为您已充分理解本协议，并同意作为本协议的一方当事人接受本协议以及其他与"ToryX"软件及相关服务相关的协议和规则（包括但不限于《ToryX隐私政策》）的约束。</strong>
             </p>
           </section>
 

@@ -56,17 +56,17 @@ export default function PrivacyPage() {
             </div>
           </nav>
         </div>
-      </header >
+      </header>
 
       {/* 内容 */}
-      < main className="relative z-10 py-16" >
+      <main className="relative z-10 py-16">
         <div className="container max-w-4xl mx-auto px-6">
           {lang === "en" ? <EnglishContent /> : <ChineseContent />}
         </div>
-      </main >
+      </main>
 
       {/* 页脚 */}
-      < footer className="relative z-10 border-t border-white/5 py-8 bg-black/30" >
+      <footer className="relative z-10 border-t border-white/5 py-8 bg-black/30">
         <div className="container max-w-7xl mx-auto px-6">
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
             <div className="text-gray-500 text-sm">
@@ -86,8 +86,8 @@ export default function PrivacyPage() {
             </div>
           </div>
         </div>
-      </footer >
-    </div >
+      </footer>
+    </div>
   );
 }
 
@@ -321,7 +321,7 @@ function EnglishContent() {
             </p>
           </section>
         </div>
-      </div >
+      </div>
     </>
   );
 }
@@ -330,224 +330,290 @@ function ChineseContent() {
   return (
     <>
       <div className="mb-12">
-        <h1 className="text-4xl font-bold mb-4">隐私政策</h1>
-        <p className="text-gray-400">最后更新日期：2026年1月22日</p>
-        <p className="text-gray-400 mt-2">生效日期：2026年1月22日</p>
+        <h1 className="text-4xl font-bold mb-4">&quot;ToryX&quot; 隐私政策</h1>
+        <p className="text-gray-400">更新日期：2026年01月22日</p>
+        <p className="text-gray-400 mt-2">生效日期：2026年01月22日</p>
       </div>
 
       <div className="prose prose-invert prose-lg max-w-none">
         <div className="space-y-8 text-gray-300">
+          {/* 引言 */}
           <section>
-            <h2 className="text-2xl font-semibold text-white mb-4">一、引言</h2>
             <p className="leading-relaxed">
-              “ToryX”指<strong>武汉观星文化传媒有限公司</strong>及其关联方（以下简称“我们”）合法拥有并运营的、标注名称为 ToryX (AI 内容智造工厂) 的客户端应用程序、官方网站以及供第三方网站和应用程序使用的软件开发工具包（SDK）和应用程序编程接口（API）。
+              &quot;ToryX&quot;指<strong>武汉观星文化传媒有限公司</strong>及其关联方（以下简称&quot;我们&quot;）合法拥有并运营的、标注名称为 ToryX (AI 内容智造工厂) 的客户端应用程序、官方网站以及供第三方网站和应用程序使用的软件开发工具包（SDK）和应用程序编程接口（API）。
             </p>
             <p className="leading-relaxed mt-4">
               我们作为 ToryX 的运营者，深知个人信息对你的重要性，我们将按照法律法规的规定，保护你的个人信息及隐私安全。我们制定本隐私政策并特别提示：希望你在使用 ToryX 及相关服务前仔细阅读并理解本隐私政策，以便作出适当的选择。
             </p>
           </section>
 
-          <section className="bg-gradient-to-r from-cyan-500/10 to-pink-500/10 border border-cyan-500/20 rounded-xl p-6">
-            <h2 className="text-2xl font-semibold text-white mb-4 flex items-center gap-2">
-              <svg className="w-6 h-6" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-5.2 1.74 2.89 2.89 0 012.31-4.64 2.93 2.93 0 01.88.13V9.4a6.84 6.84 0 00-1-.05A6.33 6.33 0 005 20.1a6.34 6.34 0 0010.86-4.43v-7a8.16 8.16 0 004.77 1.52v-3.4a4.85 4.85 0 01-1-.1z" />
-              </svg>
-              二、TikTok 集成与数据处理
-            </h2>
-            <p className="leading-relaxed text-white/90">
-              <strong>重要提示：</strong>ToryX 集成了 TikTok 的 Content Posting API，使您能够将 AI 生成的视频直接发布到您的 TikTok 账号。
-              本节专门说明我们如何处理您的 TikTok 数据。
+          {/* 概要 */}
+          <section className="bg-white/5 border border-white/10 rounded-xl p-6">
+            <h2 className="text-2xl font-semibold text-white mb-4">概要</h2>
+            <p className="leading-relaxed">
+              我们将通过本隐私政策向你介绍不同场景下我们如何处理个人信息。当你开启或使用 ToryX 时，为实现你选择使用的功能、服务，或为遵守法律法规的要求，我们会处理相关信息。除实现 ToryX 基本功能、服务所需的信息，和根据法律法规要求所必需的信息之外，你可以拒绝我们处理其他信息，但这可能导致我们无法提供对应功能、服务。我们将在隐私政策中逐项说明相关情况，<strong>有关你个人信息权益的重要条款已用加粗形式提示，请特别关注。</strong>
+            </p>
+            <p className="leading-relaxed mt-4">
+              ToryX 及相关版本之间的实际功能可能略有差异，但如关联版本无独立隐私政策，我们会遵循本隐私政策收集、处理你的个人信息。
+            </p>
+            <p className="leading-relaxed mt-4">
+              除本隐私政策外，在特定场景下，我们还会通过即时告知（含弹窗、页面提示等）、功能更新说明等方式，向你说明对应的信息收集目的、范围及使用方式，这些即时告知及功能更新说明等构成本隐私政策的一部分，并与本隐私政策具有同等效力。
+            </p>
+            <p className="leading-relaxed mt-4">
+              下文将帮你详细了解我们如何收集、使用、存储、传输、公开与保护个人信息；帮你了解查询、更正、补充、删除、复制、转移个人信息的方式。其中，<strong>有关你个人信息权益的重要内容已用加粗形式提示，请特别关注。</strong>
+            </p>
+          </section>
+
+          {/* 1. 我们如何收集和使用个人信息 */}
+          <section>
+            <h2 className="text-2xl font-semibold text-white mb-4">1. 我们如何收集和使用个人信息</h2>
+
+            <h3 className="text-xl font-medium text-white mt-6 mb-3">1.1 帐号服务</h3>
+            <p className="leading-relaxed mb-2"><strong>1.1.1 注册、登录</strong></p>
+            <p className="leading-relaxed">
+              当你注册、登录 ToryX 及使用相关服务时，你可以通过手机号码或者邮箱创建帐号，并且你可以完善相关的网络身份识别信息（名称、头像、密码），我们收集这些信息是为了帮助你完成注册。收集手机号码是履行国家法律法规关于网络实名制（真实身份信息认证）要求的必要信息，如果你拒绝提供手机号码用于注册、登录，我们可能无法为你提供信息发布（包括生成视频、评论等）功能。
+            </p>
+            <p className="leading-relaxed mt-2">
+              基于我们与通信运营商的合作，当你使用&quot;一键登录&quot;功能时，经过你的同意，我们会使用运营商提供的功能，将你设备中的手机号码作为你的注册、登录帐号并免于密码或动态验证码核验，为你提供快捷的注册、登录服务。如果你不希望使用&quot;一键登录&quot;功能，可以通过其他方式注册、登录 ToryX。
+            </p>
+            <p className="leading-relaxed mt-2">
+              你可以使用第三方帐号注册、登录 ToryX，但需要授权我们获取你在第三方平台的信息（头像、昵称等公开信息以及你授权的其他信息），用于生成与该第三方帐号绑定的 ToryX 帐号，使你可以直接注册、登录并使用 ToryX 和相关服务。部分情况下，我们需要重新验证并绑定你的手机号码，以确认该第三方帐号的真实性和关联性。
+            </p>
+            <p className="leading-relaxed mt-2">
+              如果你忘记了你的 ToryX 的登录方式，可以使用找回密码功能。为保障你帐号的安全，我们可能需要你填写相关信息以进行验证，必要时可能通过真实身份信息验证等方式验证你的身份。
             </p>
 
-            <h3 className="text-xl font-medium text-white mt-6 mb-3">2.1 我们收集的 TikTok 数据</h3>
-            <p className="leading-relaxed">当您连接 TikTok 账号时，我们会收集：</p>
-            <ul className="list-disc pl-6 space-y-2 mt-4">
-              <li><strong>TikTok 用户 ID (Open ID)：</strong>用于识别您的账号并代您发布内容</li>
-              <li><strong>显示名称和头像：</strong>用于在我们的平台内显示您的账号信息</li>
-              <li><strong>基本资料信息：</strong>粉丝数、关注数和视频数（仅用于显示）</li>
-              <li><strong>OAuth 访问令牌：</strong>用于向 TikTok 发起 API 请求（加密安全存储）</li>
-            </ul>
-
-            <h3 className="text-xl font-medium text-white mt-6 mb-3">2.2 我们如何使用您的 TikTok 数据</h3>
-            <ul className="list-disc pl-6 space-y-2">
-              <li><strong>视频发布：</strong>将您通过我们平台创建的视频上传并发布到您的 TikTok 账号</li>
-              <li><strong>账号展示：</strong>在我们的控制面板中显示您已连接的 TikTok 账号</li>
-              <li><strong>发布状态追踪：</strong>追踪发布到 TikTok 的视频状态</li>
-            </ul>
-
-            <h3 className="text-xl font-medium text-white mt-6 mb-3">2.3 我们不会收集的 TikTok 数据</h3>
-            <ul className="list-disc pl-6 space-y-2">
-              <li>我们不会获取您的 TikTok 密码</li>
-              <li>我们不会读取您的私信或评论</li>
-              <li>我们不会访问非通过我们平台创建的视频</li>
-              <li>我们不会为广告目的与第三方共享您的 TikTok 数据</li>
-            </ul>
-
-            <h3 className="text-xl font-medium text-white mt-6 mb-3">2.4 TikTok 数据保留与删除</h3>
-            <ul className="list-disc pl-6 space-y-2">
-              <li>OAuth 令牌仅在您的账号保持连接期间存储</li>
-              <li>当您断开 TikTok 账号连接时，我们会在 24 小时内删除所有相关令牌</li>
-              <li>发布记录保留 90 天供您参考，之后自动删除</li>
-              <li>您可以随时请求立即删除所有与 TikTok 相关的数据</li>
-            </ul>
-
-            <h3 className="text-xl font-medium text-white mt-6 mb-3">2.5 撤销 TikTok 访问权限</h3>
+            <p className="leading-relaxed mt-4 mb-2"><strong>1.1.2 实名认证</strong></p>
             <p className="leading-relaxed">
-              您可以随时通过我们的账号管理页面断开 TikTok 账号连接。此外，您也可以直接在 TikTok 应用的
-              设置 → 安全 → 管理应用权限 中撤销 ToryX 的访问权限。
+              在你使用需实名认证的功能或服务时，为符合法律法规相关要求，保障你或其他用户的安全，或维护功能/服务的安全稳定，需要你提供真实身份信息（真实姓名、身份证件号码或人脸信息，根据实际情况可能有所不同）以完成实名认证。
+            </p>
+            <p className="leading-relaxed mt-2">
+              在实名认证的过程中，可能需要由提供认证服务的第三方认证机构核验你的真实身份信息。这些信息仅供完成实名认证的目的，或其他法律法规所规定的用途，未经你明示授权不会用作其他目的。你可以拒绝提供，但将可能无法使用必须实名认证才可使用的功能或相关服务。不能使用此类功能或服务，不影响你使用其他功能与服务。
             </p>
 
-            <h3 className="text-xl font-medium text-white mt-6 mb-3">2.6 TikTok 政策链接</h3>
+            <p className="leading-relaxed mt-4 mb-2"><strong>1.1.3 帐号公开信息</strong></p>
             <p className="leading-relaxed">
-              使用我们的 TikTok 发布功能，即表示您已阅读并同意 TikTok 的官方政策：
+              我们会在你注册 ToryX 时为你的帐号生成用户 ID，该 ID 是你的帐号的公开识别符号。
+            </p>
+
+            <p className="leading-relaxed mt-4 mb-2"><strong>1.1.4 统一帐号和关联版本</strong></p>
+            <p className="leading-relaxed">
+              如无特别说明，ToryX 的各关联版本均使用统一的帐号服务，<strong>你可以使用同一帐号便捷地登录、使用 ToryX 关联版本，以使用对应版本的服务或功能。</strong>为了在各关联版本中提供一致的服务体验，我们使用SDK或相关技术同步帐号和内容，其中可能包括：共享昵称、头像等你设置为公开的帐号信息；同步你使用此帐号发布的内容；同步你授权的其他信息。
+            </p>
+
+            <h3 className="text-xl font-medium text-white mt-6 mb-3">1.2 内容生成与浏览</h3>
+            <p className="leading-relaxed">
+              在你使用 ToryX 生成或浏览内容的过程中，我们会记录你的使用情况。如果你未登录帐号，我们会通过设备对应的标识符信息来记录你的【点击、浏览、分享信息】。如果你已登录帐号，我们会通过你的 ToryX 帐号记录你的【点击、浏览、反馈等】。
+            </p>
+            <p className="leading-relaxed mt-2">
+              在为你提供基于位置的内容或服务时，经过你的授权，我们会使用与本服务相关的<strong>地理位置信息（如IP地址对应的城市及/或区县）</strong>，以保障内容或服务的质量。
+            </p>
+            <p className="leading-relaxed mt-2">
+              当你使用搜索时，我们会收集你的搜索关键字信息、日志记录。
+            </p>
+
+            <h3 className="text-xl font-medium text-white mt-6 mb-3">1.3 其他功能</h3>
+            <p className="leading-relaxed mb-2"><strong>1.3.1 消息通知</strong></p>
+            <p className="leading-relaxed">
+              你知悉并同意，我们在运营中可能会通过你在使用产品及/或服务的过程中所提供的联系方式（例如：电话号码、邮箱），向你发送通知，例如消息告知、身份验证、安全验证、用户使用体验调研；此外，我们也可能会以短信、邮件的方式，为你提供你可能感兴趣的服务、功能或活动等商业性信息。如你不愿接受这些信息，你可以直接与我们联系进行退订。
+            </p>
+            <p className="leading-relaxed mt-2 mb-2"><strong>1.3.2 分享互动</strong></p>
+            <p className="leading-relaxed">
+              在你分享或接收被分享的信息时，我们需要访问你的剪切板，读取其中包含的链接或分享码，以实现跳转、分享等功能。我们仅在识别出剪切板内容属于 ToryX 跳转、分享等指令时才会将其上传。
+            </p>
+            <p className="leading-relaxed mt-2 mb-2"><strong>1.3.3 订单与支付</strong></p>
+            <p className="leading-relaxed">
+              当你购买会员或服务时，我们或提供服务的第三方会收集你的订单信息。支付功能由与我们合作的第三方支付机构向你提供服务。第三方支付机构可能需要收集你的姓名、银行卡类型及卡号、有效期及手机号码等必要信息。银行卡相关信息是个人敏感信息，拒绝提供将导致你无法使用该功能。
+            </p>
+
+            <h3 className="text-xl font-medium text-white mt-6 mb-3">1.4 运营与安全运行</h3>
+            <p className="leading-relaxed">
+              为维护产品或服务的正常稳定运行，保护你或其他用户或公众的安全及合法利益，我们会收集如下必要信息：
             </p>
             <ul className="list-disc pl-6 space-y-2 mt-2">
-              <li><a href="https://www.tiktok.com/legal/page/row/privacy-policy/en" target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline">TikTok 隐私政策</a></li>
-              <li><a href="https://www.tiktok.com/legal/page/row/terms-of-service/en" target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline">TikTok 服务条款</a></li>
+              <li>为了保障软件与服务的安全运行、运营的质量及效率，我们会收集你的硬件型号、操作系统版本号、设备标识符、IP 地址、软件版本号、网络接入方式、类型、状态、网络质量数据、操作、使用、服务日志等数据。</li>
+              <li>为了预防恶意程序、保障运营质量及效率，我们会收集应用程序的总体运行、使用情况与频率、应用崩溃情况、性能数据。</li>
+              <li>我们可能使用你的帐号信息、设备信息、服务日志信息，以及我们的关联方、合作方获得你授权或依法可以提供给我们的信息，用于判断帐号安全、交易安全、进行身份验证、识别违法违规情况。</li>
+            </ul>
+
+            <h3 className="text-xl font-medium text-white mt-6 mb-3">1.5 Cookie等同类技术的使用</h3>
+            <p className="leading-relaxed">
+              我们可能会使用 Cookie 或同类技术来收集和存储你的信息，这主要用于：
+            </p>
+            <ul className="list-disc pl-6 space-y-2 mt-2">
+              <li><strong>保障安全</strong>：确认你是否安全登录，排查异常情况。</li>
+              <li><strong>提升体验</strong>：帮助你省去重复填写个人信息的步骤。</li>
+              <li><strong>推荐内容</strong>：了解你的偏好，为你推荐感兴趣的内容或服务。</li>
+            </ul>
+            <p className="leading-relaxed mt-2">
+              你可以在浏览器设置中清除 Cookie，但清除后可能无法使用依赖于 Cookie 的功能。
+            </p>
+
+            <h3 className="text-xl font-medium text-white mt-6 mb-3">1.6 依法豁免征得同意处理个人信息</h3>
+            <p className="leading-relaxed">
+              在下列情形中，根据法律法规，我们处理你的个人信息无需征得你的授权同意：
+            </p>
+            <ul className="list-disc pl-6 space-y-2 mt-2">
+              <li>根据你的要求订立或履行合同所必需；</li>
+              <li>为履行法定职责或者法定义务所必需；</li>
+              <li>为应对突发公共卫生事件，或者紧急情况下为保护自然人的生命健康和财产安全所必需；</li>
+              <li>为公共利益实施新闻报道、舆论监督等行为，在合理的范围内处理个人信息；</li>
+              <li>在合理的范围内处理你自行公开的个人信息，或者其他已经合法公开的个人信息；</li>
+              <li>法律法规规定的其他情形。</li>
             </ul>
           </section>
 
+          {/* 2. 数据使用过程中涉及的合作方以及转移、公开个人信息 */}
           <section>
-            <h2 className="text-2xl font-semibold text-white mb-4">三、我们收集的信息</h2>
+            <h2 className="text-2xl font-semibold text-white mb-4">2. 数据使用过程中涉及的合作方以及转移、公开个人信息</h2>
 
-            <h3 className="text-xl font-medium text-white mt-6 mb-3">3.1 您主动提供的信息</h3>
-            <ul className="list-disc pl-6 space-y-2">
-              <li><strong>账户信息：</strong>邮箱地址、用户名、密码（加密存储）</li>
-              <li><strong>个人资料：</strong>显示名称、头像、偏好设置</li>
-              <li><strong>内容：</strong>您上传用于 AI 处理的图片、视频和文字</li>
-              <li><strong>支付信息：</strong>通过第三方支付处理商安全处理</li>
+            <h3 className="text-xl font-medium text-white mt-6 mb-3">2.1 合作方的使用</h3>
+            <p className="leading-relaxed mb-2"><strong>2.1.1 基本原则</strong></p>
+            <p className="leading-relaxed">遵循合法、正当、必要、安全审慎原则。</p>
+
+            <p className="leading-relaxed mt-4 mb-2"><strong>2.1.2 合作场景</strong></p>
+            <p className="leading-relaxed">
+              我们可能会与第三方合作提供服务（如支付、消息推送、实名认证等），在合作过程中，我们要求合作方严格遵守法律法规和数据安全要求。
+            </p>
+            <ul className="list-disc pl-6 space-y-2 mt-2">
+              <li><strong>支付服务</strong>：由第三方支付机构提供，需收集必要的支付信息。</li>
+              <li><strong>消息推送</strong>：终端设备制造商或推送服务商可能需要使用你的设备信息以完成推送。</li>
+              <li><strong>登录/绑定帐号</strong>：经你同意，第三方产品可能会使用你的公开信息。</li>
             </ul>
 
-            <h3 className="text-xl font-medium text-white mt-6 mb-3">3.2 自动收集的信息</h3>
-            <ul className="list-disc pl-6 space-y-2">
-              <li><strong>设备信息：</strong>浏览器类型、操作系统、设备标识符</li>
-              <li><strong>使用数据：</strong>访问的页面、使用的功能、时间戳</li>
-              <li><strong>日志数据：</strong>IP 地址、访问时间、错误日志</li>
-            </ul>
-          </section>
+            <p className="leading-relaxed mt-4 mb-2"><strong>2.1.3 广告</strong></p>
+            <p className="leading-relaxed">
+              我们可能与广告合作方共享去标识化的统计信息，用于分析广告有效性，但不会共享可识别你个人身份的信息。
+            </p>
 
-          <section>
-            <h2 className="text-2xl font-semibold text-white mb-4">四、信息使用目的</h2>
-            <ul className="list-disc pl-6 space-y-2">
-              <li>提供和维护我们的 AI 内容创作服务</li>
-              <li>处理您的视频和图片生成请求</li>
-              <li>将内容发布到已连接的社交媒体平台（经您授权）</li>
-              <li>发送服务通知和更新</li>
-              <li>改进服务并开发新功能</li>
-              <li>防止欺诈并确保平台安全</li>
-              <li>遵守法律义务</li>
-            </ul>
-          </section>
+            <h3 className="text-xl font-medium text-white mt-6 mb-3">2.2 运营主体变更</h3>
+            <p className="leading-relaxed">
+              如发生合并、收购或资产转让，你的个人信息可能被转移。我们会要求继受方继续履行本隐私政策的义务，否则将要求其重新征得你的同意。
+            </p>
 
-          <section>
-            <h2 className="text-2xl font-semibold text-white mb-4">五、信息共享</h2>
-            <p className="leading-relaxed">我们不会出售您的个人信息。我们可能在以下情况下共享信息：</p>
-            <ul className="list-disc pl-6 space-y-2 mt-4">
-              <li><strong>服务提供商：</strong>云托管、支付处理、分析服务（受严格保密协议约束）</li>
-              <li><strong>社交媒体平台：</strong>仅限 TikTok，仅在您明确授权的情况下，仅用于发布您的内容</li>
-              <li><strong>法律要求：</strong>根据法律要求或为保护我们的权利</li>
-            </ul>
-          </section>
+            <h3 className="text-xl font-medium text-white mt-6 mb-3">2.3 停止运营</h3>
+            <p className="leading-relaxed">
+              如停止运营，我们将及时停止收集并删除或匿名化处理你的个人信息，并向你发送通知。
+            </p>
 
-          <section>
-            <h2 className="text-2xl font-semibold text-white mb-4">六、数据安全与存储</h2>
-            <p className="leading-relaxed">我们采用行业标准的安全措施：</p>
-            <ul className="list-disc pl-6 space-y-2 mt-4">
-              <li>传输中的数据采用 SSL/TLS 加密</li>
-              <li>静态敏感数据采用 AES-256 加密</li>
-              <li>定期进行安全审计和漏洞评估</li>
-              <li>访问控制和员工培训</li>
-              <li>OAuth 令牌加密存储，永不在日志或界面中暴露</li>
-            </ul>
-            <p className="leading-relaxed mt-4">
-              <strong>数据存储位置：</strong>您的个人信息将存储于<strong>中华人民共和国境内</strong>。我们仅在提供服务所必需的期间内保留你的个人信息。
+            <h3 className="text-xl font-medium text-white mt-6 mb-3">2.4 公开</h3>
+            <p className="leading-relaxed">
+              除非遵循法律法规或获得你的同意，我们不会主动公开你的个人信息。
             </p>
           </section>
 
+          {/* 3. 管理你的个人信息 */}
           <section>
-            <h2 className="text-2xl font-semibold text-white mb-4">七、您的权利</h2>
-            <p className="leading-relaxed">您有权：</p>
-            <ul className="list-disc pl-6 space-y-2 mt-4">
-              <li><strong>访问权：</strong>请求获取您个人数据的副本</li>
-              <li><strong>更正权：</strong>更新不准确的信息</li>
-              <li><strong>删除权：</strong>请求删除您的数据（&ldquo;被遗忘权&rdquo;）</li>
-              <li><strong>可携带权：</strong>以机器可读格式接收您的数据</li>
-              <li><strong>撤回同意：</strong>随时断开社交媒体账号连接</li>
-              <li><strong>限制权：</strong>限制我们处理您数据的方式</li>
-            </ul>
-            <p className="leading-relaxed mt-4">
-              如需行使这些权利，请通过 privacy@tokfactoryai.com 联系我们
+            <h2 className="text-2xl font-semibold text-white mb-4">3. 管理你的个人信息</h2>
+            <p className="leading-relaxed">
+              我们保障你对个人信息的查阅、复制、更正、补充、删除、撤回同意、注销帐号等权利。
+            </p>
+            <p className="leading-relaxed mt-2">
+              你可以通过应用内的设置功能或联系客服来管理你的个人信息。
+            </p>
+            <p className="leading-relaxed mt-2">
+              特别是账户注销功能，你可以在&quot;设置-账号安全&quot;中找到注销入口，注销后我们将删除或匿名化处理你的相关数据。
             </p>
           </section>
 
-          <section className="bg-white/5 border border-white/10 rounded-xl p-6">
-            <h2 className="text-2xl font-semibold text-white mb-4">八、账户注销</h2>
-            <p className="leading-relaxed">您有权随时注销账户。注销流程：</p>
-            <ol className="list-decimal pl-6 space-y-2 mt-4">
-              <li>登录账户，进入「设置」→「账户安全」→「注销账户」</li>
-              <li>验证身份后提交注销申请</li>
-              <li>我们将在 15 个工作日内完成注销处理</li>
-              <li>注销后，您的个人数据将在 30 天内被删除</li>
-            </ol>
-            <p className="leading-relaxed mt-4 text-white/80">
-              注：部分数据可能因法律合规要求保留（如交易记录依税法保留3年）。
+          {/* 4. 我们如何保护个人信息的安全 */}
+          <section>
+            <h2 className="text-2xl font-semibold text-white mb-4">4. 我们如何保护个人信息的安全</h2>
+
+            <p className="leading-relaxed mb-2"><strong>4.1 安全措施</strong></p>
+            <p className="leading-relaxed">
+              我们采取加密、去标识化等技术手段，以及严格的管理制度来保护你的个人信息。
+            </p>
+
+            <p className="leading-relaxed mt-4 mb-2"><strong>4.2 应急预案</strong></p>
+            <p className="leading-relaxed">
+              建立安全事件应急预案，一旦发生泄漏等事件，将及时启动预案并告知你相关情况。
+            </p>
+
+            <p className="leading-relaxed mt-4 mb-2"><strong>4.3 安全提示</strong></p>
+            <p className="leading-relaxed">
+              请你理解互联网环境并非百分之百安全，请妥善保管你的帐号信息。
             </p>
           </section>
 
+          {/* 5. 我们如何存储个人信息 */}
           <section>
-            <h2 className="text-2xl font-semibold text-white mb-4">九、数据保留</h2>
-            <ul className="list-disc pl-6 space-y-2">
-              <li><strong>账户数据：</strong>在账户有效期间保留，账户删除后 30 天内删除</li>
-              <li><strong>生成内容：</strong>存储 90 天，除非您提前删除</li>
-              <li><strong>TikTok 令牌：</strong>断开连接后立即删除</li>
-              <li><strong>日志数据：</strong>出于安全目的保留 12 个月</li>
-            </ul>
+            <h2 className="text-2xl font-semibold text-white mb-4">5. 我们如何存储个人信息</h2>
+
+            <p className="leading-relaxed mb-2"><strong>5.1 存储地点</strong></p>
+            <p className="leading-relaxed">
+              你的个人信息将存储于<strong>中华人民共和国境内</strong>。如需跨境传输，我们将遵循相关法律法规规定。
+            </p>
+
+            <p className="leading-relaxed mt-4 mb-2"><strong>5.2 存储期限</strong></p>
+            <p className="leading-relaxed">
+              我们仅在提供服务所必需的期间内保留你的个人信息。注销帐号后，我们将删除或匿名化处理你的信息，法律法规另有规定的除外。
+            </p>
           </section>
 
+          {/* 6. 我们如何保护未成年人 */}
           <section className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-6">
-            <h2 className="text-2xl font-semibold text-white mb-4">十、未成年人保护</h2>
+            <h2 className="text-2xl font-semibold text-white mb-4">6. 我们如何保护未成年人</h2>
             <p className="leading-relaxed">
-              ToryX 不面向 18 岁以下用户。我们不会故意收集儿童的个人信息。如果我们发现 18 岁以下的儿童向我们提供了个人信息，
-              我们将在 24 小时内删除。
+              我们非常重视对未成年人的保护。
             </p>
-            <p className="leading-relaxed mt-4">
-              <strong>监护人通道：</strong>如果您是未成年人的监护人，发现被监护人未经同意使用本服务，请立即通过 privacy@tokfactoryai.com 联系我们，
-              我们将及时删除相关账户和数据。
+            <ul className="list-disc pl-6 space-y-2 mt-2">
+              <li>若你是未满18周岁的未成年人，应在监护人指导下阅读并同意本政策。</li>
+              <li>我们只会在法律允许、监护人同意或保护未成年人所必要的情况下处理未成年人信息。</li>
+            </ul>
+          </section>
+
+          {/* 7. 隐私政策的查阅和修订 */}
+          <section>
+            <h2 className="text-2xl font-semibold text-white mb-4">7. 隐私政策的查阅和修订</h2>
+
+            <p className="leading-relaxed mb-2"><strong>7.1 查阅</strong></p>
+            <p className="leading-relaxed">
+              你可以在 ToryX 网站页脚或应用设置中查看本隐私政策。
+            </p>
+
+            <p className="leading-relaxed mt-4 mb-2"><strong>7.2 更新</strong></p>
+            <p className="leading-relaxed">
+              我们会适时修订本政策，并通过公告或站内信通知你。
             </p>
           </section>
 
+          {/* 8. 联系我们 */}
           <section>
-            <h2 className="text-2xl font-semibold text-white mb-4">十一、国际数据传输</h2>
+            <h2 className="text-2xl font-semibold text-white mb-4">8. 联系我们</h2>
             <p className="leading-relaxed">
-              我们的服务器位于中华人民共和国境内。如果您从中国境外访问我们的服务，您的数据可能会被传输到中国并在中国处理。
-              我们确保对国际数据传输采取适当的保障措施。
-            </p>
-          </section>
-
-          <section>
-            <h2 className="text-2xl font-semibold text-white mb-4">十二、政策变更</h2>
-            <p className="leading-relaxed">
-              我们可能会不时更新本隐私政策。对于重大变更，我们将通过电子邮件或在平台上显著通知您。
-              在此类修改后继续使用我们的服务即表示您接受更新后的政策。
-            </p>
-          </section>
-
-          <section>
-            <h2 className="text-2xl font-semibold text-white mb-4">十三、联系我们</h2>
-            <p className="leading-relaxed">
-              如果您对本隐私政策或我们的数据处理有任何疑问，请联系我们：
+              如果你对个人信息保护问题有疑问、建议或投诉，可选择通过以下方式联系我们：
             </p>
             <div className="mt-4 p-4 bg-white/5 rounded-lg">
+              <p>发送邮件至：<strong>contact@toryx.ai</strong></p>
+              <p className="mt-2">我们将尽快审核并在验证身份后的十五个工作日内回复。</p>
+            </div>
+          </section>
+
+          {/* 9. 其他 - 第三方服务声明 */}
+          <section className="bg-gradient-to-r from-cyan-500/10 to-pink-500/10 border border-cyan-500/20 rounded-xl p-6">
+            <h2 className="text-2xl font-semibold text-white mb-4">9. 其他</h2>
+
+            <p className="leading-relaxed mb-2"><strong>9.1 第三方服务声明</strong></p>
+            <p className="leading-relaxed">
+              ToryX 在集成第三方服务（如 TikTok、YouTube）时，将遵循相关平台的数据政策。
+            </p>
+            <ul className="list-disc pl-6 space-y-2 mt-2">
+              <li>如果你授权了 TikTok 账号，则意味着你同意接受 <a href="https://www.tiktok.com/legal/privacy-policy?lang=zh" target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline">TikTok 隐私政策</a>。</li>
+              <li>ToryX 将使用到 Google/YouTube API 服务，如果你授权了 YouTube 账号，则意味着你同意接受 <a href="https://www.google.com/policies/privacy" target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline">Google 隐私权政策</a>。</li>
+              <li>如果你需要解除 Google/YouTube 授权，可以通过 <a href="https://security.google.com/settings/security/permissions" target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline">Google 安全设置页面</a> 撤消应用的数据访问权限。</li>
+            </ul>
+          </section>
+
+          {/* 页脚信息 */}
+          <section className="border-t border-white/10 pt-8 mt-8">
+            <div className="p-4 bg-white/5 rounded-lg">
               <p><strong>武汉观星文化传媒有限公司</strong></p>
               <p className="mt-1">Wuhan Guanxing Cultural Media Co., Ltd.</p>
-              <p className="mt-2">邮箱：contact@toryx.ai</p>
-              <p>网站：www.tokfactoryai.com</p>
+              <p className="mt-2">网站：www.tokfactoryai.com</p>
               <p>地址：中国湖北省武汉市</p>
               <p className="mt-2 text-gray-400">ICP备案号：鄂ICP备2023007484号</p>
             </div>
-            <p className="leading-relaxed mt-4">
-              我们将在收到您的请求后 15 个工作日内予以回复。
-            </p>
           </section>
         </div>
       </div>
