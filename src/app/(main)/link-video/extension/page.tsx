@@ -6,7 +6,7 @@
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { 
+import {
   CheckCircle,
   Chrome,
   ArrowRight,
@@ -21,10 +21,10 @@ import { useState } from "react";
 export default function ExtensionPage() {
   const [copiedStep, setCopiedStep] = useState<number | null>(null);
 
-  const macCommand1 = `mkdir -p ~/Desktop/tok-extractor && cat > ~/Desktop/tok-extractor/manifest.json << 'EOF'
+  const macCommand1 = `mkdir -p ~/Desktop/toryx-extractor && cat > ~/Desktop/toryx-extractor/manifest.json << 'EOF'
 {
   "manifest_version": 3,
-  "name": "Tok Factory 商品提取器",
+  "name": "ToryX 商品提取器",
   "version": "1.0",
   "permissions": ["activeTab", "scripting"],
   "action": {"default_title": "提取商品数据"},
@@ -32,15 +32,15 @@ export default function ExtensionPage() {
 }
 EOF`;
 
-  const macCommand2 = `cat > ~/Desktop/tok-extractor/background.js << 'EOF'
+  const macCommand2 = `cat > ~/Desktop/toryx-extractor/background.js << 'EOF'
 chrome.action.onClicked.addListener(async(tab)=>{const r=await chrome.scripting.executeScript({target:{tabId:tab.id},func:()=>{const d={title:document.title,price:'',imgs:[]};const m=document.body.innerText.match(/[¥￥$]\\s*([\\d,.]+)/);if(m)d.price=m[1];document.querySelectorAll('img[src*="http"]').forEach(i=>{if(i.width>150&&i.height>150&&d.imgs.length<5)d.imgs.push(i.src)});d.imgs=[...new Set(d.imgs)];return d}});if(r&&r[0]&&r[0].result){chrome.tabs.create({url:'http://123.56.75.68:3000/link-video?data='+encodeURIComponent(JSON.stringify(r[0].result))})}});
 EOF`;
 
-  const winCommand1 = `mkdir %USERPROFILE%\\Desktop\\tok-extractor`;
-  
+  const winCommand1 = `mkdir %USERPROFILE%\\Desktop\\toryx-extractor`;
+
   const winManifest = `{
   "manifest_version": 3,
-  "name": "Tok Factory 商品提取器",
+  "name": "ToryX 商品提取器",
   "version": "1.0",
   "permissions": ["activeTab", "scripting"],
   "action": {"default_title": "提取商品数据"},
@@ -141,7 +141,7 @@ EOF`;
                 </Button>
               </div>
               <p className="text-sm text-green-600 dark:text-green-400">
-                ✅ 完成！桌面上会出现 tok-extractor 文件夹
+                ✅ 完成！桌面上会出现 toryx-extractor 文件夹
               </p>
             </div>
           </div>
@@ -159,7 +159,7 @@ EOF`;
                 <li>Chrome 地址栏输入 <code className="bg-muted px-2 py-0.5 rounded">chrome://extensions/</code></li>
                 <li>打开右上角「<strong>开发者模式</strong>」开关</li>
                 <li>点击「<strong>加载已解压的扩展程序</strong>」</li>
-                <li>选择桌面上的 <code className="bg-muted px-2 py-0.5 rounded">tok-extractor</code> 文件夹</li>
+                <li>选择桌面上的 <code className="bg-muted px-2 py-0.5 rounded">toryx-extractor</code> 文件夹</li>
               </ol>
               <p className="text-sm text-green-600 dark:text-green-400 font-medium">
                 🎉 安装完成！以后在商品页面点击扩展图标即可
@@ -180,7 +180,7 @@ EOF`;
           <div className="space-y-4">
             <div>
               <p className="font-medium mb-2">步骤 1：创建文件夹</p>
-              <p className="text-sm text-muted-foreground">在桌面创建文件夹，命名为 <code className="bg-muted px-2 py-0.5 rounded">tok-extractor</code></p>
+              <p className="text-sm text-muted-foreground">在桌面创建文件夹，命名为 <code className="bg-muted px-2 py-0.5 rounded">toryx-extractor</code></p>
             </div>
 
             <div>
@@ -223,7 +223,7 @@ EOF`;
                 <li>Chrome 地址栏输入 <code className="bg-muted px-2 py-0.5 rounded">chrome://extensions/</code></li>
                 <li>打开「开发者模式」</li>
                 <li>点击「加载已解压的扩展程序」</li>
-                <li>选择 tok-extractor 文件夹</li>
+                <li>选择 toryx-extractor 文件夹</li>
               </ol>
             </div>
           </div>

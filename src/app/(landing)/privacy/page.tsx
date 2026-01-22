@@ -25,7 +25,7 @@ export default function PrivacyPage() {
                 <Sparkles className="h-5 w-5 text-white" />
               </div>
               <span className="text-xl font-bold bg-gradient-to-r from-cyan-400 to-pink-400 bg-clip-text text-transparent">
-                Tok Factory
+                ToryX
               </span>
             </Link>
             <div className="flex items-center gap-4">
@@ -56,17 +56,17 @@ export default function PrivacyPage() {
             </div>
           </nav>
         </div>
-      </header>
+      </header >
 
       {/* 内容 */}
-      <main className="relative z-10 py-16">
+      < main className="relative z-10 py-16" >
         <div className="container max-w-4xl mx-auto px-6">
           {lang === "en" ? <EnglishContent /> : <ChineseContent />}
         </div>
-      </main>
+      </main >
 
       {/* 页脚 */}
-      <footer className="relative z-10 border-t border-white/5 py-8 bg-black/30">
+      < footer className="relative z-10 border-t border-white/5 py-8 bg-black/30" >
         <div className="container max-w-7xl mx-auto px-6">
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
             <div className="text-gray-500 text-sm">
@@ -86,8 +86,8 @@ export default function PrivacyPage() {
             </div>
           </div>
         </div>
-      </footer>
-    </div>
+      </footer >
+    </div >
   );
 }
 
@@ -105,12 +105,12 @@ function EnglishContent() {
           <section>
             <h2 className="text-2xl font-semibold text-white mb-4">1. Introduction</h2>
             <p className="leading-relaxed">
-              Wuhan Guanxing Cultural Media Co., Ltd. (&quot;Tok Factory&quot;, &quot;we&quot;, &quot;us&quot;, or &quot;our&quot;) operates the Tok Factory platform
+              Wuhan Guanxing Cultural Media Co., Ltd. (&quot;ToryX&quot;, &quot;we&quot;, &quot;us&quot;, or &quot;our&quot;) operates the ToryX platform
               (www.tokfactoryai.com). This Privacy Policy explains how we collect, use, disclose, and safeguard your information
               when you use our AI-powered content creation services, including our integration with the TikTok platform.
             </p>
             <p className="leading-relaxed mt-4">
-              By using Tok Factory, you agree to the collection and use of information in accordance with this Privacy Policy.
+              By using ToryX, you agree to the collection and use of information in accordance with this Privacy Policy.
               If you do not agree with this policy, please do not use our services.
             </p>
           </section>
@@ -123,7 +123,7 @@ function EnglishContent() {
               2. TikTok Integration &amp; Data Handling
             </h2>
             <p className="leading-relaxed text-white/90">
-              <strong>IMPORTANT:</strong> Tok Factory integrates with TikTok&apos;s Content Posting API to enable you to publish
+              <strong>IMPORTANT:</strong> ToryX integrates with TikTok&apos;s Content Posting API to enable you to publish
               AI-generated videos directly to your TikTok account. This section specifically covers how we handle your TikTok data.
             </p>
 
@@ -162,7 +162,7 @@ function EnglishContent() {
             <h3 className="text-xl font-medium text-white mt-6 mb-3">2.5 Revoking TikTok Access</h3>
             <p className="leading-relaxed">
               You can disconnect your TikTok account at any time through our Account Management page. Additionally,
-              you can revoke Tok Factory&apos;s access directly from your TikTok app under Settings → Security → Manage App Permissions.
+              you can revoke ToryX&apos;s access directly from your TikTok app under Settings → Security → Manage App Permissions.
             </p>
 
             <h3 className="text-xl font-medium text-white mt-6 mb-3">2.6 TikTok Policy Links</h3>
@@ -275,7 +275,7 @@ function EnglishContent() {
           <section className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-6">
             <h2 className="text-2xl font-semibold text-white mb-4">10. Protection of Minors</h2>
             <p className="leading-relaxed">
-              Tok Factory is not intended for users under 18 years of age. We do not knowingly collect personal
+              ToryX is not intended for users under 18 years of age. We do not knowingly collect personal
               information from children. If we discover that a child under 18 has provided us with personal information,
               we will delete it within 24 hours.
             </p>
@@ -321,7 +321,7 @@ function EnglishContent() {
             </p>
           </section>
         </div>
-      </div>
+      </div >
     </>
   );
 }
@@ -340,12 +340,12 @@ function ChineseContent() {
           <section>
             <h2 className="text-2xl font-semibold text-white mb-4">一、引言</h2>
             <p className="leading-relaxed">
-              武汉观星文化传媒有限公司（以下简称&ldquo;Tok Factory&rdquo;、&ldquo;我们&rdquo;或&ldquo;本公司&rdquo;）运营 Tok Factory 平台
+              武汉观星文化传媒有限公司（以下简称&ldquo;ToryX&rdquo;、&ldquo;我们&rdquo;或&ldquo;本公司&rdquo;）运营 ToryX 平台
               (www.tokfactoryai.com)。本隐私政策旨在向您说明我们如何收集、使用、披露和保护您在使用我们的 AI 内容创作服务时的信息，
               包括我们与 TikTok 平台的集成。
             </p>
             <p className="leading-relaxed mt-4">
-              使用 Tok Factory 即表示您同意按照本隐私政策收集和使用信息。如您不同意本政策，请勿使用我们的服务。
+              使用 ToryX 即表示您同意按照本隐私政策收集和使用信息。如您不同意本政策，请勿使用我们的服务。
             </p>
           </section>
 
@@ -357,7 +357,7 @@ function ChineseContent() {
               二、TikTok 集成与数据处理
             </h2>
             <p className="leading-relaxed text-white/90">
-              <strong>重要提示：</strong>Tok Factory 集成了 TikTok 的 Content Posting API，使您能够将 AI 生成的视频直接发布到您的 TikTok 账号。
+              <strong>重要提示：</strong>ToryX 集成了 TikTok 的 Content Posting API，使您能够将 AI 生成的视频直接发布到您的 TikTok 账号。
               本节专门说明我们如何处理您的 TikTok 数据。
             </p>
 
@@ -396,7 +396,7 @@ function ChineseContent() {
             <h3 className="text-xl font-medium text-white mt-6 mb-3">2.5 撤销 TikTok 访问权限</h3>
             <p className="leading-relaxed">
               您可以随时通过我们的账号管理页面断开 TikTok 账号连接。此外，您也可以直接在 TikTok 应用的
-              设置 → 安全 → 管理应用权限 中撤销 Tok Factory 的访问权限。
+              设置 → 安全 → 管理应用权限 中撤销 ToryX 的访问权限。
             </p>
 
             <h3 className="text-xl font-medium text-white mt-6 mb-3">2.6 TikTok 政策链接</h3>
@@ -509,7 +509,7 @@ function ChineseContent() {
           <section className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-6">
             <h2 className="text-2xl font-semibold text-white mb-4">十、未成年人保护</h2>
             <p className="leading-relaxed">
-              Tok Factory 不面向 18 岁以下用户。我们不会故意收集儿童的个人信息。如果我们发现 18 岁以下的儿童向我们提供了个人信息，
+              ToryX 不面向 18 岁以下用户。我们不会故意收集儿童的个人信息。如果我们发现 18 岁以下的儿童向我们提供了个人信息，
               我们将在 24 小时内删除。
             </p>
             <p className="leading-relaxed mt-4">

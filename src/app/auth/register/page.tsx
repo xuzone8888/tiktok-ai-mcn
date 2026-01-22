@@ -24,7 +24,7 @@ export default function RegisterPage() {
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!name || !email || !password || !confirmPassword) {
       toast({
         variant: "destructive",
@@ -56,7 +56,7 @@ export default function RegisterPage() {
 
     try {
       const supabase = createClient();
-      
+
       // 注册用户
       const { data, error } = await supabase.auth.signUp({
         email,
@@ -144,7 +144,7 @@ export default function RegisterPage() {
                 <p className="text-sm text-muted-foreground">📋 验证步骤：</p>
                 <ol className="text-sm text-muted-foreground space-y-1 list-decimal list-inside">
                   <li>打开您的邮箱（包括垃圾邮件文件夹）</li>
-                  <li>找到来自 Tok Factory 的验证邮件</li>
+                  <li>找到来自 ToryX 的验证邮件</li>
                   <li>点击邮件中的 &ldquo;确认邮箱&rdquo; 链接</li>
                   <li>验证成功后即可登录</li>
                 </ol>
@@ -186,7 +186,7 @@ export default function RegisterPage() {
               创建账号
             </CardTitle>
             <CardDescription className="text-muted-foreground">
-              加入 Tok Factory 开始创作
+              加入 ToryX 开始创作
             </CardDescription>
           </div>
         </CardHeader>

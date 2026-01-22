@@ -16,7 +16,7 @@ const geistMono = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "Tok Factory - AI 内容智造工厂",
+  title: "ToryX - AI 内容智造工厂",
   description: "AI 驱动的短视频内容智能生产平台",
 };
 

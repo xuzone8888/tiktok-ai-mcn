@@ -299,8 +299,8 @@ export function Sidebar() {
           {!collapsed && (
             <div className="flex flex-col">
               <span className="text-lg font-bold tracking-tight">
-                <span className="text-tiktok-cyan">Tok</span>{" "}
-                <span className="text-tiktok-pink">Factory</span>
+                <span className="text-tiktok-cyan">Tory</span>{" "}
+                <span className="text-tiktok-pink">X</span>
               </span>
               <span className="text-xs text-muted-foreground">
                 AI 内容智造工厂
@@ -348,7 +348,7 @@ export function Sidebar() {
         )}>
           {!collapsed ? (
             <div className="flex items-center justify-between text-[10px] text-white/30">
-              <span>© 2026 Tok Factory</span>
+              <span>© 2026 ToryX</span>
               <span>v1.0</span>
             </div>
           ) : (

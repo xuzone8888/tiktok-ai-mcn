@@ -158,7 +158,7 @@ export default function LandingPage() {
               </div>
               <div className="flex flex-col">
                 <span className="text-xl font-bold bg-gradient-to-r from-cyan-400 to-pink-400 bg-clip-text text-transparent">
-                  Tok Factory
+                  ToryX
                 </span>
                 <span className="text-[10px] text-gray-500 tracking-wider">AI 内容智造工厂</span>
               </div>
@@ -437,7 +437,7 @@ export default function LandingPage() {
                   <Sparkles className="h-5 w-5 text-white" />
                 </div>
                 <div>
-                  <span className="text-xl font-bold text-white">Tok Factory</span>
+                  <span className="text-xl font-bold text-white">ToryX</span>
                   <p className="text-xs text-gray-500">AI 内容智造工厂</p>
                 </div>
               </Link>

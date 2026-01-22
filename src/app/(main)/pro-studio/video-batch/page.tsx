@@ -1387,7 +1387,16 @@ export default function VideoBatchPage() {
         })
       });
 
-      if (!res.ok) throw new Error('保存失败');
+      if (!res.ok) {
+        let errorMessage = '保存失败';
+        try {
+          const data = await res.json();
+          errorMessage = data.error || data.message || res.statusText || '保存失败';
+        } catch (e) {
+          errorMessage = await res.text() || res.statusText || '保存失败';
+        }
+        throw new Error(errorMessage);
+      }
 
       toast({
         title: "✅ 方案已保存",
@@ -1399,7 +1408,7 @@ export default function VideoBatchPage() {
       toast({
         variant: "destructive",
         title: "保存失败",
-        description: "无法保存您的方案，请重试"
+        description: e instanceof Error ? e.message : "无法保存您的方案，请重试"
       });
     } finally {
       setIsUploadingTemplate(false);

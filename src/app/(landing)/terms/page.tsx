@@ -25,7 +25,7 @@ export default function TermsPage() {
                 <Sparkles className="h-5 w-5 text-white" />
               </div>
               <span className="text-xl font-bold bg-gradient-to-r from-cyan-400 to-pink-400 bg-clip-text text-transparent">
-                Tok Factory
+                ToryX
               </span>
             </Link>
             <div className="flex items-center gap-4">
@@ -56,17 +56,17 @@ export default function TermsPage() {
             </div>
           </nav>
         </div>
-      </header>
+      </header >
 
       {/* 内容 */}
-      <main className="relative z-10 py-16">
+      < main className="relative z-10 py-16" >
         <div className="container max-w-4xl mx-auto px-6">
           {lang === "en" ? <EnglishContent /> : <ChineseContent />}
         </div>
-      </main>
+      </main >
 
       {/* 页脚 */}
-      <footer className="relative z-10 border-t border-white/5 py-8 bg-black/30">
+      < footer className="relative z-10 border-t border-white/5 py-8 bg-black/30" >
         <div className="container max-w-7xl mx-auto px-6">
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
             <div className="text-gray-500 text-sm">
@@ -86,8 +86,8 @@ export default function TermsPage() {
             </div>
           </div>
         </div>
-      </footer>
-    </div>
+      </footer >
+    </div >
   );
 }
 
@@ -105,8 +105,8 @@ function EnglishContent() {
           <section>
             <h2 className="text-2xl font-semibold text-white mb-4">1. Agreement to Terms</h2>
             <p className="leading-relaxed">
-              Welcome to Tok Factory, operated by Wuhan Guanxing Cultural Media Co., Ltd. (&quot;Company&quot;, &quot;we&quot;, &quot;us&quot;, or &quot;our&quot;).
-              These Terms of Service (&quot;Terms&quot;) govern your access to and use of the Tok Factory platform at www.tokfactoryai.com,
+              Welcome to ToryX, operated by Wuhan Guanxing Cultural Media Co., Ltd. (&quot;Company&quot;, &quot;we&quot;, &quot;us&quot;, or &quot;our&quot;).
+              These Terms of Service (&quot;Terms&quot;) govern your access to and use of the ToryX platform at www.tokfactoryai.com,
               including our AI-powered content creation services and social media publishing features.
             </p>
             <p className="leading-relaxed mt-4">
@@ -117,7 +117,7 @@ function EnglishContent() {
 
           <section>
             <h2 className="text-2xl font-semibold text-white mb-4">2. Description of Services</h2>
-            <p className="leading-relaxed">Tok Factory provides the following AI-powered services:</p>
+            <p className="leading-relaxed">ToryX provides the following AI-powered services:</p>
             <ul className="list-disc pl-6 space-y-2 mt-4">
               <li><strong>AI Video Generation:</strong> Create videos from images, text prompts, and templates using advanced AI models</li>
               <li><strong>AI Image Generation:</strong> Generate e-commerce product images, virtual try-on images, and marketing visuals</li>
@@ -141,7 +141,7 @@ function EnglishContent() {
 
             <h3 className="text-xl font-medium text-white mt-6 mb-3">3.1 TikTok Account Connection</h3>
             <ul className="list-disc pl-6 space-y-2">
-              <li>You may connect your TikTok account(s) to Tok Factory to enable video publishing</li>
+              <li>You may connect your TikTok account(s) to ToryX to enable video publishing</li>
               <li>By connecting your account, you authorize us to publish content on your behalf</li>
               <li>You remain fully responsible for all content published to your TikTok account through our platform</li>
               <li>You must comply with TikTok&apos;s Terms of Service and Community Guidelines</li>
@@ -180,7 +180,7 @@ function EnglishContent() {
 
           <section>
             <h2 className="text-2xl font-semibold text-white mb-4">5. Credits and Payment</h2>
-            <p className="leading-relaxed">5.1 Tok Factory operates on a credit-based system. You purchase credits to use our AI generation services.</p>
+            <p className="leading-relaxed">5.1 ToryX operates on a credit-based system. You purchase credits to use our AI generation services.</p>
             <p className="leading-relaxed mt-4">5.2 Credit prices and consumption rates for each service are displayed on our platform and are subject to change with prior notice.</p>
             <p className="leading-relaxed mt-4">5.3 All credit purchases are final. Refunds are only provided as required by applicable law or at our sole discretion.</p>
             <p className="leading-relaxed mt-4">5.4 Credits expire one year from the date of purchase unless otherwise stated.</p>
@@ -333,8 +333,8 @@ function ChineseContent() {
           <section>
             <h2 className="text-2xl font-semibold text-white mb-4">一、条款接受</h2>
             <p className="leading-relaxed">
-              欢迎您使用 Tok Factory 平台，该平台由武汉观星文化传媒有限公司（以下简称&ldquo;本公司&rdquo;、&ldquo;我们&rdquo;）运营。
-              本服务条款（以下简称&ldquo;本条款&rdquo;）约束您对 Tok Factory 平台 (www.tokfactoryai.com) 的访问和使用，
+              欢迎您使用 ToryX 平台，该平台由武汉观星文化传媒有限公司（以下简称&ldquo;本公司&rdquo;、&ldquo;我们&rdquo;）运营。
+              本服务条款（以下简称&ldquo;本条款&rdquo;）约束您对 ToryX 平台 (www.tokfactoryai.com) 的访问和使用，
               包括我们的 AI 内容创作服务和社交媒体发布功能。
             </p>
             <p className="leading-relaxed mt-4">
@@ -344,7 +344,7 @@ function ChineseContent() {
 
           <section>
             <h2 className="text-2xl font-semibold text-white mb-4">二、服务内容</h2>
-            <p className="leading-relaxed">Tok Factory 提供以下 AI 驱动的服务：</p>
+            <p className="leading-relaxed">ToryX 提供以下 AI 驱动的服务：</p>
             <ul className="list-disc pl-6 space-y-2 mt-4">
               <li><strong>AI 视频生成：</strong>使用先进的 AI 模型从图片、文字提示和模板创建视频</li>
               <li><strong>AI 图片生成：</strong>生成电商产品图、虚拟试穿图和营销视觉素材</li>
@@ -368,7 +368,7 @@ function ChineseContent() {
 
             <h3 className="text-xl font-medium text-white mt-6 mb-3">3.1 TikTok 账号连接</h3>
             <ul className="list-disc pl-6 space-y-2">
-              <li>您可以将 TikTok 账号连接到 Tok Factory 以启用视频发布功能</li>
+              <li>您可以将 TikTok 账号连接到 ToryX 以启用视频发布功能</li>
               <li>连接账号即表示您授权我们代您发布内容</li>
               <li>您对通过我们平台发布到 TikTok 账号的所有内容承担全部责任</li>
               <li>您必须遵守 TikTok 的服务条款和社区准则</li>
@@ -407,7 +407,7 @@ function ChineseContent() {
 
           <section>
             <h2 className="text-2xl font-semibold text-white mb-4">五、积分与付费</h2>
-            <p className="leading-relaxed">5.1 Tok Factory 采用积分制。您购买积分来使用我们的 AI 生成服务。</p>
+            <p className="leading-relaxed">5.1 ToryX 采用积分制。您购买积分来使用我们的 AI 生成服务。</p>
             <p className="leading-relaxed mt-4">5.2 每项服务的积分价格和消耗量在平台上显示，可能会在提前通知后进行调整。</p>
             <p className="leading-relaxed mt-4">5.3 所有积分购买均为最终销售。仅在适用法律要求或我们自行决定的情况下提供退款。</p>
             <p className="leading-relaxed mt-4">5.4 积分自购买之日起一年内有效，除非另有说明。</p>

@@ -17,12 +17,12 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { 
-  Link2, 
-  Search, 
-  Loader2, 
-  Check, 
-  X, 
+import {
+  Link2,
+  Search,
+  Loader2,
+  Check,
+  X,
   Upload,
   AlertCircle,
   ArrowRight,
@@ -69,8 +69,8 @@ const EXTRACT_SCRIPT = `
   
   // 复制到剪贴板
   const json = JSON.stringify(data, null, 2);
-  navigator.clipboard.writeText('TOKFACTORY_DATA:' + json);
-  alert('商品数据已复制！请返回 Tok Factory 粘贴');
+  navigator.clipboard.writeText('TORYX_DATA:' + json);
+  alert('商品数据已复制！请返回 ToryX 粘贴');
   return data;
 })();
 `;
@@ -123,11 +123,11 @@ export function Step1LinkInput() {
     // 检查 URL 参数，处理从书签跳转回来的数据
     const params = new URLSearchParams(window.location.search);
     const dataParam = params.get('data');
-    
+
     if (dataParam) {
       try {
         const importedData = JSON.parse(decodeURIComponent(dataParam));
-        
+
         // 转换为 ParsedProductData 格式
         const parsedData: ParsedProductData = {
           title: importedData.title || '商品',
@@ -142,7 +142,7 @@ export function Step1LinkInput() {
         };
 
         setParsedData(parsedData, null);
-        
+
         // 清除 URL 参数
         window.history.replaceState({}, '', window.location.pathname);
       } catch (e) {
@@ -155,10 +155,10 @@ export function Step1LinkInput() {
   const handlePasteExtractedData = useCallback(async () => {
     try {
       const text = await navigator.clipboard.readText();
-      if (text.startsWith('TOKFACTORY_DATA:')) {
-        const jsonStr = text.replace('TOKFACTORY_DATA:', '');
+      if (text.startsWith('TORYX_DATA:')) {
+        const jsonStr = text.replace('TORYX_DATA:', '');
         const data = JSON.parse(jsonStr);
-        
+
         // 转换为 ParsedProductData 格式
         const parsedData: ParsedProductData = {
           title: data.title || '商品',
@@ -191,7 +191,7 @@ export function Step1LinkInput() {
   // 处理图片上传
   const handleImageUpload = useCallback(async (files: FileList | null) => {
     if (!files || files.length === 0) return;
-    
+
     setUploadingImage(true);
     const newImages: string[] = [...manualImages];
 
@@ -200,7 +200,7 @@ export function Step1LinkInput() {
         // 上传到服务器
         const formData = new FormData();
         formData.append('file', file);
-        
+
         const response = await fetch('/api/upload/image', {
           method: 'POST',
           body: formData,
@@ -216,7 +216,7 @@ export function Step1LinkInput() {
     }
 
     setManualImages(newImages);
-    
+
     // 更新 selectedImages
     const productImages: ProductImage[] = newImages.map((url, idx) => ({
       url,
@@ -225,17 +225,17 @@ export function Step1LinkInput() {
       is_primary: idx === 0,
     }));
     setSelectedImages(productImages);
-    
+
     setUploadingImage(false);
   }, [manualImages, setSelectedImages]);
 
   // 处理图片 URL 输入
   const handleImageUrlAdd = useCallback((url: string) => {
     if (!url.trim() || manualImages.length >= 3) return;
-    
+
     const newImages = [...manualImages, url.trim()];
     setManualImages(newImages);
-    
+
     const productImages: ProductImage[] = newImages.map((u, idx) => ({
       url: u,
       type: idx === 0 ? 'main' : 'detail',
@@ -285,7 +285,7 @@ export function Step1LinkInput() {
   };
 
   // 检查是否可以继续
-  const canProceed = 
+  const canProceed =
     (parsedData !== null || (isManualMode && manualTitle.trim())) &&
     primaryImageUrl !== null;
 
@@ -316,8 +316,8 @@ export function Step1LinkInput() {
                 onKeyDown={(e) => e.key === "Enter" && handleParseLink()}
               />
               {platform && platform !== "other" && (
-                <Badge 
-                  variant="secondary" 
+                <Badge
+                  variant="secondary"
                   className="absolute right-3 top-1/2 -translate-y-1/2"
                 >
                   {PLATFORM_NAMES[platform]}
@@ -345,7 +345,7 @@ export function Step1LinkInput() {
                 <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
                 <p>{parseError}</p>
               </div>
-              
+
               <div className="text-sm text-muted-foreground">
                 <p className="font-medium mb-2">无法解析？试试以下方法：</p>
                 <div className="grid gap-2">
@@ -397,7 +397,7 @@ export function Step1LinkInput() {
               <Sparkles className="h-4 w-4 text-blue-500" />
               <span className="font-medium text-blue-700 dark:text-blue-400">一键提取（推荐 ⭐）</span>
             </div>
-            
+
             <div className="space-y-4">
               {/* 大按钮：复制代码 */}
               <div className="text-center space-y-3">
@@ -405,7 +405,7 @@ export function Step1LinkInput() {
                   size="lg"
                   className="w-full bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white font-bold py-6 text-lg shadow-lg"
                   onClick={() => {
-                    const code = `(function(){var d={title:document.title,price:'',imgs:[]};var m=document.body.innerText.match(/[¥$]\\s*([\\d,.]+)/);if(m)d.price=m[1];document.querySelectorAll('img[src*="http"]').forEach(i=>{if(i.width>150&&i.height>150&&d.imgs.length<5)d.imgs.push(i.src)});d.imgs=[...new Set(d.imgs)];window.open('${typeof window !== 'undefined' ? window.location.origin : ''}/link-video?data='+encodeURIComponent(JSON.stringify(d)))})();`;
+                    const code = `(function () { var d = { title: document.title, price: '', imgs: [] }; var m = document.body.innerText.match(/[¥$]\\s*([\\d,.]+)/); if (m) d.price = m[1]; document.querySelectorAll('img[src*="http"]').forEach(i => { if (i.width > 150 && i.height > 150 && d.imgs.length < 5) d.imgs.push(i.src) }); d.imgs = [...new Set(d.imgs)]; window.open('${typeof window !== 'undefined' ? window.location.origin : ''}/link-video?data=' + encodeURIComponent(JSON.stringify(d))) })(); `;
                     navigator.clipboard.writeText(code).then(() => {
                       alert('✅ 代码已复制到剪贴板！\n\n📱 接下来请按照以下步骤操作：\n\n1️⃣ 打开商品页面（淘宝/天猫/京东等）\n2️⃣ 按 F12 键打开开发者工具\n3️⃣ 点击顶部的 Console（控制台）标签\n4️⃣ 在控制台中 Ctrl+V 粘贴\n5️⃣ 按 Enter 回车执行\n\n🎉 商品数据会自动导入！');
                     }).catch(() => {
@@ -447,7 +447,7 @@ export function Step1LinkInput() {
                 </summary>
                 <Textarea
                   readOnly
-                  value={`(function(){var d={title:document.title,price:'',imgs:[]};var m=document.body.innerText.match(/[¥$]\\s*([\\d,.]+)/);if(m)d.price=m[1];document.querySelectorAll('img[src*="http"]').forEach(i=>{if(i.width>150&&i.height>150&&d.imgs.length<5)d.imgs.push(i.src)});d.imgs=[...new Set(d.imgs)];window.open('${typeof window !== 'undefined' ? window.location.origin : ''}/link-video?data='+encodeURIComponent(JSON.stringify(d)))})();`}
+                  value={`(function () { var d = { title: document.title, price: '', imgs: [] }; var m = document.body.innerText.match(/[¥$]\\s*([\\d,.]+)/); if (m) d.price = m[1]; document.querySelectorAll('img[src*="http"]').forEach(i => { if (i.width > 150 && i.height > 150 && d.imgs.length < 5) d.imgs.push(i.src) }); d.imgs = [...new Set(d.imgs)]; window.open('${typeof window !== 'undefined' ? window.location.origin : ''}/link-video?data=' + encodeURIComponent(JSON.stringify(d))) })(); `}
                   className="mt-2 text-xs font-mono h-16"
                 />
               </details>
@@ -463,7 +463,7 @@ export function Step1LinkInput() {
               <p className="text-xs text-muted-foreground">
                 添加书签后，以后只需在商品页面点击书签即可，无需每次复制代码。
               </p>
-              
+
               <div className="bg-muted/50 rounded-lg p-3 space-y-2">
                 <p className="text-xs font-medium">添加书签的方法：</p>
                 <ol className="text-xs text-muted-foreground space-y-1 ml-4 list-decimal">
@@ -472,7 +472,7 @@ export function Step1LinkInput() {
                   <li>选择&ldquo;将链接添加到书签&rdquo;或&ldquo;添加到收藏夹&rdquo;</li>
                 </ol>
               </div>
-              
+
               <div className="flex justify-center py-2">
                 <a
                   href={bookmarkletUrl}
@@ -483,7 +483,7 @@ export function Step1LinkInput() {
                   className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-amber-500 to-orange-500 text-white font-medium shadow-lg hover:shadow-xl transition-all text-sm"
                 >
                   <Star className="h-4 w-4" />
-                  Tok 提取器（右键添加）
+                  ToryX 提取器（右键添加）
                 </a>
               </div>
               <p className="text-xs text-center text-muted-foreground">
@@ -551,9 +551,9 @@ export function Step1LinkInput() {
                   清空重选
                 </Button>
               </div>
-              
+
               <h3 className="font-semibold line-clamp-2">{parsedData.title}</h3>
-              
+
               {parsedData.selling_points.length > 0 && (
                 <div className="flex flex-wrap gap-2">
                   {parsedData.selling_points.slice(0, 3).map((point, i) => (
@@ -587,7 +587,7 @@ export function Step1LinkInput() {
               (点击星标设为主图，用于生成九宫格)
             </span>
           </Label>
-          
+
           <div className="grid grid-cols-3 gap-3">
             {selectedImages.map((img, index) => (
               <div
@@ -603,17 +603,17 @@ export function Step1LinkInput() {
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={img.url}
-                  alt={`商品图 ${index + 1}`}
+                  alt={`商品图 ${index + 1} `}
                   className="h-full w-full object-cover"
                 />
-                
+
                 {/* 主图标记 */}
                 {img.is_primary && (
                   <div className="absolute top-1 left-1 rounded bg-amber-500 px-1.5 py-0.5 text-xs font-medium text-white">
                     主图
                   </div>
                 )}
-                
+
                 {/* 选中标记 */}
                 {img.selected && (
                   <div className="absolute bottom-1 right-1 flex h-6 w-6 items-center justify-center rounded-full bg-tiktok-cyan text-white">
@@ -625,8 +625,8 @@ export function Step1LinkInput() {
                 <button
                   className={cn(
                     "absolute top-1 right-1 flex h-6 w-6 items-center justify-center rounded-full transition-all",
-                    img.is_primary 
-                      ? "bg-amber-500 text-white" 
+                    img.is_primary
+                      ? "bg-amber-500 text-white"
                       : "bg-black/50 text-white hover:bg-amber-500"
                   )}
                   onClick={(e) => {
@@ -693,14 +693,14 @@ export function Step1LinkInput() {
 
             <div>
               <Label>商品图片（最多 3 张）</Label>
-              
+
               {/* 已上传的图片预览 */}
               {manualImages.length > 0 && (
                 <div className="mt-2 grid grid-cols-3 gap-2">
                   {manualImages.map((img, idx) => (
                     <div key={idx} className="relative aspect-square rounded-lg overflow-hidden border">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={img} alt={`商品图 ${idx + 1}`} className="h-full w-full object-cover" />
+                      <img src={img} alt={`商品图 ${idx + 1} `} className="h-full w-full object-cover" />
                       <button
                         className="absolute top-1 right-1 h-5 w-5 rounded-full bg-black/60 text-white flex items-center justify-center"
                         onClick={() => {
@@ -725,7 +725,7 @@ export function Step1LinkInput() {
               {manualImages.length < 3 && (
                 <div className="mt-2 space-y-3">
                   {/* 文件上传 */}
-                  <div 
+                  <div
                     className="flex items-center justify-center rounded-lg border border-dashed p-4 text-center cursor-pointer hover:border-primary transition-colors"
                     onClick={() => fileInputRef.current?.click()}
                   >

@@ -21,7 +21,7 @@ export default function LoginPage() {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!email || !password) {
       toast({
         variant: "destructive",
@@ -35,7 +35,7 @@ export default function LoginPage() {
 
     try {
       const supabase = createClient();
-      
+
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
@@ -50,7 +50,7 @@ export default function LoginPage() {
           title: "登录成功！",
           description: "正在跳转到控制台...",
         });
-        
+
         router.push("/dashboard");
         router.refresh();
       }
@@ -84,7 +84,7 @@ export default function LoginPage() {
           </div>
           <div>
             <CardTitle className="text-2xl font-bold bg-gradient-to-r from-tiktok-cyan to-tiktok-pink bg-clip-text text-transparent">
-              Tok Factory
+              ToryX
             </CardTitle>
             <CardDescription className="text-muted-foreground">
               登录您的账号以继续
