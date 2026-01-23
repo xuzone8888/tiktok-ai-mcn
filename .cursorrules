@@ -1,0 +1,9 @@
+# Antigravity/Cursor Rules
+
+## Language Requirement
+- **Mandatory**: All conversations, explanations, plans, comments, and documentation MUST be in **Chinese (Simplified)**.
+- **English Exclusion**: Use English ONLY for code keywords, variable names, and standard technical terms that are commonly used in English (e.g., Next.js, React, API).
+
+## Communication Style
+- Be concise and direct.
+- Use Chinese for step-by-step reasoning.

@@ -1,3 +1,6 @@
+/* Inter font for Reflective Card Design System */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -9,6 +12,7 @@
 }
 
 @layer base {
+
   /* ============================================================================
    * Light Mode - "Porcelain Editorial" 浅色主题
    * 极简、高级、护眼的编辑风格设计
@@ -67,7 +71,7 @@
     /* TikTok 品牌色 - 浅色模式下稍微柔和 */
     --tiktok-cyan: 175 100% 40%;
     --tiktok-pink: 340 85% 55%;
-    
+
     /* 侧边栏宽度 */
     --sidebar-width: 280px;
   }
@@ -134,7 +138,7 @@
   * {
     @apply border-border;
   }
-  
+
   body {
     @apply bg-background text-foreground antialiased;
     font-feature-settings: "rlig" 1, "calt" 1;
@@ -142,38 +146,37 @@
 }
 
 @layer utilities {
+
   /* TikTok 霓虹渐变效果 */
   .gradient-tiktok {
     @apply bg-gradient-to-r from-tiktok-cyan to-tiktok-pink;
   }
-  
+
   .gradient-tiktok-text {
     @apply bg-gradient-to-r from-tiktok-cyan to-tiktok-pink bg-clip-text text-transparent;
   }
-  
+
   /* 霓虹发光效果 */
   .glow-cyan {
     box-shadow: 0 0 20px rgba(0, 242, 234, 0.3),
-                0 0 40px rgba(0, 242, 234, 0.1);
+      0 0 40px rgba(0, 242, 234, 0.1);
   }
-  
+
   .glow-pink {
     box-shadow: 0 0 20px rgba(255, 0, 80, 0.3),
-                0 0 40px rgba(255, 0, 80, 0.1);
+      0 0 40px rgba(255, 0, 80, 0.1);
   }
-  
+
   .glow-tiktok {
     box-shadow: 0 0 15px rgba(0, 242, 234, 0.25),
-                0 0 30px rgba(255, 0, 80, 0.15);
+      0 0 30px rgba(255, 0, 80, 0.15);
   }
-  
+
   /* 侧边栏背景 */
   .sidebar-gradient {
-    background: linear-gradient(
-      180deg,
-      hsl(var(--card)) 0%,
-      hsl(var(--background)) 100%
-    );
+    background: linear-gradient(180deg,
+        hsl(var(--card)) 0%,
+        hsl(var(--background)) 100%);
   }
 
   /* ============================================================================
@@ -187,7 +190,7 @@
     @apply bg-white border-slate-300;
     @apply hover:border-tiktok-cyan hover:bg-cyan-50/50;
   }
-  
+
   .dark .dropzone {
     @apply bg-transparent border-white/20;
     @apply hover:border-tiktok-cyan/50 hover:bg-tiktok-cyan/5;
@@ -199,7 +202,7 @@
     @apply bg-white border-slate-200 shadow-sm;
     @apply hover:shadow-md hover:border-slate-300;
   }
-  
+
   .dark .glass-card {
     @apply bg-card/50 border-border/50 backdrop-blur-sm shadow-none;
     @apply hover:border-tiktok-cyan/30 hover:shadow-none;
@@ -211,7 +214,7 @@
     @apply text-slate-800 placeholder:text-slate-400;
     @apply focus:border-tiktok-cyan focus:ring-1 focus:ring-tiktok-cyan/20;
   }
-  
+
   .dark .input-surface {
     @apply bg-black/30 border-white/10 shadow-none;
     @apply text-white placeholder:text-white/50;
@@ -222,7 +225,7 @@
   .panel-surface {
     @apply bg-white border border-slate-200;
   }
-  
+
   .dark .panel-surface {
     @apply bg-white/5 border-white/10;
   }
@@ -231,7 +234,7 @@
   .tabs-surface {
     @apply bg-slate-100/80;
   }
-  
+
   .dark .tabs-surface {
     @apply bg-black/30;
   }
@@ -241,7 +244,7 @@
     @apply border-slate-200 text-slate-700;
     @apply hover:bg-slate-100 hover:text-slate-900 hover:border-slate-300;
   }
-  
+
   .dark .btn-subtle {
     @apply border-white/20 text-white/80;
     @apply hover:bg-white/10 hover:text-white hover:border-white/30;
@@ -251,7 +254,7 @@
   .preview-surface {
     @apply bg-slate-50 border border-slate-200;
   }
-  
+
   .dark .preview-surface {
     @apply bg-black/30 border-white/10;
   }
@@ -260,7 +263,7 @@
   .thumb-surface {
     @apply bg-white border border-slate-200;
   }
-  
+
   .dark .thumb-surface {
     @apply bg-black/30 border-white/10;
   }
@@ -269,7 +272,7 @@
   .tag-surface {
     @apply bg-slate-100 text-slate-600 border border-slate-200;
   }
-  
+
   .dark .tag-surface {
     @apply bg-white/10 text-muted-foreground border-transparent;
   }
@@ -278,7 +281,7 @@
   .thumb-overlay {
     @apply bg-black/60;
   }
-  
+
   .dark .thumb-overlay {
     @apply bg-black/70;
   }
@@ -287,7 +290,7 @@
   .progress-surface {
     @apply bg-slate-100;
   }
-  
+
   .dark .progress-surface {
     @apply bg-white/5;
   }
@@ -297,44 +300,42 @@
     @apply bg-white border border-slate-200 rounded-xl p-4 transition-all;
     @apply hover:border-slate-300 hover:shadow-sm;
   }
-  
+
   .task-card.selected {
     @apply bg-cyan-50 border-tiktok-cyan;
   }
-  
+
   .dark .task-card {
     @apply bg-card/50 border-border/50;
     @apply hover:border-tiktok-cyan/30;
   }
-  
+
   .dark .task-card.selected {
     @apply bg-tiktok-cyan/10 border-tiktok-cyan/50;
   }
-  
+
   /* 悬停高亮效果 */
   .nav-item-hover {
     @apply relative overflow-hidden;
   }
-  
+
   .nav-item-hover::before {
     content: '';
     @apply absolute inset-0 opacity-0 transition-opacity duration-300;
-    background: linear-gradient(
-      90deg,
-      rgba(0, 242, 234, 0.1) 0%,
-      rgba(255, 0, 80, 0.05) 100%
-    );
+    background: linear-gradient(90deg,
+        rgba(0, 242, 234, 0.1) 0%,
+        rgba(255, 0, 80, 0.05) 100%);
   }
-  
+
   .nav-item-hover:hover::before {
     @apply opacity-100;
   }
-  
+
   /* 动画 */
   .animate-pulse-slow {
     animation: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
   }
-  
+
   .animate-glow {
     animation: glow 2s ease-in-out infinite alternate;
   }
@@ -343,11 +344,12 @@
 @keyframes glow {
   from {
     box-shadow: 0 0 10px rgba(0, 242, 234, 0.2),
-                0 0 20px rgba(255, 0, 80, 0.1);
+      0 0 20px rgba(255, 0, 80, 0.1);
   }
+
   to {
     box-shadow: 0 0 20px rgba(0, 242, 234, 0.4),
-                0 0 40px rgba(255, 0, 80, 0.2);
+      0 0 40px rgba(255, 0, 80, 0.2);
   }
 }
 
