@@ -134,13 +134,6 @@
     /* ReactBits 原版默认值 */
 }
 
-/* 登录页专用 - 灰色内容层向外扩展 */
-.reflective-card-container.login-expand .reflective-content {
-    margin: -4px -8px;
-    padding: 4px 8px;
-    border-radius: 0;
-}
-
 /* ============================================
    Typography Classes (based on design_system.md)
    ============================================ */
