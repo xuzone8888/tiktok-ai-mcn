@@ -4,24 +4,27 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import ReflectiveCard from "@/components/ui/ReflectiveCard";
+import ReflectiveInput from "@/components/ui/ReflectiveInput";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
-import { Loader2, Zap, Mail, Lock, Eye, EyeOff, User, CheckCircle2 } from "lucide-react";
+import { Zap, Mail, Lock, User, ArrowRight, Github, Chrome, Loader2, Gift } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 export default function RegisterPage() {
   const router = useRouter();
   const { toast } = useToast();
+
+  // 表单状态
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
+
+  // 加载和成功状态
   const [isLoading, setIsLoading] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
 
+  // 注册处理
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -68,9 +71,7 @@ export default function RegisterPage() {
         },
       });
 
-      if (error) {
-        throw error;
-      }
+      if (error) throw error;
 
       if (data.user) {
         // 创建用户 profile
@@ -86,7 +87,6 @@ export default function RegisterPage() {
 
         if (profileError) {
           console.error("Profile creation error:", profileError);
-          // 不阻止注册流程
         }
 
         setIsSuccess(true);
@@ -115,203 +115,240 @@ export default function RegisterPage() {
     }
   };
 
+  // 注册成功后的邮箱验证提示页面
   if (isSuccess) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-black via-gray-900 to-black p-4">
-        <Card className="w-full max-w-md border-white/10 bg-black/60 backdrop-blur-xl">
-          <CardContent className="pt-10 pb-10 text-center space-y-6">
-            <div className="flex justify-center">
-              <div className="h-20 w-20 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center animate-bounce">
-                <Mail className="h-10 w-10 text-white" />
+      <div className="min-h-screen bg-black flex items-center justify-center p-4 relative overflow-hidden">
+        <div className="absolute inset-0">
+          <div className="absolute top-1/4 left-1/4 w-[500px] h-[500px] bg-white/[0.02] rounded-full blur-3xl" />
+          <div className="absolute bottom-1/4 right-1/4 w-[500px] h-[500px] bg-[#00ff9d]/[0.05] rounded-full blur-3xl" />
+        </div>
+
+        <div className="w-full max-w-[440px] relative z-10">
+          <ReflectiveCard className="py-10 px-10">
+            <div className="text-center space-y-6">
+              {/* Success Icon */}
+              <div className="flex justify-center">
+                <div
+                  className="w-20 h-20 rounded-2xl flex items-center justify-center animate-bounce"
+                  style={{
+                    background: 'linear-gradient(135deg, #34d399 0%, #10b981 50%, #059669 100%)',
+                    boxShadow: '0 0 40px rgba(16,185,129,0.4)'
+                  }}
+                >
+                  <Mail className="h-10 w-10 text-white" />
+                </div>
               </div>
-            </div>
-            <div className="space-y-3">
-              <h2 className="text-2xl font-bold text-white">📧 请验证邮箱</h2>
-              <div className="p-4 rounded-lg bg-amber-500/10 border border-amber-500/30">
-                <p className="text-amber-200 text-sm font-medium">
-                  ⚠️ 重要提示：您必须点击邮件中的确认链接才能登录
-                </p>
+
+              {/* Title */}
+              <div className="space-y-3">
+                <h2 className="text-2xl font-bold text-white">📧 请验证邮箱</h2>
+                <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30">
+                  <p className="text-amber-200 text-sm font-medium">
+                    ⚠️ 重要提示：您必须点击邮件中的确认链接才能登录
+                  </p>
+                </div>
+                <p className="text-white/50">验证邮件已发送至：</p>
+                <p className="text-[#10b981] font-semibold text-lg break-all">{email}</p>
               </div>
-              <p className="text-muted-foreground">
-                验证邮件已发送至：
-              </p>
-              <p className="text-tiktok-cyan font-semibold text-lg break-all">
-                {email}
-              </p>
-            </div>
-            <div className="space-y-4 pt-2">
-              <div className="p-4 rounded-lg bg-white/5 border border-white/10 text-left space-y-2">
-                <p className="text-sm text-muted-foreground">📋 验证步骤：</p>
-                <ol className="text-sm text-muted-foreground space-y-1 list-decimal list-inside">
+
+              {/* Steps */}
+              <div className="p-4 rounded-xl bg-white/5 border border-white/10 text-left space-y-2">
+                <p className="text-sm text-white/60">📋 验证步骤：</p>
+                <ol className="text-sm text-white/40 space-y-1 list-decimal list-inside">
                   <li>打开您的邮箱（包括垃圾邮件文件夹）</li>
                   <li>找到来自 ToryX 的验证邮件</li>
-                  <li>点击邮件中的 &ldquo;确认邮箱&rdquo; 链接</li>
+                  <li>点击邮件中的 "确认邮箱" 链接</li>
                   <li>验证成功后即可登录</li>
                 </ol>
               </div>
+
+              {/* Action Button */}
               <Button
                 onClick={() => router.push("/auth/login")}
-                className="w-full bg-gradient-to-r from-tiktok-cyan to-tiktok-pink text-black font-semibold"
+                className="w-full h-12 bg-gradient-to-b from-white to-gray-100 hover:to-white text-black font-bold text-base rounded-xl transition-all duration-300 hover:scale-[1.02] shadow-[0_0_20px_rgba(255,255,255,0.3),inset_0_1px_0_rgba(255,255,255,1)] hover:shadow-[0_0_30px_rgba(255,255,255,0.5),inset_0_1px_0_rgba(255,255,255,1)] group border-t border-white"
               >
-                我已验证，前往登录
+                <span className="flex items-center justify-center gap-2">
+                  我已验证，前往登录
+                  <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                </span>
               </Button>
-              <p className="text-xs text-muted-foreground">
+
+              <p className="text-xs text-white/30">
                 💡 没有收到邮件？请检查垃圾邮件文件夹，或等待1-2分钟后刷新邮箱
               </p>
             </div>
-          </CardContent>
-        </Card>
+          </ReflectiveCard>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-black via-gray-900 to-black p-4">
-      {/* 背景动效 */}
-      <div className="absolute inset-0 overflow-hidden">
-        <div className="absolute -top-40 -right-40 w-80 h-80 bg-tiktok-pink/20 rounded-full blur-3xl animate-pulse" />
-        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-tiktok-cyan/20 rounded-full blur-3xl animate-pulse" style={{ animationDelay: "1s" }} />
+    <div className="min-h-screen bg-black flex items-center justify-center p-4 relative overflow-hidden">
+      {/* Background Atmosphere */}
+      <div className="absolute inset-0">
+        <div className="absolute top-1/4 left-1/4 w-[500px] h-[500px] bg-white/[0.02] rounded-full blur-3xl" />
+        <div className="absolute bottom-1/4 right-1/4 w-[500px] h-[500px] bg-[#00ff9d]/[0.05] rounded-full blur-3xl" />
       </div>
 
-      <Card className="w-full max-w-md relative z-10 border-white/10 bg-black/60 backdrop-blur-xl">
-        <CardHeader className="text-center space-y-4">
-          {/* Logo */}
-          <div className="flex justify-center">
-            <div className="h-16 w-16 rounded-2xl bg-gradient-to-br from-tiktok-pink via-purple-500 to-tiktok-cyan flex items-center justify-center shadow-2xl">
-              <Zap className="h-8 w-8 text-white" />
+      <div className="w-full max-w-[480px] relative z-10">
+        <ReflectiveCard className="py-8 px-10 login-expand">
+          {/* Header - Premium Metallic Logo */}
+          <div className="flex flex-col items-center mb-5">
+            <div
+              className="w-11 h-11 rounded-xl flex items-center justify-center mb-2 mt-2"
+              style={{
+                background: 'linear-gradient(145deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.02) 100%)',
+                border: '1px solid rgba(255,255,255,0.1)',
+                boxShadow: '0 8px 32px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.1)'
+              }}
+            >
+              <Zap className="h-6 w-6 text-white fill-white/10" />
             </div>
-          </div>
-          <div>
-            <CardTitle className="text-2xl font-bold bg-gradient-to-r from-tiktok-pink to-tiktok-cyan bg-clip-text text-transparent">
-              创建账号
-            </CardTitle>
-            <CardDescription className="text-muted-foreground">
+            <div className="flex items-baseline mb-1">
+              <span
+                className="text-[28px] font-semibold tracking-[-0.02em]"
+                style={{
+                  background: 'linear-gradient(180deg, #ffffff 0%, #e8e8e8 25%, #c0c0c0 50%, #a0a0a0 75%, #d0d0d0 100%)',
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                  filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.3))',
+                }}
+              >
+                创建账号
+              </span>
+            </div>
+            <span className="text-xs text-white/30 tracking-[0.1em]">
               加入 ToryX 开始创作
-            </CardDescription>
+            </span>
           </div>
-        </CardHeader>
 
-        <form onSubmit={handleRegister}>
-          <CardContent className="space-y-4">
-            {/* Name */}
-            <div className="space-y-2">
-              <Label htmlFor="name" className="text-sm text-muted-foreground">
-                用户名
-              </Label>
-              <div className="relative">
-                <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  id="name"
-                  type="text"
-                  placeholder="您的用户名"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="pl-10 bg-white/5 border-white/10 focus:border-tiktok-pink"
-                  disabled={isLoading}
-                />
+          {/* Form */}
+          <form onSubmit={handleRegister}>
+            <div className="space-y-4 pb-2">
+              {/* Name */}
+              <ReflectiveInput
+                icon={<User className="w-5 h-5" />}
+                placeholder="用户名"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                disabled={isLoading}
+              />
+
+              {/* Email */}
+              <ReflectiveInput
+                icon={<Mail className="w-5 h-5" />}
+                type="email"
+                placeholder="邮箱地址"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                disabled={isLoading}
+              />
+
+              {/* Password */}
+              <ReflectiveInput
+                icon={<Lock className="w-5 h-5" />}
+                type="password"
+                placeholder="密码（至少6位）"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                disabled={isLoading}
+              />
+
+              {/* Confirm Password */}
+              <ReflectiveInput
+                icon={<Lock className="w-5 h-5" />}
+                type="password"
+                placeholder="确认密码"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                disabled={isLoading}
+              />
+
+              {/* Bonus Info */}
+              <div className="flex items-center justify-center gap-2 p-3 rounded-xl bg-[#10b981]/10 border border-[#10b981]/20">
+                <Gift className="w-4 h-4 text-[#10b981]" />
+                <p className="text-sm text-white/70">
+                  新用户注册即送 <span className="text-[#10b981] font-bold">100 积分</span>
+                </p>
               </div>
-            </div>
 
-            {/* Email */}
-            <div className="space-y-2">
-              <Label htmlFor="email" className="text-sm text-muted-foreground">
-                邮箱地址
-              </Label>
-              <div className="relative">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="you@example.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="pl-10 bg-white/5 border-white/10 focus:border-tiktok-pink"
-                  disabled={isLoading}
-                />
+              {/* Submit Button */}
+              <Button
+                type="submit"
+                disabled={isLoading}
+                className="w-full h-12 bg-gradient-to-b from-white to-gray-100 hover:to-white text-black font-bold text-base rounded-xl transition-all duration-300 hover:scale-[1.02] shadow-[0_0_20px_rgba(255,255,255,0.3),inset_0_1px_0_rgba(255,255,255,1)] hover:shadow-[0_0_30px_rgba(255,255,255,0.5),inset_0_1px_0_rgba(255,255,255,1)] mt-2 group relative overflow-hidden border-t border-white disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <span className="relative z-10 flex items-center justify-center gap-2">
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      注册中...
+                    </>
+                  ) : (
+                    <>
+                      立即注册
+                      <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                    </>
+                  )}
+                </span>
+              </Button>
+
+              {/* Divider */}
+              <div className="relative flex py-2 items-center">
+                <div className="flex-grow border-t border-white/10" />
+                <span className="flex-shrink mx-4 text-white/20 text-xs uppercase tracking-widest">
+                  Or continue with
+                </span>
+                <div className="flex-grow border-t border-white/10" />
               </div>
-            </div>
 
-            {/* Password */}
-            <div className="space-y-2">
-              <Label htmlFor="password" className="text-sm text-muted-foreground">
-                密码
-              </Label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  id="password"
-                  type={showPassword ? "text" : "password"}
-                  placeholder="至少6个字符"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="pl-10 pr-10 bg-white/5 border-white/10 focus:border-tiktok-pink"
-                  disabled={isLoading}
-                />
+              {/* Social Login */}
+              <div className="grid grid-cols-2 gap-4">
                 <button
                   type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  className="h-10 flex items-center justify-center gap-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-white/80 transition-all text-sm font-medium group"
                 >
-                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  <Github className="w-4 h-4 group-hover:text-white" />
+                  GitHub
+                </button>
+                <button
+                  type="button"
+                  className="h-10 flex items-center justify-center gap-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-white/80 transition-all text-sm font-medium group"
+                >
+                  <Chrome className="w-4 h-4 text-blue-400 group-hover:text-blue-300" />
+                  Google
                 </button>
               </div>
-            </div>
 
-            {/* Confirm Password */}
-            <div className="space-y-2">
-              <Label htmlFor="confirmPassword" className="text-sm text-muted-foreground">
-                确认密码
-              </Label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  id="confirmPassword"
-                  type={showPassword ? "text" : "password"}
-                  placeholder="再次输入密码"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="pl-10 bg-white/5 border-white/10 focus:border-tiktok-pink"
-                  disabled={isLoading}
-                />
+              {/* Login Link */}
+              <div className="text-center">
+                <p className="text-white/40 text-sm">
+                  已有账号？
+                  <Link href="/auth/login" className="text-[#10b981] hover:text-[#34d399] ml-1 transition-colors font-medium">
+                    立即登录
+                  </Link>
+                </p>
+              </div>
+
+              {/* Footer */}
+              <div className="text-center">
+                <p className="text-white/30 text-xs">
+                  注册即代表您同意
+                  <Link href="/terms" className="text-white/50 hover:text-[#10b981] mx-1 transition-colors underline decoration-white/20 underline-offset-4">
+                    服务条款
+                  </Link>
+                  和
+                  <Link href="/privacy" className="text-white/50 hover:text-[#10b981] mx-1 transition-colors underline decoration-white/20 underline-offset-4">
+                    隐私政策
+                  </Link>
+                </p>
               </div>
             </div>
-
-            {/* Bonus Info */}
-            <div className="p-3 rounded-lg bg-gradient-to-r from-tiktok-cyan/10 to-tiktok-pink/10 border border-white/10">
-              <p className="text-sm text-center">
-                🎁 新用户注册即送 <span className="text-tiktok-cyan font-bold">100 积分</span>
-              </p>
-            </div>
-          </CardContent>
-
-          <CardFooter className="flex flex-col gap-4">
-            {/* Submit Button */}
-            <Button
-              type="submit"
-              disabled={isLoading}
-              className="w-full h-11 bg-gradient-to-r from-tiktok-pink to-tiktok-cyan text-black font-semibold hover:opacity-90 transition-opacity"
-            >
-              {isLoading ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  注册中...
-                </>
-              ) : (
-                "立即注册"
-              )}
-            </Button>
-
-            {/* Login Link */}
-            <p className="text-sm text-muted-foreground text-center">
-              已有账号？{" "}
-              <Link href="/auth/login" className="text-tiktok-cyan hover:underline font-medium">
-                立即登录
-              </Link>
-            </p>
-          </CardFooter>
-        </form>
-      </Card>
+          </form>
+        </ReflectiveCard>
+      </div>
     </div>
   );
 }
-

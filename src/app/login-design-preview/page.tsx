@@ -23,29 +23,50 @@ export default function LoginDesignPreview() {
                 <ReflectiveCard
                     className="py-8 px-10 login-expand"
                 >
-                    {/* Header */}
-                    <div className="flex flex-col items-center mb-10">
-                        {/* Logo Section */}
-                        <div className="flex items-center justify-center gap-3 mb-6">
-                            <div className="flex items-baseline relative">
-                                <span className="text-4xl font-black tracking-tighter text-white">Tory</span>
-                                <span className="text-4xl font-black tracking-tighter text-[#00ff9d]">X</span>
-                                {/* Decorative dot */}
-                                <div className="absolute -right-2 top-1 w-1.5 h-1.5 bg-[#00ff9d] rounded-full animate-pulse" />
-                            </div>
-                            <div className="h-6 w-[1px] bg-white/10 mx-1" /> {/* Divider */}
-                            <div className="px-2 py-0.5 rounded text-[10px] font-bold bg-white/5 text-white/50 border border-white/10 tracking-widest uppercase">
-                                AI Edition
-                            </div>
+                    {/* Header - Clean Structured Layout */}
+                    <div className="flex flex-col items-center mb-8">
+                        {/* 1. Icon Badge - Top */}
+                        <div
+                            className="w-12 h-12 rounded-xl flex items-center justify-center mb-2 mt-6"
+                            style={{
+                                background: 'linear-gradient(145deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.02) 100%)',
+                                border: '1px solid rgba(255,255,255,0.1)',
+                                boxShadow: '0 8px 32px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.1)'
+                            }}
+                        >
+                            <Zap className="h-6 w-6 text-white fill-white/10" />
                         </div>
 
-                        {/* Title Section */}
-                        <div className="text-center space-y-2">
-                            <h1 className="text-2xl font-bold text-white tracking-wide">Welcome Back</h1>
-                            <p className="text-xs text-white/30 uppercase tracking-[0.2em] font-light">
-                                Intelligent Content Creation
-                            </p>
+                        {/* 2. Brand Name - Middle */}
+                        <div className="flex items-baseline mb-1">
+                            <span
+                                className="text-[32px] font-semibold tracking-[-0.02em]"
+                                style={{
+                                    background: 'linear-gradient(180deg, #ffffff 0%, #e8e8e8 25%, #c0c0c0 50%, #a0a0a0 75%, #d0d0d0 100%)',
+                                    WebkitBackgroundClip: 'text',
+                                    WebkitTextFillColor: 'transparent',
+                                    filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.3))',
+                                }}
+                            >
+                                Tory
+                            </span>
+                            <span
+                                className="text-[32px] font-black tracking-[-0.02em] ml-[-1px]"
+                                style={{
+                                    background: 'linear-gradient(135deg, #34d399 0%, #10b981 50%, #059669 100%)',
+                                    WebkitBackgroundClip: 'text',
+                                    WebkitTextFillColor: 'transparent',
+                                    filter: 'drop-shadow(0 0 16px rgba(16,185,129,0.4))',
+                                }}
+                            >
+                                X
+                            </span>
                         </div>
+
+                        {/* 3. Subtitle - Bottom */}
+                        <span className="text-xs text-white/30 tracking-[0.15em] uppercase">
+                            AI 内容智造工厂
+                        </span>
                     </div>
 
                     {/* Login Method Tabs */}
@@ -96,7 +117,7 @@ export default function LoginDesignPreview() {
                             <>
                                 <ReflectiveInput
                                     icon={<Mail className="w-5 h-5" />}
-                                    placeholder="hello@example.com"
+                                    placeholder=""
                                 />
                                 <ReflectiveInput
                                     icon={<Lock className="w-5 h-5" />}
@@ -107,7 +128,7 @@ export default function LoginDesignPreview() {
                         )}
 
                         {/* Main Action Button */}
-                        <Button className="w-full h-12 bg-white hover:bg-white/90 text-black font-bold text-base rounded-xl transition-all duration-300 hover:scale-[1.02] shadow-[0_0_20px_rgba(255,255,255,0.2)] mt-2 group relative overflow-hidden">
+                        <Button className="w-full h-12 bg-gradient-to-b from-white to-gray-100 hover:to-white text-black font-bold text-base rounded-xl transition-all duration-300 hover:scale-[1.02] shadow-[0_0_20px_rgba(255,255,255,0.3),inset_0_1px_0_rgba(255,255,255,1)] hover:shadow-[0_0_30px_rgba(255,255,255,0.5),inset_0_1px_0_rgba(255,255,255,1)] mt-2 group relative overflow-hidden border-t border-white">
                             <span className="relative z-10 flex items-center justify-center gap-2">
                                 {loginMethod === "phone" ? "登录 / 注册" : "登 录"}
                                 <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />

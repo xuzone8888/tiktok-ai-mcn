@@ -109,3 +109,22 @@
     display: flex;
     align-items: center;
 }
+
+/* ===== 浏览器自动填充样式覆盖 ===== */
+/* Chrome/Safari/Edge 自动填充背景覆盖 - 完全透明 */
+.input-field:-webkit-autofill,
+.input-field:-webkit-autofill:hover,
+.input-field:-webkit-autofill:focus,
+.input-field:-webkit-autofill:active {
+    -webkit-box-shadow: 0 0 0 30px transparent inset !important;
+    -webkit-text-fill-color: #ffffff !important;
+    caret-color: #ffffff !important;
+    transition: background-color 5000s ease-in-out 0s;
+    background-color: transparent !important;
+}
+
+/* Firefox 自动填充 */
+.input-field:autofill {
+    background-color: transparent !important;
+    color: #ffffff !important;
+}

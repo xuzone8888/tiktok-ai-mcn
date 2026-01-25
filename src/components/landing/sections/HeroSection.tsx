@@ -14,13 +14,17 @@ export default function HeroSection() {
                 <header className="fixed top-0 left-0 right-0 z-50 border-b border-white/5 backdrop-blur-xl bg-black/30">
                     <div className="container max-w-7xl mx-auto px-6 py-4">
                         <nav className="flex items-center justify-between">
-                            <Link href="/" className="flex items-center gap-3 group">
-                                <div className="w-11 h-11 rounded-xl bg-[#1a1a1a] border border-white/20 flex items-center justify-center">
-                                    <Zap className="h-6 w-6 text-white" />
-                                </div>
+                            <Link href="/" className="flex items-center gap-2 group">
+                                {/* Lightning Icon */}
+                                <Zap className="h-7 w-7 text-white fill-white" />
+                                {/* Text Logo */}
                                 <div className="flex flex-col">
-                                    <span className="text-xl font-bold text-white">ToryX</span>
-                                    <span className="text-[10px] text-gray-500 tracking-wider uppercase">
+                                    <div className="flex items-baseline">
+                                        <span className="text-2xl font-bold text-white">Tory</span>
+                                        <span className="text-2xl font-bold text-[#00c853]">X</span>
+                                        <span className="text-sm text-white/60 ml-1">AI</span>
+                                    </div>
+                                    <span className="text-[10px] text-white/40 tracking-wider">
                                         AI 内容智造工厂
                                     </span>
                                 </div>
