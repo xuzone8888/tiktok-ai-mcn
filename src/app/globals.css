@@ -81,6 +81,9 @@
    * TikTok 风格的赛博霓虹黑色主题
    * ============================================================================ */
   .dark {
+    /* Dark color scheme for native date/time pickers */
+    color-scheme: dark;
+
     /* 背景：深邃的纯黑 */
     --background: 0 0% 4%;
     /* 前景：柔和的白色 */

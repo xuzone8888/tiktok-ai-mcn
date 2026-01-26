@@ -218,3 +218,81 @@
     transform: translateY(-4px);
     box-shadow: 0 30px 60px rgba(0, 0, 0, 0.6);
 }
+
+/* ============================================
+   Section Variant - 适合大型容器
+   ============================================ */
+
+/* Section 变体: 禁用悬停变换 */
+.reflective-card-container.variant-section:hover {
+    transform: none;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+}
+
+/* Section 变体: 内容层使用 block 布局，提高 z-index 确保交互 */
+.reflective-card-container.variant-section .reflective-content {
+    display: block;
+    height: auto;
+    background: transparent;
+    z-index: 30;
+    /* 高于 border 的 z-index 20 */
+    position: relative;
+}
+
+/* Section 变体: 不覆盖子元素的字体样式 */
+.reflective-card-container.variant-section h1,
+.reflective-card-container.variant-section h2,
+.reflective-card-container.variant-section h3,
+.reflective-card-container.variant-section p,
+.reflective-card-container.variant-section span,
+.reflective-card-container.variant-section label {
+    font-size: inherit;
+    font-weight: inherit;
+    letter-spacing: inherit;
+    text-transform: inherit;
+    opacity: inherit;
+    margin: inherit;
+    text-shadow: none;
+}
+
+/* Section 变体: 确保所有交互元素可点击 */
+.reflective-card-container.variant-section button,
+.reflective-card-container.variant-section input,
+.reflective-card-container.variant-section textarea,
+.reflective-card-container.variant-section select,
+.reflective-card-container.variant-section a,
+.reflective-card-container.variant-section .reflective-input-container {
+    position: relative;
+    z-index: 31;
+}
+
+/* Section 变体: 减少噪点强度 */
+.reflective-card-container.variant-section .reflective-noise {
+    opacity: 0.03 !important;
+}
+
+/* Section 变体: 减少光泽强度 */
+.reflective-card-container.variant-section .reflective-sheen {
+    opacity: 0.02;
+}
+
+/* Section 变体: 确保边框不阻挡交互 */
+.reflective-card-container.variant-section .reflective-border {
+    pointer-events: none !important;
+}
+
+/* Section 变体: 确保 ReflectiveInput 的发光效果正常 */
+.reflective-card-container.variant-section .reflective-input-container {
+    z-index: 31;
+}
+
+.reflective-card-container.variant-section .reflective-input-container.is-focused {
+    transform: scale(1.01);
+}
+
+.reflective-card-container.variant-section .reflective-input-container.is-focused .input-glow {
+    opacity: 1 !important;
+    box-shadow:
+        0 0 25px rgba(255, 255, 255, 0.4),
+        0 0 50px rgba(255, 255, 255, 0.15) !important;
+}

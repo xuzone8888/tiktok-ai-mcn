@@ -4,6 +4,8 @@ import { CSSProperties, ReactNode, useRef, useState, useCallback } from 'react';
 import './ReflectiveCard.css';
 
 interface ReflectiveCardProps {
+    /** 变体模式: 'card' (默认) 或 'section' (大容器) */
+    variant?: 'card' | 'section';
     /** 金属光泽不透明度 (0-1) */
     metalness?: number;
     /** 噪点层不透明度 (0-1) */
@@ -31,8 +33,12 @@ interface ReflectiveCardProps {
 /**
  * ReflectiveCard - 反光卡片组件
  * 带鼠标跟踪高光效果
+ * 
+ * variant="card" (默认): 适合小型卡片，使用flex布局
+ * variant="section": 适合大型容器，使用block布局，不覆盖子元素样式
  */
 const ReflectiveCard = ({
+    variant = 'card',
     metalness = 1,
     roughness = 0.4,
     overlayColor = 'rgba(255, 255, 255, 0.1)',
@@ -82,10 +88,12 @@ const ReflectiveCard = ({
         ...(height && { height: typeof height === 'number' ? `${height}px` : height }),
     };
 
+    const variantClass = variant === 'section' ? 'variant-section' : 'variant-card';
+
     return (
         <div
             ref={cardRef}
-            className={`reflective-card-container ${active ? 'is-active' : ''} ${isHovering ? 'is-hovering' : ''} ${className}`}
+            className={`reflective-card-container ${variantClass} ${active ? 'is-active' : ''} ${isHovering ? 'is-hovering' : ''} ${className}`}
             style={{ ...style, ...cssVariables, ...sizeStyle }}
             onMouseMove={handleMouseMove}
             onMouseEnter={handleMouseEnter}
@@ -114,3 +122,4 @@ const ReflectiveCard = ({
 };
 
 export default ReflectiveCard;
+
