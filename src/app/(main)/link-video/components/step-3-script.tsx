@@ -54,11 +54,11 @@ export function Step3Script() {
     try {
       // 如果没有 job，需要先创建
       let jobId = currentJob?.id;
-      
+
       if (!jobId) {
         // 从 store 获取数据创建 job
         const store = useLinkVideoStore.getState();
-        
+
         // 如果没有 productLinkId（浏览器提取模式），需要将 parsedData 转换为 manual_product_info
         let manualProductInfo = store.manualProductInfo;
         if (!store.productLinkId && store.parsedData && !manualProductInfo) {
@@ -66,13 +66,13 @@ export function Step3Script() {
           manualProductInfo = {
             title: store.parsedData.title,
             selling_points: store.parsedData.selling_points?.join(',') || '',
-            price: typeof store.parsedData.price === 'object' 
-              ? store.parsedData.price.current 
+            price: typeof store.parsedData.price === 'object'
+              ? store.parsedData.price.current
               : String(store.parsedData.price || ''),
             images: store.parsedData.images?.map(img => img.url) || [],
           };
         }
-        
+
         const createResponse = await fetch("/api/link-video/jobs", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -155,7 +155,7 @@ export function Step3Script() {
           <p className="text-muted-foreground mb-4">点击下方按钮生成脚本</p>
           <Button
             onClick={() => handleGenerateScript(false)}
-            className="bg-gradient-to-r from-tiktok-cyan to-tiktok-pink hover:opacity-90"
+            variant="white-glow"
           >
             <RefreshCw className="mr-2 h-4 w-4" />
             生成脚本
@@ -277,7 +277,7 @@ export function Step3Script() {
         <Button
           onClick={nextStep}
           disabled={!canProceed}
-          className="bg-gradient-to-r from-tiktok-cyan to-tiktok-pink hover:opacity-90"
+          variant="white-glow"
         >
           下一步：生成九宫格
           <ArrowRight className="ml-2 h-4 w-4" />

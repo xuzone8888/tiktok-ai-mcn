@@ -74,9 +74,8 @@ export function AccountSelector({
                 <Users className="w-12 h-12 text-gray-500 mx-auto mb-3" />
                 <p className="text-gray-400 mb-4">暂无可用账号</p>
                 <Button
-                    variant="outline"
+                    variant="white-glow"
                     onClick={() => window.location.href = '/publish/accounts'}
-                    className="text-cyan-400 border-cyan-500/50"
                 >
                     绑定 TikTok 账号
                 </Button>

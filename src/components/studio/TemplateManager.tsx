@@ -217,7 +217,7 @@ export function TemplateManager({
                             </p>
                         </div>
                         <Badge variant="outline" className={cn(
-                            "px-3 py-1 text-xs",
+                            "px-3 py-1 text-xs mr-8",
                             type === 'video_batch'
                                 ? "border-tiktok-cyan/50 text-tiktok-cyan"
                                 : "border-tiktok-pink/50 text-tiktok-pink"

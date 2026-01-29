@@ -72,6 +72,10 @@ import {
   Wifi,
   Film,
   FolderDown,
+  ArrowLeft,
+  Info,
+  Save,
+  LayoutTemplate,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import Link from "next/link";
@@ -109,7 +113,7 @@ import {
 // Templates
 import { SaveTemplateDialog } from "@/components/studio/SaveTemplateDialog";
 import { TemplateManager, type Template } from "@/components/studio/TemplateManager";
-import { LayoutTemplate, Save } from "lucide-react";
+
 
 // ============================================================================
 // 图标映射
@@ -151,27 +155,27 @@ function TaskCard({
     switch (task.status) {
       case "pending":
         return (
-          <Badge variant="outline" className="bg-muted/50 text-xs">
+          <Badge variant="outline" className="bg-white/5 border-white/10 text-xs text-muted-foreground">
             待处理
           </Badge>
         );
       case "processing":
         return (
-          <Badge className="bg-tiktok-cyan/10 text-tiktok-cyan border-tiktok-cyan/30 text-xs animate-pulse">
+          <Badge className="bg-mermaid-cyan/10 text-mermaid-cyan border-mermaid-cyan/20 text-xs animate-pulse">
             <Loader2 className="h-3 w-3 mr-1 animate-spin" />
             处理中
           </Badge>
         );
       case "completed":
         return (
-          <Badge className="bg-emerald-500/10 text-emerald-500 border-emerald-500/30 text-xs">
+          <Badge className="bg-emerald-500/10 text-emerald-500 border-emerald-500/20 text-xs shadow-[0_0_10px_rgba(16,185,129,0.2)]">
             <CheckCircle2 className="h-3 w-3 mr-1" />
             完成
           </Badge>
         );
       case "failed":
         return (
-          <Badge className="bg-red-500/10 text-red-500 border-red-500/30 text-xs">
+          <Badge className="bg-red-500/10 text-red-500 border-red-500/20 text-xs shadow-[0_0_10px_rgba(239,68,68,0.2)]">
             <XCircle className="h-3 w-3 mr-1" />
             失败
           </Badge>
@@ -190,121 +194,135 @@ function TaskCard({
   return (
     <div
       className={cn(
-        "group relative rounded-xl border transition-all duration-200 overflow-hidden",
+        "group relative rounded-3xl border transition-all duration-500 overflow-hidden",
         isSelected
-          ? "bg-tiktok-cyan/5 border-tiktok-cyan/50 ring-2 ring-tiktok-cyan/20"
-          : "bg-card/50 border-border/50 hover:border-border",
-        task.status === "processing" && "ring-2 ring-tiktok-cyan/30"
+          ? "bg-[#0B0C10] border-mermaid-cyan/50 ring-1 ring-mermaid-cyan/50 shadow-[0_0_30px_rgba(0,242,234,0.15)] scale-[1.02]"
+          : "bg-[#0B0C10] border-white/5 hover:border-mermaid-cyan/30 hover:shadow-[0_0_20px_rgba(0,242,234,0.05)] hover:-translate-y-1",
+        task.status === "processing" && "ring-1 ring-mermaid-cyan/30 animate-pulse-subtle"
       )}
     >
-      {/* 选择复选框 */}
+      {/* 选择复选框 - Neon Checkbox */}
       <div
         onClick={onToggleSelect}
         className={cn(
-          "absolute top-3 left-3 z-10 flex h-5 w-5 items-center justify-center rounded border cursor-pointer transition-all",
+          "absolute top-3 left-3 z-20 flex h-6 w-6 items-center justify-center rounded-lg border cursor-pointer transition-all duration-300",
           isSelected
-            ? "bg-tiktok-cyan border-tiktok-cyan text-black"
-            : "border-white/30 bg-black/50 hover:border-tiktok-cyan/50"
+            ? "bg-mermaid-cyan border-mermaid-cyan text-black shadow-[0_0_15px_rgba(0,242,234,0.4)] rotate-0"
+            : "border-white/20 bg-black/40 hover:border-white/50 backdrop-blur-md opacity-0 group-hover:opacity-100 hover:opacity-100 rotate-45 hover:rotate-0"
         )}
       >
-        {isSelected && <Check className="h-3 w-3" />}
+        {isSelected && <Check className="h-3.5 w-3.5 font-bold" />}
       </div>
 
-      {/* 图片预览 */}
+      {/* 图片预览 - Deep Glass Container */}
       <div
-        className="relative aspect-square bg-muted/30 cursor-pointer"
+        className="relative aspect-square bg-[#050505] cursor-pointer overflow-hidden"
         onClick={onPreview}
       >
         {task.config.sourceImageUrl ? (
           <img
             src={task.config.sourceImageUrl}
             alt={task.config.sourceImageName}
-            className="w-full h-full object-cover"
+            className={cn(
+              "w-full h-full object-cover transition-transform duration-700",
+              task.status === "processing" ? "scale-110 blur-sm" : "group-hover:scale-110"
+            )}
           />
         ) : (
-          <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-purple-500/20 to-pink-500/20">
-            <FileText className="h-10 w-10 text-purple-400 mb-2" />
-            <span className="text-xs text-purple-300 text-center px-2 line-clamp-2">
-              {task.config.prompt.slice(0, 30)}...
+          <div className="w-full h-full flex flex-col items-center justify-center bg-white/5 group-hover:bg-white/10 transition-colors">
+            <div className="p-4 rounded-2xl bg-white/5 border border-white/5 mb-3">
+              <FileText className="h-8 w-8 text-white/20" />
+            </div>
+            <span className="text-[10px] text-white/30 text-center px-6 leading-relaxed uppercase tracking-wider font-mono">
+              Pure Prompt Task
             </span>
           </div>
         )}
 
-        {/* 悬浮操作层 */}
-        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-all flex items-center justify-center opacity-0 group-hover:opacity-100">
-          <Eye className="h-8 w-8 text-white" />
+        {/* 悬浮操作层 - Deep Glass Overlay */}
+        <div className="absolute inset-0 bg-[#050505]/60 backdrop-blur-[2px] flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300 z-10">
+          <div className="flex gap-2 transform translate-y-4 group-hover:translate-y-0 transition-transform duration-300">
+            <div className="h-10 w-10 rounded-xl bg-white/10 border border-white/20 flex items-center justify-center backdrop-blur-md hover:bg-mermaid-cyan hover:text-black hover:border-mermaid-cyan transition-all cursor-pointer shadow-lg" onClick={(e) => { e.stopPropagation(); onPreview(); }}>
+              <Eye className="h-5 w-5" />
+            </div>
+          </div>
         </div>
 
-        {/* 处理进度 */}
+        {/* 处理进度条 - Neon Gradient */}
         {task.status === "processing" && task.progress !== undefined && (
-          <div className="absolute bottom-0 left-0 right-0 bg-black/70 p-2">
-            <Progress value={task.progress} className="h-1.5" />
-            <p className="text-[10px] text-white text-center mt-1">{task.progress}%</p>
+          <div className="absolute inset-0 flex flex-col items-center justify-center z-20 bg-black/40 backdrop-blur-sm">
+            <Loader2 className="h-8 w-8 text-mermaid-cyan animate-spin mb-3" />
+            <div className="w-2/3 h-1 bg-white/10 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-mermaid-lime via-mermaid-cyan to-mermaid-pink transition-all duration-300 shadow-[0_0_10px_rgba(0,242,234,0.5)]"
+                style={{ width: `${task.progress}%` }}
+              />
+            </div>
+            <span className="text-[10px] font-mono text-mermaid-cyan mt-2 animate-pulse">{task.progress}%</span>
           </div>
         )}
 
-        {/* 结果预览 - 点击查看大图 */}
+        {/* 结果预览 - Titanium Reveal */}
         {task.status === "completed" && task.resultUrl && (
-          <div className="absolute inset-0 bg-black/90 flex items-center justify-center group-hover:bg-black/80 transition-colors">
+          <div className="absolute inset-0 z-10 transition-opacity duration-300 opacity-100 group-hover:opacity-0 pointer-events-none">
             <img
               src={task.resultUrl}
               alt="Result"
-              className="max-w-[90%] max-h-[90%] object-contain rounded"
+              className="w-full h-full object-cover"
             />
-            {/* 点击查看提示 */}
-            <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-              <div className="bg-black/60 rounded-full p-3">
-                <Eye className="h-6 w-6 text-white" />
-              </div>
+            <div className="absolute bottom-0 inset-x-0 h-1/2 bg-gradient-to-t from-black/80 to-transparent" />
+            <div className="absolute bottom-3 left-3 flex items-center gap-1.5">
+              <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 text-[10px] px-1.5 py-0 h-5 backdrop-blur-md">
+                DONE
+              </Badge>
             </div>
           </div>
         )}
 
-        {/* 错误显示 */}
+        {/* 错误显示 - Red Glass */}
         {task.status === "failed" && (
-          <div className="absolute inset-0 bg-red-900/80 flex flex-col items-center justify-center p-4">
-            <XCircle className="h-8 w-8 text-red-400 mb-2" />
-            <p className="text-xs text-red-200 text-center line-clamp-2">
-              {task.error || "处理失败"}
+          <div className="absolute inset-0 bg-red-950/90 flex flex-col items-center justify-center p-6 backdrop-blur-md z-20 border border-red-500/20">
+            <div className="p-3 rounded-full bg-red-500/20 mb-3 animate-bounce">
+              <XCircle className="h-6 w-6 text-red-400" />
+            </div>
+            <p className="text-[10px] text-red-200 text-center font-mono leading-relaxed border-t border-red-500/20 pt-2 mt-1 w-full">
+              {task.error || "GENERATION FAILED"}
             </p>
           </div>
         )}
       </div>
 
-      {/* 卡片信息 */}
-      <div className="p-3 space-y-2">
-        {/* 文件名和状态 */}
+      {/* 卡片信息 - Titanium Body */}
+      <div className="p-4 space-y-3 bg-[#0B0C10] border-t border-white/5 relative">
+        {/* 文件名 */}
         <div className="flex items-center justify-between gap-2">
-          <p className="text-sm font-medium truncate flex-1">
-            {task.config.sourceImageName}
+          <p className="text-xs font-bold text-white/80 truncate flex-1 font-mono tracking-tight" title={task.config.sourceImageName}>
+            {task.config.sourceImageName || "UNTITLED TASK"}
           </p>
-          {getStatusBadge()}
+          {/* Status Badge */}
+          {task.status === 'pending' && <Badge variant="outline" className="text-[10px] h-4 border-white/10 text-white/40 bg-white/5">WAITING</Badge>}
         </div>
 
-        {/* 任务配置信息 */}
+        {/* 任务配置信息 - Neon Chips */}
         <div className="flex flex-wrap gap-1.5">
-          <Badge variant="outline" className="text-[10px] h-5 px-1.5">
-            {task.config.model === "nano-banana" ? "快速" : "Pro"}
+          <Badge variant="outline" className={cn("text-[10px] h-5 px-1.5 border-white/5 bg-white/5 font-normal", task.config.model === 'nano-banana' ? 'text-mermaid-cyan' : 'text-mermaid-pink')}>
+            {task.config.model === "nano-banana" ? "TURBO" : "PRO"}
           </Badge>
-          <Badge variant="outline" className="text-[10px] h-5 px-1.5">
+          <Badge variant="outline" className="text-[10px] h-5 px-1.5 border-white/5 text-white/50 bg-white/5 font-normal">
             {getActionLabel()}
           </Badge>
-          <Badge variant="outline" className="text-[10px] h-5 px-1.5">
+          <Badge variant="outline" className="text-[10px] h-5 px-1.5 border-white/5 text-white/50 bg-white/5 font-normal">
             {task.config.aspectRatio}
           </Badge>
-          {task.config.model === "nano-banana-pro" && task.config.resolution && (
-            <Badge variant="outline" className="text-[10px] h-5 px-1.5">
-              {task.config.resolution.toUpperCase()}
-            </Badge>
-          )}
         </div>
 
         {/* 操作栏 */}
-        <div className="flex items-center justify-between pt-1">
-          <span className="text-xs font-semibold text-amber-400">
-            {cost} Credits
+        <div className="flex items-center justify-between pt-3 border-t border-white/5">
+          <span className="text-[10px] font-mono text-white/30 flex items-center gap-1.5">
+            <Zap className="h-3 w-3 text-mermaid-cyan/60" />
+            <span className="text-white/60 font-bold">{cost}</span> PTS
           </span>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center -mr-2">
             {/* 单独开始按钮 */}
             {task.status === "pending" && (
               <TooltipProvider>
@@ -317,13 +335,13 @@ function TaskCard({
                         e.stopPropagation();
                         onStartSingle();
                       }}
-                      className="h-7 w-7 text-tiktok-cyan hover:text-tiktok-cyan hover:bg-tiktok-cyan/10"
+                      className="h-7 w-7 text-white/40 hover:text-mermaid-cyan hover:bg-mermaid-cyan/10 transition-colors rounded-lg"
                     >
                       <Play className="h-3.5 w-3.5" />
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent>
-                    <p>单独生成此任务</p>
+                    <p>Start Task</p>
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
@@ -344,14 +362,14 @@ function TaskCard({
                       <Button
                         size="icon"
                         variant="ghost"
-                        className="h-7 w-7 text-emerald-500 hover:text-emerald-500 hover:bg-emerald-500/10"
+                        className="h-7 w-7 text-white/40 hover:text-emerald-400 hover:bg-emerald-400/10 transition-colors rounded-lg"
                       >
                         <Download className="h-3.5 w-3.5" />
                       </Button>
                     </a>
                   </TooltipTrigger>
                   <TooltipContent>
-                    <p>下载结果</p>
+                    <p>Download</p>
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
@@ -368,13 +386,13 @@ function TaskCard({
                       e.stopPropagation();
                       onRemove();
                     }}
-                    className="h-7 w-7 text-red-400 hover:text-red-400 hover:bg-red-400/10"
+                    className="h-7 w-7 text-white/40 hover:text-neon-red hover:bg-neon-red/10 transition-colors rounded-lg"
                   >
                     <Trash2 className="h-3.5 w-3.5" />
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>
-                  <p>删除任务</p>
+                  <p>Remove</p>
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
@@ -739,6 +757,21 @@ export default function ImageBatchPage() {
     [userId, userCredits, updateTaskStatus, toast]
   );
 
+  // 批量开始任务
+  const handleStartAll = useCallback(async () => {
+    const pendingTasks = tasks.filter((t) => t.status === "pending");
+    if (pendingTasks.length === 0) return;
+
+    toast({ title: `🚀 开始处理 ${pendingTasks.length} 个任务` });
+
+    // 串行执行以避免并发限制
+    for (const task of pendingTasks) {
+      await handleProcessSingleTask(task);
+      // 间隔 800ms
+      await new Promise((resolve) => setTimeout(resolve, 800));
+    }
+  }, [tasks, handleProcessSingleTask, toast]);
+
   // 获取可用的 action 列表
   const getAvailableActions = () => {
     if (globalSettings.model === "nano-banana") {
@@ -764,165 +797,128 @@ export default function ImageBatchPage() {
         {/* ============================================ */}
         {/* 页面头部 */}
         {/* ============================================ */}
-        <div className="flex items-center gap-4">
-          <Link href="/pro-studio">
-            <Button variant="ghost" size="icon" className="h-9 w-9">
-              <ChevronLeft className="h-5 w-5" />
-            </Button>
-          </Link>
-          <div className="flex-1">
-            <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-              <ImageIcon className="h-6 w-6 text-tiktok-pink" />
-              <span className="gradient-tiktok-text">批量制图线</span>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowTemplateManager(true)}
-                className="ml-2 h-7 px-3 text-xs bg-white/5 border-white/10 hover:bg-white/10 text-gray-400 hover:text-cyan-400 gap-1.5 transition-all"
-              >
-                <LayoutTemplate className="h-3.5 w-3.5" />
-                <span>加载方案</span>
-              </Button>
+        <div className="flex items-center justify-between mb-10 animate-in fade-in slide-in-from-top-4 duration-500">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight flex items-center gap-3">
+              <div className="h-8 w-1.5 rounded-full bg-gradient-to-b from-mermaid-lime to-mermaid-cyan shadow-[0_0_10px_rgba(0,242,234,0.5)]" />
+              <span className="text-white drop-shadow-lg">批量制图线</span>
             </h1>
-            <p className="text-sm text-muted-foreground mt-1">
-              批量上传图片，使用 AI 进行高清放大、九宫格生成等处理
+            <p className="mt-2 text-white/60">
+              PRO STUDIO · IMAGE BATCH PIPELINE
             </p>
           </div>
 
-          {/* 快捷切换按钮组 */}
-          <div className="flex items-center gap-2 p-1 rounded-xl bg-muted/50 border border-border/50">
-            <Link href="/pro-studio/video-batch">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="hover:bg-tiktok-cyan/10 hover:text-tiktok-cyan"
-              >
-                <Video className="h-4 w-4 mr-1.5" />
-                视频
+          <div className="flex items-center gap-4">
+            <Link href="/quick-gen">
+              <Button variant="ghost" className="text-white/40 hover:text-white hover:bg-white/5">
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                返回普通模式
               </Button>
             </Link>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="bg-gradient-to-r from-tiktok-pink/20 to-tiktok-pink/10 text-tiktok-pink border border-tiktok-pink/30"
-            >
-              <ImageIcon className="h-4 w-4 mr-1.5" />
-              图片
-            </Button>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-500/10 border border-amber-500/30">
-              <Zap className="h-4 w-4 text-amber-400" />
-              <span className="text-sm font-semibold text-amber-400">
-                {userCredits.toLocaleString()}
-              </span>
-            </div>
           </div>
         </div>
 
         {/* ============================================ */}
-        {/* 全局配置工具栏 - 简化版 */}
+        {/* 全局配置工具栏 - Titanium Mermaid Edition */}
         {/* ============================================ */}
-        <Card className="glass-card">
-          <CardContent className="py-4 space-y-4">
-            {/* 第一行：模型和处理类型 */}
-            <div className="flex flex-wrap items-center gap-4">
-              {/* 模型选择 - 简化为标签 */}
-              <div className="flex items-center gap-2">
-                <Label className="text-xs text-muted-foreground whitespace-nowrap">模型</Label>
-                <div className="flex gap-1 p-1 rounded-lg bg-muted/30">
-                  <Button
-                    variant="ghost"
-                    size="sm"
+        <div className="relative z-10 mb-8 rounded-3xl bg-[#16181D]/80 backdrop-blur-xl border border-white/5 shadow-2xl overflow-hidden group/panel">
+          {/* Ambient Glow */}
+          <div className="absolute top-0 right-0 -mr-20 -mt-20 w-96 h-96 bg-mermaid-cyan/5 rounded-full blur-3xl pointer-events-none group-hover/panel:bg-mermaid-cyan/10 transition-colors duration-700" />
+          <div className="absolute bottom-0 left-0 -ml-20 -mb-20 w-96 h-96 bg-mermaid-pink/5 rounded-full blur-3xl pointer-events-none group-hover/panel:bg-mermaid-pink/10 transition-colors duration-700" />
+
+          <div className="relative p-7 space-y-7">
+            {/* 第一行：主要配置 - Glass Pills Layout */}
+            <div className="flex flex-wrap items-center gap-8">
+              {/* 模型选择 */}
+              <div className="space-y-3">
+                <Label className="text-[10px] uppercase tracking-wider text-white/30 font-bold ml-1 flex items-center gap-2">
+                  <Zap className="h-3 w-3" />
+                  模型引擎
+                </Label>
+                <div className="flex items-center p-1.5 rounded-full bg-[#050505]/60 border border-white/5 backdrop-blur-md shadow-inner">
+                  <button
                     onClick={() => updateGlobalSettings("model", "nano-banana")}
                     className={cn(
-                      "h-8 px-3 text-xs",
+                      "relative px-5 py-2.5 rounded-full text-xs font-bold transition-all duration-300 flex items-center gap-2.5",
                       globalSettings.model === "nano-banana"
-                        ? "bg-tiktok-cyan/20 text-tiktok-cyan"
-                        : "text-muted-foreground hover:text-foreground"
+                        ? "bg-white/10 text-white shadow-[0_2px_10px_rgba(0,0,0,0.3)] border border-white/10"
+                        : "text-white/40 hover:text-white hover:bg-white/5"
                     )}
                   >
-                    <Zap className="h-3.5 w-3.5 mr-1" />
-                    快速
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
+                    <Zap className={cn("h-3.5 w-3.5", globalSettings.model === "nano-banana" ? "text-mermaid-cyan" : "text-white/40")} />
+                    快速版 Turbo
+                  </button>
+                  <button
                     onClick={() => updateGlobalSettings("model", "nano-banana-pro")}
                     className={cn(
-                      "h-8 px-3 text-xs",
+                      "relative px-5 py-2.5 rounded-full text-xs font-bold transition-all duration-300 flex items-center gap-2.5",
                       globalSettings.model === "nano-banana-pro"
-                        ? "bg-tiktok-pink/20 text-tiktok-pink"
-                        : "text-muted-foreground hover:text-foreground"
+                        ? "bg-white/10 text-white shadow-[0_2px_10px_rgba(0,0,0,0.3)] border border-white/10"
+                        : "text-white/40 hover:text-white hover:bg-white/5"
                     )}
                   >
-                    <Sparkles className="h-3.5 w-3.5 mr-1" />
-                    专业
-                  </Button>
+                    <Sparkles className={cn("h-3.5 w-3.5", globalSettings.model === "nano-banana-pro" ? "text-mermaid-pink" : "text-white/40")} />
+                    专业版 Pro
+                  </button>
                 </div>
               </div>
 
-              {/* 分隔线 */}
-              <div className="h-6 w-px bg-border/50" />
+              <div className="h-12 w-px bg-white/5" />
 
-              {/* 处理类型 - 简化为一排 */}
-              <div className="flex items-center gap-2">
-                <Label className="text-xs text-muted-foreground whitespace-nowrap">处理</Label>
-                <div className="flex gap-1">
+              {/* 处理类型 */}
+              <div className="space-y-3">
+                <Label className="text-[10px] uppercase tracking-wider text-white/30 font-bold ml-1 flex items-center gap-2">
+                  <Wand2 className="h-3 w-3" />
+                  处理模式
+                </Label>
+                <div className="flex items-center gap-2">
                   {getAvailableActions().map((action) => (
-                    <Button
+                    <button
                       key={action.value}
-                      variant="outline"
-                      size="sm"
                       onClick={() => updateGlobalSettings("action", action.value)}
                       className={cn(
-                        "h-8 px-3 text-xs gap-1.5",
+                        "px-4 py-2.5 rounded-full text-xs font-bold border transition-all duration-300 flex items-center gap-2.5",
                         globalSettings.action === action.value
-                          ? globalSettings.model === "nano-banana"
-                            ? "bg-tiktok-cyan/20 border-tiktok-cyan/50 text-tiktok-cyan"
-                            : "bg-tiktok-pink/20 border-tiktok-pink/50 text-tiktok-pink"
-                          : "btn-subtle"
+                          ? "bg-mermaid-cyan/10 border-mermaid-cyan/30 text-mermaid-cyan shadow-[0_0_15px_rgba(0,242,234,0.1)]"
+                          : "bg-black/20 border-white/5 text-white/40 hover:border-white/20 hover:text-white hover:bg-white/5"
                       )}
                     >
                       {action.value === "generate" && <Wand2 className="h-3.5 w-3.5" />}
                       {action.value === "upscale" && <ZoomIn className="h-3.5 w-3.5" />}
                       {action.value === "nine_grid" && <Grid3X3 className="h-3.5 w-3.5" />}
                       {action.label}
-                      <span className="text-amber-400">{action.credits}pts</span>
-                    </Button>
+                      <span className="ml-1 text-[10px] opacity-60 font-mono bg-black/30 px-1.5 py-0.5 rounded text-current">{action.credits}pts</span>
+                    </button>
                   ))}
                 </div>
               </div>
 
-              {/* 分隔线 */}
-              <div className="h-6 w-px bg-border/50" />
+              <div className="h-12 w-px bg-white/5" />
 
-              {/* 尺寸比例 */}
-              <div className="flex items-center gap-2">
-                <Label className="text-xs text-muted-foreground whitespace-nowrap">尺寸</Label>
-                <div className="flex gap-1">
+              {/* 尺寸 */}
+              <div className="space-y-3">
+                <Label className="text-[10px] uppercase tracking-wider text-white/30 font-bold ml-1 flex items-center gap-2">
+                  <Maximize2 className="h-3 w-3" />
+                  尺寸比例
+                </Label>
+                <div className="flex gap-2">
                   {(globalSettings.model === "nano-banana"
                     ? NANO_FAST_ASPECT_OPTIONS
                     : NANO_PRO_ASPECT_OPTIONS
                   ).slice(0, 4).map((opt) => (
-                    <Button
+                    <button
                       key={opt.value}
-                      variant="outline"
-                      size="sm"
                       onClick={() => updateGlobalSettings("aspectRatio", opt.value)}
                       className={cn(
-                        "h-8 w-8 p-0",
+                        "h-10 w-10 p-0 rounded-xl border flex items-center justify-center transition-all duration-300",
                         globalSettings.aspectRatio === opt.value
-                          ? globalSettings.model === "nano-banana"
-                            ? "bg-tiktok-cyan/20 border-tiktok-cyan/50 text-tiktok-cyan"
-                            : "bg-tiktok-pink/20 border-tiktok-pink/50 text-tiktok-pink"
-                          : "btn-subtle"
+                          ? "bg-white/10 border-white/20 text-white shadow-[0_0_10px_rgba(255,255,255,0.1)] scale-105"
+                          : "bg-black/20 border-white/5 text-white/30 hover:border-white/20 hover:text-white hover:bg-white/5"
                       )}
                       title={opt.label}
                     >
                       {AspectRatioIcons[opt.value]}
-                    </Button>
+                    </button>
                   ))}
                 </div>
               </div>
@@ -930,25 +926,26 @@ export default function ImageBatchPage() {
               {/* Pro 模式分辨率 */}
               {globalSettings.model === "nano-banana-pro" && (
                 <>
-                  <div className="h-6 w-px bg-border/50" />
-                  <div className="flex items-center gap-2">
-                    <Label className="text-xs text-muted-foreground whitespace-nowrap">画质</Label>
-                    <div className="flex gap-1">
+                  <div className="h-12 w-px bg-white/5" />
+                  <div className="space-y-3">
+                    <Label className="text-[10px] uppercase tracking-wider text-white/30 font-bold ml-1 flex items-center gap-2">
+                      <Monitor className="h-3 w-3" />
+                      画质
+                    </Label>
+                    <div className="flex gap-2">
                       {IMAGE_RESOLUTION_OPTIONS.map((opt) => (
-                        <Button
+                        <button
                           key={opt.value}
-                          variant="outline"
-                          size="sm"
                           onClick={() => updateGlobalSettings("resolution", opt.value)}
                           className={cn(
-                            "h-8 px-2 text-xs",
+                            "px-4 py-2.5 rounded-xl text-xs font-bold border transition-all duration-300",
                             globalSettings.resolution === opt.value
-                              ? "bg-tiktok-pink/20 border-tiktok-pink/50 text-tiktok-pink"
-                              : "btn-subtle"
+                              ? "bg-mermaid-pink/10 border-mermaid-pink/30 text-mermaid-pink shadow-[0_0_10px_rgba(236,72,153,0.1)]"
+                              : "bg-black/20 border-white/5 text-white/30 hover:border-white/20 hover:text-white hover:bg-white/5"
                           )}
                         >
                           {opt.label}
-                        </Button>
+                        </button>
                       ))}
                     </div>
                   </div>
@@ -956,294 +953,328 @@ export default function ImageBatchPage() {
               )}
             </div>
 
-            {/* 第二行：提示词输入区 */}
+            {/* 第二行：提示词输入区 - Neon Focus */}
             {globalSettings.action === "generate" && (
-              <div className="space-y-2">
-                <Label className="text-xs text-muted-foreground">提示词（用于 AI 生成）</Label>
-                <textarea
-                  value={globalSettings.prompt}
-                  onChange={(e) => updateGlobalSettings("prompt", e.target.value)}
-                  placeholder="详细描述你想要生成的图片内容，例如：一个时尚的女性穿着红色连衣裙，站在城市街头，阳光照射，专业摄影..."
-                  className="w-full h-24 px-4 py-3 text-sm bg-muted/30 border border-border/50 rounded-lg focus:outline-none focus:ring-2 focus:ring-tiktok-cyan/50 resize-none"
-                />
+              <div className="relative group">
+                <div className="absolute -inset-[1px] bg-gradient-to-r from-mermaid-cyan/30 via-mermaid-pink/30 to-mermaid-lime/30 rounded-2xl opacity-0 group-hover:opacity-100 transition duration-500 blur-sm" />
+                <div className="relative">
+                  <textarea
+                    value={globalSettings.prompt}
+                    onChange={(e) => updateGlobalSettings("prompt", e.target.value)}
+                    placeholder="在此输入图片生成提示词... (支持中英文)"
+                    className="w-full h-28 px-6 py-5 text-sm bg-[#050505] border border-white/10 rounded-2xl text-white placeholder:text-white/20 focus:outline-none focus:border-mermaid-cyan/50 focus:ring-1 focus:ring-mermaid-cyan/20 resize-none transition-all duration-300 font-mono leading-relaxed"
+                  />
+                  <div className="absolute bottom-4 right-4 flex items-center gap-2">
+                    <div className="px-2 py-1 rounded bg-white/5 border border-white/5 text-[10px] text-white/30 font-mono">
+                      AI 增强
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
 
             {globalSettings.action !== "generate" && (
-              <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/20 border border-border/30">
-                <span className="text-sm text-muted-foreground">
-                  {globalSettings.action === "upscale" ? "🔒 高清放大模式 - 自动增强清晰度，无需提示词" : "🔒 九宫格模式 - 纯白背景+多角度展示，无需提示词"}
-                </span>
+              <div className="flex items-center gap-4 p-5 rounded-2xl bg-[#050505] border border-white/5 border-l-4 border-l-mermaid-cyan/50 shadow-inner">
+                <div className="h-10 w-10 rounded-full bg-mermaid-cyan/10 flex items-center justify-center">
+                  <Info className="h-5 w-5 text-mermaid-cyan" />
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-sm font-bold text-white tracking-wide">
+                    无需提示词模式
+                  </span>
+                  <span className="text-xs text-white/40 mt-1">
+                    {globalSettings.action === "upscale"
+                      ? "高清放大模式将自动增强分辨率和细节，保留原始构图。"
+                      : "九宫格模式将去除背景并生成多角度商品展示图。"}
+                  </span>
+                </div>
               </div>
             )}
 
-            {/* 第三行：操作按钮 */}
-            <div className="flex items-center gap-3">
+            {/* 第三行：操作按钮 (Mermaid Ultra Style) */}
+            <div className="flex items-center gap-4 pt-2">
               <input
                 type="file"
-                accept="image/*"
+                accept="image/*.webp,image/*.png,image/*.jpg,image/*.jpeg"
                 multiple
                 onChange={(e) => e.target.files && handleBatchUpload(e.target.files)}
                 className="hidden"
                 ref={fileInputRef}
               />
-              <Button
+
+              {/* Mermaid Ultra: Upload Button */}
+              <button
                 onClick={() => {
                   if (fileInputRef.current) fileInputRef.current.value = "";
                   fileInputRef.current?.click();
                 }}
-                className="h-10 px-6 bg-gradient-to-r from-tiktok-cyan to-tiktok-pink hover:opacity-90 text-black font-semibold"
+                className="group relative px-8 py-3.5 rounded-full font-bold text-black text-sm transition-all duration-300 bg-gradient-to-r from-mermaid-lime via-mermaid-cyan to-mermaid-pink hover:scale-[1.02] hover:shadow-[0_0_30px_rgba(0,242,234,0.4)] border border-white/20 overflow-hidden"
               >
-                <FolderUp className="h-4 w-4 mr-2" />
-                上传图片
-              </Button>
+                <div className="absolute inset-0 bg-gradient-to-b from-white/40 to-transparent" />
+                <div className="absolute inset-0 bg-[linear-gradient(110deg,transparent,rgba(255,255,255,0.4),transparent)] bg-[length:200%_100%] translate-x-[-100%] group-hover:animate-shimmer transition-opacity duration-300" />
+                <span className="relative z-10 flex items-center gap-2">
+                  <FolderUp className="h-5 w-5" />
+                  上传图片
+                </span>
+              </button>
 
               {globalSettings.action === "generate" && (
-                <Button
-                  variant="outline"
+                <button
                   onClick={() => setShowCreateDialog(true)}
-                  className="h-10 px-4 border-tiktok-cyan/50 text-tiktok-cyan hover:bg-tiktok-cyan/10"
+                  className="group relative px-6 py-3.5 rounded-full font-bold text-white text-sm transition-all duration-300 bg-white/5 border border-white/10 hover:bg-white/10 hover:border-mermaid-pink/50 hover:shadow-[0_0_20px_rgba(236,72,153,0.15)] overflow-hidden"
                 >
-                  <FileText className="h-4 w-4 mr-2" />
-                  纯提示词创建
-                </Button>
+                  <span className="relative z-10 flex items-center gap-2">
+                    <FileText className="h-4 w-4 text-mermaid-pink" />
+                    纯提示词任务
+                  </span>
+                </button>
               )}
 
               {tasks.length > 0 && (
-                <Button variant="outline" onClick={handleApplyToAll} className="h-10 btn-subtle">
-                  <Wand2 className="h-4 w-4 mr-1" />
-                  应用全部
-                </Button>
+                <button
+                  onClick={handleApplyToAll}
+                  className="px-6 py-3.5 rounded-full text-xs font-bold text-white/60 hover:text-white border border-transparent hover:border-white/20 hover:bg-white/5 transition-all uppercase tracking-wide"
+                >
+                  <Wand2 className="h-3.5 w-3.5 mr-2 inline-block" />
+                  应用配置到全部
+                </button>
               )}
 
               <div className="flex-1" />
 
-              <Button
-                variant="outline"
+              <button
                 onClick={() => setShowSaveTemplate(true)}
-                className="h-10 px-4 border-muted hover:bg-muted/50 text-muted-foreground hover:text-foreground"
+                className="px-6 py-3 rounded-full text-xs font-medium text-white/40 hover:text-white border border-white/5 hover:border-white/20 bg-black/20 hover:bg-black/40 transition-all flex items-center gap-2"
                 title="保存当前配置为方案"
               >
-                <Save className="h-4 w-4 mr-2" />
+                <Save className="h-4 w-4" />
                 保存方案
-              </Button>
+              </button>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div >
 
         {/* ============================================ */}
         {/* 任务列表 */}
         {/* ============================================ */}
-        <Card className="glass-card">
-          <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <CardTitle className="text-sm flex items-center gap-2">
-                  <LayoutGrid className="h-4 w-4 text-tiktok-pink" />
-                  任务队列
-                </CardTitle>
-                <Badge variant="outline" className="text-xs">
-                  {tasks.length} 个任务
+        {/* ============================================ */}
+        {/* 任务列表 */}
+        {/* ============================================ */}
+        <div className="space-y-4">
+          <div className="flex items-center justify-between px-2">
+            <div className="flex items-center gap-3">
+              <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                <LayoutGrid className="h-5 w-5 text-mermaid-cyan" />
+                任务队列
+              </h2>
+              <Badge variant="outline" className="text-xs bg-white/5 border-white/10 text-white/60">
+                {tasks.length} 个任务
+              </Badge>
+              {stats.pending > 0 && (
+                <Badge className="bg-amber-500/10 text-amber-500 border-amber-500/20 text-xs shadow-[0_0_10px_rgba(245,158,11,0.2)]">
+                  {stats.pending} 待处理
                 </Badge>
-                {stats.pending > 0 && (
-                  <Badge className="bg-amber-500/10 text-amber-500 border-amber-500/30 text-xs">
-                    {stats.pending} 待处理
-                  </Badge>
-                )}
-              </div>
-              <div className="flex items-center gap-2">
-                {/* 线路检测按钮 */}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShowSpeedTest(true)}
-                  className="h-8 text-xs"
-                >
-                  <Wifi className="h-3 w-3 mr-1" />
-                  检测线路
-                </Button>
-
-                {selectedCount > 0 && (
-                  <>
-                    {/* 批量下载选中的已完成任务 */}
-                    {tasks.filter(t => selectedTaskIds[t.id] && t.status === "completed" && t.resultUrl).length > 0 && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={async () => {
-                          const completedSelectedTasks = tasks.filter(
-                            t => selectedTaskIds[t.id] && t.status === "completed" && t.resultUrl
-                          );
-                          if (completedSelectedTasks.length === 0) {
-                            toast({ variant: "destructive", title: "没有可下载的图片" });
-                            return;
-                          }
-
-                          // 获取最佳线路
-                          const cachedResults = getCachedSpeedTestResults();
-                          const bestRoute = getBestRouteId(cachedResults);
-
-                          setIsDownloading(true);
-                          setDownloadProgress({
-                            show: true,
-                            total: completedSelectedTasks.length,
-                            current: 0,
-                            success: 0,
-                            failed: 0,
-                            currentFilename: "准备中...",
-                          });
-
-                          let successCount = 0;
-                          let failedCount = 0;
-
-                          // 逐个通过代理下载
-                          for (let i = 0; i < completedSelectedTasks.length; i++) {
-                            const task = completedSelectedTasks[i];
-                            if (task.resultUrl) {
-                              const filename = `图片-${i + 1}.png`;
-                              setDownloadProgress(prev => ({
-                                ...prev,
-                                currentFilename: filename,
-                              }));
-
-                              try {
-                                // 构建代理URL
-                                const params = new URLSearchParams({
-                                  url: task.resultUrl,
-                                  filename,
-                                  ...(bestRoute && { route: bestRoute }),
-                                });
-                                const proxyUrl = `/api/download-proxy?${params}`;
-                                const response = await fetch(proxyUrl);
-
-                                if (response.ok) {
-                                  const blob = await response.blob();
-                                  const blobUrl = URL.createObjectURL(blob);
-                                  const link = document.createElement("a");
-                                  link.href = blobUrl;
-                                  link.download = filename;
-                                  document.body.appendChild(link);
-                                  link.click();
-                                  document.body.removeChild(link);
-                                  URL.revokeObjectURL(blobUrl);
-                                  successCount++;
-                                } else {
-                                  // 代理失败，尝试直接下载
-                                  const link = document.createElement("a");
-                                  link.href = task.resultUrl;
-                                  link.download = filename;
-                                  link.target = "_blank";
-                                  document.body.appendChild(link);
-                                  link.click();
-                                  document.body.removeChild(link);
-                                  successCount++;
-                                }
-                              } catch (err) {
-                                console.error("Download failed:", err);
-                                failedCount++;
-                              }
-
-                              setDownloadProgress(prev => ({
-                                ...prev,
-                                current: i + 1,
-                                success: successCount,
-                                failed: failedCount,
-                              }));
-
-                              // 间隔 600ms 避免浏览器阻止
-                              await new Promise(r => setTimeout(r, 600));
-                            }
-                          }
-
-                          setIsDownloading(false);
-                          toast({
-                            title: `✅ 下载完成`,
-                            description: `成功 ${successCount} 张${failedCount > 0 ? `，失败 ${failedCount} 张` : ""}`,
-                          });
-
-                          // 3秒后关闭进度弹窗
-                          setTimeout(() => {
-                            setDownloadProgress(prev => ({ ...prev, show: false }));
-                          }, 3000);
-                        }}
-                        disabled={isDownloading}
-                        className="h-8 text-xs text-emerald-400 border-emerald-400/30 hover:bg-emerald-400/10"
-                      >
-                        {isDownloading ? (
-                          <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                        ) : (
-                          <Download className="h-3 w-3 mr-1" />
-                        )}
-                        下载选中 ({tasks.filter(t => selectedTaskIds[t.id] && t.status === "completed" && t.resultUrl).length})
-                      </Button>
-                    )}
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleApplyToSelected}
-                      className="h-8 text-xs text-tiktok-cyan border-tiktok-cyan/30 hover:bg-tiktok-cyan/10"
-                    >
-                      <Wand2 className="h-3 w-3 mr-1" />
-                      应用到选中 ({selectedCount})
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={removeSelectedTasks}
-                      className="h-8 text-xs text-red-400 border-red-400/30 hover:bg-red-400/10"
-                    >
-                      <Trash2 className="h-3 w-3 mr-1" />
-                      删除 ({selectedCount})
-                    </Button>
-                  </>
-                )}
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="sm" className="h-8 btn-subtle">
-                      <MoreVertical className="h-3.5 w-3.5" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={() => selectAllTasks(true)}>
-                      <Check className="h-4 w-4 mr-2" />
-                      全选
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={clearSelection}>
-                      <X className="h-4 w-4 mr-2" />
-                      取消选择
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={resetBatch}>
-                      <RotateCcw className="h-4 w-4 mr-2" />
-                      重置所有任务
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={clearAllTasks} className="text-red-400">
-                      <Trash2 className="h-4 w-4 mr-2" />
-                      清空所有
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
+              )}
             </div>
-          </CardHeader>
-          <CardContent>
+
+            <div className="flex items-center gap-2">
+              {/* 线路检测按钮 (Removed) */}
+
+              {selectedCount > 0 && (
+                <>
+                  {/* 批量下载选中的已完成任务 */}
+                  {tasks.filter(t => selectedTaskIds[t.id] && t.status === "completed" && t.resultUrl).length > 0 && (
+                    <button
+                      onClick={async () => {
+                        const completedSelectedTasks = tasks.filter(
+                          t => selectedTaskIds[t.id] && t.status === "completed" && t.resultUrl
+                        );
+                        if (completedSelectedTasks.length === 0) {
+                          toast({ variant: "destructive", title: "没有可下载的图片" });
+                          return;
+                        }
+
+                        // 获取最佳线路
+                        const cachedResults = getCachedSpeedTestResults();
+                        const bestRoute = getBestRouteId(cachedResults);
+
+                        setIsDownloading(true);
+                        setDownloadProgress({
+                          show: true,
+                          total: completedSelectedTasks.length,
+                          current: 0,
+                          success: 0,
+                          failed: 0,
+                          currentFilename: "准备中...",
+                        });
+
+                        let successCount = 0;
+                        let failedCount = 0;
+
+                        // 逐个通过代理下载
+                        for (let i = 0; i < completedSelectedTasks.length; i++) {
+                          const task = completedSelectedTasks[i];
+                          if (task.resultUrl) {
+                            const filename = `图片-${i + 1}.png`;
+                            setDownloadProgress(prev => ({
+                              ...prev,
+                              currentFilename: filename,
+                            }));
+
+                            try {
+                              // 构建代理URL
+                              const params = new URLSearchParams({
+                                url: task.resultUrl,
+                                filename,
+                                ...(bestRoute && { route: bestRoute }),
+                              });
+                              const proxyUrl = `/api/download-proxy?${params}`;
+                              const response = await fetch(proxyUrl);
+
+                              if (response.ok) {
+                                const blob = await response.blob();
+                                const blobUrl = URL.createObjectURL(blob);
+                                const link = document.createElement("a");
+                                link.href = blobUrl;
+                                link.download = filename;
+                                document.body.appendChild(link);
+                                link.click();
+                                document.body.removeChild(link);
+                                URL.revokeObjectURL(blobUrl);
+                                successCount++;
+                              } else {
+                                // 代理失败，尝试直接下载
+                                const link = document.createElement("a");
+                                link.href = task.resultUrl;
+                                link.download = filename;
+                                link.target = "_blank";
+                                document.body.appendChild(link);
+                                link.click();
+                                document.body.removeChild(link);
+                                successCount++;
+                              }
+                            } catch (err) {
+                              console.error("Download failed:", err);
+                              failedCount++;
+                            }
+
+                            setDownloadProgress(prev => ({
+                              ...prev,
+                              current: i + 1,
+                              success: successCount,
+                              failed: failedCount,
+                            }));
+
+                            // 间隔 600ms 避免浏览器阻止
+                            await new Promise(r => setTimeout(r, 600));
+                          }
+                        }
+
+                        setIsDownloading(false);
+                        toast({
+                          title: `✅ 下载完成`,
+                          description: `成功 ${successCount} 张${failedCount > 0 ? `，失败 ${failedCount} 张` : ""}`,
+                        });
+
+                        // 3秒后关闭进度弹窗
+                        setTimeout(() => {
+                          setDownloadProgress(prev => ({ ...prev, show: false }));
+                        }, 3000);
+                      }}
+                      disabled={isDownloading}
+                      className="h-8 px-3 rounded-lg text-xs font-medium text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 hover:bg-emerald-500/20 transition-all flex items-center gap-1.5"
+                    >
+                      {isDownloading ? (
+                        <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                      ) : (
+                        <Download className="h-3 w-3 mr-1" />
+                      )}
+                      下载选中 ({tasks.filter(t => selectedTaskIds[t.id] && t.status === "completed" && t.resultUrl).length})
+                    </button>
+                  )}
+                  <button
+                    onClick={handleApplyToSelected}
+                    className="h-8 px-3 rounded-lg text-xs font-medium text-white/60 bg-white/5 border border-white/10 hover:bg-white/10 hover:text-white transition-all flex items-center gap-1.5"
+                  >
+                    <Wand2 className="h-3 w-3 mr-1" />
+                    应用 ({selectedCount})
+                  </button>
+                  <button
+                    onClick={removeSelectedTasks}
+                    className="h-8 px-3 rounded-lg text-xs font-medium text-red-400 bg-red-500/10 border border-red-500/20 hover:bg-red-500/20 transition-all flex items-center gap-1.5"
+                  >
+                    <Trash2 className="h-3 w-3 mr-1" />
+                    删除 ({selectedCount})
+                  </button>
+                </>
+              )}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button className="h-8 w-8 rounded-lg flex items-center justify-center text-white/40 hover:text-white bg-white/5 hover:bg-white/10 border border-white/5 transition-all">
+                    <MoreVertical className="h-4 w-4" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="bg-[#16181D] border-white/10">
+                  <DropdownMenuItem onClick={() => selectAllTasks(true)} className="hover:bg-white/5 focus:bg-white/5">
+                    <Check className="h-4 w-4 mr-2" />
+                    全选
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={clearSelection} className="hover:bg-white/5 focus:bg-white/5">
+                    <X className="h-4 w-4 mr-2" />
+                    取消选择
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator className="bg-white/10" />
+                  <DropdownMenuItem onClick={resetBatch} className="hover:bg-white/5 focus:bg-white/5">
+                    <RotateCcw className="h-4 w-4 mr-2" />
+                    重置所有任务
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator className="bg-white/10" />
+                  <DropdownMenuItem onClick={clearAllTasks} className="text-red-400 hover:bg-red-500/10 focus:bg-red-500/10">
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    清空所有
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          </div>
+
+          <div className="bg-transparent">
             {tasks.length === 0 ? (
+              // Aurora Card Empty State
               <div
-                className="flex flex-col items-center justify-center py-16 border-2 border-dashed border-border/50 rounded-xl cursor-pointer hover:border-tiktok-cyan/30 transition-colors"
+                className="group flex flex-col items-center justify-center py-24 rounded-[2rem] border border-white/5 bg-[#0B0C10] relative overflow-hidden cursor-pointer transition-all duration-500 hover:scale-[1.01] hover:shadow-2xl"
                 onClick={() => {
-                  // 先重置文件输入，确保可以选择相同文件
                   if (fileInputRef.current) {
                     fileInputRef.current.value = "";
                   }
                   fileInputRef.current?.click();
                 }}
               >
-                <Upload className="h-16 w-16 text-muted-foreground/30 mb-4" />
-                <p className="text-lg font-medium text-muted-foreground">点击或拖拽上传图片</p>
-                <p className="text-sm text-muted-foreground/70 mt-1">
-                  支持 JPG、PNG、WebP 格式，可批量上传
-                </p>
+                {/* Aurora Background Effect */}
+                <div className="absolute inset-0 bg-gradient-to-br from-mermaid-cyan/5 via-transparent to-mermaid-pink/5 opacity-50 group-hover:opacity-100 transition-opacity duration-1000" />
+                <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-10" />
+
+                {/* Animated Rings */}
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] border border-white/5 rounded-full animate-[spin_20s_linear_infinite]" />
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[300px] h-[300px] border border-white/5 rounded-full animate-[spin_15s_linear_infinite_reverse]" />
+
+                <div className="relative z-10 flex flex-col items-center">
+                  <div className="h-24 w-24 rounded-3xl bg-[#050505] border border-white/10 flex items-center justify-center mb-8 shadow-2xl group-hover:scale-110 transition-transform duration-500 group-hover:border-mermaid-cyan/30 group-hover:shadow-[0_0_40px_rgba(0,242,234,0.15)]">
+                    <div className="absolute inset-0 bg-gradient-to-br from-mermaid-cyan/10 to-mermaid-pink/10 rounded-3xl opacity-0 group-hover:opacity-100 transition-opacity" />
+                    <FolderUp className="h-10 w-10 text-white/20 group-hover:text-mermaid-cyan transition-colors duration-500" />
+                  </div>
+
+                  <h3 className="text-2xl font-bold text-white mb-2 tracking-tight">
+                    拖放图片到此处
+                  </h3>
+                  <p className="text-white/40 text-sm max-w-md text-center leading-relaxed">
+                    支持 JPG, PNG, WEBP · 自动处理流水线已就绪
+                  </p>
+
+                  <div className="mt-8 px-6 py-2 rounded-full border border-white/5 bg-white/5 text-[10px] uppercase tracking-widest text-white/30 group-hover:bg-mermaid-cyan/10 group-hover:text-mermaid-cyan group-hover:border-mermaid-cyan/20 transition-all">
+                    点击浏览文件
+                  </div>
+                </div>
               </div>
             ) : (
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
@@ -1260,91 +1291,115 @@ export default function ImageBatchPage() {
                 ))}
               </div>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </div>
 
         {/* ============================================ */}
         {/* 底部状态栏 - 仅显示统计信息，单个任务手动点击开始 */}
         {/* ============================================ */}
-        {tasks.length > 0 && (
-          <div className="fixed bottom-0 left-0 right-0 z-50 border-t border-border/50 bg-background/95 backdrop-blur-xl">
-            <div className="container max-w-7xl mx-auto px-6 py-3">
-              <div className="flex items-center justify-between">
-                {/* 统计信息 */}
-                <div className="flex items-center gap-6">
-                  <div className="flex items-center gap-2">
-                    <ImageIcon className="h-5 w-5 text-muted-foreground" />
-                    <span className="text-sm">
-                      <span className="font-semibold">{tasks.length}</span>
-                      <span className="text-muted-foreground ml-1">个任务</span>
-                    </span>
-                  </div>
+        {
+          tasks.length > 0 && (
+            <div className="fixed bottom-0 left-0 right-0 z-50 border-t border-white/5 bg-[#050505]/80 backdrop-blur-2xl supports-[backdrop-filter]:bg-[#050505]/60 shadow-[0_-10px_40px_rgba(0,0,0,0.5)]">
+              <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
+              <div className="container max-w-7xl mx-auto px-6 py-4">
+                <div className="flex items-center justify-between">
+                  {/* 统计信息 - Glass Chips */}
+                  <div className="flex items-center gap-6">
+                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/5">
+                      <ImageIcon className="h-4 w-4 text-white/40" />
+                      <span className="text-xs text-white/60">
+                        <span className="font-bold text-white shadow-black drop-shadow-md">{tasks.length}</span>
+                        <span className="text-white/30 ml-1.5 tracking-wide uppercase text-[10px]">Tasks</span>
+                      </span>
+                    </div>
 
-                  <div className="h-5 w-px bg-border/50" />
+                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-amber-500/5 border border-amber-500/10">
+                      <Zap className="h-4 w-4 text-amber-400" />
+                      <span className="text-xs">
+                        <span className="font-bold text-amber-400">{stats.totalCost}</span>
+                        <span className="text-amber-500/40 ml-1.5 tracking-wide uppercase text-[10px]">Credits</span>
+                      </span>
+                    </div>
 
-                  <div className="flex items-center gap-2">
-                    <Zap className="h-5 w-5 text-amber-400" />
-                    <span className="text-sm">
-                      <span className="font-semibold text-amber-400">{stats.totalCost}</span>
-                      <span className="text-muted-foreground ml-1">Credits</span>
-                    </span>
-                    {userCredits < stats.totalCost && (
-                      <span className="text-xs text-red-400 ml-1">(余额不足)</span>
-                    )}
-                  </div>
+                    {(stats.completed > 0 || stats.failed > 0 || stats.processing > 0) && (
+                      <div className="flex items-center gap-3">
+                        <div className="h-8 w-px bg-white/5 mx-2" />
 
-                  {(stats.completed > 0 || stats.failed > 0 || stats.processing > 0) && (
-                    <>
-                      <div className="h-5 w-px bg-border/50" />
-                      <div className="flex items-center gap-3 text-sm">
                         {stats.pending > 0 && (
-                          <span className="flex items-center gap-1 text-muted-foreground">
-                            <Clock className="h-4 w-4" />
-                            {stats.pending} 待处理
+                          <span className="flex items-center gap-1.5 text-xs text-white/30 font-mono">
+                            <Clock className="h-3.5 w-3.5" />
+                            {stats.pending} WAITING
                           </span>
                         )}
                         {stats.processing > 0 && (
-                          <span className="flex items-center gap-1 text-tiktok-cyan">
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                            {stats.processing} 处理中
+                          <span className="flex items-center gap-1.5 text-xs text-mermaid-cyan font-bold animate-pulse">
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            {stats.processing} PROCESSING
                           </span>
                         )}
                         {stats.completed > 0 && (
-                          <span className="flex items-center gap-1 text-emerald-500">
-                            <CheckCircle2 className="h-4 w-4" />
-                            {stats.completed} 完成
+                          <span className="flex items-center gap-1.5 text-xs text-emerald-400 font-bold">
+                            <CheckCircle2 className="h-3.5 w-3.5" />
+                            {stats.completed} DONE
                           </span>
                         )}
                         {stats.failed > 0 && (
-                          <span className="flex items-center gap-1 text-red-400">
-                            <XCircle className="h-4 w-4" />
-                            {stats.failed} 失败
+                          <span className="flex items-center gap-1.5 text-xs text-red-400 font-bold">
+                            <XCircle className="h-3.5 w-3.5" />
+                            {stats.failed} FAILED
                           </span>
                         )}
                       </div>
-                    </>
-                  )}
-                </div>
+                    )}
+                  </div>
 
-                {/* 提示信息 */}
-                <div className="flex items-center gap-3 text-sm text-muted-foreground">
-                  <span>💡 点击每个任务卡片上的播放按钮开始生成</span>
-                  {stats.pending > 0 && (
-                    <Button
-                      onClick={resetBatch}
-                      variant="ghost"
-                      size="sm"
-                      className="h-8 text-xs"
+                  {/* 操作按钮组 */}
+                  <div className="flex items-center gap-3">
+                    {/* 清空按钮 */}
+                    <button
+                      onClick={clearAllTasks}
+                      className="px-4 py-2 rounded-full text-xs font-medium text-white/30 hover:text-red-400 transition-colors flex items-center gap-2 hover:bg-red-500/10"
                     >
-                      <RotateCcw className="h-3.5 w-3.5 mr-1" />
-                      重置失败任务
-                    </Button>
-                  )}
+                      CLEAR ALL
+                    </button>
+
+                    {/* 开始按钮 - Mermaid Ultra Scale */}
+                    <button
+                      onClick={handleStartAll}
+                      disabled={stats.processing > 0 || stats.pending === 0}
+                      className={cn(
+                        "group relative px-8 py-3 rounded-full font-bold text-black text-xs transition-all duration-300 overflow-hidden",
+                        stats.processing > 0 || stats.pending === 0
+                          ? "bg-white/5 text-white/20 cursor-not-allowed border border-white/5"
+                          : "bg-gradient-to-r from-mermaid-lime via-mermaid-cyan to-mermaid-pink hover:scale-[1.02] hover:shadow-[0_0_30px_rgba(0,242,234,0.4)] border border-white/20"
+                      )}
+                    >
+                      {!(stats.processing > 0 || stats.pending === 0) && (
+                        <>
+                          <div className="absolute inset-0 bg-gradient-to-b from-white/40 to-transparent" />
+                          <div className="absolute inset-0 bg-[linear-gradient(110deg,transparent,rgba(255,255,255,0.4),transparent)] bg-[length:200%_100%] translate-x-[-100%] group-hover:animate-shimmer transition-opacity duration-300" />
+                        </>
+                      )}
+                      <span className="relative z-10 flex items-center gap-2 tracking-wide">
+                        {stats.processing > 0 ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            PROCESSING PIPELINE...
+                          </>
+                        ) : (
+                          <>
+                            <Sparkles className="h-4 w-4" />
+                            START BATCH PIPELINE
+                          </>
+                        )}
+                      </span>
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-        )}
+          )
+        }
 
         {/* ============================================ */}
         {/* 预览弹窗 - 支持4K大图 */}
@@ -1408,7 +1463,7 @@ export default function ImageBatchPage() {
                   target="_blank"
                   rel="noopener noreferrer"
                 >
-                  <Button className="bg-gradient-to-r from-tiktok-cyan to-tiktok-pink text-black">
+                  <Button variant="white-glow">
                     <Download className="h-4 w-4 mr-2" />
                     下载结果
                   </Button>
@@ -1421,69 +1476,73 @@ export default function ImageBatchPage() {
           </DialogContent>
         </Dialog>
 
-        {/* 创建任务弹窗 - 纯提示词模式 */}
+        {/* 创建任务弹窗 - 纯提示词模式 (JCUI 2.0 Mermaid Edition) */}
         <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
-          <DialogContent className="max-w-2xl bg-black/95 border-white/10 text-white backdrop-blur-xl gap-0 p-0 overflow-hidden">
-            {/* Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 bg-white/5">
-              <div className="flex flex-col gap-0.5">
-                <DialogTitle className="text-lg font-semibold flex items-center gap-2">
-                  <Sparkles className="h-5 w-5 text-tiktok-pink" />
+          <DialogContent className="max-w-2xl bg-[#16181D]/90 backdrop-blur-2xl border-white/10 shadow-[0_0_50px_rgba(0,0,0,0.5)] p-0 overflow-hidden gap-0">
+            {/* Header - Glass Bar */}
+            <div className="flex items-center justify-between px-6 py-5 border-b border-white/5 bg-white/5 backdrop-blur-md">
+              <div className="flex flex-col gap-1">
+                <DialogTitle className="text-xl font-bold flex items-center gap-2 text-white">
+                  <div className="p-1.5 rounded-lg bg-mermaid-pink/10 border border-mermaid-pink/20">
+                    <Sparkles className="h-5 w-5 text-mermaid-pink" />
+                  </div>
                   纯提示词创建
                 </DialogTitle>
-                <DialogDescription className="text-xs text-muted-foreground">
-                  直接通过 AI 生成图片，无需上传素材
+                <DialogDescription className="text-xs text-white/40 tracking-wide font-medium">
+                  PURE PROMPT GENERATION · JCUI STUDIO
                 </DialogDescription>
               </div>
-              <Button
-                variant="ghost"
-                size="sm"
+              <button
                 onClick={() => setShowTemplateManager(true)}
-                className="h-8 gap-1.5 text-tiktok-cyan hover:text-tiktok-cyan hover:bg-tiktok-cyan/10 rounded-full px-3"
+                className="h-8 px-4 rounded-full bg-mermaid-cyan/5 hover:bg-mermaid-cyan/10 border border-mermaid-cyan/20 text-mermaid-cyan text-xs font-bold transition-all flex items-center gap-2"
               >
-                <FolderDown className="h-4 w-4" />
-                <span className="text-xs font-medium">加载方案</span>
-              </Button>
+                <FolderDown className="h-3.5 w-3.5" />
+                加载方案 template
+              </button>
             </div>
 
-            <div className="p-6 space-y-6">
-              {/* Prompt Input */}
-              <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                <div className="space-y-2">
-                  <Label className="text-sm text-gray-300">
-                    提示词 <span className="text-red-400">*</span>
+            <div className="p-8 space-y-8">
+              {/* Prompt Input - Obsidian Style */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs font-bold text-white/60 uppercase tracking-wider">
+                    Creative Prompt <span className="text-mermaid-pink">*</span>
                   </Label>
+                  <span className="text-[10px] text-white/20">SUPPORTS MULTI-LANGUAGE</span>
+                </div>
+                <div className="relative group">
+                  <div className="absolute -inset-0.5 bg-gradient-to-r from-mermaid-cyan/20 to-mermaid-pink/20 rounded-xl opacity-0 group-hover:opacity-100 transition duration-500 blur" />
                   <textarea
                     value={createPrompt}
                     onChange={(e) => setCreatePrompt(e.target.value)}
-                    placeholder="详细描述你想要生成的图片内容，例如：一个时尚的亚洲女性穿着优雅的白色连衣裙..."
-                    className="w-full h-40 px-4 py-3 text-sm bg-white/5 border border-white/10 rounded-xl text-white placeholder:text-gray-500 focus:outline-none focus:border-tiktok-cyan/50 resize-none leading-relaxed"
+                    placeholder="在此输入提示词，详细描述画面内容、风格、光影等（支持中英文）..."
+                    className="relative w-full h-48 px-5 py-4 text-sm bg-[#050505] border border-white/10 rounded-xl text-white placeholder:text-white/20 focus:outline-none focus:border-mermaid-cyan/50 focus:ring-1 focus:ring-mermaid-cyan/20 resize-none transition-all duration-300"
                   />
                 </div>
               </div>
 
-              {/* Status Bar */}
-              <div className="bg-white/5 rounded-xl border border-white/10 p-4 space-y-4">
-                <div className="flex flex-wrap items-center gap-2 text-xs">
-                  <div className="px-2.5 py-1 rounded-md bg-purple-500/10 text-purple-400 border border-purple-500/20 flex items-center gap-1.5">
-                    <Film className="h-3 w-3" />
-                    {globalSettings.model === "nano-banana" ? "快速版" : "专业版"}
+              {/* Status Bar - Neon Pills */}
+              <div className="p-5 rounded-2xl bg-black/20 border border-white/5 space-y-5">
+                <div className="flex flex-wrap items-center gap-3">
+                  <div className="px-3 py-1.5 rounded-full bg-purple-500/10 text-purple-400 border border-purple-500/20 text-xs font-medium flex items-center gap-2 shadow-[0_0_10px_rgba(168,85,247,0.1)]">
+                    <Film className="h-3.5 w-3.5" />
+                    {globalSettings.model === "nano-banana" ? "Turbo Model" : "Pro Model"}
                   </div>
-                  <div className="px-2.5 py-1 rounded-md bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 flex items-center gap-1.5">
-                    <Wand2 className="h-3 w-3" />
-                    {globalSettings.action === "generate" ? "AI生成" : globalSettings.action === "upscale" ? "高清放大" : "九宫格"}
+                  <div className="px-3 py-1.5 rounded-full bg-mermaid-cyan/10 text-mermaid-cyan border border-mermaid-cyan/20 text-xs font-medium flex items-center gap-2 shadow-[0_0_10px_rgba(0,242,234,0.1)]">
+                    <Wand2 className="h-3.5 w-3.5" />
+                    {globalSettings.action === "generate" ? "AI Generation" : globalSettings.action === "upscale" ? "Upscale" : "Grid View"}
                   </div>
-                  <div className="px-2.5 py-1 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center gap-1.5">
-                    <Square className="h-3 w-3" />
+                  <div className="px-3 py-1.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs font-medium flex items-center gap-2">
+                    <Square className="h-3.5 w-3.5" />
                     {globalSettings.aspectRatio}
                   </div>
                   {globalSettings.model === "nano-banana-pro" && (
-                    <div className="px-2.5 py-1 rounded-md bg-pink-500/10 text-pink-400 border border-pink-500/20 flex items-center gap-1.5">
-                      <Monitor className="h-3 w-3" />
+                    <div className="px-3 py-1.5 rounded-full bg-mermaid-pink/10 text-mermaid-pink border border-mermaid-pink/20 text-xs font-medium flex items-center gap-2">
+                      <Monitor className="h-3.5 w-3.5" />
                       {globalSettings.resolution?.toUpperCase()}
                     </div>
                   )}
-                  <div className="ml-auto flex items-center gap-1 text-amber-400 font-medium">
+                  <div className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs font-bold font-mono">
                     <Zap className="h-3.5 w-3.5" />
                     {getImageTaskCost({
                       ...globalSettings,
@@ -1491,38 +1550,31 @@ export default function ImageBatchPage() {
                       sourceImageName: "",
                       action: "generate",
                       prompt: "",
-                    }) * createCount} pts
+                    }) * createCount} PTS
                   </div>
                 </div>
 
-                <div className="h-px bg-white/10 w-full" />
+                <div className="h-px bg-white/5 w-full" />
 
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-300">创建数量</span>
-                  <div className="flex items-center gap-3">
-                    <span className="text-xs text-muted-foreground mr-2">
-                      生成多个变体
-                    </span>
-                    <div className="flex items-center bg-black/20 rounded-lg border border-white/10 h-8">
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="h-8 w-8 rounded-none rounded-l-lg hover:bg-white/10 text-gray-400 hover:text-white"
+                  <span className="text-xs font-bold text-white/40 uppercase tracking-wider">Batch Count</span>
+                  <div className="flex items-center gap-4">
+                    <div className="flex items-center bg-[#050505] rounded-full border border-white/10 p-1">
+                      <button
+                        className="h-8 w-8 rounded-full flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 transition-colors"
                         onClick={() => setCreateCount(Math.max(1, createCount - 1))}
                         disabled={createCount <= 1}
                       >
-                        <Minus className="h-3 w-3" />
-                      </Button>
-                      <div className="w-12 text-center text-sm font-semibold text-white">{createCount}</div>
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="h-8 w-8 rounded-none rounded-r-lg hover:bg-white/10 text-gray-400 hover:text-white"
+                        <Minus className="h-4 w-4" />
+                      </button>
+                      <div className="w-12 text-center text-sm font-bold text-white font-mono">{createCount}</div>
+                      <button
+                        className="h-8 w-8 rounded-full flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 transition-colors"
                         onClick={() => setCreateCount(Math.min(20, createCount + 1))}
                         disabled={createCount >= 20}
                       >
-                        <Plus className="h-3 w-3" />
-                      </Button>
+                        <Plus className="h-4 w-4" />
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -1530,28 +1582,30 @@ export default function ImageBatchPage() {
             </div>
 
             <DialogFooter className="p-6 pt-0 sm:justify-between bg-transparent border-none">
-              <Button
-                variant="ghost"
+              <button
                 onClick={() => setShowSaveTemplate(true)}
-                className="text-gray-400 hover:text-white hover:bg-white/5 gap-2"
+                className="text-white/30 hover:text-white text-xs font-medium flex items-center gap-2 transition-colors group"
               >
-                <Save className="h-4 w-4" />
-                <span className="underline decoration-dashed underline-offset-4">保存为方案</span>
-              </Button>
+                <div className="p-1.5 rounded-md bg-white/5 group-hover:bg-white/10 transition-colors">
+                  <Save className="h-3.5 w-3.5" />
+                </div>
+                保存为方案
+              </button>
 
-              <div className="flex gap-3">
-                <Button
-                  variant="ghost"
+              <div className="flex gap-4">
+                <button
                   onClick={() => {
                     setCreatePrompt("");
                     setCreateCount(1);
                     setShowCreateDialog(false);
                   }}
-                  className="text-gray-400 hover:text-white hover:bg-white/10"
+                  className="px-6 py-3 rounded-full text-xs font-bold text-white/40 hover:text-white hover:bg-white/5 transition-all"
                 >
-                  取消
-                </Button>
-                <Button
+                  取消 Cancel
+                </button>
+
+                {/* Mermaid Ultra Button */}
+                <button
                   onClick={() => {
                     if (!createPrompt.trim()) {
                       toast({ variant: "destructive", title: "请输入提示词" });
@@ -1564,11 +1618,15 @@ export default function ImageBatchPage() {
                     setShowCreateDialog(false);
                   }}
                   disabled={!createPrompt.trim()}
-                  className="bg-gradient-to-r from-tiktok-cyan to-tiktok-pink text-black font-semibold shadow-[0_0_20px_rgba(6,182,212,0.3)] hover:shadow-[0_0_30px_rgba(6,182,212,0.5)] transition-all px-8 border-none"
+                  className="group relative px-8 py-3 rounded-full font-bold text-black text-xs tracking-wide transition-all duration-300 bg-gradient-to-r from-[#CCFF00] via-[#00F2EA] to-[#EC4899] hover:scale-[1.02] hover:shadow-[0_0_20px_rgba(0,242,234,0.5)] border border-white/20 overflow-hidden disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <Sparkles className="h-4 w-4 mr-2" />
-                  立即创建 {createCount > 1 && `(${createCount})`}
-                </Button>
+                  <div className="absolute inset-0 bg-gradient-to-b from-white/40 to-transparent pointer-events-none" />
+                  <div className="absolute inset-0 bg-[linear-gradient(110deg,transparent,rgba(255,255,255,0.4),transparent)] bg-[length:200%_100%] translate-x-[-100%] group-hover:animate-shimmer transition-opacity duration-300 pointer-events-none" />
+                  <span className="relative z-10 flex items-center gap-2">
+                    <Sparkles className="h-4 w-4" />
+                    立即创建 CREATE {createCount > 1 && `(${createCount})`}
+                  </span>
+                </button>
               </div>
             </DialogFooter>
           </DialogContent>
@@ -1619,19 +1677,21 @@ export default function ImageBatchPage() {
             </div>
           </DialogContent>
         </Dialog>
-      </div>
+      </div >
       {/* Templates */}
-      <SaveTemplateDialog
+      < SaveTemplateDialog
         open={showSaveTemplate}
         onOpenChange={setShowSaveTemplate}
         onSave={handleSaveTemplate}
-        defaultName={`${globalSettings.model}-${globalSettings.action}-${globalSettings.aspectRatio}`}
-        configPreview={[
-          { icon: <Film className="h-3.5 w-3.5" />, label: "模型", value: globalSettings.model === "nano-banana-pro" ? "专业版" : "快速版" },
-          { icon: <Wand2 className="h-3.5 w-3.5" />, label: "处理", value: globalSettings.action === "upscale" ? "高清放大" : globalSettings.action === "generate" ? "AI生成" : "九宫格" },
-          { icon: <Square className="h-3.5 w-3.5" />, label: "比例", value: globalSettings.aspectRatio || "自动" },
-          { icon: <Monitor className="h-3.5 w-3.5" />, label: "分辨率", value: globalSettings.resolution?.toUpperCase() || "1K" },
-        ]}
+        defaultName={`${globalSettings.model}-${globalSettings.action}-${globalSettings.aspectRatio}`
+        }
+        configPreview={
+          [
+            { icon: <Film className="h-3.5 w-3.5" />, label: "模型", value: globalSettings.model === "nano-banana-pro" ? "专业版" : "快速版" },
+            { icon: <Wand2 className="h-3.5 w-3.5" />, label: "处理", value: globalSettings.action === "upscale" ? "高清放大" : globalSettings.action === "generate" ? "AI生成" : "九宫格" },
+            { icon: <Square className="h-3.5 w-3.5" />, label: "比例", value: globalSettings.aspectRatio || "自动" },
+            { icon: <Monitor className="h-3.5 w-3.5" />, label: "分辨率", value: globalSettings.resolution?.toUpperCase() || "1K" },
+          ]}
       />
       <TemplateManager
         open={showTemplateManager}
@@ -1639,7 +1699,7 @@ export default function ImageBatchPage() {
         type="image_batch"
         onSelect={handleLoadTemplate}
       />
-    </TooltipProvider>
+    </TooltipProvider >
   );
 }
 

@@ -89,7 +89,7 @@ function getExpiryStatus(expiresAt: string): { text: string; isExpiringSoon: boo
   const expiry = new Date(expiresAt);
   const diff = expiry.getTime() - now.getTime();
   const days = Math.ceil(diff / (1000 * 60 * 60 * 24));
-  
+
   if (diff <= 0) {
     return { text: "已过期", isExpiringSoon: false, isExpired: true };
   }
@@ -134,10 +134,10 @@ export default function TaskLogPage() {
       const params = new URLSearchParams();
       if (selectedType !== "all") params.set("type", selectedType);
       if (selectedStatus !== "all") params.set("status", selectedStatus);
-      
+
       const response = await fetch(`/api/user/tasks?${params.toString()}`);
       const result = await response.json();
-      
+
       if (result.success) {
         setTasks(result.data.tasks);
         setStats(result.data.stats);
@@ -155,7 +155,7 @@ export default function TaskLogPage() {
       setRefreshing(true);
       const response = await fetch("/api/user/tasks/refresh", { method: "POST" });
       const result = await response.json();
-      
+
       if (result.success) {
         console.log("[TaskLog] Refresh result:", result.data);
         // 重新获取任务列表
@@ -191,7 +191,7 @@ export default function TaskLogPage() {
 
   const handleDownload = async (task: TaskLogItem) => {
     if (!task.resultUrl) return;
-    
+
     try {
       const response = await fetch(task.resultUrl);
       const blob = await response.blob();
@@ -242,10 +242,10 @@ export default function TaskLogPage() {
       {/* Page Header */}
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">
-            <span className="gradient-tiktok-text">成品交付单</span>
+          <h1 className="text-3xl font-bold tracking-tight text-white drop-shadow-lg">
+            成品交付单
           </h1>
-          <p className="mt-2 text-muted-foreground">
+          <p className="mt-2 text-white/60">
             查看和下载您生成的视频与图片内容
           </p>
         </div>
@@ -255,10 +255,10 @@ export default function TaskLogPage() {
             <span className="text-sm text-amber-400">内容保留7天</span>
           </div>
           {stats && stats.processingTasks > 0 && (
-            <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={refreshProcessingTasks} 
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={refreshProcessingTasks}
               disabled={refreshing}
               className="gap-2 text-tiktok-cyan border-tiktok-cyan/30 hover:bg-tiktok-cyan/10"
             >
@@ -273,51 +273,51 @@ export default function TaskLogPage() {
         </div>
       </div>
 
-      {/* Stats Cards */}
+      {/* Stats Cards - Titanium Glass */}
       <div className="grid gap-4 md:grid-cols-4">
-        <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
+        <Card variant="glass" className="group hover:border-mermaid-cyan/30 transition-all duration-300">
           <CardContent className="flex items-center gap-4 p-6">
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-tiktok-cyan/10">
-              <History className="h-6 w-6 text-tiktok-cyan" />
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/5 border border-white/10 shadow-inner group-hover:bg-mermaid-cyan/10 group-hover:text-mermaid-cyan transition-colors">
+              <History className="h-6 w-6 text-white/70 group-hover:text-mermaid-cyan transition-colors" />
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">总任务数</p>
-              <p className="text-2xl font-bold">{stats?.totalTasks || 0}</p>
+              <p className="text-sm text-white/40">总任务数</p>
+              <p className="text-2xl font-bold text-white tracking-tight group-hover:text-mermaid-cyan transition-colors">{stats?.totalTasks || 0}</p>
             </div>
           </CardContent>
         </Card>
-        <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
+        <Card variant="glass" className="group hover:border-mermaid-pink/30 transition-all duration-300">
           <CardContent className="flex items-center gap-4 p-6">
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-tiktok-pink/10">
-              <Video className="h-6 w-6 text-tiktok-pink" />
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/5 border border-white/10 shadow-inner group-hover:bg-mermaid-pink/10 group-hover:text-mermaid-pink transition-colors">
+              <Video className="h-6 w-6 text-white/70 group-hover:text-mermaid-pink transition-colors" />
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">视频</p>
-              <p className="text-2xl font-bold">{stats?.totalVideos || 0}</p>
+              <p className="text-sm text-white/40">视频</p>
+              <p className="text-2xl font-bold text-white tracking-tight group-hover:text-mermaid-pink transition-colors">{stats?.totalVideos || 0}</p>
             </div>
           </CardContent>
         </Card>
-        <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
+        <Card variant="glass" className="group hover:border-mermaid-cyan/30 transition-all duration-300">
           <CardContent className="flex items-center gap-4 p-6">
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-tiktok-cyan/10">
-              <ImageIcon className="h-6 w-6 text-tiktok-cyan" />
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/5 border border-white/10 shadow-inner group-hover:bg-mermaid-cyan/10 group-hover:text-mermaid-cyan transition-colors">
+              <ImageIcon className="h-6 w-6 text-white/70 group-hover:text-mermaid-cyan transition-colors" />
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">图片</p>
-              <p className="text-2xl font-bold">{stats?.totalImages || 0}</p>
+              <p className="text-sm text-white/40">图片</p>
+              <p className="text-2xl font-bold text-white tracking-tight group-hover:text-mermaid-cyan transition-colors">{stats?.totalImages || 0}</p>
             </div>
           </CardContent>
         </Card>
-        <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
+        <Card variant="glass" className="group hover:border-neon-green/30 transition-all duration-300">
           <CardContent className="flex items-center gap-4 p-6">
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-500/10">
-              <CheckCircle className="h-6 w-6 text-emerald-400" />
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-neon-green/10 border border-neon-green/20 shadow-[0_0_8px_rgba(57,255,20,0.1)]">
+              <CheckCircle className="h-6 w-6 text-neon-green drop-shadow" />
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">成功率</p>
-              <p className="text-2xl font-bold">
-                {stats && stats.totalTasks > 0 
-                  ? Math.round((stats.completedTasks / stats.totalTasks) * 100) 
+              <p className="text-sm text-white/40">成功率</p>
+              <p className="text-2xl font-bold text-neon-green tracking-tight">
+                {stats && stats.totalTasks > 0
+                  ? Math.round((stats.completedTasks / stats.totalTasks) * 100)
                   : 0}%
               </p>
             </div>
@@ -325,18 +325,18 @@ export default function TaskLogPage() {
         </Card>
       </div>
 
-      {/* Filters and Search */}
-      <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
+      {/* Filters and Search - Titanium Glass */}
+      <Card variant="glass" className="bg-[#0B0C10]/60 backdrop-blur-md">
         <CardContent className="p-4">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             {/* Search */}
-            <div className="relative flex-1 max-w-md">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <div className="relative flex-1 max-w-md group">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/30 group-focus-within:text-mermaid-cyan transition-colors" />
               <Input
                 placeholder="搜索提示词或模型..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10 bg-background/50 border-border/50"
+                className="pl-10 bg-white/5 border-white/10 focus-visible:ring-1 focus-visible:ring-mermaid-cyan/50 focus-visible:border-mermaid-cyan/50 transition-all placeholder:text-white/20 text-white rounded-xl"
               />
             </div>
 
@@ -345,12 +345,12 @@ export default function TaskLogPage() {
               {typeFilters.map((filter) => (
                 <Button
                   key={filter.value}
-                  variant={selectedType === filter.value ? "default" : "outline"}
+                  variant={selectedType === filter.value ? "mermaid" : "ghost"}
                   size="sm"
                   onClick={() => setSelectedType(filter.value)}
-                  className={selectedType === filter.value 
-                    ? "bg-gradient-to-r from-tiktok-cyan to-tiktok-pink" 
-                    : "border-border/50 hover:border-tiktok-cyan/50"
+                  className={selectedType === filter.value
+                    ? ""
+                    : "bg-white/5 text-white/60 border-white/5 hover:bg-white/10 hover:text-white transition-all"
                   }
                 >
                   {filter.label}
@@ -363,12 +363,12 @@ export default function TaskLogPage() {
               {statusFilters.map((filter) => (
                 <Button
                   key={filter.value}
-                  variant={selectedStatus === filter.value ? "default" : "outline"}
+                  variant={selectedStatus === filter.value ? "mermaid" : "ghost"}
                   size="sm"
                   onClick={() => setSelectedStatus(filter.value)}
-                  className={selectedStatus === filter.value 
-                    ? "bg-gradient-to-r from-tiktok-cyan to-tiktok-pink" 
-                    : "border-border/50 hover:border-tiktok-cyan/50"
+                  className={selectedStatus === filter.value
+                    ? ""
+                    : "bg-white/5 text-white/60 border-white/5 hover:bg-white/10 hover:text-white transition-all"
                   }
                 >
                   {filter.label}
@@ -377,11 +377,11 @@ export default function TaskLogPage() {
             </div>
 
             {/* View Toggle */}
-            <div className="flex items-center gap-2 border border-border/50 rounded-lg p-1">
+            <div className="flex items-center gap-2 border border-white/10 rounded-lg p-1 bg-white/5">
               <Button
                 variant={viewMode === "grid" ? "secondary" : "ghost"}
                 size="icon"
-                className="h-8 w-8"
+                className={viewMode === "grid" ? "bg-white/10 text-white" : "text-white/40 hover:text-white"}
                 onClick={() => setViewMode("grid")}
               >
                 <Grid3X3 className="h-4 w-4" />
@@ -389,7 +389,7 @@ export default function TaskLogPage() {
               <Button
                 variant={viewMode === "list" ? "secondary" : "ghost"}
                 size="icon"
-                className="h-8 w-8"
+                className={viewMode === "list" ? "bg-white/10 text-white" : "text-white/40 hover:text-white"}
                 onClick={() => setViewMode("list")}
               >
                 <List className="h-4 w-4" />
@@ -425,55 +425,52 @@ export default function TaskLogPage() {
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {filteredTasks.map((task) => {
               const expiry = getExpiryStatus(task.expiresAt);
-              
+
               return (
-                <Card 
-                  key={task.id} 
-                  className={`group overflow-hidden border-border/50 bg-card/50 hover:border-tiktok-cyan/30 transition-all ${
-                    expiry.isExpired ? "opacity-50" : ""
-                  }`}
+                <Card
+                  key={task.id}
+                  variant="glass"
+                  className={`group overflow-hidden bg-[#0B0C10]/60 hover:shadow-lg hover:shadow-mermaid-cyan/10 transition-all duration-500 ${expiry.isExpired ? "opacity-50" : ""
+                    }`}
                 >
-                  <div className="relative aspect-video bg-gradient-to-br from-background to-background/50">
+                  <div className="relative aspect-video bg-gradient-to-br from-white/5 to-white/10">
                     {task.resultUrl && task.status === "completed" ? (
                       task.type === "video" ? (
                         <div className="absolute inset-0 flex items-center justify-center">
-                          <video 
-                            src={task.resultUrl} 
+                          <video
+                            src={task.resultUrl}
                             className="w-full h-full object-cover"
                             muted
                           />
-                          <div className="absolute inset-0 flex items-center justify-center bg-black/30">
-                            <Play className="h-12 w-12 text-white" />
+                          <div className="absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <Play className="h-12 w-12 text-white drop-shadow-lg" />
                           </div>
                         </div>
                       ) : (
-                        <img 
-                          src={task.resultUrl} 
+                        <img
+                          src={task.resultUrl}
                           alt={task.prompt || "生成图片"}
-                          className="w-full h-full object-cover"
+                          className="w-full h-full object-cover hover:scale-105 transition-transform duration-700"
                         />
                       )
                     ) : (
                       <div className="absolute inset-0 flex items-center justify-center">
-                        <div className={`flex h-16 w-16 items-center justify-center rounded-xl ${
-                          task.type === "video" ? "bg-tiktok-pink/20" : "bg-tiktok-cyan/20"
-                        }`}>
+                        <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-white/5 border border-white/10 shadow-inner">
                           {task.type === "video" ? (
-                            <Video className="h-8 w-8 text-tiktok-pink" />
+                            <Video className="h-8 w-8 text-white/30" />
                           ) : (
-                            <ImageIcon className="h-8 w-8 text-tiktok-cyan" />
+                            <ImageIcon className="h-8 w-8 text-white/30" />
                           )}
                         </div>
                       </div>
                     )}
-                    
+
                     {/* Status Badge */}
                     <div className="absolute top-2 left-2">
-                      <div className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs ${
-                        task.status === "completed" ? "bg-emerald-500/20 text-emerald-400" :
-                        task.status === "failed" ? "bg-red-500/20 text-red-400" :
-                        "bg-amber-500/20 text-amber-400"
-                      }`}>
+                      <div className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs backdrop-blur-md ${task.status === "completed" ? "bg-neon-green/20 text-neon-green" :
+                        task.status === "failed" ? "bg-neon-red/20 text-neon-red" :
+                          "bg-neon-warning/20 text-neon-warning"
+                        }`}>
                         {getStatusIcon(task.status)}
                         {getStatusLabel(task.status)}
                       </div>
@@ -482,7 +479,7 @@ export default function TaskLogPage() {
                     {/* Expiry Badge */}
                     {expiry.isExpiringSoon && !expiry.isExpired && (
                       <div className="absolute top-2 right-2">
-                        <div className="flex items-center gap-1 px-2 py-1 rounded-full text-xs bg-amber-500/20 text-amber-400">
+                        <div className="flex items-center gap-1 px-2 py-1 rounded-full text-xs bg-neon-warning/20 text-neon-warning backdrop-blur-md">
                           <AlertTriangle className="h-3 w-3" />
                           {expiry.text}
                         </div>
@@ -492,18 +489,18 @@ export default function TaskLogPage() {
                     {/* Hover Actions */}
                     {task.status === "completed" && task.resultUrl && !expiry.isExpired && (
                       <div className="absolute inset-0 flex items-center justify-center gap-2 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <Button 
-                          size="icon" 
-                          variant="secondary" 
-                          className="h-9 w-9"
+                        <Button
+                          size="icon"
+                          variant="mermaid-ghost"
+                          className="h-9 w-9 rounded-full"
                           onClick={() => setPreviewTask(task)}
                         >
                           <Eye className="h-4 w-4" />
                         </Button>
-                        <Button 
-                          size="icon" 
-                          variant="secondary" 
-                          className="h-9 w-9"
+                        <Button
+                          size="icon"
+                          variant="mermaid-ghost"
+                          className="h-9 w-9 rounded-full"
                           onClick={() => handleDownload(task)}
                         >
                           <Download className="h-4 w-4" />
@@ -511,45 +508,44 @@ export default function TaskLogPage() {
                       </div>
                     )}
                   </div>
-                  
-                  <CardContent className="p-4">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium truncate text-sm">
-                          {task.prompt?.substring(0, 30) || "未命名任务"}
-                          {task.prompt && task.prompt.length > 30 ? "..." : ""}
+
+                  <CardContent className="p-3 border-t border-white/5">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1 min-w-0 overflow-hidden">
+                        <p className="font-medium text-sm text-white/90 group-hover:text-mermaid-cyan transition-colors line-clamp-2 leading-tight">
+                          {task.prompt || "未命名任务"}
                         </p>
-                        <div className="flex items-center gap-2 mt-1">
-                          <span className="text-xs text-muted-foreground">
+                        <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                          <span className="text-xs text-white/40 whitespace-nowrap">
                             {getSourceLabel(task.source)}
                           </span>
-                          <span className="text-xs text-muted-foreground">·</span>
-                          <span className="text-xs text-muted-foreground">
+                          <span className="text-xs text-white/40">·</span>
+                          <span className="text-xs text-white/40 whitespace-nowrap">
                             {task.credits} 积分
                           </span>
                         </div>
-                        <p className="text-xs text-muted-foreground mt-1">
+                        <p className="text-xs text-white/30 mt-1">
                           {formatDate(task.createdAt)}
                         </p>
                       </div>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
+                          <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 text-white/40 hover:text-white">
                             <MoreVertical className="h-4 w-4" />
                           </Button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="bg-popover border-border">
+                        <DropdownMenuContent align="end" className="bg-[#16181D] border-white/10 text-white">
                           {task.status === "completed" && task.resultUrl && !expiry.isExpired && (
                             <>
-                              <DropdownMenuItem onClick={() => setPreviewTask(task)}>
+                              <DropdownMenuItem onClick={() => setPreviewTask(task)} className="focus:bg-white/10 focus:text-mermaid-cyan">
                                 <Eye className="h-4 w-4 mr-2" />
                                 预览
                               </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => handleDownload(task)}>
+                              <DropdownMenuItem onClick={() => handleDownload(task)} className="focus:bg-white/10 focus:text-mermaid-cyan">
                                 <Download className="h-4 w-4 mr-2" />
                                 下载
                               </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => window.open(task.resultUrl!, "_blank")}>
+                              <DropdownMenuItem onClick={() => window.open(task.resultUrl!, "_blank")} className="focus:bg-white/10 focus:text-mermaid-cyan">
                                 <ExternalLink className="h-4 w-4 mr-2" />
                                 新窗口打开
                               </DropdownMenuItem>
@@ -564,67 +560,64 @@ export default function TaskLogPage() {
             })}
           </div>
         ) : (
-          <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
+          <Card variant="glass" className="bg-[#0B0C10]/60 backdrop-blur-sm">
             <CardContent className="p-0">
-              <div className="divide-y divide-border/50">
+              <div className="divide-y divide-white/5">
                 {filteredTasks.map((task) => {
                   const expiry = getExpiryStatus(task.expiresAt);
-                  
+
                   return (
-                    <div 
-                      key={task.id} 
-                      className={`flex items-center gap-4 p-4 hover:bg-white/5 transition-colors ${
-                        expiry.isExpired ? "opacity-50" : ""
-                      }`}
+                    <div
+                      key={task.id}
+                      className={`flex items-center gap-4 p-4 hover:bg-white/5 transition-all duration-300 group ${expiry.isExpired ? "opacity-50" : ""
+                        }`}
                     >
-                      <div className={`flex h-12 w-12 items-center justify-center rounded-lg ${
-                        task.type === "video" ? "bg-tiktok-pink/20" : "bg-tiktok-cyan/20"
-                      }`}>
+                      <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-white/5 border border-white/10 group-hover:border-mermaid-cyan/30 group-hover:bg-mermaid-cyan/5 transition-colors">
                         {task.type === "video" ? (
-                          <Video className="h-5 w-5 text-tiktok-pink" />
+                          <Video className="h-5 w-5 text-white/70 group-hover:text-mermaid-cyan" />
                         ) : (
-                          <ImageIcon className="h-5 w-5 text-tiktok-cyan" />
+                          <ImageIcon className="h-5 w-5 text-white/70 group-hover:text-mermaid-cyan" />
                         )}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="font-medium truncate">
+                        <p className="font-medium truncate text-white/90 group-hover:text-mermaid-cyan transition-colors">
                           {task.prompt?.substring(0, 50) || "未命名任务"}
                         </p>
-                        <p className="text-sm text-muted-foreground">
+                        <p className="text-sm text-white/40">
                           {getSourceLabel(task.source)} · {task.model}
                         </p>
                       </div>
                       <div className="flex items-center gap-2">
                         {getStatusIcon(task.status)}
-                        <span className="text-sm">{getStatusLabel(task.status)}</span>
+                        <span className="text-sm text-white/70">{getStatusLabel(task.status)}</span>
                       </div>
-                      <div className="text-sm text-muted-foreground hidden md:block">
+                      <div className="text-sm text-white/40 hidden md:block">
                         {task.credits} 积分
                       </div>
-                      <div className="text-sm text-muted-foreground hidden lg:block">
+                      <div className="text-sm text-white/40 hidden lg:block">
                         {formatDate(task.createdAt)}
                       </div>
                       {expiry.isExpiringSoon && !expiry.isExpired && (
-                        <div className="flex items-center gap-1 px-2 py-1 rounded-full text-xs bg-amber-500/20 text-amber-400">
+                        <div className="flex items-center gap-1 px-2 py-1 rounded-full text-xs bg-neon-warning/20 text-neon-warning">
                           <AlertTriangle className="h-3 w-3" />
                           {expiry.text}
                         </div>
                       )}
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                         {task.status === "completed" && task.resultUrl && !expiry.isExpired && (
                           <>
-                            <Button 
-                              variant="ghost" 
-                              size="icon" 
-                              className="h-8 w-8"
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 hover:bg-white/10 hover:text-mermaid-cyan"
                               onClick={() => setPreviewTask(task)}
                             >
                               <Eye className="h-4 w-4" />
                             </Button>
-                            <Button 
-                              variant="ghost" 
-                              size="icon" 
-                              className="h-8 w-8"
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 hover:bg-white/10 hover:text-mermaid-cyan"
                               onClick={() => handleDownload(task)}
                             >
                               <Download className="h-4 w-4" />
@@ -654,23 +647,23 @@ export default function TaskLogPage() {
               {previewTask?.type === "video" ? "视频预览" : "图片预览"}
             </DialogTitle>
           </DialogHeader>
-          
+
           <div className="space-y-3">
             {previewTask?.type === "video" && previewTask.resultUrl ? (
-              <video 
-                src={previewTask.resultUrl} 
-                controls 
+              <video
+                src={previewTask.resultUrl}
+                controls
                 autoPlay
                 className="w-full max-h-[50vh] rounded-lg object-contain bg-black"
               />
             ) : previewTask?.resultUrl ? (
-              <img 
-                src={previewTask.resultUrl} 
+              <img
+                src={previewTask.resultUrl}
                 alt={previewTask.prompt || "预览图片"}
                 className="w-full max-h-[50vh] rounded-lg object-contain"
               />
             ) : null}
-            
+
             <div className="space-y-1.5 text-sm p-3 rounded-lg bg-muted/30">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">提示词</span>
@@ -693,15 +686,16 @@ export default function TaskLogPage() {
                 <span>{previewTask?.createdAt && formatDate(previewTask.createdAt)}</span>
               </div>
             </div>
-            
+
             <div className="flex justify-end gap-2 pt-2">
               <Button variant="outline" size="sm" onClick={() => setPreviewTask(null)}>
                 关闭
               </Button>
               {previewTask?.resultUrl && (
-                <Button 
+                <Button
                   size="sm"
-                  className="gap-2 bg-gradient-to-r from-tiktok-cyan to-tiktok-pink"
+                  variant="white-glow"
+                  className="gap-2"
                   onClick={() => handleDownload(previewTask)}
                 >
                   <Download className="h-4 w-4" />

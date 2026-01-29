@@ -55,13 +55,15 @@ import {
   UserX,
   UserCheck,
   CreditCard,
+  Eye,
 } from "lucide-react";
+import Link from "next/link";
 import { useToast } from "@/hooks/use-toast";
-import { 
-  type UserRole, 
-  type UserStatus, 
-  getRoleDisplayName, 
-  getStatusDisplay 
+import {
+  type UserRole,
+  type UserStatus,
+  getRoleDisplayName,
+  getStatusDisplay
 } from "@/lib/admin";
 
 // ============================================================================
@@ -257,14 +259,14 @@ export default function AdminUsersPage() {
           deduct: "扣除成功",
           system_grant: "系统发放成功",
         }[creditAction];
-        
+
         toast({
           title: actionText,
           description: `${creditAction === "deduct" ? "-" : "+"}${creditAmount} Credits`,
         });
         setShowCreditsDialog(false);
         fetchUsers();
-        
+
         // 触发前端积分刷新（更新header中的积分显示）
         window.dispatchEvent(new CustomEvent("credits-updated"));
       } else {
@@ -303,7 +305,7 @@ export default function AdminUsersPage() {
 
   const handleDeleteUser = async () => {
     if (!selectedUser) return;
-    
+
     setIsProcessing(true);
     try {
       const res = await fetch("/api/admin/users", {
@@ -356,7 +358,7 @@ export default function AdminUsersPage() {
 
   const handleSaveRestrictions = async () => {
     if (!selectedUser) return;
-    
+
     setIsProcessing(true);
     try {
       // TODO: 实际生产环境需要调用 API 保存
@@ -468,311 +470,366 @@ export default function AdminUsersPage() {
   // ================================================================
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold">用户管理</h1>
-        <p className="text-muted-foreground">
-          管理用户账号、积分余额和账号状态
-        </p>
+    <div className="space-y-8">
+      {/* Header - JCUI 2.0 Style */}
+      <div className="relative">
+        <div className="absolute -inset-4 bg-gradient-to-r from-[#CCFF00]/5 via-[#00F2EA]/5 to-[#EC4899]/5 blur-3xl opacity-50 pointer-events-none" />
+        <div className="relative">
+          <h1 className="text-3xl font-bold tracking-tight text-white">
+            用户<span className="text-transparent bg-clip-text bg-gradient-to-r from-[#CCFF00] via-[#00F2EA] to-[#EC4899]">管理</span>
+          </h1>
+          <p className="text-white/50 text-sm font-mono mt-1 uppercase tracking-wider">
+            USER ACCOUNTS • CREDITS • STATUS CONTROL
+          </p>
+        </div>
       </div>
 
-      {/* Stats Cards */}
+      {/* Stats Cards - Mermaid Glass */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card className="border-border/50 bg-card/50">
-          <CardContent className="p-4 flex items-center gap-4">
-            <div className="h-12 w-12 rounded-xl bg-blue-500/20 flex items-center justify-center">
-              <User className="h-6 w-6 text-blue-400" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold">{users.length}</p>
-              <p className="text-xs text-muted-foreground">总用户数</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="border-border/50 bg-card/50">
-          <CardContent className="p-4 flex items-center gap-4">
-            <div className="h-12 w-12 rounded-xl bg-green-500/20 flex items-center justify-center">
-              <UserCheck className="h-6 w-6 text-green-400" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold">
-                {users.filter((u) => u.status === "active").length}
-              </p>
-              <p className="text-xs text-muted-foreground">活跃用户</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="border-border/50 bg-card/50">
-          <CardContent className="p-4 flex items-center gap-4">
-            <div className="h-12 w-12 rounded-xl bg-red-500/20 flex items-center justify-center">
-              <UserX className="h-6 w-6 text-red-400" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold">
-                {users.filter((u) => u.status === "banned").length}
-              </p>
-              <p className="text-xs text-muted-foreground">封禁用户</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="border-border/50 bg-card/50">
-          <CardContent className="p-4 flex items-center gap-4">
-            <div className="h-12 w-12 rounded-xl bg-amber-500/20 flex items-center justify-center">
-              <Zap className="h-6 w-6 text-amber-400" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold">
-                {formatCredits(users.reduce((sum, u) => sum + u.credits, 0))}
-              </p>
-              <p className="text-xs text-muted-foreground">总积分</p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Filters */}
-      <Card className="border-border/50 bg-card/50">
-        <CardContent className="p-4">
-          <div className="flex flex-wrap gap-4">
-            <div className="flex-1 min-w-[250px]">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="搜索邮箱或用户名..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-9 bg-background border-border"
-                />
+        {/* Total Users */}
+        <div className="group relative rounded-2xl p-[1px] bg-gradient-to-br from-[#00F2EA]/30 to-[#00F2EA]/10 hover:from-[#00F2EA]/50 hover:to-[#00F2EA]/20 transition-all duration-500">
+          <div className="relative h-full rounded-2xl bg-[#0B0C10] p-5 overflow-hidden">
+            <div className="absolute top-0 right-0 w-24 h-24 bg-[#00F2EA]/10 blur-2xl rounded-full transition-all duration-500 group-hover:bg-[#00F2EA]/20" />
+            <div className="relative flex items-center gap-4">
+              <div className="h-12 w-12 rounded-xl bg-[#00F2EA]/10 border border-[#00F2EA]/20 flex items-center justify-center group-hover:scale-110 transition-transform duration-500">
+                <User className="h-6 w-6 text-[#00F2EA]" />
+              </div>
+              <div>
+                <p className="text-3xl font-bold text-white">{users.length}</p>
+                <p className="text-xs text-white/50 font-mono">TOTAL USERS</p>
               </div>
             </div>
-            <Select value={filterRole} onValueChange={setFilterRole}>
-              <SelectTrigger className="w-[130px] bg-background border-border">
-                <SelectValue placeholder="角色" />
-              </SelectTrigger>
-              <SelectContent className="bg-popover border-border">
-                <SelectItem value="all">全部角色</SelectItem>
-                <SelectItem value="user">普通用户</SelectItem>
-                <SelectItem value="admin">管理员</SelectItem>
-                <SelectItem value="super_admin">超级管理员</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={filterStatus} onValueChange={setFilterStatus}>
-              <SelectTrigger className="w-[130px] bg-background border-border">
-                <SelectValue placeholder="状态" />
-              </SelectTrigger>
-              <SelectContent className="bg-popover border-border">
-                <SelectItem value="all">全部状态</SelectItem>
-                <SelectItem value="active">正常</SelectItem>
-                <SelectItem value="suspended">暂停</SelectItem>
-                <SelectItem value="banned">封禁</SelectItem>
-              </SelectContent>
-            </Select>
           </div>
-        </CardContent>
-      </Card>
+        </div>
 
-      {/* Users Table */}
-      <Card className="border-border/50 bg-card/50">
-        <CardContent className="p-0">
-          {loading ? (
-            <div className="flex items-center justify-center h-64">
-              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        {/* Active Users */}
+        <div className="group relative rounded-2xl p-[1px] bg-gradient-to-br from-[#22c55e]/30 to-[#22c55e]/10 hover:from-[#22c55e]/50 hover:to-[#22c55e]/20 transition-all duration-500">
+          <div className="relative h-full rounded-2xl bg-[#0B0C10] p-5 overflow-hidden">
+            <div className="absolute top-0 right-0 w-24 h-24 bg-[#22c55e]/10 blur-2xl rounded-full transition-all duration-500 group-hover:bg-[#22c55e]/20" />
+            <div className="relative flex items-center gap-4">
+              <div className="h-12 w-12 rounded-xl bg-[#22c55e]/10 border border-[#22c55e]/20 flex items-center justify-center group-hover:scale-110 transition-transform duration-500">
+                <UserCheck className="h-6 w-6 text-[#22c55e]" />
+              </div>
+              <div>
+                <p className="text-3xl font-bold text-white">
+                  {users.filter((u) => u.status === "active").length}
+                </p>
+                <p className="text-xs text-white/50 font-mono">ACTIVE</p>
+              </div>
             </div>
-          ) : filteredUsers.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
-              <User className="h-12 w-12 mb-4 opacity-50" />
-              <p>未找到用户</p>
+          </div>
+        </div>
+
+        {/* Banned Users */}
+        <div className="group relative rounded-2xl p-[1px] bg-gradient-to-br from-[#ef4444]/30 to-[#ef4444]/10 hover:from-[#ef4444]/50 hover:to-[#ef4444]/20 transition-all duration-500">
+          <div className="relative h-full rounded-2xl bg-[#0B0C10] p-5 overflow-hidden">
+            <div className="absolute top-0 right-0 w-24 h-24 bg-[#ef4444]/10 blur-2xl rounded-full transition-all duration-500 group-hover:bg-[#ef4444]/20" />
+            <div className="relative flex items-center gap-4">
+              <div className="h-12 w-12 rounded-xl bg-[#ef4444]/10 border border-[#ef4444]/20 flex items-center justify-center group-hover:scale-110 transition-transform duration-500">
+                <UserX className="h-6 w-6 text-[#ef4444]" />
+              </div>
+              <div>
+                <p className="text-3xl font-bold text-white">
+                  {users.filter((u) => u.status === "banned").length}
+                </p>
+                <p className="text-xs text-white/50 font-mono">BANNED</p>
+              </div>
             </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow className="border-border/50 hover:bg-transparent">
-                  <TableHead className="w-[300px]">用户</TableHead>
-                  <TableHead>角色</TableHead>
-                  <TableHead>
-                    <div className="flex items-center gap-1">
-                      <Zap className="h-3.5 w-3.5 text-amber-400" />
-                      积分
+          </div>
+        </div>
+
+        {/* Total Credits */}
+        <div className="group relative rounded-2xl p-[1px] bg-gradient-to-br from-[#CCFF00]/30 via-[#00F2EA]/20 to-[#EC4899]/30 hover:from-[#CCFF00]/50 hover:to-[#EC4899]/50 transition-all duration-500">
+          <div className="relative h-full rounded-2xl bg-[#0B0C10] p-5 overflow-hidden">
+            <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-[#CCFF00]/10 to-[#EC4899]/10 blur-2xl rounded-full transition-all duration-500 group-hover:from-[#CCFF00]/20 group-hover:to-[#EC4899]/20" />
+            <div className="relative flex items-center gap-4">
+              <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-[#CCFF00]/10 to-[#EC4899]/10 border border-[#CCFF00]/20 flex items-center justify-center group-hover:scale-110 transition-transform duration-500">
+                <Zap className="h-6 w-6 text-[#CCFF00]" />
+              </div>
+              <div>
+                <p className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-[#CCFF00] to-[#00F2EA]">
+                  {formatCredits(users.reduce((sum, u) => sum + u.credits, 0))}
+                </p>
+                <p className="text-xs text-white/50 font-mono">TOTAL CREDITS</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Filters - Titanium Glass */}
+      <div className="rounded-2xl border border-white/10 bg-[#0B0C10]/80 backdrop-blur-xl p-5 relative overflow-hidden">
+        <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent" />
+        <div className="flex flex-wrap gap-4 items-center">
+          {/* Search Input */}
+          <div className="flex-1 min-w-[280px] relative group">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-white/30 group-focus-within:text-[#00F2EA] transition-colors duration-300" />
+            <Input
+              placeholder="搜索邮箱或用户名..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-11 h-12 bg-[#050505] border-white/10 rounded-xl text-white placeholder:text-white/30 focus:border-[#00F2EA]/50 focus:ring-[#00F2EA]/20 transition-all duration-300"
+            />
+          </div>
+
+          {/* Role Filter */}
+          <Select value={filterRole} onValueChange={setFilterRole}>
+            <SelectTrigger className="w-[140px] h-12 bg-[#050505] border-white/10 rounded-xl text-white hover:border-white/20 transition-colors">
+              <SelectValue placeholder="角色" />
+            </SelectTrigger>
+            <SelectContent className="bg-[#0B0C10] border-white/10 rounded-xl">
+              <SelectItem value="all" className="text-white hover:bg-white/5 focus:bg-white/5">全部角色</SelectItem>
+              <SelectItem value="user" className="text-white hover:bg-white/5 focus:bg-white/5">普通用户</SelectItem>
+              <SelectItem value="admin" className="text-white hover:bg-white/5 focus:bg-white/5">管理员</SelectItem>
+              <SelectItem value="super_admin" className="text-white hover:bg-white/5 focus:bg-white/5">超级管理员</SelectItem>
+            </SelectContent>
+          </Select>
+
+          {/* Status Filter */}
+          <Select value={filterStatus} onValueChange={setFilterStatus}>
+            <SelectTrigger className="w-[140px] h-12 bg-[#050505] border-white/10 rounded-xl text-white hover:border-white/20 transition-colors">
+              <SelectValue placeholder="状态" />
+            </SelectTrigger>
+            <SelectContent className="bg-[#0B0C10] border-white/10 rounded-xl">
+              <SelectItem value="all" className="text-white hover:bg-white/5 focus:bg-white/5">全部状态</SelectItem>
+              <SelectItem value="active" className="text-white hover:bg-white/5 focus:bg-white/5">正常</SelectItem>
+              <SelectItem value="suspended" className="text-white hover:bg-white/5 focus:bg-white/5">暂停</SelectItem>
+              <SelectItem value="banned" className="text-white hover:bg-white/5 focus:bg-white/5">封禁</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      {/* Users List - JCUI 2.0 Card Layout */}
+      <div className="rounded-2xl border border-white/10 bg-[#0B0C10]/80 backdrop-blur-xl overflow-hidden">
+        {/* Header Row */}
+        <div className="grid grid-cols-12 gap-4 p-4 border-b border-white/10 bg-[#050505]/50">
+          <div className="col-span-4 text-xs font-mono text-white/40 uppercase tracking-wider">用户</div>
+          <div className="col-span-2 text-xs font-mono text-white/40 uppercase tracking-wider">角色</div>
+          <div className="col-span-2 text-xs font-mono text-white/40 uppercase tracking-wider flex items-center gap-1">
+            <Zap className="h-3 w-3 text-[#CCFF00]" /> 积分
+          </div>
+          <div className="col-span-2 text-xs font-mono text-white/40 uppercase tracking-wider">注册时间</div>
+          <div className="col-span-1 text-xs font-mono text-white/40 uppercase tracking-wider">状态</div>
+          <div className="col-span-1 text-xs font-mono text-white/40 uppercase tracking-wider text-right">操作</div>
+        </div>
+
+        {/* Content */}
+        {loading ? (
+          <div className="flex items-center justify-center h-64">
+            <div className="relative">
+              <div className="absolute inset-0 h-10 w-10 rounded-full border-2 border-[#00F2EA]/20 animate-ping" />
+              <Loader2 className="h-10 w-10 animate-spin text-[#00F2EA]" />
+            </div>
+          </div>
+        ) : filteredUsers.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-64">
+            <div className="h-16 w-16 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center mb-4">
+              <User className="h-8 w-8 text-white/20" />
+            </div>
+            <p className="text-white/40 font-mono text-sm">NO USERS FOUND</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-white/5">
+            {filteredUsers.map((user) => {
+              const statusDisplay = getStatusDisplay(user.status);
+              const isAdmin = user.role === "super_admin" || user.role === "admin";
+              return (
+                <div
+                  key={user.id}
+                  className={cn(
+                    "group grid grid-cols-12 gap-4 p-4 transition-all duration-300 hover:bg-white/[0.02] relative",
+                    isAdmin && "bg-gradient-to-r from-[#ef4444]/[0.02] to-transparent"
+                  )}
+                >
+                  {/* Hover glow effect */}
+                  <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none bg-gradient-to-r from-[#00F2EA]/[0.02] via-transparent to-transparent" />
+
+                  {/* User Info */}
+                  <div className="col-span-4 flex items-center gap-3 relative z-10">
+                    <div className={cn(
+                      "h-11 w-11 rounded-xl overflow-hidden flex-shrink-0 transition-transform duration-300 group-hover:scale-105",
+                      isAdmin
+                        ? "ring-2 ring-[#ef4444]/40 shadow-[0_0_15px_rgba(239,68,68,0.2)]"
+                        : "ring-1 ring-white/10"
+                    )}>
+                      {user.avatar_url ? (
+                        <img
+                          src={user.avatar_url}
+                          alt={user.name || ""}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-[#00F2EA] to-[#EC4899]">
+                          <span className="text-black font-bold text-sm">
+                            {(user.name || user.email)[0].toUpperCase()}
+                          </span>
+                        </div>
+                      )}
                     </div>
-                  </TableHead>
-                  <TableHead>
-                    <div className="flex items-center gap-1">
-                      <Calendar className="h-3.5 w-3.5" />
-                      注册时间
+                    <div className="min-w-0">
+                      <p className="font-semibold text-white truncate group-hover:text-[#00F2EA] transition-colors duration-300">
+                        {user.name || "未命名用户"}
+                      </p>
+                      <p className="text-xs text-white/40 flex items-center gap-1.5 truncate">
+                        <Mail className="h-3 w-3 flex-shrink-0" />
+                        <span className="truncate">{user.email}</span>
+                      </p>
                     </div>
-                  </TableHead>
-                  <TableHead>状态</TableHead>
-                  <TableHead className="w-[100px]">操作</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredUsers.map((user) => {
-                  const statusDisplay = getStatusDisplay(user.status);
-                  return (
-                    <TableRow
-                      key={user.id}
-                      className="border-border/50 hover:bg-white/5"
+                  </div>
+
+                  {/* Role */}
+                  <div className="col-span-2 flex items-center relative z-10">
+                    <span
+                      className={cn(
+                        "px-3 py-1.5 rounded-lg text-xs font-bold transition-all duration-300",
+                        user.role === "super_admin"
+                          ? "bg-gradient-to-r from-[#ef4444]/20 to-[#f97316]/20 text-[#ef4444] border border-[#ef4444]/30 shadow-[0_0_10px_rgba(239,68,68,0.1)]"
+                          : user.role === "admin"
+                            ? "bg-gradient-to-r from-[#f59e0b]/20 to-[#eab308]/20 text-[#f59e0b] border border-[#f59e0b]/30 shadow-[0_0_10px_rgba(245,158,11,0.1)]"
+                            : "bg-white/5 text-white/50 border border-white/10"
+                      )}
                     >
-                      <TableCell>
-                        <div className="flex items-center gap-3">
-                          <div className="h-10 w-10 rounded-full bg-muted overflow-hidden flex-shrink-0">
-                            {user.avatar_url ? (
-                              <img
-                                src={user.avatar_url}
-                                alt={user.name || ""}
-                                className="w-full h-full object-cover"
-                              />
-                            ) : (
-                              <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-tiktok-cyan to-tiktok-pink">
-                                <span className="text-black font-bold text-sm">
-                                  {(user.name || user.email)[0].toUpperCase()}
-                                </span>
-                              </div>
-                            )}
-                          </div>
-                          <div>
-                            <p className="font-medium">
-                              {user.name || "未命名用户"}
-                            </p>
-                            <p className="text-xs text-muted-foreground flex items-center gap-1">
-                              <Mail className="h-3 w-3" />
-                              {user.email}
-                            </p>
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <span
-                          className={cn(
-                            "px-2 py-1 rounded-full text-xs font-medium",
-                            user.role === "super_admin"
-                              ? "bg-red-500/20 text-red-400 border border-red-500/30"
-                              : user.role === "admin"
-                              ? "bg-amber-500/20 text-amber-400 border border-amber-500/30"
-                              : "bg-white/10 text-muted-foreground"
-                          )}
+                      {isAdmin && <Shield className="h-3 w-3 inline mr-1" />}
+                      {getRoleDisplayName(user.role)}
+                    </span>
+                  </div>
+
+                  {/* Credits */}
+                  <div className="col-span-2 flex items-center relative z-10">
+                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-gradient-to-r from-[#CCFF00]/10 to-[#00F2EA]/10 border border-[#CCFF00]/20">
+                      <Zap className="h-4 w-4 text-[#CCFF00]" />
+                      <span className="font-bold text-transparent bg-clip-text bg-gradient-to-r from-[#CCFF00] to-[#00F2EA]">
+                        {user.credits.toLocaleString()}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Registration Date */}
+                  <div className="col-span-2 flex items-center relative z-10">
+                    <div className="flex items-center gap-2 text-white/40 text-sm">
+                      <Calendar className="h-3.5 w-3.5" />
+                      <span>{formatDate(user.created_at)}</span>
+                    </div>
+                  </div>
+
+                  {/* Status */}
+                  <div className="col-span-1 flex items-center relative z-10">
+                    <span
+                      className={cn(
+                        "px-2.5 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 transition-all duration-300",
+                        user.status === "active"
+                          ? "bg-[#22c55e]/15 text-[#22c55e] border border-[#22c55e]/30 shadow-[0_0_8px_rgba(34,197,94,0.15)]"
+                          : user.status === "suspended"
+                            ? "bg-[#f59e0b]/15 text-[#f59e0b] border border-[#f59e0b]/30"
+                            : "bg-[#ef4444]/15 text-[#ef4444] border border-[#ef4444]/30"
+                      )}
+                    >
+                      {user.status === "active" && <CheckCircle2 className="h-3 w-3" />}
+                      {user.status === "banned" && <Ban className="h-3 w-3" />}
+                      {user.status === "suspended" && <AlertTriangle className="h-3 w-3" />}
+                      {statusDisplay.label}
+                    </span>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="col-span-1 flex items-center justify-end relative z-10">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-9 w-9 rounded-lg border border-transparent hover:border-white/10 hover:bg-white/5 transition-all duration-300"
                         >
-                          {getRoleDisplayName(user.role)}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <span className="font-bold text-amber-400 text-lg">
-                          {user.credits.toLocaleString()}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-1 text-muted-foreground text-sm">
-                          <Clock className="h-3.5 w-3.5" />
-                          {formatDate(user.created_at)}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <span
-                          className={cn(
-                            "px-2 py-1 rounded-full text-xs font-medium flex items-center gap-1 w-fit",
-                            statusDisplay.color === "green"
-                              ? "bg-green-500/20 text-green-400"
-                              : statusDisplay.color === "yellow"
-                              ? "bg-yellow-500/20 text-yellow-400"
-                              : "bg-red-500/20 text-red-400"
-                          )}
+                          <MoreHorizontal className="h-4 w-4 text-white/40 group-hover:text-white/70" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent
+                        align="end"
+                        className="bg-[#0B0C10] border-white/10 rounded-xl shadow-2xl shadow-black/50 min-w-[180px]"
+                      >
+                        <DropdownMenuItem asChild className="hover:bg-white/5 focus:bg-white/5 rounded-lg m-1">
+                          <Link href={`/admin/users/${user.id}`} className="cursor-pointer text-white">
+                            <Eye className="h-4 w-4 mr-2 text-[#00F2EA]" />
+                            查看详情
+                          </Link>
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator className="bg-white/10 my-1" />
+                        <DropdownMenuItem
+                          onClick={() => handleOpenCreditsDialog(user)}
+                          className="hover:bg-white/5 focus:bg-white/5 rounded-lg m-1 text-white"
                         >
-                          {user.status === "active" && (
-                            <CheckCircle2 className="h-3 w-3" />
-                          )}
-                          {user.status === "banned" && (
-                            <Ban className="h-3 w-3" />
-                          )}
-                          {user.status === "suspended" && (
-                            <AlertTriangle className="h-3 w-3" />
-                          )}
-                          {statusDisplay.label}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-8 w-8">
-                              <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent
-                            align="end"
-                            className="bg-popover border-border"
+                          <CreditCard className="h-4 w-4 mr-2 text-[#CCFF00]" />
+                          积分管理
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => handleOpenRestrictionsDialog(user)}
+                          disabled={user.role !== "user"}
+                          className="hover:bg-white/5 focus:bg-white/5 rounded-lg m-1 text-white disabled:opacity-30"
+                        >
+                          <Shield className="h-4 w-4 mr-2 text-[#f59e0b]" />
+                          功能限制
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator className="bg-white/10 my-1" />
+                        {user.status === "banned" ? (
+                          <DropdownMenuItem
+                            onClick={() => handleUnbanUser(user)}
+                            className="text-[#22c55e] hover:bg-[#22c55e]/10 focus:bg-[#22c55e]/10 rounded-lg m-1"
                           >
-                            <DropdownMenuItem
-                              onClick={() => handleOpenCreditsDialog(user)}
-                            >
-                              <CreditCard className="h-4 w-4 mr-2" />
-                              积分管理
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => handleOpenRestrictionsDialog(user)}
-                              disabled={user.role !== "user"}
-                            >
-                              <Shield className="h-4 w-4 mr-2" />
-                              功能限制
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator className="bg-white/10" />
-                            {user.status === "banned" ? (
-                              <DropdownMenuItem
-                                onClick={() => handleUnbanUser(user)}
-                                className="text-green-400 focus:text-green-400"
-                              >
-                                <UserCheck className="h-4 w-4 mr-2" />
-                                解除封禁
-                              </DropdownMenuItem>
-                            ) : (
-                              <DropdownMenuItem
-                                onClick={() => handleOpenBanDialog(user)}
-                                className="text-red-400 focus:text-red-400"
-                                disabled={user.role !== "user"}
-                              >
-                                <Ban className="h-4 w-4 mr-2" />
-                                封禁用户
-                              </DropdownMenuItem>
-                            )}
-                            <DropdownMenuSeparator className="bg-white/10" />
-                            <DropdownMenuItem
-                              onClick={() => handleOpenDeleteDialog(user)}
-                              className="text-red-500 focus:text-red-500"
-                              disabled={user.role !== "user"}
-                            >
-                              <UserX className="h-4 w-4 mr-2" />
-                              删除用户
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+                            <UserCheck className="h-4 w-4 mr-2" />
+                            解除封禁
+                          </DropdownMenuItem>
+                        ) : (
+                          <DropdownMenuItem
+                            onClick={() => handleOpenBanDialog(user)}
+                            className="text-[#ef4444] hover:bg-[#ef4444]/10 focus:bg-[#ef4444]/10 rounded-lg m-1"
+                            disabled={user.role !== "user"}
+                          >
+                            <Ban className="h-4 w-4 mr-2" />
+                            封禁用户
+                          </DropdownMenuItem>
+                        )}
+                        <DropdownMenuItem
+                          onClick={() => handleOpenDeleteDialog(user)}
+                          className="text-[#ef4444] hover:bg-[#ef4444]/10 focus:bg-[#ef4444]/10 rounded-lg m-1"
+                          disabled={user.role !== "user"}
+                        >
+                          <UserX className="h-4 w-4 mr-2" />
+                          删除用户
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
 
       {/* Credits Management Dialog */}
       <Dialog open={showCreditsDialog} onOpenChange={setShowCreditsDialog}>
-        <DialogContent className="max-w-md bg-background border-border">
+        <DialogContent className="max-w-md bg-[#0B0C10] border-white/10 rounded-2xl">
+          <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-[#CCFF00]/30 to-transparent" />
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Zap className="h-5 w-5 text-amber-400" />
+            <DialogTitle className="flex items-center gap-2 text-white">
+              <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-[#CCFF00]/20 to-[#00F2EA]/20 border border-[#CCFF00]/30 flex items-center justify-center">
+                <Zap className="h-4 w-4 text-[#CCFF00]" />
+              </div>
               积分管理
             </DialogTitle>
-            <DialogDescription>
-              为用户 <span className="text-white font-medium">{selectedUser?.email}</span> 管理积分
+            <DialogDescription className="text-white/50">
+              为用户 <span className="text-[#00F2EA] font-medium">{selectedUser?.email}</span> 管理积分
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 py-4">
             {/* Current Balance */}
-            <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30">
-              <p className="text-xs text-amber-400 mb-1">当前余额</p>
-              <p className="text-3xl font-bold text-amber-400">
-                {selectedUser?.credits.toLocaleString()} <span className="text-lg">积分</span>
+            <div className="p-4 rounded-xl bg-gradient-to-br from-[#CCFF00]/10 to-[#00F2EA]/10 border border-[#CCFF00]/20 relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-20 h-20 bg-[#CCFF00]/10 blur-2xl rounded-full" />
+              <p className="text-xs text-[#CCFF00] mb-1 font-mono uppercase">Current Balance</p>
+              <p className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-[#CCFF00] to-[#00F2EA]">
+                {selectedUser?.credits.toLocaleString()} <span className="text-lg text-white/60">积分</span>
               </p>
             </div>
 
@@ -854,10 +911,10 @@ export default function AdminUsersPage() {
                 onChange={(e) => setCreditAmount(parseInt(e.target.value) || 0)}
                 min={1}
                 max={creditAction === "deduct" ? selectedUser?.credits : undefined}
-                className="bg-background border-border text-lg font-bold"
+                className="bg-[#050505] border-white/10 text-lg font-bold text-white rounded-xl h-12"
               />
               {creditAction === "deduct" && selectedUser && (
-                <p className="text-xs text-muted-foreground mt-1">
+                <p className="text-xs text-white/40 mt-1">
                   最大可扣除: {selectedUser.credits.toLocaleString()} 积分
                 </p>
               )}
@@ -874,21 +931,21 @@ export default function AdminUsersPage() {
                 onChange={(e) => setCreditReason(e.target.value)}
                 placeholder="例如：线下转账、系统补偿、活动奖励..."
                 rows={3}
-                className="bg-background border-border resize-none"
+                className="bg-[#050505] border-white/10 text-white rounded-xl resize-none placeholder:text-white/30"
               />
-              <p className="text-xs text-muted-foreground mt-1">
+              <p className="text-xs text-white/40 mt-1">
                 此备注将记录到审计日志中，请详细说明操作原因
               </p>
             </div>
 
             {/* Preview */}
-            <div className="p-3 rounded-lg bg-muted/50 border border-border">
-              <p className="text-xs text-muted-foreground mb-1">操作预览</p>
+            <div className="p-3 rounded-xl bg-[#050505] border border-white/10">
+              <p className="text-xs text-white/40 mb-1 font-mono uppercase">Preview</p>
               <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">操作后余额:</span>
+                <span className="text-white/50">操作后余额:</span>
                 <span className={cn(
                   "text-xl font-bold",
-                  creditAction === "deduct" ? "text-red-400" : creditAction === "system_grant" ? "text-tiktok-cyan" : "text-green-400"
+                  creditAction === "deduct" ? "text-[#ef4444]" : creditAction === "system_grant" ? "text-[#00F2EA]" : "text-[#22c55e]"
                 )}>
                   {creditAction === "deduct"
                     ? Math.max(0, (selectedUser?.credits || 0) - creditAmount).toLocaleString()
@@ -915,8 +972,8 @@ export default function AdminUsersPage() {
                 creditAction === "system_grant"
                   ? "bg-gradient-to-r from-tiktok-cyan to-tiktok-pink text-black"
                   : creditAction === "recharge"
-                  ? "bg-gradient-to-r from-green-500 to-emerald-500 text-white"
-                  : "bg-gradient-to-r from-red-500 to-orange-500 text-white"
+                    ? "bg-gradient-to-r from-green-500 to-emerald-500 text-white"
+                    : "bg-gradient-to-r from-red-500 to-orange-500 text-white"
               )}
             >
               {isProcessing ? (
@@ -1103,7 +1160,7 @@ export default function AdminUsersPage() {
 
             <div className="space-y-3">
               {FEATURE_OPTIONS.map((feature) => (
-                <div 
+                <div
                   key={feature.key}
                   className="flex items-center justify-between p-3 rounded-lg bg-muted/50 border border-border"
                 >

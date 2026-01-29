@@ -1233,7 +1233,7 @@ export default function QuickGeneratorPage() {
     return (
       <div className="flex h-[calc(100vh-100px)] gap-6 p-6">
         {/* Skeleton Left Panel */}
-        <div className="w-[400px] flex-shrink-0 space-y-4">
+        <div className="w-[380px] flex-shrink-0 space-y-4">
           <div className="h-10 w-48 bg-white/5 rounded-lg animate-pulse" />
           <div className="h-12 bg-white/5 rounded-xl animate-pulse" />
           <div className="h-64 bg-white/5 rounded-xl animate-pulse" />
@@ -1253,15 +1253,16 @@ export default function QuickGeneratorPage() {
       {/* ============================================================ */}
       {/* LEFT PANEL - Control Center */}
       {/* ============================================================ */}
-      <div className="w-[400px] flex-shrink-0 flex flex-col space-y-4 overflow-y-auto pr-2">
-        {/* Header */}
+      {/* ============================================================ */}
+      {/* LEFT PANEL - Control Center */}
+      {/* ============================================================ */}
+      <div className="w-[380px] flex-shrink-0 flex flex-col space-y-3 overflow-y-auto pr-2 bg-[#0B0C10]/60 backdrop-blur-md border border-white/10 rounded-2xl p-4">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-xl font-bold flex items-center gap-2">
-              <Zap className="h-5 w-5 text-amber-400" />
-              极速造片机
+            <h1 className="text-3xl font-bold tracking-tight flex items-center gap-3">
+              <div className="h-8 w-1.5 rounded-full bg-gradient-to-b from-mermaid-lime to-mermaid-cyan shadow-[0_0_10px_rgba(0,242,234,0.5)]" />
+              <span className="text-white drop-shadow-lg">极速造片机</span>
             </h1>
-            <p className="text-xs text-muted-foreground">AI 快速图片生成</p>
           </div>
           <div className="flex items-center gap-2">
             {/* 历史记录按钮 */}
@@ -1271,28 +1272,14 @@ export default function QuickGeneratorPage() {
               onClick={() => setShowHistoryPanel(!showHistoryPanel)}
               className={cn(
                 "h-8 px-2.5 gap-1.5 border-white/20",
-                showHistoryPanel && "bg-purple-500/20 border-purple-500/50 text-purple-400"
+                showHistoryPanel && "bg-mermaid-pink/20 border-mermaid-pink/50 text-mermaid-pink"
               )}
             >
               <History className="h-3.5 w-3.5" />
               <span className="text-xs">历史</span>
             </Button>
             {/* 积分显示 */}
-            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/10 border border-amber-500/30">
-              <Zap className="h-3.5 w-3.5 text-amber-500" />
-              {isLoadingCredits ? (
-                <span className="w-10 h-4 bg-amber-500/20 rounded animate-pulse" />
-              ) : (
-                <span className="font-semibold text-amber-400 text-sm">{userCredits ?? 0}</span>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Mode Indicator - 纯图片模式 */}
-        <div className="flex p-1 rounded-xl panel-surface">
-          <div className="flex-1 py-2 rounded-lg gap-2 flex items-center justify-center bg-gradient-to-r from-purple-500 to-pink-500 text-white font-semibold">
-            <ImageIcon className="h-4 w-4" /> 图片模式
+            {/* 积分显示 - Removed per user request */}
           </div>
         </div>
 
@@ -1302,10 +1289,10 @@ export default function QuickGeneratorPage() {
         {outputMode === "video" && (
           <>
             {/* Step 1: Image Source */}
-            <Card className="border-border/50 bg-card/50">
+            <Card className="border-white/10 bg-white/5 backdrop-blur-sm shadow-xl">
               <CardHeader className="pb-3">
                 <CardTitle className="text-sm flex items-center gap-2">
-                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-tiktok-cyan/20 text-tiktok-cyan text-xs font-bold">1</span>
+                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-mermaid-cyan/20 text-mermaid-cyan text-xs font-bold">1</span>
                   Image Source
                   <span className="text-xs text-muted-foreground font-normal ml-1">(可选)</span>
                 </CardTitle>
@@ -1365,17 +1352,17 @@ export default function QuickGeneratorPage() {
                       <div className="space-y-3 p-3 rounded-lg panel-surface">
                         <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
                           <span className="flex items-center gap-1">
-                            <Sparkles className="h-3 w-3 text-tiktok-pink" />
+                            <Sparkles className="h-3 w-3 text-mermaid-pink" />
                             NanoBanana Pro 图片增强
                           </span>
                         </div>
                         <div className="flex gap-2">
                           <Button variant="outline" size="sm" onClick={() => setProcessingType("upscale")}
-                            className={cn("flex-1 h-8 gap-1", processingType === "upscale" ? "bg-tiktok-cyan/20 border-tiktok-cyan/50 text-tiktok-cyan" : "btn-subtle")}>
+                            className={cn("flex-1 h-8 gap-1", processingType === "upscale" ? "bg-mermaid-cyan/20 border-mermaid-cyan/50 text-mermaid-cyan" : "btn-subtle")}>
                             <ZoomIn className="h-3.5 w-3.5" /> 高清放大 (40 pts)
                           </Button>
                           <Button variant="outline" size="sm" onClick={() => setProcessingType("9grid")}
-                            className={cn("flex-1 h-8 gap-1", processingType === "9grid" ? "bg-tiktok-pink/20 border-tiktok-pink/50 text-tiktok-pink" : "btn-subtle")}>
+                            className={cn("flex-1 h-8 gap-1", processingType === "9grid" ? "bg-mermaid-pink/20 border-mermaid-pink/50 text-mermaid-pink" : "btn-subtle")}>
                             <Grid3X3 className="h-3.5 w-3.5" /> 九宫格 (60 pts)
                           </Button>
                         </div>
@@ -1384,7 +1371,7 @@ export default function QuickGeneratorPage() {
                             <span className="text-xs text-muted-foreground self-center mr-2">生成数量:</span>
                             {([1, 2] as BatchCount[]).map((count) => (
                               <Button key={count} variant="outline" size="sm" onClick={() => setBatchCount(count)}
-                                className={cn("flex-1 h-8", batchCount === count ? "bg-amber-500/20 border-amber-500/50 text-amber-400" : "btn-subtle")}>
+                                className={cn("flex-1 h-8", batchCount === count ? "bg-neon-warning/20 border-neon-warning/50 text-neon-warning" : "btn-subtle")}>
                                 {count}
                               </Button>
                             ))}
@@ -1405,7 +1392,7 @@ export default function QuickGeneratorPage() {
             <Card className="border-border/50 bg-card/50">
               <CardHeader className="pb-3">
                 <CardTitle className="text-sm flex items-center gap-2">
-                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-tiktok-pink/20 text-tiktok-pink text-xs font-bold">2</span>
+                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-mermaid-pink/20 text-mermaid-pink text-xs font-bold">2</span>
                   Video Configuration
                 </CardTitle>
               </CardHeader>
@@ -1441,7 +1428,7 @@ export default function QuickGeneratorPage() {
                     <div className="space-y-1.5">
                       {(Object.entries(VIDEO_MODEL_PRICING) as [VideoModel, typeof VIDEO_MODEL_PRICING[VideoModel]][]).map(([key, value]) => (
                         <Button key={key} variant="outline" size="sm" onClick={() => setVideoModel(key)}
-                          className={cn("w-full justify-between h-8", videoModel === key ? "bg-tiktok-cyan/20 border-tiktok-cyan/50 text-tiktok-cyan" : "btn-subtle")}>
+                          className={cn("w-full justify-between h-8", videoModel === key ? "bg-mermaid-cyan/20 border-mermaid-cyan/50 text-mermaid-cyan" : "btn-subtle")}>
                           <span className="flex items-center gap-1.5"><Clock className="h-3.5 w-3.5" />{value.label}</span>
                           <span className="text-xs">{value.credits} pts</span>
                         </Button>
@@ -1452,11 +1439,11 @@ export default function QuickGeneratorPage() {
                     <Label className="text-xs text-muted-foreground mb-2 block">Aspect Ratio</Label>
                     <div className="flex gap-2">
                       <Button variant="outline" size="sm" onClick={() => setVideoAspectRatio("9:16")}
-                        className={cn("flex-1 h-8", videoAspectRatio === "9:16" ? "bg-tiktok-cyan/20 border-tiktok-cyan/50 text-tiktok-cyan" : "btn-subtle")}>
+                        className={cn("flex-1 h-8", videoAspectRatio === "9:16" ? "bg-mermaid-cyan/20 border-mermaid-cyan/50 text-mermaid-cyan" : "btn-subtle")}>
                         <Smartphone className="h-3.5 w-3.5 mr-1" /> 9:16
                       </Button>
                       <Button variant="outline" size="sm" onClick={() => setVideoAspectRatio("16:9")}
-                        className={cn("flex-1 h-8", videoAspectRatio === "16:9" ? "bg-tiktok-pink/20 border-tiktok-pink/50 text-tiktok-pink" : "btn-subtle")}>
+                        className={cn("flex-1 h-8", videoAspectRatio === "16:9" ? "bg-mermaid-pink/20 border-mermaid-pink/50 text-mermaid-pink" : "btn-subtle")}>
                         <Monitor className="h-3.5 w-3.5 mr-1" /> 16:9
                       </Button>
                     </div>
@@ -1467,24 +1454,24 @@ export default function QuickGeneratorPage() {
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <Label className="text-xs text-muted-foreground flex items-center gap-1.5">
-                      <User className="h-3.5 w-3.5 text-tiktok-pink" /> AI Cast
+                      <User className="h-3.5 w-3.5 text-mermaid-pink" /> AI Cast
                     </Label>
-                    <Switch checked={useAiModel} onCheckedChange={setUseAiModel} className="data-[state=checked]:bg-tiktok-pink scale-90" />
+                    <Switch checked={useAiModel} onCheckedChange={setUseAiModel} className="data-[state=checked]:bg-mermaid-pink scale-90" />
                   </div>
                   {useAiModel && (
                     <Button
                       variant="outline"
                       onClick={handleOpenModelDialog}
                       className={cn(
-                        "w-full h-auto min-h-[44px] justify-between border-white/20 hover:border-tiktok-pink/50 py-2",
-                        selectedModel && "bg-gradient-to-r from-tiktok-pink/5 to-purple-500/5"
+                        "w-full h-auto min-h-[44px] justify-between border-white/20 hover:border-mermaid-pink/50 py-2",
+                        selectedModel && "bg-gradient-to-r from-mermaid-pink/5 to-purple-500/5"
                       )}
                     >
                       <div className="flex items-center gap-3">
                         {aiCastMode === "auto" ? (
                           <>
-                            <div className="h-8 w-8 rounded-full bg-gradient-to-br from-tiktok-cyan/30 to-blue-500/30 flex items-center justify-center border border-tiktok-cyan/30">
-                              <Bot className="h-4 w-4 text-tiktok-cyan" />
+                            <div className="h-8 w-8 rounded-full bg-gradient-to-br from-mermaid-cyan/30 to-blue-500/30 flex items-center justify-center border border-mermaid-cyan/30">
+                              <Bot className="h-4 w-4 text-mermaid-cyan" />
                             </div>
                             <div className="text-left">
                               <p className="text-sm font-medium">Auto Match</p>
@@ -1497,11 +1484,11 @@ export default function QuickGeneratorPage() {
                               <img
                                 src={selectedModel.avatar_url}
                                 alt={selectedModel.name}
-                                className="h-8 w-8 rounded-full object-cover border border-tiktok-pink/30"
+                                className="h-8 w-8 rounded-full object-cover border border-mermaid-pink/30"
                               />
                             ) : (
-                              <div className="h-8 w-8 rounded-full bg-gradient-to-br from-tiktok-pink/30 to-purple-500/30 flex items-center justify-center border border-tiktok-pink/30">
-                                <User className="h-4 w-4 text-tiktok-pink" />
+                              <div className="h-8 w-8 rounded-full bg-gradient-to-br from-mermaid-pink/30 to-purple-500/30 flex items-center justify-center border border-mermaid-pink/30">
+                                <User className="h-4 w-4 text-mermaid-pink" />
                               </div>
                             )}
                             <div className="text-left">
@@ -1533,8 +1520,8 @@ export default function QuickGeneratorPage() {
 
                 {/* Auto Download */}
                 <div className="flex items-center justify-between py-2 px-3 rounded-lg panel-surface">
-                  <Label className="text-xs flex items-center gap-1.5"><Download className="h-3.5 w-3.5 text-tiktok-cyan" />Auto-Download</Label>
-                  <Switch checked={autoDownload} onCheckedChange={setAutoDownload} className="data-[state=checked]:bg-tiktok-cyan scale-90" />
+                  <Label className="text-xs flex items-center gap-1.5"><Download className="h-3.5 w-3.5 text-mermaid-cyan" />Auto-Download</Label>
+                  <Switch checked={autoDownload} onCheckedChange={setAutoDownload} className="data-[state=checked]:bg-mermaid-cyan scale-90" />
                 </div>
               </CardContent>
             </Card>
@@ -1548,8 +1535,8 @@ export default function QuickGeneratorPage() {
           <Card className="border-border/50 bg-card/50">
             <CardHeader className="pb-3">
               <CardTitle className="text-sm flex items-center gap-2">
-                <Sparkles className="h-4 w-4 text-tiktok-pink" />
-                Image Generation Settings
+                <Sparkles className="h-4 w-4 text-mermaid-pink" />
+                图片生成设置
               </CardTitle>
               <CardDescription className="text-xs">使用 Nano Banana AI 生成/增强图片 (最多支持 4 张参考图)</CardDescription>
             </CardHeader>
@@ -1634,8 +1621,8 @@ export default function QuickGeneratorPage() {
               <div>
                 <Label className="text-xs text-muted-foreground mb-2 block flex items-center gap-1.5">
                   <Wand2 className="h-3.5 w-3.5 text-amber-400" />
-                  <span className="font-medium">Prompt</span>
-                  <span className="text-muted-foreground ml-1">(Recommended)</span>
+                  <span className="font-medium">提示词 Prompt</span>
+                  <span className="text-muted-foreground ml-1">(推荐)</span>
                 </Label>
                 <div className="relative">
                   <Textarea
@@ -1643,28 +1630,28 @@ export default function QuickGeneratorPage() {
                     onChange={(e) => setPrompt(e.target.value)}
                     placeholder="描述你想要生成的图片效果... (例如：'摄影棚灯光、白色背景、产品摄影')"
                     disabled={canvasState === "generating"}
-                    className="input-surface resize-none text-sm pr-16 min-h-[180px]"
+                    className="bg-[#0B0C10]/40 border-white/10 focus:border-mermaid-cyan/50 text-white placeholder:text-white/30 resize-none text-sm pr-16 min-h-[180px] rounded-xl"
                   />
                   <Button size="sm" variant="ghost" onClick={handleEnhancePrompt}
                     disabled={isEnhancingPrompt || !prompt.trim()}
                     className="absolute bottom-2 right-2 h-7 text-xs bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 px-2">
                     {isEnhancingPrompt ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
-                    <span className="ml-1">Enhance</span>
+                    <span className="ml-1">优化</span>
                   </Button>
                 </div>
               </div>
 
               {/* Quality Tier Selection */}
               <div>
-                <Label className="text-xs text-muted-foreground mb-2 block">Quality Tier</Label>
+                <Label className="text-xs text-muted-foreground mb-2 block">画质等级</Label>
                 <div className="flex gap-2">
                   <Button variant="outline" size="sm" onClick={() => setImageNanoTier("fast")}
-                    className={cn("flex-1 h-10 flex-col gap-0.5", imageNanoTier === "fast" ? "bg-tiktok-cyan/20 border-tiktok-cyan/50 text-tiktok-cyan" : "btn-subtle")}>
+                    className={cn("flex-1 h-10 flex-col gap-0.5", imageNanoTier === "fast" ? "bg-transparent border-mermaid-cyan text-mermaid-cyan ring-1 ring-mermaid-cyan/50" : "btn-subtle")}>
                     <span className="font-semibold">Fast</span>
                     <span className="text-xs opacity-70">10 Credits</span>
                   </Button>
                   <Button variant="outline" size="sm" onClick={() => setImageNanoTier("pro")}
-                    className={cn("flex-1 h-10 flex-col gap-0.5", imageNanoTier === "pro" ? "bg-tiktok-pink/20 border-tiktok-pink/50 text-tiktok-pink" : "btn-subtle")}>
+                    className={cn("flex-1 h-10 flex-col gap-0.5", imageNanoTier === "pro" ? "bg-transparent border-mermaid-pink text-mermaid-pink ring-1 ring-mermaid-pink/50" : "btn-subtle")}>
                     <span className="font-semibold">Pro</span>
                     <span className="text-xs opacity-70">28 Credits</span>
                   </Button>
@@ -1673,9 +1660,9 @@ export default function QuickGeneratorPage() {
 
               {/* Aspect Ratio */}
               <div>
-                <Label className="text-xs text-muted-foreground mb-2 block">Aspect Ratio</Label>
+                <Label className="text-xs text-muted-foreground mb-2 block">画面比例</Label>
                 <Select value={imageAspectRatio} onValueChange={(v) => setImageAspectRatio(v as ImageAspectRatio)}>
-                  <SelectTrigger className="input-surface h-9">
+                  <SelectTrigger className="bg-[#0B0C10]/40 border-white/10 focus:border-mermaid-cyan/50 text-white h-9 rounded-lg">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="bg-popover/95 border-border/50 backdrop-blur-xl">
@@ -1691,7 +1678,7 @@ export default function QuickGeneratorPage() {
                 <div>
                   <Label className="text-xs text-muted-foreground mb-2 block">Resolution</Label>
                   <Select value={imageResolution} onValueChange={(v) => setImageResolution(v as ImageResolution)}>
-                    <SelectTrigger className="input-surface h-9">
+                    <SelectTrigger className="bg-[#0B0C10]/40 border-white/10 focus:border-mermaid-cyan/50 text-white h-9 rounded-lg">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent className="bg-popover/95 border-border/50 backdrop-blur-xl">
@@ -1705,8 +1692,8 @@ export default function QuickGeneratorPage() {
 
               {/* Auto Download */}
               <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-white/5">
-                <Label className="text-xs flex items-center gap-1.5"><Download className="h-3.5 w-3.5 text-tiktok-cyan" />Auto-Download</Label>
-                <Switch checked={autoDownload} onCheckedChange={setAutoDownload} className="data-[state=checked]:bg-tiktok-cyan scale-90" />
+                <Label className="text-xs flex items-center gap-1.5"><Download className="h-3.5 w-3.5 text-mermaid-cyan" />自动下载</Label>
+                <Switch checked={autoDownload} onCheckedChange={setAutoDownload} className="data-[state=checked]:bg-mermaid-cyan scale-90" />
               </div>
             </CardContent>
           </Card>
@@ -1717,28 +1704,47 @@ export default function QuickGeneratorPage() {
         {/* ======================================== */}
         <div className="sticky bottom-0 pt-2 pb-4 bg-background">
           <div className="flex items-center justify-between mb-2 text-sm">
-            <span className="text-muted-foreground">Estimated Cost:</span>
+            <span className="text-muted-foreground">预计消耗:</span>
             <div className="flex items-center gap-2">
-              <span className="font-bold text-amber-400">{totalCost} Credits</span>
+              <span className="font-bold text-amber-400">{totalCost} 积分</span>
               {(userCredits ?? 0) < totalCost && (
                 <span className="text-xs text-red-400">(余额: {userCredits ?? 0})</span>
               )}
             </div>
           </div>
-          <Button onClick={handleGenerate} disabled={!canGenerate || canvasState === "generating" || (outputMode === "video" && isQuickGenRunning) || (outputMode === "image" && isQuickGenImageRunning)}
-            className={cn("w-full h-12 font-semibold transition-all text-base",
-              canGenerate && !(outputMode === "video" && isQuickGenRunning) && !(outputMode === "image" && isQuickGenImageRunning) ? "bg-gradient-to-r from-tiktok-pink to-purple-500 text-white shadow-[0_0_20px_rgba(255,0,80,0.3)]" : "bg-white/10 text-muted-foreground")}>
-            {canvasState === "generating" || (outputMode === "video" && isQuickGenRunning) || (outputMode === "image" && isQuickGenImageRunning) ? (
-              <><Loader2 className="h-5 w-5 mr-2 animate-spin" />生成中... {outputMode === "video" ? (quickGenActiveTask?.progress || generatingProgress) : (quickGenImageTask?.progress || generatingProgress)}%</>
-            ) : (
-              <><Play className="h-5 w-5 mr-2" />生成 {outputMode === "video" ? "视频" : "图片"}</>
+          <button
+            onClick={handleGenerate}
+            disabled={!canGenerate || canvasState === "generating" || (outputMode === "video" && isQuickGenRunning) || (outputMode === "image" && isQuickGenImageRunning)}
+            className={cn(
+              "relative w-full h-14 font-bold text-lg transition-all duration-500 overflow-hidden group rounded-xl border",
+              canGenerate && !(outputMode === "video" && isQuickGenRunning) && !(outputMode === "image" && isQuickGenImageRunning)
+                ? "bg-gradient-to-r from-[#CCFF00] via-[#00F2EA] to-[#EC4899] text-black border-white/20 shadow-[0_0_30px_rgba(0,242,234,0.4)] hover:shadow-[0_0_50px_rgba(0,242,234,0.7)] hover:scale-[1.02]"
+                : "bg-gradient-to-r from-[#CCFF00]/40 via-[#00F2EA]/40 to-[#EC4899]/40 text-white/50 border-white/10 cursor-not-allowed"
             )}
-          </Button>
+          >
+            {/* Glossy Overlay - only visible when active */}
+            <div className={cn(
+              "absolute inset-0 bg-gradient-to-b from-white/40 to-transparent pointer-events-none transition-opacity duration-300",
+              canGenerate ? "opacity-100" : "opacity-30"
+            )} />
+            {/* Shimmer Effect - Glossy Wipe on Hover (only when active) */}
+            {canGenerate && (
+              <div className="absolute inset-0 bg-[linear-gradient(110deg,transparent,rgba(255,255,255,0.5),transparent)] bg-[length:200%_100%] opacity-0 group-hover:opacity-100 group-hover:animate-shimmer pointer-events-none transition-opacity duration-300" />
+            )}
+
+            <span className="relative z-10 flex items-center justify-center gap-2">
+              {canvasState === "generating" || (outputMode === "video" && isQuickGenRunning) || (outputMode === "image" && isQuickGenImageRunning) ? (
+                <><Loader2 className="h-6 w-6 mr-2 animate-spin" />生成中... {outputMode === "video" ? (quickGenActiveTask?.progress || generatingProgress) : (quickGenImageTask?.progress || generatingProgress)}%</>
+              ) : (
+                <><Play className={cn("h-6 w-6 mr-2", canGenerate ? "fill-black" : "fill-white/30")} />生成 {outputMode === "video" ? "视频" : "图片"}</>
+              )}
+            </span>
+          </button>
           {/* 显示禁用原因 */}
           {!canGenerate && canvasState !== "generating" && !(outputMode === "video" && isQuickGenRunning) && !(outputMode === "image" && isQuickGenImageRunning) && (
             <p className="text-xs text-center mt-2">
               {!userId ? (
-                <a href="/auth/login" className="text-tiktok-cyan hover:underline">
+                <a href="/auth/login" className="text-mermaid-cyan hover:underline">
                   🔐 请先登录以使用生成功能
                 </a>
               ) : (userCredits ?? 0) < totalCost ? (
@@ -1752,12 +1758,12 @@ export default function QuickGeneratorPage() {
           )}
           {/* 后台任务运行中提示 - 只在对应模式下显示 */}
           {outputMode === "video" && isQuickGenRunning && (
-            <p className="text-xs text-center mt-2 text-tiktok-cyan">
+            <p className="text-xs text-center mt-2 text-mermaid-cyan">
               🎬 视频正在后台生成中，可以切换到其他页面
             </p>
           )}
           {outputMode === "image" && isQuickGenImageRunning && (
-            <p className="text-xs text-center mt-2 text-violet-400">
+            <p className="text-xs text-center mt-2 text-mermaid-pink">
               🎨 图片正在后台生成中，可以切换到其他页面
             </p>
           )}
@@ -1767,7 +1773,10 @@ export default function QuickGeneratorPage() {
       {/* ============================================================ */}
       {/* RIGHT PANEL - Canvas/Preview */}
       {/* ============================================================ */}
-      <div className="flex-1 rounded-2xl border border-border/50 bg-muted/30 dark:bg-black/30 overflow-hidden relative">
+      {/* ============================================================ */}
+      {/* RIGHT PANEL - Canvas/Preview */}
+      {/* ============================================================ */}
+      <div className="flex-1 rounded-2xl border border-white/10 bg-[#0B0C10]/40 backdrop-blur-xl overflow-hidden relative shadow-2xl shadow-black/50">
 
         {/* Empty State */}
         {canvasState === "empty" && (
@@ -1793,7 +1802,7 @@ export default function QuickGeneratorPage() {
             </div>
             {sourceType === "nano_banana" && (
               <p className="mt-6 text-muted-foreground text-center text-sm">
-                Click <span className="text-tiktok-cyan font-semibold">&quot;Process&quot;</span> to enhance
+                Click <span className="text-mermaid-cyan font-semibold">&quot;Process&quot;</span> to enhance
               </p>
             )}
           </div>
@@ -1827,9 +1836,7 @@ export default function QuickGeneratorPage() {
                 </div>
               ))}
             </div>
-            <p className="mt-6 text-muted-foreground text-center text-sm">
-              输入提示词并点击 <span className="text-purple-400 font-semibold">&quot;Generate Image&quot;</span> 开始生成
-            </p>
+
           </div>
         )}
 
@@ -1837,16 +1844,16 @@ export default function QuickGeneratorPage() {
         {canvasState === "processing" && (
           <div className="absolute inset-0 flex flex-col items-center justify-center">
             <div className="relative h-32 w-32 mb-8">
-              <div className="absolute inset-0 rounded-full border-4 border-tiktok-cyan/30 animate-ping" />
-              <div className="absolute inset-2 rounded-full border-4 border-tiktok-pink/30 animate-ping" style={{ animationDelay: "0.2s" }} />
+              <div className="absolute inset-0 rounded-full border-4 border-mermaid-cyan/30 animate-ping" />
+              <div className="absolute inset-2 rounded-full border-4 border-mermaid-pink/30 animate-ping" style={{ animationDelay: "0.2s" }} />
               <div className="absolute inset-4 rounded-full border-4 border-purple-500/30 animate-ping" style={{ animationDelay: "0.4s" }} />
               <div className="absolute inset-0 flex items-center justify-center">
-                <Sparkles className="h-12 w-12 text-tiktok-cyan animate-pulse" />
+                <Sparkles className="h-12 w-12 text-mermaid-cyan animate-pulse" />
               </div>
             </div>
-            <p className="text-2xl font-semibold text-tiktok-cyan mb-2">Processing...</p>
+            <p className="text-2xl font-semibold text-mermaid-cyan mb-2">Processing...</p>
             <div className="w-64 h-2 bg-white/10 rounded-full mt-4 overflow-hidden">
-              <div className="h-full bg-gradient-to-r from-tiktok-cyan to-tiktok-pink transition-all" style={{ width: `${processingProgress}%` }} />
+              <div className="h-full bg-gradient-to-r from-mermaid-cyan to-mermaid-pink transition-all" style={{ width: `${processingProgress}%` }} />
             </div>
           </div>
         )}
@@ -1866,7 +1873,7 @@ export default function QuickGeneratorPage() {
                   <img
                     src={processedImages[0]}
                     alt="Processed"
-                    className="max-w-full max-h-[400px] object-contain rounded-xl border-2 border-white/20 group-hover:border-tiktok-cyan/50 transition-all"
+                    className="max-w-full max-h-[400px] object-contain rounded-xl border-2 border-white/20 group-hover:border-mermaid-cyan/50 transition-all"
                   />
                   <div className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/30 transition-all rounded-xl">
                     <span className="opacity-0 group-hover:opacity-100 text-white text-sm font-medium">点击放大</span>
@@ -1874,7 +1881,7 @@ export default function QuickGeneratorPage() {
                 </div>
                 <Button
                   onClick={() => handleSelectImage(processedImages[0])}
-                  className="mt-4 bg-gradient-to-r from-tiktok-cyan to-blue-500 text-black font-semibold"
+                  className="mt-4 bg-gradient-to-r from-mermaid-cyan to-blue-500 text-black font-semibold"
                 >
                   <Check className="h-4 w-4 mr-2" />使用此图片
                 </Button>
@@ -1888,7 +1895,7 @@ export default function QuickGeneratorPage() {
                     variant="outline"
                     size="icon"
                     onClick={() => setCurrentImageIndex(prev => (prev - 1 + processedImages.length) % processedImages.length)}
-                    className="h-14 w-14 rounded-full bg-gradient-to-r from-tiktok-cyan/80 to-blue-500/80 border-2 border-white/30 hover:from-tiktok-cyan hover:to-blue-500 shadow-lg shadow-tiktok-cyan/30"
+                    className="h-14 w-14 rounded-full bg-gradient-to-r from-mermaid-cyan/80 to-blue-500/80 border-2 border-white/30 hover:from-mermaid-cyan hover:to-blue-500 shadow-lg shadow-mermaid-cyan/30"
                   >
                     <ArrowLeft className="h-7 w-7 text-white" />
                   </Button>
@@ -1901,7 +1908,7 @@ export default function QuickGeneratorPage() {
                     <img
                       src={processedImages[currentImageIndex]}
                       alt={`Option ${currentImageIndex + 1}`}
-                      className="max-w-[400px] max-h-[400px] object-contain rounded-xl border-2 border-white/20 group-hover:border-tiktok-cyan/50 transition-all"
+                      className="max-w-[400px] max-h-[400px] object-contain rounded-xl border-2 border-white/20 group-hover:border-mermaid-cyan/50 transition-all"
                     />
                     <div className="absolute top-3 left-3 bg-black/70 px-3 py-1 rounded-full text-sm font-semibold">
                       {currentImageIndex + 1} / {processedImages.length}
@@ -1916,7 +1923,7 @@ export default function QuickGeneratorPage() {
                     variant="outline"
                     size="icon"
                     onClick={() => setCurrentImageIndex(prev => (prev + 1) % processedImages.length)}
-                    className="h-14 w-14 rounded-full bg-gradient-to-r from-tiktok-pink/80 to-purple-500/80 border-2 border-white/30 hover:from-tiktok-pink hover:to-purple-500 shadow-lg shadow-tiktok-pink/30"
+                    className="h-14 w-14 rounded-full bg-gradient-to-r from-mermaid-pink/80 to-purple-500/80 border-2 border-white/30 hover:from-mermaid-pink hover:to-purple-500 shadow-lg shadow-mermaid-pink/30"
                   >
                     <ChevronRight className="h-7 w-7 text-white" />
                   </Button>
@@ -1931,7 +1938,7 @@ export default function QuickGeneratorPage() {
                       className={cn(
                         "w-18 h-18 rounded-lg overflow-hidden border-2 transition-all",
                         currentImageIndex === index
-                          ? "border-tiktok-cyan ring-2 ring-tiktok-cyan/50 scale-110"
+                          ? "border-mermaid-cyan ring-2 ring-mermaid-cyan/50 scale-110"
                           : "border-white/20 hover:border-white/40 opacity-70 hover:opacity-100"
                       )}
                     >
@@ -1943,7 +1950,7 @@ export default function QuickGeneratorPage() {
                 {/* 选择按钮 */}
                 <Button
                   onClick={() => handleSelectImage(processedImages[currentImageIndex])}
-                  className="mt-5 bg-gradient-to-r from-tiktok-cyan to-blue-500 text-black font-semibold px-6 py-2"
+                  className="mt-5 bg-gradient-to-r from-mermaid-cyan to-blue-500 text-black font-semibold px-6 py-2"
                 >
                   <Check className="h-4 w-4 mr-2" />使用图片 #{currentImageIndex + 1}
                 </Button>
@@ -1956,8 +1963,8 @@ export default function QuickGeneratorPage() {
         {canvasState === "selected" && (selectedImage || uploadedFile) && (
           <div className="absolute inset-0 flex flex-col items-center justify-center p-8">
             <div className="relative">
-              <img src={selectedImage || uploadedFile?.url} alt="Selected" className="max-w-full max-h-[500px] object-contain rounded-xl ring-2 ring-tiktok-cyan" />
-              <div className="absolute -top-3 -right-3 bg-tiktok-cyan text-black px-3 py-1 rounded-full text-sm font-semibold flex items-center gap-1">
+              <img src={selectedImage || uploadedFile?.url} alt="Selected" className="max-w-full max-h-[500px] object-contain rounded-xl ring-2 ring-mermaid-cyan" />
+              <div className="absolute -top-3 -right-3 bg-mermaid-cyan text-black px-3 py-1 rounded-full text-sm font-semibold flex items-center gap-1">
                 <Check className="h-4 w-4" /> Ready
               </div>
             </div>
@@ -1975,12 +1982,12 @@ export default function QuickGeneratorPage() {
             <div className="relative h-40 w-40 mb-8">
               <svg className="w-full h-full -rotate-90">
                 <circle cx="80" cy="80" r="70" fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="8" />
-                <circle cx="80" cy="80" r="70" fill="none" stroke="url(#soraGrad)" strokeWidth="8" strokeLinecap="round" strokeDasharray={`${generatingProgress * 4.4} 440`} />
-                <defs><linearGradient id="soraGrad" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stopColor="#ff0050" /><stop offset="100%" stopColor="#8b5cf6" /></linearGradient></defs>
+                <circle cx="80" cy="80" r="70" fill="none" stroke="url(#mermaidGrad)" strokeWidth="8" strokeLinecap="round" strokeDasharray={`${generatingProgress * 4.4} 440`} />
+                <defs><linearGradient id="mermaidGrad" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stopColor="#CCFF00" /><stop offset="50%" stopColor="#00F2EA" /><stop offset="100%" stopColor="#EC4899" /></linearGradient></defs>
               </svg>
               <div className="absolute inset-0 flex items-center justify-center"><span className="text-4xl font-bold">{generatingProgress}%</span></div>
             </div>
-            <p className="text-2xl font-semibold text-tiktok-pink mb-2">{outputMode === "video" ? "Sora is dreaming..." : "Enhancing image..."}</p>
+            <p className="text-2xl font-semibold text-mermaid-pink mb-2">{outputMode === "video" ? "Sora is dreaming..." : "Enhancing image..."}</p>
           </div>
         )}
 
@@ -1993,9 +2000,9 @@ export default function QuickGeneratorPage() {
               onClick={() => handleOpenFullscreen(resultUrl, outputMode)}
             >
               {outputMode === "video" ? (
-                <video src={resultUrl} controls autoPlay loop className="max-w-full max-h-[450px] rounded-xl group-hover:ring-2 group-hover:ring-tiktok-cyan/50 transition-all" />
+                <video src={resultUrl} controls autoPlay loop className="max-w-full max-h-[450px] rounded-xl group-hover:ring-2 group-hover:ring-mermaid-cyan/50 transition-all" />
               ) : (
-                <img src={resultUrl} alt="Generated" className="max-w-full max-h-[450px] object-contain rounded-xl group-hover:ring-2 group-hover:ring-tiktok-cyan/50 transition-all" />
+                <img src={resultUrl} alt="Generated" className="max-w-full max-h-[450px] object-contain rounded-xl group-hover:ring-2 group-hover:ring-mermaid-cyan/50 transition-all" />
               )}
               <div className="absolute top-3 right-3 bg-black/70 px-3 py-1.5 rounded-full text-xs font-medium opacity-0 group-hover:opacity-100 transition-opacity">
                 🔍 点击全屏查看
@@ -2005,7 +2012,7 @@ export default function QuickGeneratorPage() {
             <div className="flex gap-3 mt-5">
               <Button
                 onClick={() => handleDownloadContent(resultUrl, outputMode)}
-                className="bg-gradient-to-r from-tiktok-cyan to-blue-500 text-black font-semibold px-5"
+                className="bg-gradient-to-r from-mermaid-cyan to-blue-500 text-black font-semibold px-5"
               >
                 <Download className="h-4 w-4 mr-2" />保留它
               </Button>
@@ -2048,7 +2055,7 @@ export default function QuickGeneratorPage() {
         <DialogContent className="max-w-2xl bg-black/95 border-white/10">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <User className="h-5 w-5 text-tiktok-pink" />
+              <User className="h-5 w-5 text-mermaid-pink" />
               Choose Your AI Model
             </DialogTitle>
             <DialogDescription>Select a model to present your product</DialogDescription>
@@ -2056,13 +2063,13 @@ export default function QuickGeneratorPage() {
 
           <Tabs value={tempSelectedMode} onValueChange={(v) => setTempSelectedMode(v as AiCastMode)} className="mt-4">
             <TabsList className="grid w-full grid-cols-3 bg-black/30 h-10">
-              <TabsTrigger value="auto" className="data-[state=active]:bg-tiktok-cyan/20 data-[state=active]:text-tiktok-cyan">
+              <TabsTrigger value="auto" className="data-[state=active]:bg-mermaid-cyan/20 data-[state=active]:text-mermaid-cyan">
                 <Bot className="h-4 w-4 mr-2" />Auto Match
               </TabsTrigger>
-              <TabsTrigger value="team" className="data-[state=active]:bg-tiktok-pink/20 data-[state=active]:text-tiktok-pink">
+              <TabsTrigger value="team" className="data-[state=active]:bg-mermaid-pink/20 data-[state=active]:text-mermaid-pink">
                 <Users className="h-4 w-4 mr-2" />My Team
                 {myTeamModels.length > 0 && (
-                  <span className="ml-1.5 text-xs bg-tiktok-pink/30 px-1.5 py-0.5 rounded-full">{myTeamModels.length}</span>
+                  <span className="ml-1.5 text-xs bg-mermaid-pink/30 px-1.5 py-0.5 rounded-full">{myTeamModels.length}</span>
                 )}
               </TabsTrigger>
               <TabsTrigger value="all" className="data-[state=active]:bg-purple-500/20 data-[state=active]:text-purple-400">
@@ -2072,14 +2079,14 @@ export default function QuickGeneratorPage() {
 
             {/* Auto Match Tab */}
             <TabsContent value="auto" className="mt-4">
-              <div className="p-8 rounded-xl bg-gradient-to-br from-tiktok-cyan/10 to-blue-500/10 border border-tiktok-cyan/20 text-center">
+              <div className="p-8 rounded-xl bg-gradient-to-br from-mermaid-cyan/10 to-blue-500/10 border border-mermaid-cyan/20 text-center">
                 <div className="relative h-20 w-20 mx-auto mb-4">
-                  <div className="absolute inset-0 rounded-full bg-tiktok-cyan/20 animate-ping" />
+                  <div className="absolute inset-0 rounded-full bg-mermaid-cyan/20 animate-ping" />
                   <div className="absolute inset-0 flex items-center justify-center">
-                    <Bot className="h-10 w-10 text-tiktok-cyan" />
+                    <Bot className="h-10 w-10 text-mermaid-cyan" />
                   </div>
                 </div>
-                <p className="text-xl font-semibold text-tiktok-cyan mb-2">Smart Auto Match</p>
+                <p className="text-xl font-semibold text-mermaid-cyan mb-2">Smart Auto Match</p>
                 <p className="text-sm text-muted-foreground max-w-sm mx-auto">
                   AI will analyze your product and automatically pick the best fitting model for your content.
                 </p>
@@ -2107,7 +2114,7 @@ export default function QuickGeneratorPage() {
                           className={cn(
                             "flex flex-col items-center p-4 rounded-xl border-2 transition-all hover:scale-[1.02]",
                             tempSelectedModelId === model.id
-                              ? "border-tiktok-pink bg-tiktok-pink/10 ring-2 ring-tiktok-pink/30"
+                              ? "border-mermaid-pink bg-mermaid-pink/10 ring-2 ring-mermaid-pink/30"
                               : isExpiringSoon
                                 ? "border-amber-500/50 bg-amber-500/5 hover:border-amber-500"
                                 : "border-white/10 hover:border-white/30 bg-white/5"
@@ -2122,13 +2129,13 @@ export default function QuickGeneratorPage() {
                                 className="h-20 w-20 rounded-full object-cover border-2 border-white/20"
                               />
                             ) : (
-                              <div className="h-20 w-20 rounded-full bg-gradient-to-br from-tiktok-pink/30 to-purple-500/30 flex items-center justify-center border-2 border-white/20">
+                              <div className="h-20 w-20 rounded-full bg-gradient-to-br from-mermaid-pink/30 to-purple-500/30 flex items-center justify-center border-2 border-white/20">
                                 <User className="h-10 w-10 text-muted-foreground" />
                               </div>
                             )}
                             {/* Selection Indicator */}
                             {tempSelectedModelId === model.id && (
-                              <div className="absolute -top-1 -right-1 h-6 w-6 rounded-full bg-tiktok-pink flex items-center justify-center shadow-lg">
+                              <div className="absolute -top-1 -right-1 h-6 w-6 rounded-full bg-mermaid-pink flex items-center justify-center shadow-lg">
                                 <Check className="h-4 w-4 text-white" />
                               </div>
                             )}
@@ -2179,7 +2186,7 @@ export default function QuickGeneratorPage() {
                       setShowModelDialog(false);
                       window.location.href = "/models";
                     }}
-                    className="border-tiktok-pink/50 text-tiktok-pink hover:bg-tiktok-pink/10"
+                    className="border-mermaid-pink/50 text-mermaid-pink hover:bg-mermaid-pink/10"
                   >
                     Browse Model Market
                   </Button>
@@ -2204,7 +2211,7 @@ export default function QuickGeneratorPage() {
                         className={cn(
                           "flex flex-col items-center p-4 rounded-xl border-2 transition-all hover:scale-[1.02]",
                           tempSelectedModelId === model.id
-                            ? "border-purple-500 bg-purple-500/10 ring-2 ring-purple-500/30"
+                            ? "border-mermaid-cyan bg-mermaid-cyan/10 ring-2 ring-mermaid-cyan/30"
                             : "border-white/10 hover:border-white/30 bg-white/5"
                         )}
                       >
@@ -2217,13 +2224,13 @@ export default function QuickGeneratorPage() {
                               className="h-20 w-20 rounded-full object-cover border-2 border-white/20"
                             />
                           ) : (
-                            <div className="h-20 w-20 rounded-full bg-gradient-to-br from-purple-500/30 to-pink-500/30 flex items-center justify-center border-2 border-white/20">
+                            <div className="h-20 w-20 rounded-full bg-gradient-to-br from-mermaid-cyan/30 to-mermaid-pink/30 flex items-center justify-center border-2 border-white/20">
                               <User className="h-10 w-10 text-muted-foreground" />
                             </div>
                           )}
                           {/* Selection Indicator */}
                           {tempSelectedModelId === model.id && (
-                            <div className="absolute -top-1 -right-1 h-6 w-6 rounded-full bg-purple-500 flex items-center justify-center shadow-lg">
+                            <div className="absolute -top-1 -right-1 h-6 w-6 rounded-full bg-mermaid-cyan flex items-center justify-center shadow-lg">
                               <Check className="h-4 w-4 text-white" />
                             </div>
                           )}
@@ -2285,7 +2292,7 @@ export default function QuickGeneratorPage() {
             <div className="text-xs text-muted-foreground">
               {tempSelectedMode === "auto" ? (
                 <span className="flex items-center gap-1.5">
-                  <Bot className="h-3.5 w-3.5 text-tiktok-cyan" />
+                  <Bot className="h-3.5 w-3.5 text-mermaid-cyan" />
                   AI will choose the best model
                 </span>
               ) : tempSelectedModelId ? (
@@ -2304,7 +2311,7 @@ export default function QuickGeneratorPage() {
               <Button
                 onClick={handleConfirmModel}
                 disabled={(tempSelectedMode === "team" || tempSelectedMode === "all") && !tempSelectedModelId}
-                className="bg-gradient-to-r from-tiktok-pink to-purple-500 text-white font-semibold"
+                className="bg-gradient-to-r from-mermaid-lime via-mermaid-cyan to-mermaid-pink text-black font-semibold"
               >
                 <CheckCircle2 className="h-4 w-4 mr-2" />
                 Confirm
@@ -2351,7 +2358,7 @@ export default function QuickGeneratorPage() {
             <div className="w-full px-8 py-4 bg-black/50 border-t border-white/10 flex items-center justify-center gap-4">
               <Button
                 onClick={() => handleDownloadContent(fullscreenPreview.url, fullscreenPreview.type)}
-                className="bg-gradient-to-r from-tiktok-cyan to-blue-500 text-black font-semibold px-6"
+                className="bg-gradient-to-r from-mermaid-cyan to-blue-500 text-black font-semibold px-6"
               >
                 <Download className="h-4 w-4 mr-2" />保留它 (下载)
               </Button>
@@ -2529,7 +2536,7 @@ export default function QuickGeneratorPage() {
           </div>
         </SheetContent>
       </Sheet>
-    </div>
+    </div >
   );
 }
 

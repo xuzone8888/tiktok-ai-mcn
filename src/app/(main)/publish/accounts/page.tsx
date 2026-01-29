@@ -295,29 +295,35 @@ export default function TikTokAccountsPage() {
 
     return (
         <div className="space-y-6">
-            {/* Page Header */}
+            {/* Page Header - JCUI 2.0 Titanium Bar */}
             <div className="flex items-center justify-between">
-                <div>
-                    <h1 className="text-2xl font-bold flex items-center gap-2">
-                        <Users className="h-6 w-6 text-pink-500" />
-                        TikTok 账号管理
-                    </h1>
-                    <p className="text-muted-foreground mt-1">
-                        绑定和管理您的 TikTok 账号，用于发布视频内容
-                    </p>
+                <div className="flex items-center gap-4">
+                    {/* Vertical Gradient Bar */}
+                    <div className="w-1.5 h-14 rounded-full bg-gradient-to-b from-[#CCFF00] via-[#00F2EA] to-[#EC4899]" />
+                    <div>
+                        <h1 className="text-2xl font-bold text-white flex items-center gap-2">
+                            TikTok 账号管理
+                        </h1>
+                        <p className="text-white/50 text-sm mt-0.5">
+                            绑定和管理您的 TikTok 账号，用于发布视频内容
+                        </p>
+                    </div>
                 </div>
-                <Button
+                <button
                     onClick={() => setShowBindingModal(true)}
                     disabled={connecting}
-                    className="bg-gradient-to-r from-cyan-500 to-pink-500 hover:opacity-90"
+                    className="group relative flex items-center gap-2 px-5 py-2.5 rounded-lg overflow-hidden bg-gradient-to-r from-[#CCFF00] via-[#00F2EA] to-[#EC4899] text-black font-bold text-sm transition-all duration-500 hover:scale-[1.02] hover:shadow-[0_0_25px_rgba(0,242,234,0.5)] disabled:opacity-50"
                 >
+                    {/* Glass shine */}
+                    <div className="absolute inset-0 bg-gradient-to-b from-white/50 via-white/20 to-transparent pointer-events-none" />
+                    <div className="absolute top-[10%] left-0 right-0 h-[35%] bg-gradient-to-b from-white/30 to-transparent pointer-events-none rounded-lg" />
                     {connecting ? (
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        <Loader2 className="h-4 w-4 animate-spin relative z-10" />
                     ) : (
-                        <Plus className="h-4 w-4 mr-2" />
+                        <Plus className="h-4 w-4 relative z-10" />
                     )}
-                    绑定 TikTok 账号
-                </Button>
+                    <span className="relative z-10">绑定 TikTok 账号</span>
+                </button>
             </div>
 
             {/* Sort and Group Controls */}
@@ -368,32 +374,19 @@ export default function TikTokAccountsPage() {
                 </div>
             )}
 
-            {/* Empty State */}
+            {/* Empty State - JCUI 2.0 Glass Panel */}
             {!loading && accounts.length === 0 && (
-                <Card className="border-dashed">
-                    <CardContent className="flex flex-col items-center justify-center py-16">
-                        <div className="w-16 h-16 rounded-full bg-gradient-to-r from-cyan-500/20 to-pink-500/20 flex items-center justify-center mb-4">
-                            <UserPlus className="h-8 w-8 text-pink-500" />
+                <div className="bg-white/5 rounded-2xl border border-white/10 backdrop-blur-sm">
+                    <div className="flex flex-col items-center justify-center py-16">
+                        <div className="w-20 h-20 rounded-full bg-gradient-to-br from-[#CCFF00]/20 via-[#00F2EA]/20 to-[#EC4899]/20 flex items-center justify-center mb-6 border border-white/10">
+                            <UserPlus className="h-10 w-10 text-[#EC4899]" />
                         </div>
-                        <h3 className="text-xl font-semibold mb-2">还没有绑定 TikTok 账号</h3>
-                        <p className="text-muted-foreground text-center max-w-md mb-6">
+                        <h3 className="text-xl font-bold text-white mb-2">还没有绑定 TikTok 账号</h3>
+                        <p className="text-white/50 text-center max-w-md text-sm">
                             绑定您的 TikTok 账号后，可以直接从平台发布 AI 生成的视频内容
                         </p>
-                        <Button
-                            onClick={() => setShowBindingModal(true)}
-                            disabled={connecting}
-                            size="lg"
-                            className="bg-gradient-to-r from-cyan-500 to-pink-500 hover:opacity-90"
-                        >
-                            {connecting ? (
-                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                            ) : (
-                                <Plus className="h-4 w-4 mr-2" />
-                            )}
-                            立即绑定 TikTok 账号
-                        </Button>
-                    </CardContent>
-                </Card>
+                    </div>
+                </div>
             )}
 
             {/* Account Cards - Grouped */}

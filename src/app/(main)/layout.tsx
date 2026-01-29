@@ -7,10 +7,8 @@ export default function MainLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex min-h-screen h-screen overflow-hidden bg-background relative">
-      {/* Decorative gradient orbs - 底部装饰渐变 */}
-      <div className="fixed bottom-0 left-1/4 w-[500px] h-[500px] bg-gradient-to-r from-tiktok-cyan/5 to-transparent rounded-full blur-3xl pointer-events-none" />
-      <div className="fixed bottom-0 right-1/4 w-[400px] h-[400px] bg-gradient-to-l from-tiktok-pink/5 to-transparent rounded-full blur-3xl pointer-events-none" />
+    <div className="flex min-h-screen h-screen overflow-hidden bg-titanium-grid relative selection:bg-white/20">
+      {/* JCUI 1.0: 已移除旧版彩色渐变光球，使用干净的钛空银网格背景 */}
 
       <Sidebar />
       <div className="flex flex-1 flex-col overflow-hidden relative z-10">

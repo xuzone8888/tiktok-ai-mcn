@@ -109,7 +109,7 @@ export function Step2Config() {
               className={cn(
                 "relative cursor-pointer p-4 transition-all hover:border-tiktok-cyan/50",
                 videoConfig.duration === option.value &&
-                  "border-tiktok-cyan bg-tiktok-cyan/5 ring-1 ring-tiktok-cyan/30"
+                "border-tiktok-cyan bg-tiktok-cyan/5 ring-1 ring-tiktok-cyan/30"
               )}
               onClick={() => setVideoConfig({ duration: option.value })}
             >
@@ -141,7 +141,7 @@ export function Step2Config() {
               className={cn(
                 "cursor-pointer p-4 transition-all hover:border-tiktok-pink/50",
                 videoConfig.aspect_ratio === option.value &&
-                  "border-tiktok-pink bg-tiktok-pink/5 ring-1 ring-tiktok-pink/30"
+                "border-tiktok-pink bg-tiktok-pink/5 ring-1 ring-tiktok-pink/30"
               )}
               onClick={() => setVideoConfig({ aspect_ratio: option.value })}
             >
@@ -210,7 +210,7 @@ export function Step2Config() {
               className={cn(
                 "cursor-pointer p-3 text-center transition-all",
                 videoConfig.language === value &&
-                  "border-tiktok-cyan bg-tiktok-cyan/5"
+                "border-tiktok-cyan bg-tiktok-cyan/5"
               )}
               onClick={() => setVideoConfig({ language: value as ScriptLanguage })}
             >
@@ -227,7 +227,7 @@ export function Step2Config() {
           AI 模特
           <span className="text-xs text-muted-foreground">(可选)</span>
         </Label>
-        
+
         {loadingModels ? (
           <div className="text-sm text-muted-foreground">加载中...</div>
         ) : hiredModels.length === 0 ? (
@@ -264,7 +264,7 @@ export function Step2Config() {
                 className={cn(
                   "cursor-pointer p-3 transition-all",
                   selectedModelId === contract.model_id &&
-                    "border-tiktok-pink bg-tiktok-pink/5"
+                  "border-tiktok-pink bg-tiktok-pink/5"
                 )}
                 onClick={() => setSelectedModelId(contract.model_id)}
               >
@@ -303,7 +303,7 @@ export function Step2Config() {
         </Button>
         <Button
           onClick={nextStep}
-          className="bg-gradient-to-r from-tiktok-cyan to-tiktok-pink hover:opacity-90"
+          variant="white-glow"
         >
           下一步：生成脚本
           <ArrowRight className="ml-2 h-4 w-4" />

@@ -66,16 +66,16 @@ export const ModelPreviewCard = memo(function ModelPreviewCard({
   return (
     <div
       className={cn(
-        "group relative overflow-hidden rounded-2xl border border-border/50 bg-card/50 backdrop-blur-sm transition-all duration-300",
-        "hover:border-tiktok-cyan/50 hover:shadow-xl hover:shadow-tiktok-cyan/10",
+        "group relative flex flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#0B0C10] transition-all duration-300",
+        "hover:shadow-[0_0_40px_-10px_rgba(0,242,234,0.3)]",
         "hover:-translate-y-1",
-        hasActiveContract && "ring-2 ring-emerald-500/50"
+        hasActiveContract && "ring-1 ring-mermaid-cyan/30"
       )}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
     >
       {/* Media Container */}
-      <div className="relative aspect-[3/4] overflow-hidden bg-gradient-to-br from-tiktok-cyan/5 to-tiktok-pink/5">
+      <div className="relative aspect-[3/4] w-full overflow-hidden bg-[#0B0C10]">
         {/* Static Image (default) */}
         {model.avatar_url ? (
           <img
@@ -138,25 +138,25 @@ export const ModelPreviewCard = memo(function ModelPreviewCard({
         {/* Top Left Badges */}
         <div className="absolute top-3 left-3 flex flex-col gap-2 z-10">
           {model.is_trending && (
-            <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-gradient-to-r from-tiktok-cyan to-tiktok-pink text-xs font-semibold text-black shadow-lg">
+            <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-gradient-to-r from-mermaid-cyan to-mermaid-pink text-xs font-bold text-black shadow-[0_0_10px_rgba(0,242,234,0.3)]">
               <TrendingUp className="h-3 w-3" />
               热门
             </span>
           )}
           {model.is_featured && !model.is_trending && (
-            <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500 text-xs font-semibold text-black shadow-lg">
+            <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-gradient-to-r from-mermaid-lime to-mermaid-cyan text-xs font-bold text-black shadow-[0_0_10px_rgba(204,255,0,0.3)]">
               <Star className="h-3 w-3" />
               推荐
             </span>
           )}
           {hasActiveContract && (
-            <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500 text-xs font-semibold text-black shadow-lg">
+            <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-neon-green/20 border border-neon-green/30 text-xs font-bold text-neon-green backdrop-blur-md shadow-[0_0_10px_rgba(34,197,94,0.2)]">
               <CheckCircle2 className="h-3 w-3" />
               已签约
             </span>
           )}
           {!hasActiveContract && model.is_hired_by_others && (
-            <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-orange-500 text-xs font-semibold text-black shadow-lg">
+            <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/10 border border-white/20 text-xs font-medium text-white/70 backdrop-blur-md">
               <Users className="h-3 w-3" />
               已被聘用
             </span>
@@ -193,16 +193,16 @@ export const ModelPreviewCard = memo(function ModelPreviewCard({
       </div>
 
       {/* Footer */}
-      <div className="p-4 space-y-3 bg-gradient-to-b from-transparent to-black/20">
+      <div className="relative z-20 -mt-px p-4 space-y-3 bg-[#0B0C10]">
         {/* Price */}
         <div className="flex items-center justify-between">
           <span className="text-sm text-muted-foreground">Monthly Rate</span>
           <div className="flex items-center gap-1.5">
-            <Coins className="h-4 w-4 text-tiktok-cyan" />
-            <span className="font-bold text-lg tracking-tight">
+            <Coins className="h-4 w-4 text-mermaid-cyan" />
+            <span className="font-bold text-lg tracking-tight text-white/90">
               {model.base_price.toLocaleString()}
             </span>
-            <span className="text-xs text-muted-foreground">Credits</span>
+            <span className="text-xs text-mermaid-cyan/70">Credits</span>
           </div>
         </div>
 
@@ -210,7 +210,7 @@ export const ModelPreviewCard = memo(function ModelPreviewCard({
         {hasActiveContract ? (
           <Button
             variant="outline"
-            className="w-full border-emerald-500/50 text-emerald-400 hover:bg-emerald-500/10 hover:text-emerald-300"
+            className="w-full bg-white/5 border-white/10 text-white hover:bg-white/10 hover:border-mermaid-cyan/30 hover:text-mermaid-cyan transition-all"
             onClick={onManage}
           >
             <CheckCircle2 className="mr-2 h-4 w-4" />
@@ -227,13 +227,17 @@ export const ModelPreviewCard = memo(function ModelPreviewCard({
             暂不可用
           </Button>
         ) : (
-          <Button
-            className="w-full bg-gradient-to-r from-tiktok-cyan to-tiktok-pink text-black font-bold hover:opacity-90 hover:scale-[1.02] transition-all shadow-lg shadow-tiktok-cyan/20"
+          <button
+            className="w-full relative px-6 py-3 rounded-full font-bold text-black text-sm transition-all duration-500 bg-gradient-to-r from-[#CCFF00] via-[#00F2EA] to-[#EC4899] hover:scale-[1.02] hover:shadow-[0_0_20px_rgba(0,242,234,0.5)] border border-white/20 overflow-hidden group/btn shadow-[0_0_20px_rgba(0,242,234,0.2)]"
             onClick={onHire}
           >
-            <Sparkles className="mr-2 h-4 w-4" />
-            立即聘用
-          </Button>
+            <div className="absolute inset-0 bg-gradient-to-b from-white/40 to-transparent" />
+            <div className="absolute inset-0 bg-[linear-gradient(110deg,transparent,rgba(255,255,255,0.4),transparent)] bg-[length:200%_100%] opacity-0 group-hover/btn:opacity-100 group-hover/btn:animate-shimmer transition-opacity duration-300" />
+            <span className="relative z-10 flex items-center justify-center gap-2">
+              <Sparkles className="h-4 w-4 fill-black/20" />
+              立即聘用
+            </span>
+          </button>
         )}
       </div>
     </div>

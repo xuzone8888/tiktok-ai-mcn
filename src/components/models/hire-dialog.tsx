@@ -91,7 +91,7 @@ export function HireDialog({
       if (response.success && response.data) {
         setResult("success");
         setNewBalance(response.data.newBalance);
-        
+
         // 通知父组件
         if (onHireSuccess) {
           onHireSuccess(model.id, response.data.newBalance);
@@ -138,10 +138,10 @@ export function HireDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-[480px] bg-card border-border/50">
+      <DialogContent className="sm:max-w-[480px] bg-black/80 border-white/10 backdrop-blur-xl shadow-2xl shadow-mermaid-cyan/10">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Sparkles className="h-5 w-5 text-tiktok-cyan" />
+          <DialogTitle className="flex items-center gap-2 text-white">
+            <Sparkles className="h-5 w-5 text-mermaid-cyan drop-shadow-[0_0_5px_rgba(0,242,234,0.5)]" />
             Hire {model.name}
           </DialogTitle>
           <DialogDescription>
@@ -191,7 +191,7 @@ export function HireDialog({
                 <Button variant="outline" onClick={() => setResult(null)}>
                   Select Another
                 </Button>
-                <Button 
+                <Button
                   onClick={handleGoToTeam}
                   className="bg-gradient-to-r from-tiktok-cyan to-tiktok-pink text-black"
                 >
@@ -226,8 +226,8 @@ export function HireDialog({
         {!result && (
           <>
             {/* Model Preview */}
-            <div className="flex items-center gap-4 p-4 rounded-xl bg-gradient-to-r from-white/5 to-white/[0.02] border border-border/50">
-              <div className="h-16 w-16 rounded-xl overflow-hidden bg-gradient-to-br from-tiktok-cyan/20 to-tiktok-pink/20 flex-shrink-0">
+            <div className="flex items-center gap-4 p-4 rounded-xl bg-white/5 border border-white/10 backdrop-blur-md">
+              <div className="h-16 w-16 rounded-xl overflow-hidden bg-gradient-to-br from-mermaid-cyan/20 to-mermaid-pink/20 flex-shrink-0">
                 {model.avatar_url ? (
                   <img
                     src={model.avatar_url}
@@ -271,19 +271,19 @@ export function HireDialog({
                       onClick={() => setSelectedPeriod(option.period)}
                       disabled={!isAffordable}
                       className={cn(
-                        "relative p-3 rounded-xl border text-left transition-all",
+                        "relative p-3 rounded-xl border text-left transition-all duration-300 group overflow-hidden",
                         isSelected
-                          ? "border-tiktok-cyan bg-tiktok-cyan/10 shadow-lg shadow-tiktok-cyan/5"
-                          : "border-border/50 hover:border-border hover:bg-white/5",
-                        !isAffordable && "opacity-50 cursor-not-allowed"
+                          ? "border-mermaid-cyan bg-mermaid-cyan/10 shadow-[0_0_20px_rgba(0,242,234,0.2)]"
+                          : "border-white/10 hover:border-mermaid-cyan/50 hover:bg-white/5",
+                        !isAffordable && "opacity-50 cursor-not-allowed grayscale"
                       )}
                     >
                       {option.discount && (
                         <span className={cn(
-                          "absolute -top-2 right-2 px-2 py-0.5 text-xs font-medium rounded-full",
-                          option.period === "monthly" 
-                            ? "bg-gradient-to-r from-tiktok-cyan to-tiktok-pink text-black"
-                            : "bg-emerald-500/20 text-emerald-400"
+                          "absolute -top-2 right-2 px-2 py-0.5 text-xs font-bold rounded-full shadow-lg",
+                          option.period === "monthly"
+                            ? "bg-gradient-to-r from-mermaid-cyan to-mermaid-pink text-black shadow-[0_0_10px_rgba(0,242,234,0.3)]"
+                            : "bg-neon-green/20 text-neon-green border border-neon-green/30"
                         )}>
                           {option.discount}
                         </span>
@@ -297,7 +297,7 @@ export function HireDialog({
                           {price.toLocaleString()}
                         </span>
                       </div>
-                      <div className="flex items-center gap-1 mt-1 text-xs text-muted-foreground">
+                      <div className="flex items-center gap-1 mt-1 text-xs text-white/40 group-hover:text-white/60 transition-colors">
                         <Coins className="h-3 w-3" />
                         Credits
                       </div>
@@ -308,7 +308,7 @@ export function HireDialog({
             </div>
 
             {/* Summary */}
-            <div className="space-y-3 p-4 rounded-xl bg-gradient-to-b from-white/5 to-transparent border border-border/50">
+            <div className="space-y-3 p-4 rounded-xl bg-black/40 border border-white/5 backdrop-blur-md">
               <div className="flex items-center justify-between text-sm">
                 <span className="text-muted-foreground flex items-center gap-2">
                   <Coins className="h-4 w-4" />
@@ -338,19 +338,19 @@ export function HireDialog({
               </div>
               <div className="border-t border-border/50 pt-3 mt-3">
                 <div className="flex items-center justify-between">
-                  <span className="font-medium">Total</span>
-                  <span className="text-xl font-bold bg-gradient-to-r from-tiktok-cyan to-tiktok-pink bg-clip-text text-transparent">
+                  <span className="font-medium text-white">Total</span>
+                  <span className="text-xl font-bold bg-gradient-to-r from-mermaid-cyan to-mermaid-pink bg-clip-text text-transparent drop-shadow-[0_0_10px_rgba(0,242,234,0.5)]">
                     {selectedPrice.toLocaleString()} Credits
                   </span>
                 </div>
                 {!canAfford && (
-                  <p className="text-xs text-red-400 mt-2 flex items-center gap-1">
+                  <p className="text-xs text-neon-red mt-2 flex items-center gap-1 drop-shadow-[0_0_5px_rgba(239,68,68,0.5)]">
                     <AlertCircle className="h-3 w-3" />
                     Insufficient balance. Need {(selectedPrice - userCredits).toLocaleString()} more Credits
                   </p>
                 )}
                 {canAfford && (
-                  <p className="text-xs text-emerald-400 mt-2 flex items-center gap-1">
+                  <p className="text-xs text-neon-green mt-2 flex items-center gap-1 drop-shadow-[0_0_5px_rgba(34,197,94,0.5)]">
                     <CheckCircle2 className="h-3 w-3" />
                     Balance after: {(userCredits - selectedPrice).toLocaleString()} Credits
                   </p>
@@ -363,31 +363,34 @@ export function HireDialog({
         {/* Footer */}
         {!result && (
           <DialogFooter className="gap-2">
-            <Button 
-              variant="outline" 
-              onClick={handleClose} 
+            <Button
+              variant="outline"
+              onClick={handleClose}
               disabled={isProcessing}
-              className="border-border/50"
+              className="border-white/10 hover:bg-white/10 text-white/70 hover:text-white"
             >
               Cancel
             </Button>
-            <Button
+            <button
               onClick={handleHire}
               disabled={!canAfford || isProcessing || !userId}
-              className="bg-gradient-to-r from-tiktok-cyan to-tiktok-pink text-black font-semibold hover:opacity-90 min-w-[120px]"
+              className="relative min-w-[140px] px-6 py-3 rounded-full font-bold text-black text-sm transition-all duration-500 bg-gradient-to-r from-[#CCFF00] via-[#00F2EA] to-[#EC4899] hover:scale-[1.02] hover:shadow-[0_0_20px_rgba(0,242,234,0.5)] border border-white/20 overflow-hidden group/btn shadow-[0_0_20px_rgba(0,242,234,0.2)] disabled:opacity-50 disabled:grayscale disabled:cursor-not-allowed"
             >
+              <div className="absolute inset-0 bg-gradient-to-b from-white/40 to-transparent" />
+              <div className="absolute inset-0 bg-[linear-gradient(110deg,transparent,rgba(255,255,255,0.4),transparent)] bg-[length:200%_100%] opacity-0 group-hover/btn:opacity-100 group-hover/btn:animate-shimmer transition-opacity duration-300" />
+
               {isProcessing ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                <div className="relative z-10 flex items-center justify-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin text-black" />
                   Processing...
-                </>
+                </div>
               ) : (
-                <>
-                  <Sparkles className="mr-2 h-4 w-4" />
+                <span className="relative z-10 flex items-center justify-center gap-2">
+                  <Sparkles className="h-4 w-4 fill-black/20" />
                   Confirm Hire
-                </>
+                </span>
               )}
-            </Button>
+            </button>
           </DialogFooter>
         )}
       </DialogContent>

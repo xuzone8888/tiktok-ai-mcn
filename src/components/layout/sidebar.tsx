@@ -125,14 +125,6 @@ const navGroups: NavGroup[] = [
         icon: Link2,
         description: "链接一键成片",
       },
-      {
-        title: "爆款克隆机",
-        href: "/clip-editor",
-        icon: Copy,
-        description: "爆款分镜还原",
-        comingSoon: true,
-        comingSoonMessage: "即将推出：一键复刻爆款视频风格，快速生成同款内容",
-      },
     ],
   },
   // --- 矩阵发货 ---
@@ -140,7 +132,7 @@ const navGroups: NavGroup[] = [
     header: "矩阵发货",
     items: [
       {
-        title: "智能分发站",
+        title: "视频发布站",
         href: "/publish",
         icon: Send,
         description: "多平台视频分发",
@@ -243,32 +235,32 @@ export function Sidebar() {
         href={item.href}
         className={cn(
           "nav-interactive group relative flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium",
-          "transition-all duration-150 ease-out",
+          "transition-all duration-300 ease-out",
           isActive
-            ? "bg-gradient-to-r from-tiktok-cyan/15 to-tiktok-pink/10 text-white"
-            : "text-white/60 hover:bg-white/[0.08] hover:text-white hover:translate-x-0.5"
+            ? "bg-gradient-to-r from-mermaid-lime/10 to-mermaid-cyan/10 text-white"
+            : "text-white/60 hover:bg-white/[0.05] hover:text-white hover:translate-x-1"
         )}
       >
-        {/* Active indicator - 左侧强调条 */}
+        {/* Active indicator - 右侧霓虹光条 */}
         {isActive && (
-          <div className="absolute left-0 top-1/2 h-9 w-[3px] -translate-y-1/2 rounded-r-full bg-tiktok-cyan shadow-[0_0_8px_rgba(0,242,234,0.5)]" />
+          <div className="absolute right-0 top-1/2 h-6 w-[3px] -translate-y-1/2 rounded-l-full bg-mermaid-cyan shadow-[0_0_10px_#00F2EA]" />
         )}
 
         <div
           className={cn(
-            "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-all duration-150",
+            "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-all duration-300",
             isActive
-              ? "bg-gradient-to-br from-tiktok-cyan/25 to-tiktok-pink/15 text-tiktok-cyan"
-              : "bg-white/[0.04] group-hover:bg-white/[0.12]"
+              ? "bg-mermaid-cyan/20 text-mermaid-cyan shadow-[0_0_10px_rgba(0,242,234,0.2)]"
+              : "bg-white/[0.04] group-hover:bg-white/[0.1] text-white/70"
           )}
         >
-          <Icon className="h-4 w-4 transition-transform duration-150 group-hover:scale-105" />
+          <Icon className="h-4 w-4 transition-transform duration-300 group-hover:scale-110" />
         </div>
 
         {!collapsed && (
           <span className={cn(
-            "text-sm transition-all duration-150 group-hover:translate-x-0.5",
-            isActive && "font-medium"
+            "text-sm transition-all duration-300 group-hover:translate-x-0.5",
+            isActive && "font-bold tracking-wide text-transparent bg-clip-text bg-gradient-to-r from-white to-white/90"
           )}>
             {item.title}
           </span>
@@ -276,7 +268,7 @@ export function Sidebar() {
 
         {/* Hover glow effect */}
         {isActive && (
-          <div className="absolute inset-0 -z-10 rounded-xl bg-gradient-to-r from-tiktok-cyan/5 to-tiktok-pink/5 opacity-0 blur-xl transition-opacity group-hover:opacity-100" />
+          <div className="absolute inset-0 -z-10 rounded-xl bg-mermaid-cyan/5 opacity-0 blur-xl transition-opacity group-hover:opacity-100" />
         )}
       </Link>
     );
@@ -286,24 +278,42 @@ export function Sidebar() {
     <TooltipProvider>
       <aside
         className={cn(
-          "relative flex h-screen flex-col sidebar-gradient border-r border-border/50 transition-all duration-300 ease-in-out",
+          "relative flex h-screen flex-col bg-[#0B0C10] border-r border-white/5 transition-all duration-300 ease-in-out",
           collapsed ? "w-20" : "w-[260px]"
         )}
       >
-        {/* Logo */}
-        <div className="flex h-16 items-center gap-3 border-b border-border/50 px-4">
-          <div className="relative flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-tiktok-cyan to-tiktok-pink">
-            <Sparkles className="h-5 w-5 text-primary-foreground dark:text-black" />
-            <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-tiktok-cyan to-tiktok-pink opacity-50 blur-lg" />
-          </div>
+        {/* Final Brand Header - ToryX Hyper Glass */}
+        <div className={cn(
+          "flex items-center border-b border-white/5 bg-[#0B0C10] transition-all duration-300 relative overflow-hidden group/header",
+          collapsed ? "justify-center h-16 w-full" : "h-20 px-5"
+        )}>
+          {/* Ambient Glow */}
+          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-2/3 h-1 bg-gradient-to-r from-transparent via-[#00f2ea]/20 to-transparent blur-sm group-hover/header:via-[#00f2ea]/40 transition-all duration-500" />
+
+          <Link href="/" className="group/logo relative flex shrink-0 items-center justify-center transition-all duration-300 hover:scale-[1.03] active:scale-95">
+            <div className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px] bg-gradient-to-br from-[#d9ff00] via-[#00f2ea] to-[#ff0080] shadow-[0_8px_20px_rgba(0,242,234,0.3),inset_0_2px_4px_rgba(255,255,255,0.9),inset_0_-4px_10px_rgba(0,0,0,0.1)] ring-1 ring-white/30">
+
+              {/* Internal Glass Cavity */}
+              <div className="absolute inset-[2px] rounded-[12px] bg-white/10 blur-[0.5px] mix-blend-overlay" />
+
+              {/* Top Specular Highlight */}
+              <div className="absolute inset-x-0 top-0 h-[45%] bg-gradient-to-b from-white/90 to-transparent rounded-t-[13px] opacity-90 pointer-events-none" />
+
+              {/* Bottom Refraction */}
+              <div className="absolute inset-x-0 bottom-0 h-[40%] bg-gradient-to-t from-white/40 to-transparent rounded-b-[14px] mix-blend-overlay pointer-events-none" />
+
+              {/* Icon */}
+              <Zap className="h-5 w-5 text-white drop-shadow-[0_2px_3px_rgba(0,0,0,0.2)] relative z-10" fill="white" strokeWidth={0} />
+            </div>
+          </Link>
+
           {!collapsed && (
-            <div className="flex flex-col">
-              <span className="text-lg font-bold tracking-tight">
-                <span className="text-tiktok-cyan">Tory</span>{" "}
-                <span className="text-tiktok-pink">X</span>
-              </span>
-              <span className="text-xs text-muted-foreground">
-                AI 内容智造工厂
+            <div className="ml-3 flex flex-col gap-0.5 animate-in fade-in slide-in-from-left-2 duration-300">
+              <h1 className="text-[22px] font-black tracking-tight leading-none bg-clip-text text-transparent bg-gradient-to-r from-[#d9ff00] via-[#00f2ea] to-[#ff0080] filter drop-shadow-[0_2px_8px_rgba(0,242,234,0.25)] select-none">
+                ToryX
+              </h1>
+              <span className="text-[9px] font-extrabold tracking-[0.2em] text-white/30 uppercase select-none group-hover/header:text-white/50 transition-colors">
+                AI Content Factory
               </span>
             </div>
           )}

@@ -976,30 +976,29 @@ export default function PublishPage() {
 
     return (
         <div className="space-y-6 p-6 max-w-7xl mx-auto min-h-full pb-20">
-            {/* Header */}
+            {/* Header - JCUI 2.0 Titanium Bar */}
             <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                    <div className="p-3 rounded-2xl bg-gradient-to-br from-cyan-500/20 to-pink-500/20 backdrop-blur-sm border border-white/10">
-                        <Rocket className="w-6 h-6 text-cyan-400" />
-                    </div>
-                    <div>
-                        <h1 className="text-2xl font-bold bg-gradient-to-r from-cyan-400 to-pink-400 bg-clip-text text-transparent">
-                            智能分发站
-                        </h1>
-                    </div>
+                <div>
+                    <h1 className="text-3xl font-bold tracking-tight flex items-center gap-3">
+                        <div className="h-8 w-1.5 rounded-full bg-gradient-to-b from-mermaid-lime to-mermaid-cyan shadow-[0_0_10px_rgba(0,242,234,0.5)]" />
+                        <span className="text-white drop-shadow-lg">视频发布站</span>
+                    </h1>
+                    <p className="mt-1 text-white/60 ml-[19px]">
+                        一键发布至多平台，智能调度分发任务
+                    </p>
                 </div>
 
                 <button
                     onClick={() => router.push('/publish/accounts')}
-                    className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 transition-colors"
+                    className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 hover:border-white/20 transition-all"
                 >
-                    <Settings className="w-4 h-4" />
-                    <span>账号管理</span>
+                    <Settings className="w-4 h-4 text-white/70" />
+                    <span className="text-white/80">账号管理</span>
                 </button>
             </div>
 
-            {/* Tabs */}
-            <div className="flex gap-2 p-1 bg-white/5 rounded-xl border border-white/10 w-fit">
+            {/* Tabs - JCUI 2.0 Fluid Segmented Controls with Holographic Gradient */}
+            <div className="flex gap-1 p-1.5 bg-black/40 rounded-xl border border-white/10 w-fit backdrop-blur-md">
                 {[
                     { id: 'create' as TabType, label: '创建发布', icon: Send },
                     { id: 'tasks' as TabType, label: '任务管理', icon: ListFilter }
@@ -1007,13 +1006,22 @@ export default function PublishPage() {
                     <button
                         key={tab.id}
                         onClick={() => setActiveTab(tab.id)}
-                        className={`flex items-center gap-2 px-4 py-2.5 rounded-lg transition-all ${activeTab === tab.id
-                            ? 'bg-gradient-to-r from-cyan-500 to-pink-500 text-white shadow-lg'
-                            : 'text-gray-400 hover:text-white hover:bg-white/5'
+                        className={`group relative flex items-center gap-2 px-5 py-2.5 rounded-lg font-medium transition-all duration-300 overflow-hidden ${activeTab === tab.id
+                            ? 'bg-gradient-to-r from-[#CCFF00] via-[#00F2EA] to-[#EC4899] text-black shadow-[0_0_20px_rgba(0,242,234,0.4)]'
+                            : 'text-white/50 hover:text-white/80 hover:bg-white/5'
                             }`}
                     >
-                        <tab.icon className="w-4 h-4" />
-                        <span className="font-medium">{tab.label}</span>
+                        {/* Enhanced Glass overlays for active state */}
+                        {activeTab === tab.id && (
+                            <>
+                                {/* Primary gloss */}
+                                <div className="absolute inset-0 bg-gradient-to-b from-white/50 via-white/20 to-transparent pointer-events-none" />
+                                {/* Secondary shine band */}
+                                <div className="absolute top-[10%] left-0 right-0 h-[40%] bg-gradient-to-b from-white/30 to-transparent pointer-events-none rounded-lg" />
+                            </>
+                        )}
+                        <tab.icon className={`w-4 h-4 relative z-10 ${activeTab === tab.id ? 'text-black' : ''}`} />
+                        <span className="relative z-10">{tab.label}</span>
                     </button>
                 ))}
             </div>
@@ -1042,18 +1050,22 @@ export default function PublishPage() {
                                     </button>
                                 )}
 
-                                {/* Default cover toggle */}
-                                <div className="flex items-center gap-2">
-                                    <span className="text-xs text-gray-400">使用默认封面</span>
+                                {/* Default cover toggle - JCUI 2.0 Style */}
+                                <div className="flex items-center gap-3 px-3 py-2 rounded-xl bg-white/5 border border-white/10">
+                                    <span className="text-xs text-white/60 font-medium">使用默认封面</span>
                                     <button
                                         onClick={() => setUseDefaultCover(!useDefaultCover)}
-                                        className={`relative w-10 h-5 rounded-full transition-colors ${useDefaultCover ? 'bg-cyan-500' : 'bg-gray-600'
+                                        className={`relative w-11 h-6 rounded-full transition-all duration-300 ${useDefaultCover
+                                            ? 'bg-gradient-to-r from-[#CCFF00] to-[#00F2EA] shadow-[0_0_12px_rgba(0,242,234,0.4)]'
+                                            : 'bg-white/10 border border-white/20'
                                             }`}
                                     >
-                                        <div className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${useDefaultCover ? 'translate-x-5' : 'translate-x-0'
+                                        <div className={`absolute top-1 left-1 w-4 h-4 rounded-full transition-all duration-300 ${useDefaultCover
+                                            ? 'translate-x-5 bg-black shadow-md'
+                                            : 'translate-x-0 bg-white/60'
                                             }`} />
                                     </button>
-                                    <span className={`text-xs ${useDefaultCover ? 'text-cyan-400' : 'text-gray-500'}`}>
+                                    <span className={`text-xs font-bold ${useDefaultCover ? 'text-[#00F2EA]' : 'text-white/40'}`}>
                                         {useDefaultCover ? '首帧' : '自定义'}
                                     </span>
                                 </div>
@@ -1319,10 +1331,13 @@ export default function PublishPage() {
                             <div className="flex items-center gap-3">
                                 <button
                                     onClick={() => router.push('/publish/accounts')}
-                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-cyan-500/20 to-pink-500/20 border border-cyan-500/30 text-cyan-400 hover:from-cyan-500/30 hover:to-pink-500/30 transition-all text-sm"
+                                    className="group relative flex items-center gap-1.5 px-4 py-2 rounded-lg overflow-hidden bg-gradient-to-r from-[#CCFF00] via-[#00F2EA] to-[#EC4899] text-black font-bold text-sm transition-all duration-500 hover:scale-[1.02] hover:shadow-[0_0_20px_rgba(0,242,234,0.4)]"
                                 >
-                                    <Plus className="w-3.5 h-3.5" />
-                                    去绑定
+                                    {/* Glass shine */}
+                                    <div className="absolute inset-0 bg-gradient-to-b from-white/40 via-white/15 to-transparent pointer-events-none" />
+                                    <div className="absolute top-[10%] left-0 right-0 h-[35%] bg-gradient-to-b from-white/25 to-transparent pointer-events-none rounded-lg" />
+                                    <Plus className="w-3.5 h-3.5 relative z-10" />
+                                    <span className="relative z-10">去绑定</span>
                                 </button>
                             </div>
                         </div>
@@ -1337,9 +1352,18 @@ export default function PublishPage() {
                                 <p className="text-gray-400 mb-4">还没有绑定 TikTok 账号</p>
                                 <button
                                     onClick={() => router.push('/publish/accounts')}
-                                    className="px-4 py-2 bg-gradient-to-r from-cyan-500 to-pink-500 rounded-lg font-medium hover:opacity-90 transition-opacity"
+                                    className="group relative px-5 py-2 rounded-full font-bold text-black text-sm overflow-hidden transition-all duration-500 hover:scale-[1.02] hover:shadow-[0_0_25px_rgba(0,242,234,0.5)] bg-gradient-to-r from-[#CCFF00] via-[#00F2EA] to-[#EC4899]"
                                 >
-                                    立即绑定账号
+                                    {/* Strong glass shine - top half highlight */}
+                                    <div className="absolute inset-0 bg-gradient-to-b from-white/50 via-white/20 to-transparent pointer-events-none" />
+                                    {/* Secondary horizontal shine band */}
+                                    <div className="absolute top-[15%] left-0 right-0 h-[35%] bg-gradient-to-b from-white/30 to-transparent pointer-events-none rounded-full" />
+                                    {/* Shimmer effect on hover */}
+                                    <div className="absolute inset-0 bg-[linear-gradient(110deg,transparent,rgba(255,255,255,0.5),transparent)] bg-[length:200%_100%] opacity-0 group-hover:opacity-100 group-hover:animate-shimmer transition-opacity duration-300 pointer-events-none" />
+                                    <span className="relative z-10 flex items-center gap-2">
+                                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" /></svg>
+                                        立即绑定账号
+                                    </span>
                                 </button>
                             </div>
                         ) : (
@@ -1853,9 +1877,16 @@ export default function PublishPage() {
                                 <button
                                     onClick={handlePublish}
                                     disabled={isPublishing || selectedVideos.length === 0 || selectedAccounts.length === 0}
-                                    className="relative overflow-hidden group h-12 px-6 rounded-xl bg-gradient-to-r from-cyan-500 via-blue-500 to-purple-600 hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50 disabled:hover:scale-100"
+                                    className="relative overflow-hidden group h-12 px-6 rounded-xl bg-gradient-to-r from-[#CCFF00] via-[#00F2EA] to-[#EC4899] hover:scale-[1.02] hover:shadow-[0_0_25px_rgba(0,242,234,0.5)] active:scale-[0.98] transition-all duration-500 disabled:opacity-50 disabled:hover:scale-100"
                                 >
-                                    <div className="relative z-10 flex items-center gap-2 text-white font-bold">
+                                    {/* Glass shine - top highlight */}
+                                    <div className="absolute inset-0 bg-gradient-to-b from-white/50 via-white/20 to-transparent pointer-events-none" />
+                                    {/* Secondary shine band */}
+                                    <div className="absolute top-[10%] left-0 right-0 h-[40%] bg-gradient-to-b from-white/30 to-transparent pointer-events-none rounded-xl" />
+                                    {/* Shimmer on hover */}
+                                    <div className="absolute inset-0 bg-[linear-gradient(110deg,transparent,rgba(255,255,255,0.5),transparent)] bg-[length:200%_100%] opacity-0 group-hover:opacity-100 group-hover:animate-shimmer transition-opacity duration-300 pointer-events-none" />
+
+                                    <div className="relative z-10 flex items-center gap-2 text-black font-bold">
                                         {isPublishing ? (
                                             <>
                                                 <Loader2 className="w-4 h-4 animate-spin" />
@@ -1868,9 +1899,6 @@ export default function PublishPage() {
                                             </>
                                         )}
                                     </div>
-
-                                    {/* Shine Effect */}
-                                    <div className="absolute inset-0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000 bg-gradient-to-r from-transparent via-white/20 to-transparent skew-x-12" />
                                 </button>
                             </div>
                         </div>

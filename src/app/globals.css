@@ -77,63 +77,82 @@
   }
 
   /* ============================================================================
-   * Dark Mode - "Cyber Neon" 深色主题
-   * TikTok 风格的赛博霓虹黑色主题
+   * Dark Mode - "JCUI 2.0 Mermaid Glass" 美人鱼玻璃主题
+   * Deep Space, Holographic, High-Precision
    * ============================================================================ */
   .dark {
     /* Dark color scheme for native date/time pickers */
     color-scheme: dark;
 
-    /* 背景：深邃的纯黑 */
-    --background: 0 0% 4%;
-    /* 前景：柔和的白色 */
-    --foreground: 0 0% 98%;
+    /* --- 核心背景 (Deep Space) --- */
+    --background: 0 0% 2%;
+    /* #050505 - Deep Black */
+    --foreground: 0 0% 100%;
+    /* Pure White */
 
-    /* 卡片：略浅的黑色，形成层次 */
-    --card: 0 0% 7%;
-    --card-foreground: 0 0% 98%;
+    /* --- 卡片表面 (Titanium Surface) --- */
+    --card: 228 6% 5%;
+    /* #0B0C10 - Titanium Dark */
+    --card-foreground: 0 0% 100%;
 
-    /* Popover/弹窗 */
-    --popover: 0 0% 7%;
-    --popover-foreground: 0 0% 98%;
+    /* --- Popover/弹窗 (Raised Surface) --- */
+    --popover: 225 6% 9%;
+    /* #16181D - Slightly lighter */
+    --popover-foreground: 0 0% 100%;
 
-    /* 主色：TikTok Cyan 霓虹色 */
+    /* --- 主交互色 (Mermaid Gradient) --- */
     --primary: 174 100% 47%;
+    /* Default to Cyan if single color needed */
     --primary-foreground: 0 0% 0%;
 
-    /* 次级色：TikTok Pink 霓虹色 */
-    --secondary: 340 100% 50%;
+    /* --- 次级色 (Ghost White) --- */
+    --secondary: 240 4% 16%;
+    /* Gray-800 equivalent for neutral buttons */
     --secondary-foreground: 0 0% 100%;
 
-    /* 柔和色调 */
-    --muted: 0 0% 12%;
-    --muted-foreground: 0 0% 65%;
+    /* --- 柔和色调 --- */
+    --muted: 240 4% 16%;
+    --muted-foreground: 240 5% 65%;
 
-    /* 强调色 */
-    --accent: 174 100% 47%;
+    /* --- 强调色 (Mermaid Lime) --- */
+    --accent: 74 100% 50%;
+    /* #CCFF00 */
     --accent-foreground: 0 0% 0%;
 
-    /* 危险/警告色 */
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 0 0% 98%;
+    /* --- 状态色 (Semantic Neon) --- */
+    --destructive: 336 84% 60%;
+    /* #EC4899 - Mermaid Pink */
+    --destructive-foreground: 0 0% 100%;
 
-    /* 边框色：深灰 */
-    --border: 0 0% 16%;
-    --input: 0 0% 16%;
+    --success: 142 71% 45%;
+    /* #22c55e - Neon Green */
+    --warning: 45 93% 47%;
+    /* #f59e0b - Neon Amber */
+    --info: 217 91% 60%;
+    /* #3b82f6 - Neon Blue */
 
-    /* Focus Ring：TikTok Cyan */
+    /* --- 边框色 (Glass Border) --- */
+    --border: 0 0% 100%;
+    /* Handled via opacity (white/10) in components */
+    --input: 0 0% 100%;
     --ring: 174 100% 47%;
+    /* Mermaid Cyan Focus Ring */
 
-    /* 图表色彩 - 霓虹色调 */
-    --chart-1: 174 100% 47%;
-    --chart-2: 340 100% 50%;
-    --chart-3: 280 80% 55%;
-    --chart-4: 45 100% 60%;
-    --chart-5: 200 80% 50%;
+    /* --- 图表色彩 (Mermaid Spectrum) --- */
+    --chart-1: 74 100% 50%;
+    /* Lime */
+    --chart-2: 174 100% 47%;
+    /* Cyan */
+    --chart-3: 336 84% 60%;
+    /* Pink */
+    --chart-4: 280 80% 55%;
+    /* Purple */
+    --chart-5: 0 0% 100%;
+    /* White */
 
-    /* TikTok 品牌霓虹色 */
+    /* --- Legacy Compat --- */
     --tiktok-cyan: 174 100% 47%;
-    --tiktok-pink: 340 100% 50%;
+    --tiktok-pink: 336 84% 60%;
   }
 }
 
@@ -150,7 +169,48 @@
 
 @layer utilities {
 
-  /* TikTok 霓虹渐变效果 */
+  /* ============================================================================
+   * JCUI 1.0 Titanium Silver 专属工具类
+   * ============================================================================ */
+
+  /* 深空钛网格背景 (Deep Space Grid) */
+  .bg-titanium-grid {
+    background-color: #050505;
+    /* Deep Black */
+    background-image: linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+  }
+
+  /* 流光动画 (Shimmer Animation) */
+  @keyframes shimmer {
+    0% {
+      transform: translateX(-100%);
+    }
+
+    100% {
+      transform: translateX(100%);
+    }
+  }
+
+  .animate-shimmer {
+    animation: shimmer 2s infinite linear;
+  }
+
+  /* 白色发光 (White Titanium Glow) */
+  .glow-titanium {
+    box-shadow: 0 0 15px rgba(255, 255, 255, 0.15),
+      0 0 30px rgba(255, 255, 255, 0.05);
+  }
+
+  .hover\:glow-titanium:hover {
+    box-shadow: 0 0 25px rgba(255, 255, 255, 0.4),
+      0 0 50px rgba(255, 255, 255, 0.1);
+  }
+
+  /* ============================================================================
+   * Legacy: TikTok 霓虹渐变效果 (保留兼容)
+   * ============================================================================ */
   .gradient-tiktok {
     @apply bg-gradient-to-r from-tiktok-cyan to-tiktok-pink;
   }

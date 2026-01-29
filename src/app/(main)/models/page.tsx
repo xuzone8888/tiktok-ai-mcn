@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { 
+import {
   Search,
   Filter,
   Users,
@@ -42,30 +42,30 @@ const categories = [
 // Empty State Component
 // ============================================================================
 
-function EmptyState({ 
-  hasFilters, 
-  onClearFilters 
-}: { 
-  hasFilters: boolean; 
+function EmptyState({
+  hasFilters,
+  onClearFilters
+}: {
+  hasFilters: boolean;
   onClearFilters: () => void;
 }) {
   return (
     <div className="flex flex-col items-center justify-center py-24 text-center">
       <div className="relative mb-6">
-        <div className="absolute inset-0 bg-gradient-to-r from-tiktok-cyan/20 to-tiktok-pink/20 blur-3xl" />
-        <PackageOpen className="relative h-24 w-24 text-muted-foreground/30" />
+        <div className="absolute inset-0 bg-gradient-to-r from-mermaid-cyan/20 to-mermaid-pink/20 blur-3xl" />
+        <PackageOpen className="relative h-24 w-24 text-white/30" />
       </div>
-      
+
       {hasFilters ? (
         <>
-          <h3 className="text-xl font-semibold mb-2">没有找到匹配的模特</h3>
-          <p className="text-muted-foreground max-w-sm mb-6">
+          <h3 className="text-xl font-semibold mb-2 text-white">没有找到匹配的模特</h3>
+          <p className="text-white/60 max-w-sm mb-6">
             尝试调整搜索条件或筛选器来找到您想要的模特。
           </p>
-          <Button 
-            variant="outline" 
+          <Button
+            variant="outline"
             onClick={onClearFilters}
-            className="border-border/50 hover:border-tiktok-cyan/50"
+            className="border-white/10 hover:border-mermaid-cyan/50 text-white/70 hover:text-white hover:bg-white/5"
           >
             <RefreshCw className="mr-2 h-4 w-4" />
             清除所有筛选
@@ -73,8 +73,8 @@ function EmptyState({
         </>
       ) : (
         <>
-          <h3 className="text-xl font-semibold mb-2">暂无可用模特</h3>
-          <p className="text-muted-foreground max-w-sm">
+          <h3 className="text-xl font-semibold mb-2 text-white">暂无可用模特</h3>
+          <p className="text-white/60 max-w-sm">
             模特资源库暂时为空，请稍后再来或联系客服。
           </p>
         </>
@@ -93,12 +93,12 @@ function LoadingSkeleton() {
       {Array.from({ length: 8 }).map((_, i) => (
         <div
           key={i}
-          className="rounded-2xl border border-border/50 bg-card/50 overflow-hidden animate-pulse"
+          className="rounded-2xl border border-white/10 bg-[#0B0C10]/60 overflow-hidden animate-pulse"
         >
-          <div className="aspect-[3/4] bg-gradient-to-br from-muted/50 to-muted/30" />
+          <div className="aspect-[3/4] bg-gradient-to-br from-white/5 to-white/10" />
           <div className="p-4 space-y-3">
-            <div className="h-4 bg-muted/50 rounded w-3/4" />
-            <div className="h-10 bg-muted/50 rounded" />
+            <div className="h-4 bg-white/10 rounded w-3/4" />
+            <div className="h-10 bg-white/10 rounded" />
           </div>
         </div>
       ))}
@@ -112,19 +112,19 @@ function LoadingSkeleton() {
 
 export default function ModelsPage() {
   const { toast } = useToast();
-  
+
   // Data state
   const [models, setModels] = useState<ModelWithContract[]>([]);
   const [loading, setLoading] = useState(true);
   const [userCredits, setUserCredits] = useState(0);
   const [userId, setUserId] = useState<string | undefined>(undefined);
-  
+
   // Filter state
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [showTrending, setShowTrending] = useState(false);
   const [showFeatured, setShowFeatured] = useState(false);
-  
+
   // Dialog state
   const [selectedModel, setSelectedModel] = useState<PublicModel | null>(null);
   const [hireDialogOpen, setHireDialogOpen] = useState(false);
@@ -243,28 +243,28 @@ export default function ModelsPage() {
   // Convert PublicModel to AIModel for HireDialog
   const selectedModelAsAIModel: AIModel | null = selectedModel
     ? {
-        id: selectedModel.id,
-        name: selectedModel.name,
-        description: selectedModel.description || "",
-        avatar_url: selectedModel.avatar_url,
-        sample_images: selectedModel.avatar_url ? [selectedModel.avatar_url] : [],
-        sample_videos: selectedModel.demo_video_url ? [selectedModel.demo_video_url] : [],
-        style_tags: selectedModel.tags,
-        category: selectedModel.category,
-        gender: selectedModel.gender || "neutral",
-        is_active: true,
-        is_featured: selectedModel.is_featured,
-        is_trending: selectedModel.is_trending,
-        rating: selectedModel.rating,
-        price_daily: Math.round(selectedModel.base_price / 30),
-        price_weekly: Math.round(selectedModel.base_price / 4),
-        price_monthly: selectedModel.base_price,
-        price_yearly: selectedModel.base_price * 10,
-        total_rentals: selectedModel.total_rentals,
-        total_generations: selectedModel.total_generations,
-        created_at: selectedModel.created_at,
-        updated_at: selectedModel.created_at,
-      }
+      id: selectedModel.id,
+      name: selectedModel.name,
+      description: selectedModel.description || "",
+      avatar_url: selectedModel.avatar_url,
+      sample_images: selectedModel.avatar_url ? [selectedModel.avatar_url] : [],
+      sample_videos: selectedModel.demo_video_url ? [selectedModel.demo_video_url] : [],
+      style_tags: selectedModel.tags,
+      category: selectedModel.category,
+      gender: selectedModel.gender || "neutral",
+      is_active: true,
+      is_featured: selectedModel.is_featured,
+      is_trending: selectedModel.is_trending,
+      rating: selectedModel.rating,
+      price_daily: Math.round(selectedModel.base_price / 30),
+      price_weekly: Math.round(selectedModel.base_price / 4),
+      price_monthly: selectedModel.base_price,
+      price_yearly: selectedModel.base_price * 10,
+      total_rentals: selectedModel.total_rentals,
+      total_generations: selectedModel.total_generations,
+      created_at: selectedModel.created_at,
+      updated_at: selectedModel.created_at,
+    }
     : null;
 
   // ============================================================================
@@ -276,72 +276,61 @@ export default function ModelsPage() {
       {/* Page Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">
-            <span className="gradient-tiktok-text">模特资源库</span>
+          <h1 className="text-3xl font-bold tracking-tight flex items-center gap-3">
+            <div className="h-8 w-1.5 rounded-full bg-gradient-to-b from-mermaid-lime to-mermaid-cyan shadow-[0_0_10px_rgba(0,242,234,0.5)]" />
+            <span className="text-white drop-shadow-lg">模特资源库</span>
           </h1>
-          <p className="mt-2 text-muted-foreground">
+          <p className="mt-2 text-white/60">
             发现顶级 AI 模特，打造您的创意团队
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={fetchModels}
-            disabled={loading}
-            className="border-border/50 hover:border-tiktok-cyan/50"
-          >
-            <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
-          </Button>
-          <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-tiktok-cyan/10 to-tiktok-pink/10 border border-border/50">
-            <Coins className="h-5 w-5 text-tiktok-cyan" />
-            <span className="font-bold">{userCredits.toLocaleString()}</span>
-            <span className="text-sm text-muted-foreground">积分</span>
-          </div>
+
+
         </div>
       </div>
 
       {/* Search and Quick Filters */}
       <div className="flex flex-wrap items-center gap-3">
         <div className="relative flex-1 min-w-[200px] max-w-md">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input 
-            placeholder="搜索名称、风格、类别..." 
-            className="pl-10 bg-muted/50 border-border/50 focus:border-tiktok-cyan/50"
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/40" />
+          <Input
+            placeholder="搜索名称、风格、类别..."
+            className="pl-10 bg-white/5 border-white/10 focus:border-mermaid-cyan/50 text-white placeholder:text-white/30"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
         </div>
-        
-        <Button 
-          variant={showTrending ? "default" : "outline"} 
+
+        <Button
+          variant={showTrending ? "default" : "outline"}
           className={cn(
             "transition-all",
-            showTrending 
-              ? "bg-gradient-to-r from-tiktok-cyan to-tiktok-pink text-black font-semibold" 
-              : "border-border/50 hover:border-tiktok-cyan/50 hover:bg-tiktok-cyan/5"
+            showTrending
+              ? "bg-gradient-to-r from-mermaid-cyan to-mermaid-pink text-black font-semibold shadow-[0_0_15px_rgba(0,242,234,0.3)]"
+              : "border-white/10 hover:border-mermaid-cyan/50 hover:bg-mermaid-cyan/5 text-white/70 hover:text-white"
           )}
           onClick={() => setShowTrending(!showTrending)}
         >
           <TrendingUp className="mr-2 h-4 w-4" />
           热门
         </Button>
-        
-        <Button 
-          variant={showFeatured ? "default" : "outline"} 
+
+        <Button
+          variant={showFeatured ? "default" : "outline"}
           className={cn(
             "transition-all",
-            showFeatured 
-              ? "bg-gradient-to-r from-amber-500 to-orange-500 text-black font-semibold" 
-              : "border-border/50 hover:border-amber-500/50 hover:bg-amber-500/5"
+            showFeatured
+              ? "bg-gradient-to-r from-mermaid-lime to-mermaid-cyan text-black font-semibold shadow-[0_0_15px_rgba(204,255,0,0.3)]"
+              : "border-white/10 hover:border-mermaid-lime/50 hover:bg-mermaid-lime/5 text-white/70 hover:text-white"
           )}
           onClick={() => setShowFeatured(!showFeatured)}
         >
           <Star className="mr-2 h-4 w-4" />
           推荐
         </Button>
-        
-        <Button variant="outline" className="border-border/50 hover:bg-white/5">
+
+        <Button variant="outline" className="border-white/10 hover:bg-white/5 text-white/70 hover:text-white hover:border-white/20">
           <Filter className="mr-2 h-4 w-4" />
           高级筛选
         </Button>
@@ -352,37 +341,45 @@ export default function ModelsPage() {
         {categories.map((category) => (
           <Button
             key={category.id}
-            variant={selectedCategory === category.id ? "default" : "outline"}
+            variant={"ghost"}
             size="sm"
             className={cn(
-              "transition-all",
-              selectedCategory === category.id 
-                ? "bg-gradient-to-r from-tiktok-cyan to-tiktok-pink text-black font-semibold shadow-lg shadow-tiktok-cyan/20"
-                : "border-border/50 hover:bg-white/5 hover:border-tiktok-cyan/30"
+              "relative px-4 py-2 rounded-xl font-bold text-sm transition-all duration-300 border overflow-hidden",
+              selectedCategory === category.id
+                ? "text-black border-transparent shadow-[0_0_20px_rgba(0,242,234,0.3)] hover:scale-[1.02]"
+                : "bg-white/5 border-white/10 text-white/70 hover:text-white hover:bg-white/10 hover:border-white/20"
             )}
             onClick={() => setSelectedCategory(category.id)}
           >
-            {category.label}
+            {selectedCategory === category.id && (
+              <div className="absolute inset-0 bg-gradient-to-r from-[#CCFF00] via-[#00F2EA] to-[#EC4899]" />
+            )}
+            {selectedCategory === category.id && (
+              <div className="absolute inset-0 bg-gradient-to-b from-white/40 to-transparent" />
+            )}
+            <span className="relative z-10 flex items-center gap-2">
+              {category.label}
+            </span>
           </Button>
         ))}
       </div>
 
       {/* Stats Bar */}
-      <div className="flex items-center gap-6 py-3 px-5 rounded-xl bg-gradient-to-r from-white/5 to-white/[0.02] border border-border/50">
+      <div className="flex items-center gap-6 py-3 px-5 rounded-xl bg-gradient-to-r from-white/5 to-white/[0.02] border border-white/10 backdrop-blur-md">
         <div className="flex items-center gap-2">
-          <Users className="h-5 w-5 text-tiktok-cyan" />
+          <Users className="h-5 w-5 text-mermaid-cyan drop-shadow-[0_0_5px_rgba(0,242,234,0.5)]" />
           <span className="text-sm">
             <span className="font-bold text-white">{filteredModels.length}</span>
-            <span className="text-muted-foreground ml-1">位可用模特</span>
+            <span className="text-white/40 ml-1">位可用模特</span>
           </span>
         </div>
         <div className="flex items-center gap-2">
-          <Sparkles className="h-5 w-5 text-tiktok-pink" />
+          <Sparkles className="h-5 w-5 text-mermaid-pink drop-shadow-[0_0_5px_rgba(236,72,153,0.5)]" />
           <span className="text-sm">
             <span className="font-bold text-white">
               {filteredModels.filter((m) => m.has_active_contract).length}
             </span>
-            <span className="text-muted-foreground ml-1">位已签约</span>
+            <span className="text-white/40 ml-1">位已签约</span>
           </span>
         </div>
       </div>

@@ -20,7 +20,7 @@ export type VideoBatchTaskStatus =
 export type VideoAspectRatio = "9:16" | "16:9";
 
 /** 视频时长 */
-export type VideoDuration = 10 | 15 | 25;
+export type VideoDuration = 8 | 10 | 15 | 25;
 
 /** 视频质量 */
 export type VideoQuality = "standard" | "hd";
@@ -49,7 +49,7 @@ export function getAvailableDurations(modelType: VideoModelType, quality: VideoQ
     }
     return [25]; // Pro 标清只有 25 秒
   } else if (modelType === "veo3" || modelType === "veo3-quality") {
-    return [10]; // VEO3 固定 8 秒，这里显示为最接近的选项
+    return [8]; // VEO3 固定 8 秒
   }
   return [15]; // 默认
 }

@@ -9,11 +9,11 @@
 import { useState, useEffect } from "react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card } from "@/components/ui/card";
-import { 
-  LayoutGrid, 
-  Square, 
-  Image, 
-  User, 
+import {
+  LayoutGrid,
+  Square,
+  Image,
+  User,
   Camera,
   Sparkles,
 } from "lucide-react";
@@ -64,37 +64,41 @@ export default function ImageFactoryPage() {
 
   return (
     <div className="h-full flex flex-col">
-      {/* 顶部：标题和模式切换 */}
-      <div className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+      {/* 顶部：标题和模式切换 - Titanium Bar */}
+      <div className="border-b border-white/5 bg-[#050505]/80 backdrop-blur-xl sticky top-0 z-10 transition-all duration-500">
         <div className="px-6 py-4">
           {/* 标题 */}
-          <div className="flex items-center gap-3 mb-4">
-            <div className="p-2 rounded-lg bg-gradient-to-br from-orange-500 to-pink-500">
-              <Sparkles className="h-5 w-5 text-white" />
-            </div>
-            <div>
-              <h1 className="text-xl font-bold">商图精修台</h1>
-              <p className="text-sm text-muted-foreground">
-                AI 驱动的电商图片精修工具
-              </p>
-            </div>
+          <div className="mb-4 animate-in fade-in slide-in-from-top-4 duration-500">
+            <h1 className="text-3xl font-bold tracking-tight flex items-center gap-3">
+              <div className="h-8 w-1.5 rounded-full bg-gradient-to-b from-mermaid-lime to-mermaid-cyan shadow-[0_0_10px_rgba(0,242,234,0.5)]" />
+              <span className="text-white drop-shadow-lg">商图精修台</span>
+            </h1>
+            <p className="mt-2 text-white/60">
+              AI 电商影像处理中心 · E-COMMERCE IMAGING CENTER
+            </p>
           </div>
 
-          {/* 模式切换 Tabs */}
-          <Tabs value={currentMode} onValueChange={handleModeChange}>
-            <TabsList className="grid grid-cols-5 w-full max-w-3xl">
+          {/* 模式切换 Tabs - JCUI 2.0 Mermaid Glass Pills */}
+          <Tabs value={currentMode} onValueChange={handleModeChange} className="animate-in fade-in slide-in-from-bottom-2 duration-500 delay-100">
+            <TabsList className="grid grid-cols-5 w-full max-w-4xl bg-[#0B0C10]/80 border border-white/10 h-12 p-1.5 rounded-2xl backdrop-blur-xl shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
               {(Object.keys(ECOM_MODE_CONFIG) as EcomImageMode[]).map((mode) => (
                 <TabsTrigger
                   key={mode}
                   value={mode}
-                  className="flex items-center gap-2 text-xs sm:text-sm"
+                  className="relative flex items-center justify-center gap-2 text-xs font-bold transition-all duration-300 rounded-xl overflow-hidden
+                    text-white/40 hover:text-white/70 hover:bg-white/5
+                    data-[state=active]:text-black data-[state=active]:bg-gradient-to-r data-[state=active]:from-[#CCFF00] data-[state=active]:via-[#00F2EA] data-[state=active]:to-[#CCFF00]
+                    data-[state=active]:shadow-[0_0_20px_rgba(204,255,0,0.3),inset_0_1px_0_rgba(255,255,255,0.3)]
+                    data-[state=active]:border-0"
                 >
-                  {MODE_ICONS[mode]}
-                  <span className="hidden sm:inline">
-                    {ECOM_MODE_CONFIG[mode].title}
-                  </span>
-                  <span className="sm:hidden">
-                    {ECOM_MODE_CONFIG[mode].title.slice(0, 4)}
+                  <span className="relative z-10 flex items-center gap-2">
+                    {MODE_ICONS[mode]}
+                    <span className="hidden sm:inline">
+                      {ECOM_MODE_CONFIG[mode].title}
+                    </span>
+                    <span className="sm:hidden">
+                      {ECOM_MODE_CONFIG[mode].title.slice(0, 4)}
+                    </span>
                   </span>
                 </TabsTrigger>
               ))}
@@ -105,19 +109,19 @@ export default function ImageFactoryPage() {
 
       {/* 主内容区：三栏布局 */}
       <div className="flex-1 overflow-hidden">
-        <div className="h-full grid grid-cols-12 gap-4 p-4">
+        <div className="h-full grid grid-cols-12 gap-3 p-3">
           {/* 左侧面板：素材 & 参数 */}
-          <Card className="col-span-12 lg:col-span-3 overflow-hidden flex flex-col">
+          <Card className="col-span-12 lg:col-span-3 overflow-hidden flex flex-col bg-transparent border-0 shadow-none">
             <LeftPanel />
           </Card>
 
           {/* 中间面板：步骤流 */}
-          <Card className="col-span-12 lg:col-span-4 overflow-hidden flex flex-col">
+          <Card className="col-span-12 lg:col-span-4 overflow-hidden flex flex-col bg-transparent border-0 shadow-none">
             <CenterPanel />
           </Card>
 
           {/* 右侧面板：结果预览 */}
-          <Card className="col-span-12 lg:col-span-5 overflow-hidden flex flex-col">
+          <Card className="col-span-12 lg:col-span-5 overflow-hidden flex flex-col bg-transparent border-0 shadow-none">
             <RightPanel />
           </Card>
         </div>

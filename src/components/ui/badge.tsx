@@ -15,14 +15,21 @@ const badgeVariants = cva(
         destructive:
           "border-transparent bg-destructive text-destructive-foreground hover:bg-destructive/80",
         outline: "text-foreground",
-        success:
-          "border-transparent bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30",
-        warning:
-          "border-transparent bg-amber-500/20 text-amber-400 hover:bg-amber-500/30",
-        info:
-          "border-transparent bg-tiktok-cyan/20 text-tiktok-cyan hover:bg-tiktok-cyan/30",
-        pink:
-          "border-transparent bg-tiktok-pink/20 text-tiktok-pink hover:bg-tiktok-pink/30",
+        // ============================================================================
+        // JCUI 2.0 Mermaid Glass Status (Final)
+        // ============================================================================
+        // Mermaid: Brand Gradient
+        "mermaid": "border-transparent bg-gradient-to-r from-mermaid-lime via-mermaid-cyan to-mermaid-pink text-black font-bold shadow-[0_0_15px_rgba(0,242,234,0.4)]",
+        // Neon Success (Green)
+        "neon-success": "border-transparent bg-[#22c55e]/10 text-[#22c55e] shadow-[0_0_10px_rgba(34,197,94,0.2)]",
+        // Neon Warning (Amber)
+        "neon-warning": "border-transparent bg-[#f59e0b]/10 text-[#f59e0b] shadow-[0_0_10px_rgba(245,158,11,0.2)]",
+        // Neon Error (Red)
+        "neon-error": "border-transparent bg-[#ef4444]/10 text-[#ef4444] shadow-[0_0_10px_rgba(239,68,68,0.2)]",
+        // Neon Info (Blue)
+        "neon-info": "border-transparent bg-[#3b82f6]/10 text-[#3b82f6] shadow-[0_0_10px_rgba(59,130,246,0.2)]",
+        // Glass: Premium Neutral
+        "glass": "border-white/10 bg-white/5 text-white/70 backdrop-blur-md",
       },
     },
     defaultVariants: {
@@ -33,7 +40,7 @@ const badgeVariants = cva(
 
 export interface BadgeProps
   extends React.HTMLAttributes<HTMLDivElement>,
-    VariantProps<typeof badgeVariants> {}
+  VariantProps<typeof badgeVariants> { }
 
 function Badge({ className, variant, ...props }: BadgeProps) {
   return (

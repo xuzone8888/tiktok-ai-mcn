@@ -29,48 +29,45 @@ export default function LinkVideoPage() {
   // 如果需要重置，可以调用 reset()
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-background via-background to-muted/20">
-      {/* 页面标题 */}
-      <div className="border-b border-border/50 bg-gradient-to-r from-tiktok-cyan/5 via-transparent to-tiktok-pink/5">
-        <div className="container mx-auto px-4 py-6">
-          <div className="flex items-center gap-4">
-            <div className="relative flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-tiktok-cyan to-tiktok-pink shadow-lg">
-              <Link2 className="h-7 w-7 text-white" />
-              <div className="absolute -right-1 -top-1">
-                <Sparkles className="h-5 w-5 text-amber-400" />
-              </div>
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight">
-                链接转化机
-              </h1>
-              <p className="text-muted-foreground">
-                粘贴商品链接，AI 自动生成带货短视频
-              </p>
-            </div>
+    <div className="h-full flex flex-col bg-[#050505]">
+      {/* 页面标题 - JCUI 2.0 Titanium Bar */}
+      <div className="border-b border-white/5 bg-[#050505]/80 backdrop-blur-xl sticky top-0 z-10 transition-all duration-500">
+        <div className="px-6 py-4">
+          <div className="mb-3 animate-in fade-in slide-in-from-top-4 duration-500">
+            <h1 className="text-3xl font-bold tracking-tight flex items-center gap-3">
+              <div className="h-8 w-1.5 rounded-full bg-gradient-to-b from-mermaid-lime to-mermaid-cyan shadow-[0_0_10px_rgba(0,242,234,0.5)]" />
+              <span className="text-white drop-shadow-lg">链接转化机</span>
+            </h1>
+            <p className="mt-1 text-white/60 ml-[19px]">
+              粘贴商品链接，AI 自动生成带货短视频
+            </p>
           </div>
         </div>
       </div>
 
       {/* 步骤导航 */}
-      <div className="sticky top-0 z-40 border-b border-border/50 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
-        <div className="container mx-auto px-4">
+      <div className="border-b border-white/5 bg-[#0B0C10]/60 backdrop-blur-xl">
+        <div className="px-6 py-2">
           <StepNavigator />
         </div>
       </div>
 
       {/* 主内容区 */}
-      <div className="container mx-auto px-4 py-8">
-        <Card className="mx-auto max-w-4xl border-border/50 bg-card/50 backdrop-blur">
-          <div className="p-6 md:p-8">
-            {/* 步骤内容 */}
-            {currentStep === 1 && <Step1LinkInput />}
-            {currentStep === 2 && <Step2Config />}
-            {currentStep === 3 && <Step3Script />}
-            {currentStep === 4 && <Step4Grid />}
-            {currentStep === 5 && <Step5Video />}
+      <div className="flex-1 overflow-auto">
+        <div className="px-6 py-6">
+          <div className="mx-auto max-w-4xl">
+            <div className="bg-[#16181D]/80 backdrop-blur-xl border border-white/5 rounded-2xl overflow-hidden shadow-2xl">
+              <div className="p-5">
+                {/* 步骤内容 */}
+                {currentStep === 1 && <Step1LinkInput />}
+                {currentStep === 2 && <Step2Config />}
+                {currentStep === 3 && <Step3Script />}
+                {currentStep === 4 && <Step4Grid />}
+                {currentStep === 5 && <Step5Video />}
+              </div>
+            </div>
           </div>
-        </Card>
+        </div>
       </div>
     </div>
   );

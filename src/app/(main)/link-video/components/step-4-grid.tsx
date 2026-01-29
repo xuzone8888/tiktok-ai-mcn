@@ -133,7 +133,7 @@ export function Step4Grid() {
   // 计算进度和剩余时间
   const progress = Math.min((elapsedTime / ESTIMATED_TOTAL_TIME) * 100, 95);
   const remainingTime = Math.max(ESTIMATED_TOTAL_TIME - elapsedTime, 0);
-  
+
   const formatTime = (seconds: number) => {
     if (seconds <= 0) return "即将完成...";
     if (seconds < 60) return `约 ${seconds} 秒`;
@@ -181,7 +181,7 @@ export function Step4Grid() {
           <p className="text-muted-foreground mb-4">点击下方按钮生成九宫格</p>
           <Button
             onClick={() => handleGenerateGrid(false)}
-            className="bg-gradient-to-r from-tiktok-cyan to-tiktok-pink hover:opacity-90"
+            variant="white-glow"
           >
             <Grid3X3 className="mr-2 h-4 w-4" />
             生成九宫格
@@ -193,7 +193,7 @@ export function Step4Grid() {
         <div className="flex flex-col items-center justify-center rounded-lg border p-8">
           <Loader2 className="h-8 w-8 animate-spin text-tiktok-pink mb-4" />
           <p className="text-muted-foreground font-medium">正在生成九宫格图片...</p>
-          
+
           {/* 进度条 */}
           <div className="w-full max-w-xs mt-4 space-y-2">
             <Progress value={progress} className="h-2" />
@@ -207,7 +207,7 @@ export function Step4Grid() {
               </span>
             </div>
           </div>
-          
+
           <p className="text-xs text-muted-foreground mt-3">
             使用 Nano Banana Pro 生成多角度产品图
           </p>
@@ -303,7 +303,7 @@ export function Step4Grid() {
         <Button
           onClick={nextStep}
           disabled={!canProceed}
-          className="bg-gradient-to-r from-tiktok-cyan to-tiktok-pink hover:opacity-90"
+          variant="white-glow"
         >
           下一步：生成视频
           <ArrowRight className="ml-2 h-4 w-4" />

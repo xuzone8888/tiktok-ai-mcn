@@ -5,12 +5,12 @@
  */
 
 import { useState, useEffect, useRef } from "react";
-import { 
-  Upload, 
-  Wand2, 
+import {
+  Upload,
+  Wand2,
   ImagePlus,
-  Check, 
-  Loader2, 
+  Check,
+  Loader2,
   AlertCircle,
   Play,
   Pause,
@@ -24,9 +24,9 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
-import { 
-  useImageFactoryStore, 
-  useSteps, 
+import {
+  useImageFactoryStore,
+  useSteps,
   useCanStartTask,
   useIsTaskInProgress,
   useModeSpecificConfig,
@@ -43,10 +43,10 @@ const STEP_ICONS = {
 
 // 状态颜色
 const STATUS_COLORS = {
-  pending: "bg-muted text-muted-foreground",
-  active: "bg-primary text-primary-foreground animate-pulse",
-  completed: "bg-green-500 text-white",
-  failed: "bg-red-500 text-white",
+  pending: "bg-white/5 text-muted-foreground border border-white/10",
+  active: "bg-mermaid-cyan/20 text-mermaid-cyan border border-mermaid-cyan/50 animate-pulse shadow-[0_0_15px_rgba(0,255,255,0.3)]",
+  completed: "bg-neon-green/20 text-neon-green border border-neon-green/50",
+  failed: "bg-neon-red/20 text-neon-red border border-neon-red/50",
 };
 
 export function CenterPanel() {
@@ -82,7 +82,7 @@ export function CenterPanel() {
   const isTaskInProgress = useIsTaskInProgress();
   const modeConfig = ECOM_MODE_CONFIG[currentMode];
   const modeSpecificConfig = useModeSpecificConfig();
-  
+
   const [isEditingPrompts, setIsEditingPrompts] = useState(false);
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -205,7 +205,7 @@ export function CenterPanel() {
 
       // 保存提示词用于编辑
       setEditablePrompts(data.prompts);
-      
+
       // 更新任务状态
       if (currentTask) {
         updateCurrentTask({
@@ -307,7 +307,7 @@ export function CenterPanel() {
 
     // 立即执行一次
     poll();
-    
+
     // 每 3 秒轮询一次
     pollingRef.current = setInterval(poll, 3000);
   };
@@ -332,25 +332,28 @@ export function CenterPanel() {
   };
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full bg-[#16181D]/80 backdrop-blur-xl border border-white/5 rounded-2xl overflow-hidden shadow-2xl">
       {/* 标题 */}
-      <div className="p-4 border-b flex items-center justify-between">
+      <div className="p-3 border-b border-white/5 flex items-center justify-between bg-white/5 backdrop-blur-md">
         <div className="flex items-center gap-2">
-          <Wand2 className="h-4 w-4 text-muted-foreground" />
-          <span className="font-medium">生成流程</span>
+          <Wand2 className="h-4 w-4 text-mermaid-cyan/70" />
+          <span className="font-bold text-white tracking-wide text-xs">工作流水线</span>
         </div>
         {currentTask && (
-          <Button variant="ghost" size="sm" onClick={handleReset}>
-            <RotateCcw className="h-4 w-4 mr-1" />
-            重新开始
+          <Button variant="ghost" size="sm" onClick={handleReset} className="text-white/40 hover:text-white hover:bg-white/10 text-xs h-7 px-2">
+            <RotateCcw className="h-3 w-3 mr-1" />
+            RESET
           </Button>
         )}
       </div>
 
       <ScrollArea className="flex-1">
-        <div className="p-4 space-y-6">
+        <div className="p-5 space-y-6">
           {/* 步骤流 */}
-          <div className="space-y-4">
+          <div className="relative space-y-5">
+            {/* 连线背景 */}
+            <div className="absolute left-5 top-4 bottom-4 w-0.5 bg-gradient-to-b from-white/10 via-white/5 to-transparent -z-10" />
+
             {steps.map((step, index) => {
               const Icon = STEP_ICONS[step.id as keyof typeof STEP_ICONS] || Upload;
               const isActive = step.status === "active";
@@ -358,47 +361,45 @@ export function CenterPanel() {
               const isFailed = step.status === "failed";
 
               return (
-                <div key={step.id} className="relative">
-                  {/* 连接线 */}
-                  {index < steps.length - 1 && (
-                    <div
-                      className={cn(
-                        "absolute left-5 top-10 w-0.5 h-8",
-                        isCompleted ? "bg-green-500" : "bg-muted"
-                      )}
-                    />
-                  )}
-
+                <div key={step.id} className="relative group">
                   <div className="flex items-start gap-4">
                     {/* 图标 */}
                     <div
                       className={cn(
-                        "w-10 h-10 rounded-full flex items-center justify-center shrink-0",
-                        STATUS_COLORS[step.status]
+                        "relative w-8 h-8 rounded-full flex items-center justify-center shrink-0 border transition-all duration-500 z-10 bg-[#0B0C10]",
+                        isActive
+                          ? "border-mermaid-cyan text-mermaid-cyan shadow-[0_0_20px_rgba(0,242,234,0.3)] scale-110"
+                          : isCompleted
+                            ? "border-neon-green text-neon-green bg-neon-green/10"
+                            : isFailed
+                              ? "border-neon-red text-neon-red"
+                              : "border-white/10 text-white/30 group-hover:border-white/20 group-hover:text-white/50"
                       )}
                     >
+                      {isActive && <div className="absolute inset-0 rounded-full bg-mermaid-cyan/20 animate-ping" />}
                       {isActive ? (
-                        <Loader2 className="h-5 w-5 animate-spin" />
+                        <Loader2 className="h-4 w-4 animate-spin" />
                       ) : isCompleted ? (
-                        <Check className="h-5 w-5" />
+                        <Check className="h-4 w-4" />
                       ) : isFailed ? (
-                        <AlertCircle className="h-5 w-5" />
+                        <AlertCircle className="h-4 w-4" />
                       ) : (
-                        <Icon className="h-5 w-5" />
+                        <Icon className="h-4 w-4" />
                       )}
                     </div>
 
                     {/* 内容 */}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium">{step.title}</span>
+                    <div className={cn("flex-1 min-w-0 pt-2 transition-all duration-300", isActive ? "opacity-100 translate-x-1" : "opacity-60")}>
+                      <div className="flex items-center gap-3">
+                        <span className={cn("font-bold text-sm tracking-wide", isActive ? "text-white" : "text-white/70")}>{step.title}</span>
+                        {isActive && (
+                          <Badge variant="outline" className="border-mermaid-cyan/20 text-mermaid-cyan bg-mermaid-cyan/10 text-[10px] px-1.5 py-0 animate-pulse">PROCESSING</Badge>
+                        )}
                         {isFailed && (
-                          <Badge variant="destructive" className="text-xs">
-                            失败
-                          </Badge>
+                          <Badge variant="destructive" className="text-[10px]">FAILED</Badge>
                         )}
                       </div>
-                      <p className="text-sm text-muted-foreground mt-0.5">
+                      <p className="text-xs text-white/40 mt-1 font-medium">
                         {step.description}
                       </p>
                     </div>
@@ -408,145 +409,151 @@ export function CenterPanel() {
             })}
           </div>
 
-          {/* 提示词编辑区域 */}
-          {currentTask && 
-           modeConfig.needsPromptGeneration && 
-           !isOneClick &&
-           currentTask.status === "generating_images" &&
-           Object.keys(editablePrompts).length > 0 && (
-            <div className="space-y-4 pt-4 border-t">
-              <div className="flex items-center justify-between">
-                <Label>编辑提示词</Label>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setIsEditingPrompts(!isEditingPrompts)}
-                >
-                  <Edit3 className="h-4 w-4 mr-1" />
-                  {isEditingPrompts ? "取消编辑" : "编辑"}
-                </Button>
-              </div>
-
-              {Object.entries(editablePrompts).map(([key, value]) => (
-                <div key={key} className="space-y-2">
-                  <Label className="text-xs text-muted-foreground capitalize">
-                    {key}
-                  </Label>
-                  <Textarea
-                    value={value}
-                    onChange={(e) => updateEditablePrompt(key, e.target.value)}
-                    disabled={!isEditingPrompts}
-                    className="min-h-[80px] text-sm"
-                  />
+          {/* 提示词编辑区域 - Obsidian Glass */}
+          {currentTask &&
+            modeConfig.needsPromptGeneration &&
+            !isOneClick &&
+            currentTask.status === "generating_images" &&
+            Object.keys(editablePrompts).length > 0 && (
+              <div className="space-y-4 pt-6 border-t border-white/5 animate-in fade-in slide-in-from-bottom-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs font-bold text-white/50 uppercase tracking-wider">Refine Prompts</Label>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setIsEditingPrompts(!isEditingPrompts)}
+                    className="text-mermaid-cyan hover:text-mermaid-cyan hover:bg-mermaid-cyan/10 text-xs"
+                  >
+                    <Edit3 className="h-3 w-3 mr-1" />
+                    {isEditingPrompts ? "CANCEL" : "EDIT"}
+                  </Button>
                 </div>
-              ))}
-            </div>
-          )}
 
-          {/* 进度显示 */}
-          {isPolling && currentTask && (
-            <div className="space-y-2 pt-4 border-t">
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">生成进度</span>
-                <span className="font-medium">{getProgress()}%</span>
+                {Object.entries(editablePrompts).map(([key, value]) => (
+                  <div key={key} className="space-y-2">
+                    <Label className="text-[10px] font-mono text-white/30 uppercase pl-1">
+                      {key} Prompt
+                    </Label>
+                    <div className="relative group">
+                      <div className="absolute -inset-0.5 bg-gradient-to-r from-mermaid-cyan/20 to-mermaid-pink/20 rounded-xl opacity-0 group-hover:opacity-100 transition duration-500 blur" />
+                      <Textarea
+                        value={value}
+                        onChange={(e) => updateEditablePrompt(key, e.target.value)}
+                        disabled={!isEditingPrompts}
+                        className="relative min-h-[100px] text-sm bg-[#050505] border-white/10 text-white rounded-xl resize-none focus:border-mermaid-cyan/50 focus:ring-1 focus:ring-mermaid-cyan/20 transition-all"
+                      />
+                    </div>
+                  </div>
+                ))}
               </div>
-              <Progress value={getProgress()} className="h-2" />
+            )}
+
+          {/* 进度显示 - Neon Gradient */}
+          {isPolling && currentTask && (
+            <div className="space-y-3 pt-6 border-t border-white/5 animate-in fade-in">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-mermaid-cyan animate-pulse font-bold">GENERATING ASSETS...</span>
+                <span className="font-mono text-white/60">{getProgress()}%</span>
+              </div>
+              <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-gradient-to-r from-mermaid-lime via-mermaid-cyan to-mermaid-pink transition-all duration-300 shadow-[0_0_10px_rgba(0,242,234,0.5)]"
+                  style={{ width: `${getProgress()}%` }}
+                />
+              </div>
             </div>
           )}
 
           {/* 错误显示 */}
           {error && (
-            <div className="p-4 rounded-lg bg-red-500/10 border border-red-500/20">
-              <div className="flex items-start gap-2">
-                <AlertCircle className="h-5 w-5 text-red-500 shrink-0 mt-0.5" />
-                <div>
-                  <p className="font-medium text-red-500">出错了</p>
-                  <p className="text-sm text-muted-foreground mt-1">{error}</p>
-                </div>
+            <div className="p-4 rounded-xl bg-neon-red/5 border border-neon-red/20 backdrop-blur-md flex items-start gap-3">
+              <AlertCircle className="h-5 w-5 text-neon-red shrink-0 mt-0.5" />
+              <div>
+                <p className="font-bold text-neon-red text-sm">System Error</p>
+                <p className="text-xs text-white/60 mt-1">{error}</p>
               </div>
             </div>
           )}
         </div>
       </ScrollArea>
 
-      {/* 底部：操作按钮 */}
-      <div className="p-4 border-t space-y-3">
+      {/* 底部：操作按钮 - Mermaid Ultra */}
+      <div className="p-4 border-t border-white/5 bg-[#0B0C10]/50 backdrop-blur-md">
         {!currentTask ? (
           // 开始任务
-          <Button
-            className="w-full"
-            size="lg"
+          <button
             onClick={handleCreateTask}
             disabled={!canStartTask || isCreatingTask}
+            className="group relative w-full py-3 rounded-xl font-bold text-black text-xs tracking-wide transition-all duration-300 bg-gradient-to-r from-[#CCFF00] via-[#00F2EA] to-[#EC4899] hover:scale-[1.02] hover:shadow-[0_0_30px_rgba(0,242,234,0.4)] border border-white/20 overflow-hidden disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
           >
-            {isCreatingTask ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                创建任务中...
-              </>
-            ) : (
-              <>
-                <Play className="h-4 w-4 mr-2" />
-                {isOneClick ? "一键生成" : "开始任务"}
-              </>
-            )}
-          </Button>
+            <div className="absolute inset-0 bg-gradient-to-b from-white/40 to-transparent pointer-events-none" />
+            <div className="absolute inset-0 bg-[linear-gradient(110deg,transparent,rgba(255,255,255,0.4),transparent)] bg-[length:200%_100%] translate-x-[-100%] group-hover:animate-shimmer transition-opacity duration-300 pointer-events-none" />
+            <span className="relative z-10 flex items-center justify-center gap-2">
+              {isCreatingTask ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" /> INITIALIZING...
+                </>
+              ) : (
+                <>
+                  <Wand2 className="h-4 w-4 fill-black/20" />
+                  {isOneClick ? "一键生成" : "开始生成"}
+                </>
+              )}
+            </span>
+          </button>
         ) : currentTask.status === "created" && modeConfig.needsPromptGeneration && !isOneClick ? (
           // 手动模式：生成提示词
-          <Button
-            className="w-full"
-            size="lg"
+          <button
             onClick={() => handleGeneratePrompts()}
             disabled={isGeneratingPrompts}
+            className="group relative w-full py-4 rounded-xl font-bold text-black text-sm tracking-wide transition-all duration-300 bg-gradient-to-r from-mermaid-cyan to-mermaid-lime hover:scale-[1.02] hover:shadow-[0_0_20px_rgba(0,242,234,0.3)] border border-white/20 overflow-hidden disabled:opacity-50"
           >
-            {isGeneratingPrompts ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                生成提示词中...
-              </>
-            ) : (
-              <>
-                <Wand2 className="h-4 w-4 mr-2" />
-                生成提示词
-              </>
-            )}
-          </Button>
+            <span className="relative z-10 flex items-center justify-center gap-2">
+              {isGeneratingPrompts ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" /> GENERATING PROMPTS...
+                </>
+              ) : (
+                <>
+                  <Edit3 className="h-4 w-4" /> GENERATE PROMPTS
+                </>
+              )}
+            </span>
+          </button>
         ) : currentTask.status === "generating_images" && !isPolling && !isGeneratingImages ? (
           // 手动模式：生成图片
-          <Button
-            className="w-full"
-            size="lg"
+          <button
             onClick={() => handleGenerateImages()}
             disabled={isGeneratingImages}
+            className="group relative w-full py-4 rounded-xl font-bold text-black text-sm tracking-wide transition-all duration-300 bg-gradient-to-r from-[#CCFF00] via-[#00F2EA] to-[#EC4899] hover:scale-[1.02] hover:shadow-[0_0_30px_rgba(0,242,234,0.4)] border border-white/20 overflow-hidden disabled:opacity-50"
           >
-            {isGeneratingImages ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                提交中...
-              </>
-            ) : (
-              <>
-                <ImagePlus className="h-4 w-4 mr-2" />
-                生成图片
-              </>
-            )}
-          </Button>
+            <div className="absolute inset-0 bg-gradient-to-b from-white/40 to-transparent pointer-events-none" />
+            <span className="relative z-10 flex items-center justify-center gap-2">
+              {isGeneratingImages ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" /> SUBMITTING...
+                </>
+              ) : (
+                <>
+                  <ImagePlus className="h-4 w-4" /> GENERATE FINAL IMAGES
+                </>
+              )}
+            </span>
+          </button>
         ) : isPolling ? (
           // 生成中
-          <Button className="w-full" size="lg" disabled>
-            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-            图片生成中...
-          </Button>
+          <button disabled className="w-full py-4 rounded-xl font-bold text-white/50 bg-[#0B0C10] border border-white/10 flex items-center justify-center gap-2 cursor-wait">
+            <Loader2 className="h-4 w-4 animate-spin text-mermaid-cyan" /> PROCESSING...
+          </button>
         ) : ["success", "partial_success", "failed"].includes(currentTask?.status || "") ? (
           // 完成
           <Button
-            className="w-full"
-            size="lg"
+            className="w-full py-6 rounded-xl font-bold border-white/10 hover:bg-white/5 hover:text-white"
             variant="outline"
             onClick={handleReset}
           >
             <RotateCcw className="h-4 w-4 mr-2" />
-            重新开始
+            START NEW TASK
           </Button>
         ) : null}
       </div>

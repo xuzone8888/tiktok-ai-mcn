@@ -63,16 +63,16 @@ export function Step5Video() {
   } = useLinkVideoStore();
 
   const [isPolling, setIsPolling] = useState(false);
-  
+
   // 批量生成状态
   const [batchCount, setBatchCount] = useState(1);
   const [batchTasks, setBatchTasks] = useState<BatchVideoTask[]>([]);
   const [isBatchMode, setIsBatchMode] = useState(false);
   const [completedVideos, setCompletedVideos] = useState<string[]>([]);
-  
+
   // 用于取消轮询的 ref
   const pollAbortRef = useRef<boolean>(false);
-  
+
   // 恢复状态标记
   const hasRestoredRef = useRef(false);
   // 是否存在活跃任务（即使组件重新挂载也视为活跃）
@@ -157,7 +157,7 @@ export function Step5Video() {
     // 重置取消标志
     pollAbortRef.current = false;
     setIsBatchMode(true);
-    
+
     const tasks: BatchVideoTask[] = Array.from({ length: batchCount }, (_, i) => ({
       id: i + 1,
       status: "generating" as const,
@@ -177,18 +177,18 @@ export function Step5Video() {
         const result = await response.json();
 
         if (result.success && result.task_id) {
-          setBatchTasks(prev => prev.map((t, idx) => 
+          setBatchTasks(prev => prev.map((t, idx) =>
             idx === i ? { ...t, taskId: result.task_id } : t
           ));
           return { index: i, taskId: result.task_id, success: true };
         } else {
-          setBatchTasks(prev => prev.map((t, idx) => 
+          setBatchTasks(prev => prev.map((t, idx) =>
             idx === i ? { ...t, status: "failed", error: result.error } : t
           ));
           return { index: i, success: false };
         }
       } catch {
-        setBatchTasks(prev => prev.map((t, idx) => 
+        setBatchTasks(prev => prev.map((t, idx) =>
           idx === i ? { ...t, status: "failed", error: "网络错误" } : t
         ));
         return { index: i, success: false };
@@ -197,7 +197,7 @@ export function Step5Video() {
 
     // 等待所有任务启动完成
     const results = await Promise.all(startPromises);
-    
+
     // 对成功启动的任务开始轮询
     results.forEach(({ index, taskId, success }) => {
       if (success && taskId) {
@@ -217,13 +217,13 @@ export function Step5Video() {
   useEffect(() => {
     if (hasRestoredRef.current) return;
     hasRestoredRef.current = true;
-    
+
     // 如果有视频已完成，直接显示
     if (videoUrl) {
       console.log('[Step5] Restored completed video:', videoUrl);
       return;
     }
-    
+
     // 如果有进行中的视频任务或已有 taskId，恢复轮询
     if (videoTaskId && !isPolling && currentJob?.id) {
       console.log('[Step5] Restoring video task polling:', videoTaskId);
@@ -240,7 +240,7 @@ export function Step5Video() {
       // 检查是否应该停止
       if (pollAbortRef.current || attempts >= maxAttempts) {
         if (attempts >= maxAttempts) {
-          setBatchTasks(prev => prev.map((t, idx) => 
+          setBatchTasks(prev => prev.map((t, idx) =>
             idx === index ? { ...t, status: "failed", error: "生成超时" } : t
           ));
         }
@@ -260,7 +260,7 @@ export function Step5Video() {
         const result = await response.json();
 
         if (result.status === "completed" && result.video_url) {
-          setBatchTasks(prev => prev.map((t, idx) => 
+          setBatchTasks(prev => prev.map((t, idx) =>
             idx === index ? { ...t, status: "completed", videoUrl: result.video_url, progress: 100 } : t
           ));
           setCompletedVideos(prev => [...prev, result.video_url]);
@@ -268,13 +268,13 @@ export function Step5Video() {
             setVideoGenerated(result.video_url);
           }
         } else if (result.status === "failed") {
-          setBatchTasks(prev => prev.map((t, idx) => 
+          setBatchTasks(prev => prev.map((t, idx) =>
             idx === index ? { ...t, status: "failed", error: result.error } : t
           ));
         } else {
           // 更新进度
           const progress = result.progress || Math.min(95, 10 + attempts * 1.5);
-          setBatchTasks(prev => prev.map((t, idx) => 
+          setBatchTasks(prev => prev.map((t, idx) =>
             idx === index ? { ...t, progress } : t
           ));
           attempts++;
@@ -368,8 +368,8 @@ export function Step5Video() {
           <div className="flex flex-col items-center justify-center rounded-lg border border-dashed p-8">
             <Video className="h-12 w-12 text-muted-foreground mb-4" />
             <p className="text-muted-foreground mb-2">
-              {batchCount > 1 
-                ? `准备批量生成 ${batchCount} 个视频` 
+              {batchCount > 1
+                ? `准备批量生成 ${batchCount} 个视频`
                 : "准备就绪，开始生成视频"}
             </p>
             <p className="text-xs text-muted-foreground mb-4">
@@ -378,7 +378,7 @@ export function Step5Video() {
             <Button
               onClick={handleBatchGenerate}
               size="lg"
-              className="bg-gradient-to-r from-tiktok-cyan to-tiktok-pink hover:opacity-90"
+              variant="white-glow"
             >
               <Video className="mr-2 h-5 w-5" />
               开始生成（{totalCredits} 积分）
@@ -392,7 +392,7 @@ export function Step5Video() {
         <div className="flex flex-col items-center justify-center rounded-lg border p-8">
           <Loader2 className="h-10 w-10 animate-spin text-tiktok-cyan mb-4" />
           <p className="font-medium mb-2">正在生成视频...</p>
-          
+
           <div className="w-full max-w-xs mb-4">
             <Progress value={videoProgress} className="h-2" />
             <p className="text-center text-sm text-muted-foreground mt-1">
@@ -415,7 +415,7 @@ export function Step5Video() {
             <Loader2 className="h-8 w-8 animate-spin text-tiktok-cyan mx-auto mb-2" />
             <p className="font-medium">正在批量生成 {batchCount} 个视频...</p>
           </div>
-          
+
           <div className="grid gap-3">
             {batchTasks.map((task, index) => (
               <Card key={task.id} className="p-3">
@@ -423,14 +423,14 @@ export function Step5Video() {
                   <span className="font-medium text-sm">视频 #{index + 1}</span>
                   <Badge variant={
                     task.status === "completed" ? "default" :
-                    task.status === "failed" ? "destructive" :
-                    task.status === "generating" ? "secondary" : "outline"
+                      task.status === "failed" ? "destructive" :
+                        task.status === "generating" ? "secondary" : "outline"
                   }>
                     {task.status === "completed" && <Check className="h-3 w-3 mr-1" />}
                     {task.status === "generating" && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
                     {task.status === "completed" ? "完成" :
-                     task.status === "failed" ? "失败" :
-                     task.status === "generating" ? "生成中" : "等待中"}
+                      task.status === "failed" ? "失败" :
+                        task.status === "generating" ? "生成中" : "等待中"}
                   </Badge>
                 </div>
                 <Progress value={task.progress} className="h-1.5" />
@@ -577,11 +577,11 @@ export function Step5Video() {
           <ArrowLeft className="mr-2 h-4 w-4" />
           上一步
         </Button>
-        
+
         {videoUrl && (
           <Button
             onClick={reset}
-            className="bg-gradient-to-r from-tiktok-cyan to-tiktok-pink hover:opacity-90"
+            variant="white-glow"
           >
             创建新任务
           </Button>

@@ -61,6 +61,12 @@ const config: Config = {
           cyan: "#00F2EA",   // Secondary
           pink: "#FF0050",   // Danger/Hot
         },
+        // JCUI 2.0 Mermaid Glass Palette (Final)
+        mermaid: {
+          lime: "#CCFF00",
+          cyan: "#00F2EA",
+          pink: "#EC4899",
+        },
       },
       borderRadius: {
         lg: "var(--radius)",
@@ -75,6 +81,13 @@ const config: Config = {
         "spin-slow": "spin 3s linear infinite",
         "pulse-slow": "pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite",
         glow: "glow 2s ease-in-out infinite alternate",
+        shimmer: "shimmer 2s linear infinite",
+      },
+      keyframes: {
+        shimmer: {
+          from: { backgroundPosition: "0 0" },
+          to: { backgroundPosition: "-200% 0" },
+        },
       },
       backgroundImage: {
         "gradient-radial": "radial-gradient(var(--tw-gradient-stops))",

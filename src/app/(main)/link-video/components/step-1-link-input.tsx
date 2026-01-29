@@ -327,7 +327,7 @@ export function Step1LinkInput() {
             <Button
               onClick={handleParseLink}
               disabled={!inputUrl.trim() || isParsingLink}
-              className="bg-gradient-to-r from-tiktok-cyan to-tiktok-pink hover:opacity-90"
+              variant="white-glow"
             >
               {isParsingLink ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -785,7 +785,7 @@ export function Step1LinkInput() {
         <Button
           onClick={nextStep}
           disabled={!canProceed}
-          className="bg-gradient-to-r from-tiktok-cyan to-tiktok-pink hover:opacity-90"
+          variant="white-glow"
         >
           下一步：配置参数
           <ArrowRight className="ml-2 h-4 w-4" />
