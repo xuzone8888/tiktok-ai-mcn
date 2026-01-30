@@ -15,7 +15,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 async function refundCredits(userId: string, amount: number, taskId: string, reason: string) {
   try {
     const supabase = createAdminClient();
-    
+
     // 获取用户当前积分
     const { data: profile, error: profileError } = await supabase
       .from("profiles")
@@ -74,14 +74,15 @@ export async function GET(
       );
     }
 
-    // 从 URL 参数获取是否为 Pro 模式
+    // 从 URL 参数获取是否为 Pro 模式和 API 线路
     const searchParams = request.nextUrl.searchParams;
     const isPro = searchParams.get("isPro") === "true";
+    const apiLine = (searchParams.get("apiLine") as "line1" | "line2" | "line3") || "line1";
 
-    console.log("[Sora Status] Querying task:", taskId, "isPro:", isPro);
+    console.log("[Sora Status] Querying task:", taskId, "isPro:", isPro, "apiLine:", apiLine);
 
     // 查询 Sora2 任务状态
-    const result = await querySora2Result(taskId, isPro);
+    const result = await querySora2Result(taskId, isPro, undefined, apiLine);
 
     if (!result.success) {
       console.error("[Sora Status] Query failed:", result.error);
@@ -109,7 +110,7 @@ export async function GET(
     if (task.status === "completed" || task.status === "failed") {
       try {
         const supabase = createAdminClient();
-        
+
         // 注意：generations 表没有 updated_at 字段
         const updateData: Record<string, unknown> = {
           status: task.status,
@@ -146,7 +147,7 @@ export async function GET(
               console.error("[Sora Status] Failed to update DB:", updateError);
             } else {
               console.log("[Sora Status] Updated DB for task:", taskId, "status:", task.status, "count:", count);
-              
+
               // 🔥 如果任务失败，自动退还积分
               if (task.status === "failed" && existingRecord.user_id && existingRecord.credit_cost > 0) {
                 const refunded = await refundCredits(
@@ -173,7 +174,7 @@ export async function GET(
     let errorMessage = task.errorMessage;
     let refundNote = "";
     let suggestion = "";
-    
+
     if (task.status === "failed") {
       // 分析错误类型并提供针对性建议
       if (errorMessage?.includes("内容政策") || errorMessage?.includes("E-1103")) {
@@ -202,9 +203,9 @@ export async function GET(
   } catch (error) {
     console.error("[Sora Status] Error:", error);
     return NextResponse.json(
-      { 
-        success: false, 
-        error: error instanceof Error ? error.message : "查询状态失败" 
+      {
+        success: false,
+        error: error instanceof Error ? error.message : "查询状态失败"
       },
       { status: 500 }
     );

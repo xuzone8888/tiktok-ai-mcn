@@ -6,6 +6,39 @@
 // 基础类型
 // ============================================================================
 
+// ============================================================================
+// API 线路配置
+// ============================================================================
+
+/** API 线路类型 */
+export type ApiLineType = "line1" | "line2" | "line3";
+
+/** API 线路配置详情 */
+export interface ApiLineConfig {
+  id: ApiLineType;
+  name: string;
+  description: string;
+}
+
+/** 可用的 API 线路 */
+export const API_LINES: Record<ApiLineType, ApiLineConfig> = {
+  line1: {
+    id: "line1",
+    name: "默认线路",
+    description: "速创 API"
+  },
+  line2: {
+    id: "line2",
+    name: "备用线路",
+    description: "OpenAI 兼容"
+  },
+  line3: {
+    id: "line3",
+    name: "备用线路2",
+    description: "吾音科技 (10/15秒)"
+  },
+} as const;
+
 /** 视频任务状态 */
 export type VideoBatchTaskStatus =
   | "pending"           // 待处理
@@ -110,10 +143,10 @@ export interface VideoBatchTask {
   aiModelId?: string;         // AI 模特 ID（不暴露给用户）
   aiModelName?: string;       // AI 模特显示名称（用户可见）
 
-  // 任务创建时的视频配置（保存以确保显示一致）
   modelType: VideoModelType;
   duration: VideoDuration;
   quality: VideoQuality;
+  apiLine?: ApiLineType;          // 任务创建时使用的 API 线路
 
   // 豆包 AI 生成结果
   doubaoTalkingScript: string | null;   // 步骤1: 口播脚本 (C01-C07)
@@ -152,6 +185,8 @@ export interface VideoBatchGlobalSettings {
   aiModelName: string | null;        // 显示名称（用户可见）
   aiModelTriggerWord: string | null; // 触发词（后台使用，不暴露给用户）
   aiModelCover: string | null;       // AI 模特封面图URL
+  // API 线路配置
+  apiLine: ApiLineType;              // API 线路选择
 }
 
 // ============================================================================

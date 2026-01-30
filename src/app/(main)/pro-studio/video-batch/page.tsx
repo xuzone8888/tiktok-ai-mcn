@@ -82,6 +82,8 @@ import {
   type VideoModelType,
   type VideoDuration,
   type VideoQuality,
+  type ApiLineType,
+  API_LINES,
   PIPELINE_STEPS,
   getStatusLabel,
   getVideoBatchTotalPrice,
@@ -1362,6 +1364,7 @@ export default function VideoBatchPage() {
           duration: globalSettings.duration,
           quality: globalSettings.quality,
           aspectRatio: globalSettings.aspectRatio,
+          apiLine: globalSettings.apiLine, // 新增：API 线路
           useAiModel: useAiModel,
           aiModelId: selectedModelId,
           aiModelName: selectedModelName,
@@ -1426,6 +1429,7 @@ export default function VideoBatchPage() {
         if (gs.duration) updateGlobalSettings('duration', gs.duration);
         if (gs.quality) updateGlobalSettings('quality', gs.quality);
         if (gs.aspectRatio) updateGlobalSettings('aspectRatio', gs.aspectRatio);
+        if (gs.apiLine) updateGlobalSettings('apiLine', gs.apiLine); // 新增：API 线路
       }
 
       // 恢复 AI 模特
@@ -2424,6 +2428,7 @@ C07: [story CTA, inspiring, <50 chars]`,
             userId: currentUserId,  // 传递用户ID以便记录到任务日志
             creditCost: taskCreditCost,  // 传递积分消耗
             mode: isPromptMode ? "prompt_to_video" : "image_to_video", // 传递任务模式
+            apiLine: task.apiLine || globalSettings.apiLine, // 新增：API 线路
           }),
         });
 
@@ -2455,9 +2460,10 @@ C07: [story CTA, inspiring, <50 chars]`,
         // VEO3 通常需要 3-5 分钟，设置 10 分钟超时
         const maxPollTime = isVeo3Model ? 10 * 60 * 1000 : (isPro ? 35 * 60 * 1000 : 10 * 60 * 1000);
         // 轮询状态接口路径
+        const taskApiLine = task.apiLine || globalSettings.apiLine; // 新增：获取任务的 API 线路
         const statusApiPath = isVeo3Model
           ? `/api/video-batch/veo-status/${soraTaskId}`
-          : `/api/video-batch/sora-status/${soraTaskId}?isPro=${isPro}`;
+          : `/api/video-batch/sora-status/${soraTaskId}?isPro=${isPro}&apiLine=${taskApiLine}`;
         const pollInterval = 15 * 1000; // 15秒轮询一次（减少请求频率）
         const startTime = Date.now();
 
@@ -3409,6 +3415,35 @@ C07: [story CTA, inspiring, <50 chars]`,
                       ))}
                     </div>
                   </div>
+
+                  {/* API 线路选择 - 仅 Sora2/Sora2 Pro 显示 */}
+                  {(globalSettings.modelType === "sora2" ||
+                    globalSettings.modelType === "sora2-pro") && (
+                      <div className="space-y-2">
+                        <Label className="text-xs text-white/60 flex items-center gap-1.5">
+                          <span>🌐</span> API 线路
+                          <span className="text-[10px] text-amber-400/80 ml-1">
+                            (繁忙时切换)
+                          </span>
+                        </Label>
+                        <div className="grid grid-cols-2 gap-2">
+                          {Object.values(API_LINES).map((line) => (
+                            <button
+                              key={line.id}
+                              onClick={() => updateGlobalSettings("apiLine", line.id)}
+                              className={cn(
+                                "px-3 py-2 rounded-lg text-xs transition-all text-center font-medium",
+                                globalSettings.apiLine === line.id
+                                  ? "bg-tiktok-cyan/20 text-tiktok-cyan border border-tiktok-cyan/30"
+                                  : "bg-white/5 text-white/50 border border-white/10 hover:bg-white/10 hover:text-white/70"
+                              )}
+                            >
+                              {line.name}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
 
                   {/* AI 模特选择 */}
                   <div className="space-y-2">

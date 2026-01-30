@@ -428,18 +428,13 @@ export default function LoginPage() {
 
       <div className="w-full max-w-[460px] relative z-10">
         <ReflectiveCard className="py-8 px-10 login-expand">
-          {/* Header - Premium Metallic Logo */}
+          {/* Header - Premium ToryX Logo */}
           <div className="flex flex-col items-center mb-6">
-            <div
-              className="w-12 h-12 rounded-xl flex items-center justify-center mb-2 mt-4"
-              style={{
-                background: 'linear-gradient(145deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.02) 100%)',
-                border: '1px solid rgba(255,255,255,0.1)',
-                boxShadow: '0 8px 32px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.1)'
-              }}
-            >
-              <Zap className="h-6 w-6 text-white fill-white/10" />
-            </div>
+            <img
+              src="/images/toryx_logo_icon.png"
+              alt="ToryX Logo"
+              className="w-16 h-16 mb-2 mt-4 drop-shadow-[0_0_20px_rgba(16,185,129,0.3)]"
+            />
             <div className="flex items-baseline mb-1">
               <span
                 className="text-[32px] font-semibold tracking-[-0.02em]"

@@ -25,6 +25,7 @@ interface RequestBody {
   userId?: string;
   creditCost?: number;
   mode?: "image_to_video" | "prompt_to_video"; // 任务模式
+  apiLine?: "line1" | "line2" | "line3"; // API 线路选择
 }
 
 // ============================================================================
@@ -34,10 +35,10 @@ interface RequestBody {
 export async function POST(request: NextRequest) {
   try {
     const body: RequestBody = await request.json();
-    const { 
-      aiVideoPrompt, 
-      mainGridImageUrl, 
-      aspectRatio, 
+    const {
+      aiVideoPrompt,
+      mainGridImageUrl,
+      aspectRatio,
       durationSeconds = 15,
       quality = "standard",
       modelType = "sora2",
@@ -45,6 +46,7 @@ export async function POST(request: NextRequest) {
       userId,
       creditCost = 0,
       mode = "image_to_video",
+      apiLine = "line1",
     } = body;
 
     const isPromptMode = mode === "prompt_to_video";
@@ -93,6 +95,7 @@ export async function POST(request: NextRequest) {
       creditCost,
       hasMainImage: !!mainGridImageUrl,
       mode,
+      apiLine,
     });
 
     // 提交 Sora2 视频生成任务
@@ -103,7 +106,7 @@ export async function POST(request: NextRequest) {
       aspectRatio: aspectRatio,
       ...(mainGridImageUrl && { url: mainGridImageUrl }), // 有图片时才传
       model: sora2Model,
-    });
+    }, undefined, apiLine);
 
     if (!submitResult.success || !submitResult.taskId) {
       console.error("[Video Batch] Sora submit failed:", submitResult.error);
@@ -140,7 +143,7 @@ export async function POST(request: NextRequest) {
           })
           .select()
           .single();
-        
+
         if (insertError) {
           console.error("[Video Batch] Failed to create DB record:", insertError);
         } else {
@@ -170,9 +173,9 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error("[Video Batch] Error submitting Sora video:", error);
     return NextResponse.json(
-      { 
-        success: false, 
-        error: error instanceof Error ? error.message : "视频提交失败" 
+      {
+        success: false,
+        error: error instanceof Error ? error.message : "视频提交失败"
       },
       { status: 500 }
     );

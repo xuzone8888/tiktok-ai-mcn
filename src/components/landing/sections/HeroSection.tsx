@@ -14,9 +14,13 @@ export default function HeroSection() {
                 <header className="fixed top-0 left-0 right-0 z-50 border-b border-white/5 backdrop-blur-xl bg-black/30">
                     <div className="container max-w-7xl mx-auto px-6 py-4">
                         <nav className="flex items-center justify-between">
-                            <Link href="/" className="flex items-center gap-2 group">
-                                {/* Lightning Icon */}
-                                <Zap className="h-7 w-7 text-white fill-white" />
+                            <Link href="/" className="flex items-center gap-3 group">
+                                {/* ToryX Logo */}
+                                <img
+                                    src="/images/toryx_logo_icon.png"
+                                    alt="ToryX Logo"
+                                    className="w-10 h-10 drop-shadow-[0_0_15px_rgba(16,185,129,0.3)]"
+                                />
                                 {/* Text Logo */}
                                 <div className="flex flex-col">
                                     <div className="flex items-baseline">
@@ -65,8 +69,8 @@ export default function HeroSection() {
                     </div>
 
                     {/* 主标题 */}
-                    <h1 className="text-5xl md:text-7xl font-bold leading-[1.1] mb-6 text-white">
-                        {heroData.headline}
+                    <h1 className="text-4xl md:text-5xl lg:text-6xl xl:text-7xl font-bold leading-[1.1] mb-6 text-white whitespace-nowrap">
+                        从商品链接，到 TikTok 爆款视频
                     </h1>
 
                     {/* 副标题 */}

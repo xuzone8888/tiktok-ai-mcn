@@ -239,7 +239,7 @@ export default function PrivacyPage() {
                     </div>
                     <div>
                       <p className="text-gray-400 text-sm">{lang === "en" ? "Website" : "网站"}</p>
-                      <p className="text-white">www.tokfactoryai.com</p>
+                      <p className="text-white">toryxai.com</p>
                     </div>
                     <div>
                       <p className="text-gray-400 text-sm">{lang === "en" ? "Address" : "地址"}</p>

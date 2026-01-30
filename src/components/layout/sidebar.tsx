@@ -291,20 +291,11 @@ export function Sidebar() {
           <div className="absolute top-0 left-1/2 -translate-x-1/2 w-2/3 h-1 bg-gradient-to-r from-transparent via-[#00f2ea]/20 to-transparent blur-sm group-hover/header:via-[#00f2ea]/40 transition-all duration-500" />
 
           <Link href="/" className="group/logo relative flex shrink-0 items-center justify-center transition-all duration-300 hover:scale-[1.03] active:scale-95">
-            <div className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px] bg-gradient-to-br from-[#d9ff00] via-[#00f2ea] to-[#ff0080] shadow-[0_8px_20px_rgba(0,242,234,0.3),inset_0_2px_4px_rgba(255,255,255,0.9),inset_0_-4px_10px_rgba(0,0,0,0.1)] ring-1 ring-white/30">
-
-              {/* Internal Glass Cavity */}
-              <div className="absolute inset-[2px] rounded-[12px] bg-white/10 blur-[0.5px] mix-blend-overlay" />
-
-              {/* Top Specular Highlight */}
-              <div className="absolute inset-x-0 top-0 h-[45%] bg-gradient-to-b from-white/90 to-transparent rounded-t-[13px] opacity-90 pointer-events-none" />
-
-              {/* Bottom Refraction */}
-              <div className="absolute inset-x-0 bottom-0 h-[40%] bg-gradient-to-t from-white/40 to-transparent rounded-b-[14px] mix-blend-overlay pointer-events-none" />
-
-              {/* Icon */}
-              <Zap className="h-5 w-5 text-white drop-shadow-[0_2px_3px_rgba(0,0,0,0.2)] relative z-10" fill="white" strokeWidth={0} />
-            </div>
+            <img
+              src="/images/toryx_logo_icon.png"
+              alt="ToryX Logo"
+              className="h-10 w-10 drop-shadow-[0_0_15px_rgba(16,185,129,0.4)] ring-1 ring-white/10 rounded-xl"
+            />
           </Link>
 
           {!collapsed && (

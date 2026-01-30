@@ -52,7 +52,7 @@ export default function TermsPage() {
                 <div>
                   <h2 className="text-xl font-bold text-white mb-3">{lang === "en" ? "1. Introduction" : "一、引言"}</h2>
                   <p className="leading-loose">{lang === "en" ? 'Welcome to "ToryX" software and related services!' : '欢迎使用"ToryX"软件及相关服务！'}</p>
-                  <p className="leading-loose mt-3">{lang === "en" ? '"ToryX" software and related services refer to the products and services provided to you by Wuhan Guanxing Cultural Media Co., Ltd. and its affiliates (hereinafter referred to as "Company"), which legally own and operate the client application labeled "ToryX" and the related website (www.tokfactoryai.com). This Agreement is entered into between you and the Company regarding your download, installation, registration, login, use of "ToryX" software, and access to related services.' : '"ToryX"软件及相关服务是指武汉观星文化传媒有限公司及其关联方（以下简称"公司"）依法拥有并运营的标注名称为"ToryX"的客户端应用程序及相关网站（www.tokfactoryai.com）向您提供的产品与服务。本协议是您与公司就您下载、安装、注册、登录、使用"ToryX"软件及获取相关服务所订立的协议。'}</p>
+                  <p className="leading-loose mt-3">{lang === "en" ? '"ToryX" software and related services refer to the products and services provided to you by Wuhan Guanxing Cultural Media Co., Ltd. and its affiliates (hereinafter referred to as "Company"), which legally own and operate the client application labeled "ToryX" and the related website (toryxai.com). This Agreement is entered into between you and the Company regarding your download, installation, registration, login, use of "ToryX" software, and access to related services.' : '"ToryX"软件及相关服务是指武汉观星文化传媒有限公司及其关联方（以下简称"公司"）依法拥有并运营的标注名称为"ToryX"的客户端应用程序及相关网站（toryxai.com）向您提供的产品与服务。本协议是您与公司就您下载、安装、注册、登录、使用"ToryX"软件及获取相关服务所订立的协议。'}</p>
                   <p className="leading-loose mt-3">{lang === "en" ? 'To better provide services to you, please strictly read and fully understand this Agreement before you start using "ToryX" software and related services, especially terms involving exemption or limitation of liability, licensing of rights and use of information, terms regarding consent to activate and use special individual services, governing law and dispute resolution terms, etc. Among them, important contents such as exemption or limitation of liability terms will be prompted in bold for your attention.' : '为了更好地为您提供服务，请您在开始使用"ToryX"软件及相关服务之前，严格阅读并充分理解本协议，特别是涉及免除或限制责任的条款、权利许可和信息使用的条款、同意开通和使用特殊单项服务的条款、法律适用和争议解决条款等。其中，免除或限制责任条款等重要内容将以加粗形式提示您注意。'}</p>
                   <p className="leading-loose mt-3">{lang === "en" ? 'If you do not agree to this Agreement, we will be unable to provide you with complete products and services, and you may choose to stop using them. If you voluntarily choose to agree to or use "ToryX" software and related services, it shall be deemed that you have fully understood this Agreement and agreed to accept the constraints of this Agreement.' : '如您不同意本协议，我们将无法为您提供完整的产品和服务，您可以选择停止使用。如果您自愿选择同意或使用"ToryX"软件及相关服务，即视为您已充分理解本协议，并同意接受本协议的约束。'}</p>
                 </div>
@@ -317,7 +317,7 @@ export default function TermsPage() {
                     </div>
                     <div>
                       <p className="text-gray-400 text-sm">{lang === "en" ? "Website" : "网站"}</p>
-                      <p className="text-white">www.tokfactoryai.com</p>
+                      <p className="text-white">toryxai.com</p>
                     </div>
                     <div>
                       <p className="text-gray-400 text-sm">{lang === "en" ? "Address" : "地址"}</p>

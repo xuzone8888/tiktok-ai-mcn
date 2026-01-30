@@ -15,7 +15,11 @@ export async function GET(request: NextRequest) {
     const errorDescription = searchParams.get('error_description');
 
     // Base URL for redirects
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://www.tokfactoryai.com';
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL;
+    if (!baseUrl) {
+        console.error('CRITICAL: NEXT_PUBLIC_APP_URL environment variable is not set');
+        throw new Error('NEXT_PUBLIC_APP_URL environment variable is required');
+    }
 
     // Handle OAuth errors
     if (error) {
