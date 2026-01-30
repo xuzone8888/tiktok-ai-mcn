@@ -35,6 +35,11 @@ const nextConfig = {
         protocol: 'https',
         hostname: '**.cloudflare.com',
       },
+      // ToryX media domain
+      {
+        protocol: 'https',
+        hostname: 'media.toryxai.com',
+      },
       // TikTok CDN for avatars
       {
         protocol: 'https',

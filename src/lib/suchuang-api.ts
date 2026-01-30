@@ -17,6 +17,14 @@ import https from 'https';
 const API_BASE_URL = process.env.SUCHUANG_API_ENDPOINT || "https://api.wuyinkeji.com";
 const API_KEY = process.env.SUCHUANG_API_KEY || "";
 
+// Line3 - 吾音科技 sora2-new 备用线路
+const LINE3_API_BASE = "https://api.wuyinkeji.com";
+const LINE3_API_KEY = process.env.LINE3_API_KEY || "";
+
+// Gemini 3 Pro Image - fsai.app 代理
+const GEMINI_IMAGE_API_BASE = process.env.GEMINI_IMAGE_API_ENDPOINT || "https://fsai.app";
+const GEMINI_IMAGE_API_KEY = process.env.GEMINI_IMAGE_API_KEY || "";
+
 // 注意：Sora2 API 使用 https.request 并强制 IPv4
 // 因为 Cloudflare 的 IPv6 在阿里云服务器上不可达
 
@@ -462,12 +470,107 @@ interface Sora2SubmitResponse {
  * 
  * API 端点: POST /v1/videos
  * 文档: https://k0qzjtg1od.apifox.cn/384599477e0
+ * 
+ * @param apiLine - API 线路选择
+ *   - line1=默认(scd666)
+ *   - line2=备用(fsai.app) 
+ *   - line3=吾音科技(sora2-new, 仅支持10/15秒)
  */
 export async function submitSora2(
   params: Sora2Params & { model?: Sora2ModelType },
-  apiKey?: string
+  apiKey?: string,
+  apiLine: "line1" | "line2" | "line3" = "line1"
 ): Promise<{ success: boolean; taskId?: string; error?: string }> {
-  const key = apiKey || SORA2_API_KEY || API_KEY;
+
+  // ========== Line3: 吾音科技 sora2-new API (完全不同的格式) ==========
+  if (apiLine === "line3") {
+    const key = LINE3_API_KEY;
+    if (!key) {
+      return { success: false, error: "Line3 API key not configured" };
+    }
+
+    // Line3 仅支持 10/15 秒
+    const duration = params.duration || 15;
+    if (duration !== 10 && duration !== 15) {
+      return { success: false, error: "吾音科技线路仅支持 10 秒和 15 秒视频" };
+    }
+
+    try {
+      // 构建 URL 参数
+      const url = new URL(`${LINE3_API_BASE}/api/sora2-new/submit`);
+      url.searchParams.set("key", key);
+      url.searchParams.set("prompt", params.prompt);
+      url.searchParams.set("duration", String(duration));
+      url.searchParams.set("aspectRatio", params.aspectRatio || "9:16");
+      if (params.url) {
+        url.searchParams.set("url", params.url);
+      }
+
+      console.log("[Sora2-Line3] Submitting task:", {
+        endpoint: `${LINE3_API_BASE}/api/sora2-new/submit`,
+        duration,
+        aspectRatio: params.aspectRatio || "9:16",
+        prompt: params.prompt.substring(0, 50) + "...",
+        hasImage: !!params.url,
+      });
+
+      // 发送 POST 请求
+      const result = await new Promise<{ data: string; statusCode: number }>((resolve, reject) => {
+        const options = {
+          hostname: url.hostname,
+          port: 443,
+          path: url.pathname + url.search,
+          method: 'POST',
+          family: 4,
+          timeout: 60000,
+        };
+
+        const req = https.request(options, (res) => {
+          let data = '';
+          res.on('data', chunk => data += chunk);
+          res.on('end', () => resolve({ data, statusCode: res.statusCode || 0 }));
+        });
+
+        req.on('error', reject);
+        req.on('timeout', () => {
+          req.destroy();
+          reject(new Error('Request timeout'));
+        });
+
+        req.end();
+      });
+
+      console.log("[Sora2-Line3] Response:", result.data.substring(0, 300));
+
+      const data = JSON.parse(result.data);
+
+      if (data.code === 200 && data.data?.id) {
+        return { success: true, taskId: data.data.id };
+      }
+
+      return { success: false, error: data.msg || "吾音科技 API 错误" };
+    } catch (error) {
+      console.error("[Sora2-Line3] Submit error:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Network error"
+      };
+    }
+  }
+
+  // ========== Line1/Line2: 标准 OpenAI 兼容格式 ==========
+  // 根据线路选择 API 端点和密钥
+  let apiBase: string;
+  let key: string;
+
+  if (apiLine === "line2") {
+    apiBase = process.env.LINE2_API_ENDPOINT || "https://fsai.app/v1";
+    key = process.env.LINE2_API_KEY || "";
+    console.log("[Sora2] Using Line2 (backup) API:", apiBase);
+  } else {
+    apiBase = SORA2_API_BASE;
+    key = apiKey || SORA2_API_KEY || API_KEY;
+  }
 
   if (!key) {
     return { success: false, error: "Sora2 API key not configured" };
@@ -481,10 +584,11 @@ export async function submitSora2(
       "standard"
     );
 
-    const endpoint = `${SORA2_API_BASE}/v1/videos`;
+    const endpoint = `${apiBase}/v1/videos`;
 
     console.log("[Sora2] Submitting task:", {
       endpoint,
+      apiLine,
       model,
       prompt: params.prompt.substring(0, 50) + "...",
       hasImage: !!params.url,
@@ -620,20 +724,120 @@ export async function submitSora2(
  * 查询 Sora2 任务结果（新版 API）
  * 
  * API 端点: GET /v1/videos/{id}
+ * 
+ * @param apiLine - API 线路选择
+ *   - line1=默认(scd666)
+ *   - line2=备用(fsai.app)
+ *   - line3=吾音科技(sora2/detail)
  */
 export async function querySora2Result(
   taskId: string,
   usePro: boolean = false,
-  apiKey?: string
+  apiKey?: string,
+  apiLine: "line1" | "line2" | "line3" = "line1"
 ): Promise<{ success: boolean; task?: TaskStatus; error?: string; raw?: unknown }> {
-  const key = apiKey || SORA2_API_KEY || API_KEY;
+
+  // ========== Line3: 吾音科技查询 API (完全不同的格式) ==========
+  if (apiLine === "line3") {
+    const key = LINE3_API_KEY;
+    if (!key) {
+      return { success: false, error: "Line3 API key not configured" };
+    }
+
+    try {
+      // 构建 URL 参数
+      const url = new URL(`${LINE3_API_BASE}/api/sora2/detail`);
+      url.searchParams.set("key", key);
+      url.searchParams.set("id", taskId);
+
+      console.log("[Sora2-Line3] Querying task:", taskId);
+
+      // 发送 GET 请求
+      const result = await new Promise<{ data: string; statusCode: number }>((resolve, reject) => {
+        const options = {
+          hostname: url.hostname,
+          port: 443,
+          path: url.pathname + url.search,
+          method: 'GET',
+          family: 4,
+          timeout: 60000,
+        };
+
+        const req = https.request(options, (res) => {
+          let data = '';
+          res.on('data', chunk => data += chunk);
+          res.on('end', () => resolve({ data, statusCode: res.statusCode || 0 }));
+        });
+
+        req.on('error', reject);
+        req.on('timeout', () => {
+          req.destroy();
+          reject(new Error('Request timeout'));
+        });
+
+        req.end();
+      });
+
+      const data = JSON.parse(result.data);
+
+      if (data.code === 200 && data.data) {
+        // 吾音科技状态码: 0=处理中, 1=成功, 2=失败
+        const statusMap: Record<number, TaskStatus["status"]> = {
+          0: "processing",
+          1: "completed",
+          2: "failed",
+        };
+
+        const taskStatus = statusMap[data.data.status] ?? "processing";
+
+        console.log("[Sora2-Line3] Query response:", {
+          id: data.data.id,
+          status: data.data.status,
+          mappedStatus: taskStatus,
+          hasUrl: !!data.data.remote_url,
+        });
+
+        return {
+          success: true,
+          task: {
+            taskId: data.data.id || taskId,
+            status: taskStatus,
+            resultUrl: data.data.remote_url || data.data.url,
+            errorMessage: data.data.fail_reason,
+          },
+          raw: data,
+        };
+      }
+
+      return { success: false, error: data.msg || "吾音科技查询失败" };
+    } catch (error) {
+      console.error("[Sora2-Line3] Query error:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Network error"
+      };
+    }
+  }
+
+  // ========== Line1/Line2: 标准 OpenAI 兼容格式 ==========
+  // 根据线路选择 API 端点和密钥
+  let apiBase: string;
+  let key: string;
+
+  if (apiLine === "line2") {
+    apiBase = process.env.LINE2_API_ENDPOINT || "https://fsai.app/v1";
+    key = process.env.LINE2_API_KEY || "";
+  } else {
+    apiBase = SORA2_API_BASE;
+    key = apiKey || SORA2_API_KEY || API_KEY;
+  }
 
   if (!key) {
     return { success: false, error: "Sora2 API key not configured" };
   }
 
   try {
-    const endpoint = `${SORA2_API_BASE}/v1/videos/${taskId}`;
+    const endpoint = `${apiBase}/v1/videos/${taskId}`;
 
     // 使用 https.request 并强制 IPv4（解决 IPv6 超时问题）
     let retryCount = 0;
@@ -940,3 +1144,172 @@ export async function testApiConnection(apiKey?: string): Promise<{
   }
 }
 
+
+// ============================================================================
+// Gemini 3 Pro Image API (图片生成 - 同步返回)
+// ============================================================================
+
+export interface GeminiImageParams {
+  prompt: string;
+  sourceImageUrl?: string; // 可选的参考图片
+}
+
+export interface GeminiImageResult {
+  success: boolean;
+  imageBase64?: string;  // Base64 编码的图片数据
+  imageUrl?: string;     // 如果上传到 OSS 后的 URL
+  error?: string;
+}
+
+/**
+ * 使用 Gemini 3 Pro Image 生成图片
+ * 
+ * 特点：
+ * - 同步返回，无需轮询
+ * - 返回 Base64 编码的 JPEG 图片
+ * - 价格便宜（约 ¥0.02/张）
+ * - 分辨率约 1K-1.5K
+ * 
+ * @param params 图片生成参数
+ */
+export async function generateGeminiImage(
+  params: GeminiImageParams
+): Promise<GeminiImageResult> {
+  const key = GEMINI_IMAGE_API_KEY;
+
+  if (!key) {
+    return { success: false, error: "Gemini Image API key not configured" };
+  }
+
+  try {
+    // 构建消息内容
+    let messageContent = params.prompt;
+
+    // 如果有源图片，使用图生图模式
+    if (params.sourceImageUrl) {
+      messageContent = `参考这张图片，${params.prompt}\n\n参考图片: ${params.sourceImageUrl}`;
+    }
+
+    const requestBody = JSON.stringify({
+      model: "gemini-3-pro-image",
+      messages: [
+        { role: "user", content: messageContent }
+      ],
+      max_tokens: 4096,
+    });
+
+    console.log("[Gemini-Image] Generating image:", {
+      prompt: params.prompt.substring(0, 50) + "...",
+      hasSourceImage: !!params.sourceImageUrl,
+    });
+
+    const result = await new Promise<{ data: string; statusCode: number }>((resolve, reject) => {
+      const url = new URL(`${GEMINI_IMAGE_API_BASE}/v1/chat/completions`);
+      const options = {
+        hostname: url.hostname,
+        port: 443,
+        path: url.pathname,
+        method: 'POST',
+        family: 4,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${key}`,
+          'Content-Length': Buffer.byteLength(requestBody),
+        },
+        timeout: 120000, // 2分钟超时
+      };
+
+      const req = https.request(options, (res) => {
+        let data = '';
+        res.on('data', chunk => data += chunk);
+        res.on('end', () => resolve({ data, statusCode: res.statusCode || 0 }));
+      });
+
+      req.on('error', reject);
+      req.on('timeout', () => {
+        req.destroy();
+        reject(new Error('Request timeout'));
+      });
+
+      req.write(requestBody);
+      req.end();
+    });
+
+    if (result.statusCode !== 200) {
+      console.error("[Gemini-Image] API error:", result.statusCode, result.data.substring(0, 300));
+      const errorData = JSON.parse(result.data);
+      return {
+        success: false,
+        error: errorData.error?.message || `API returned status ${result.statusCode}`
+      };
+    }
+
+    const data = JSON.parse(result.data);
+
+    if (!data.choices || !data.choices[0]?.message?.content) {
+      return { success: false, error: "API 未返回图片内容" };
+    }
+
+    const content = data.choices[0].message.content;
+
+    // 提取 Base64 图片数据
+    const base64Match = content.indexOf('base64,');
+    if (base64Match === -1) {
+      console.error("[Gemini-Image] No base64 image in response");
+      return { success: false, error: "API 未返回有效图片" };
+    }
+
+    const imageBase64 = content.substring(base64Match + 7);
+
+    console.log("[Gemini-Image] Image generated successfully:", {
+      sizeKB: (Buffer.from(imageBase64, 'base64').length / 1024).toFixed(2),
+      tokens: data.usage?.total_tokens,
+    });
+
+    return {
+      success: true,
+      imageBase64,
+    };
+
+  } catch (error) {
+    console.error("[Gemini-Image] Generate error:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Network error"
+    };
+  }
+}
+
+/**
+ * 将 Base64 图片上传到 OSS 并返回 URL
+ * 
+ * 用于将 Gemini 返回的 Base64 图片转换为可访问的 URL
+ */
+export async function uploadBase64ImageToOSS(
+  base64Data: string,
+  filename?: string
+): Promise<{ success: boolean; url?: string; error?: string }> {
+  try {
+    // 直接使用 OSS SDK 上传
+    const { uploadImageBuffer, generateMediaPath, getPublicUrl } = await import('@/lib/oss');
+
+    const buffer = Buffer.from(base64Data, 'base64');
+    const objectPath = generateMediaPath(
+      'images',
+      'gemini-gen',  // 使用固定的用户 ID 文件夹
+      filename || `gemini-${Date.now()}.jpg`
+    );
+
+    const url = await uploadImageBuffer(buffer, objectPath, 'image/jpeg');
+
+    console.log("[Gemini-Image] Uploaded to OSS:", url);
+
+    return { success: true, url };
+  } catch (error) {
+    console.error("[Gemini-Image] Upload error:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Upload failed"
+    };
+  }
+}
