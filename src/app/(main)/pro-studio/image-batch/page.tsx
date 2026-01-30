@@ -670,12 +670,23 @@ export default function ImageBatchPage() {
         });
 
         const responseText = await response.text();
+        console.log("[Image Batch] API response status:", response.status, "length:", responseText.length);
+
         let result;
         try {
           result = JSON.parse(responseText);
-        } catch {
-          console.error("[Image Batch] Failed to parse submit response:", responseText.substring(0, 200));
-          throw new Error("图片处理服务响应格式错误");
+        } catch (parseError) {
+          console.error("[Image Batch] Failed to parse submit response:", {
+            status: response.status,
+            textLength: responseText.length,
+            preview: responseText.substring(0, 300),
+            error: parseError,
+          });
+          // 如果响应状态是 200 但解析失败，可能是网络问题，提示用户检查成品交付单
+          if (response.status === 200) {
+            throw new Error("响应解析失败，请检查成品交付单确认结果");
+          }
+          throw new Error(`图片处理失败 (${response.status})`);
         }
 
         if (!result.success) {
