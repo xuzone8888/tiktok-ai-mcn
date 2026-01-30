@@ -1253,13 +1253,25 @@ export async function generateGeminiImage(
     const content = data.choices[0].message.content;
 
     // 提取 Base64 图片数据
+    // 格式可能是: ![image](data:image/jpeg;base64,/9j/4AAQ...) 
+    // 或者直接: data:image/jpeg;base64,/9j/4AAQ...
     const base64Match = content.indexOf('base64,');
     if (base64Match === -1) {
-      console.error("[Gemini-Image] No base64 image in response");
+      console.error("[Gemini-Image] No base64 image in response, content preview:", content.substring(0, 200));
       return { success: false, error: "API 未返回有效图片" };
     }
 
-    const imageBase64 = content.substring(base64Match + 7);
+    // 提取 base64 数据，处理可能的 markdown 格式
+    let imageBase64 = content.substring(base64Match + 7);
+
+    // 如果是 markdown 格式 ![image](data:...), 需要移除末尾的 )
+    const closingParen = imageBase64.indexOf(')');
+    if (closingParen !== -1) {
+      imageBase64 = imageBase64.substring(0, closingParen);
+    }
+
+    // 移除可能的换行符和空格
+    imageBase64 = imageBase64.trim();
 
     console.log("[Gemini-Image] Image generated successfully:", {
       sizeKB: (Buffer.from(imageBase64, 'base64').length / 1024).toFixed(2),
