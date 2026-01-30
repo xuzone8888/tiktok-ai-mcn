@@ -1219,11 +1219,30 @@ export async function generateGeminiImage(
 
     if (result.statusCode !== 200) {
       console.error("[Gemini-Image] API error:", result.statusCode, result.data.substring(0, 300));
-      const errorData = JSON.parse(result.data);
-      return {
-        success: false,
-        error: errorData.error?.message || `API returned status ${result.statusCode}`
-      };
+
+      // 解析错误信息并返回友好的错误消息
+      let errorMessage = `Gemini API 错误 (${result.statusCode})`;
+      try {
+        const errorData = JSON.parse(result.data);
+        const rawMessage = errorData.error?.message || "";
+
+        // 提供用户友好的错误信息
+        if (result.statusCode === 403) {
+          errorMessage = "Gemini API 暂时繁忙，请稍后重试";
+        } else if (result.statusCode === 429) {
+          errorMessage = "Gemini API 请求频率过高，请稍后重试";
+        } else if (rawMessage.includes("PERMISSION_DENIED")) {
+          errorMessage = "Gemini API 权限受限，请稍后重试";
+        } else if (rawMessage.includes("rate limit")) {
+          errorMessage = "Gemini API 请求频率过高，请稍后重试";
+        } else {
+          errorMessage = rawMessage.substring(0, 100) || errorMessage;
+        }
+      } catch {
+        // 解析失败时使用默认错误消息
+      }
+
+      return { success: false, error: errorMessage };
     }
 
     const data = JSON.parse(result.data);
