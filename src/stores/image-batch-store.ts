@@ -41,6 +41,7 @@ export interface ExcelPromptRow {
 
 /** 已上传的图片信息 */
 export interface UploadedImageInfo {
+  id: string;
   file: File;
   previewUrl: string;
   name: string;
