@@ -68,6 +68,7 @@ import {
   Plus,
   Minus,
   FileText,
+  FileSpreadsheet,
   PackageOpen,
   Wifi,
   Film,
@@ -103,7 +104,13 @@ import {
   useImageBatchSelectedIds,
   useImageBatchSelectedCount,
   useImageBatchStats,
+  useImageBatchScenario,
+  useImageBatchUploadedImages,
+  useImageBatchExcelData,
+  useImageBatchPromptCount,
+  useImageBatchScenarioTaskCount,
   getImageTaskCost,
+  type UploadedImageInfo,
 } from "@/stores/image-batch-store";
 
 import {
@@ -113,6 +120,10 @@ import {
 // Templates
 import { SaveTemplateDialog } from "@/components/studio/SaveTemplateDialog";
 import { TemplateManager, type Template } from "@/components/studio/TemplateManager";
+
+// Excel 批量上传
+import { ExcelUploader } from "@/components/studio/ExcelUploader";
+
 
 
 // ============================================================================
@@ -411,14 +422,21 @@ export default function ImageBatchPage() {
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Store
+  // Store - 基础状态
   const tasks = useImageBatchTasks();
-  const _jobStatus = useImageBatchJobStatus(); // 保留供未来批量功能使用
+  const _jobStatus = useImageBatchJobStatus();
   const globalSettings = useImageBatchGlobalSettings();
   const selectedTaskIds = useImageBatchSelectedIds();
   const selectedCount = useImageBatchSelectedCount();
   const stats = useImageBatchStats();
-  void _jobStatus; // suppress unused warning
+  void _jobStatus;
+
+  // Store - 场景状态
+  const scenario = useImageBatchScenario();
+  const uploadedImages = useImageBatchUploadedImages();
+  const excelData = useImageBatchExcelData();
+  const promptCount = useImageBatchPromptCount();
+  const scenarioTaskCount = useImageBatchScenarioTaskCount();
 
   const {
     addTasksFromFiles,
@@ -434,6 +452,15 @@ export default function ImageBatchPage() {
     updateGlobalSettings,
     applyGlobalSettingsToAllPending,
     applyGlobalSettingsToSelected,
+    // 场景管理
+    setScenario,
+    addUploadedImages,
+    clearUploadedImages,
+    setExcelData,
+    clearExcelData,
+    setPromptCount,
+    resetScenarioData,
+    createTasksFromScenario,
   } = useImageBatchStore();
 
   // Local State
@@ -441,16 +468,12 @@ export default function ImageBatchPage() {
   const [userCredits, setUserCredits] = useState(0);
   const [previewTask, setPreviewTask] = useState<ImageBatchTask | null>(null);
 
-  // 创建任务弹窗状态
-  const [showCreateDialog, setShowCreateDialog] = useState(false);
-  const [createPrompt, setCreatePrompt] = useState("");
-  const [createCount, setCreateCount] = useState(1);
+  // 启动任务弹窗状态
+  const [showStartDialog, setShowStartDialog] = useState(false);
 
   // 批量下载状态
   const [isDownloading, setIsDownloading] = useState(false);
-  // 线路检测弹窗状态
   const [showSpeedTest, setShowSpeedTest] = useState(false);
-  // 下载进度状态
   const [downloadProgress, setDownloadProgress] = useState({
     show: false,
     total: 0,
@@ -475,8 +498,10 @@ export default function ImageBatchPage() {
           resolution: globalSettings.resolution,
           prompt: globalSettings.prompt,
         },
-        createPrompt,
-        createCount,
+        // 保存场景数据
+        scenario,
+        promptCount,
+        // 图片和Excel数据在实际使用时需要先上传到OSS
         savedAt: new Date().toISOString(),
       };
 
@@ -522,15 +547,15 @@ export default function ImageBatchPage() {
         if (gs.prompt) updateGlobalSettings('prompt', gs.prompt);
       }
 
-      // 恢复创建参数
-      if (config.createPrompt) setCreatePrompt(config.createPrompt);
-      if (config.createCount) setCreateCount(config.createCount);
+      // 恢复场景数据
+      if (config.scenario) setScenario(config.scenario);
+      if (config.promptCount) setPromptCount(config.promptCount);
 
       // 关闭方案管理器
       setShowTemplateManager(false);
 
-      // 自动打开创建任务弹窗
-      setShowCreateDialog(true);
+      // 自动打开启动任务弹窗
+      setShowStartDialog(true);
 
       toast({
         title: "✅ 方案已加载",
@@ -1091,7 +1116,10 @@ export default function ImageBatchPage() {
 
               {globalSettings.action === "generate" && (
                 <button
-                  onClick={() => setShowCreateDialog(true)}
+                  onClick={() => {
+                    setScenario("prompt");
+                    setShowStartDialog(true);
+                  }}
                   className="group relative px-6 py-3.5 rounded-full font-bold text-white text-sm transition-all duration-300 bg-white/5 border border-white/10 hover:bg-white/10 hover:border-mermaid-pink/50 hover:shadow-[0_0_20px_rgba(236,72,153,0.15)] overflow-hidden"
                 >
                   <span className="relative z-10 flex items-center gap-2">
@@ -1547,20 +1575,31 @@ export default function ImageBatchPage() {
           </DialogContent>
         </Dialog>
 
-        {/* 创建任务弹窗 - 纯提示词模式 (JCUI 2.0 Mermaid Edition) */}
-        <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
+        {/* 统一启动任务弹窗 - 支持三种场景 (JCUI 2.0 Mermaid Edition) */}
+        <Dialog open={showStartDialog} onOpenChange={setShowStartDialog}>
           <DialogContent className="max-w-2xl bg-[#16181D]/90 backdrop-blur-2xl border-white/10 shadow-[0_0_50px_rgba(0,0,0,0.5)] p-0 overflow-hidden gap-0">
             {/* Header - Glass Bar */}
             <div className="flex items-center justify-between px-6 py-5 border-b border-white/5 bg-white/5 backdrop-blur-md">
               <div className="flex flex-col gap-1">
                 <DialogTitle className="text-xl font-bold flex items-center gap-2 text-white">
-                  <div className="p-1.5 rounded-lg bg-mermaid-pink/10 border border-mermaid-pink/20">
-                    <Sparkles className="h-5 w-5 text-mermaid-pink" />
+                  <div className={cn(
+                    "p-1.5 rounded-lg border",
+                    scenario === "prompt" && "bg-mermaid-pink/10 border-mermaid-pink/20",
+                    scenario === "image" && "bg-mermaid-cyan/10 border-mermaid-cyan/20",
+                    scenario === "excel" && "bg-emerald-500/10 border-emerald-500/20"
+                  )}>
+                    {scenario === "prompt" && <Sparkles className="h-5 w-5 text-mermaid-pink" />}
+                    {scenario === "image" && <ImageIcon className="h-5 w-5 text-mermaid-cyan" />}
+                    {scenario === "excel" && <FileSpreadsheet className="h-5 w-5 text-emerald-400" />}
                   </div>
-                  纯提示词创建
+                  {scenario === "prompt" && "纯提示词创建"}
+                  {scenario === "image" && "图片改造"}
+                  {scenario === "excel" && "Excel 批量创建"}
                 </DialogTitle>
                 <DialogDescription className="text-xs text-white/40 tracking-wide font-medium">
-                  PURE PROMPT GENERATION · JCUI STUDIO
+                  {scenario === "prompt" && "PURE PROMPT GENERATION · JCUI STUDIO"}
+                  {scenario === "image" && `IMAGE TRANSFORMATION · ${uploadedImages.length} FILES`}
+                  {scenario === "excel" && `BATCH CREATION · ${excelData.length} PROMPTS`}
                 </DialogDescription>
               </div>
               <button
@@ -1568,38 +1607,117 @@ export default function ImageBatchPage() {
                 className="h-8 px-4 rounded-full bg-mermaid-cyan/5 hover:bg-mermaid-cyan/10 border border-mermaid-cyan/20 text-mermaid-cyan text-xs font-bold transition-all flex items-center gap-2"
               >
                 <FolderDown className="h-3.5 w-3.5" />
-                加载方案 template
+                加载方案
               </button>
             </div>
 
-            <div className="p-8 space-y-8">
-              {/* Prompt Input - Obsidian Style */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <Label className="text-xs font-bold text-white/60 uppercase tracking-wider">
-                    Creative Prompt <span className="text-mermaid-pink">*</span>
-                  </Label>
-                  <span className="text-[10px] text-white/20">SUPPORTS MULTI-LANGUAGE</span>
+            <div className="p-8 space-y-6">
+              {/* 场景1: 纯提示词模式 - 提示词输入 */}
+              {scenario === "prompt" && (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs font-bold text-white/60 uppercase tracking-wider">
+                      Creative Prompt <span className="text-mermaid-pink">*</span>
+                    </Label>
+                    <span className="text-[10px] text-white/20">SUPPORTS MULTI-LANGUAGE</span>
+                  </div>
+                  <div className="relative group">
+                    <div className="absolute -inset-0.5 bg-gradient-to-r from-mermaid-cyan/20 to-mermaid-pink/20 rounded-xl opacity-0 group-hover:opacity-100 transition duration-500 blur" />
+                    <textarea
+                      value={globalSettings.prompt}
+                      onChange={(e) => updateGlobalSettings("prompt", e.target.value)}
+                      placeholder="在此输入提示词，详细描述画面内容、风格、光影等（支持中英文）..."
+                      className="relative w-full h-40 px-5 py-4 text-sm bg-[#050505] border border-white/10 rounded-xl text-white placeholder:text-white/20 focus:outline-none focus:border-mermaid-cyan/50 focus:ring-1 focus:ring-mermaid-cyan/20 resize-none transition-all duration-300"
+                    />
+                  </div>
                 </div>
-                <div className="relative group">
-                  <div className="absolute -inset-0.5 bg-gradient-to-r from-mermaid-cyan/20 to-mermaid-pink/20 rounded-xl opacity-0 group-hover:opacity-100 transition duration-500 blur" />
+              )}
+
+              {/* 场景2: 图片改造模式 - 图片预览 */}
+              {scenario === "image" && (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs font-bold text-white/60 uppercase tracking-wider">
+                      已上传图片 <span className="text-mermaid-cyan">({uploadedImages.length})</span>
+                    </Label>
+                    <button
+                      onClick={clearUploadedImages}
+                      className="text-[10px] text-red-400/60 hover:text-red-400 transition-colors"
+                    >
+                      清除全部
+                    </button>
+                  </div>
+                  <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto p-3 rounded-xl bg-black/20 border border-white/5">
+                    {uploadedImages.slice(0, 12).map((img, i) => (
+                      <div key={i} className="w-14 h-14 rounded-lg overflow-hidden border border-white/10 flex-shrink-0">
+                        <img src={img.previewUrl} alt={img.name} className="w-full h-full object-cover" />
+                      </div>
+                    ))}
+                    {uploadedImages.length > 12 && (
+                      <div className="w-14 h-14 rounded-lg bg-white/10 flex items-center justify-center text-xs text-white/40">
+                        +{uploadedImages.length - 12}
+                      </div>
+                    )}
+                  </div>
+                  {/* 图片模式也可以输入提示词 */}
                   <textarea
-                    value={createPrompt}
-                    onChange={(e) => setCreatePrompt(e.target.value)}
-                    placeholder="在此输入提示词，详细描述画面内容、风格、光影等（支持中英文）..."
-                    className="relative w-full h-48 px-5 py-4 text-sm bg-[#050505] border border-white/10 rounded-xl text-white placeholder:text-white/20 focus:outline-none focus:border-mermaid-cyan/50 focus:ring-1 focus:ring-mermaid-cyan/20 resize-none transition-all duration-300"
+                    value={globalSettings.prompt}
+                    onChange={(e) => updateGlobalSettings("prompt", e.target.value)}
+                    placeholder="输入提示词引导图片改造方向（可选）..."
+                    className="w-full h-20 px-4 py-3 text-sm bg-[#050505] border border-white/10 rounded-xl text-white placeholder:text-white/20 focus:outline-none focus:border-mermaid-cyan/50 resize-none"
                   />
                 </div>
-              </div>
+              )}
 
-              {/* Status Bar - Neon Pills */}
+              {/* 场景3: Excel批量模式 - 数据汇总 */}
+              {scenario === "excel" && (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs font-bold text-white/60 uppercase tracking-wider">
+                      Excel 数据汇总
+                    </Label>
+                    <button
+                      onClick={clearExcelData}
+                      className="text-[10px] text-red-400/60 hover:text-red-400 transition-colors"
+                    >
+                      清除数据
+                    </button>
+                  </div>
+                  <div className="p-4 rounded-xl bg-black/20 border border-white/5 space-y-2">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-white/60">提示词条数</span>
+                      <span className="text-white font-mono">{excelData.length}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-white/60">任务总数</span>
+                      <span className="text-emerald-400 font-mono font-bold">
+                        {excelData.reduce((sum, row) => sum + row.count, 0)}
+                      </span>
+                    </div>
+                    <div className="h-px bg-white/5 my-2" />
+                    <div className="max-h-24 overflow-y-auto space-y-1">
+                      {excelData.slice(0, 5).map((row, i) => (
+                        <div key={i} className="flex items-center justify-between text-xs">
+                          <span className="text-white/40 truncate max-w-[280px]">{row.prompt}</span>
+                          <span className="text-white/60">×{row.count}</span>
+                        </div>
+                      ))}
+                      {excelData.length > 5 && (
+                        <div className="text-[10px] text-white/30 text-center">...还有 {excelData.length - 5} 条</div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* 配置状态栏 - 所有场景通用 */}
               <div className="p-5 rounded-2xl bg-black/20 border border-white/5 space-y-5">
                 <div className="flex flex-wrap items-center gap-3">
-                  <div className="px-3 py-1.5 rounded-full bg-purple-500/10 text-purple-400 border border-purple-500/20 text-xs font-medium flex items-center gap-2 shadow-[0_0_10px_rgba(168,85,247,0.1)]">
+                  <div className="px-3 py-1.5 rounded-full bg-purple-500/10 text-purple-400 border border-purple-500/20 text-xs font-medium flex items-center gap-2">
                     <Film className="h-3.5 w-3.5" />
                     {globalSettings.model === "nano-banana" ? "Turbo Model" : "Pro Model"}
                   </div>
-                  <div className="px-3 py-1.5 rounded-full bg-mermaid-cyan/10 text-mermaid-cyan border border-mermaid-cyan/20 text-xs font-medium flex items-center gap-2 shadow-[0_0_10px_rgba(0,242,234,0.1)]">
+                  <div className="px-3 py-1.5 rounded-full bg-mermaid-cyan/10 text-mermaid-cyan border border-mermaid-cyan/20 text-xs font-medium flex items-center gap-2">
                     <Wand2 className="h-3.5 w-3.5" />
                     {globalSettings.action === "generate" ? "AI Generation" : globalSettings.action === "upscale" ? "Upscale" : "Grid View"}
                   </div>
@@ -1619,36 +1737,51 @@ export default function ImageBatchPage() {
                       ...globalSettings,
                       sourceImageUrl: "",
                       sourceImageName: "",
-                      action: "generate",
+                      action: globalSettings.action,
                       prompt: "",
-                    }) * createCount} PTS
+                    }) * scenarioTaskCount} PTS
                   </div>
                 </div>
 
                 <div className="h-px bg-white/5 w-full" />
 
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-white/40 uppercase tracking-wider">Batch Count</span>
-                  <div className="flex items-center gap-4">
-                    <div className="flex items-center bg-[#050505] rounded-full border border-white/10 p-1">
-                      <button
-                        className="h-8 w-8 rounded-full flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 transition-colors"
-                        onClick={() => setCreateCount(Math.max(1, createCount - 1))}
-                        disabled={createCount <= 1}
-                      >
-                        <Minus className="h-4 w-4" />
-                      </button>
-                      <div className="w-12 text-center text-sm font-bold text-white font-mono">{createCount}</div>
-                      <button
-                        className="h-8 w-8 rounded-full flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 transition-colors"
-                        onClick={() => setCreateCount(Math.min(20, createCount + 1))}
-                        disabled={createCount >= 20}
-                      >
-                        <Plus className="h-4 w-4" />
-                      </button>
+                {/* 场景1独有: 数量选择 */}
+                {scenario === "prompt" && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-white/40 uppercase tracking-wider">Batch Count</span>
+                    <div className="flex items-center gap-4">
+                      <div className="flex items-center bg-[#050505] rounded-full border border-white/10 p-1">
+                        <button
+                          className="h-8 w-8 rounded-full flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 transition-colors disabled:opacity-30"
+                          onClick={() => setPromptCount(promptCount - 1)}
+                          disabled={promptCount <= 1}
+                        >
+                          <Minus className="h-4 w-4" />
+                        </button>
+                        <div className="w-12 text-center text-sm font-bold text-white font-mono">{promptCount}</div>
+                        <button
+                          className="h-8 w-8 rounded-full flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 transition-colors disabled:opacity-30"
+                          onClick={() => setPromptCount(promptCount + 1)}
+                          disabled={promptCount >= 50}
+                        >
+                          <Plus className="h-4 w-4" />
+                        </button>
+                      </div>
                     </div>
                   </div>
-                </div>
+                )}
+
+                {/* 场景2/3: 只显示数量（只读） */}
+                {(scenario === "image" || scenario === "excel") && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-white/40 uppercase tracking-wider">
+                      {scenario === "image" ? "Image Count" : "Total Tasks"}
+                    </span>
+                    <div className="px-4 py-2 rounded-full bg-[#050505] border border-white/10 text-sm font-bold text-white font-mono">
+                      {scenarioTaskCount}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -1666,42 +1799,57 @@ export default function ImageBatchPage() {
               <div className="flex gap-4">
                 <button
                   onClick={() => {
-                    setCreatePrompt("");
-                    setCreateCount(1);
-                    setShowCreateDialog(false);
+                    resetScenarioData();
+                    setShowStartDialog(false);
                   }}
                   className="px-6 py-3 rounded-full text-xs font-bold text-white/40 hover:text-white hover:bg-white/5 transition-all"
                 >
                   取消 Cancel
                 </button>
 
-                {/* Mermaid Ultra Button */}
+                {/* Mermaid Ultra Button - 启动任务 */}
                 <button
                   onClick={() => {
-                    if (!createPrompt.trim()) {
+                    // 场景1需要验证提示词
+                    if (scenario === "prompt" && !globalSettings.prompt.trim()) {
                       toast({ variant: "destructive", title: "请输入提示词" });
                       return;
                     }
-                    const ids = addTaskFromPrompt(createPrompt, createCount);
+                    // 场景2需要有图片
+                    if (scenario === "image" && uploadedImages.length === 0) {
+                      toast({ variant: "destructive", title: "请先上传图片" });
+                      return;
+                    }
+                    // 场景3需要有Excel数据
+                    if (scenario === "excel" && excelData.length === 0) {
+                      toast({ variant: "destructive", title: "请先上传Excel文件" });
+                      return;
+                    }
+
+                    const ids = createTasksFromScenario();
                     toast({ title: `✅ 已创建 ${ids.length} 个任务` });
-                    setCreatePrompt("");
-                    setCreateCount(1);
-                    setShowCreateDialog(false);
+                    resetScenarioData();
+                    setShowStartDialog(false);
                   }}
-                  disabled={!createPrompt.trim()}
+                  disabled={
+                    (scenario === "prompt" && !globalSettings.prompt.trim()) ||
+                    (scenario === "image" && uploadedImages.length === 0) ||
+                    (scenario === "excel" && excelData.length === 0)
+                  }
                   className="group relative px-8 py-3 rounded-full font-bold text-black text-xs tracking-wide transition-all duration-300 bg-gradient-to-r from-[#CCFF00] via-[#00F2EA] to-[#EC4899] hover:scale-[1.02] hover:shadow-[0_0_20px_rgba(0,242,234,0.5)] border border-white/20 overflow-hidden disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <div className="absolute inset-0 bg-gradient-to-b from-white/40 to-transparent pointer-events-none" />
                   <div className="absolute inset-0 bg-[linear-gradient(110deg,transparent,rgba(255,255,255,0.4),transparent)] bg-[length:200%_100%] translate-x-[-100%] group-hover:animate-shimmer transition-opacity duration-300 pointer-events-none" />
                   <span className="relative z-10 flex items-center gap-2">
                     <Sparkles className="h-4 w-4" />
-                    立即创建 CREATE {createCount > 1 && `(${createCount})`}
+                    启动任务 START {scenarioTaskCount > 1 && `(${scenarioTaskCount})`}
                   </span>
                 </button>
               </div>
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
 
         {/* 线路检测弹窗 */}
         <SpeedTestDialog
