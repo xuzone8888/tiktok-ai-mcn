@@ -17,17 +17,16 @@ import https from 'https';
 const API_BASE_URL = process.env.SUCHUANG_API_ENDPOINT || "https://api.wuyinkeji.com";
 const API_KEY = process.env.SUCHUANG_API_KEY || "";
 
-// Line3 - 吾音科技 sora2-new 备用线路
-const LINE3_API_BASE = "https://api.wuyinkeji.com";
-const LINE3_API_KEY = process.env.LINE3_API_KEY || "";
+// 备用线路 (line2) - 吾音科技 sora2-new API
+const WUYIN_API_BASE = "https://api.wuyinkeji.com";
+const WUYIN_API_KEY = process.env.WUYIN_API_KEY || "";
 
 // Gemini 3 Pro Image - fsai.app 代理
 const GEMINI_IMAGE_API_BASE = process.env.GEMINI_IMAGE_API_ENDPOINT || "https://fsai.app";
 const GEMINI_IMAGE_API_KEY = process.env.GEMINI_IMAGE_API_KEY || "";
 
-// 注意：Sora2 API 使用 https.request 并强制 IPv4
-// 因为 Cloudflare 的 IPv6 在阿里云服务器上不可达
-
+// 注意：Sora2 API 使用 https.request 并强�?IPv4
+// 因为 Cloudflare �?IPv6 在阿里云服务器上不可�?
 // ============================================================================
 // 类型定义
 // ============================================================================
@@ -36,9 +35,9 @@ const GEMINI_IMAGE_API_KEY = process.env.GEMINI_IMAGE_API_KEY || "";
 export interface NanoBananaParams {
   model: "nano-banana" | "nano-banana-pro";
   prompt: string;
-  img_url?: string | string[];  // 参考图片 URL
+  img_url?: string | string[];  // 参考图�?URL
   aspectRatio?: "auto" | "1:1" | "16:9" | "9:16" | "4:3" | "3:4" | "3:2" | "2:3" | "5:4" | "4:5" | "21:9";
-  resolution?: "1k" | "2k" | "4k";  // 仅 Pro 版本支持
+  resolution?: "1k" | "2k" | "4k";  // �?Pro 版本支持
 }
 
 // NanoBanana 响应
@@ -57,13 +56,12 @@ export interface NanoBananaResultResponse {
   data?: {
     id: number;
     task_id?: string;
-    status: number;  // 0=处理中, 1=失败, 2=成功 (根据实际 API 返回)
+    status: number;  // 0=处理�? 1=失败, 2=成功 (根据实际 API 返回)
     size?: string;
     prompt?: string;
     fail_reason?: string;
-    image_url?: string;  // 生成的图片 URL (API 实际返回的字段名)
-    remote_url?: string;  // 备用字段名
-    created_at?: string;
+    image_url?: string;  // 生成的图�?URL (API 实际返回的字段名)
+    remote_url?: string;  // 备用字段�?    created_at?: string;
     updated_at?: string;
   };
 }
@@ -74,7 +72,7 @@ export interface Sora2Params {
   duration?: 10 | 15 | 20 | 25;  // Sora2 支持 10/15, Sora2Pro 支持 10/15/20/25
   aspectRatio?: "9:16" | "16:9";
   size?: "small" | "large";
-  url?: string;  // 参考图片 URL
+  url?: string;  // 参考图�?URL
 }
 
 // Sora2 响应
@@ -93,7 +91,7 @@ export interface Sora2ResultResponse {
   data?: {
     id: string;
     content: string;
-    status: number;  // 0=处理中, 1=成功, 2=失败
+    status: number;  // 0=处理�? 1=成功, 2=失败
     fail_reason?: string;
     remote_url?: string;
     duration?: number;
@@ -103,8 +101,7 @@ export interface Sora2ResultResponse {
   };
 }
 
-// 通用任务状态
-export interface TaskStatus {
+// 通用任务状�?export interface TaskStatus {
   taskId: string;
   status: "pending" | "processing" | "completed" | "failed";
   resultUrl?: string;
@@ -122,9 +119,9 @@ export interface TaskStatus {
  * 
  * 根据速创 API 文档:
  * - NanoBanana 接口地址: https://api.wuyinkeji.com/api/img/nanoBanana
- *   - 需要 model 参数
+ *   - 需�?model 参数
  * - NanoBanana-pro 接口地址: https://api.wuyinkeji.com/api/img/nanoBanana-pro
- *   - 不需要 model 和 size 参数
+ *   - 不需�?model �?size 参数
  * - Content-Type: application/json;charset=utf-8
  * - Authorization: 接口密钥
  */
@@ -140,8 +137,7 @@ export async function submitNanoBanana(
 
   try {
     const isPro = params.model === "nano-banana-pro";
-    // 根据 model 选择不同的端点
-    const endpoint = isPro
+    // 根据 model 选择不同的端�?    const endpoint = isPro
       ? `${API_BASE_URL}/api/img/nanoBanana-pro`
       : `${API_BASE_URL}/api/img/nanoBanana`;
 
@@ -154,18 +150,15 @@ export async function submitNanoBanana(
       resolution: params.resolution,
     });
 
-    // 构建请求体
-    // 注意：如果有参考图片，需要在提示词中明确指出如何基于参考图生成
+    // 构建请求�?    // 注意：如果有参考图片，需要在提示词中明确指出如何基于参考图生成
     let finalPrompt = params.prompt;
 
     // 如果有参考图片，增强提示词以确保 AI 理解需要基于参考图进行创作
     if (params.img_url && params.prompt) {
-      // 检查提示词是否已经包含参考图的相关指令
-      const hasReferenceKeywords = /reference|参考|based on|基于|style of|风格/i.test(params.prompt);
+      // 检查提示词是否已经包含参考图的相关指�?      const hasReferenceKeywords = /reference|参考|based on|基于|style of|风格/i.test(params.prompt);
 
       if (!hasReferenceKeywords) {
-        // 为提示词添加参考图指令，确保 AI 根据提示词和参考图生成新内容
-        finalPrompt = `Create a new image based on the reference image provided. Transform it according to this description: ${params.prompt}. Use the reference image as a style and composition guide, but generate new creative content following the prompt instructions.`;
+        // 为提示词添加参考图指令，确�?AI 根据提示词和参考图生成新内�?        finalPrompt = `Create a new image based on the reference image provided. Transform it according to this description: ${params.prompt}. Use the reference image as a style and composition guide, but generate new creative content following the prompt instructions.`;
       }
     }
 
@@ -173,8 +166,7 @@ export async function submitNanoBanana(
       prompt: finalPrompt,
     };
 
-    // 普通 NanoBanana 需要 model 参数，Pro 版本不需要
-    if (!isPro) {
+    // 普�?NanoBanana 需�?model 参数，Pro 版本不需�?    if (!isPro) {
       requestBody.model = "nano-banana";
     }
 
@@ -183,14 +175,12 @@ export async function submitNanoBanana(
       requestBody.aspectRatio = params.aspectRatio;
     }
 
-    // 添加参考图片
-    if (params.img_url) {
+    // 添加参考图�?    if (params.img_url) {
       requestBody.img_url = params.img_url;
     }
 
     // NanoBanana Pro 支持 imageSize 参数 (1K, 2K, 4K)
-    // 注意：API 文档中参数名是 imageSize，K 是大写
-    if (isPro && params.resolution) {
+    // 注意：API 文档中参数名�?imageSize，K 是大�?    if (isPro && params.resolution) {
       const sizeMap: Record<string, string> = {
         "1k": "1K",
         "2k": "2K",
@@ -202,8 +192,7 @@ export async function submitNanoBanana(
     console.log("[NanoBanana] Request body:", JSON.stringify(requestBody));
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 60000); // 60秒超时
-
+    const timeoutId = setTimeout(() => controller.abort(), 60000); // 60秒超�?
     try {
       const response = await fetch(endpoint, {
         method: "POST",
@@ -245,13 +234,11 @@ export async function submitNanoBanana(
       clearTimeout(timeoutId);
       console.error("[NanoBanana] Fetch error:", fetchError);
 
-      // 判断是否是网络超时
-      if (fetchError instanceof Error && fetchError.name === "AbortError") {
+      // 判断是否是网络超�?      if (fetchError instanceof Error && fetchError.name === "AbortError") {
         return { success: false, error: "请求超时，请稍后重试" };
       }
 
-      // 网络错误时返回更友好的提示
-      return {
+      // 网络错误时返回更友好的提�?      return {
         success: false,
         error: fetchError instanceof Error ? `网络错误: ${fetchError.message}` : "网络连接失败"
       };
@@ -272,8 +259,7 @@ export async function submitNanoBanana(
  * - 接口地址: https://api.wuyinkeji.com/api/img/drawDetail
  * - 请求方式: HTTP GET
  * - 请求参数: key (API密钥), id (任务ID)
- * - 此接口支持查询 NanoBanana, NanoBanana-pro, Sora 等图片生成结果
- */
+ * - 此接口支持查�?NanoBanana, NanoBanana-pro, Sora 等图片生成结�? */
 export async function queryNanoBananaResult(
   taskId: string,
   model: "nano-banana" | "nano-banana-pro" = "nano-banana",
@@ -286,7 +272,7 @@ export async function queryNanoBananaResult(
   }
 
   try {
-    // 使用通用的图片生成详情查询接口 (GET 请求)
+    // 使用通用的图片生成详情查询接�?(GET 请求)
     const endpoint = `${API_BASE_URL}/api/img/drawDetail?key=${encodeURIComponent(key)}&id=${encodeURIComponent(taskId)}`;
 
     console.log("[NanoBanana] Querying task:", taskId, "at:", `${API_BASE_URL}/api/img/drawDetail`);
@@ -323,10 +309,9 @@ export async function queryNanoBananaResult(
     });
 
     if (data.code === 200 && data.data) {
-      // 根据实际 API 返回，状态码含义：
-      // 0 = 处理中 (processing)
-      // 1 = 失败 (failed) - 有 fail_reason
-      // 2 = 成功 (completed) - 有 image_url
+      // 根据实际 API 返回，状态码含义�?      // 0 = 处理�?(processing)
+      // 1 = 失败 (failed) - �?fail_reason
+      // 2 = 成功 (completed) - �?image_url
       const statusMap: Record<number, TaskStatus["status"]> = {
         0: "processing",
         1: "failed",
@@ -336,16 +321,15 @@ export async function queryNanoBananaResult(
       let taskStatus = statusMap[data.data.status] || "processing";
 
       // 重要修复：只有当状态为 2 (completed) 且有图片 URL 时才认为成功
-      // 不能仅凭有 URL 就认为成功，因为处理中也可能返回源图片 URL
+      // 不能仅凭�?URL 就认为成功，因为处理中也可能返回源图�?URL
       if (data.data.status === 2 && imageUrl && imageUrl.length > 0) {
         taskStatus = "completed";
       } else if (data.data.status === 0) {
-        // 处理中状态，即使有 URL 也不认为完成
+        // 处理中状态，即使�?URL 也不认为完成
         taskStatus = "processing";
       }
 
-      // 如果状态是 1 或有 fail_reason 且没有图片，则认为失败
-      if (data.data.status === 1 || (data.data.fail_reason && data.data.status !== 2)) {
+      // 如果状态是 1 或有 fail_reason 且没有图片，则认为失�?      if (data.data.status === 1 || (data.data.fail_reason && data.data.status !== 2)) {
         taskStatus = "failed";
         console.log("[NanoBanana] Task failed:", {
           taskId: data.data.id,
@@ -354,7 +338,7 @@ export async function queryNanoBananaResult(
         });
       }
 
-      // 只有在任务完成时才返回结果 URL
+      // 只有在任务完成时才返回结�?URL
       const finalResultUrl = taskStatus === "completed" ? imageUrl : undefined;
 
       return {
@@ -386,34 +370,27 @@ export async function queryNanoBananaResult(
 // ============================================================================
 
 // 新版 Sora2 API 端点 (生产队API)
-// 从环境变量读取，支持动态切换
-const SORA2_API_BASE = process.env.SORA2_API_ENDPOINT || "https://api.scd666.com";
+// 从环境变量读取，支持动态切�?const SORA2_API_BASE = process.env.SORA2_API_ENDPOINT || "https://api.scd666.com";
 const SORA2_API_KEY = process.env.SORA2_API_KEY || "";
 
 /**
  * Sora2 模型类型
  * 
- * 标清版 (3-5分钟):
- * - sora2-portrait: 竖屏 10秒
- * - sora2-landscape: 横屏 10秒
- * - sora2-portrait-15s: 竖屏 15秒
- * - sora2-landscape-15s: 横屏 15秒
- * 
- * Pro版 (15-30分钟):
- * - sora2-pro-portrait-hd-15s: 竖屏 15秒 高清
- * - sora2-pro-landscape-hd-15s: 横屏 15秒 高清
- * - sora2-pro-portrait-25s: 竖屏 25秒
- * - sora2-pro-landscape-25s: 横屏 25秒
- */
+ * 标清�?(3-5分钟):
+ * - sora2-portrait: 竖屏 10�? * - sora2-landscape: 横屏 10�? * - sora2-portrait-15s: 竖屏 15�? * - sora2-landscape-15s: 横屏 15�? * 
+ * Pro�?(15-30分钟):
+ * - sora2-pro-portrait-hd-15s: 竖屏 15�?高清
+ * - sora2-pro-landscape-hd-15s: 横屏 15�?高清
+ * - sora2-pro-portrait-25s: 竖屏 25�? * - sora2-pro-landscape-25s: 横屏 25�? */
 export type Sora2ModelType =
-  | "sora2-portrait"           // 竖屏 10秒 标清
-  | "sora2-landscape"          // 横屏 10秒 标清
-  | "sora2-portrait-15s"       // 竖屏 15秒 标清
-  | "sora2-landscape-15s"      // 横屏 15秒 标清
-  | "sora2-pro-portrait-hd-15s"    // 竖屏 15秒 高清 Pro
-  | "sora2-pro-landscape-hd-15s"   // 横屏 15秒 高清 Pro
-  | "sora2-pro-portrait-25s"       // 竖屏 25秒 标清 Pro
-  | "sora2-pro-landscape-25s";     // 横屏 25秒 标清 Pro
+  | "sora2-portrait"           // 竖屏 10�?标清
+  | "sora2-landscape"          // 横屏 10�?标清
+  | "sora2-portrait-15s"       // 竖屏 15�?标清
+  | "sora2-landscape-15s"      // 横屏 15�?标清
+  | "sora2-pro-portrait-hd-15s"    // 竖屏 15�?高清 Pro
+  | "sora2-pro-landscape-hd-15s"   // 横屏 15�?高清 Pro
+  | "sora2-pro-portrait-25s"       // 竖屏 25�?标清 Pro
+  | "sora2-pro-landscape-25s";     // 横屏 25�?标清 Pro
 
 /**
  * 根据参数获取 Sora2 模型名称
@@ -437,8 +414,7 @@ export function getSora2ModelName(
     return isPortrait ? "sora2-pro-portrait-25s" : "sora2-pro-landscape-25s";
   }
 
-  // 默认返回 15 秒标清
-  return isPortrait ? "sora2-portrait-15s" : "sora2-landscape-15s";
+  // 默认返回 15 秒标�?  return isPortrait ? "sora2-portrait-15s" : "sora2-landscape-15s";
 }
 
 /**
@@ -459,45 +435,40 @@ interface Sora2SubmitResponse {
   created_at: number;
   completed_at?: number;
   size: string;
-  video_url?: string;  // 任务完成后返回
-  error?: {
+  video_url?: string;  // 任务完成后返�?  error?: {
     message: string;
   };
 }
 
 /**
- * 提交 Sora2 视频生成任务（新版 API）
- * 
+ * 提交 Sora2 视频生成任务（新�?API�? * 
  * API 端点: POST /v1/videos
  * 文档: https://k0qzjtg1od.apifox.cn/384599477e0
  * 
- * @param apiLine - API 线路选择
- *   - line1=默认(scd666)
- *   - line2=备用(fsai.app) 
- *   - line3=吾音科技(sora2-new, 仅支持10/15秒)
+ * @param apiLine - API 线路支持�? *   - line1=默认(scd666)
+ *   - line2=吾音科技(sora2-new, 仅支�?0/15�?
  */
 export async function submitSora2(
   params: Sora2Params & { model?: Sora2ModelType },
   apiKey?: string,
-  apiLine: "line1" | "line2" | "line3" = "line1"
+  apiLine: "line1" | "line2" = "line1"
 ): Promise<{ success: boolean; taskId?: string; error?: string }> {
 
-  // ========== Line3: 吾音科技 sora2-new API (完全不同的格式) ==========
-  if (apiLine === "line3") {
-    const key = LINE3_API_KEY;
+  // ========== Line2: 吾音科技 sora2-new API (完全不同的格�? ==========
+  if (apiLine === "line2") {
+    const key = WUYIN_API_KEY;
     if (!key) {
-      return { success: false, error: "Line3 API key not configured" };
+      return { success: false, error: "吾音科技 API key not configured" };
     }
 
-    // Line3 仅支持 10/15 秒
-    const duration = params.duration || 15;
+    // 吾音科技线路仅支�?10/15 �?    const duration = params.duration || 15;
     if (duration !== 10 && duration !== 15) {
-      return { success: false, error: "吾音科技线路仅支持 10 秒和 15 秒视频" };
+      return { success: false, error: "吾音科技线路仅支�?10 秒和 15 秒视�? };
     }
 
     try {
       // 构建 URL 参数
-      const url = new URL(`${LINE3_API_BASE}/api/sora2-new/submit`);
+      const url = new URL(`${WUYIN_API_BASE}/api/sora2-new/submit`);
       url.searchParams.set("key", key);
       url.searchParams.set("prompt", params.prompt);
       url.searchParams.set("duration", String(duration));
@@ -506,15 +477,15 @@ export async function submitSora2(
         url.searchParams.set("url", params.url);
       }
 
-      console.log("[Sora2-Line3] Submitting task:", {
-        endpoint: `${LINE3_API_BASE}/api/sora2-new/submit`,
+      console.log("[Sora2-Wuyin] Submitting task:", {
+        endpoint: `${WUYIN_API_BASE}/api/sora2-new/submit`,
         duration,
         aspectRatio: params.aspectRatio || "9:16",
         prompt: params.prompt.substring(0, 50) + "...",
         hasImage: !!params.url,
       });
 
-      // 发送 POST 请求
+      // 发�?POST 请求
       const result = await new Promise<{ data: string; statusCode: number }>((resolve, reject) => {
         const options = {
           hostname: url.hostname,
@@ -540,7 +511,7 @@ export async function submitSora2(
         req.end();
       });
 
-      console.log("[Sora2-Line3] Response:", result.data.substring(0, 300));
+      console.log("[Sora2-Wuyin] Response:", result.data.substring(0, 300));
 
       const data = JSON.parse(result.data);
 
@@ -550,7 +521,7 @@ export async function submitSora2(
 
       return { success: false, error: data.msg || "吾音科技 API 错误" };
     } catch (error) {
-      console.error("[Sora2-Line3] Submit error:", error);
+      console.error("[Sora2-Wuyin] Submit error:", error);
       return {
         success: false,
         error: error instanceof Error ? error.message : "Network error"
@@ -558,19 +529,9 @@ export async function submitSora2(
     }
   }
 
-  // ========== Line1/Line2: 标准 OpenAI 兼容格式 ==========
-  // 根据线路选择 API 端点和密钥
-  let apiBase: string;
-  let key: string;
-
-  if (apiLine === "line2") {
-    apiBase = process.env.LINE2_API_ENDPOINT || "https://fsai.app/v1";
-    key = process.env.LINE2_API_KEY || "";
-    console.log("[Sora2] Using Line2 (backup) API:", apiBase);
-  } else {
-    apiBase = SORA2_API_BASE;
-    key = apiKey || SORA2_API_KEY || API_KEY;
-  }
+  // ========== Line1: 速创 API (OpenAI 兼容格式) ==========
+  // 以下代码仅处�?line1，line2（吾音科技）已在上面处理完�?  const apiBase = SORA2_API_BASE;
+  const key = apiKey || SORA2_API_KEY || API_KEY;
 
   if (!key) {
     return { success: false, error: "Sora2 API key not configured" };
@@ -584,11 +545,7 @@ export async function submitSora2(
       "standard"
     );
 
-    // LINE2_API_ENDPOINT 已经包含 /v1，所以只需要加 /videos
-    // LINE1 的 SORA2_API_BASE 不包含 /v1，需要完整路径
-    const endpoint = apiLine === "line2"
-      ? `${apiBase}/videos`
-      : `${apiBase}/v1/videos`;
+    const endpoint = `${apiBase}/v1/videos`;
 
     console.log("[Sora2] Submitting task:", {
       endpoint,
@@ -598,21 +555,19 @@ export async function submitSora2(
       hasImage: !!params.url,
     });
 
-    // 构建请求体
-    const requestBody: Record<string, unknown> = {
+    // 构建请求�?    const requestBody: Record<string, unknown> = {
       prompt: params.prompt,
       model: model,
     };
 
     // 如果有参考图片，添加到请求体（图生视频）
     // 文档: https://k0qzjtg1od.apifox.cn/384599479e0
-    // 参数名: image_url
+    // 参数�? image_url
     if (params.url) {
       requestBody.image_url = params.url;
     }
 
-    // 使用 https.request 并强制 IPv4（解决 IPv6 超时问题）
-    const bodyStr = JSON.stringify(requestBody);
+    // 使用 https.request 并强�?IPv4（解�?IPv6 超时问题�?    const bodyStr = JSON.stringify(requestBody);
     let retryCount = 0;
     const maxRetries = 3;
     let responseText = '';
@@ -656,13 +611,12 @@ export async function submitSora2(
         responseText = result.data;
         statusCode = result.statusCode;
 
-        // 如果是 5xx 服务器错误，进行重试
+        // 如果�?5xx 服务器错误，进行重试
         if (statusCode >= 500 && statusCode < 600) {
           throw new Error(`Server error: ${statusCode}`);
         }
 
-        break; // 成功则跳出循环
-      } catch (fetchError) {
+        break; // 成功则跳出循�?      } catch (fetchError) {
         retryCount++;
         if (retryCount > maxRetries) {
           throw fetchError;
@@ -674,7 +628,7 @@ export async function submitSora2(
     }
     console.log("[Sora2] Raw response (status: " + statusCode + "):", responseText.substring(0, 500));
 
-    // 检查 HTTP 状态码
+    // 检�?HTTP 状态码
     if (statusCode >= 500) {
       console.error(`[Sora2] Server error ${statusCode}:`, responseText.substring(0, 200));
       return {
@@ -725,38 +679,36 @@ export async function submitSora2(
 }
 
 /**
- * 查询 Sora2 任务结果（新版 API）
- * 
+ * 查询 Sora2 任务结果（新�?API�? * 
  * API 端点: GET /v1/videos/{id}
  * 
  * @param apiLine - API 线路选择
  *   - line1=默认(scd666)
- *   - line2=备用(fsai.app)
- *   - line3=吾音科技(sora2/detail)
+ *   - line2=吾音科技(sora2/detail)
  */
 export async function querySora2Result(
   taskId: string,
   usePro: boolean = false,
   apiKey?: string,
-  apiLine: "line1" | "line2" | "line3" = "line1"
+  apiLine: "line1" | "line2" = "line1"
 ): Promise<{ success: boolean; task?: TaskStatus; error?: string; raw?: unknown }> {
 
-  // ========== Line3: 吾音科技查询 API (完全不同的格式) ==========
-  if (apiLine === "line3") {
-    const key = LINE3_API_KEY;
+  // ========== Line2: 吾音科技查询 API (完全不同的格�? ==========
+  if (apiLine === "line2") {
+    const key = WUYIN_API_KEY;
     if (!key) {
-      return { success: false, error: "Line3 API key not configured" };
+      return { success: false, error: "吾音科技 API key not configured" };
     }
 
     try {
       // 构建 URL 参数
-      const url = new URL(`${LINE3_API_BASE}/api/sora2/detail`);
+      const url = new URL(`${WUYIN_API_BASE}/api/sora2/detail`);
       url.searchParams.set("key", key);
       url.searchParams.set("id", taskId);
 
-      console.log("[Sora2-Line3] Querying task:", taskId);
+      console.log("[Sora2-Wuyin] Querying task:", taskId);
 
-      // 发送 GET 请求
+      // 发�?GET 请求
       const result = await new Promise<{ data: string; statusCode: number }>((resolve, reject) => {
         const options = {
           hostname: url.hostname,
@@ -785,7 +737,7 @@ export async function querySora2Result(
       const data = JSON.parse(result.data);
 
       if (data.code === 200 && data.data) {
-        // 吾音科技状态码: 0=处理中, 1=成功, 2=失败
+        // 吾音科技状态码: 0=处理�? 1=成功, 2=失败
         const statusMap: Record<number, TaskStatus["status"]> = {
           0: "processing",
           1: "completed",
@@ -794,7 +746,7 @@ export async function querySora2Result(
 
         const taskStatus = statusMap[data.data.status] ?? "processing";
 
-        console.log("[Sora2-Line3] Query response:", {
+        console.log("[Sora2-Wuyin] Query response:", {
           id: data.data.id,
           status: data.data.status,
           mappedStatus: taskStatus,
@@ -815,7 +767,7 @@ export async function querySora2Result(
 
       return { success: false, error: data.msg || "吾音科技查询失败" };
     } catch (error) {
-      console.error("[Sora2-Line3] Query error:", error);
+      console.error("[Sora2-Wuyin] Query error:", error);
       return {
         success: false,
         error: error instanceof Error ? error.message : "Network error"
@@ -823,32 +775,18 @@ export async function querySora2Result(
     }
   }
 
-  // ========== Line1/Line2: 标准 OpenAI 兼容格式 ==========
-  // 根据线路选择 API 端点和密钥
-  let apiBase: string;
-  let key: string;
-
-  if (apiLine === "line2") {
-    apiBase = process.env.LINE2_API_ENDPOINT || "https://fsai.app/v1";
-    key = process.env.LINE2_API_KEY || "";
-  } else {
-    apiBase = SORA2_API_BASE;
-    key = apiKey || SORA2_API_KEY || API_KEY;
-  }
+  // ========== Line1: 速创 API (OpenAI 兼容格式) ==========
+  // 以下代码仅处�?line1，line2（吾音科技）已在上面处理完�?  const apiBase = SORA2_API_BASE;
+  const key = apiKey || SORA2_API_KEY || API_KEY;
 
   if (!key) {
     return { success: false, error: "Sora2 API key not configured" };
   }
 
   try {
-    // LINE2_API_ENDPOINT 已经包含 /v1，所以只需要加 /videos/taskId
-    // LINE1 的 SORA2_API_BASE 不包含 /v1，需要完整路径
-    const endpoint = apiLine === "line2"
-      ? `${apiBase}/videos/${taskId}`
-      : `${apiBase}/v1/videos/${taskId}`;
+    const endpoint = `${apiBase}/v1/videos/${taskId}`;
 
-    // 使用 https.request 并强制 IPv4（解决 IPv6 超时问题）
-    let retryCount = 0;
+    // 使用 https.request 并强�?IPv4（解�?IPv6 超时问题�?    let retryCount = 0;
     const maxRetries = 2;
     let responseText = '';
     let statusCode = 0;
@@ -867,8 +805,7 @@ export async function querySora2Result(
               'Authorization': `Bearer ${key}`,
               'Accept': 'application/json',
             },
-            timeout: 60000, // 60秒超时
-          };
+            timeout: 60000, // 60秒超�?          };
 
           const req = https.request(options, (res) => {
             let data = '';
@@ -888,7 +825,7 @@ export async function querySora2Result(
         responseText = result.data;
         statusCode = result.statusCode;
 
-        // 如果是 5xx 服务器错误，进行重试
+        // 如果�?5xx 服务器错误，进行重试
         if (statusCode >= 500 && statusCode < 600) {
           throw new Error(`Server error: ${statusCode}`);
         }
@@ -908,7 +845,7 @@ export async function querySora2Result(
       return { success: false, error: "网络请求失败，请稍后重试" };
     }
 
-    // 检查 HTTP 状态码
+    // 检�?HTTP 状态码
     if (statusCode >= 500) {
       console.error(`[Sora2] Query server error ${statusCode}:`, responseText.substring(0, 200));
       return { success: false, error: `视频服务暂时繁忙 (${statusCode})，请稍后重试` };
@@ -933,8 +870,7 @@ export async function querySora2Result(
       hasUrl: !!data.video_url,
     });
 
-    // 状态映射
-    const statusMap: Record<string, TaskStatus["status"]> = {
+    // 状态映�?    const statusMap: Record<string, TaskStatus["status"]> = {
       "queued": "pending",
       "processing": "processing",
       "completed": "completed",
@@ -968,8 +904,7 @@ export async function querySora2Result(
 
 /**
  * 图片放大高清
- * 使用 NanoBanana 的图片增强能力
- */
+ * 使用 NanoBanana 的图片增强能�? */
 export async function upscaleImage(
   imageUrl: string,
   targetResolution: "2k" | "4k" = "2k",
@@ -982,8 +917,7 @@ export async function upscaleImage(
     model: "nano-banana-pro",
     prompt: upscalePrompt,
     img_url: imageUrl,
-    aspectRatio: "auto",  // 保持原比例
-    resolution: targetResolution,
+    aspectRatio: "auto",  // 保持原比�?    resolution: targetResolution,
   }, apiKey);
 }
 
@@ -992,13 +926,9 @@ export async function upscaleImage(
 // ============================================================================
 
 /**
- * 生成产品九宫格多角度图
- * 使用 NanoBanana 生成产品的多角度展示图
- * 
- * 优化适配 Sora2/Sora2 Pro 视频生成：
- * - 突出产品角度+细节，AI生成友好
- * - 画面构图简洁、光线均匀（自然光质感）
- * - 背景纯色（白底），便于 Sora 精准渲染高清细节
+ * 生成产品九宫格多角度�? * 使用 NanoBanana 生成产品的多角度展示�? * 
+ * 优化适配 Sora2/Sora2 Pro 视频生成�? * - 突出产品角度+细节，AI生成友好
+ * - 画面构图简洁、光线均匀（自然光质感�? * - 背景纯色（白底），便�?Sora 精准渲染高清细节
  */
 export async function generateNineGrid(
   imageUrl: string,
@@ -1008,31 +938,24 @@ export async function generateNineGrid(
   // 九宫格提示词 - 适配 Sora2/Sora2 Pro 视频生成
   const gridPrompt = `Create a professional 3x3 grid layout (9 cells) optimized for Sora2 AI video generation.
 
-【核心要求】
-- 画面构图简洁干净
+【核心要求�?- 画面构图简洁干净
 - 光线均匀，自然光质感，无强烈阴影
 - 背景纯白色，无杂质无纹理
 - 每个镜头展示产品的不同角度和细节
 - 所有镜头统一分辨率，比例1:1
 - 画面无畸变，边缘清晰
 
-【9个角度布局】
-1. 正面全貌（居中，主视角）
+�?个角度布局�?1. 正面全貌（居中，主视角）
 2. 背面全貌
 3. 左侧45度角
 4. 右侧45度角
 5. 俯视角度（顶部视图）
-6. 仰视角度或底部细节
-7. 产品核心细节特写1
+6. 仰视角度或底部细�?7. 产品核心细节特写1
 8. 产品核心细节特写2
-9. 使用场景或整体氛围展示
-
-【图片质量要求】
-- 高清晰度，细节锐利
-- 产品主体突出，占画面60-80%
+9. 使用场景或整体氛围展�?
+【图片质量要求�?- 高清晰度，细节锐�?- 产品主体突出，占画面60-80%
 - 色彩真实准确
-- 便于Sora AI精准识别和渲染
-
+- 便于Sora AI精准识别和渲�?
 ${productDescription ? `产品描述: ${productDescription}` : ""}
 
 Output as a single 1:1 square image with perfect 3x3 grid layout, white background, ready for Sora2 video generation.`;
@@ -1064,8 +987,7 @@ export async function waitForTaskCompletion(
 ): Promise<{ success: boolean; task?: TaskStatus; error?: string }> {
   const {
     maxWaitTime = 5 * 60 * 1000,  // 5 分钟
-    pollInterval = 10 * 1000,     // 10 秒
-    onProgress,
+    pollInterval = 10 * 1000,     // 10 �?    onProgress,
   } = options || {};
 
   const startTime = Date.now();
@@ -1159,22 +1081,19 @@ export async function testApiConnection(apiKey?: string): Promise<{
 
 export interface GeminiImageParams {
   prompt: string;
-  sourceImageUrl?: string; // 可选的参考图片
-}
+  sourceImageUrl?: string; // 可选的参考图�?}
 
 export interface GeminiImageResult {
   success: boolean;
-  imageBase64?: string;  // Base64 编码的图片数据
-  imageUrl?: string;     // 如果上传到 OSS 后的 URL
+  imageBase64?: string;  // Base64 编码的图片数�?  imageUrl?: string;     // 如果上传�?OSS 后的 URL
   error?: string;
 }
 
 /**
  * 使用 Gemini 3 Pro Image 生成图片
  * 
- * 特点：
- * - 同步返回，无需轮询
- * - 返回 Base64 编码的 JPEG 图片
+ * 特点�? * - 同步返回，无需轮询
+ * - 返回 Base64 编码�?JPEG 图片
  * - 价格便宜（约 ¥0.02/张）
  * - 分辨率约 1K-1.5K
  * 
@@ -1195,7 +1114,7 @@ export async function generateGeminiImage(
 
     // 如果有源图片，使用图生图模式
     if (params.sourceImageUrl) {
-      messageContent = `参考这张图片，${params.prompt}\n\n参考图片: ${params.sourceImageUrl}`;
+      messageContent = `参考这张图片，${params.prompt}\n\n参考图�? ${params.sourceImageUrl}`;
     }
 
     const requestBody = JSON.stringify({
@@ -1255,31 +1174,30 @@ export async function generateGeminiImage(
     const data = JSON.parse(result.data);
 
     if (!data.choices || !data.choices[0]?.message?.content) {
-      return { success: false, error: "API 未返回图片内容" };
+      return { success: false, error: "API 未返回图片内�? };
     }
 
     const content = data.choices[0].message.content;
 
     // 提取 Base64 图片数据
-    // 格式可能是: ![image](data:image/jpeg;base64,/9j/4AAQ...) 
-    // 或者直接: data:image/jpeg;base64,/9j/4AAQ...
+    // 格式可能�? ![image](data:image/jpeg;base64,/9j/4AAQ...) 
+    // 或者直�? data:image/jpeg;base64,/9j/4AAQ...
     const base64Match = content.indexOf('base64,');
     if (base64Match === -1) {
       console.error("[Gemini-Image] No base64 image in response, content preview:", content.substring(0, 200));
-      return { success: false, error: "API 未返回有效图片" };
+      return { success: false, error: "API 未返回有效图�? };
     }
 
     // 提取 base64 数据，处理可能的 markdown 格式
     let imageBase64 = content.substring(base64Match + 7);
 
-    // 如果是 markdown 格式 ![image](data:...), 需要移除末尾的 )
+    // 如果�?markdown 格式 ![image](data:...), 需要移除末尾的 )
     const closingParen = imageBase64.indexOf(')');
     if (closingParen !== -1) {
       imageBase64 = imageBase64.substring(0, closingParen);
     }
 
-    // 移除可能的换行符和空格
-    imageBase64 = imageBase64.trim();
+    // 移除可能的换行符和空�?    imageBase64 = imageBase64.trim();
 
     console.log("[Gemini-Image] Image generated successfully:", {
       sizeKB: (Buffer.from(imageBase64, 'base64').length / 1024).toFixed(2),
@@ -1301,9 +1219,9 @@ export async function generateGeminiImage(
 }
 
 /**
- * 将 Base64 图片上传到 OSS 并返回 URL
+ * �?Base64 图片上传�?OSS 并返�?URL
  * 
- * 用于将 Gemini 返回的 Base64 图片转换为可访问的 URL
+ * 用于�?Gemini 返回�?Base64 图片转换为可访问�?URL
  */
 export async function uploadBase64ImageToOSS(
   base64Data: string,
@@ -1316,8 +1234,7 @@ export async function uploadBase64ImageToOSS(
     const buffer = Buffer.from(base64Data, 'base64');
     const objectPath = generateMediaPath(
       'images',
-      'gemini-gen',  // 使用固定的用户 ID 文件夹
-      filename || `gemini-${Date.now()}.jpg`
+      'gemini-gen',  // 使用固定的用�?ID 文件�?      filename || `gemini-${Date.now()}.jpg`
     );
 
     const url = await uploadImageBuffer(buffer, objectPath, 'image/jpeg');
