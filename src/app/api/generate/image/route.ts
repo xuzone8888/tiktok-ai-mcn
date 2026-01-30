@@ -374,6 +374,7 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const taskId = searchParams.get("taskId");
     const model = searchParams.get("model") || "nano-banana";
+    const userId = searchParams.get("userId"); // 新增：支持按用户ID查询
 
     if (!taskId) {
       return NextResponse.json(
@@ -382,8 +383,85 @@ export async function GET(request: Request) {
       );
     }
 
-    console.log("[Generate Image] Querying task:", taskId, { model });
+    console.log("[Generate Image] Querying task:", taskId, { model, userId });
 
+    // ================================================================
+    // Gemini 任务直接查询数据库
+    // Gemini API 是同步的，结果直接保存在 generations 表中
+    // ================================================================
+    if (taskId.startsWith("gemini-")) {
+      const supabase = createAdminClient();
+
+      // 首先尝试精确匹配 taskId
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let { data: genData, error: dbError } = await (supabase as any)
+        .from("generations")
+        .select("*")
+        .eq("task_id", taskId)
+        .single();
+
+      // 如果精确匹配失败且有 userId，尝试查询该用户最近1分钟内的 Gemini 任务
+      // 这解决了 POST 响应解析失败但后端已成功的情况
+      if ((dbError || !genData) && userId) {
+        console.log("[Generate Image] Exact match failed, searching recent tasks for user:", userId);
+        const oneMinuteAgo = new Date(Date.now() - 60000).toISOString();
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: recentData } = await (supabase as any)
+          .from("generations")
+          .select("*")
+          .eq("user_id", userId)
+          .eq("source", "batch_image")
+          .like("task_id", "gemini-%")
+          .gte("created_at", oneMinuteAgo)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .single();
+
+        if (recentData) {
+          console.log("[Generate Image] Found recent Gemini task:", recentData.task_id);
+          genData = recentData;
+          dbError = null;
+        }
+      }
+
+      if (dbError || !genData) {
+        console.log("[Generate Image] Gemini task not found in DB:", taskId);
+        return NextResponse.json({
+          success: true,
+          data: {
+            taskId,
+            status: "processing",
+            imageUrl: null,
+            errorMessage: null,
+          },
+        });
+      }
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const record = genData as any;
+      console.log("[Generate Image] Gemini task found in DB:", {
+        taskId: record.task_id,
+        status: record.status,
+        hasImage: !!record.image_url,
+      });
+
+      return NextResponse.json({
+        success: true,
+        data: {
+          taskId: record.task_id,
+          status: record.status,
+          imageUrl: record.image_url || record.result_url,
+          errorMessage: record.error_message,
+          createdAt: record.created_at,
+          updatedAt: record.completed_at,
+        },
+      });
+    }
+
+    // ================================================================
+    // NanoBanana 任务查询 API
+    // ================================================================
     const result = await queryNanoBananaResult(
       taskId,
       model as "nano-banana" | "nano-banana-pro"

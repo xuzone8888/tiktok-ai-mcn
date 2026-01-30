@@ -673,6 +673,7 @@ export default function ImageBatchPage() {
         console.log("[Image Batch] API response status:", response.status, "length:", responseText.length);
 
         let result;
+        let fallbackPolling = false;
         try {
           result = JSON.parse(responseText);
         } catch (parseError) {
@@ -682,11 +683,25 @@ export default function ImageBatchPage() {
             preview: responseText.substring(0, 300),
             error: parseError,
           });
-          // 如果响应状态是 200 但解析失败，可能是网络问题，提示用户检查成品交付单
+
+          // 如果响应状态是 200 但解析失败，可能后端已成功，启动轮询查询数据库
           if (response.status === 200) {
-            throw new Error("响应解析失败，请检查成品交付单确认结果");
+            console.log("[Image Batch] Response parsing failed but status 200, will poll database");
+            // 生成一个匹配的 taskId 用于轮询
+            // 后端会根据时间戳范围查询 generations 表
+            const fallbackTaskId = `gemini-${Date.now()}`;
+            result = {
+              success: true,
+              data: {
+                taskId: fallbackTaskId,
+                model: task.config.model,
+                status: "processing",
+              }
+            };
+            fallbackPolling = true;
+          } else {
+            throw new Error(`图片处理失败 (${response.status})`);
           }
-          throw new Error(`图片处理失败 (${response.status})`);
         }
 
         if (!result.success) {
@@ -720,8 +735,8 @@ export default function ImageBatchPage() {
 
         // 轮询任务状态
         let pollCount = 0;
-        const maxPolls = 60;
-        const pollInterval = 3000;
+        const maxPolls = fallbackPolling ? 20 : 60; // fallback模式下轮询次数较少
+        const pollInterval = fallbackPolling ? 2000 : 3000; // fallback模式下轮询间隔更短
 
         const pollTimer = setInterval(async () => {
           pollCount++;
@@ -729,8 +744,9 @@ export default function ImageBatchPage() {
           updateTaskStatus(task.id, "processing", { progress: Math.round(estimatedProgress) });
 
           try {
+            // 传递 userId 参数，后端可以用它查找最近的任务
             const statusResponse = await fetch(
-              `/api/generate/image?taskId=${apiTaskId}&model=${taskModel}`
+              `/api/generate/image?taskId=${apiTaskId}&model=${taskModel}&userId=${currentUserId}`
             );
             const statusResult = await statusResponse.json();
 
