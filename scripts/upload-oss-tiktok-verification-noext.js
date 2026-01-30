@@ -25,9 +25,9 @@ async function uploadVerificationFile() {
 
         console.log('✅ Upload successful!');
         console.log('File URL:', result.url);
-        console.log('Expected URL (no extension): https://media.tokfactoryai.com/tiktokq7WzML4gl2azSthzUyz18XZM56Kgj87m');
+        console.log('Expected URL (no extension): https://media.toryxai.com/tiktokq7WzML4gl2azSthzUyz18XZM56Kgj87m');
         console.log('\nVerify by visiting:');
-        console.log('https://media.tokfactoryai.com/tiktokq7WzML4gl2azSthzUyz18XZM56Kgj87m');
+        console.log('https://media.toryxai.com/tiktokq7WzML4gl2azSthzUyz18XZM56Kgj87m');
     } catch (error) {
         console.error('❌ Upload failed:', error);
     }

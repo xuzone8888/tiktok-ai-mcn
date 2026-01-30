@@ -27,7 +27,7 @@ const ossConfig = {
 }
 
 // Custom domain for public URLs
-const CUSTOM_DOMAIN = process.env.ALIYUN_OSS_CUSTOM_DOMAIN || 'media.tokfactoryai.com'
+const CUSTOM_DOMAIN = process.env.ALIYUN_OSS_CUSTOM_DOMAIN || 'media.toryxai.com'
 
 // Supported media types
 export type MediaType = 'video' | 'image' | 'audio'

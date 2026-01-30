@@ -37,11 +37,11 @@ async function uploadVerificationFile() {
 
         console.log('✅ Upload successful!');
         console.log('File URL:', result.url);
-        console.log('Expected URL: https://media.tokfactoryai.com/' + fileName);
+        console.log('Expected URL: https://media.toryxai.com/' + fileName);
 
         // Test access
         console.log('\nVerify by visiting:');
-        console.log('https://media.tokfactoryai.com/' + fileName);
+        console.log('https://media.toryxai.com/' + fileName);
 
     } catch (error) {
         console.error('❌ Upload failed:', error.message);

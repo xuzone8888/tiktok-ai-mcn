@@ -25,7 +25,7 @@ const ossConfig = {
     secure: true,
 }
 
-const CUSTOM_DOMAIN = process.env.ALIYUN_OSS_CUSTOM_DOMAIN || 'media.tokfactoryai.com'
+const CUSTOM_DOMAIN = process.env.ALIYUN_OSS_CUSTOM_DOMAIN || 'media.toryxai.com'
 
 export const runtime = 'nodejs'
 

@@ -26,7 +26,7 @@ const ossConfig = {
     timeout: 300000, // 5 minutes for large video downloads
 }
 
-const CUSTOM_DOMAIN = process.env.ALIYUN_OSS_CUSTOM_DOMAIN || 'media.tokfactoryai.com'
+const CUSTOM_DOMAIN = process.env.ALIYUN_OSS_CUSTOM_DOMAIN || 'media.toryxai.com'
 
 export const runtime = 'nodejs'
 export const maxDuration = 300 // 5 minutes timeout

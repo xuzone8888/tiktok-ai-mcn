@@ -21,7 +21,7 @@ async function uploadSandboxVerification() {
         });
         console.log('Upload successful!');
         console.log('OSS URL:', result.url);
-        console.log('CDN URL:', `https://media.tokfactoryai.com/${filename}`);
+        console.log('CDN URL:', `https://media.toryxai.com/${filename}`);
     } catch (error) {
         console.error('Upload failed:', error);
     }

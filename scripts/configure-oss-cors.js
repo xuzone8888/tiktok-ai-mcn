@@ -27,7 +27,7 @@ async function configureCORS() {
         // Set new CORS rules
         const rules = [
             {
-                allowedOrigin: ['https://tokfactoryai.com', 'https://www.tokfactoryai.com'],
+                allowedOrigin: ['https://toryxai.com', 'https://www.toryxai.com'],
                 allowedMethod: ['GET', 'PUT', 'POST', 'HEAD', 'DELETE'],
                 allowedHeader: ['*'],
                 exposeHeader: ['ETag', 'x-oss-request-id', 'Content-Length'],
