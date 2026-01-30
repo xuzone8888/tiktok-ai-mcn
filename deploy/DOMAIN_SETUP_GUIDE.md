@@ -14,7 +14,7 @@
 
 ### 前提条件
 
-- ✅ 已购买域名（例如：`tokfactoryai.com`）
+- ✅ 已购买域名（例如：`toryxai.com`）
 - ✅ 域名已解析到阿里云服务器 IP：`123.56.75.68`
 - ✅ 服务器已安装 Nginx
 - ✅ 服务器已安装 Certbot（用于 SSL 证书）
@@ -37,8 +37,8 @@
 | A | www | 123.56.75.68 | 600 |
 
 **说明**：
-- `@` 表示根域名（例如：`tokfactoryai.com`）
-- `www` 表示 www 子域名（例如：`www.tokfactoryai.com`）
+- `@` 表示根域名（例如：`toryxai.com`）
+- `www` 表示 www 子域名（例如：`www.toryxai.com`）
 - `123.56.75.68` 是您的阿里云服务器 IP
 
 ### 1.3 等待 DNS 生效
@@ -82,7 +82,7 @@ sudo nano /etc/nginx/sites-available/tiktok-ai-mcn
 ```nginx
 server {
     listen 80;
-    server_name tokfactoryai.com www.tokfactoryai.com;
+    server_name toryxai.com www.toryxai.com;
 
     location / {
         proxy_pass http://localhost:3000;

@@ -43,7 +43,7 @@
 
 | 域名 | 状态 |
 |------|------|
-| `www.tokfactoryai.com` | ✅ 已配置 |
+| `www.toryxai.com` | ✅ 已配置 |
 | `tiktok-ai-mcn.vercel.app` | ✅ 已配置 |
 | `tiktok-ai-delu2wa3f-xuzones-projects.vercel.app` | ✅ 自动生成 |
 

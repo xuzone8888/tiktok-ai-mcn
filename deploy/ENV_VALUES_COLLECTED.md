@@ -2,7 +2,7 @@
 
 ## ✅ 已从 Vercel 获取的值
 
-1. **NEXT_PUBLIC_APP_URL**: `https://www.tokfactoryai.com`
+1. **NEXT_PUBLIC_APP_URL**: `https://www.toryxai.com`
 2. **NEXT_PUBLIC_SUPABASE_URL**: `https://hfabrifuvujpdzarlbky.supabase.co`
 3. **NEXT_PUBLIC_SUPABASE_ANON_KEY**: `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhmYWJyaWZ1dnVqcGR6YXJsYmt5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ0Njc5OTIsImV4cCI6MjA4MDA0Mzk5Mn0.EonhiMYT1AgVgqNvyHER7NBKkN629tAFatOhnnqJdIo`
 4. **SORA2_API_KEY**: `sk-SZPEdRnAdW3Dgu9DqTE4nNcqkv1fNG3oBULwmEhw6F329JLE`

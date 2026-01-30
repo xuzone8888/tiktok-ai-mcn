@@ -19,8 +19,8 @@
 ┌─────────────────┐         ┌─────────────────┐
 │   Vercel 部署    │         │   阿里云部署     │
 │                 │         │                 │
-│ www.tokfactory  │         │  aliyun-domain  │
-│     ai.com      │         │      .com       │
+│   www.toryxai   │         │  aliyun-domain  │
+│      .com       │         │      .com       │
 └────────┬────────┘         └────────┬────────┘
          │                           │
          └───────────┬───────────────┘
@@ -40,8 +40,8 @@
 **重要**: 两个部署需要使用不同的域名，或者使用 DNS 负载均衡/故障转移。
 
 **方案A: 使用不同域名**
-- Vercel: `www.tokfactoryai.com`
-- 阿里云: `cn.tokfactoryai.com` 或 `aliyun.tokfactoryai.com`
+- Vercel: `www.toryxai.com`
+- 阿里云: `cn.toryxai.com` 或 `aliyun.toryxai.com`
 
 **方案B: 使用 DNS 智能解析**
 - 国内用户 → 阿里云服务器

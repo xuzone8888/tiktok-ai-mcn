@@ -104,7 +104,7 @@ SUCHUANG_API_KEY=your_suchuang_key
 # ==========================================
 # 使用服务器 IP 或域名
 NEXT_PUBLIC_APP_URL=http://your-server-ip:3000
-# 或使用域名: NEXT_PUBLIC_APP_URL=https://cn.tokfactoryai.com
+# 或使用域名: NEXT_PUBLIC_APP_URL=https://toryxai.com
 
 # ==========================================
 # 管理员配置

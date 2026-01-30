@@ -107,7 +107,7 @@ tail -50 /var/log/nginx/error.log
 
 ## 🔗 相关链接
 
-- 网站地址: https://tokfactoryai.com
+- 网站地址: https://toryxai.com
 - 服务器 IP: 123.56.75.68
 - 项目目录: /var/www/tiktok-ai-mcn
 

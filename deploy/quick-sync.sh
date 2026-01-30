@@ -64,5 +64,5 @@ EOF
 echo ""
 echo "==========================================="
 echo "✅ 同步完成！"
-echo "🌐 访问: https://tokfactoryai.com"
+echo "🌐 访问: https://toryxai.com"
 echo "==========================================="
