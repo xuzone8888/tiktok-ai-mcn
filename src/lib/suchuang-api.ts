@@ -584,7 +584,11 @@ export async function submitSora2(
       "standard"
     );
 
-    const endpoint = `${apiBase}/v1/videos`;
+    // LINE2_API_ENDPOINT 已经包含 /v1，所以只需要加 /videos
+    // LINE1 的 SORA2_API_BASE 不包含 /v1，需要完整路径
+    const endpoint = apiLine === "line2"
+      ? `${apiBase}/videos`
+      : `${apiBase}/v1/videos`;
 
     console.log("[Sora2] Submitting task:", {
       endpoint,
@@ -837,7 +841,11 @@ export async function querySora2Result(
   }
 
   try {
-    const endpoint = `${apiBase}/v1/videos/${taskId}`;
+    // LINE2_API_ENDPOINT 已经包含 /v1，所以只需要加 /videos/taskId
+    // LINE1 的 SORA2_API_BASE 不包含 /v1，需要完整路径
+    const endpoint = apiLine === "line2"
+      ? `${apiBase}/videos/${taskId}`
+      : `${apiBase}/v1/videos/${taskId}`;
 
     // 使用 https.request 并强制 IPv4（解决 IPv6 超时问题）
     let retryCount = 0;
