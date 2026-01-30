@@ -653,45 +653,72 @@ export default function ImageBatchPage() {
         }
 
         // 前端预先生成 requestId，后端用它作为 taskId
-        // 这样即使响应解析失败，我们也知道 taskId
+        // 这样即使响应超时/解析失败，我们也能用 requestId 查询
         const requestId = `gemini-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
-
-        // 调用 API
-        console.log("[Image Batch] Calling generate/image with requestId:", requestId);
-        const response = await fetch("/api/generate/image", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            mode: task.config.action,
-            model: task.config.model,
-            sourceImageUrl: remoteImageUrl,
-            aspectRatio: task.config.aspectRatio,
-            resolution: task.config.resolution,
-            prompt: task.config.prompt,
-            userId: currentUserId,
-            source: "batch_image",
-            requestId, // 传递 requestId，后端用它作为 taskId
-          }),
-        });
-
-        const responseText = await response.text();
-        console.log("[Image Batch] API response status:", response.status, "length:", responseText.length);
 
         let result;
         let needPolling = false;
+        let fetchError: Error | null = null;
 
+        // 调用 API（可能会超时）
+        console.log("[Image Batch] Calling generate/image with requestId:", requestId);
         try {
-          result = JSON.parse(responseText);
-        } catch (parseError) {
-          console.error("[Image Batch] Parse error:", parseError);
+          const response = await fetch("/api/generate/image", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              mode: task.config.action,
+              model: task.config.model,
+              sourceImageUrl: remoteImageUrl,
+              aspectRatio: task.config.aspectRatio,
+              resolution: task.config.resolution,
+              prompt: task.config.prompt,
+              userId: currentUserId,
+              source: "batch_image",
+              requestId,
+            }),
+          });
 
-          // 响应解析失败，但我们有 requestId，可以用它查询
-          if (response.status === 200) {
-            console.log("[Image Batch] Parsing failed, will query with requestId:", requestId);
-            result = { success: true, data: { taskId: requestId, model: task.config.model, status: "processing" } };
+          const responseText = await response.text();
+          console.log("[Image Batch] API response status:", response.status, "length:", responseText.length);
+
+          // 504 = Gateway Timeout，后端可能还在处理
+          if (response.status === 504) {
+            console.log("[Image Batch] 504 Timeout, will poll for result with requestId:", requestId);
             needPolling = true;
+            result = { success: true, data: { taskId: requestId, model: task.config.model, status: "processing" } };
           } else {
-            throw new Error(`图片处理失败 (${response.status})`);
+            try {
+              result = JSON.parse(responseText);
+            } catch {
+              // 解析失败，如果状态码是 200，可能后端成功了
+              if (response.status === 200) {
+                console.log("[Image Batch] Parse failed but status 200, will poll:", requestId);
+                needPolling = true;
+                result = { success: true, data: { taskId: requestId, model: task.config.model, status: "processing" } };
+              } else {
+                throw new Error(`图片处理失败 (${response.status})`);
+              }
+            }
+          }
+        } catch (err) {
+          fetchError = err instanceof Error ? err : new Error("Network error");
+          const errMsg = fetchError.message.toLowerCase();
+
+          // 检查是否是超时类错误，如果是，启动轮询
+          const isTimeoutError = errMsg.includes("timeout") ||
+            errMsg.includes("504") ||
+            errMsg.includes("socket hang up") ||
+            errMsg.includes("econnreset") ||
+            errMsg.includes("aborted");
+
+          if (isTimeoutError) {
+            console.log("[Image Batch] Timeout/network error, will poll for result:", requestId, errMsg);
+            needPolling = true;
+            result = { success: true, data: { taskId: requestId, model: task.config.model, status: "processing" } };
+          } else {
+            // 其他错误直接抛出
+            throw fetchError;
           }
         }
 
