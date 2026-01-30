@@ -754,16 +754,24 @@ export default function ImageBatchPage() {
 
         // 轮询任务状态
         let pollCount = 0;
-        const maxPolls = needPolling ? 20 : 60; // needPolling模式下轮询次数较少
-        const pollInterval = needPolling ? 2000 : 3000; // needPolling模式下轮询间隔更短
+        const maxPolls = needPolling ? 20 : 60;
+        const pollInterval = needPolling ? 2000 : 3000;
+        const taskIdToTrack = task.id; // 保存任务ID用于状态检查
 
         const pollTimer = setInterval(async () => {
+          // 重要：从 store 获取当前任务状态，防止覆盖已完成的任务
+          const currentTask = useImageBatchStore.getState().tasks.find(t => t.id === taskIdToTrack);
+          if (!currentTask || currentTask.status !== "processing") {
+            console.log("[Image Batch] Task no longer processing, stopping poll:", taskIdToTrack, currentTask?.status);
+            clearInterval(pollTimer);
+            return;
+          }
+
           pollCount++;
           const estimatedProgress = Math.min(95, 30 + pollCount * 1.1);
           updateTaskStatus(task.id, "processing", { progress: Math.round(estimatedProgress) });
 
           try {
-            // 传递 userId 参数，后端可以用它查找最近的任务
             const statusResponse = await fetch(
               `/api/generate/image?taskId=${apiTaskId}&model=${taskModel}&userId=${currentUserId}`
             );
