@@ -77,8 +77,6 @@ import {
   Info,
   Save,
   LayoutTemplate,
-  FolderOpen,
-  Rocket,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import Link from "next/link";
@@ -456,7 +454,6 @@ export default function ImageBatchPage() {
     applyGlobalSettingsToSelected,
     // 场景管理
     setScenario,
-    setUploadedImages,
     addUploadedImages,
     clearUploadedImages,
     setExcelData,
@@ -1090,196 +1087,68 @@ export default function ImageBatchPage() {
               </div>
             )}
 
-            {/* 第三行：操作按钮区 - 新布局 */}
-            <div className="flex flex-col gap-4 pt-2">
-              {/* 第一排：入口按钮 */}
-              <div className="flex items-center gap-3">
-                <input
-                  type="file"
-                  accept="image/*.webp,image/*.png,image/*.jpg,image/*.jpeg"
-                  multiple
-                  onChange={async (e) => {
-                    if (!e.target.files || e.target.files.length === 0) return;
-                    const files = Array.from(e.target.files);
+            {/* 第三行：操作按钮 (Mermaid Ultra Style) */}
+            <div className="flex items-center gap-4 pt-2">
+              <input
+                type="file"
+                accept="image/*.webp,image/*.png,image/*.jpg,image/*.jpeg"
+                multiple
+                onChange={(e) => e.target.files && handleBatchUpload(e.target.files)}
+                className="hidden"
+                ref={fileInputRef}
+              />
 
-                    // 不再立即创建任务，而是存入 uploadedImages 状态
-                    const imageInfos = files.map((file, idx) => ({
-                      id: `upload-${Date.now()}-${idx}`,
-                      file,
-                      name: file.name,
-                      previewUrl: URL.createObjectURL(file),
-                    }));
+              {/* Mermaid Ultra: Upload Button */}
+              <button
+                onClick={() => {
+                  if (fileInputRef.current) fileInputRef.current.value = "";
+                  fileInputRef.current?.click();
+                }}
+                className="group relative px-8 py-3.5 rounded-full font-bold text-black text-sm transition-all duration-300 bg-gradient-to-r from-mermaid-lime via-mermaid-cyan to-mermaid-pink hover:scale-[1.02] hover:shadow-[0_0_30px_rgba(0,242,234,0.4)] border border-white/20 overflow-hidden"
+              >
+                <div className="absolute inset-0 bg-gradient-to-b from-white/40 to-transparent" />
+                <div className="absolute inset-0 bg-[linear-gradient(110deg,transparent,rgba(255,255,255,0.4),transparent)] bg-[length:200%_100%] translate-x-[-100%] group-hover:animate-shimmer transition-opacity duration-300" />
+                <span className="relative z-10 flex items-center gap-2">
+                  <FolderUp className="h-5 w-5" />
+                  上传图片
+                </span>
+              </button>
 
-                    addUploadedImages(imageInfos);
-                    setScenario("image");
-
-                    toast({
-                      title: `📷 已添加 ${files.length} 张图片`,
-                      description: "点击「启动任务」开始处理",
-                    });
-                  }}
-                  className="hidden"
-                  ref={fileInputRef}
-                />
-
-                {/* 加载方案按钮 */}
-                <button
-                  onClick={() => setShowTemplateManager(true)}
-                  className="px-5 py-3 rounded-full text-sm font-medium text-white/60 hover:text-white border border-white/10 hover:border-white/20 bg-black/20 hover:bg-black/40 transition-all flex items-center gap-2"
-                >
-                  <FolderOpen className="h-4 w-4" />
-                  加载方案
-                </button>
-
-                {/* 上传图片按钮 */}
+              {globalSettings.action === "generate" && (
                 <button
                   onClick={() => {
-                    if (fileInputRef.current) fileInputRef.current.value = "";
-                    fileInputRef.current?.click();
+                    setScenario("prompt");
+                    setShowStartDialog(true);
                   }}
-                  className="group relative px-6 py-3 rounded-full font-bold text-black text-sm transition-all duration-300 bg-gradient-to-r from-mermaid-lime via-mermaid-cyan to-mermaid-pink hover:scale-[1.02] hover:shadow-[0_0_30px_rgba(0,242,234,0.4)] border border-white/20 overflow-hidden"
+                  className="group relative px-6 py-3.5 rounded-full font-bold text-white text-sm transition-all duration-300 bg-white/5 border border-white/10 hover:bg-white/10 hover:border-mermaid-pink/50 hover:shadow-[0_0_20px_rgba(236,72,153,0.15)] overflow-hidden"
                 >
-                  <div className="absolute inset-0 bg-gradient-to-b from-white/40 to-transparent" />
                   <span className="relative z-10 flex items-center gap-2">
-                    <FolderUp className="h-4 w-4" />
-                    上传图片
+                    <FileText className="h-4 w-4 text-mermaid-pink" />
+                    纯提示词任务
                   </span>
                 </button>
-
-                {/* Excel批量按钮 */}
-                {globalSettings.action === "generate" && (
-                  <button
-                    onClick={() => {
-                      setScenario("excel");
-                      setShowStartDialog(true);
-                    }}
-                    className="px-5 py-3 rounded-full text-sm font-medium text-white/60 hover:text-white border border-white/10 hover:border-mermaid-pink/30 bg-black/20 hover:bg-mermaid-pink/10 transition-all flex items-center gap-2"
-                  >
-                    <FileSpreadsheet className="h-4 w-4 text-mermaid-pink" />
-                    Excel批量
-                  </button>
-                )}
-
-                <div className="flex-1" />
-
-                {/* 场景指示器 + 数量 + 启动按钮 */}
-                <div className="flex items-center gap-4">
-                  {/* 场景指示器 */}
-                  <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10">
-                    {scenario === "prompt" && (
-                      <>
-                        <FileText className="h-4 w-4 text-mermaid-cyan" />
-                        <span className="text-sm text-white/60">提示词创作</span>
-                      </>
-                    )}
-                    {scenario === "image" && (
-                      <>
-                        <ImageIcon className="h-4 w-4 text-mermaid-lime" />
-                        <span className="text-sm text-white/60">图片改造</span>
-                        <span className="text-sm font-bold text-mermaid-lime">{uploadedImages.length}张</span>
-                      </>
-                    )}
-                    {scenario === "excel" && (
-                      <>
-                        <FileSpreadsheet className="h-4 w-4 text-mermaid-pink" />
-                        <span className="text-sm text-white/60">Excel批量</span>
-                        {excelData.length > 0 && (
-                          <span className="text-sm font-bold text-mermaid-pink">
-                            {excelData.reduce((sum, r) => sum + r.count, 0)}个
-                          </span>
-                        )}
-                      </>
-                    )}
-                  </div>
-
-                  {/* 数量输入（仅prompt场景可编辑） */}
-                  {scenario === "prompt" && (
-                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/10">
-                      <button
-                        onClick={() => setPromptCount(Math.max(1, promptCount - 1))}
-                        className="h-7 w-7 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white/60 hover:text-white transition-all"
-                      >
-                        <Minus className="h-3 w-3" />
-                      </button>
-                      <span className="w-8 text-center text-sm font-bold text-white">{promptCount}</span>
-                      <button
-                        onClick={() => setPromptCount(Math.min(50, promptCount + 1))}
-                        className="h-7 w-7 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white/60 hover:text-white transition-all"
-                      >
-                        <Plus className="h-3 w-3" />
-                      </button>
-                    </div>
-                  )}
-
-                  {/* 启动任务按钮 */}
-                  <button
-                    onClick={() => setShowStartDialog(true)}
-                    disabled={
-                      (scenario === "prompt" && !globalSettings.prompt?.trim()) ||
-                      (scenario === "image" && uploadedImages.length === 0) ||
-                      (scenario === "excel" && excelData.length === 0)
-                    }
-                    className={cn(
-                      "group relative px-8 py-3 rounded-full font-bold text-sm transition-all duration-300 overflow-hidden",
-                      (scenario === "prompt" && !globalSettings.prompt?.trim()) ||
-                        (scenario === "image" && uploadedImages.length === 0) ||
-                        (scenario === "excel" && excelData.length === 0)
-                        ? "bg-white/5 text-white/30 border border-white/5 cursor-not-allowed"
-                        : "bg-gradient-to-r from-mermaid-cyan via-mermaid-lime to-mermaid-cyan text-black hover:scale-[1.02] hover:shadow-[0_0_30px_rgba(0,242,234,0.4)] border border-white/20"
-                    )}
-                  >
-                    {!((scenario === "prompt" && !globalSettings.prompt?.trim()) ||
-                      (scenario === "image" && uploadedImages.length === 0) ||
-                      (scenario === "excel" && excelData.length === 0)) && (
-                        <div className="absolute inset-0 bg-gradient-to-b from-white/40 to-transparent" />
-                      )}
-                    <span className="relative z-10 flex items-center gap-2">
-                      <Rocket className="h-4 w-4" />
-                      启动任务
-                    </span>
-                  </button>
-                </div>
-              </div>
-
-              {/* 第二排：已上传图片预览（仅image场景显示） */}
-              {scenario === "image" && uploadedImages.length > 0 && (
-                <div className="flex items-center gap-3 p-3 rounded-xl bg-white/5 border border-white/10">
-                  <span className="text-xs text-white/40 shrink-0">已添加:</span>
-                  <div className="flex items-center gap-2 overflow-x-auto">
-                    {uploadedImages.slice(0, 8).map((img) => (
-                      <div key={img.id} className="relative group shrink-0">
-                        <img
-                          src={img.previewUrl}
-                          alt={img.name}
-                          className="h-12 w-12 rounded-lg object-cover border border-white/10"
-                        />
-                        <button
-                          onClick={() => {
-                            const newImages = uploadedImages.filter(i => i.id !== img.id);
-                            setUploadedImages(newImages);
-                            if (newImages.length === 0) setScenario("prompt");
-                          }}
-                          className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-red-500 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                        >
-                          <X className="h-2.5 w-2.5" />
-                        </button>
-                      </div>
-                    ))}
-                    {uploadedImages.length > 8 && (
-                      <span className="text-xs text-white/40">+{uploadedImages.length - 8}张</span>
-                    )}
-                  </div>
-                  <button
-                    onClick={() => {
-                      clearUploadedImages();
-                      setScenario("prompt");
-                    }}
-                    className="ml-auto text-xs text-red-400 hover:text-red-300 transition-colors"
-                  >
-                    清空
-                  </button>
-                </div>
               )}
+
+              {tasks.length > 0 && (
+                <button
+                  onClick={handleApplyToAll}
+                  className="px-6 py-3.5 rounded-full text-xs font-bold text-white/60 hover:text-white border border-transparent hover:border-white/20 hover:bg-white/5 transition-all uppercase tracking-wide"
+                >
+                  <Wand2 className="h-3.5 w-3.5 mr-2 inline-block" />
+                  应用配置到全部
+                </button>
+              )}
+
+              <div className="flex-1" />
+
+              <button
+                onClick={() => setShowSaveTemplate(true)}
+                className="px-6 py-3 rounded-full text-xs font-medium text-white/40 hover:text-white border border-white/5 hover:border-white/20 bg-black/20 hover:bg-black/40 transition-all flex items-center gap-2"
+                title="保存当前配置为方案"
+              >
+                <Save className="h-4 w-4" />
+                保存方案
+              </button>
             </div>
           </div>
         </div >
