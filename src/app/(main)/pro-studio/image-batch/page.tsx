@@ -685,6 +685,23 @@ export default function ImageBatchPage() {
         const apiTaskId = result.data.taskId;
         const taskModel = result.data.model;
 
+        // ================================================================
+        // 重要：Gemini API (nano-banana) 是同步返回的，直接检查状态
+        // 如果 API 已经返回 completed，无需轮询
+        // ================================================================
+        if (result.data.status === "completed" && result.data.imageUrl) {
+          updateTaskStatus(task.id, "completed", {
+            apiTaskId,
+            resultUrl: result.data.imageUrl,
+            progress: 100,
+            completedAt: new Date().toISOString(),
+          });
+          setUserCredits((prev) => prev - getImageTaskCost(task.config));
+          toast({ title: `✅ ${task.config.sourceImageName || "图片"} 处理完成` });
+          return; // 直接返回，不进入轮询
+        }
+
+        // 非同步 API（如 nano-banana-pro），需要轮询
         updateTaskStatus(task.id, "processing", {
           apiTaskId,
           progress: 30,
