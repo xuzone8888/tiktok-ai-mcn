@@ -61,6 +61,7 @@ export async function POST(request: Request) {
       resolution = "1k",            // "1k" | "2k" | "4k" (for nano-banana-pro)
       userId,
       source = "quick_gen",         // "quick_gen" | "batch_image"
+      requestId,                    // 前端生成的 ID，用于确保前端始终知道 taskId
     } = body;
 
     console.log("[Generate Image] Request received:", {
@@ -230,7 +231,8 @@ export async function POST(request: Request) {
             result = { success: false, error: uploadResult.error || "图片上传失败" };
           } else {
             // Gemini 是同步的，直接返回成功
-            const taskId = `gemini-${Date.now()}`;
+            // 优先使用前端传来的 requestId，确保前端始终知道 taskId
+            const taskId = requestId || `gemini-${Date.now()}`;
 
             // 直接写入 generations 表（已完成状态）
             if (userId) {

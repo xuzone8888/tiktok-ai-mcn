@@ -652,8 +652,12 @@ export default function ImageBatchPage() {
           updateTaskStatus(task.id, "processing", { progress: 10 });
         }
 
+        // 前端预先生成 requestId，后端用它作为 taskId
+        // 这样即使响应解析失败，我们也知道 taskId
+        const requestId = `gemini-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+
         // 调用 API
-        console.log("[Image Batch] Calling generate/image with userId:", currentUserId);
+        console.log("[Image Batch] Calling generate/image with requestId:", requestId);
         const response = await fetch("/api/generate/image", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -665,7 +669,8 @@ export default function ImageBatchPage() {
             resolution: task.config.resolution,
             prompt: task.config.prompt,
             userId: currentUserId,
-            source: "batch_image", // 标记来源为批量图片处理
+            source: "batch_image",
+            requestId, // 传递 requestId，后端用它作为 taskId
           }),
         });
 
@@ -673,32 +678,18 @@ export default function ImageBatchPage() {
         console.log("[Image Batch] API response status:", response.status, "length:", responseText.length);
 
         let result;
-        let fallbackPolling = false;
+        let needPolling = false;
+
         try {
           result = JSON.parse(responseText);
         } catch (parseError) {
-          console.error("[Image Batch] Failed to parse submit response:", {
-            status: response.status,
-            textLength: responseText.length,
-            preview: responseText.substring(0, 300),
-            error: parseError,
-          });
+          console.error("[Image Batch] Parse error:", parseError);
 
-          // 如果响应状态是 200 但解析失败，可能后端已成功，启动轮询查询数据库
+          // 响应解析失败，但我们有 requestId，可以用它查询
           if (response.status === 200) {
-            console.log("[Image Batch] Response parsing failed but status 200, will poll database");
-            // 生成一个匹配的 taskId 用于轮询
-            // 后端会根据时间戳范围查询 generations 表
-            const fallbackTaskId = `gemini-${Date.now()}`;
-            result = {
-              success: true,
-              data: {
-                taskId: fallbackTaskId,
-                model: task.config.model,
-                status: "processing",
-              }
-            };
-            fallbackPolling = true;
+            console.log("[Image Batch] Parsing failed, will query with requestId:", requestId);
+            result = { success: true, data: { taskId: requestId, model: task.config.model, status: "processing" } };
+            needPolling = true;
           } else {
             throw new Error(`图片处理失败 (${response.status})`);
           }
@@ -708,7 +699,8 @@ export default function ImageBatchPage() {
           throw new Error(result.error || "提交任务失败");
         }
 
-        const apiTaskId = result.data.taskId;
+        // 优先用后端返回的 taskId，否则用我们的 requestId
+        const apiTaskId = result.data.taskId || requestId;
         const taskModel = result.data.model;
 
         // ================================================================
@@ -735,8 +727,8 @@ export default function ImageBatchPage() {
 
         // 轮询任务状态
         let pollCount = 0;
-        const maxPolls = fallbackPolling ? 20 : 60; // fallback模式下轮询次数较少
-        const pollInterval = fallbackPolling ? 2000 : 3000; // fallback模式下轮询间隔更短
+        const maxPolls = needPolling ? 20 : 60; // needPolling模式下轮询次数较少
+        const pollInterval = needPolling ? 2000 : 3000; // needPolling模式下轮询间隔更短
 
         const pollTimer = setInterval(async () => {
           pollCount++;
