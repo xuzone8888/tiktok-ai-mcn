@@ -1098,36 +1098,29 @@ export default function ImageBatchPage() {
                 ref={fileInputRef}
               />
 
-              {/* Mermaid Ultra: Upload Button */}
+              {/* 启动任务核心按钮 */}
               <button
-                onClick={() => {
-                  if (fileInputRef.current) fileInputRef.current.value = "";
-                  fileInputRef.current?.click();
-                }}
+                onClick={() => setShowStartDialog(true)}
                 className="group relative px-8 py-3.5 rounded-full font-bold text-black text-sm transition-all duration-300 bg-gradient-to-r from-mermaid-lime via-mermaid-cyan to-mermaid-pink hover:scale-[1.02] hover:shadow-[0_0_30px_rgba(0,242,234,0.4)] border border-white/20 overflow-hidden"
               >
                 <div className="absolute inset-0 bg-gradient-to-b from-white/40 to-transparent" />
                 <div className="absolute inset-0 bg-[linear-gradient(110deg,transparent,rgba(255,255,255,0.4),transparent)] bg-[length:200%_100%] translate-x-[-100%] group-hover:animate-shimmer transition-opacity duration-300" />
                 <span className="relative z-10 flex items-center gap-2">
-                  <FolderUp className="h-5 w-5" />
-                  上传图片
+                  <Sparkles className="h-5 w-5" />
+                  启动任务
                 </span>
               </button>
 
-              {globalSettings.action === "generate" && (
-                <button
-                  onClick={() => {
-                    setScenario("prompt");
-                    setShowStartDialog(true);
-                  }}
-                  className="group relative px-6 py-3.5 rounded-full font-bold text-white text-sm transition-all duration-300 bg-white/5 border border-white/10 hover:bg-white/10 hover:border-mermaid-pink/50 hover:shadow-[0_0_20px_rgba(236,72,153,0.15)] overflow-hidden"
-                >
-                  <span className="relative z-10 flex items-center gap-2">
-                    <FileText className="h-4 w-4 text-mermaid-pink" />
-                    纯提示词任务
-                  </span>
-                </button>
-              )}
+              {/* 加载方案按钮 */}
+              <button
+                onClick={() => setShowTemplateManager(true)}
+                className="group relative px-6 py-3.5 rounded-full font-bold text-white text-sm transition-all duration-300 bg-white/5 border border-white/10 hover:bg-white/10 hover:border-mermaid-cyan/50 hover:shadow-[0_0_20px_rgba(0,242,234,0.15)] overflow-hidden"
+              >
+                <span className="relative z-10 flex items-center gap-2">
+                  <LayoutTemplate className="h-4 w-4 text-mermaid-cyan" />
+                  加载方案
+                </span>
+              </button>
 
               {tasks.length > 0 && (
                 <button
@@ -1705,6 +1698,19 @@ export default function ImageBatchPage() {
                       {excelData.length > 5 && (
                         <div className="text-[10px] text-white/30 text-center">...还有 {excelData.length - 5} 条</div>
                       )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* 提示词预览 - 图片/Excel场景显示全局提示词 */}
+              {(scenario === "image" || scenario === "excel") && globalSettings.prompt && (
+                <div className="p-4 rounded-xl bg-black/20 border border-white/5">
+                  <div className="flex items-start gap-3">
+                    <FileText className="h-4 w-4 text-mermaid-cyan shrink-0 mt-0.5" />
+                    <div className="space-y-1">
+                      <span className="text-[10px] text-white/30 uppercase tracking-wider">提示词</span>
+                      <p className="text-sm text-white/70 line-clamp-2">{globalSettings.prompt}</p>
                     </div>
                   </div>
                 </div>
