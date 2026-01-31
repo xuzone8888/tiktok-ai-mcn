@@ -2487,15 +2487,26 @@ export default function PublishPage() {
                                                                 min="0"
                                                                 max="100"
                                                                 defaultValue="1"
-                                                                onChange={(e) => {
+                                                                onInput={(e) => {
                                                                     const videoEl = document.getElementById(`cover-video-${video.id}-modal`) as HTMLVideoElement
-                                                                    if (videoEl && videoEl.duration) {
-                                                                        videoEl.currentTime = (parseInt(e.target.value) / 100) * videoEl.duration
+                                                                    if (!videoEl) return
+
+                                                                    // Check if video has loaded enough
+                                                                    if (!videoEl.duration || isNaN(videoEl.duration)) {
+                                                                        console.log('[Cover] Video duration not ready yet')
+                                                                        return
                                                                     }
+
+                                                                    const targetTime = (parseInt((e.target as HTMLInputElement).value) / 100) * videoEl.duration
+                                                                    console.log('[Cover] Seeking to:', targetTime.toFixed(2), 'of', videoEl.duration.toFixed(2))
+
+                                                                    // Set time and wait for seeked event
+                                                                    videoEl.currentTime = targetTime
                                                                 }}
                                                                 className="w-full h-2 bg-gray-700/50 rounded-full appearance-none cursor-pointer accent-pink-500 hover:accent-pink-400 transition-colors [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-gradient-to-tr [&::-webkit-slider-thumb]:from-pink-500 [&::-webkit-slider-thumb]:to-purple-500 [&::-webkit-slider-thumb]:cursor-grab [&::-webkit-slider-thumb]:shadow-lg [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white [&::-webkit-slider-thumb]:transition-transform [&::-webkit-slider-thumb]:hover:scale-110"
                                                             />
                                                         </div>
+                                                        <p className="text-xs text-gray-500 text-center">拖动滑块后稍等片刻，视频会自动更新到选定位置</p>
                                                     </div>
 
                                                     {/* Action buttons */}
