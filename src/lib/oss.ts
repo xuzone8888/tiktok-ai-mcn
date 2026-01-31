@@ -143,6 +143,7 @@ export async function uploadBuffer(
     const result = await client.put(objectPath, uploadBuffer, {
         headers: {
             'Content-Type': contentType,
+            'Content-Disposition': 'inline',  // Allow media to play in browser, not download
             'Cache-Control': 'max-age=31536000', // Cache for 1 year
         },
     })

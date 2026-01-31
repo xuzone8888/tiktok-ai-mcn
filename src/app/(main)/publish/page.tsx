@@ -192,6 +192,10 @@ export default function PublishPage() {
     const coverInputRef = useRef<HTMLInputElement>(null)
     const [coverUploadVideoId, setCoverUploadVideoId] = useState<string | null>(null)
 
+    // Video blob URL cache for cover selection (remote videos need to be downloaded first)
+    const [videoBlobCache, setVideoBlobCache] = useState<Record<string, string>>({})
+    const [loadingVideoBlob, setLoadingVideoBlob] = useState(false)
+
     // Clear task confirmation
     const [showClearConfirm, setShowClearConfirm] = useState(false)
 
@@ -801,10 +805,24 @@ export default function PublishPage() {
         if (expandedVideoId === videoId) {
             setExpandedVideoId(null)
         } else {
+            const video = selectedVideos.find(v => v.id === videoId)
+            if (!video?.url) return
+
+            // For remote OSS videos, generate a proxy URL that returns correct headers
+            // This avoids the Content-Disposition: attachment issue
+            const isLocalUrl = video.localUrl?.startsWith('blob:')
+            const hasProxyUrl = videoBlobCache[videoId]
+
+            if (!isLocalUrl && !hasProxyUrl && video.url.includes('media.toryxai.com')) {
+                // Generate proxy URL for OSS videos
+                const proxyUrl = `/api/proxy/video?url=${encodeURIComponent(video.url)}`
+                setVideoBlobCache(prev => ({ ...prev, [videoId]: proxyUrl }))
+                console.log('[Cover] Using proxy URL for OSS video')
+            }
+
             setExpandedVideoId(videoId)
             // Generate cover options if not already generated
-            const video = selectedVideos.find(v => v.id === videoId)
-            if (video?.url && (!video.coverOptions || video.coverOptions.length === 0)) {
+            if (video.url && (!video.coverOptions || video.coverOptions.length === 0)) {
                 const options = await generateCoverOptions(video.url)
                 setSelectedVideos(prev => prev.map(v =>
                     v.id === videoId ? { ...v, coverOptions: options } : v
@@ -2428,13 +2446,14 @@ export default function PublishPage() {
                                                 <div className="mx-auto md:mx-0 w-[240px] aspect-[9/16] rounded-xl overflow-hidden bg-black flex-shrink-0 relative shadow-2xl border border-white/10 ring-1 ring-white/5">
                                                     <video
                                                         id={`cover-video-${video.id}-modal`}
-                                                        src={video.localUrl || video.url}
+                                                        src={videoBlobCache[video.id] || video.localUrl || video.url}
                                                         crossOrigin="anonymous"
                                                         className="w-full h-full object-cover"
                                                         muted
                                                         playsInline
-                                                        preload="metadata"
-                                                        onLoadedMetadata={(e) => {
+                                                        preload="auto"
+                                                        onLoadedData={(e) => {
+                                                            // Seek to first frame once video data is loaded
                                                             e.currentTarget.currentTime = 0.1
                                                         }}
                                                     />
@@ -2482,16 +2501,43 @@ export default function PublishPage() {
                                                     {/* Action buttons */}
                                                     <div className="grid grid-cols-1 gap-3 pt-2">
                                                         <button
-                                                            onClick={() => {
+                                                            onClick={async () => {
                                                                 const videoEl = document.getElementById(`cover-video-${video.id}-modal`) as HTMLVideoElement
                                                                 if (videoEl) {
                                                                     try {
+                                                                        // Check if video is ready
+                                                                        if (videoEl.readyState < 2) {
+                                                                            toast({ variant: "destructive", title: "视频未就绪", description: "请等待视频加载完成后再选择封面" })
+                                                                            return
+                                                                        }
+
+                                                                        // Check if video has actual dimensions
+                                                                        if (!videoEl.videoWidth || !videoEl.videoHeight) {
+                                                                            toast({ variant: "destructive", title: "视频未加载", description: "视频帧未加载，请稍后重试或刷新页面后重试" })
+                                                                            return
+                                                                        }
+
                                                                         const canvas = document.createElement('canvas')
-                                                                        canvas.width = videoEl.videoWidth || 720
-                                                                        canvas.height = videoEl.videoHeight || 1280
+                                                                        canvas.width = videoEl.videoWidth
+                                                                        canvas.height = videoEl.videoHeight
                                                                         const ctx = canvas.getContext('2d')
                                                                         if (ctx) {
                                                                             ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height)
+
+                                                                            // Check if canvas actually has content (not just black)
+                                                                            const imageData = ctx.getImageData(0, 0, 10, 10)
+                                                                            const hasContent = imageData.data.some((val, idx) => idx % 4 !== 3 && val > 0)
+
+                                                                            if (!hasContent) {
+                                                                                // Canvas is black - likely CORS issue or video not loaded
+                                                                                toast({
+                                                                                    variant: "destructive",
+                                                                                    title: "封面提取失败",
+                                                                                    description: "无法提取视频帧。请刷新页面或稍后重试（清空浏览器缓存可能有帮助）"
+                                                                                })
+                                                                                return
+                                                                            }
+
                                                                             const frameData = canvas.toDataURL('image/jpeg', 0.9)
                                                                             const timestampMs = Math.round(videoEl.currentTime * 1000)
                                                                             updateVideoCover(video.id, frameData, timestampMs)
@@ -2500,7 +2546,20 @@ export default function PublishPage() {
                                                                         }
                                                                     } catch (error) {
                                                                         console.error('Failed to capture frame:', error)
-                                                                        setUploadError('无法从该视频捕获帧，请重新上传视频')
+                                                                        // More specific error for CORS
+                                                                        if (error instanceof DOMException && error.name === 'SecurityError') {
+                                                                            toast({
+                                                                                variant: "destructive",
+                                                                                title: "跨域安全限制",
+                                                                                description: "视频来源受跨域限制，请刷新页面或使用上传功能重新添加视频"
+                                                                            })
+                                                                        } else {
+                                                                            toast({
+                                                                                variant: "destructive",
+                                                                                title: "封面提取失败",
+                                                                                description: "无法提取帧，请重试或刷新页面"
+                                                                            })
+                                                                        }
                                                                     }
                                                                 }
                                                             }}

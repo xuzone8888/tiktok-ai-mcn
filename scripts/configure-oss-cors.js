@@ -1,9 +1,21 @@
 /**
- * Configure CORS for OSS bucket
- * Run: node scripts/configure-oss-cors.js
+ * 配置阿里云OSS CORS规则
+ * 允许 toryxai.com 域名的跨域请求
  */
 
-require('dotenv').config({ path: '.env.local' });
+const fs = require('fs');
+const path = require('path');
+
+// 手动加载 .env.local
+const envPath = path.join(__dirname, '..', '.env.local');
+const envContent = fs.readFileSync(envPath, 'utf-8');
+envContent.split('\n').forEach(line => {
+    const match = line.match(/^([^#=]+)=(.*)$/);
+    if (match) {
+        process.env[match[1].trim()] = match[2].trim();
+    }
+});
+
 const OSS = require('ali-oss');
 
 const client = new OSS({
@@ -14,46 +26,67 @@ const client = new OSS({
 });
 
 async function configureCORS() {
+    console.log('配置OSS CORS规则...');
+    console.log('Bucket:', process.env.ALIYUN_OSS_BUCKET);
+
+    const corsRules = [
+        {
+            // 生产环境 - toryxai.com
+            allowedOrigin: ['https://www.toryxai.com', 'https://toryxai.com'],
+            allowedMethod: ['GET', 'PUT', 'POST', 'DELETE', 'HEAD'],
+            allowedHeader: ['*'],
+            exposeHeader: ['ETag', 'x-oss-request-id', 'Content-Length'],
+            maxAgeSeconds: 3600,
+        },
+        {
+            // 本地开发环境
+            allowedOrigin: ['http://localhost:3000', 'http://127.0.0.1:3000'],
+            allowedMethod: ['GET', 'PUT', 'POST', 'DELETE', 'HEAD'],
+            allowedHeader: ['*'],
+            exposeHeader: ['ETag', 'x-oss-request-id', 'Content-Length'],
+            maxAgeSeconds: 3600,
+        },
+        {
+            // 旧域名（兼容）
+            allowedOrigin: ['https://www.tokfactoryai.com', 'https://tokfactoryai.com'],
+            allowedMethod: ['GET', 'PUT', 'POST', 'DELETE', 'HEAD'],
+            allowedHeader: ['*'],
+            exposeHeader: ['ETag', 'x-oss-request-id', 'Content-Length'],
+            maxAgeSeconds: 3600,
+        }
+    ];
+
     try {
-        // Get current CORS configuration
-        console.log('Current CORS configuration:');
+        // 先获取当前CORS配置
+        console.log('\n当前CORS配置:');
         try {
-            const result = await client.getBucketCORS();
-            console.log(JSON.stringify(result.rules, null, 2));
+            const currentCors = await client.getBucketCORS(process.env.ALIYUN_OSS_BUCKET);
+            console.log(JSON.stringify(currentCors.rules, null, 2));
         } catch (e) {
-            console.log('No existing CORS rules or error:', e.message);
+            console.log('(暂无配置或获取失败)');
         }
 
-        // Set new CORS rules
-        const rules = [
-            {
-                allowedOrigin: ['https://toryxai.com', 'https://www.toryxai.com'],
-                allowedMethod: ['GET', 'PUT', 'POST', 'HEAD', 'DELETE'],
-                allowedHeader: ['*'],
-                exposeHeader: ['ETag', 'x-oss-request-id', 'Content-Length'],
-                maxAgeSeconds: '3600',
-            },
-            // Localhost for development
-            {
-                allowedOrigin: ['http://localhost:3000', 'http://127.0.0.1:3000'],
-                allowedMethod: ['GET', 'PUT', 'POST', 'HEAD', 'DELETE'],
-                allowedHeader: ['*'],
-                exposeHeader: ['ETag', 'x-oss-request-id', 'Content-Length'],
-                maxAgeSeconds: '3600',
-            },
-        ];
+        // 设置新的CORS规则
+        console.log('\n正在设置新的CORS规则...');
+        await client.putBucketCORS(process.env.ALIYUN_OSS_BUCKET, corsRules);
 
-        console.log('\nSetting new CORS rules...');
-        await client.putBucketCORS(process.env.ALIYUN_OSS_BUCKET, rules);
-        console.log('✅ CORS configured successfully!');
+        console.log('\n✅ CORS规则设置成功！');
 
-        // Verify
-        console.log('\nNew CORS configuration:');
-        const verifyResult = await client.getBucketCORS();
-        console.log(JSON.stringify(verifyResult.rules, null, 2));
+        // 验证配置
+        console.log('\n验证新配置:');
+        const newCors = await client.getBucketCORS(process.env.ALIYUN_OSS_BUCKET);
+        console.log(JSON.stringify(newCors.rules, null, 2));
+
+        console.log('\n允许的来源:');
+        newCors.rules.forEach((rule, i) => {
+            console.log(`规则 ${i + 1}: ${rule.allowedOrigin.join(', ')}`);
+        });
 
     } catch (error) {
-        console.error('❌ Error:', error.message);
+        console.error('❌ 配置失败:', error.message);
+        if (error.code) {
+            console.error('错误代码:', error.code);
+        }
         process.exit(1);
     }
 }

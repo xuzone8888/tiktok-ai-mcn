@@ -140,6 +140,7 @@ export async function POST(request: NextRequest) {
             mime: contentType,
             headers: {
                 'Content-Type': contentType,
+                'Content-Disposition': 'inline',  // Allow video to play in browser, not download
                 'x-oss-storage-class': 'Standard',
             },
         })
