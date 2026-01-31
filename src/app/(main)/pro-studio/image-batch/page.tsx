@@ -592,11 +592,18 @@ export default function ImageBatchPage() {
         return;
       }
 
-      const ids = await addTasksFromFiles(fileArray);
+      // 存储到 uploadedImages 状态，而不是直接创建任务
+      const newImages = fileArray.map(file => ({
+        id: `img-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        file,
+        previewUrl: URL.createObjectURL(file),
+        name: file.name,
+      }));
+      addUploadedImages(newImages);
 
       toast({
-        title: "✅ 上传成功",
-        description: `已添加 ${ids.length} 张图片`,
+        title: "✅ 图片已添加",
+        description: `已添加 ${newImages.length} 张图片，点击「启动任务」开始处理`,
       });
 
       // 重置文件输入，允许再次选择相同文件
@@ -1712,11 +1719,11 @@ export default function ImageBatchPage() {
                 <div className="flex flex-wrap items-center gap-3">
                   <div className="px-3 py-1.5 rounded-full bg-purple-500/10 text-purple-400 border border-purple-500/20 text-xs font-medium flex items-center gap-2">
                     <Film className="h-3.5 w-3.5" />
-                    {globalSettings.model === "nano-banana" ? "Turbo Model" : "Pro Model"}
+                    {globalSettings.model === "nano-banana" ? "快速模式" : "专业模式"}
                   </div>
                   <div className="px-3 py-1.5 rounded-full bg-mermaid-cyan/10 text-mermaid-cyan border border-mermaid-cyan/20 text-xs font-medium flex items-center gap-2">
                     <Wand2 className="h-3.5 w-3.5" />
-                    {globalSettings.action === "generate" ? "AI Generation" : globalSettings.action === "upscale" ? "Upscale" : "Grid View"}
+                    {globalSettings.action === "generate" ? "AI 生成" : globalSettings.action === "upscale" ? "高清放大" : "九宫格"}
                   </div>
                   <div className="px-3 py-1.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs font-medium flex items-center gap-2">
                     <Square className="h-3.5 w-3.5" />
@@ -1745,7 +1752,7 @@ export default function ImageBatchPage() {
                 {/* 场景1独有: 数量选择 */}
                 {scenario === "prompt" && (
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-white/40 uppercase tracking-wider">Batch Count</span>
+                    <span className="text-xs font-bold text-white/40 tracking-wider">生成数量</span>
                     <div className="flex items-center gap-4">
                       <div className="flex items-center bg-[#050505] rounded-full border border-white/10 p-1">
                         <button
@@ -1771,8 +1778,8 @@ export default function ImageBatchPage() {
                 {/* 场景2/3: 只显示数量（只读） */}
                 {(scenario === "image" || scenario === "excel") && (
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-white/40 uppercase tracking-wider">
-                      {scenario === "image" ? "Image Count" : "Total Tasks"}
+                    <span className="text-xs font-bold text-white/40 tracking-wider">
+                      {scenario === "image" ? "图片数量" : "任务总数"}
                     </span>
                     <div className="px-4 py-2 rounded-full bg-[#050505] border border-white/10 text-sm font-bold text-white font-mono">
                       {scenarioTaskCount}
