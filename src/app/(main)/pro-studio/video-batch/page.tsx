@@ -552,24 +552,24 @@ const VideoTaskCard = memo(function VideoTaskCard({
   return (
     <div
       className={cn(
-        "group relative rounded-xl border transition-all duration-300 overflow-hidden",
+        "group relative rounded-3xl border transition-all duration-500 overflow-hidden",
         isSelected
-          ? "bg-tiktok-pink/10 border-tiktok-pink/50 ring-1 ring-tiktok-pink/30 shadow-[0_0_20px_rgba(236,72,153,0.15)]"
-          : "bg-black/40 backdrop-blur-md border-white/10 hover:border-tiktok-cyan/30 hover:shadow-[0_0_15px_rgba(0,242,234,0.1)]",
-        task.status !== "pending" && task.status !== "success" && task.status !== "failed" && "ring-1 ring-tiktok-cyan/30 shadow-[0_0_10px_rgba(0,242,234,0.1)]"
+          ? "bg-[#0B0C10] border-mermaid-cyan/50 ring-1 ring-mermaid-cyan/50 shadow-[0_0_30px_rgba(0,242,234,0.15)] scale-[1.02]"
+          : "bg-[#0B0C10] border-white/5 hover:border-mermaid-cyan/30 hover:shadow-[0_0_20px_rgba(0,242,234,0.05)] hover:-translate-y-1",
+        task.status !== "pending" && task.status !== "success" && task.status !== "failed" && "ring-1 ring-mermaid-cyan/30 animate-pulse-subtle"
       )}
     >
-      {/* 选择复选框 */}
+      {/* 选择复选框 - Neon Checkbox */}
       <div
         onClick={onToggleSelect}
         className={cn(
-          "absolute top-2 left-2 z-10 flex h-8 w-8 items-center justify-center rounded-lg border-2 cursor-pointer transition-all group/checkbox",
+          "absolute top-3 left-3 z-20 flex h-6 w-6 items-center justify-center rounded-lg border cursor-pointer transition-all duration-300",
           isSelected
-            ? "bg-tiktok-pink border-tiktok-pink text-white shadow-lg shadow-tiktok-pink/40"
-            : "border-white/40 bg-black/60 hover:border-tiktok-pink hover:bg-black/80 hover:scale-105"
+            ? "bg-mermaid-cyan border-mermaid-cyan text-black shadow-[0_0_15px_rgba(0,242,234,0.5)]"
+            : "border-white/20 bg-black/40 hover:border-mermaid-cyan/50 hover:bg-black/60"
         )}
       >
-        {isSelected && <Check className="h-4 w-4" />}
+        {isSelected && <Check className="h-3 w-3" />}
       </div>
 
       {/* 预览区 - 视频成功时显示视频缩略图，否则显示图片 */}
@@ -675,8 +675,8 @@ const VideoTaskCard = memo(function VideoTaskCard({
         )}
       </div>
 
-      {/* 卡片信息 */}
-      <div className="p-3 space-y-3">
+      {/* 卡片信息 - Titanium Body */}
+      <div className="p-4 space-y-3 bg-[#0B0C10] border-t border-white/5 relative">
         {/* 状态和流水线进度 */}
         <div className="flex items-center justify-between gap-2">
           {getStatusBadge()}
@@ -2946,19 +2946,29 @@ C07: [story CTA, inspiring, <50 chars]`,
           <CardContent>
             {tasks.length === 0 ? (
               <div
-                className="group flex flex-col items-center justify-center py-20 border border-dashed border-white/10 bg-white/5 rounded-2xl cursor-pointer transition-all duration-300 hover:bg-white/10 hover:border-tiktok-cyan/30 hover:shadow-[0_0_30px_-10px_rgba(0,242,234,0.1)]"
+                className="group flex flex-col items-center justify-center py-24 rounded-[2rem] border border-white/5 bg-[#0B0C10] relative overflow-hidden cursor-pointer transition-all duration-500 hover:border-mermaid-cyan/30 hover:shadow-[0_0_30px_rgba(0,242,234,0.1)]"
                 onClick={() => setShowCreateDialog(true)}
               >
-                <div className="relative mb-6">
-                  <div className="absolute inset-0 bg-tiktok-cyan/20 blur-xl rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-                  <div className="relative w-24 h-24 rounded-2xl bg-black/40 border border-white/10 flex items-center justify-center group-hover:scale-110 transition-transform duration-300 shadow-inner">
-                    <Video className="h-12 w-12 text-white/20 group-hover:text-tiktok-cyan transition-colors duration-300" />
+                {/* Aurora Background Effect */}
+                <div className="absolute inset-0 bg-gradient-to-br from-mermaid-cyan/5 via-transparent to-mermaid-pink/5 opacity-50" />
+                <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-10" />
+
+                {/* Animated Rings */}
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] border border-white/5 rounded-full animate-[spin_20s_linear_infinite]" />
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[300px] h-[300px] border border-white/5 rounded-full animate-[spin_15s_linear_infinite_reverse]" />
+
+                <div className="relative z-10 flex flex-col items-center">
+                  <div className="relative mb-6">
+                    <div className="absolute inset-0 bg-mermaid-cyan/20 blur-xl rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                    <div className="relative w-24 h-24 rounded-2xl bg-black/40 border border-white/10 flex items-center justify-center group-hover:scale-110 transition-transform duration-300 shadow-inner">
+                      <Video className="h-12 w-12 text-white/20 group-hover:text-mermaid-cyan transition-colors duration-300" />
+                    </div>
                   </div>
+                  <h3 className="text-xl font-bold text-white mb-2 group-hover:text-mermaid-cyan transition-colors tracking-tight">暂无视频任务</h3>
+                  <p className="text-sm text-white/40 group-hover:text-white/80 transition-colors">
+                    点击 <span className="text-mermaid-cyan font-medium">"创建视频任务"</span> 开始批量生产
+                  </p>
                 </div>
-                <h3 className="text-xl font-bold text-white mb-2 group-hover:text-tiktok-cyan transition-colors tracking-tight">暂无视频任务</h3>
-                <p className="text-sm text-gray-400 group-hover:text-white/80 transition-colors">
-                  点击 <span className="text-tiktok-cyan font-medium">"创建视频任务"</span> 开始批量生产
-                </p>
               </div>
             ) : (
               (() => {

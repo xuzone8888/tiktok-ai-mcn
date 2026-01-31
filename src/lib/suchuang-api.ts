@@ -1134,12 +1134,15 @@ export async function testApiConnection(apiKey?: string): Promise<{
 export interface GeminiImageParams {
   prompt: string;
   sourceImageUrl?: string; // 可选的参考图片
+  aspectRatio?: string;    // 图片比例 如 "9:16", "16:9", "1:1"
+  resolution?: string;     // 分辨率 如 "1024x1024"
 }
 
 export interface GeminiImageResult {
   success: boolean;
   imageBase64?: string;  // Base64 编码的图片数据
   imageUrl?: string;     // 如果上传到 OSS 后的 URL
+  processing?: boolean;  // 524 超时时返回 true，表示可能还在处理中
   error?: string;
 }
 
@@ -1164,19 +1167,28 @@ export async function generateGeminiImage(
   }
 
   try {
-    // 构建消息内容
+    // 构建消息内容 - 使用简单文本格式（经过验证稳定工作）
+    // 昨天 22:42-22:51 成功生成 5 张图片用的就是这种格式
     let messageContent = params.prompt;
 
-    // 如果有源图片，使用图生图模式
-    if (params.sourceImageUrl) {
-      messageContent = `参考这张图片，${params.prompt}\n\n参考图片: ${params.sourceImageUrl}`;
+    // 添加尺寸比例要求
+    if (params.aspectRatio && params.aspectRatio !== "auto") {
+      messageContent = `生成的图片请使用 ${params.aspectRatio} 的宽高比例。${messageContent}`;
     }
+
+    // 如果有源图片，使用图生图模式（直接在文本中引用 URL）
+    if (params.sourceImageUrl) {
+      messageContent = `参考这张图片，${messageContent} ${params.sourceImageUrl}`;
+      console.log("[Gemini-Image] Image-to-image mode, embedding URL in prompt");
+    }
+
+    const messages = [
+      { role: "user", content: messageContent }
+    ];
 
     const requestBody = JSON.stringify({
       model: "gemini-3-pro-image",
-      messages: [
-        { role: "user", content: messageContent }
-      ],
+      messages,
       max_tokens: 4096,
     });
 
@@ -1198,7 +1210,7 @@ export async function generateGeminiImage(
           'Authorization': `Bearer ${key}`,
           'Content-Length': Buffer.byteLength(requestBody),
         },
-        timeout: 120000, // 2分钟超时
+        timeout: 300000, // 5分钟超时（图生图可能需要更长时间）
       };
 
       const req = https.request(options, (res) => {
@@ -1219,6 +1231,17 @@ export async function generateGeminiImage(
 
     if (result.statusCode !== 200) {
       console.error("[Gemini-Image] API error:", result.statusCode, result.data.substring(0, 300));
+
+      // 524 = Cloudflare 超时，但 API 可能还在后台处理
+      // 返回特殊状态让前端启动轮询而不是直接失败
+      if (result.statusCode === 524) {
+        console.log("[Gemini-Image] 524 Cloudflare timeout - API may still be processing");
+        return {
+          success: true,
+          processing: true,
+          error: "Gemini API 正在处理中，请等待结果..."
+        };
+      }
 
       // 解析错误信息并返回友好的错误消息
       let errorMessage = `Gemini API 错误 (${result.statusCode})`;

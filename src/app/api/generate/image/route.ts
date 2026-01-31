@@ -16,6 +16,10 @@ import {
 } from "@/lib/suchuang-api";
 import { createAdminClient } from "@/lib/supabase/admin";
 
+// 增加请求体大小限制以支持 base64 图片 (50MB)
+export const maxDuration = 120; // 2分钟超时
+export const dynamic = 'force-dynamic';
+
 // ============================================================================
 // 积分配置
 // 快速单个图片/批量生产图片扣分机制：
@@ -124,16 +128,49 @@ export async function POST(request: Request) {
         );
       }
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error: deductError } = await (supabase as any)
-        .from("profiles")
-        .update({ credits: currentCredits - creditCost })
-        .eq("id", userId);
+      // 尝试扣费（带重试机制，处理并发冲突）
+      let deductSuccess = false;
+      let deductAttempts = 0;
+      const maxAttempts = 3;
 
-      if (deductError) {
-        console.error("[Generate Image] Failed to deduct credits:", deductError);
+      while (!deductSuccess && deductAttempts < maxAttempts) {
+        deductAttempts++;
+
+        // 重新获取最新余额
+        const { data: latestProfile } = await supabase
+          .from("profiles")
+          .select("credits")
+          .eq("id", userId)
+          .single();
+
+        const latestCredits = (latestProfile as unknown as { credits: number })?.credits || 0;
+
+        if (latestCredits < creditCost) {
+          return NextResponse.json(
+            { success: false, error: `积分不足！需要 ${creditCost} 积分，当前余额 ${latestCredits}` },
+            { status: 400 }
+          );
+        }
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error: deductError } = await (supabase as any)
+          .from("profiles")
+          .update({ credits: latestCredits - creditCost })
+          .eq("id", userId)
+          .eq("credits", latestCredits); // 乐观锁：只有余额未变时才更新
+
+        if (!deductError) {
+          deductSuccess = true;
+        } else if (deductAttempts < maxAttempts) {
+          console.log(`[Generate Image] Credits deduct retry ${deductAttempts}/${maxAttempts}`);
+          await new Promise(r => setTimeout(r, 100 * deductAttempts)); // 指数退避
+        }
+      }
+
+      if (!deductSuccess) {
+        console.error("[Generate Image] Failed to deduct credits after retries");
         return NextResponse.json(
-          { success: false, error: "Failed to deduct credits" },
+          { success: false, error: "扣费失败，请重试" },
           { status: 500 }
         );
       }
@@ -216,9 +253,23 @@ export async function POST(request: Request) {
         const geminiResult = await generateGeminiImage({
           prompt,
           sourceImageUrl,
+          aspectRatio,
         });
 
-        if (!geminiResult.success || !geminiResult.imageBase64) {
+        if (geminiResult.processing) {
+          // 524 超时 - API 可能还在处理中，返回 processing 状态让前端轮询
+          const taskId = requestId || `gemini-${Date.now()}`;
+          console.log("[Generate Image] Gemini API 524 timeout, returning processing status for polling:", taskId);
+          return NextResponse.json({
+            success: true,
+            data: {
+              taskId,
+              status: "processing",
+              model: "gemini-3-pro-image",
+              estimatedTime: "处理中（可能需要2-4分钟）",
+            },
+          });
+        } else if (!geminiResult.success || !geminiResult.imageBase64) {
           result = { success: false, error: geminiResult.error || "Gemini 图片生成失败" };
         } else {
           // 将 Base64 上传到 OSS

@@ -757,7 +757,7 @@ export const useImageBatchStore = create<ImageBatchState & ImageBatchActions>()(
                 action: globalSettings.action,
                 aspectRatio: globalSettings.aspectRatio,
                 resolution: globalSettings.resolution,
-                prompt: globalSettings.action === "generate" ? prompt : "",
+                prompt: prompt,  // 始终传递提示词，图生图也需要
               },
               createdAt: new Date().toISOString(),
             };
@@ -815,26 +815,31 @@ export const useImageBatchStore = create<ImageBatchState & ImageBatchActions>()(
             removeItem: () => { },
           };
         }),
-        // 只持久化已完成的任务和设置
+        // 持久化所有任务和设置（包括待处理任务）
         partialize: (state) => ({
-          tasks: state.tasks
-            .filter(task => task.status === "completed" || task.resultUrl)
-            .map(task => ({
-              ...task,
-              config: {
-                ...task.config,
-                // 不持久化 blob URLs
-                sourceImageUrl: task.config.sourceImageUrl?.startsWith("blob:") ? "" : task.config.sourceImageUrl,
-              },
-            }))
-            .filter(task => task.config.sourceImageUrl || task.resultUrl),
+          tasks: state.tasks.map(task => ({
+            ...task,
+            config: {
+              ...task.config,
+              // 不持久化 blob URLs (这些任务重载后无法恢复图片)
+              sourceImageUrl: task.config.sourceImageUrl?.startsWith("blob:") ? "" : task.config.sourceImageUrl,
+            },
+          })),
           globalSettings: state.globalSettings,
           jobStatus: state.jobStatus === "running" ? "idle" : state.jobStatus,
         }),
         onRehydrateStorage: () => (state) => {
           if (state) {
+            // 将中断的 processing 任务重置为 pending
+            state.tasks = state.tasks.map(task =>
+              task.status === "processing"
+                ? { ...task, status: "pending" as const, progress: undefined, startedAt: undefined }
+                : task
+            );
             console.log("[ImageBatchStore] Rehydrated from localStorage:", {
               taskCount: state.tasks.length,
+              pending: state.tasks.filter(t => t.status === "pending").length,
+              completed: state.tasks.filter(t => t.status === "completed").length,
             });
           }
         },

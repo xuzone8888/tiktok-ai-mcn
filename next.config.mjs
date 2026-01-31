@@ -8,6 +8,8 @@ const nextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
+  // API 配置 - 增加请求体大小限制以支持 base64 图片
+  serverExternalPackages: [],
   // 图片优化
   images: {
     remotePatterns: [

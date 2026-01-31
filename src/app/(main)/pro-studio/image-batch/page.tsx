@@ -334,8 +334,8 @@ function TaskCard({
             <span className="text-white/60 font-bold">{cost}</span> PTS
           </span>
           <div className="flex items-center -mr-2">
-            {/* 单独开始按钮 */}
-            {task.status === "pending" && (
+            {/* 单独开始/重试按钮 */}
+            {(task.status === "pending" || task.status === "failed") && (
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -346,13 +346,22 @@ function TaskCard({
                         e.stopPropagation();
                         onStartSingle();
                       }}
-                      className="h-7 w-7 text-white/40 hover:text-mermaid-cyan hover:bg-mermaid-cyan/10 transition-colors rounded-lg"
+                      className={cn(
+                        "h-7 w-7 transition-colors rounded-lg",
+                        task.status === "failed"
+                          ? "text-amber-400 hover:text-amber-300 hover:bg-amber-400/10"
+                          : "text-white/40 hover:text-mermaid-cyan hover:bg-mermaid-cyan/10"
+                      )}
                     >
-                      <Play className="h-3.5 w-3.5" />
+                      {task.status === "failed" ? (
+                        <RotateCcw className="h-3.5 w-3.5" />
+                      ) : (
+                        <Play className="h-3.5 w-3.5" />
+                      )}
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent>
-                    <p>Start Task</p>
+                    <p>{task.status === "failed" ? "Retry" : "Start Task"}</p>
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
@@ -490,6 +499,38 @@ export default function ImageBatchPage() {
   // Template Handlers
   const handleSaveTemplate = async (name: string, description: string) => {
     try {
+      // 如果有图片场景，先上传所有 blob 图片到 OSS
+      let savedImages: { name: string; previewUrl: string }[] = [];
+      if (scenario === "image" && uploadedImages.length > 0) {
+        toast({ title: "📤 正在上传图片到服务器..." });
+
+        const uploadPromises = uploadedImages.map(async (img) => {
+          if (img.previewUrl.startsWith("blob:")) {
+            try {
+              const blobResponse = await fetch(img.previewUrl);
+              const blob = await blobResponse.blob();
+              const formData = new FormData();
+              formData.append("file", blob, img.name);
+
+              const uploadResponse = await fetch("/api/upload/image", {
+                method: "POST",
+                body: formData,
+              });
+              const uploadResult = await uploadResponse.json();
+
+              if (uploadResult.success && uploadResult.data?.url) {
+                return { name: img.name, previewUrl: uploadResult.data.url };
+              }
+            } catch (e) {
+              console.error("Failed to upload image:", img.name, e);
+            }
+          }
+          return img; // 如果不是 blob 或上传失败，保留原 URL
+        });
+
+        savedImages = await Promise.all(uploadPromises);
+      }
+
       const configToSave = {
         globalSettings: {
           model: globalSettings.model,
@@ -501,7 +542,8 @@ export default function ImageBatchPage() {
         // 保存场景数据
         scenario,
         promptCount,
-        // 图片和Excel数据在实际使用时需要先上传到OSS
+        // 保存上传到 OSS 的图片 URLs
+        savedImages: savedImages.length > 0 ? savedImages : undefined,
         savedAt: new Date().toISOString(),
       };
 
@@ -551,6 +593,19 @@ export default function ImageBatchPage() {
       if (config.scenario) setScenario(config.scenario);
       if (config.promptCount) setPromptCount(config.promptCount);
 
+      // 恢复保存的图片（OSS URLs）
+      if (config.savedImages && config.savedImages.length > 0) {
+        // 设置场景为图片模式
+        setScenario("image");
+        // 恢复图片到 uploadedImages
+        useImageBatchStore.setState({
+          uploadedImages: config.savedImages.map((img: { name: string; previewUrl: string }) => ({
+            name: img.name,
+            previewUrl: img.previewUrl,
+          }))
+        });
+      }
+
       // 关闭方案管理器
       setShowTemplateManager(false);
 
@@ -582,7 +637,7 @@ export default function ImageBatchPage() {
       .catch(console.error);
   }, []);
 
-  // 批量上传
+  // 批量上传 - 只添加到 uploadedImages，任务创建由 createTasksFromScenario 处理
   const handleBatchUpload = useCallback(
     async (files: FileList) => {
       const fileArray = Array.from(files).filter((f) => f.type.startsWith("image/"));
@@ -592,7 +647,7 @@ export default function ImageBatchPage() {
         return;
       }
 
-      // 存储到 uploadedImages 状态，而不是直接创建任务
+      // 存储到 uploadedImages 用于弹窗展示和后续任务创建
       const newImages = fileArray.map(file => ({
         id: `img-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
         file,
@@ -601,9 +656,12 @@ export default function ImageBatchPage() {
       }));
       addUploadedImages(newImages);
 
+      // 设置场景为图片模式
+      setScenario("image");
+
       toast({
-        title: "✅ 图片已添加",
-        description: `已添加 ${newImages.length} 张图片，点击「启动任务」开始处理`,
+        title: "✅ 上传成功",
+        description: `已添加 ${fileArray.length} 张图片，点击「创建任务」可开始处理`,
       });
 
       // 重置文件输入，允许再次选择相同文件
@@ -611,7 +669,7 @@ export default function ImageBatchPage() {
         fileInputRef.current.value = "";
       }
     },
-    [addTasksFromFiles, toast]
+    [addTasksFromFiles, addUploadedImages, toast]
   );
 
   // 应用全局设置到所有待处理任务
@@ -657,14 +715,16 @@ export default function ImageBatchPage() {
       });
 
       try {
-        // 上传图片（如果有源图片）
-        let remoteImageUrl = task.config.sourceImageUrl;
+        // 处理图片（如果有源图片）- 上传到 OSS 获得 HTTP URL
+        // API 需要可访问的 HTTP URL，不是 base64 data URL
+        let imageUrlForApi = task.config.sourceImageUrl;
         if (task.config.sourceImageUrl) {
           if (task.config.sourceImageUrl.startsWith("blob:")) {
+            // 将 blob 上传到 OSS 获取公网 URL
             const blobResponse = await fetch(task.config.sourceImageUrl);
             const blob = await blobResponse.blob();
             const formData = new FormData();
-            formData.append("file", blob, task.config.sourceImageName);
+            formData.append("file", blob, task.config.sourceImageName || "image.png");
 
             const uploadResponse = await fetch("/api/upload/image", {
               method: "POST",
@@ -673,14 +733,15 @@ export default function ImageBatchPage() {
             const uploadResult = await uploadResponse.json();
 
             if (uploadResult.success && uploadResult.data?.url) {
-              remoteImageUrl = uploadResult.data.url;
+              imageUrlForApi = uploadResult.data.url;
+              console.log("[Image Batch] Uploaded to OSS:", imageUrlForApi);
             } else {
-              throw new Error("图片上传失败");
+              throw new Error("图片上传失败: " + (uploadResult.error || "Unknown error"));
             }
           }
           updateTaskStatus(task.id, "processing", { progress: 20 });
         } else {
-          // 纯提示词模式，跳过上传步骤
+          // 纯提示词模式，跳过图片处理
           updateTaskStatus(task.id, "processing", { progress: 10 });
         }
 
@@ -692,16 +753,19 @@ export default function ImageBatchPage() {
         let needPolling = false;
         let fetchError: Error | null = null;
 
-        // 调用 API（可能会超时）
+        // 调用 API（可能会超时）- 使用 5 分钟超时
         console.log("[Image Batch] Calling generate/image with requestId:", requestId);
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 300000); // 5 分钟超时
         try {
           const response = await fetch("/api/generate/image", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
+            signal: controller.signal,
             body: JSON.stringify({
               mode: task.config.action,
               model: task.config.model,
-              sourceImageUrl: remoteImageUrl,
+              sourceImageUrl: imageUrlForApi,
               aspectRatio: task.config.aspectRatio,
               resolution: task.config.resolution,
               prompt: task.config.prompt,
@@ -710,13 +774,15 @@ export default function ImageBatchPage() {
               requestId,
             }),
           });
+          clearTimeout(timeoutId);
 
           const responseText = await response.text();
           console.log("[Image Batch] API response status:", response.status, "length:", responseText.length);
 
           // 504 = Gateway Timeout，后端可能还在处理
-          if (response.status === 504) {
-            console.log("[Image Batch] 504 Timeout, will poll for result with requestId:", requestId);
+          // 524 = Cloudflare Timeout，后端也可能还在处理（重要！）
+          if (response.status === 504 || response.status === 524) {
+            console.log(`[Image Batch] ${response.status} Timeout, will poll for result with requestId:`, requestId);
             needPolling = true;
             result = { success: true, data: { taskId: requestId, model: task.config.model, status: "processing" } };
           } else {
@@ -785,9 +851,12 @@ export default function ImageBatchPage() {
         });
 
         // 轮询任务状态
+        // 增加轮询时间：API 可能需要 200-300 秒才响应
+        // 原来：60 次 × 3 秒 = 180 秒，不够
+        // 现在：120 次 × 3 秒 = 360 秒（6 分钟），足够处理慢响应
         let pollCount = 0;
-        const maxPolls = needPolling ? 20 : 60;
-        const pollInterval = needPolling ? 2000 : 3000;
+        const maxPolls = needPolling ? 60 : 120;  // 增加轮询次数
+        const pollInterval = needPolling ? 3000 : 3000;
         const taskIdToTrack = task.id; // 保存任务ID用于状态检查
 
         const pollTimer = setInterval(async () => {
@@ -1105,16 +1174,17 @@ export default function ImageBatchPage() {
                 ref={fileInputRef}
               />
 
-              {/* 启动任务核心按钮 */}
+              {/* 上传图片按钮 - Glass Style */}
               <button
-                onClick={() => setShowStartDialog(true)}
-                className="group relative px-8 py-3.5 rounded-full font-bold text-black text-sm transition-all duration-300 bg-gradient-to-r from-mermaid-lime via-mermaid-cyan to-mermaid-pink hover:scale-[1.02] hover:shadow-[0_0_30px_rgba(0,242,234,0.4)] border border-white/20 overflow-hidden"
+                onClick={() => {
+                  if (fileInputRef.current) fileInputRef.current.value = "";
+                  fileInputRef.current?.click();
+                }}
+                className="group relative px-6 py-3.5 rounded-full font-bold text-white text-sm transition-all duration-300 bg-white/5 border border-white/10 hover:bg-white/10 hover:border-mermaid-cyan/50 hover:shadow-[0_0_20px_rgba(0,242,234,0.15)] overflow-hidden"
               >
-                <div className="absolute inset-0 bg-gradient-to-b from-white/40 to-transparent" />
-                <div className="absolute inset-0 bg-[linear-gradient(110deg,transparent,rgba(255,255,255,0.4),transparent)] bg-[length:200%_100%] translate-x-[-100%] group-hover:animate-shimmer transition-opacity duration-300" />
                 <span className="relative z-10 flex items-center gap-2">
-                  <Sparkles className="h-5 w-5" />
-                  启动任务
+                  <FolderUp className="h-4 w-4 text-mermaid-cyan" />
+                  上传图片
                 </span>
               </button>
 
@@ -1140,15 +1210,6 @@ export default function ImageBatchPage() {
               )}
 
               <div className="flex-1" />
-
-              <button
-                onClick={() => setShowSaveTemplate(true)}
-                className="px-6 py-3 rounded-full text-xs font-medium text-white/40 hover:text-white border border-white/5 hover:border-white/20 bg-black/20 hover:bg-black/40 transition-all flex items-center gap-2"
-                title="保存当前配置为方案"
-              >
-                <Save className="h-4 w-4" />
-                保存方案
-              </button>
             </div>
           </div>
         </div >
@@ -1339,18 +1400,10 @@ export default function ImageBatchPage() {
 
           <div className="bg-transparent">
             {tasks.length === 0 ? (
-              // Aurora Card Empty State
-              <div
-                className="group flex flex-col items-center justify-center py-24 rounded-[2rem] border border-white/5 bg-[#0B0C10] relative overflow-hidden cursor-pointer transition-all duration-500 hover:scale-[1.01] hover:shadow-2xl"
-                onClick={() => {
-                  if (fileInputRef.current) {
-                    fileInputRef.current.value = "";
-                  }
-                  fileInputRef.current?.click();
-                }}
-              >
+              // Aurora Card Empty State (Display Only)
+              <div className="group flex flex-col items-center justify-center py-24 rounded-[2rem] border border-white/5 bg-[#0B0C10] relative overflow-hidden">
                 {/* Aurora Background Effect */}
-                <div className="absolute inset-0 bg-gradient-to-br from-mermaid-cyan/5 via-transparent to-mermaid-pink/5 opacity-50 group-hover:opacity-100 transition-opacity duration-1000" />
+                <div className="absolute inset-0 bg-gradient-to-br from-mermaid-cyan/5 via-transparent to-mermaid-pink/5 opacity-50" />
                 <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-10" />
 
                 {/* Animated Rings */}
@@ -1358,36 +1411,103 @@ export default function ImageBatchPage() {
                 <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[300px] h-[300px] border border-white/5 rounded-full animate-[spin_15s_linear_infinite_reverse]" />
 
                 <div className="relative z-10 flex flex-col items-center">
-                  <div className="h-24 w-24 rounded-3xl bg-[#050505] border border-white/10 flex items-center justify-center mb-8 shadow-2xl group-hover:scale-110 transition-transform duration-500 group-hover:border-mermaid-cyan/30 group-hover:shadow-[0_0_40px_rgba(0,242,234,0.15)]">
-                    <div className="absolute inset-0 bg-gradient-to-br from-mermaid-cyan/10 to-mermaid-pink/10 rounded-3xl opacity-0 group-hover:opacity-100 transition-opacity" />
-                    <FolderUp className="h-10 w-10 text-white/20 group-hover:text-mermaid-cyan transition-colors duration-500" />
-                  </div>
-
-                  <h3 className="text-2xl font-bold text-white mb-2 tracking-tight">
-                    拖放图片到此处
-                  </h3>
-                  <p className="text-white/40 text-sm max-w-md text-center leading-relaxed">
-                    支持 JPG, PNG, WEBP · 自动处理流水线已就绪
-                  </p>
-
-                  <div className="mt-8 px-6 py-2 rounded-full border border-white/5 bg-white/5 text-[10px] uppercase tracking-widest text-white/30 group-hover:bg-mermaid-cyan/10 group-hover:text-mermaid-cyan group-hover:border-mermaid-cyan/20 transition-all">
-                    点击浏览文件
-                  </div>
+                  {uploadedImages.length > 0 ? (
+                    <>
+                      {/* 有图片但未创建任务 */}
+                      <div className="flex flex-wrap gap-3 justify-center mb-6 max-w-2xl">
+                        {uploadedImages.slice(0, 8).map((img, i) => (
+                          <div key={`preview-${i}-${img.name}`} className="w-20 h-20 rounded-xl overflow-hidden border border-white/20 shadow-lg">
+                            <img src={img.previewUrl} alt={img.name} className="w-full h-full object-cover" />
+                          </div>
+                        ))}
+                        {uploadedImages.length > 8 && (
+                          <div className="w-20 h-20 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center">
+                            <span className="text-white/40 text-sm font-medium">+{uploadedImages.length - 8}</span>
+                          </div>
+                        )}
+                      </div>
+                      <h3 className="text-xl font-bold text-white/80 mb-2 tracking-tight">
+                        已上传 {uploadedImages.length} 张图片
+                      </h3>
+                      <p className="text-white/40 text-sm max-w-md text-center leading-relaxed mb-4">
+                        点击「创建任务」按钮开始处理
+                      </p>
+                      <button
+                        onClick={clearUploadedImages}
+                        className="text-xs text-red-400/60 hover:text-red-400 transition-colors"
+                      >
+                        清除所有图片
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      {/* 真正的空状态 */}
+                      <div className="h-24 w-24 rounded-3xl bg-[#050505] border border-white/10 flex items-center justify-center mb-8 shadow-2xl">
+                        <LayoutGrid className="h-10 w-10 text-white/20" />
+                      </div>
+                      <h3 className="text-2xl font-bold text-white/60 mb-2 tracking-tight">
+                        任务队列为空
+                      </h3>
+                      <p className="text-white/40 text-sm max-w-md text-center leading-relaxed">
+                        请使用上方「上传图片」按钮添加任务
+                      </p>
+                    </>
+                  )}
                 </div>
               </div>
             ) : (
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-                {tasks.map((task) => (
-                  <TaskCard
-                    key={task.id}
-                    task={task}
-                    isSelected={!!selectedTaskIds[task.id]}
-                    onToggleSelect={() => toggleTaskSelection(task.id)}
-                    onRemove={() => removeTask(task.id)}
-                    onStartSingle={() => handleProcessSingleTask(task)}
-                    onPreview={() => setPreviewTask(task)}
-                  />
-                ))}
+              <div className="space-y-6">
+                {/* 新上传的图片预览 - 当有任务且有新上传图片时显示 */}
+                {uploadedImages.length > 0 && (
+                  <div className="p-4 rounded-2xl bg-gradient-to-br from-mermaid-cyan/5 to-mermaid-pink/5 border border-white/10">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold text-mermaid-cyan uppercase tracking-wider">
+                          📷 待处理图片
+                        </span>
+                        <span className="px-2 py-0.5 rounded-full bg-mermaid-cyan/20 text-mermaid-cyan text-[10px] font-bold">
+                          {uploadedImages.length}
+                        </span>
+                      </div>
+                      <button
+                        onClick={clearUploadedImages}
+                        className="text-[10px] text-red-400/60 hover:text-red-400 transition-colors"
+                      >
+                        清除
+                      </button>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {uploadedImages.slice(0, 10).map((img, i) => (
+                        <div key={`pending-${i}-${img.name}`} className="w-14 h-14 rounded-lg overflow-hidden border border-white/20">
+                          <img src={img.previewUrl} alt={img.name} className="w-full h-full object-cover" />
+                        </div>
+                      ))}
+                      {uploadedImages.length > 10 && (
+                        <div className="w-14 h-14 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center">
+                          <span className="text-white/40 text-xs">+{uploadedImages.length - 10}</span>
+                        </div>
+                      )}
+                    </div>
+                    <p className="text-[10px] text-white/40 mt-2">
+                      点击「创建任务」将这些图片添加到处理队列
+                    </p>
+                  </div>
+                )}
+
+                {/* 任务卡片网格 */}
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+                  {tasks.map((task) => (
+                    <TaskCard
+                      key={task.id}
+                      task={task}
+                      isSelected={!!selectedTaskIds[task.id]}
+                      onToggleSelect={() => toggleTaskSelection(task.id)}
+                      onRemove={() => removeTask(task.id)}
+                      onStartSingle={() => handleProcessSingleTask(task)}
+                      onPreview={() => setPreviewTask(task)}
+                    />
+                  ))}
+                </div>
               </div>
             )}
           </div>
@@ -1397,7 +1517,7 @@ export default function ImageBatchPage() {
         {/* 底部状态栏 - 仅显示统计信息，单个任务手动点击开始 */}
         {/* ============================================ */}
         {
-          tasks.length > 0 && (
+          (tasks.length > 0 || globalSettings.prompt) && (
             <div className="fixed bottom-0 left-0 right-0 z-50 border-t border-white/5 bg-[#050505]/80 backdrop-blur-2xl supports-[backdrop-filter]:bg-[#050505]/60 shadow-[0_-10px_40px_rgba(0,0,0,0.5)]">
               <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
               <div className="container max-w-7xl mx-auto px-6 py-4">
@@ -1454,42 +1574,45 @@ export default function ImageBatchPage() {
 
                   {/* 操作按钮组 */}
                   <div className="flex items-center gap-3">
-                    {/* 清空按钮 */}
+                    {/* 清空按钮 - Glass Style */}
                     <button
-                      onClick={clearAllTasks}
-                      className="px-4 py-2 rounded-full text-xs font-medium text-white/30 hover:text-red-400 transition-colors flex items-center gap-2 hover:bg-red-500/10"
+                      onClick={() => {
+                        clearAllTasks();
+                        clearUploadedImages();
+                        updateGlobalSettings("prompt", "");
+                      }}
+                      className="group relative px-5 py-2.5 rounded-full font-medium text-white text-xs transition-all duration-300 bg-white/5 border border-white/10 hover:bg-red-500/10 hover:border-red-500/30 hover:text-red-400"
                     >
-                      CLEAR ALL
+                      <span className="relative z-10 flex items-center gap-2">
+                        <Trash2 className="h-3.5 w-3.5" />
+                        清空全部
+                      </span>
                     </button>
 
-                    {/* 开始按钮 - Mermaid Ultra Scale */}
+                    {/* 创建任务按钮 - Gradient Style */}
                     <button
-                      onClick={handleStartAll}
-                      disabled={stats.processing > 0 || stats.pending === 0}
+                      onClick={() => setShowStartDialog(true)}
+                      disabled={stats.pending === 0 && uploadedImages.length === 0 && !globalSettings.prompt}
                       className={cn(
-                        "group relative px-8 py-3 rounded-full font-bold text-black text-xs transition-all duration-300 overflow-hidden",
-                        stats.processing > 0 || stats.pending === 0
+                        "group relative px-12 py-4 rounded-full font-bold text-sm transition-all duration-300 overflow-hidden",
+                        stats.pending === 0 && uploadedImages.length === 0 && !globalSettings.prompt
                           ? "bg-white/5 text-white/20 cursor-not-allowed border border-white/5"
-                          : "bg-gradient-to-r from-mermaid-lime via-mermaid-cyan to-mermaid-pink hover:scale-[1.02] hover:shadow-[0_0_30px_rgba(0,242,234,0.4)] border border-white/20"
+                          : "bg-gradient-to-r from-mermaid-lime via-mermaid-cyan to-mermaid-pink text-black hover:scale-[1.02] hover:shadow-[0_0_40px_rgba(0,242,234,0.5)] border border-white/20"
                       )}
                     >
-                      {!(stats.processing > 0 || stats.pending === 0) && (
+                      {!(stats.pending === 0 && uploadedImages.length === 0 && !globalSettings.prompt) && (
                         <>
                           <div className="absolute inset-0 bg-gradient-to-b from-white/40 to-transparent" />
                           <div className="absolute inset-0 bg-[linear-gradient(110deg,transparent,rgba(255,255,255,0.4),transparent)] bg-[length:200%_100%] translate-x-[-100%] group-hover:animate-shimmer transition-opacity duration-300" />
                         </>
                       )}
-                      <span className="relative z-10 flex items-center gap-2 tracking-wide">
-                        {stats.processing > 0 ? (
-                          <>
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                            PROCESSING PIPELINE...
-                          </>
-                        ) : (
-                          <>
-                            <Sparkles className="h-4 w-4" />
-                            START BATCH PIPELINE
-                          </>
+                      <span className="relative z-10 flex items-center gap-2">
+                        <Sparkles className="h-5 w-5" />
+                        创建任务
+                        {(uploadedImages.length > 0 || globalSettings.prompt) && (
+                          <span className="ml-1 px-2 py-0.5 rounded-full bg-black/20 text-[10px] font-bold">
+                            {uploadedImages.length > 0 ? uploadedImages.length : ""}
+                          </span>
                         )}
                       </span>
                     </button>
@@ -1637,17 +1760,23 @@ export default function ImageBatchPage() {
                 </div>
               )}
 
-              {/* 已上传图片预览 - 有图片时显示（只读） */}
-              {uploadedImages.length > 0 && (
+              {/* 场景2: 图片模式 - 显示 uploadedImages */}
+              {scenario === "image" && uploadedImages.length > 0 && (
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <Label className="text-xs font-bold text-white/40 uppercase tracking-wider">
-                      已上传图片 <span className="text-mermaid-cyan">({uploadedImages.length})</span>
+                      待处理图片 <span className="text-mermaid-cyan">({uploadedImages.length})</span>
                     </Label>
+                    <button
+                      onClick={clearUploadedImages}
+                      className="text-[10px] text-red-400/60 hover:text-red-400 transition-colors"
+                    >
+                      清除图片
+                    </button>
                   </div>
                   <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto p-3 rounded-xl bg-black/20 border border-white/5">
                     {uploadedImages.slice(0, 12).map((img, i) => (
-                      <div key={i} className="w-14 h-14 rounded-lg overflow-hidden border border-white/10 flex-shrink-0">
+                      <div key={`img-${i}-${img.name}`} className="w-14 h-14 rounded-lg overflow-hidden border border-white/10 flex-shrink-0">
                         <img src={img.previewUrl} alt={img.name} className="w-full h-full object-cover" />
                       </div>
                     ))}
@@ -1701,18 +1830,6 @@ export default function ImageBatchPage() {
                 </div>
               )}
 
-              {/* 提示词预览 - 图片/Excel场景显示全局提示词 */}
-              {(scenario === "image" || scenario === "excel") && globalSettings.prompt && (
-                <div className="p-4 rounded-xl bg-black/20 border border-white/5">
-                  <div className="flex items-start gap-3">
-                    <FileText className="h-4 w-4 text-mermaid-cyan shrink-0 mt-0.5" />
-                    <div className="space-y-1">
-                      <span className="text-[10px] text-white/30 uppercase tracking-wider">提示词</span>
-                      <p className="text-sm text-white/70 line-clamp-2">{globalSettings.prompt}</p>
-                    </div>
-                  </div>
-                </div>
-              )}
 
               {/* 配置状态栏 - 所有场景通用 */}
               <div className="p-5 rounded-2xl bg-black/20 border border-white/5 space-y-5">
@@ -1813,7 +1930,7 @@ export default function ImageBatchPage() {
 
                 {/* Mermaid Ultra Button - 启动任务 */}
                 <button
-                  onClick={() => {
+                  onClick={async () => {
                     // 场景1需要验证提示词
                     if (scenario === "prompt" && !globalSettings.prompt.trim()) {
                       toast({ variant: "destructive", title: "请输入提示词" });
@@ -1831,9 +1948,32 @@ export default function ImageBatchPage() {
                     }
 
                     const ids = createTasksFromScenario();
-                    toast({ title: `✅ 已创建 ${ids.length} 个任务` });
-                    resetScenarioData();
+                    const taskCount = ids.length;
+                    toast({ title: `🚀 已创建 ${taskCount} 个任务，正在启动处理...` });
+                    // 注意：不能立即调用 resetScenarioData()，因为它会撤销 blob URLs
+                    // 必须等所有任务都开始处理后再清理 (每任务 500ms 错峰 + 3秒缓冲)
                     setShowStartDialog(false);
+
+                    // 自动开始处理任务 - 并发执行 + 错峰启动 (支持100-200任务批量)
+                    // 使用 setTimeout 让 UI 先更新，然后并发启动所有任务
+                    setTimeout(() => {
+                      const newTasks = useImageBatchStore.getState().tasks.filter(t => ids.includes(t.id));
+                      // 并发启动所有任务，每个任务错峰 500ms 开始，避免 API 限流
+                      newTasks.forEach((task, i) => {
+                        if (task.status === "pending") {
+                          setTimeout(() => {
+                            handleProcessSingleTask(task);
+                          }, i * 500); // 每个任务间隔 500ms 启动，减少 API 压力
+                        }
+                      });
+
+                      // 所有任务都已调度启动后，再清理场景数据（延迟足够时间让所有 blob fetch 完成）
+                      // 每个任务 500ms 错峰 + 3秒缓冲（让 OSS 上传完成）
+                      setTimeout(() => {
+                        resetScenarioData();
+                        console.log("[Image Batch] Scene data reset after all tasks started");
+                      }, newTasks.length * 500 + 3000);
+                    }, 100);
                   }}
                   disabled={
                     (scenario === "prompt" && !globalSettings.prompt.trim()) ||
