@@ -2447,7 +2447,7 @@ export default function PublishPage() {
                                                 <div className="mx-auto md:mx-0 w-[240px] aspect-[9/16] rounded-xl overflow-hidden bg-black flex-shrink-0 relative shadow-2xl border border-white/10 ring-1 ring-white/5">
                                                     <video
                                                         id={`cover-video-${video.id}-modal`}
-                                                        src={videoBlobCache[video.id] || video.localUrl || video.url}
+                                                        src={video.localUrl || video.url}
                                                         crossOrigin="anonymous"
                                                         className="w-full h-full object-cover"
                                                         muted
@@ -2455,7 +2455,14 @@ export default function PublishPage() {
                                                         preload="auto"
                                                         onLoadedData={(e) => {
                                                             // Seek to first frame once video data is loaded
+                                                            console.log('[Cover] Video loaded, seeking to 0.1')
                                                             e.currentTarget.currentTime = 0.1
+                                                        }}
+                                                        onSeeked={(e) => {
+                                                            console.log('[Cover] Video seeked to:', e.currentTarget.currentTime.toFixed(2))
+                                                        }}
+                                                        onError={(e) => {
+                                                            console.error('[Cover] Video error:', e)
                                                         }}
                                                     />
                                                     <div className="absolute bottom-3 left-3 right-3 bg-black/70 backdrop-blur-md rounded-lg px-2 py-1.5 border border-white/10">
