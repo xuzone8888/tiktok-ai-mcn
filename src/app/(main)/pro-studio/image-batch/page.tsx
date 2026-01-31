@@ -1605,40 +1605,38 @@ export default function ImageBatchPage() {
             </div>
 
             <div className="p-8 space-y-6">
-              {/* 场景1: 纯提示词模式 - 提示词输入 */}
-              {scenario === "prompt" && (
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <Label className="text-xs font-bold text-white/60 uppercase tracking-wider">
-                      Creative Prompt <span className="text-mermaid-pink">*</span>
-                    </Label>
-                    <span className="text-[10px] text-white/20">SUPPORTS MULTI-LANGUAGE</span>
-                  </div>
-                  <div className="relative group">
-                    <div className="absolute -inset-0.5 bg-gradient-to-r from-mermaid-cyan/20 to-mermaid-pink/20 rounded-xl opacity-0 group-hover:opacity-100 transition duration-500 blur" />
-                    <textarea
-                      value={globalSettings.prompt}
-                      onChange={(e) => updateGlobalSettings("prompt", e.target.value)}
-                      placeholder="在此输入提示词，详细描述画面内容、风格、光影等（支持中英文）..."
-                      className="relative w-full h-40 px-5 py-4 text-sm bg-[#050505] border border-white/10 rounded-xl text-white placeholder:text-white/20 focus:outline-none focus:border-mermaid-cyan/50 focus:ring-1 focus:ring-mermaid-cyan/20 resize-none transition-all duration-300"
-                    />
-                  </div>
+              {/* 提示词预览 - 所有场景通用（只读） */}
+              {globalSettings.prompt && (
+                <div className="space-y-2">
+                  <Label className="text-xs font-bold text-white/40 uppercase tracking-wider">
+                    提示词 <span className="text-white/20">PROMPT</span>
+                  </Label>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div className="p-4 rounded-xl bg-black/20 border border-white/5 cursor-help">
+                        <p className="text-sm text-white/70 line-clamp-3">{globalSettings.prompt}</p>
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" className="max-w-md bg-[#16181D] border-white/10">
+                      <p className="text-sm text-white/80 whitespace-pre-wrap">{globalSettings.prompt}</p>
+                    </TooltipContent>
+                  </Tooltip>
                 </div>
               )}
 
-              {/* 场景2: 图片改造模式 - 图片预览 */}
-              {scenario === "image" && (
-                <div className="space-y-3">
+              {!globalSettings.prompt && (
+                <div className="p-4 rounded-xl bg-amber-500/5 border border-amber-500/20">
+                  <p className="text-sm text-amber-400/80">⚠️ 请先在配置区域输入提示词</p>
+                </div>
+              )}
+
+              {/* 已上传图片预览 - 有图片时显示（只读） */}
+              {uploadedImages.length > 0 && (
+                <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <Label className="text-xs font-bold text-white/60 uppercase tracking-wider">
+                    <Label className="text-xs font-bold text-white/40 uppercase tracking-wider">
                       已上传图片 <span className="text-mermaid-cyan">({uploadedImages.length})</span>
                     </Label>
-                    <button
-                      onClick={clearUploadedImages}
-                      className="text-[10px] text-red-400/60 hover:text-red-400 transition-colors"
-                    >
-                      清除全部
-                    </button>
                   </div>
                   <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto p-3 rounded-xl bg-black/20 border border-white/5">
                     {uploadedImages.slice(0, 12).map((img, i) => (
@@ -1652,13 +1650,6 @@ export default function ImageBatchPage() {
                       </div>
                     )}
                   </div>
-                  {/* 图片模式也可以输入提示词 */}
-                  <textarea
-                    value={globalSettings.prompt}
-                    onChange={(e) => updateGlobalSettings("prompt", e.target.value)}
-                    placeholder="输入提示词引导图片改造方向（可选）..."
-                    className="w-full h-20 px-4 py-3 text-sm bg-[#050505] border border-white/10 rounded-xl text-white placeholder:text-white/20 focus:outline-none focus:border-mermaid-cyan/50 resize-none"
-                  />
                 </div>
               )}
 
