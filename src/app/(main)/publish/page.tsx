@@ -2516,11 +2516,16 @@ export default function PublishPage() {
                                                             onClick={async () => {
                                                                 console.log('[Cover] Button clicked, starting capture...')
                                                                 const videoEl = document.getElementById(`cover-video-${video.id}-modal`) as HTMLVideoElement
+                                                                const sliderEl = document.querySelector(`input[type="range"]`) as HTMLInputElement
                                                                 console.log('[Cover] Video element:', videoEl ? 'found' : 'NOT FOUND')
-                                                                if (videoEl) {
+                                                                console.log('[Cover] Slider element:', sliderEl ? 'found' : 'NOT FOUND')
+
+                                                                if (videoEl && sliderEl) {
                                                                     console.log('[Cover] readyState:', videoEl.readyState, 'duration:', videoEl.duration, 'currentTime:', videoEl.currentTime)
                                                                     console.log('[Cover] dimensions:', videoEl.videoWidth, 'x', videoEl.videoHeight)
                                                                     console.log('[Cover] src:', videoEl.src?.substring(0, 80))
+                                                                    console.log('[Cover] Slider value:', sliderEl.value)
+
                                                                     try {
                                                                         // Check if video is ready
                                                                         if (videoEl.readyState < 2) {
@@ -2535,6 +2540,44 @@ export default function PublishPage() {
                                                                             toast({ variant: "destructive", title: "视频未加载", description: "视频帧未加载，请稍后重试或刷新页面后重试" })
                                                                             return
                                                                         }
+
+                                                                        // Calculate target time from slider value
+                                                                        const sliderValue = parseInt(sliderEl.value) || 1
+                                                                        const targetTime = (sliderValue / 100) * videoEl.duration
+                                                                        console.log('[Cover] Target time from slider:', targetTime.toFixed(2))
+
+                                                                        // Seek to target time and wait for seeked event
+                                                                        await new Promise<void>((resolve, reject) => {
+                                                                            const timeout = setTimeout(() => {
+                                                                                console.log('[Cover] Seek timeout, proceeding anyway')
+                                                                                resolve()
+                                                                            }, 2000) // 2 second timeout
+
+                                                                            const onSeeked = () => {
+                                                                                clearTimeout(timeout)
+                                                                                console.log('[Cover] Seek completed, currentTime:', videoEl.currentTime.toFixed(2))
+                                                                                videoEl.removeEventListener('seeked', onSeeked)
+                                                                                resolve()
+                                                                            }
+
+                                                                            videoEl.addEventListener('seeked', onSeeked)
+
+                                                                            // If already at target time, resolve immediately
+                                                                            if (Math.abs(videoEl.currentTime - targetTime) < 0.1) {
+                                                                                clearTimeout(timeout)
+                                                                                videoEl.removeEventListener('seeked', onSeeked)
+                                                                                console.log('[Cover] Already at target time')
+                                                                                resolve()
+                                                                            } else {
+                                                                                console.log('[Cover] Seeking to:', targetTime.toFixed(2))
+                                                                                videoEl.currentTime = targetTime
+                                                                            }
+                                                                        })
+
+                                                                        // Small delay to ensure frame is rendered
+                                                                        await new Promise(resolve => setTimeout(resolve, 100))
+
+                                                                        console.log('[Cover] After seek, currentTime:', videoEl.currentTime.toFixed(2))
 
                                                                         console.log('[Cover] Creating canvas...')
                                                                         const canvas = document.createElement('canvas')
@@ -2565,7 +2608,7 @@ export default function PublishPage() {
                                                                             console.log('[Cover] Converting to dataURL...')
                                                                             const frameData = canvas.toDataURL('image/jpeg', 0.9)
                                                                             const timestampMs = Math.round(videoEl.currentTime * 1000)
-                                                                            console.log('[Cover] SUCCESS! Updating cover, frameData length:', frameData.length)
+                                                                            console.log('[Cover] SUCCESS! Updating cover, frameData length:', frameData.length, 'at time:', timestampMs, 'ms')
                                                                             updateVideoCover(video.id, frameData, timestampMs)
                                                                             setExpandedVideoId(null)
                                                                             toast({ title: "封面已更新", description: "✅ 已成功设置选定帧为视频封面" })
