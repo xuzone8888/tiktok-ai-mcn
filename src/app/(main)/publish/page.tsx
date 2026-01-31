@@ -118,6 +118,7 @@ type TabType = 'create' | 'tasks'
 type VideoSourceType = 'upload' | 'asset'  // Only support local upload and asset library
 
 export default function PublishPage() {
+    console.log('[PublishPage] v2024.01.31-A - Component loaded')
     const router = useRouter()
     const { toast } = useToast()
     const fileInputRef = useRef<HTMLInputElement>(null)
