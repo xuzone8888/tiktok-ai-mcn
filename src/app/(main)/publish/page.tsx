@@ -2513,34 +2513,46 @@ export default function PublishPage() {
                                                     <div className="grid grid-cols-1 gap-3 pt-2">
                                                         <button
                                                             onClick={async () => {
+                                                                console.log('[Cover] Button clicked, starting capture...')
                                                                 const videoEl = document.getElementById(`cover-video-${video.id}-modal`) as HTMLVideoElement
+                                                                console.log('[Cover] Video element:', videoEl ? 'found' : 'NOT FOUND')
                                                                 if (videoEl) {
+                                                                    console.log('[Cover] readyState:', videoEl.readyState, 'duration:', videoEl.duration, 'currentTime:', videoEl.currentTime)
+                                                                    console.log('[Cover] dimensions:', videoEl.videoWidth, 'x', videoEl.videoHeight)
+                                                                    console.log('[Cover] src:', videoEl.src?.substring(0, 80))
                                                                     try {
                                                                         // Check if video is ready
                                                                         if (videoEl.readyState < 2) {
+                                                                            console.log('[Cover] FAILED: readyState < 2')
                                                                             toast({ variant: "destructive", title: "视频未就绪", description: "请等待视频加载完成后再选择封面" })
                                                                             return
                                                                         }
 
                                                                         // Check if video has actual dimensions
                                                                         if (!videoEl.videoWidth || !videoEl.videoHeight) {
+                                                                            console.log('[Cover] FAILED: no dimensions')
                                                                             toast({ variant: "destructive", title: "视频未加载", description: "视频帧未加载，请稍后重试或刷新页面后重试" })
                                                                             return
                                                                         }
 
+                                                                        console.log('[Cover] Creating canvas...')
                                                                         const canvas = document.createElement('canvas')
                                                                         canvas.width = videoEl.videoWidth
                                                                         canvas.height = videoEl.videoHeight
                                                                         const ctx = canvas.getContext('2d')
                                                                         if (ctx) {
+                                                                            console.log('[Cover] Drawing video to canvas...')
                                                                             ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height)
 
+                                                                            console.log('[Cover] Getting image data to check content...')
                                                                             // Check if canvas actually has content (not just black)
                                                                             const imageData = ctx.getImageData(0, 0, 10, 10)
                                                                             const hasContent = imageData.data.some((val, idx) => idx % 4 !== 3 && val > 0)
+                                                                            console.log('[Cover] hasContent:', hasContent)
 
                                                                             if (!hasContent) {
                                                                                 // Canvas is black - likely CORS issue or video not loaded
+                                                                                console.log('[Cover] FAILED: canvas is black')
                                                                                 toast({
                                                                                     variant: "destructive",
                                                                                     title: "封面提取失败",
@@ -2549,11 +2561,15 @@ export default function PublishPage() {
                                                                                 return
                                                                             }
 
+                                                                            console.log('[Cover] Converting to dataURL...')
                                                                             const frameData = canvas.toDataURL('image/jpeg', 0.9)
                                                                             const timestampMs = Math.round(videoEl.currentTime * 1000)
+                                                                            console.log('[Cover] SUCCESS! Updating cover, frameData length:', frameData.length)
                                                                             updateVideoCover(video.id, frameData, timestampMs)
                                                                             setExpandedVideoId(null)
                                                                             toast({ title: "封面已更新", description: "✅ 已成功设置选定帧为视频封面" })
+                                                                        } else {
+                                                                            console.log('[Cover] FAILED: no canvas context')
                                                                         }
                                                                     } catch (error) {
                                                                         console.error('Failed to capture frame:', error)
