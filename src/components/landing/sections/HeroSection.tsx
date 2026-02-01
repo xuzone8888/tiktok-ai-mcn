@@ -151,12 +151,12 @@ export default function HeroSection() {
                                     <h3 className="text-2xl font-bold text-white mb-4">请先登录</h3>
                                     <p className="text-gray-400 mb-6">登录后即可选择 AI 模特，开始生成视频</p>
                                     <div className="flex flex-col gap-3">
-                                        <Link href="/auth/login">
+                                        <Link href="/auth/login?redirect=/models">
                                             <button className="w-full bg-gradient-to-b from-white to-gray-100 text-black hover:to-white py-3 rounded-xl font-medium transition-all">
                                                 立即登录
                                             </button>
                                         </Link>
-                                        <Link href="/auth/register">
+                                        <Link href="/auth/register?redirect=/models">
                                             <button className="w-full bg-white/10 text-white border border-white/20 py-3 rounded-xl font-medium hover:bg-white/20 transition-all">
                                                 免费注册
                                             </button>

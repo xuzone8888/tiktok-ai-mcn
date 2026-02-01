@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import ReflectiveCard from "@/components/ui/ReflectiveCard";
@@ -12,7 +12,11 @@ import { useToast } from "@/hooks/use-toast";
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { toast } = useToast();
+
+  // 获取重定向目标
+  const redirectTo = searchParams.get('redirect') || '/dashboard';
 
   // 登录方式: password (密码登录) | phone (手机验证码) | email (邮箱验证码)
   const [loginMethod, setLoginMethod] = useState<"password" | "phone" | "email">("password");
@@ -81,8 +85,8 @@ export default function LoginPage() {
                 description: "正在跳转到控制台...",
               });
 
-              // 跳转到 dashboard
-              window.location.replace("/dashboard");
+              // 跳转到目标页面
+              window.location.replace(redirectTo);
             }
           } catch (err) {
             console.error("Auth callback error:", err);
@@ -195,9 +199,8 @@ export default function LoginPage() {
           title: "🎉 登录成功！",
           description: "正在跳转到控制台...",
         });
-        // 使用 window.location 强制跳转，确保 session 同步
         setTimeout(() => {
-          window.location.href = "/dashboard";
+          window.location.href = redirectTo;
         }, 500);
       }
     } catch (error: any) {
@@ -241,9 +244,8 @@ export default function LoginPage() {
           title: "登录成功！",
           description: "正在跳转到控制台...",
         });
-        // 使用 window.location 强制跳转，确保 session 同步
         setTimeout(() => {
-          window.location.href = "/dashboard";
+          window.location.href = redirectTo;
         }, 500);
       }
     } catch (error: any) {
@@ -380,8 +382,8 @@ export default function LoginPage() {
           const actionUrl = new URL(result.actionLink);
           const currentOrigin = window.location.origin;
 
-          // 更新 redirect_to 参数为当前域名 + /dashboard
-          actionUrl.searchParams.set('redirect_to', `${currentOrigin}/dashboard`);
+          // 更新 redirect_to 参数为当前域名 + 目标页面
+          actionUrl.searchParams.set('redirect_to', `${currentOrigin}${redirectTo}`);
 
           const adaptedLink = actionUrl.toString();
           console.log("Adapted link:", adaptedLink);
@@ -399,7 +401,7 @@ export default function LoginPage() {
       });
 
       setIsLoading(false);
-      window.location.replace("/dashboard");
+      window.location.replace(redirectTo);
       return;
     } catch (error: any) {
       console.error("Phone login error:", error);
