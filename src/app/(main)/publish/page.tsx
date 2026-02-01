@@ -186,6 +186,9 @@ export default function PublishPage() {
     // Privacy level for TikTok publishing
     const [privacyLevel, setPrivacyLevel] = useState<'PUBLIC_TO_EVERYONE' | 'MUTUAL_FOLLOW_FRIENDS' | 'FOLLOWER_OF_CREATOR' | 'SELF_ONLY'>('SELF_ONLY')
 
+    // AI generated content flag (default OFF - user can opt-in)
+    const [isAiGenerated, setIsAiGenerated] = useState(false)
+
     // Expanded video for editing (shows cover options inline)
     const [expandedVideoId, setExpandedVideoId] = useState<string | null>(null)
 
@@ -967,7 +970,7 @@ export default function PublishPage() {
                     allow_duet: true,
                     allow_stitch: true,
                     is_brand_content: false,
-                    is_ai_generated: true,  // Default to AI-generated since this is AI MCN platform
+                    is_ai_generated: isAiGenerated,  // User can opt-in to mark as AI content
                     publish_mode: publishMode,
                     scheduled_at: publishMode === 'scheduled'
                         ? new Date(`${scheduledDate}T${scheduledTime}`).toISOString()
@@ -1661,6 +1664,30 @@ export default function PublishPage() {
                                     })}
                                 </div>
 
+                            </div>
+
+                            {/* AI Generated Content Toggle */}
+                            <div className="mt-4 flex items-center justify-between p-4 bg-black/30 rounded-xl border border-white/10">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-purple-500/20 to-pink-500/20 flex items-center justify-center">
+                                        <Sparkles className="w-5 h-5 text-purple-400" />
+                                    </div>
+                                    <div>
+                                        <p className="text-sm font-medium text-white">AI 生成内容</p>
+                                        <p className="text-xs text-gray-500">标记视频为 AI 生成，符合 TikTok 政策</p>
+                                    </div>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => setIsAiGenerated(!isAiGenerated)}
+                                    className={`relative w-12 h-6 rounded-full transition-colors duration-300 ${isAiGenerated ? 'bg-purple-500' : 'bg-white/10'
+                                        }`}
+                                >
+                                    <span
+                                        className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow-md transition-all duration-300 ${isAiGenerated ? 'left-7' : 'left-1'
+                                            }`}
+                                    />
+                                </button>
                             </div>
                         </div >
                     </section >
