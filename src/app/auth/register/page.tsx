@@ -83,7 +83,7 @@ export default function RegisterPage() {
             name,
             role: "user",
             credits: 100, // 新用户赠送 100 积分
-          });
+          } as any);
 
         if (profileError) {
           console.error("Profile creation error:", profileError);
@@ -98,7 +98,7 @@ export default function RegisterPage() {
         // 如果邮箱验证被禁用，直接跳转
         if (data.session) {
           setTimeout(() => {
-            router.push("/dashboard");
+            router.push("/models");
             router.refresh();
           }, 2000);
         }

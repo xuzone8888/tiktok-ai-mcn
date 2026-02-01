@@ -17,7 +17,7 @@ function LoginPageContent() {
   const { toast } = useToast();
 
   // 获取重定向目标
-  const redirectTo = searchParams.get('redirect') || '/dashboard';
+  const redirectTo = searchParams.get('redirect') || '/models';
 
   // 登录方式: password (密码登录) | phone (手机验证码) | email (邮箱验证码)
   const [loginMethod, setLoginMethod] = useState<"password" | "phone" | "email">("password");
@@ -193,7 +193,7 @@ function LoginPageContent() {
             name: data.user.email?.split("@")[0] || "用户",
             role: "user",
             credits: 100, // 新用户赠送积分
-          });
+          } as any);
         }
 
         toast({
