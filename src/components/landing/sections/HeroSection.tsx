@@ -123,16 +123,24 @@ export default function HeroSection() {
                         {heroData.subheadline}
                     </p>
 
-                    {/* 行动按钮 */}
+                    {/* Reflective 输入框 */}
                     <div className="max-w-2xl mx-auto mb-10">
-                        <button
-                            onClick={handleGoToModels}
-                            className="bg-gradient-to-b from-white to-gray-100 text-black hover:to-white px-8 py-4 rounded-xl font-medium text-lg flex items-center mx-auto shadow-[0_0_20px_rgba(255,255,255,0.3),inset_0_1px_0_rgba(255,255,255,1)] hover:shadow-[0_0_25px_rgba(255,255,255,0.5),inset_0_1px_0_rgba(255,255,255,1)] transition-all duration-300 border-t border-white"
-                        >
-                            <Users className="h-5 w-5 mr-3" />
-                            去选择模特
-                            <ArrowRight className="h-5 w-5 ml-3" />
-                        </button>
+                        <ReflectiveCard className="!rounded-2xl" roughness={0.6}>
+                            <div className="flex items-center p-2">
+                                <input
+                                    type="text"
+                                    placeholder={heroData.inputPlaceholder}
+                                    className="flex-1 bg-transparent text-white placeholder-gray-500 px-4 py-3 text-lg outline-none"
+                                />
+                                <button
+                                    onClick={handleGoToModels}
+                                    className="bg-gradient-to-b from-white to-gray-100 text-black hover:to-white px-6 py-3 rounded-xl font-medium flex items-center shadow-[0_0_20px_rgba(255,255,255,0.3),inset_0_1px_0_rgba(255,255,255,1)] hover:shadow-[0_0_25px_rgba(255,255,255,0.5),inset_0_1px_0_rgba(255,255,255,1)] transition-all duration-300 border-t border-white"
+                                >
+                                    去选择模特
+                                    <ArrowRight className="h-4 w-4 ml-2" />
+                                </button>
+                            </div>
+                        </ReflectiveCard>
                     </div>
 
                     {/* 登录弹窗 */}
