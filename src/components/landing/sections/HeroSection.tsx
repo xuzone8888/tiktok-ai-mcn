@@ -34,6 +34,34 @@ export default function HeroSection() {
                                 </div>
                             </Link>
 
+                            {/* 导航链接 */}
+                            <div className="hidden md:flex items-center gap-1">
+                                <Link
+                                    href="/quick-gen"
+                                    className="px-4 py-2 text-sm text-gray-400 hover:text-white hover:bg-white/5 rounded-lg transition-all"
+                                >
+                                    快速生成
+                                </Link>
+                                <Link
+                                    href="/pricing"
+                                    className="px-4 py-2 text-sm text-gray-400 hover:text-white hover:bg-white/5 rounded-lg transition-all"
+                                >
+                                    价格
+                                </Link>
+                                <Link
+                                    href="/help"
+                                    className="px-4 py-2 text-sm text-gray-400 hover:text-white hover:bg-white/5 rounded-lg transition-all"
+                                >
+                                    帮助
+                                </Link>
+                                <Link
+                                    href="/contact"
+                                    className="px-4 py-2 text-sm text-gray-400 hover:text-white hover:bg-white/5 rounded-lg transition-all"
+                                >
+                                    联系
+                                </Link>
+                            </div>
+
                             <div className="flex items-center gap-3">
                                 <Link href="/auth/login">
                                     <Button
