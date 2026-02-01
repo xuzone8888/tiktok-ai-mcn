@@ -101,10 +101,10 @@ export async function POST(request: Request) {
   try {
     const supabase = createAdminClient();
     const clientSupabase = await createClient();
-    
+
     // 获取当前登录的管理员
     const { data: { user: currentUser } } = await clientSupabase.auth.getUser();
-    
+
     if (!currentUser) {
       return NextResponse.json(
         { success: false, error: "未登录" },
@@ -205,7 +205,7 @@ export async function POST(request: Request) {
             .from("profiles")
             .update({ credits: oldCredits })
             .eq("id", targetUserId);
-          
+
           console.error("[Admin API] Update admin credits error:", updateAdminError);
           return NextResponse.json(
             { success: false, error: "更新管理员积分失败" },
@@ -213,7 +213,17 @@ export async function POST(request: Request) {
           );
         }
 
-        // 触发前端积分刷新
+        // 记录充值交易
+        await supabase.from("credit_transactions").insert({
+          user_id: targetUserId,
+          amount: amount,
+          type: "admin_adjustment",
+          description: `管理员充值: ${reason.trim()}`,
+          balance_before: oldCredits,
+          balance_after: newCredits,
+          created_by: currentUser.id,
+        });
+
         console.log(`[Admin API] Credits recharged: ${targetUser.email} +${amount}, Admin ${adminProfile.email} balance: ${adminNewCredits}`);
 
         result = {
@@ -235,7 +245,7 @@ export async function POST(request: Request) {
       // ============================================
       case "deduct": {
         const deductAmount = Math.abs(amount || 0);
-        
+
         if (deductAmount <= 0) {
           return NextResponse.json(
             { success: false, error: "积分数量必须为正数" },
@@ -289,13 +299,24 @@ export async function POST(request: Request) {
             .from("profiles")
             .update({ credits: oldCredits })
             .eq("id", targetUserId);
-          
+
           console.error("[Admin API] Update admin credits error:", updateAdminError);
           return NextResponse.json(
             { success: false, error: "更新管理员积分失败" },
             { status: 500 }
           );
         }
+
+        // 记录扣除交易
+        await supabase.from("credit_transactions").insert({
+          user_id: targetUserId,
+          amount: -deductAmount,
+          type: "admin_adjustment",
+          description: `管理员扣除: ${reason.trim()}`,
+          balance_before: oldCredits,
+          balance_after: newCredits,
+          created_by: currentUser.id,
+        });
 
         console.log(`[Admin API] Credits deducted: ${targetUser.email} -${deductAmount}, Admin ${adminProfile.email} balance: ${adminNewCredits}`);
 
@@ -349,6 +370,17 @@ export async function POST(request: Request) {
           );
         }
 
+        // 记录系统发放交易
+        await supabase.from("credit_transactions").insert({
+          user_id: targetUserId,
+          amount: amount,
+          type: "bonus",
+          description: `系统发放: ${reason.trim()}`,
+          balance_before: oldCredits,
+          balance_after: newCredits,
+          created_by: currentUser.id,
+        });
+
         console.log(`[Admin API] System granted: ${targetUser.email} +${amount} (by ${adminProfile.email})`);
 
         result = {
@@ -386,13 +418,13 @@ export async function POST(request: Request) {
         // 删除用户的相关数据（按顺序删除以避免外键约束）
         // 1. 删除用户的合约
         await supabase.from("contracts").delete().eq("user_id", targetUserId);
-        
+
         // 2. 删除用户的生成记录
         await supabase.from("generations").delete().eq("user_id", targetUserId);
-        
+
         // 3. 删除用户的积分交易记录
         await supabase.from("credit_transactions").delete().eq("user_id", targetUserId);
-        
+
         // 4. 删除用户的 profile
         const { error: deleteProfileError } = await supabase
           .from("profiles")
@@ -513,7 +545,7 @@ export async function POST(request: Request) {
       // ============================================
       case "setRole": {
         const newRole = body.newRole as UserRole;
-        
+
         if (!newRole || !["user", "creator", "admin", "super_admin"].includes(newRole)) {
           return NextResponse.json(
             { success: false, error: "无效的角色" },

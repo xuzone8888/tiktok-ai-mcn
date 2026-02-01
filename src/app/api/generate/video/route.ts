@@ -56,10 +56,10 @@ const ESTIMATED_TIME_MAP: Record<number, string> = {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    
-    const { 
-      prompt, 
-      duration = 15, 
+
+    const {
+      prompt,
+      duration = 15,
       aspectRatio = "9:16",
       quality = "standard",
       apiModel,
@@ -87,37 +87,37 @@ export async function POST(request: Request) {
     // 计算费用并扣除积分
     // ============================================
     const creditCost = getVideoCreditCost(duration, quality);
-    
+
     if (userId) {
       const supabase = createAdminClient();
-      
+
       // 获取用户当前积分
       const { data: profile, error: profileError } = await supabase
         .from("profiles")
         .select("credits")
         .eq("id", userId)
         .single();
-      
+
       if (profileError || !profile) {
         return NextResponse.json(
           { success: false, error: "User not found" },
           { status: 404 }
         );
       }
-      
+
       if (profile.credits < creditCost) {
         return NextResponse.json(
           { success: false, error: `积分不足！需要 ${creditCost} 积分，当前余额 ${profile.credits}` },
           { status: 400 }
         );
       }
-      
+
       // 扣除积分
       const { error: deductError } = await supabase
         .from("profiles")
         .update({ credits: profile.credits - creditCost })
         .eq("id", userId);
-      
+
       if (deductError) {
         console.error("[Generate Video] Failed to deduct credits:", deductError);
         return NextResponse.json(
@@ -125,7 +125,7 @@ export async function POST(request: Request) {
           { status: 500 }
         );
       }
-      
+
       console.log("[Generate Video] Credits deducted:", {
         userId,
         cost: creditCost,
@@ -145,11 +145,11 @@ export async function POST(request: Request) {
 
     if (modelId) {
       const supabase = createAdminClient();
-      
+
       // 处理 "auto" 模式：从用户已签约的模特中随机选择一个
       if (modelId === "auto" && userId) {
         console.log("[Generate Video] Auto mode: selecting random model for user:", userId);
-        
+
         // 查询用户已签约且未过期的模特
         const { data: contracts } = await supabase
           .from("contracts")
@@ -157,13 +157,13 @@ export async function POST(request: Request) {
           .eq("user_id", userId)
           .eq("status", "active")
           .gt("end_date", new Date().toISOString());
-        
+
         if (contracts && contracts.length > 0) {
           // 随机选择一个模特
           const randomIndex = Math.floor(Math.random() * contracts.length);
           const selectedContract = contracts[randomIndex];
           const modelData = selectedContract.ai_models as { id: string; name: string; trigger_word: string | null };
-          
+
           if (modelData?.trigger_word) {
             triggerWord = modelData.trigger_word;
             actualModelId = modelData.id;
@@ -206,7 +206,7 @@ export async function POST(request: Request) {
 
     // 确定使用的 Sora2 模型
     const isPro = quality === "hd" || duration === 25;
-    
+
     console.log("[Generate Video] Submitting task:", {
       originalPrompt: prompt.substring(0, 50) + "...",
       hasTriggerWord: !!triggerWord,
@@ -229,7 +229,7 @@ export async function POST(request: Request) {
 
     if (!result.success) {
       console.error("[Generate Video] Submit failed:", result.error);
-      
+
       // 如果提交失败，退还积分
       if (userId) {
         try {
@@ -239,13 +239,13 @@ export async function POST(request: Request) {
             .select("credits")
             .eq("id", userId)
             .single();
-          
+
           if (profile) {
             await supabase
               .from("profiles")
               .update({ credits: profile.credits + creditCost })
               .eq("id", userId);
-            
+
             console.log("[Generate Video] Credits refunded due to submit failure:", {
               userId,
               refund: creditCost,
@@ -255,7 +255,7 @@ export async function POST(request: Request) {
           console.error("[Generate Video] Failed to refund credits:", refundError);
         }
       }
-      
+
       return NextResponse.json(
         { success: false, error: result.error },
         { status: 500 }
@@ -357,50 +357,77 @@ export async function GET(request: Request) {
     if (task.status === "completed" || task.status === "failed") {
       try {
         const supabase = createAdminClient();
-        
+
         // 获取 generation 记录以获取 user_id 和 duration
         const { data: generation } = await supabase
           .from("generations")
           .select("user_id, duration, status, credit_cost")
           .eq("task_id", taskId)
           .single();
-        
-        // 更新 generation 状态（注意：generations 表没有 updated_at 字段）
-        await supabase
-          .from("generations")
-          .update({
-            status: task.status,
-            result_url: task.resultUrl || null,
-            video_url: task.resultUrl || null,
-            error_message: task.errorMessage || null,
-            completed_at: task.status === "completed" ? new Date().toISOString() : null,
-          })
-          .eq("task_id", taskId);
-        
-        console.log("[Generate Video] Updated generations table:", taskId, task.status, task.resultUrl ? "has URL" : "no URL");
-        
-        // 如果生成失败，退还积分
-        if (task.status === "failed" && generation?.user_id && generation?.status !== "failed") {
-          const refundAmount = generation.credit_cost || CREDIT_COST_MAP[generation.duration] || 50;
-          
-          const { data: profile } = await supabase
-            .from("profiles")
-            .select("credits")
-            .eq("id", generation.user_id)
+
+        // 使用原子操作更新状态（防止并发重复退款）
+        if (task.status === "failed" && generation?.status === "processing") {
+          // 先尝试原子更新状态
+          const { data: updateResult, error: updateError } = await supabase
+            .from("generations")
+            .update({
+              status: "failed",
+              error_message: task.errorMessage || null,
+            })
+            .eq("task_id", taskId)
+            .eq("status", "processing") // 乐观锁
+            .select()
             .single();
-          
-          if (profile) {
-            await supabase
+
+          // 只有成功更新状态的请求才能退款
+          if (updateResult && !updateError && generation?.user_id) {
+            const refundAmount = generation.credit_cost || CREDIT_COST_MAP[generation.duration] || 50;
+
+            const { data: profile } = await supabase
               .from("profiles")
-              .update({ credits: profile.credits + refundAmount })
-              .eq("id", generation.user_id);
-            
-            console.log("[Generate Video] Credits refunded due to failure:", {
-              userId: generation.user_id,
-              refund: refundAmount,
-            });
+              .select("credits")
+              .eq("id", generation.user_id)
+              .single();
+
+            if (profile) {
+              await supabase
+                .from("profiles")
+                .update({ credits: profile.credits + refundAmount })
+                .eq("id", generation.user_id);
+
+              // 记录退款交易
+              await supabase.from("credit_transactions").insert({
+                user_id: generation.user_id,
+                amount: refundAmount,
+                type: "refund",
+                description: `视频生成失败自动退款 (${taskId})`,
+                balance_before: profile.credits,
+                balance_after: profile.credits + refundAmount,
+              });
+
+              console.log("[Generate Video] Credits refunded due to failure:", {
+                userId: generation.user_id,
+                refund: refundAmount,
+              });
+            }
+          } else if (updateError) {
+            console.log("[Generate Video] Skipping refund - already processed:", taskId);
           }
+        } else if (task.status === "completed" && generation?.status === "processing") {
+          // 任务成功完成
+          await supabase
+            .from("generations")
+            .update({
+              status: "completed",
+              result_url: task.resultUrl || null,
+              video_url: task.resultUrl || null,
+              completed_at: new Date().toISOString(),
+            })
+            .eq("task_id", taskId)
+            .eq("status", "processing");
         }
+
+        console.log("[Generate Video] Updated generations table:", taskId, task.status, task.resultUrl ? "has URL" : "no URL");
       } catch (dbError) {
         console.error("[Generate Video] Failed to update DB:", dbError);
       }

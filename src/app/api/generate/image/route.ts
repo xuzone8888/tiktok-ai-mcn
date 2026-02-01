@@ -542,53 +542,72 @@ export async function GET(request: Request) {
           .single();
 
         // 如果任务失败且之前状态是 processing，则退还积分
+        // 使用原子操作防止重复退款：先更新状态，只有成功更新的请求才能退款
         if (task.status === "failed" && genData && genData.status === "processing") {
-          const userId = genData.user_id;
-          const creditCost = genData.credit_cost || 0;
+          // 先尝试原子更新状态（乐观锁）- 只有 processing 状态才能更新为 failed
+          const { data: updateResult, error: statusUpdateError } = await supabase
+            .from("generations")
+            .update({ status: "failed", error_message: task.errorMessage })
+            .eq("task_id", taskId)
+            .eq("status", "processing") // 乐观锁：只有 processing 状态才能更新
+            .select()
+            .single();
 
-          if (userId && creditCost > 0) {
-            const { data: profileData } = await supabase
-              .from("profiles")
-              .select("credits")
-              .eq("id", userId)
-              .single();
+          // 只有成功更新状态的请求才执行退款（防止并发重复退款）
+          if (updateResult && !statusUpdateError) {
+            const refundUserId = genData.user_id;
+            const creditCost = genData.credit_cost || 0;
 
-            if (profileData) {
-              const currentCredits = (profileData as { credits: number }).credits;
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              await (supabase as any)
+            if (refundUserId && creditCost > 0) {
+              const { data: profileData } = await supabase
                 .from("profiles")
-                .update({ credits: currentCredits + creditCost })
-                .eq("id", userId);
+                .select("credits")
+                .eq("id", refundUserId)
+                .single();
 
-              console.log("[Generate Image] Credits refunded on task failure:", {
-                taskId,
-                userId,
-                refunded: creditCost,
-                newBalance: currentCredits + creditCost,
-              });
+              if (profileData) {
+                const currentCredits = (profileData as { credits: number }).credits;
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                await (supabase as any)
+                  .from("profiles")
+                  .update({ credits: currentCredits + creditCost })
+                  .eq("id", refundUserId);
+
+                // 记录退款交易
+                await supabase.from("credit_transactions").insert({
+                  user_id: refundUserId,
+                  amount: creditCost,
+                  type: "refund",
+                  description: `图片生成失败自动退款 (${taskId})`,
+                  balance_before: currentCredits,
+                  balance_after: currentCredits + creditCost,
+                });
+
+                console.log("[Generate Image] Credits refunded on task failure:", {
+                  taskId,
+                  userId: refundUserId,
+                  refunded: creditCost,
+                  newBalance: currentCredits + creditCost,
+                });
+              }
             }
+          } else {
+            // 状态更新失败说明其他请求已经处理了，跳过退款
+            console.log("[Generate Image] Skipping refund - already processed by another request:", taskId);
           }
+        } else if (task.status === "completed" && genData && genData.status === "processing") {
+          // 任务成功完成，更新状态
+          await supabase
+            .from("generations")
+            .update({
+              status: "completed",
+              result_url: task.resultUrl || null,
+              image_url: task.resultUrl || null,
+              completed_at: new Date().toISOString(),
+            })
+            .eq("task_id", taskId)
+            .eq("status", "processing");
         }
-
-        // 生成更友好的错误信息
-        let friendlyErrorMessage = task.errorMessage;
-        if (task.errorMessage?.includes("google gemini timeout")) {
-          friendlyErrorMessage = "第三方 AI 服务暂时繁忙，积分已自动退还，请稍后重试或使用 Nano Banana Fast 模式";
-        } else if (task.errorMessage?.includes("timeout")) {
-          friendlyErrorMessage = "生成超时，积分已自动退还，请稍后重试";
-        }
-
-        await supabase
-          .from("generations")
-          .update({
-            status: task.status,
-            result_url: task.resultUrl || null,
-            image_url: task.resultUrl || null,
-            error_message: friendlyErrorMessage || null,
-            completed_at: task.status === "completed" ? new Date().toISOString() : null,
-          })
-          .eq("task_id", taskId);
         console.log("[Generate Image] Updated generations table:", taskId, task.status);
       } catch (dbError) {
         console.error("[Generate Image] Failed to update DB:", dbError);
