@@ -431,37 +431,13 @@ function LoginPageContent() {
 
       <div className="w-full max-w-[460px] relative z-10">
         <ReflectiveCard className="py-8 px-10 login-expand">
-          {/* Header - Premium ToryX Logo */}
+          {/* Header - ToryX Logo */}
           <div className="flex flex-col items-center mb-6">
             <img
-              src="/images/toryx_logo_icon.png"
-              alt="ToryX Logo"
-              className="w-16 h-16 mb-2 mt-4 drop-shadow-[0_0_20px_rgba(16,185,129,0.3)]"
+              src="/images/toryx_logo_text.png"
+              alt="ToryX AI"
+              className="h-12 mt-4 mb-3 drop-shadow-[0_0_20px_rgba(16,185,129,0.3)]"
             />
-            <div className="flex items-baseline mb-1">
-              <span
-                className="text-[32px] font-semibold tracking-[-0.02em]"
-                style={{
-                  background: 'linear-gradient(180deg, #ffffff 0%, #e8e8e8 25%, #c0c0c0 50%, #a0a0a0 75%, #d0d0d0 100%)',
-                  WebkitBackgroundClip: 'text',
-                  WebkitTextFillColor: 'transparent',
-                  filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.3))',
-                }}
-              >
-                Tory
-              </span>
-              <span
-                className="text-[32px] font-black tracking-[-0.02em] ml-[-1px]"
-                style={{
-                  background: 'linear-gradient(135deg, #34d399 0%, #10b981 50%, #059669 100%)',
-                  WebkitBackgroundClip: 'text',
-                  WebkitTextFillColor: 'transparent',
-                  filter: 'drop-shadow(0 0 16px rgba(16,185,129,0.4))',
-                }}
-              >
-                X
-              </span>
-            </div>
             <span className="text-xs text-white/30 tracking-[0.15em] uppercase">
               AI 内容智造工厂
             </span>

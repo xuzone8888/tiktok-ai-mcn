@@ -38,23 +38,12 @@ export default function HeroSection() {
                     <div className="container max-w-7xl mx-auto px-6 py-4">
                         <nav className="flex items-center justify-between">
                             <Link href="/" className="flex items-center gap-3 group">
-                                {/* ToryX Logo */}
+                                {/* ToryX Logo - Full Text Logo */}
                                 <img
-                                    src="/images/toryx_logo_icon.png"
-                                    alt="ToryX Logo"
-                                    className="w-10 h-10 drop-shadow-[0_0_15px_rgba(16,185,129,0.3)]"
+                                    src="/images/toryx_logo_text.png"
+                                    alt="ToryX AI"
+                                    className="h-8 drop-shadow-[0_0_15px_rgba(16,185,129,0.3)]"
                                 />
-                                {/* Text Logo */}
-                                <div className="flex flex-col">
-                                    <div className="flex items-baseline">
-                                        <span className="text-2xl font-bold text-white">Tory</span>
-                                        <span className="text-2xl font-bold text-[#00c853]">X</span>
-                                        <span className="text-sm text-white/60 ml-1">AI</span>
-                                    </div>
-                                    <span className="text-[10px] text-white/40 tracking-wider">
-                                        AI 内容智造工厂
-                                    </span>
-                                </div>
                             </Link>
 
                             {/* 导航链接 */}

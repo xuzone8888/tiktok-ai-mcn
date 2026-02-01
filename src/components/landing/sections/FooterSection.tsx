@@ -29,13 +29,11 @@ export default function FooterSection() {
                 <div className="grid md:grid-cols-5 gap-8 mb-12">
                     <div className="md:col-span-2">
                         <Link href="/" className="flex items-center gap-3 mb-6">
-                            <div className="w-10 h-10 rounded-xl bg-[#1a1a1a] border border-white/10 hover:border-white/30 transition-colors flex items-center justify-center">
-                                <Zap className="h-5 w-5 text-white" />
-                            </div>
-                            <div>
-                                <span className="text-xl font-bold text-white">ToryX</span>
-                                <p className="text-xs text-gray-500">AI 内容智造工厂</p>
-                            </div>
+                            <img
+                                src="/images/toryx_logo_text.png"
+                                alt="ToryX AI"
+                                className="h-8 drop-shadow-[0_0_12px_rgba(16,185,129,0.3)]"
+                            />
                         </Link>
                         <p className="text-gray-500 text-sm leading-relaxed max-w-xs">
                             AI 驱动的短视频创作平台，让每一个创作者都能高效产出专业级内容。

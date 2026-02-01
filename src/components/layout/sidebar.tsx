@@ -290,24 +290,25 @@ export function Sidebar() {
           {/* Ambient Glow */}
           <div className="absolute top-0 left-1/2 -translate-x-1/2 w-2/3 h-1 bg-gradient-to-r from-transparent via-[#00f2ea]/20 to-transparent blur-sm group-hover/header:via-[#00f2ea]/40 transition-all duration-500" />
 
-          <Link href="/" className="group/logo relative flex shrink-0 items-center justify-center transition-all duration-300 hover:scale-[1.03] active:scale-95">
+          <Link href="/" className="group/logo relative flex shrink-0 items-center gap-3 transition-all duration-300 hover:scale-[1.03] active:scale-95">
+            {/* Icon Logo - Always visible */}
             <img
-              src="/images/toryx_logo_icon.png"
-              alt="ToryX Logo"
-              className="h-10 w-10 drop-shadow-[0_0_15px_rgba(16,185,129,0.4)] ring-1 ring-white/10 rounded-xl"
+              src="/images/toryx_logo_icon_new.png"
+              alt="ToryX"
+              className={cn(
+                "drop-shadow-[0_0_15px_rgba(16,185,129,0.4)] rounded-xl",
+                collapsed ? "h-10 w-10" : "h-10 w-10"
+              )}
             />
+            {/* Text Logo - Only when expanded */}
+            {!collapsed && (
+              <img
+                src="/images/toryx_logo_text.png"
+                alt="ToryX AI"
+                className="h-7 drop-shadow-[0_0_12px_rgba(16,185,129,0.3)]"
+              />
+            )}
           </Link>
-
-          {!collapsed && (
-            <div className="ml-3 flex flex-col gap-0.5 animate-in fade-in slide-in-from-left-2 duration-300">
-              <h1 className="text-[22px] font-black tracking-tight leading-none bg-clip-text text-transparent bg-gradient-to-r from-[#d9ff00] via-[#00f2ea] to-[#ff0080] filter drop-shadow-[0_2px_8px_rgba(0,242,234,0.25)] select-none">
-                ToryX
-              </h1>
-              <span className="text-[9px] font-extrabold tracking-[0.2em] text-white/30 uppercase select-none group-hover/header:text-white/50 transition-colors">
-                AI Content Factory
-              </span>
-            </div>
-          )}
         </div>
 
         {/* Navigation */}
