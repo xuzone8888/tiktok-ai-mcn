@@ -1,12 +1,35 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import Link from "next/link";
-import { ArrowRight, Play, Zap } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ArrowRight, Play, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import ReflectiveCard from "@/components/ui/ReflectiveCard";
 import { heroData } from "../data/landing-data";
+import { createClient } from "@/lib/supabase/client";
 
 export default function HeroSection() {
+    const router = useRouter();
+    const [isLoggedIn, setIsLoggedIn] = useState(false);
+    const [showLoginModal, setShowLoginModal] = useState(false);
+
+    useEffect(() => {
+        const checkAuth = async () => {
+            const supabase = createClient();
+            const { data: { user } } = await supabase.auth.getUser();
+            setIsLoggedIn(!!user);
+        };
+        checkAuth();
+    }, []);
+
+    const handleGoToModels = () => {
+        if (isLoggedIn) {
+            router.push("/models");
+        } else {
+            setShowLoginModal(true);
+        }
+    };
     return (
         <section className="relative z-10 pt-24 pb-32">
             <div className="container max-w-7xl mx-auto px-6">
@@ -100,22 +123,47 @@ export default function HeroSection() {
                         {heroData.subheadline}
                     </p>
 
-                    {/* Reflective 输入框 */}
+                    {/* 行动按钮 */}
                     <div className="max-w-2xl mx-auto mb-10">
-                        <ReflectiveCard className="!rounded-2xl" roughness={0.6}>
-                            <div className="flex items-center p-2">
-                                <input
-                                    type="text"
-                                    placeholder={heroData.inputPlaceholder}
-                                    className="flex-1 bg-transparent text-white placeholder-gray-500 px-4 py-3 text-lg outline-none"
-                                />
-                                <button className="bg-gradient-to-b from-white to-gray-100 text-black hover:to-white px-6 py-3 rounded-xl font-medium flex items-center shadow-[0_0_20px_rgba(255,255,255,0.3),inset_0_1px_0_rgba(255,255,255,1)] hover:shadow-[0_0_25px_rgba(255,255,255,0.5),inset_0_1px_0_rgba(255,255,255,1)] transition-all duration-300 border-t border-white">
-                                    生成视频
-                                    <ArrowRight className="h-4 w-4 ml-2" />
-                                </button>
-                            </div>
-                        </ReflectiveCard>
+                        <button
+                            onClick={handleGoToModels}
+                            className="bg-gradient-to-b from-white to-gray-100 text-black hover:to-white px-8 py-4 rounded-xl font-medium text-lg flex items-center mx-auto shadow-[0_0_20px_rgba(255,255,255,0.3),inset_0_1px_0_rgba(255,255,255,1)] hover:shadow-[0_0_25px_rgba(255,255,255,0.5),inset_0_1px_0_rgba(255,255,255,1)] transition-all duration-300 border-t border-white"
+                        >
+                            <Users className="h-5 w-5 mr-3" />
+                            去选择模特
+                            <ArrowRight className="h-5 w-5 ml-3" />
+                        </button>
                     </div>
+
+                    {/* 登录弹窗 */}
+                    {showLoginModal && (
+                        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm">
+                            <ReflectiveCard className="!rounded-2xl max-w-md w-full mx-4">
+                                <div className="p-8 text-center">
+                                    <h3 className="text-2xl font-bold text-white mb-4">请先登录</h3>
+                                    <p className="text-gray-400 mb-6">登录后即可选择 AI 模特，开始生成视频</p>
+                                    <div className="flex flex-col gap-3">
+                                        <Link href="/auth/login">
+                                            <button className="w-full bg-gradient-to-b from-white to-gray-100 text-black hover:to-white py-3 rounded-xl font-medium transition-all">
+                                                立即登录
+                                            </button>
+                                        </Link>
+                                        <Link href="/auth/register">
+                                            <button className="w-full bg-white/10 text-white border border-white/20 py-3 rounded-xl font-medium hover:bg-white/20 transition-all">
+                                                免费注册
+                                            </button>
+                                        </Link>
+                                        <button
+                                            onClick={() => setShowLoginModal(false)}
+                                            className="text-gray-500 hover:text-white text-sm mt-2"
+                                        >
+                                            取消
+                                        </button>
+                                    </div>
+                                </div>
+                            </ReflectiveCard>
+                        </div>
+                    )}
 
                     {/* CTA 按钮组 */}
                     <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
