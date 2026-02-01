@@ -144,6 +144,7 @@ export const footerLinks = {
         { label: "AI 模特管理", href: "/models" },
     ],
     support: [
+        { label: "价格方案", href: "/pricing" },
         { label: "帮助中心", href: "/help" },
         { label: "联系我们", href: "/contact" },
         { label: "反馈建议", href: "/feedback" },

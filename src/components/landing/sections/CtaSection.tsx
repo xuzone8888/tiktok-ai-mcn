@@ -32,9 +32,9 @@ export default function CtaSection() {
                                     <ArrowRight className="h-5 w-5 ml-3 group-hover:translate-x-1 transition-transform" />
                                 </button>
                             </Link>
-                            <Link href="/contact">
+                            <Link href="/pricing">
                                 <div className="px-10 py-4 border border-white/20 text-white rounded-xl font-medium text-lg hover:bg-white/10 transition-all">
-                                    预约演示
+                                    查看价格
                                 </div>
                             </Link>
                         </div>
