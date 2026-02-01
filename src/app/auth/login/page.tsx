@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
@@ -10,7 +10,8 @@ import { Button } from "@/components/ui/button";
 import { Zap, Mail, Lock, Smartphone, ArrowRight, Github, Chrome, Loader2, KeyRound } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
-export default function LoginPage() {
+// 包装组件以支持 useSearchParams
+function LoginPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { toast } = useToast();
@@ -729,5 +730,18 @@ export default function LoginPage() {
         </ReflectiveCard >
       </div >
     </div >
+  );
+}
+
+// 导出包装在 Suspense 中的组件
+export default function LoginPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-black flex items-center justify-center">
+        <div className="text-white/50">加载中...</div>
+      </div>
+    }>
+      <LoginPageContent />
+    </Suspense>
   );
 }
