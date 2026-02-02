@@ -20,10 +20,11 @@ export default function TermsPage() {
         <div className="container max-w-7xl mx-auto px-6 py-4">
           <nav className="flex items-center justify-between">
             <Link href="/" className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-400 via-purple-500 to-pink-500 flex items-center justify-center">
-                <Sparkles className="h-5 w-5 text-white" />
-              </div>
-              <span className="text-xl font-bold bg-gradient-to-r from-cyan-400 to-pink-400 bg-clip-text text-transparent">TikTok AI MCN</span>
+              <img
+                src="/images/toryx_logo_text.png"
+                alt="ToryX AI"
+                className="h-8 drop-shadow-[0_0_15px_rgba(16,185,129,0.3)]"
+              />
             </Link>
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-2 bg-white/10 rounded-lg p-1">
