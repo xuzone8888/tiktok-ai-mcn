@@ -31,6 +31,7 @@ const PROTECTED_ROUTES = [
   "/team",
   "/quick-gen",
   "/pro-studio",
+  "/image-factory",
   "/admin",
 ];
 
@@ -57,7 +58,7 @@ export async function middleware(req: NextRequest) {
   // ============================================
   // 2. 检查是否为受保护路由
   // ============================================
-  const isProtectedRoute = PROTECTED_ROUTES.some(route => 
+  const isProtectedRoute = PROTECTED_ROUTES.some(route =>
     pathname === route || pathname.startsWith(route + "/")
   );
 

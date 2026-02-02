@@ -18,15 +18,11 @@ export default function HelpPage() {
                 <div className="container max-w-7xl mx-auto px-6 py-4">
                     <nav className="flex items-center justify-between">
                         <Link href="/" className="flex items-center gap-3 group">
-                            <div className="w-11 h-11 rounded-xl bg-[#1a1a1a] border border-white/20 flex items-center justify-center">
-                                <Sparkles className="h-6 w-6 text-white" />
-                            </div>
-                            <div className="flex flex-col">
-                                <span className="text-xl font-bold text-white">ToryX</span>
-                                <span className="text-[10px] text-gray-500 tracking-wider uppercase">
-                                    AI 内容智造工厂
-                                </span>
-                            </div>
+                            <img
+                                src="/images/toryx_logo_text.png"
+                                alt="ToryX AI"
+                                className="h-8 drop-shadow-[0_0_15px_rgba(16,185,129,0.3)]"
+                            />
                         </Link>
                         <Link href="/">
                             <Button variant="ghost" className="text-gray-300 hover:text-white">
