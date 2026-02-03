@@ -372,21 +372,40 @@ function TaskCard({
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <a
-                      href={task.resultUrl}
-                      download
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      onClick={(e) => e.stopPropagation()}
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-7 w-7 text-white/40 hover:text-emerald-400 hover:bg-emerald-400/10 transition-colors rounded-lg"
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        const filename = (task.config.sourceImageName?.replace(/\.[^.]+$/, '') || 'image') + '-result.png';
+                        try {
+                          const params = new URLSearchParams({
+                            url: task.resultUrl!,
+                            filename,
+                          });
+                          const proxyUrl = `/api/download-proxy?${params}`;
+                          const response = await fetch(proxyUrl);
+                          if (response.ok) {
+                            const blob = await response.blob();
+                            const blobUrl = URL.createObjectURL(blob);
+                            const link = document.createElement('a');
+                            link.href = blobUrl;
+                            link.download = filename;
+                            document.body.appendChild(link);
+                            link.click();
+                            document.body.removeChild(link);
+                            URL.revokeObjectURL(blobUrl);
+                          } else {
+                            window.open(task.resultUrl, '_blank');
+                          }
+                        } catch {
+                          window.open(task.resultUrl, '_blank');
+                        }
+                      }}
                     >
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="h-7 w-7 text-white/40 hover:text-emerald-400 hover:bg-emerald-400/10 transition-colors rounded-lg"
-                      >
-                        <Download className="h-3.5 w-3.5" />
-                      </Button>
-                    </a>
+                      <Download className="h-3.5 w-3.5" />
+                    </Button>
                   </TooltipTrigger>
                   <TooltipContent>
                     <p>Download</p>
@@ -1242,115 +1261,165 @@ export default function ImageBatchPage() {
 
               {selectedCount > 0 && (
                 <>
-                  {/* 批量下载选中的已完成任务 */}
+                  {/* 下载下拉菜单 */}
                   {tasks.filter(t => selectedTaskIds[t.id] && t.status === "completed" && t.resultUrl).length > 0 && (
-                    <button
-                      onClick={async () => {
-                        const completedSelectedTasks = tasks.filter(
-                          t => selectedTaskIds[t.id] && t.status === "completed" && t.resultUrl
-                        );
-                        if (completedSelectedTasks.length === 0) {
-                          toast({ variant: "destructive", title: "没有可下载的图片" });
-                          return;
-                        }
-
-                        // 获取最佳线路
-                        const cachedResults = getCachedSpeedTestResults();
-                        const bestRoute = getBestRouteId(cachedResults);
-
-                        setIsDownloading(true);
-                        setDownloadProgress({
-                          show: true,
-                          total: completedSelectedTasks.length,
-                          current: 0,
-                          success: 0,
-                          failed: 0,
-                          currentFilename: "准备中...",
-                        });
-
-                        let successCount = 0;
-                        let failedCount = 0;
-
-                        // 逐个通过代理下载
-                        for (let i = 0; i < completedSelectedTasks.length; i++) {
-                          const task = completedSelectedTasks[i];
-                          if (task.resultUrl) {
-                            const filename = `图片-${i + 1}.png`;
-                            setDownloadProgress(prev => ({
-                              ...prev,
-                              currentFilename: filename,
-                            }));
-
-                            try {
-                              // 构建代理URL
-                              const params = new URLSearchParams({
-                                url: task.resultUrl,
-                                filename,
-                                ...(bestRoute && { route: bestRoute }),
-                              });
-                              const proxyUrl = `/api/download-proxy?${params}`;
-                              const response = await fetch(proxyUrl);
-
-                              if (response.ok) {
-                                const blob = await response.blob();
-                                const blobUrl = URL.createObjectURL(blob);
-                                const link = document.createElement("a");
-                                link.href = blobUrl;
-                                link.download = filename;
-                                document.body.appendChild(link);
-                                link.click();
-                                document.body.removeChild(link);
-                                URL.revokeObjectURL(blobUrl);
-                                successCount++;
-                              } else {
-                                // 代理失败，尝试直接下载
-                                const link = document.createElement("a");
-                                link.href = task.resultUrl;
-                                link.download = filename;
-                                link.target = "_blank";
-                                document.body.appendChild(link);
-                                link.click();
-                                document.body.removeChild(link);
-                                successCount++;
-                              }
-                            } catch (err) {
-                              console.error("Download failed:", err);
-                              failedCount++;
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button
+                          disabled={isDownloading}
+                          className="h-8 px-3 rounded-lg text-xs font-medium text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 hover:bg-emerald-500/20 transition-all flex items-center gap-1.5"
+                        >
+                          {isDownloading ? (
+                            <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                          ) : (
+                            <Download className="h-3 w-3 mr-1" />
+                          )}
+                          下载 ({tasks.filter(t => selectedTaskIds[t.id] && t.status === "completed" && t.resultUrl).length})
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="start" className="bg-[#16181D]/95 backdrop-blur-xl border-white/10">
+                        <DropdownMenuItem
+                          onClick={async () => {
+                            const completedSelectedTasks = tasks.filter(
+                              t => selectedTaskIds[t.id] && t.status === "completed" && t.resultUrl
+                            );
+                            if (completedSelectedTasks.length === 0) {
+                              toast({ variant: "destructive", title: "没有可下载的图片" });
+                              return;
                             }
 
-                            setDownloadProgress(prev => ({
-                              ...prev,
-                              current: i + 1,
-                              success: successCount,
-                              failed: failedCount,
-                            }));
+                            // 获取最佳线路
+                            const cachedResults = getCachedSpeedTestResults();
+                            const bestRoute = getBestRouteId(cachedResults);
 
-                            // 间隔 600ms 避免浏览器阻止
-                            await new Promise(r => setTimeout(r, 600));
-                          }
-                        }
+                            setIsDownloading(true);
+                            setDownloadProgress({
+                              show: true,
+                              total: completedSelectedTasks.length,
+                              current: 0,
+                              success: 0,
+                              failed: 0,
+                              currentFilename: "准备中...",
+                            });
 
-                        setIsDownloading(false);
-                        toast({
-                          title: `✅ 下载完成`,
-                          description: `成功 ${successCount} 张${failedCount > 0 ? `，失败 ${failedCount} 张` : ""}`,
-                        });
+                            let successCount = 0;
+                            let failedCount = 0;
 
-                        // 3秒后关闭进度弹窗
-                        setTimeout(() => {
-                          setDownloadProgress(prev => ({ ...prev, show: false }));
-                        }, 3000);
-                      }}
-                      disabled={isDownloading}
-                      className="h-8 px-3 rounded-lg text-xs font-medium text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 hover:bg-emerald-500/20 transition-all flex items-center gap-1.5"
-                    >
-                      {isDownloading ? (
-                        <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                      ) : (
-                        <Download className="h-3 w-3 mr-1" />
-                      )}
-                      下载选中 ({tasks.filter(t => selectedTaskIds[t.id] && t.status === "completed" && t.resultUrl).length})
-                    </button>
+                            // 逐个通过代理下载
+                            for (let i = 0; i < completedSelectedTasks.length; i++) {
+                              const task = completedSelectedTasks[i];
+                              if (task.resultUrl) {
+                                const filename = `图片-${i + 1}.png`;
+                                setDownloadProgress(prev => ({
+                                  ...prev,
+                                  currentFilename: filename,
+                                }));
+
+                                try {
+                                  // 构建代理URL
+                                  const params = new URLSearchParams({
+                                    url: task.resultUrl,
+                                    filename,
+                                    ...(bestRoute && { route: bestRoute }),
+                                  });
+                                  const proxyUrl = `/api/download-proxy?${params}`;
+                                  const response = await fetch(proxyUrl);
+
+                                  if (response.ok) {
+                                    const blob = await response.blob();
+                                    const blobUrl = URL.createObjectURL(blob);
+                                    const link = document.createElement("a");
+                                    link.href = blobUrl;
+                                    link.download = filename;
+                                    document.body.appendChild(link);
+                                    link.click();
+                                    document.body.removeChild(link);
+                                    URL.revokeObjectURL(blobUrl);
+                                    successCount++;
+                                  } else {
+                                    // 代理失败，尝试直接下载
+                                    const link = document.createElement("a");
+                                    link.href = task.resultUrl;
+                                    link.download = filename;
+                                    link.target = "_blank";
+                                    document.body.appendChild(link);
+                                    link.click();
+                                    document.body.removeChild(link);
+                                    successCount++;
+                                  }
+                                } catch (err) {
+                                  console.error("Download failed:", err);
+                                  failedCount++;
+                                }
+
+                                setDownloadProgress(prev => ({
+                                  ...prev,
+                                  current: i + 1,
+                                  success: successCount,
+                                  failed: failedCount,
+                                }));
+
+                                // 间隔 600ms 避免浏览器阻止
+                                await new Promise(r => setTimeout(r, 600));
+                              }
+                            }
+
+                            setIsDownloading(false);
+                            toast({
+                              title: `✅ 下载完成`,
+                              description: `成功 ${successCount} 张${failedCount > 0 ? `，失败 ${failedCount} 张` : ""}`,
+                            });
+
+                            // 3秒后关闭进度弹窗
+                            setTimeout(() => {
+                              setDownloadProgress(prev => ({ ...prev, show: false }));
+                            }, 3000);
+                          }}
+                          className="flex items-center gap-2 cursor-pointer text-white/80 hover:text-white focus:text-white"
+                        >
+                          <Download className="h-4 w-4" />
+                          <span>直接下载图片</span>
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator className="bg-white/10" />
+                        <DropdownMenuItem
+                          onClick={() => {
+                            const completedSelectedTasks = tasks.filter(
+                              t => selectedTaskIds[t.id] && t.status === "completed" && t.resultUrl
+                            );
+                            if (completedSelectedTasks.length === 0) {
+                              toast({ variant: "destructive", title: "没有可导出的图片地址" });
+                              return;
+                            }
+
+                            // 收集所有URL
+                            const urls = completedSelectedTasks
+                              .map(t => t.resultUrl)
+                              .filter(Boolean)
+                              .join('\n');
+
+                            // 创建并下载TXT文件
+                            const blob = new Blob([urls], { type: 'text/plain;charset=utf-8' });
+                            const blobUrl = URL.createObjectURL(blob);
+                            const link = document.createElement('a');
+                            link.href = blobUrl;
+                            link.download = `图片地址_${new Date().toLocaleDateString('zh-CN').replace(/\//g, '-')}_${completedSelectedTasks.length}张.txt`;
+                            document.body.appendChild(link);
+                            link.click();
+                            document.body.removeChild(link);
+                            URL.revokeObjectURL(blobUrl);
+
+                            toast({
+                              title: "✅ 地址已导出",
+                              description: `已导出 ${completedSelectedTasks.length} 个图片地址到 TXT 文件`,
+                            });
+                          }}
+                          className="flex items-center gap-2 cursor-pointer text-white/80 hover:text-white focus:text-white"
+                        >
+                          <FileText className="h-4 w-4" />
+                          <span>导出TXT地址</span>
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   )}
                   <button
                     onClick={handleApplyToSelected}
@@ -1679,17 +1748,38 @@ export default function ImageBatchPage() {
             </div>
             <DialogFooter className="flex-row justify-end gap-2">
               {previewTask?.status === "completed" && previewTask.resultUrl && (
-                <a
-                  href={previewTask.resultUrl}
-                  download
-                  target="_blank"
-                  rel="noopener noreferrer"
+                <Button
+                  variant="white-glow"
+                  onClick={async () => {
+                    const filename = (previewTask.config.sourceImageName?.replace(/\.[^.]+$/, '') || 'image') + '-result.png';
+                    try {
+                      const params = new URLSearchParams({
+                        url: previewTask.resultUrl!,
+                        filename,
+                      });
+                      const proxyUrl = `/api/download-proxy?${params}`;
+                      const response = await fetch(proxyUrl);
+                      if (response.ok) {
+                        const blob = await response.blob();
+                        const blobUrl = URL.createObjectURL(blob);
+                        const link = document.createElement('a');
+                        link.href = blobUrl;
+                        link.download = filename;
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                        URL.revokeObjectURL(blobUrl);
+                      } else {
+                        window.open(previewTask.resultUrl, '_blank');
+                      }
+                    } catch {
+                      window.open(previewTask.resultUrl, '_blank');
+                    }
+                  }}
                 >
-                  <Button variant="white-glow">
-                    <Download className="h-4 w-4 mr-2" />
-                    下载结果
-                  </Button>
-                </a>
+                  <Download className="h-4 w-4 mr-2" />
+                  下载结果
+                </Button>
               )}
               <Button variant="outline" onClick={() => setPreviewTask(null)}>
                 关闭

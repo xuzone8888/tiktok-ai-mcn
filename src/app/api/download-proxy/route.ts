@@ -19,6 +19,9 @@ const allowedDomains = [
   "supabase.co",
   "openpt.wuyinkeji.com",
   "wuyinkeji.com",
+  // ToryX 图片/视频 CDN
+  "toryxai.com",
+  "media.toryxai.com",
   // ss3.life CDN (10-15秒视频)
   "ss3.life",
   "videos-jp.ss3.life",
