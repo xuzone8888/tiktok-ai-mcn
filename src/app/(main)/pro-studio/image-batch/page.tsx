@@ -512,6 +512,7 @@ export default function ImageBatchPage() {
   });
 
   // Template State
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showSaveTemplate, setShowSaveTemplate] = useState(false);
   const [showTemplateManager, setShowTemplateManager] = useState(false);
 
@@ -963,6 +964,38 @@ export default function ImageBatchPage() {
     }
   }, [tasks, handleProcessSingleTask, toast]);
 
+  // 重置失败的任务并立即重新启动
+  const handleResetFailed = useCallback(async () => {
+    const failedTasks = tasks.filter(t => t.status === "failed");
+    if (failedTasks.length === 0) return;
+
+    toast({ title: `🚀 正在重新启动 ${failedTasks.length} 个失败任务...` });
+
+    // 先重置所有失败任务的状态为 pending
+    failedTasks.forEach(task => {
+      updateTaskStatus(task.id, "pending", {
+        error: undefined,
+        apiTaskId: undefined,
+        progress: undefined,
+        startedAt: undefined,
+        completedAt: undefined,
+      });
+    });
+
+    // 等待状态更新后，逐个启动任务（带间隔避免服务器压力）
+    setTimeout(() => {
+      const resetTasks = useImageBatchStore.getState().tasks.filter(
+        t => failedTasks.some(f => f.id === t.id) && t.status === "pending"
+      );
+
+      resetTasks.forEach((task, index) => {
+        setTimeout(() => {
+          handleProcessSingleTask(task);
+        }, index * 1200); // 每个任务间隔1200ms启动
+      });
+    }, 200);
+  }, [tasks, updateTaskStatus, toast, handleProcessSingleTask]);
+
   // 获取可用的 action 列表
   const getAvailableActions = () => {
     if (globalSettings.model === "nano-banana") {
@@ -999,243 +1032,23 @@ export default function ImageBatchPage() {
             </p>
           </div>
 
-          <div className="flex items-center gap-4">
-            <Link href="/quick-gen">
-              <Button variant="ghost" className="text-white/40 hover:text-white hover:bg-white/5">
-                <ArrowLeft className="h-4 w-4 mr-2" />
-                返回普通模式
-              </Button>
-            </Link>
+          <div className="flex items-center gap-3">
+
+            {/* 创建图片任务按钮 - 增大版 */}
+            <button
+              onClick={() => setShowCreateDialog(true)}
+              className="relative h-10 px-7 rounded-full font-bold text-black text-sm transition-all duration-500 bg-gradient-to-r from-[#CCFF00] via-[#00F2EA] to-[#EC4899] hover:scale-[1.03] hover:shadow-[0_0_30px_rgba(0,242,234,0.6)] border border-white/20 overflow-hidden group shadow-[0_0_15px_rgba(0,242,234,0.3)]"
+            >
+              <div className="absolute inset-0 bg-gradient-to-b from-white/40 to-transparent" />
+              <div className="absolute inset-0 bg-[linear-gradient(110deg,transparent,rgba(255,255,255,0.4),transparent)] bg-[length:200%_100%] opacity-0 group-hover:opacity-100 group-hover:animate-shimmer transition-opacity duration-300" />
+              <span className="relative z-10 flex items-center justify-center gap-2">
+                <Sparkles className="h-4 w-4 fill-black/20" />
+                创建图片任务
+              </span>
+            </button>
           </div>
         </div>
 
-        {/* ============================================ */}
-        {/* 全局配置工具栏 - Titanium Mermaid Edition */}
-        {/* ============================================ */}
-        <div className="relative z-10 mb-8 rounded-3xl bg-[#16181D]/80 backdrop-blur-xl border border-white/5 shadow-2xl overflow-hidden group/panel">
-          {/* Ambient Glow */}
-          <div className="absolute top-0 right-0 -mr-20 -mt-20 w-96 h-96 bg-mermaid-cyan/5 rounded-full blur-3xl pointer-events-none group-hover/panel:bg-mermaid-cyan/10 transition-colors duration-700" />
-          <div className="absolute bottom-0 left-0 -ml-20 -mb-20 w-96 h-96 bg-mermaid-pink/5 rounded-full blur-3xl pointer-events-none group-hover/panel:bg-mermaid-pink/10 transition-colors duration-700" />
-
-          <div className="relative p-7 space-y-7">
-            {/* 第一行：主要配置 - Glass Pills Layout */}
-            <div className="flex flex-wrap items-center gap-8">
-              {/* 模型选择 */}
-              <div className="space-y-3">
-                <Label className="text-[10px] uppercase tracking-wider text-white/30 font-bold ml-1 flex items-center gap-2">
-                  <Zap className="h-3 w-3" />
-                  模型引擎
-                </Label>
-                <div className="flex items-center p-1.5 rounded-full bg-[#050505]/60 border border-white/5 backdrop-blur-md shadow-inner">
-                  <button
-                    onClick={() => updateGlobalSettings("model", "nano-banana")}
-                    className={cn(
-                      "relative px-5 py-2.5 rounded-full text-xs font-bold transition-all duration-300 flex items-center gap-2.5",
-                      globalSettings.model === "nano-banana"
-                        ? "bg-white/10 text-white shadow-[0_2px_10px_rgba(0,0,0,0.3)] border border-white/10"
-                        : "text-white/40 hover:text-white hover:bg-white/5"
-                    )}
-                  >
-                    <Zap className={cn("h-3.5 w-3.5", globalSettings.model === "nano-banana" ? "text-mermaid-cyan" : "text-white/40")} />
-                    快速版 Turbo
-                  </button>
-                  <button
-                    onClick={() => updateGlobalSettings("model", "nano-banana-pro")}
-                    className={cn(
-                      "relative px-5 py-2.5 rounded-full text-xs font-bold transition-all duration-300 flex items-center gap-2.5",
-                      globalSettings.model === "nano-banana-pro"
-                        ? "bg-white/10 text-white shadow-[0_2px_10px_rgba(0,0,0,0.3)] border border-white/10"
-                        : "text-white/40 hover:text-white hover:bg-white/5"
-                    )}
-                  >
-                    <Sparkles className={cn("h-3.5 w-3.5", globalSettings.model === "nano-banana-pro" ? "text-mermaid-pink" : "text-white/40")} />
-                    专业版 Pro
-                  </button>
-                </div>
-              </div>
-
-              <div className="h-12 w-px bg-white/5" />
-
-              {/* 处理类型 */}
-              <div className="space-y-3">
-                <Label className="text-[10px] uppercase tracking-wider text-white/30 font-bold ml-1 flex items-center gap-2">
-                  <Wand2 className="h-3 w-3" />
-                  处理模式
-                </Label>
-                <div className="flex items-center gap-2">
-                  {getAvailableActions().map((action) => (
-                    <button
-                      key={action.value}
-                      onClick={() => updateGlobalSettings("action", action.value)}
-                      className={cn(
-                        "px-4 py-2.5 rounded-full text-xs font-bold border transition-all duration-300 flex items-center gap-2.5",
-                        globalSettings.action === action.value
-                          ? "bg-mermaid-cyan/10 border-mermaid-cyan/30 text-mermaid-cyan shadow-[0_0_15px_rgba(0,242,234,0.1)]"
-                          : "bg-black/20 border-white/5 text-white/40 hover:border-white/20 hover:text-white hover:bg-white/5"
-                      )}
-                    >
-                      {action.value === "generate" && <Wand2 className="h-3.5 w-3.5" />}
-                      {action.value === "upscale" && <ZoomIn className="h-3.5 w-3.5" />}
-                      {action.value === "nine_grid" && <Grid3X3 className="h-3.5 w-3.5" />}
-                      {action.label}
-                      <span className="ml-1 text-[10px] opacity-60 font-mono bg-black/30 px-1.5 py-0.5 rounded text-current">{action.credits}pts</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="h-12 w-px bg-white/5" />
-
-              {/* 尺寸 */}
-              <div className="space-y-3">
-                <Label className="text-[10px] uppercase tracking-wider text-white/30 font-bold ml-1 flex items-center gap-2">
-                  <Maximize2 className="h-3 w-3" />
-                  尺寸比例
-                </Label>
-                <div className="flex gap-2">
-                  {(globalSettings.model === "nano-banana"
-                    ? NANO_FAST_ASPECT_OPTIONS
-                    : NANO_PRO_ASPECT_OPTIONS
-                  ).slice(0, 4).map((opt) => (
-                    <button
-                      key={opt.value}
-                      onClick={() => updateGlobalSettings("aspectRatio", opt.value)}
-                      className={cn(
-                        "h-10 w-10 p-0 rounded-xl border flex items-center justify-center transition-all duration-300",
-                        globalSettings.aspectRatio === opt.value
-                          ? "bg-white/10 border-white/20 text-white shadow-[0_0_10px_rgba(255,255,255,0.1)] scale-105"
-                          : "bg-black/20 border-white/5 text-white/30 hover:border-white/20 hover:text-white hover:bg-white/5"
-                      )}
-                      title={opt.label}
-                    >
-                      {AspectRatioIcons[opt.value]}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Pro 模式分辨率 */}
-              {globalSettings.model === "nano-banana-pro" && (
-                <>
-                  <div className="h-12 w-px bg-white/5" />
-                  <div className="space-y-3">
-                    <Label className="text-[10px] uppercase tracking-wider text-white/30 font-bold ml-1 flex items-center gap-2">
-                      <Monitor className="h-3 w-3" />
-                      画质
-                    </Label>
-                    <div className="flex gap-2">
-                      {IMAGE_RESOLUTION_OPTIONS.map((opt) => (
-                        <button
-                          key={opt.value}
-                          onClick={() => updateGlobalSettings("resolution", opt.value)}
-                          className={cn(
-                            "px-4 py-2.5 rounded-xl text-xs font-bold border transition-all duration-300",
-                            globalSettings.resolution === opt.value
-                              ? "bg-mermaid-pink/10 border-mermaid-pink/30 text-mermaid-pink shadow-[0_0_10px_rgba(236,72,153,0.1)]"
-                              : "bg-black/20 border-white/5 text-white/30 hover:border-white/20 hover:text-white hover:bg-white/5"
-                          )}
-                        >
-                          {opt.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>
-
-            {/* 第二行：提示词输入区 - Neon Focus */}
-            {globalSettings.action === "generate" && (
-              <div className="relative group">
-                <div className="absolute -inset-[1px] bg-gradient-to-r from-mermaid-cyan/30 via-mermaid-pink/30 to-mermaid-lime/30 rounded-2xl opacity-0 group-hover:opacity-100 transition duration-500 blur-sm" />
-                <div className="relative">
-                  <textarea
-                    value={globalSettings.prompt}
-                    onChange={(e) => updateGlobalSettings("prompt", e.target.value)}
-                    placeholder="在此输入图片生成提示词... (支持中英文)"
-                    className="w-full h-28 px-6 py-5 text-sm bg-[#050505] border border-white/10 rounded-2xl text-white placeholder:text-white/20 focus:outline-none focus:border-mermaid-cyan/50 focus:ring-1 focus:ring-mermaid-cyan/20 resize-none transition-all duration-300 font-mono leading-relaxed"
-                  />
-                  <div className="absolute bottom-4 right-4 flex items-center gap-2">
-                    <div className="px-2 py-1 rounded bg-white/5 border border-white/5 text-[10px] text-white/30 font-mono">
-                      AI 增强
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {globalSettings.action !== "generate" && (
-              <div className="flex items-center gap-4 p-5 rounded-2xl bg-[#050505] border border-white/5 border-l-4 border-l-mermaid-cyan/50 shadow-inner">
-                <div className="h-10 w-10 rounded-full bg-mermaid-cyan/10 flex items-center justify-center">
-                  <Info className="h-5 w-5 text-mermaid-cyan" />
-                </div>
-                <div className="flex flex-col">
-                  <span className="text-sm font-bold text-white tracking-wide">
-                    无需提示词模式
-                  </span>
-                  <span className="text-xs text-white/40 mt-1">
-                    {globalSettings.action === "upscale"
-                      ? "高清放大模式将自动增强分辨率和细节，保留原始构图。"
-                      : "九宫格模式将去除背景并生成多角度商品展示图。"}
-                  </span>
-                </div>
-              </div>
-            )}
-
-            {/* 第三行：操作按钮 (Mermaid Ultra Style) */}
-            <div className="flex items-center gap-4 pt-2">
-              <input
-                type="file"
-                accept="image/*.webp,image/*.png,image/*.jpg,image/*.jpeg"
-                multiple
-                onChange={(e) => e.target.files && handleBatchUpload(e.target.files)}
-                className="hidden"
-                ref={fileInputRef}
-              />
-
-              {/* 上传图片按钮 - Glass Style */}
-              <button
-                onClick={() => {
-                  if (fileInputRef.current) fileInputRef.current.value = "";
-                  fileInputRef.current?.click();
-                }}
-                className="group relative px-6 py-3.5 rounded-full font-bold text-white text-sm transition-all duration-300 bg-white/5 border border-white/10 hover:bg-white/10 hover:border-mermaid-cyan/50 hover:shadow-[0_0_20px_rgba(0,242,234,0.15)] overflow-hidden"
-              >
-                <span className="relative z-10 flex items-center gap-2">
-                  <FolderUp className="h-4 w-4 text-mermaid-cyan" />
-                  上传图片
-                </span>
-              </button>
-
-              {/* 加载方案按钮 */}
-              <button
-                onClick={() => setShowTemplateManager(true)}
-                className="group relative px-6 py-3.5 rounded-full font-bold text-white text-sm transition-all duration-300 bg-white/5 border border-white/10 hover:bg-white/10 hover:border-mermaid-cyan/50 hover:shadow-[0_0_20px_rgba(0,242,234,0.15)] overflow-hidden"
-              >
-                <span className="relative z-10 flex items-center gap-2">
-                  <LayoutTemplate className="h-4 w-4 text-mermaid-cyan" />
-                  加载方案
-                </span>
-              </button>
-
-              {tasks.length > 0 && (
-                <button
-                  onClick={handleApplyToAll}
-                  className="px-6 py-3.5 rounded-full text-xs font-bold text-white/60 hover:text-white border border-transparent hover:border-white/20 hover:bg-white/5 transition-all uppercase tracking-wide"
-                >
-                  <Wand2 className="h-3.5 w-3.5 mr-2 inline-block" />
-                  应用配置到全部
-                </button>
-              )}
-
-              <div className="flex-1" />
-            </div>
-          </div>
-        </div >
-
-        {/* ============================================ */}
-        {/* 任务列表 */}
-        {/* ============================================ */}
         {/* ============================================ */}
         {/* 任务列表 */}
         {/* ============================================ */}
@@ -1422,13 +1235,6 @@ export default function ImageBatchPage() {
                     </DropdownMenu>
                   )}
                   <button
-                    onClick={handleApplyToSelected}
-                    className="h-8 px-3 rounded-lg text-xs font-medium text-white/60 bg-white/5 border border-white/10 hover:bg-white/10 hover:text-white transition-all flex items-center gap-1.5"
-                  >
-                    <Wand2 className="h-3 w-3 mr-1" />
-                    应用 ({selectedCount})
-                  </button>
-                  <button
                     onClick={removeSelectedTasks}
                     className="h-8 px-3 rounded-lg text-xs font-medium text-red-400 bg-red-500/10 border border-red-500/20 hover:bg-red-500/20 transition-all flex items-center gap-1.5"
                   >
@@ -1469,8 +1275,11 @@ export default function ImageBatchPage() {
 
           <div className="bg-transparent">
             {tasks.length === 0 ? (
-              // Aurora Card Empty State (Display Only)
-              <div className="group flex flex-col items-center justify-center py-24 rounded-[2rem] border border-white/5 bg-[#0B0C10] relative overflow-hidden">
+              // Aurora Card Empty State - 可点击打开创建任务对话框
+              <div
+                className="group flex flex-col items-center justify-center py-24 rounded-[2rem] border border-white/5 bg-[#0B0C10] relative overflow-hidden cursor-pointer transition-all duration-500 hover:border-mermaid-cyan/30 hover:shadow-[0_0_30px_rgba(0,242,234,0.1)]"
+                onClick={() => setShowCreateDialog(true)}
+              >
                 {/* Aurora Background Effect */}
                 <div className="absolute inset-0 bg-gradient-to-br from-mermaid-cyan/5 via-transparent to-mermaid-pink/5 opacity-50" />
                 <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-10" />
@@ -1499,10 +1308,13 @@ export default function ImageBatchPage() {
                         已上传 {uploadedImages.length} 张图片
                       </h3>
                       <p className="text-white/40 text-sm max-w-md text-center leading-relaxed mb-4">
-                        点击「创建任务」按钮开始处理
+                        点击此处或 <span className="text-mermaid-cyan font-medium">"创建图片任务"</span> 按钮开始处理
                       </p>
                       <button
-                        onClick={clearUploadedImages}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          clearUploadedImages();
+                        }}
                         className="text-xs text-red-400/60 hover:text-red-400 transition-colors"
                       >
                         清除所有图片
@@ -1511,14 +1323,15 @@ export default function ImageBatchPage() {
                   ) : (
                     <>
                       {/* 真正的空状态 */}
-                      <div className="h-24 w-24 rounded-3xl bg-[#050505] border border-white/10 flex items-center justify-center mb-8 shadow-2xl">
-                        <LayoutGrid className="h-10 w-10 text-white/20" />
+                      <div className="relative mb-6">
+                        <div className="absolute inset-0 bg-mermaid-cyan/20 blur-xl rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                        <div className="relative w-24 h-24 rounded-2xl bg-black/40 border border-white/10 flex items-center justify-center group-hover:scale-110 transition-transform duration-300 shadow-inner">
+                          <ImageIcon className="h-12 w-12 text-white/20 group-hover:text-mermaid-cyan transition-colors duration-300" />
+                        </div>
                       </div>
-                      <h3 className="text-2xl font-bold text-white/60 mb-2 tracking-tight">
-                        任务队列为空
-                      </h3>
-                      <p className="text-white/40 text-sm max-w-md text-center leading-relaxed">
-                        请使用上方「上传图片」按钮添加任务
+                      <h3 className="text-xl font-bold text-white mb-2 group-hover:text-mermaid-cyan transition-colors tracking-tight">暂无图片任务</h3>
+                      <p className="text-sm text-white/40 group-hover:text-white/80 transition-colors">
+                        点击 <span className="text-mermaid-cyan font-medium">"创建图片任务"</span> 开始批量生产
                       </p>
                     </>
                   )}
@@ -1641,51 +1454,16 @@ export default function ImageBatchPage() {
                     )}
                   </div>
 
-                  {/* 操作按钮组 */}
-                  <div className="flex items-center gap-3">
-                    {/* 清空按钮 - Glass Style */}
+                  {/* 右侧：重置失败按钮 */}
+                  {stats.failed > 0 && (
                     <button
-                      onClick={() => {
-                        clearAllTasks();
-                        clearUploadedImages();
-                        updateGlobalSettings("prompt", "");
-                      }}
-                      className="group relative px-5 py-2.5 rounded-full font-medium text-white text-xs transition-all duration-300 bg-white/5 border border-white/10 hover:bg-red-500/10 hover:border-red-500/30 hover:text-red-400"
+                      onClick={handleResetFailed}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium text-amber-400 bg-amber-400/10 border border-amber-400/20 hover:bg-amber-400/20 transition-all"
                     >
-                      <span className="relative z-10 flex items-center gap-2">
-                        <Trash2 className="h-3.5 w-3.5" />
-                        清空全部
-                      </span>
+                      <RotateCcw className="h-3.5 w-3.5" />
+                      重置失败任务
                     </button>
-
-                    {/* 创建任务按钮 - Gradient Style */}
-                    <button
-                      onClick={() => setShowStartDialog(true)}
-                      disabled={stats.pending === 0 && uploadedImages.length === 0 && !globalSettings.prompt}
-                      className={cn(
-                        "group relative px-12 py-4 rounded-full font-bold text-sm transition-all duration-300 overflow-hidden",
-                        stats.pending === 0 && uploadedImages.length === 0 && !globalSettings.prompt
-                          ? "bg-white/5 text-white/20 cursor-not-allowed border border-white/5"
-                          : "bg-gradient-to-r from-mermaid-lime via-mermaid-cyan to-mermaid-pink text-black hover:scale-[1.02] hover:shadow-[0_0_40px_rgba(0,242,234,0.5)] border border-white/20"
-                      )}
-                    >
-                      {!(stats.pending === 0 && uploadedImages.length === 0 && !globalSettings.prompt) && (
-                        <>
-                          <div className="absolute inset-0 bg-gradient-to-b from-white/40 to-transparent" />
-                          <div className="absolute inset-0 bg-[linear-gradient(110deg,transparent,rgba(255,255,255,0.4),transparent)] bg-[length:200%_100%] translate-x-[-100%] group-hover:animate-shimmer transition-opacity duration-300" />
-                        </>
-                      )}
-                      <span className="relative z-10 flex items-center gap-2">
-                        <Sparkles className="h-5 w-5" />
-                        创建任务
-                        {(uploadedImages.length > 0 || globalSettings.prompt) && (
-                          <span className="ml-1 px-2 py-0.5 rounded-full bg-black/20 text-[10px] font-bold">
-                            {uploadedImages.length > 0 ? uploadedImages.length : ""}
-                          </span>
-                        )}
-                      </span>
-                    </button>
-                  </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -1707,23 +1485,31 @@ export default function ImageBatchPage() {
               </DialogTitle>
             </DialogHeader>
             <div className="flex flex-col lg:flex-row gap-6">
-              {/* 原图 */}
+              {/* 原图 / 提示词 */}
               <div className="flex-1 min-w-0">
                 <p className="text-sm text-muted-foreground mb-2 flex items-center gap-2">
-                  📷 原图
+                  {previewTask?.config.sourceImageUrl ? "📷 原图" : "✍️ 提示词"}
                 </p>
-                <a
-                  href={previewTask?.config.sourceImageUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="block"
-                >
-                  <img
-                    src={previewTask?.config.sourceImageUrl}
-                    alt="Original"
-                    className="w-full max-h-[70vh] object-contain rounded-lg border border-white/10 cursor-zoom-in hover:border-white/30 transition-colors"
-                  />
-                </a>
+                {previewTask?.config.sourceImageUrl ? (
+                  <a
+                    href={previewTask.config.sourceImageUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block"
+                  >
+                    <img
+                      src={previewTask.config.sourceImageUrl}
+                      alt="Original"
+                      className="w-full max-h-[70vh] object-contain rounded-lg border border-white/10 cursor-zoom-in hover:border-white/30 transition-colors"
+                    />
+                  </a>
+                ) : (
+                  <div className="w-full min-h-[300px] max-h-[70vh] flex items-center justify-center rounded-lg border border-white/10 bg-white/5 p-6">
+                    <p className="text-lg text-white/80 text-center leading-relaxed whitespace-pre-wrap">
+                      {previewTask?.config.prompt || "无提示词"}
+                    </p>
+                  </div>
+                )}
               </div>
               {/* 结果图 */}
               {previewTask?.status === "completed" && previewTask.resultUrl && (
@@ -2130,6 +1916,335 @@ export default function ImageBatchPage() {
             </div>
           </DialogContent>
         </Dialog>
+
+        {/* ============================================ */}
+        {/* 创建任务对话框 - Mermaid Edition */}
+        {/* ============================================ */}
+        <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
+          <DialogContent className="max-w-4xl bg-[#0B0C10]/98 backdrop-blur-3xl border border-white/10 text-white shadow-[0_0_120px_-30px_rgba(0,242,234,0.15)] gap-0 p-0 overflow-hidden rounded-2xl flex flex-col max-h-[90vh]">
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 bg-gradient-to-r from-white/5 to-transparent">
+              <div className="flex items-center gap-4">
+                <DialogTitle className="text-lg font-semibold flex items-center gap-2">
+                  <Sparkles className="h-5 w-5 text-mermaid-pink" />
+                  创建图片任务
+                </DialogTitle>
+                <DialogDescription className="sr-only">配置参数并批量生成图片</DialogDescription>
+              </div>
+              <div className="flex items-center gap-2 mr-8">
+                <button
+                  onClick={() => setShowTemplateManager(true)}
+                  className="px-3 py-1.5 rounded-lg text-xs font-medium text-white/60 bg-white/5 border border-white/10 hover:bg-white/10 hover:text-white transition-all flex items-center gap-1.5"
+                >
+                  <LayoutTemplate className="h-3.5 w-3.5" />
+                  加载方案
+                </button>
+              </div>
+            </div>
+
+            {/* Body - 配置面板 */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+              {/* 第一行：主要配置 */}
+              <div className="flex flex-wrap items-center gap-6">
+                {/* 模型选择 */}
+                <div className="space-y-2">
+                  <Label className="text-[10px] uppercase tracking-wider text-white/30 font-bold flex items-center gap-2">
+                    <Zap className="h-3 w-3" />
+                    模型引擎
+                  </Label>
+                  <div className="flex items-center p-1 rounded-full bg-[#050505]/60 border border-white/5">
+                    <button
+                      onClick={() => updateGlobalSettings("model", "nano-banana")}
+                      className={cn(
+                        "px-4 py-2 rounded-full text-xs font-bold transition-all flex items-center gap-2",
+                        globalSettings.model === "nano-banana"
+                          ? "bg-white/10 text-white border border-white/10"
+                          : "text-white/40 hover:text-white hover:bg-white/5"
+                      )}
+                    >
+                      <Zap className={cn("h-3.5 w-3.5", globalSettings.model === "nano-banana" ? "text-mermaid-cyan" : "text-white/40")} />
+                      快速版
+                    </button>
+                    <button
+                      onClick={() => updateGlobalSettings("model", "nano-banana-pro")}
+                      className={cn(
+                        "px-4 py-2 rounded-full text-xs font-bold transition-all flex items-center gap-2",
+                        globalSettings.model === "nano-banana-pro"
+                          ? "bg-white/10 text-white border border-white/10"
+                          : "text-white/40 hover:text-white hover:bg-white/5"
+                      )}
+                    >
+                      <Sparkles className={cn("h-3.5 w-3.5", globalSettings.model === "nano-banana-pro" ? "text-mermaid-pink" : "text-white/40")} />
+                      专业版
+                    </button>
+                  </div>
+                </div>
+
+                <div className="h-10 w-px bg-white/5" />
+
+                {/* 处理类型 */}
+                <div className="space-y-2">
+                  <Label className="text-[10px] uppercase tracking-wider text-white/30 font-bold flex items-center gap-2">
+                    <Wand2 className="h-3 w-3" />
+                    处理模式
+                  </Label>
+                  <div className="flex gap-2">
+                    {getAvailableActions().map((action) => (
+                      <button
+                        key={action.value}
+                        onClick={() => updateGlobalSettings("action", action.value)}
+                        className={cn(
+                          "px-3 py-2 rounded-lg text-xs font-bold border transition-all flex items-center gap-2",
+                          globalSettings.action === action.value
+                            ? "bg-mermaid-cyan/10 border-mermaid-cyan/30 text-mermaid-cyan"
+                            : "bg-black/20 border-white/5 text-white/40 hover:border-white/20 hover:text-white"
+                        )}
+                      >
+                        {action.value === "generate" && <Wand2 className="h-3.5 w-3.5" />}
+                        {action.value === "upscale" && <ZoomIn className="h-3.5 w-3.5" />}
+                        {action.value === "nine_grid" && <Grid3X3 className="h-3.5 w-3.5" />}
+                        {action.label}
+                        <span className="text-[10px] opacity-60 font-mono">{action.credits}pts</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="h-10 w-px bg-white/5" />
+
+                {/* 尺寸 */}
+                <div className="space-y-2">
+                  <Label className="text-[10px] uppercase tracking-wider text-white/30 font-bold flex items-center gap-2">
+                    <Maximize2 className="h-3 w-3" />
+                    尺寸比例
+                  </Label>
+                  <div className="flex gap-1.5">
+                    {(globalSettings.model === "nano-banana" ? NANO_FAST_ASPECT_OPTIONS : NANO_PRO_ASPECT_OPTIONS).slice(0, 4).map((opt) => (
+                      <button
+                        key={opt.value}
+                        onClick={() => updateGlobalSettings("aspectRatio", opt.value)}
+                        className={cn(
+                          "h-9 w-9 rounded-lg border flex items-center justify-center transition-all",
+                          globalSettings.aspectRatio === opt.value
+                            ? "bg-white/10 border-white/20 text-white scale-105"
+                            : "bg-black/20 border-white/5 text-white/30 hover:border-white/20 hover:text-white"
+                        )}
+                        title={opt.label}
+                      >
+                        {AspectRatioIcons[opt.value]}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Pro 模式分辨率 */}
+                {globalSettings.model === "nano-banana-pro" && (
+                  <>
+                    <div className="h-10 w-px bg-white/5" />
+                    <div className="space-y-2">
+                      <Label className="text-[10px] uppercase tracking-wider text-white/30 font-bold flex items-center gap-2">
+                        <Monitor className="h-3 w-3" />
+                        画质
+                      </Label>
+                      <div className="flex gap-1.5">
+                        {IMAGE_RESOLUTION_OPTIONS.map((opt) => (
+                          <button
+                            key={opt.value}
+                            onClick={() => updateGlobalSettings("resolution", opt.value)}
+                            className={cn(
+                              "px-3 py-2 rounded-lg text-xs font-bold border transition-all",
+                              globalSettings.resolution === opt.value
+                                ? "bg-mermaid-pink/10 border-mermaid-pink/30 text-mermaid-pink"
+                                : "bg-black/20 border-white/5 text-white/30 hover:border-white/20 hover:text-white"
+                            )}
+                          >
+                            {opt.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* 提示词输入区 */}
+              {globalSettings.action === "generate" && (
+                <div className="space-y-2">
+                  <Label className="text-[10px] uppercase tracking-wider text-white/30 font-bold flex items-center gap-2">
+                    <Wand2 className="h-3 w-3" />
+                    提示词
+                  </Label>
+                  <textarea
+                    value={globalSettings.prompt}
+                    onChange={(e) => updateGlobalSettings("prompt", e.target.value)}
+                    placeholder="在此输入图片生成提示词... (支持中英文)"
+                    className="w-full h-24 px-4 py-3 text-sm bg-[#050505] border border-white/10 rounded-xl text-white placeholder:text-white/20 focus:outline-none focus:border-mermaid-cyan/50 resize-none font-mono"
+                  />
+                </div>
+              )}
+
+              {globalSettings.action !== "generate" && (
+                <div className="flex items-center gap-3 p-4 rounded-xl bg-[#050505] border border-white/5 border-l-4 border-l-mermaid-cyan/50">
+                  <Info className="h-5 w-5 text-mermaid-cyan" />
+                  <div>
+                    <span className="text-sm font-bold text-white">无需提示词模式</span>
+                    <p className="text-xs text-white/40 mt-0.5">
+                      {globalSettings.action === "upscale"
+                        ? "高清放大模式将自动增强分辨率和细节，保留原始构图。"
+                        : "九宫格模式将去除背景并生成多角度商品展示图。"}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* 图片上传区 */}
+              <div className="space-y-2">
+                <Label className="text-[10px] uppercase tracking-wider text-white/30 font-bold flex items-center gap-2">
+                  <FolderUp className="h-3 w-3" />
+                  图片素材 ({uploadedImages.length} 张)
+                </Label>
+                <div
+                  className="border-2 border-dashed border-white/10 rounded-xl p-6 text-center hover:border-mermaid-cyan/30 transition-colors cursor-pointer"
+                  onClick={() => {
+                    if (fileInputRef.current) fileInputRef.current.value = "";
+                    fileInputRef.current?.click();
+                  }}
+                >
+                  <input
+                    type="file"
+                    accept="image/*.webp,image/*.png,image/*.jpg,image/*.jpeg"
+                    multiple
+                    onChange={(e) => e.target.files && handleBatchUpload(e.target.files)}
+                    className="hidden"
+                    ref={fileInputRef}
+                  />
+                  {uploadedImages.length > 0 ? (
+                    <div className="space-y-3">
+                      <div className="flex flex-wrap gap-2 justify-center">
+                        {uploadedImages.slice(0, 10).map((img, i) => (
+                          <div key={`dialog-preview-${i}-${img.name}`} className="w-14 h-14 rounded-lg overflow-hidden border border-white/20">
+                            <img src={img.previewUrl} alt={img.name} className="w-full h-full object-cover" />
+                          </div>
+                        ))}
+                        {uploadedImages.length > 10 && (
+                          <div className="w-14 h-14 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center">
+                            <span className="text-white/40 text-xs">+{uploadedImages.length - 10}</span>
+                          </div>
+                        )}
+                      </div>
+                      <p className="text-xs text-white/40">点击继续添加图片，或拖拽文件到此处</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <FolderUp className="h-8 w-8 text-white/20 mx-auto" />
+                      <p className="text-sm text-white/40">点击上传图片，或拖拽文件到此处</p>
+                      <p className="text-xs text-white/20">支持 PNG, JPG, WEBP 格式</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* 任务数量 (仅提示词模式) */}
+              {globalSettings.action === "generate" && uploadedImages.length === 0 && (
+                <div className="space-y-2">
+                  <Label className="text-[10px] uppercase tracking-wider text-white/30 font-bold flex items-center gap-2">
+                    <LayoutGrid className="h-3 w-3" />
+                    生成数量
+                  </Label>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="number"
+                      min="1"
+                      max="100"
+                      value={promptCount}
+                      onChange={(e) => setPromptCount(Math.max(1, Math.min(100, parseInt(e.target.value) || 1)))}
+                      className="w-24 px-3 py-2 text-sm bg-[#050505] border border-white/10 rounded-lg text-white focus:outline-none focus:border-mermaid-cyan/50"
+                    />
+                    <span className="text-xs text-white/40">个任务</span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-4 border-t border-white/10 bg-white/5 flex flex-row justify-between items-center">
+              {/* 左侧：保存方案 */}
+              <button
+                onClick={() => setShowSaveTemplate(true)}
+                className="px-3 py-1.5 rounded-lg text-xs font-medium text-white/60 bg-white/5 border border-white/10 hover:bg-white/10 hover:text-white transition-all flex items-center gap-1.5"
+              >
+                <Save className="h-3.5 w-3.5" />
+                保存方案
+              </button>
+
+              {/* 右侧：清除图片、取消、启动任务 */}
+              <div className="flex items-center gap-3">
+                {uploadedImages.length > 0 && (
+                  <button
+                    onClick={clearUploadedImages}
+                    className="text-xs text-red-400/60 hover:text-red-400 transition-colors"
+                  >
+                    清除图片
+                  </button>
+                )}
+                <button
+                  onClick={() => setShowCreateDialog(false)}
+                  className="px-5 py-2.5 rounded-full text-xs font-bold text-white/40 hover:text-white hover:bg-white/5 transition-all"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={() => {
+                    // 设置场景
+                    if (uploadedImages.length > 0) {
+                      setScenario("image");
+                    } else if (globalSettings.prompt.trim()) {
+                      setScenario("prompt");
+                    } else {
+                      toast({ variant: "destructive", title: "请上传图片或输入提示词" });
+                      return;
+                    }
+
+                    // 创建任务
+                    const ids = createTasksFromScenario();
+                    if (ids.length === 0) {
+                      toast({ variant: "destructive", title: "请上传图片或输入提示词" });
+                      return;
+                    }
+
+                    toast({ title: `🚀 已创建 ${ids.length} 个任务，正在启动处理...` });
+                    setShowCreateDialog(false);
+
+                    // 自动开始处理任务（增加间隔避免服务器压力）
+                    setTimeout(() => {
+                      const newTasks = useImageBatchStore.getState().tasks.filter(t => ids.includes(t.id));
+                      newTasks.forEach((task, i) => {
+                        if (task.status === "pending") {
+                          setTimeout(() => {
+                            handleProcessSingleTask(task);
+                          }, i * 1200); // 每个任务间隔1200ms启动
+                        }
+                      });
+                      // 清理场景数据
+                      setTimeout(() => {
+                        resetScenarioData();
+                      }, newTasks.length * 1200 + 3000);
+                    }, 100);
+                  }}
+                  disabled={uploadedImages.length === 0 && !globalSettings.prompt.trim()}
+                  className="group relative px-6 py-2.5 rounded-full font-bold text-black text-xs transition-all bg-gradient-to-r from-[#CCFF00] via-[#00F2EA] to-[#EC4899] hover:scale-[1.02] hover:shadow-[0_0_20px_rgba(0,242,234,0.5)] border border-white/20 overflow-hidden disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <div className="absolute inset-0 bg-gradient-to-b from-white/40 to-transparent pointer-events-none" />
+                  <span className="relative z-10 flex items-center gap-2">
+                    <Sparkles className="h-4 w-4" />
+                    启动任务 {uploadedImages.length > 0 ? `(${uploadedImages.length})` : promptCount > 1 ? `(${promptCount})` : ""}
+                  </span>
+                </button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
       </div >
       {/* Templates */}
       < SaveTemplateDialog
