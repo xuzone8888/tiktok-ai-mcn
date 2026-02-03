@@ -73,6 +73,19 @@ import {
   FolderDown,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import {
+  SlideshowModePanel,
+  PositionUploader,
+  MusicPoolManager,
+  SubtitleEditor,
+  TransitionPicker,
+  type SlideshowMode,
+  type Position,
+  type MusicMode,
+  type SubtitleConfig,
+  type TransitionEffect
+} from "@/components/slideshow";
+
 
 // Types
 import {
@@ -1276,10 +1289,25 @@ export default function VideoBatchPage() {
 
   // 纯提示词创建模式
   const [createMode, setCreateMode] = useState<"image" | "prompt">("prompt");
+
+  // 轮播视频状态
+  const [slideshowMode, setSlideshowMode] = useState<SlideshowMode>('random');
+  const [slideshowPositions, setSlideshowPositions] = useState<Position[]>([]);
+  const [slideshowImages, setSlideshowImages] = useState<File[]>([]);
+  const [slideshowImagesPerVideo, setSlideshowImagesPerVideo] = useState(5);
+  const [slideshowMusicMode, setSlideshowMusicMode] = useState<MusicMode>('preset');
+  const [slideshowCustomMusic, setSlideshowCustomMusic] = useState<File[]>([]);
+  const [slideshowTransition, setSlideshowTransition] = useState<TransitionEffect>('fade');
+  const [slideshowDuration, setSlideshowDuration] = useState(3); // 每张图片时长2-10秒
+  const [slideshowAspectRatio, setSlideshowAspectRatio] = useState<'9:16' | '16:9'>('9:16');
+  const [slideshowSubtitle, setSlideshowSubtitle] = useState<SubtitleConfig | null>(null);
+  const [isSlideshowGenerating, setIsSlideshowGenerating] = useState(false);
+
   const [promptInput, setPromptInput] = useState("");
   const [groupNameInput, setGroupNameInput] = useState(""); // 分组名称
   const [referenceImageFile, setReferenceImageFile] = useState<File | null>(null);
   const [referenceImageUrl, setReferenceImageUrl] = useState("");
+
 
   // 批量下载状态
   const [isDownloading, setIsDownloading] = useState(false);
@@ -2623,10 +2651,12 @@ C07: [story CTA, inspiring, <50 chars]`,
   return (
     <TooltipProvider>
       <div className="space-y-6 pb-32">
+        {/* ============================================ */}
         {/* 页面头部 */}
-        <div>
+        {/* ============================================ */}
+        <div className="mb-10 animate-in fade-in slide-in-from-top-4 duration-500">
           <h1 className="text-3xl font-bold tracking-tight flex items-center gap-3">
-            <div className="h-8 w-1.5 rounded-full bg-gradient-to-b from-[#CCFF00] to-[#00F2EA] shadow-[0_0_10px_rgba(0,242,234,0.5)]" />
+            <div className="h-8 w-1.5 rounded-full bg-gradient-to-b from-mermaid-lime to-mermaid-cyan shadow-[0_0_10px_rgba(0,242,234,0.5)]" />
             <span className="text-white drop-shadow-lg">批量视频线</span>
           </h1>
           <p className="mt-2 text-white/60">
@@ -2634,445 +2664,446 @@ C07: [story CTA, inspiring, <50 chars]`,
           </p>
         </div>
 
-        {/* V7: 任务队列 - 创建按钮整合到 Header */}
-        <Card className="glass-card">
-          <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <CardTitle className="text-sm flex items-center gap-2">
-                  <Film className="h-4 w-4 text-tiktok-cyan" />
-                  任务队列
-                </CardTitle>
-                <Badge variant="outline" className="text-xs">
-                  {tasks.length} 个任务
-                </Badge>
-              </div>
+        {/* ============================================ */}
+        {/* 任务队列 */}
+        {/* ============================================ */}
+        <div className="space-y-4">
+          <div className="flex items-center justify-between px-2">
+            <div className="flex items-center gap-3">
+              <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                <Film className="h-5 w-5 text-mermaid-cyan" />
+                任务队列
+              </h2>
+              <Badge variant="outline" className="text-xs bg-white/5 border-white/10 text-white/60">
+                {tasks.length} 个任务
+              </Badge>
+            </div>
 
-              <div className="flex items-center gap-3">
-                {/* 批量操作组 - 移至此处 */}
-                <div className="flex items-center gap-2 mr-2">
-                  {selectedCount > 0 && (
-                    <>
-                      {/* 批量下载 */}
-                      {tasks.filter(t => selectedTaskIds[t.id] && t.status === "success" && t.soraVideoUrl).length > 0 && (
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              disabled={isDownloading}
-                              className="h-8 text-xs text-emerald-400 border-emerald-400/30 hover:bg-emerald-400/10"
-                            >
-                              {isDownloading ? (
-                                <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                              ) : (
-                                <Download className="h-3 w-3 mr-1" />
-                              )}
-                              下载 ({tasks.filter(t => selectedTaskIds[t.id] && t.status === "success" && t.soraVideoUrl).length})
-                              <ChevronDown className="h-3 w-3 ml-1" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="w-64">
-                            {/* 方式1: 直连CDN推荐 */}
-                            <DropdownMenuItem
-                              onClick={async () => {
-                                const completedSelectedTasks = tasks.filter(
-                                  t => selectedTaskIds[t.id] && t.status === "success" && t.soraVideoUrl && !downloadedTaskIds.has(t.id)
-                                );
-                                if (completedSelectedTasks.length === 0) {
-                                  const allDownloaded = tasks.filter(
-                                    t => selectedTaskIds[t.id] && t.status === "success" && t.soraVideoUrl
-                                  ).every(t => downloadedTaskIds.has(t.id));
+            <div className="flex items-center gap-3">
+              {/* 批量操作组 - 移至此处 */}
+              <div className="flex items-center gap-2 mr-2">
+                {selectedCount > 0 && (
+                  <>
+                    {/* 批量下载 */}
+                    {tasks.filter(t => selectedTaskIds[t.id] && t.status === "success" && t.soraVideoUrl).length > 0 && (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={isDownloading}
+                            className="h-8 text-xs text-emerald-400 border-emerald-400/30 hover:bg-emerald-400/10"
+                          >
+                            {isDownloading ? (
+                              <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                            ) : (
+                              <Download className="h-3 w-3 mr-1" />
+                            )}
+                            下载 ({tasks.filter(t => selectedTaskIds[t.id] && t.status === "success" && t.soraVideoUrl).length})
+                            <ChevronDown className="h-3 w-3 ml-1" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-64">
+                          {/* 方式1: 直连CDN推荐 */}
+                          <DropdownMenuItem
+                            onClick={async () => {
+                              const completedSelectedTasks = tasks.filter(
+                                t => selectedTaskIds[t.id] && t.status === "success" && t.soraVideoUrl && !downloadedTaskIds.has(t.id)
+                              );
+                              if (completedSelectedTasks.length === 0) {
+                                const allDownloaded = tasks.filter(
+                                  t => selectedTaskIds[t.id] && t.status === "success" && t.soraVideoUrl
+                                ).every(t => downloadedTaskIds.has(t.id));
 
-                                  if (allDownloaded) {
-                                    toast({ title: "✅ 所有选中视频已下载", description: "无需重复下载" });
-                                  } else {
-                                    toast({ variant: "destructive", title: "没有可下载的视频" });
-                                  }
-                                  return;
+                                if (allDownloaded) {
+                                  toast({ title: "✅ 所有选中视频已下载", description: "无需重复下载" });
+                                } else {
+                                  toast({ variant: "destructive", title: "没有可下载的视频" });
+                                }
+                                return;
+                              }
+
+                              cancelDownloadRef.current = false;
+                              setDownloadProgress({
+                                show: true,
+                                total: completedSelectedTasks.length,
+                                current: 0,
+                                success: 0,
+                                failed: 0,
+                                currentFilename: "准备中...",
+                                startTime: Date.now(),
+                                cancelled: false,
+                              });
+                              setIsDownloading(true);
+
+                              let successCount = 0;
+                              let failedCount = 0;
+
+                              for (let i = 0; i < completedSelectedTasks.length; i++) {
+                                if (cancelDownloadRef.current) {
+                                  setDownloadProgress(prev => ({ ...prev, cancelled: true }));
+                                  break;
                                 }
 
-                                cancelDownloadRef.current = false;
-                                setDownloadProgress({
-                                  show: true,
-                                  total: completedSelectedTasks.length,
-                                  current: 0,
-                                  success: 0,
-                                  failed: 0,
-                                  currentFilename: "准备中...",
-                                  startTime: Date.now(),
-                                  cancelled: false,
-                                });
-                                setIsDownloading(true);
+                                const task = completedSelectedTasks[i];
+                                if (task.soraVideoUrl) {
+                                  const filename = generateSimpleFilename(task, tasks.indexOf(task));
+                                  setDownloadProgress(prev => ({ ...prev, currentFilename: filename }));
+                                  setDownloadingTaskIds(prev => new Set(prev).add(task.id));
+                                  setTaskDownloadProgress(prev => ({ ...prev, [task.id]: 0 }));
 
-                                let successCount = 0;
-                                let failedCount = 0;
-
-                                for (let i = 0; i < completedSelectedTasks.length; i++) {
-                                  if (cancelDownloadRef.current) {
-                                    setDownloadProgress(prev => ({ ...prev, cancelled: true }));
-                                    break;
-                                  }
-
-                                  const task = completedSelectedTasks[i];
-                                  if (task.soraVideoUrl) {
-                                    const filename = generateSimpleFilename(task, tasks.indexOf(task));
-                                    setDownloadProgress(prev => ({ ...prev, currentFilename: filename }));
-                                    setDownloadingTaskIds(prev => new Set(prev).add(task.id));
-                                    setTaskDownloadProgress(prev => ({ ...prev, [task.id]: 0 }));
-
-                                    try {
-                                      const response = await fetch(task.soraVideoUrl, {
-                                        method: "GET",
-                                        mode: "cors",
-                                        credentials: "omit",
-                                      });
-
-                                      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-
-                                      const contentLength = response.headers.get("content-length");
-                                      const totalSize = contentLength ? parseInt(contentLength, 10) : 0;
-                                      const reader = response.body?.getReader();
-                                      if (!reader) throw new Error("无法读取响应流");
-
-                                      const chunks: Uint8Array[] = [];
-                                      let receivedLength = 0;
-
-                                      while (true) {
-                                        const { done, value } = await reader.read();
-                                        if (done) break;
-                                        chunks.push(value);
-                                        receivedLength += value.length;
-                                        if (totalSize > 0) {
-                                          const progress = Math.round((receivedLength / totalSize) * 100);
-                                          setTaskDownloadProgress(prev => ({ ...prev, [task.id]: progress }));
-                                        }
-                                      }
-
-                                      const blob = new Blob(chunks, { type: "video/mp4" });
-                                      const blobUrl = URL.createObjectURL(blob);
-                                      const link = document.createElement("a");
-                                      link.href = blobUrl;
-                                      link.download = filename;
-                                      document.body.appendChild(link);
-                                      link.click();
-                                      document.body.removeChild(link);
-                                      setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
-                                      successCount++;
-                                      markTaskAsDownloaded(task.id);
-                                      setTaskDownloadProgress(prev => ({ ...prev, [task.id]: 100 }));
-                                    } catch (error) {
-                                      console.error(`Download Error:`, error);
-                                      failedCount++;
-                                      openVideoInNewTab(task.soraVideoUrl);
-                                    }
-
-                                    setDownloadingTaskIds(prev => {
-                                      const newSet = new Set(prev);
-                                      newSet.delete(task.id);
-                                      return newSet;
+                                  try {
+                                    const response = await fetch(task.soraVideoUrl, {
+                                      method: "GET",
+                                      mode: "cors",
+                                      credentials: "omit",
                                     });
 
-                                    setDownloadProgress(prev => ({
-                                      ...prev,
-                                      current: i + 1,
-                                      success: successCount,
-                                      failed: failedCount,
-                                    }));
+                                    if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
-                                    await new Promise(r => setTimeout(r, 200));
+                                    const contentLength = response.headers.get("content-length");
+                                    const totalSize = contentLength ? parseInt(contentLength, 10) : 0;
+                                    const reader = response.body?.getReader();
+                                    if (!reader) throw new Error("无法读取响应流");
+
+                                    const chunks: Uint8Array[] = [];
+                                    let receivedLength = 0;
+
+                                    while (true) {
+                                      const { done, value } = await reader.read();
+                                      if (done) break;
+                                      chunks.push(value);
+                                      receivedLength += value.length;
+                                      if (totalSize > 0) {
+                                        const progress = Math.round((receivedLength / totalSize) * 100);
+                                        setTaskDownloadProgress(prev => ({ ...prev, [task.id]: progress }));
+                                      }
+                                    }
+
+                                    const blob = new Blob(chunks, { type: "video/mp4" });
+                                    const blobUrl = URL.createObjectURL(blob);
+                                    const link = document.createElement("a");
+                                    link.href = blobUrl;
+                                    link.download = filename;
+                                    document.body.appendChild(link);
+                                    link.click();
+                                    document.body.removeChild(link);
+                                    setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+                                    successCount++;
+                                    markTaskAsDownloaded(task.id);
+                                    setTaskDownloadProgress(prev => ({ ...prev, [task.id]: 100 }));
+                                  } catch (error) {
+                                    console.error(`Download Error:`, error);
+                                    failedCount++;
+                                    openVideoInNewTab(task.soraVideoUrl);
                                   }
+
+                                  setDownloadingTaskIds(prev => {
+                                    const newSet = new Set(prev);
+                                    newSet.delete(task.id);
+                                    return newSet;
+                                  });
+
+                                  setDownloadProgress(prev => ({
+                                    ...prev,
+                                    current: i + 1,
+                                    success: successCount,
+                                    failed: failedCount,
+                                  }));
+
+                                  await new Promise(r => setTimeout(r, 200));
                                 }
+                              }
 
-                                setIsDownloading(false);
-                                setTaskDownloadProgress({});
-                              }}
-                              className="cursor-pointer bg-gradient-to-r from-emerald-500/10 to-teal-500/10 border border-emerald-500/20"
-                            >
-                              <Zap className="h-4 w-4 mr-2 text-emerald-400" />
-                              <div className="flex flex-col">
-                                <span className="font-medium text-emerald-400">直连CDN推荐 🧪</span>
-                                <span className="text-xs text-muted-foreground">直连CDN，速度最快，显示进度</span>
-                              </div>
-                            </DropdownMenuItem>
+                              setIsDownloading(false);
+                              setTaskDownloadProgress({});
+                            }}
+                            className="cursor-pointer bg-gradient-to-r from-emerald-500/10 to-teal-500/10 border border-emerald-500/20"
+                          >
+                            <Zap className="h-4 w-4 mr-2 text-emerald-400" />
+                            <div className="flex flex-col">
+                              <span className="font-medium text-emerald-400">直连CDN推荐 🧪</span>
+                              <span className="text-xs text-muted-foreground">直连CDN，速度最快，显示进度</span>
+                            </div>
+                          </DropdownMenuItem>
 
-                            <DropdownMenuSeparator />
+                          <DropdownMenuSeparator />
 
-                            <DropdownMenuItem
-                              onClick={() => {
-                                const completedSelectedTasks = tasks.filter(
-                                  t => selectedTaskIds[t.id] && t.status === "success" && t.soraVideoUrl
-                                );
-                                if (completedSelectedTasks.length === 0) return;
+                          <DropdownMenuItem
+                            onClick={() => {
+                              const completedSelectedTasks = tasks.filter(
+                                t => selectedTaskIds[t.id] && t.status === "success" && t.soraVideoUrl
+                              );
+                              if (completedSelectedTasks.length === 0) return;
 
-                                const urls = completedSelectedTasks
-                                  .map((task) => task.soraVideoUrl)
-                                  .filter(Boolean)
-                                  .join("\n");
+                              const urls = completedSelectedTasks
+                                .map((task) => task.soraVideoUrl)
+                                .filter(Boolean)
+                                .join("\n");
 
-                                const blob = new Blob([urls], { type: "text/plain;charset=utf-8" });
-                                const url = URL.createObjectURL(blob);
-                                const a = document.createElement("a");
-                                a.href = url;
-                                a.download = `video_urls_${new Date().toISOString().slice(0, 10)}.txt`;
-                                document.body.appendChild(a);
-                                a.click();
-                                document.body.removeChild(a);
-                                URL.revokeObjectURL(url);
+                              const blob = new Blob([urls], { type: "text/plain;charset=utf-8" });
+                              const url = URL.createObjectURL(blob);
+                              const a = document.createElement("a");
+                              a.href = url;
+                              a.download = `video_urls_${new Date().toISOString().slice(0, 10)}.txt`;
+                              document.body.appendChild(a);
+                              a.click();
+                              document.body.removeChild(a);
+                              URL.revokeObjectURL(url);
 
-                                toast({ title: "✅ 导出成功", description: `已导出 ${completedSelectedTasks.length} 个视频地址` });
-                              }}
-                              className="cursor-pointer"
-                            >
-                              <FileDown className="h-4 w-4 mr-2 text-blue-400" />
-                              <div className="flex flex-col">
-                                <span>导出地址 (TXT)</span>
-                                <span className="text-xs text-muted-foreground">导入 IDM/迅雷 批量下载</span>
-                              </div>
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      )}
+                              toast({ title: "✅ 导出成功", description: `已导出 ${completedSelectedTasks.length} 个视频地址` });
+                            }}
+                            className="cursor-pointer"
+                          >
+                            <FileDown className="h-4 w-4 mr-2 text-blue-400" />
+                            <div className="flex flex-col">
+                              <span>导出地址 (TXT)</span>
+                              <span className="text-xs text-muted-foreground">导入 IDM/迅雷 批量下载</span>
+                            </div>
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    )}
 
-                      {/* 删除选中 */}
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={removeSelectedTasks}
-                        className="h-8 text-xs text-red-400 border-red-400/30 hover:bg-red-400/10"
-                      >
-                        <Trash2 className="h-3 w-3 mr-1" />
-                        删除 ({selectedCount})
-                      </Button>
-                    </>
-                  )}
-
-                  {/* 选择管理 */}
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-8 px-3 text-xs font-medium bg-white/5 border-white/10 text-white/60 hover:text-white hover:bg-white/10 hover:border-white/20 transition-all"
-                      >
-                        <Settings2 className="h-3.5 w-3.5 mr-1.5 opacity-70" />
-                        <span className="text-white/70 group-hover:text-white">选择管理</span>
-                        <ChevronDown className="h-3 w-3 ml-1.5 opacity-50" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-40">
-                      <DropdownMenuItem onClick={() => selectAllTasks(true)} className="cursor-pointer">
-                        <Check className="h-4 w-4 mr-2 text-emerald-400" />
-                        全选
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={clearSelection} className="cursor-pointer">
-                        <X className="h-4 w-4 mr-2 text-orange-400" />
-                        取消选择
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem onClick={clearAllTasks} className="text-red-400 cursor-pointer">
-                        <Trash2 className="h-4 w-4 mr-2" />
-                        清空所有
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-
-                <div className="h-4 w-px bg-white/10 mx-1" />
-
-                {/* Mermaid Ultra 开始全部按钮 (Emerald Gradient) */}
-                {stats.pending > 0 && (
-                  <button
-                    onClick={async () => {
-                      if (!userId) {
-                        toast({ variant: "destructive", title: "请先登录" });
-                        return;
-                      }
-
-                      const pendingTasks = tasks.filter(t => t.status === "pending");
-                      if (pendingTasks.length === 0) {
-                        toast({ title: "没有待处理任务", variant: "default" });
-                        return;
-                      }
-
-                      if (userCredits < stats.totalCost) {
-                        toast({ variant: "destructive", title: `积分不足，需要 ${stats.totalCost} 积分，当前余额 ${userCredits}` });
-                        return;
-                      }
-
-                      setIsBatchStarting(true);
-                      toast({ title: `🚀 正在启动 ${pendingTasks.length} 个视频任务...` });
-
-                      for (const task of pendingTasks) {
-                        handleStartSingleTask(task);
-                        await new Promise(r => setTimeout(r, 1000));
-                      }
-
-                      setIsBatchStarting(false);
-                    }}
-                    disabled={isBatchStarting || stats.pending === 0}
-                    className="relative h-8 px-5 rounded-full font-bold text-white text-xs transition-all duration-500 bg-gradient-to-r from-emerald-500 to-teal-500 hover:scale-[1.02] hover:shadow-[0_0_20px_rgba(16,185,129,0.5)] border border-white/20 overflow-hidden group shadow-[0_0_10px_rgba(16,185,129,0.2)] disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <div className="absolute inset-0 bg-gradient-to-b from-white/40 to-transparent" />
-                    <div className="absolute inset-0 bg-[linear-gradient(110deg,transparent,rgba(255,255,255,0.4),transparent)] bg-[length:200%_100%] opacity-0 group-hover:opacity-100 group-hover:animate-shimmer transition-opacity duration-300" />
-                    <span className="relative z-10 flex items-center justify-center gap-1.5">
-                      {isBatchStarting ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      ) : (
-                        <Play className="h-3.5 w-3.5 fill-white/20" />
-                      )}
-                      {isBatchStarting ? "启动中..." : `开始全部 (${stats.pending})`}
-                    </span>
-                  </button>
+                    {/* 删除选中 */}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={removeSelectedTasks}
+                      className="h-8 text-xs text-red-400 border-red-400/30 hover:bg-red-400/10"
+                    >
+                      <Trash2 className="h-3 w-3 mr-1" />
+                      删除 ({selectedCount})
+                    </Button>
+                  </>
                 )}
 
-                {/* Mermaid Ultra 创建任务按钮 (Small) */}
+                {/* 选择管理 */}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8 px-3 text-xs font-medium bg-white/5 border-white/10 text-white/60 hover:text-white hover:bg-white/10 hover:border-white/20 transition-all"
+                    >
+                      <Settings2 className="h-3.5 w-3.5 mr-1.5 opacity-70" />
+                      <span className="text-white/70 group-hover:text-white">选择管理</span>
+                      <ChevronDown className="h-3 w-3 ml-1.5 opacity-50" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-40">
+                    <DropdownMenuItem onClick={() => selectAllTasks(true)} className="cursor-pointer">
+                      <Check className="h-4 w-4 mr-2 text-emerald-400" />
+                      全选
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={clearSelection} className="cursor-pointer">
+                      <X className="h-4 w-4 mr-2 text-orange-400" />
+                      取消选择
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={clearAllTasks} className="text-red-400 cursor-pointer">
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      清空所有
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+
+              <div className="h-4 w-px bg-white/10 mx-1" />
+
+              {/* Mermaid Ultra 开始全部按钮 (Emerald Gradient) */}
+              {stats.pending > 0 && (
                 <button
-                  onClick={() => setShowCreateDialog(true)}
-                  className="relative h-8 px-5 rounded-full font-bold text-black text-xs transition-all duration-500 bg-gradient-to-r from-[#CCFF00] via-[#00F2EA] to-[#EC4899] hover:scale-[1.02] hover:shadow-[0_0_20px_rgba(0,242,234,0.5)] border border-white/20 overflow-hidden group shadow-[0_0_10px_rgba(0,242,234,0.2)]"
+                  onClick={async () => {
+                    if (!userId) {
+                      toast({ variant: "destructive", title: "请先登录" });
+                      return;
+                    }
+
+                    const pendingTasks = tasks.filter(t => t.status === "pending");
+                    if (pendingTasks.length === 0) {
+                      toast({ title: "没有待处理任务", variant: "default" });
+                      return;
+                    }
+
+                    if (userCredits < stats.totalCost) {
+                      toast({ variant: "destructive", title: `积分不足，需要 ${stats.totalCost} 积分，当前余额 ${userCredits}` });
+                      return;
+                    }
+
+                    setIsBatchStarting(true);
+                    toast({ title: `🚀 正在启动 ${pendingTasks.length} 个视频任务...` });
+
+                    for (const task of pendingTasks) {
+                      handleStartSingleTask(task);
+                      await new Promise(r => setTimeout(r, 1000));
+                    }
+
+                    setIsBatchStarting(false);
+                  }}
+                  disabled={isBatchStarting || stats.pending === 0}
+                  className="relative h-8 px-5 rounded-full font-bold text-white text-xs transition-all duration-500 bg-gradient-to-r from-emerald-500 to-teal-500 hover:scale-[1.02] hover:shadow-[0_0_20px_rgba(16,185,129,0.5)] border border-white/20 overflow-hidden group shadow-[0_0_10px_rgba(16,185,129,0.2)] disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <div className="absolute inset-0 bg-gradient-to-b from-white/40 to-transparent" />
                   <div className="absolute inset-0 bg-[linear-gradient(110deg,transparent,rgba(255,255,255,0.4),transparent)] bg-[length:200%_100%] opacity-0 group-hover:opacity-100 group-hover:animate-shimmer transition-opacity duration-300" />
                   <span className="relative z-10 flex items-center justify-center gap-1.5">
-                    <Sparkles className="h-3.5 w-3.5 fill-black/20" />
-                    创建视频任务
+                    {isBatchStarting ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Play className="h-3.5 w-3.5 fill-white/20" />
+                    )}
+                    {isBatchStarting ? "启动中..." : `开始全部 (${stats.pending})`}
                   </span>
                 </button>
+              )}
+
+              {/* Mermaid Ultra 创建任务按钮 (Small) */}
+              <button
+                onClick={() => setShowCreateDialog(true)}
+                className="relative h-8 px-5 rounded-full font-bold text-black text-xs transition-all duration-500 bg-gradient-to-r from-[#CCFF00] via-[#00F2EA] to-[#EC4899] hover:scale-[1.02] hover:shadow-[0_0_20px_rgba(0,242,234,0.5)] border border-white/20 overflow-hidden group shadow-[0_0_10px_rgba(0,242,234,0.2)]"
+              >
+                <div className="absolute inset-0 bg-gradient-to-b from-white/40 to-transparent" />
+                <div className="absolute inset-0 bg-[linear-gradient(110deg,transparent,rgba(255,255,255,0.4),transparent)] bg-[length:200%_100%] opacity-0 group-hover:opacity-100 group-hover:animate-shimmer transition-opacity duration-300" />
+                <span className="relative z-10 flex items-center justify-center gap-1.5">
+                  <Sparkles className="h-3.5 w-3.5 fill-black/20" />
+                  创建视频任务
+                </span>
+              </button>
+            </div>
+          </div>
+
+
+
+
+
+          {tasks.length === 0 ? (
+            <div
+              className="group flex flex-col items-center justify-center py-24 rounded-[2rem] border border-white/5 bg-[#0B0C10] relative overflow-hidden cursor-pointer transition-all duration-500 hover:border-mermaid-cyan/30 hover:shadow-[0_0_30px_rgba(0,242,234,0.1)]"
+              onClick={() => setShowCreateDialog(true)}
+            >
+              {/* Aurora Background Effect */}
+              <div className="absolute inset-0 bg-gradient-to-br from-mermaid-cyan/5 via-transparent to-mermaid-pink/5 opacity-50" />
+              <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-10" />
+
+              {/* Animated Rings */}
+              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] border border-white/5 rounded-full animate-[spin_20s_linear_infinite]" />
+              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[300px] h-[300px] border border-white/5 rounded-full animate-[spin_15s_linear_infinite_reverse]" />
+
+              <div className="relative z-10 flex flex-col items-center">
+                <div className="relative mb-6">
+                  <div className="absolute inset-0 bg-mermaid-cyan/20 blur-xl rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                  <div className="relative w-24 h-24 rounded-2xl bg-black/40 border border-white/10 flex items-center justify-center group-hover:scale-110 transition-transform duration-300 shadow-inner">
+                    <Video className="h-12 w-12 text-white/20 group-hover:text-mermaid-cyan transition-colors duration-300" />
+                  </div>
+                </div>
+                <h3 className="text-xl font-bold text-white mb-2 group-hover:text-mermaid-cyan transition-colors tracking-tight">暂无视频任务</h3>
+                <p className="text-sm text-white/40 group-hover:text-white/80 transition-colors">
+                  点击 <span className="text-mermaid-cyan font-medium">"创建视频任务"</span> 开始批量生产
+                </p>
               </div>
             </div>
+          ) : (
+            (() => {
+              // 按分组整理任务
+              const groupedTasks: Record<string, VideoBatchTask[]> = {};
+              const ungroupedTasks: VideoBatchTask[] = [];
 
-
-          </CardHeader>
-          <CardContent>
-            {tasks.length === 0 ? (
-              <div
-                className="group flex flex-col items-center justify-center py-24 rounded-[2rem] border border-white/5 bg-[#0B0C10] relative overflow-hidden cursor-pointer transition-all duration-500 hover:border-mermaid-cyan/30 hover:shadow-[0_0_30px_rgba(0,242,234,0.1)]"
-                onClick={() => setShowCreateDialog(true)}
-              >
-                {/* Aurora Background Effect */}
-                <div className="absolute inset-0 bg-gradient-to-br from-mermaid-cyan/5 via-transparent to-mermaid-pink/5 opacity-50" />
-                <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-10" />
-
-                {/* Animated Rings */}
-                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] border border-white/5 rounded-full animate-[spin_20s_linear_infinite]" />
-                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[300px] h-[300px] border border-white/5 rounded-full animate-[spin_15s_linear_infinite_reverse]" />
-
-                <div className="relative z-10 flex flex-col items-center">
-                  <div className="relative mb-6">
-                    <div className="absolute inset-0 bg-mermaid-cyan/20 blur-xl rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-                    <div className="relative w-24 h-24 rounded-2xl bg-black/40 border border-white/10 flex items-center justify-center group-hover:scale-110 transition-transform duration-300 shadow-inner">
-                      <Video className="h-12 w-12 text-white/20 group-hover:text-mermaid-cyan transition-colors duration-300" />
-                    </div>
-                  </div>
-                  <h3 className="text-xl font-bold text-white mb-2 group-hover:text-mermaid-cyan transition-colors tracking-tight">暂无视频任务</h3>
-                  <p className="text-sm text-white/40 group-hover:text-white/80 transition-colors">
-                    点击 <span className="text-mermaid-cyan font-medium">"创建视频任务"</span> 开始批量生产
-                  </p>
-                </div>
-              </div>
-            ) : (
-              (() => {
-                // 按分组整理任务
-                const groupedTasks: Record<string, VideoBatchTask[]> = {};
-                const ungroupedTasks: VideoBatchTask[] = [];
-
-                tasks.forEach(task => {
-                  if (task.groupName) {
-                    if (!groupedTasks[task.groupName]) {
-                      groupedTasks[task.groupName] = [];
-                    }
-                    groupedTasks[task.groupName].push(task);
-                  } else {
-                    ungroupedTasks.push(task);
+              tasks.forEach(task => {
+                if (task.groupName) {
+                  if (!groupedTasks[task.groupName]) {
+                    groupedTasks[task.groupName] = [];
                   }
-                });
+                  groupedTasks[task.groupName].push(task);
+                } else {
+                  ungroupedTasks.push(task);
+                }
+              });
 
-                // 反转任务顺序，让最新创建的任务显示在前面
-                Object.keys(groupedTasks).forEach(groupName => {
-                  groupedTasks[groupName].reverse();
-                });
-                ungroupedTasks.reverse();
+              // 反转任务顺序，让最新创建的任务显示在前面
+              Object.keys(groupedTasks).forEach(groupName => {
+                groupedTasks[groupName].reverse();
+              });
+              ungroupedTasks.reverse();
 
-                const groupNames = Object.keys(groupedTasks).reverse(); // 分组也按最新的在前
-                const hasGroups = groupNames.length > 0;
+              const groupNames = Object.keys(groupedTasks).reverse(); // 分组也按最新的在前
+              const hasGroups = groupNames.length > 0;
 
-                // 渲染单个任务卡片的辅助函数
-                const renderTaskCard = (task: VideoBatchTask) => (
-                  <VideoTaskCard
-                    key={task.id}
-                    task={task}
-                    isSelected={!!selectedTaskIds[task.id]}
-                    onToggleSelect={() => toggleTaskSelection(task.id)}
-                    onStart={() => handleStartSingleTask(task)}
-                    onRemove={() => removeTask(task.id)}
-                    onClone={() => {
-                      const newId = cloneTask(task.id);
-                      if (newId) {
-                        toast({ title: "✅ 任务已克隆" });
-                      }
-                    }}
-                    onViewScript={() => setPreviewTask(task)}
-                    onEditImages={() => handleEditTaskImages(task)}
-                    onPlayVideo={() => setPlayingVideoTask(task)}
-                    onDownload={() => handleDownloadTask(task)}
-                    modelType={globalSettings.modelType}
-                    duration={globalSettings.duration}
-                    quality={globalSettings.quality}
-                    downloadProgress={taskDownloadProgress[task.id] || 0}
-                    isDownloading={downloadingTaskIds.has(task.id)}
-                    isDownloaded={downloadedTaskIds.has(task.id)}
-                  />
-                );
+              // 渲染单个任务卡片的辅助函数
+              const renderTaskCard = (task: VideoBatchTask) => (
+                <VideoTaskCard
+                  key={task.id}
+                  task={task}
+                  isSelected={!!selectedTaskIds[task.id]}
+                  onToggleSelect={() => toggleTaskSelection(task.id)}
+                  onStart={() => handleStartSingleTask(task)}
+                  onRemove={() => removeTask(task.id)}
+                  onClone={() => {
+                    const newId = cloneTask(task.id);
+                    if (newId) {
+                      toast({ title: "✅ 任务已克隆" });
+                    }
+                  }}
+                  onViewScript={() => setPreviewTask(task)}
+                  onEditImages={() => handleEditTaskImages(task)}
+                  onPlayVideo={() => setPlayingVideoTask(task)}
+                  onDownload={() => handleDownloadTask(task)}
+                  modelType={globalSettings.modelType}
+                  duration={globalSettings.duration}
+                  quality={globalSettings.quality}
+                  downloadProgress={taskDownloadProgress[task.id] || 0}
+                  isDownloading={downloadingTaskIds.has(task.id)}
+                  isDownloaded={downloadedTaskIds.has(task.id)}
+                />
+              );
 
-                return (
-                  <div className="space-y-6">
-                    {/* 分组任务 */}
-                    {groupNames.map(groupName => {
-                      const groupTaskList = groupedTasks[groupName];
-                      const groupSuccessCount = groupTaskList.filter(t => t.status === "success").length;
-                      const groupTotalCount = groupTaskList.length;
+              return (
+                <div className="space-y-6">
+                  {/* 分组任务 */}
+                  {groupNames.map(groupName => {
+                    const groupTaskList = groupedTasks[groupName];
+                    const groupSuccessCount = groupTaskList.filter(t => t.status === "success").length;
+                    const groupTotalCount = groupTaskList.length;
 
-                      return (
-                        <div key={groupName} className="space-y-3">
-                          {/* 分组标题 */}
-                          <div className="flex items-center gap-3 py-2 px-3 bg-amber-500/10 rounded-lg border border-amber-500/20">
-                            <FolderUp className="h-4 w-4 text-amber-400" />
-                            <span className="font-semibold text-amber-400">{groupName}</span>
-                            <Badge variant="outline" className="text-xs border-amber-500/30 text-amber-400">
-                              {groupSuccessCount}/{groupTotalCount} 完成
-                            </Badge>
-                          </div>
-                          {/* 分组内任务 */}
-                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-                            {groupTaskList.map(renderTaskCard)}
-                          </div>
+                    return (
+                      <div key={groupName} className="space-y-3">
+                        {/* 分组标题 */}
+                        <div className="flex items-center gap-3 py-2 px-3 bg-amber-500/10 rounded-lg border border-amber-500/20">
+                          <FolderUp className="h-4 w-4 text-amber-400" />
+                          <span className="font-semibold text-amber-400">{groupName}</span>
+                          <Badge variant="outline" className="text-xs border-amber-500/30 text-amber-400">
+                            {groupSuccessCount}/{groupTotalCount} 完成
+                          </Badge>
                         </div>
-                      );
-                    })}
-
-                    {/* 未分组任务 */}
-                    {ungroupedTasks.length > 0 && (
-                      <div className="space-y-3">
-                        {hasGroups && (
-                          <div className="flex items-center gap-3 py-2 px-3 bg-muted/30 rounded-lg border border-border/50">
-                            <Video className="h-4 w-4 text-muted-foreground" />
-                            <span className="font-medium text-muted-foreground">未分组</span>
-                            <Badge variant="outline" className="text-xs">
-                              {ungroupedTasks.filter(t => t.status === "success").length}/{ungroupedTasks.length} 完成
-                            </Badge>
-                          </div>
-                        )}
+                        {/* 分组内任务 */}
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-                          {ungroupedTasks.map(renderTaskCard)}
+                          {groupTaskList.map(renderTaskCard)}
                         </div>
                       </div>
-                    )}
-                  </div>
-                );
-              })()
-            )}
-          </CardContent>
-        </Card>
+                    );
+                  })}
+
+                  {/* 未分组任务 */}
+                  {ungroupedTasks.length > 0 && (
+                    <div className="space-y-3">
+                      {hasGroups && (
+                        <div className="flex items-center gap-3 py-2 px-3 bg-muted/30 rounded-lg border border-border/50">
+                          <Video className="h-4 w-4 text-muted-foreground" />
+                          <span className="font-medium text-muted-foreground">未分组</span>
+                          <Badge variant="outline" className="text-xs">
+                            {ungroupedTasks.filter(t => t.status === "success").length}/{ungroupedTasks.length} 完成
+                          </Badge>
+                        </div>
+                      )}
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                        {ungroupedTasks.map(renderTaskCard)}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()
+          )}
+        </div>
 
         {/* 底部状态栏 - 仅显示统计信息，单个任务手动点击开始 */}
         {tasks.length > 0 && (
@@ -3185,7 +3216,7 @@ C07: [story CTA, inspiring, <50 chars]`,
                     )}
                   >
                     <ImageIcon className="h-4 w-4" />
-                    图片转视频
+                    图片转视频（电商）
                   </button>
                 </div>
               </div>
@@ -3270,7 +3301,7 @@ C07: [story CTA, inspiring, <50 chars]`,
                       </div>
                     </div>
                   </div>
-                ) : (
+                ) : createMode === "image" ? (
                   /* 图片转视频模式 */
                   <div className="space-y-4 h-full flex flex-col">
                     {/* 极简进度条 */}
@@ -3338,7 +3369,149 @@ C07: [story CTA, inspiring, <50 chars]`,
                       </div>
                     </div>
                   </div>
-                )}
+                ) : createMode === "slideshow" ? (
+                  /* 图片轮播模式 */
+                  <div className="space-y-5 h-full flex flex-col">
+                    {/* 模式选择 */}
+                    <SlideshowModePanel
+                      mode={slideshowMode}
+                      onChange={setSlideshowMode}
+                    />
+
+                    {/* 素材上传区 */}
+                    <div className="flex-1 overflow-y-auto">
+                      {slideshowMode === 'random' ? (
+                        /* 智能混剪: 批量上传 */
+                        <div className="space-y-3">
+                          <Label className="text-xs text-white/60">📷 上传图片 (最多300张)</Label>
+                          <div className="border-2 border-dashed border-white/20 rounded-xl p-4 hover:border-mermaid-cyan/50 transition-colors">
+                            <input
+                              type="file"
+                              multiple
+                              accept="image/*"
+                              className="hidden"
+                              id="slideshow-images"
+                              onChange={(e) => {
+                                const files = Array.from(e.target.files || []).slice(0, 300);
+                                setSlideshowImages(prev => [...prev, ...files].slice(0, 300));
+                              }}
+                            />
+                            <label htmlFor="slideshow-images" className="cursor-pointer block text-center">
+                              <Upload className="h-8 w-8 mx-auto text-white/30 mb-2" />
+                              <p className="text-sm text-white/50">点击或拖拽上传图片</p>
+                              <p className="text-xs text-white/30 mt-1">已上传 {slideshowImages.length} 张</p>
+                            </label>
+                          </div>
+                          {slideshowImages.length > 0 && (
+                            <div className="grid grid-cols-6 gap-2 max-h-[200px] overflow-y-auto">
+                              {slideshowImages.slice(0, 18).map((file, i) => (
+                                <div key={i} className="aspect-square rounded-lg overflow-hidden bg-white/5 relative group">
+                                  <img src={URL.createObjectURL(file)} alt="" className="w-full h-full object-cover" />
+                                  <button
+                                    onClick={() => setSlideshowImages(prev => prev.filter((_, idx) => idx !== i))}
+                                    className="absolute top-1 right-1 w-4 h-4 bg-red-500 rounded-full opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
+                                  >
+                                    <X className="h-2.5 w-2.5 text-white" />
+                                  </button>
+                                </div>
+                              ))}
+                              {slideshowImages.length > 18 && (
+                                <div className="aspect-square rounded-lg bg-white/10 flex items-center justify-center text-white/60 text-sm">
+                                  +{slideshowImages.length - 18}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        /* 场景编排: 位置上传 */
+                        <PositionUploader
+                          positions={slideshowPositions}
+                          onChange={setSlideshowPositions}
+                          maxPositions={15}
+                        />
+                      )}
+                    </div>
+
+                    {/* 配置区 */}
+                    <div className="space-y-4 pt-4 border-t border-white/10">
+                      {/* 每视频图片数 (仅智能混剪) */}
+                      {slideshowMode === 'random' && (
+                        <div className="space-y-2">
+                          <Label className="text-xs text-white/60">🎬 每视频图片数</Label>
+                          <div className="flex gap-2">
+                            {[1, 3, 5, 8, 10, 15].map(n => (
+                              <button
+                                key={n}
+                                onClick={() => setSlideshowImagesPerVideo(n)}
+                                className={cn(
+                                  "px-3 py-1.5 rounded-lg text-sm transition-all",
+                                  slideshowImagesPerVideo === n
+                                    ? "bg-mermaid-cyan/20 text-mermaid-cyan border border-mermaid-cyan/30"
+                                    : "bg-white/5 text-white/50 hover:bg-white/10"
+                                )}
+                              >
+                                {n}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* 转场效果 */}
+                      <TransitionPicker
+                        value={slideshowTransition}
+                        onChange={setSlideshowTransition}
+                      />
+
+                      {/* 图片时长 */}
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <Label className="text-xs text-white/60">⏱️ 图片时长</Label>
+                          <span className="text-xs text-mermaid-cyan font-medium">{slideshowDuration}秒</span>
+                        </div>
+                        <input
+                          type="range"
+                          min={2}
+                          max={10}
+                          value={slideshowDuration}
+                          onChange={(e) => setSlideshowDuration(parseInt(e.target.value))}
+                          className="w-full h-2 bg-white/10 rounded-full appearance-none cursor-pointer accent-mermaid-cyan"
+                        />
+                        <div className="flex justify-between text-[10px] text-white/40">
+                          <span>2秒</span>
+                          <span>总时长: {(() => {
+                            const imageCount = slideshowMode === 'random'
+                              ? Math.min(slideshowImages.length, slideshowImagesPerVideo)
+                              : slideshowPositions[0]?.images.length || 1;
+                            const total = imageCount * slideshowDuration - (imageCount - 1) * 0.5;
+                            return total > 0 ? `${total.toFixed(1)}s` : '0s';
+                          })()}</span>
+                          <span>10秒</span>
+                        </div>
+                      </div>
+
+                      {/* 音乐配置 */}
+                      <MusicPoolManager
+                        mode={slideshowMusicMode}
+                        onModeChange={setSlideshowMusicMode}
+                        customMusic={slideshowCustomMusic}
+                        onCustomMusicChange={setSlideshowCustomMusic}
+                        recommendedCount={Math.ceil(
+                          slideshowMode === 'random'
+                            ? Math.floor(slideshowImages.length / slideshowImagesPerVideo) / 10
+                            : (slideshowPositions[0]?.images.length || 0) / 10
+                        )}
+                      />
+
+                      {/* 字幕配置 */}
+                      <SubtitleEditor
+                        subtitle={slideshowSubtitle}
+                        onChange={setSlideshowSubtitle}
+                      />
+                    </div>
+                  </div>
+                ) : null}
               </div>
 
               {/* 右侧 40%：配置区域 */}
@@ -3937,31 +4110,31 @@ C07: [story CTA, inspiring, <50 chars]`,
             </DialogFooter>
           </DialogContent>
         </Dialog>
-      </div>
 
-      {/* Template Dialogs */}
-      <SaveTemplateDialog
-        open={showSaveTemplate}
-        onOpenChange={setShowSaveTemplate}
-        onSave={handleSaveTemplate}
-        defaultName={`${globalSettings.modelType}-${globalSettings.duration}s-${globalSettings.aspectRatio}`}
-        isUploading={isUploadingTemplate}
-        configPreview={[
-          { icon: <Film className="h-3.5 w-3.5" />, label: "模型", value: globalSettings.modelType === "sora2" ? "Sora 2.0" : globalSettings.modelType === "sora2-pro" ? "Sora 2.0 Pro" : globalSettings.modelType === "veo3" ? "VEO3 快速版" : "VEO3 高清版" },
-          { icon: <Clock className="h-3.5 w-3.5" />, label: "时长", value: `${globalSettings.duration}秒` },
-          { icon: <Monitor className="h-3.5 w-3.5" />, label: "比例", value: globalSettings.aspectRatio },
-          { icon: <UserCircle className="h-3.5 w-3.5" />, label: "AI模特", value: useAiModel && selectedModelName ? selectedModelName : "未使用" },
-          { icon: <ImageIcon className="h-3.5 w-3.5" />, label: "数量", value: `${batchCreateCount}个` },
-        ]}
-        imagePreview={newTaskImages.map(img => ({ url: img.url, name: img.name }))}
-      />
-      <TemplateManager
-        open={showTemplateManager}
-        onOpenChange={setShowTemplateManager}
-        type="video_batch"
-        onSelect={handleLoadTemplate}
-      />
-    </TooltipProvider>
+        {/* Template Dialogs */}
+        <SaveTemplateDialog
+          open={showSaveTemplate}
+          onOpenChange={setShowSaveTemplate}
+          onSave={handleSaveTemplate}
+          defaultName={`${globalSettings.modelType}-${globalSettings.duration}s-${globalSettings.aspectRatio}`}
+          isUploading={isUploadingTemplate}
+          configPreview={[
+            { icon: <Film className="h-3.5 w-3.5" />, label: "模型", value: globalSettings.modelType === "sora2" ? "Sora 2.0" : globalSettings.modelType === "sora2-pro" ? "Sora 2.0 Pro" : globalSettings.modelType === "veo3" ? "VEO3 快速版" : "VEO3 高清版" },
+            { icon: <Clock className="h-3.5 w-3.5" />, label: "时长", value: `${globalSettings.duration}秒` },
+            { icon: <Monitor className="h-3.5 w-3.5" />, label: "比例", value: globalSettings.aspectRatio },
+            { icon: <UserCircle className="h-3.5 w-3.5" />, label: "AI模特", value: useAiModel && selectedModelName ? selectedModelName : "未使用" },
+            { icon: <ImageIcon className="h-3.5 w-3.5" />, label: "数量", value: `${batchCreateCount}个` },
+          ]}
+          imagePreview={newTaskImages.map(img => ({ url: img.url, name: img.name }))}
+        />
+        <TemplateManager
+          open={showTemplateManager}
+          onOpenChange={setShowTemplateManager}
+          type="video_batch"
+          onSelect={handleLoadTemplate}
+        />
+      </div>
+    </TooltipProvider >
   );
 }
 
