@@ -44,6 +44,9 @@ export interface VideoBatchState {
 
   // 当前正在编辑的任务（用于添加图片）
   editingTaskId: string | null;
+
+  // 当前激活的任务组名称
+  activeGroupName: string | null;
 }
 
 // ============================================================================
@@ -54,7 +57,7 @@ export interface VideoBatchActions {
   // ==================== 任务管理 ====================
 
   /** 创建新任务 */
-  createTask: (images: TaskImageInfo[]) => string;
+  createTask: (images: TaskImageInfo[], groupName?: string) => string;
 
   /** 从提示词创建任务（纯提示词模式） */
   createTaskFromPrompt: (prompt: string, referenceImageUrl?: string, count?: number, groupName?: string) => string[];
@@ -144,6 +147,17 @@ export interface VideoBatchActions {
 
   /** 设置正在编辑的任务 */
   setEditingTask: (taskId: string | null) => void;
+
+  // ==================== 任务组管理 ====================
+
+  /** 设置激活的任务组 */
+  setActiveGroup: (groupName: string | null) => void;
+
+  /** 删除任务组（删除该组下所有任务） */
+  removeGroup: (groupName: string) => void;
+
+  /** 获取所有任务组及其统计信息 */
+  getGroups: () => Array<{ name: string; count: number; completed: number; createdAt: string }>;
 }
 
 // ============================================================================
@@ -227,6 +241,7 @@ const initialState: VideoBatchState = {
   },
   selectedTaskIds: {},
   editingTaskId: null,
+  activeGroupName: null,
 };
 
 // ============================================================================
@@ -241,7 +256,7 @@ export const useVideoBatchStore = create<VideoBatchState & VideoBatchActions>()(
 
         // ==================== 任务管理 ====================
 
-        createTask: (images) => {
+        createTask: (images, groupName) => {
           const id = generateId();
           const { globalSettings } = get();
 
@@ -264,6 +279,7 @@ export const useVideoBatchStore = create<VideoBatchState & VideoBatchActions>()(
             // AI 模特配置
             useAiModel: globalSettings.useAiModel,
             aiModelId: globalSettings.aiModelId || undefined,
+            groupName: groupName?.trim() || '默认', // 任务组名称
             doubaoTalkingScript: null,
             doubaoAiVideoPrompt: null,
             soraTaskId: null,
@@ -297,7 +313,7 @@ export const useVideoBatchStore = create<VideoBatchState & VideoBatchActions>()(
               mode: "prompt_to_video" as VideoBatchTaskMode,
               customPrompt: prompt.trim(),
               referenceImageUrl: referenceImageUrl || undefined,
-              groupName: groupName?.trim() || undefined, // 分组名称
+              groupName: groupName?.trim() || '默认', // 任务组名称（必填）
               aspectRatio: globalSettings.aspectRatio,
               modelType: globalSettings.modelType,
               duration: globalSettings.duration,
@@ -342,6 +358,7 @@ export const useVideoBatchStore = create<VideoBatchState & VideoBatchActions>()(
               duration: globalSettings.duration,
               quality: globalSettings.quality,
               apiLine: globalSettings.apiLine,
+              groupName: '默认', // 默认任务组
               doubaoTalkingScript: null,
               doubaoAiVideoPrompt: null,
               soraTaskId: null,
@@ -385,6 +402,7 @@ export const useVideoBatchStore = create<VideoBatchState & VideoBatchActions>()(
             duration: sourceTask.duration,
             quality: sourceTask.quality,
             apiLine: sourceTask.apiLine,   // 复制原任务的线路配置
+            groupName: sourceTask.groupName || '默认', // 继承源任务的组名
             doubaoTalkingScript: null,  // 重置生成结果
             doubaoAiVideoPrompt: null,
             soraTaskId: null,
@@ -433,6 +451,7 @@ export const useVideoBatchStore = create<VideoBatchState & VideoBatchActions>()(
               duration: globalSettings.duration,
               quality: globalSettings.quality,
               apiLine: globalSettings.apiLine,
+              groupName: '默认', // 默认任务组
               doubaoTalkingScript: null,
               doubaoAiVideoPrompt: null,
               soraTaskId: null,
@@ -735,6 +754,58 @@ export const useVideoBatchStore = create<VideoBatchState & VideoBatchActions>()(
             state.editingTaskId = taskId;
           });
         },
+
+        // ==================== 任务组管理 ====================
+
+        setActiveGroup: (groupName) => {
+          set((state) => {
+            state.activeGroupName = groupName;
+            // 切换任务组时清空选中状态
+            state.selectedTaskIds = {};
+          });
+        },
+
+        removeGroup: (groupName) => {
+          set((state) => {
+            // 删除该组下所有任务
+            state.tasks = state.tasks.filter((t) => t.groupName !== groupName);
+            // 如果删除的是当前激活的组，切换到第一个组或 null
+            if (state.activeGroupName === groupName) {
+              const remainingGroups = Array.from(new Set(state.tasks.map((t) => t.groupName).filter(Boolean)));
+              state.activeGroupName = remainingGroups[0] || null;
+            }
+            // 清空选中状态
+            state.selectedTaskIds = {};
+          });
+        },
+
+        getGroups: () => {
+          const { tasks } = get();
+          const groupMap = new Map<string, { count: number; completed: number; createdAt: string }>();
+
+          tasks.forEach((task) => {
+            const name = task.groupName || '默认';
+            const current = groupMap.get(name);
+            if (!current) {
+              groupMap.set(name, {
+                count: 1,
+                completed: task.status === 'success' ? 1 : 0,
+                createdAt: task.createdAt,
+              });
+            } else {
+              groupMap.set(name, {
+                count: current.count + 1,
+                completed: current.completed + (task.status === 'success' ? 1 : 0),
+                createdAt: current.createdAt < task.createdAt ? current.createdAt : task.createdAt,
+              });
+            }
+          });
+
+          // 按创建时间排序（先创建的在前）
+          return Array.from(groupMap.entries())
+            .map(([name, stats]) => ({ name, ...stats }))
+            .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+        },
       })),
       { name: "VideoBatchStore" }
     ),
@@ -764,6 +835,7 @@ export const useVideoBatchStore = create<VideoBatchState & VideoBatchActions>()(
           })).filter(img => img.url), // 移除空 URL 的图片
         })),
         globalSettings: state.globalSettings,
+        activeGroupName: state.activeGroupName,
         // 如果页面刷新时正在运行，标记为需要恢复
         jobStatus: ["running", "paused"].includes(state.jobStatus) ? "paused" : state.jobStatus,
       }),
@@ -803,16 +875,20 @@ export const useVideoBatchStore = create<VideoBatchState & VideoBatchActions>()(
             }
 
             // 检查图片是否有效（blob URLs 在刷新后会失效）
-            const hasValidImages = task.images.some(img =>
-              img.url && (img.url.startsWith("http://") || img.url.startsWith("https://"))
-            );
-            if (!hasValidImages && task.status === "pending") {
-              task.errorMessage = "图片已失效，请重新上传";
+            // 注意：纯提示词任务 (prompt_to_video) 不需要图片，跳过此检查
+            if (task.mode !== "prompt_to_video") {
+              const hasValidImages = task.images.some(img =>
+                img.url && (img.url.startsWith("http://") || img.url.startsWith("https://"))
+              );
+              if (!hasValidImages && task.status === "pending") {
+                task.errorMessage = "图片已失效，请重新上传";
+              }
             }
           });
-          // 过滤掉没有有效图片的待处理任务
+          // 过滤掉没有有效图片的待处理任务（但保留纯提示词任务）
           state.tasks = state.tasks.filter(task =>
             task.status !== "pending" ||
+            task.mode === "prompt_to_video" || // 纯提示词任务不需要图片
             task.images.some(img => img.url && !img.url.startsWith("blob:"))
           );
 
@@ -835,6 +911,40 @@ export const useVideoBatchJobStatus = () => useVideoBatchStore((state) => state.
 export const useVideoBatchGlobalSettings = () => useVideoBatchStore((state) => state.globalSettings);
 export const useVideoBatchSelectedIds = () => useVideoBatchStore((state) => state.selectedTaskIds);
 export const useVideoBatchSelectedCount = () => useVideoBatchStore((state) => Object.keys(state.selectedTaskIds).length);
+export const useVideoBatchActiveGroup = () => useVideoBatchStore((state) => state.activeGroupName);
+
+/** 获取当前激活任务组的任务 */
+export const useActiveGroupTasks = () => {
+  const tasks = useVideoBatchStore((state) => state.tasks);
+  const activeGroupName = useVideoBatchStore((state) => state.activeGroupName);
+
+  if (!activeGroupName) {
+    return tasks; // 如果没有激活的组，返回所有任务
+  }
+  return tasks.filter((t) => t.groupName === activeGroupName);
+};
+
+/** 获取当前激活任务组的统计信息 */
+export const useActiveGroupStats = () => {
+  const tasks = useVideoBatchStore((state) => state.tasks);
+  const activeGroupName = useVideoBatchStore((state) => state.activeGroupName);
+  const globalSettings = useVideoBatchStore((state) => state.globalSettings);
+
+  const filteredTasks = activeGroupName
+    ? tasks.filter((t) => t.groupName === activeGroupName)
+    : tasks;
+
+  return {
+    total: filteredTasks.length,
+    pending: filteredTasks.filter((t) => t.status === "pending").length,
+    running: filteredTasks.filter((t) =>
+      ["uploading", "generating_script", "generating_prompt", "generating_video"].includes(t.status)
+    ).length,
+    success: filteredTasks.filter((t) => t.status === "success").length,
+    failed: filteredTasks.filter((t) => t.status === "failed").length,
+    totalCost: getVideoBatchTotalCost(filteredTasks, globalSettings),
+  };
+};
 
 export const useVideoBatchStats = () => {
   const tasks = useVideoBatchStore((state) => state.tasks);
@@ -851,3 +961,5 @@ export const useVideoBatchStats = () => {
   };
 };
 
+/** 任务组最大数量限制 */
+export const MAX_TASK_GROUPS = 30;

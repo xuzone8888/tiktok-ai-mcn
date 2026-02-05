@@ -123,8 +123,8 @@ export interface VideoBatchTask {
   images: TaskImageInfo[];
   aspectRatio: VideoAspectRatio;
 
-  // 分组名称（用于批量下载时区分不同组）
-  groupName?: string;
+  // 任务组名称（必填，用于Tab切换和批量管理）
+  groupName: string;
 
   // 任务模式
   mode?: VideoBatchTaskMode;  // 默认 "image_to_video"

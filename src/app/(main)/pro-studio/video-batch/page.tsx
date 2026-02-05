@@ -30,6 +30,16 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
@@ -111,8 +121,12 @@ import {
   useVideoBatchSelectedIds,
   useVideoBatchSelectedCount,
   useVideoBatchStats,
+  useVideoBatchActiveGroup,
+  useActiveGroupTasks,
+  useActiveGroupStats,
   validateTaskImages,
   validatePromptTask,
+  MAX_TASK_GROUPS,
 } from "@/stores/video-batch-store";
 
 // Textarea
@@ -1258,6 +1272,9 @@ export default function VideoBatchPage() {
   const selectedTaskIds = useVideoBatchSelectedIds();
   const selectedCount = useVideoBatchSelectedCount();
   const stats = useVideoBatchStats();
+  const activeGroupName = useVideoBatchActiveGroup();
+  const activeGroupTasks = useActiveGroupTasks();
+  const activeGroupStats = useActiveGroupStats();
   void _jobStatus; // suppress unused warning
 
   const {
@@ -1274,6 +1291,9 @@ export default function VideoBatchPage() {
     removeSelectedTasks,
     resetBatch,
     updateGlobalSettings,
+    setActiveGroup,
+    removeGroup,
+    getGroups,
   } = useVideoBatchStore();
 
   // Local State
@@ -1307,6 +1327,13 @@ export default function VideoBatchPage() {
   const [groupNameInput, setGroupNameInput] = useState(""); // 分组名称
   const [referenceImageFile, setReferenceImageFile] = useState<File | null>(null);
   const [referenceImageUrl, setReferenceImageUrl] = useState("");
+
+  // 删除任务组确认弹窗
+  const [deleteGroupDialog, setDeleteGroupDialog] = useState<{ open: boolean; groupName: string; count: number }>({
+    open: false,
+    groupName: "",
+    count: 0,
+  });
 
 
   // 批量下载状态
@@ -2911,8 +2938,8 @@ C07: [story CTA, inspiring, <50 chars]`,
 
               <div className="h-4 w-px bg-white/10 mx-1" />
 
-              {/* Mermaid Ultra 开始全部按钮 (Emerald Gradient) */}
-              {stats.pending > 0 && (
+              {/* Mermaid Ultra 开始全部按钮 (Emerald Gradient) - 作用于当前任务组 */}
+              {activeGroupStats.pending > 0 && (
                 <button
                   onClick={async () => {
                     if (!userId) {
@@ -2920,19 +2947,20 @@ C07: [story CTA, inspiring, <50 chars]`,
                       return;
                     }
 
-                    const pendingTasks = tasks.filter(t => t.status === "pending");
+                    // 只处理当前任务组的待处理任务
+                    const pendingTasks = activeGroupTasks.filter(t => t.status === "pending");
                     if (pendingTasks.length === 0) {
-                      toast({ title: "没有待处理任务", variant: "default" });
+                      toast({ title: "当前任务组没有待处理任务", variant: "default" });
                       return;
                     }
 
-                    if (userCredits < stats.totalCost) {
-                      toast({ variant: "destructive", title: `积分不足，需要 ${stats.totalCost} 积分，当前余额 ${userCredits}` });
+                    if (userCredits < activeGroupStats.totalCost) {
+                      toast({ variant: "destructive", title: `积分不足，需要 ${activeGroupStats.totalCost} 积分，当前余额 ${userCredits}` });
                       return;
                     }
 
                     setIsBatchStarting(true);
-                    toast({ title: `🚀 正在启动 ${pendingTasks.length} 个视频任务...` });
+                    toast({ title: `🚀 正在启动「${activeGroupName}」中 ${pendingTasks.length} 个视频任务...` });
 
                     for (const task of pendingTasks) {
                       handleStartSingleTask(task);
@@ -2941,7 +2969,7 @@ C07: [story CTA, inspiring, <50 chars]`,
 
                     setIsBatchStarting(false);
                   }}
-                  disabled={isBatchStarting || stats.pending === 0}
+                  disabled={isBatchStarting || activeGroupStats.pending === 0}
                   className="relative h-8 px-5 rounded-full font-bold text-white text-xs transition-all duration-500 bg-gradient-to-r from-emerald-500 to-teal-500 hover:scale-[1.02] hover:shadow-[0_0_20px_rgba(16,185,129,0.5)] border border-white/20 overflow-hidden group shadow-[0_0_10px_rgba(16,185,129,0.2)] disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <div className="absolute inset-0 bg-gradient-to-b from-white/40 to-transparent" />
@@ -2952,7 +2980,7 @@ C07: [story CTA, inspiring, <50 chars]`,
                     ) : (
                       <Play className="h-3.5 w-3.5 fill-white/20" />
                     )}
-                    {isBatchStarting ? "启动中..." : `开始全部 (${stats.pending})`}
+                    {isBatchStarting ? "启动中..." : `开始全部 (${activeGroupStats.pending})`}
                   </span>
                 </button>
               )}
@@ -3004,29 +3032,17 @@ C07: [story CTA, inspiring, <50 chars]`,
             </div>
           ) : (
             (() => {
-              // 按分组整理任务
-              const groupedTasks: Record<string, VideoBatchTask[]> = {};
-              const ungroupedTasks: VideoBatchTask[] = [];
+              // 获取所有任务组（按创建时间排序）
+              const groups = getGroups();
 
-              tasks.forEach(task => {
-                if (task.groupName) {
-                  if (!groupedTasks[task.groupName]) {
-                    groupedTasks[task.groupName] = [];
-                  }
-                  groupedTasks[task.groupName].push(task);
-                } else {
-                  ungroupedTasks.push(task);
-                }
-              });
+              // 如果没有激活的组，自动激活第一个
+              if (groups.length > 0 && !activeGroupName) {
+                // 自动切换到第一个组
+                setTimeout(() => setActiveGroup(groups[0].name), 0);
+              }
 
-              // 反转任务顺序，让最新创建的任务显示在前面
-              Object.keys(groupedTasks).forEach(groupName => {
-                groupedTasks[groupName].reverse();
-              });
-              ungroupedTasks.reverse();
-
-              const groupNames = Object.keys(groupedTasks).reverse(); // 分组也按最新的在前
-              const hasGroups = groupNames.length > 0;
+              // 当前组的任务（反转顺序，最新在前）
+              const currentGroupTasks = [...activeGroupTasks].reverse();
 
               // 渲染单个任务卡片的辅助函数
               const renderTaskCard = (task: VideoBatchTask) => (
@@ -3057,46 +3073,79 @@ C07: [story CTA, inspiring, <50 chars]`,
               );
 
               return (
-                <div className="space-y-6">
-                  {/* 分组任务 */}
-                  {groupNames.map(groupName => {
-                    const groupTaskList = groupedTasks[groupName];
-                    const groupSuccessCount = groupTaskList.filter(t => t.status === "success").length;
-                    const groupTotalCount = groupTaskList.length;
-
-                    return (
-                      <div key={groupName} className="space-y-3">
-                        {/* 分组标题 */}
-                        <div className="flex items-center gap-3 py-2 px-3 bg-amber-500/10 rounded-lg border border-amber-500/20">
-                          <FolderUp className="h-4 w-4 text-amber-400" />
-                          <span className="font-semibold text-amber-400">{groupName}</span>
-                          <Badge variant="outline" className="text-xs border-amber-500/30 text-amber-400">
-                            {groupSuccessCount}/{groupTotalCount} 完成
-                          </Badge>
-                        </div>
-                        {/* 分组内任务 */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-                          {groupTaskList.map(renderTaskCard)}
-                        </div>
+                <div className="space-y-4">
+                  {/* 任务组 Tab 横向切换栏 */}
+                  <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-hide">
+                    {groups.map((group) => (
+                      <div
+                        key={group.name}
+                        className={cn(
+                          "relative flex items-center gap-2 px-4 py-2 rounded-full transition-all cursor-pointer group shrink-0",
+                          activeGroupName === group.name
+                            ? "bg-gradient-to-r from-tiktok-cyan/20 to-tiktok-pink/20 border border-tiktok-cyan/30 text-white shadow-[0_0_15px_rgba(0,242,234,0.15)] font-medium"
+                            : "bg-white/5 hover:bg-white/10 text-white/70 hover:text-white border border-white/10 hover:border-white/20"
+                        )}
+                        onClick={() => setActiveGroup(group.name)}
+                      >
+                        <FolderUp className="h-4 w-4" />
+                        <span className="max-w-[120px] truncate">{group.name}</span>
+                        <Badge
+                          variant="secondary"
+                          className={cn(
+                            "text-xs",
+                            activeGroupName === group.name
+                              ? "bg-tiktok-cyan/20 text-tiktok-cyan border-tiktok-cyan/20"
+                              : "bg-white/10 text-white/60"
+                          )}
+                        >
+                          {group.completed}/{group.count}
+                        </Badge>
+                        {/* 删除任务组按钮 */}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            e.preventDefault();
+                            setDeleteGroupDialog({
+                              open: true,
+                              groupName: group.name,
+                              count: group.count,
+                            });
+                          }}
+                          className={cn(
+                            "ml-1 p-1 rounded-full transition-all hover:scale-110",
+                            activeGroupName === group.name
+                              ? "hover:bg-red-500/20 text-red-400/70 hover:text-red-400"
+                              : "hover:bg-red-500/20 text-white/40 hover:text-red-400"
+                          )}
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
                       </div>
-                    );
-                  })}
+                    ))}
 
-                  {/* 未分组任务 */}
-                  {ungroupedTasks.length > 0 && (
-                    <div className="space-y-3">
-                      {hasGroups && (
-                        <div className="flex items-center gap-3 py-2 px-3 bg-muted/30 rounded-lg border border-border/50">
-                          <Video className="h-4 w-4 text-muted-foreground" />
-                          <span className="font-medium text-muted-foreground">未分组</span>
-                          <Badge variant="outline" className="text-xs">
-                            {ungroupedTasks.filter(t => t.status === "success").length}/{ungroupedTasks.length} 完成
-                          </Badge>
-                        </div>
-                      )}
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-                        {ungroupedTasks.map(renderTaskCard)}
+                    {/* 任务组数量提示 */}
+                    {groups.length >= MAX_TASK_GROUPS && (
+                      <div className="shrink-0 px-3 py-2 text-xs text-amber-400 bg-amber-500/10 rounded-full border border-amber-500/20">
+                        已达上限 {MAX_TASK_GROUPS} 个任务组
                       </div>
+                    )}
+                  </div>
+
+                  {/* 当前任务组的任务卡片网格 */}
+                  {currentGroupTasks.length > 0 ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                      {currentGroupTasks.map(renderTaskCard)}
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center justify-center py-16 text-center">
+                      <div className="w-16 h-16 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center mb-4">
+                        <Video className="h-8 w-8 text-white/20" />
+                      </div>
+                      <p className="text-white/40 text-sm">
+                        {groups.length === 0
+                          ? "暂无任务组，点击「创建视频任务」开始"
+                          : "当前任务组暂无任务"}
+                      </p>
                     </div>
                   )}
                 </div>
@@ -3105,17 +3154,28 @@ C07: [story CTA, inspiring, <50 chars]`,
           )}
         </div>
 
-        {/* 底部状态栏 - 仅显示统计信息，单个任务手动点击开始 */}
+        {/* 底部状态栏 - 显示当前任务组的统计信息 */}
         {tasks.length > 0 && (
           <div className="fixed bottom-0 left-0 right-0 z-50 border-t border-border/50 bg-background/95 backdrop-blur-xl">
             <div className="container max-w-7xl mx-auto px-6 py-3">
               <div className="flex items-center justify-between">
                 {/* 统计信息 */}
                 <div className="flex items-center gap-6">
+                  {/* 当前任务组名称 */}
+                  {activeGroupName && (
+                    <>
+                      <div className="flex items-center gap-2">
+                        <FolderUp className="h-5 w-5 text-tiktok-cyan" />
+                        <span className="text-sm font-semibold text-tiktok-cyan">{activeGroupName}</span>
+                      </div>
+                      <div className="h-5 w-px bg-border/50" />
+                    </>
+                  )}
+
                   <div className="flex items-center gap-2">
                     <Video className="h-5 w-5 text-muted-foreground" />
                     <span className="text-sm">
-                      <span className="font-semibold">{tasks.length}</span>
+                      <span className="font-semibold">{activeGroupStats.total}</span>
                       <span className="text-muted-foreground ml-1">个任务</span>
                     </span>
                   </div>
@@ -3125,37 +3185,37 @@ C07: [story CTA, inspiring, <50 chars]`,
                   <div className="flex items-center gap-2">
                     <Zap className="h-5 w-5 text-amber-400" />
                     <span className="text-sm">
-                      <span className="font-semibold text-amber-400">{stats.totalCost}</span>
+                      <span className="font-semibold text-amber-400">{activeGroupStats.totalCost}</span>
                       <span className="text-muted-foreground ml-1">Credits</span>
                     </span>
                   </div>
 
-                  {(stats.pending > 0 || stats.running > 0 || stats.success > 0 || stats.failed > 0) && (
+                  {(activeGroupStats.pending > 0 || activeGroupStats.running > 0 || activeGroupStats.success > 0 || activeGroupStats.failed > 0) && (
                     <>
                       <div className="h-5 w-px bg-border/50" />
                       <div className="flex items-center gap-3 text-sm">
-                        {stats.pending > 0 && (
+                        {activeGroupStats.pending > 0 && (
                           <span className="flex items-center gap-1 text-muted-foreground">
                             <Clock className="h-4 w-4" />
-                            {stats.pending} 待处理
+                            {activeGroupStats.pending} 待处理
                           </span>
                         )}
-                        {stats.running > 0 && (
+                        {activeGroupStats.running > 0 && (
                           <span className="flex items-center gap-1 text-tiktok-cyan">
                             <Loader2 className="h-4 w-4 animate-spin" />
-                            {stats.running} 处理中
+                            {activeGroupStats.running} 处理中
                           </span>
                         )}
-                        {stats.success > 0 && (
+                        {activeGroupStats.success > 0 && (
                           <span className="flex items-center gap-1 text-emerald-500">
                             <CheckCircle2 className="h-4 w-4" />
-                            {stats.success} 完成
+                            {activeGroupStats.success} 完成
                           </span>
                         )}
-                        {stats.failed > 0 && (
+                        {activeGroupStats.failed > 0 && (
                           <span className="flex items-center gap-1 text-red-400">
                             <XCircle className="h-4 w-4" />
-                            {stats.failed} 失败
+                            {activeGroupStats.failed} 失败
                           </span>
                         )}
                       </div>
@@ -3163,8 +3223,8 @@ C07: [story CTA, inspiring, <50 chars]`,
                   )}
                 </div>
 
-                {/* 操作按钮 - 只保留重置失败任务，开始按钮已移至顶部 */}
-                {stats.failed > 0 && (
+                {/* 操作按钮 - 重置当前任务组的失败任务 */}
+                {activeGroupStats.failed > 0 && (
                   <Button
                     onClick={resetBatch}
                     variant="ghost"
@@ -3290,14 +3350,41 @@ C07: [story CTA, inspiring, <50 chars]`,
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label className="text-xs text-white/60">📁 分组名称 (可选)</Label>
-                        <input
-                          type="text"
-                          value={groupNameInput}
-                          onChange={(e) => setGroupNameInput(e.target.value)}
-                          placeholder="如：夏季新品..."
-                          className="w-full h-10 px-3 bg-white/5 border border-white/10 rounded-lg text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-tiktok-pink/50"
-                        />
+                        <Label className="text-xs text-white/60 flex items-center gap-1">
+                          📁 任务组 <span className="text-red-400">*</span>
+                        </Label>
+                        <div className="space-y-2">
+                          {/* 现有任务组快捷选择 */}
+                          {getGroups().length > 0 && (
+                            <div className="flex flex-wrap gap-1.5">
+                              {getGroups().slice(0, 5).map((g) => (
+                                <button
+                                  key={g.name}
+                                  type="button"
+                                  onClick={() => setGroupNameInput(g.name)}
+                                  className={cn(
+                                    "px-2 py-1 rounded text-xs transition-all",
+                                    groupNameInput === g.name
+                                      ? "bg-tiktok-pink/20 text-tiktok-pink border border-tiktok-pink/30"
+                                      : "bg-white/5 text-white/50 border border-white/10 hover:bg-white/10 hover:text-white"
+                                  )}
+                                >
+                                  {g.name}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                          <input
+                            type="text"
+                            value={groupNameInput}
+                            onChange={(e) => setGroupNameInput(e.target.value)}
+                            placeholder="输入或选择任务组名称..."
+                            className={cn(
+                              "w-full h-10 px-3 bg-white/5 border rounded-lg text-sm text-white placeholder:text-white/30 focus:outline-none",
+                              groupNameInput.trim() ? "border-white/10 focus:border-tiktok-pink/50" : "border-red-500/30 focus:border-red-500/50"
+                            )}
+                          />
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -3341,14 +3428,41 @@ C07: [story CTA, inspiring, <50 chars]`,
                     {/* 提示词配置 + 分组名 */}
                     <div className="grid grid-cols-2 gap-4 pt-2">
                       <div className="space-y-2">
-                        <Label className="text-xs text-white/60">📁 分组名称 (可选)</Label>
-                        <input
-                          type="text"
-                          value={groupNameInput}
-                          onChange={(e) => setGroupNameInput(e.target.value)}
-                          placeholder="如：夏季新品..."
-                          className="w-full h-10 px-3 bg-white/5 border border-white/10 rounded-lg text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-tiktok-cyan/50"
-                        />
+                        <Label className="text-xs text-white/60 flex items-center gap-1">
+                          📁 任务组 <span className="text-red-400">*</span>
+                        </Label>
+                        <div className="space-y-2">
+                          {/* 现有任务组快捷选择 */}
+                          {getGroups().length > 0 && (
+                            <div className="flex flex-wrap gap-1.5">
+                              {getGroups().slice(0, 5).map((g) => (
+                                <button
+                                  key={g.name}
+                                  type="button"
+                                  onClick={() => setGroupNameInput(g.name)}
+                                  className={cn(
+                                    "px-2 py-1 rounded text-xs transition-all",
+                                    groupNameInput === g.name
+                                      ? "bg-tiktok-cyan/20 text-tiktok-cyan border border-tiktok-cyan/30"
+                                      : "bg-white/5 text-white/50 border border-white/10 hover:bg-white/10 hover:text-white"
+                                  )}
+                                >
+                                  {g.name}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                          <input
+                            type="text"
+                            value={groupNameInput}
+                            onChange={(e) => setGroupNameInput(e.target.value)}
+                            placeholder="输入或选择任务组名称..."
+                            className={cn(
+                              "w-full h-10 px-3 bg-white/5 border rounded-lg text-sm text-white placeholder:text-white/30 focus:outline-none",
+                              groupNameInput.trim() ? "border-white/10 focus:border-tiktok-cyan/50" : "border-red-500/30 focus:border-red-500/50"
+                            )}
+                          />
+                        </div>
                       </div>
                       <div className="space-y-2">
                         <Label className="text-xs text-white/60">⚙️ 提示词配置</Label>
@@ -3508,6 +3622,12 @@ C07: [story CTA, inspiring, <50 chars]`,
                       <SubtitleEditor
                         subtitle={slideshowSubtitle}
                         onChange={setSlideshowSubtitle}
+                        previewFiles={
+                          slideshowMode === 'random'
+                            ? slideshowImages.slice(0, 10)
+                            : (slideshowPositions[0]?.images?.slice(0, 10) || [])
+                        }
+                        aspectRatio="9:16"
                       />
                     </div>
                   </div>
@@ -3755,6 +3875,12 @@ C07: [story CTA, inspiring, <50 chars]`,
                       }
                     }
 
+                    // 任务组名称必填验证
+                    if (!groupNameInput.trim()) {
+                      toast({ variant: "destructive", title: "请输入或选择任务组名称" });
+                      return;
+                    }
+
                     const currentMode = createMode;
                     const currentCount = batchCreateCount;
                     const currentPrompt = promptInput;
@@ -3769,7 +3895,7 @@ C07: [story CTA, inspiring, <50 chars]`,
                     setTimeout(async () => {
                       try {
                         if (currentMode === "image") {
-                          for (let i = 0; i < currentCount; i++) createTask([...currentImages]);
+                          for (let i = 0; i < currentCount; i++) createTask([...currentImages], currentGroup.trim() || undefined);
                           setNewTaskImages([]);
                         } else {
                           let uploadedRefUrl = "";
@@ -3794,6 +3920,8 @@ C07: [story CTA, inspiring, <50 chars]`,
                         }
                         setBatchCreateCount(1);
                         toast({ title: `✅ 已创建 ${currentCount} 个任务` });
+                        // 自动切换到新创建的任务组
+                        setActiveGroup(currentGroup.trim());
                       } catch (error) {
                         console.error("Create tasks error:", error);
                         toast({ variant: "destructive", title: "创建任务失败，请重试" });
@@ -4133,6 +4261,57 @@ C07: [story CTA, inspiring, <50 chars]`,
           type="video_batch"
           onSelect={handleLoadTemplate}
         />
+
+        {/* 删除任务组确认弹窗 - JCUI 2.0 Mermaid Glass */}
+        <AlertDialog open={deleteGroupDialog.open} onOpenChange={(open) => setDeleteGroupDialog(prev => ({ ...prev, open }))}>
+          <AlertDialogContent className="bg-[#0B0C10] border border-white/10 shadow-[0_0_60px_rgba(236,72,153,0.15)] backdrop-blur-xl rounded-2xl overflow-hidden max-w-md">
+            {/* 顶部渐变装饰条 */}
+            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-mermaid-lime via-mermaid-cyan to-mermaid-pink" />
+
+            <AlertDialogHeader className="pt-6">
+              <AlertDialogTitle className="flex items-center gap-4 text-white text-lg">
+                <div className="relative">
+                  <div className="absolute inset-0 bg-mermaid-pink/30 rounded-xl blur-lg animate-pulse" />
+                  <div className="relative p-3 rounded-xl bg-mermaid-pink/10 border border-mermaid-pink/30">
+                    <Trash2 className="h-6 w-6 text-mermaid-pink" />
+                  </div>
+                </div>
+                <div>
+                  <span className="block">删除任务组</span>
+                  <span className="text-xs text-white/40 font-normal">此操作无法撤销</span>
+                </div>
+              </AlertDialogTitle>
+              <AlertDialogDescription className="text-white/60 pt-4 text-sm leading-relaxed">
+                确定要删除任务组「<span className="text-white font-medium px-1.5 py-0.5 bg-white/10 rounded">{deleteGroupDialog.groupName}</span>」吗？
+                <div className="mt-4 p-3 rounded-lg bg-mermaid-pink/5 border border-mermaid-pink/20">
+                  <div className="flex items-center gap-2 text-mermaid-pink">
+                    <AlertTriangle className="h-4 w-4" />
+                    <span className="font-medium">警告</span>
+                  </div>
+                  <p className="mt-1.5 text-xs text-white/50">
+                    将删除该组下所有 <span className="text-mermaid-pink font-bold">{deleteGroupDialog.count}</span> 个任务，已生成的视频也将一并删除。
+                  </p>
+                </div>
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter className="gap-3 pt-6">
+              <AlertDialogCancel className="flex-1 bg-white/5 border-white/10 text-white/80 hover:bg-white/10 hover:border-mermaid-cyan/30 hover:text-white rounded-xl transition-all">
+                取消
+              </AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => {
+                  removeGroup(deleteGroupDialog.groupName);
+                  toast({ title: `🗑️ 已删除任务组「${deleteGroupDialog.groupName}」` });
+                  setDeleteGroupDialog({ open: false, groupName: "", count: 0 });
+                }}
+                className="flex-1 bg-gradient-to-r from-mermaid-pink to-red-500 hover:from-mermaid-pink hover:to-red-400 text-white font-medium border-0 rounded-xl shadow-[0_0_20px_rgba(236,72,153,0.3)] hover:shadow-[0_0_30px_rgba(236,72,153,0.5)] transition-all hover:scale-[1.02] active:scale-95"
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                确认删除
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </TooltipProvider >
   );
