@@ -287,6 +287,7 @@ export interface Database {
           error_message: string | null;
           progress: number;
           metadata: Json;
+          group_name: string | null;
           created_at: string;
           updated_at: string;
           started_at: string | null;
@@ -311,6 +312,7 @@ export interface Database {
           error_message?: string | null;
           progress?: number;
           metadata?: Json;
+          group_name?: string | null;
         };
         Update: {
           status?: GenerationStatus;
@@ -324,6 +326,7 @@ export interface Database {
           error_message?: string | null;
           progress?: number;
           metadata?: Json;
+          group_name?: string | null;
           started_at?: string | null;
           completed_at?: string | null;
         };

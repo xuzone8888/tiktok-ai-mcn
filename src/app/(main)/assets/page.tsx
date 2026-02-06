@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useToast } from "@/hooks/use-toast";
 import {
   History,
   Search,
@@ -22,12 +23,15 @@ import {
   AlertTriangle,
   Play,
   ExternalLink,
+  FileDown,
+  ChevronDown,
 } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import {
   Dialog,
@@ -39,7 +43,7 @@ import {
 interface TaskLogItem {
   id: string;
   type: "video" | "image";
-  source: "quick_gen" | "batch_video" | "batch_image";
+  source: "quick_gen" | "batch_video" | "batch_video_prompt" | "batch_video_veo3" | "batch_video_prompt_veo3" | "batch_image" | "link_video" | "ecom_factory";
   status: "completed" | "failed" | "processing" | "pending";
   resultUrl: string | null;
   thumbnailUrl: string | null;
@@ -49,6 +53,7 @@ interface TaskLogItem {
   createdAt: string;
   completedAt: string | null;
   expiresAt: string;
+  groupName?: string;
 }
 
 interface TaskStats {
@@ -73,6 +78,43 @@ const statusFilters = [
   { value: "processing", label: "处理中" },
   { value: "failed", label: "失败" },
 ];
+
+const sourceFilters = [
+  { value: "all", label: "全部来源" },
+  { value: "quick_gen", label: "快速生成" },
+  { value: "batch_video", label: "批量视频" },
+  { value: "batch_image", label: "批量图片" },
+  { value: "link_video", label: "链接秒变" },
+  { value: "ecom_factory", label: "电商工厂" },
+];
+
+const dateFilters = [
+  { value: "all", label: "全部时间" },
+  { value: "today", label: "今天" },
+  { value: "3days", label: "最近3天" },
+  { value: "7days", label: "最近7天" },
+];
+
+function getSourceColor(source: string): string {
+  switch (source) {
+    case "quick_gen":
+      return "bg-blue-500/20 text-blue-400 border-blue-500/30";
+    case "batch_video":
+    case "batch_video_prompt":
+      return "bg-purple-500/20 text-purple-400 border-purple-500/30";
+    case "batch_video_veo3":
+    case "batch_video_prompt_veo3":
+      return "bg-pink-500/20 text-pink-400 border-pink-500/30";
+    case "batch_image":
+      return "bg-emerald-500/20 text-emerald-400 border-emerald-500/30";
+    case "link_video":
+      return "bg-orange-500/20 text-orange-400 border-orange-500/30";
+    case "ecom_factory":
+      return "bg-amber-500/20 text-amber-400 border-amber-500/30";
+    default:
+      return "bg-white/10 text-white/60 border-white/20";
+  }
+}
 
 function formatDate(dateString: string): string {
   const date = new Date(dateString);
@@ -108,49 +150,87 @@ function getSourceLabel(source: string): string {
       return "快速生成";
     case "batch_video":
       return "批量视频";
+    case "batch_video_prompt":
+      return "Sora文生视频";
+    case "batch_video_veo3":
+      return "VEO3视频";
+    case "batch_video_prompt_veo3":
+      return "VEO3文生";
     case "batch_image":
       return "批量图片";
     case "link_video":
       return "链接秒变";
+    case "ecom_factory":
+      return "电商工厂";
     default:
       return "未知来源";
   }
 }
 
 export default function TaskLogPage() {
+  const { toast } = useToast();
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedType, setSelectedType] = useState("all");
   const [selectedStatus, setSelectedStatus] = useState("all");
+  const [selectedSource, setSelectedSource] = useState("all");
+  const [selectedDate, setSelectedDate] = useState("all");
   const [tasks, setTasks] = useState<TaskLogItem[]>([]);
   const [stats, setStats] = useState<TaskStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [previewTask, setPreviewTask] = useState<TaskLogItem | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [offset, setOffset] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [downloading, setDownloading] = useState<string | null>(null);
 
-  const fetchTasks = async () => {
+  const fetchTasks = async (appendMode = false) => {
     try {
-      setLoading(true);
+      if (appendMode) {
+        setLoadingMore(true);
+      } else {
+        setLoading(true);
+        setOffset(0);
+      }
+
       const params = new URLSearchParams();
       if (selectedType !== "all") params.set("type", selectedType);
       if (selectedStatus !== "all") params.set("status", selectedStatus);
+      if (selectedSource !== "all") params.set("source", selectedSource);
+      if (selectedDate !== "all") params.set("dateRange", selectedDate);
+      params.set("offset", appendMode ? String(offset + 50) : "0");
+      params.set("limit", "50");
 
       const response = await fetch(`/api/user/tasks?${params.toString()}`);
       const result = await response.json();
 
       if (result.success) {
-        setTasks(result.data.tasks);
+        if (appendMode) {
+          setTasks(prev => [...prev, ...result.data.tasks]);
+          setOffset(prev => prev + 50);
+        } else {
+          setTasks(result.data.tasks);
+        }
         setStats(result.data.stats);
+        setHasMore(result.data.pagination.total > (appendMode ? offset + 100 : 50));
       }
     } catch (error) {
       console.error("[TaskLog] Error:", error);
     } finally {
       setLoading(false);
+      setLoadingMore(false);
+    }
+  };
+
+  const loadMore = () => {
+    if (!loadingMore && hasMore) {
+      fetchTasks(true);
     }
   };
 
   // 刷新处理中的任务状态
-  const refreshProcessingTasks = async () => {
+  const refreshProcessingTasks = useCallback(async () => {
     try {
       setRefreshing(true);
       const response = await fetch("/api/user/tasks/refresh", { method: "POST" });
@@ -158,27 +238,37 @@ export default function TaskLogPage() {
 
       if (result.success) {
         console.log("[TaskLog] Refresh result:", result.data);
+        if (result.data.completed > 0 || result.data.failed > 0) {
+          toast({
+            title: "任务状态已更新",
+            description: `${result.data.completed} 个完成，${result.data.failed} 个失败`,
+          });
+        }
         // 重新获取任务列表
         await fetchTasks();
       }
     } catch (error) {
       console.error("[TaskLog] Refresh error:", error);
+      toast({
+        title: "刷新失败",
+        description: "请稍后重试",
+        variant: "destructive",
+      });
     } finally {
       setRefreshing(false);
     }
-  };
+  }, [toast]);
 
   useEffect(() => {
     fetchTasks();
-  }, [selectedType, selectedStatus]);
+  }, [selectedType, selectedStatus, selectedSource, selectedDate]);
 
-  // 页面加载时自动刷新处理中的任务
+  // 页面加载后自动刷新处理中的任务（仅当有处理中任务时）
   useEffect(() => {
-    if (stats && stats.processingTasks > 0) {
+    if (stats && stats.processingTasks > 0 && !refreshing) {
       refreshProcessingTasks();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [stats?.processingTasks]);
 
   const filteredTasks = tasks.filter((task) => {
     if (!searchQuery) return true;
@@ -193,18 +283,31 @@ export default function TaskLogPage() {
     if (!task.resultUrl) return;
 
     try {
-      const response = await fetch(task.resultUrl);
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
+      setDownloading(task.id);
+      const filename = `${task.type}-${task.id.slice(-6)}.${task.type === "video" ? "mp4" : "png"}`;
+      // 使用代理下载，避免 CORS 问题
+      const proxyUrl = `/api/download-proxy?url=${encodeURIComponent(task.resultUrl)}&filename=${encodeURIComponent(filename)}`;
+
       const a = document.createElement("a");
-      a.href = url;
-      a.download = `${task.type}-${task.id}.${task.type === "video" ? "mp4" : "png"}`;
+      a.href = proxyUrl;
+      a.download = filename;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
+
+      toast({
+        title: "开始下载",
+        description: filename,
+      });
     } catch (error) {
       console.error("[Download] Error:", error);
+      toast({
+        title: "下载失败",
+        description: "请稍后重试或使用新窗口打开",
+        variant: "destructive",
+      });
+    } finally {
+      setDownloading(null);
     }
   };
 
@@ -266,10 +369,93 @@ export default function TaskLogPage() {
               刷新状态 ({stats.processingTasks})
             </Button>
           )}
-          <Button variant="outline" size="sm" onClick={fetchTasks} className="gap-2">
+          <Button variant="outline" size="sm" onClick={() => fetchTasks()} className="gap-2">
             <RefreshCw className="h-4 w-4" />
             刷新
           </Button>
+          {/* TXT 导出下拉菜单 */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className="gap-2 text-blue-400 border-blue-400/30 hover:bg-blue-400/10">
+                <FileDown className="h-4 w-4" />
+                导出地址
+                <ChevronDown className="h-3 w-3" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuItem
+                onClick={() => {
+                  const completedTasks = filteredTasks.filter(t => t.status === "completed" && t.resultUrl);
+                  if (completedTasks.length === 0) {
+                    toast({ title: "没有可导出的内容", variant: "destructive" });
+                    return;
+                  }
+                  const urls = completedTasks.map(t => t.resultUrl).filter(Boolean).join("\n");
+                  const blob = new Blob([urls], { type: "text/plain;charset=utf-8" });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement("a");
+                  a.href = url;
+                  a.download = `assets_urls_${new Date().toISOString().slice(0, 10)}.txt`;
+                  document.body.appendChild(a);
+                  a.click();
+                  document.body.removeChild(a);
+                  URL.revokeObjectURL(url);
+                  toast({ title: "✅ 导出成功", description: `已导出 ${completedTasks.length} 个下载地址` });
+                }}
+                className="cursor-pointer"
+              >
+                <FileDown className="h-4 w-4 mr-2 text-blue-400" />
+                <div className="flex flex-col">
+                  <span>导出当前筛选 (TXT)</span>
+                  <span className="text-xs text-muted-foreground">导入 IDM/迅雷 批量下载</span>
+                </div>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={async () => {
+                  try {
+                    toast({ title: "正在获取全部已完成任务...", description: "请稍候" });
+                    // Fetch all completed tasks from API (no limit)
+                    const params = new URLSearchParams();
+                    params.set("status", "completed");
+                    params.set("limit", "10000"); // Large number to get all
+                    const response = await fetch(`/api/user/tasks?${params.toString()}`);
+                    const result = await response.json();
+                    if (!result.success) {
+                      toast({ title: "获取失败", variant: "destructive" });
+                      return;
+                    }
+                    const allCompletedTasks = result.data.tasks.filter((t: TaskLogItem) => t.resultUrl);
+                    if (allCompletedTasks.length === 0) {
+                      toast({ title: "没有可导出的内容", variant: "destructive" });
+                      return;
+                    }
+                    const urls = allCompletedTasks.map((t: TaskLogItem) => t.resultUrl).filter(Boolean).join("\n");
+                    const blob = new Blob([urls], { type: "text/plain;charset=utf-8" });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement("a");
+                    a.href = url;
+                    a.download = `all_assets_urls_${new Date().toISOString().slice(0, 10)}.txt`;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                    toast({ title: "✅ 导出成功", description: `已导出 ${allCompletedTasks.length} 个下载地址` });
+                  } catch (error) {
+                    console.error("[Export] Error:", error);
+                    toast({ title: "导出失败", description: "请稍后重试", variant: "destructive" });
+                  }
+                }}
+                className="cursor-pointer"
+              >
+                <FileDown className="h-4 w-4 mr-2 text-emerald-400" />
+                <div className="flex flex-col">
+                  <span>导出全部已完成 (TXT)</span>
+                  <span className="text-xs text-muted-foreground">从服务器获取全部任务</span>
+                </div>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
@@ -327,7 +513,8 @@ export default function TaskLogPage() {
 
       {/* Filters and Search - Titanium Glass */}
       <Card variant="glass" className="bg-[#0B0C10]/60 backdrop-blur-md">
-        <CardContent className="p-4">
+        <CardContent className="p-4 space-y-4">
+          {/* Row 1: Search + Type + Status */}
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             {/* Search */}
             <div className="relative flex-1 max-w-md group">
@@ -367,6 +554,47 @@ export default function TaskLogPage() {
                   size="sm"
                   onClick={() => setSelectedStatus(filter.value)}
                   className={selectedStatus === filter.value
+                    ? ""
+                    : "bg-white/5 text-white/60 border-white/5 hover:bg-white/10 hover:text-white transition-all"
+                  }
+                >
+                  {filter.label}
+                </Button>
+              ))}
+            </div>
+          </div>
+
+          {/* Row 2: Source + Date + View Toggle */}
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between border-t border-white/5 pt-4">
+            {/* Source Filter */}
+            <div className="flex flex-wrap gap-2">
+              <span className="text-white/40 text-sm flex items-center mr-2">来源:</span>
+              {sourceFilters.map((filter) => (
+                <Button
+                  key={filter.value}
+                  variant={selectedSource === filter.value ? "mermaid" : "ghost"}
+                  size="sm"
+                  onClick={() => setSelectedSource(filter.value)}
+                  className={selectedSource === filter.value
+                    ? ""
+                    : "bg-white/5 text-white/60 border-white/5 hover:bg-white/10 hover:text-white transition-all"
+                  }
+                >
+                  {filter.label}
+                </Button>
+              ))}
+            </div>
+
+            {/* Date Filter */}
+            <div className="flex flex-wrap gap-2">
+              <span className="text-white/40 text-sm flex items-center mr-2">时间:</span>
+              {dateFilters.map((filter) => (
+                <Button
+                  key={filter.value}
+                  variant={selectedDate === filter.value ? "mermaid" : "ghost"}
+                  size="sm"
+                  onClick={() => setSelectedDate(filter.value)}
+                  className={selectedDate === filter.value
                     ? ""
                     : "bg-white/5 text-white/60 border-white/5 hover:bg-white/10 hover:text-white transition-all"
                   }
@@ -516,8 +744,13 @@ export default function TaskLogPage() {
                           {task.prompt || "未命名任务"}
                         </p>
                         <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                          <span className="text-xs text-white/40 whitespace-nowrap">
+                          {/* Colored Source Badge */}
+                          <span className={`text-xs px-1.5 py-0.5 rounded border ${getSourceColor(task.source)}`}>
                             {getSourceLabel(task.source)}
+                          </span>
+                          {/* Task ID */}
+                          <span className="text-xs text-white/50 font-mono">
+                            #{task.id.slice(-4).toUpperCase()}
                           </span>
                           <span className="text-xs text-white/40">·</span>
                           <span className="text-xs text-white/40 whitespace-nowrap">
@@ -525,7 +758,7 @@ export default function TaskLogPage() {
                           </span>
                         </div>
                         <p className="text-xs text-white/30 mt-1">
-                          {formatDate(task.createdAt)}
+                          {new Date(task.createdAt).toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}
                         </p>
                       </div>
                       <DropdownMenu>
@@ -580,12 +813,21 @@ export default function TaskLogPage() {
                         )}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="font-medium truncate text-white/90 group-hover:text-mermaid-cyan transition-colors">
-                          {task.prompt?.substring(0, 50) || "未命名任务"}
-                        </p>
-                        <p className="text-sm text-white/40">
-                          {getSourceLabel(task.source)} · {task.model}
-                        </p>
+                        <div className="flex items-center gap-2">
+                          <p className="font-medium truncate text-white/90 group-hover:text-mermaid-cyan transition-colors">
+                            {task.prompt?.substring(0, 50) || "未命名任务"}
+                          </p>
+                          <span className="text-xs text-white/50 font-mono shrink-0">
+                            #{task.id.slice(-4).toUpperCase()}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <span className={`text-xs px-1.5 py-0.5 rounded border ${getSourceColor(task.source)}`}>
+                            {getSourceLabel(task.source)}
+                          </span>
+                          <span className="text-xs text-white/40">·</span>
+                          <span className="text-sm text-white/40">{task.model}</span>
+                        </div>
                       </div>
                       <div className="flex items-center gap-2">
                         {getStatusIcon(task.status)}
@@ -595,7 +837,7 @@ export default function TaskLogPage() {
                         {task.credits} 积分
                       </div>
                       <div className="text-sm text-white/40 hidden lg:block">
-                        {formatDate(task.createdAt)}
+                        {new Date(task.createdAt).toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}
                       </div>
                       {expiry.isExpiringSoon && !expiry.isExpired && (
                         <div className="flex items-center gap-1 px-2 py-1 rounded-full text-xs bg-neon-warning/20 text-neon-warning">
@@ -632,6 +874,29 @@ export default function TaskLogPage() {
             </CardContent>
           </Card>
         )
+      )}
+
+      {/* Load More Button */}
+      {!loading && filteredTasks.length > 0 && hasMore && (
+        <div className="flex justify-center py-4">
+          <Button
+            variant="outline"
+            onClick={loadMore}
+            disabled={loadingMore}
+            className="gap-2 border-white/10 hover:border-mermaid-cyan/30 hover:bg-mermaid-cyan/5"
+          >
+            {loadingMore ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                加载中...
+              </>
+            ) : (
+              <>
+                加载更多
+              </>
+            )}
+          </Button>
+        </div>
       )}
 
       {/* Preview Dialog - 优化尺寸，避免被遮挡 */}

@@ -20,7 +20,7 @@ import { createClient } from "@/lib/supabase/server";
 export interface TaskLogItem {
   id: string;
   type: "video" | "image";
-  source: "quick_gen" | "batch_video" | "batch_image" | "link_video" | "ecom_factory";
+  source: "quick_gen" | "batch_video" | "batch_image" | "link_video" | "ecom_factory" | "batch_video_prompt" | "batch_video_veo3" | "batch_video_prompt_veo3";
   status: "completed" | "failed" | "processing" | "pending";
   resultUrl: string | null;
   thumbnailUrl: string | null;
@@ -30,6 +30,7 @@ export interface TaskLogItem {
   createdAt: string;
   completedAt: string | null;
   expiresAt: string; // 7天后过期
+  groupName?: string; // 任务分组
   // 电商图片工厂额外字段
   mode?: string;
   outputCount?: number;
@@ -52,10 +53,10 @@ export interface TaskStats {
 export async function GET(request: Request) {
   try {
     const supabase = await createClient();
-    
+
     // 获取当前登录用户
     const { data: { user } } = await supabase.auth.getUser();
-    
+
     if (!user) {
       return NextResponse.json(
         { success: false, error: "未登录" },
@@ -66,46 +67,84 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const type = searchParams.get("type") || "all";
     const status = searchParams.get("status") || "all";
+    const source = searchParams.get("source") || "all";
+    const dateRange = searchParams.get("dateRange") || "all";
+    const groupName = searchParams.get("groupName") || "all";
     const limit = parseInt(searchParams.get("limit") || "50");
     const offset = parseInt(searchParams.get("offset") || "0");
 
-    // 计算 7 天前的时间戳（只保留 7 天内的记录）
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-    const sevenDaysAgoISO = sevenDaysAgo.toISOString();
+    // 计算日期范围
+    const now = new Date();
+    let startDateISO: string | null = null;
+
+    switch (dateRange) {
+      case "today":
+        startDateISO = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+        break;
+      case "3days":
+        startDateISO = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000).toISOString();
+        break;
+      case "7days":
+        startDateISO = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
+        break;
+      case "all":
+      default:
+        // 不设置日期限制，查询所有数据
+        startDateISO = null;
+        break;
+    }
 
     // ========== 并行查询两个表（提高性能）==========
     // 1. 查询 generations 表
     const generationsPromise = (async () => {
       // 如果只查询电商图片，跳过 generations 表
-      if (type === "ecom") return [];
-      
+      if (type === "ecom" || source === "ecom_factory") return [];
+
       let query = supabase
         .from("generations")
         .select("*")
         .eq("user_id", user.id)
-        .gte("created_at", sevenDaysAgoISO)
         .order("created_at", { ascending: false });
+
+      // 仅当指定日期范围时应用日期过滤
+      if (startDateISO) {
+        query = query.gte("created_at", startDateISO);
+      }
 
       if (type === "video") query = query.eq("type", "video");
       if (type === "image") query = query.eq("type", "image");
       if (status !== "all") query = query.eq("status", status);
 
+      // 来源筛选
+      if (source !== "all") {
+        query = query.eq("source", source);
+      }
+
+      // 分组筛选
+      if (groupName !== "all") {
+        query = query.eq("group_name", groupName);
+      }
+
       const { data } = await query;
       return data || [];
     })();
-    
+
     // 2. 查询 ecom_image_tasks 表（电商图片工厂）
     const ecomPromise = (async () => {
-      // 如果只查询视频，跳过电商图片任务
+      // 如果只查询视频，或者筛选的来源不是电商工厂也不是全部，跳过电商图片任务
       if (type === "video") return [];
-      
+      if (source !== "all" && source !== "ecom_factory") return [];
+
       let query = supabase
         .from("ecom_image_tasks")
         .select("*")
         .eq("user_id", user.id)
-        .gte("created_at", sevenDaysAgoISO)
         .order("created_at", { ascending: false });
+
+      // 仅当指定日期范围时应用日期过滤
+      if (startDateISO) {
+        query = query.gte("created_at", startDateISO);
+      }
 
       // 电商任务状态映射
       if (status === "completed") {
@@ -133,7 +172,7 @@ export async function GET(request: Request) {
     const generationsLogs: TaskLogItem[] = generationsTasks.map((task: any) => {
       const createdAt = new Date(task.created_at);
       const expiresAt = new Date(createdAt.getTime() + 7 * 24 * 60 * 60 * 1000);
-      
+
       return {
         id: task.id,
         type: task.type || "video",
@@ -147,6 +186,7 @@ export async function GET(request: Request) {
         createdAt: task.created_at,
         completedAt: task.completed_at || null,
         expiresAt: expiresAt.toISOString(),
+        groupName: task.group_name || "默认",
       };
     });
 
@@ -155,7 +195,7 @@ export async function GET(request: Request) {
     const ecomLogs: TaskLogItem[] = ecomTasks.map((task: any) => {
       const createdAt = new Date(task.created_at);
       const expiresAt = new Date(createdAt.getTime() + 7 * 24 * 60 * 60 * 1000);
-      
+
       // 状态映射
       let mappedStatus: TaskLogItem["status"] = "processing";
       if (task.status === "success" || task.status === "partial_success") {
@@ -168,7 +208,7 @@ export async function GET(request: Request) {
 
       // 获取第一张结果图片作为缩略图
       const outputItems = task.output_items || [];
-      const firstSuccessItem = outputItems.find((item: { status: string; image_url?: string }) => 
+      const firstSuccessItem = outputItems.find((item: { status: string; image_url?: string }) =>
         item.status === "success" && item.image_url
       );
 
@@ -180,7 +220,7 @@ export async function GET(request: Request) {
         try_on: "AI试穿",
         buyer_show: "买家秀",
       };
-      
+
       return {
         id: task.id,
         type: "image" as const,

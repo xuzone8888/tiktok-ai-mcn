@@ -14,10 +14,10 @@ import { querySora2Result, queryNanoBananaResult } from "@/lib/suchuang-api";
 export async function POST() {
   try {
     const supabase = await createClient();
-    
+
     // 获取当前登录用户
     const { data: { user } } = await supabase.auth.getUser();
-    
+
     if (!user) {
       return NextResponse.json(
         { success: false, error: "未登录" },
@@ -27,22 +27,37 @@ export async function POST() {
 
     // 获取用户所有 processing 状态的任务
     const adminClient = createAdminClient();
-    const { data: processingTasks, error } = await adminClient
-      .from("generations")
-      .select("*")
-      .eq("user_id", user.id)
-      .eq("status", "processing")
-      .order("created_at", { ascending: false });
 
-    if (error) {
-      console.error("[Refresh Tasks] Error fetching tasks:", error);
-      return NextResponse.json(
-        { success: false, error: "获取任务失败" },
-        { status: 500 }
-      );
+    // 并行查询两个表的处理中任务
+    const [generationsResult, ecomResult] = await Promise.all([
+      adminClient
+        .from("generations")
+        .select("*")
+        .eq("user_id", user.id)
+        .eq("status", "processing")
+        .order("created_at", { ascending: false }),
+      adminClient
+        .from("ecom_image_tasks")
+        .select("*")
+        .eq("user_id", user.id)
+        .in("status", ["created", "generating_prompts", "generating_images"])
+        .order("created_at", { ascending: false }),
+    ]);
+
+    if (generationsResult.error) {
+      console.error("[Refresh Tasks] Error fetching generations:", generationsResult.error);
+    }
+    if (ecomResult.error) {
+      console.error("[Refresh Tasks] Error fetching ecom tasks:", ecomResult.error);
     }
 
-    if (!processingTasks || processingTasks.length === 0) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const processingTasks: any[] = generationsResult.data || [];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const ecomProcessingTasks: any[] = ecomResult.data || [];
+    const totalProcessing = processingTasks.length + ecomProcessingTasks.length;
+
+    if (totalProcessing === 0) {
       return NextResponse.json({
         success: true,
         data: {
@@ -54,7 +69,10 @@ export async function POST() {
       });
     }
 
-    console.log("[Refresh Tasks] Found processing tasks:", processingTasks.length);
+    console.log("[Refresh Tasks] Found processing tasks:", {
+      generations: processingTasks.length,
+      ecom: ecomProcessingTasks.length
+    });
 
     let refreshed = 0;
     let completed = 0;
@@ -77,7 +95,7 @@ export async function POST() {
           // 视频任务 - 使用 Sora2 API 查询
           const isPro = taskModel.includes("pro") || taskModel.includes("hd") || taskModel.includes("25s");
           const result = await querySora2Result(taskId, isPro);
-          
+
           if (result.success && result.task) {
             if (result.task.status === "completed") {
               newStatus = "completed";
@@ -91,7 +109,7 @@ export async function POST() {
           // 图片任务 - 使用 NanoBanana API 查询
           const model = taskModel.includes("pro") ? "nano-banana-pro" : "nano-banana";
           const result = await queryNanoBananaResult(taskId, model);
-          
+
           if (result.success && result.task) {
             if (result.task.status === "completed") {
               newStatus = "completed";
@@ -124,7 +142,8 @@ export async function POST() {
             updateData.error_message = errorMessage;
           }
 
-          await adminClient
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          await (adminClient as any)
             .from("generations")
             .update(updateData)
             .eq("id", task.id);
