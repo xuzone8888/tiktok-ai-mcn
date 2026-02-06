@@ -25,6 +25,7 @@ import {
   ExternalLink,
   FileDown,
   ChevronDown,
+  FolderOpen,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -175,6 +176,8 @@ export default function TaskLogPage() {
   const [selectedStatus, setSelectedStatus] = useState("all");
   const [selectedSource, setSelectedSource] = useState("all");
   const [selectedDate, setSelectedDate] = useState("all");
+  const [selectedGroup, setSelectedGroup] = useState("all");
+  const [availableGroups, setAvailableGroups] = useState<string[]>([]);
   const [tasks, setTasks] = useState<TaskLogItem[]>([]);
   const [stats, setStats] = useState<TaskStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -199,6 +202,7 @@ export default function TaskLogPage() {
       if (selectedStatus !== "all") params.set("status", selectedStatus);
       if (selectedSource !== "all") params.set("source", selectedSource);
       if (selectedDate !== "all") params.set("dateRange", selectedDate);
+      if (selectedGroup !== "all") params.set("groupName", selectedGroup);
       params.set("offset", appendMode ? String(offset + 50) : "0");
       params.set("limit", "50");
 
@@ -211,6 +215,16 @@ export default function TaskLogPage() {
           setOffset(prev => prev + 50);
         } else {
           setTasks(result.data.tasks);
+          // 从所有任务中提取分组名称（仅在非追加模式且未筛选分组时）
+          if (selectedGroup === "all") {
+            const groups = new Set<string>();
+            result.data.tasks.forEach((task: TaskLogItem) => {
+              if (task.groupName && task.groupName !== "默认") {
+                groups.add(task.groupName);
+              }
+            });
+            setAvailableGroups(Array.from(groups).sort());
+          }
         }
         setStats(result.data.stats);
         setHasMore(result.data.pagination.total > (appendMode ? offset + 100 : 50));
@@ -261,7 +275,7 @@ export default function TaskLogPage() {
 
   useEffect(() => {
     fetchTasks();
-  }, [selectedType, selectedStatus, selectedSource, selectedDate]);
+  }, [selectedType, selectedStatus, selectedSource, selectedDate, selectedGroup]);
 
   // 页面加载后自动刷新处理中的任务（仅当有处理中任务时）
   useEffect(() => {
@@ -603,6 +617,50 @@ export default function TaskLogPage() {
                 </Button>
               ))}
             </div>
+
+            {/* Group Filter Dropdown */}
+            {availableGroups.length > 0 && (
+              <div className="flex items-center gap-2">
+                <span className="text-white/40 text-sm flex items-center">
+                  <FolderOpen className="h-4 w-4 mr-1" />
+                  分组:
+                </span>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant={selectedGroup !== "all" ? "mermaid" : "ghost"}
+                      size="sm"
+                      className={`gap-2 ${selectedGroup !== "all"
+                        ? ""
+                        : "bg-white/5 text-white/60 border-white/5 hover:bg-white/10 hover:text-white"
+                        }`}
+                    >
+                      {selectedGroup === "all" ? "全部分组" : selectedGroup}
+                      <ChevronDown className="h-3 w-3" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="bg-[#16181D] border-white/10 text-white max-h-60 overflow-auto">
+                    <DropdownMenuItem
+                      onClick={() => setSelectedGroup("all")}
+                      className={`focus:bg-white/10 cursor-pointer ${selectedGroup === "all" ? "text-mermaid-cyan" : ""}`}
+                    >
+                      全部分组
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator className="bg-white/10" />
+                    {availableGroups.map((group) => (
+                      <DropdownMenuItem
+                        key={group}
+                        onClick={() => setSelectedGroup(group)}
+                        className={`focus:bg-white/10 cursor-pointer ${selectedGroup === group ? "text-mermaid-cyan" : ""}`}
+                      >
+                        <FolderOpen className="h-4 w-4 mr-2 text-muted-foreground" />
+                        {group}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            )}
 
             {/* View Toggle */}
             <div className="flex items-center gap-2 border border-white/10 rounded-lg p-1 bg-white/5">
