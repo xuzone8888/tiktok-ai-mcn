@@ -442,20 +442,22 @@ export default function TikTokAccountsPage() {
                                                     <span>视频: {formatNumber(account.video_count)}</span>
                                                     <span>获赞: {formatNumber(account.likes_count)}</span>
                                                 </CardDescription>
-                                                {/* TikTok Username / Handle */}
-                                                <div className="flex items-center gap-1.5 mt-2">
-                                                    <span className="text-xs text-muted-foreground">用户名:</span>
-                                                    <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono text-cyan-500">
-                                                        @{account.username || account.open_id.substring(0, 12)}
-                                                    </code>
-                                                    <button
-                                                        onClick={() => copyOpenId(account.username || account.open_id)}
-                                                        className="p-1 hover:bg-muted rounded transition-colors"
-                                                        title="复制用户名"
-                                                    >
-                                                        <Copy className="h-3 w-3 text-muted-foreground" />
-                                                    </button>
-                                                </div>
+                                                {/* TikTok Username / Handle - only show if we have a real username */}
+                                                {account.username && (
+                                                    <div className="flex items-center gap-1.5 mt-2">
+                                                        <span className="text-xs text-muted-foreground">用户名:</span>
+                                                        <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono text-cyan-500">
+                                                            @{account.username}
+                                                        </code>
+                                                        <button
+                                                            onClick={() => copyOpenId(account.username!)}
+                                                            className="p-1 hover:bg-muted rounded transition-colors"
+                                                            title="复制用户名"
+                                                        >
+                                                            <Copy className="h-3 w-3 text-muted-foreground" />
+                                                        </button>
+                                                    </div>
+                                                )}
                                             </div>
                                         </div>
 
