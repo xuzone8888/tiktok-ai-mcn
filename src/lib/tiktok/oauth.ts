@@ -25,7 +25,6 @@ export function getTikTokOAuthConfig() {
         redirectUri,
         scopes: [
             'user.info.basic',
-            'user.info.profile',
             'user.info.stats',
             'video.upload',
             'video.publish',
@@ -176,10 +175,11 @@ export async function getUserInfo(accessToken: string): Promise<TikTokUserInfo> 
         'avatar_url',
         'avatar_url_100',
         'display_name',
-        'bio_description',
-        'profile_deep_link',
-        'is_verified',
-        'username',  // Add username to get the actual @handle
+        // 以下字段需要 user.info.profile 权限（暂未申请）：
+        // 'bio_description',
+        // 'profile_deep_link',
+        // 'is_verified',
+        // 'username',
         'follower_count',
         'following_count',
         'likes_count',
