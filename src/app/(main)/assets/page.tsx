@@ -618,49 +618,55 @@ export default function TaskLogPage() {
               ))}
             </div>
 
-            {/* Group Filter Dropdown */}
-            {availableGroups.length > 0 && (
-              <div className="flex items-center gap-2">
-                <span className="text-white/40 text-sm flex items-center">
-                  <FolderOpen className="h-4 w-4 mr-1" />
-                  分组:
-                </span>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      variant={selectedGroup !== "all" ? "mermaid" : "ghost"}
-                      size="sm"
-                      className={`gap-2 ${selectedGroup !== "all"
-                        ? ""
-                        : "bg-white/5 text-white/60 border-white/5 hover:bg-white/10 hover:text-white"
-                        }`}
-                    >
-                      {selectedGroup === "all" ? "全部分组" : selectedGroup}
-                      <ChevronDown className="h-3 w-3" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="start" className="bg-[#16181D] border-white/10 text-white max-h-60 overflow-auto">
-                    <DropdownMenuItem
-                      onClick={() => setSelectedGroup("all")}
-                      className={`focus:bg-white/10 cursor-pointer ${selectedGroup === "all" ? "text-mermaid-cyan" : ""}`}
-                    >
-                      全部分组
+            {/* Group Filter Dropdown - 始终显示 */}
+            <div className="flex items-center gap-2">
+              <span className="text-white/40 text-sm flex items-center">
+                <FolderOpen className="h-4 w-4 mr-1" />
+                分组:
+              </span>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant={selectedGroup !== "all" ? "mermaid" : "ghost"}
+                    size="sm"
+                    className={`gap-2 ${selectedGroup !== "all"
+                      ? ""
+                      : "bg-white/5 text-white/60 border-white/5 hover:bg-white/10 hover:text-white"
+                      }`}
+                  >
+                    {selectedGroup === "all" ? "全部分组" : selectedGroup}
+                    <ChevronDown className="h-3 w-3" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="bg-[#16181D] border-white/10 text-white max-h-60 overflow-auto">
+                  <DropdownMenuItem
+                    onClick={() => setSelectedGroup("all")}
+                    className={`focus:bg-white/10 cursor-pointer ${selectedGroup === "all" ? "text-mermaid-cyan" : ""}`}
+                  >
+                    全部分组
+                  </DropdownMenuItem>
+                  {availableGroups.length > 0 ? (
+                    <>
+                      <DropdownMenuSeparator className="bg-white/10" />
+                      {availableGroups.map((group) => (
+                        <DropdownMenuItem
+                          key={group}
+                          onClick={() => setSelectedGroup(group)}
+                          className={`focus:bg-white/10 cursor-pointer ${selectedGroup === group ? "text-mermaid-cyan" : ""}`}
+                        >
+                          <FolderOpen className="h-4 w-4 mr-2 text-muted-foreground" />
+                          {group}
+                        </DropdownMenuItem>
+                      ))}
+                    </>
+                  ) : (
+                    <DropdownMenuItem disabled className="text-white/30 text-sm">
+                      暂无自定义分组
                     </DropdownMenuItem>
-                    <DropdownMenuSeparator className="bg-white/10" />
-                    {availableGroups.map((group) => (
-                      <DropdownMenuItem
-                        key={group}
-                        onClick={() => setSelectedGroup(group)}
-                        className={`focus:bg-white/10 cursor-pointer ${selectedGroup === group ? "text-mermaid-cyan" : ""}`}
-                      >
-                        <FolderOpen className="h-4 w-4 mr-2 text-muted-foreground" />
-                        {group}
-                      </DropdownMenuItem>
-                    ))}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-            )}
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
 
             {/* View Toggle */}
             <div className="flex items-center gap-2 border border-white/10 rounded-lg p-1 bg-white/5">
