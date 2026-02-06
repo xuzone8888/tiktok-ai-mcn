@@ -17,7 +17,7 @@ export async function POST(
 ) {
   try {
     const { id: jobId } = await params;
-    
+
     // 1. 验证用户
     const supabase = await createServerClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
@@ -32,7 +32,7 @@ export async function POST(
     // 2. 解析请求
     const body = await request.json().catch(() => ({}));
     const { retry = false, batchIndex = 0 } = body;
-    
+
     // batchIndex > 0 表示批量生成的第2个及以后的任务
     const isBatchExtra = batchIndex > 0;
 
@@ -74,13 +74,13 @@ export async function POST(
     // 5. 检查/扣除积分
     // 批量生成时，每个视频都需要单独扣除积分
     const creditsNeeded = getLinkVideoCredits(job.video_config.duration);
-    
+
     // 决定是否需要扣积分：
     // - 首次生成(batchIndex=0, retry=false, credits_used=0)：扣
     // - 批量额外(batchIndex>0)：每个都扣
     // - 重试(retry=true)：不扣
     const shouldDeductCredits = !retry && (isBatchExtra || job.credits_used === 0);
-    
+
     if (shouldDeductCredits) {
       // 检查用户积分
       const { data: profile } = await adminSupabase
@@ -145,7 +145,7 @@ export async function POST(
     // 7. 构建 Prompt
     // 组合脚本 + AI 模特触发词 (参考 generate-video 模块的实现)
     let finalPrompt = '';
-    
+
     // 批量变体修饰词 - 为每个批量任务生成不同风格的视频
     const variationStyles = [
       '', // 第一个保持原样
@@ -154,13 +154,13 @@ export async function POST(
       'Close-up details, intimate feel. ',
       'Wide shots, cinematic composition. ',
     ];
-    
+
     // 如果是批量任务，添加变体修饰词
     if (batchIndex > 0 && batchIndex < variationStyles.length) {
       finalPrompt = variationStyles[batchIndex];
       console.log('[Video API] Added batch variation modifier:', variationStyles[batchIndex], 'for batch index:', batchIndex);
     }
-    
+
     // 如果有 AI 模特，注入触发词到 prompt 开头
     if (job.ai_model?.trigger_word) {
       finalPrompt += `Professional video featuring ${job.ai_model.trigger_word}. `;
@@ -168,7 +168,7 @@ export async function POST(
     }
 
     // 添加脚本内容 (截取前750字符，为其他修饰词留空间)
-    const scriptContent = job.script_text.length > 750 
+    const scriptContent = job.script_text.length > 750
       ? job.script_text.substring(0, 750) + '...'
       : job.script_text;
     finalPrompt += scriptContent;
@@ -188,7 +188,7 @@ export async function POST(
     const aspectRatio = job.video_config.aspect_ratio;
     const isPro = duration === 15 || duration === 25;
     const quality = duration === 15 && isPro ? 'hd' : 'standard';
-    
+
     const model = getSora2ModelName(
       aspectRatio as '9:16' | '16:9',
       duration as 10 | 15 | 25,
@@ -277,7 +277,7 @@ export async function GET(
     const { id: jobId } = await params;
     const searchParams = new URL(request.url).searchParams;
     const externalTaskId = searchParams.get("taskId") || null;
-    
+
     const supabase = await createServerClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
 
@@ -314,7 +314,7 @@ export async function GET(
           .select('id')
           .eq('task_id', job.video_task_id)
           .single();
-        
+
         if (!existingGen) {
           // 尝试补同步
           const { data: fullJob } = await adminSupabase
@@ -322,7 +322,7 @@ export async function GET(
             .select('*, ai_model:ai_models(name)')
             .eq('id', jobId)
             .single();
-          
+
           if (fullJob) {
             await adminSupabase.from('generations').insert({
               user_id: user.id,
@@ -335,6 +335,7 @@ export async function GET(
               result_url: job.final_video_url,
               video_url: job.final_video_url,
               credit_cost: fullJob.credits_used || 0,
+              group_name: fullJob.title || '链接秒变',
               created_at: fullJob.created_at,
               completed_at: fullJob.completed_at || new Date().toISOString(),
             });
@@ -344,7 +345,7 @@ export async function GET(
       } catch (syncError) {
         console.error('[Video API] Failed to backfill generations:', syncError);
       }
-      
+
       return NextResponse.json({
         success: true,
         status: 'completed',
@@ -380,7 +381,7 @@ export async function GET(
 
     const task = taskResult.task;
     const raw = taskResult.raw as { progress?: number };
-    
+
     console.log('[Video API] Task result:', { status: task?.status, hasUrl: !!task?.resultUrl });
 
     if (task?.status === 'completed' && task.resultUrl) {
@@ -418,10 +419,11 @@ export async function GET(
             result_url: task.resultUrl,
             video_url: task.resultUrl,
             credit_cost: externalTaskId ? getLinkVideoCredits(fullJob.video_config?.duration || 15) : (fullJob.credits_used || 0),
+            group_name: fullJob.title || '链接秒变',
             created_at: new Date().toISOString(),
             completed_at: new Date().toISOString(),
           });
-          
+
           if (insertError) {
             console.error('[Video API] Failed to insert generation:', insertError);
           } else {

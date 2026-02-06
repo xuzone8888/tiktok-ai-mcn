@@ -23,6 +23,7 @@ interface RequestBody {
   userId?: string;
   creditCost?: number;
   mode?: "image_to_video" | "prompt_to_video";
+  groupName?: string; // 任务分组名称
 }
 
 // ============================================================================
@@ -32,15 +33,16 @@ interface RequestBody {
 export async function POST(request: NextRequest) {
   try {
     const body: RequestBody = await request.json();
-    const { 
-      aiVideoPrompt, 
-      mainGridImageUrl, 
-      aspectRatio, 
+    const {
+      aiVideoPrompt,
+      mainGridImageUrl,
+      aspectRatio,
       quality = "fast",
       taskId,
       userId,
       creditCost = 0,
       mode = "image_to_video",
+      groupName,
     } = body;
 
     const isPromptMode = mode === "prompt_to_video";
@@ -121,12 +123,13 @@ export async function POST(request: NextRequest) {
             source_image_url: mainGridImageUrl || null,
             status: "processing",
             credit_cost: creditCost,
+            group_name: groupName || "默认",
             use_pro: quality === "quality",
             created_at: new Date().toISOString(),
           })
           .select()
           .single();
-        
+
         if (insertError) {
           console.error("[VEO3 Batch] Failed to create DB record:", insertError);
         } else {
@@ -155,9 +158,9 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error("[VEO3 Batch] Error submitting VEO3 video:", error);
     return NextResponse.json(
-      { 
-        success: false, 
-        error: error instanceof Error ? error.message : "视频提交失败" 
+      {
+        success: false,
+        error: error instanceof Error ? error.message : "视频提交失败"
       },
       { status: 500 }
     );

@@ -26,6 +26,7 @@ interface RequestBody {
   creditCost?: number;
   mode?: "image_to_video" | "prompt_to_video"; // 任务模式
   apiLine?: "line1" | "line2" | "line3"; // API 线路选择
+  groupName?: string; // 任务分组名称
 }
 
 // ============================================================================
@@ -47,6 +48,7 @@ export async function POST(request: NextRequest) {
       creditCost = 0,
       mode = "image_to_video",
       apiLine = "line1",
+      groupName,
     } = body;
 
     const isPromptMode = mode === "prompt_to_video";
@@ -139,6 +141,7 @@ export async function POST(request: NextRequest) {
             status: "processing",  // 初始状态为处理中
             credit_cost: creditCost,
             use_pro: isPro,
+            group_name: groupName || "默认",
             created_at: new Date().toISOString(),
           })
           .select()
