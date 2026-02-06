@@ -1338,10 +1338,14 @@ export default function VideoBatchPage() {
 
   // 批量下载状态
   const [isDownloading, setIsDownloading] = useState(false);
-  // 批量开始状态
-  const [isBatchStarting, setIsBatchStarting] = useState(false);
+  // 批量开始状态（按任务组管理，支持多组并行启动）
+  const [batchStartingGroups, setBatchStartingGroups] = useState<Record<string, boolean>>({});
   // 线路检测弹窗状态
   const [showSpeedTest, setShowSpeedTest] = useState(false);
+
+  // 悬浮滚动按钮状态
+  const [showScrollButton, setShowScrollButton] = useState(false);
+  const [isAtBottom, setIsAtBottom] = useState(false);
 
   // Template State
   const [showSaveTemplate, setShowSaveTemplate] = useState(false);
@@ -1587,23 +1591,67 @@ export default function VideoBatchPage() {
   // 取消下载的ref
   const cancelDownloadRef = useRef(false);
 
-  // 生成简化文件名的辅助函数（支持分组前缀）
-  const generateSimpleFilename = useCallback((task: VideoBatchTask, index?: number) => {
+  // 滚动监听 - 检测是否需要显示悬浮滚动按钮
+  useEffect(() => {
+    // 找到主滚动容器 (layout.tsx 中的 main 元素)
+    const mainContainer = document.querySelector('main.overflow-y-auto');
+    if (!mainContainer) return;
+
+    const handleScroll = () => {
+      const { scrollTop, scrollHeight, clientHeight } = mainContainer;
+      // 只有当内容高度超过视口 200px 以上才显示按钮
+      const isScrollable = scrollHeight > clientHeight + 200;
+      setShowScrollButton(isScrollable);
+
+      // 判断是否在底部区域（距离底部 100px 以内视为底部）
+      const distanceToBottom = scrollHeight - scrollTop - clientHeight;
+      setIsAtBottom(distanceToBottom < 100);
+    };
+
+    // 初始检测
+    handleScroll();
+
+    // 监听滚动事件
+    mainContainer.addEventListener('scroll', handleScroll);
+
+    // 监听窗口大小变化（可能影响是否需要滚动）
+    window.addEventListener('resize', handleScroll);
+
+    return () => {
+      mainContainer.removeEventListener('scroll', handleScroll);
+      window.removeEventListener('resize', handleScroll);
+    };
+  }, [activeGroupTasks.length, activeGroupName]); // 任务数量或组变化时重新检测
+
+  // 滚动到顶部或底部
+  const handleScrollToPosition = useCallback(() => {
+    const mainContainer = document.querySelector('main.overflow-y-auto');
+    if (!mainContainer) return;
+
+    if (isAtBottom) {
+      // 在底部，滚动到顶部
+      mainContainer.scrollTo({ top: 0, behavior: 'smooth' });
+    } else {
+      // 在顶部或中间，滚动到底部
+      mainContainer.scrollTo({ top: mainContainer.scrollHeight, behavior: 'smooth' });
+    }
+  }, [isAtBottom]);
+
+  // 生成简化文件名的辅助函数（支持分组前缀，自动计算组内序号）
+  const generateSimpleFilename = useCallback((task: VideoBatchTask) => {
     const aspectStr = task.aspectRatio.replace(":", "x");
     const durationStr = `${task.duration || 15}s`;
 
-    // 如果有分组名，计算组内序号；否则使用全局序号
-    let seq: number;
     if (task.groupName) {
       // 获取同组任务，计算组内序号
       const groupTasks = tasks.filter(t => t.groupName === task.groupName);
-      seq = index !== undefined ? index + 1 : groupTasks.findIndex(t => t.id === task.id) + 1;
+      const seq = groupTasks.findIndex(t => t.id === task.id) + 1;
       // 返回带分组前缀的文件名
       return `${task.groupName}-视频${seq}-${aspectStr}-${durationStr}.mp4`;
     }
 
     // 无分组时使用全局序号
-    seq = index !== undefined ? index + 1 : tasks.findIndex(t => t.id === task.id) + 1;
+    const seq = tasks.findIndex(t => t.id === task.id) + 1;
     return `视频-${seq}-${aspectStr}-${durationStr}.mp4`;
   }, [tasks]);
 
@@ -2709,201 +2757,207 @@ C07: [story CTA, inspiring, <50 chars]`,
             <div className="flex items-center gap-3">
               {/* 批量操作组 - 移至此处 */}
               <div className="flex items-center gap-2 mr-2">
-                {selectedCount > 0 && (
-                  <>
-                    {/* 批量下载 */}
-                    {tasks.filter(t => selectedTaskIds[t.id] && t.status === "success" && t.soraVideoUrl).length > 0 && (
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            disabled={isDownloading}
-                            className="h-8 text-xs text-emerald-400 border-emerald-400/30 hover:bg-emerald-400/10"
-                          >
-                            {isDownloading ? (
-                              <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                            ) : (
-                              <Download className="h-3 w-3 mr-1" />
-                            )}
-                            下载 ({tasks.filter(t => selectedTaskIds[t.id] && t.status === "success" && t.soraVideoUrl).length})
-                            <ChevronDown className="h-3 w-3 ml-1" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-64">
-                          {/* 方式1: 直连CDN推荐 */}
-                          <DropdownMenuItem
-                            onClick={async () => {
-                              const completedSelectedTasks = tasks.filter(
-                                t => selectedTaskIds[t.id] && t.status === "success" && t.soraVideoUrl && !downloadedTaskIds.has(t.id)
-                              );
-                              if (completedSelectedTasks.length === 0) {
-                                const allDownloaded = tasks.filter(
-                                  t => selectedTaskIds[t.id] && t.status === "success" && t.soraVideoUrl
-                                ).every(t => downloadedTaskIds.has(t.id));
+                {/* 计算当前组的选中数量 */}
+                {(() => {
+                  const groupSelectedCount = activeGroupTasks.filter(t => selectedTaskIds[t.id]).length;
+                  return groupSelectedCount > 0 && (
+                    <>
+                      {/* 批量下载 */}
+                      {activeGroupTasks.filter(t => selectedTaskIds[t.id] && t.status === "success" && t.soraVideoUrl).length > 0 && (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              disabled={isDownloading}
+                              className="h-8 text-xs text-emerald-400 border-emerald-400/30 hover:bg-emerald-400/10"
+                            >
+                              {isDownloading ? (
+                                <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                              ) : (
+                                <Download className="h-3 w-3 mr-1" />
+                              )}
+                              下载 ({activeGroupTasks.filter(t => selectedTaskIds[t.id] && t.status === "success" && t.soraVideoUrl).length})
+                              <ChevronDown className="h-3 w-3 ml-1" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-64">
+                            {/* 方式1: 直连CDN推荐 */}
+                            <DropdownMenuItem
+                              onClick={async () => {
+                                const completedSelectedTasks = activeGroupTasks.filter(
+                                  t => selectedTaskIds[t.id] && t.status === "success" && t.soraVideoUrl && !downloadedTaskIds.has(t.id)
+                                );
+                                if (completedSelectedTasks.length === 0) {
+                                  const allDownloaded = activeGroupTasks.filter(
+                                    t => selectedTaskIds[t.id] && t.status === "success" && t.soraVideoUrl
+                                  ).every(t => downloadedTaskIds.has(t.id));
 
-                                if (allDownloaded) {
-                                  toast({ title: "✅ 所有选中视频已下载", description: "无需重复下载" });
-                                } else {
-                                  toast({ variant: "destructive", title: "没有可下载的视频" });
-                                }
-                                return;
-                              }
-
-                              cancelDownloadRef.current = false;
-                              setDownloadProgress({
-                                show: true,
-                                total: completedSelectedTasks.length,
-                                current: 0,
-                                success: 0,
-                                failed: 0,
-                                currentFilename: "准备中...",
-                                startTime: Date.now(),
-                                cancelled: false,
-                              });
-                              setIsDownloading(true);
-
-                              let successCount = 0;
-                              let failedCount = 0;
-
-                              for (let i = 0; i < completedSelectedTasks.length; i++) {
-                                if (cancelDownloadRef.current) {
-                                  setDownloadProgress(prev => ({ ...prev, cancelled: true }));
-                                  break;
+                                  if (allDownloaded) {
+                                    toast({ title: "✅ 所有选中视频已下载", description: "无需重复下载" });
+                                  } else {
+                                    toast({ variant: "destructive", title: "没有可下载的视频" });
+                                  }
+                                  return;
                                 }
 
-                                const task = completedSelectedTasks[i];
-                                if (task.soraVideoUrl) {
-                                  const filename = generateSimpleFilename(task, tasks.indexOf(task));
-                                  setDownloadProgress(prev => ({ ...prev, currentFilename: filename }));
-                                  setDownloadingTaskIds(prev => new Set(prev).add(task.id));
-                                  setTaskDownloadProgress(prev => ({ ...prev, [task.id]: 0 }));
+                                cancelDownloadRef.current = false;
+                                setDownloadProgress({
+                                  show: true,
+                                  total: completedSelectedTasks.length,
+                                  current: 0,
+                                  success: 0,
+                                  failed: 0,
+                                  currentFilename: "准备中...",
+                                  startTime: Date.now(),
+                                  cancelled: false,
+                                });
+                                setIsDownloading(true);
 
-                                  try {
-                                    const response = await fetch(task.soraVideoUrl, {
-                                      method: "GET",
-                                      mode: "cors",
-                                      credentials: "omit",
-                                    });
+                                let successCount = 0;
+                                let failedCount = 0;
 
-                                    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-
-                                    const contentLength = response.headers.get("content-length");
-                                    const totalSize = contentLength ? parseInt(contentLength, 10) : 0;
-                                    const reader = response.body?.getReader();
-                                    if (!reader) throw new Error("无法读取响应流");
-
-                                    const chunks: Uint8Array[] = [];
-                                    let receivedLength = 0;
-
-                                    while (true) {
-                                      const { done, value } = await reader.read();
-                                      if (done) break;
-                                      chunks.push(value);
-                                      receivedLength += value.length;
-                                      if (totalSize > 0) {
-                                        const progress = Math.round((receivedLength / totalSize) * 100);
-                                        setTaskDownloadProgress(prev => ({ ...prev, [task.id]: progress }));
-                                      }
-                                    }
-
-                                    const blob = new Blob(chunks, { type: "video/mp4" });
-                                    const blobUrl = URL.createObjectURL(blob);
-                                    const link = document.createElement("a");
-                                    link.href = blobUrl;
-                                    link.download = filename;
-                                    document.body.appendChild(link);
-                                    link.click();
-                                    document.body.removeChild(link);
-                                    setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
-                                    successCount++;
-                                    markTaskAsDownloaded(task.id);
-                                    setTaskDownloadProgress(prev => ({ ...prev, [task.id]: 100 }));
-                                  } catch (error) {
-                                    console.error(`Download Error:`, error);
-                                    failedCount++;
-                                    openVideoInNewTab(task.soraVideoUrl);
+                                for (let i = 0; i < completedSelectedTasks.length; i++) {
+                                  if (cancelDownloadRef.current) {
+                                    setDownloadProgress(prev => ({ ...prev, cancelled: true }));
+                                    break;
                                   }
 
-                                  setDownloadingTaskIds(prev => {
-                                    const newSet = new Set(prev);
-                                    newSet.delete(task.id);
-                                    return newSet;
-                                  });
+                                  const task = completedSelectedTasks[i];
+                                  if (task.soraVideoUrl) {
+                                    const filename = generateSimpleFilename(task);
+                                    setDownloadProgress(prev => ({ ...prev, currentFilename: filename }));
+                                    setDownloadingTaskIds(prev => new Set(prev).add(task.id));
+                                    setTaskDownloadProgress(prev => ({ ...prev, [task.id]: 0 }));
 
-                                  setDownloadProgress(prev => ({
-                                    ...prev,
-                                    current: i + 1,
-                                    success: successCount,
-                                    failed: failedCount,
-                                  }));
+                                    try {
+                                      const response = await fetch(task.soraVideoUrl, {
+                                        method: "GET",
+                                        mode: "cors",
+                                        credentials: "omit",
+                                      });
 
-                                  await new Promise(r => setTimeout(r, 200));
+                                      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+                                      const contentLength = response.headers.get("content-length");
+                                      const totalSize = contentLength ? parseInt(contentLength, 10) : 0;
+                                      const reader = response.body?.getReader();
+                                      if (!reader) throw new Error("无法读取响应流");
+
+                                      const chunks: Uint8Array[] = [];
+                                      let receivedLength = 0;
+
+                                      while (true) {
+                                        const { done, value } = await reader.read();
+                                        if (done) break;
+                                        chunks.push(value);
+                                        receivedLength += value.length;
+                                        if (totalSize > 0) {
+                                          const progress = Math.round((receivedLength / totalSize) * 100);
+                                          setTaskDownloadProgress(prev => ({ ...prev, [task.id]: progress }));
+                                        }
+                                      }
+
+                                      const blob = new Blob(chunks, { type: "video/mp4" });
+                                      const blobUrl = URL.createObjectURL(blob);
+                                      const link = document.createElement("a");
+                                      link.href = blobUrl;
+                                      link.download = filename;
+                                      document.body.appendChild(link);
+                                      link.click();
+                                      document.body.removeChild(link);
+                                      setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+                                      successCount++;
+                                      markTaskAsDownloaded(task.id);
+                                      setTaskDownloadProgress(prev => ({ ...prev, [task.id]: 100 }));
+                                    } catch (error) {
+                                      console.error(`Download Error:`, error);
+                                      failedCount++;
+                                      openVideoInNewTab(task.soraVideoUrl);
+                                    }
+
+                                    setDownloadingTaskIds(prev => {
+                                      const newSet = new Set(prev);
+                                      newSet.delete(task.id);
+                                      return newSet;
+                                    });
+
+                                    setDownloadProgress(prev => ({
+                                      ...prev,
+                                      current: i + 1,
+                                      success: successCount,
+                                      failed: failedCount,
+                                    }));
+
+                                    await new Promise(r => setTimeout(r, 200));
+                                  }
                                 }
-                              }
 
-                              setIsDownloading(false);
-                              setTaskDownloadProgress({});
-                            }}
-                            className="cursor-pointer bg-gradient-to-r from-emerald-500/10 to-teal-500/10 border border-emerald-500/20"
-                          >
-                            <Zap className="h-4 w-4 mr-2 text-emerald-400" />
-                            <div className="flex flex-col">
-                              <span className="font-medium text-emerald-400">直连CDN推荐 🧪</span>
-                              <span className="text-xs text-muted-foreground">直连CDN，速度最快，显示进度</span>
-                            </div>
-                          </DropdownMenuItem>
+                                setIsDownloading(false);
+                                setTaskDownloadProgress({});
+                              }}
+                              className="cursor-pointer bg-gradient-to-r from-emerald-500/10 to-teal-500/10 border border-emerald-500/20"
+                            >
+                              <Zap className="h-4 w-4 mr-2 text-emerald-400" />
+                              <div className="flex flex-col">
+                                <span className="font-medium text-emerald-400">直连CDN推荐 🧪</span>
+                                <span className="text-xs text-muted-foreground">直连CDN，速度最快，显示进度</span>
+                              </div>
+                            </DropdownMenuItem>
 
-                          <DropdownMenuSeparator />
+                            <DropdownMenuSeparator />
 
-                          <DropdownMenuItem
-                            onClick={() => {
-                              const completedSelectedTasks = tasks.filter(
-                                t => selectedTaskIds[t.id] && t.status === "success" && t.soraVideoUrl
-                              );
-                              if (completedSelectedTasks.length === 0) return;
+                            <DropdownMenuItem
+                              onClick={() => {
+                                const completedSelectedTasks = activeGroupTasks.filter(
+                                  t => selectedTaskIds[t.id] && t.status === "success" && t.soraVideoUrl
+                                );
+                                if (completedSelectedTasks.length === 0) return;
 
-                              const urls = completedSelectedTasks
-                                .map((task) => task.soraVideoUrl)
-                                .filter(Boolean)
-                                .join("\n");
+                                const urls = completedSelectedTasks
+                                  .map((task) => task.soraVideoUrl)
+                                  .filter(Boolean)
+                                  .join("\n");
 
-                              const blob = new Blob([urls], { type: "text/plain;charset=utf-8" });
-                              const url = URL.createObjectURL(blob);
-                              const a = document.createElement("a");
-                              a.href = url;
-                              a.download = `video_urls_${new Date().toISOString().slice(0, 10)}.txt`;
-                              document.body.appendChild(a);
-                              a.click();
-                              document.body.removeChild(a);
-                              URL.revokeObjectURL(url);
+                                const blob = new Blob([urls], { type: "text/plain;charset=utf-8" });
+                                const url = URL.createObjectURL(blob);
+                                const a = document.createElement("a");
+                                a.href = url;
+                                // 添加任务组前缀便于归档
+                                const prefix = activeGroupName ? `${activeGroupName}-` : "";
+                                a.download = `${prefix}video_urls_${new Date().toISOString().slice(0, 10)}.txt`;
+                                document.body.appendChild(a);
+                                a.click();
+                                document.body.removeChild(a);
+                                URL.revokeObjectURL(url);
 
-                              toast({ title: "✅ 导出成功", description: `已导出 ${completedSelectedTasks.length} 个视频地址` });
-                            }}
-                            className="cursor-pointer"
-                          >
-                            <FileDown className="h-4 w-4 mr-2 text-blue-400" />
-                            <div className="flex flex-col">
-                              <span>导出地址 (TXT)</span>
-                              <span className="text-xs text-muted-foreground">导入 IDM/迅雷 批量下载</span>
-                            </div>
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    )}
+                                toast({ title: "✅ 导出成功", description: `已导出 ${completedSelectedTasks.length} 个视频地址` });
+                              }}
+                              className="cursor-pointer"
+                            >
+                              <FileDown className="h-4 w-4 mr-2 text-blue-400" />
+                              <div className="flex flex-col">
+                                <span>导出地址 (TXT)</span>
+                                <span className="text-xs text-muted-foreground">导入 IDM/迅雷 批量下载</span>
+                              </div>
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      )}
 
-                    {/* 删除选中 */}
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={removeSelectedTasks}
-                      className="h-8 text-xs text-red-400 border-red-400/30 hover:bg-red-400/10"
-                    >
-                      <Trash2 className="h-3 w-3 mr-1" />
-                      删除 ({selectedCount})
-                    </Button>
-                  </>
-                )}
+                      {/* 删除选中 */}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={removeSelectedTasks}
+                        className="h-8 text-xs text-red-400 border-red-400/30 hover:bg-red-400/10"
+                      >
+                        <Trash2 className="h-3 w-3 mr-1" />
+                        删除 ({activeGroupTasks.filter(t => selectedTaskIds[t.id]).length})
+                      </Button>
+                    </>
+                  );
+                })()}
 
                 {/* 选择管理 */}
                 <DropdownMenu>
@@ -2919,7 +2973,7 @@ C07: [story CTA, inspiring, <50 chars]`,
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-40">
-                    <DropdownMenuItem onClick={() => selectAllTasks(true)} className="cursor-pointer">
+                    <DropdownMenuItem onClick={() => selectAllTasks(true, activeGroupName || undefined)} className="cursor-pointer">
                       <Check className="h-4 w-4 mr-2 text-emerald-400" />
                       全选
                     </DropdownMenuItem>
@@ -2928,9 +2982,9 @@ C07: [story CTA, inspiring, <50 chars]`,
                       取消选择
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={clearAllTasks} className="text-red-400 cursor-pointer">
+                    <DropdownMenuItem onClick={() => clearAllTasks(activeGroupName || undefined)} className="text-red-400 cursor-pointer">
                       <Trash2 className="h-4 w-4 mr-2" />
-                      清空所有
+                      清空当前组
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
@@ -2959,28 +3013,37 @@ C07: [story CTA, inspiring, <50 chars]`,
                       return;
                     }
 
-                    setIsBatchStarting(true);
-                    toast({ title: `🚀 正在启动「${activeGroupName}」中 ${pendingTasks.length} 个视频任务...` });
+                    // 捕获当前任务组名称，防止异步期间用户切换组导致状态错乱
+                    const startingGroupName = activeGroupName;
+                    if (!startingGroupName) return;
+
+                    setBatchStartingGroups(prev => ({ ...prev, [startingGroupName]: true }));
+                    toast({ title: `🚀 正在启动「${startingGroupName}」中 ${pendingTasks.length} 个视频任务...` });
 
                     for (const task of pendingTasks) {
                       handleStartSingleTask(task);
-                      await new Promise(r => setTimeout(r, 1000));
+                      await new Promise(r => setTimeout(r, 500));
                     }
 
-                    setIsBatchStarting(false);
+                    // 使用捕获的名称清除状态
+                    setBatchStartingGroups(prev => {
+                      const updated = { ...prev };
+                      delete updated[startingGroupName];
+                      return updated;
+                    });
                   }}
-                  disabled={isBatchStarting || activeGroupStats.pending === 0}
+                  disabled={(activeGroupName && batchStartingGroups[activeGroupName]) || activeGroupStats.pending === 0}
                   className="relative h-8 px-5 rounded-full font-bold text-white text-xs transition-all duration-500 bg-gradient-to-r from-emerald-500 to-teal-500 hover:scale-[1.02] hover:shadow-[0_0_20px_rgba(16,185,129,0.5)] border border-white/20 overflow-hidden group shadow-[0_0_10px_rgba(16,185,129,0.2)] disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <div className="absolute inset-0 bg-gradient-to-b from-white/40 to-transparent" />
                   <div className="absolute inset-0 bg-[linear-gradient(110deg,transparent,rgba(255,255,255,0.4),transparent)] bg-[length:200%_100%] opacity-0 group-hover:opacity-100 group-hover:animate-shimmer transition-opacity duration-300" />
                   <span className="relative z-10 flex items-center justify-center gap-1.5">
-                    {isBatchStarting ? (
+                    {activeGroupName && batchStartingGroups[activeGroupName] ? (
                       <Loader2 className="h-3.5 w-3.5 animate-spin" />
                     ) : (
                       <Play className="h-3.5 w-3.5 fill-white/20" />
                     )}
-                    {isBatchStarting ? "启动中..." : `开始全部 (${activeGroupStats.pending})`}
+                    {activeGroupName && batchStartingGroups[activeGroupName] ? "启动中..." : `开始全部 (${activeGroupStats.pending})`}
                   </span>
                 </button>
               )}
@@ -3153,6 +3216,37 @@ C07: [story CTA, inspiring, <50 chars]`,
             })()
           )}
         </div>
+
+        {/* 悬浮滚动按钮 - 任务卡片较多时显示 */}
+        {showScrollButton && tasks.length > 0 && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                onClick={handleScrollToPosition}
+                className={cn(
+                  "fixed right-6 top-1/2 -translate-y-1/2 z-40",
+                  "w-10 h-10 rounded-full",
+                  "bg-white/5 hover:bg-white/10 backdrop-blur-md",
+                  "border border-white/10 hover:border-white/20",
+                  "flex items-center justify-center",
+                  "text-white/50 hover:text-white",
+                  "transition-all duration-300 ease-out",
+                  "hover:scale-110 hover:shadow-[0_0_20px_rgba(255,255,255,0.1)]",
+                  "active:scale-95"
+                )}
+              >
+                {isAtBottom ? (
+                  <ChevronUp className="h-5 w-5" />
+                ) : (
+                  <ChevronDown className="h-5 w-5" />
+                )}
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="left" className="text-xs">
+              {isAtBottom ? "返回顶部" : "滚动到底部"}
+            </TooltipContent>
+          </Tooltip>
+        )}
 
         {/* 底部状态栏 - 显示当前任务组的统计信息 */}
         {tasks.length > 0 && (

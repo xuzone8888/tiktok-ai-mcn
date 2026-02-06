@@ -103,16 +103,16 @@ export interface VideoBatchActions {
   /** 批量删除任务 */
   removeTasks: (taskIds: string[]) => void;
 
-  /** 清空所有任务 */
-  clearAllTasks: () => void;
+  /** 清空任务（可选：仅针对指定任务组） */
+  clearAllTasks: (groupName?: string) => void;
 
   // ==================== 选择管理 ====================
 
   /** 切换任务选中状态 */
   toggleTaskSelection: (taskId: string) => void;
 
-  /** 全选/取消全选 */
-  selectAllTasks: (selected: boolean) => void;
+  /** 全选/取消全选（可选：仅针对指定任务组） */
+  selectAllTasks: (selected: boolean, groupName?: string) => void;
 
   /** 清空选择 */
   clearSelection: () => void;
@@ -649,20 +649,42 @@ export const useVideoBatchStore = create<VideoBatchState & VideoBatchActions>()(
           });
         },
 
-        clearAllTasks: () => {
-          const { tasks } = get();
-          tasks.forEach((task) => {
+        clearAllTasks: (groupName?: string) => {
+          const { tasks, activeGroupName } = get();
+
+          // 确定要清除的任务
+          const tasksToRemove = groupName
+            ? tasks.filter(t => t.groupName === groupName)
+            : tasks;
+
+          // 释放 blob URLs
+          tasksToRemove.forEach((task) => {
             task.images.forEach((img) => {
               if (img.url.startsWith("blob:")) {
                 URL.revokeObjectURL(img.url);
               }
             });
           });
+
           set((state) => {
-            state.tasks = [];
-            state.selectedTaskIds = {};
-            state.jobStatus = "idle";
-            state.editingTaskId = null;
+            if (groupName) {
+              // 只清除指定组的任务
+              state.tasks = state.tasks.filter(t => t.groupName !== groupName);
+              // 清空选中状态
+              state.selectedTaskIds = {};
+              // 如果清除的是当前激活的组，切换到第一个剩余组
+              if (activeGroupName === groupName) {
+                const remainingGroups = Array.from(new Set(state.tasks.map(t => t.groupName).filter(Boolean)));
+                state.activeGroupName = remainingGroups[0] || null;
+              }
+            } else {
+              // 清除所有任务
+              state.tasks = [];
+              state.selectedTaskIds = {};
+              state.jobStatus = "idle";
+              state.editingTaskId = null;
+              state.activeGroupName = null;
+            }
           });
         },
 
@@ -678,10 +700,14 @@ export const useVideoBatchStore = create<VideoBatchState & VideoBatchActions>()(
           });
         },
 
-        selectAllTasks: (selected) => {
+        selectAllTasks: (selected, groupName) => {
           set((state) => {
             if (selected) {
-              state.tasks.forEach((t) => {
+              // 如果指定了任务组，只选择该组的任务
+              const targetTasks = groupName
+                ? state.tasks.filter(t => t.groupName === groupName)
+                : state.tasks;
+              targetTasks.forEach((t) => {
                 state.selectedTaskIds[t.id] = true;
               });
             } else {
