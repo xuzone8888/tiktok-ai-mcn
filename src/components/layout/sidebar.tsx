@@ -125,13 +125,12 @@ const navGroups: NavGroup[] = [
         icon: Link2,
         description: "链接一键成片",
       },
-      // TODO: 图片转视频功能开发中，暂时隐藏
-      // {
-      //   title: "图片转视频",
-      //   href: "/pro-studio/image-slideshow",
-      //   icon: Images,
-      //   description: "图片轮播合成视频",
-      // },
+      {
+        title: "图片转视频",
+        href: "/pro-studio/image-slideshow",
+        icon: Images,
+        description: "图片轮播合成视频",
+      },
     ],
   },
   // --- 矩阵发货 ---

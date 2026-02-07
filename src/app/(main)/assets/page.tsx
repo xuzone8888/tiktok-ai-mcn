@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
+import JSZip from "jszip";
 import {
   History,
   Search,
@@ -16,6 +17,8 @@ import {
   Download,
   Eye,
   CheckCircle,
+  CheckSquare,
+  Square,
   XCircle,
   Clock,
   Loader2,
@@ -26,6 +29,9 @@ import {
   FileDown,
   ChevronDown,
   FolderOpen,
+  Calendar,
+  X,
+  Package,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -94,6 +100,7 @@ const dateFilters = [
   { value: "today", label: "今天" },
   { value: "3days", label: "最近3天" },
   { value: "7days", label: "最近7天" },
+  { value: "custom", label: "自定义" },
 ];
 
 function getSourceColor(source: string): string {
@@ -183,10 +190,19 @@ export default function TaskLogPage() {
   const [loading, setLoading] = useState(true);
   const [previewTask, setPreviewTask] = useState<TaskLogItem | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-  const [offset, setOffset] = useState(0);
+  const [cursor, setCursor] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [downloading, setDownloading] = useState<string | null>(null);
+  const [customDateFrom, setCustomDateFrom] = useState("");
+  const [customDateTo, setCustomDateTo] = useState("");
+  // 批量选择模式
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  // ZIP 后台下载进度
+  const [zipProgress, setZipProgress] = useState<{ current: number; total: number } | null>(null);
+  const zipAbortRef = useRef(false);
+  const fetchTasksRef = useRef<(appendMode?: boolean) => Promise<void>>(null!);
 
   const fetchTasks = async (appendMode = false) => {
     try {
@@ -194,7 +210,7 @@ export default function TaskLogPage() {
         setLoadingMore(true);
       } else {
         setLoading(true);
-        setOffset(0);
+        setCursor(null);
       }
 
       const params = new URLSearchParams();
@@ -202,9 +218,16 @@ export default function TaskLogPage() {
       if (selectedStatus !== "all") params.set("status", selectedStatus);
       if (selectedSource !== "all") params.set("source", selectedSource);
       if (selectedDate !== "all") params.set("dateRange", selectedDate);
+      if (selectedDate === "custom") {
+        if (customDateFrom) params.set("dateFrom", customDateFrom);
+        if (customDateTo) params.set("dateTo", customDateTo);
+      }
       if (selectedGroup !== "all") params.set("groupName", selectedGroup);
-      params.set("offset", appendMode ? String(offset + 50) : "0");
-      params.set("limit", "50");
+      // cursor 游标分页：加载更多时传上一页最后一条的 createdAt
+      if (appendMode && cursor) {
+        params.set("cursor", cursor);
+      }
+      params.set("limit", "200");
 
       const response = await fetch(`/api/user/tasks?${params.toString()}`);
       const result = await response.json();
@@ -212,22 +235,17 @@ export default function TaskLogPage() {
       if (result.success) {
         if (appendMode) {
           setTasks(prev => [...prev, ...result.data.tasks]);
-          setOffset(prev => prev + 50);
         } else {
           setTasks(result.data.tasks);
-          // 从所有任务中提取分组名称（仅在非追加模式且未筛选分组时）
-          if (selectedGroup === "all") {
-            const groups = new Set<string>();
-            result.data.tasks.forEach((task: TaskLogItem) => {
-              if (task.groupName && task.groupName !== "默认") {
-                groups.add(task.groupName);
-              }
-            });
-            setAvailableGroups(Array.from(groups).sort());
-          }
+        }
+        // 使用 API 返回的完整分组列表（不受分页限制）
+        if (result.data.availableGroups) {
+          setAvailableGroups(result.data.availableGroups);
         }
         setStats(result.data.stats);
-        setHasMore(result.data.pagination.total > (appendMode ? offset + 100 : 50));
+        // 使用 API 返回的 nextCursor 和 hasMore
+        setCursor(result.data.pagination.nextCursor || null);
+        setHasMore(result.data.pagination.hasMore ?? false);
       }
     } catch (error) {
       console.error("[TaskLog] Error:", error);
@@ -237,13 +255,16 @@ export default function TaskLogPage() {
     }
   };
 
+  // 始终保持 ref 指向最新的 fetchTasks（解决 useCallback 闭包陈旧问题）
+  fetchTasksRef.current = fetchTasks;
+
   const loadMore = () => {
     if (!loadingMore && hasMore) {
       fetchTasks(true);
     }
   };
 
-  // 刷新处理中的任务状态
+  // 刷新处理中的任务状态（手动触发）
   const refreshProcessingTasks = useCallback(async () => {
     try {
       setRefreshing(true);
@@ -257,9 +278,14 @@ export default function TaskLogPage() {
             title: "任务状态已更新",
             description: `${result.data.completed} 个完成，${result.data.failed} 个失败`,
           });
+          // 通过 ref 调用最新的 fetchTasks（包含当前筛选值），重新加载列表
+          fetchTasksRef.current();
+        } else {
+          toast({
+            title: "暂无变化",
+            description: `${result.data.total || 0} 个任务仍在处理中`,
+          });
         }
-        // 重新获取任务列表
-        await fetchTasks();
       }
     } catch (error) {
       console.error("[TaskLog] Refresh error:", error);
@@ -275,14 +301,7 @@ export default function TaskLogPage() {
 
   useEffect(() => {
     fetchTasks();
-  }, [selectedType, selectedStatus, selectedSource, selectedDate, selectedGroup]);
-
-  // 页面加载后自动刷新处理中的任务（仅当有处理中任务时）
-  useEffect(() => {
-    if (stats && stats.processingTasks > 0 && !refreshing) {
-      refreshProcessingTasks();
-    }
-  }, [stats?.processingTasks]);
+  }, [selectedType, selectedStatus, selectedSource, selectedDate, selectedGroup, customDateFrom, customDateTo]);
 
   const filteredTasks = tasks.filter((task) => {
     if (!searchQuery) return true;
@@ -325,6 +344,157 @@ export default function TaskLogPage() {
     }
   };
 
+  // ============================================================================
+  // 批量选择相关函数
+  // ============================================================================
+
+  const isSelectable = (task: TaskLogItem) => {
+    const expiry = getExpiryStatus(task.expiresAt);
+    return task.status === "completed" && !!task.resultUrl && !expiry.isExpired;
+  };
+
+  const toggleSelection = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const selectAllCompleted = () => {
+    const selectableIds = filteredTasks.filter(isSelectable).map(t => t.id);
+    setSelectedIds(new Set(selectableIds));
+  };
+
+  const exitSelectionMode = () => {
+    setSelectionMode(false);
+    setSelectedIds(new Set());
+  };
+
+  const getSelectedTasks = () => {
+    return filteredTasks.filter(t => selectedIds.has(t.id) && isSelectable(t));
+  };
+
+  const handleBatchExportTxt = () => {
+    const selected = getSelectedTasks();
+    if (selected.length === 0) {
+      toast({ title: "没有选中的任务", variant: "destructive" });
+      return;
+    }
+    // 按分组归类
+    const grouped = new Map<string, string[]>();
+    for (const t of selected) {
+      if (!t.resultUrl) continue;
+      const group = t.groupName && t.groupName !== "默认" ? t.groupName : (t.source === "ecom_factory" ? "电商工厂" : "未分组");
+      if (!grouped.has(group)) grouped.set(group, []);
+      grouped.get(group)!.push(t.resultUrl);
+    }
+    // 生成带分组标题的 TXT
+    const lines: string[] = [];
+    Array.from(grouped.entries()).forEach(([group, urls]) => {
+      lines.push(`# === ${group} (${urls.length}个) ===`);
+      lines.push(...urls);
+      lines.push(""); // 空行分隔
+    });
+    const blob = new Blob([lines.join("\n")], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `batch_download_urls_${new Date().toISOString().slice(0, 16).replace(':', '-')}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast({
+      title: "✅ 导出成功",
+      description: `已导出 ${selected.length} 个地址（${grouped.size}个分组），请用 IDM/迅雷 批量下载`,
+    });
+  };
+
+  const handleBatchZipDownload = async () => {
+    const selected = getSelectedTasks();
+    if (selected.length === 0) {
+      toast({ title: "没有选中的任务", variant: "destructive" });
+      return;
+    }
+
+    // 退出选择模式，让用户继续操作
+    exitSelectionMode();
+    zipAbortRef.current = false;
+
+    setZipProgress({ current: 0, total: selected.length });
+    toast({
+      title: "📦 开始打包下载",
+      description: `正在下载 ${selected.length} 个文件，可继续其他操作`,
+    });
+
+    try {
+      const zip = new JSZip();
+      let completed = 0;
+      // 文件名计数器，防止同一文件夹内重名
+      const nameCounter = new Map<string, number>();
+
+      for (const task of selected) {
+        if (zipAbortRef.current) break;
+        if (!task.resultUrl) continue;
+
+        try {
+          // 按分组建子文件夹
+          const group = task.groupName && task.groupName !== "默认" ? task.groupName : (task.source === "ecom_factory" ? "电商工厂" : "未分组");
+          const ext = task.type === "video" ? "mp4" : "png";
+          const baseName = `${task.type}-${task.id.slice(-6)}`;
+          // 防重：如果同名则追加序号
+          const key = `${group}/${baseName}.${ext}`;
+          const count = nameCounter.get(key) || 0;
+          nameCounter.set(key, count + 1);
+          const filename = count === 0 ? `${baseName}.${ext}` : `${baseName}_${count}.${ext}`;
+
+          const proxyUrl = `/api/download-proxy?url=${encodeURIComponent(task.resultUrl)}&filename=${encodeURIComponent(filename)}`;
+          const response = await fetch(proxyUrl);
+          if (response.ok) {
+            const blob = await response.blob();
+            zip.folder(group)!.file(filename, blob);
+          }
+        } catch (err) {
+          console.error(`[BatchZip] Failed to download ${task.id}:`, err);
+        }
+        completed++;
+        setZipProgress({ current: completed, total: selected.length });
+      }
+
+      if (zipAbortRef.current) {
+        setZipProgress(null);
+        toast({ title: "已取消打包", variant: "destructive" });
+        return;
+      }
+
+      // 生成并下载 ZIP
+      const zipBlob = await zip.generateAsync({ type: "blob" });
+      const url = URL.createObjectURL(zipBlob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `toryx_batch_${new Date().toISOString().slice(0, 10)}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      toast({
+        title: "✅ 打包完成",
+        description: `已下载 ${completed} 个文件`,
+      });
+    } catch (error) {
+      console.error("[BatchZip] Error:", error);
+      toast({ title: "打包失败", description: "请稍后重试", variant: "destructive" });
+    } finally {
+      setZipProgress(null);
+    }
+  };
+
   const getStatusIcon = (status: string) => {
     switch (status) {
       case "completed":
@@ -358,19 +528,21 @@ export default function TaskLogPage() {
     <div className="space-y-6">
       {/* Page Header */}
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight text-white drop-shadow-lg">
-            成品交付单
-          </h1>
-          <p className="mt-2 text-white/60">
-            查看和下载您生成的视频与图片内容
-          </p>
+        <div className="flex items-center gap-3">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight text-white drop-shadow-lg">
+              成品交付单
+            </h1>
+            <p className="mt-2 text-white/60">
+              查看和下载您生成的视频与图片内容
+            </p>
+          </div>
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/10 border border-amber-500/30 self-start mt-1">
+            <AlertTriangle className="h-3.5 w-3.5 text-amber-400" />
+            <span className="text-xs text-amber-400">内容保留7天</span>
+          </div>
         </div>
         <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/30">
-            <AlertTriangle className="h-4 w-4 text-amber-400" />
-            <span className="text-sm text-amber-400">内容保留7天</span>
-          </div>
           {stats && stats.processingTasks > 0 && (
             <Button
               variant="outline"
@@ -383,93 +555,36 @@ export default function TaskLogPage() {
               刷新状态 ({stats.processingTasks})
             </Button>
           )}
-          <Button variant="outline" size="sm" onClick={() => fetchTasks()} className="gap-2">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => fetchTasks()}
+            className="h-9 w-9 text-white/50 hover:text-white hover:bg-white/10"
+            title="刷新"
+          >
             <RefreshCw className="h-4 w-4" />
-            刷新
           </Button>
-          {/* TXT 导出下拉菜单 */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" className="gap-2 text-blue-400 border-blue-400/30 hover:bg-blue-400/10">
-                <FileDown className="h-4 w-4" />
-                导出地址
-                <ChevronDown className="h-3 w-3" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuItem
-                onClick={() => {
-                  const completedTasks = filteredTasks.filter(t => t.status === "completed" && t.resultUrl);
-                  if (completedTasks.length === 0) {
-                    toast({ title: "没有可导出的内容", variant: "destructive" });
-                    return;
-                  }
-                  const urls = completedTasks.map(t => t.resultUrl).filter(Boolean).join("\n");
-                  const blob = new Blob([urls], { type: "text/plain;charset=utf-8" });
-                  const url = URL.createObjectURL(blob);
-                  const a = document.createElement("a");
-                  a.href = url;
-                  a.download = `assets_urls_${new Date().toISOString().slice(0, 10)}.txt`;
-                  document.body.appendChild(a);
-                  a.click();
-                  document.body.removeChild(a);
-                  URL.revokeObjectURL(url);
-                  toast({ title: "✅ 导出成功", description: `已导出 ${completedTasks.length} 个下载地址` });
-                }}
-                className="cursor-pointer"
-              >
-                <FileDown className="h-4 w-4 mr-2 text-blue-400" />
-                <div className="flex flex-col">
-                  <span>导出当前筛选 (TXT)</span>
-                  <span className="text-xs text-muted-foreground">导入 IDM/迅雷 批量下载</span>
-                </div>
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                onClick={async () => {
-                  try {
-                    toast({ title: "正在获取全部已完成任务...", description: "请稍候" });
-                    // Fetch all completed tasks from API (no limit)
-                    const params = new URLSearchParams();
-                    params.set("status", "completed");
-                    params.set("limit", "10000"); // Large number to get all
-                    const response = await fetch(`/api/user/tasks?${params.toString()}`);
-                    const result = await response.json();
-                    if (!result.success) {
-                      toast({ title: "获取失败", variant: "destructive" });
-                      return;
-                    }
-                    const allCompletedTasks = result.data.tasks.filter((t: TaskLogItem) => t.resultUrl);
-                    if (allCompletedTasks.length === 0) {
-                      toast({ title: "没有可导出的内容", variant: "destructive" });
-                      return;
-                    }
-                    const urls = allCompletedTasks.map((t: TaskLogItem) => t.resultUrl).filter(Boolean).join("\n");
-                    const blob = new Blob([urls], { type: "text/plain;charset=utf-8" });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement("a");
-                    a.href = url;
-                    a.download = `all_assets_urls_${new Date().toISOString().slice(0, 10)}.txt`;
-                    document.body.appendChild(a);
-                    a.click();
-                    document.body.removeChild(a);
-                    URL.revokeObjectURL(url);
-                    toast({ title: "✅ 导出成功", description: `已导出 ${allCompletedTasks.length} 个下载地址` });
-                  } catch (error) {
-                    console.error("[Export] Error:", error);
-                    toast({ title: "导出失败", description: "请稍后重试", variant: "destructive" });
-                  }
-                }}
-                className="cursor-pointer"
-              >
-                <FileDown className="h-4 w-4 mr-2 text-emerald-400" />
-                <div className="flex flex-col">
-                  <span>导出全部已完成 (TXT)</span>
-                  <span className="text-xs text-muted-foreground">从服务器获取全部任务</span>
-                </div>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          {!selectionMode ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setSelectionMode(true)}
+              className="gap-2 bg-gradient-to-r from-mermaid-cyan/10 to-mermaid-pink/10 border-mermaid-cyan/30 text-mermaid-cyan hover:from-mermaid-cyan/20 hover:to-mermaid-pink/20 hover:border-mermaid-cyan/50 transition-all"
+            >
+              <CheckSquare className="h-4 w-4" />
+              批量选择
+            </Button>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={exitSelectionMode}
+              className="gap-2 text-white/60 border-white/20 hover:text-white hover:bg-white/10"
+            >
+              <X className="h-4 w-4" />
+              退出选择
+            </Button>
+          )}
         </div>
       </div>
 
@@ -600,22 +715,50 @@ export default function TaskLogPage() {
             </div>
 
             {/* Date Filter */}
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-2 items-center">
               <span className="text-white/40 text-sm flex items-center mr-2">时间:</span>
               {dateFilters.map((filter) => (
                 <Button
                   key={filter.value}
                   variant={selectedDate === filter.value ? "mermaid" : "ghost"}
                   size="sm"
-                  onClick={() => setSelectedDate(filter.value)}
+                  onClick={() => {
+                    setSelectedDate(filter.value);
+                    // 切换到非自定义时清空自定义日期
+                    if (filter.value !== "custom") {
+                      setCustomDateFrom("");
+                      setCustomDateTo("");
+                    }
+                  }}
                   className={selectedDate === filter.value
                     ? ""
                     : "bg-white/5 text-white/60 border-white/5 hover:bg-white/10 hover:text-white transition-all"
                   }
                 >
+                  {filter.value === "custom" && <Calendar className="h-3 w-3 mr-1" />}
                   {filter.label}
                 </Button>
               ))}
+              {/* 自定义日期选择器 */}
+              {selectedDate === "custom" && (
+                <div className="flex items-center gap-2 ml-2">
+                  <input
+                    type="datetime-local"
+                    value={customDateFrom}
+                    onChange={(e) => setCustomDateFrom(e.target.value)}
+                    className="px-2 py-1 rounded-lg text-xs bg-white/5 border border-white/10 text-white focus:border-mermaid-cyan/50 focus:outline-none focus:ring-1 focus:ring-mermaid-cyan/30 transition-all [color-scheme:dark]"
+                    placeholder="开始时间"
+                  />
+                  <span className="text-white/30 text-xs">至</span>
+                  <input
+                    type="datetime-local"
+                    value={customDateTo}
+                    onChange={(e) => setCustomDateTo(e.target.value)}
+                    className="px-2 py-1 rounded-lg text-xs bg-white/5 border border-white/10 text-white focus:border-mermaid-cyan/50 focus:outline-none focus:ring-1 focus:ring-mermaid-cyan/30 transition-all [color-scheme:dark]"
+                    placeholder="结束时间"
+                  />
+                </div>
+              )}
             </div>
 
             {/* Group Filter Dropdown - 始终显示 */}
@@ -722,10 +865,22 @@ export default function TaskLogPage() {
                 <Card
                   key={task.id}
                   variant="glass"
-                  className={`group overflow-hidden bg-[#0B0C10]/60 hover:shadow-lg hover:shadow-mermaid-cyan/10 transition-all duration-500 ${expiry.isExpired ? "opacity-50" : ""
-                    }`}
+                  className={`group overflow-hidden bg-[#0B0C10]/60 hover:shadow-lg hover:shadow-mermaid-cyan/10 transition-all duration-500 ${expiry.isExpired ? "opacity-50" : ""} ${selectionMode && selectedIds.has(task.id) ? "ring-2 ring-mermaid-cyan/60 border-mermaid-cyan/40" : ""}`}
+                  onClick={selectionMode && isSelectable(task) ? () => toggleSelection(task.id) : undefined}
+                  style={selectionMode ? { cursor: isSelectable(task) ? "pointer" : "not-allowed" } : undefined}
                 >
                   <div className="relative aspect-video bg-gradient-to-br from-white/5 to-white/10">
+                    {/* Selection Checkbox */}
+                    {selectionMode && (
+                      <div className="absolute top-2 left-2 z-20">
+                        <div className={`flex h-6 w-6 items-center justify-center rounded-md border-2 transition-all ${!isSelectable(task) ? "border-white/10 bg-white/5 cursor-not-allowed" :
+                          selectedIds.has(task.id) ? "border-mermaid-cyan bg-mermaid-cyan text-black" :
+                            "border-white/30 bg-black/50 hover:border-mermaid-cyan/60"
+                          }`}>
+                          {selectedIds.has(task.id) && <CheckCircle className="h-4 w-4" />}
+                        </div>
+                      </div>
+                    )}
                     {task.resultUrl && task.status === "completed" ? (
                       task.type === "video" ? (
                         <div className="absolute inset-0 flex items-center justify-center">
@@ -757,8 +912,8 @@ export default function TaskLogPage() {
                       </div>
                     )}
 
-                    {/* Status Badge */}
-                    <div className="absolute top-2 left-2">
+                    {/* Status Badge - shift right when in selection mode */}
+                    <div className={`absolute top-2 ${selectionMode ? "left-10" : "left-2"} transition-all`}>
                       <div className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs backdrop-blur-md ${task.status === "completed" ? "bg-neon-green/20 text-neon-green" :
                         task.status === "failed" ? "bg-neon-red/20 text-neon-red" :
                           "bg-neon-warning/20 text-neon-warning"
@@ -825,31 +980,49 @@ export default function TaskLogPage() {
                           {new Date(task.createdAt).toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}
                         </p>
                       </div>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 text-white/40 hover:text-white">
-                            <MoreVertical className="h-4 w-4" />
+                      <div className="flex items-center gap-1 shrink-0">
+                        {/* 始终可见的下载按钮 */}
+                        {task.status === "completed" && task.resultUrl && !expiry.isExpired && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-mermaid-cyan/70 hover:text-mermaid-cyan hover:bg-mermaid-cyan/10"
+                            onClick={() => handleDownload(task)}
+                            disabled={downloading === task.id}
+                          >
+                            {downloading === task.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Download className="h-4 w-4" />
+                            )}
                           </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="bg-[#16181D] border-white/10 text-white">
-                          {task.status === "completed" && task.resultUrl && !expiry.isExpired && (
-                            <>
-                              <DropdownMenuItem onClick={() => setPreviewTask(task)} className="focus:bg-white/10 focus:text-mermaid-cyan">
-                                <Eye className="h-4 w-4 mr-2" />
-                                预览
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => handleDownload(task)} className="focus:bg-white/10 focus:text-mermaid-cyan">
-                                <Download className="h-4 w-4 mr-2" />
-                                下载
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => window.open(task.resultUrl!, "_blank")} className="focus:bg-white/10 focus:text-mermaid-cyan">
-                                <ExternalLink className="h-4 w-4 mr-2" />
-                                新窗口打开
-                              </DropdownMenuItem>
-                            </>
-                          )}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                        )}
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-white/40 hover:text-white">
+                              <MoreVertical className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="bg-[#16181D] border-white/10 text-white">
+                            {task.status === "completed" && task.resultUrl && !expiry.isExpired && (
+                              <>
+                                <DropdownMenuItem onClick={() => setPreviewTask(task)} className="focus:bg-white/10 focus:text-mermaid-cyan">
+                                  <Eye className="h-4 w-4 mr-2" />
+                                  预览
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => handleDownload(task)} className="focus:bg-white/10 focus:text-mermaid-cyan">
+                                  <Download className="h-4 w-4 mr-2" />
+                                  下载
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => window.open(task.resultUrl!, "_blank")} className="focus:bg-white/10 focus:text-mermaid-cyan">
+                                  <ExternalLink className="h-4 w-4 mr-2" />
+                                  新窗口打开
+                                </DropdownMenuItem>
+                              </>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
                     </div>
                   </CardContent>
                 </Card>
@@ -866,9 +1039,19 @@ export default function TaskLogPage() {
                   return (
                     <div
                       key={task.id}
-                      className={`flex items-center gap-4 p-4 hover:bg-white/5 transition-all duration-300 group ${expiry.isExpired ? "opacity-50" : ""
-                        }`}
+                      className={`flex items-center gap-4 p-4 hover:bg-white/5 transition-all duration-300 group ${expiry.isExpired ? "opacity-50" : ""} ${selectionMode && selectedIds.has(task.id) ? "bg-mermaid-cyan/5 border-l-2 border-l-mermaid-cyan" : ""}`}
+                      onClick={selectionMode && isSelectable(task) ? () => toggleSelection(task.id) : undefined}
+                      style={selectionMode ? { cursor: isSelectable(task) ? "pointer" : "not-allowed" } : undefined}
                     >
+                      {/* List Checkbox */}
+                      {selectionMode && (
+                        <div className={`flex h-5 w-5 items-center justify-center rounded border-2 shrink-0 transition-all ${!isSelectable(task) ? "border-white/10 bg-white/5" :
+                          selectedIds.has(task.id) ? "border-mermaid-cyan bg-mermaid-cyan text-black" :
+                            "border-white/30 bg-black/30 hover:border-mermaid-cyan/60"
+                          }`}>
+                          {selectedIds.has(task.id) && <CheckCircle className="h-3 w-3" />}
+                        </div>
+                      )}
                       <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-white/5 border border-white/10 group-hover:border-mermaid-cyan/30 group-hover:bg-mermaid-cyan/5 transition-colors">
                         {task.type === "video" ? (
                           <Video className="h-5 w-5 text-white/70 group-hover:text-mermaid-cyan" />
@@ -909,13 +1092,13 @@ export default function TaskLogPage() {
                           {expiry.text}
                         </div>
                       )}
-                      <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div className="flex items-center gap-1">
                         {task.status === "completed" && task.resultUrl && !expiry.isExpired && (
                           <>
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="h-8 w-8 hover:bg-white/10 hover:text-mermaid-cyan"
+                              className="h-8 w-8 text-white/50 hover:bg-white/10 hover:text-mermaid-cyan"
                               onClick={() => setPreviewTask(task)}
                             >
                               <Eye className="h-4 w-4" />
@@ -923,10 +1106,15 @@ export default function TaskLogPage() {
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="h-8 w-8 hover:bg-white/10 hover:text-mermaid-cyan"
+                              className="h-8 w-8 text-mermaid-cyan/70 hover:bg-mermaid-cyan/10 hover:text-mermaid-cyan"
                               onClick={() => handleDownload(task)}
+                              disabled={downloading === task.id}
                             >
-                              <Download className="h-4 w-4" />
+                              {downloading === task.id ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <Download className="h-4 w-4" />
+                              )}
                             </Button>
                           </>
                         )}
@@ -1035,6 +1223,101 @@ export default function TaskLogPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* ============================================================ */}
+      {/* 批量选择浮动操作栏 */}
+      {/* ============================================================ */}
+      {selectionMode && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 animate-in slide-in-from-bottom-4 duration-300">
+          <div className="flex items-center gap-3 px-6 py-3 rounded-2xl bg-[#16181D]/95 backdrop-blur-xl border border-white/10 shadow-2xl shadow-black/50">
+            {/* 已选数量 */}
+            <div className="flex items-center gap-2 pr-3 border-r border-white/10">
+              <CheckSquare className="h-4 w-4 text-mermaid-cyan" />
+              <span className="text-sm font-medium text-white">
+                已选 <span className="text-mermaid-cyan font-bold">{selectedIds.size}</span> 个
+              </span>
+            </div>
+
+            {/* 全选本页成功 */}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={selectAllCompleted}
+              className="text-white/60 hover:text-white hover:bg-white/10 text-sm"
+            >
+              <Square className="h-3.5 w-3.5 mr-1.5" />
+              全选成功
+            </Button>
+
+            {/* 导出TXT (推荐) */}
+            <Button
+              size="sm"
+              onClick={handleBatchExportTxt}
+              disabled={selectedIds.size === 0}
+              className="gap-2 bg-gradient-to-r from-mermaid-cyan to-blue-500 text-black font-medium hover:from-mermaid-cyan/90 hover:to-blue-500/90 disabled:opacity-40"
+            >
+              <FileDown className="h-4 w-4" />
+              导出TXT
+              <span className="text-[10px] opacity-70">推荐</span>
+            </Button>
+
+            {/* 打包ZIP */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleBatchZipDownload}
+              disabled={selectedIds.size === 0 || !!zipProgress}
+              className="gap-2 text-white/70 border-white/20 hover:text-white hover:bg-white/10 disabled:opacity-40"
+            >
+              <Package className="h-4 w-4" />
+              打包ZIP
+            </Button>
+
+            {/* 取消 */}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={exitSelectionMode}
+              className="text-white/40 hover:text-white hover:bg-white/10 ml-1"
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================ */}
+      {/* ZIP 后台下载进度浮窗 */}
+      {/* ============================================================ */}
+      {zipProgress && (
+        <div className="fixed bottom-6 right-6 z-50 animate-in slide-in-from-bottom-4 duration-300">
+          <div className="flex flex-col gap-2 p-4 rounded-xl bg-[#16181D]/95 backdrop-blur-xl border border-white/10 shadow-2xl shadow-black/50 min-w-[240px]">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Package className="h-4 w-4 text-mermaid-cyan animate-pulse" />
+                <span className="text-sm font-medium text-white">正在打包下载...</span>
+              </div>
+              <button
+                onClick={() => { zipAbortRef.current = true; }}
+                className="text-white/30 hover:text-white/60 transition-colors"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+            {/* 进度条 */}
+            <div className="w-full h-2 rounded-full bg-white/10 overflow-hidden">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-mermaid-cyan to-mermaid-pink transition-all duration-300"
+                style={{ width: `${Math.round((zipProgress.current / zipProgress.total) * 100)}%` }}
+              />
+            </div>
+            <div className="flex items-center justify-between text-xs text-white/40">
+              <span>{zipProgress.current}/{zipProgress.total} 文件</span>
+              <span>完成后将自动下载</span>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

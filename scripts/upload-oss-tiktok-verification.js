@@ -21,9 +21,9 @@ const client = new OSS({
 });
 
 async function uploadVerificationFile() {
-    // TikTok requires file without .txt extension!
-    const fileName = 'tiktokq7WzML4gl2azSthzUyz18XZM56Kgj87m';
-    const fileContent = 'tiktok-developers-site-verification=q7WzML4gl2azSthzUyz18XZM56Kgj87m';
+    // TikTok verification file for media.toryxai.com (Production)
+    const fileName = 'tiktok7OVEkLfzUFeDu54fH6XsOhUPGwQF80vf.txt';
+    const fileContent = 'tiktok-developers-site-verification=7OVEkLfzUFeDu54fH6XsOhUPGwQF80vf';
 
     try {
         console.log('Uploading verification file to OSS...');

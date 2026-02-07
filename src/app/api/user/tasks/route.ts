@@ -6,12 +6,21 @@
  * 查询参数:
  * - type: "all" | "video" | "image" - 任务类型
  * - status: "all" | "completed" | "failed" | "processing" - 任务状态
- * - limit: number - 返回数量限制
- * - offset: number - 分页偏移
+ * - source: "all" | "quick_gen" | "batch_video" | ... - 来源筛选
+ * - dateRange: "all" | "today" | "3days" | "7days" | "custom" - 时间范围
+ * - dateFrom / dateTo: 自定义时间范围 (ISO 或 YYYY-MM-DD)
+ * - groupName: "all" | 具体分组名 - 分组筛选
+ * - cursor: ISO datetime - 游标分页（上一页最后一条的 createdAt）
+ * - limit: number - 每页数量（默认 200）
  * 
  * 数据来源:
  * - generations 表: 快速生成、批量生成的视频/图片
  * - ecom_image_tasks 表: 电商图片工厂任务
+ * 
+ * 性能优化:
+ * - 统计数据通过 RPC 在数据库层聚合（无行数上限）
+ * - cursor 游标分页，消除跨表分页 BUG
+ * - 只查询前端需要的字段，减少传输量
  */
 
 import { NextResponse } from "next/server";
@@ -46,6 +55,21 @@ export interface TaskStats {
   totalCreditsUsed: number;
 }
 
+// generations 表只查前端需要的字段（不再 select("*")）
+const GENERATIONS_FIELDS = [
+  "id", "type", "source", "status",
+  "result_url", "video_url", "image_url", "thumbnail_url",
+  "prompt", "model", "credit_cost",
+  "created_at", "completed_at", "group_name",
+].join(", ");
+
+// ecom_image_tasks 表只查前端需要的字段
+const ECOM_FIELDS = [
+  "id", "status", "mode", "model_type",
+  "output_items", "credits_cost",
+  "created_at", "updated_at",
+].join(", ");
+
 // ============================================================================
 // GET - 获取用户任务日志
 // ============================================================================
@@ -70,12 +94,15 @@ export async function GET(request: Request) {
     const source = searchParams.get("source") || "all";
     const dateRange = searchParams.get("dateRange") || "all";
     const groupName = searchParams.get("groupName") || "all";
-    const limit = parseInt(searchParams.get("limit") || "50");
-    const offset = parseInt(searchParams.get("offset") || "0");
+    const dateFrom = searchParams.get("dateFrom"); // 自定义起始日期 (ISO 或 YYYY-MM-DD)
+    const dateTo = searchParams.get("dateTo");     // 自定义结束日期 (ISO 或 YYYY-MM-DD)
+    const cursor = searchParams.get("cursor");     // 游标分页：上一页最后一条的 created_at
+    const limit = parseInt(searchParams.get("limit") || "200");
 
     // 计算日期范围
     const now = new Date();
     let startDateISO: string | null = null;
+    let endDateISO: string | null = null;
 
     switch (dateRange) {
       case "today":
@@ -87,6 +114,21 @@ export async function GET(request: Request) {
       case "7days":
         startDateISO = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
         break;
+      case "custom":
+        // 自定义日期范围
+        if (dateFrom) {
+          startDateISO = new Date(dateFrom).toISOString();
+        }
+        if (dateTo) {
+          const endDate = new Date(dateTo);
+          // 如果传入的是纯日期（不含时间部分 T），补齐到当天 23:59:59.999
+          // 如果传入的是 datetime-local 值（含 T），直接使用用户指定的时间
+          if (!dateTo.includes("T")) {
+            endDate.setHours(23, 59, 59, 999);
+          }
+          endDateISO = endDate.toISOString();
+        }
+        break;
       case "all":
       default:
         // 不设置日期限制，查询所有数据
@@ -94,21 +136,96 @@ export async function GET(request: Request) {
         break;
     }
 
-    // ========== 并行查询两个表（提高性能）==========
-    // 1. 查询 generations 表
+    // ========== 并行查询（提高性能）==========
+
+    // 0. 查询所有可用分组名（优先用 RPC DISTINCT，性能更高，无行数限制）
+    const groupsPromise = (async () => {
+      // 尝试调用数据库函数（需要先执行 migration: 20260207_distinct_groups_rpc.sql）
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: rpcData, error: rpcError } = await (supabase as any)
+        .rpc("get_user_group_names", { p_user_id: user.id });
+
+      if (!rpcError && rpcData) {
+        return (rpcData as { group_name: string }[]).map(r => r.group_name);
+      }
+
+      // 回退方案：若 RPC 不可用，用普通查询 + JS 去重
+      console.log("[Tasks API] RPC get_user_group_names not available, using fallback");
+      const { data } = await supabase
+        .from("generations")
+        .select("group_name")
+        .eq("user_id", user.id)
+        .not("group_name", "is", null)
+        .range(0, 2999);
+      if (!data) return [];
+      const unique = new Set<string>();
+      for (const row of data as { group_name: string | null }[]) {
+        if (row.group_name && row.group_name !== "默认") {
+          unique.add(row.group_name);
+        }
+      }
+      return Array.from(unique).sort();
+    })();
+
+    // 1. 统计数据通过 RPC 在数据库层聚合（无行数限制，精确统计）
+    const statsPromise = (async (): Promise<TaskStats> => {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: rpcData, error: rpcError } = await (supabase as any)
+          .rpc("get_user_task_stats", {
+            p_user_id: user.id,
+            p_start_date: startDateISO || null,
+            p_end_date: endDateISO || null,
+            p_type: type,
+            p_source: source,
+            p_status: status,
+            p_group_name: groupName,
+          });
+
+        if (!rpcError && rpcData) {
+          // RPC 返回 JSON 标量，Supabase JS 可能包装成数组或直接返回对象
+          const raw = Array.isArray(rpcData) ? rpcData[0] : rpcData;
+          // 映射 snake_case → camelCase
+          return {
+            totalTasks: raw.totalTasks ?? raw.total_tasks ?? 0,
+            completedTasks: raw.completedTasks ?? raw.completed_tasks ?? 0,
+            failedTasks: raw.failedTasks ?? raw.failed_tasks ?? 0,
+            processingTasks: raw.processingTasks ?? raw.processing_tasks ?? 0,
+            totalVideos: raw.totalVideos ?? raw.total_videos ?? 0,
+            totalImages: raw.totalImages ?? raw.total_images ?? 0,
+            totalCreditsUsed: raw.totalCreditsUsed ?? raw.total_credits_used ?? 0,
+          };
+        }
+        throw new Error(rpcError?.message || "RPC failed");
+      } catch (err) {
+        // 回退方案：若 RPC 不可用，用 count 查询
+        console.log("[Tasks API] RPC get_user_task_stats not available, using fallback", err);
+        return fallbackStats(supabase, user.id, type, status, source, groupName, startDateISO, endDateISO);
+      }
+    })();
+
+    // 2. 查询 generations 数据（cursor 分页，只取需要的字段）
     const generationsPromise = (async () => {
       // 如果只查询电商图片，跳过 generations 表
       if (type === "ecom" || source === "ecom_factory") return [];
 
       let query = supabase
         .from("generations")
-        .select("*")
+        .select(GENERATIONS_FIELDS)
         .eq("user_id", user.id)
         .order("created_at", { ascending: false });
 
-      // 仅当指定日期范围时应用日期过滤
+      // 日期过滤
       if (startDateISO) {
         query = query.gte("created_at", startDateISO);
+      }
+      if (endDateISO) {
+        query = query.lte("created_at", endDateISO);
+      }
+
+      // cursor 游标分页：取 created_at < cursor 的下一批数据
+      if (cursor) {
+        query = query.lt("created_at", cursor);
       }
 
       if (type === "video") query = query.eq("type", "video");
@@ -125,11 +242,13 @@ export async function GET(request: Request) {
         query = query.eq("group_name", groupName);
       }
 
+      // 每张表取 limit 条（合并后再取 top limit）
+      query = query.limit(limit);
       const { data } = await query;
       return data || [];
     })();
 
-    // 2. 查询 ecom_image_tasks 表（电商图片工厂）
+    // 3. 查询 ecom_image_tasks 数据（cursor 分页，只取需要的字段）
     const ecomPromise = (async () => {
       // 如果只查询视频，或者筛选的来源不是电商工厂也不是全部，跳过电商图片任务
       if (type === "video") return [];
@@ -137,13 +256,21 @@ export async function GET(request: Request) {
 
       let query = supabase
         .from("ecom_image_tasks")
-        .select("*")
+        .select(ECOM_FIELDS)
         .eq("user_id", user.id)
         .order("created_at", { ascending: false });
 
-      // 仅当指定日期范围时应用日期过滤
+      // 日期过滤
       if (startDateISO) {
         query = query.gte("created_at", startDateISO);
+      }
+      if (endDateISO) {
+        query = query.lte("created_at", endDateISO);
+      }
+
+      // cursor 游标分页
+      if (cursor) {
+        query = query.lt("created_at", cursor);
       }
 
       // 电商任务状态映射
@@ -155,16 +282,21 @@ export async function GET(request: Request) {
         query = query.in("status", ["created", "generating_prompts", "generating_images"]);
       }
 
+      query = query.limit(limit);
       const { data } = await query;
       return data || [];
     })();
 
-    const [generationsTasks, ecomTasks] = await Promise.all([generationsPromise, ecomPromise]);
+    const [allGroups, stats, generationsTasks, ecomTasks] = await Promise.all([
+      groupsPromise, statsPromise, generationsPromise, ecomPromise,
+    ]);
 
     console.log("[Tasks API] Query results:", {
       userId: user.id,
       generationsCount: generationsTasks.length,
       ecomTasksCount: ecomTasks.length,
+      totalTasks: stats.totalTasks,
+      cursor: cursor || "none",
     });
 
     // ========== 转换 generations 数据 ==========
@@ -239,33 +371,27 @@ export async function GET(request: Request) {
       };
     });
 
-    // ========== 合并并排序（按创建时间倒序）==========
-    const allTasks = [...generationsLogs, ...ecomLogs]
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    // ========== 合并并排序（按创建时间倒序），取 top limit ==========
+    const mergedTasks = [...generationsLogs, ...ecomLogs]
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .slice(0, limit);
 
-    // 应用分页
-    const paginatedTasks = allTasks.slice(offset, offset + limit);
-
-    // ========== 计算统计数据 ==========
-    const stats: TaskStats = {
-      totalTasks: allTasks.length,
-      completedTasks: allTasks.filter(t => t.status === "completed").length,
-      failedTasks: allTasks.filter(t => t.status === "failed").length,
-      processingTasks: allTasks.filter(t => t.status === "processing" || t.status === "pending").length,
-      totalVideos: allTasks.filter(t => t.type === "video").length,
-      totalImages: allTasks.filter(t => t.type === "image").length,
-      totalCreditsUsed: allTasks.reduce((sum, t) => sum + (t.credits || 0), 0),
-    };
+    // 计算 nextCursor（下一页从这条的 createdAt 往前取）
+    const nextCursor = mergedTasks.length > 0
+      ? mergedTasks[mergedTasks.length - 1].createdAt
+      : null;
 
     return NextResponse.json({
       success: true,
       data: {
-        tasks: paginatedTasks,
+        tasks: mergedTasks,
         stats,
+        availableGroups: allGroups,
         pagination: {
-          total: allTasks.length,
+          total: stats.totalTasks,
           limit,
-          offset,
+          nextCursor,
+          hasMore: mergedTasks.length === limit,
         },
       },
     });
@@ -278,4 +404,93 @@ export async function GET(request: Request) {
   }
 }
 
+// ============================================================================
+// 回退方案：当 RPC 不可用时，用多个 count 查询计算统计
+// ============================================================================
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function fallbackStats(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  userId: string,
+  type: string,
+  status: string,
+  source: string,
+  groupName: string,
+  startDateISO: string | null,
+  endDateISO: string | null,
+): Promise<TaskStats> {
+  // 用轻量级查询获取统计字段（只选 3 个小字段，不拉全量数据）
+  const buildGenQuery = () => {
+    let q = supabase
+      .from("generations")
+      .select("status, type, credit_cost")
+      .eq("user_id", userId);
+    if (startDateISO) q = q.gte("created_at", startDateISO);
+    if (endDateISO) q = q.lte("created_at", endDateISO);
+    if (type === "video") q = q.eq("type", "video");
+    if (type === "image") q = q.eq("type", "image");
+    if (status !== "all") q = q.eq("status", status);
+    if (source !== "all") q = q.eq("source", source);
+    if (groupName !== "all") q = q.eq("group_name", groupName);
+    q = q.range(0, 9999); // 提高上限
+    return q;
+  };
+
+  const buildEcomQuery = () => {
+    let q = supabase
+      .from("ecom_image_tasks")
+      .select("status, credits_cost")
+      .eq("user_id", userId);
+    if (startDateISO) q = q.gte("created_at", startDateISO);
+    if (endDateISO) q = q.lte("created_at", endDateISO);
+    if (status === "completed") q = q.in("status", ["success", "partial_success"]);
+    else if (status === "failed") q = q.eq("status", "failed");
+    else if (status === "processing") q = q.in("status", ["created", "generating_prompts", "generating_images"]);
+    q = q.range(0, 9999);
+    return q;
+  };
+
+  const skipGen = type === "ecom" || source === "ecom_factory";
+  const skipEcom = type === "video" || (source !== "all" && source !== "ecom_factory");
+
+  const [genResult, ecomResult] = await Promise.all([
+    skipGen ? { data: [] } : buildGenQuery(),
+    skipEcom ? { data: [] } : buildEcomQuery(),
+  ]);
+
+  const genData = genResult.data || [];
+  const ecomData = ecomResult.data || [];
+
+  let completed = 0, failed = 0, processing = 0;
+  let videos = 0, images = 0, credits = 0;
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  for (const t of genData as any[]) {
+    if (t.status === "completed") completed++;
+    else if (t.status === "failed") failed++;
+    else processing++;
+    if (t.type === "video") videos++;
+    else images++;
+    credits += t.credit_cost || 0;
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  for (const t of ecomData as any[]) {
+    if (t.status === "success" || t.status === "partial_success") completed++;
+    else if (t.status === "failed") failed++;
+    else processing++;
+    images++;
+    credits += t.credits_cost || 0;
+  }
+
+  return {
+    totalTasks: genData.length + ecomData.length,
+    completedTasks: completed,
+    failedTasks: failed,
+    processingTasks: processing,
+    totalVideos: videos,
+    totalImages: images,
+    totalCreditsUsed: credits,
+  };
+}
