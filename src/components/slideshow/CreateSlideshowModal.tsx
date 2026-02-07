@@ -3,6 +3,7 @@
 /**
  * 创建轮播任务弹窗
  * 两个Tab: 智能混剪 / 场景编排
+ * 增强版：集成 AI 文案、配音、BGM
  */
 
 import React, { useState, useRef, useEffect } from "react";
@@ -12,10 +13,10 @@ import {
     DialogContent,
     DialogHeader,
     DialogTitle,
+    DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
 import {
     Select,
     SelectContent,
@@ -35,9 +36,16 @@ import {
     Image as ImageIcon,
     Sparkles,
     Save,
-    Film,
     Clock,
+    Smartphone,
+    Monitor,
 } from "lucide-react";
+
+// 新增组件导入
+import { SubtitleEditor, type SubtitleConfig } from './SubtitleEditor';
+import { BGMSelector, type BGMConfig } from './BGMSelector';
+import { type VoiceConfig } from './VoiceSelector';
+import { type AICaptionConfig } from './AICaptionGenerator';
 
 // 转场效果
 const TRANSITION_OPTIONS = [
@@ -53,22 +61,7 @@ const TRANSITION_OPTIONS = [
     { value: "fadewhite", label: "白屏过渡" },
 ];
 
-// 字体选项
-const FONT_OPTIONS = [
-    { value: "NotoSansSC", label: "思源黑体" },
-    { value: "ZCOOLXiaoWei", label: "站酷小薇" },
-    { value: "MaShanZheng", label: "马善正楷" },
-    { value: "ZCOOLQingKeHuangYou", label: "庆科黄油" },
-];
 
-// 颜色选项
-const COLOR_OPTIONS = [
-    { value: "white", label: "白色", class: "bg-white" },
-    { value: "black", label: "黑色", class: "bg-black border border-white/30" },
-    { value: "#FFD700", label: "金色", class: "bg-yellow-400" },
-    { value: "#00F2EA", label: "青色", class: "bg-cyan-400" },
-    { value: "#FE2C55", label: "粉色", class: "bg-pink-500" },
-];
 
 interface Position {
     id: string;
@@ -76,21 +69,19 @@ interface Position {
     images: File[];
 }
 
-interface SubtitleConfig {
-    enabled: boolean;
-    text: string;
-    position: "top" | "center" | "bottom";
-    fontFamily: string;
-    fontSize: number;
-    fontColor: string;
-}
-
+// 扩展的轮播配置 - 集成所有新功能
 interface SlideshowConfig {
     duration: number;
     transition: string;
     aspectRatio: "9:16" | "16:9";
-    musicMode: "none" | "preset" | "custom";
-    subtitle: SubtitleConfig;
+    // 新增：字幕 (使用 SubtitleEditor 的类型)
+    subtitle: SubtitleConfig | null;
+    // 新增：BGM
+    bgm: BGMConfig;
+    // 新增：配音
+    voice: VoiceConfig;
+    // 新增：AI 文案
+    aiCaption: AICaptionConfig;
 }
 
 interface CreateSlideshowModalProps {
@@ -122,24 +113,31 @@ export function CreateSlideshowModal({
         { id: "1", name: "位置 1", images: [] },
     ]);
 
-    // 配置状态
+    // 配置状态 (新结构)
     const [config, setConfig] = useState<SlideshowConfig>({
         duration: 3,
         transition: "fade",
         aspectRatio: "9:16",
-        musicMode: "preset",
-        subtitle: {
+        subtitle: null, // 字幕默认关闭
+        bgm: {
             enabled: false,
-            text: "",
-            position: "bottom",
-            fontFamily: "NotoSansSC",
-            fontSize: 48,
-            fontColor: "white",
+            mode: "none",
+        },
+        voice: {
+            enabled: false,
+            voiceId: "",
+            voiceName: "",
+        },
+        aiCaption: {
+            enabled: false,
+            mode: "unified",
+            keywords: "",
+            style: "lively",
+            language: "en", // 默认英文
         },
     });
 
-    // Canvas 预览 ref
-    const canvasRef = useRef<HTMLCanvasElement>(null);
+
 
     // 文件上传 ref
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -155,40 +153,8 @@ export function CreateSlideshowModal({
         return total > 0 ? total.toFixed(1) : "0";
     };
 
-    // 更新预览 Canvas
-    useEffect(() => {
-        if (!canvasRef.current || !config.subtitle.enabled) return;
-        const canvas = canvasRef.current;
-        const ctx = canvas.getContext("2d");
-        if (!ctx) return;
+    // 注意: Canvas 预览已移至 SubtitleEditor 组件内部
 
-        const width = canvas.clientWidth * 2;
-        const height = canvas.clientHeight * 2;
-        canvas.width = width;
-        canvas.height = height;
-
-        // 背景
-        ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
-        ctx.fillRect(0, 0, width, height);
-        ctx.fillStyle = "rgba(255, 255, 255, 0.1)";
-        ctx.fillRect(10, 10, width - 20, height - 20);
-
-        if (config.subtitle.text) {
-            const fontSize = (config.subtitle.fontSize / 48) * 24;
-            ctx.font = `bold ${fontSize}px sans-serif`;
-            ctx.fillStyle = config.subtitle.fontColor;
-            ctx.textAlign = "center";
-            ctx.shadowColor = "rgba(0, 0, 0, 0.8)";
-            ctx.shadowBlur = 4;
-
-            let y: number;
-            if (config.subtitle.position === "top") y = height * 0.15;
-            else if (config.subtitle.position === "center") y = height / 2;
-            else y = height * 0.85;
-
-            ctx.fillText(config.subtitle.text, width / 2, y);
-        }
-    }, [config.subtitle]);
 
     // 处理文件上传
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -245,187 +211,256 @@ export function CreateSlideshowModal({
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-[90vw] w-[1400px] max-h-[85vh] overflow-hidden bg-black/95 border-white/10">
-                <DialogHeader>
-                    <DialogTitle className="text-white flex items-center gap-2">
-                        <Sparkles className="h-5 w-5 text-pink-400" />
-                        创建轮播任务
+            <DialogContent className="max-w-[90vw] w-[1400px] h-[85vh] flex flex-col overflow-hidden bg-black/95 border-white/10">
+                <DialogHeader className="border-b border-white/10 pb-4">
+                    <DialogTitle className="text-white flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                            <Sparkles className="h-5 w-5 text-mermaid-pink" />
+                            <span>创建轮播任务</span>
+                        </div>
+
+                        {/* 顶部 Tab 居右显示，更轻量化 */}
+                        <div className="flex bg-black/40 rounded-lg p-1 border border-white/5">
+                            <button
+                                onClick={() => setActiveTab("random")}
+                                className={cn(
+                                    "px-4 py-1.5 rounded-md text-xs font-medium transition-all flex items-center gap-2",
+                                    activeTab === "random"
+                                        ? "bg-mermaid-pink/20 text-mermaid-pink shadow-[0_0_10px_rgba(255,0,128,0.2)]"
+                                        : "text-white/40 hover:text-white/80"
+                                )}
+                            >
+                                <Shuffle className="h-3.5 w-3.5" />
+                                智能混剪
+                            </button>
+                            <button
+                                onClick={() => setActiveTab("position")}
+                                className={cn(
+                                    "px-4 py-1.5 rounded-md text-xs font-medium transition-all flex items-center gap-2",
+                                    activeTab === "position"
+                                        ? "bg-mermaid-cyan/20 text-mermaid-cyan shadow-[0_0_10px_rgba(0,242,234,0.2)]"
+                                        : "text-white/40 hover:text-white/80"
+                                )}
+                            >
+                                <Layers className="h-3.5 w-3.5" />
+                                场景编排
+                            </button>
+                        </div>
                     </DialogTitle>
                 </DialogHeader>
 
-                {/* Tab 切换 - 紧凑版 */}
-                <div className="flex gap-2">
-                    <button
-                        onClick={() => setActiveTab("random")}
-                        className={cn(
-                            "flex-1 py-2 px-3 rounded-lg flex items-center justify-center gap-2 transition-all text-sm",
-                            activeTab === "random"
-                                ? "bg-gradient-to-r from-pink-500/20 to-purple-500/20 border border-pink-500/50 text-white"
-                                : "bg-white/5 border border-white/10 text-white/60 hover:bg-white/10"
-                        )}
-                    >
-                        <Shuffle className="h-3.5 w-3.5" />
-                        <span className="font-medium">智能混剪</span>
-                    </button>
-                    <button
-                        onClick={() => setActiveTab("position")}
-                        className={cn(
-                            "flex-1 py-2 px-3 rounded-lg flex items-center justify-center gap-2 transition-all text-sm",
-                            activeTab === "position"
-                                ? "bg-gradient-to-r from-pink-500/20 to-purple-500/20 border border-pink-500/50 text-white"
-                                : "bg-white/5 border border-white/10 text-white/60 hover:bg-white/10"
-                        )}
-                    >
-                        <Layers className="h-3.5 w-3.5" />
-                        <span className="font-medium">场景编排</span>
-                    </button>
-                </div>
+
 
                 {/* 主内容区 */}
-                <div className="flex gap-6 mt-3 max-h-[72vh] overflow-hidden">
-                    {/* 左侧：上传区 */}
-                    <div className="flex-[6] overflow-y-auto pr-2 space-y-3">
+                <div className="flex gap-6 mt-3 flex-1 min-h-0 overflow-hidden">
+                    {/* 左侧：内容主区域 (Flex 7) */}
+                    <div className="flex-[7] flex flex-col min-w-0 pr-6 border-r border-white/5 h-full overflow-hidden">
                         {activeTab === "random" ? (
                             <>
-                                {/* 顶部控制栏 - sticky */}
-                                <div className="sticky top-0 z-10 bg-black/95 pb-3 border-b border-white/5">
-                                    <div className="flex items-center gap-6">
-                                        {/* 每视频图片数 */}
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-xs text-white/50">📊 每视频图片数</span>
+                                {/* 顶部工具栏 - 上下文相关 */}
+                                <div className="flex items-center gap-4 bg-white/5 rounded-xl p-3 border border-white/5 mb-4 shrink-0">
+                                    {/* 每视频图片数 */}
+                                    <div className="flex items-center gap-3 pr-4 border-r border-white/10">
+                                        <div className="flex flex-col">
+                                            <span className="text-[10px] text-white/40 uppercase tracking-wider font-semibold">每次生成消耗</span>
+                                            <span className="text-xs text-white/80">每组图片数量</span>
+                                        </div>
+                                        <div className="flex items-center bg-black/40 rounded-lg p-0.5 border border-white/10">
                                             <button
                                                 onClick={() => setImagesPerVideo(Math.max(1, imagesPerVideo - 1))}
-                                                className="w-7 h-7 rounded-md bg-white/5 border border-white/10 hover:bg-white/10 flex items-center justify-center text-white/60 hover:text-white transition-colors disabled:opacity-30"
+                                                className="w-7 h-7 flex items-center justify-center text-white/50 hover:text-white hover:bg-white/10 rounded-md transition-all disabled:opacity-30"
                                                 disabled={imagesPerVideo <= 1}
                                             >
-                                                <Minus className="h-3.5 w-3.5" />
+                                                <Minus className="h-3 w-3" />
                                             </button>
-                                            <input
-                                                type="text"
-                                                inputMode="numeric"
-                                                value={imagesPerVideo}
-                                                onChange={(e) => {
-                                                    const val = parseInt(e.target.value) || 1;
-                                                    setImagesPerVideo(Math.min(15, Math.max(1, val)));
-                                                }}
-                                                className="w-10 h-7 rounded-md bg-white/5 border border-white/10 text-white text-center text-sm focus:outline-none focus:ring-1 focus:ring-pink-500/50"
-                                            />
+                                            <div className="min-w-[40px] text-center font-mono text-mermaid-cyan font-bold text-sm">
+                                                {imagesPerVideo}
+                                            </div>
                                             <button
                                                 onClick={() => setImagesPerVideo(Math.min(15, imagesPerVideo + 1))}
-                                                className="w-7 h-7 rounded-md bg-white/5 border border-white/10 hover:bg-white/10 flex items-center justify-center text-white/60 hover:text-white transition-colors disabled:opacity-30"
+                                                className="w-7 h-7 flex items-center justify-center text-white/50 hover:text-white hover:bg-white/10 rounded-md transition-all disabled:opacity-30"
                                                 disabled={imagesPerVideo >= 15}
                                             >
-                                                <Plus className="h-3.5 w-3.5" />
+                                                <Plus className="h-3 w-3" />
                                             </button>
-                                            <span className="text-xs text-white/30">张</span>
                                         </div>
+                                    </div>
 
-                                        {/* 分隔符 */}
-                                        <div className="w-px h-5 bg-white/10" />
-
-                                        {/* 每张时长 */}
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-xs text-white/50">⏱️ 每张时长</span>
+                                    {/* 每张时长 */}
+                                    <div className="flex items-center gap-3">
+                                        <div className="flex flex-col">
+                                            <span className="text-[10px] text-white/40 uppercase tracking-wider font-semibold">节奏控制</span>
+                                            <span className="text-xs text-white/80">单图停留时长</span>
+                                        </div>
+                                        <div className="flex items-center bg-black/40 rounded-lg p-0.5 border border-white/10">
                                             <button
                                                 onClick={() => setConfig((c) => ({ ...c, duration: Math.max(2, c.duration - 1) }))}
-                                                className="w-7 h-7 rounded-md bg-white/5 border border-white/10 hover:bg-white/10 flex items-center justify-center text-white/60 hover:text-white transition-colors disabled:opacity-30"
+                                                className="w-7 h-7 flex items-center justify-center text-white/50 hover:text-white hover:bg-white/10 rounded-md transition-all disabled:opacity-30"
                                                 disabled={config.duration <= 2}
                                             >
-                                                <Minus className="h-3.5 w-3.5" />
+                                                <Minus className="h-3 w-3" />
                                             </button>
-                                            <input
-                                                type="text"
-                                                inputMode="numeric"
-                                                value={config.duration}
-                                                onChange={(e) => {
-                                                    const val = parseInt(e.target.value) || 2;
-                                                    setConfig((c) => ({ ...c, duration: Math.min(10, Math.max(2, val)) }));
-                                                }}
-                                                className="w-10 h-7 rounded-md bg-white/5 border border-white/10 text-white text-center text-sm focus:outline-none focus:ring-1 focus:ring-pink-500/50"
-                                            />
+                                            <div className="min-w-[40px] text-center font-mono text-mermaid-pink font-bold text-sm">
+                                                {config.duration}s
+                                            </div>
                                             <button
                                                 onClick={() => setConfig((c) => ({ ...c, duration: Math.min(10, c.duration + 1) }))}
-                                                className="w-7 h-7 rounded-md bg-white/5 border border-white/10 hover:bg-white/10 flex items-center justify-center text-white/60 hover:text-white transition-colors disabled:opacity-30"
+                                                className="w-7 h-7 flex items-center justify-center text-white/50 hover:text-white hover:bg-white/10 rounded-md transition-all disabled:opacity-30"
                                                 disabled={config.duration >= 10}
                                             >
-                                                <Plus className="h-3.5 w-3.5" />
+                                                <Plus className="h-3 w-3" />
                                             </button>
-                                            <span className="text-xs text-white/30">秒</span>
+                                        </div>
+                                    </div>
+
+                                    <div className="ml-auto flex items-center gap-6 text-right">
+                                        {/* 预估视频时长 */}
+                                        <div>
+                                            <div className="text-[10px] text-white/40 uppercase tracking-wider font-semibold">每视频时长</div>
+                                            <div className="text-sm font-medium flex items-center gap-1">
+                                                <Clock className="h-3 w-3 text-mermaid-cyan" />
+                                                <span className="text-mermaid-cyan">{calculateTotalDuration()}</span>
+                                                <span className="text-white/50">秒</span>
+                                            </div>
+                                        </div>
+                                        {/* 预计生成视频数 */}
+                                        <div>
+                                            <div className="text-[10px] text-white/40 uppercase tracking-wider font-semibold">预计生成</div>
+                                            <div className="text-sm font-medium">
+                                                <span className="text-white">{Math.ceil(randomImages.length / imagesPerVideo) || 0}</span>
+                                                <span className="text-white/50 mx-1">条视频</span>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
 
-                                {/* 智能混剪：图片上传 */}
-                                <div className="space-y-2">
-                                    <div className="flex items-center justify-between">
-                                        <Label className="text-xs text-white/60">📸 上传图片</Label>
-                                        <span className="text-xs text-white/40">
-                                            已上传 {randomImages.length} 张
+                                {/* 智能混剪：图片上传网格 */}
+                                <div className="flex-1 overflow-y-auto min-h-0 bg-black/20 rounded-xl border border-white/5 p-4">
+                                    <div className="flex items-center justify-between mb-4">
+                                        <div className="flex items-center gap-2">
+                                            <ImageIcon className="h-4 w-4 text-mermaid-cyan" />
+                                            <span className="text-sm font-medium text-white/90">图片素材库</span>
+                                        </div>
+                                        <span className="text-xs text-white/40 px-2 py-1 rounded bg-white/5">
+                                            已上传 <span className="text-white">{randomImages.length}</span> 张
                                         </span>
                                     </div>
-                                    <div className="grid grid-cols-6 gap-2">
+
+                                    <div className="grid grid-cols-5 md:grid-cols-6 lg:grid-cols-7 gap-3">
+                                        {/* 上传按钮 - 固定在第一个 */}
+                                        <button
+                                            onClick={() => fileInputRef.current?.click()}
+                                            className="aspect-square rounded-xl bg-white/5 border border-dashed border-white/20 hover:border-mermaid-cyan/50 hover:bg-mermaid-cyan/5 flex flex-col items-center justify-center gap-2 text-white/40 hover:text-mermaid-cyan transition-all group"
+                                        >
+                                            <div className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center group-hover:bg-mermaid-cyan/20 transition-colors">
+                                                <Plus className="h-4 w-4" />
+                                            </div>
+                                            <span className="text-xs">添加图片</span>
+                                        </button>
+
                                         {randomImages.map((file, idx) => (
                                             <div
                                                 key={idx}
-                                                className="aspect-square rounded-lg bg-white/5 border border-white/10 overflow-hidden relative group"
+                                                className="aspect-square rounded-xl bg-black border border-white/10 overflow-hidden relative group hover:border-mermaid-cyan/50 transition-colors"
                                             >
                                                 <img
                                                     src={URL.createObjectURL(file)}
                                                     alt=""
-                                                    className="w-full h-full object-cover"
+                                                    className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity"
                                                 />
-                                                <button
-                                                    onClick={() =>
-                                                        setRandomImages((prev) =>
-                                                            prev.filter((_, i) => i !== idx)
-                                                        )
-                                                    }
-                                                    className="absolute top-1 right-1 p-1 rounded bg-black/50 text-white/60 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
-                                                >
-                                                    <X className="h-3 w-3" />
-                                                </button>
+                                                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
+                                                    <span className="absolute bottom-1.5 left-2 text-[10px] text-white/80 font-mono">#{idx + 1}</span>
+                                                    <button
+                                                        onClick={() =>
+                                                            setRandomImages((prev) =>
+                                                                prev.filter((_, i) => i !== idx)
+                                                            )
+                                                        }
+                                                        className="absolute top-1.5 right-1.5 p-1 rounded-md bg-red-500/20 text-red-400 hover:bg-red-500 hover:text-white transition-colors"
+                                                    >
+                                                        <Trash2 className="h-3 w-3" />
+                                                    </button>
+                                                </div>
                                             </div>
                                         ))}
-                                        <button
-                                            onClick={() => fileInputRef.current?.click()}
-                                            className="aspect-square rounded-lg bg-white/5 border border-dashed border-white/20 hover:border-pink-500/50 flex items-center justify-center text-white/40 hover:text-pink-400 transition-colors"
-                                        >
-                                            <Plus className="h-6 w-6" />
-                                        </button>
                                     </div>
+
+                                    {randomImages.length === 0 && (
+                                        <div className="flex flex-col items-center justify-center h-48 text-white/30">
+                                            <Upload className="h-8 w-8 mb-3 opacity-50" />
+                                            <p className="text-sm">点击上方 "+" 添加图片素材</p>
+                                            <p className="text-xs mt-1 opacity-50">支持 JPG, PNG, WebP 格式</p>
+                                        </div>
+                                    )}
                                 </div>
                             </>
                         ) : (
                             <>
+                                {/* 场景编排：顶部说明 */}
+                                <div className="flex items-center justify-between mb-4 px-1">
+                                    <div className="space-y-1">
+                                        <h3 className="text-sm font-medium text-white/90 flex items-center gap-2">
+                                            <Layers className="h-4 w-4 text-mermaid-cyan" />
+                                            场景剧本编排
+                                        </h3>
+                                        <p className="text-xs text-white/40">每个"位置"代表一个视频分镜，可为该分镜指定多张备选图片</p>
+                                    </div>
+                                    <Button
+                                        onClick={addPosition}
+                                        size="sm"
+                                        variant="outline"
+                                        className="h-8 text-xs border-dashed border-mermaid-cyan/30 text-mermaid-cyan hover:bg-mermaid-cyan/10 hover:border-mermaid-cyan/50 hover:text-mermaid-cyan"
+                                    >
+                                        <Plus className="h-3 w-3 mr-1.5" />
+                                        添加新位置
+                                    </Button>
+                                </div>
+
                                 {/* 场景编排：位置列表 */}
-                                <div className="space-y-3">
-                                    <Label className="text-xs text-white/60">🎯 位置配置</Label>
+                                <div className="flex-1 overflow-y-auto min-h-0 space-y-3 pr-2">
                                     {positions.map((pos, idx) => (
                                         <div
                                             key={pos.id}
-                                            className="p-3 rounded-lg bg-white/5 border border-white/10 space-y-2"
+                                            className="p-4 rounded-xl bg-white/5 border border-white/10 hover:border-white/20 transition-colors group"
                                         >
-                                            <div className="flex items-center justify-between">
-                                                <span className="text-sm text-white/80">{pos.name}</span>
-                                                <div className="flex items-center gap-1">
-                                                    <button className="p-1 text-white/40 hover:text-white">
+                                            <div className="flex items-center justify-between mb-3">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="w-6 h-6 rounded-md bg-white/10 flex items-center justify-center text-xs font-mono text-white/60">
+                                                        {idx + 1}
+                                                    </div>
+                                                    <span className="text-sm font-medium text-white/90">{pos.name}</span>
+                                                </div>
+                                                <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity gap-1">
+                                                    <button className="p-1.5 text-white/40 hover:text-white rounded-md hover:bg-white/10 transition-colors">
                                                         <Edit2 className="h-3.5 w-3.5" />
                                                     </button>
                                                     {positions.length > 1 && (
                                                         <button
                                                             onClick={() => removePosition(pos.id)}
-                                                            className="p-1 text-white/40 hover:text-red-400"
+                                                            className="p-1.5 text-white/40 hover:text-red-400 rounded-md hover:bg-red-500/10 transition-colors"
                                                         >
                                                             <Trash2 className="h-3.5 w-3.5" />
                                                         </button>
                                                     )}
                                                 </div>
                                             </div>
-                                            <div className="flex gap-2 flex-wrap">
+
+                                            {/* 横向滚动图片流 */}
+                                            <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
+                                                <button
+                                                    onClick={() => {
+                                                        setUploadTargetPosition(pos.id);
+                                                        fileInputRef.current?.click();
+                                                    }}
+                                                    className="w-16 h-16 shrink-0 rounded-lg bg-black/20 border border-dashed border-white/10 hover:border-mermaid-pink/50 hover:bg-mermaid-pink/5 flex items-center justify-center text-white/30 hover:text-mermaid-pink transition-all"
+                                                >
+                                                    <Plus className="h-5 w-5" />
+                                                </button>
+
                                                 {pos.images.map((file, imgIdx) => (
                                                     <div
                                                         key={imgIdx}
-                                                        className="w-12 h-12 rounded bg-white/10 overflow-hidden relative group"
+                                                        className="w-16 h-16 shrink-0 rounded-lg bg-black border border-white/10 overflow-hidden relative group/img"
                                                     >
                                                         <img
                                                             src={URL.createObjectURL(file)}
@@ -447,76 +482,85 @@ export function CreateSlideshowModal({
                                                                     )
                                                                 )
                                                             }
-                                                            className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                                                            className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover/img:opacity-100 transition-opacity"
                                                         >
-                                                            <X className="h-3 w-3 text-white" />
+                                                            <X className="h-4 w-4 text-white hover:text-red-400 transition-colors" />
                                                         </button>
                                                     </div>
                                                 ))}
-                                                <button
-                                                    onClick={() => {
-                                                        setUploadTargetPosition(pos.id);
-                                                        fileInputRef.current?.click();
-                                                    }}
-                                                    className="w-12 h-12 rounded bg-white/5 border border-dashed border-white/20 hover:border-pink-500/50 flex items-center justify-center text-white/40 hover:text-pink-400"
-                                                >
-                                                    <Plus className="h-4 w-4" />
-                                                </button>
+
+                                                {pos.images.length === 0 && (
+                                                    <div className="flex items-center text-xs text-white/20 italic pl-2">
+                                                        暂无素材...
+                                                    </div>
+                                                )}
                                             </div>
                                         </div>
                                     ))}
-                                    <button
-                                        onClick={addPosition}
-                                        className="w-full py-2 rounded-lg bg-white/5 border border-dashed border-white/20 hover:border-pink-500/50 text-white/50 hover:text-pink-400 text-xs transition-colors"
-                                    >
-                                        <Plus className="h-3.5 w-3.5 inline mr-1" />
-                                        添加新位置
-                                    </button>
+
+                                    <div className="h-8 w-full flex items-center justify-center border-t border-white/5 mt-4 pt-2">
+                                        <div className="text-xs text-white/30 flex items-center gap-2">
+                                            <Clock className="h-3 w-3" />
+                                            <span>总时长预估: <span className="text-mermaid-pink">{calculateTotalDuration()}</span> 秒</span>
+                                        </div>
+                                    </div>
                                 </div>
                             </>
                         )}
                     </div>
 
-                    {/* 右侧：配置区 - 紧凑布局 */}
-                    <div className="flex-[4] overflow-y-auto pl-4 border-l border-white/10 space-y-3">
-                        <h4 className="text-sm font-medium text-white/80 sticky top-0 bg-black/95 pb-2 z-10">⚙️ 轮播配置</h4>
-
-                        {/* 视频比例 */}
-                        <div className="space-y-1">
-                            <Label className="text-xs text-white/50">视频比例</Label>
-                            <div className="flex gap-2">
-                                {(["9:16", "16:9"] as const).map((ratio) => (
-                                    <button
-                                        key={ratio}
-                                        onClick={() => setConfig((c) => ({ ...c, aspectRatio: ratio }))}
-                                        className={cn(
-                                            "flex-1 py-2 rounded-lg text-sm transition-all",
-                                            config.aspectRatio === ratio
-                                                ? "bg-pink-500/20 text-pink-400 border border-pink-500/30"
-                                                : "bg-white/5 text-white/50 hover:bg-white/10"
-                                        )}
-                                    >
-                                        {ratio === "9:16" ? "竖版 9:16" : "横版 16:9"}
-                                    </button>
-                                ))}
-                            </div>
+                    {/* 右侧：配置区 (Flex 3) */}
+                    <div className="flex-[3] flex flex-col min-w-[320px] overflow-hidden bg-white/[0.02] -mr-6 -my-3 p-6 border-l border-white/5">
+                        <div className="flex items-center gap-2 mb-6 text-white/90">
+                            <div className="w-1 h-4 bg-mermaid-cyan rounded-full shadow-[0_0_8px_rgba(0,242,234,0.5)]" />
+                            <h4 className="text-sm font-bold">全局配置</h4>
                         </div>
 
-                        {/* 第二行: 转场 + 音乐 */}
-                        <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-6 overflow-y-auto pr-2 pb-10">
+                            {/* 视频比例 */}
+                            <div className="space-y-2">
+                                <Label className="text-xs text-white/40 font-medium tracking-wide uppercase">视频比例</Label>
+                                <div className="grid grid-cols-2 gap-2">
+                                    {(["9:16", "16:9"] as const).map((ratio) => (
+                                        <button
+                                            key={ratio}
+                                            onClick={() => setConfig((c) => ({ ...c, aspectRatio: ratio }))}
+                                            className={cn(
+                                                "relative py-3 px-2 rounded-lg text-xs transition-all border group overflow-hidden",
+                                                config.aspectRatio === ratio
+                                                    ? "bg-gradient-to-br from-mermaid-pink/10 to-mermaid-purple/10 border-mermaid-pink/50 text-white"
+                                                    : "bg-white/5 border-white/5 text-white/50 hover:bg-white/10"
+                                            )}
+                                        >
+                                            <div className="flex flex-col items-center gap-1.5 z-10 relative">
+                                                {ratio === "9:16" ? (
+                                                    <Smartphone className="h-4 w-4" />
+                                                ) : (
+                                                    <Monitor className="h-4 w-4" />
+                                                )}
+                                                <span className="font-medium">{ratio === "9:16" ? "竖版 9:16" : "横版 16:9"}</span>
+                                            </div>
+                                            {config.aspectRatio === ratio && (
+                                                <div className="absolute inset-0 bg-mermaid-pink/5 blur-xl group-hover:bg-mermaid-pink/10 transition-colors" />
+                                            )}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
                             {/* 转场效果 */}
-                            <div className="space-y-1">
-                                <Label className="text-xs text-white/50">转场效果</Label>
+                            <div className="space-y-2">
+                                <Label className="text-xs text-white/40 font-medium tracking-wide uppercase">转场效果</Label>
                                 <Select
                                     value={config.transition}
                                     onValueChange={(v) => setConfig((c) => ({ ...c, transition: v }))}
                                 >
-                                    <SelectTrigger className="h-8 bg-white/5 border-white/10 text-white text-xs">
+                                    <SelectTrigger className="h-10 bg-white/5 border-white/10 text-white text-sm hover:border-mermaid-cyan/30 transition-colors">
                                         <SelectValue />
                                     </SelectTrigger>
-                                    <SelectContent className="bg-black/95 border-white/10">
+                                    <SelectContent className="bg-[#1A1B20] border-white/10">
                                         {TRANSITION_OPTIONS.map((t) => (
-                                            <SelectItem key={t.value} value={t.value} className="text-white text-xs">
+                                            <SelectItem key={t.value} value={t.value} className="text-white">
                                                 {t.label}
                                             </SelectItem>
                                         ))}
@@ -524,223 +568,85 @@ export function CreateSlideshowModal({
                                 </Select>
                             </div>
 
-                            {/* 背景音乐 */}
-                            <div className="space-y-1">
-                                <Label className="text-xs text-white/50">🎵 背景音乐</Label>
-                                <div className="flex gap-1">
-                                    {(["none", "preset", "custom"] as const).map((mode) => (
-                                        <button
-                                            key={mode}
-                                            onClick={() => setConfig((c) => ({ ...c, musicMode: mode }))}
-                                            className={cn(
-                                                "flex-1 py-1.5 rounded-lg text-[10px] transition-all",
-                                                config.musicMode === mode
-                                                    ? "bg-pink-500/20 text-pink-400 border border-pink-500/30"
-                                                    : "bg-white/5 text-white/50 hover:bg-white/10"
-                                            )}
-                                        >
-                                            {mode === "none" ? "无" : mode === "preset" ? "预设" : "自定义"}
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-                        </div>
+                            {/* 背景音乐 - 使用新组件 */}
+                            <BGMSelector
+                                config={config.bgm}
+                                onChange={(bgmConfig) => setConfig((c) => ({ ...c, bgm: bgmConfig }))}
+                                videoCount={activeTab === "random" ? Math.ceil(randomImages.length / imagesPerVideo) : 1}
+                            />
 
-                        {/* 分隔线 */}
-                        <div className="border-t border-white/5 pt-2" />
+                            {/* 分隔线 */}
+                            <div className="h-px bg-white/5 my-4" />
 
-                        {/* 字幕设置 */}
-                        <div className="space-y-2">
-                            <div className="flex items-center justify-between">
-                                <Label className="text-xs text-white/50">📝 字幕设置</Label>
-                                <button
-                                    onClick={() =>
-                                        setConfig((c) => ({
-                                            ...c,
-                                            subtitle: { ...c.subtitle, enabled: !c.subtitle.enabled },
-                                        }))
-                                    }
-                                    className={cn(
-                                        "relative w-9 h-5 rounded-full transition-all",
-                                        config.subtitle.enabled
-                                            ? "bg-pink-500/30 border border-pink-500/50"
-                                            : "bg-white/10 border border-white/20"
-                                    )}
-                                >
-                                    <span
-                                        className={cn(
-                                            "absolute top-0.5 w-4 h-4 rounded-full transition-all",
-                                            config.subtitle.enabled
-                                                ? "left-[18px] bg-pink-400"
-                                                : "left-0.5 bg-white/40"
-                                        )}
-                                    />
-                                </button>
-                            </div>
-
-                            {config.subtitle.enabled && (
-                                <div className="space-y-2 p-2 bg-white/5 rounded-lg">
-                                    {/* 预览和输入 */}
-                                    <div className="grid grid-cols-[80px_1fr] gap-2">
-                                        {/* 迷你预览 */}
-                                        <canvas
-                                            ref={canvasRef}
-                                            className="w-full aspect-[9/16] bg-black/50 rounded-lg"
-                                        />
-                                        {/* 右侧配置 */}
-                                        <div className="space-y-2">
-                                            {/* 文字输入 */}
-                                            <Input
-                                                value={config.subtitle.text}
-                                                onChange={(e) =>
-                                                    setConfig((c) => ({
-                                                        ...c,
-                                                        subtitle: { ...c.subtitle, text: e.target.value },
-                                                    }))
-                                                }
-                                                placeholder="输入字幕..."
-                                                className="h-7 bg-white/5 border-white/10 text-white text-xs"
-                                            />
-                                            {/* 字体 */}
-                                            <Select
-                                                value={config.subtitle.fontFamily}
-                                                onValueChange={(v) =>
-                                                    setConfig((c) => ({
-                                                        ...c,
-                                                        subtitle: { ...c.subtitle, fontFamily: v },
-                                                    }))
-                                                }
-                                            >
-                                                <SelectTrigger className="h-7 bg-white/5 border-white/10 text-white text-xs">
-                                                    <SelectValue />
-                                                </SelectTrigger>
-                                                <SelectContent className="bg-black/95 border-white/10">
-                                                    {FONT_OPTIONS.map((f) => (
-                                                        <SelectItem key={f.value} value={f.value} className="text-white text-xs">
-                                                            {f.label}
-                                                        </SelectItem>
-                                                    ))}
-                                                </SelectContent>
-                                            </Select>
-                                            {/* 位置 */}
-                                            <div className="flex gap-1">
-                                                {(["top", "center", "bottom"] as const).map((pos) => (
-                                                    <button
-                                                        key={pos}
-                                                        onClick={() =>
-                                                            setConfig((c) => ({
-                                                                ...c,
-                                                                subtitle: { ...c.subtitle, position: pos },
-                                                            }))
-                                                        }
-                                                        className={cn(
-                                                            "flex-1 py-1 rounded text-[10px] transition-all",
-                                                            config.subtitle.position === pos
-                                                                ? "bg-pink-500/20 text-pink-400"
-                                                                : "bg-white/5 text-white/50"
-                                                        )}
-                                                    >
-                                                        {pos === "top" ? "顶部" : pos === "center" ? "居中" : "底部"}
-                                                    </button>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    </div>
-                                    {/* 颜色选择 - 单独一行 */}
-                                    <div className="flex items-center gap-2 pt-1">
-                                        <span className="text-[10px] text-white/40">颜色:</span>
-                                        <div className="flex gap-1.5">
-                                            {COLOR_OPTIONS.map((c) => (
-                                                <button
-                                                    key={c.value}
-                                                    onClick={() =>
-                                                        setConfig((cfg) => ({
-                                                            ...cfg,
-                                                            subtitle: { ...cfg.subtitle, fontColor: c.value },
-                                                        }))
-                                                    }
-                                                    className={cn(
-                                                        "w-5 h-5 rounded-full transition-all",
-                                                        c.class,
-                                                        config.subtitle.fontColor === c.value
-                                                            ? "ring-2 ring-pink-400 scale-110"
-                                                            : ""
-                                                    )}
-                                                    title={c.label}
-                                                />
-                                            ))}
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
+                            {/* 字幕设置 - 集成 AI 配音和 AI 字幕 */}
+                            <SubtitleEditor
+                                subtitle={config.subtitle || {
+                                    text: "",
+                                    boxX: 10,
+                                    boxY: 80,
+                                    boxWidth: 80,
+                                    style: 'classic',
+                                    tone: 'neutral',
+                                    color: '#FFFFFF',
+                                    position: 80,
+                                    fontSize: 36,
+                                    fontColor: "#FFFFFF",
+                                    fontFamily: "Cinzel-VariableFont_wght",
+                                    borderWidth: 0,
+                                    borderColor: "#000000",
+                                    shadow: false,
+                                    textOverlays: [],
+                                }}
+                                onChange={(subtitleConfig) => setConfig((c) => ({ ...c, subtitle: subtitleConfig }))}
+                                previewFiles={
+                                    activeTab === "random"
+                                        ? randomImages.slice(0, 10)
+                                        : positions.flatMap(p => p.images).slice(0, 10)
+                                }
+                                aspectRatio={config.aspectRatio}
+                                // 新增：AI 配音配置
+                                voiceConfig={config.voice}
+                                onVoiceChange={(voiceConfig) => setConfig((c) => ({ ...c, voice: voiceConfig }))}
+                                // 新增：AI 字幕配置
+                                aiCaptionConfig={config.aiCaption}
+                                onAiCaptionChange={(aiConfig) => setConfig((c) => ({ ...c, aiCaption: aiConfig }))}
+                                videoCount={activeTab === "random" ? Math.ceil(randomImages.length / imagesPerVideo) : 1}
+                            />
                         </div>
                     </div>
                 </div>
 
                 {/* 底部按钮 */}
-                <div className="flex items-center justify-between mt-4 pt-4 border-t border-white/10">
-                    <Button variant="ghost" className="text-white/60">
-                        <Save className="h-4 w-4 mr-1.5" />
-                        保存方案
-                    </Button>
-
-                    {/* 中间：预估信息 */}
-                    <div className="flex items-center gap-6">
-                        {activeTab === "random" && randomImages.length > 0 && (
-                            <>
-                                <div className="flex items-center gap-2 text-sm">
-                                    <Film className="h-4 w-4 text-pink-400" />
-                                    <span className="text-white/50">可生成</span>
-                                    <span className="text-pink-400 font-bold">
-                                        {Math.floor(randomImages.length / imagesPerVideo) || 0}
-                                    </span>
-                                    <span className="text-white/50">条视频</span>
-                                </div>
-                                <div className="flex items-center gap-2 text-sm">
-                                    <Clock className="h-4 w-4 text-purple-400" />
-                                    <span className="text-white/50">每条约</span>
-                                    <span className="text-purple-400 font-bold">
-                                        {(imagesPerVideo * config.duration - (imagesPerVideo - 1) * 0.5).toFixed(1)}
-                                    </span>
-                                    <span className="text-white/50">秒</span>
-                                </div>
-                            </>
-                        )}
-                        {activeTab === "position" && positions.length > 0 && (
-                            <>
-                                <div className="flex items-center gap-2 text-sm">
-                                    <Film className="h-4 w-4 text-pink-400" />
-                                    <span className="text-white/50">可生成</span>
-                                    <span className="text-pink-400 font-bold">
-                                        {positions.filter(p => p.images.length > 0).length > 0 ? 1 : 0}
-                                    </span>
-                                    <span className="text-white/50">条视频</span>
-                                </div>
-                                <div className="flex items-center gap-2 text-sm">
-                                    <Clock className="h-4 w-4 text-purple-400" />
-                                    <span className="text-white/50">每条约</span>
-                                    <span className="text-purple-400 font-bold">
-                                        {calculateTotalDuration()}
-                                    </span>
-                                    <span className="text-white/50">秒</span>
-                                </div>
-                            </>
-                        )}
-                    </div>
-
-                    <div className="flex gap-2">
-                        <Button variant="ghost" onClick={() => onOpenChange(false)} className="text-white/60">
-                            取消
+                <DialogFooter className="border-t border-white/10 pt-4 shrink-0">
+                    <div className="flex w-full items-center justify-between">
+                        <Button variant="ghost" className="text-white/40 hover:text-white h-9 text-xs">
+                            <Save className="h-4 w-4 mr-1.5" />
+                            保存方案
                         </Button>
-                        <Button
-                            onClick={handleSubmit}
-                            className="bg-gradient-to-r from-pink-500 to-purple-500 hover:from-pink-600 hover:to-purple-600"
-                        >
-                            <Sparkles className="h-4 w-4 mr-1.5" />
-                            立即创建
-                        </Button>
+
+                        <div className="flex gap-2">
+                            <Button
+                                variant="ghost"
+                                onClick={() => onOpenChange(false)}
+                                className="text-white/60 hover:text-white h-9"
+                            >
+                                取消
+                            </Button>
+                            <Button
+                                onClick={handleSubmit}
+                                className="bg-gradient-to-r from-mermaid-pink to-mermaid-purple hover:from-mermaid-pink/90 hover:to-mermaid-purple/90 h-9 shadow-[0_0_20px_rgba(255,0,128,0.3)] transition-all hover:scale-105"
+                            >
+                                <Sparkles className="h-4 w-4 mr-1.5 animate-pulse" />
+                                立即创建
+                                {(randomImages.length > 0 || positions.length > 0) && (
+                                    <span className="ml-2 pl-2 border-l border-white/20 text-xs opacity-80">
+                                        {activeTab === 'random' ? Math.ceil(randomImages.length / imagesPerVideo) : (positions.length > 0 ? 1 : 0)} 条
+                                    </span>
+                                )}
+                            </Button>
+                        </div>
                     </div>
-                </div>
+                </DialogFooter>
 
                 {/* 隐藏的文件输入 */}
                 <input

@@ -30,7 +30,9 @@ export interface SlideshowTask {
     imageCount: number;
     duration: number;
     transition: string;
-    outputUrl?: string;
+    outputUrl?: string;           // 保留兼容性 - 第一个视频
+    outputUrls?: string[];        // 新增：所有视频 URL
+    videoCount?: number;          // 新增：生成的视频数量
     thumbnailUrl?: string;
     createdAt: Date;
 }
@@ -181,12 +183,27 @@ function SlideshowTaskCard({ task, onDelete, onDownload, onPlay }: SlideshowTask
     };
 
     const status = statusConfig[task.status];
+    const hasVideo = task.outputUrl || (task.outputUrls && task.outputUrls.length > 0);
+    const videoUrl = task.outputUrls?.[0] || task.outputUrl;
 
     return (
         <div className="group relative rounded-xl overflow-hidden border border-white/10 bg-white/5 hover:border-white/20 transition-all">
-            {/* 缩略图区域 */}
+            {/* 视频预览区域 */}
             <div className="aspect-[9/16] relative bg-black/30">
-                {task.thumbnailUrl ? (
+                {hasVideo && videoUrl ? (
+                    <video
+                        src={videoUrl}
+                        className="w-full h-full object-cover"
+                        muted
+                        loop
+                        playsInline
+                        onMouseEnter={(e) => e.currentTarget.play()}
+                        onMouseLeave={(e) => {
+                            e.currentTarget.pause();
+                            e.currentTarget.currentTime = 0;
+                        }}
+                    />
+                ) : task.thumbnailUrl ? (
                     <img
                         src={task.thumbnailUrl}
                         alt="预览"
@@ -206,8 +223,8 @@ function SlideshowTaskCard({ task, onDelete, onDownload, onPlay }: SlideshowTask
                     {status.label}
                 </div>
 
-                {/* 播放按钮 */}
-                {task.status === 'completed' && task.outputUrl && (
+                {/* 播放按钮覆盖层 */}
+                {task.status === 'completed' && hasVideo && (
                     <div className="absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity">
                         <button
                             onClick={onPlay}
@@ -232,7 +249,7 @@ function SlideshowTaskCard({ task, onDelete, onDownload, onPlay }: SlideshowTask
 
                 {/* 操作按钮 */}
                 <div className="flex items-center gap-1">
-                    {task.status === 'completed' && (
+                    {task.status === 'completed' && hasVideo && (
                         <button
                             onClick={onDownload}
                             className="flex-1 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-white/60 hover:text-white text-xs transition-colors"

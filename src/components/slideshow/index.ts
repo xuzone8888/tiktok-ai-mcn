@@ -9,3 +9,9 @@ export { SubtitleEditor, type SubtitleConfig } from './SubtitleEditor';
 export { TransitionPicker, type TransitionEffect } from './TransitionPicker';
 export { SlideshowSection, type SlideshowTask } from './SlideshowSection';
 export { CreateSlideshowModal } from './CreateSlideshowModal';
+
+// Phase 1: Enhanced Components
+export { BGMSelector, type BGMConfig, type BGMMode, PRESET_MUSIC, assignRandomMusic } from './BGMSelector';
+export { VoiceSelector, type VoiceConfig, PRESET_VOICES } from './VoiceSelector';
+export { AICaptionGenerator, type AICaptionConfig, type CaptionStyle, type CaptionMode } from './AICaptionGenerator';
+

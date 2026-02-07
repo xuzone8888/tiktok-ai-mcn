@@ -840,7 +840,45 @@ export const useVideoBatchStore = create<VideoBatchState & VideoBatchActions>()(
       storage: createJSONStorage(() => {
         // 只在客户端使用 localStorage
         if (typeof window !== "undefined") {
-          return localStorage;
+          return {
+            getItem: (name: string) => localStorage.getItem(name),
+            setItem: (name: string, value: string) => {
+              try {
+                localStorage.setItem(name, value);
+              } catch (e) {
+                console.warn(`[VideoBatchStore] localStorage写入失败(${(value.length / 1024).toFixed(1)}KB)，尝试清理旧数据...`, e);
+                // 清理策略：仅对已完成/失败任务移除大字段；保留 pending/processing 任务的数据
+                try {
+                  const parsed = JSON.parse(value);
+                  if (parsed?.state?.tasks) {
+                    const FINISHED = ["success", "failed"];
+                    parsed.state.tasks = parsed.state.tasks.map((t: Record<string, unknown>) => {
+                      if (FINISHED.includes(t.status as string)) {
+                        return {
+                          ...t,
+                          doubaoTalkingScript: null,
+                          doubaoAiVideoPrompt: null,
+                          images: [], // 已完成任务不再需要图片
+                        };
+                      }
+                      // pending / processing 任务仅清除脚本，保留图片（用户可能要重试）
+                      return {
+                        ...t,
+                        doubaoTalkingScript: null,
+                        doubaoAiVideoPrompt: null,
+                      };
+                    });
+                    const cleaned = JSON.stringify(parsed);
+                    localStorage.setItem(name, cleaned);
+                    console.log(`[VideoBatchStore] 清理后重试写入成功 (${(cleaned.length / 1024).toFixed(1)}KB)`);
+                  }
+                } catch {
+                  console.error("[VideoBatchStore] localStorage清理后仍失败，跳过持久化");
+                }
+              }
+            },
+            removeItem: (name: string) => localStorage.removeItem(name),
+          };
         }
         // 服务端返回空存储
         return {
@@ -853,6 +891,11 @@ export const useVideoBatchStore = create<VideoBatchState & VideoBatchActions>()(
       partialize: (state) => ({
         tasks: state.tasks.map(task => ({
           ...task,
+          // 已完成/失败的任务不持久化中间结果（口播脚本、AI提示词），大幅节省空间
+          ...(task.status === "success" || task.status === "failed" ? {
+            doubaoTalkingScript: null,
+            doubaoAiVideoPrompt: null,
+          } : {}),
           // 清理 blob URLs，只保留已上传的 http URLs
           images: task.images.map(img => ({
             ...img,
