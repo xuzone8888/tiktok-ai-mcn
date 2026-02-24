@@ -1904,9 +1904,12 @@ export default function VideoBatchPage() {
 
   // 智能下载视频 - 优先直连CDN，速度最快
   const downloadVideo = useCallback(async (url: string, filename: string, mode: "fast" | "named" = "fast"): Promise<boolean> => {
-    if (mode === "named") {
-      // 命名下载模式：走代理，可以指定文件名，但较慢
-      console.log("[Download] Named mode: using proxy for custom filename...");
+    // 望景API 的 URL 需要鉴权，必须走代理
+    const needsProxy = url.includes('60.205.120.27') || url.includes('/v1/videos/');
+
+    if (mode === "named" || needsProxy) {
+      // 命名下载模式 或 需鉴权的URL：走代理
+      console.log(`[Download] Using proxy (${needsProxy ? 'auth required' : 'named mode'})...`);
       return await downloadVideoViaProxy(url, filename);
     }
 
@@ -2832,10 +2835,14 @@ C07: [story CTA, inspiring, <50 chars]`,
                                     setTaskDownloadProgress(prev => ({ ...prev, [task.id]: 0 }));
 
                                     try {
-                                      const response = await fetch(task.soraVideoUrl, {
+                                      // 望景API URL 需要走代理下载
+                                      const needsProxy = task.soraVideoUrl.includes('60.205.120.27') || task.soraVideoUrl.includes('/v1/videos/');
+                                      const fetchUrl = needsProxy
+                                        ? `/api/download-proxy?url=${encodeURIComponent(task.soraVideoUrl)}&filename=${encodeURIComponent(filename)}`
+                                        : task.soraVideoUrl;
+                                      const response = await fetch(fetchUrl, {
                                         method: "GET",
-                                        mode: "cors",
-                                        credentials: "omit",
+                                        ...(needsProxy ? {} : { mode: "cors", credentials: "omit" }),
                                       });
 
                                       if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -2874,7 +2881,12 @@ C07: [story CTA, inspiring, <50 chars]`,
                                     } catch (error) {
                                       console.error(`Download Error:`, error);
                                       failedCount++;
-                                      openVideoInNewTab(task.soraVideoUrl);
+                                      // 望景API URL 走代理打开
+                                      if (task.soraVideoUrl.includes('60.205.120.27') || task.soraVideoUrl.includes('/v1/videos/')) {
+                                        openVideoInNewTab(`/api/download-proxy?url=${encodeURIComponent(task.soraVideoUrl)}&filename=video.mp4`);
+                                      } else {
+                                        openVideoInNewTab(task.soraVideoUrl);
+                                      }
                                     }
 
                                     setDownloadingTaskIds(prev => {

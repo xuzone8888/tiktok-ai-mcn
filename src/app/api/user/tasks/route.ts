@@ -305,12 +305,19 @@ export async function GET(request: Request) {
       const createdAt = new Date(task.created_at);
       const expiresAt = new Date(createdAt.getTime() + 7 * 24 * 60 * 60 * 1000);
 
+      // 望景API (备用线路) 的 /content 端点需要 Bearer Token，浏览器无法直连
+      // 自动包装为代理 URL，由服务端注入鉴权
+      let resultUrl = task.result_url || task.video_url || task.image_url || null;
+      if (resultUrl && resultUrl.includes('60.205.120.27') && resultUrl.includes('/v1/videos/')) {
+        resultUrl = `/api/download-proxy?url=${encodeURIComponent(resultUrl)}&filename=video.mp4`;
+      }
+
       return {
         id: task.id,
         type: task.type || "video",
         source: task.source || "quick_gen",
         status: task.status || "completed",
-        resultUrl: task.result_url || task.video_url || task.image_url || null,
+        resultUrl,
         thumbnailUrl: task.thumbnail_url || null,
         prompt: task.prompt || null,
         model: task.model || "unknown",
