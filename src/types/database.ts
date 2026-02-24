@@ -778,6 +778,98 @@ export interface Database {
       };
 
       // -----------------------------------------------------------------------
+      // Product Link Cache 表 (商品链接解析缓存)
+      // -----------------------------------------------------------------------
+      product_link_cache: {
+        Row: {
+          id: string;
+          url: string;
+          url_hash: string;
+          platform: string;
+          raw_title: string | null;
+          raw_description: string | null;
+          raw_price: string | null;
+          raw_promo_info: string | null;
+          raw_images: Json;
+          parsed_data: Json | null;
+          parse_status: string;
+          parse_error: string | null;
+          created_at: string;
+          updated_at: string;
+          last_fetched_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          url: string;
+          url_hash: string;
+          platform?: string;
+          raw_title?: string | null;
+          raw_description?: string | null;
+          raw_price?: string | null;
+          raw_promo_info?: string | null;
+          raw_images?: Json;
+          parsed_data?: Json | null;
+          parse_status?: string;
+          parse_error?: string | null;
+          last_fetched_at?: string | null;
+          updated_at?: string;
+        };
+        Update: {
+          url?: string;
+          platform?: string;
+          raw_title?: string | null;
+          raw_description?: string | null;
+          raw_price?: string | null;
+          raw_promo_info?: string | null;
+          raw_images?: Json;
+          parsed_data?: Json | null;
+          parse_status?: string;
+          parse_error?: string | null;
+          last_fetched_at?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+
+      // -----------------------------------------------------------------------
+      // Creative Templates 表 (创意模板)
+      // -----------------------------------------------------------------------
+      creative_templates: {
+        Row: {
+          id: string;
+          user_id: string;
+          name: string;
+          description: string | null;
+          type: string;
+          config: Json;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          name: string;
+          description?: string | null;
+          type: string;
+          config: Json;
+        };
+        Update: {
+          name?: string;
+          description?: string | null;
+          type?: string;
+          config?: Json;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "creative_templates_user_id_fkey";
+            columns: ["user_id"];
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
+
+      // -----------------------------------------------------------------------
       // TikTok Auth States 表 (OAuth 状态管理)
       // -----------------------------------------------------------------------
       tiktok_auth_states: {
