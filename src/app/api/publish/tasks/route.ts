@@ -106,8 +106,8 @@ export async function GET(request: NextRequest) {
         // Transform tasks to include summary info
         const transformedTasks = tasks?.map(task => ({
             ...task,
-            video_count: new Set(task.items?.map((i: { video_id: string }) => i.video_id)).size,
-            account_count: new Set(task.items?.map((i: { tiktok_account_id: string }) => i.tiktok_account_id)).size,
+            video_count: new Set(task.items?.map((i: { video_url: string }) => i.video_url)).size,
+            account_count: new Set(task.items?.map((i: { account_id: string }) => i.account_id)).size,
             total_items: task.items?.length || 0,
             completed_items: task.items?.filter((i: { status: string }) => i.status === 'published').length || 0,
             failed_items: task.items?.filter((i: { status: string }) => i.status === 'failed').length || 0
@@ -162,7 +162,7 @@ export async function POST(request: NextRequest) {
 
         // Check authorization status
         const now = new Date()
-        const expiredAccounts = accounts.filter(a => new Date(a.token_expires_at) <= now)
+        const expiredAccounts = accounts.filter(a => a.token_expires_at && new Date(a.token_expires_at) <= now)
         if (expiredAccounts.length > 0) {
             return NextResponse.json({
                 error: '部分账号授权已过期，请先刷新授权',

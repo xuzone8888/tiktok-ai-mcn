@@ -767,6 +767,47 @@ export interface Database {
             columns: ["user_id"];
             referencedRelation: "profiles";
             referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "link_video_jobs_ai_model_id_fkey";
+            columns: ["ai_model_id"];
+            referencedRelation: "ai_models";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
+
+      // -----------------------------------------------------------------------
+      // TikTok Auth States 表 (OAuth 状态管理)
+      // -----------------------------------------------------------------------
+      tiktok_auth_states: {
+        Row: {
+          id: string;
+          state: string;
+          code_verifier: string;
+          user_id: string;
+          expires_at: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          state: string;
+          code_verifier: string;
+          user_id: string;
+          expires_at: string;
+        };
+        Update: {
+          state?: string;
+          code_verifier?: string;
+          user_id?: string;
+          expires_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "tiktok_auth_states_user_id_fkey";
+            columns: ["user_id"];
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
           }
         ];
       };

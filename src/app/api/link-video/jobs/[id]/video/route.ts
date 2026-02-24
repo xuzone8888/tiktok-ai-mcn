@@ -11,6 +11,14 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { submitSora2, querySora2Result, getSora2ModelName } from '@/lib/suchuang-api';
 import { getLinkVideoCredits } from '@/types/link-video';
 
+interface VideoConfig {
+  duration: number;
+  aspect_ratio: string;
+  language?: string;
+  video_style?: string;
+  [key: string]: unknown;
+}
+
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -73,7 +81,8 @@ export async function POST(
 
     // 5. 检查/扣除积分
     // 批量生成时，每个视频都需要单独扣除积分
-    const creditsNeeded = getLinkVideoCredits(job.video_config.duration);
+    const videoConfig = job.video_config as unknown as VideoConfig | null;
+    const creditsNeeded = getLinkVideoCredits((videoConfig?.duration ?? 15) as Parameters<typeof getLinkVideoCredits>[0]);
 
     // 决定是否需要扣积分：
     // - 首次生成(batchIndex=0, retry=false, credits_used=0)：扣
@@ -111,11 +120,12 @@ export async function POST(
 
       // 记录交易
       const batchLabel = isBatchExtra ? ` (批量#${batchIndex + 1})` : '';
+      const jobVideoConfig = job.video_config as unknown as VideoConfig | null;
       await adminSupabase.from('credit_transactions').insert({
         user_id: user.id,
         amount: -creditsNeeded,
         type: 'usage',
-        description: `链接秒变视频 - ${job.video_config.duration}秒视频${batchLabel}`,
+        description: `链接秒变视频 - ${jobVideoConfig?.duration ?? 15}秒视频${batchLabel}`,
         reference_type: 'link_video_job',
         reference_id: jobId,
         balance_before: profile.credits,
@@ -184,8 +194,8 @@ export async function POST(
     finalPrompt += qualityModifiers[batchIndex % qualityModifiers.length];
 
     // 8. 确定 Sora 模型
-    const duration = job.video_config.duration;
-    const aspectRatio = job.video_config.aspect_ratio;
+    const duration = videoConfig?.duration ?? 15;
+    const aspectRatio = videoConfig?.aspect_ratio ?? '9:16';
     const isPro = duration === 15 || duration === 25;
     const quality = duration === 15 && isPro ? 'hd' : 'standard';
 
@@ -208,7 +218,7 @@ export async function POST(
     const videoResult = await submitSora2({
       prompt: finalPrompt,
       model,
-      duration,
+      duration: duration as 10 | 15 | 25,
       aspectRatio: aspectRatio as '9:16' | '16:9',
       url: job.grid_image_url, // 使用九宫格作为参考图
     });
@@ -312,7 +322,7 @@ export async function GET(
         const { data: existingGen } = await adminSupabase
           .from('generations')
           .select('id')
-          .eq('task_id', job.video_task_id)
+          .eq('task_id', job.video_task_id || '')
           .single();
 
         if (!existingGen) {
@@ -335,7 +345,7 @@ export async function GET(
               result_url: job.final_video_url,
               video_url: job.final_video_url,
               credit_cost: fullJob.credits_used || 0,
-              group_name: fullJob.title || '链接秒变',
+              group_name: '链接秒变',
               created_at: fullJob.created_at,
               completed_at: fullJob.completed_at || new Date().toISOString(),
             });
@@ -418,8 +428,8 @@ export async function GET(
             model: fullJob.ai_model?.name || 'Sora2',
             result_url: task.resultUrl,
             video_url: task.resultUrl,
-            credit_cost: externalTaskId ? getLinkVideoCredits(fullJob.video_config?.duration || 15) : (fullJob.credits_used || 0),
-            group_name: fullJob.title || '链接秒变',
+            credit_cost: externalTaskId ? getLinkVideoCredits(((fullJob.video_config as unknown as VideoConfig | null)?.duration || 15) as Parameters<typeof getLinkVideoCredits>[0]) : (fullJob.credits_used || 0),
+            group_name: '链接秒变',
             created_at: new Date().toISOString(),
             completed_at: new Date().toISOString(),
           });

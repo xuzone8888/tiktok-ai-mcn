@@ -46,8 +46,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             processing_items: task.items?.filter((i: { status: string }) => i.status === 'processing').length || 0,
             completed_items: task.items?.filter((i: { status: string }) => i.status === 'completed').length || 0,
             failed_items: task.items?.filter((i: { status: string }) => i.status === 'failed').length || 0,
-            video_count: new Set(task.items?.map((i: { video_id: string }) => i.video_id)).size,
-            account_count: new Set(task.items?.map((i: { tiktok_account_id: string }) => i.tiktok_account_id)).size
+            video_count: new Set(task.items?.map((i: { video_url: string }) => i.video_url)).size,
+            account_count: new Set(task.items?.map((i: { account_id: string }) => i.account_id)).size
         }
 
         return NextResponse.json({
