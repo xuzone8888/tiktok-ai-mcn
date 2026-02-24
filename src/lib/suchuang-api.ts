@@ -486,7 +486,7 @@ export async function submitSora2(
   if (apiLine === "line2") {
     const key = WANGJING_API_KEY;
     if (!key) {
-      return { success: false, error: "望景API key not configured (WANGJING_API_KEY)" };
+      return { success: false, error: "备用线路 API 未配置，请联系管理员" };
     }
 
     // 望景API 支持 10/15 秒
@@ -750,7 +750,7 @@ export async function querySora2Result(
   if (apiLine === "line2") {
     const key = WANGJING_API_KEY;
     if (!key) {
-      return { success: false, error: "望景API key not configured (WANGJING_API_KEY)" };
+      return { success: false, error: "备用线路 API 未配置，请联系管理员" };
     }
 
     try {
