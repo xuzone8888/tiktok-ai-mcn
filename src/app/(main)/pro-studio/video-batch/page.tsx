@@ -106,6 +106,7 @@ import {
   type VideoDuration,
   type VideoQuality,
   type ApiLineType,
+  type PipelineStep,
   API_LINES,
   PIPELINE_STEPS,
   getStatusLabel,
@@ -2858,7 +2859,7 @@ C07: [story CTA, inspiring, <50 chars]`,
                                         }
                                       }
 
-                                      const blob = new Blob(chunks, { type: "video/mp4" });
+                                      const blob = new Blob(chunks as unknown as BlobPart[], { type: "video/mp4" });
                                       const blobUrl = URL.createObjectURL(blob);
                                       const link = document.createElement("a");
                                       link.href = blobUrl;

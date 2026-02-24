@@ -72,14 +72,14 @@ export interface GlobalSettings {
 export interface BatchState {
   // 任务列表
   tasks: BatchTask[];
-  
+
   // 批量作业状态
   jobStatus: BatchJobStatus;
   currentTaskIndex: number;
-  
+
   // 全局设置 (用于批量添加时的默认配置)
   globalSettings: GlobalSettings;
-  
+
   // 选中的任务 (使用 Record 代替 Set 以避免序列化问题)
   selectedTaskIds: Record<string, boolean>;
 }
@@ -90,26 +90,26 @@ export interface BatchState {
 
 export interface BatchActions {
   // ==================== 任务管理 ====================
-  
+
   /**
    * 添加单个任务
    */
   addTask: (config: Partial<BatchTaskConfig>) => string;
-  
+
   /**
    * 批量添加任务 (从文件)
    * @param files - 上传的文件列表
    * @returns 添加的任务 ID 列表
    */
   addTasksFromFiles: (files: File[]) => Promise<string[]>;
-  
+
   /**
    * 批量添加任务 (从 Prompts)
    * @param prompts - Prompt 列表
    * @returns 添加的任务 ID 列表
    */
   addTasksFromPrompts: (prompts: string[]) => string[];
-  
+
   /**
    * 更新任务配置
    */
@@ -118,7 +118,7 @@ export interface BatchActions {
     key: K,
     value: BatchTaskConfig[K]
   ) => void;
-  
+
   /**
    * 更新任务状态
    */
@@ -127,88 +127,88 @@ export interface BatchActions {
     status: BatchTaskStatus,
     extra?: Partial<Pick<BatchTask, "taskId" | "resultUrl" | "error" | "progress" | "startedAt" | "completedAt">>
   ) => void;
-  
+
   /**
    * 复制任务
    */
   duplicateTask: (id: string) => string | null;
-  
+
   /**
    * 删除任务
    */
   removeTask: (id: string) => void;
-  
+
   /**
    * 批量删除任务
    */
   removeTasks: (ids: string[]) => void;
-  
+
   /**
    * 清空所有任务
    */
   clearAllTasks: () => void;
-  
+
   /**
    * 重新排序任务
    */
   reorderTasks: (fromIndex: number, toIndex: number) => void;
-  
+
   // ==================== 选择管理 ====================
-  
+
   /**
    * 切换任务选中状态
    */
   toggleTaskSelection: (id: string) => void;
-  
+
   /**
    * 全选/取消全选
    */
   selectAllTasks: (selected: boolean) => void;
-  
+
   /**
    * 清空选择
    */
   clearSelection: () => void;
-  
+
   /**
    * 删除选中的任务
    */
   removeSelectedTasks: () => void;
-  
+
   // ==================== 批量作业控制 ====================
-  
+
   /**
    * 开始批量处理
    */
   startBatch: () => void;
-  
+
   /**
    * 暂停批量处理
    */
   pauseBatch: () => void;
-  
+
   /**
    * 继续批量处理
    */
   resumeBatch: () => void;
-  
+
   /**
    * 取消批量处理
    */
   cancelBatch: () => void;
-  
+
   /**
    * 重置批量作业 (将所有任务重置为 draft)
    */
   resetBatch: () => void;
-  
+
   /**
    * 设置当前处理的任务索引
    */
   setCurrentTaskIndex: (index: number) => void;
-  
+
   // ==================== 全局设置 ====================
-  
+
   /**
    * 更新全局设置
    */
@@ -216,7 +216,7 @@ export interface BatchActions {
     key: K,
     value: GlobalSettings[K]
   ) => void;
-  
+
   /**
    * 应用全局设置到所有 draft 任务
    */
@@ -272,7 +272,7 @@ const initialState: BatchState = {
   currentTaskIndex: 0,
   globalSettings: {
     outputMode: "video",
-    videoModel: "sora-2",
+    videoModel: "sora2-10s",
     videoAspectRatio: "9:16",
     imageTier: "fast",
     imageAspectRatio: "auto",
@@ -297,7 +297,7 @@ export const useBatchStore = create<BatchState & BatchActions>()(
         addTask: (config) => {
           const id = generateId();
           const { globalSettings, tasks } = get();
-          
+
           const newTask: BatchTask = {
             id,
             index: tasks.length,
@@ -408,7 +408,7 @@ export const useBatchStore = create<BatchState & BatchActions>()(
         duplicateTask: (id) => {
           const { tasks } = get();
           const task = tasks.find((t) => t.id === id);
-          
+
           if (!task) return null;
 
           const newId = generateId();
@@ -663,7 +663,7 @@ export const useCurrentTask = () => useBatchStore((state) => {
 /**
  * 获取单个任务
  */
-export const useTask = (id: string) => useBatchStore((state) => 
+export const useTask = (id: string) => useBatchStore((state) =>
   state.tasks.find((t) => t.id === id)
 );
 

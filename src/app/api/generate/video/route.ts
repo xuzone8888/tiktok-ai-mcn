@@ -381,7 +381,7 @@ export async function GET(request: Request) {
 
           // 只有成功更新状态的请求才能退款
           if (updateResult && !updateError && generation?.user_id) {
-            const refundAmount = generation.credit_cost || CREDIT_COST_MAP[generation.duration] || 50;
+            const refundAmount = generation.credit_cost || (generation.duration ? CREDIT_COST_MAP[generation.duration] : null) || 50;
 
             const { data: profile } = await supabase
               .from("profiles")

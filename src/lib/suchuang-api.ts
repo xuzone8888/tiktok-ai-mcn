@@ -479,7 +479,7 @@ interface Sora2SubmitResponse {
 export async function submitSora2(
   params: Sora2Params & { model?: Sora2ModelType },
   apiKey?: string,
-  apiLine: "line1" | "line2" = "line1"
+  apiLine: "line1" | "line2" | "line3" = "line1"
 ): Promise<{ success: boolean; taskId?: string; error?: string }> {
 
   // ========== Line2: 吾音科技 sora2-new API (完全不同的格式) ==========
@@ -724,7 +724,7 @@ export async function querySora2Result(
   taskId: string,
   usePro: boolean = false,
   apiKey?: string,
-  apiLine: "line1" | "line2" = "line1"
+  apiLine: "line1" | "line2" | "line3" = "line1"
 ): Promise<{ success: boolean; task?: TaskStatus; error?: string; raw?: unknown }> {
 
   // ========== Line2: 吾音科技查询 API (完全不同的格式) ==========

@@ -8,9 +8,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import type { 
-  VideoConfig, 
-  ManualProductInfo, 
+import type {
+  VideoConfig,
+  ManualProductInfo,
   LinkVideoJob,
   DEFAULT_VIDEO_CONFIG,
 } from '@/types/link-video';
@@ -197,7 +197,7 @@ export async function POST(request: NextRequest) {
         status: 'created',
         current_step: 2, // 创建时已完成第1步 (链接解析)
         credits_estimated: creditsEstimated,
-      })
+      } as never)
       .select()
       .single();
 

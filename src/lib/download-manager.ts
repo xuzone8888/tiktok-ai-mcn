@@ -79,16 +79,16 @@ const STORAGE_KEY = "download_speed_test_results";
  */
 export function getCachedSpeedTestResults(): SpeedTestResult[] {
   if (typeof window === "undefined") return [];
-  
+
   try {
     const cached = localStorage.getItem(STORAGE_KEY);
     if (!cached) return [];
-    
+
     const data = JSON.parse(cached);
     const now = Date.now();
-    
+
     // 过滤过期的结果
-    return (data.results || []).filter((r: SpeedTestResult) => 
+    return (data.results || []).filter((r: SpeedTestResult) =>
       r.testedAt && (now - r.testedAt) < DEFAULT_CONFIG.cacheExpiry
     );
   } catch {
@@ -101,7 +101,7 @@ export function getCachedSpeedTestResults(): SpeedTestResult[] {
  */
 export function saveSpeedTestResults(results: SpeedTestResult[]): void {
   if (typeof window === "undefined") return;
-  
+
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({
       results,
@@ -150,23 +150,23 @@ export async function fetchAvailableRoutes(): Promise<DownloadRoute[]> {
  * 测试单条线路速度
  */
 export async function testRouteSpeed(
-  routeId: string, 
+  routeId: string,
   testUrl?: string,
   onProgress?: (status: string) => void
 ): Promise<SpeedTestResult> {
   onProgress?.(`正在测试 ${routeId} 线路...`);
-  
+
   try {
     const response = await fetch("/api/speed-test", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ routeId, testUrl }),
     });
-    
+
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
     }
-    
+
     const result = await response.json();
     return {
       ...result,
@@ -192,7 +192,7 @@ export async function testAllRoutes(
 ): Promise<SpeedTestResult[]> {
   const routes = await fetchAvailableRoutes();
   const results: SpeedTestResult[] = [];
-  
+
   for (const route of routes) {
     // 初始化为testing状态
     const pendingResult: SpeedTestResult = {
@@ -203,10 +203,10 @@ export async function testAllRoutes(
     };
     results.push(pendingResult);
     onProgress?.(results, route.name);
-    
+
     // 执行测速
     const result = await testRouteSpeed(route.id);
-    
+
     // 更新结果
     const index = results.findIndex(r => r.routeId === route.id);
     if (index >= 0) {
@@ -214,10 +214,10 @@ export async function testAllRoutes(
     }
     onProgress?.(results, route.name);
   }
-  
+
   // 保存结果
   saveSpeedTestResults(results);
-  
+
   return results;
 }
 
@@ -234,41 +234,41 @@ export async function testRouteSpeedInBrowser(
     const startTime = Date.now();
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 30000);
-    
+
     const response = await fetch(url, {
       signal: controller.signal,
       cache: "no-store",
     });
-    
+
     clearTimeout(timeoutId);
-    
+
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
     }
-    
+
     const contentLength = response.headers.get("content-length");
     const totalBytes = contentLength ? parseInt(contentLength, 10) : 0;
-    
+
     // 使用 reader 读取数据以获取进度
     const reader = response.body?.getReader();
     if (!reader) throw new Error("No reader available");
-    
+
     let bytesLoaded = 0;
     const chunks: Uint8Array[] = [];
-    
+
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
-      
+
       chunks.push(value);
       bytesLoaded += value.length;
       onProgress?.(bytesLoaded, totalBytes);
     }
-    
+
     const endTime = Date.now();
     const duration = (endTime - startTime) / 1000;
     const speedMBps = bytesLoaded / duration / (1024 * 1024);
-    
+
     return {
       speed: Math.round(speedMBps * 100) / 100,
       duration: Math.round(duration * 100) / 100,
@@ -297,38 +297,38 @@ export async function downloadViaProxy(
       filename,
       ...(routeId && { route: routeId }),
     });
-    
+
     const proxyUrl = `/api/download-proxy?${params}`;
     const response = await fetch(proxyUrl);
-    
+
     if (!response.ok) {
       const error = await response.json().catch(() => ({ error: "下载失败" }));
       throw new Error(error.error || `HTTP ${response.status}`);
     }
-    
+
     const contentLength = response.headers.get("content-length");
     const totalBytes = contentLength ? parseInt(contentLength, 10) : 0;
-    
+
     // 如果有进度回调且支持流式读取
     if (onProgress && response.body) {
       const reader = response.body.getReader();
       const chunks: Uint8Array[] = [];
       let bytesLoaded = 0;
-      
+
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-        
+
         chunks.push(value);
         bytesLoaded += value.length;
         onProgress(bytesLoaded, totalBytes);
       }
-      
+
       // 合并所有chunks
-      const blob = new Blob(chunks);
+      const blob = new Blob(chunks as unknown as BlobPart[]);
       return blob;
     }
-    
+
     return await response.blob();
   } catch (error) {
     console.error("[DownloadManager] Proxy download failed:", error);
@@ -364,34 +364,34 @@ export async function smartDownload(
   }
 ): Promise<boolean> {
   const { preferredRoute, maxRetries = 3, onProgress, onRetry } = options || {};
-  
+
   // 获取最佳线路
   let routeId = preferredRoute;
   if (!routeId) {
     const cachedResults = getCachedSpeedTestResults();
     routeId = getBestRouteId(cachedResults) || undefined;
   }
-  
+
   // 尝试下载
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       console.log(`[DownloadManager] Download attempt ${attempt}/${maxRetries}, route: ${routeId || "default"}`);
-      
+
       const blob = await downloadViaProxy(url, filename, routeId, onProgress);
       if (blob && blob.size > 0) {
         triggerBrowserDownload(blob, filename);
         return true;
       }
-      
+
       throw new Error("下载数据为空");
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : "下载失败";
       console.error(`[DownloadManager] Attempt ${attempt} failed:`, errorMsg);
-      
+
       if (attempt < maxRetries) {
         onRetry?.(attempt, errorMsg);
         await new Promise(resolve => setTimeout(resolve, DEFAULT_CONFIG.retryDelay));
-        
+
         // 切换到备用线路
         if (routeId && routeId !== "backup") {
           routeId = "backup";
@@ -400,7 +400,7 @@ export async function smartDownload(
       }
     }
   }
-  
+
   return false;
 }
 
@@ -428,7 +428,7 @@ export async function batchDownload(
     onTaskComplete,
     onCancel,
   } = options || {};
-  
+
   const results = { success: 0, failed: 0, cancelled: false };
   const progress: DownloadProgress = {
     total: tasks.length,
@@ -437,40 +437,40 @@ export async function batchDownload(
     inProgress: 0,
     startTime: Date.now(),
   };
-  
+
   // 获取最佳线路
   const cachedResults = getCachedSpeedTestResults();
   const bestRoute = getBestRouteId(cachedResults);
-  
+
   // 创建任务队列
   const queue = [...tasks];
   const activeDownloads = new Map<string, Promise<boolean>>();
-  
+
   const processNext = async (): Promise<void> => {
     // 检查是否取消
     if (onCancel?.()) {
       results.cancelled = true;
       return;
     }
-    
+
     // 获取下一个任务
     const task = queue.shift();
     if (!task) return;
-    
+
     progress.inProgress++;
     progress.currentFile = task.filename;
     onProgress?.({ ...progress });
-    
+
     // 执行下载
     const downloadPromise = smartDownload(task.url, task.filename, {
       preferredRoute: bestRoute || undefined,
     });
-    
+
     activeDownloads.set(task.id, downloadPromise);
-    
+
     try {
       const success = await downloadPromise;
-      
+
       if (success) {
         results.success++;
         progress.completed++;
@@ -478,7 +478,7 @@ export async function batchDownload(
         results.failed++;
         progress.failed++;
       }
-      
+
       onTaskComplete?.(task.id, success, task.filename);
     } catch {
       results.failed++;
@@ -487,22 +487,22 @@ export async function batchDownload(
     } finally {
       progress.inProgress--;
       activeDownloads.delete(task.id);
-      
+
       // 计算预估剩余时间
       const elapsed = Date.now() - progress.startTime;
       const avgTimePerTask = elapsed / (progress.completed + progress.failed);
       const remaining = progress.total - progress.completed - progress.failed;
       progress.estimatedTimeRemaining = Math.round(avgTimePerTask * remaining / 1000);
-      
+
       onProgress?.({ ...progress });
     }
-    
+
     // 添加下载间隔
     if (queue.length > 0 && delayBetweenDownloads > 0) {
       await new Promise(resolve => setTimeout(resolve, delayBetweenDownloads));
     }
   };
-  
+
   // 启动并发下载
   const workers: Promise<void>[] = [];
   for (let i = 0; i < Math.min(maxConcurrent, tasks.length); i++) {
@@ -512,10 +512,10 @@ export async function batchDownload(
       }
     })());
   }
-  
+
   // 等待所有下载完成
   await Promise.all(workers);
-  
+
   return results;
 }
 

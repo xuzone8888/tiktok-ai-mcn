@@ -8,8 +8,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createServerClient } from "@/lib/supabase/server";
 import { getEcomImageCost } from "@/lib/credits";
-import type { 
-  EcomImageMode, 
+import type {
+  EcomImageMode,
   ImageModelType,
   EcomLanguage,
   EcomAspectRatio,
@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
     // 1. 验证用户身份
     const supabase = await createServerClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
-    
+
     if (authError || !user) {
       return NextResponse.json(
         { success: false, error: "请先登录" },
@@ -67,7 +67,7 @@ export async function POST(request: NextRequest) {
 
     const validModes: EcomImageMode[] = [
       "ecom_five_pack",
-      "white_background", 
+      "white_background",
       "scene_image",
       "try_on",
       "buyer_show"
@@ -126,8 +126,8 @@ export async function POST(request: NextRequest) {
 
     if (profile.credits < creditsCost) {
       return NextResponse.json(
-        { 
-          success: false, 
+        {
+          success: false,
           error: `积分不足，本次任务需要 ${creditsCost} 积分，当前余额 ${profile.credits} 积分`,
           credits_required: creditsCost,
           credits_current: profile.credits,
@@ -160,7 +160,7 @@ export async function POST(request: NextRequest) {
 
     const { data: task, error: insertError } = await adminClient
       .from("ecom_image_tasks")
-      .insert(taskData)
+      .insert(taskData as never)
       .select()
       .single();
 

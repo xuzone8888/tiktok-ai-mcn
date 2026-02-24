@@ -95,7 +95,7 @@ export async function GET(request: NextRequest) {
 
     // 合并模拟产品和用户上传的产品
     const uploadedProducts: Product[] = [];
-    for (const [id, data] of mockProductStore.entries()) {
+    for (const [id, data] of Array.from(mockProductStore.entries())) {
       uploadedProducts.push({
         id,
         user_id: "00000000-0000-0000-0000-000000000001",

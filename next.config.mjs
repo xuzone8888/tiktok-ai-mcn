@@ -6,7 +6,7 @@ const nextConfig = {
   },
   // TypeScript 配置 - 339 个预存 TS 错误待清理，暂保持跳过
   typescript: {
-    ignoreBuildErrors: true,
+    ignoreBuildErrors: false,
   },
   // API 配置 - 增加请求体大小限制以支持 base64 图片
   serverExternalPackages: [],

@@ -347,12 +347,12 @@ export default function AdminUsersPage() {
 
   const handleOpenRestrictionsDialog = (user: AdminUser) => {
     setSelectedUser(user);
-    setFeatureRestrictions(user.feature_restrictions || {
+    setFeatureRestrictions((user.feature_restrictions || {
       video_generation: true,
       image_generation: true,
       model_hiring: true,
       batch_processing: true,
-    });
+    }) as typeof featureRestrictions);
     setShowRestrictionsDialog(true);
   };
 

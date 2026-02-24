@@ -138,7 +138,7 @@ async function parseGenericPage(url: string): Promise<ParseResult> {
     }
 
     const html = await response.text();
-    
+
     // 提取标题
     let title = '';
     const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
@@ -161,7 +161,7 @@ async function parseGenericPage(url: string): Promise<ParseResult> {
 
     // 提取图片
     const images: string[] = [];
-    
+
     // Open Graph 图片
     const ogImageMatch = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i);
     if (ogImageMatch) {
@@ -170,7 +170,7 @@ async function parseGenericPage(url: string): Promise<ParseResult> {
 
     // 主图
     const mainImageMatches = html.matchAll(/<img[^>]+src=["']([^"']+)["'][^>]*>/gi);
-    for (const match of mainImageMatches) {
+    for (const match of Array.from(html.matchAll(/<img[^>]+src=["']([^"']+)["'][^>]*>/gi))) {
       const src = match[1];
       if (src && !images.includes(src)) {
         images.push(src);
@@ -484,7 +484,7 @@ export async function aiEnhanceProductInfo(
 
     const data = await response.json();
     const content = data.choices?.[0]?.message?.content || '';
-    
+
     // 尝试解析 JSON
     const match = content.match(/\{[\s\S]*\}/);
     if (match) {

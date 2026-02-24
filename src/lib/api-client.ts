@@ -79,7 +79,7 @@ function setCache<T>(key: string, data: T, ttl: number): void {
 // 清理过期缓存
 function cleanupCache(): void {
   const now = Date.now();
-  for (const [key, entry] of cache.entries()) {
+  for (const [key, entry] of Array.from(cache.entries())) {
     if (now - entry.timestamp > entry.ttl) {
       cache.delete(key);
     }
@@ -139,7 +139,7 @@ async function fetchWithRetry<T>(
       }
     } catch (error) {
       lastError = error as Error;
-      
+
       // 如果是最后一次重试，或者是客户端错误（4xx），不再重试
       if (i === retries || (error instanceof Error && error.message.includes('HTTP 4'))) {
         break;
@@ -299,7 +299,7 @@ export const apiClient = {
    * 清除指定 URL 的缓存
    */
   invalidateCache(url: string): void {
-    for (const key of cache.keys()) {
+    for (const key of Array.from(cache.keys())) {
       if (key.includes(url)) {
         cache.delete(key);
       }

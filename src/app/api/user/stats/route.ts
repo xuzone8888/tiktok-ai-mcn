@@ -15,14 +15,14 @@ export interface UserStats {
     thisMonth: number;       // 本月使用积分
     lastMonth: number;       // 上月使用积分
   };
-  
+
   // 签约模特
   models: {
     total: number;           // 签约模特数量
     active: number;          // 活跃合约数
     expiringSoon: number;    // 即将到期（7天内）
   };
-  
+
   // 视频生成
   videos: {
     total: number;           // 总生成视频数
@@ -31,7 +31,7 @@ export interface UserStats {
     completed: number;       // 成功数
     failed: number;          // 失败数
   };
-  
+
   // 图片生成
   images: {
     total: number;           // 总生成图片数
@@ -40,7 +40,7 @@ export interface UserStats {
     completed: number;       // 成功数
     failed: number;          // 失败数
   };
-  
+
   // 最近活动
   recentActivity: {
     type: "video" | "image";
@@ -58,10 +58,10 @@ export interface UserStats {
 export async function GET() {
   try {
     const supabase = await createClient();
-    
+
     // 获取当前登录用户
     const { data: { user } } = await supabase.auth.getUser();
-    
+
     if (!user) {
       return NextResponse.json(
         { success: false, error: "未登录" },
@@ -124,7 +124,7 @@ export async function GET() {
     const creditsThisMonth = (generations || [])
       .filter(g => new Date(g.created_at) >= thisMonthStart)
       .reduce((sum, g) => sum + (g.credit_cost || 0), 0);
-    
+
     const creditsLastMonth = (generations || [])
       .filter(g => {
         const date = new Date(g.created_at);
@@ -145,7 +145,7 @@ export async function GET() {
 
     const recentActivity = (recentTasks || []).map(task => ({
       type: task.type || "video",
-      title: task.prompt?.substring(0, 30) + (task.prompt?.length > 30 ? "..." : "") || "未命名任务",
+      title: (task.prompt?.substring(0, 30) || "") + ((task.prompt?.length ?? 0) > 30 ? "..." : "") || "未命名任务",
       model: task.model || "Unknown",
       status: task.status || "completed",
       createdAt: task.created_at,
@@ -177,7 +177,7 @@ export async function GET() {
         completed: imageTasks.filter(i => i.status === "completed").length,
         failed: imageTasks.filter(i => i.status === "failed").length,
       },
-      recentActivity,
+      recentActivity: recentActivity as UserStats['recentActivity'],
     };
 
     return NextResponse.json({

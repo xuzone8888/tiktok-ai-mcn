@@ -227,7 +227,7 @@ async function queryPendingItems(
         return []
     }
 
-    return data || []
+    return (data || []) as unknown as PublishItem[]
 }
 
 /**

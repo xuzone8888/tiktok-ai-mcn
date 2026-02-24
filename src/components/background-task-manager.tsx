@@ -13,6 +13,7 @@
 import { useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useVideoBatchStore } from "@/stores/video-batch-store";
+import type { PipelineStep } from "@/types/video-batch";
 import { useImageBatchStore } from "@/stores/image-batch-store";
 import { useQuickGenStore } from "@/stores/quick-gen-store";
 import { useToast } from "@/hooks/use-toast";
@@ -28,12 +29,12 @@ function useVideoTaskExecutor() {
   const jobStatus = useVideoBatchStore((state) => state.jobStatus);
   const globalSettings = useVideoBatchStore((state) => state.globalSettings);
   const updateTaskStatus = useVideoBatchStore((state) => state.updateTaskStatus);
-  const setJobStatus = useVideoBatchStore((state) => state.setJobStatus);
-  
+  const setJobStatus = (status: string) => useVideoBatchStore.setState({ jobStatus: status as import("@/stores/video-batch-store").VideoBatchJobStatus });
+
   const isExecutingRef = useRef(false);
   const executedTasksRef = useRef<Set<string>>(new Set());
   const userIdRef = useRef<string | null>(null);
-  
+
   // 获取用户 ID
   useEffect(() => {
     fetch("/api/user/credits")
@@ -85,7 +86,7 @@ function useVideoTaskExecutor() {
       // 【修复】优先使用任务创建时保存的模特ID，而不是当前全局设置
       const taskModelId = task.aiModelId || globalSettings.aiModelId;
       const taskUseAiModel = task.useAiModel ?? globalSettings.useAiModel;
-      
+
       console.log("[VideoTaskExecutor] Task AI model config:", {
         taskId: task.id,
         taskModelId: task.aiModelId,
@@ -95,7 +96,7 @@ function useVideoTaskExecutor() {
         finalModelId: taskModelId,
         finalUseAiModel: taskUseAiModel,
       });
-      
+
       // 【优化】如果启用了 AI 模特，在任务开始前验证合约是否有效
       if (taskUseAiModel && taskModelId) {
         try {
@@ -105,7 +106,7 @@ function useVideoTaskExecutor() {
             body: JSON.stringify({ modelId: taskModelId }),
           });
           const verifyData = await verifyRes.json();
-          
+
           if (!verifyData.valid) {
             console.warn("[VideoTaskExecutor] AI model contract invalid:", {
               modelId: taskModelId,
@@ -125,10 +126,10 @@ function useVideoTaskExecutor() {
           // 验证失败时不阻止任务执行
         }
       }
-      
+
       // 上传图片
       updateTaskStatus(taskId, "uploading", { currentStep: 1, progress: 10 });
-      
+
       const uploadedUrls: string[] = [];
       for (const img of task.images) {
         // 验证图片 URL 是否有效
@@ -136,12 +137,12 @@ function useVideoTaskExecutor() {
           console.warn("[VideoTaskExecutor] Skipping image with no URL or file:", img.id);
           continue;
         }
-        
+
         if (img.file) {
           const formData = new FormData();
           formData.append("file", img.file);
           formData.append("folder", "video-batch");
-          
+
           const uploadRes = await fetch("/api/upload/image", {
             method: "POST",
             body: formData,
@@ -154,7 +155,7 @@ function useVideoTaskExecutor() {
             console.error("[VideoTaskExecutor] Failed to parse upload response:", uploadText, e);
             throw new Error("图片上传服务响应格式错误");
           }
-          
+
           if (!uploadData.success) {
             throw new Error(uploadData.error || "图片上传失败");
           }
@@ -185,10 +186,10 @@ function useVideoTaskExecutor() {
           imageBase64List.push(url);
           continue;
         }
-        
+
         try {
           const response = await fetch(url);
-          
+
           // 验证响应是否为图片
           const contentType = response.headers.get("content-type") || "";
           if (!response.ok || !contentType.startsWith("image/")) {
@@ -197,7 +198,7 @@ function useVideoTaskExecutor() {
             imageBase64List.push(url);
             continue;
           }
-          
+
           const blob = await response.blob();
           const base64 = await new Promise<string>((resolve, reject) => {
             const reader = new FileReader();
@@ -215,7 +216,7 @@ function useVideoTaskExecutor() {
 
       // 生成脚本
       updateTaskStatus(taskId, "generating_script", { currentStep: 2, progress: 30 });
-      
+
       const scriptRes = await fetch("/api/video-batch/generate-talking-script", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -225,7 +226,7 @@ function useVideoTaskExecutor() {
           language: globalSettings.language,
         }),
       });
-      
+
       // 检查响应状态
       if (!scriptRes.ok) {
         const contentType = scriptRes.headers.get("content-type") || "";
@@ -234,7 +235,7 @@ function useVideoTaskExecutor() {
           throw new Error(`脚本生成服务暂时不可用 (${scriptRes.status})，请稍后重试`);
         }
       }
-      
+
       const scriptText = await scriptRes.text();
       let scriptResult;
       try {
@@ -247,15 +248,15 @@ function useVideoTaskExecutor() {
         throw new Error(scriptResult.error || "脚本生成失败");
       }
 
-      updateTaskStatus(taskId, "generating_script", { 
-        currentStep: 2, 
-        progress: 50, 
-        doubaoTalkingScript: scriptResult.data.script 
+      updateTaskStatus(taskId, "generating_script", {
+        currentStep: 2,
+        progress: 50,
+        doubaoTalkingScript: scriptResult.data.script
       });
 
       // 生成提示词
       updateTaskStatus(taskId, "generating_prompt", { currentStep: 3, progress: 60 });
-      
+
       const promptRes = await fetch("/api/video-batch/generate-ai-video-prompt", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -269,7 +270,7 @@ function useVideoTaskExecutor() {
           modelTriggerWord: taskUseAiModel ? globalSettings.aiModelTriggerWord : undefined,
         }),
       });
-      
+
       // 检查响应状态
       if (!promptRes.ok) {
         const contentType = promptRes.headers.get("content-type") || "";
@@ -278,7 +279,7 @@ function useVideoTaskExecutor() {
           throw new Error(`提示词生成服务暂时不可用 (${promptRes.status})，请稍后重试`);
         }
       }
-      
+
       const promptText = await promptRes.text();
       let promptResult;
       try {
@@ -298,20 +299,20 @@ function useVideoTaskExecutor() {
         finalVideoPrompt = `[AI MODEL: ${globalSettings.aiModelTriggerWord}]\n\n${finalVideoPrompt}`;
       }
 
-      updateTaskStatus(taskId, "generating_prompt", { 
-        currentStep: 3, 
-        progress: 75, 
-        doubaoAiVideoPrompt: finalVideoPrompt 
+      updateTaskStatus(taskId, "generating_prompt", {
+        currentStep: 3,
+        progress: 75,
+        doubaoAiVideoPrompt: finalVideoPrompt
       });
 
       // 生成视频
       updateTaskStatus(taskId, "generating_video", { currentStep: 4, progress: 80 });
-      
+
       const mainGridImageUrl = uploadedUrls[0];
-      
+
       // 确保 userId 已获取
       console.log("[VideoTaskExecutor] Calling generate-sora-video with userId:", userIdRef.current);
-      
+
       const videoRes = await fetch("/api/video-batch/generate-sora-video", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -326,7 +327,7 @@ function useVideoTaskExecutor() {
           userId: userIdRef.current, // 传递用户 ID 以写入任务日志
         }),
       });
-      
+
       // 检查响应状态
       if (!videoRes.ok) {
         const contentType = videoRes.headers.get("content-type") || "";
@@ -335,7 +336,7 @@ function useVideoTaskExecutor() {
           throw new Error(`视频生成服务暂时不可用 (${videoRes.status})，请稍后重试`);
         }
       }
-      
+
       const videoText = await videoRes.text();
       let videoResult;
       try {
@@ -350,7 +351,7 @@ function useVideoTaskExecutor() {
 
       // 任务成功
       updateTaskStatus(taskId, "success", {
-        currentStep: 5,
+        currentStep: 4 as PipelineStep,
         progress: 100,
         soraTaskId: videoResult.data.soraTaskId,
         soraVideoUrl: videoResult.data.videoUrl,
@@ -391,10 +392,10 @@ function useVideoTaskExecutor() {
       );
       if (!hasRunningTasks && tasks.length > 0) {
         setJobStatus("completed");
-        
+
         const successCount = tasks.filter(t => t.status === "success").length;
         const failedCount = tasks.filter(t => t.status === "failed").length;
-        
+
         if (successCount > 0 || failedCount > 0) {
           toast({
             title: "📹 批量视频任务完成",
@@ -412,17 +413,17 @@ function useVideoTaskExecutor() {
     // 顺序执行任务
     const executeNext = async () => {
       isExecutingRef.current = true;
-      
+
       for (const task of pendingTasks) {
         if (executedTasksRef.current.has(task.id)) continue;
         executedTasksRef.current.add(task.id);
-        
+
         await executeVideoTask(task.id);
-        
+
         // 任务间延迟
         await new Promise(resolve => setTimeout(resolve, 2000));
       }
-      
+
       isExecutingRef.current = false;
     };
 
@@ -448,11 +449,11 @@ function useImageTaskExecutor() {
   const jobStatus = useImageBatchStore((state) => state.jobStatus);
   const updateTaskResult = useImageBatchStore((state) => state.updateTaskResult);
   const setJobStatus = useImageBatchStore((state) => state.setJobStatus);
-  
+
   const isExecutingRef = useRef(false);
   const executedTasksRef = useRef<Set<string>>(new Set());
   const userIdRef = useRef<string | null>(null);
-  
+
   // 获取用户 ID
   useEffect(() => {
     fetch("/api/user/credits")
@@ -541,7 +542,7 @@ function useImageTaskExecutor() {
       if (result.success && result.data?.taskId) {
         const apiTaskId = result.data.taskId;
         const taskModel = result.data.model;
-        
+
         updateTaskResult(taskId, { apiTaskId });
 
         // 轮询等待结果
@@ -600,10 +601,10 @@ function useImageTaskExecutor() {
       const hasProcessingTasks = tasks.some(t => t.status === "processing");
       if (!hasProcessingTasks && tasks.length > 0) {
         setJobStatus("completed");
-        
+
         const successCount = tasks.filter(t => t.status === "completed").length;
         const failedCount = tasks.filter(t => t.status === "failed").length;
-        
+
         if (successCount > 0 || failedCount > 0) {
           toast({
             title: "🖼️ 批量图片任务完成",
@@ -653,11 +654,11 @@ function useQuickGenTaskExecutor() {
   const { toast } = useToast();
   const activeTask = useQuickGenStore((state) => state.activeVideoTask);
   const updateTaskStatus = useQuickGenStore((state) => state.updateTaskStatus);
-  
+
   const isExecutingRef = useRef(false);
   const executedTaskIdRef = useRef<string | null>(null);
   const userIdRef = useRef<string | null>(null);
-  
+
   // 获取用户 ID
   useEffect(() => {
     fetch("/api/user/credits")
@@ -682,7 +683,7 @@ function useQuickGenTaskExecutor() {
     if (!activeTask) return;
     if (isExecutingRef.current) return;
     if (executedTaskIdRef.current === activeTask.id) return;
-    
+
     const needsExecution = activeTask.status === "idle" || activeTask.status === "polling";
     if (!needsExecution) return;
 
@@ -720,8 +721,8 @@ function useQuickGenTaskExecutor() {
           }
           if (!result.success) throw new Error(result.error || "提交失败");
 
-          updateTaskStatus(activeTask.id, "polling", { 
-            progress: 20, taskId: result.data.taskId, creditsDeducted: true 
+          updateTaskStatus(activeTask.id, "polling", {
+            progress: 20, taskId: result.data.taskId, creditsDeducted: true
           });
         }
 
@@ -732,7 +733,7 @@ function useQuickGenTaskExecutor() {
 
         const usePro = task.quality === "hd" || task.duration === 25;
         const maxAttempts = usePro ? 120 : 40;
-        
+
         for (let i = 0; i < maxAttempts; i++) {
           await new Promise(r => setTimeout(r, 10000));
           updateTaskStatus(task.id, "polling", { progress: Math.min(20 + i * 2, 90) });
@@ -752,8 +753,8 @@ function useQuickGenTaskExecutor() {
               updateTaskStatus(task.id, "completed", {
                 progress: 100, resultUrl: statusData.data.videoUrl, completedAt: new Date().toISOString()
               });
-              toast({ 
-                title: "🎉 快速视频生成完成", 
+              toast({
+                title: "🎉 快速视频生成完成",
                 description: (
                   <a href="/quick-gen" className="text-amber-400 hover:underline flex items-center gap-1">
                     点击查看结果 <ExternalLink className="h-3 w-3" />
@@ -797,11 +798,11 @@ function useQuickGenImageTaskExecutor() {
   const { toast } = useToast();
   const activeTask = useQuickGenStore((state) => state.activeImageTask);
   const updateTaskStatus = useQuickGenStore((state) => state.updateImageTaskStatus);
-  
+
   const isExecutingRef = useRef(false);
   const executedTaskIdRef = useRef<string | null>(null);
   const userIdRef = useRef<string | null>(null);
-  
+
   // 获取用户 ID
   useEffect(() => {
     fetch("/api/user/credits")
@@ -826,7 +827,7 @@ function useQuickGenImageTaskExecutor() {
     if (!activeTask) return;
     if (isExecutingRef.current) return;
     if (executedTaskIdRef.current === activeTask.id) return;
-    
+
     const needsExecution = activeTask.status === "idle" || activeTask.status === "polling";
     if (!needsExecution) return;
 
@@ -864,8 +865,8 @@ function useQuickGenImageTaskExecutor() {
           }
           if (!result.success) throw new Error(result.error || "提交失败");
 
-          updateTaskStatus(activeTask.id, "polling", { 
-            progress: 20, taskId: result.data.taskId, creditsDeducted: true 
+          updateTaskStatus(activeTask.id, "polling", {
+            progress: 20, taskId: result.data.taskId, creditsDeducted: true
           });
         }
 
@@ -875,7 +876,7 @@ function useQuickGenImageTaskExecutor() {
         if (!task || !task.taskId) return;
 
         const maxAttempts = 60;
-        
+
         for (let i = 0; i < maxAttempts; i++) {
           await new Promise(r => setTimeout(r, 3000));
           updateTaskStatus(task.id, "polling", { progress: Math.min(20 + i * 2, 90) });
@@ -895,8 +896,8 @@ function useQuickGenImageTaskExecutor() {
               updateTaskStatus(task.id, "completed", {
                 progress: 100, resultUrl: statusData.data.imageUrl, completedAt: new Date().toISOString()
               });
-              toast({ 
-                title: "🎉 快速图片生成完成", 
+              toast({
+                title: "🎉 快速图片生成完成",
                 description: (
                   <a href="/quick-gen" className="text-violet-400 hover:underline flex items-center gap-1">
                     点击查看结果 <ExternalLink className="h-3 w-3" />
@@ -948,14 +949,14 @@ function TaskStatusIndicator() {
   const runningVideoTasks = videoTasks.filter(
     t => t.status !== "pending" && t.status !== "success" && t.status !== "failed"
   ).length;
-  
+
   const runningImageTasks = imageTasks.filter(t => t.status === "processing").length;
-  
+
   const isQuickGenRunning = quickGenTask && !["completed", "failed", "idle"].includes(quickGenTask.status);
   const isQuickGenImageRunning = quickGenImageTask && !["completed", "failed", "idle"].includes(quickGenImageTask.status);
 
-  const hasRunningTasks = videoJobStatus === "running" || imageJobStatus === "running" || 
-                          runningVideoTasks > 0 || runningImageTasks > 0 || isQuickGenRunning || isQuickGenImageRunning;
+  const hasRunningTasks = videoJobStatus === "running" || imageJobStatus === "running" ||
+    runningVideoTasks > 0 || runningImageTasks > 0 || isQuickGenRunning || isQuickGenImageRunning;
 
   if (!hasRunningTasks) return null;
 
@@ -963,7 +964,7 @@ function TaskStatusIndicator() {
     <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-3 animate-in slide-in-from-right-5 fade-in duration-300">
       {/* 快速图片生成 */}
       {isQuickGenImageRunning && (
-        <div 
+        <div
           onClick={() => router.push("/quick-gen")}
           className="flex items-center gap-3 bg-gradient-to-r from-violet-500/10 to-fuchsia-500/10 backdrop-blur-xl border border-violet-500/30 rounded-xl px-4 py-3 shadow-xl shadow-violet-500/10 hover:scale-[1.02] transition-transform cursor-pointer group"
         >
@@ -976,7 +977,7 @@ function TaskStatusIndicator() {
             <span className="text-sm font-medium text-violet-100">快速图片生成中</span>
             <div className="flex items-center gap-2 mt-1">
               <div className="w-24 h-1.5 bg-violet-900/30 rounded-full overflow-hidden">
-                <div 
+                <div
                   className="h-full bg-gradient-to-r from-violet-400 to-fuchsia-400 rounded-full transition-all duration-500"
                   style={{ width: `${quickGenImageTask?.progress || 0}%` }}
                 />
@@ -990,7 +991,7 @@ function TaskStatusIndicator() {
 
       {/* 快速视频生成 */}
       {isQuickGenRunning && (
-        <div 
+        <div
           onClick={() => router.push("/quick-gen")}
           className="flex items-center gap-3 bg-gradient-to-r from-amber-500/10 to-orange-500/10 backdrop-blur-xl border border-amber-500/30 rounded-xl px-4 py-3 shadow-xl shadow-amber-500/10 hover:scale-[1.02] transition-transform cursor-pointer group"
         >
@@ -1003,7 +1004,7 @@ function TaskStatusIndicator() {
             <span className="text-sm font-medium text-amber-100">快速视频生成中</span>
             <div className="flex items-center gap-2 mt-1">
               <div className="w-24 h-1.5 bg-amber-900/30 rounded-full overflow-hidden">
-                <div 
+                <div
                   className="h-full bg-gradient-to-r from-amber-400 to-orange-400 rounded-full transition-all duration-500"
                   style={{ width: `${quickGenTask?.progress || 0}%` }}
                 />
@@ -1017,7 +1018,7 @@ function TaskStatusIndicator() {
 
       {/* 批量视频生成 */}
       {(videoJobStatus === "running" || runningVideoTasks > 0) && (
-        <div 
+        <div
           onClick={() => router.push("/pro-studio/video-batch")}
           className="flex items-center gap-3 bg-gradient-to-r from-cyan-500/10 to-blue-500/10 backdrop-blur-xl border border-cyan-500/30 rounded-xl px-4 py-3 shadow-xl shadow-cyan-500/10 hover:scale-[1.02] transition-transform cursor-pointer group"
         >
@@ -1035,10 +1036,10 @@ function TaskStatusIndicator() {
           <ExternalLink className="h-4 w-4 text-cyan-400/50 group-hover:text-cyan-400 transition-colors" />
         </div>
       )}
-      
+
       {/* 批量图片处理 */}
       {(imageJobStatus === "running" || runningImageTasks > 0) && (
-        <div 
+        <div
           onClick={() => router.push("/pro-studio/image-batch")}
           className="flex items-center gap-3 bg-gradient-to-r from-pink-500/10 to-purple-500/10 backdrop-blur-xl border border-pink-500/30 rounded-xl px-4 py-3 shadow-xl shadow-pink-500/10 hover:scale-[1.02] transition-transform cursor-pointer group"
         >
@@ -1067,13 +1068,13 @@ function TaskStatusIndicator() {
 export function BackgroundTaskManager() {
   // 启动视频批量任务执行器
   useVideoTaskExecutor();
-  
+
   // 启动图片批量任务执行器
   useImageTaskExecutor();
-  
+
   // 启动 Quick Gen 视频任务执行器
   useQuickGenTaskExecutor();
-  
+
   // 启动 Quick Gen 图片任务执行器
   useQuickGenImageTaskExecutor();
 

@@ -250,7 +250,7 @@ export default function ImageSlideshowPage() {
             <CreateSlideshowModal
                 open={showModal}
                 onOpenChange={setShowModal}
-                onSubmit={handleCreateTask}
+                onSubmit={handleCreateTask as never}
             />
         </div>
     );

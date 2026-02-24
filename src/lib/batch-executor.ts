@@ -85,7 +85,7 @@ async function downloadFile(url: string, filename: string): Promise<void> {
     const response = await fetch(url);
     const blob = await response.blob();
     const blobUrl = URL.createObjectURL(blob);
-    
+
     const link = document.createElement("a");
     link.href = blobUrl;
     link.download = filename;
@@ -93,7 +93,7 @@ async function downloadFile(url: string, filename: string): Promise<void> {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    
+
     // 延迟释放 blob URL
     setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
   } catch (error) {
@@ -136,16 +136,16 @@ async function executeVideoTask(
     let sourceImageUrl = config.sourceImageUrl;
     if (sourceImageUrl?.startsWith("blob:")) {
       onTaskUpdate?.(task.id, "processing", { progress: 5 });
-      
+
       const uploadResult = await uploadBlobToStorage(
         sourceImageUrl,
         `batch-source-${task.id}.jpg`
       );
-      
+
       if (!uploadResult.success) {
         return { success: false, error: `Upload failed: ${uploadResult.error}` };
       }
-      
+
       sourceImageUrl = uploadResult.url;
     }
 
@@ -154,7 +154,7 @@ async function executeVideoTask(
 
     const submitParams: SubmitVideoParams = {
       prompt: config.prompt || "",
-      model: config.videoModel || "sora-2",
+      model: config.videoModel || "sora2-10s",
       aspectRatio: config.videoAspectRatio || "9:16",
       sourceImageUrl,
       modelId: config.modelId,
@@ -222,7 +222,7 @@ async function executeImageTask(
   try {
     // 2. 处理源图片 (如果是 blob URL，需要先上传)
     let sourceImageUrl: string | string[] | undefined;
-    
+
     if (config.sourceImageUrls?.length) {
       // 多图模式
       const uploadedUrls: string[] = [];
@@ -240,24 +240,24 @@ async function executeImageTask(
         } else {
           uploadedUrls.push(url);
         }
-        onTaskUpdate?.(task.id, "processing", { 
-          progress: Math.round((i + 1) / config.sourceImageUrls.length * 10) 
+        onTaskUpdate?.(task.id, "processing", {
+          progress: Math.round((i + 1) / config.sourceImageUrls.length * 10)
         });
       }
       sourceImageUrl = uploadedUrls;
     } else if (config.sourceImageUrl?.startsWith("blob:")) {
       // 单图模式
       onTaskUpdate?.(task.id, "processing", { progress: 5 });
-      
+
       const uploadResult = await uploadBlobToStorage(
         config.sourceImageUrl,
         `batch-source-${task.id}.jpg`
       );
-      
+
       if (!uploadResult.success) {
         return { success: false, error: `Upload failed: ${uploadResult.error}` };
       }
-      
+
       sourceImageUrl = uploadResult.url;
     } else {
       sourceImageUrl = config.sourceImageUrl;
@@ -284,7 +284,7 @@ async function executeImageTask(
 
     // 4. 轮询直到完成
     const model = config.imageTier === "pro" ? "nano-banana-pro" : "nano-banana";
-    
+
     const pollResult = await pollImageUntilComplete(
       submitResult.taskId!,
       model as "nano-banana" | "nano-banana-pro",

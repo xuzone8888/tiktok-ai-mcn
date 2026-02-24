@@ -13,28 +13,16 @@ export default function ReflectiveDemoPage() {
                     {/* 原版卡片 */}
                     <ReflectiveCard
                         overlayColor="rgba(0, 0, 0, 0.2)"
-                        blurStrength={12}
-                        glassDistortion={30}
                         metalness={1}
                         roughness={0.75}
-                        displacementStrength={20}
-                        noiseScale={1}
-                        specularConstant={5}
-                        grayscale={0.15}
                         color="#ffffff"
                     />
 
-                    {/* 自定义内容版本 - 使用完全相同的参数 */}
+                    {/* 自定义内容版本 */}
                     <ReflectiveCard
                         overlayColor="rgba(0, 0, 0, 0.2)"
-                        blurStrength={12}
-                        glassDistortion={30}
                         metalness={1}
                         roughness={0.75}
-                        displacementStrength={20}
-                        noiseScale={1}
-                        specularConstant={5}
-                        grayscale={0.15}
                         color="#ffffff"
                     >
                         <div className="flex flex-col h-full justify-between">

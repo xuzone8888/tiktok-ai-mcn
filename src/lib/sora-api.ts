@@ -109,22 +109,22 @@ export async function createSoraTask(
   // ============================================
   // 【核心逻辑】组装最终 Prompt (注入唤醒词)
   // ============================================
-  
+
   // 1. 验证用户输入的 Prompt
   const validation = validateUserPrompt(input.prompt || "");
   if (validation.warnings.length > 0) {
     console.log("[Sora API] Prompt validation warnings:", validation.warnings);
   }
-  
+
   // 2. 组装最终 Prompt (自动注入模特唤醒词)
   const promptResult = await assemblePrompt({
     user_prompt: validation.sanitizedPrompt,
     model_id: input.model_id,
     source_image_url: input.source_image_url,
   });
-  
+
   const finalPrompt = promptResult.final_prompt;
-  
+
   console.log("[Sora API] Prompt Assembly:", {
     user_prompt: input.prompt?.substring(0, 50) + "...",
     model_id: input.model_id,
@@ -186,7 +186,7 @@ export async function createSoraTask(
     }
 
     const data: SoraAPIResponse = await response.json();
-    
+
     if (data.success && data.data?.id) {
       // 更新任务状态
       task.status = "processing";
@@ -203,7 +203,7 @@ export async function createSoraTask(
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
     console.error("[Sora API] Create task error:", errorMessage);
-    
+
     // 标记任务失败
     task.status = "failed";
     task.error_message = errorMessage;
@@ -319,12 +319,12 @@ export async function cancelSoraTask(
  */
 export function getUserTasks(userId: string): SoraTask[] {
   const tasks: SoraTask[] = [];
-  for (const task of taskStore.values()) {
+  for (const task of Array.from(taskStore.values())) {
     if (task.user_id === userId) {
       tasks.push(task);
     }
   }
-  return tasks.sort((a, b) => 
+  return tasks.sort((a, b) =>
     new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
   );
 }
@@ -435,7 +435,7 @@ function startMockGeneration(taskId: string) {
 
     currentStep++;
     const progress = Math.min(Math.round((currentStep / totalSteps) * 100), 99);
-    
+
     task.progress = progress;
     task.updated_at = new Date().toISOString();
     taskStore.set(taskId, task);
@@ -509,10 +509,10 @@ export async function createVideoGenerationAction(
     aspect_ratio?: "16:9" | "9:16" | "1:1";
     source_image_url?: string | null;  // 参考图片 URL
   }
-): Promise<{ 
-  success: boolean; 
-  task_id?: string; 
-  credits_used?: number; 
+): Promise<{
+  success: boolean;
+  task_id?: string;
+  credits_used?: number;
   model_used?: boolean;
   error?: string;
 }> {
