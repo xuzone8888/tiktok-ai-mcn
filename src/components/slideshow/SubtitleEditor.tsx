@@ -198,14 +198,7 @@ const TONE_COLORS: Record<SubtitleTone, { label: string; icon: string; colors: {
     },
 };
 
-// ⭐ 新增：AI 配音选项
-const VOICE_OPTIONS = [
-    { id: 'Sarah', name: 'Sarah', gender: 'female', label: '♀ Sarah 女声' },
-    { id: 'Charlotte', name: 'Charlotte', gender: 'female', label: '♀ Charlotte 女声' },
-    { id: 'Charlie', name: 'Charlie', gender: 'male', label: '♂ Charlie 男声' },
-    { id: 'Bill', name: 'Bill', gender: 'male', label: '♂ Bill 男声' },
-    { id: 'Brian', name: 'Brian', gender: 'male', label: '♂ Brian 男声' },
-];
+
 
 // ⭐ 新增：AI 字幕风格选项
 const AI_SUBTITLE_STYLES = [
@@ -276,17 +269,9 @@ export function SubtitleEditor({
     const [overlayPositionMode, setOverlayPositionMode] = useState<'fixed' | 'random'>('fixed');
     const [overlayStyleMode, setOverlayStyleMode] = useState<'custom' | 'inherit' | 'random'>('inherit');
 
-    // ⭐ 新增：AI 字幕状态
-    const [aiSubtitleEnabled, setAiSubtitleEnabled] = useState(false);
-    const [aiSubtitlePrompt, setAiSubtitlePrompt] = useState('');
-    const [aiSubtitleStyle, setAiSubtitleStyle] = useState<'lively' | 'professional' | 'humor' | 'poetic' | 'minimal'>('lively');
-    const [aiSubtitleLanguage, setAiSubtitleLanguage] = useState<'en' | 'zh'>('zh');
-    const [aiSubtitleMode, setAiSubtitleMode] = useState<'fixed' | 'random'>('fixed');
 
-    // ⭐ 新增：AI 配音状态
-    const [aiVoiceEnabled, setAiVoiceEnabled] = useState(false);
-    const [aiVoiceId, setAiVoiceId] = useState('Sarah');
-    const [aiVoiceMode, setAiVoiceMode] = useState<'fixed' | 'random' | 'balanced'>('fixed');
+
+
 
     // 使用 useMemo 缓存 File 对象的 blob URLs
     const fileUrls = React.useMemo(() => {
@@ -724,8 +709,7 @@ export function SubtitleEditor({
         return baseStyle;
     };
 
-    // Debug: Fixed tone
-    const currentTone = TONE_COLORS['neutral'];
+
 
     return (
         <>
@@ -771,7 +755,7 @@ export function SubtitleEditor({
             {
                 isModalOpen && subtitle && (
                     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
-                        <div className="bg-slate-900 border border-white/10 rounded-2xl w-[1400px] h-[800px] overflow-hidden shadow-2xl flex flex-col">
+                        <div className="bg-slate-900 border border-white/10 rounded-2xl w-[92vw] max-w-[1100px] h-[88vh] max-h-[800px] overflow-hidden shadow-2xl flex flex-col">
                             {/* 弹窗头部 */}
                             <div className="flex items-center justify-between p-4 border-b border-white/10">
                                 <h2 className="text-lg font-semibold text-white flex items-center gap-2">
@@ -789,7 +773,7 @@ export function SubtitleEditor({
                             {/* 弹窗内容 */}
                             <div className="p-6 flex gap-6 flex-1 overflow-hidden">
                                 {/* 左侧：预览区 */}
-                                <div className="flex-shrink-0 w-[500px] space-y-3">
+                                <div className="flex-shrink-0 w-[300px] space-y-3">
                                     <div className="flex items-center justify-between">
                                         <Label className="text-sm text-white/60 flex items-center gap-2">
                                             <Move className="h-4 w-4" />
@@ -959,7 +943,7 @@ export function SubtitleEditor({
                                 </div>
 
                                 {/* 右侧：配置面板 */}
-                                <div className="flex-1 space-y-3 overflow-y-auto">
+                                <div className="flex-1 min-h-0 overflow-y-auto space-y-3 pr-1">
                                     {/* Tab 切换 */}
                                     {/* Tab 切换 - JCUI Segmented Control */}
                                     <div className="flex gap-1 p-1 bg-black/40 border border-white/5 rounded-xl">
@@ -1202,10 +1186,11 @@ export function SubtitleEditor({
                                                 </div>
                                             )}
 
-                                            {/* 风格选择 */}
-                                            <div className="space-y-3">
-                                                <Label className="text-sm text-white/60">✨ 字幕风格</Label>
-                                                <div className="grid grid-cols-5 gap-2">
+                                            {/* 🎨 字幕样式（风格 + 色调 + 颜色 合并） */}
+                                            <div className="space-y-3 p-3 bg-white/5 border border-white/10 rounded-xl">
+                                                <Label className="text-sm text-white/80">🎨 字幕样式</Label>
+                                                {/* 风格 - 紧凑横排 */}
+                                                <div className="flex gap-1.5">
                                                     {(Object.keys(STYLE_PRESETS) as SubtitleStyle[]).map((style) => {
                                                         const preset = STYLE_PRESETS[style];
                                                         const isSelected = subtitle.style === style;
@@ -1214,29 +1199,20 @@ export function SubtitleEditor({
                                                                 key={style}
                                                                 onClick={() => applyStyle(style)}
                                                                 className={cn(
-                                                                    "py-4 px-2 rounded-xl text-center transition-all duration-300",
+                                                                    "flex-1 py-2 px-1 rounded-lg text-center transition-all duration-200",
                                                                     isSelected
-                                                                        ? "bg-white/10 border border-white text-white shadow-[0_0_15px_rgba(255,255,255,0.2)] scale-105"
-                                                                        : "bg-white/5 border border-white/5 hover:bg-white/10 hover:border-white/20"
+                                                                        ? "bg-white/15 border border-white/60 text-white"
+                                                                        : "bg-white/5 border border-white/5 hover:bg-white/10 text-white/50"
                                                                 )}
                                                             >
-                                                                <div className="text-2xl mb-1">{preset.icon}</div>
-                                                                <div className={cn(
-                                                                    "text-xs transition-colors",
-                                                                    isSelected ? "text-white font-medium" : "text-white/50"
-                                                                )}>
-                                                                    {preset.label}
-                                                                </div>
+                                                                <div className="text-lg">{preset.icon}</div>
+                                                                <div className="text-[10px] mt-0.5">{preset.label}</div>
                                                             </button>
                                                         );
                                                     })}
                                                 </div>
-                                            </div>
-
-                                            {/* 色调选择 */}
-                                            <div className="space-y-3">
-                                                <Label className="text-sm text-white/60">🎨 文字色调</Label>
-                                                <div className="flex gap-2">
+                                                {/* 色调 + 颜色 - 一行 */}
+                                                <div className="flex items-center gap-2">
                                                     {(Object.keys(TONE_COLORS) as SubtitleTone[]).map((tone) => {
                                                         const toneData = TONE_COLORS[tone];
                                                         const isSelected = subtitle.tone === tone;
@@ -1245,59 +1221,43 @@ export function SubtitleEditor({
                                                                 key={tone}
                                                                 onClick={() => applyTone(tone)}
                                                                 className={cn(
-                                                                    "flex-1 py-3 px-4 rounded-xl text-center transition-all duration-300",
+                                                                    "py-1.5 px-3 rounded-lg text-xs transition-all",
                                                                     isSelected
-                                                                        ? "bg-white/10 border border-white text-white shadow-[0_0_15px_rgba(255,255,255,0.2)]"
-                                                                        : "bg-white/5 border border-white/5 hover:bg-white/10"
+                                                                        ? "bg-white/15 border border-white/40 text-white"
+                                                                        : "bg-white/5 border border-transparent text-white/40 hover:text-white/70"
                                                                 )}
                                                             >
-                                                                <span className="text-lg mr-2">{toneData.icon}</span>
-                                                                <span className={cn(
-                                                                    "text-sm transition-colors",
-                                                                    isSelected ? "text-white font-medium" : "text-white/50"
-                                                                )}>
-                                                                    {toneData.label}
-                                                                </span>
+                                                                {toneData.icon} {toneData.label}
                                                             </button>
                                                         );
                                                     })}
-                                                </div>
-
-                                                {/* 颜色选择 */}
-                                                <div className="flex gap-3 pt-2 justify-center">
-                                                    {currentTone.colors.map((colorOption) => (
+                                                    <div className="border-l border-white/10 h-6 mx-1" />
+                                                    {TONE_COLORS[subtitle.tone]?.colors.map((colorOption) => (
                                                         <button
                                                             key={colorOption.value}
                                                             onClick={() => applyColor(colorOption.value)}
                                                             className={cn(
-                                                                "w-12 h-12 rounded-full transition-all duration-300 border-2",
+                                                                "w-7 h-7 rounded-full transition-all border-2",
                                                                 subtitle.color === colorOption.value
-                                                                    ? "border-white ring-2 ring-white/20 scale-110 shadow-lg"
-                                                                    : "border-transparent hover:scale-105 opacity-80 hover:opacity-100"
+                                                                    ? "border-white scale-110"
+                                                                    : "border-transparent opacity-70 hover:opacity-100 hover:scale-105"
                                                             )}
-                                                            style={{
-                                                                backgroundColor: colorOption.value,
-                                                                boxShadow: subtitle.color === colorOption.value
-                                                                    ? `0 0 20px ${colorOption.value}40`
-                                                                    : undefined
-                                                            }}
+                                                            style={{ backgroundColor: colorOption.value }}
                                                             title={colorOption.label}
                                                         />
                                                     ))}
                                                 </div>
-                                            </div>
-
-                                            {/* 预览风格效果 */}
-                                            <div className="p-4 bg-black/30 rounded-xl">
-                                                <Label className="text-xs text-white/40 mb-2 block">效果预览</Label>
-                                                <div
-                                                    className="text-center py-3"
-                                                    style={{
-                                                        ...getTextStyle(),
-                                                        fontSize: '24px',
-                                                    }}
-                                                >
-                                                    {subtitle.text || '字幕效果预览'}
+                                                {/* 效果预览 - 紧凑 */}
+                                                <div className="p-2 bg-black/30 rounded-lg">
+                                                    <div
+                                                        className="text-center py-1.5"
+                                                        style={{
+                                                            ...getTextStyle(),
+                                                            fontSize: '18px',
+                                                        }}
+                                                    >
+                                                        {subtitle.text || '字幕效果预览'}
+                                                    </div>
                                                 </div>
                                             </div>
                                         </> // 配音字幕 Tab 结束
@@ -1306,7 +1266,6 @@ export function SubtitleEditor({
                                     {/* 图文字幕 Tab 内容 */}
                                     {activeTab === 'text' && (
                                         <div className="space-y-4">
-                                            {/* AI 批量生成区域 */}
                                             {/* AI 批量生成区域 */}
                                             <div className="p-4 bg-[#1a1a1a] border border-white/10 rounded-xl space-y-3 relative overflow-hidden">
                                                 {/* Reflective Border */}
@@ -1434,85 +1393,33 @@ export function SubtitleEditor({
                                                     </button>
                                                 </div>
 
-                                                {/* ⭐ 图文字幕模式设置 */}
-                                                <div className="p-3 bg-white/5 rounded-xl space-y-3">
-                                                    <Label className="text-xs text-white/40">📍 新增字幕的默认设置</Label>
-
-                                                    {/* 位置模式 */}
-                                                    {/* 位置模式 */}
-                                                    <div className="flex items-center gap-3">
-                                                        <span className="text-xs text-white/50 w-12 text-right">位置</span>
-                                                        <div className="flex gap-1 flex-1 bg-black/40 p-1 rounded-lg border border-white/5">
-                                                            <button
-                                                                onClick={() => setOverlayPositionMode('fixed')}
-                                                                className={cn(
-                                                                    "flex-1 py-1.5 px-3 rounded-md text-xs transition-all font-medium",
-                                                                    overlayPositionMode === 'fixed'
-                                                                        ? "bg-white/10 text-white shadow-sm border border-white/20"
-                                                                        : "text-white/40 hover:text-white/70"
-                                                                )}
-                                                            >
-                                                                📌 固定
-                                                            </button>
-                                                            <button
-                                                                onClick={() => setOverlayPositionMode('random')}
-                                                                className={cn(
-                                                                    "flex-1 py-1.5 px-3 rounded-md text-xs transition-all font-medium",
-                                                                    overlayPositionMode === 'random'
-                                                                        ? "bg-white/10 text-white shadow-sm border border-white/20"
-                                                                        : "text-white/40 hover:text-white/70"
-                                                                )}
-                                                            >
-                                                                🎲 随机
-                                                            </button>
-                                                        </div>
+                                                {/* 默认设置 - 紧凑行 */}
+                                                <div className="flex items-center gap-2 p-2 bg-white/5 rounded-lg">
+                                                    <span className="text-[10px] text-white/40">新增默认:</span>
+                                                    <div className="flex gap-1 bg-black/30 p-0.5 rounded-md">
+                                                        <button
+                                                            onClick={() => setOverlayPositionMode('fixed')}
+                                                            className={cn("px-2 py-1 rounded text-[10px]", overlayPositionMode === 'fixed' ? "bg-white/15 text-white" : "text-white/40")}
+                                                        >📌 固定位置</button>
+                                                        <button
+                                                            onClick={() => setOverlayPositionMode('random')}
+                                                            className={cn("px-2 py-1 rounded text-[10px]", overlayPositionMode === 'random' ? "bg-white/15 text-white" : "text-white/40")}
+                                                        >🎲 随机位置</button>
                                                     </div>
-
-                                                    {/* 样式模式 */}
-                                                    {/* 样式模式 */}
-                                                    <div className="flex items-center gap-3">
-                                                        <span className="text-xs text-white/50 w-12 text-right">样式</span>
-                                                        <div className="flex gap-1 flex-1 bg-black/40 p-1 rounded-lg border border-white/5">
-                                                            <button
-                                                                onClick={() => setOverlayStyleMode('inherit')}
-                                                                className={cn(
-                                                                    "flex-1 py-1.5 px-3 rounded-md text-xs transition-all font-medium",
-                                                                    overlayStyleMode === 'inherit'
-                                                                        ? "bg-white/10 text-white shadow-sm border border-white/20"
-                                                                        : "text-white/40 hover:text-white/70"
-                                                                )}
-                                                            >
-                                                                🔗 继承
-                                                            </button>
-                                                            <button
-                                                                onClick={() => setOverlayStyleMode('custom')}
-                                                                className={cn(
-                                                                    "flex-1 py-1.5 px-3 rounded-md text-xs transition-all font-medium",
-                                                                    overlayStyleMode === 'custom'
-                                                                        ? "bg-white/10 text-white shadow-sm border border-white/20"
-                                                                        : "text-white/40 hover:text-white/70"
-                                                                )}
-                                                            >
-                                                                ✏️ 自定义
-                                                            </button>
-                                                            <button
-                                                                onClick={() => setOverlayStyleMode('random')}
-                                                                className={cn(
-                                                                    "flex-1 py-1.5 px-3 rounded-md text-xs transition-all font-medium",
-                                                                    overlayStyleMode === 'random'
-                                                                        ? "bg-white/10 text-white shadow-sm border border-white/20"
-                                                                        : "text-white/40 hover:text-white/70"
-                                                                )}
-                                                            >
-                                                                🎲 随机
-                                                            </button>
-                                                        </div>
+                                                    <div className="flex gap-1 bg-black/30 p-0.5 rounded-md">
+                                                        <button
+                                                            onClick={() => setOverlayStyleMode('inherit')}
+                                                            className={cn("px-2 py-1 rounded text-[10px]", overlayStyleMode === 'inherit' ? "bg-white/15 text-white" : "text-white/40")}
+                                                        >🔗 继承</button>
+                                                        <button
+                                                            onClick={() => setOverlayStyleMode('custom')}
+                                                            className={cn("px-2 py-1 rounded text-[10px]", overlayStyleMode === 'custom' ? "bg-white/15 text-white" : "text-white/40")}
+                                                        >✏️ 自定义</button>
+                                                        <button
+                                                            onClick={() => setOverlayStyleMode('random')}
+                                                            className={cn("px-2 py-1 rounded text-[10px]", overlayStyleMode === 'random' ? "bg-white/15 text-white" : "text-white/40")}
+                                                        >🎲 随机</button>
                                                     </div>
-
-                                                    {/* 提示信息 */}
-                                                    {overlayPositionMode === 'random' && (
-                                                        <p className="text-xs text-white/30">💡 随机位置会自动避开配音字幕区域</p>
-                                                    )}
                                                 </div>
 
                                                 {/* 图片模式列表 */}
@@ -1654,28 +1561,28 @@ export function SubtitleEditor({
                                         </div>
                                     )}
                                 </div>
+                            </div>
 
-                                {/* 弹窗底部 */}
-                                <div className="p-4 border-t border-white/10 flex justify-end gap-3 bg-black/40 backdrop-blur-sm sticky bottom-0 z-20">
-                                    <button
-                                        onClick={closeModal}
-                                        className="px-6 py-2 bg-white/5 hover:bg-white/10 text-white/70 hover:text-white rounded-xl transition-colors text-sm border border-white/5"
-                                    >
-                                        取消
-                                    </button>
-                                    <button
-                                        onClick={closeModal}
-                                        className={cn(
-                                            "px-6 py-2 rounded-xl transition-all duration-300 text-sm font-medium",
-                                            "bg-gradient-to-b from-white to-gray-200 text-black border-t border-white/60",
-                                            "shadow-[0_0_20px_rgba(255,255,255,0.2)]",
-                                            "hover:shadow-[0_0_25px_rgba(255,255,255,0.4)] hover:scale-[1.02]",
-                                            "active:scale-[0.98]"
-                                        )}
-                                    >
-                                        确认应用
-                                    </button>
-                                </div>
+                            {/* 弹窗底部 - 固定在弹窗底部 */}
+                            <div className="p-4 border-t border-white/10 flex justify-end gap-3 bg-slate-900/95 backdrop-blur-sm flex-shrink-0">
+                                <button
+                                    onClick={closeModal}
+                                    className="px-6 py-2 bg-white/5 hover:bg-white/10 text-white/70 hover:text-white rounded-xl transition-colors text-sm border border-white/5"
+                                >
+                                    取消
+                                </button>
+                                <button
+                                    onClick={closeModal}
+                                    className={cn(
+                                        "px-6 py-2 rounded-xl transition-all duration-300 text-sm font-medium",
+                                        "bg-gradient-to-b from-white to-gray-200 text-black border-t border-white/60",
+                                        "shadow-[0_0_20px_rgba(255,255,255,0.2)]",
+                                        "hover:shadow-[0_0_25px_rgba(255,255,255,0.4)] hover:scale-[1.02]",
+                                        "active:scale-[0.98]"
+                                    )}
+                                >
+                                    确认应用
+                                </button>
                             </div>
                         </div>
                     </div>
