@@ -25,7 +25,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         items:publish_task_items(
           id,
           status,
-          tiktok_account_id
+          account_id
         )
       `)
             .eq('id', id)
@@ -46,11 +46,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         }
 
         // Check if related accounts are still authorized
-        const accountIds = [...new Set(failedItems.map((i: { tiktok_account_id: string }) => i.tiktok_account_id))]
+        const accountIds = Array.from(new Set(failedItems.map((i: { account_id: string }) => i.account_id)))
 
         const { data: accounts, error: accountsError } = await supabase
             .from('tiktok_accounts')
-            .select('id, access_token_expires_at')
+            .select('id, token_expires_at')
             .eq('user_id', user.id)
             .in('id', accountIds)
 
@@ -59,7 +59,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         }
 
         const now = new Date()
-        const expiredAccounts = accounts?.filter(a => new Date(a.access_token_expires_at) <= now) || []
+        const expiredAccounts = accounts?.filter(a => a.token_expires_at && new Date(a.token_expires_at) <= now) || []
 
         if (expiredAccounts.length > 0) {
             return NextResponse.json({
@@ -76,7 +76,6 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             .update({
                 status: 'pending',
                 error_message: null,
-                retry_count: supabase.rpc('increment', { x: 1 }) // Increment retry count - this won't work directly, simplified for now
             })
             .in('id', failedItemIds)
 

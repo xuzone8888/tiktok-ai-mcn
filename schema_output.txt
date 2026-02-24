@@ -1,0 +1,237 @@
+## profiles
+  id: string (uuid) = "0007d8c3-2a4c-43cf-8fdd-21432c89a1c9"
+  email: string = "18271850054@139.com"
+  name: string = "Irene888"
+  avatar_url: nullable = null
+  role: string = "user"
+  credits: number = 75250
+  status: string = "active"
+  banned_at: nullable = null
+  banned_reason: nullable = null
+  created_at: string (datetime) = "2025-12-05T06:24:53.85716+00:00"
+  updated_at: string (datetime) = "2026-02-14T05:13:34.833583+00:00"
+  phone: nullable = null
+
+## users: NOT_FOUND
+## ai_models
+  id: string (uuid) = "46b8ee95-5f0f-48e8-81b2-a71ee48d9425"
+  name: string = "lunana"
+  description: string = "lunana"
+  avatar_url: string = "https://hfabrifuvujpdzarlbky.supabase.co/storage/v1/object/public/model-avatars
+  sample_images: Json[] (array) = ["https://hfabrifuvujpdzarlbky.supabase.co/storage/v1/object/public/model-avatar
+  sample_videos: Json[] (array) = ["https://hfabrifuvujpdzarlbky.supabase.co/storage/v1/object/public/model-demos/
+  category: string = "Fashion"
+  style_tags: Json[] (array) = []
+  gender: string = "female"
+  age_range: string = "20-25"
+  price_daily: number = 100
+  price_weekly: number = 500
+  price_monthly: number = 1500
+  price_yearly: number = 12000
+  rating: number = 5
+  total_rentals: number = 0
+  total_generations: number = 0
+  is_active: boolean = true
+  is_featured: boolean = false
+  is_trending: boolean = false
+  trigger_word: string = "@auroralame"
+  capabilities: Json (object) = {"image":true,"video":true,"voice":false}
+  metadata: Json (object) = {}
+  created_at: string (datetime) = "2025-12-02T11:29:53.768543+00:00"
+  updated_at: string (datetime) = "2025-12-02T11:33:13.177026+00:00"
+
+## products: NOT_FOUND
+## contracts
+  id: string (uuid) = "5c80711e-a2f4-442f-adcf-53a543ffedc4"
+  user_id: string (uuid) = "4b591d9d-5217-4e0f-9c7d-ec94b6a02a73"
+  model_id: string (uuid) = "46b8ee95-5f0f-48e8-81b2-a71ee48d9425"
+  rental_period: string = "monthly"
+  start_date: string (datetime) = "2026-01-13T05:29:15.17+00:00"
+  end_date: string (datetime) = "2026-02-12T05:29:14.857+00:00"
+  status: string = "active"
+  credits_paid: number = 1500
+  generations_count: number = 0
+  auto_renew: boolean = false
+  created_at: string (datetime) = "2026-01-13T05:29:15.328388+00:00"
+  updated_at: string (datetime) = "2026-01-13T05:29:15.328388+00:00"
+  cancelled_at: nullable = null
+
+## generations
+  id: string (uuid) = "c723c879-6c71-4bc9-a23d-54bbf26eb142"
+  user_id: string (uuid) = "4d4a5690-51d0-45c4-9275-22637c028995"
+  task_id: string = "1193285"
+  type: string = "image"
+  source: string = "quick_gen"
+  prompt: string = "高清产品展示，适配Sora2视频生成"
+  model: string = "nano-banana"
+  duration: nullable = null
+  aspect_ratio: string = "auto"
+  quality: string = "1k"
+  source_image_url: string = "https://hfabrifuvujpdzarlbky.supabase.co/storage/v1/object/public/uploads/quick
+  status: string = "completed"
+  result_url: string = "https://openpt1.oss-cn-shanghai.aliyuncs.com/2bd6330deea54bd2a0c6482eee01b7cc.j
+  video_url: nullable = null
+  image_url: string = "https://openpt1.oss-cn-shanghai.aliyuncs.com/2bd6330deea54bd2a0c6482eee01b7cc.j
+  thumbnail_url: nullable = null
+  error_message: nullable = null
+  credit_cost: number = 10
+  use_pro: boolean = false
+  metadata: Json (object) = {}
+  created_at: string (datetime) = "2025-12-04T11:17:30.19+00:00"
+  completed_at: string (datetime) = "2025-12-04T11:18:15.216+00:00"
+  group_name: string = "默认"
+
+## credit_transactions
+  id: string (uuid) = "2704e334-57dd-46de-a632-ce99020f846e"
+  user_id: string (uuid) = "4d4a5690-51d0-45c4-9275-22637c028995"
+  amount: number = -50
+  type: string = "usage"
+  description: string = "聘用模特 001号女模特 (daily)"
+  reference_id: string (uuid) = "15e8959c-eefb-44cc-a1a7-23aa62c923b0"
+  reference_type: string = "contract"
+  balance_before: number = 7760
+  balance_after: number = 7710
+  created_at: string (datetime) = "2025-12-02T11:22:37.344259+00:00"
+  created_by: nullable = null
+
+## projects: NOT_FOUND
+## task_queue: NOT_FOUND
+## credit_pricing: NOT_FOUND
+## system_settings
+  id: string (uuid) = "d1d2ab60-546b-415c-883b-7e7e372d7f20"
+  key: string = "pricing_video"
+  value: Json (object) = {"5s":30,"10s":50,"15s":80,"20s":120}
+  description: string = "视频生成定价"
+  updated_at: string (datetime) = "2025-11-30T12:41:59.103706+00:00"
+  updated_by: nullable = null
+
+## tiktok_accounts
+  id: string (uuid) = "0acacfe6-7be9-4ee8-bf4e-c46a21af4ba2"
+  user_id: string (uuid) = "6700180c-c6f5-4e6f-a910-6faea0f8b81e"
+  open_id: string = "-000UthakH6l4eQNI7JobiX3xaHxQPvaamzN"
+  union_id: string (uuid) = "d8f4f019-f62f-5657-a299-b9d958515201"
+  display_name: string = "Valor"
+  avatar_url: string = "https://p19-common-sign.tiktokcdn-us.com/tos-useast5-avt-0068-tx/bf288120545eeb
+  follower_count: number = 6554
+  following_count: number = 17
+  likes_count: number = 18206
+  video_count: number = 2
+  access_token: string = "act.FCZxFa3BjYwAU5HVhVJs1EPWGOEZxUY2HmdIdG46Hh2dKY8wtNIAyyyeIe5m!6377.u1"
+  refresh_token: string = "rft.67ncGT9VRsL66JlpE9ILs874Cgozp84lRc1SPbxdHPwkBBk9SiwObuGHG1yX!6440.u1"
+  token_expires_at: string (datetime) = "2026-02-02T09:40:00.116+00:00"
+  scopes: Json[] (array) = ["user.info.profile","user.info.stats","video.upload","user.info.basic","video.p
+  account_type: string = "normal"
+  status: string = "active"
+  created_at: string (datetime) = "2026-02-01T09:40:01.051557+00:00"
+  updated_at: string (datetime) = "2026-02-01T09:40:01.051557+00:00"
+  username: string = "fcyyvyvvh"
+
+## publish_tasks
+  id: string (uuid) = "12634a3f-bba7-47b6-bea6-d1349844768e"
+  user_id: string (uuid) = "4d4a5690-51d0-45c4-9275-22637c028995"
+  task_name: nullable = null
+  publish_type: string = "normal"
+  title_template: string = "测试任务"
+  privacy_level: string = "SELF_ONLY"
+  allow_comment: boolean = true
+  allow_duet: boolean = true
+  allow_stitch: boolean = true
+  brand_content_toggle: boolean = false
+  brand_organic_toggle: boolean = false
+  is_aigc: boolean = true
+  scheduled_at: nullable = null
+  batch_interval_seconds: number = 180
+  status: string = "completed"
+  total_items: number = 4
+  success_count: number = 4
+  failed_count: number = 0
+  product_info: nullable = null
+  created_at: string (datetime) = "2026-01-19T02:32:37.416001+00:00"
+  updated_at: string (datetime) = "2026-01-19T02:32:37.416001+00:00"
+  started_at: nullable = null
+  completed_at: string (datetime) = "2026-01-19T02:33:35.814+00:00"
+  name: string = "未命名任务组"
+  published_count: number = 0
+  pending_count: number = 0
+  total_views: number = 0
+  total_likes: number = 0
+
+## publish_task_items
+  id: string (uuid) = "85421876-38f0-4736-835f-77fc6f3d276e"
+  task_id: string (uuid) = "6dc7011b-39be-4366-9833-df4b1a16cba0"
+  account_id: string (uuid) = "0432e7c1-969c-4d8b-a390-02897ab32fd4"
+  video_url: string = "https://media.toryxai.com/videos/3280837d-0e1b-499e-a435-6857c18c9516/177036890
+  video_source: string = "upload"
+  source_asset_id: nullable = null
+  title: string = "This $15 spot-remover changed my skincare routine forever—my dark spots are GON
+  tiktok_publish_id: string = "v_pub_url~v2-1.7603678415966783502"
+  tiktok_share_id: nullable = null
+  status: string = "published"
+  error_code: nullable = null
+  error_message: nullable = null
+  scheduled_at: string (datetime) = "2026-02-06T09:20:00+00:00"
+  published_at: string (datetime) = "2026-02-06T09:20:30.143+00:00"
+  created_at: string (datetime) = "2026-02-06T09:10:02.560049+00:00"
+  updated_at: string (datetime) = "2026-02-06T09:10:02.560049+00:00"
+  cover_timestamp_ms: nullable = null
+  view_count: number = 0
+  like_count: number = 0
+  comment_count: number = 0
+  share_count: number = 0
+  stats_updated_at: nullable = null
+  tiktok_video_id: nullable = null
+
+## link_video_jobs
+  id: string (uuid) = "d843f8ea-ad45-4f91-8002-ba863e072e1d"
+  user_id: string (uuid) = "4d4a5690-51d0-45c4-9275-22637c028995"
+  product_link_id: nullable = null
+  ai_model_id: nullable = null
+  manual_product_info: Json (object) = {"price":"54","title":"Sweet Furniture Dresser TV Stand, Entertainment Center wi
+  video_config: Json (object) = {"duration":15,"language":"en","video_style":"selfie_talking","aspect_ratio":"9:
+  selected_main_image_url: string = "https://p16-oec-general-useast5.ttcdn-us.com/tos-useast5-i-omjb5zjo8w-tx/4cdeea
+  selected_image_urls: Json[] (array) = ["https://p16-oec-general-useast5.ttcdn-us.com/tos-useast5-i-omjb5zjo8w-tx/4cdee
+  script_text: string = "C01: (2s) [Visual: Close-up selfie shot, bright lighting]\n[Action: Creator lea
+  script_versions: Json[] (array) = [{"content":"C01: (2s) [Visual: Close-up selfie shot, bright lighting]\n[Action:
+  grid_image_url: string = "https://openpt1.oss-cn-shanghai.aliyuncs.com/4d5a69df7ca0421e940c22969a18c47a.p
+  final_video_url: nullable = null
+  thumbnail_url: nullable = null
+  grid_task_id: string = "1296102"
+  video_task_id: string = "video_62bc83dc-5c9d-42ec-b08e-da78f11b5a69"
+  status: string = "generating_video"
+  current_step: number = 5
+  progress: number = 0
+  error_message: string = "google gemini timeout..."
+  credits_estimated: number = 100
+  credits_used: number = 100
+  credits_refunded: number = 0
+  script_rewrite_count: number = 0
+  grid_retry_count: number = 0
+  video_retry_count: number = 0
+  created_at: string (datetime) = "2025-12-08T11:14:37.258687+00:00"
+  updated_at: string (datetime) = "2025-12-08T11:14:37.258687+00:00"
+  started_at: string (datetime) = "2025-12-08T11:18:30.921+00:00"
+  completed_at: nullable = null
+
+## product_links: NOT_FOUND
+## templates: NOT_FOUND
+## audit_logs: NOT_FOUND
+## quick_gen_history
+  id: string (uuid) = "f53eedf2-e33d-4374-9e62-a6c08ec75891"
+  user_id: string (uuid) = "4d4a5690-51d0-45c4-9275-22637c028995"
+  mode: string = "image"
+  input_images: Json[] (array) = ["https://hfabrifuvujpdzarlbky.supabase.co/storage/v1/object/public/uploads/quic
+  prompt: string = "放大高清"
+  image_model: string = "nano-banana"
+  image_quality_tier: string = "fast"
+  image_aspect_ratio: string = "auto"
+  image_resolution: string = "1k"
+  video_model: nullable = null
+  video_aspect_ratio: nullable = null
+  video_use_ai_model: boolean = false
+  video_ai_model_id: nullable = null
+  output_url: string = "https://openpt1.oss-cn-shanghai.aliyuncs.com/d9bf3322a8f2451a9171d9e474190a8b.p
+  thumbnail_url: nullable = null
+  status: string = "completed"
+  credits_cost: number = 10
+  created_at: string (datetime) = "2025-12-10T04:56:12.145247+00:00"
+  expires_at: string (datetime) = "2025-12-17T04:56:12.145247+00:00"

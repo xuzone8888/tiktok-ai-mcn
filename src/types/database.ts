@@ -100,6 +100,7 @@ export interface Database {
           is_active: boolean;
           is_featured: boolean;
           is_trending: boolean;
+          trigger_word: string | null;
           capabilities: Json;
           metadata: Json;
           created_at: string;
@@ -125,6 +126,7 @@ export interface Database {
           is_active?: boolean;
           is_featured?: boolean;
           is_trending?: boolean;
+          trigger_word?: string | null;
           capabilities?: Json;
           metadata?: Json;
         };
@@ -147,6 +149,7 @@ export interface Database {
           is_active?: boolean;
           is_featured?: boolean;
           is_trending?: boolean;
+          trigger_word?: string | null;
           capabilities?: Json;
           metadata?: Json;
         };
@@ -271,88 +274,71 @@ export interface Database {
         Row: {
           id: string;
           user_id: string;
-          contract_id: string;
-          product_id: string | null;
-          model_id: string;
-          type: GenerationType;
-          status: GenerationStatus;
-          input_params: GenerationInputParams;
-          output_url: string | null;
-          output_urls: Json;
-          thumbnail_url: string | null;
+          task_id: string | null;
+          type: string;
+          source: string;
+          prompt: string | null;
+          model: string | null;
           duration: number | null;
-          resolution: string | null;
-          file_size: number | null;
-          credits_used: number;
+          aspect_ratio: string | null;
+          quality: string | null;
+          source_image_url: string | null;
+          status: string;
+          result_url: string | null;
+          video_url: string | null;
+          image_url: string | null;
+          thumbnail_url: string | null;
           error_message: string | null;
-          progress: number;
+          credit_cost: number;
+          use_pro: boolean;
           metadata: Json;
-          group_name: string | null;
           created_at: string;
-          updated_at: string;
-          started_at: string | null;
           completed_at: string | null;
+          group_name: string | null;
         };
         Insert: {
           id?: string;
           user_id: string;
-          contract_id: string;
-          product_id?: string | null;
-          model_id: string;
-          type: GenerationType;
-          status?: GenerationStatus;
-          input_params: GenerationInputParams;
-          output_url?: string | null;
-          output_urls?: Json;
-          thumbnail_url?: string | null;
+          task_id?: string | null;
+          type: string;
+          source?: string;
+          prompt?: string | null;
+          model?: string | null;
           duration?: number | null;
-          resolution?: string | null;
-          file_size?: number | null;
-          credits_used?: number;
+          aspect_ratio?: string | null;
+          quality?: string | null;
+          source_image_url?: string | null;
+          status?: string;
+          result_url?: string | null;
+          video_url?: string | null;
+          image_url?: string | null;
+          thumbnail_url?: string | null;
           error_message?: string | null;
-          progress?: number;
+          credit_cost?: number;
+          use_pro?: boolean;
           metadata?: Json;
           group_name?: string | null;
         };
         Update: {
-          status?: GenerationStatus;
-          output_url?: string | null;
-          output_urls?: Json;
+          task_id?: string | null;
+          type?: string;
+          source?: string;
+          status?: string;
+          result_url?: string | null;
+          video_url?: string | null;
+          image_url?: string | null;
           thumbnail_url?: string | null;
-          duration?: number | null;
-          resolution?: string | null;
-          file_size?: number | null;
-          credits_used?: number;
           error_message?: string | null;
-          progress?: number;
+          credit_cost?: number;
           metadata?: Json;
           group_name?: string | null;
-          started_at?: string | null;
           completed_at?: string | null;
         };
         Relationships: [
           {
             foreignKeyName: "generations_user_id_fkey";
             columns: ["user_id"];
-            referencedRelation: "users";
-            referencedColumns: ["id"];
-          },
-          {
-            foreignKeyName: "generations_contract_id_fkey";
-            columns: ["contract_id"];
-            referencedRelation: "contracts";
-            referencedColumns: ["id"];
-          },
-          {
-            foreignKeyName: "generations_product_id_fkey";
-            columns: ["product_id"];
-            referencedRelation: "products";
-            referencedColumns: ["id"];
-          },
-          {
-            foreignKeyName: "generations_model_id_fkey";
-            columns: ["model_id"];
-            referencedRelation: "ai_models";
+            referencedRelation: "profiles";
             referencedColumns: ["id"];
           }
         ];
@@ -449,18 +435,24 @@ export interface Database {
           id: string;
           key: string;
           value: Json;
+          description: string | null;
           updated_at: string;
+          updated_by: string | null;
         };
         Insert: {
           id?: string;
           key: string;
           value: Json;
+          description?: string | null;
           updated_at?: string;
+          updated_by?: string | null;
         };
         Update: {
           key?: string;
           value?: Json;
+          description?: string | null;
           updated_at?: string;
+          updated_by?: string | null;
         };
         Relationships: [];
       };
@@ -472,38 +464,59 @@ export interface Database {
         Row: {
           id: string;
           user_id: string;
-          tiktok_user_id: string | null;
-          username: string | null;
+          open_id: string;
+          union_id: string | null;
           display_name: string | null;
           avatar_url: string | null;
-          access_token: string | null;
-          refresh_token: string | null;
+          follower_count: number;
+          following_count: number;
+          likes_count: number;
+          video_count: number;
+          access_token: string;
+          refresh_token: string;
           token_expires_at: string | null;
-          is_active: boolean;
+          scopes: Json;
+          account_type: string;
+          status: string;
           created_at: string;
           updated_at: string;
+          username: string | null;
         };
         Insert: {
           id?: string;
           user_id: string;
-          tiktok_user_id?: string | null;
-          username?: string | null;
+          open_id: string;
+          union_id?: string | null;
           display_name?: string | null;
           avatar_url?: string | null;
-          access_token?: string | null;
-          refresh_token?: string | null;
+          follower_count?: number;
+          following_count?: number;
+          likes_count?: number;
+          video_count?: number;
+          access_token: string;
+          refresh_token: string;
           token_expires_at?: string | null;
-          is_active?: boolean;
+          scopes?: Json;
+          account_type?: string;
+          status?: string;
+          username?: string | null;
         };
         Update: {
-          tiktok_user_id?: string | null;
-          username?: string | null;
+          open_id?: string;
+          union_id?: string | null;
           display_name?: string | null;
           avatar_url?: string | null;
-          access_token?: string | null;
-          refresh_token?: string | null;
+          follower_count?: number;
+          following_count?: number;
+          likes_count?: number;
+          video_count?: number;
+          access_token?: string;
+          refresh_token?: string;
           token_expires_at?: string | null;
-          is_active?: boolean;
+          scopes?: Json;
+          account_type?: string;
+          status?: string;
+          username?: string | null;
         };
         Relationships: [
           {
@@ -522,35 +535,67 @@ export interface Database {
         Row: {
           id: string;
           user_id: string;
-          tiktok_account_id: string | null;
-          video_url: string;
-          title: string | null;
-          description: string | null;
-          status: string;
-          publish_id: string | null;
-          error_message: string | null;
+          task_name: string | null;
+          name: string | null;
+          publish_type: string;
+          title_template: string | null;
+          privacy_level: string;
+          allow_comment: boolean;
+          allow_duet: boolean;
+          allow_stitch: boolean;
+          brand_content_toggle: boolean;
+          brand_organic_toggle: boolean;
+          is_aigc: boolean;
           scheduled_at: string | null;
-          published_at: string | null;
+          batch_interval_seconds: number;
+          status: string;
+          total_items: number;
+          success_count: number;
+          failed_count: number;
+          published_count: number;
+          pending_count: number;
+          total_views: number;
+          total_likes: number;
+          product_info: Json | null;
           created_at: string;
           updated_at: string;
+          started_at: string | null;
+          completed_at: string | null;
         };
         Insert: {
           id?: string;
           user_id: string;
-          tiktok_account_id?: string | null;
-          video_url: string;
-          title?: string | null;
-          description?: string | null;
-          status?: string;
-          publish_id?: string | null;
-          error_message?: string | null;
+          task_name?: string | null;
+          name?: string | null;
+          publish_type?: string;
+          title_template?: string | null;
+          privacy_level?: string;
+          allow_comment?: boolean;
+          allow_duet?: boolean;
+          allow_stitch?: boolean;
+          brand_content_toggle?: boolean;
+          brand_organic_toggle?: boolean;
+          is_aigc?: boolean;
           scheduled_at?: string | null;
+          batch_interval_seconds?: number;
+          status?: string;
+          total_items?: number;
+          product_info?: Json | null;
         };
         Update: {
+          task_name?: string | null;
+          name?: string | null;
           status?: string;
-          publish_id?: string | null;
-          error_message?: string | null;
-          published_at?: string | null;
+          total_items?: number;
+          success_count?: number;
+          failed_count?: number;
+          published_count?: number;
+          pending_count?: number;
+          total_views?: number;
+          total_likes?: number;
+          product_info?: Json | null;
+          started_at?: string | null;
+          completed_at?: string | null;
         };
         Relationships: [
           {
@@ -558,11 +603,301 @@ export interface Database {
             columns: ["user_id"];
             referencedRelation: "profiles";
             referencedColumns: ["id"];
+          }
+        ];
+      };
+
+      // -----------------------------------------------------------------------
+      // Publish Task Items 表 (发布任务子项)
+      // -----------------------------------------------------------------------
+      publish_task_items: {
+        Row: {
+          id: string;
+          task_id: string;
+          account_id: string;
+          video_url: string;
+          video_source: string;
+          source_asset_id: string | null;
+          title: string | null;
+          tiktok_publish_id: string | null;
+          tiktok_share_id: string | null;
+          tiktok_video_id: string | null;
+          status: string;
+          error_code: string | null;
+          error_message: string | null;
+          scheduled_at: string | null;
+          published_at: string | null;
+          created_at: string;
+          updated_at: string;
+          cover_timestamp_ms: number | null;
+          view_count: number;
+          like_count: number;
+          comment_count: number;
+          share_count: number;
+          stats_updated_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          task_id: string;
+          account_id: string;
+          video_url: string;
+          video_source?: string;
+          source_asset_id?: string | null;
+          title?: string | null;
+          tiktok_publish_id?: string | null;
+          tiktok_share_id?: string | null;
+          tiktok_video_id?: string | null;
+          status?: string;
+          error_code?: string | null;
+          error_message?: string | null;
+          scheduled_at?: string | null;
+          cover_timestamp_ms?: number | null;
+        };
+        Update: {
+          status?: string;
+          tiktok_publish_id?: string | null;
+          tiktok_share_id?: string | null;
+          tiktok_video_id?: string | null;
+          error_code?: string | null;
+          error_message?: string | null;
+          published_at?: string | null;
+          cover_timestamp_ms?: number | null;
+          view_count?: number;
+          like_count?: number;
+          comment_count?: number;
+          share_count?: number;
+          stats_updated_at?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "publish_task_items_task_id_fkey";
+            columns: ["task_id"];
+            referencedRelation: "publish_tasks";
+            referencedColumns: ["id"];
           },
           {
-            foreignKeyName: "publish_tasks_tiktok_account_id_fkey";
-            columns: ["tiktok_account_id"];
+            foreignKeyName: "publish_task_items_account_id_fkey";
+            columns: ["account_id"];
             referencedRelation: "tiktok_accounts";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
+
+      // -----------------------------------------------------------------------
+      // Link Video Jobs 表 (链接解析视频生成)
+      // -----------------------------------------------------------------------
+      link_video_jobs: {
+        Row: {
+          id: string;
+          user_id: string;
+          product_link_id: string | null;
+          ai_model_id: string | null;
+          manual_product_info: Json | null;
+          video_config: Json | null;
+          selected_main_image_url: string | null;
+          selected_image_urls: Json | null;
+          script_text: string | null;
+          script_versions: Json | null;
+          grid_image_url: string | null;
+          final_video_url: string | null;
+          thumbnail_url: string | null;
+          grid_task_id: string | null;
+          video_task_id: string | null;
+          status: string;
+          current_step: number;
+          progress: number;
+          error_message: string | null;
+          credits_estimated: number;
+          credits_used: number;
+          credits_refunded: number;
+          script_rewrite_count: number;
+          grid_retry_count: number;
+          video_retry_count: number;
+          created_at: string;
+          updated_at: string;
+          started_at: string | null;
+          completed_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          product_link_id?: string | null;
+          ai_model_id?: string | null;
+          manual_product_info?: Json | null;
+          video_config?: Json | null;
+          selected_main_image_url?: string | null;
+          selected_image_urls?: Json | null;
+          script_text?: string | null;
+          script_versions?: Json | null;
+          status?: string;
+          current_step?: number;
+          credits_estimated?: number;
+        };
+        Update: {
+          product_link_id?: string | null;
+          ai_model_id?: string | null;
+          manual_product_info?: Json | null;
+          video_config?: Json | null;
+          selected_main_image_url?: string | null;
+          selected_image_urls?: Json | null;
+          script_text?: string | null;
+          script_versions?: Json | null;
+          grid_image_url?: string | null;
+          final_video_url?: string | null;
+          thumbnail_url?: string | null;
+          grid_task_id?: string | null;
+          video_task_id?: string | null;
+          status?: string;
+          current_step?: number;
+          progress?: number;
+          error_message?: string | null;
+          credits_estimated?: number;
+          credits_used?: number;
+          credits_refunded?: number;
+          script_rewrite_count?: number;
+          grid_retry_count?: number;
+          video_retry_count?: number;
+          started_at?: string | null;
+          completed_at?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "link_video_jobs_user_id_fkey";
+            columns: ["user_id"];
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
+
+      // -----------------------------------------------------------------------
+      // Quick Gen History 表 (快速生成历史记录)
+      // -----------------------------------------------------------------------
+      quick_gen_history: {
+        Row: {
+          id: string;
+          user_id: string;
+          mode: string;
+          input_images: Json;
+          prompt: string | null;
+          image_model: string | null;
+          image_quality_tier: string | null;
+          image_aspect_ratio: string | null;
+          image_resolution: string | null;
+          video_model: string | null;
+          video_aspect_ratio: string | null;
+          video_use_ai_model: boolean;
+          video_ai_model_id: string | null;
+          output_url: string | null;
+          thumbnail_url: string | null;
+          status: string;
+          credits_cost: number;
+          created_at: string;
+          expires_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          mode: string;
+          input_images?: Json;
+          prompt?: string | null;
+          image_model?: string | null;
+          image_quality_tier?: string | null;
+          image_aspect_ratio?: string | null;
+          image_resolution?: string | null;
+          video_model?: string | null;
+          video_aspect_ratio?: string | null;
+          video_use_ai_model?: boolean;
+          video_ai_model_id?: string | null;
+          output_url?: string | null;
+          thumbnail_url?: string | null;
+          status?: string;
+          credits_cost?: number;
+          expires_at?: string | null;
+        };
+        Update: {
+          mode?: string;
+          output_url?: string | null;
+          thumbnail_url?: string | null;
+          status?: string;
+          credits_cost?: number;
+          expires_at?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "quick_gen_history_user_id_fkey";
+            columns: ["user_id"];
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
+
+      // -----------------------------------------------------------------------
+      // Ecom Image Tasks 表 (电商图片工厂任务)
+      // -----------------------------------------------------------------------
+      ecom_image_tasks: {
+        Row: {
+          id: string;
+          user_id: string;
+          mode: string;
+          model_type: string;
+          language: string;
+          ratio: string;
+          resolution: string | null;
+          input_image_urls: Json;
+          mode_config: Json;
+          prompts: Json;
+          output_items: Json;
+          status: string;
+          current_step: number;
+          error_message: string | null;
+          credits_cost: number;
+          credits_charged: boolean;
+          credits_charged_at: string | null;
+          created_at: string;
+          updated_at: string;
+          completed_at: string | null;
+          metadata: Json;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          mode: string;
+          model_type?: string;
+          language?: string;
+          ratio?: string;
+          resolution?: string | null;
+          input_image_urls: Json;
+          mode_config?: Json;
+          prompts?: Json;
+          output_items?: Json;
+          status?: string;
+          current_step?: number;
+          credits_cost?: number;
+          credits_charged?: boolean;
+          metadata?: Json;
+        };
+        Update: {
+          mode?: string;
+          model_type?: string;
+          status?: string;
+          current_step?: number;
+          error_message?: string | null;
+          prompts?: Json;
+          output_items?: Json;
+          credits_cost?: number;
+          credits_charged?: boolean;
+          credits_charged_at?: string | null;
+          completed_at?: string | null;
+          metadata?: Json;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "ecom_image_tasks_user_id_fkey";
+            columns: ["user_id"];
+            referencedRelation: "profiles";
             referencedColumns: ["id"];
           }
         ];
