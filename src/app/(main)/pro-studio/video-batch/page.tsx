@@ -2805,6 +2805,21 @@ C07: [story CTA, inspiring, <50 chars]`,
                                   return;
                                 }
 
+                                // 尝试使用 File System Access API（选择一次文件夹，后台自动下载）
+                                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                let dirHandle: any = null;
+                                try {
+                                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                  if ('showDirectoryPicker' in window) {
+                                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                    dirHandle = await (window as any).showDirectoryPicker({ mode: 'readwrite' });
+                                  }
+                                } catch (e) {
+                                  // 用户取消了文件夹选择
+                                  if (e instanceof DOMException && e.name === 'AbortError') return;
+                                  console.log('[Download] File System Access API not available, using fallback');
+                                }
+
                                 cancelDownloadRef.current = false;
                                 setDownloadProgress({
                                   show: true,
@@ -2812,7 +2827,7 @@ C07: [story CTA, inspiring, <50 chars]`,
                                   current: 0,
                                   success: 0,
                                   failed: 0,
-                                  currentFilename: "准备中...",
+                                  currentFilename: dirHandle ? "正在下载到选定文件夹..." : "准备中...",
                                   startTime: Date.now(),
                                   cancelled: false,
                                 });
@@ -2852,41 +2867,59 @@ C07: [story CTA, inspiring, <50 chars]`,
                                       const reader = response.body?.getReader();
                                       if (!reader) throw new Error("无法读取响应流");
 
-                                      const chunks: Uint8Array[] = [];
-                                      let receivedLength = 0;
+                                      if (dirHandle) {
+                                        // ✅ File System Access API: 直接写入文件到选定文件夹
+                                        const fileHandle = await dirHandle.getFileHandle(filename, { create: true });
+                                        const writable = await fileHandle.createWritable();
+                                        let receivedLength = 0;
 
-                                      while (true) {
-                                        const { done, value } = await reader.read();
-                                        if (done) break;
-                                        chunks.push(value);
-                                        receivedLength += value.length;
-                                        if (totalSize > 0) {
-                                          const progress = Math.round((receivedLength / totalSize) * 100);
-                                          setTaskDownloadProgress(prev => ({ ...prev, [task.id]: progress }));
+                                        try {
+                                          while (true) {
+                                            const { done, value } = await reader.read();
+                                            if (done) break;
+                                            await writable.write(value);
+                                            receivedLength += value.length;
+                                            if (totalSize > 0) {
+                                              const progress = Math.round((receivedLength / totalSize) * 100);
+                                              setTaskDownloadProgress(prev => ({ ...prev, [task.id]: progress }));
+                                            }
+                                          }
+                                        } finally {
+                                          await writable.close();
                                         }
+                                      } else {
+                                        // 回退模式: blob 下载
+                                        const chunks: Uint8Array[] = [];
+                                        let receivedLength = 0;
+
+                                        while (true) {
+                                          const { done, value } = await reader.read();
+                                          if (done) break;
+                                          chunks.push(value);
+                                          receivedLength += value.length;
+                                          if (totalSize > 0) {
+                                            const progress = Math.round((receivedLength / totalSize) * 100);
+                                            setTaskDownloadProgress(prev => ({ ...prev, [task.id]: progress }));
+                                          }
+                                        }
+
+                                        const blob = new Blob(chunks as unknown as BlobPart[], { type: "video/mp4" });
+                                        const blobUrl = URL.createObjectURL(blob);
+                                        const link = document.createElement("a");
+                                        link.href = blobUrl;
+                                        link.download = filename;
+                                        document.body.appendChild(link);
+                                        link.click();
+                                        document.body.removeChild(link);
+                                        setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
                                       }
 
-                                      const blob = new Blob(chunks as unknown as BlobPart[], { type: "video/mp4" });
-                                      const blobUrl = URL.createObjectURL(blob);
-                                      const link = document.createElement("a");
-                                      link.href = blobUrl;
-                                      link.download = filename;
-                                      document.body.appendChild(link);
-                                      link.click();
-                                      document.body.removeChild(link);
-                                      setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
                                       successCount++;
                                       markTaskAsDownloaded(task.id);
                                       setTaskDownloadProgress(prev => ({ ...prev, [task.id]: 100 }));
                                     } catch (error) {
                                       console.error(`Download Error:`, error);
                                       failedCount++;
-                                      // 望景API URL 走代理打开
-                                      if (task.soraVideoUrl.includes('60.205.120.27') || task.soraVideoUrl.includes('/v1/videos/')) {
-                                        openVideoInNewTab(`/api/download-proxy?url=${encodeURIComponent(task.soraVideoUrl)}&filename=video.mp4`);
-                                      } else {
-                                        openVideoInNewTab(task.soraVideoUrl);
-                                      }
                                     }
 
                                     setDownloadingTaskIds(prev => {
@@ -2908,13 +2941,18 @@ C07: [story CTA, inspiring, <50 chars]`,
 
                                 setIsDownloading(false);
                                 setTaskDownloadProgress({});
+                                toast({
+                                  title: successCount > 0 ? "✅ 批量下载完成" : "下载失败",
+                                  description: `成功 ${successCount} 个${failedCount > 0 ? `，失败 ${failedCount} 个` : ''}${dirHandle ? '，已保存到选定文件夹' : ''}`,
+                                  variant: failedCount > 0 && successCount === 0 ? "destructive" : "default",
+                                });
                               }}
                               className="cursor-pointer bg-gradient-to-r from-emerald-500/10 to-teal-500/10 border border-emerald-500/20"
                             >
                               <Zap className="h-4 w-4 mr-2 text-emerald-400" />
                               <div className="flex flex-col">
-                                <span className="font-medium text-emerald-400">直连CDN推荐 🧪</span>
-                                <span className="text-xs text-muted-foreground">直连CDN，速度最快，显示进度</span>
+                                <span className="font-medium text-emerald-400">选择文件夹批量下载 ⚡</span>
+                                <span className="text-xs text-muted-foreground">选一次文件夹，后台自动下载全部</span>
                               </div>
                             </DropdownMenuItem>
 
