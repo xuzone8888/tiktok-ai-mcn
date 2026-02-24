@@ -23,48 +23,48 @@ import type {
 interface LinkVideoState {
   // 当前任务
   currentJob: LinkVideoJob | null;
-  
+
   // 步骤控制
   currentStep: number;  // 1-5
-  
+
   // Step 1: 链接输入
   inputUrl: string;
   isParsingLink: boolean;
   parsedData: ParsedProductData | null;
   parseError: string | null;
   productLinkId: string | null;
-  
+
   // 图片选择
   selectedImages: ProductImage[];
   primaryImageUrl: string | null;
-  
+
   // Step 2: 视频配置
   videoConfig: VideoConfig;
   selectedModelId: string | null;
-  
+
   // Step 3: 脚本
   scriptText: string;
   isGeneratingScript: boolean;
   scriptError: string | null;
   scriptVersion: number;
-  
+
   // Step 4: 九宫格
   gridImageUrl: string | null;
   isGeneratingGrid: boolean;
   gridError: string | null;
   gridTaskId: string | null;
-  
+
   // Step 5: 视频
   videoUrl: string | null;
   isGeneratingVideo: boolean;
   videoError: string | null;
   videoTaskId: string | null;
   videoProgress: number;
-  
+
   // 手动模式
   isManualMode: boolean;
   manualProductInfo: ManualProductInfo | null;
-  
+
   // 全局状态
   isLoading: boolean;
   error: string | null;
@@ -75,53 +75,53 @@ interface LinkVideoActions {
   setStep: (step: number) => void;
   nextStep: () => void;
   prevStep: () => void;
-  
+
   // Step 1: 链接解析
   setInputUrl: (url: string) => void;
   startParseLink: () => void;
-  setParsedData: (data: ParsedProductData, productLinkId: string) => void;
+  setParsedData: (data: ParsedProductData, productLinkId: string | null) => void;
   setParseError: (error: string) => void;
-  
+
   // 图片选择
   toggleImageSelection: (imageUrl: string) => void;
   setPrimaryImage: (imageUrl: string) => void;
   setSelectedImages: (images: ProductImage[]) => void;
-  
+
   // Step 2: 配置
   setVideoConfig: (config: Partial<VideoConfig>) => void;
   setSelectedModelId: (modelId: string | null) => void;
-  
+
   // Step 3: 脚本
   setScriptText: (text: string) => void;
   startGenerateScript: () => void;
   setScriptGenerated: (script: string, version: number) => void;
   setScriptError: (error: string) => void;
-  
+
   // Step 4: 九宫格
   startGenerateGrid: () => void;
   setGridGenerated: (url: string) => void;
   setGridTaskId: (taskId: string) => void;
   setGridError: (error: string) => void;
-  
+
   // Step 5: 视频
   startGenerateVideo: () => void;
   setVideoGenerated: (url: string) => void;
   setVideoTaskId: (taskId: string) => void;
   setVideoProgress: (progress: number) => void;
   setVideoError: (error: string) => void;
-  
+
   // 手动模式
   enableManualMode: () => void;
   setManualProductInfo: (info: ManualProductInfo) => void;
-  
+
   // 任务管理
   setCurrentJob: (job: LinkVideoJob | null) => void;
   updateJobStatus: (status: LinkVideoJobStatus) => void;
-  
+
   // 重置
   reset: () => void;
   resetStep: (step: number) => void;
-  
+
   // 全局
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
@@ -136,16 +136,16 @@ type LinkVideoStore = LinkVideoState & LinkVideoActions;
 const initialState: LinkVideoState = {
   currentJob: null,
   currentStep: 1,
-  
+
   inputUrl: '',
   isParsingLink: false,
   parsedData: null,
   parseError: null,
   productLinkId: null,
-  
+
   selectedImages: [],
   primaryImageUrl: null,
-  
+
   videoConfig: {
     duration: 15,
     aspect_ratio: '9:16',
@@ -154,26 +154,26 @@ const initialState: LinkVideoState = {
     language: 'en',
   },
   selectedModelId: null,
-  
+
   scriptText: '',
   isGeneratingScript: false,
   scriptError: null,
   scriptVersion: 0,
-  
+
   gridImageUrl: null,
   isGeneratingGrid: false,
   gridError: null,
   gridTaskId: null,
-  
+
   videoUrl: null,
   isGeneratingVideo: false,
   videoError: null,
   videoTaskId: null,
   videoProgress: 0,
-  
+
   isManualMode: false,
   manualProductInfo: null,
-  
+
   isLoading: false,
   error: null,
 };
@@ -190,16 +190,16 @@ export const useLinkVideoStore = create<LinkVideoStore>()(
       // ========================================
       // 步骤导航
       // ========================================
-      
+
       setStep: (step) => set({ currentStep: step }),
-      
+
       nextStep: () => {
         const { currentStep } = get();
         if (currentStep < 5) {
           set({ currentStep: currentStep + 1 });
         }
       },
-      
+
       prevStep: () => {
         const { currentStep } = get();
         if (currentStep > 1) {
@@ -210,15 +210,15 @@ export const useLinkVideoStore = create<LinkVideoStore>()(
       // ========================================
       // Step 1: 链接解析
       // ========================================
-      
+
       setInputUrl: (url) => set({ inputUrl: url, parseError: null }),
-      
-      startParseLink: () => set({ 
-        isParsingLink: true, 
+
+      startParseLink: () => set({
+        isParsingLink: true,
         parseError: null,
         parsedData: null,
       }),
-      
+
       setParsedData: (data, productLinkId) => {
         // 自动选择所有图片，第一张为主图
         const selectedImages = data.images.map((img, idx) => ({
@@ -226,7 +226,7 @@ export const useLinkVideoStore = create<LinkVideoStore>()(
           selected: true,
           is_primary: idx === 0,
         }));
-        
+
         set({
           isParsingLink: false,
           parsedData: data,
@@ -237,7 +237,7 @@ export const useLinkVideoStore = create<LinkVideoStore>()(
           isManualMode: false,
         });
       },
-      
+
       setParseError: (error) => set({
         isParsingLink: false,
         parseError: error,
@@ -246,7 +246,7 @@ export const useLinkVideoStore = create<LinkVideoStore>()(
       // ========================================
       // 图片选择
       // ========================================
-      
+
       toggleImageSelection: (imageUrl) => {
         const { selectedImages } = get();
         set({
@@ -255,7 +255,7 @@ export const useLinkVideoStore = create<LinkVideoStore>()(
           ),
         });
       },
-      
+
       setPrimaryImage: (imageUrl) => {
         const { selectedImages } = get();
         set({
@@ -266,8 +266,8 @@ export const useLinkVideoStore = create<LinkVideoStore>()(
           primaryImageUrl: imageUrl,
         });
       },
-      
-      setSelectedImages: (images) => set({ 
+
+      setSelectedImages: (images) => set({
         selectedImages: images,
         primaryImageUrl: images.find(i => i.is_primary)?.url || images[0]?.url || null,
       }),
@@ -275,31 +275,31 @@ export const useLinkVideoStore = create<LinkVideoStore>()(
       // ========================================
       // Step 2: 配置
       // ========================================
-      
+
       setVideoConfig: (config) => set(state => ({
         videoConfig: { ...state.videoConfig, ...config },
       })),
-      
+
       setSelectedModelId: (modelId) => set({ selectedModelId: modelId }),
 
       // ========================================
       // Step 3: 脚本
       // ========================================
-      
+
       setScriptText: (text) => set({ scriptText: text }),
-      
+
       startGenerateScript: () => set({
         isGeneratingScript: true,
         scriptError: null,
       }),
-      
+
       setScriptGenerated: (script, version) => set({
         isGeneratingScript: false,
         scriptText: script,
         scriptVersion: version,
         scriptError: null,
       }),
-      
+
       setScriptError: (error) => set({
         isGeneratingScript: false,
         scriptError: error,
@@ -308,21 +308,21 @@ export const useLinkVideoStore = create<LinkVideoStore>()(
       // ========================================
       // Step 4: 九宫格
       // ========================================
-      
+
       startGenerateGrid: () => set({
         isGeneratingGrid: true,
         gridError: null,
         gridImageUrl: null,
       }),
-      
+
       setGridGenerated: (url) => set({
         isGeneratingGrid: false,
         gridImageUrl: url,
         gridError: null,
       }),
-      
+
       setGridTaskId: (taskId) => set({ gridTaskId: taskId }),
-      
+
       setGridError: (error) => set({
         isGeneratingGrid: false,
         gridError: error,
@@ -331,25 +331,25 @@ export const useLinkVideoStore = create<LinkVideoStore>()(
       // ========================================
       // Step 5: 视频
       // ========================================
-      
+
       startGenerateVideo: () => set({
         isGeneratingVideo: true,
         videoError: null,
         videoUrl: null,
         videoProgress: 0,
       }),
-      
+
       setVideoGenerated: (url) => set({
         isGeneratingVideo: false,
         videoUrl: url,
         videoError: null,
         videoProgress: 100,
       }),
-      
+
       setVideoTaskId: (taskId) => set({ videoTaskId: taskId }),
-      
+
       setVideoProgress: (progress) => set({ videoProgress: progress }),
-      
+
       setVideoError: (error) => set({
         isGeneratingVideo: false,
         videoError: error,
@@ -358,13 +358,13 @@ export const useLinkVideoStore = create<LinkVideoStore>()(
       // ========================================
       // 手动模式
       // ========================================
-      
-      enableManualMode: () => set({ 
+
+      enableManualMode: () => set({
         isManualMode: true,
         parsedData: null,
         productLinkId: null,
       }),
-      
+
       setManualProductInfo: (info) => {
         const images: ProductImage[] = info.images.map((url, idx) => ({
           url,
@@ -372,7 +372,7 @@ export const useLinkVideoStore = create<LinkVideoStore>()(
           selected: true,
           is_primary: idx === 0,
         }));
-        
+
         set({
           manualProductInfo: info,
           selectedImages: images,
@@ -383,9 +383,9 @@ export const useLinkVideoStore = create<LinkVideoStore>()(
       // ========================================
       // 任务管理
       // ========================================
-      
+
       setCurrentJob: (job) => set({ currentJob: job }),
-      
+
       updateJobStatus: (status) => set(state => ({
         currentJob: state.currentJob ? { ...state.currentJob, status } : null,
       })),
@@ -393,9 +393,9 @@ export const useLinkVideoStore = create<LinkVideoStore>()(
       // ========================================
       // 重置
       // ========================================
-      
+
       reset: () => set(initialState),
-      
+
       resetStep: (step) => {
         switch (step) {
           case 1:
@@ -444,7 +444,7 @@ export const useLinkVideoStore = create<LinkVideoStore>()(
       // ========================================
       // 全局
       // ========================================
-      
+
       setLoading: (loading) => set({ isLoading: loading }),
       setError: (error) => set({ error }),
     }),
@@ -487,7 +487,7 @@ export const useLinkVideoStore = create<LinkVideoStore>()(
 /** 获取当前步骤是否可以继续 */
 export function useCanProceed(): boolean {
   const store = useLinkVideoStore();
-  
+
   switch (store.currentStep) {
     case 1:
       // Step 1: 需要有解析数据或手动输入，且选中了主图
@@ -526,7 +526,7 @@ export function useIsStepLoading(): boolean {
 /** 获取当前步骤的错误 */
 export function useStepError(): string | null {
   const store = useLinkVideoStore();
-  
+
   switch (store.currentStep) {
     case 1:
       return store.parseError;

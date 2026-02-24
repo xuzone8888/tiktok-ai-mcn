@@ -4,7 +4,7 @@ const nextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
   },
-  // TypeScript 配置 - prompts route 导出非 HTTP 函数，需修复后再启用
+  // TypeScript 配置 - 339 个预存 TS 错误待清理，暂保持跳过
   typescript: {
     ignoreBuildErrors: true,
   },

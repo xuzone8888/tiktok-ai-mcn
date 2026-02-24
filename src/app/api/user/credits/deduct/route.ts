@@ -30,7 +30,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 // 积分定价配置
 // ============================================================================
 
-export const CREDIT_PRICING = {
+const CREDIT_PRICING = {
   // 快速单个视频
   quickVideo: {
     "sora2-10s": 20,
@@ -38,7 +38,7 @@ export const CREDIT_PRICING = {
     "sora2-pro-15s-hd": 320,
     "sora2-pro-25s": 320,
   },
-  
+
   // 批量生产视频
   batchVideo: {
     "sora2-10s": 20,
@@ -46,7 +46,7 @@ export const CREDIT_PRICING = {
     "sora2-pro-15s-hd": 350,
     "sora2-pro-25s": 350,
   },
-  
+
   // 图片生成
   image: {
     "nano-banana-fast": 10,
@@ -55,7 +55,7 @@ export const CREDIT_PRICING = {
 };
 
 // 操作类型
-export type OperationType = 
+export type OperationType =
   | "quick_video"
   | "batch_video"
   | "quick_image"
@@ -73,7 +73,7 @@ interface DeductRequest {
 /**
  * 根据操作类型和模型获取积分消耗
  */
-export function getCreditCost(operationType: OperationType, model: string): number {
+function getCreditCost(operationType: OperationType, model: string): number {
   switch (operationType) {
     case "quick_video":
       return CREDIT_PRICING.quickVideo[model as keyof typeof CREDIT_PRICING.quickVideo] || 20;
@@ -134,8 +134,8 @@ export async function POST(request: Request) {
     // 检查积分是否足够
     if (currentCredits < totalCost) {
       return NextResponse.json(
-        { 
-          success: false, 
+        {
+          success: false,
           error: `积分不足！需要 ${totalCost} 积分，当前余额 ${currentCredits}`,
           required: totalCost,
           current: currentCredits,

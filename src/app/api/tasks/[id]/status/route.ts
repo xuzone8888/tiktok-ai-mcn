@@ -21,15 +21,15 @@ interface MockTask {
 const globalTaskStore = new Map<string, MockTask>();
 
 // 导出供其他模块使用
-export function getTaskStore() {
+function getTaskStore() {
   return globalTaskStore;
 }
 
-export function setTask(task: MockTask) {
+function setTask(task: MockTask) {
   globalTaskStore.set(task.id, task);
 }
 
-export function getTask(taskId: string): MockTask | undefined {
+function getTask(taskId: string): MockTask | undefined {
   return globalTaskStore.get(taskId);
 }
 

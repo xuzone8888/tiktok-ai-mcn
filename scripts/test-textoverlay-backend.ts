@@ -154,7 +154,7 @@ async function testCustomMode() {
             boxY: 70,
             boxWidth: 80,
             style: 'neon',
-            tone: 'excited',
+            tone: 'warm',
             color: '#FF0000',
             fontSize: 18,
             fontFamily: 'Microsoft YaHei',

@@ -41,7 +41,7 @@ interface TaskRecord {
 const taskStore = new Map<string, TaskRecord>();
 
 // 导出供状态查询 API 使用
-export function getTaskFromStore(taskId: string): TaskRecord | undefined {
+function getTaskFromStore(taskId: string): TaskRecord | undefined {
   return taskStore.get(taskId);
 }
 
@@ -125,18 +125,18 @@ export async function POST(request: Request) {
     // ============================================
     // 组装最终 Prompt (注入唤醒词)
     // ============================================
-    
+
     const validation = validateUserPrompt(prompt || "");
     if (validation.warnings.length > 0) {
       console.log("[Generate API] Prompt validation warnings:", validation.warnings);
     }
-    
+
     const promptResult = await assemblePrompt({
       user_prompt: validation.sanitizedPrompt,
       model_id: modelId,
       source_image_url: imageUrl,
     });
-    
+
     console.log("[Generate API] Prompt Assembly:", {
       has_user_prompt: hasPrompt,
       has_image: hasImage,
@@ -212,9 +212,9 @@ export async function POST(request: Request) {
 // ============================================================================
 
 async function simulateTaskProcessing(
-  taskId: string, 
-  duration: VideoDuration, 
-  userId: string, 
+  taskId: string,
+  duration: VideoDuration,
+  userId: string,
   credits: number
 ) {
   const task = taskStore.get(taskId);
@@ -242,10 +242,10 @@ async function simulateTaskProcessing(
 
     if (currentStep >= totalSteps) {
       clearInterval(interval);
-      
+
       // 90% 成功率
       const isSuccess = Math.random() > 0.1;
-      
+
       if (isSuccess) {
         const outputUrls = [
           "https://www.w3schools.com/html/mov_bbb.mp4",
@@ -279,7 +279,7 @@ async function simulateTaskProcessing(
             .update({ credits: profile.credits + credits })
             .eq("id", userId);
         }
-        
+
         taskStore.set(taskId, {
           ...currentTask,
           status: "failed",
