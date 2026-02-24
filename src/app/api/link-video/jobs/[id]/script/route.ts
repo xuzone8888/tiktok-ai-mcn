@@ -17,7 +17,7 @@ export async function POST(
 ) {
   try {
     const { id: jobId } = await params;
-    
+
     // 1. 验证用户
     const supabase = await createServerClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
@@ -58,7 +58,7 @@ export async function POST(
     let creditsCharged = 0;
     if (rewrite && isScriptRewriteCharged(job.script_rewrite_count)) {
       creditsCharged = getScriptRewriteCost(job.script_rewrite_count);
-      
+
       // 检查用户积分
       const { data: profile } = await adminSupabase
         .from('profiles')
@@ -102,8 +102,8 @@ export async function POST(
 
     // 7. 生成脚本
     const scriptResult = await generateLinkVideoScript({
-      productInfo,
-      videoConfig: job.video_config,
+      productInfo: productInfo as unknown as Parameters<typeof generateLinkVideoScript>[0]['productInfo'],
+      videoConfig: job.video_config as unknown as Parameters<typeof generateLinkVideoScript>[0]['videoConfig'],
       modelProfile: job.ai_model ? {
         name: job.ai_model.name,
         gender: job.ai_model.gender,
@@ -128,7 +128,7 @@ export async function POST(
     }
 
     // 8. 保存脚本
-    const currentVersions = job.script_versions || [];
+    const currentVersions = (job.script_versions || []) as Array<Record<string, unknown>>;
     const newVersion = {
       version: currentVersions.length + 1,
       content: scriptResult.script,
@@ -153,13 +153,13 @@ export async function POST(
 
     // 9. 扣除重写费用
     if (creditsCharged > 0) {
-      await adminSupabase.rpc('deduct_credits', {
+      await adminSupabase.rpc('deduct_credits' as never, {
         p_user_id: user.id,
         p_amount: creditsCharged,
         p_description: `链接转视频 - 脚本重写 (第${job.script_rewrite_count + 1}次)`,
         p_reference_type: 'link_video_job',
         p_reference_id: jobId,
-      });
+      } as never);
     }
 
     return NextResponse.json({

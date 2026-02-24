@@ -366,10 +366,10 @@ export async function queryVeo3Result(
 
     console.log("[VEO3] Query response:", {
       code: data.code,
-      taskId: data.data?.task_id,
+      taskId: data.data?.id,
       status: data.data?.status,
       progress: data.data?.progress,
-      hasUrl: !!data.data?.video_url,
+      hasUrl: !!(data.data?.result?.videos && data.data.result.videos.length > 0),
     });
 
     if (data.code === 200 && data.data) {

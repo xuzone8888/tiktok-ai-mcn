@@ -4,9 +4,9 @@
  * 使用豆包 API 生成电商带货脚本
  */
 
-import type { 
-  VideoConfig, 
-  ParsedProductData, 
+import type {
+  VideoConfig,
+  ParsedProductData,
   ManualProductInfo,
   VideoStyle,
   PlatformStyle,
@@ -98,9 +98,9 @@ export async function generateLinkVideoScript(
     console.error('[Script Generator] API not configured!');
     console.error('  DOUBAO_API_KEY:', DOUBAO_API_KEY ? 'configured' : 'MISSING');
     console.error('  DOUBAO_ENDPOINT_ID:', DOUBAO_ENDPOINT_ID ? 'configured' : 'MISSING');
-    return { 
-      success: false, 
-      error: '脚本生成服务未配置，请检查服务器环境变量 DOUBAO_API_KEY 和 DOUBAO_ENDPOINT_ID' 
+    return {
+      success: false,
+      error: '脚本生成服务未配置，请检查服务器环境变量 DOUBAO_API_KEY 和 DOUBAO_ENDPOINT_ID'
     };
   }
 
@@ -157,9 +157,9 @@ export async function generateLinkVideoScript(
 
   } catch (error) {
     console.error('[Script Generator] Error:', error);
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : '脚本生成失败' 
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : '脚本生成失败'
     };
   }
 }
@@ -184,14 +184,15 @@ function buildUserPrompt(
     // ParsedProductData
     title = productInfo.title;
     sellingPoints = productInfo.selling_points;
-    price = typeof productInfo.price === 'object' 
+    price = typeof productInfo.price === 'object'
       ? `${productInfo.price.current}${productInfo.price.discount ? ` (${productInfo.price.discount})` : ''}`
       : productInfo.price;
   } else {
     // ManualProductInfo
     title = productInfo.title;
-    sellingPoints = productInfo.selling_points.split(/[,，;；\n]/).filter(s => s.trim());
-    price = productInfo.price;
+    const sp = productInfo.selling_points;
+    sellingPoints = typeof sp === 'string' ? sp.split(/[,，;；\n]/).filter((s: string) => s.trim()) : (sp as string[]);
+    price = String(productInfo.price);
   }
 
   // 构建 Prompt
