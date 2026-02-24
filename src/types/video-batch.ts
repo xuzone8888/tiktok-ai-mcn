@@ -30,7 +30,7 @@ export const API_LINES: Record<ApiLineType, ApiLineConfig> = {
   line2: {
     id: "line2",
     name: "备用线路",
-    description: "吾音科技 sora2-new (10/15秒)"
+    description: "望景API sora-2 (10/15秒)"
   },
 } as const;
 
