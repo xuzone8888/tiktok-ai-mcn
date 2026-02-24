@@ -23,7 +23,7 @@ export async function GET(
     // 1. 验证用户身份
     const supabase = await createServerClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
-    
+
     if (authError || !user) {
       return NextResponse.json(
         { success: false, error: "请先登录" },
@@ -56,18 +56,18 @@ export async function GET(
 
     // 3. 如果任务正在生成图片，检查 Nano Banana 任务状态
     if (task.status === "generating_images") {
-      const outputItems = task.output_items as OutputItem[] || [];
+      const outputItems = (task.output_items as unknown as OutputItem[]) || [];
       let hasUpdates = false;
       let completedCount = 0;
       let failedCount = 0;
 
       for (let i = 0; i < outputItems.length; i++) {
         const item = outputItems[i];
-        
+
         // 只检查正在处理中的项
         if (item.status === "processing" && item.task_id) {
           const result = await queryNanoBananaResult(item.task_id);
-          
+
           // 修复：正确读取返回格式 { success, task: { status, resultUrl } }
           if (result.success && result.task?.status === "completed" && result.task?.resultUrl) {
             outputItems[i] = {
@@ -100,9 +100,9 @@ export async function GET(
         // 计算完成状态
         const totalCount = outputItems.length;
         const processingCount = outputItems.filter(item => item.status === "processing").length;
-        
+
         let newStatus: EcomTaskStatus = "generating_images";
-        
+
         if (processingCount === 0) {
           // 所有任务都已完成
           if (failedCount === totalCount) {
@@ -138,7 +138,7 @@ export async function GET(
 
         // 更新返回的任务对象
         Object.assign(task, updateData);
-        task.output_items = outputItems;
+        task.output_items = outputItems as unknown as typeof task.output_items;
       }
     }
 

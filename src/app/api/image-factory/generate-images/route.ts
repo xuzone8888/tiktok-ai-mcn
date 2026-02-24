@@ -8,12 +8,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createServerClient } from "@/lib/supabase/server";
 import { submitNanoBanana } from "@/lib/suchuang-api";
-import type { 
-  EcomImageMode, 
-  ImageModelType, 
+import type {
+  EcomImageMode,
+  ImageModelType,
   OutputItem,
   EcomAspectRatio,
-  EcomResolution 
+  EcomResolution
 } from "@/types/ecom-image";
 import { FIVE_PACK_TYPES } from "@/types/ecom-image";
 
@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
     // 1. 验证用户身份
     const supabase = await createServerClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
-    
+
     if (authError || !user) {
       return NextResponse.json(
         { success: false, error: "请先登录" },
@@ -122,11 +122,11 @@ export async function POST(request: NextRequest) {
     if (mode === "ecom_five_pack") {
       // 电商五图套装：生成 5 张图
       const fivePackTypes: Array<keyof typeof FIVE_PACK_TYPES> = ["main", "scene", "detail", "selling", "compare"];
-      
+
       for (const type of fivePackTypes) {
         const prompt = prompts[type] || `Generate a ${type} image for e-commerce`;
         const typeConfig = FIVE_PACK_TYPES[type];
-        
+
         // 提交 Nano Banana 任务
         const result = await submitNanoBanana({
           model: modelType,
@@ -193,7 +193,7 @@ export async function POST(request: NextRequest) {
 
       if (profile && profile.credits >= task.credits_cost) {
         const newBalance = profile.credits - task.credits_cost;
-        
+
         // 扣除积分
         const { error: deductError } = await adminClient
           .from("profiles")
@@ -236,10 +236,11 @@ export async function POST(request: NextRequest) {
     await adminClient
       .from("ecom_image_tasks")
       .update({
-        output_items: outputItems,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        output_items: outputItems as any,
         status: newStatus,
-        error_message: failedCount > 0 
-          ? `${failedCount}/${outputItems.length} 张图片生成失败` 
+        error_message: failedCount > 0
+          ? `${failedCount}/${outputItems.length} 张图片生成失败`
           : null,
       })
       .eq("id", task_id);
@@ -270,7 +271,7 @@ export async function POST(request: NextRequest) {
 // 获取默认提示词 - 所有提示词都强调保持原产品不变
 function getDefaultPrompt(mode: EcomImageMode): string {
   const keepProductPrefix = "Keep the EXACT SAME product from the reference image unchanged. Maintain all product details, colors, textures and shape exactly as shown.";
-  
+
   switch (mode) {
     case "white_background":
       return `${keepProductPrefix} Place the product on a pure white background. Professional studio lighting, soft even illumination, no harsh shadows, no extra objects, no text, no watermark.`;

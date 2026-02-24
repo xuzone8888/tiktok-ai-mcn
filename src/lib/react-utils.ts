@@ -32,7 +32,7 @@ export function typedMemo<P extends object>(
   Component: ComponentType<P>,
   propsAreEqual?: (prevProps: Readonly<P>, nextProps: Readonly<P>) => boolean
 ): ComponentType<P> {
-  return memo(Component, propsAreEqual) as ComponentType<P>;
+  return memo(Component, propsAreEqual) as unknown as ComponentType<P>;
 }
 
 // ============================================================================
@@ -228,11 +228,11 @@ export function useStableCallback<T extends (...args: Parameters<T>) => ReturnTy
  */
 export function usePrevious<T>(value: T): T | undefined {
   const ref = useRef<T>();
-  
+
   useEffect(() => {
     ref.current = value;
   }, [value]);
-  
+
   return ref.current;
 }
 

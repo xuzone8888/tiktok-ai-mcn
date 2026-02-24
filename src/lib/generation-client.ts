@@ -21,7 +21,7 @@ import {
 export interface SubmitVideoParams {
   prompt: string;
   model: VideoModel;
-  aspectRatio: VideoAspectRatio;
+  aspectRatio: ImageAspectRatio;
   sourceImageUrl?: string;
   modelId?: string;  // AI 模特 ID
   userId?: string;
@@ -43,7 +43,7 @@ export async function submitVideoGeneration(params: SubmitVideoParams): Promise<
   try {
     const { model, ...rest } = params;
     const duration = VIDEO_MODEL_PRICING[model].apiDuration;
-    
+
     const response = await fetch("/api/generate/video", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -76,9 +76,9 @@ export async function submitVideoGeneration(params: SubmitVideoParams): Promise<
     };
   } catch (error) {
     console.error("[Generation Client] Submit video error:", error);
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : "Network error" 
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Network error"
     };
   }
 }
@@ -94,7 +94,7 @@ export interface VideoTaskStatus {
  * 查询视频生成任务状态
  */
 export async function queryVideoStatus(
-  taskId: string, 
+  taskId: string,
   usePro: boolean = false
 ): Promise<{ success: boolean; task?: VideoTaskStatus; error?: string }> {
   try {
@@ -125,9 +125,9 @@ export async function queryVideoStatus(
     };
   } catch (error) {
     console.error("[Generation Client] Query video error:", error);
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : "Network error" 
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Network error"
     };
   }
 }
@@ -162,7 +162,7 @@ export async function submitImageGeneration(params: SubmitImageParams): Promise<
   try {
     const { tier, ...rest } = params;
     const model = tier === "pro" ? "nano-banana-pro" : "nano-banana";
-    
+
     const response = await fetch("/api/generate/image", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -195,9 +195,9 @@ export async function submitImageGeneration(params: SubmitImageParams): Promise<
     };
   } catch (error) {
     console.error("[Generation Client] Submit image error:", error);
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : "Network error" 
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Network error"
     };
   }
 }
@@ -213,7 +213,7 @@ export interface ImageTaskStatus {
  * 查询图片生成任务状态
  */
 export async function queryImageStatus(
-  taskId: string, 
+  taskId: string,
   model: "nano-banana" | "nano-banana-pro" = "nano-banana"
 ): Promise<{ success: boolean; task?: ImageTaskStatus; error?: string }> {
   try {
@@ -244,9 +244,9 @@ export async function queryImageStatus(
     };
   } catch (error) {
     console.error("[Generation Client] Query image error:", error);
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : "Network error" 
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Network error"
     };
   }
 }
@@ -270,17 +270,17 @@ export async function pollVideoUntilComplete(
   options: PollOptions = {}
 ): Promise<{ success: boolean; task?: VideoTaskStatus; error?: string }> {
   const { maxPolls = 120, intervalMs = 5000, onProgress } = options;
-  
+
   return new Promise((resolve) => {
     let pollCount = 0;
-    
+
     const pollTimer = setInterval(async () => {
       pollCount++;
       onProgress?.(pollCount, maxPolls);
-      
+
       try {
         const result = await queryVideoStatus(taskId, usePro);
-        
+
         if (!result.success) {
           // 继续轮询，除非达到最大次数
           if (pollCount >= maxPolls) {
@@ -289,9 +289,9 @@ export async function pollVideoUntilComplete(
           }
           return;
         }
-        
+
         const task = result.task!;
-        
+
         if (task.status === "completed") {
           clearInterval(pollTimer);
           resolve({ success: true, task });
@@ -305,9 +305,9 @@ export async function pollVideoUntilComplete(
       } catch (error) {
         if (pollCount >= maxPolls) {
           clearInterval(pollTimer);
-          resolve({ 
-            success: false, 
-            error: error instanceof Error ? error.message : "Polling error" 
+          resolve({
+            success: false,
+            error: error instanceof Error ? error.message : "Polling error"
           });
         }
       }
@@ -324,17 +324,17 @@ export async function pollImageUntilComplete(
   options: PollOptions = {}
 ): Promise<{ success: boolean; task?: ImageTaskStatus; error?: string }> {
   const { maxPolls = 60, intervalMs = 3000, onProgress } = options;
-  
+
   return new Promise((resolve) => {
     let pollCount = 0;
-    
+
     const pollTimer = setInterval(async () => {
       pollCount++;
       onProgress?.(pollCount, maxPolls);
-      
+
       try {
         const result = await queryImageStatus(taskId, model);
-        
+
         if (!result.success) {
           if (pollCount >= maxPolls) {
             clearInterval(pollTimer);
@@ -342,9 +342,9 @@ export async function pollImageUntilComplete(
           }
           return;
         }
-        
+
         const task = result.task!;
-        
+
         if (task.status === "completed") {
           clearInterval(pollTimer);
           resolve({ success: true, task });
@@ -358,9 +358,9 @@ export async function pollImageUntilComplete(
       } catch (error) {
         if (pollCount >= maxPolls) {
           clearInterval(pollTimer);
-          resolve({ 
-            success: false, 
-            error: error instanceof Error ? error.message : "Polling error" 
+          resolve({
+            success: false,
+            error: error instanceof Error ? error.message : "Polling error"
           });
         }
       }
@@ -383,17 +383,17 @@ export async function uploadBlobToStorage(
     // 获取 blob 数据
     const blobResponse = await fetch(blobUrl);
     const blob = await blobResponse.blob();
-    
+
     // 创建 FormData
     const formData = new FormData();
     formData.append("file", blob, fileName);
-    
+
     // 上传到 Supabase Storage
     const uploadResponse = await fetch("/api/upload", {
       method: "POST",
       body: formData,
     });
-    
+
     const uploadResponseText = await uploadResponse.text();
     let uploadResult;
     try {
@@ -402,17 +402,17 @@ export async function uploadBlobToStorage(
       console.error("[Generation Client] Failed to parse upload response:", uploadResponseText.substring(0, 200));
       return { success: false, error: "上传服务响应格式错误" };
     }
-    
+
     if (!uploadResult.success) {
       return { success: false, error: uploadResult.error };
     }
-    
+
     return { success: true, url: uploadResult.url };
   } catch (error) {
     console.error("[Generation Client] Upload error:", error);
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : "Upload failed" 
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Upload failed"
     };
   }
 }

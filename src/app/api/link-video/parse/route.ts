@@ -57,7 +57,7 @@ export async function POST(request: NextRequest) {
           success: true,
           data: {
             product_link_id: data.id,
-            parsed_data: data.parsed_data as ParsedProductData,
+            parsed_data: data.parsed_data as unknown as ParsedProductData,
             from_cache: true,
           },
         });
@@ -73,7 +73,7 @@ export async function POST(request: NextRequest) {
 
     // 开发环境使用 Mock 数据 (如果配置了)
     const useMock = process.env.LINK_PARSER_USE_MOCK === 'true';
-    const parseResult = useMock 
+    const parseResult = useMock
       ? getMockParseResult(url)
       : await parseProductLink(url, forcePlatform);
 
@@ -106,6 +106,7 @@ export async function POST(request: NextRequest) {
     try {
       const { data: savedLink, error: saveError } = await adminSupabase
         .from('product_link_cache')
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         .upsert({
           url,
           url_hash: urlHash,
@@ -115,12 +116,12 @@ export async function POST(request: NextRequest) {
           raw_price: parseResult.rawData?.price,
           raw_promo_info: parseResult.rawData?.promoInfo,
           raw_images: parseResult.rawData?.images || [],
-          parsed_data: parseResult.data,
+          parsed_data: parseResult.data as unknown as Record<string, unknown>,
           parse_status: 'success',
           parse_error: null,
           last_fetched_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
-        }, {
+        } as never, {
           onConflict: 'url_hash',
         })
         .select()

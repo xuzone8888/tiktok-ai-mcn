@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
     // 1. 验证用户身份
     const supabase = await createServerClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
-    
+
     if (authError || !user) {
       return NextResponse.json(
         { success: false, error: "请先登录" },
@@ -115,7 +115,7 @@ export async function POST(request: NextRequest) {
       mode,
       language,
       inputImageUrls: inputImages,
-      modeConfig,
+      modeConfig: modeConfig as Record<string, unknown>,
     });
 
     if (!result.success || !result.prompts) {

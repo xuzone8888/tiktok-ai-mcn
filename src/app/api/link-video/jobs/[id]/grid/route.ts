@@ -16,7 +16,7 @@ export async function POST(
 ) {
   try {
     const { id: jobId } = await params;
-    
+
     // 1. 验证用户
     const supabase = await createServerClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
@@ -68,10 +68,10 @@ export async function POST(
       .eq('id', jobId);
 
     // 6. 获取产品描述
-    const productInfo = job.manual_product_info || 
+    const productInfo = job.manual_product_info ||
       (job.product_link_id ? await getProductInfo(adminSupabase, job.product_link_id) : null);
-    
-    const productDescription = productInfo?.title || undefined;
+
+    const productDescription = (productInfo as Record<string, unknown>)?.title as string || undefined;
 
     // 7. 调用 Nano Banana Pro 生成九宫格
     console.log('[Grid API] Generating nine-grid for job:', jobId);
@@ -127,7 +127,7 @@ export async function GET(
 ) {
   try {
     const { id: jobId } = await params;
-    
+
     const supabase = await createServerClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
 
@@ -241,7 +241,7 @@ async function getProductInfo(supabase: ReturnType<typeof createAdminClient>, li
     .select('parsed_data')
     .eq('id', linkId)
     .single();
-  
+
   return data?.parsed_data;
 }
 

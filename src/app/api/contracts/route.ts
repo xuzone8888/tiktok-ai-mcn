@@ -47,12 +47,12 @@ export async function GET(request: NextRequest) {
 
     // 按状态过滤
     if (status) {
-      query = query.eq("status", status);
+      query = query.eq("status", status as never);
     } else {
       // 默认只返回 active 状态的合约
       query = query.eq("status", "active");
     }
-    
+
     // ⚠️ 重要：必须检查合约是否过期！
     // 只返回未过期的合约（end_date > 当前时间）
     query = query.gt("end_date", new Date().toISOString());
@@ -97,7 +97,7 @@ export async function POST(request: NextRequest) {
 
     const supabase = await createClient();
     const adminSupabase = createAdminClient();
-    
+
     const { data: { user } } = await supabase.auth.getUser();
 
     if (!user) {
@@ -155,9 +155,9 @@ export async function POST(request: NextRequest) {
 
       if (otherContracts && otherContracts.length > 0) {
         return NextResponse.json(
-          { 
-            success: false, 
-            error: "该模特已被其他用户签约，暂时无法聘用。请等待当前签约到期后再试。" 
+          {
+            success: false,
+            error: "该模特已被其他用户签约，暂时无法聘用。请等待当前签约到期后再试。"
           },
           { status: 400 }
         );
@@ -196,8 +196,8 @@ export async function POST(request: NextRequest) {
 
     if (profile.credits < price) {
       return NextResponse.json(
-        { 
-          success: false, 
+        {
+          success: false,
           error: `积分不足！需要 ${price} 积分，当前余额 ${profile.credits}`,
           required: price,
           available: profile.credits,
@@ -222,7 +222,7 @@ export async function POST(request: NextRequest) {
     // 计算结束日期
     const startDate = new Date();
     const endDate = new Date();
-    
+
     // 如果是续约，从当前合约结束日期开始计算
     if (action === "renew" && existingContract) {
       const currentEndDate = new Date(existingContract.end_date);
@@ -230,7 +230,7 @@ export async function POST(request: NextRequest) {
         endDate.setTime(currentEndDate.getTime());
       }
     }
-    
+
     switch (rental_period) {
       case "daily":
         endDate.setDate(endDate.getDate() + 1);
@@ -290,7 +290,7 @@ export async function POST(request: NextRequest) {
       .eq("model_id", model_id)
       .eq("status", "active")
       .lt("end_date", new Date().toISOString());
-    
+
     if (expireError) {
       console.warn("[Contracts API] Failed to expire old contracts:", expireError);
     } else if (expiredCount && expiredCount > 0) {
@@ -368,7 +368,7 @@ export async function PUT(request: NextRequest) {
 
     const supabase = await createClient();
     const adminSupabase = createAdminClient();
-    
+
     const { data: { user } } = await supabase.auth.getUser();
 
     if (!user) {
@@ -436,8 +436,8 @@ export async function PUT(request: NextRequest) {
 
     if (profile.credits < price) {
       return NextResponse.json(
-        { 
-          success: false, 
+        {
+          success: false,
           error: `积分不足！需要 ${price} 积分，当前余额 ${profile.credits}`,
         },
         { status: 400 }
@@ -460,7 +460,7 @@ export async function PUT(request: NextRequest) {
     // 计算新的结束日期（从当前结束日期开始累加）
     const currentEndDate = new Date(contract.end_date);
     const newEndDate = new Date(Math.max(currentEndDate.getTime(), Date.now()));
-    
+
     switch (rental_period) {
       case "daily":
         newEndDate.setDate(newEndDate.getDate() + 1);
