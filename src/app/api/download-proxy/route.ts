@@ -33,6 +33,8 @@ const allowedDomains = [
   "videos-jp.ss2.life",
   "videos-us.ss2.life",
   "videos-sg.ss2.life",
+  // 望景API (备用线路)
+  "60.205.120.27",
 ];
 
 function isAllowedDomain(url: string): boolean {
@@ -44,6 +46,21 @@ function isAllowedDomain(url: string): boolean {
   } catch {
     return false;
   }
+}
+
+/** 获取望景API的auth header（服务端注入，不暴露给前端） */
+function getAuthHeaders(videoUrl: string): Record<string, string> {
+  try {
+    const urlObj = new URL(videoUrl);
+    // 望景API 的 /content 端点需要 Bearer token
+    if (urlObj.hostname === "60.205.120.27" && urlObj.pathname.includes('/v1/videos/')) {
+      const key = process.env.WANGJING_API_KEY;
+      if (key) {
+        return { 'Authorization': `Bearer ${key}` };
+      }
+    }
+  } catch { /* ignore */ }
+  return {};
 }
 
 export async function GET(request: NextRequest) {
@@ -108,10 +125,12 @@ export async function GET(request: NextRequest) {
     // 模式3: 普通流式下载（默认）
     console.log(`[Download Proxy] Streaming: ${filename}`);
 
+    const authHeaders = getAuthHeaders(videoUrl);
     const response = await fetch(videoUrl, {
       headers: {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
         "Accept": "*/*",
+        ...authHeaders,
       },
     });
 
