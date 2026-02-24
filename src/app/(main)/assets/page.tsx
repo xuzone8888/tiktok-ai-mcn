@@ -391,7 +391,12 @@ export default function TaskLogPage() {
       if (!t.resultUrl) continue;
       const group = t.groupName && t.groupName !== "默认" ? t.groupName : (t.source === "ecom_factory" ? "电商工厂" : "未分组");
       if (!grouped.has(group)) grouped.set(group, []);
-      grouped.get(group)!.push(t.resultUrl);
+      // 将相对代理路径补全为完整 URL（让迅雷等第三方工具可用）
+      let exportUrl = t.resultUrl;
+      if (exportUrl.startsWith('/api/')) {
+        exportUrl = `${window.location.origin}${exportUrl}`;
+      }
+      grouped.get(group)!.push(exportUrl);
     }
     // 生成带分组标题的 TXT
     const lines: string[] = [];

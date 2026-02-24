@@ -2966,7 +2966,15 @@ C07: [story CTA, inspiring, <50 chars]`,
                                 if (completedSelectedTasks.length === 0) return;
 
                                 const urls = completedSelectedTasks
-                                  .map((task) => task.soraVideoUrl)
+                                  .map((task) => {
+                                    const url = task.soraVideoUrl;
+                                    if (!url) return null;
+                                    // 望景API URL 需要走代理（带域名，让迅雷等第三方工具可用）
+                                    if (url.includes('60.205.120.27') || url.includes('/v1/videos/')) {
+                                      return `${window.location.origin}/api/download-proxy?url=${encodeURIComponent(url)}&filename=video.mp4`;
+                                    }
+                                    return url;
+                                  })
                                   .filter(Boolean)
                                   .join("\n");
 
