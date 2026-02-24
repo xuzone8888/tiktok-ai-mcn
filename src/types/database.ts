@@ -389,7 +389,7 @@ export interface Database {
           created_by?: string | null;
           metadata?: Json;
         };
-        Update: never; // 交易记录不允许更新
+        Update: Record<string, never>; // 交易记录不允许更新
         Relationships: [
           {
             foreignKeyName: "credit_transactions_user_id_fkey";
@@ -808,6 +808,7 @@ export interface Database {
           video_generations: number;
           image_generations: number;
         };
+        Relationships: [];
       };
       user_draft_tasks: {
         Row: {
@@ -828,6 +829,7 @@ export interface Database {
           product_name: string | null;
           product_image: string | null;
         };
+        Relationships: [];
       };
       project_stats: {
         Row: {
@@ -843,6 +845,7 @@ export interface Database {
           completed_count: number;
           failed_count: number;
         };
+        Relationships: [];
       };
     };
 

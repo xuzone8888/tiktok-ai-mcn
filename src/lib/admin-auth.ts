@@ -67,8 +67,7 @@ export async function requireAdmin(): Promise<AdminAuthResult> {
             .eq("id", user.id)
             .single();
 
-        // 显式类型转换（Database types 与实际 schema 不匹配，将在阶段二修复）
-        const profile = profileData as { id: string; email: string; name: string | null; role: string; credits: number } | null;
+        const profile = profileData;
 
         if (profileError || !profile) {
             return {

@@ -4,7 +4,7 @@ const nextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
   },
-  // TypeScript 配置 - 暂时跳过以确保构建成功
+  // TypeScript 配置 - prompts route 导出非 HTTP 函数，需修复后再启用
   typescript: {
     ignoreBuildErrors: true,
   },
