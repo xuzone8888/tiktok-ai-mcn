@@ -72,7 +72,7 @@ interface DoubaoResponse {
 // 默认提示词
 const DEFAULT_PROMPTS = {
   talkingScriptSystem: `You are a professional short-form video script generator for TikTok e-commerce. You create engaging, viral-style product recommendation scripts that follow TikTok trends and best practices.`,
-  
+
   talkingScriptUser: `Based on all the product images provided (the first image is a 3x3 high-resolution grid showing multiple angles of the product, and the following images provide extra details and usage scenes), extract the core selling points and write a TikTok selfie-style talking-head product recommendation script in English.
 
 Requirements:
@@ -128,7 +128,7 @@ async function getConfiguredPrompts(): Promise<typeof DEFAULT_PROMPTS> {
     // 直接从数据库读取提示词配置
     const { createAdminClient } = await import("@/lib/supabase/admin");
     const supabase = createAdminClient();
-    
+
     const { data, error } = await supabase
       .from("system_settings")
       .select("value")
@@ -137,16 +137,16 @@ async function getConfiguredPrompts(): Promise<typeof DEFAULT_PROMPTS> {
 
     if (!error && data?.value) {
       console.log("[Doubao API] Loaded prompts from database");
-      cachedPrompts = data.value;
+      cachedPrompts = data.value as unknown as typeof DEFAULT_PROMPTS;
       lastCacheTime = now;
-      return data.value;
+      return data.value as unknown as typeof DEFAULT_PROMPTS;
     } else {
       console.log("[Doubao API] No prompts in database, using defaults. Error:", error?.message);
     }
   } catch (error) {
     console.log("[Doubao API] Failed to load prompts from database:", error);
   }
-  
+
   return DEFAULT_PROMPTS;
 }
 
@@ -171,13 +171,13 @@ function delay(ms: number): Promise<void> {
 async function waitForRateLimit(): Promise<void> {
   const now = Date.now();
   const timeSinceLastRequest = now - lastRequestTime;
-  
+
   if (timeSinceLastRequest < MIN_REQUEST_INTERVAL) {
     const waitTime = MIN_REQUEST_INTERVAL - timeSinceLastRequest;
     console.log(`[Doubao API] Rate limiting: waiting ${waitTime}ms before next request`);
     await delay(waitTime);
   }
-  
+
   lastRequestTime = Date.now();
 }
 
@@ -195,7 +195,7 @@ async function callDoubaoAPI(
   const apiKey = DOUBAO_API_KEY;
   const endpointId = DOUBAO_ENDPOINT_ID;
   const maxRetries = options?.maxRetries ?? 3;
-  
+
   if (!apiKey) {
     console.error("[Doubao API] API key not configured");
     return { success: false, error: "豆包 API 密钥未配置，请在 .env.local 中配置 DOUBAO_API_KEY" };
@@ -222,7 +222,7 @@ async function callDoubaoAPI(
       console.log("[Doubao API] Calling API:", {
         endpoint: endpointId,
         messageCount: messages.length,
-        hasImages: messages.some(m => 
+        hasImages: messages.some(m =>
           Array.isArray(m.content) && m.content.some(c => c.type === "image_url")
         ),
         attempt,
@@ -240,7 +240,7 @@ async function callDoubaoAPI(
       if (!response.ok) {
         const errorText = await response.text();
         console.error("[Doubao API] HTTP error:", response.status, errorText);
-        
+
         // 处理 429 限流错误
         if (response.status === 429) {
           // 解析错误信息
@@ -258,12 +258,12 @@ async function callDoubaoAPI(
           } catch {
             // 忽略 JSON 解析错误
           }
-          
+
           // 如果是账户限制，不重试
           if (errorMessage.includes("安全体验模式")) {
             return { success: false, error: errorMessage };
           }
-          
+
           // 其他 429 错误，等待后重试
           if (attempt < maxRetries) {
             const retryDelay = Math.min(5000 * Math.pow(2, attempt - 1), 30000); // 指数退避，最大30秒
@@ -271,10 +271,10 @@ async function callDoubaoAPI(
             await delay(retryDelay);
             continue;
           }
-          
+
           return { success: false, error: errorMessage };
         }
-        
+
         // 400 错误 - 检查是否是图片下载超时，可以重试
         if (response.status === 400 && errorText.includes("Timeout while downloading")) {
           if (attempt < maxRetries) {
@@ -283,12 +283,12 @@ async function callDoubaoAPI(
             await delay(retryDelay);
             continue;
           }
-          return { 
-            success: false, 
-            error: "图片下载超时，请检查网络或稍后重试" 
+          return {
+            success: false,
+            error: "图片下载超时，请检查网络或稍后重试"
           };
         }
-        
+
         // 其他 5xx 错误，可能重试
         if (response.status >= 500 && attempt < maxRetries) {
           const retryDelay = 3000 * attempt;
@@ -296,7 +296,7 @@ async function callDoubaoAPI(
           await delay(retryDelay);
           continue;
         }
-        
+
         // 400 错误的中文提示
         if (response.status === 400) {
           let errorMsg = "请求参数错误";
@@ -305,16 +305,16 @@ async function callDoubaoAPI(
             if (errorJson.error?.message) {
               errorMsg = errorJson.error.message;
             }
-          } catch {}
-          return { 
-            success: false, 
-            error: `API 请求失败: ${errorMsg}` 
+          } catch { }
+          return {
+            success: false,
+            error: `API 请求失败: ${errorMsg}`
           };
         }
-        
-        return { 
-          success: false, 
-          error: `API 请求失败: ${response.status}` 
+
+        return {
+          success: false,
+          error: `API 请求失败: ${response.status}`
         };
       }
 
@@ -333,7 +333,7 @@ async function callDoubaoAPI(
       }
 
       const content = data.choices[0].message.content;
-      
+
       console.log("[Doubao API] Success:", {
         contentLength: content.length,
         usage: data.usage,
@@ -343,7 +343,7 @@ async function callDoubaoAPI(
       return { success: true, content };
     } catch (error) {
       console.error("[Doubao API] Error:", error);
-      
+
       // 网络错误，可能重试
       if (attempt < maxRetries) {
         const retryDelay = 3000 * attempt;
@@ -351,10 +351,10 @@ async function callDoubaoAPI(
         await delay(retryDelay);
         continue;
       }
-      
-      return { 
-        success: false, 
-        error: error instanceof Error ? error.message : "网络请求失败" 
+
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "网络请求失败"
       };
     }
   }
@@ -374,7 +374,7 @@ async function imageUrlToBase64(url: string): Promise<string | null> {
     }
 
     console.log("[Doubao] Converting image to base64:", url);
-    
+
     // 对于 Supabase Storage URL，直接使用原始 URL
     // Supabase 公开存储桶的 URL 可能在服务端访问时遇到问题
     // 让豆包 API 直接获取是更可靠的方式
@@ -383,7 +383,7 @@ async function imageUrlToBase64(url: string): Promise<string | null> {
       // 直接返回原始URL，让豆包API自己获取
       return url;
     }
-    
+
     const response = await fetch(url, {
       headers: {
         "Accept": "image/*",
@@ -391,36 +391,36 @@ async function imageUrlToBase64(url: string): Promise<string | null> {
       },
       redirect: "follow",
     });
-    
+
     if (!response.ok) {
       console.error("[Doubao] Failed to fetch image:", response.status, response.statusText);
       // 返回原始 URL 作为 fallback
       return url;
     }
-    
+
     // 获取图片类型
     const contentType = response.headers.get("content-type") || "";
-    
+
     // 验证是否为图片类型
     if (!contentType.startsWith("image/")) {
       console.error("[Doubao] Response is not an image, content-type:", contentType);
       // 返回原始 URL，让豆包 API 尝试获取
       return url;
     }
-    
+
     const buffer = await response.arrayBuffer();
-    
+
     // 检查 buffer 是否为空或太小
     if (buffer.byteLength < 100) {
       console.error("[Doubao] Image buffer too small:", buffer.byteLength, "bytes");
       return url;
     }
-    
+
     const base64 = Buffer.from(buffer).toString("base64");
     const dataUrl = `data:${contentType};base64,${base64}`;
-    
+
     console.log("[Doubao] Image converted to base64, size:", Math.round(base64.length / 1024), "KB, type:", contentType);
-    
+
     return dataUrl;
   } catch (error) {
     console.error("[Doubao] Error converting image to base64:", error);
@@ -452,7 +452,7 @@ export async function generateTalkingScript(
 
   // 获取配置的提示词
   const prompts = await getConfiguredPrompts();
-  
+
   // 使用自定义提示词或默认配置
   const systemPrompt = customPrompts?.systemPrompt?.trim() || prompts.talkingScriptSystem;
   const userPrompt = customPrompts?.userPrompt?.trim() || prompts.talkingScriptUser;
@@ -495,21 +495,21 @@ export async function generateTalkingScript(
   // 清理脚本：只保留第一组完整的 C01-C07 脚本
   let cleanedScript = result.content || "";
   const originalLength = cleanedScript.length;
-  
+
   // 方法1：按行提取，只保留 C01-C07 的有效行
   const lines = cleanedScript.split('\n');
   const validLines: string[] = [];
   let foundC01 = false;
   let foundC07 = false;
-  
+
   for (const line of lines) {
     const trimmedLine = line.trim();
     // 检查是否是 C01-C07 开头的行
     const shotMatch = trimmedLine.match(/^C0([1-7])\s*:/i);
-    
+
     if (shotMatch) {
       const shotNum = parseInt(shotMatch[1]);
-      
+
       if (shotNum === 1) {
         // 遇到 C01
         if (foundC07) {
@@ -531,17 +531,17 @@ export async function generateTalkingScript(
       validLines.push(line);
     }
   }
-  
+
   if (validLines.length > 0) {
     cleanedScript = validLines.join('\n').trim();
   }
-  
-  console.log("[Doubao] Script cleaned:", { 
-    original: originalLength, 
+
+  console.log("[Doubao] Script cleaned:", {
+    original: originalLength,
     cleaned: cleanedScript.length,
     foundC01,
     foundC07,
-    linesKept: validLines.length 
+    linesKept: validLines.length
   });
 
   return { success: true, script: cleanedScript };
@@ -563,19 +563,19 @@ export async function generateAiVideoPrompt(
     systemPrompt?: string;
     userPrompt?: string;
   }
-): Promise<{ success: boolean; prompt?: string; error?: string }> {
+): Promise<{ success: boolean; prompt?: string; displayPrompt?: string; error?: string }> {
   if (!talkingScript || talkingScript.trim().length === 0) {
     return { success: false, error: "请提供口播脚本" };
   }
 
-  console.log("[Doubao] Generating AI video prompt from script:", 
+  console.log("[Doubao] Generating AI video prompt from script:",
     talkingScript.substring(0, 100) + "...",
     modelTriggerWord ? `with model: ${modelTriggerWord}` : ""
   );
 
   // 获取配置的提示词
   const prompts = await getConfiguredPrompts();
-  
+
   // 使用自定义提示词或默认配置
   const systemPrompt = customPrompts?.systemPrompt?.trim() || prompts.aiVideoPromptSystem;
   const userPromptTemplate = customPrompts?.userPrompt?.trim() || prompts.aiVideoPromptUser;
@@ -596,7 +596,7 @@ export async function generateAiVideoPrompt(
   }
 
   let finalPrompt = result.content || "";
-  
+
   // 保存原始提示词（不含 trigger word，用于展示给用户）
   const rawPrompt = finalPrompt;
 
@@ -613,23 +613,23 @@ export async function generateAiVideoPrompt(
   const MAX_PROMPT_LENGTH = 1000;
   if (finalPrompt.length > MAX_PROMPT_LENGTH) {
     console.warn(`[Doubao] Prompt too long (${finalPrompt.length} chars), truncating to ${MAX_PROMPT_LENGTH}`);
-    
+
     // 提取模特前缀
     let modelPrefix = "";
     const modelPrefixMatch = finalPrompt.match(/^\[AI MODEL APPEARANCE:.*?\]\n\n/);
     if (modelPrefixMatch) {
       modelPrefix = modelPrefixMatch[0];
     }
-    
+
     // 提取所有镜头 (C01-C07)
     const shotMatches = finalPrompt.match(/C0[1-7]:[^\n]*/g) || [];
-    
+
     if (shotMatches.length >= 7) {
       // 有足够的镜头，压缩每个镜头到固定长度
       const prefixLength = modelPrefix.length;
       const availableLength = MAX_PROMPT_LENGTH - prefixLength - 50; // 留 50 字符余量
       const maxShotLength = Math.floor(availableLength / 7); // 每个镜头的最大长度
-      
+
       const compressedShots = shotMatches.slice(0, 7).map(shot => {
         if (shot.length <= maxShotLength) return shot;
         // 截断镜头，保留开头
@@ -638,14 +638,14 @@ export async function generateAiVideoPrompt(
         const maxContentLength = maxShotLength - shotCode.length - 3;
         return shotCode + " " + content.substring(0, maxContentLength).trim() + "...";
       });
-      
+
       finalPrompt = modelPrefix + compressedShots.join("\n");
       console.log(`[Doubao] Compressed all 7 shots to ${finalPrompt.length} chars`);
     } else {
       // 镜头不足，使用原来的截断逻辑
       const shots = finalPrompt.split(/(?=C0[1-7]:)/);
       let truncatedPrompt = modelPrefix;
-      
+
       for (const shot of shots) {
         if (shot.startsWith("[AI MODEL APPEARANCE:")) continue;
         if ((truncatedPrompt + shot).length <= MAX_PROMPT_LENGTH) {
@@ -659,11 +659,11 @@ export async function generateAiVideoPrompt(
           break;
         }
       }
-      
+
       finalPrompt = truncatedPrompt || finalPrompt.substring(0, MAX_PROMPT_LENGTH);
       console.log(`[Doubao] Truncated prompt to ${finalPrompt.length} chars`);
     }
-    
+
     // 最终长度检查
     if (finalPrompt.length > MAX_PROMPT_LENGTH) {
       finalPrompt = finalPrompt.substring(0, MAX_PROMPT_LENGTH - 3) + "...";
@@ -684,7 +684,7 @@ export async function testDoubaoConnection(): Promise<{
   message: string;
 }> {
   const apiKey = DOUBAO_API_KEY;
-  
+
   if (!apiKey) {
     return { success: false, message: "API 密钥未配置" };
   }

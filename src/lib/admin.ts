@@ -80,7 +80,7 @@ export interface BanUserParams {
 /**
  * 检查用户是否是 Admin
  */
-export function isAdmin(role: UserRole | null | undefined): boolean {
+export function isAdmin(role: string | null | undefined): boolean {
   return role === "admin" || role === "super_admin";
 }
 

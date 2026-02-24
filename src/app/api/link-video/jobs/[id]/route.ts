@@ -116,10 +116,11 @@ export async function PATCH(
     const updates: Partial<LinkVideoJob> = {};
 
     if (body.video_config) {
+      const existingConfig = (existingJob.video_config || {}) as Record<string, unknown>;
       updates.video_config = {
-        ...existingJob.video_config,
+        ...existingConfig,
         ...body.video_config,
-      };
+      } as VideoConfig;
     }
 
     if (body.ai_model_id !== undefined) {
@@ -136,19 +137,19 @@ export async function PATCH(
 
     if (body.script_text !== undefined) {
       updates.script_text = body.script_text;
-      
+
       // 添加到脚本版本历史
-      const currentVersions = existingJob.script_versions || [];
+      const currentVersions = (existingJob.script_versions || []) as Array<Record<string, unknown>>;
       const newVersion = {
         version: currentVersions.length + 1,
         content: body.script_text,
         created_at: new Date().toISOString(),
       };
-      updates.script_versions = [...currentVersions, newVersion];
+      updates.script_versions = [...currentVersions, newVersion] as unknown as typeof updates.script_versions;
     }
 
     if (body.status) {
-      updates.status = body.status;
+      updates.status = body.status as LinkVideoJob['status'];
     }
 
     if (body.current_step) {
@@ -158,7 +159,7 @@ export async function PATCH(
     // 执行更新
     const { data: updatedJob, error: updateError } = await adminSupabase
       .from('link_video_jobs')
-      .update(updates)
+      .update(updates as Record<string, unknown>)
       .eq('id', id)
       .select()
       .single();

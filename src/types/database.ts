@@ -150,6 +150,8 @@ export interface Database {
           is_featured?: boolean;
           is_trending?: boolean;
           trigger_word?: string | null;
+          total_rentals?: number;
+          total_generations?: number;
           capabilities?: Json;
           metadata?: Json;
         };
@@ -772,6 +774,12 @@ export interface Database {
             foreignKeyName: "link_video_jobs_ai_model_id_fkey";
             columns: ["ai_model_id"];
             referencedRelation: "ai_models";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "link_video_jobs_product_link_id_fkey";
+            columns: ["product_link_id"];
+            referencedRelation: "product_link_cache";
             referencedColumns: ["id"];
           }
         ];

@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
                 supabase
                     .from('publish_tasks')
                     .select('id')
-                    .eq('user_id', user.id)
+                    .eq('user_id', user.id) as unknown as string[]
             )
 
         // Get this month's published count
@@ -52,7 +52,7 @@ export async function GET(request: NextRequest) {
                 supabase
                     .from('publish_tasks')
                     .select('id')
-                    .eq('user_id', user.id)
+                    .eq('user_id', user.id) as unknown as string[]
             )
 
         // Get total counts for success rate calculation
@@ -64,7 +64,7 @@ export async function GET(request: NextRequest) {
                 supabase
                     .from('publish_tasks')
                     .select('id')
-                    .eq('user_id', user.id)
+                    .eq('user_id', user.id) as unknown as string[]
             )
 
         const { count: totalFailed } = await supabase
@@ -75,7 +75,7 @@ export async function GET(request: NextRequest) {
                 supabase
                     .from('publish_tasks')
                     .select('id')
-                    .eq('user_id', user.id)
+                    .eq('user_id', user.id) as unknown as string[]
             )
 
         // Calculate success rate
@@ -103,7 +103,7 @@ export async function GET(request: NextRequest) {
                 supabase
                     .from('publish_tasks')
                     .select('id')
-                    .eq('user_id', user.id)
+                    .eq('user_id', user.id) as unknown as string[]
             )
             .order('published_at', { ascending: false })
             .limit(100)

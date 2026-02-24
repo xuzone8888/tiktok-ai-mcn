@@ -27,16 +27,14 @@ export async function GET(request: Request) {
     const modelId = searchParams.get("id");
     const includeTriggerWord = searchParams.get("include_trigger_word") === "true";
 
-    // 选择字段 - Admin 可以看到 trigger_word
-    const selectFields = includeTriggerWord
-      ? "*"
-      : "id, name, description, avatar_url, sample_images, sample_videos, category, style_tags, gender, age_range, price_daily, price_weekly, price_monthly, price_yearly, rating, total_rentals, total_generations, is_active, is_featured, is_trending, created_at, updated_at";
+    // Always select all fields - Admin can see everything including trigger_word
+    // Field filtering for non-admin display is handled at the response level
 
     if (modelId) {
       // 获取单个模特
       const { data: model, error } = await supabase
         .from("ai_models")
-        .select(selectFields)
+        .select("*")
         .eq("id", modelId)
         .single();
 
@@ -56,7 +54,7 @@ export async function GET(request: Request) {
     // 获取所有模特
     const { data: models, error, count } = await supabase
       .from("ai_models")
-      .select(selectFields, { count: "exact" })
+      .select("*", { count: "exact" })
       .order("created_at", { ascending: false });
 
     if (error) {
@@ -154,7 +152,8 @@ export async function POST(request: Request) {
 
     const { data: newModel, error } = await supabase
       .from("ai_models")
-      .insert(insertData)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .insert(insertData as any)
       .select()
       .single();
 
