@@ -367,22 +367,26 @@ export interface Database {
           user_id: string;
           type: CreditTransactionType;
           amount: number;
+          balance_before: number;
           balance_after: number;
           reference_type: string | null;
           reference_id: string | null;
           description: string | null;
+          created_by: string | null;
           metadata: Json;
           created_at: string;
         };
         Insert: {
           id?: string;
           user_id: string;
-          type: CreditTransactionType;
+          type: CreditTransactionType | string;
           amount: number;
+          balance_before?: number;
           balance_after: number;
           reference_type?: string | null;
           reference_id?: string | null;
           description?: string | null;
+          created_by?: string | null;
           metadata?: Json;
         };
         Update: never; // 交易记录不允许更新
@@ -391,6 +395,174 @@ export interface Database {
             foreignKeyName: "credit_transactions_user_id_fkey";
             columns: ["user_id"];
             referencedRelation: "users";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
+
+      // -----------------------------------------------------------------------
+      // Profiles 表 (用户扩展信息，与 auth.users 关联)
+      // -----------------------------------------------------------------------
+      profiles: {
+        Row: {
+          id: string;
+          email: string;
+          name: string | null;
+          avatar_url: string | null;
+          role: string;
+          credits: number;
+          status: string;
+          banned_at: string | null;
+          banned_reason: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id: string;
+          email: string;
+          name?: string | null;
+          avatar_url?: string | null;
+          role?: string;
+          credits?: number;
+          status?: string;
+          banned_at?: string | null;
+          banned_reason?: string | null;
+        };
+        Update: {
+          email?: string;
+          name?: string | null;
+          avatar_url?: string | null;
+          role?: string;
+          credits?: number;
+          status?: string;
+          banned_at?: string | null;
+          banned_reason?: string | null;
+        };
+        Relationships: [];
+      };
+
+      // -----------------------------------------------------------------------
+      // System Settings 表 (键值对配置存储)
+      // -----------------------------------------------------------------------
+      system_settings: {
+        Row: {
+          id: string;
+          key: string;
+          value: Json;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          key: string;
+          value: Json;
+          updated_at?: string;
+        };
+        Update: {
+          key?: string;
+          value?: Json;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+
+      // -----------------------------------------------------------------------
+      // TikTok Accounts 表
+      // -----------------------------------------------------------------------
+      tiktok_accounts: {
+        Row: {
+          id: string;
+          user_id: string;
+          tiktok_user_id: string | null;
+          username: string | null;
+          display_name: string | null;
+          avatar_url: string | null;
+          access_token: string | null;
+          refresh_token: string | null;
+          token_expires_at: string | null;
+          is_active: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          tiktok_user_id?: string | null;
+          username?: string | null;
+          display_name?: string | null;
+          avatar_url?: string | null;
+          access_token?: string | null;
+          refresh_token?: string | null;
+          token_expires_at?: string | null;
+          is_active?: boolean;
+        };
+        Update: {
+          tiktok_user_id?: string | null;
+          username?: string | null;
+          display_name?: string | null;
+          avatar_url?: string | null;
+          access_token?: string | null;
+          refresh_token?: string | null;
+          token_expires_at?: string | null;
+          is_active?: boolean;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "tiktok_accounts_user_id_fkey";
+            columns: ["user_id"];
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
+
+      // -----------------------------------------------------------------------
+      // Publish Tasks 表
+      // -----------------------------------------------------------------------
+      publish_tasks: {
+        Row: {
+          id: string;
+          user_id: string;
+          tiktok_account_id: string | null;
+          video_url: string;
+          title: string | null;
+          description: string | null;
+          status: string;
+          publish_id: string | null;
+          error_message: string | null;
+          scheduled_at: string | null;
+          published_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          tiktok_account_id?: string | null;
+          video_url: string;
+          title?: string | null;
+          description?: string | null;
+          status?: string;
+          publish_id?: string | null;
+          error_message?: string | null;
+          scheduled_at?: string | null;
+        };
+        Update: {
+          status?: string;
+          publish_id?: string | null;
+          error_message?: string | null;
+          published_at?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "publish_tasks_user_id_fkey";
+            columns: ["user_id"];
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "publish_tasks_tiktok_account_id_fkey";
+            columns: ["tiktok_account_id"];
+            referencedRelation: "tiktok_accounts";
             referencedColumns: ["id"];
           }
         ];
