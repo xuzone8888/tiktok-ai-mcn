@@ -189,12 +189,26 @@ export async function GET(
       refundNote = "积分已自动退还到您的账户";
     }
 
+    // 对需要鉴权的视频 URL（如望景API的 /content 端点）包装为代理 URL
+    // 这样前端无论是 <video src> 播放还是下载都通过代理自动带 auth
+    let finalVideoUrl = task.resultUrl;
+    if (finalVideoUrl && apiLine === "line2") {
+      try {
+        const urlObj = new URL(finalVideoUrl);
+        // 望景API 的 /content 端点需要 Bearer Token，浏览器无法直连
+        if (urlObj.hostname === "60.205.120.27" || finalVideoUrl.includes('/v1/videos/')) {
+          const origin = request.nextUrl.origin;
+          finalVideoUrl = `${origin}/api/download-proxy?url=${encodeURIComponent(finalVideoUrl)}&filename=video-${taskId.slice(-8)}.mp4`;
+        }
+      } catch { /* use original URL */ }
+    }
+
     return NextResponse.json({
       success: true,
       data: {
         taskId: task.taskId,
         status: task.status,
-        videoUrl: task.resultUrl,
+        videoUrl: finalVideoUrl,
         errorMessage: errorMessage,
         refundNote: task.status === "failed" ? refundNote : undefined,
         suggestion: task.status === "failed" && suggestion ? suggestion : undefined,

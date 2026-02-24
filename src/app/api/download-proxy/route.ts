@@ -80,7 +80,8 @@ export async function GET(request: NextRequest) {
   try {
     // 模式1: 获取文件信息（用于多线程下载前获取文件大小）
     if (mode === "info") {
-      const response = await fetch(videoUrl, { method: "HEAD" });
+      const authHeaders = getAuthHeaders(videoUrl);
+      const response = await fetch(videoUrl, { method: "HEAD", headers: { ...authHeaders } });
       const contentLength = response.headers.get("content-length");
       const acceptRanges = response.headers.get("accept-ranges");
 
@@ -100,10 +101,12 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ error: "缺少 start/end 参数" }, { status: 400 });
       }
 
+      const authHeaders = getAuthHeaders(videoUrl);
       const response = await fetch(videoUrl, {
         headers: {
           "Range": `bytes=${start}-${end}`,
           "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+          ...authHeaders,
         },
       });
 
