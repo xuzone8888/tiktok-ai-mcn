@@ -5,6 +5,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { requireAdmin } from "@/lib/admin-auth";
 
 // ============================================================================
 // 类型定义
@@ -189,7 +190,9 @@ const mockAuditLogs: AuditLog[] = [
 
 export async function GET(request: NextRequest) {
   try {
-    // TODO: 生产环境需要验证 Admin 身份
+    // 鉴权：验证管理员身份
+    const auth = await requireAdmin();
+    if (auth.error) return auth.error;
 
     const { searchParams } = new URL(request.url);
     const page = parseInt(searchParams.get("page") || "1");

@@ -6,6 +6,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { requireAdmin } from "@/lib/admin-auth";
 
 // ============================================================================
 // 类型定义
@@ -119,7 +120,10 @@ export async function GET(request: NextRequest) {
     }
 
     // 完整数据 (仅 Admin)
-    // TODO: 生产环境需验证 Admin 身份
+    // 鉴权：验证管理员身份
+    const auth = await requireAdmin();
+    if (auth.error) return auth.error;
+
     return NextResponse.json({
       success: true,
       data: mockSystemSettings,
@@ -139,9 +143,11 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    // TODO: 生产环境需验证 Admin 身份
-    const adminId = MOCK_ADMIN_ID;
-    const adminEmail = MOCK_ADMIN_EMAIL;
+    // 鉴权：验证管理员身份
+    const auth = await requireAdmin();
+    if (auth.error) return auth.error;
+    const adminId = auth.profile.id;
+    const adminEmail = auth.profile.email;
 
     const body = await request.json();
     const { section, data } = body;

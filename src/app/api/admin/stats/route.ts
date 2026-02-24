@@ -6,6 +6,7 @@
 
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { requireAdmin } from "@/lib/admin-auth";
 
 export interface AdminStats {
   // 用户统计
@@ -15,14 +16,14 @@ export interface AdminStats {
     newThisMonth: number;
     newLastMonth: number;
   };
-  
+
   // 模特统计
   models: {
     total: number;
     active: number;
     featured: number;
   };
-  
+
   // 积分统计
   credits: {
     totalIssued: number;
@@ -30,7 +31,7 @@ export interface AdminStats {
     usedLastMonth: number;
     usedToday: number;
   };
-  
+
   // 生成统计
   generations: {
     totalVideos: number;
@@ -41,7 +42,7 @@ export interface AdminStats {
     imagesThisMonth: number;
     successRate: number;
   };
-  
+
   // 最近活动
   recentActivity: {
     action: string;
@@ -49,7 +50,7 @@ export interface AdminStats {
     detail: string;
     time: string;
   }[];
-  
+
   // 热门模特
   topModels: {
     name: string;
@@ -64,6 +65,10 @@ export interface AdminStats {
 
 export async function GET() {
   try {
+    // 鉴权：验证管理员身份
+    const auth = await requireAdmin();
+    if (auth.error) return auth.error;
+
     const supabase = createAdminClient();
 
     // 时间范围计算
@@ -113,7 +118,7 @@ export async function GET() {
     const { data: allProfiles } = await supabase
       .from("profiles")
       .select("credits");
-    
+
     const totalCredits = allProfiles?.reduce((sum, p) => sum + (p.credits || 0), 0) || 0;
 
     // 从生成记录计算积分使用
@@ -252,7 +257,7 @@ export async function GET() {
 function formatTimeAgo(date: Date): string {
   const now = new Date();
   const diff = now.getTime() - date.getTime();
-  
+
   if (diff < 60000) return "刚刚";
   if (diff < 3600000) return `${Math.floor(diff / 60000)} 分钟前`;
   if (diff < 86400000) return `${Math.floor(diff / 3600000)} 小时前`;

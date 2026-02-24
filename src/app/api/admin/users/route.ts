@@ -14,6 +14,7 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { isAdmin, type AdminUser, type UserRole, type UserStatus } from "@/lib/admin";
+import { requireAdmin } from "@/lib/admin-auth";
 
 // ============================================================================
 // GET - 获取用户列表
@@ -21,6 +22,10 @@ import { isAdmin, type AdminUser, type UserRole, type UserStatus } from "@/lib/a
 
 export async function GET(request: Request) {
   try {
+    // 鉴权：验证管理员身份
+    const auth = await requireAdmin();
+    if (auth.error) return auth.error;
+
     const supabase = createAdminClient();
 
     const { searchParams } = new URL(request.url);

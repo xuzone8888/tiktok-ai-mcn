@@ -7,11 +7,12 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { requireAdmin } from "@/lib/admin-auth";
 
 // 默认提示词配置
 export const DEFAULT_PROMPTS = {
   talkingScriptSystem: `You are a professional short-form video script generator for TikTok e-commerce. You create engaging, viral-style product recommendation scripts that follow TikTok trends and best practices.`,
-  
+
   talkingScriptUser: `Based on all the product images provided (the first image is a 3x3 high-resolution grid showing multiple angles of the product, and the following images provide extra details and usage scenes), extract the core selling points and write a TikTok selfie-style talking-head product recommendation script in English.
 
 Requirements:
@@ -59,12 +60,15 @@ Requirements:
 - Each shot should start with its code like: 'C01: ...', 'C02: ...', etc.`,
 };
 
-// 内存缓存（生产环境应使用数据库）
-let cachedPrompts = { ...DEFAULT_PROMPTS };
+
 
 // GET - 获取提示词配置
 export async function GET() {
   try {
+    // 鉴权：验证管理员身份
+    const auth = await requireAdmin();
+    if (auth.error) return auth.error;
+
     // 尝试从数据库读取
     const supabase = createAdminClient();
     const { data, error } = await supabase
@@ -80,16 +84,16 @@ export async function GET() {
       });
     }
 
-    // 返回缓存或默认值
+    // 返回默认值
     return NextResponse.json({
       success: true,
-      data: cachedPrompts,
+      data: DEFAULT_PROMPTS,
     });
   } catch (error) {
     console.error("[Prompts API] Error loading prompts:", error);
     return NextResponse.json({
       success: true,
-      data: cachedPrompts,
+      data: DEFAULT_PROMPTS,
     });
   }
 }
@@ -97,6 +101,10 @@ export async function GET() {
 // POST - 保存提示词配置
 export async function POST(request: NextRequest) {
   try {
+    // 鉴权：验证管理员身份
+    const auth = await requireAdmin();
+    if (auth.error) return auth.error;
+
     const body = await request.json();
     const { talkingScriptSystem, talkingScriptUser, aiVideoPromptSystem, aiVideoPromptUser } = body;
 
@@ -107,13 +115,11 @@ export async function POST(request: NextRequest) {
       aiVideoPromptUser: aiVideoPromptUser || DEFAULT_PROMPTS.aiVideoPromptUser,
     };
 
-    // 更新缓存
-    cachedPrompts = prompts;
 
     // 尝试保存到数据库
     try {
       const supabase = createAdminClient();
-      
+
       // 使用 upsert 保存
       const { error } = await supabase
         .from("system_settings")
@@ -149,8 +155,19 @@ export async function POST(request: NextRequest) {
 }
 
 // 导出获取提示词的函数供其他模块使用
-export function getPrompts() {
-  return cachedPrompts;
+export async function getPrompts() {
+  try {
+    const supabase = createAdminClient();
+    const { data, error } = await supabase
+      .from("system_settings")
+      .select("value")
+      .eq("key", "video_batch_prompts")
+      .single();
+    if (!error && data?.value) {
+      return data.value as typeof DEFAULT_PROMPTS;
+    }
+  } catch { }
+  return DEFAULT_PROMPTS;
 }
 
 

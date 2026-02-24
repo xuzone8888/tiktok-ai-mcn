@@ -15,9 +15,14 @@ import {
   getContentType,
   StorageFolder
 } from "@/lib/oss";
+import { requireAdmin } from "@/lib/admin-auth";
 
 export async function POST(request: Request) {
   try {
+    // 鉴权：验证管理员身份
+    const auth = await requireAdmin();
+    if (auth.error) return auth.error;
+
     const formData = await request.formData();
     const file = formData.get("file") as File | null;
     const bucket = formData.get("bucket") as string | null;

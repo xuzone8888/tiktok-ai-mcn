@@ -9,6 +9,7 @@
 
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { requireAdmin } from "@/lib/admin-auth";
 
 // ============================================================================
 // GET - 获取模特列表 (Admin 专用，包含 trigger_word)
@@ -16,8 +17,12 @@ import { createAdminClient } from "@/lib/supabase/admin";
 
 export async function GET(request: Request) {
   try {
+    // 鉴权：验证管理员身份
+    const auth = await requireAdmin();
+    if (auth.error) return auth.error;
+
     const supabase = createAdminClient();
-    
+
     const { searchParams } = new URL(request.url);
     const modelId = searchParams.get("id");
     const includeTriggerWord = searchParams.get("include_trigger_word") === "true";
@@ -83,11 +88,15 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   console.log("[Admin API] POST /api/admin/models - Creating new model");
-  
+
   try {
+    // 鉴权：验证管理员身份
+    const auth = await requireAdmin();
+    if (auth.error) return auth.error;
+
     const supabase = createAdminClient();
     const body = await request.json();
-    
+
     console.log("[Admin API] Request body:", JSON.stringify(body, null, 2));
 
     const {
@@ -182,6 +191,10 @@ export async function POST(request: Request) {
 
 export async function PATCH(request: Request) {
   try {
+    // 鉴权：验证管理员身份
+    const auth = await requireAdmin();
+    if (auth.error) return auth.error;
+
     const supabase = createAdminClient();
     const body = await request.json();
 
@@ -252,6 +265,10 @@ export async function PATCH(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
+    // 鉴权：验证管理员身份
+    const auth = await requireAdmin();
+    if (auth.error) return auth.error;
+
     const supabase = createAdminClient();
 
     const { searchParams } = new URL(request.url);

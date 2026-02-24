@@ -1,21 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
-import { isAdmin } from "@/lib/admin";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { requireAdmin } from "@/lib/admin-auth";
 
 // ============================================================================
 // Admin API: Get User Detail with Activity Stats
 // ============================================================================
-
-const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
 
 export async function GET(
     request: NextRequest,
     { params }: { params: { id: string } }
 ) {
     try {
+        // 鉴权：验证管理员身份
+        const auth = await requireAdmin();
+        if (auth.error) return auth.error;
+
+        const supabase = createAdminClient();
         const userId = params.id;
 
         // 1. Get user profile
