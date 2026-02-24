@@ -4,7 +4,7 @@ const nextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
   },
-  // TypeScript 配置 - 339 个预存 TS 错误待清理，暂保持跳过
+  // TypeScript 配置 - 已完成全量类型修复 (339→0 errors)
   typescript: {
     ignoreBuildErrors: false,
   },
