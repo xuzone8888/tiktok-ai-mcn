@@ -11,7 +11,7 @@
 // ============================================================================
 
 /** API 线路类型 */
-export type ApiLineType = "line1" | "line2";
+export type ApiLineType = "line1" | "line2" | "line3";
 
 /** API 线路配置详情 */
 export interface ApiLineConfig {
@@ -31,6 +31,11 @@ export const API_LINES: Record<ApiLineType, ApiLineConfig> = {
     id: "line2",
     name: "备用线路",
     description: "望景API sora-2 (10/15秒)"
+  },
+  line3: {
+    id: "line3",
+    name: "备用线路2",
+    description: "无印科技 sora2-new (10/15秒, ¥0.5/次)"
   },
 } as const;
 

@@ -95,7 +95,7 @@ export function BGMSelector({ config, onChange, videoCount = 1 }: BGMSelectorPro
             </div>
 
             <div className="flex bg-black/40 p-1 rounded-lg border border-white/5">
-                {(['none', 'random', 'single'] as const).map((mode) => (
+                {(['random', 'single', 'none'] as const).map((mode) => (
                     <button
                         key={mode}
                         onClick={() => handleModeChange(mode)}
@@ -129,7 +129,7 @@ export function BGMSelector({ config, onChange, videoCount = 1 }: BGMSelectorPro
             )}
 
             {/* 音乐列表 */}
-            {config.enabled && (
+            {config.mode === 'single' && (
                 <div className="space-y-1.5 max-h-48 overflow-y-auto custom-scrollbar">
                     {PRESET_MUSIC.map((track) => (
                         <button

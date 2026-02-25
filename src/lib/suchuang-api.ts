@@ -21,6 +21,10 @@ const API_KEY = process.env.SUCHUANG_API_KEY || "";
 const WANGJING_API_BASE = process.env.WANGJING_API_ENDPOINT || "http://60.205.120.27:35208";
 const WANGJING_API_KEY = process.env.WANGJING_API_KEY || "";
 
+// 备用线路2 (line3) - 无印科技 sora2-new (老接口格式, form-urlencoded)
+const WUYINKEJI_API_BASE = "https://api.wuyinkeji.com";
+const WUYINKEJI_API_KEY = process.env.WUYINKEJI_API_KEY || "";
+
 // Gemini 3 Pro Image - fsai.app 代理
 const GEMINI_IMAGE_API_BASE = process.env.GEMINI_IMAGE_API_ENDPOINT || "https://fsai.app";
 const GEMINI_IMAGE_API_KEY = process.env.GEMINI_IMAGE_API_KEY || "";
@@ -474,7 +478,8 @@ interface Sora2SubmitResponse {
  * @param apiLine - API 线路选择
  * 线路支持：
  *   - line1=默认(scd666)
- *   - line2=吾音科技(sora2-new, 仅支持10/15秒)
+ *   - line2=望景API(OpenAI兼容格式)
+ *   - line3=无印科技(sora2-new, 仅支持10/15秒, 0.5元/次)
  */
 export async function submitSora2(
   params: Sora2Params & { model?: Sora2ModelType },
@@ -498,6 +503,10 @@ export async function submitSora2(
     // 根据 aspectRatio 映射 size 参数
     const aspectRatio = params.aspectRatio || "9:16";
     const size = aspectRatio === "16:9" ? "1280x720" : "720x1280";
+
+    // 文档请求示例使用 sora-2，网关根据 size/seconds 自动映射具体模型
+    // 可用模型: sora-2, sora2-portrait-10s, sora2-portrait-15s, sora2-landscape-10s, sora2-landscape-15s
+    const orientation = aspectRatio === "16:9" ? "landscape" : "portrait";
 
     try {
       const endpoint = `${WANGJING_API_BASE}/v1/videos`;
@@ -570,6 +579,93 @@ export async function submitSora2(
       return { success: false, error: "望景API 未返回任务ID" };
     } catch (error) {
       console.error("[Sora2-Wangjing] Submit error:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Network error"
+      };
+    }
+  }
+
+  // ========== Line3: 无印科技 sora2-new (老接口格式) ==========
+  if (apiLine === "line3") {
+    const key = WUYINKEJI_API_KEY;
+    if (!key) {
+      return { success: false, error: "备用线路2 (无印科技) API 未配置，请联系管理员" };
+    }
+
+    const duration = params.duration || 10;
+    if (duration !== 10 && duration !== 15) {
+      return { success: false, error: "无印科技 sora2-new 仅支持 10 秒和 15 秒视频" };
+    }
+
+    const aspectRatio = params.aspectRatio || "9:16";
+
+    try {
+      const endpoint = `${WUYINKEJI_API_BASE}/api/sora2-new/submit`;
+      const formBody = new URLSearchParams({
+        prompt: params.prompt,
+        duration: String(duration),
+        aspectRatio: aspectRatio,
+        size: 'small',
+        ...(params.url && { url: params.url }),
+      }).toString();
+
+      console.log("[Sora2-Wuyinkeji] Submitting task:", {
+        endpoint,
+        duration,
+        aspectRatio,
+        prompt: params.prompt.substring(0, 50) + "...",
+        hasImage: !!params.url,
+      });
+
+      const result = await new Promise<{ data: string; statusCode: number }>((resolve, reject) => {
+        const urlObj = new URL(endpoint);
+        const options = {
+          hostname: urlObj.hostname,
+          port: 443,
+          path: urlObj.pathname,
+          method: 'POST',
+          family: 4,
+          timeout: 60000,
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded;charset=utf-8',
+            'Authorization': key,
+            'Content-Length': Buffer.byteLength(formBody),
+          },
+        };
+
+        const req = https.request(options, (res) => {
+          let data = '';
+          res.on('data', (chunk: string) => data += chunk);
+          res.on('end', () => resolve({ data, statusCode: res.statusCode || 0 }));
+        });
+
+        req.on('error', reject);
+        req.on('timeout', () => {
+          req.destroy();
+          reject(new Error('Request timeout'));
+        });
+
+        req.write(formBody);
+        req.end();
+      });
+
+      console.log("[Sora2-Wuyinkeji] Response:", result.data.substring(0, 300));
+      const data = JSON.parse(result.data);
+
+      if (data.code !== 200) {
+        return { success: false, error: data.msg || "无印科技 API 提交失败" };
+      }
+
+      const taskId = data.data?.id;
+      if (!taskId) {
+        return { success: false, error: "无印科技 API 未返回任务 ID" };
+      }
+
+      console.log("[Sora2-Wuyinkeji] Task submitted:", taskId);
+      return { success: true, taskId };
+    } catch (error) {
+      console.error("[Sora2-Wuyinkeji] Submit error:", error);
       return {
         success: false,
         error: error instanceof Error ? error.message : "Network error"
@@ -737,7 +833,8 @@ export async function submitSora2(
  * 
  * @param apiLine - API 线路选择
  *   - line1=默认(scd666)
- *   - line2=吾音科技(sora2/detail)
+ *   - line2=望景API(OpenAI兼容格式)
+ *   - line3=无印科技(sora2-new/detail)
  */
 export async function querySora2Result(
   taskId: string,
@@ -756,6 +853,8 @@ export async function querySora2Result(
     try {
       const endpoint = `${WANGJING_API_BASE}/v1/videos/${taskId}`;
       const urlObj = new URL(endpoint);
+      // 新增：使用 link_mode=esa 利用加速链提高下载稳定性
+      urlObj.searchParams.set('link_mode', 'esa');
       const httpModule = urlObj.protocol === 'https:' ? https : await import('http');
 
       console.log("[Sora2-Wangjing] Querying task:", taskId);
@@ -764,7 +863,7 @@ export async function querySora2Result(
         const options = {
           hostname: urlObj.hostname,
           port: urlObj.port || (urlObj.protocol === 'https:' ? 443 : 80),
-          path: urlObj.pathname,
+          path: urlObj.pathname + urlObj.search,
           method: 'GET',
           family: 4,
           timeout: 60000,
@@ -833,6 +932,97 @@ export async function querySora2Result(
       };
     } catch (error) {
       console.error("[Sora2-Wangjing] Query error:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Network error"
+      };
+    }
+  }
+
+  // ========== Line3: 无印科技 sora2/detail ==========
+  if (apiLine === "line3") {
+    const key = WUYINKEJI_API_KEY;
+    if (!key) {
+      return { success: false, error: "备用线路2 (无印科技) API 未配置" };
+    }
+
+    try {
+      const endpoint = `${WUYINKEJI_API_BASE}/api/sora2/detail?key=${encodeURIComponent(key)}&id=${encodeURIComponent(taskId)}`;
+
+      console.log("[Sora2-Wuyinkeji] Querying task:", taskId);
+
+      const result = await new Promise<{ data: string; statusCode: number }>((resolve, reject) => {
+        const urlObj = new URL(endpoint);
+        const options = {
+          hostname: urlObj.hostname,
+          port: 443,
+          path: urlObj.pathname + urlObj.search,
+          method: 'GET',
+          family: 4,
+          timeout: 60000,
+          headers: {
+            'Authorization': key,
+          },
+        };
+
+        const req = https.request(options, (res) => {
+          let data = '';
+          res.on('data', (chunk: string) => data += chunk);
+          res.on('end', () => resolve({ data, statusCode: res.statusCode || 0 }));
+        });
+
+        req.on('error', reject);
+        req.on('timeout', () => {
+          req.destroy();
+          reject(new Error('Request timeout'));
+        });
+
+        req.end();
+      });
+
+      const data = JSON.parse(result.data);
+
+      if (data.code !== 200) {
+        return { success: false, error: data.msg || "无印科技 查询失败" };
+      }
+
+      const taskData = data.data || data;
+
+      // 无印科技状态：0=处理中, 1=成功, 2=失败
+      // 注意：status=2 时 fail_reason 有值且 remote_url 为空
+      const wuyinkejiStatusMap: Record<number, TaskStatus["status"]> = {
+        0: "processing",
+        1: "completed",
+        2: "failed",
+      };
+
+      let taskStatus = wuyinkejiStatusMap[taskData.status] ?? "processing";
+      // 容错：即使 status!=2 但有 fail_reason 且无 URL，也视为失败
+      if (taskData.fail_reason && !taskData.remote_url && !taskData.transfer_url) {
+        taskStatus = "failed";
+      }
+      const videoUrl = taskData.transfer_url || taskData.remote_url || null;
+
+      console.log("[Sora2-Wuyinkeji] Query response:", {
+        id: taskData.id || taskId,
+        status: taskData.status,
+        mappedStatus: taskStatus,
+        hasUrl: !!videoUrl,
+        failReason: taskData.fail_reason,
+      });
+
+      return {
+        success: true,
+        task: {
+          taskId: taskData.id || taskId,
+          status: taskStatus,
+          resultUrl: videoUrl,
+          errorMessage: taskData.fail_reason,
+        },
+        raw: data,
+      };
+    } catch (error) {
+      console.error("[Sora2-Wuyinkeji] Query error:", error);
       return {
         success: false,
         error: error instanceof Error ? error.message : "Network error"
@@ -1377,6 +1567,101 @@ export async function uploadBase64ImageToOSS(
     return {
       success: false,
       error: error instanceof Error ? error.message : "Upload failed"
+    };
+  }
+}
+
+// ============================================================================
+// 望景API 新特性 (2026-02-24 更新)
+// ============================================================================
+
+/**
+ * 获取望景API视频直接下载 URL
+ * 
+ * 使用 /v1/videos/{task_id}/content 端点
+ * 返回 307 重定向到实际视频文件
+ * 
+ * @param taskId 任务 ID
+ * @returns 直接下载 URL（通过 download-proxy 代理访问）
+ */
+export function getWangjingVideoContentUrl(taskId: string): string {
+  return `${WANGJING_API_BASE}/v1/videos/${taskId}/content`;
+}
+
+/**
+ * 查询望景API Byte 余额
+ * 
+ * API 端点: GET /v1/token/balance
+ * 需要 Bearer token 认证
+ * 
+ * @returns 余额信息
+ */
+export async function getWangjingBalance(): Promise<{
+  success: boolean;
+  balance?: number;
+  balanceFormatted?: string;
+  error?: string;
+}> {
+  const key = WANGJING_API_KEY;
+  if (!key) {
+    return { success: false, error: '望景API 未配置' };
+  }
+
+  try {
+    const endpoint = `${WANGJING_API_BASE}/v1/token/balance`;
+    const urlObj = new URL(endpoint);
+    const httpModule = urlObj.protocol === 'https:' ? https : await import('http');
+
+    const result = await new Promise<{ data: string; statusCode: number }>((resolve, reject) => {
+      const options = {
+        hostname: urlObj.hostname,
+        port: urlObj.port || (urlObj.protocol === 'https:' ? 443 : 80),
+        path: urlObj.pathname,
+        method: 'GET',
+        family: 4,
+        timeout: 15000,
+        headers: {
+          'Authorization': `Bearer ${key}`,
+        },
+      };
+
+      const req = httpModule.request(options, (res: import('http').IncomingMessage) => {
+        let data = '';
+        res.on('data', (chunk: string) => data += chunk);
+        res.on('end', () => resolve({ data, statusCode: res.statusCode || 0 }));
+      });
+
+      req.on('error', reject);
+      req.on('timeout', () => {
+        req.destroy();
+        reject(new Error('Request timeout'));
+      });
+
+      req.end();
+    });
+
+    if (result.statusCode !== 200) {
+      console.error('[Wangjing Balance] HTTP error:', result.statusCode, result.data.substring(0, 200));
+      return { success: false, error: `请求失败: ${result.statusCode}` };
+    }
+
+    const data = JSON.parse(result.data);
+    console.log('[Wangjing Balance] Response:', data);
+
+    // 望景API 返回格式: { balance_byte: number, object: string, unlimited_quota: boolean }
+    const balance = data.balance_byte ?? data.data?.balance ?? data.balance ?? 0;
+    const unlimited = data.unlimited_quota === true;
+
+    return {
+      success: true,
+      balance,
+      balanceFormatted: unlimited ? '无限额度' : `${balance.toFixed(4)} Byte`,
+    };
+  } catch (error) {
+    console.error('[Wangjing Balance] Error:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Network error',
     };
   }
 }

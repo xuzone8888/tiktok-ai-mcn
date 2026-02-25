@@ -43,7 +43,7 @@ import {
 
 // 新增组件导入
 import { SubtitleEditor, type SubtitleConfig } from './SubtitleEditor';
-import { BGMSelector, type BGMConfig } from './BGMSelector';
+import { type BGMConfig } from './BGMSelector';
 import { type VoiceConfig } from './VoiceSelector';
 import { type AICaptionConfig } from './AICaptionGenerator';
 
@@ -568,17 +568,8 @@ export function CreateSlideshowModal({
                                 </Select>
                             </div>
 
-                            {/* 背景音乐 - 使用新组件 */}
-                            <BGMSelector
-                                config={config.bgm}
-                                onChange={(bgmConfig) => setConfig((c) => ({ ...c, bgm: bgmConfig }))}
-                                videoCount={activeTab === "random" ? Math.ceil(randomImages.length / imagesPerVideo) : 1}
-                            />
 
-                            {/* 分隔线 */}
-                            <div className="h-px bg-white/5 my-4" />
 
-                            {/* 字幕设置 - 集成 AI 配音和 AI 字幕 */}
                             <SubtitleEditor
                                 subtitle={config.subtitle || {
                                     text: "",
@@ -604,13 +595,16 @@ export function CreateSlideshowModal({
                                         : positions.flatMap(p => p.images).slice(0, 10)
                                 }
                                 aspectRatio={config.aspectRatio}
-                                // 新增：AI 配音配置
+                                // AI 配音配置
                                 voiceConfig={config.voice}
                                 onVoiceChange={(voiceConfig) => setConfig((c) => ({ ...c, voice: voiceConfig }))}
-                                // 新增：AI 字幕配置
+                                // AI 字幕配置
                                 aiCaptionConfig={config.aiCaption}
                                 onAiCaptionChange={(aiConfig) => setConfig((c) => ({ ...c, aiCaption: aiConfig }))}
                                 videoCount={activeTab === "random" ? Math.ceil(randomImages.length / imagesPerVideo) : 1}
+                                // 背景音乐（整合到 SubtitleEditor 内部卡片）
+                                bgmConfig={config.bgm}
+                                onBgmChange={(bgmConfig) => setConfig((c) => ({ ...c, bgm: bgmConfig }))}
                             />
                         </div>
                     </div>

@@ -21,6 +21,7 @@ export interface AICaptionConfig {
     keywords: string;
     style: CaptionStyle;
     language: CaptionLanguage; // 默认英文
+    generatedTexts?: string[]; // AI 生成的字幕结果
 }
 
 interface AICaptionGeneratorProps {

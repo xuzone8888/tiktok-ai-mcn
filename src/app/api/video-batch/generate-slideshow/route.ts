@@ -14,7 +14,7 @@ import {
 } from '@/lib/ffmpeg-slideshow';
 import { uploadBuffer } from '@/lib/oss';
 import { generateCaptions, CaptionStyle, CaptionMode } from '@/lib/deepseek-api';
-import { textToSpeechWithTimestamps, WordTimestamp } from '@/lib/elevenlabs-api';
+import { textToSpeechWithTimestamps, WordTimestamp, PRESET_VOICES } from '@/lib/elevenlabs-api';
 import type { SubtitleConfig } from '@/lib/ffmpeg-slideshow';
 import crypto from 'crypto';
 import fs from 'fs/promises';
@@ -296,6 +296,22 @@ export async function POST(req: NextRequest) {
 
         if (voice?.enabled && voice.voiceId) {
             console.log('[Slideshow API] Pre-generating voiceovers to get durations...');
+
+            // 处理 random 模式：为每个视频分配真实的 voiceId
+            const isRandomVoice = voice.voiceId === 'random';
+            let assignedVoiceIds: string[];
+            if (isRandomVoice) {
+                // 使用 elevenlabs-api.ts 中定义的预设音色（保持一致性）
+                const VOICE_POOL = PRESET_VOICES.map(v => v.id);
+                assignedVoiceIds = Array.from({ length: localImageGroups.length }, () => {
+                    return VOICE_POOL[Math.floor(Math.random() * VOICE_POOL.length)];
+                });
+                console.log('[Slideshow API] Random voice mode: assigned voiceIds:', assignedVoiceIds);
+            } else {
+                // 指定音色：所有视频使用同一个
+                assignedVoiceIds = Array(localImageGroups.length).fill(voice.voiceId);
+            }
+
             for (let i = 0; i < localImageGroups.length; i++) {
                 const rawVoiceText = generatedCaptions[i] || subtitle?.text || '';
                 const voiceText = stripEmoji(rawVoiceText); // 过滤 emoji
@@ -309,8 +325,9 @@ export async function POST(req: NextRequest) {
                 }
 
                 try {
-                    console.log(`[Slideshow API] Generating TTS with timestamps ${i + 1}/${localImageGroups.length}...`);
-                    const ttsResult = await textToSpeechWithTimestamps(voice.voiceId, voiceText, {
+                    const actualVoiceId = assignedVoiceIds[i];
+                    console.log(`[Slideshow API] Generating TTS ${i + 1}/${localImageGroups.length} with voiceId=${actualVoiceId}...`);
+                    const ttsResult = await textToSpeechWithTimestamps(actualVoiceId, voiceText, {
                         stability: 0.5,
                         similarity_boost: 0.75,
                     });
@@ -351,6 +368,19 @@ export async function POST(req: NextRequest) {
             const voiceoverData = voiceovers[index];
             const voiceDuration = voiceoverData?.duration || 0;
 
+            // 过滤 textOverlays：只保留 imageIndex 在当前视频图片范围内的条目
+            // 防止超出范围的 overlay 在视频末尾显示导致文字重叠
+            const groupImageCount = localImageGroups[index].length;
+            const filteredOverlays = (subtitle?.textOverlays || []).filter(o => {
+                // custom 模式不按图片索引过滤
+                if (o.timingMode === 'custom') return true;
+                // image 模式：只保留 imageIndex 在当前视频范围内的
+                const imgIdx = o.imageIndex ?? 0;
+                return imgIdx < groupImageCount;
+            });
+
+            console.log(`[Slideshow API] Video ${index + 1}: ${groupImageCount} images, ${filteredOverlays.length}/${(subtitle?.textOverlays || []).length} textOverlays`);
+
             return {
                 text: captionText,
                 position: subtitle?.position || 80,
@@ -362,7 +392,7 @@ export async function POST(req: NextRequest) {
                 shadow: subtitle?.shadow ?? true,
                 voiceDuration, // 传递配音时长用于字幕结束时间同步
                 wordTimestamps: voiceoverData?.timestamps || [], // 传递词级时间戳用于精确同步
-                textOverlays: subtitle?.textOverlays || [], // 图文字幕
+                textOverlays: filteredOverlays, // 按视频图片范围过滤的图文字幕
             } as SubtitleConfig;
         });
 

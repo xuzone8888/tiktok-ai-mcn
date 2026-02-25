@@ -5,7 +5,7 @@
  * 路由: /pro-studio/image-slideshow
  */
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useToast } from "@/hooks/use-toast";
 import {
     SlideshowSection,
@@ -16,9 +16,30 @@ import {
 export default function ImageSlideshowPage() {
     const { toast } = useToast();
 
-    // 任务状态
-    const [slideshowTasks, setSlideshowTasks] = useState<SlideshowTask[]>([]);
+    // 任务状态 - 从 localStorage 恢复
+    const [slideshowTasks, setSlideshowTasks] = useState<SlideshowTask[]>(() => {
+        if (typeof window === 'undefined') return [];
+        try {
+            const saved = localStorage.getItem('slideshow-tasks');
+            if (saved) {
+                const parsed = JSON.parse(saved);
+                return parsed.map((t: any) => ({ ...t, createdAt: new Date(t.createdAt) }));
+            }
+        } catch (e) {
+            console.warn('[Slideshow] Failed to restore tasks:', e);
+        }
+        return [];
+    });
     const [showModal, setShowModal] = useState(false);
+
+    // 持久化到 localStorage
+    useEffect(() => {
+        try {
+            localStorage.setItem('slideshow-tasks', JSON.stringify(slideshowTasks));
+        } catch (e) {
+            console.warn('[Slideshow] Failed to save tasks:', e);
+        }
+    }, [slideshowTasks]);
 
     // 上传图片到 OSS
     const uploadImages = async (files: File[]): Promise<string[]> => {

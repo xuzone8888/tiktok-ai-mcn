@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 字幕可视化编辑器 - 弹窗版 v2
  * 修复：真正可拖拽 + 图片轮播预览
  */
@@ -7,12 +7,13 @@
 
 import React, { useRef, useState, useCallback, useEffect } from 'react';
 import { cn } from '@/lib/utils';
-import { Type, X, Move, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Mic, Play, Pause, Loader2, Wand2, Sparkles, Check, AlertCircle } from 'lucide-react';
+import { Type, X, Move, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Mic, Play, Pause, Loader2, Wand2, Sparkles, Check, AlertCircle, Music, ChevronDown } from 'lucide-react';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 // ⭐ 类型导入
 import { type VoiceConfig, PRESET_VOICES } from './VoiceSelector';
 import { type AICaptionConfig, type CaptionStyle } from './AICaptionGenerator';
+import { BGMSelector, type BGMConfig } from './BGMSelector';
 
 // 类型定义
 export type SubtitleStyle = 'classic' | 'trending' | 'cinema' | 'neon' | 'minimal';
@@ -91,17 +92,18 @@ export interface SubtitleConfig {
 interface SubtitleEditorProps {
     subtitle: SubtitleConfig | null;
     onChange: (subtitle: SubtitleConfig | null) => void;
-    previewImages?: string[];  // URL 数组
-    previewImage?: string;     // 兼容单图 URL
-    previewFiles?: File[];     // 新增：File 对象数组
+    previewImages?: string[];
+    previewImage?: string;
+    previewFiles?: File[];
     aspectRatio?: '9:16' | '16:9';
-    // ⭐ 新增：AI 配音配置
     voiceConfig?: VoiceConfig;
     onVoiceChange?: (config: VoiceConfig) => void;
-    // ⭐ 新增：AI 字幕配置
     aiCaptionConfig?: AICaptionConfig;
     onAiCaptionChange?: (config: AICaptionConfig) => void;
     videoCount?: number;
+    // 背景音乐（从全局配置移入）
+    bgmConfig?: BGMConfig;
+    onBgmChange?: (config: BGMConfig) => void;
 }
 
 // 风格预设配置
@@ -234,13 +236,13 @@ export function SubtitleEditor({
     previewImage,
     previewFiles = [],
     aspectRatio = '9:16',
-    // ⭐ 新增：AI 配音配置
     voiceConfig,
     onVoiceChange,
-    // ⭐ 新增：AI 字幕配置
     aiCaptionConfig,
     onAiCaptionChange,
-    videoCount = 1
+    videoCount = 1,
+    bgmConfig,
+    onBgmChange
 }: SubtitleEditorProps) {
     const enabled = subtitle !== null;
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -248,7 +250,8 @@ export function SubtitleEditor({
     const [isDragging, setIsDragging] = useState(false);
     const [currentImageIndex, setCurrentImageIndex] = useState(0);
     const [fontScale, setFontScale] = useState(1);
-    const [activeTab, setActiveTab] = useState<'voice' | 'text'>('voice');
+    // 卡片折叠状态
+    const [expandedCards, setExpandedCards] = useState<Record<string, boolean>>({ bgm: false, voice: true, style: true, overlay: false });
 
     // AI 生成相关状态
     const [aiPrompt, setAiPrompt] = useState('');
@@ -262,8 +265,7 @@ export function SubtitleEditor({
     // TextOverlay 拖拽状态
     const [draggingOverlayId, setDraggingOverlayId] = useState<string | null>(null);
 
-    // 图文字幕模式状态：图片绑定 vs 自由时间
-    const [overlayTimingMode, setOverlayTimingMode] = useState<'image' | 'custom'>('image');
+
 
     // ⭐ 新增：图文字幕位置/样式模式
     const [overlayPositionMode, setOverlayPositionMode] = useState<'fixed' | 'random'>('fixed');
@@ -415,7 +417,7 @@ export function SubtitleEditor({
         return {
             id: crypto.randomUUID(),
             text,
-            timingMode: overlayTimingMode,
+            timingMode: 'image' as const,
             imageIndex,
             boxX: 10,
             boxY: 20,
@@ -612,6 +614,42 @@ export function SubtitleEditor({
         }
     };
 
+    // AI 字幕生成（卡片2 - 配音字幕文案）
+    const generateAICaptions = async () => {
+        if (!aiCaptionConfig || !onAiCaptionChange) return;
+        if (!aiCaptionConfig.keywords?.trim()) {
+            alert('请先输入主题/关键词');
+            return;
+        }
+        setIsGenerating(true);
+        try {
+            const response = await fetch('/api/ai/captions', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    keywords: aiCaptionConfig.keywords,
+                    style: aiCaptionConfig.style || 'lively',
+                    count: videoCount,
+                    mode: aiCaptionConfig.mode || 'unified',
+                    language: aiCaptionConfig.language || 'en',
+                }),
+            });
+            if (!response.ok) throw new Error('AI 生成失败');
+            const data = await response.json();
+            const captions: string[] = data.captions || [];
+            // 将生成的文案设置为字幕文本
+            if (subtitle && captions.length > 0) {
+                onChange({ ...subtitle, text: captions[0] });
+            }
+            onAiCaptionChange({ ...aiCaptionConfig, generatedTexts: captions });
+        } catch (error: any) {
+            console.error('[AI Caption Generate Error]:', error);
+            alert(error.message || 'AI 字幕生成失败，请重试');
+        } finally {
+            setIsGenerating(false);
+        }
+    };
+
     // 真正的拖拽处理
     const handleMouseDown = useCallback((e: React.MouseEvent) => {
         e.preventDefault();
@@ -719,7 +757,7 @@ export function SubtitleEditor({
                 <div className="flex items-center justify-between">
                     <Label className="text-sm text-white/80 flex items-center gap-2">
                         <Type className="h-4 w-4" />
-                        📝 字幕设置
+                        🎬 视频增强
                     </Label>
                     <button
                         onClick={handleEnable}
@@ -746,7 +784,7 @@ export function SubtitleEditor({
                         className="w-full py-3 px-4 bg-white/5 border border-white/10 rounded-xl text-white/80 hover:bg-white/10 hover:border-white/20 transition-all flex items-center justify-center gap-2"
                     >
                         <Type className="h-4 w-4" />
-                        配置字幕样式
+                        配置视频增强
                     </button>
                 )}
             </div>
@@ -760,7 +798,7 @@ export function SubtitleEditor({
                             <div className="flex items-center justify-between p-4 border-b border-white/10">
                                 <h2 className="text-lg font-semibold text-white flex items-center gap-2">
                                     <Type className="h-5 w-5" />
-                                    字幕样式编辑器
+                                    视频增强编辑器
                                 </h2>
                                 <button
                                     onClick={closeModal}
@@ -944,87 +982,95 @@ export function SubtitleEditor({
 
                                 {/* 右侧：配置面板 */}
                                 <div className="flex-1 min-h-0 overflow-y-auto space-y-3 pr-1">
-                                    {/* Tab 切换 */}
-                                    {/* Tab 切换 - JCUI Segmented Control */}
-                                    <div className="flex gap-1 p-1 bg-black/40 border border-white/5 rounded-xl">
-                                        <button
-                                            onClick={() => setActiveTab('voice')}
-                                            className={cn(
-                                                "flex-1 py-2 px-4 rounded-lg transition-all flex items-center justify-center gap-2 text-sm font-medium",
-                                                activeTab === 'voice'
-                                                    ? "bg-white text-black shadow-lg shadow-white/10 scale-[1.02]"
-                                                    : "text-white/50 hover:text-white hover:bg-white/5"
-                                            )}
-                                        >
-                                            <Mic className={cn("h-4 w-4", activeTab === 'voice' ? "text-black" : "opacity-70")} />
-                                            配音字幕
-                                        </button>
-                                        <button
-                                            onClick={() => setActiveTab('text')}
-                                            className={cn(
-                                                "flex-1 py-2 px-4 rounded-lg transition-all flex items-center justify-center gap-2 text-sm font-medium",
-                                                activeTab === 'text'
-                                                    ? "bg-white text-black shadow-lg shadow-white/10 scale-[1.02]"
-                                                    : "text-white/50 hover:text-white hover:bg-white/5"
-                                            )}
-                                        >
-                                            <Type className={cn("h-4 w-4", activeTab === 'text' ? "text-black" : "opacity-70")} />
-                                            图文字幕
-                                        </button>
-                                    </div>
-
-                                    {/* 配音字幕 Tab 内容 */}
-                                    {activeTab === 'voice' && (
-                                        <>
-                                            {/* ⭐ AI 配音选择器 */}
-                                            {voiceConfig && onVoiceChange && (
-                                                <div className="space-y-3 p-4 bg-white/5 border border-white/10 rounded-xl">
-                                                    <Label className="text-sm text-white/80 flex items-center gap-2">
-                                                        <Mic className="h-4 w-4" />
-                                                        🎙️ AI 配音
-                                                    </Label>
-                                                    {/* 三选一模式 */}
-                                                    <div className="flex gap-2">
-                                                        <div className="flex gap-2 p-1 bg-black/20 rounded-xl border border-white/5">
-                                                            <button
-                                                                onClick={() => onVoiceChange({ ...voiceConfig, enabled: false, voiceId: '', voiceName: '' })}
-                                                                className={cn(
-                                                                    "flex-1 py-2 px-3 rounded-lg text-xs font-medium transition-all",
-                                                                    !voiceConfig.enabled
-                                                                        ? "bg-white text-black shadow-[0_0_15px_rgba(255,255,255,0.3)]"
-                                                                        : "text-white/40 hover:text-white hover:bg-white/5"
-                                                                )}
-                                                            >
-                                                                无
-                                                            </button>
-                                                            <button
-                                                                onClick={() => onVoiceChange({ enabled: true, voiceId: 'random', voiceName: '随机' })}
-                                                                className={cn(
-                                                                    "flex-1 py-2 px-3 rounded-lg text-xs font-medium transition-all",
-                                                                    voiceConfig.enabled && voiceConfig.voiceId === 'random'
-                                                                        ? "bg-white text-black shadow-[0_0_15px_rgba(255,255,255,0.3)]"
-                                                                        : "text-white/40 hover:text-white hover:bg-white/5"
-                                                                )}
-                                                            >
-                                                                🎲 随机
-                                                            </button>
-                                                            <button
-                                                                onClick={() => {
-                                                                    const defaultVoice = PRESET_VOICES[0];
-                                                                    onVoiceChange({ enabled: true, voiceId: defaultVoice.id, voiceName: defaultVoice.name });
-                                                                }}
-                                                                className={cn(
-                                                                    "flex-1 py-2 px-3 rounded-lg text-xs font-medium transition-all",
-                                                                    voiceConfig.enabled && voiceConfig.voiceId !== 'random'
-                                                                        ? "bg-white text-black shadow-[0_0_15px_rgba(255,255,255,0.3)]"
-                                                                        : "text-white/40 hover:text-white hover:bg-white/5"
-                                                                )}
-                                                            >
-                                                                指定配音
-                                                            </button>
-                                                        </div>
+                                    {/* ═══ 卡片 1：🎵 背景音乐 ═══ */}
+                                    {bgmConfig && onBgmChange && (
+                                        <div className="border border-white/10 rounded-xl overflow-hidden">
+                                            <button
+                                                onClick={() => setExpandedCards(s => ({ ...s, bgm: !s.bgm }))}
+                                                className="w-full flex items-center justify-between p-3 hover:bg-white/5 transition-colors"
+                                            >
+                                                <div className="flex items-center gap-2 text-sm font-medium text-white/90">
+                                                    <Music className="h-4 w-4" />
+                                                    🎵 背景音乐
+                                                    {bgmConfig.enabled && (
+                                                        <span className="text-[10px] px-1.5 py-0.5 bg-white/10 rounded text-white/50">
+                                                            {bgmConfig.mode === 'random' ? '随机' : bgmConfig.mode === 'single' ? '指定' : '关闭'}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <ChevronDown className={cn("h-4 w-4 text-white/40 transition-transform", expandedCards.bgm && "rotate-180")} />
+                                            </button>
+                                            {expandedCards.bgm && (
+                                                <div className="px-3 pb-3 border-t border-white/5">
+                                                    <div className="pt-3">
+                                                        <BGMSelector config={bgmConfig} onChange={onBgmChange} videoCount={videoCount} />
                                                     </div>
-                                                    {/* 指定配音时显示配音列表 */}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    {/* ═══ 卡片 2：🎙️ AI 配音 ═══ */}
+                                    {voiceConfig && onVoiceChange && (
+                                        <div className="border border-white/10 rounded-xl overflow-hidden">
+                                            <button
+                                                onClick={() => setExpandedCards(s => ({ ...s, voice: !s.voice }))}
+                                                className="w-full flex items-center justify-between p-3 hover:bg-white/5 transition-colors"
+                                            >
+                                                <div className="flex items-center gap-2 text-sm font-medium text-white/90">
+                                                    <Mic className="h-4 w-4" />
+                                                    🎙️ AI 配音
+                                                    {voiceConfig.enabled && (
+                                                        <span className="text-[10px] px-1.5 py-0.5 bg-white/10 rounded text-white/50">
+                                                            {voiceConfig.voiceId === 'random' ? '随机' : voiceConfig.voiceName || '已开启'}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <ChevronDown className={cn("h-4 w-4 text-white/40 transition-transform", expandedCards.voice && "rotate-180")} />
+                                            </button>
+                                            {expandedCards.voice && (
+                                                <div className="px-3 pb-3 border-t border-white/5 space-y-3 pt-3">
+                                                    {/* 三选一模式 */}
+                                                    <div className="flex gap-2 p-1 bg-black/20 rounded-xl border border-white/5">
+                                                        <button
+                                                            onClick={() => onVoiceChange({ enabled: true, voiceId: 'random', voiceName: '随机' })}
+                                                            className={cn(
+                                                                "flex-1 py-2 px-3 rounded-lg text-xs font-medium transition-all",
+                                                                voiceConfig.enabled && voiceConfig.voiceId === 'random'
+                                                                    ? "bg-white text-black shadow-[0_0_15px_rgba(255,255,255,0.3)]"
+                                                                    : "text-white/40 hover:text-white hover:bg-white/5"
+                                                            )}
+                                                        >
+                                                            🎲 随机
+                                                        </button>
+                                                        <button
+                                                            onClick={() => {
+                                                                const defaultVoice = PRESET_VOICES[0];
+                                                                onVoiceChange({ enabled: true, voiceId: defaultVoice.id, voiceName: defaultVoice.name });
+                                                            }}
+                                                            className={cn(
+                                                                "flex-1 py-2 px-3 rounded-lg text-xs font-medium transition-all",
+                                                                voiceConfig.enabled && voiceConfig.voiceId !== 'random'
+                                                                    ? "bg-white text-black shadow-[0_0_15px_rgba(255,255,255,0.3)]"
+                                                                    : "text-white/40 hover:text-white hover:bg-white/5"
+                                                            )}
+                                                        >
+                                                            指定配音
+                                                        </button>
+                                                        <button
+                                                            onClick={() => onVoiceChange({ ...voiceConfig, enabled: false, voiceId: '', voiceName: '' })}
+                                                            className={cn(
+                                                                "flex-1 py-2 px-3 rounded-lg text-xs font-medium transition-all",
+                                                                !voiceConfig.enabled
+                                                                    ? "bg-white text-black shadow-[0_0_15px_rgba(255,255,255,0.3)]"
+                                                                    : "text-white/40 hover:text-white hover:bg-white/5"
+                                                            )}
+                                                        >
+                                                            无
+                                                        </button>
+                                                    </div>
+
+                                                    {/* 指定配音列表 */}
                                                     {voiceConfig.enabled && voiceConfig.voiceId !== 'random' && (
                                                         <div className="grid grid-cols-1 gap-1.5 max-h-32 overflow-y-auto">
                                                             {PRESET_VOICES.map((voice) => (
@@ -1038,10 +1084,7 @@ export function SubtitleEditor({
                                                                             : "bg-transparent border-transparent hover:bg-white/5"
                                                                     )}
                                                                 >
-                                                                    <span className={cn(
-                                                                        "text-xs",
-                                                                        voice.gender === 'female' ? "text-pink-400" : "text-blue-400"
-                                                                    )}>
+                                                                    <span className={cn("text-xs", voice.gender === 'female' ? "text-pink-400" : "text-blue-400")}>
                                                                         {voice.gender === 'female' ? '♀' : '♂'}
                                                                     </span>
                                                                     <span className="text-xs text-white/80">{voice.name}</span>
@@ -1053,7 +1096,8 @@ export function SubtitleEditor({
                                                             ))}
                                                         </div>
                                                     )}
-                                                    {/* 提示信息 */}
+
+                                                    {/* 提示 */}
                                                     {voiceConfig.enabled && (
                                                         <div className="text-[10px] text-white/40 flex items-center gap-1">
                                                             <AlertCircle className="h-3 w-3" />
@@ -1063,132 +1107,156 @@ export function SubtitleEditor({
                                                             }
                                                         </div>
                                                     )}
-                                                </div>
-                                            )}
 
-                                            {/* ⭐ AI 字幕生成器 */}
-                                            {/* ⭐ AI 字幕生成器 */}
-                                            {aiCaptionConfig && onAiCaptionChange && (
-                                                <div className="space-y-3 p-4 bg-[#1a1a1a] border border-white/10 rounded-xl relative overflow-hidden">
-                                                    {/* Reflective Border Effect */}
-                                                    <div className="absolute inset-0 pointer-events-none rounded-xl border border-white/5" />
-
-                                                    <div className="flex items-center justify-between relative z-10">
-                                                        <Label className="text-sm text-white/90 flex items-center gap-2 font-medium">
-                                                            <Wand2 className="h-4 w-4 text-white" />
-                                                            AI 字幕
-                                                        </Label>
-                                                        <button
-                                                            onClick={() => onAiCaptionChange({ ...aiCaptionConfig, enabled: !aiCaptionConfig.enabled })}
-                                                            className={cn(
-                                                                "relative w-10 h-5 rounded-full transition-all duration-300",
-                                                                aiCaptionConfig.enabled
-                                                                    ? "bg-white/20 border border-white/30"
-                                                                    : "bg-white/5 border border-white/10"
-                                                            )}
-                                                        >
-                                                            <span className={cn(
-                                                                "absolute top-0.5 w-4 h-4 rounded-full transition-all duration-300 shadow",
-                                                                aiCaptionConfig.enabled
-                                                                    ? "left-[22px] bg-white shadow-[0_0_10px_rgba(255,255,255,0.5)]"
-                                                                    : "left-0.5 bg-white/40"
-                                                            )} />
-                                                        </button>
-                                                    </div>
-                                                    {aiCaptionConfig.enabled && (
-                                                        <div className="space-y-3 relative z-10 pt-1">
-                                                            {/* 关键词输入 */}
-                                                            <input
-                                                                type="text"
-                                                                value={aiCaptionConfig.keywords}
-                                                                onChange={(e) => onAiCaptionChange({ ...aiCaptionConfig, keywords: e.target.value })}
-                                                                placeholder="输入主题/关键词..."
-                                                                className="w-full px-4 py-3 bg-[#101012] border border-white/10 rounded-xl text-sm text-white placeholder:text-white/20 focus:outline-none focus:border-white/30 transition-all shadow-inner"
-                                                            />
-                                                            {/* 语言和风格 */}
-                                                            <div className="flex gap-2 p-1 bg-black/20 rounded-xl border border-white/5">
+                                                    {/* AI 字幕生成（配音文案） */}
+                                                    {aiCaptionConfig && onAiCaptionChange && (
+                                                        <div className="space-y-3 p-3 bg-[#1a1a1a] border border-white/10 rounded-xl">
+                                                            <div className="flex items-center justify-between">
+                                                                <Label className="text-sm text-white/90 flex items-center gap-2 font-medium">
+                                                                    <Wand2 className="h-4 w-4 text-white" />
+                                                                    AI 字幕
+                                                                </Label>
                                                                 <button
-                                                                    onClick={() => onAiCaptionChange({ ...aiCaptionConfig, language: 'en' })}
+                                                                    onClick={() => onAiCaptionChange({ ...aiCaptionConfig, enabled: !aiCaptionConfig.enabled })}
                                                                     className={cn(
-                                                                        "flex-1 py-1.5 rounded-lg text-xs font-medium transition-all",
-                                                                        aiCaptionConfig.language === 'en'
-                                                                            ? "bg-white/10 text-white shadow-sm border border-white/10"
-                                                                            : "text-white/40 hover:text-white/70 hover:bg-white/5"
+                                                                        "relative w-10 h-5 rounded-full transition-all duration-300",
+                                                                        aiCaptionConfig.enabled
+                                                                            ? "bg-white/20 border border-white/30"
+                                                                            : "bg-white/5 border border-white/10"
                                                                     )}
                                                                 >
-                                                                    🌍 EN
-                                                                </button>
-                                                                <button
-                                                                    onClick={() => onAiCaptionChange({ ...aiCaptionConfig, language: 'zh' })}
-                                                                    className={cn(
-                                                                        "flex-1 py-1.5 rounded-lg text-xs font-medium transition-all",
-                                                                        aiCaptionConfig.language === 'zh'
-                                                                            ? "bg-white/10 text-white shadow-sm border border-white/10"
-                                                                            : "text-white/40 hover:text-white/70 hover:bg-white/5"
-                                                                    )}
-                                                                >
-                                                                    🇨🇳 中文
+                                                                    <span className={cn(
+                                                                        "absolute top-0.5 w-4 h-4 rounded-full transition-all duration-300 shadow",
+                                                                        aiCaptionConfig.enabled
+                                                                            ? "left-[22px] bg-white shadow-[0_0_10px_rgba(255,255,255,0.5)]"
+                                                                            : "left-0.5 bg-white/40"
+                                                                    )} />
                                                                 </button>
                                                             </div>
-                                                            {/* AI 生成按钮 - JCUI Primary White Button */}
-                                                            <Button
-                                                                onClick={async () => {
-                                                                    if (!aiCaptionConfig.keywords.trim()) return;
-                                                                    setIsGenerating(true);
-                                                                    try {
-                                                                        const response = await fetch('/api/ai/captions', {
-                                                                            method: 'POST',
-                                                                            headers: { 'Content-Type': 'application/json' },
-                                                                            body: JSON.stringify({
-                                                                                keywords: aiCaptionConfig.keywords,
-                                                                                style: aiCaptionConfig.style || 'lively',
-                                                                                count: videoCount,
-                                                                                mode: aiCaptionConfig.mode || 'unified',
-                                                                                language: aiCaptionConfig.language || 'en',
-                                                                            }),
-                                                                        });
-                                                                        if (response.ok) {
-                                                                            const data = await response.json();
-                                                                            if (data.captions?.[0]) {
-                                                                                onChange({ ...subtitle, text: data.captions[0] });
-                                                                            }
-                                                                        }
-                                                                    } catch (err) {
-                                                                        console.error('AI caption error:', err);
-                                                                    } finally {
-                                                                        setIsGenerating(false);
-                                                                    }
-                                                                }}
-                                                                disabled={isGenerating || !aiCaptionConfig.keywords.trim()}
-                                                                className={cn(
-                                                                    "w-full h-10 text-sm font-medium transition-all duration-300 rounded-xl border-t border-white/60",
-                                                                    "bg-gradient-to-b from-white to-gray-200 text-black",
-                                                                    "shadow-[0_0_20px_rgba(255,255,255,0.3)]",
-                                                                    "hover:shadow-[0_0_25px_rgba(255,255,255,0.5)] hover:scale-[1.01]",
-                                                                    "active:scale-[0.98]",
-                                                                    "disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none"
-                                                                )}
-                                                            >
-                                                                {isGenerating ? (
-                                                                    <>
-                                                                        <Loader2 className="h-4 w-4 mr-2 animate-spin text-black" />
-                                                                        生成中...
-                                                                    </>
-                                                                ) : (
-                                                                    <>
-                                                                        <Sparkles className="h-4 w-4 mr-2 text-black fill-black/10" />
-                                                                        ✨ AI 智能生成文案
-                                                                    </>
-                                                                )}
-                                                            </Button>
+                                                            {aiCaptionConfig.enabled && (
+                                                                <div className="space-y-3 pt-1">
+                                                                    <input
+                                                                        type="text"
+                                                                        value={aiCaptionConfig.keywords}
+                                                                        onChange={(e) => onAiCaptionChange({ ...aiCaptionConfig, keywords: e.target.value })}
+                                                                        placeholder="输入主题/关键词..."
+                                                                        className="w-full bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder:text-white/20 focus:outline-none focus:border-white/30"
+                                                                    />
+                                                                    {/* 统一/多样模式切换 */}
+                                                                    <div className="flex bg-black/40 p-1 rounded-lg border border-white/5">
+                                                                        <button
+                                                                            onClick={() => onAiCaptionChange({ ...aiCaptionConfig, mode: 'unified' })}
+                                                                            className={cn(
+                                                                                "flex-1 py-1.5 rounded-md text-xs font-medium transition-all",
+                                                                                aiCaptionConfig.mode === 'unified'
+                                                                                    ? "bg-white/10 text-white shadow-sm border border-white/10"
+                                                                                    : "text-white/40 hover:text-white/70"
+                                                                            )}
+                                                                        >
+                                                                            📋 统一文案
+                                                                        </button>
+                                                                        <button
+                                                                            onClick={() => onAiCaptionChange({ ...aiCaptionConfig, mode: 'diverse' })}
+                                                                            className={cn(
+                                                                                "flex-1 py-1.5 rounded-md text-xs font-medium transition-all",
+                                                                                aiCaptionConfig.mode === 'diverse'
+                                                                                    ? "bg-white/10 text-white shadow-sm border border-white/10"
+                                                                                    : "text-white/40 hover:text-white/70"
+                                                                            )}
+                                                                        >
+                                                                            🎭 多样文案
+                                                                        </button>
+                                                                    </div>
+                                                                    {aiCaptionConfig.mode === 'diverse' && (
+                                                                        <div className="text-[10px] text-white/40 bg-white/5 rounded-lg px-2 py-1.5">
+                                                                            将为 {videoCount} 条视频分别生成不同内容的字幕文案
+                                                                        </div>
+                                                                    )}
+                                                                    <div className="flex items-center gap-2">
+                                                                        <div className="flex bg-black/40 p-1 rounded-lg border border-white/5 flex-1">
+                                                                            <button
+                                                                                onClick={() => onAiCaptionChange({ ...aiCaptionConfig, language: 'en' })}
+                                                                                className={cn(
+                                                                                    "flex-1 py-1.5 rounded-md text-xs font-medium transition-all",
+                                                                                    aiCaptionConfig.language === 'en'
+                                                                                        ? "bg-white/10 text-white shadow-sm border border-white/10"
+                                                                                        : "text-white/40 hover:text-white/70"
+                                                                                )}
+                                                                            >
+                                                                                🌐 EN
+                                                                            </button>
+                                                                            <button
+                                                                                onClick={() => onAiCaptionChange({ ...aiCaptionConfig, language: 'zh' })}
+                                                                                className={cn(
+                                                                                    "flex-1 py-1.5 rounded-md text-xs font-medium transition-all",
+                                                                                    aiCaptionConfig.language === 'zh'
+                                                                                        ? "bg-white/10 text-white shadow-sm border border-white/10"
+                                                                                        : "text-white/40 hover:text-white/70"
+                                                                                )}
+                                                                            >
+                                                                                CN 中文
+                                                                            </button>
+                                                                        </div>
+                                                                    </div>
+                                                                    <Button
+                                                                        onClick={generateAICaptions}
+                                                                        disabled={isGenerating || !aiCaptionConfig.keywords?.trim()}
+                                                                        className={cn(
+                                                                            "w-full h-9 text-xs font-medium transition-all duration-300 rounded-xl",
+                                                                            "bg-gradient-to-b from-white to-gray-200 text-black border-t border-white/60",
+                                                                            "shadow-[0_0_15px_rgba(255,255,255,0.25)]",
+                                                                            "hover:shadow-[0_0_20px_rgba(255,255,255,0.4)] hover:scale-[1.01]",
+                                                                            "active:scale-[0.98]",
+                                                                            "disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none"
+                                                                        )}
+                                                                    >
+                                                                        {isGenerating ? (
+                                                                            <>
+                                                                                <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin text-black" />
+                                                                                生成中...
+                                                                            </>
+                                                                        ) : (
+                                                                            <>
+                                                                                <Sparkles className="h-3.5 w-3.5 mr-1.5 text-black fill-black/10" />
+                                                                                ✨ AI 智能生成文案
+                                                                            </>
+                                                                        )}
+                                                                    </Button>
+                                                                    {/* 显示已生成的字幕文案 */}
+                                                                    {aiCaptionConfig.generatedTexts && aiCaptionConfig.generatedTexts.length > 0 && (
+                                                                        <div className="space-y-1.5 mt-2">
+                                                                            <Label className="text-[10px] text-white/40">已生成 {aiCaptionConfig.generatedTexts.length} 条字幕：</Label>
+                                                                            <div className="max-h-32 overflow-y-auto space-y-1">
+                                                                                {aiCaptionConfig.generatedTexts.map((text: string, i: number) => (
+                                                                                    <div key={i} className="text-xs text-white/60 bg-black/30 px-2 py-1.5 rounded-md">
+                                                                                        <span className="text-white/30 mr-1">#{i + 1}</span> {text}
+                                                                                    </div>
+                                                                                ))}
+                                                                            </div>
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            )}
                                                         </div>
                                                     )}
                                                 </div>
                                             )}
+                                        </div>
+                                    )}
 
-                                            {/* 🎨 字幕样式（风格 + 色调 + 颜色 合并） */}
-                                            <div className="space-y-3 p-3 bg-white/5 border border-white/10 rounded-xl">
-                                                <Label className="text-sm text-white/80">🎨 字幕样式</Label>
+                                    {/* ═══ 卡片 3：🎨 字幕样式 ═══ */}
+                                    <div className="border border-white/10 rounded-xl overflow-hidden">
+                                        <button
+                                            onClick={() => setExpandedCards(s => ({ ...s, style: !s.style }))}
+                                            className="w-full flex items-center justify-between p-3 hover:bg-white/5 transition-colors"
+                                        >
+                                            <div className="flex items-center gap-2 text-sm font-medium text-white/90">
+                                                🎨 字幕样式
+                                            </div>
+                                            <ChevronDown className={cn("h-4 w-4 text-white/40 transition-transform", expandedCards.style && "rotate-180")} />
+                                        </button>
+                                        {expandedCards.style && (
+                                            <div className="px-3 pb-3 border-t border-white/5 space-y-3 pt-3">
                                                 {/* 风格 - 紧凑横排 */}
                                                 <div className="flex gap-1.5">
                                                     {(Object.keys(STYLE_PRESETS) as SubtitleStyle[]).map((style) => {
@@ -1211,7 +1279,7 @@ export function SubtitleEditor({
                                                         );
                                                     })}
                                                 </div>
-                                                {/* 色调 + 颜色 - 一行 */}
+                                                {/* 色调 + 颜色 */}
                                                 <div className="flex items-center gap-2">
                                                     {(Object.keys(TONE_COLORS) as SubtitleTone[]).map((tone) => {
                                                         const toneData = TONE_COLORS[tone];
@@ -1247,7 +1315,7 @@ export function SubtitleEditor({
                                                         />
                                                     ))}
                                                 </div>
-                                                {/* 效果预览 - 紧凑 */}
+                                                {/* 效果预览 */}
                                                 <div className="p-2 bg-black/30 rounded-lg">
                                                     <div
                                                         className="text-center py-1.5"
@@ -1260,307 +1328,181 @@ export function SubtitleEditor({
                                                     </div>
                                                 </div>
                                             </div>
-                                        </> // 配音字幕 Tab 结束
-                                    )}
+                                        )}
+                                    </div>
 
-                                    {/* 图文字幕 Tab 内容 */}
-                                    {activeTab === 'text' && (
-                                        <div className="space-y-4">
-                                            {/* AI 批量生成区域 */}
-                                            <div className="p-4 bg-[#1a1a1a] border border-white/10 rounded-xl space-y-3 relative overflow-hidden">
-                                                {/* Reflective Border */}
-                                                <div className="absolute inset-0 pointer-events-none rounded-xl border border-white/5" />
-
-                                                <Label className="text-sm text-white/90 flex items-center gap-2 font-medium relative z-10">
-                                                    <Wand2 className="h-4 w-4 text-white" />
-                                                    AI 批量生成
-                                                </Label>
-
-                                                <textarea
-                                                    value={aiPrompt}
-                                                    onChange={(e) => setAiPrompt(e.target.value)}
-                                                    placeholder="请输入提示词，如：生成产品促销文案..."
-                                                    className="w-full h-20 bg-[#101012] border border-white/10 rounded-xl p-3 text-sm text-white placeholder:text-white/20 resize-none focus:outline-none focus:border-white/30 transition-all shadow-inner relative z-10"
-                                                />
-
-                                                <div className="flex items-center gap-3 relative z-10">
-                                                    {/* 文案模式切换 - Segmented Control */}
-                                                    <div className="flex bg-black/40 p-1 rounded-lg border border-white/5 flex-1">
-                                                        <button
-                                                            onClick={() => setAiMode('uniform')}
-                                                            className={cn(
-                                                                "flex-1 py-1.5 px-2 rounded-md text-xs font-medium transition-all",
-                                                                aiMode === 'uniform'
-                                                                    ? "bg-white text-black shadow-sm"
-                                                                    : "text-white/40 hover:text-white/70"
-                                                            )}
-                                                        >
-                                                            统一文案
-                                                        </button>
-                                                        <button
-                                                            onClick={() => setAiMode('diverse')}
-                                                            className={cn(
-                                                                "flex-1 py-1.5 px-2 rounded-md text-xs font-medium transition-all",
-                                                                aiMode === 'diverse'
-                                                                    ? "bg-white text-black shadow-sm"
-                                                                    : "text-white/40 hover:text-white/70"
-                                                            )}
-                                                        >
-                                                            多样文案
-                                                        </button>
-                                                    </div>
-
-                                                    {/* 语言选择 */}
-                                                    <div className="flex bg-black/40 p-1 rounded-lg border border-white/5 flex-none w-32">
-                                                        <button
-                                                            onClick={() => setAiLanguage('en')}
-                                                            className={cn(
-                                                                "flex-1 py-1.5 rounded-md text-xs font-medium transition-all",
-                                                                aiLanguage === 'en'
-                                                                    ? "bg-white/10 text-white shadow-sm border border-white/10"
-                                                                    : "text-white/40 hover:text-white/70"
-                                                            )}
-                                                        >
-                                                            EN
-                                                        </button>
-                                                        <button
-                                                            onClick={() => setAiLanguage('zh')}
-                                                            className={cn(
-                                                                "flex-1 py-1.5 rounded-md text-xs font-medium transition-all",
-                                                                aiLanguage === 'zh'
-                                                                    ? "bg-white/10 text-white shadow-sm border border-white/10"
-                                                                    : "text-white/40 hover:text-white/70"
-                                                            )}
-                                                        >
-                                                            中文
-                                                        </button>
-                                                    </div>
-                                                </div>
-
-                                                {/* Generate Button - Primary White */}
-                                                <Button
-                                                    onClick={generateAITexts}
-                                                    disabled={isGenerating || !aiPrompt.trim() || allImages.length === 0}
-                                                    className={cn(
-                                                        "w-full h-9 text-xs font-medium transition-all duration-300 rounded-xl relative z-10",
-                                                        "bg-gradient-to-b from-white to-gray-200 text-black border-t border-white/60",
-                                                        "shadow-[0_0_15px_rgba(255,255,255,0.25)]",
-                                                        "hover:shadow-[0_0_20px_rgba(255,255,255,0.4)] hover:scale-[1.01]",
-                                                        "active:scale-[0.98]",
-                                                        "disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none"
-                                                    )}
-                                                >
-                                                    {isGenerating ? (
-                                                        <>
-                                                            <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin text-black" />
-                                                            生成中...
-                                                        </>
-                                                    ) : (
-                                                        <>
-                                                            <Sparkles className="h-3.5 w-3.5 mr-1.5 text-black fill-black/10" />
-                                                            ✨ AI 批量生成文本
-                                                        </>
-                                                    )}
-                                                </Button>
-                                            </div>
-
-                                            {/* 模式切换 */}
-                                            <div className="space-y-3">
-
-                                                {/* Timing Mode - Segmented Control */}
-                                                <div className="flex gap-1 p-1 bg-black/40 border border-white/5 rounded-xl">
-                                                    <button
-                                                        onClick={() => setOverlayTimingMode('image')}
-                                                        className={cn(
-                                                            "flex-1 py-2 px-3 rounded-lg text-xs font-medium transition-all flex items-center justify-center gap-2",
-                                                            overlayTimingMode === 'image'
-                                                                ? "bg-white/10 border border-white text-white shadow-[0_0_10px_rgba(255,255,255,0.2)]"
-                                                                : "text-white/40 hover:text-white hover:bg-white/5 border border-transparent"
-                                                        )}
-                                                    >
-                                                        📌 图片模式
-                                                    </button>
-                                                    <button
-                                                        onClick={() => setOverlayTimingMode('custom')}
-                                                        className={cn(
-                                                            "flex-1 py-2 px-3 rounded-lg text-xs font-medium transition-all flex items-center justify-center gap-2",
-                                                            overlayTimingMode === 'custom'
-                                                                ? "bg-white/10 border border-white text-white shadow-[0_0_10px_rgba(255,255,255,0.2)]"
-                                                                : "text-white/40 hover:text-white hover:bg-white/5 border border-transparent"
-                                                        )}
-                                                    >
-                                                        ⏱️ 自由模式
-                                                    </button>
-                                                </div>
-
-                                                {/* 默认设置 - 紧凑行 */}
-                                                <div className="flex items-center gap-2 p-2 bg-white/5 rounded-lg">
-                                                    <span className="text-[10px] text-white/40">新增默认:</span>
-                                                    <div className="flex gap-1 bg-black/30 p-0.5 rounded-md">
-                                                        <button
-                                                            onClick={() => setOverlayPositionMode('fixed')}
-                                                            className={cn("px-2 py-1 rounded text-[10px]", overlayPositionMode === 'fixed' ? "bg-white/15 text-white" : "text-white/40")}
-                                                        >📌 固定位置</button>
-                                                        <button
-                                                            onClick={() => setOverlayPositionMode('random')}
-                                                            className={cn("px-2 py-1 rounded text-[10px]", overlayPositionMode === 'random' ? "bg-white/15 text-white" : "text-white/40")}
-                                                        >🎲 随机位置</button>
-                                                    </div>
-                                                    <div className="flex gap-1 bg-black/30 p-0.5 rounded-md">
-                                                        <button
-                                                            onClick={() => setOverlayStyleMode('inherit')}
-                                                            className={cn("px-2 py-1 rounded text-[10px]", overlayStyleMode === 'inherit' ? "bg-white/15 text-white" : "text-white/40")}
-                                                        >🔗 继承</button>
-                                                        <button
-                                                            onClick={() => setOverlayStyleMode('custom')}
-                                                            className={cn("px-2 py-1 rounded text-[10px]", overlayStyleMode === 'custom' ? "bg-white/15 text-white" : "text-white/40")}
-                                                        >✏️ 自定义</button>
-                                                        <button
-                                                            onClick={() => setOverlayStyleMode('random')}
-                                                            className={cn("px-2 py-1 rounded text-[10px]", overlayStyleMode === 'random' ? "bg-white/15 text-white" : "text-white/40")}
-                                                        >🎲 随机</button>
-                                                    </div>
-                                                </div>
-
-                                                {/* 图片模式列表 */}
-                                                {overlayTimingMode === 'image' && (
-                                                    <div className="space-y-2">
-                                                        <Label className="text-sm text-white/60">📝 按图片分组</Label>
-                                                        <div className="max-h-[250px] overflow-y-auto space-y-2 pr-2">
-                                                            {allImages.length > 0 ? (
-                                                                allImages.map((_, idx) => {
-                                                                    const overlaysForImage = imageOverlays.filter(o => o.imageIndex === idx);
-                                                                    return (
-                                                                        <div key={idx} className="p-3 bg-white/5 rounded-lg space-y-2">
-                                                                            <div className="flex items-center justify-between">
-                                                                                <span className="text-xs text-white/40">📌 图片 {idx + 1}</span>
-                                                                                <button
-                                                                                    onClick={() => addTextOverlay(idx)}
-                                                                                    className="text-xs text-white/70 hover:text-white bg-white/5 hover:bg-white/10 px-2 py-1 rounded transition-all flex items-center gap-1 border border-white/5"
-                                                                                >
-                                                                                    <span className="text-[10px]">+</span> 添加文本
-                                                                                </button>
-                                                                            </div>
-                                                                            {overlaysForImage.length > 0 ? (
-                                                                                overlaysForImage.map(overlay => (
-                                                                                    <div key={overlay.id} className="flex items-center justify-between p-2 bg-black/20 rounded">
-                                                                                        <span className="text-sm text-white/80 truncate flex-1">
-                                                                                            {overlay.text.slice(0, 30)}{overlay.text.length > 30 ? '...' : ''}
-                                                                                        </span>
-                                                                                        <div className="flex gap-1">
-                                                                                            <button
-                                                                                                onClick={() => setEditingOverlay(overlay)}
-                                                                                                className="text-xs text-white/60 hover:text-white px-2 py-1 hover:bg-white/10 rounded transition-colors"
-                                                                                            >编辑</button>
-                                                                                            <button
-                                                                                                onClick={() => deleteTextOverlay(overlay.id)}
-                                                                                                className="text-xs text-white/40 hover:text-red-400 px-2 py-1 hover:bg-white/5 rounded transition-colors"
-                                                                                            >
-                                                                                                删除
-                                                                                            </button>
-                                                                                        </div>
-                                                                                    </div>
-                                                                                ))
-                                                                            ) : (
-                                                                                <div className="text-xs text-white/30 text-center py-2">暂无文本</div>
-                                                                            )}
-                                                                        </div>
-                                                                    );
-                                                                })
-                                                            ) : (
-                                                                <div className="text-sm text-white/40 text-center py-8">
-                                                                    请先上传图片
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                    </div>
+                                    {/* ═══ 卡片 4：📝 图文叠加 ═══ */}
+                                    <div className="border border-white/10 rounded-xl overflow-hidden">
+                                        <button
+                                            onClick={() => setExpandedCards(s => ({ ...s, overlay: !s.overlay }))}
+                                            className="w-full flex items-center justify-between p-3 hover:bg-white/5 transition-colors"
+                                        >
+                                            <div className="flex items-center gap-2 text-sm font-medium text-white/90">
+                                                📝 图文叠加
+                                                {(subtitle.textOverlays?.length ?? 0) > 0 && (
+                                                    <span className="text-[10px] px-1.5 py-0.5 bg-white/10 rounded text-white/50">
+                                                        {subtitle.textOverlays?.length} 条
+                                                    </span>
                                                 )}
-
-                                                {/* 自由模式列表 */}
-                                                {overlayTimingMode === 'custom' && (
-                                                    <div className="space-y-2">
-                                                        <div className="flex items-center justify-between">
-                                                            <Label className="text-sm text-white/60">⏱️ 自由时间文本</Label>
+                                            </div>
+                                            <ChevronDown className={cn("h-4 w-4 text-white/40 transition-transform", expandedCards.overlay && "rotate-180")} />
+                                        </button>
+                                        {expandedCards.overlay && (
+                                            <div className="px-3 pb-3 border-t border-white/5 space-y-3 pt-3">
+                                                {/* AI 文案生成 */}
+                                                <div className="p-3 bg-[#1a1a1a] border border-white/10 rounded-xl space-y-3 relative overflow-hidden">
+                                                    <div className="absolute inset-0 pointer-events-none rounded-xl border border-white/5" />
+                                                    <Label className="text-sm text-white/80 flex items-center gap-2 relative z-10">
+                                                        <Sparkles className="h-4 w-4" />
+                                                        ✨ AI 文案生成
+                                                    </Label>
+                                                    <textarea
+                                                        value={aiPrompt}
+                                                        onChange={(e) => setAiPrompt(e.target.value)}
+                                                        placeholder="请输入提示词，如：生成产品促销文案..."
+                                                        className="w-full h-16 bg-[#101012] border border-white/10 rounded-xl p-3 text-sm text-white placeholder:text-white/20 resize-none focus:outline-none focus:border-white/30 transition-all shadow-inner relative z-10"
+                                                    />
+                                                    <div className="flex items-center gap-3 relative z-10">
+                                                        {/* 文案策略 */}
+                                                        <div className="flex bg-black/40 p-1 rounded-lg border border-white/5 flex-1">
                                                             <button
-                                                                onClick={addCustomOverlay}
-                                                                className="text-xs text-white/70 hover:text-white bg-white/5 hover:bg-white/10 px-2 py-1 rounded transition-all flex items-center gap-1 border border-white/5"
+                                                                onClick={() => setAiMode('uniform')}
+                                                                className={cn(
+                                                                    "flex-1 py-1.5 px-2 rounded-md text-xs font-medium transition-all",
+                                                                    aiMode === 'uniform'
+                                                                        ? "bg-white text-black shadow-sm"
+                                                                        : "text-white/40 hover:text-white/70"
+                                                                )}
                                                             >
-                                                                <span className="text-[10px]">+</span> 添加文本层
+                                                                统一文案
+                                                            </button>
+                                                            <button
+                                                                onClick={() => setAiMode('diverse')}
+                                                                className={cn(
+                                                                    "flex-1 py-1.5 px-2 rounded-md text-xs font-medium transition-all",
+                                                                    aiMode === 'diverse'
+                                                                        ? "bg-white text-black shadow-sm"
+                                                                        : "text-white/40 hover:text-white/70"
+                                                                )}
+                                                            >
+                                                                多样文案
                                                             </button>
                                                         </div>
-                                                        <div className="max-h-[250px] overflow-y-auto space-y-3 pr-2">
-                                                            {customOverlays.length > 0 ? (
-                                                                customOverlays.map((overlay, idx) => (
-                                                                    <div key={overlay.id} className="p-3 bg-white/5 rounded-lg space-y-3">
-                                                                        <div className="flex items-center justify-between">
-                                                                            <span className="text-xs text-white/40">📝 文本层 {idx + 1}</span>
-                                                                            <div className="flex gap-1">
-                                                                                <button
-                                                                                    onClick={() => setEditingOverlay(overlay)}
-                                                                                    className="text-xs text-white/70 hover:text-white"
-                                                                                >
-                                                                                    编辑
-                                                                                </button>
-                                                                                <button
-                                                                                    onClick={() => deleteTextOverlay(overlay.id)}
-                                                                                    className="text-xs text-red-400 hover:text-red-300"
-                                                                                >
-                                                                                    删除
-                                                                                </button>
-                                                                            </div>
-                                                                        </div>
-                                                                        {/* 文本输入 */}
-                                                                        <input
-                                                                            type="text"
-                                                                            value={overlay.text}
-                                                                            onChange={(e) => updateTextOverlay(overlay.id, { text: e.target.value })}
-                                                                            placeholder="输入文本内容..."
-                                                                            className="w-full bg-black/30 border border-white/10 rounded px-3 py-2 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-white/30"
-                                                                        />
-                                                                        {/* 时间范围滑块 */}
-                                                                        <div className="space-y-2">
-                                                                            <div className="flex items-center justify-between text-xs text-white/40">
-                                                                                <span>时间范围: {overlay.startPercent ?? 0}% - {overlay.endPercent ?? 100}%</span>
-                                                                            </div>
-                                                                            <div className="flex items-center gap-2">
-                                                                                <input
-                                                                                    type="range"
-                                                                                    min="0"
-                                                                                    max="100"
-                                                                                    value={overlay.startPercent ?? 0}
-                                                                                    onChange={(e) => updateTextOverlay(overlay.id, {
-                                                                                        startPercent: Math.min(Number(e.target.value), (overlay.endPercent ?? 100) - 5)
-                                                                                    })}
-                                                                                    className="flex-1 h-2 rounded-full bg-white/10 appearance-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white"
-                                                                                />
-                                                                                <input
-                                                                                    type="range"
-                                                                                    min="0"
-                                                                                    max="100"
-                                                                                    value={overlay.endPercent ?? 100}
-                                                                                    onChange={(e) => updateTextOverlay(overlay.id, {
-                                                                                        endPercent: Math.max(Number(e.target.value), (overlay.startPercent ?? 0) + 5)
-                                                                                    })}
-                                                                                    className="flex-1 h-2 rounded-full bg-white/20 appearance-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white/80"
-                                                                                />
-                                                                            </div>
-                                                                        </div>
-                                                                    </div>
-                                                                ))
-                                                            ) : (
-                                                                <div className="text-sm text-white/40 text-center py-8">
-                                                                    点击"+ 添加文本层"创建自由时间文本<br />
-                                                                    <span className="text-xs text-white/30">可用于品牌水印、全程叠加文字等</span>
-                                                                </div>
-                                                            )}
+                                                        {/* 语言 */}
+                                                        <div className="flex bg-black/40 p-1 rounded-lg border border-white/5 flex-none w-28">
+                                                            <button
+                                                                onClick={() => setAiLanguage('en')}
+                                                                className={cn(
+                                                                    "flex-1 py-1.5 rounded-md text-xs font-medium transition-all",
+                                                                    aiLanguage === 'en'
+                                                                        ? "bg-white/10 text-white shadow-sm border border-white/10"
+                                                                        : "text-white/40 hover:text-white/70"
+                                                                )}
+                                                            >
+                                                                EN
+                                                            </button>
+                                                            <button
+                                                                onClick={() => setAiLanguage('zh')}
+                                                                className={cn(
+                                                                    "flex-1 py-1.5 rounded-md text-xs font-medium transition-all",
+                                                                    aiLanguage === 'zh'
+                                                                        ? "bg-white/10 text-white shadow-sm border border-white/10"
+                                                                        : "text-white/40 hover:text-white/70"
+                                                                )}
+                                                            >
+                                                                中文
+                                                            </button>
                                                         </div>
                                                     </div>
-                                                )}
+                                                    <Button
+                                                        onClick={generateAITexts}
+                                                        disabled={isGenerating || !aiPrompt.trim() || allImages.length === 0}
+                                                        className={cn(
+                                                            "w-full h-9 text-xs font-medium transition-all duration-300 rounded-xl relative z-10",
+                                                            "bg-gradient-to-b from-white to-gray-200 text-black border-t border-white/60",
+                                                            "shadow-[0_0_15px_rgba(255,255,255,0.25)]",
+                                                            "hover:shadow-[0_0_20px_rgba(255,255,255,0.4)] hover:scale-[1.01]",
+                                                            "active:scale-[0.98]",
+                                                            "disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none"
+                                                        )}
+                                                    >
+                                                        {isGenerating ? (
+                                                            <>
+                                                                <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin text-black" />
+                                                                生成中...
+                                                            </>
+                                                        ) : (
+                                                            <>
+                                                                <Sparkles className="h-3.5 w-3.5 mr-1.5 text-black fill-black/10" />
+                                                                ✨ AI 生成文案
+                                                            </>
+                                                        )}
+                                                    </Button>
+                                                </div>
 
+                                                {/* 按图片分组列表 */}
+                                                <div className="space-y-2">
+                                                    <Label className="text-sm text-white/60">📷 按图片分组</Label>
+                                                    <div className="max-h-[250px] overflow-y-auto space-y-2 pr-1">
+                                                        {allImages.length > 0 ? (
+                                                            allImages.map((_, idx) => {
+                                                                const overlays = imageOverlays.filter(o => o.imageIndex === idx);
+                                                                return (
+                                                                    <div key={idx} className="p-2.5 bg-white/5 rounded-lg border border-white/5 space-y-1.5">
+                                                                        <div className="flex items-center justify-between">
+                                                                            <span className="text-xs text-white/60 flex items-center gap-1.5">
+                                                                                📷 图片 {idx + 1}
+                                                                            </span>
+                                                                            <button
+                                                                                onClick={() => addTextOverlay(idx)}
+                                                                                className="text-[10px] text-white/40 hover:text-white px-2 py-0.5 rounded hover:bg-white/10 transition-colors"
+                                                                            >
+                                                                                + 添加文本
+                                                                            </button>
+                                                                        </div>
+                                                                        {overlays.length > 0 ? (
+                                                                            overlays.map((overlay) => (
+                                                                                <div
+                                                                                    key={overlay.id}
+                                                                                    className="flex items-center gap-2 p-2 bg-black/20 rounded-md group"
+                                                                                >
+                                                                                    <span className="flex-1 text-xs text-white/70 truncate">
+                                                                                        {overlay.text || '(空文本)'}
+                                                                                    </span>
+                                                                                    <button
+                                                                                        onClick={() => setEditingOverlay({ ...overlay })}
+                                                                                        className="text-[10px] text-white/30 hover:text-white opacity-0 group-hover:opacity-100 transition-all"
+                                                                                    >
+                                                                                        编辑
+                                                                                    </button>
+                                                                                    <button
+                                                                                        onClick={() => deleteTextOverlay(overlay.id)}
+                                                                                        className="text-[10px] text-white/30 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all"
+                                                                                    >
+                                                                                        删除
+                                                                                    </button>
+                                                                                </div>
+                                                                            ))
+                                                                        ) : (
+                                                                            <div className="text-[10px] text-white/20 italic pl-1">
+                                                                                暂无文本
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
+                                                                );
+                                                            })
+                                                        ) : (
+                                                            <div className="text-xs text-white/30 text-center py-4">
+                                                                请先上传图片
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
                                             </div>
-                                        </div>
-                                    )}
+                                        )}
+                                    </div>
                                 </div>
+
                             </div>
 
                             {/* 弹窗底部 - 固定在弹窗底部 */}
@@ -1589,7 +1531,7 @@ export function SubtitleEditor({
                 )
             }
 
-            {/* TextOverlay 编辑弹窗 - Bug #2 修复 */}
+            {/* TextOverlay 编辑弹窗 */}
             {
                 editingOverlay && (
                     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm">
@@ -1606,7 +1548,7 @@ export function SubtitleEditor({
                             </div>
 
                             {/* 弹窗内容 */}
-                            <div className="p-6 space-y-4">
+                            <div className="p-6 space-y-4 overflow-y-auto">
                                 {/* 文本编辑 */}
                                 <div className="space-y-2">
                                     <Label className="text-sm text-white/60">文本内容</Label>
@@ -1623,9 +1565,7 @@ export function SubtitleEditor({
                                     <div className="space-y-2">
                                         <Label className="text-xs text-white/40">X 位置: {editingOverlay.boxX}%</Label>
                                         <input
-                                            type="range"
-                                            min="0"
-                                            max="100"
+                                            type="range" min="0" max="100"
                                             value={editingOverlay.boxX}
                                             onChange={(e) => setEditingOverlay({ ...editingOverlay, boxX: Number(e.target.value) })}
                                             className="w-full h-2 rounded-full bg-white/10 appearance-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white"
@@ -1634,9 +1574,7 @@ export function SubtitleEditor({
                                     <div className="space-y-2">
                                         <Label className="text-xs text-white/40">Y 位置: {editingOverlay.boxY}%</Label>
                                         <input
-                                            type="range"
-                                            min="0"
-                                            max="100"
+                                            type="range" min="0" max="100"
                                             value={editingOverlay.boxY}
                                             onChange={(e) => setEditingOverlay({ ...editingOverlay, boxY: Number(e.target.value) })}
                                             className="w-full h-2 rounded-full bg-white/10 appearance-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white"
@@ -1648,25 +1586,21 @@ export function SubtitleEditor({
                                 <div className="space-y-2">
                                     <Label className="text-xs text-white/40">宽度: {editingOverlay.boxWidth}%</Label>
                                     <input
-                                        type="range"
-                                        min="20"
-                                        max="100"
+                                        type="range" min="20" max="100"
                                         value={editingOverlay.boxWidth}
                                         onChange={(e) => setEditingOverlay({ ...editingOverlay, boxWidth: Number(e.target.value) })}
                                         className="w-full h-2 rounded-full bg-white/10 appearance-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white"
                                     />
                                 </div>
 
-                                {/* 高度 (仅预览参考) */}
+                                {/* 高度 */}
                                 <div className="space-y-2">
                                     <Label className="text-xs text-white/40">
                                         高度: {editingOverlay.boxHeight ?? 'auto'}%
                                         <span className="text-white/20 ml-2">(仅预览参考)</span>
                                     </Label>
                                     <input
-                                        type="range"
-                                        min="5"
-                                        max="50"
+                                        type="range" min="5" max="50"
                                         value={editingOverlay.boxHeight ?? 15}
                                         onChange={(e) => setEditingOverlay({ ...editingOverlay, boxHeight: Number(e.target.value) })}
                                         className="w-full h-2 rounded-full bg-white/10 appearance-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white"
@@ -1707,9 +1641,7 @@ export function SubtitleEditor({
                                     <div className="space-y-1">
                                         <Label className="text-xs text-white/40">字号: {editingOverlay.fontSize ?? 14}px</Label>
                                         <input
-                                            type="range"
-                                            min="10"
-                                            max="48"
+                                            type="range" min="10" max="48"
                                             value={editingOverlay.fontSize ?? 14}
                                             onChange={(e) => setEditingOverlay({ ...editingOverlay, fontSize: Number(e.target.value) })}
                                             className="w-full h-2 rounded-full bg-white/10 appearance-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white"
@@ -1744,9 +1676,7 @@ export function SubtitleEditor({
                                         <div className="flex-1 space-y-1">
                                             <Label className="text-xs text-white/40">描边: {editingOverlay.borderWidth ?? 2}px</Label>
                                             <input
-                                                type="range"
-                                                min="0"
-                                                max="5"
+                                                type="range" min="0" max="5"
                                                 value={editingOverlay.borderWidth ?? 2}
                                                 onChange={(e) => setEditingOverlay({ ...editingOverlay, borderWidth: Number(e.target.value) })}
                                                 className="w-full h-2 rounded-full bg-white/10 appearance-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white"
@@ -1770,9 +1700,7 @@ export function SubtitleEditor({
                                         <Label className="text-xs text-white/40">时间范围: {editingOverlay.startPercent ?? 0}% - {editingOverlay.endPercent ?? 100}%</Label>
                                         <div className="flex gap-2">
                                             <input
-                                                type="range"
-                                                min="0"
-                                                max="100"
+                                                type="range" min="0" max="100"
                                                 value={editingOverlay.startPercent ?? 0}
                                                 onChange={(e) => setEditingOverlay({
                                                     ...editingOverlay,
@@ -1781,9 +1709,7 @@ export function SubtitleEditor({
                                                 className="flex-1 h-2 rounded-full bg-white/10 appearance-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white"
                                             />
                                             <input
-                                                type="range"
-                                                min="0"
-                                                max="100"
+                                                type="range" min="0" max="100"
                                                 value={editingOverlay.endPercent ?? 100}
                                                 onChange={(e) => setEditingOverlay({
                                                     ...editingOverlay,
@@ -1832,3 +1758,4 @@ export function SubtitleEditor({
         </>
     );
 }
+
