@@ -28,6 +28,7 @@ interface AICaptionGeneratorProps {
     config: AICaptionConfig;
     onChange: (config: AICaptionConfig) => void;
     videoCount: number;
+    videoDurationSeconds?: number; // 视频预估时长
     onGenerate?: (captions: string[]) => void;
 }
 
@@ -43,6 +44,7 @@ export function AICaptionGenerator({
     config,
     onChange,
     videoCount,
+    videoDurationSeconds,
     onGenerate,
 }: AICaptionGeneratorProps) {
     const [isGenerating, setIsGenerating] = useState(false);
@@ -73,6 +75,7 @@ export function AICaptionGenerator({
                     count: videoCount,
                     mode: config.mode,
                     language: config.language || 'en',
+                    videoDurationSeconds: videoDurationSeconds || 8,
                 }),
             });
 

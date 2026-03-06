@@ -88,7 +88,7 @@ export async function textToSpeech(
                 },
                 body: JSON.stringify({
                     text: text,
-                    model_id: 'eleven_multilingual_v2',
+                    model_id: 'eleven_flash_v2_5',
                     voice_settings: {
                         stability: settings.stability,
                         similarity_boost: settings.similarity_boost,
@@ -164,7 +164,7 @@ export async function textToSpeechWithTimestamps(
                 },
                 body: JSON.stringify({
                     text: text,
-                    model_id: 'eleven_multilingual_v2',
+                    model_id: 'eleven_flash_v2_5',
                     voice_settings: {
                         stability: settings.stability,
                         similarity_boost: settings.similarity_boost,

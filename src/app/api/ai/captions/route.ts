@@ -9,7 +9,7 @@ import { generateCaptions } from '@/lib/deepseek-api';
 export async function POST(request: NextRequest) {
     try {
         const body = await request.json();
-        const { keywords, style, count, mode, language } = body;
+        const { keywords, style, count, mode, language, videoDurationSeconds, maxLength } = body;
 
         // 参数验证
         if (!keywords || typeof keywords !== 'string') {
@@ -19,7 +19,8 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        if (!['lively', 'professional', 'humorous', 'poetic', 'minimal'].includes(style)) {
+        // style 现在是可选的（AI 自动判断风格），但如果传了则验证合法性
+        if (style && !['lively', 'professional', 'humorous', 'poetic', 'minimal'].includes(style)) {
             return NextResponse.json(
                 { error: 'Invalid style' },
                 { status: 400 }
@@ -28,7 +29,14 @@ export async function POST(request: NextRequest) {
 
         const videoCount = Math.min(Math.max(1, count || 1), 20);
         const captionMode = mode === 'diverse' ? 'diverse' : 'unified';
-        const captionLanguage = language === 'zh' ? 'zh' : 'en'; // 默认英文
+        const captionLanguage = language === 'zh' ? 'zh' : 'en';
+
+        // Fix 4A: 前端传入视频时长和 maxLength，生成与视频匹配的文案
+        const duration = typeof videoDurationSeconds === 'number' ? videoDurationSeconds : 8;
+        // 🔧 中文倍数 5 匹配 TTS 4.5字/秒（13.5s×5=68字 → 68/4.5=15.1s ≈ 视频时长）
+        const dynamicMaxLength = typeof maxLength === 'number'
+            ? maxLength
+            : Math.round(duration * (captionLanguage === 'zh' ? 5 : 3));
 
         const captions = await generateCaptions({
             keywords,
@@ -36,6 +44,8 @@ export async function POST(request: NextRequest) {
             count: videoCount,
             mode: captionMode,
             language: captionLanguage,
+            videoDurationSeconds: duration,
+            maxLength: Math.max(dynamicMaxLength, 30),
         });
 
         return NextResponse.json({

@@ -7,7 +7,8 @@ export { PositionUploader, type Position } from './PositionUploader';
 export { MusicPoolManager, type MusicMode } from './MusicPoolManager';
 export { SubtitleEditor, type SubtitleConfig } from './SubtitleEditor';
 export { TransitionPicker, type TransitionEffect } from './TransitionPicker';
-export { SlideshowSection, type SlideshowTask } from './SlideshowSection';
+export { SlideshowSection } from './SlideshowSection';
+export type { SlideshowTask } from '@/stores/slideshow-store';
 export { CreateSlideshowModal } from './CreateSlideshowModal';
 
 // Phase 1: Enhanced Components

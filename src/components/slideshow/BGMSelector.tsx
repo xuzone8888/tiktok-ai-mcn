@@ -94,28 +94,47 @@ export function BGMSelector({ config, onChange, videoCount = 1 }: BGMSelectorPro
                 </Label>
             </div>
 
-            <div className="flex bg-black/40 p-1 rounded-lg border border-white/5">
-                {(['random', 'single', 'none'] as const).map((mode) => (
-                    <button
-                        key={mode}
-                        onClick={() => handleModeChange(mode)}
-                        className={cn(
-                            "flex-1 py-1.5 rounded-md text-xs font-medium transition-all flex items-center justify-center gap-1",
-                            config.mode === mode
-                                ? "bg-mermaid-cyan/20 text-mermaid-cyan shadow-sm"
-                                : "text-white/40 hover:text-white/70"
-                        )}
-                    >
-                        {mode === 'none' && '无'}
-                        {mode === 'random' && (
-                            <>
-                                <Shuffle className="h-3 w-3" />
-                                随机
-                            </>
-                        )}
-                        {mode === 'single' && '指定'}
-                    </button>
-                ))}
+            {/* 模式选择 (Segmented Control) */}
+            <div className="relative flex p-1 bg-black/40 rounded-full border border-white/5 shadow-inner mb-4">
+                {/* 滑块背景 (根据当前选中状态计算绝对定位) */}
+                <div
+                    className={cn(
+                        "absolute top-1 bottom-1 w-[calc(33.33%-2.6px)] rounded-full transition-all duration-300 ease-out shadow-sm",
+                        config.mode === 'random'
+                            ? "bg-gradient-to-r from-mermaid-cyan/20 to-mermaid-cyan/5 border border-mermaid-cyan/30 left-1 shadow-[inset_0_1px_0_rgba(0,242,234,0.3),0_0_15px_rgba(0,242,234,0.1)]"
+                            : config.mode === 'single'
+                                ? "bg-gradient-to-r from-mermaid-cyan/20 to-mermaid-cyan/5 border border-mermaid-cyan/30 left-[33.33%] shadow-[inset_0_1px_0_rgba(0,242,234,0.3),0_0_15px_rgba(0,242,234,0.1)]"
+                                : "bg-white/[0.08] border border-white/10 left-[calc(66.66%+1px)]"
+                    )}
+                />
+
+                <button
+                    onClick={() => handleModeChange('random')}
+                    className={cn(
+                        "relative z-10 flex-1 py-1.5 text-xs font-medium transition-colors rounded-full flex items-center justify-center gap-1",
+                        config.mode === 'random' ? "text-mermaid-cyan drop-shadow-[0_0_8px_rgba(0,242,234,0.8)]" : "text-white/40 hover:text-white/70"
+                    )}
+                >
+                    <Shuffle className="h-3 w-3" /> 随机
+                </button>
+                <button
+                    onClick={() => handleModeChange('single')}
+                    className={cn(
+                        "relative z-10 flex-1 py-1.5 text-xs font-medium transition-colors rounded-full flex items-center justify-center gap-1",
+                        config.mode === 'single' ? "text-mermaid-cyan drop-shadow-[0_0_8px_rgba(0,242,234,0.8)]" : "text-white/40 hover:text-white/70"
+                    )}
+                >
+                    指定音乐
+                </button>
+                <button
+                    onClick={() => handleModeChange('none')}
+                    className={cn(
+                        "relative z-10 flex-1 py-1.5 text-xs font-medium transition-colors rounded-full",
+                        config.mode === 'none' ? "text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.8)]" : "text-white/40 hover:text-white/70"
+                    )}
+                >
+                    无
+                </button>
             </div>
 
             {/* 随机模式提示 */}
@@ -130,17 +149,17 @@ export function BGMSelector({ config, onChange, videoCount = 1 }: BGMSelectorPro
 
             {/* 音乐列表 */}
             {config.mode === 'single' && (
-                <div className="space-y-1.5 max-h-48 overflow-y-auto custom-scrollbar">
+                <div className="space-y-2 max-h-48 overflow-y-auto custom-scrollbar pr-1">
                     {PRESET_MUSIC.map((track) => (
-                        <button
+                        <div
                             key={track.id}
                             onClick={() => config.mode === 'single' && handleSelectTrack(track.id)}
                             className={cn(
-                                "w-full flex items-center gap-3 p-2 rounded-lg transition-all text-left group",
+                                "w-full flex items-center gap-3 p-2.5 rounded-xl transition-all duration-300 text-left group border cursor-default",
                                 config.mode === 'single' && config.selectedId === track.id
-                                    ? "bg-mermaid-cyan/10 border border-mermaid-cyan/30"
-                                    : "bg-white/5 border border-transparent hover:bg-white/10",
-                                config.mode === 'random' && "cursor-default"
+                                    ? "bg-mermaid-cyan/10 border-mermaid-cyan/30 shadow-[inset_0_1px_0_rgba(0,242,234,0.2)]"
+                                    : "bg-white/[0.02] border-white/5 hover:bg-white/[0.04] hover:border-white/10 shadow-inner",
+                                config.mode === 'single' && "cursor-pointer"
                             )}
                         >
                             {/* 播放按钮 */}
@@ -164,19 +183,24 @@ export function BGMSelector({ config, onChange, videoCount = 1 }: BGMSelectorPro
                             </button>
 
                             {/* 曲目信息 */}
-                            <div className="flex-1 min-w-0">
-                                <div className="text-xs text-white/90 truncate">{track.name}</div>
-                                <div className="text-[10px] text-white/40 truncate">{track.artist}</div>
+                            <div className="flex-1 min-w-0 flex flex-col justify-center">
+                                <div className={cn(
+                                    "text-xs font-medium truncate transition-colors",
+                                    config.mode === 'single' && config.selectedId === track.id ? "text-mermaid-cyan drop-shadow-[0_0_5px_rgba(0,242,234,0.4)]" : "text-white/80 group-hover:text-white"
+                                )}>
+                                    {track.name}
+                                </div>
+                                <div className="text-[10px] text-white/40 truncate mt-0.5">{track.artist}</div>
                             </div>
 
                             {/* 时长 */}
-                            <span className="text-[10px] text-white/30 shrink-0">{track.duration}</span>
+                            <span className="text-[10px] text-white/30 shrink-0 font-medium">{track.duration}</span>
 
                             {/* 选中标记 */}
                             {config.mode === 'single' && config.selectedId === track.id && (
-                                <Check className="h-4 w-4 text-mermaid-cyan shrink-0" />
+                                <Check className="h-4 w-4 text-mermaid-cyan shrink-0 ml-1" />
                             )}
-                        </button>
+                        </div>
                     ))}
                 </div>
             )}

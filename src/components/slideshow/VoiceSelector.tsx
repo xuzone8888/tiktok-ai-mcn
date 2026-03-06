@@ -10,14 +10,9 @@ import { cn } from '@/lib/utils';
 import { Mic, Play, Pause, Volume2, AlertCircle, Loader2 } from 'lucide-react';
 import { Label } from '@/components/ui/label';
 
-// 预设推荐音色
-export const PRESET_VOICES = [
-    { id: 'EXAVITQu4vr4xnSDxMaL', name: 'Sarah', gender: 'female' as const, style: '甜美清晰', preview: 'https://api.elevenlabs.io/v1/voices/EXAVITQu4vr4xnSDxMaL/preview' },
-    { id: 'IKne3meq5aSn9XLyUdCD', name: 'Charlie', gender: 'male' as const, style: '磁性温暖', preview: 'https://api.elevenlabs.io/v1/voices/IKne3meq5aSn9XLyUdCD/preview' },
-    { id: 'XB0fDUnXU5powFXDhCwa', name: 'Charlotte', gender: 'female' as const, style: '优雅成熟', preview: 'https://api.elevenlabs.io/v1/voices/XB0fDUnXU5powFXDhCwa/preview' },
-    { id: 'pqHfZKP75CvOlQylNhV4', name: 'Bill', gender: 'male' as const, style: '沉稳专业', preview: 'https://api.elevenlabs.io/v1/voices/pqHfZKP75CvOlQylNhV4/preview' },
-    { id: 'nPczCjzI2devNBz1zQrb', name: 'Brian', gender: 'male' as const, style: '活力阳光', preview: 'https://api.elevenlabs.io/v1/voices/nPczCjzI2devNBz1zQrb/preview' },
-];
+// 从共享数据源导入（方便 server/client 复用）
+import { PRESET_VOICES } from '@/lib/voice-data';
+export { PRESET_VOICES };
 
 export interface VoiceConfig {
     enabled: boolean;
@@ -34,7 +29,11 @@ interface VoiceSelectorProps {
 export function VoiceSelector({ config, onChange, videoCount = 1 }: VoiceSelectorProps) {
     const [playingId, setPlayingId] = useState<string | null>(null);
     const [loadingId, setLoadingId] = useState<string | null>(null);
+    const [voiceLang, setVoiceLang] = useState<'zh' | 'en'>('zh');
     const audioRef = useRef<HTMLAudioElement | null>(null);
+
+    // 按语言过滤音色
+    const filteredVoices = PRESET_VOICES.filter(v => v.lang === voiceLang);
 
     // 播放试听
     const playPreview = async (voice: typeof PRESET_VOICES[number]) => {
@@ -85,8 +84,8 @@ export function VoiceSelector({ config, onChange, videoCount = 1 }: VoiceSelecto
         if (config.enabled) {
             onChange({ ...config, enabled: false });
         } else {
-            // 启用时默认选第一个
-            const defaultVoice = PRESET_VOICES[0];
+            // 启用时默认选当前语言 Tab 的第一个
+            const defaultVoice = filteredVoices[0];
             onChange({
                 enabled: true,
                 voiceId: defaultVoice.id,
@@ -142,9 +141,35 @@ export function VoiceSelector({ config, onChange, videoCount = 1 }: VoiceSelecto
                         </span>
                     </div>
 
+                    {/* 语言 Tab */}
+                    <div className="flex gap-1 p-0.5 bg-black/20 rounded-lg border border-white/5">
+                        <button
+                            onClick={() => setVoiceLang('zh')}
+                            className={cn(
+                                "flex-1 py-1.5 px-3 rounded-md text-xs font-medium transition-all",
+                                voiceLang === 'zh'
+                                    ? "bg-white/15 text-white shadow-sm"
+                                    : "text-white/40 hover:text-white/60"
+                            )}
+                        >
+                            🇨🇳 中文
+                        </button>
+                        <button
+                            onClick={() => setVoiceLang('en')}
+                            className={cn(
+                                "flex-1 py-1.5 px-3 rounded-md text-xs font-medium transition-all",
+                                voiceLang === 'en'
+                                    ? "bg-white/15 text-white shadow-sm"
+                                    : "text-white/40 hover:text-white/60"
+                            )}
+                        >
+                            🇺🇸 English
+                        </button>
+                    </div>
+
                     {/* 音色列表 */}
                     <div className="grid grid-cols-1 gap-2">
-                        {PRESET_VOICES.map((voice) => (
+                        {filteredVoices.map((voice) => (
                             <button
                                 key={voice.id}
                                 onClick={() => handleSelectVoice(voice)}
@@ -160,9 +185,11 @@ export function VoiceSelector({ config, onChange, videoCount = 1 }: VoiceSelecto
                                     "w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium shrink-0",
                                     voice.gender === 'female'
                                         ? "bg-pink-500/20 text-pink-400"
-                                        : "bg-blue-500/20 text-blue-400"
+                                        : voice.gender === 'neutral'
+                                            ? "bg-purple-500/20 text-purple-400"
+                                            : "bg-blue-500/20 text-blue-400"
                                 )}>
-                                    {voice.gender === 'female' ? '♀' : '♂'}
+                                    {voice.gender === 'female' ? '♀' : voice.gender === 'neutral' ? '◎' : '♂'}
                                 </div>
 
                                 {/* 音色信息 */}
@@ -173,36 +200,40 @@ export function VoiceSelector({ config, onChange, videoCount = 1 }: VoiceSelecto
                                             "text-[10px] px-1.5 py-0.5 rounded",
                                             voice.gender === 'female'
                                                 ? "bg-pink-500/10 text-pink-400"
-                                                : "bg-blue-500/10 text-blue-400"
+                                                : voice.gender === 'neutral'
+                                                    ? "bg-purple-500/10 text-purple-400"
+                                                    : "bg-blue-500/10 text-blue-400"
                                         )}>
-                                            {voice.gender === 'female' ? '女声' : '男声'}
+                                            {voice.gender === 'female' ? '女声' : voice.gender === 'neutral' ? '中性' : '男声'}
                                         </span>
                                     </div>
                                     <div className="text-[10px] text-white/40">{voice.style}</div>
                                 </div>
 
-                                {/* 试听按钮 */}
-                                <button
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        playPreview(voice);
-                                    }}
-                                    disabled={loadingId === voice.id}
-                                    className={cn(
-                                        "w-7 h-7 rounded-full flex items-center justify-center shrink-0 transition-all",
-                                        playingId === voice.id
-                                            ? "bg-mermaid-pink text-white"
-                                            : "bg-white/10 text-white/60 hover:bg-white/20"
-                                    )}
-                                >
-                                    {loadingId === voice.id ? (
-                                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                    ) : playingId === voice.id ? (
-                                        <Pause className="h-3.5 w-3.5" />
-                                    ) : (
-                                        <Play className="h-3.5 w-3.5 ml-0.5" />
-                                    )}
-                                </button>
+                                {/* 试听按钮 - 仅英文音色有 preview */}
+                                {voice.preview ? (
+                                    <button
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            playPreview(voice);
+                                        }}
+                                        disabled={loadingId === voice.id}
+                                        className={cn(
+                                            "w-7 h-7 rounded-full flex items-center justify-center shrink-0 transition-all",
+                                            playingId === voice.id
+                                                ? "bg-mermaid-pink text-white"
+                                                : "bg-white/10 text-white/60 hover:bg-white/20"
+                                        )}
+                                    >
+                                        {loadingId === voice.id ? (
+                                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                        ) : playingId === voice.id ? (
+                                            <Pause className="h-3.5 w-3.5" />
+                                        ) : (
+                                            <Play className="h-3.5 w-3.5 ml-0.5" />
+                                        )}
+                                    </button>
+                                ) : null}
 
                                 {/* 选中指示 */}
                                 {config.voiceId === voice.id && (

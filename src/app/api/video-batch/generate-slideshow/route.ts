@@ -13,14 +13,16 @@ import {
     getPresetMusicList,
 } from '@/lib/ffmpeg-slideshow';
 import { uploadBuffer } from '@/lib/oss';
-import { generateCaptions, CaptionStyle, CaptionMode } from '@/lib/deepseek-api';
-import { textToSpeechWithTimestamps, WordTimestamp, PRESET_VOICES } from '@/lib/elevenlabs-api';
+import { generateCaptions, generateTextOverlays, CaptionStyle, CaptionMode } from '@/lib/deepseek-api';
+import { textToSpeechWithTimestamps, WordTimestamp } from '@/lib/elevenlabs-api';
+import { doubaoTextToSpeechWithTimestamps } from '@/lib/doubao-tts-api';
+import { PRESET_VOICES } from '@/lib/voice-data';
 import type { SubtitleConfig } from '@/lib/ffmpeg-slideshow';
 import crypto from 'crypto';
 import fs from 'fs/promises';
 import path from 'path';
 import os from 'os';
-import { spawn } from 'child_process';
+import { spawn, execSync } from 'child_process';
 
 // 请求类型 - 与前端 CreateSlideshowModal 配置对齐
 interface SlideshowRequest {
@@ -58,7 +60,8 @@ interface SlideshowRequest {
         mode: 'unified' | 'diverse';
         keywords: string;
         style: string;
-        language?: 'en' | 'zh'; // 语言选项
+        language?: 'en' | 'zh';
+        generatedTexts?: string[]; // 前端预生成的文案
     };
 
     // 增强版字幕配置 - 与 FFmpeg drawtext 参数对齐
@@ -91,8 +94,102 @@ interface SlideshowRequest {
             borderWidth?: number;
             borderColor?: string;
             shadow?: boolean;
+            positionMode?: 'fixed' | 'random';
+            styleMode?: 'inherit' | 'custom' | 'random';
+            animation?: string;
         }>;
+        // overlay AI 生成配置（批量生成时使用）
+        overlayAiConfig?: {
+            prompt: string;
+            language: 'en' | 'zh';
+            mode: 'uniform' | 'diverse';
+        };
+        // 图文位置模式
+        overlayPositionMode?: 'fixed' | 'random';
     } | null;
+}
+
+/**
+ * AI 智能选声：根据文案内容选择最合适的配音音色
+ * 支持去重：通过 usageCounts 跟踪已使用次数，优先选使用少的音色
+ * 策略：AI 返回 top-3 推荐，从中挑使用次数最少的
+ */
+const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY;
+const DEEPSEEK_API_BASE = 'https://api.deepseek.com/v1/chat/completions';
+
+async function smartVoiceSelect(
+    text: string,
+    language: string,
+    pool: typeof PRESET_VOICES,
+    usageCounts: Map<string, number>,  // 已分配计数器
+): Promise<string> {
+    if (!DEEPSEEK_API_KEY) {
+        throw new Error('DeepSeek API key not configured');
+    }
+
+    const voiceList = pool.map((v, i) => `${i + 1}.${v.name}(${v.style})`).join(' ');
+    const prompt = `根据视频配音文本，从以下音色中选3个最合适的。只返回3个编号数字，用逗号分隔，不要解释。
+文本："${text.substring(0, 150)}"
+音色：${voiceList}`;
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000); // 8 秒超时
+
+    try {
+        const response = await fetch(DEEPSEEK_API_BASE, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${DEEPSEEK_API_KEY}`,
+            },
+            body: JSON.stringify({
+                model: 'deepseek-chat',
+                messages: [{ role: 'user', content: prompt }],
+                max_tokens: 20,
+                temperature: 0.3,
+            }),
+            signal: controller.signal,
+        });
+
+        clearTimeout(timeout);
+
+        if (!response.ok) {
+            throw new Error(`DeepSeek API error: ${response.status}`);
+        }
+
+        const data = await response.json();
+        const resultText = data.choices?.[0]?.message?.content?.trim() || '';
+
+        // 解析 top-3 推荐（如 "2,5,8" 或 "2、5、8"）
+        const nums = resultText.split(/[,，、\s]+/).map((s: string) => parseInt(s.trim())).filter((n: number) => !isNaN(n) && n >= 1 && n <= pool.length);
+
+        if (nums.length === 0) {
+            console.warn(`[SmartVoice] Invalid AI response "${resultText}", using least-used`);
+            return pickLeastUsed(pool, usageCounts);
+        }
+
+        // 从 top-3 中选使用次数最少的（去重）
+        const candidates = nums.map((n: number) => pool[n - 1]);
+        candidates.sort((a: typeof pool[number], b: typeof pool[number]) => (usageCounts.get(a.id) || 0) - (usageCounts.get(b.id) || 0));
+        const selected = candidates[0];
+
+        // 更新计数
+        usageCounts.set(selected.id, (usageCounts.get(selected.id) || 0) + 1);
+
+        console.log(`[SmartVoice] AI top-3: [${nums.join(',')}] → selected: ${selected.name} (used ${usageCounts.get(selected.id)}x) for "${text.substring(0, 30)}..."`);
+        return selected.id;
+    } catch (error: any) {
+        clearTimeout(timeout);
+        throw error;
+    }
+}
+
+/** 从音色池中选使用次数最少的（纯随机 fallback） */
+function pickLeastUsed(pool: typeof PRESET_VOICES, usageCounts: Map<string, number>): string {
+    const sorted = [...pool].sort((a, b) => (usageCounts.get(a.id) || 0) - (usageCounts.get(b.id) || 0));
+    const selected = sorted[0];
+    usageCounts.set(selected.id, (usageCounts.get(selected.id) || 0) + 1);
+    return selected.id;
 }
 
 export async function POST(req: NextRequest) {
@@ -101,6 +198,13 @@ export async function POST(req: NextRequest) {
         const elapsed = ((Date.now() - startTime) / 1000).toFixed(2);
         console.log(`\n========== [${elapsed}s] SLIDESHOW: ${step} ==========`);
         if (data) console.log(JSON.stringify(data, null, 2));
+    };
+    // 🔍 持久化诊断日志（不会被终端滚丢）
+    const debugLogPath = path.join(process.cwd(), '.temp', 'slideshow', 'output', 'api_debug.log');
+    const dbg = async (msg: string) => {
+        const ts = new Date().toISOString();
+        const line = `[${ts}] ${msg}\n`;
+        try { await fs.appendFile(debugLogPath, line); } catch { }
     };
 
     log('📥 REQUEST RECEIVED');
@@ -160,14 +264,10 @@ export async function POST(req: NextRequest) {
             if (!positions || positions.length === 0) {
                 return NextResponse.json({ error: '请设置位置并上传图片' }, { status: 400 });
             }
-            // 验证所有位置图片数量相等
+            // 每个位置至少要有1张图片
             const counts = positions.map(p => p.images.length);
-            const firstCount = counts[0];
-            if (counts.some(c => c !== firstCount)) {
-                return NextResponse.json({ error: '所有位置的图片数量必须相等' }, { status: 400 });
-            }
-            if (firstCount === 0) {
-                return NextResponse.json({ error: '位置中没有图片' }, { status: 400 });
+            if (counts.some(c => c === 0)) {
+                return NextResponse.json({ error: '每个位置至少需要1张图片' }, { status: 400 });
             }
         } else {
             return NextResponse.json({ error: '无效的模式' }, { status: 400 });
@@ -182,7 +282,8 @@ export async function POST(req: NextRequest) {
             creditsPerVideo = calculateCredits(imagesPerVideo);
         } else {
             const positionImages = positions!.map(p => p.images);
-            imageGroups = positionExtract(positionImages, positionImages[0].length);
+            const minCount = Math.min(...positionImages.map(p => p.length));
+            imageGroups = positionExtract(positionImages, minCount);
             creditsPerVideo = calculateCredits(positions!.length);
         }
 
@@ -230,26 +331,73 @@ export async function POST(req: NextRequest) {
 
         // === AI 文案生成 ===
         let generatedCaptions: string[] = [];
-        if (aiCaption?.enabled && aiCaption.keywords) {
-            console.log('[Slideshow API] Generating AI captions...');
-            try {
-                // 计算平均每个视频的时长（图片数 × 每张图片时长）
-                const avgImagesPerVideo = Math.ceil(localImageGroups.reduce((sum, g) => sum + g.length, 0) / localImageGroups.length);
-                const estimatedVideoDuration = avgImagesPerVideo * durationPerImage;
+        const captionLanguage = aiCaption?.language || 'en';
 
-                generatedCaptions = await generateCaptions({
-                    keywords: aiCaption.keywords,
-                    style: aiCaption.style as CaptionStyle || 'lively',
-                    count: localImageGroups.length,
-                    mode: aiCaption.mode as CaptionMode || 'diverse',
-                    maxLength: 50,
-                    language: aiCaption.language || 'en',
-                    videoDurationSeconds: estimatedVideoDuration, // 传递视频时长用于匹配文案长度
-                });
-                console.log('[Slideshow API] AI captions generated:', generatedCaptions);
-            } catch (captionError: any) {
-                console.error('[Slideshow API] AI caption generation failed:', captionError.message);
-                // 继续执行，不阻断流程
+        // 计算预估视频时长（所有路径都需要）
+        const avgImagesPerVideo = Math.ceil(localImageGroups.reduce((sum, g) => sum + g.length, 0) / localImageGroups.length);
+        const estimatedVideoDuration = avgImagesPerVideo * durationPerImage;
+        // 中文 TTS 实测 ≈ 4.5 字/秒（豆包含标点和停顿），英文 ≈ 2.5 词/秒
+        const wordsPerSec = captionLanguage === 'zh' ? 4.5 : 2.5;
+        const minCharsForVideo = Math.round(estimatedVideoDuration * wordsPerSec * 0.8); // 至少填满视频 80%
+
+        console.log(`[Slideshow API] 📊 Caption sizing: ${estimatedVideoDuration.toFixed(1)}s video, lang=${captionLanguage}, minChars=${minCharsForVideo}`);
+        await dbg(`📊 CAPTION SIZING: durationPerImage=${durationPerImage}, avgImages=${avgImagesPerVideo}, estDuration=${estimatedVideoDuration.toFixed(1)}s, lang=${captionLanguage}, minChars=${minCharsForVideo}`);
+
+        // Fix 4B: 优先使用前端已生成的文案 — 但要验证长度是否匹配视频时长
+        const preGenTexts = aiCaption?.generatedTexts;
+        if (preGenTexts && preGenTexts.length >= localImageGroups.length) {
+            const avgLen = preGenTexts.reduce((sum, t) => sum + t.length, 0) / preGenTexts.length;
+            console.log(`[Slideshow API] 📝 Frontend generatedTexts: ${preGenTexts.length} items, avgLen=${avgLen.toFixed(0)} chars (need >=${minCharsForVideo})`);
+
+            if (avgLen >= minCharsForVideo * 0.6) {
+                generatedCaptions = preGenTexts.slice(0, localImageGroups.length);
+                console.log(`[Slideshow API] ✅ Using pre-generated captions from frontend (avgLen=${avgLen.toFixed(0)} >= ${Math.round(minCharsForVideo * 0.6)})`);
+                await dbg(`✅ USING FRONTEND CAPTIONS: avgLen=${avgLen.toFixed(0)} >= ${Math.round(minCharsForVideo * 0.6)} (60% threshold). Texts: ${preGenTexts.map(t => `[${t.length}]"${t.substring(0, 30)}"`).join(', ')}`);
+            } else {
+                console.warn(`[Slideshow API] ⚠️ Frontend captions too short (avgLen=${avgLen.toFixed(0)} < ${Math.round(minCharsForVideo * 0.6)}), regenerating...`);
+                await dbg(`⚠️ FRONTEND CAPTIONS TOO SHORT: avgLen=${avgLen.toFixed(0)} < ${Math.round(minCharsForVideo * 0.6)}. Will regenerate.`);
+            }
+        }
+
+        // 如果没有可用文案，使用 AI 生成（带长度验证重试）
+        if (generatedCaptions.length === 0 && aiCaption?.enabled && aiCaption.keywords) {
+            // 🔧 中文倍数 5（TTS 4.5字/秒 → 14s×5=70字 → 70/4.5=15.6s ≈ 视频时长）
+            // 英文倍数 3（TTS 2.5词/秒 → 14s×3=42词 → 42/2.5=16.8s ≈ 视频时长）
+            const dynamicMaxLength = Math.round(estimatedVideoDuration * (captionLanguage === 'zh' ? 5 : 3));
+
+            for (let captionAttempt = 0; captionAttempt < 2; captionAttempt++) {
+                try {
+                    // 第二次尝试时增大 maxLength 50%，迫使 AI 写更长
+                    const attemptMaxLength = captionAttempt === 0 ? dynamicMaxLength : Math.round(dynamicMaxLength * 1.5);
+                    console.log(`[Slideshow API] 🤖 Caption generation attempt ${captionAttempt + 1}, maxLength=${attemptMaxLength}...`);
+
+                    generatedCaptions = await generateCaptions({
+                        keywords: aiCaption.keywords,
+                        style: aiCaption.style as CaptionStyle || 'lively',
+                        count: localImageGroups.length,
+                        mode: aiCaption.mode as CaptionMode || 'diverse',
+                        maxLength: Math.max(attemptMaxLength, 30),
+                        language: captionLanguage,
+                        videoDurationSeconds: estimatedVideoDuration,
+                    });
+
+                    const avgLen = generatedCaptions.reduce((s, c) => s + c.length, 0) / generatedCaptions.length;
+                    console.log(`[Slideshow API] Attempt ${captionAttempt + 1}: avgLen=${avgLen.toFixed(0)}, minRequired=${minCharsForVideo}`);
+                    await dbg(`🤖 CAPTION ATTEMPT ${captionAttempt + 1}: maxLength=${attemptMaxLength}, avgLen=${avgLen.toFixed(0)}, items=${generatedCaptions.length}: ${generatedCaptions.map(c => `[${c.length}]"${c.substring(0, 40)}"`).join(', ')}`);
+
+                    if (avgLen >= minCharsForVideo) {
+                        console.log(`[Slideshow API] ✅ Caption length OK (${avgLen.toFixed(0)} >= ${minCharsForVideo})`);
+                        break;
+                    } else if (captionAttempt === 0) {
+                        console.warn(`[Slideshow API] ⚠️ Captions too short (${avgLen.toFixed(0)} < ${minCharsForVideo}), retrying with larger maxLength...`);
+                        generatedCaptions = []; // 清空，触发重试
+                    }
+                    // 第二次无论如何都用（总比没有好）
+                } catch (captionError: any) {
+                    console.error(`[Slideshow API] Caption generation attempt ${captionAttempt + 1} failed:`, captionError.message);
+                    await dbg(`❌ CAPTION ERROR attempt ${captionAttempt + 1}: ${captionError.message}`);
+                    if (captionAttempt === 1) break;
+                }
             }
         }
 
@@ -294,28 +442,57 @@ export async function POST(req: NextRequest) {
             return result.replace(/\s+/g, ' ').trim();
         };
 
+        console.log('[Slideshow API] 🎤 Voice config check:', JSON.stringify({ enabled: voice?.enabled, voiceId: voice?.voiceId, voiceName: (voice as any)?.voiceName }));
         if (voice?.enabled && voice.voiceId) {
-            console.log('[Slideshow API] Pre-generating voiceovers to get durations...');
+            console.log('[Slideshow API] ✅ Voice ENABLED - Pre-generating voiceovers...');
 
             // 处理 random 模式：为每个视频分配真实的 voiceId
             const isRandomVoice = voice.voiceId === 'random';
             let assignedVoiceIds: string[];
             if (isRandomVoice) {
-                // 使用 elevenlabs-api.ts 中定义的预设音色（保持一致性）
-                const VOICE_POOL = PRESET_VOICES.map(v => v.id);
-                assignedVoiceIds = Array.from({ length: localImageGroups.length }, () => {
-                    return VOICE_POOL[Math.floor(Math.random() * VOICE_POOL.length)];
-                });
-                console.log('[Slideshow API] Random voice mode: assigned voiceIds:', assignedVoiceIds);
+                // AI 智能选声（串行执行避免并发超时）+ 去重
+                const language = aiCaption?.language || 'en';
+                const langPool = PRESET_VOICES.filter(v => v.lang === language);
+                const fallbackPool = langPool.length > 0 ? langPool : PRESET_VOICES;
+                const usageCounts = new Map<string, number>();
+                assignedVoiceIds = [];
+
+                for (let i = 0; i < localImageGroups.length; i++) {
+                    const voiceText = generatedCaptions[i] || subtitle?.text || '';
+                    if (!voiceText.trim()) {
+                        assignedVoiceIds.push(pickLeastUsed(fallbackPool, usageCounts));
+                        continue;
+                    }
+                    try {
+                        const vid = await smartVoiceSelect(voiceText, language, fallbackPool, usageCounts);
+                        assignedVoiceIds.push(vid);
+                    } catch (err: any) {
+                        console.warn(`[Slideshow API] Smart voice select failed for video ${i + 1}, using least-used:`, err.message);
+                        assignedVoiceIds.push(pickLeastUsed(fallbackPool, usageCounts));
+                    }
+                }
+                console.log('[Slideshow API] AI smart voice assigned:', assignedVoiceIds);
+                await dbg(`🎤 VOICE ASSIGN (random): ${assignedVoiceIds.map((v, i) => `V${i + 1}=${v}`).join(', ')}`);
             } else {
                 // 指定音色：所有视频使用同一个
                 assignedVoiceIds = Array(localImageGroups.length).fill(voice.voiceId);
+                await dbg(`🎤 VOICE ASSIGN (fixed): all=${voice.voiceId}`);
             }
+
+            // 🔧 跟踪 TTS 失败的音色 ID（55000 错误），后续视频自动避开
+            const blacklistedVoiceIds = new Set<string>();
 
             for (let i = 0; i < localImageGroups.length; i++) {
                 const rawVoiceText = generatedCaptions[i] || subtitle?.text || '';
-                const voiceText = stripEmoji(rawVoiceText); // 过滤 emoji
+                let voiceText = stripEmoji(rawVoiceText); // 过滤 emoji
+
+                // ℹ️ 文本长度由 AI 端 fixCaptionLength 控制 + 合并端 outputDuration 弹性延长
+                // 不再在此裁剪（之前的 charsPerSec 值对英文严重错误，导致文本被过度截断）
+
+                console.log(`[Slideshow API] 🎤 TTS ${i + 1} voiceText="${voiceText.substring(0, 80)}" (len=${voiceText.length})`);
+                await dbg(`📝 TTS V${i + 1} INPUT: len=${voiceText.length}, text="${voiceText.substring(0, 60)}"`);
                 if (!voiceText) {
+                    console.warn(`[Slideshow API] ❌ TTS ${i + 1}: SKIPPED — no text for voiceover`);
                     voiceovers.push(null);
                     continue;
                 }
@@ -325,25 +502,102 @@ export async function POST(req: NextRequest) {
                 }
 
                 try {
-                    const actualVoiceId = assignedVoiceIds[i];
+                    let actualVoiceId = assignedVoiceIds[i];
+
+                    // 如果分配的音色已在黑名单中，立即切换
+                    if (blacklistedVoiceIds.has(actualVoiceId)) {
+                        const language = aiCaption?.language || 'en';
+                        const langPool = PRESET_VOICES.filter(v => v.lang === language && !blacklistedVoiceIds.has(v.id));
+                        if (langPool.length > 0) {
+                            actualVoiceId = langPool[Math.floor(Math.random() * langPool.length)].id;
+                            console.log(`[Slideshow API] ⚠️ TTS ${i + 1}: assigned voice blacklisted, switched to ${actualVoiceId}`);
+                        }
+                    }
+
                     console.log(`[Slideshow API] Generating TTS ${i + 1}/${localImageGroups.length} with voiceId=${actualVoiceId}...`);
-                    const ttsResult = await textToSpeechWithTimestamps(actualVoiceId, voiceText, {
-                        stability: 0.5,
-                        similarity_boost: 0.75,
-                    });
 
-                    console.log(`[Slideshow API] TTS ${i + 1} generated: ${ttsResult.audio.length} bytes, ${ttsResult.duration.toFixed(2)}s, ${ttsResult.timestamps.length} words`);
+                    // 🔧 TTS 间隔：测试证实豆包无限流（0s也能3/3成功），保留 2s 安全间隔
+                    if (i > 0) {
+                        const waitSec = 2;
+                        console.log(`[Slideshow API] ⏳ Waiting ${waitSec}s before TTS ${i + 1}...`);
+                        await new Promise(r => setTimeout(r, waitSec * 1000));
+                    }
 
-                    voiceovers.push({
-                        buffer: ttsResult.audio,
-                        duration: ttsResult.duration,
-                        timestamps: ttsResult.timestamps,
-                    });
+                    // TTS 重试机制 — 3次重试，遇到 55000 自动切换音色
+                    let ttsResult: { audio: Buffer; duration: number; timestamps: any[] } | null = null;
+                    const maxAttempts = 3;
+                    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+                        try {
+                            const isDoubaoVoice = actualVoiceId.startsWith('zh_');
+                            await dbg(`🔊 TTS V${i + 1} attempt ${attempt + 1}: voiceId=${actualVoiceId}, engine=${isDoubaoVoice ? 'doubao' : 'elevenlabs'}`);
+
+                            ttsResult = isDoubaoVoice
+                                ? await doubaoTextToSpeechWithTimestamps(actualVoiceId, voiceText)
+                                : await textToSpeechWithTimestamps(actualVoiceId, voiceText, {
+                                    stability: 0.5,
+                                    similarity_boost: 0.75,
+                                });
+                            break; // 成功就跳出
+                        } catch (retryErr: any) {
+                            const errMsg = retryErr.message || '';
+                            const is55000 = errMsg.includes('55000') || errMsg.includes('mismatched');
+
+                            await dbg(`⚠️ TTS V${i + 1} attempt ${attempt + 1}/${maxAttempts} failed: ${errMsg} (is55000=${is55000})`);
+
+                            if (is55000) {
+                                // 55000 错误：音色不可用，加入黑名单，立即切换到其他音色
+                                blacklistedVoiceIds.add(actualVoiceId);
+                                console.warn(`[Slideshow API] 🔴 TTS ${i + 1}: voice "${actualVoiceId}" → 55000 error, blacklisting and switching...`);
+
+                                const language = aiCaption?.language || 'en';
+                                const availablePool = PRESET_VOICES.filter(v => v.lang === language && !blacklistedVoiceIds.has(v.id));
+                                if (availablePool.length > 0) {
+                                    actualVoiceId = availablePool[Math.floor(Math.random() * availablePool.length)].id;
+                                    console.log(`[Slideshow API] 🔄 TTS ${i + 1}: switched to "${actualVoiceId}", retrying...`);
+                                    await dbg(`🔄 TTS V${i + 1}: switched to ${actualVoiceId}`);
+                                    // 切换后立即重试（不等待）
+                                    continue;
+                                } else {
+                                    console.error(`[Slideshow API] ❌ TTS ${i + 1}: no available voices left after blacklisting`);
+                                    break;
+                                }
+                            }
+
+                            if (attempt < maxAttempts - 1) {
+                                console.warn(`[Slideshow API] ⚠️ TTS ${i + 1} attempt ${attempt + 1} failed: ${errMsg}, retrying in 3s...`);
+                                await new Promise(r => setTimeout(r, 3000));
+                            } else {
+                                throw retryErr; // 最后一次失败才抛出
+                            }
+                        }
+                    }
+
+                    if (ttsResult) {
+                        console.log(`[Slideshow API] ✅ TTS ${i + 1} generated: ${ttsResult.audio.length} bytes, ${ttsResult.duration.toFixed(2)}s, ${ttsResult.timestamps.length} words`);
+                        voiceovers.push({
+                            buffer: ttsResult.audio,
+                            duration: ttsResult.duration,
+                            timestamps: ttsResult.timestamps,
+                        });
+                    } else {
+                        console.error(`[Slideshow API] ❌ TTS ${i + 1}: no result after retries`);
+                        voiceovers.push(null);
+                    }
                 } catch (voiceError: any) {
-                    console.error(`[Slideshow API] TTS ${i + 1} failed:`, voiceError.message);
+                    console.error(`[Slideshow API] ❌ TTS ${i + 1} FAILED after retries:`, voiceError.message);
+                    await dbg(`❌ TTS V${i + 1} FAILED: ${voiceError.message}`);
                     voiceovers.push(null);
                 }
             }
+            console.log(`\n🟡🟡🟡 CHECK-3: ALL TTS SUMMARY 🟡🟡🟡`);
+            for (let vi = 0; vi < voiceovers.length; vi++) {
+                const vo = voiceovers[vi];
+                console.log(`  V${vi + 1}: ${vo ? `✅ ${vo.buffer.length} bytes, ${vo.duration.toFixed(2)}s` : '❌ NULL (no audio)'}`);
+            }
+            console.log(`[Slideshow API] 🎤 Voiceover generation complete: ${voiceovers.filter(v => v !== null).length}/${voiceovers.length} successful`);
+            await dbg(`🎤 TTS COMPLETE: ${voiceovers.map((v, i) => `V${i + 1}=${v ? `${v.duration.toFixed(1)}s` : 'NULL'}`).join(', ')}`);
+        } else {
+            console.log('[Slideshow API] ⚠️ Voice DISABLED or no voiceId — skipping TTS entirely');
         }
 
         // 生成视频
@@ -355,44 +609,109 @@ export async function POST(req: NextRequest) {
         console.log('[Slideshow API] AI Caption config:', JSON.stringify(aiCaption, null, 2));
         console.log('[Slideshow API] Generated captions:', generatedCaptions);
 
-        // 为每个视频组准备字幕配置（包含配音时长用于同步）
-        const subtitleConfigs = localImageGroups.map((_, index) => {
-            // 优先使用 AI 生成的文案，否则使用用户手动输入的字幕
+        // === AI 图文文本生成（与 caption 一致：批量时 always 重新生成以尊重 language 设置） ===
+        let generatedOverlayTexts: string[] = [];
+        const overlayAiConfig = subtitle?.overlayAiConfig;
+        // ⭐ 修复：始终重新生成图文文案，确保 language 设置生效（和 caption 行为一致）
+        if (overlayAiConfig?.prompt) {
+            console.log(`[Slideshow API] Generating AI overlay texts (language=${overlayAiConfig.language || 'en'}, existing overlays=${subtitle?.textOverlays?.length ?? 0})...`);
+            try {
+                // 计算总图片数（每张图 1 条文案）
+                const totalImageCount = localImageGroups.reduce((sum, g) => sum + g.length, 0);
+                // uniform=所有图用同一条, diverse=每张图独立生成
+                const isUniform = overlayAiConfig.mode === 'uniform';
+                generatedOverlayTexts = await generateTextOverlays({
+                    prompt: overlayAiConfig.prompt,
+                    mode: isUniform ? 'uniform' : 'diverse',
+                    count: isUniform ? 1 : totalImageCount,
+                    language: overlayAiConfig.language || 'en',
+                    maxLength: 60,
+                });
+                // uniform 模式：将单条文案复制为 N 条（每张图一条）
+                if (isUniform && generatedOverlayTexts.length === 1) {
+                    generatedOverlayTexts = Array(totalImageCount)
+                        .fill(generatedOverlayTexts[0]);
+                }
+                console.log(`[Slideshow API] AI overlay texts generated: ${generatedOverlayTexts.length} texts for ${totalImageCount} images`);
+                generatedOverlayTexts.forEach((t, i) => {
+                    console.log(`[Slideshow API]   Image ${i + 1}: ${t.substring(0, 60)}`);
+                });
+            } catch (err: any) {
+                console.error('[Slideshow API] Overlay text generation failed:', err.message);
+                // 继续执行，降级为复用已有文本
+            }
+        }
+
+        // 为每个视频组准备字幕配置
+        let textCursor = 0; // AI 文本游标：按图片顺序分配
+        const subtitleConfigs = localImageGroups.map((group, index) => {
+            // 配音字幕文本：优先 AI 生成，否则用户手动输入
             const rawCaptionText = generatedCaptions[index] || subtitle?.text || '';
             if (!rawCaptionText) return undefined;
 
-            // 过滤 emoji 和特殊字符，防止 ASS 字幕生成失败
+            // 过滤 emoji 和特殊字符
             const captionText = stripEmoji(rawCaptionText);
 
-            // 获取对应的配音时长（如果有）
+            // 获取配音时长
             const voiceoverData = voiceovers[index];
             const voiceDuration = voiceoverData?.duration || 0;
 
-            // 过滤 textOverlays：只保留 imageIndex 在当前视频图片范围内的条目
-            // 防止超出范围的 overlay 在视频末尾显示导致文字重叠
-            const groupImageCount = localImageGroups[index].length;
-            const filteredOverlays = (subtitle?.textOverlays || []).filter(o => {
-                // custom 模式不按图片索引过滤
-                if (o.timingMode === 'custom') return true;
-                // image 模式：只保留 imageIndex 在当前视频范围内的
-                const imgIdx = o.imageIndex ?? 0;
-                return imgIdx < groupImageCount;
-            });
+            // === 图文文本分发：每张图 1 个 overlay，按位置继承样式 ===
+            const existingOverlays = subtitle?.textOverlays || [];
+            const groupImageCount = group.length;
+            let videoOverlays: any[] = [];
 
-            console.log(`[Slideshow API] Video ${index + 1}: ${groupImageCount} images, ${filteredOverlays.length}/${(subtitle?.textOverlays || []).length} textOverlays`);
+            if (existingOverlays.length > 0) {
+                // 🔍 DEBUG: 打印所有原始 overlay 的样式字段
+                if (index === 0) {
+                    existingOverlays.forEach((ov, oi) => {
+                        console.log(`[Slideshow API] Original overlay[${oi}] style:`, JSON.stringify({
+                            style: ov.style, tone: ov.tone, color: ov.color,
+                            fontSize: ov.fontSize, fontFamily: ov.fontFamily,
+                            fontWeight: ov.fontWeight, borderWidth: ov.borderWidth,
+                            borderColor: ov.borderColor, shadow: ov.shadow,
+                            styleMode: ov.styleMode, animation: ov.animation,
+                        }));
+                    });
+                }
+
+                for (let imgIdx = 0; imgIdx < groupImageCount; imgIdx++) {
+                    // ⭐ 按位置继承样式：图片位置 0 → overlay[0] 的样式，位置 1 → overlay[1] 的样式
+                    const styleTemplate = existingOverlays[imgIdx % existingOverlays.length];
+
+                    // 文本优先级：AI 新生成 > 已有 overlays 循环复用
+                    const overlayText = generatedOverlayTexts[textCursor + imgIdx]
+                        || existingOverlays[(textCursor + imgIdx) % existingOverlays.length]?.text
+                        || '';
+
+                    if (overlayText) {
+                        const finalFontWeight = styleTemplate.fontWeight || '700';
+                        console.log(`[Slideshow API] TextOverlay ${imgIdx}: fontWeight from template='${styleTemplate.fontWeight}' → final='${finalFontWeight}'`);
+                        videoOverlays.push({
+                            ...styleTemplate,                // ⭐ 继承对应位置的样式配置
+                            id: crypto.randomUUID(),          // 唯一 ID
+                            text: stripEmoji(overlayText),    // 独立文案（过滤 emoji）
+                            imageIndex: imgIdx,               // 绑定到当前图片
+                            positionMode: subtitle?.overlayPositionMode || 'fixed',  // ⭐ 尊重用户选择，默认固定
+                            fontWeight: finalFontWeight,  // ⭐ 确保粗体不丢失
+                        });
+                    }
+                }
+            }
+
+            // 移动游标到下一个视频的起始位置
+            textCursor += groupImageCount;
+
+            console.log(`[Slideshow API] Video ${index + 1}: ${groupImageCount} images, ${videoOverlays.length} overlay(s)`);
+            videoOverlays.forEach((o, i) => console.log(`[Slideshow API]   img${o.imageIndex}: "${o.text?.substring(0, 40)}" fontWeight=${o.fontWeight} style=${o.style} animation=${o.animation}`));
 
             return {
+                ...subtitle,
                 text: captionText,
-                position: subtitle?.position || 80,
-                fontSize: subtitle?.fontSize || 36,
-                fontColor: subtitle?.fontColor || 'white',
-                fontFamily: subtitle?.fontFamily || 'Cinzel-VariableFont_wght',
-                borderWidth: subtitle?.borderWidth ?? 2,
-                borderColor: subtitle?.borderColor || '#000000',
-                shadow: subtitle?.shadow ?? true,
-                voiceDuration, // 传递配音时长用于字幕结束时间同步
-                wordTimestamps: voiceoverData?.timestamps || [], // 传递词级时间戳用于精确同步
-                textOverlays: filteredOverlays, // 按视频图片范围过滤的图文字幕
+                fontFamily: subtitle?.fontFamily || 'NotoSansSC',
+                voiceDuration,
+                wordTimestamps: voiceoverData?.timestamps || [],
+                textOverlays: videoOverlays,
             } as SubtitleConfig;
         });
 
@@ -418,23 +737,37 @@ export async function POST(req: NextRequest) {
 
         // === 合并配音到视频 ===
         if (voice?.enabled && voice.voiceId) {
-            console.log('[Slideshow API] Merging voiceovers into videos...');
+            console.log(`[Slideshow API] 🔊 Merging voiceovers: ${voiceovers.filter(v => v !== null).length} voiceovers for ${results.length} videos`);
             for (let i = 0; i < results.length; i++) {
                 const result = results[i];
                 const voiceoverData = voiceovers[i];
 
-                if (!result.success || !result.videoPath || !voiceoverData) continue;
+                console.log(`\n🔵🔵🔵 CHECK-4: MERGE PRE-CHECK V${i + 1} 🔵🔵🔵`);
+                console.log(`  video: success=${result.success}, path=${result.videoPath || 'NONE'}`);
+                console.log(`  voiceover: ${voiceoverData ? `✅ ${voiceoverData.buffer.length} bytes, ${voiceoverData.duration.toFixed(2)}s` : '❌ NULL'}`);
+
+                if (!result.success || !result.videoPath || !voiceoverData) {
+                    console.log(`  ❌ SKIPPING MERGE: success=${result.success} path=${!!result.videoPath} voiceover=${!!voiceoverData}`);
+                    await dbg(`⏭️ MERGE SKIP V${i + 1}: success=${result.success}, hasPath=${!!result.videoPath}, hasVoiceover=${!!voiceoverData}`);
+                    continue;
+                }
 
                 try {
-                    console.log(`[Slideshow API] Merging voiceover into video ${i + 1}...`);
-                    const mergedPath = await mergeVoiceover(result.videoPath, voiceoverData.buffer);
+                    console.log(`[Slideshow API] 🔊 Merging voiceover ${i + 1}: ${voiceoverData.buffer.length} bytes, ${voiceoverData.duration.toFixed(2)}s`);
+                    const mergedPath = await mergeVoiceover(result.videoPath, voiceoverData.buffer, voiceoverData.duration);
                     results[i].videoPath = mergedPath;
-                    console.log(`[Slideshow API] Video ${i + 1} merged: ${mergedPath}`);
+                    console.log(`\n🟣🟣🟣 CHECK-5: MERGE RESULT V${i + 1} 🟣🟣🟣`);
+                    console.log(`  ✅ SUCCESS: output=${mergedPath}`);
+                    console.log(`[Slideshow API] ✅ Video ${i + 1} merged: ${mergedPath}`);
+                    await dbg(`✅ MERGE V${i + 1}: voiceDur=${voiceoverData.duration.toFixed(1)}s, audioBytes=${voiceoverData.buffer.length}, output=${mergedPath}`);
                 } catch (mergeError: any) {
-                    console.error(`[Slideshow API] Merge error for video ${i + 1}:`, mergeError.message);
+                    console.error(`[Slideshow API] ❌ Merge FAILED for video ${i + 1}:`, mergeError.message);
+                    await dbg(`❌ MERGE FAIL V${i + 1}: ${mergeError.message}`);
                     // 继续使用原视频，不阻断流程
                 }
             }
+        } else {
+            console.log('[Slideshow API] ⚠️ Voice disabled — skipping merge step');
         }
 
         // 上传成功的视频到 OSS
@@ -523,12 +856,30 @@ async function downloadFiles(urls: string[], type: 'images' | 'music'): Promise<
 }
 
 /**
+ * 获取媒体文件时长（秒）
+ */
+function getMediaDuration(filePath: string): number {
+    try {
+        const output = execSync(
+            `ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${filePath}"`,
+            { encoding: 'utf-8', timeout: 10000 }
+        );
+        const duration = parseFloat(output.trim());
+        return isNaN(duration) ? 0 : duration;
+    } catch {
+        console.warn('[Slideshow API] ffprobe failed, using fallback duration');
+        return 0;
+    }
+}
+
+/**
  * 将配音合成到视频中（混合 BGM 和配音）
  * @param videoPath 原视频路径（可能已含BGM）
  * @param audioBuffer 配音音频 Buffer
+ * @param voiceDuration 配音时长（秒）
  * @returns 合成后的视频路径
  */
-async function mergeVoiceover(videoPath: string, audioBuffer: Buffer): Promise<string> {
+async function mergeVoiceover(videoPath: string, audioBuffer: Buffer, voiceDuration: number): Promise<string> {
     const tempDir = path.dirname(videoPath);
     const voiceoverPath = path.join(tempDir, `voiceover_${Date.now()}.mp3`);
     const outputPath = path.join(tempDir, `final_${Date.now()}.mp4`);
@@ -536,36 +887,66 @@ async function mergeVoiceover(videoPath: string, audioBuffer: Buffer): Promise<s
     // 保存配音文件
     await fs.writeFile(voiceoverPath, audioBuffer);
 
-    return new Promise((resolve) => {
-        // 配音效果参数
-        const VOICE_DELAY_MS = 1000;  // 1 秒延迟
-        const VOICE_FADE_IN = 0.5;     // 0.5 秒渐入
-        const VOICE_FADE_OUT = 0.3;    // 0.3 秒渐出
+    // 获取视频时长
+    const videoDuration = getMediaDuration(videoPath);
+    // 🔧 如果配音稍长于视频，延长输出而非截断（保护内容完整性）
+    // 配音 + 1.5s 延迟/缓冲，最多延长 20%
+    const voiceEndTime = voiceDuration + 1.5;  // 配音结束时间（含延迟）
+    const outputDuration = voiceEndTime > videoDuration
+        ? Math.min(voiceEndTime, videoDuration * 1.2)
+        : videoDuration;
+    console.log(`[Audio Mix] Video: ${videoDuration.toFixed(1)}s, Voice: ${voiceDuration.toFixed(1)}s, Output: ${outputDuration.toFixed(1)}s ${voiceEndTime > videoDuration ? '(EXTENDED for full voiceover)' : '(exact)'}`);
 
-        // 使用 FFmpeg amix 滤镜混合配音和 BGM
-        // 策略：
-        // 1. BGM 用 apad 填充静音以匹配视频时长
-        // 2. 配音添加延迟 + 渐入渐出效果
-        // 3. 混合后以视频时长为准
+    return new Promise((resolve) => {
+        // 🔊 音频混合参数
+        const VOICE_DELAY_MS = 1000;      // 配音延迟 1 秒
+        const VOICE_DELAY_S = VOICE_DELAY_MS / 1000;
+        const VOICE_FADE_IN = 0.5;        // 配音渐入 0.5 秒
+        const VOICE_FADE_OUT = 0.3;       // 配音渐出 0.3 秒
+        const BGM_VOLUME = 0.2;           // BGM 音量 20%（配音为主）
+        const BGM_FADE_IN = 1.5;          // BGM 渐入 1.5 秒
+        const BGM_FADE_OUT = 2.0;         // BGM 渐出 2 秒
+
+        // === BGM 滤镜链 ===
+        let bgmFilter = `[0:a]volume=${BGM_VOLUME}`;
+        // BGM 渐入（始终添加）
+        bgmFilter += `,afade=t=in:st=0:d=${BGM_FADE_IN}`;
+        // BGM 渐出（仅在视频足够长时添加，避免与渐入重叠）
+        if (outputDuration > BGM_FADE_IN + BGM_FADE_OUT + 1) {
+            const bgmFadeOutStart = Math.max(0, outputDuration - BGM_FADE_OUT);
+            bgmFilter += `,afade=t=out:st=${bgmFadeOutStart.toFixed(2)}:d=${BGM_FADE_OUT}`;
+        }
+        bgmFilter += ',apad[bgm]';  // pad BGM 到输出时长
+
+        // === 配音滤镜链 ===
+        let voiceFilter = `[1:a]adelay=${VOICE_DELAY_MS}|${VOICE_DELAY_MS}`;
+        // 配音渐入
+        voiceFilter += `,afade=t=in:st=${VOICE_DELAY_S}:d=${VOICE_FADE_IN}`;
+        // 配音渐出（仅在配音足够长时添加）
+        if (voiceDuration > VOICE_FADE_IN + VOICE_FADE_OUT) {
+            const voiceFadeOutStart = VOICE_DELAY_S + voiceDuration - VOICE_FADE_OUT;
+            voiceFilter += `,afade=t=out:st=${voiceFadeOutStart.toFixed(2)}:d=${VOICE_FADE_OUT}`;
+        }
+        // 🔧 atrim 基于 outputDuration（允许配音超出视频时自动延长）
+        voiceFilter += `,volume=1.0,atrim=0:${outputDuration.toFixed(2)},asetpts=PTS-STARTPTS,apad[voice]`;
+
+        // amix: duration=first — 以 BGM（= 视频时长 + apad）为基准
+        const filterComplex = `${bgmFilter};${voiceFilter};[bgm][voice]amix=inputs=2:duration=first:dropout_transition=3[aout]`;
+
+        console.log(`[Audio Mix] Filter: ${filterComplex}`);
+        console.log(`[Audio Mix] Output duration: ${outputDuration.toFixed(2)}s (video=${videoDuration.toFixed(1)}s, voice=${voiceDuration.toFixed(1)}s)`);
+
         const ffmpegArgs = [
             '-y',
             '-i', videoPath,          // 输入 0: 原视频 (含 BGM)
             '-i', voiceoverPath,      // 输入 1: 配音
-            '-filter_complex',
-            // BGM: 降低音量 + 填充静音
-            '[0:a]volume=0.3,apad[bgm];' +
-            // 配音: 延迟1秒 + 渐入0.5秒 + 填充静音
-            `[1:a]adelay=${VOICE_DELAY_MS}|${VOICE_DELAY_MS},` +
-            `afade=t=in:st=${VOICE_DELAY_MS / 1000}:d=${VOICE_FADE_IN},` +
-            'volume=1.0,apad[voice];' +
-            // 混合
-            '[bgm][voice]amix=inputs=2:duration=first:dropout_transition=3[aout]',
+            '-filter_complex', filterComplex,
             '-map', '0:v:0',          // 使用原视频流
             '-map', '[aout]',         // 使用混合后的音频
             '-c:v', 'copy',           // 视频直接复制
             '-c:a', 'aac',
             '-b:a', '192k',
-            '-shortest',              // 以视频时长为准
+            '-t', outputDuration.toFixed(2),  // 🔧 基于 outputDuration（允许配音延长）
             outputPath,
         ];
 
@@ -599,7 +980,7 @@ async function mergeVoiceover(videoPath: string, audioBuffer: Buffer): Promise<s
                     '-c:a', 'aac',
                     '-map', '0:v:0',
                     '-map', '1:a:0',
-                    '-shortest',
+                    '-t', outputDuration.toFixed(2),  // 同样允许延长
                     outputPath,
                 ];
 

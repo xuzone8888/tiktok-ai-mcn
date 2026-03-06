@@ -23,6 +23,21 @@ export type SubtitleStyle = 'classic' | 'trending' | 'cinema' | 'neon' | 'minima
 // 色调类型
 export type SubtitleTone = 'warm' | 'cool' | 'neutral';
 
+// 🎬 字幕动画预设类型
+export type SubtitleAnimation = 'none' | 'fade' | 'pop' | 'slide-up' | 'slide-left' | 'glow';
+
+// 字体选项列表（中英文）
+export const FONT_OPTIONS = [
+    { id: 'NotoSansSC', name: '思源黑体', file: 'NotoSansSC/NotoSansSC-Variable.ttf', lang: 'zh' },
+    { id: 'ZCOOLKuaiLe', name: '站酷快乐体', file: 'ZCOOLKuaiLe/ZCOOLKuaiLe-Regular.ttf', lang: 'zh' },
+    { id: 'Montserrat', name: 'Montserrat', file: 'Montserrat/Montserrat-Bold.ttf', lang: 'en' },
+    { id: 'BebasNeue', name: 'Bebas Neue', file: 'BebasNeue/BebasNeue-Regular.ttf', lang: 'en' },
+    { id: 'Pacifico', name: 'Pacifico', file: 'Pacifico/Pacifico-Regular.ttf', lang: 'en' },
+    { id: 'Cinzel', name: 'Cinzel', file: 'Cinzel/Cinzel-VariableFont_wght.ttf', lang: 'en' },
+    { id: 'EBGaramond', name: 'EB Garamond', file: 'EB_Garamond/EBGaramond-VariableFont_wght.ttf', lang: 'en' },
+    { id: 'MicrosoftYaHei', name: '微软雅黑', file: 'system:msyh.ttc', lang: 'zh' },
+];
+
 // 图文字幕 - 单个文本叠加层
 export interface TextOverlay {
     id: string;                     // 唯一标识
@@ -116,6 +131,16 @@ export interface SubtitleConfig {
 
     // 新增：图文字幕
     textOverlays?: TextOverlay[];
+
+    // 新增：overlay AI 生成配置（批量生成时使用）
+    overlayAiConfig?: {
+        prompt: string;
+        language: 'en' | 'zh';
+        mode: 'uniform' | 'diverse';
+    };
+
+    // 🎬 新增：字幕动画
+    animation?: SubtitleAnimation;
 }
 
 export interface SlideshowOptions {
@@ -410,15 +435,10 @@ export function shuffleAndGroup(images: string[], imagesPerVideo: number): strin
 
 /**
  * 场景编排模式: 从每个位置随机抽取一张
+ * 支持不等数量的位置，以最少图片数为准
  */
 export function positionExtract(positions: string[][], count: number): string[][] {
-    // 验证所有位置数量相等
-    const positionCount = positions[0]?.length || 0;
-    for (const pos of positions) {
-        if (pos.length !== positionCount) {
-            throw new Error('所有位置的图片数量必须相等');
-        }
-    }
+    if (positions.length === 0) return [];
 
     // 打乱每个位置的图片顺序
     const shuffledPositions = positions.map(pos => {
@@ -430,10 +450,12 @@ export function positionExtract(positions: string[][], count: number): string[][
         return arr;
     });
 
+    // 以最少数量为准
+    const minLen = Math.min(...shuffledPositions.map(p => p.length));
+    const maxVideos = Math.min(count, minLen);
+
     // 提取视频组合
     const groups: string[][] = [];
-    const maxVideos = Math.min(count, positionCount);
-
     for (let i = 0; i < maxVideos; i++) {
         const group = shuffledPositions.map(pos => pos[i]);
         groups.push(group);

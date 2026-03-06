@@ -32,6 +32,134 @@ RESOLUTIONS = {
 # 每张图片默认显示时长(秒)
 DEFAULT_DURATION = 2
 
+# ========================================
+# 🎬 字体检测 + 动画标签生成
+# ========================================
+
+# 字体查找映射表：fontFamily ID → 可能的字体文件路径（按优先级排列）
+FONT_LOOKUP = {
+    'NotoSansSC': [
+        str(PROJECT_DIR / 'public' / 'fonts' / 'NotoSansSC' / 'NotoSansSC-Variable.ttf'),
+        '/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc',  # Linux apt
+        '/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc',
+    ],
+    'ZCOOLKuaiLe': [
+        str(PROJECT_DIR / 'public' / 'fonts' / 'ZCOOLKuaiLe' / 'ZCOOLKuaiLe-Regular.ttf'),
+    ],
+    'Montserrat': [
+        str(PROJECT_DIR / 'public' / 'fonts' / 'Montserrat' / 'Montserrat-Bold.ttf'),
+    ],
+    'BebasNeue': [
+        str(PROJECT_DIR / 'public' / 'fonts' / 'BebasNeue' / 'BebasNeue-Regular.ttf'),
+    ],
+    'Pacifico': [
+        str(PROJECT_DIR / 'public' / 'fonts' / 'Pacifico' / 'Pacifico-Regular.ttf'),
+    ],
+    'Cinzel': [
+        str(PROJECT_DIR / 'public' / 'fonts' / 'Cinzel' / 'Cinzel-VariableFont_wght.ttf'),
+    ],
+    'EBGaramond': [
+        str(PROJECT_DIR / 'public' / 'fonts' / 'EB_Garamond' / 'EBGaramond-VariableFont_wght.ttf'),
+    ],
+    'MicrosoftYaHei': [
+        'C:/Windows/Fonts/msyh.ttc',
+    ],
+}
+
+# ASS 内嵌字体名映射（ASS 使用字体的内部名称，不是文件名）
+FONT_ASS_NAMES = {
+    'NotoSansSC': 'Noto Sans SC',
+    'ZCOOLKuaiLe': 'ZCOOL KuaiLe',
+    'Montserrat': 'Montserrat',
+    'BebasNeue': 'Bebas Neue',
+    'Pacifico': 'Pacifico',
+    'Cinzel': 'Cinzel',
+    'EBGaramond': 'EB Garamond',
+    'MicrosoftYaHei': 'Microsoft YaHei',
+}
+
+# 默认字体回退顺序（中文优先）
+DEFAULT_FONT_FALLBACK = ['NotoSansSC', 'MicrosoftYaHei', 'Montserrat']
+
+
+def detect_available_font(font_family_id: str = '') -> str:
+    """
+    动态检测可用字体，返回 ASS Fontname
+    优先使用用户指定的字体，若不可用则按回退顺序查找
+    """
+    # 尝试指定字体
+    if font_family_id and font_family_id in FONT_LOOKUP:
+        for path in FONT_LOOKUP[font_family_id]:
+            if os.path.exists(path):
+                print(f"[Font] Found: {font_family_id} at {path}")
+                return FONT_ASS_NAMES.get(font_family_id, font_family_id)
+        print(f"[Font] Requested '{font_family_id}' not found, trying fallback...")
+
+    # 回退查找
+    for fb_id in DEFAULT_FONT_FALLBACK:
+        for path in FONT_LOOKUP.get(fb_id, []):
+            if os.path.exists(path):
+                print(f"[Font] Fallback: {fb_id} at {path}")
+                return FONT_ASS_NAMES.get(fb_id, fb_id)
+
+    # 最终回退
+    print("[Font] WARNING: No fonts found, using Microsoft YaHei (may fail on Linux)")
+    return 'Microsoft YaHei'
+
+
+def get_font_dir_for_ass() -> str:
+    """获取 ASS fontsdir 路径（包含项目字体）"""
+    project_fonts = str(PROJECT_DIR / 'public' / 'fonts')
+    if os.path.isdir(project_fonts):
+        return project_fonts
+    return 'C:/Windows/Fonts'
+
+
+def build_animation_tags(animation: str, pos_x: int = 0, pos_y: int = 0, is_trending: bool = False) -> str:
+    """
+    根据动画预设生成 ASS override tags
+    
+    所有动画都设计为不依赖 pos_x/pos_y 坐标，使用纯 transform 实现
+    适用于 alignment 定位的配音字幕（无 \pos() 标签）
+    
+    Args:
+        animation: 动画类型 'none' | 'fade' | 'pop' | 'slide-up' | 'slide-left' | 'glow'
+        pos_x: 保留参数（向后兼容）
+        pos_y: 保留参数（向后兼容）
+        is_trending: 是否潮流样式 — True 时用 \1a 替代 \alpha，避免覆盖 \3a\4a 底色透明度
+    Returns:
+        ASS override tag 字符串
+    """
+    if not animation or animation == 'none':
+        return ''
+    
+    # ⭐ 潮流样式：用 \1a（仅文字alpha）替代 \alpha（全alpha），避免覆盖底色 \3a\4a
+    a_full = r'\1a' if is_trending else r'\alpha'
+    
+    if animation == 'fade':
+        # 淡入 300ms，淡出 200ms — 简洁经典
+        return r'{\fad(300,200)}'
+    
+    elif animation == 'pop':
+        # 弹出：透明+50%高度 → 105%回弹 → 100%
+        return '{' + f'{a_full}&HFF&' + r'\fscy50' + r'\t(0,200,' + f'{a_full}&H00&' + r'\fscy105)' + r'\t(200,350,\fscy100)}'
+    
+    elif animation == 'slide-up':
+        # 从下方滑入
+        return r'{\fscy0\fad(200,200)\t(0,300,\fscy100)}'
+    
+    elif animation == 'slide-left':
+        # 展开：透明渐显+淡出
+        return '{' + f'{a_full}&HFF&' + r'\t(0,300,' + f'{a_full}&H00&)' + r'\fad(0,200)}'
+    
+    elif animation == 'glow':
+        # 发光脉冲：blur + fad
+        return r'{\blur8\t(0,400,\blur0)\t(400,800,\blur3)\t(800,1000,\blur0)\fad(200,200)}'
+    
+    else:
+        print(f"[Animation] Unknown animation type: {animation}")
+        return ''
+
 
 def ensure_dirs():
     """确保临时目录存在"""
@@ -146,6 +274,10 @@ def generate_slideshow(
             resize_image(img_path, output_img, target_size)
             processed_images.append(output_img)
         
+        # 🎬 注入 aspect_ratio 到 subtitle 配置，供下游函数使用
+        if subtitle:
+            subtitle['_aspect_ratio'] = aspect_ratio
+        
         # Step 2: 构建 FFmpeg 命令
         if transition == "none":
             # 无转场: 简单拼接
@@ -182,9 +314,9 @@ def generate_slideshow(
         shutil.rmtree(work_dir, ignore_errors=True)
 
 
-def generate_ass_subtitle(text: str, font_size: int, font_color: str, subtitle: dict) -> str:
+def generate_ass_subtitle(text: str, font_size: int, font_color: str, subtitle: dict, aspect_ratio: str = '9:16') -> str:
     """
-    生成 ASS 格式字幕文件内容 - 支持分句显示
+    生成 ASS 格式字幕文件内容 - 支持分句显示 + 动画效果
     将完整文案拆分成多个句子，每句依次显示，与配音同步
     支持新的方框定位参数: boxX, boxY, boxWidth
     """
@@ -202,9 +334,10 @@ def generate_ass_subtitle(text: str, font_size: int, font_color: str, subtitle: 
     
     primary_color = hex_to_ass_color(font_color)
     
-    # 检查是否是霓虹风格 - 需要特殊发光效果
+    # 检查样式 - 每种样式有完全不同的 ASS 参数
     style_name = subtitle.get('style', 'classic')
     is_neon = style_name == 'neon'
+    is_trending = style_name == 'trending'
     
     # 读取前端的字重设置 (fontWeight 可能是 '400', '600', '700' 等字符串)
     font_weight_str = subtitle.get('fontWeight', '400')
@@ -213,27 +346,67 @@ def generate_ass_subtitle(text: str, font_size: int, font_color: str, subtitle: 
     except (ValueError, TypeError):
         font_weight = 400
     
-    # 字重 >= 500 视为粗体 (CSS 的 font-weight: 500+ 为 medium 及以上)
-    is_bold = font_weight >= 500 or is_neon  # 霓虹风格也强制粗体
+    # 字重 >= 600 视为粗体
+    is_bold = font_weight >= 600
     bold = 1 if is_bold else 0
     
-    print(f"[Subtitle] Style: {style_name}, fontWeight: {font_weight_str} -> bold={bold}")
+    # ============================================================
+    # 五种样式的 ASS 专用参数（经 15 方案迭代验证的最优参数）
+    # ============================================================
+    # 默认 BorderStyle=1 (普通描边)
+    border_style = 1
+    spacing = 0  # 字间距
     
-    if is_neon:
-        # 霓虹风格: 描边和阴影都使用主色，模拟发光效果
-        outline_color = primary_color  # 描边用主色
-        border_width = 5  # 加粗描边模拟发光
-        shadow_depth = 4  # 加深阴影
-        # 阴影颜色也用主色（半透明）
-        back_color = hex_to_ass_color(font_color).replace('&H00', '&H60')  # 40% 透明
-        print(f"[Subtitle] Neon style: outline={outline_color}, shadow={back_color}")
+    if style_name == 'classic':
+        # 📺 经典 C4 深阴影: bord=4 + shadow=3，立体浮雕感
+        outline_color = "&H00000000"  # 黑色描边
+        border_width = 4
+        shadow_depth = 3
+        back_color = "&H90000000"  # 深半透明阴影色
+        bold = 1  # 强制粗体
+    elif style_name == 'trending':
+        # 🔥 潮流: BorderStyle=3 方框背景模式
+        # 透明度由 Dialogue 行的 \3a/\4a 覆盖标签控制（比 Style 行 alpha 更可靠）
+        border_style = 3
+        outline_color = "&H00000000"  # 纯黑色（透明度由 Dialogue \3a 控制）
+        border_width = 0
+        shadow_depth = 0
+        back_color = "&H00000000"  # 纯黑色（透明度由 Dialogue \4a 控制）
+        bold = 1
+    elif style_name == 'cinema':
+        # 🎬 影视 M3 细黑宽距: bord=1 + Spacing=4，电影字幕感
+        outline_color = "&H00000000"  # 细黑描边
+        border_width = 1
+        shadow_depth = 2
+        back_color = "&H60000000"
+        spacing = 4  # 宽字间距是关键差异
+        bold = 0  # 非粗体更优雅
+    elif style_name == 'neon':
+        # 💜 霓虹 B方案: Outline=2 blur=3 青色光晕
+        # 底层光晕（GlowLayer）在 Style 行单独生成
+        # 顶层描边色跟随色调（深色描边增加可读性）
+        tone = subtitle.get('tone', 'cool')
+        outline_color = "&H00804000" if tone == 'cool' else "&H00000044" if tone == 'warm' else "&H00333333"
+        border_width = 2  # 与 GlowLayer 匹配，避免定位偏移
+        shadow_depth = 0
+        back_color = "&H00000000"
+        bold = 1
+    elif style_name == 'minimal':
+        # ✏️ 简约 N4 极淡阴影: bord=0 + shadow=1，干净且可读
+        outline_color = "&H00000000"
+        border_width = 0
+        shadow_depth = 1
+        back_color = "&HC0000000"  # 深透明阴影
+        bold = 0  # 常规字重
     else:
-        # 其他风格: 使用用户设置的描边颜色
-        border_color = subtitle.get('borderColor', '#000000')
-        outline_color = hex_to_ass_color(border_color)
-        border_width = subtitle.get('borderWidth', 2)
-        shadow_depth = 2 if subtitle.get('shadow', False) else 0
-        back_color = "&H80000000"  # 默认黑色半透明阴影
+        # 未知样式回退到 classic
+        outline_color = "&H00000000"
+        border_width = 4
+        shadow_depth = 3
+        back_color = "&H90000000"
+        bold = 1
+    
+    print(f"[Subtitle] Style: {style_name}, fontWeight: {font_weight_str} -> bold={bold}, bord={border_width}, shadow={shadow_depth}, borderStyle={border_style}")
     
     # 方框定位参数 (新版)
     box_x = subtitle.get('boxX', 10)  # 左边距百分比
@@ -243,31 +416,44 @@ def generate_ass_subtitle(text: str, font_size: int, font_color: str, subtitle: 
     # 兼容旧版 position 参数
     position = subtitle.get('position', box_y)
     
-    # 计算 ASS 边距 (基于 1080x1920 分辨率)
-    video_width = 1080
-    video_height = 1920
+    # === Bug Fix: 根据实际宽高比设置分辨率 ===
+    if aspect_ratio == '16:9':
+        video_width = 1920
+        video_height = 1080
+    else:  # 9:16 默认
+        video_width = 1080
+        video_height = 1920
+    
+    # 计算 ASS 边距
     margin_l = int(video_width * box_x / 100)
     margin_r = int(video_width * (100 - box_x - box_width) / 100)
     margin_v = int(video_height * (100 - position) / 100)
     
     # 字号缩放: 预览区字号 -> 实际视频字号
-    # 预览区高度约 520px，视频高度 1920px
-    # 用户看到的字号是相对于预览区的，需要放大到视频尺寸
-    # 缩放因子 = 视频高度 / 预览区高度 ≈ 1920 / 520 ≈ 3.7
-    PREVIEW_HEIGHT = 520  # 前端预览区的近似高度
-    scale_factor = video_height / PREVIEW_HEIGHT  # ≈ 3.69
+    PREVIEW_HEIGHT = subtitle.get('_previewHeight', 520)  # 前端传入实际预览区高度
+    scale_factor = video_height / PREVIEW_HEIGHT
     
-    # 计算实际视频字号: 用户设置的预览字号 * 缩放因子
+    # 计算实际视频字号
     scaled_font_size = int(font_size * scale_factor)
-    # 限制范围: 最小 48px (视频上可读)，最大 360px (不超出画面)
+    # 影视(cinema)样式用细体(bold=0)，视频中显得偏小偏细，补偿放大 15%
+    if style_name == 'cinema':
+        scaled_font_size = int(scaled_font_size * 1.15)
     actual_font_size = max(48, min(360, scaled_font_size))
     
     print(f"[Subtitle] Font scaling: preview {font_size}px * {scale_factor:.2f} = video {actual_font_size}px")
+    print(f"[Subtitle] Video resolution: {video_width}x{video_height} ({aspect_ratio})")
+    
+    # === 动态字体检测 ===
+    font_family_id = subtitle.get('fontFamily', '')
+    font_name = detect_available_font(font_family_id)
+    print(f"[Subtitle] Font: requested='{font_family_id}' -> detected='{font_name}'")
     
     alignment = 2  # 底部居中
     
     # 配音延迟 - 与 TypeScript 中的 VOICE_DELAY_MS 保持一致
-    VOICE_DELAY_SECONDS = 1.0
+    # 预览模式不需要延迟（只捕获第 0 帧）
+    is_preview = subtitle.get('_preview_mode', False)
+    VOICE_DELAY_SECONDS = 0.0 if is_preview else 1.0
     SYNC_BUFFER = 0.5
     
     # 格式化 ASS 时间 (H:MM:SS.CC)
@@ -279,64 +465,93 @@ def generate_ass_subtitle(text: str, font_size: int, font_color: str, subtitle: 
     
     # 拆分句子的函数
     def split_sentences(text: str) -> list:
-        """
-        将文案按句子拆分
-        支持中英文标点：。！？.!? 以及逗号作为次要分隔符
-        对于长句子，按单词边界拆分（不截断单词）
-        """
-        # 先按主要句子结束符拆分
-        sentences = re.split(r'(?<=[。！？.!?])\s*', text)
+        """Split text into subtitle segments. Each segment max 2 lines via backslash-N."""
+        # Dynamic max chars per line
+        available_width = video_width - margin_l - margin_r
+        # 判断文本语言：中文每字约 font_size * 0.78px（全角），英文每字约 font_size * 0.50px（半角平均）
+        chinese_ratio = len(re.findall(r'[\u4e00-\u9fff]', text)) / max(len(text), 1)
+        char_width_est = actual_font_size * (0.78 if chinese_ratio > 0.3 else 0.50)
+        max_line_chars = max(6, int(available_width / char_width_est) - 1)
+        print(f"[Subtitle] max_line_chars={max_line_chars} (avail={available_width}px, font={actual_font_size}px)")
         
-        # 过滤空句子
-        sentences = [s.strip() for s in sentences if s.strip()]
+        # Step 1: Split by sentence-ending punctuation
+        segments = re.split(r'(?<=[。！？.!?])\s*', text)
+        segments = [s.strip() for s in segments if s.strip()]
         
-        # 如果只有一个长句子，尝试按逗号拆分
-        if len(sentences) == 1 and len(sentences[0]) > 40:
-            sub_sentences = re.split(r'(?<=[，,、;；])\s*', sentences[0])
-            sub_sentences = [s.strip() for s in sub_sentences if s.strip()]
-            if len(sub_sentences) > 1:
-                sentences = sub_sentences
-        
-        # 对超长句子进行智能拆分（按单词边界）
+        # Step 2: Further split long sentences by commas
         result = []
-        max_chars = 35  # 每段最多显示的字符数
+        for seg in segments:
+            if len(seg) <= max_line_chars * 2:
+                result.append(seg)
+            else:
+                sub = re.split(r'(?<=[，,、;；])\s*', seg)
+                sub = [s.strip() for s in sub if s.strip()]
+                if len(sub) > 1:
+                    # Group comma-sub-segments into pairs that fit 2 lines
+                    current = ""
+                    for s in sub:
+                        if current and len(current) + len(s) > max_line_chars * 2:
+                            result.append(current)
+                            current = s
+                        else:
+                            current = current + s if current else s
+                    if current:
+                        result.append(current)
+                else:
+                    result.append(seg)
         
-        for sentence in sentences:
-            if len(sentence) <= max_chars:
-                result.append(sentence)
+        # Step 3: Wrap each segment into multiple lines (each line <= max_line_chars)
+        final = []
+        for seg in result:
+            if len(seg) <= max_line_chars:
+                final.append(seg)
                 continue
             
-            # 检测是否主要是中文（中文可以按字符分割）
-            chinese_chars = len(re.findall(r'[\u4e00-\u9fff]', sentence))
-            is_chinese = chinese_chars > len(sentence) * 0.3
+            chinese_chars = len(re.findall(r'[\u4e00-\u9fff]', seg))
+            is_chinese = chinese_chars > len(seg) * 0.3
             
             if is_chinese:
-                # 中文：按字符分割，但尽量在标点处断开
+                # Split into lines of max_line_chars, prefer breaking at commas
+                sub_lines = []
                 current = ""
-                for char in sentence:
+                for char in seg:
                     current += char
-                    if len(current) >= max_chars or char in '，。！？、；：':
-                        if current.strip():
-                            result.append(current.strip())
+                    if char in '，,、；：' and len(current) >= 4:
+                        sub_lines.append(current)
                         current = ""
-                if current.strip():
-                    result.append(current.strip())
+                    elif len(current) >= max_line_chars:
+                        sub_lines.append(current)
+                        current = ""
+                if current:
+                    if sub_lines and len(current) <= 3 and len(sub_lines[-1]) + len(current) <= max_line_chars:
+                        sub_lines[-1] = sub_lines[-1] + current
+                    else:
+                        sub_lines.append(current)
+                wrapped = (chr(92) + 'N').join(sub_lines)
+                final.append(wrapped)
             else:
-                # 英文：按单词边界分割
-                words = sentence.split()
+                # English: wrap at spaces
+                words = seg.split()
+                sub_lines = []
                 current_line = ""
                 for word in words:
-                    test_line = current_line + (" " if current_line else "") + word
-                    if len(test_line) <= max_chars:
-                        current_line = test_line
+                    test = current_line + (" " if current_line else "") + word
+                    if len(test) <= max_line_chars:
+                        current_line = test
                     else:
                         if current_line:
-                            result.append(current_line)
+                            sub_lines.append(current_line)
                         current_line = word
                 if current_line:
-                    result.append(current_line)
+                    sub_lines.append(current_line)
+                wrapped = (chr(92) + 'N').join(sub_lines)
+                final.append(wrapped)
         
-        return result if result else [text]
+        out = final if final else [text]
+        for idx, seg in enumerate(out):
+            clean = seg.replace(chr(92)+'N', '')
+            print(f"[Subtitle] split_sentences[{idx}] ({len(clean)}ch): {clean}")
+        return out
     
     # 检查是否有精确的词级时间戳
     word_timestamps = subtitle.get('wordTimestamps', [])
@@ -359,25 +574,31 @@ def generate_ass_subtitle(text: str, font_size: int, font_color: str, subtitle: 
             group_start = group[0]['start']
             group_end_time = group[-1]['end']
             
-            # 拼接这组词的文本
-            group_text = ' '.join([w['word'] for w in group])
+            # 拼接这组词的文本（清理换行符防止破坏 ASS Dialogue 单行格式）
+            group_text = ' '.join([w['word'].replace('\n', '').replace('\r', '') for w in group])
             
-            # 对文本进行自动换行处理
-            if len(group_text) > 20:
-                mid = len(group_text) // 2
-                # 在空格处换行
-                break_pos = mid
-                for j in range(mid - 3, min(mid + 5, len(group_text))):
-                    if j >= 0 and group_text[j] == ' ':
-                        break_pos = j
-                        break
-                group_text = group_text[:break_pos] + '\\N' + group_text[break_pos+1:]
+            # 不再手动 \N 换行——WrapStyle:0 + margins 让 libass 在空格处自动换行
             
             # 添加延迟
             adjusted_start = VOICE_DELAY_SECONDS + group_start
             adjusted_end = VOICE_DELAY_SECONDS + group_end_time
             
-            dialogue = f"Dialogue: 0,{format_ass_time(adjusted_start)},{format_ass_time(adjusted_end)},Default,,0,0,0,,{group_text}"
+            # 🎬 动画标签注入（预览模式跳过，因为 time=0 时 fad 使字幕透明）
+            animation = subtitle.get('animation', 'fade')  # 默认淡入淡出
+            anim_tags = '' if is_preview else build_animation_tags(animation, is_trending=is_trending)
+            
+            # 霓虹双层渲染：生成两条 Dialogue（底层光晕 Layer 0 + 顶层清晰文字 Layer 1）
+            if is_neon:
+                blur_tag = '{' + chr(92) + 'blur2}'  # blur2: 与 overlay 一致，清晰光晕
+                glow_dialogue = f"Dialogue: 0,{format_ass_time(adjusted_start)},{format_ass_time(adjusted_end)},GlowLayer,,0,0,0,,{blur_tag}{anim_tags}{group_text}"
+                dialogues.append(glow_dialogue)
+            
+            # 潮流: xbord/ybord 控制内边距, \3a/\4a 控制半透明度
+            trending_tag = r'{\xbord8\ybord4\3a&HA0&\4a&HA0&}' if is_trending else ''  # A0=63% 透明（与 overlay 一致）
+            
+            # 霓虹时 Default 直接用 Layer 1
+            default_layer = 1 if is_neon else 0
+            dialogue = f"Dialogue: {default_layer},{format_ass_time(adjusted_start)},{format_ass_time(adjusted_end)},Default,,0,0,0,,{anim_tags}{trending_tag}{group_text}"
             dialogues.append(dialogue)
             print(f"[Subtitle] Word group {len(dialogues)}: {format_ass_time(adjusted_start)} -> {format_ass_time(adjusted_end)}: {group_text[:30]}...")
             
@@ -388,7 +609,8 @@ def generate_ass_subtitle(text: str, font_size: int, font_color: str, subtitle: 
         # 回退：使用平均分配时间的分句显示
         print("[Subtitle] No word timestamps, using sentence-based timing")
         
-        # 拆分句子
+        # 🔧 关键修复: 去掉文案中的真实换行符（会破坏 ASS Dialogue 的单行格式）
+        text = text.replace('\n', '').replace('\r', '').strip()
         sentences = split_sentences(text)
         print(f"[Subtitle] Split into {len(sentences)} segments: {sentences}")
         
@@ -400,33 +622,53 @@ def generate_ass_subtitle(text: str, font_size: int, font_color: str, subtitle: 
             # 没有配音时长，按句子数量估算（每句约 2 秒）
             total_duration = len(sentences) * 2.0
         
-        # 计算每句的显示时长
-        duration_per_sentence = total_duration / len(sentences)
-        print(f"[Subtitle] Total duration: {total_duration:.1f}s, per sentence: {duration_per_sentence:.1f}s")
+        # 按字符数比例分配时间（TTS 匀速读，字数比例 ≈ 时间比例）
+        # 注意: 去掉 \N 换行标记再计算字符数，\N 不占语音时间
+        bs_n = chr(92) + 'N'
+        total_chars = sum(len(s.replace(bs_n, '')) for s in sentences)
+        if total_chars == 0:
+            total_chars = len(sentences)  # fallback: 平均分配
+        print(f"[Subtitle] Total duration: {total_duration:.1f}s, total chars: {total_chars}, sentences: {len(sentences)}")
         
         # 生成多个 Dialogue 事件
         dialogues = []
+        cumulative_time = 0.0
         for i, sentence in enumerate(sentences):
-            start_time = VOICE_DELAY_SECONDS + i * duration_per_sentence
-            end_time = VOICE_DELAY_SECONDS + (i + 1) * duration_per_sentence
+            clean_len = len(sentence.replace(bs_n, ''))
+            char_ratio = clean_len / total_chars if total_chars > 0 else 1.0 / len(sentences)
+            seg_duration = total_duration * char_ratio
+            start_time = VOICE_DELAY_SECONDS + cumulative_time
+            end_time = start_time + seg_duration
+            cumulative_time += seg_duration
             
-            # 对文本进行自动换行处理（如果单句仍然太长）
+            # 不再手动 \N 换行——WrapStyle:0 + margins 让 libass 自动换行
+            # 手动 \N 与 libass 自动换行冲突会导致部分文本不显示
             wrapped_sentence = sentence
-            if len(sentence) > 15:
-                # 在中间位置插入换行符
-                mid = len(sentence) // 2
-                # 尝试找到一个好的换行位置（空格或标点附近）
-                break_pos = mid
-                for j in range(mid, min(mid + 5, len(sentence))):
-                    if sentence[j] in ' ，,、':
-                        break_pos = j + 1
-                        break
-                wrapped_sentence = sentence[:break_pos] + '\\N' + sentence[break_pos:]
+            # 🎬 动画标签注入（预览模式跳过，因为 time=0 时 fad 使字幕透明）
+            animation = subtitle.get('animation', 'fade')  # 默认淡入淡出
+            anim_tags = '' if is_preview else build_animation_tags(animation, is_trending=is_trending)
             
-            dialogue = f"Dialogue: 0,{format_ass_time(start_time)},{format_ass_time(end_time)},Default,,0,0,0,,{wrapped_sentence}"
+            # 霓虹双层渲染：生成两条 Dialogue（底层光晕 Layer 0 + 顶层清晰文字 Layer 1）
+            if is_neon:
+                blur_tag = '{' + chr(92) + 'blur2}'  # blur2: 与 overlay 一致，清晰光晕
+                glow_dialogue = f"Dialogue: 0,{format_ass_time(start_time)},{format_ass_time(end_time)},GlowLayer,,0,0,0,,{blur_tag}{anim_tags}{wrapped_sentence}"
+                dialogues.append(glow_dialogue)
+            
+            # 潮流: xbord/ybord 控制内边距, \3a/\4a 控制半透明度
+            trending_tag = r'{\xbord8\ybord4\3a&HA0&\4a&HA0&}' if is_trending else ''  # A0=63% 透明（与 overlay 一致）
+            
+            # 霓虹时 Default 直接用 Layer 1
+            default_layer = 1 if is_neon else 0
+            dialogue = f"Dialogue: {default_layer},{format_ass_time(start_time)},{format_ass_time(end_time)},Default,,0,0,0,,{anim_tags}{trending_tag}{wrapped_sentence}"
             dialogues.append(dialogue)
-            print(f"[Subtitle] Segment {i+1}: {format_ass_time(start_time)} -> {format_ass_time(end_time)}: {sentence[:30]}...")
-    
+            print(f"[Subtitle] Segment {i+1}: {format_ass_time(start_time)} -> {format_ass_time(end_time)}: [{sentence}]")
+        
+        # 🔧 调试: 保存 Dialogue 到文件
+        debug_path = os.path.join(OUTPUT_DIR, 'debug_dialogues.txt')
+        with open(debug_path, 'w', encoding='utf-8') as dbf:
+            for d_line in dialogues:
+                dbf.write(d_line + '\n')
+        print(f"[Subtitle] Debug dialogues saved to {debug_path}")
     # === TextOverlay 支持 ===
     text_overlays = subtitle.get('textOverlays', [])
     duration_per_image = subtitle.get('durationPerImage', 2.0)
@@ -466,7 +708,8 @@ def generate_ass_subtitle(text: str, font_size: int, font_color: str, subtitle: 
         # 策略1: 随机尝试
         for _ in range(50):
             x = margin + random.random() * (100 - box_width - margin * 2)
-            y = margin + random.random() * (100 - box_height - margin * 2)
+            y_min = max(margin, 15)  # ⭐ 至少从 15% 开始，避开顶部 letterbox 白区
+            y = y_min + random.random() * (100 - box_height - y_min - margin)
             rect = {'x': x, 'y': y, 'width': box_width, 'height': box_height}
             if not has_collision(rect, forbidden_zones):
                 return round(x), round(y)
@@ -518,10 +761,15 @@ def generate_ass_subtitle(text: str, font_size: int, font_color: str, subtitle: 
             o_box_x = overlay.get('boxX', 10)
             o_box_y = overlay.get('boxY', 20)
             o_box_width = overlay.get('boxWidth', 80)
-            o_font_weight = overlay.get('fontWeight', '400')
+            o_font_weight = overlay.get('fontWeight', '700')  # ⭐ 默认粗体
             o_border_width = overlay.get('borderWidth', 2)
             o_border_color = overlay.get('borderColor', '#000000')
             o_shadow = overlay.get('shadow', True)
+            
+            # ⭐ overlay 独立字体检测
+            o_font_family_id = overlay.get('fontFamily', '')
+            o_font_name = detect_available_font(o_font_family_id) if o_font_family_id else font_name
+            print(f"[Subtitle] TextOverlay {idx}: Font: requested='{o_font_family_id}' -> detected='{o_font_name}'")
             
             # ⭐ 新增：处理 positionMode（随机位置）
             position_mode = overlay.get('positionMode', 'fixed')
@@ -542,9 +790,9 @@ def generate_ass_subtitle(text: str, font_size: int, font_color: str, subtitle: 
                 print(f"[Subtitle] TextOverlay {idx}: Random style -> {o_style}, {o_color}")
             elif style_mode == 'inherit':
                 o_style = subtitle.get('style', 'classic')
-                o_color = subtitle.get('color', '#FFFFFF')
-                # tone 用于 UI 但不直接影响渲染
-                print(f"[Subtitle] TextOverlay {idx}: Inherit style -> {o_style}, {o_color}")
+                # 不覆盖 o_color — 前端创建 overlay 时已将 subtitle.color 复制到 overlay.color
+                # 用户后续更改 overlay 颜色后，overlay.color 会被更新为用户选择的颜色
+                print(f"[Subtitle] TextOverlay {idx}: Inherit style -> {o_style}, color kept as {o_color}")
             
             # 更新 overlay 对象（用于后续日志和处理）
             overlay['boxX'] = o_box_x
@@ -565,39 +813,88 @@ def generate_ass_subtitle(text: str, font_size: int, font_color: str, subtitle: 
             
             # 字号缩放
             o_scaled_font_size = int(o_font_size * scale_factor)
+            # 影视(cinema)样式细体补偿放大 15%
+            if o_style == 'cinema':
+                o_scaled_font_size = int(o_scaled_font_size * 1.15)
             o_actual_font_size = max(48, min(360, o_scaled_font_size))
+            print(f"[Subtitle] TextOverlay {idx}: fontSize {o_font_size}px * {scale_factor:.2f} = {o_actual_font_size}px")
             
             # 粗体判断
             try:
                 o_weight = int(o_font_weight) if o_font_weight else 400
             except (ValueError, TypeError):
                 o_weight = 400
-            o_bold = 1 if o_weight >= 500 or o_style == 'neon' else 0
+            o_bold = 1 if o_weight >= 500 else 0
             
-            # 阴影深度
+            # ⭐ 根据 o_style 动态设置 ASS 参数（保留用户自定义值，preset 仅作默认回退）
+            o_border_style = 1  # 默认普通描边
+            o_ass_outline = o_outline_color
+            o_back_color = "&H80000000"
             o_shadow_depth = 2 if o_shadow else 0
+            o_spacing = 0
+            o_is_neon = False
             
-            # 边距计算 - 使用 \pos() 精确定位，margin 仅用于宽度限制
+            # 保存用户原始配置（用于判断是否被 preset 覆盖）
+            user_border_width = overlay.get('borderWidth')  # None = 用户未设置
+            user_bold = o_bold  # 已从 fontWeight 计算
+            user_shadow = overlay.get('shadow')  # None/True/False
+            
+            if o_style == 'classic':
+                o_ass_outline = "&H00000000"
+                # 📺 经典风格：与配音字幕一致的粗描边 + 深阴影（bord=4, shadow=3）
+                o_border_width = max(user_border_width if user_border_width is not None else 4, 2)
+                o_shadow_depth = 0 if user_shadow is False else 3
+                o_back_color = "&H90000000"
+                o_bold = 1  # ⭐ 强制粗体（和配音字幕一致）
+            elif o_style == 'trending':
+                o_border_style = 3  # 方框背景模式
+                # 透明度由 Dialogue 行的 \3a/\4a 覆盖标签控制（比 Style 行 alpha 更可靠）
+                o_ass_outline = "&H00000000"  # 纯黑色
+                o_border_width = user_border_width if user_border_width is not None else 0
+                o_shadow_depth = 0
+                o_back_color = "&H00000000"  # 纯黑色
+                o_bold = 1
+            elif o_style == 'cinema':
+                o_ass_outline = "&H00000000"
+                o_border_width = user_border_width if user_border_width is not None else 1
+                o_shadow_depth = 0 if user_shadow is False else 2
+                o_back_color = "&H60000000"
+                o_spacing = 4
+            elif o_style == 'neon':
+                o_is_neon = True
+                o_tone = overlay.get('tone', 'cool')
+                o_ass_outline = "&H00804000" if o_tone == 'cool' else "&H00000044" if o_tone == 'warm' else "&H00333333"
+                o_border_width = user_border_width if user_border_width is not None else 2  # B方案：与 GlowLayer Outline=2 匹配
+                o_shadow_depth = 0
+                o_back_color = "&H00000000"
+                o_bold = 1  # ⭐ 强制粗体
+            elif o_style == 'minimal':
+                o_ass_outline = "&H00000000"
+                o_border_width = user_border_width if user_border_width is not None else 0
+                o_shadow_depth = 0 if user_shadow is False else 1
+                o_back_color = "&HC0000000"
+            
+            print(f"[Subtitle] TextOverlay {idx}: Style={o_style}, BorderStyle={o_border_style}, neon={o_is_neon}")
+            
+            # 边距计算 — margin 同时控制定位 + 换行宽度（不使用 \pos，避免覆盖换行）
             o_margin_l = int(video_width * o_box_x / 100)
             o_margin_r = int(video_width * (100 - o_box_x - o_box_width) / 100)
-            o_margin_v = 0  # 不使用 margin_v，改用 \pos() 精确定位
-            
-            # 计算 \pos() 坐标 (文本中心点)
-            # pos_x: box 水平中心 = boxX + boxWidth/2
-            # pos_y: box 顶部 = boxY (alignment=2 会让文本底部对齐此点，所以需要调整)
-            o_pos_x = int(video_width * (o_box_x + o_box_width / 2) / 100)
-            o_pos_y = int(video_height * o_box_y / 100)
+            o_margin_v = int(video_height * o_box_y / 100)  # 垂直定位由 margin 控制
             
             # Style 名称
-            style_name = f"Overlay{idx}"
+            style_name_base = f"Overlay{idx}"
             
-            # 创建 Style 行 - 使用 alignment=8 (顶部居中) 以便 \pos 指定顶部位置
-            style_line = f"Style: {style_name},Microsoft YaHei,{o_actual_font_size},{o_primary_color},&H000000FF,{o_outline_color},&H80000000,{o_bold},0,0,0,100,100,0,0,1,{o_border_width},{o_shadow_depth},8,{o_margin_l},{o_margin_r},{o_margin_v},0"
+            # ⭐ Neon B方案：GlowLayer Outline=2（与 Default 匹配），光晕色跟随色调
+            if o_is_neon:
+                o_tone = overlay.get('tone', 'cool')
+                neon_glow_color = "&H00EAF200" if o_tone == 'cool' else "&H00F65C8B" if o_tone == 'warm' else "&H00FFCC88"
+                # Outline=2: 与 Default 一致，确保定位对齐
+                glow_style_line = f"Style: {style_name_base}Glow,{o_font_name},{o_actual_font_size},{neon_glow_color},&H000000FF,{neon_glow_color},&H00000000,{o_bold},0,0,0,100,100,{o_spacing},0,1,2,0,8,{o_margin_l},{o_margin_r},{o_margin_v},0"
+                overlay_styles.append(glow_style_line)
+            
+            # 创建 Style 行 - alignment=8 (顶部居中)，margin 控制定位和换行
+            style_line = f"Style: {style_name_base},{o_font_name},{o_actual_font_size},{o_primary_color},&H000000FF,{o_ass_outline},{o_back_color},{o_bold},0,0,0,100,100,{o_spacing},0,{o_border_style},{o_border_width},{o_shadow_depth},8,{o_margin_l},{o_margin_r},{o_margin_v},0"
             overlay_styles.append(style_line)
-            
-            # 保存坐标供 Dialogue 使用
-            overlay['_pos_x'] = o_pos_x
-            overlay['_pos_y'] = o_pos_y
             
             # 获取时间模式
             timing_mode = overlay.get('timingMode', 'image')
@@ -616,44 +913,100 @@ def generate_ass_subtitle(text: str, font_size: int, font_color: str, subtitle: 
                 # 每张图片时间: imageIndex * durationPerImage -> (imageIndex + 1) * durationPerImage
                 # 考虑转场：有转场时总时长 = n * duration - (n-1) * fade
                 start_time = image_index * duration_per_image - image_index * transition_duration
-                end_time = (image_index + 1) * duration_per_image - image_index * transition_duration
+                # ⭐ 结束时间提前 transition_duration，避免与下一张图的 overlay 时间重叠
+                end_time = (image_index + 1) * duration_per_image - image_index * transition_duration - transition_duration
                 print(f"[Subtitle] TextOverlay {idx} (image): imageIndex={image_index}, {format_ass_time(start_time)}->{format_ass_time(end_time)}")
             
-            # 确保时间不为负
-            start_time = max(0, start_time)
+            # 确保时间不为负，并添加 0.5s 延迟让文本不在第一帧就出现
+            start_time = max(0, start_time) + 0.5
             
-            # 获取 \pos() 坐标
-            o_pos_x = overlay.get('_pos_x', 540)  # 默认中心
-            o_pos_y = overlay.get('_pos_y', 200)
+            # 🎬 动画标签（纯 transform，不依赖 \pos）
+            overlay_animation = overlay.get('animation') or subtitle.get('animation', 'fade')
+            overlay_anim_tags = build_animation_tags(overlay_animation, 0, 0, is_trending=(o_style == 'trending'))
             
-            # 创建 Dialogue 行（Layer 0，在配音字幕下方）
-            # 使用 \pos(x,y) 精确定位覆盖 Style 的 margin 设置
-            dialogue_line = f"Dialogue: 0,{format_ass_time(start_time)},{format_ass_time(end_time)},{style_name},,0,0,0,,{{\\pos({o_pos_x},{o_pos_y})}}{strip_emoji(overlay_text)}"
+            # 🔧 TextOverlay 文本换行(防止 neon 双层因 Outline 宽度不同导致错位)
+            o_available_width = video_width - o_margin_l - o_margin_r
+            # 语言感知：中文全角 0.78, 英文半角 0.50
+            o_chinese_ratio = len(re.findall(r'[\u4e00-\u9fff]', overlay_text)) / max(len(overlay_text), 1)
+            o_char_width_est = o_actual_font_size * (0.78 if o_chinese_ratio > 0.3 else 0.50)
+            o_max_line_chars = max(6, int(o_available_width / o_char_width_est) - 1)
+            raw_overlay_text = strip_emoji(overlay_text).replace('\n', '').replace('\r', '')
+            o_chinese_chars = len(re.findall(r'[\u4e00-\u9fff]', raw_overlay_text))
+            if o_chinese_chars > len(raw_overlay_text) * 0.3 and len(raw_overlay_text) > o_max_line_chars:
+                o_lines = []
+                o_cur = ""
+                for ch in raw_overlay_text:
+                    o_cur += ch
+                    if ch in '，,、；：' and len(o_cur) >= 4:
+                        o_lines.append(o_cur)
+                        o_cur = ""
+                    elif len(o_cur) >= o_max_line_chars:
+                        o_lines.append(o_cur)
+                        o_cur = ""
+                if o_cur:
+                    if o_lines and len(o_cur) <= 3 and len(o_lines[-1]) + len(o_cur) <= o_max_line_chars:
+                        o_lines[-1] += o_cur
+                    else:
+                        o_lines.append(o_cur)
+                wrapped_overlay = (chr(92) + 'N').join(o_lines)
+            else:
+                wrapped_overlay = raw_overlay_text
+            
+            print(f"[Subtitle] TextOverlay {idx} neon={o_is_neon}: maxChars={o_max_line_chars}, text=[{wrapped_overlay}]")
+            
+            # Neon 크层渲染：底层光晕 Dialogue
+            if o_is_neon:
+                blur_tag = '{' + chr(92) + 'blur2}'  # overlay 用 blur2（文字较小，blur3 过于模糊）
+                glow_dialogue = f"Dialogue: 0,{format_ass_time(start_time)},{format_ass_time(end_time)},{style_name_base}Glow,,0,0,0,,{blur_tag}{overlay_anim_tags}{wrapped_overlay}"
+                overlay_dialogues.append(glow_dialogue)
+            
+            o_trending_tag = r'{\xbord8\ybord4\3a&HA0&\4a&HA0&}' if o_style == 'trending' else ''  # A0=63% 透明（比配音字幕 D0=82% 更不透明，overlay 需要更强底色）
+            
+            o_default_layer = 1 if o_is_neon else 0
+            dialogue_line = f"Dialogue: {o_default_layer},{format_ass_time(start_time)},{format_ass_time(end_time)},{style_name_base},,0,0,0,,{overlay_anim_tags}{o_trending_tag}{wrapped_overlay}"
             overlay_dialogues.append(dialogue_line)
             
             print(f"[Subtitle] TextOverlay {idx}: {overlay_text[:30]}...")
     
     # 组合 Styles 和 Dialogues
-    all_styles = [f"Style: Default,Microsoft YaHei,{actual_font_size},{primary_color},&H000000FF,{outline_color},{back_color},{bold},0,0,0,100,100,0,0,1,{border_width},{shadow_depth},{alignment},{margin_l},{margin_r},{margin_v},0"]
+    all_styles = [f"Style: Default,{font_name},{actual_font_size},{primary_color},&H000000FF,{outline_color},{back_color},{bold},0,0,0,100,100,{spacing},0,{border_style},{border_width},{shadow_depth},{alignment},{margin_l},{margin_r},{margin_v},0"]
+    
+    # 霓虹 B方案：GlowLayer Outline=2（与 Default 一致避免偏移），光晕色跟随色调
+    if is_neon:
+        tone = subtitle.get('tone', 'cool')
+        neon_glow_color = "&H00EAF200" if tone == 'cool' else "&H00F65C8B" if tone == 'warm' else "&H00FFCC88"
+        glow_style = f"Style: GlowLayer,{font_name},{actual_font_size},{neon_glow_color},&H000000FF,{neon_glow_color},&H00000000,{bold},0,0,0,100,100,{spacing},0,1,2,0,{alignment},{margin_l},{margin_r},{margin_v},0"
+        all_styles.append(glow_style)
+    
     all_styles.extend(overlay_styles)
     
-    # 配音字幕使用 Layer 1（在上面）
+    # 配音字幕使用更高 Layer（在 TextOverlay 上面）
+    # 霓虹样式已经自行处理了 Layer 分配（GlowLayer=0, Default=1）
     all_dialogues = []
     for d in dialogues:
-        # 将 "Dialogue: 0," 替换为 "Dialogue: 1," 以确保在 TextOverlay 上面
-        if d.startswith("Dialogue: 0,"):
-            d = "Dialogue: 1," + d[12:]
+        if not is_preview:
+            if is_neon:
+                # 霓虹双层：GlowLayer 用 Layer 0，Default 用 Layer 1（已在生成时设置）
+                # 提升两层以确保都在 TextOverlay 上面
+                if d.startswith("Dialogue: 0,"):
+                    d = "Dialogue: 1," + d[12:]  # GlowLayer: 0 -> 1
+                elif d.startswith("Dialogue: 1,"):
+                    d = "Dialogue: 2," + d[12:]  # Default: 1 -> 2
+            else:
+                # 非霓虹：统一提升到 Layer 1
+                if d.startswith("Dialogue: 0,"):
+                    d = "Dialogue: 1," + d[12:]
         all_dialogues.append(d)
     
     # TextOverlay 使用 Layer 0（在下面）
     all_dialogues.extend(overlay_dialogues)
     
-    # ASS 文件内容
+    # ASS 文件内容 - 使用动态分辨率
     ass_content = f"""[Script Info]
 Title: Slideshow Subtitle
 ScriptType: v4.00+
-PlayResX: 1080
-PlayResY: 1920
+PlayResX: {video_width}
+PlayResY: {video_height}
 WrapStyle: 0
 
 [V4+ Styles]
@@ -746,7 +1099,7 @@ def wrap_text(text: str, font_size: int, video_width: int = 1080) -> str:
     return '\n'.join(lines)
 
 
-def build_subtitle_filter(subtitle: dict, duration: float, work_dir: str = None) -> str:
+def build_subtitle_filter(subtitle: dict, duration: float, work_dir: str = None, aspect_ratio: str = '9:16') -> str:
     """
     构建字幕 drawtext 滤镜 - 增强版
     支持: 精确 Y 轴位置、自定义字体、描边、阴影、自动换行
@@ -798,20 +1151,54 @@ def build_subtitle_filter(subtitle: dict, duration: float, work_dir: str = None)
             
             # 生成 ASS 字幕文件
             # ASS 格式对中文支持更好，且可以精确控制样式
-            ass_content = generate_ass_subtitle(text, font_size, font_color, subtitle)
+            ar = subtitle.get('_aspect_ratio', aspect_ratio)
+            ass_content = generate_ass_subtitle(text, font_size, font_color, subtitle, ar)
             
             with open(ass_path, 'w', encoding='utf-8') as f:
                 f.write(ass_content)
             
             print(f"[Subtitle] ASS file created: {ass_path}")
             print(f"[Subtitle] Text content: {text}")
+            print(f"[Subtitle] ASS preview (first 500 chars):")
+            print(ass_content[:500])
+            
+            # === 关键修复：将字体文件复制到 work_dir ===
+            # FFmpeg fontsdir 不递归搜索子目录，所以需要将字体文件复制到同一目录
+            import shutil
+            font_family_id = subtitle.get('fontFamily', '')
+            font_paths = FONT_LOOKUP.get(font_family_id, [])
+            fonts_copied = False
+            for fp in font_paths:
+                if os.path.exists(fp):
+                    dest = os.path.join(work_dir, os.path.basename(fp))
+                    if not os.path.exists(dest):
+                        shutil.copy2(fp, dest)
+                    print(f"[Subtitle] Font file copied to work_dir: {os.path.basename(fp)}")
+                    fonts_copied = True
+                    break
+            
+            if not fonts_copied:
+                print(f"[Subtitle] WARNING: Font '{font_family_id}' not found, FFmpeg will use fallback")
+            
+            # ⭐ 复制 overlay 独立字体文件到 work_dir
+            copied_font_ids = {font_family_id}  # 跟踪已复制的字体，避免重复
+            for overlay_item in subtitle.get('textOverlays', []):
+                o_fid = overlay_item.get('fontFamily', '')
+                if o_fid and o_fid not in copied_font_ids:
+                    copied_font_ids.add(o_fid)
+                    for fp in FONT_LOOKUP.get(o_fid, []):
+                        if os.path.exists(fp):
+                            dest = os.path.join(work_dir, os.path.basename(fp))
+                            if not os.path.exists(dest):
+                                shutil.copy2(fp, dest)
+                            print(f"[Subtitle] Overlay font copied: {o_fid} -> {os.path.basename(fp)}")
+                            break
             
             # FFmpeg ass 滤镜需要正斜杠路径，冒号需要转义
             ass_escaped = ass_path.replace('\\', '/').replace(':', r'\:')
             
-            # 使用 fontsdir 指定 Windows 字体目录，确保中文字体可用
-            # force_style 强制使用 Microsoft YaHei 字体
-            fonts_dir = "C:/Windows/Fonts".replace(':', r'\:')
+            # fontsdir 指向 work_dir（字体文件已复制到此处）
+            fonts_dir = work_dir.replace('\\', '/').replace(':', r'\:')
             return f"ass='{ass_escaped}':fontsdir='{fonts_dir}'"
             
         except Exception as e:
@@ -1033,10 +1420,121 @@ def build_fade_slideshow_cmd(images: list, output: str, duration: float, music: 
     return cmd
 
 
+def generate_preview_frame(image_path: str, subtitle: dict, output_path: str, aspect_ratio: str = '9:16') -> bool:
+    """
+    生成单帧字幕预览图 — 用 FFmpeg 渲染，确保与最终视频像素级一致
+    
+    Args:
+        image_path: 输入图片路径
+        subtitle: 字幕配置 dict
+        output_path: 输出预览图路径 (.jpg)
+        aspect_ratio: 宽高比 '9:16' 或 '16:9'
+    Returns:
+        True if success
+    """
+    import shutil
+    
+    if not os.path.exists(image_path):
+        print(f"[Preview] Image not found: {image_path}")
+        return False
+    
+    # 目标分辨率
+    if aspect_ratio == '16:9':
+        w, h = 1920, 1080
+    else:
+        w, h = 1080, 1920
+    
+    work_dir = tempfile.mkdtemp(prefix="preview_")
+    
+    try:
+        # 准备字幕文本 — 根据字体语言自适应默认文本
+        en_fonts = ['Montserrat', 'BebasNeue', 'Pacifico', 'Cinzel', 'EBGaramond']
+        font_family = subtitle.get('fontFamily', '')
+        default_text = 'Subtitle Preview' if font_family in en_fonts else '配音文本效果'
+        preview_text = subtitle.get('text', '') or default_text
+        
+        # 构建一个静态字幕（显示 0~10s，覆盖整个预览帧）
+        preview_subtitle = {
+            **subtitle,
+            'text': preview_text,
+            'voiceDuration': 10,  # 10 秒确保字幕可见
+            'wordTimestamps': [],
+            '_preview_mode': True,  # 跳过 VOICE_DELAY
+        }
+        
+        font_size = preview_subtitle.get('fontSize', 36)
+        font_color = preview_subtitle.get('fontColor') or preview_subtitle.get('color') or '#FFFFFF'
+        
+        # 生成 ASS
+        ass_content = generate_ass_subtitle(
+            text=preview_text,
+            font_size=font_size,
+            font_color=font_color,
+            subtitle=preview_subtitle,
+            aspect_ratio=aspect_ratio,
+        )
+        
+        # 写入 ASS 文件
+        ass_path = os.path.join(work_dir, "preview.ass")
+        with open(ass_path, 'w', encoding='utf-8') as f:
+            f.write(ass_content)
+        
+        # 复制字体文件到 work_dir
+        font_family_id = subtitle.get('fontFamily', '')
+        font_paths = FONT_LOOKUP.get(font_family_id, [])
+        for fp in font_paths:
+            if os.path.exists(fp):
+                dest = os.path.join(work_dir, os.path.basename(fp))
+                if not os.path.exists(dest):
+                    shutil.copy2(fp, dest)
+                print(f"[Preview] Font copied: {os.path.basename(fp)}")
+                break
+        
+        # FFmpeg: 缩放图片 + 叠加字幕 → 输出单帧
+        ass_escaped = ass_path.replace('\\', '/').replace(':', r'\:')
+        fonts_dir = work_dir.replace('\\', '/').replace(':', r'\:')
+        
+        vf = f"scale={w}:{h}:force_original_aspect_ratio=decrease,pad={w}:{h}:(ow-iw)/2:(oh-ih)/2:black,ass='{ass_escaped}':fontsdir='{fonts_dir}'"
+        
+        cmd = [
+            "ffmpeg", "-y",
+            "-i", image_path,
+            "-vf", vf,
+            "-vframes", "1",
+            "-q:v", "2",
+            # 颜色空间保持一致
+            "-color_range", "pc",
+            "-colorspace", "bt709",
+            "-color_primaries", "bt709",
+            "-color_trc", "bt709",
+            output_path,
+        ]
+        
+        print(f"[Preview] Running: {' '.join(cmd[:6])}...")
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
+        
+        if result.returncode != 0:
+            print(f"[Preview] FFmpeg error: {result.stderr[-500:]}")
+            return False
+        
+        print(f"[Preview] Generated: {output_path} ({os.path.getsize(output_path)} bytes)")
+        return True
+        
+    except Exception as e:
+        print(f"[Preview] Error: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+    finally:
+        shutil.rmtree(work_dir, ignore_errors=True)
+
+
 def main():
     parser = argparse.ArgumentParser(description="Generate slideshow video from images")
+    parser.add_argument("--mode", type=str, default="slideshow", choices=["slideshow", "preview"],
+                        help="Mode: 'slideshow' for video, 'preview' for single frame subtitle preview")
     parser.add_argument("--images", type=str, required=True, help="JSON array of image paths")
-    parser.add_argument("--output", type=str, required=True, help="Output video path")
+    parser.add_argument("--output", type=str, required=True, help="Output video/image path")
     parser.add_argument("--aspect", type=str, default="9:16", choices=["9:16", "16:9"])
     parser.add_argument("--duration", type=float, default=2.0, help="Duration per image (seconds)")
     # 支持所有 xfade 转场效果
@@ -1055,18 +1553,35 @@ def main():
     images = json.loads(args.images)
     subtitle = json.loads(args.subtitle) if args.subtitle else None
     
-    success = generate_slideshow(
-        images=images,
-        output_path=args.output,
-        aspect_ratio=args.aspect,
-        duration_per_image=args.duration,
-        transition=args.transition,
-        music_path=args.music,
-        subtitle=subtitle,
-    )
-    
-    sys.exit(0 if success else 1)
+    if args.mode == "preview":
+        # 预览模式：生成单帧带字幕的预览图
+        if not images:
+            print("[Preview] No images provided")
+            sys.exit(1)
+        if not subtitle:
+            print("[Preview] No subtitle config provided")
+            sys.exit(1)
+        success = generate_preview_frame(
+            image_path=images[0],
+            subtitle=subtitle,
+            output_path=args.output,
+            aspect_ratio=args.aspect,
+        )
+        sys.exit(0 if success else 1)
+    else:
+        # 默认：生成轮播视频
+        success = generate_slideshow(
+            images=images,
+            output_path=args.output,
+            aspect_ratio=args.aspect,
+            duration_per_image=args.duration,
+            transition=args.transition,
+            music_path=args.music,
+            subtitle=subtitle,
+        )
+        sys.exit(0 if success else 1)
 
 
 if __name__ == "__main__":
     main()
+
