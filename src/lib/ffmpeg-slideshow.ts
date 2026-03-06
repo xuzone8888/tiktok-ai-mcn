@@ -6,8 +6,18 @@
 import { spawn } from 'child_process';
 import path from 'path';
 import fs from 'fs/promises';
+import fsSync from 'fs';
 import crypto from 'crypto';
 import os from 'os';
+
+// 持久化诊断日志（不受 PM2 缓冲影响）
+const DEBUG_LOG_PATH = path.join(process.cwd(), '.temp', 'slideshow', 'output', 'api_debug.log');
+async function dbgLog(msg: string) {
+    const ts = new Date().toISOString();
+    const line = `[${ts}] [ffmpeg-lib] ${msg}\n`;
+    try { await fs.appendFile(DEBUG_LOG_PATH, line); } catch { }
+    console.log(`[ffmpeg-lib] ${msg}`);
+}
 
 const PYTHON_SCRIPT = path.join(process.cwd(), 'scripts', 'ffmpeg-slideshow.py');
 // 使用项目目录下的 .temp 文件夹，避免 Windows 用户目录含中文导致的路径问题
@@ -186,6 +196,7 @@ export async function getRandomPresetMusic(): Promise<string | null> {
  * 执行 Python 脚本 - 使用 spawn 避免 shell 解析问题
  */
 async function runPythonScript(args: string[]): Promise<{ success: boolean; stdout: string; stderr: string }> {
+    await dbgLog(`🐍 runPythonScript START, args count=${args.length}`);
     return new Promise((resolve) => {
         const pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
 
@@ -194,6 +205,7 @@ async function runPythonScript(args: string[]): Promise<{ success: boolean; stdo
         args.forEach((arg, i) => {
             console.log(`[Slideshow]   [${i}]: ${arg.substring(0, 200)}${arg.length > 200 ? '...' : ''}`);
         });
+        dbgLog(`🐍 CMD: ${pythonCmd} ${PYTHON_SCRIPT} (${args.length} args)`);
 
         const proc = spawn(pythonCmd, [PYTHON_SCRIPT, ...args], {
             stdio: ['ignore', 'pipe', 'pipe'],
@@ -215,6 +227,9 @@ async function runPythonScript(args: string[]): Promise<{ success: boolean; stdo
             console.log(`[Slideshow] Process exited with code ${code}`);
             if (stdout) console.log(`[Slideshow] stdout: ${stdout.substring(0, 2000)}`);
             if (stderr) console.log(`[Slideshow] stderr (full): ${stderr}`);
+            dbgLog(`🐍 EXIT code=${code}, stdout=${stdout.length}ch, stderr=${stderr.length}ch`);
+            if (stderr) dbgLog(`🐍 STDERR: ${stderr.substring(0, 500)}`);
+            if (code !== 0) dbgLog(`🐍 STDOUT (on fail): ${stdout.substring(0, 500)}`);
             resolve({
                 success: code === 0,
                 stdout,
@@ -224,6 +239,7 @@ async function runPythonScript(args: string[]): Promise<{ success: boolean; stdo
 
         proc.on('error', (err) => {
             console.error(`[Slideshow] Spawn error: ${err.message}`);
+            dbgLog(`🐍 SPAWN ERROR: ${err.message}`);
             resolve({
                 success: false,
                 stdout: '',
@@ -234,6 +250,7 @@ async function runPythonScript(args: string[]): Promise<{ success: boolean; stdo
         // 5 分钟超时
         setTimeout(() => {
             proc.kill();
+            dbgLog('🐍 TIMEOUT: killed after 5 minutes');
             resolve({
                 success: false,
                 stdout,
@@ -248,8 +265,16 @@ async function runPythonScript(args: string[]): Promise<{ success: boolean; stdo
  */
 export async function generateSlideshow(options: SlideshowOptions): Promise<SlideshowResult> {
     const { images, aspectRatio, durationPerImage, transition, musicPath, subtitle } = options;
+    await dbgLog(`📹 generateSlideshow START: ${images.length} images, ${aspectRatio}, ${transition}`);
+
+    // 检查图片文件是否存在
+    for (const img of images) {
+        const exists = fsSync.existsSync(img);
+        if (!exists) await dbgLog(`⚠️ IMAGE NOT FOUND: ${img}`);
+    }
 
     if (images.length === 0) {
+        await dbgLog('❌ No images provided');
         return { success: false, error: 'No images provided' };
     }
 
@@ -340,18 +365,23 @@ export async function generateSlideshow(options: SlideshowOptions): Promise<Slid
         console.log(`[Slideshow] Subtitle enabled: ${!!subtitle?.text}`);
         console.log(`[Slideshow] Output: ${outputPath}`);
 
+        await dbgLog(`📹 Calling runPythonScript with ${args.length} args...`);
         const result = await runPythonScript(args);
 
         if (!result.success) {
             console.error('[Slideshow] Python script failed:', result.stderr);
+            await dbgLog(`❌ Python FAILED: stderr=${result.stderr.substring(0, 300)}`);
             return { success: false, error: result.stderr || 'FFmpeg generation failed' };
         }
 
         // 检查输出文件是否存在
         try {
             await fs.access(outputPath);
+            const stat = await fs.stat(outputPath);
+            await dbgLog(`✅ Video created: ${outputPath} (${stat.size} bytes)`);
         } catch {
             console.error('[Slideshow] Output file not found:', outputPath);
+            await dbgLog(`❌ Output file NOT FOUND: ${outputPath}`);
             return { success: false, error: 'Output file not created' };
         }
 
@@ -361,6 +391,7 @@ export async function generateSlideshow(options: SlideshowOptions): Promise<Slid
     } catch (error: any) {
         console.error('[Slideshow] Error:', error.message);
         console.error('[Slideshow] Stack:', error.stack);
+        await dbgLog(`❌ EXCEPTION: ${error.message}\n${error.stack}`);
         return { success: false, error: error.message };
     }
 }
