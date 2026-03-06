@@ -229,7 +229,10 @@ async function runPythonScript(args: string[]): Promise<{ success: boolean; stdo
             if (stderr) console.log(`[Slideshow] stderr (full): ${stderr}`);
             dbgLog(`🐍 EXIT code=${code}, stdout=${stdout.length}ch, stderr=${stderr.length}ch`);
             if (stderr) dbgLog(`🐍 STDERR: ${stderr.substring(0, 500)}`);
-            if (code !== 0) dbgLog(`🐍 STDOUT (on fail): ${stdout.substring(0, 500)}`);
+            // exit code != 0 时记录完整 stdout（关键：FFmpeg 的错误信息在 stdout 里）
+            if (code !== 0) {
+                dbgLog(`🐍 STDOUT FULL (on fail):\n${stdout}`);
+            }
             resolve({
                 success: code === 0,
                 stdout,
