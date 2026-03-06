@@ -1353,14 +1353,17 @@ def build_fade_slideshow_cmd(images: list, output: str, duration: float, music: 
         try:
             sub_filter = build_subtitle_filter(subtitle, duration, work_dir)
             if sub_filter:
-                filter_str = f"{base_filter}[pre_sub];[pre_sub]{sub_filter}[outv]"
+                single_filter = f"{base_filter}[pre_sub];[pre_sub]{sub_filter}[outv]"
             else:
-                filter_str = f"{base_filter}[outv]"
+                single_filter = f"{base_filter}[outv]"
         except Exception as e:
             import traceback
             print(f"[Subtitle] ERROR in build_subtitle_filter (n=1): {e}")
             traceback.print_exc()
-            filter_str = f"{base_filter}[outv]"
+            single_filter = f"{base_filter}[outv]"
+        
+        # ⭐ 关键修复：将 fps/format 预处理（定义 [v0] 标签）合并到 filter_str 中
+        filter_str = ";".join(filters) + ";" + single_filter
     else:
         # 使用 xfade 连接 - 支持多种转场效果
         # 可用效果: fade, wipeleft, wiperight, wipeup, wipedown, slideleft, slideright, 
