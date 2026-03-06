@@ -7,13 +7,24 @@
  * 2. FormData: imageFile + subtitleJson + aspectRatio — 适用于本地上传文件
  */
 import { NextRequest, NextResponse } from 'next/server';
-import { spawn } from 'child_process';
+import { spawn, execSync } from 'child_process';
 import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
 
 const SCRIPT_PATH = path.join(process.cwd(), 'scripts', 'ffmpeg-slideshow.py');
 const PREVIEW_DIR = path.join(process.cwd(), '.temp', 'preview');
+
+// 跨平台 Python 命令检测：Linux 优先 python3，Windows 优先 python
+const PYTHON_CMD = (() => {
+    for (const cmd of ['python3', 'python']) {
+        try {
+            execSync(`${cmd} --version`, { stdio: 'ignore' });
+            return cmd;
+        } catch { /* 忽略 */ }
+    }
+    return 'python3'; // 兜底
+})();
 
 // 确保预览目录存在
 if (!fs.existsSync(PREVIEW_DIR)) {
@@ -112,7 +123,7 @@ export async function POST(request: NextRequest) {
         const imagesJson = JSON.stringify([localImagePath]);
 
         const result = await new Promise<boolean>((resolve) => {
-            const child = spawn('python', [
+            const child = spawn(PYTHON_CMD, [
                 SCRIPT_PATH,
                 '--mode', 'preview',
                 '--images', imagesJson,
