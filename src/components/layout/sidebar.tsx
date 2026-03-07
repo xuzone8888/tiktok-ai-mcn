@@ -21,6 +21,7 @@ import {
   Send,
   Clapperboard,
   Copy,
+  CreditCard,
 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -160,6 +161,18 @@ const navGroups: NavGroup[] = [
         href: "/assets",
         icon: Package,
         description: "查看历史作品",
+      },
+    ],
+  },
+  // --- 账户中心 ---
+  {
+    header: "账户中心",
+    items: [
+      {
+        title: "充值中心",
+        href: "/recharge",
+        icon: CreditCard,
+        description: "积分充值购买",
       },
     ],
   },

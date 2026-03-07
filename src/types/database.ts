@@ -430,6 +430,66 @@ export interface Database {
       };
 
       // -----------------------------------------------------------------------
+      // Payment Orders 表 (支付订单)
+      // -----------------------------------------------------------------------
+      payment_orders: {
+        Row: {
+          id: string;
+          user_id: string;
+          order_no: string;
+          trade_no: string | null;
+          product_type: string;
+          product_name: string;
+          credits_amount: number;
+          amount_cents: number;
+          currency: string;
+          pay_channel: string;
+          status: string;
+          pay_url: string | null;
+          paid_at: string | null;
+          expired_at: string | null;
+          notify_data: Json | null;
+          metadata: Json;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          order_no: string;
+          trade_no?: string | null;
+          product_type?: string;
+          product_name: string;
+          credits_amount: number;
+          amount_cents: number;
+          currency?: string;
+          pay_channel: string;
+          status?: string;
+          pay_url?: string | null;
+          paid_at?: string | null;
+          expired_at?: string | null;
+          notify_data?: Json | null;
+          metadata?: Json;
+        };
+        Update: {
+          trade_no?: string | null;
+          status?: string;
+          pay_url?: string | null;
+          paid_at?: string | null;
+          notify_data?: Json | null;
+          metadata?: Json;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "payment_orders_user_id_fkey";
+            columns: ["user_id"];
+            referencedRelation: "users";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
+
+      // -----------------------------------------------------------------------
       // System Settings 表 (键值对配置存储)
       // -----------------------------------------------------------------------
       system_settings: {
