@@ -506,6 +506,9 @@ function useImageTaskExecutor() {
 
           if (uploadResult.success && uploadResult.data?.url) {
             remoteImageUrl = uploadResult.data.url;
+            // 更新任务配置中的 sourceImageUrl 为远程 URL，
+            // 这样预览对话框中原图不会因 blob URL 被回收而显示失败
+            useImageBatchStore.getState().updateTaskConfig(taskId, "sourceImageUrl", remoteImageUrl);
           } else {
             throw new Error("图片上传失败");
           }
