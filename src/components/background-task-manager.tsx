@@ -859,12 +859,28 @@ function useQuickGenImageTaskExecutor() {
           });
 
           const responseText = await response.text();
+          console.log("[QuickGenImageTaskExecutor] Response:", response.status, responseText.substring(0, 300));
+          
+          // 先检查 HTTP 状态码
+          if (!response.ok) {
+            // 尝试从 JSON 中提取错误信息
+            try {
+              const errJson = JSON.parse(responseText);
+              throw new Error(errJson.error || errJson.message || `服务器错误 (${response.status})`);
+            } catch (parseErr) {
+              if (parseErr instanceof SyntaxError) {
+                throw new Error(`服务器返回错误 (HTTP ${response.status}): ${responseText.substring(0, 100)}`);
+              }
+              throw parseErr; // Re-throw the error we constructed above
+            }
+          }
+
           let result;
           try {
             result = JSON.parse(responseText);
           } catch (e) {
-            console.error("[QuickGenImageTaskExecutor] Failed to parse image generation response:", responseText.substring(0, 200), e);
-            throw new Error("图片生成服务响应格式错误");
+            console.error("[QuickGenImageTaskExecutor] JSON parse failed:", responseText.substring(0, 200), e);
+            throw new Error(`图片生成服务响应格式错误 (HTTP ${response.status}): ${responseText.substring(0, 80)}`);
           }
           if (!result.success) throw new Error(result.error || "提交失败");
 
