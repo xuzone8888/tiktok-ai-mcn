@@ -847,7 +847,7 @@ function useQuickGenImageTaskExecutor() {
               mode: "generate",
               model: activeTask.model,
               prompt: activeTask.prompt,
-              sourceImageUrl: activeTask.sourceImageUrls.length > 0 ? activeTask.sourceImageUrls : undefined,
+              sourceImageUrl: activeTask.sourceImageUrls.length > 0 ? activeTask.sourceImageUrls[0] : undefined,
               tier: activeTask.tier,
               aspectRatio: activeTask.aspectRatio,
               resolution: activeTask.resolution,
