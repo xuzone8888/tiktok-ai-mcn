@@ -1742,37 +1742,50 @@ export default function ImageBatchPage() {
 
                 <div className="h-px bg-white/5 w-full" />
 
-                {/* 场景1独有: 数量选择 */}
-                {scenario === "prompt" && (
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-white/40 tracking-wider">生成数量</span>
-                    <div className="flex items-center gap-4">
-                      <div className="flex items-center bg-[#050505] rounded-full border border-white/10 p-1">
-                        <button
-                          className="h-8 w-8 rounded-full flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 transition-colors disabled:opacity-30"
-                          onClick={() => setPromptCount(promptCount - 1)}
-                          disabled={promptCount <= 1}
-                        >
-                          <Minus className="h-4 w-4" />
-                        </button>
-                        <div className="w-12 text-center text-sm font-bold text-white font-mono">{promptCount}</div>
-                        <button
-                          className="h-8 w-8 rounded-full flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 transition-colors disabled:opacity-30"
-                          onClick={() => setPromptCount(promptCount + 1)}
-                          disabled={promptCount >= 50}
-                        >
-                          <Plus className="h-4 w-4" />
-                        </button>
+                {/* 场景1/2: 数量选择 (prompt 和 image 都支持调整) */}
+                {(scenario === "prompt" || scenario === "image") && (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-white/40 tracking-wider">
+                        {scenario === "image" ? "每图生成数" : "生成数量"}
+                      </span>
+                      <div className="flex items-center gap-4">
+                        <div className="flex items-center bg-[#050505] rounded-full border border-white/10 p-1">
+                          <button
+                            className="h-8 w-8 rounded-full flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 transition-colors disabled:opacity-30"
+                            onClick={() => setPromptCount(promptCount - 1)}
+                            disabled={promptCount <= 1}
+                          >
+                            <Minus className="h-4 w-4" />
+                          </button>
+                          <div className="w-12 text-center text-sm font-bold text-white font-mono">{promptCount}</div>
+                          <button
+                            className="h-8 w-8 rounded-full flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 transition-colors disabled:opacity-30"
+                            onClick={() => setPromptCount(promptCount + 1)}
+                            disabled={promptCount >= 50}
+                          >
+                            <Plus className="h-4 w-4" />
+                          </button>
+                        </div>
                       </div>
                     </div>
+                    {/* 图片场景多任务时显示总数汇总 */}
+                    {scenario === "image" && uploadedImages.length > 0 && (
+                      <div className="text-xs text-white/30 text-right font-mono">
+                        {promptCount > 1
+                          ? `${uploadedImages.length} 张图 × ${promptCount} 次 = ${scenarioTaskCount} 个任务`
+                          : `${uploadedImages.length} 张图 = ${scenarioTaskCount} 个任务`
+                        }
+                      </div>
+                    )}
                   </div>
                 )}
 
-                {/* 场景2/3: 只显示数量（只读） */}
-                {(scenario === "image" || scenario === "excel") && (
+                {/* 场景3: Excel 只显示数量（只读） */}
+                {scenario === "excel" && (
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold text-white/40 tracking-wider">
-                      {scenario === "image" ? "图片数量" : "任务总数"}
+                      任务总数
                     </span>
                     <div className="px-4 py-2 rounded-full bg-[#050505] border border-white/10 text-sm font-bold text-white font-mono">
                       {scenarioTaskCount}

@@ -773,14 +773,17 @@ export const useImageBatchStore = create<ImageBatchState & ImageBatchActions>()(
                 break;
 
               case "image":
-                // 场景2: 图片改造，每张图片一个任务
-                uploadedImages.forEach((img, i) => {
-                  const task = createTask(
-                    globalSettings.prompt.trim(),
-                    img.previewUrl,
-                    img.name || `上传图片 ${i + 1}`
-                  );
-                  state.tasks.push(task);
+                // 场景2: 图片改造，每张图片 × promptCount 个任务
+                uploadedImages.forEach((img, imgIndex) => {
+                  for (let j = 0; j < promptCount; j++) {
+                    const suffix = promptCount > 1 ? ` #${j + 1}` : "";
+                    const task = createTask(
+                      globalSettings.prompt.trim(),
+                      img.previewUrl,
+                      (img.name || `上传图片 ${imgIndex + 1}`) + suffix
+                    );
+                    state.tasks.push(task);
+                  }
                 });
                 break;
 
@@ -888,7 +891,7 @@ export const useImageBatchScenarioTaskCount = () => {
     case "prompt":
       return promptCount;
     case "image":
-      return uploadedImages.length;
+      return uploadedImages.length * promptCount;
     case "excel":
       return excelData.reduce((sum, row) => sum + row.count, 0);
     default:

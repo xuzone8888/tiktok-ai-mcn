@@ -506,9 +506,17 @@ function useImageTaskExecutor() {
 
           if (uploadResult.success && uploadResult.data?.url) {
             remoteImageUrl = uploadResult.data.url;
-            // 更新任务配置中的 sourceImageUrl 为远程 URL，
-            // 这样预览对话框中原图不会因 blob URL 被回收而显示失败
+            // 更新当前任务
             useImageBatchStore.getState().updateTaskConfig(taskId, "sourceImageUrl", remoteImageUrl);
+            // 批量更新所有共享同一 blob URL 的 pending 任务，
+            // 避免 blob 被 revoke 后后续任务无法访问，同时避免重复上传同一张图片
+            const originalBlobUrl = task.config.sourceImageUrl;
+            const allTasks = useImageBatchStore.getState().tasks;
+            allTasks.forEach((t) => {
+              if (t.id !== taskId && t.config.sourceImageUrl === originalBlobUrl && t.status === "pending") {
+                useImageBatchStore.getState().updateTaskConfig(t.id, "sourceImageUrl", remoteImageUrl);
+              }
+            });
           } else {
             throw new Error("图片上传失败");
           }
