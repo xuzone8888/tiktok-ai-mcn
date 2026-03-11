@@ -863,11 +863,33 @@ function useQuickGenImageTaskExecutor() {
           try {
             result = JSON.parse(responseText);
           } catch (e) {
-            console.error("[QuickGenImageTaskExecutor] Failed to parse image generation response:", responseText, e);
+            console.error("[QuickGenImageTaskExecutor] Failed to parse image generation response:", responseText.substring(0, 200), e);
             throw new Error("图片生成服务响应格式错误");
           }
           if (!result.success) throw new Error(result.error || "提交失败");
 
+          // 对于 Gemini (nano-banana Fast), POST 直接返回 completed + imageUrl
+          // 不需要进入轮询循环
+          if (result.data?.status === "completed" && result.data?.imageUrl) {
+            updateTaskStatus(activeTask.id, "completed", {
+              progress: 100,
+              taskId: result.data.taskId,
+              resultUrl: result.data.imageUrl,
+              completedAt: new Date().toISOString(),
+              creditsDeducted: true,
+            });
+            toast({
+              title: "🎉 快速图片生成完成",
+              description: (
+                <a href="/quick-gen" className="text-violet-400 hover:underline flex items-center gap-1">
+                  点击查看结果 <ExternalLink className="h-3 w-3" />
+                </a>
+              ),
+            });
+            return; // 直接返回，不进入轮询
+          }
+
+          // 对于 Pro 模式或异步任务，进入轮询
           updateTaskStatus(activeTask.id, "polling", {
             progress: 20, taskId: result.data.taskId, creditsDeducted: true
           });
