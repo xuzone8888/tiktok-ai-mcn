@@ -1388,23 +1388,10 @@ export async function generateGeminiImage(
   }
 
   try {
-    // 构建消息内容 - 使用结构化数组格式（新 API 要求）
-    const contentParts: Array<{ type: string; text?: string; image_url?: { url: string } }> = [];
-
-    // 文本部分
+    // 构建文本提示词
     let textContent = params.prompt;
     if (params.aspectRatio && params.aspectRatio !== "auto") {
       textContent = `生成的图片请使用 ${params.aspectRatio} 的宽高比例。${textContent}`;
-    }
-    contentParts.push({ type: "text", text: textContent });
-
-    // 如果有源图片，使用图生图模式（使用 image_url 格式）
-    if (params.sourceImageUrl) {
-      contentParts.push({
-        type: "image_url",
-        image_url: { url: params.sourceImageUrl },
-      });
-      console.log("[Gemini-Image] Image-to-image mode, using image_url format");
     }
 
     // 根据比例选择模型（landscape 或 portrait）
@@ -1413,8 +1400,25 @@ export async function generateGeminiImage(
       ? "gemini-3.0-pro-image-portrait-2k"
       : "gemini-3.0-pro-image-landscape-2k";
 
+    // 构建消息内容：
+    // - 纯文本生图：content 用字符串（上游 API 要求）
+    // - 图生图模式：content 用数组格式（包含 image_url）
+    let messageContent: string | Array<{ type: string; text?: string; image_url?: { url: string } }>;
+
+    if (params.sourceImageUrl) {
+      // 图生图：使用数组格式
+      messageContent = [
+        { type: "text", text: textContent },
+        { type: "image_url", image_url: { url: params.sourceImageUrl } },
+      ];
+      console.log("[Gemini-Image] Image-to-image mode, using array content format");
+    } else {
+      // 纯文本生图：使用字符串格式
+      messageContent = textContent;
+    }
+
     const messages = [
-      { role: "user", content: contentParts }
+      { role: "user", content: messageContent }
     ];
 
     const requestBody = JSON.stringify({
