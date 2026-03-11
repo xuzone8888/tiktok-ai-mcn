@@ -2157,12 +2157,12 @@ export default function ImageBatchPage() {
                 </div>
               </div>
 
-              {/* 任务数量 (仅提示词模式) */}
-              {globalSettings.action === "generate" && uploadedImages.length === 0 && (
+              {/* 任务数量 */}
+              {globalSettings.action === "generate" && (
                 <div className="space-y-2">
                   <Label className="text-[10px] uppercase tracking-wider text-white/30 font-bold flex items-center gap-2">
                     <LayoutGrid className="h-3 w-3" />
-                    生成数量
+                    {uploadedImages.length > 0 ? "每图生成数" : "生成数量"}
                   </Label>
                   <div className="flex items-center gap-3">
                     <input
@@ -2173,7 +2173,12 @@ export default function ImageBatchPage() {
                       onChange={(e) => setPromptCount(Math.max(1, Math.min(100, parseInt(e.target.value) || 1)))}
                       className="w-24 px-3 py-2 text-sm bg-[#050505] border border-white/10 rounded-lg text-white focus:outline-none focus:border-mermaid-cyan/50"
                     />
-                    <span className="text-xs text-white/40">个任务</span>
+                    <span className="text-xs text-white/40">
+                      {uploadedImages.length > 0
+                        ? `${uploadedImages.length} 张图 × ${promptCount} 次 = ${uploadedImages.length * promptCount} 个任务`
+                        : `个任务`
+                      }
+                    </span>
                   </div>
                 </div>
               )}
@@ -2250,7 +2255,7 @@ export default function ImageBatchPage() {
                   <div className="absolute inset-0 bg-gradient-to-b from-white/40 to-transparent pointer-events-none" />
                   <span className="relative z-10 flex items-center gap-2">
                     <Sparkles className="h-4 w-4" />
-                    启动任务 {uploadedImages.length > 0 ? `(${uploadedImages.length})` : promptCount > 1 ? `(${promptCount})` : ""}
+                    启动任务 {(() => { const total = uploadedImages.length > 0 ? uploadedImages.length * promptCount : promptCount; return total > 1 ? `(${total})` : ""; })()}
                   </span>
                 </button>
               </div>
