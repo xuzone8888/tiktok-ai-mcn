@@ -22,6 +22,9 @@ const allowedDomains = [
   // ToryX 图片/视频 CDN
   "toryxai.com",
   "media.toryxai.com",
+  // Gemini Image API CDN
+  "xas231.online",
+  "flow.xas231.online",
   // ss3.life CDN (10-15秒视频)
   "ss3.life",
   "videos-jp.ss3.life",
