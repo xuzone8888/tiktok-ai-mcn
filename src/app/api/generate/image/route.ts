@@ -314,7 +314,7 @@ export async function POST(request: Request) {
         } else {
           // 将 Base64 上传到 OSS
           const uploadResult = await uploadBase64ImageToOSS(
-            geminiResult.imageBase64,
+            geminiResult.imageBase64!,
             `gemini-${Date.now()}.jpg`
           );
 
