@@ -1,0 +1,23 @@
+# frp 客户端配置 — Mac Studio 端
+# 通过阿里云 ECS 的 frps 服务端建立加密隧道
+
+serverAddr = "123.56.75.68"        # 阿里云 ECS 公网 IP
+serverPort = 7000                   # frps 监听端口
+
+# 安全配置
+auth.method = "token"
+auth.token = "your-frp-secret-token"  # 与 frps.toml 保持一致
+
+# TLS 加密
+transport.tls.enable = true
+
+# 断线自动重连
+loginFailExit = false
+
+# 将本地 9090 端口映射到 ECS
+[[proxies]]
+name = "ffmpeg-worker"
+type = "tcp"
+localIP = "127.0.0.1"
+localPort = 9090
+remotePort = 9091                   # ECS 上通过 127.0.0.1:9091 访问 Worker

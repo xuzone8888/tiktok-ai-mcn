@@ -37,6 +37,7 @@ export async function POST(request: NextRequest) {
         let subtitle: any = null;
         let aspectRatio = '9:16';
         let cacheKey = '';
+        let originalImageUrl = '';  // 原始图片 URL（Worker 用）
 
         const contentType = request.headers.get('content-type') || '';
 
@@ -82,6 +83,7 @@ export async function POST(request: NextRequest) {
             if (imagePath.startsWith('/uploads/')) {
                 localImagePath = path.join(process.cwd(), 'public', imagePath);
             } else if (imagePath.startsWith('http')) {
+                originalImageUrl = imagePath;  // 保留原始 URL 给 Worker
                 try {
                     const tmpPath = path.join(PREVIEW_DIR, `input_${Date.now()}.jpg`);
                     const response = await fetch(imagePath);
@@ -118,7 +120,43 @@ export async function POST(request: NextRequest) {
             }
         }
 
-        // 调用 Python 脚本生成预览帧
+        // === Mac Studio Worker 预览（优先） ===
+        const MAC_WORKER_URL = process.env.MAC_WORKER_URL || 'http://127.0.0.1:9091';
+        const MAC_WORKER_TOKEN = process.env.MAC_WORKER_TOKEN || '';
+
+        // 只对有原始 HTTP URL 的请求使用 Worker（本地上传文件无法传远程）
+        if (originalImageUrl) {
+            try {
+                const controller = new AbortController();
+                const timer = setTimeout(() => controller.abort(), 10000);
+
+                const workerResp = await fetch(`${MAC_WORKER_URL}/api/preview`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...(MAC_WORKER_TOKEN ? { 'Authorization': `Bearer ${MAC_WORKER_TOKEN}` } : {}),
+                    },
+                    body: JSON.stringify({ imageUrl: originalImageUrl, subtitle, aspectRatio }),
+                    signal: controller.signal,
+                });
+                clearTimeout(timer);
+
+                if (workerResp.ok) {
+                    const workerBuffer = Buffer.from(await workerResp.arrayBuffer());
+                    // 写入本地缓存
+                    fs.writeFileSync(outputPath, workerBuffer);
+                    console.log('[Preview API] ✅ Worker preview success');
+                    return new NextResponse(workerBuffer, {
+                        headers: { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=300' },
+                    });
+                }
+                console.warn(`[Preview API] Worker failed: ${workerResp.status}, falling back to local`);
+            } catch (e: any) {
+                console.warn(`[Preview API] Worker unavailable: ${e.message}, falling back to local`);
+            }
+        }
+
+        // 调用本地 Python 脚本生成预览帧（回退方案）
         const subtitleJson = JSON.stringify(subtitle);
         const imagesJson = JSON.stringify([localImagePath]);
 

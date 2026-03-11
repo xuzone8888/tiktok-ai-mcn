@@ -1,0 +1,15 @@
+{
+  "name": "mac-ffmpeg-worker",
+  "version": "1.0.0",
+  "description": "FFmpeg rendering worker for Mac Studio — receives tasks from Alibaba Cloud ECS",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "ali-oss": "^6.20.0",
+    "dotenv": "^16.4.0",
+    "express": "^4.18.2"
+  }
+}

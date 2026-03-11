@@ -161,11 +161,19 @@ export interface SlideshowOptions {
     musicPath?: string;            // 音乐文件路径
     subtitle?: SubtitleConfig | null;  // 字幕配置 (可选)
     originalImageIndices?: number[];   // 批量生成时的原始图片索引 (用于 textOverlay 重映射)
+    // Mac Studio Worker 支持
+    imageUrls?: string[];          // OSS 图片 URL（用于 Worker 远程下载）
+    voiceover?: {                  // 配音数据（Worker 同时完成音频合成）
+        buffer: Buffer;
+        duration: number;
+        timestamps: Array<{ word: string; start: number; end: number }>;
+    } | null;
 }
 
 export interface SlideshowResult {
     success: boolean;
     videoPath?: string;
+    videoUrl?: string;             // Worker 返回的 OSS URL（无需本地文件）
     error?: string;
 }
 
@@ -263,11 +271,104 @@ async function runPythonScript(args: string[]): Promise<{ success: boolean; stdo
     });
 }
 
+// ========================================
+// Mac Studio Worker 远程渲染
+// ========================================
+const MAC_WORKER_URL = process.env.MAC_WORKER_URL || 'http://127.0.0.1:9091';
+const MAC_WORKER_TOKEN = process.env.MAC_WORKER_TOKEN || '';
+const MAC_WORKER_TIMEOUT = 120000; // 120 秒超时
+
+/**
+ * 调用 Mac Studio Worker 进行远程渲染
+ * Worker 完成: 图片下载 → FFmpeg 渲染 → 音频合成 → OSS 上传
+ * 返回: 视频 OSS URL
+ */
+async function callMacWorker(options: SlideshowOptions): Promise<SlideshowResult> {
+    const { imageUrls, subtitle, aspectRatio, durationPerImage, transition, voiceover } = options;
+
+    if (!imageUrls || imageUrls.length === 0) {
+        return { success: false, error: 'No imageUrls for Worker' };
+    }
+
+    // 构建 Worker 请求
+    const body: Record<string, unknown> = {
+        images: imageUrls,
+        subtitle: subtitle || undefined,
+        bgm: 'random',
+        aspectRatio,
+        durationPerImage,
+        transition,
+    };
+
+    // 配音数据：Buffer → base64
+    if (voiceover && voiceover.buffer) {
+        body.voiceover = {
+            base64: voiceover.buffer.toString('base64'),
+            duration: voiceover.duration,
+            timestamps: voiceover.timestamps,
+        };
+    }
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), MAC_WORKER_TIMEOUT);
+
+    try {
+        const resp = await fetch(`${MAC_WORKER_URL}/api/render`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                ...(MAC_WORKER_TOKEN ? { 'Authorization': `Bearer ${MAC_WORKER_TOKEN}` } : {}),
+            },
+            body: JSON.stringify(body),
+            signal: controller.signal,
+        });
+
+        clearTimeout(timer);
+
+        if (!resp.ok) {
+            const errText = await resp.text().catch(() => 'Unknown error');
+            console.warn(`[Worker] HTTP ${resp.status}: ${errText.slice(0, 200)}`);
+            return { success: false, error: `Worker HTTP ${resp.status}` };
+        }
+
+        const result = await resp.json() as { success: boolean; videoUrl?: string; elapsed?: number };
+        if (result.success && result.videoUrl) {
+            console.log(`[Worker] ✅ Render complete in ${result.elapsed}s: ${result.videoUrl}`);
+            return { success: true, videoUrl: result.videoUrl };
+        }
+
+        return { success: false, error: 'Worker returned no videoUrl' };
+    } catch (err: any) {
+        clearTimeout(timer);
+        if (err.name === 'AbortError') {
+            console.warn(`[Worker] ⏰ Timeout after ${MAC_WORKER_TIMEOUT / 1000}s`);
+        } else {
+            console.warn(`[Worker] ❌ Error: ${err.message}`);
+        }
+        return { success: false, error: err.message };
+    }
+}
+
 /**
  * 生成单个轮播视频
+ * 优先使用 Mac Studio Worker（快 10-20 倍），失败时自动回退到本地 FFmpeg
  */
 export async function generateSlideshow(options: SlideshowOptions): Promise<SlideshowResult> {
     const { images, aspectRatio, durationPerImage, transition, musicPath, subtitle } = options;
+
+    // === Mac Studio Worker 优先 ===
+    if (options.imageUrls && options.imageUrls.length > 0) {
+        try {
+            const workerResult = await callMacWorker(options);
+            if (workerResult.success) {
+                await dbgLog(`✅ Worker rendered: ${workerResult.videoUrl}`);
+                return workerResult;
+            }
+            console.warn(`[Slideshow] Worker failed (${workerResult.error}), falling back to local FFmpeg`);
+        } catch (e: any) {
+            console.warn(`[Slideshow] Worker unavailable: ${e.message}, falling back to local FFmpeg`);
+        }
+    }
     await dbgLog(`📹 generateSlideshow START: ${images.length} images, ${aspectRatio}, ${transition}`);
 
     // 检查图片文件是否存在
@@ -401,17 +502,21 @@ export async function generateSlideshow(options: SlideshowOptions): Promise<Slid
 
 /**
  * 批量生成轮播视频
- * 
+ *
  * @param imageGroups 图片分组列表，每组生成一个视频
  * @param options 通用配置（不包含字幕，字幕由 subtitleConfigs 单独传递）
  * @param musicPool 音乐池，随机分配给每个视频
  * @param subtitleConfigs 字幕配置数组，每个视频使用对应索引的配置
+ * @param imageUrlGroups OSS 图片 URL 分组（Mac Worker 用）
+ * @param voiceovers 配音数据数组（Mac Worker 用，同时完成音频合成）
  */
 export async function generateSlideshowBatch(
     imageGroups: string[][],
     options: Omit<SlideshowOptions, 'images' | 'musicPath' | 'subtitle'>,
     musicPool: string[] = [],
-    subtitleConfigs: (SubtitleConfig | null | undefined)[] = []
+    subtitleConfigs: (SubtitleConfig | null | undefined)[] = [],
+    imageUrlGroups?: string[][],
+    voiceovers?: ({ buffer: Buffer; duration: number; timestamps: Array<{ word: string; start: number; end: number }> } | null)[]
 ): Promise<SlideshowResult[]> {
     const results: SlideshowResult[] = [];
 
@@ -435,6 +540,9 @@ export async function generateSlideshowBatch(
             musicPath,
             subtitle,
             ...options,
+            // Mac Worker 支持：传递 OSS URL + 配音数据
+            imageUrls: imageUrlGroups?.[i],
+            voiceover: voiceovers?.[i] || null,
         });
 
         results.push(result);

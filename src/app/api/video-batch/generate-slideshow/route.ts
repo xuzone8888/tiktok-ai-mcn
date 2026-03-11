@@ -727,7 +727,9 @@ export async function POST(req: NextRequest) {
                 transition,
             },
             musicPool,
-            subtitleConfigs // 传递字幕配置数组，每个视频使用对应的配置
+            subtitleConfigs, // 传递字幕配置数组，每个视频使用对应的配置
+            imageGroups,     // ⭐ 原始 OSS URL 分组（Mac Worker 用）
+            voiceovers,      // ⭐ 配音数据（Mac Worker 用，同时完成音频合成）
         );
         console.log('[Slideshow API] FFmpeg completed, results:', results.length);
         // Log each result's status
@@ -740,6 +742,13 @@ export async function POST(req: NextRequest) {
             console.log(`[Slideshow API] 🔊 Merging voiceovers: ${voiceovers.filter(v => v !== null).length} voiceovers for ${results.length} videos`);
             for (let i = 0; i < results.length; i++) {
                 const result = results[i];
+
+                // ⭐ Worker 结果已包含配音合成，跳过本地合并
+                if (result.videoUrl) {
+                    console.log(`[Slideshow API] ✅ Video ${i + 1}: Worker already merged voiceover, skipping`);
+                    continue;
+                }
+
                 const voiceoverData = voiceovers[i];
 
                 console.log(`\n🔵🔵🔵 CHECK-4: MERGE PRE-CHECK V${i + 1} 🔵🔵🔵`);
@@ -777,7 +786,13 @@ export async function POST(req: NextRequest) {
         for (let i = 0; i < results.length; i++) {
             const result = results[i];
             console.log(`[Slideshow API] Processing result ${i + 1}/${results.length}: success=${result.success}`);
-            if (result.success && result.videoPath) {
+
+            // ⭐ Worker 结果：已有 videoUrl，无需本地上传
+            if (result.success && result.videoUrl) {
+                console.log(`[Slideshow API] Video ${i + 1}: Worker URL = ${result.videoUrl}`);
+                videos.push({ url: result.videoUrl, cost: creditsPerVideo });
+                successCount++;
+            } else if (result.success && result.videoPath) {
                 try {
                     console.log(`[Slideshow API] Uploading video ${i + 1} to OSS...`);
                     const ossKey = `videos/slideshow/${user.id}/${crypto.randomUUID()}.mp4`;
