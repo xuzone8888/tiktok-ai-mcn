@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
+import dns from "node:dns";
 
+// 强制 Node.js 优先使用 IPv4 解析 DNS
+// 阿里云 ECS 服务器 IPv6 不通，Cloudflare CDN 域名有 IPv6 地址
+// 不设置此项会导致 fetch 连接超时 (ETIMEDOUT)
+dns.setDefaultResultOrder("ipv4first");
 /**
  * 视频下载代理 API
  * 
