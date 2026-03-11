@@ -97,7 +97,7 @@ export async function initVideoPublishFromUrl(
             disable_stitch: postInfo.disableStitch ?? false,
             brand_content_toggle: postInfo.brandContentToggle ?? false,
             brand_organic_toggle: postInfo.brandOrganicToggle ?? false,
-            is_aigc: postInfo.isAigc ?? false,
+            is_aigc: postInfo.isAigc ?? true,
             ...(postInfo.videoCoverTimestampMs !== undefined && { video_cover_timestamp_ms: postInfo.videoCoverTimestampMs }),
         },
         source_info: {

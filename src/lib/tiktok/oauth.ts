@@ -24,10 +24,10 @@ export function getTikTokOAuthConfig() {
         clientSecret,
         redirectUri,
         scopes: [
-            'user.info.basic',
-            'user.info.stats',
-            'video.upload',
-            'video.publish',
+            'user.info.basic',   // 获取头像、昵称（creator_info 展示）
+            'video.publish',     // 发布视频（PULL_FROM_URL 模式）
+            // ❌ 已移除 user.info.stats — 未使用，审核会拒
+            // ❌ 已移除 video.upload — 我们用 PULL_FROM_URL，不需要 upload scope
         ],
     };
 }

@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { processPublishQueue } from '@/lib/publish-processor'
 
 // TikTok content posting types - define locally since we're not using the actual upload functions yet
-type VideoPrivacyLevel = 'PUBLIC_TO_EVERYONE' | 'MUTUAL_FOLLOW_FRIENDS' | 'SELF_ONLY'
+type VideoPrivacyLevel = 'PUBLIC_TO_EVERYONE' | 'MUTUAL_FOLLOW_FRIENDS' | 'FOLLOWER_OF_CREATOR' | 'SELF_ONLY'
 
 // Types for request body
 interface CreateTaskRequest {
@@ -18,11 +18,12 @@ interface CreateTaskRequest {
     }>
     account_ids: string[]
     caption: string
-    privacy_level: VideoPrivacyLevel
-    allow_comments: boolean
+    privacy_level: VideoPrivacyLevel | null  // null = 用户未选择，后端校验必填
+    allow_comment: boolean
     allow_duet: boolean
     allow_stitch: boolean
-    is_brand_content: boolean
+    brand_content_toggle: boolean
+    brand_organic_toggle: boolean
     is_ai_generated: boolean
     publish_mode: 'now' | 'scheduled'
     scheduled_at: string | null
@@ -144,6 +145,11 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: '请至少选择一个发布账号' }, { status: 400 })
         }
 
+        // 校验 privacy_level 必填（TikTok 审核要求：不可替用户选择隐私级别）
+        if (!body.privacy_level) {
+            return NextResponse.json({ error: '请选择可见范围' }, { status: 400 })
+        }
+
         // Verify all accounts belong to the user and are authorized
         const { data: accounts, error: accountsError } = await supabase
             .from('tiktok_accounts')
@@ -188,11 +194,12 @@ export async function POST(request: NextRequest) {
                 scheduled_at: body.publish_mode === 'scheduled' ? body.scheduled_at : null,
                 title_template: body.caption,  // Database uses title_template, not caption_template
                 privacy_level: body.privacy_level,
-                allow_comment: body.allow_comments,  // Database uses allow_comment (singular)
+                allow_comment: body.allow_comment,
                 allow_duet: body.allow_duet,
                 allow_stitch: body.allow_stitch,
-                brand_content_toggle: body.is_brand_content,  // Database uses brand_content_toggle
-                is_aigc: body.is_ai_generated,  // Database uses is_aigc
+                brand_content_toggle: body.brand_content_toggle ?? false,
+                brand_organic_toggle: body.brand_organic_toggle ?? false,
+                is_aigc: body.is_ai_generated ?? true,  // ToryX 默认标记 AI 生成
                 batch_interval_seconds: body.batch_interval * 60,  // Database uses seconds, convert from minutes
                 total_items: totalItemsCount,  // Set total items count upfront
                 pending_count: totalItemsCount,  // 初始化统计

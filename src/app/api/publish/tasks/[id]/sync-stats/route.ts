@@ -7,6 +7,15 @@ interface RouteParams {
 
 // POST - Sync video statistics from TikTok
 export async function POST(request: NextRequest, { params }: RouteParams) {
+    // 1.14 Audit Build: feature flag 禁用 video/query
+    // 审核期间设置 ENABLE_VIDEO_STATS_SYNC=false 避免触发 video.list scope
+    if (process.env.ENABLE_VIDEO_STATS_SYNC === 'false') {
+        return NextResponse.json(
+            { error: '视频数据同步功能当前已禁用（审核模式）', disabled: true },
+            { status: 503 }
+        )
+    }
+
     try {
         const { id: taskId } = await params
         const supabase = await createClient()

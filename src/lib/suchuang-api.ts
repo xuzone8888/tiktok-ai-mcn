@@ -25,8 +25,8 @@ const WANGJING_API_KEY = process.env.WANGJING_API_KEY || "";
 const WUYINKEJI_API_BASE = "https://api.wuyinkeji.com";
 const WUYINKEJI_API_KEY = process.env.WUYINKEJI_API_KEY || "";
 
-// Gemini 3 Pro Image - fsai.app 代理
-const GEMINI_IMAGE_API_BASE = process.env.GEMINI_IMAGE_API_ENDPOINT || "https://fsai.app";
+// Gemini 3 Pro Image - xas231 代理 (需要 stream:true 模式)
+const GEMINI_IMAGE_API_BASE = process.env.GEMINI_IMAGE_API_ENDPOINT || "https://api.xas231.online";
 const GEMINI_IMAGE_API_KEY = process.env.GEMINI_IMAGE_API_KEY || "";
 
 // 注意：Sora2 API 使用 https.request 并强制 IPv4
@@ -1388,36 +1388,49 @@ export async function generateGeminiImage(
   }
 
   try {
-    // 构建消息内容 - 使用简单文本格式（经过验证稳定工作）
-    // 昨天 22:42-22:51 成功生成 5 张图片用的就是这种格式
-    let messageContent = params.prompt;
+    // 构建消息内容 - 使用结构化数组格式（新 API 要求）
+    const contentParts: Array<{ type: string; text?: string; image_url?: { url: string } }> = [];
 
-    // 添加尺寸比例要求
+    // 文本部分
+    let textContent = params.prompt;
     if (params.aspectRatio && params.aspectRatio !== "auto") {
-      messageContent = `生成的图片请使用 ${params.aspectRatio} 的宽高比例。${messageContent}`;
+      textContent = `生成的图片请使用 ${params.aspectRatio} 的宽高比例。${textContent}`;
+    }
+    contentParts.push({ type: "text", text: textContent });
+
+    // 如果有源图片，使用图生图模式（使用 image_url 格式）
+    if (params.sourceImageUrl) {
+      contentParts.push({
+        type: "image_url",
+        image_url: { url: params.sourceImageUrl },
+      });
+      console.log("[Gemini-Image] Image-to-image mode, using image_url format");
     }
 
-    // 如果有源图片，使用图生图模式（直接在文本中引用 URL）
-    if (params.sourceImageUrl) {
-      messageContent = `参考这张图片，${messageContent} ${params.sourceImageUrl}`;
-      console.log("[Gemini-Image] Image-to-image mode, embedding URL in prompt");
-    }
+    // 根据比例选择模型（landscape 或 portrait）
+    const isPortrait = params.aspectRatio === "9:16" || params.aspectRatio === "3:4" || params.aspectRatio === "2:3";
+    const geminiModel = isPortrait
+      ? "gemini-3.0-pro-image-portrait-2k"
+      : "gemini-3.0-pro-image-landscape-2k";
 
     const messages = [
-      { role: "user", content: messageContent }
+      { role: "user", content: contentParts }
     ];
 
     const requestBody = JSON.stringify({
-      model: "gemini-3-pro-image",
+      model: geminiModel,
       messages,
-      max_tokens: 4096,
+      stream: true,  // 新 API 必须使用流式模式
     });
 
     console.log("[Gemini-Image] Generating image:", {
       prompt: params.prompt.substring(0, 50) + "...",
       hasSourceImage: !!params.sourceImageUrl,
+      model: geminiModel,
+      streaming: true,
     });
 
+    // 使用流式请求（新 API 要求 stream:true）
     const result = await new Promise<{ data: string; statusCode: number }>((resolve, reject) => {
       const url = new URL(`${GEMINI_IMAGE_API_BASE}/v1/chat/completions`);
       const options = {
@@ -1431,7 +1444,7 @@ export async function generateGeminiImage(
           'Authorization': `Bearer ${key}`,
           'Content-Length': Buffer.byteLength(requestBody),
         },
-        timeout: 300000, // 5分钟超时（图生图可能需要更长时间）
+        timeout: 300000, // 5分钟超时（图片生成可能需要2-3分钟）
       };
 
       const req = https.request(options, (res) => {
@@ -1453,8 +1466,7 @@ export async function generateGeminiImage(
     if (result.statusCode !== 200) {
       console.error("[Gemini-Image] API error:", result.statusCode, result.data.substring(0, 300));
 
-      // 524 = Cloudflare 超时，但 API 可能还在后台处理
-      // 返回特殊状态让前端启动轮询而不是直接失败
+      // 524 = Cloudflare 超时
       if (result.statusCode === 524) {
         console.log("[Gemini-Image] 524 Cloudflare timeout - API may still be processing");
         return {
@@ -1464,20 +1476,18 @@ export async function generateGeminiImage(
         };
       }
 
-      // 解析错误信息并返回友好的错误消息
+      // 解析错误信息
       let errorMessage = `Gemini API 错误 (${result.statusCode})`;
       try {
         const errorData = JSON.parse(result.data);
         const rawMessage = errorData.error?.message || "";
-
-        // 提供用户友好的错误信息
         if (result.statusCode === 403) {
-          errorMessage = "Gemini API 暂时繁忙，请稍后重试";
+          if (rawMessage.includes("额度不足")) {
+            errorMessage = "Gemini API 额度不足，请联系管理员";
+          } else {
+            errorMessage = "Gemini API 暂时繁忙，请稍后重试";
+          }
         } else if (result.statusCode === 429) {
-          errorMessage = "Gemini API 请求频率过高，请稍后重试";
-        } else if (rawMessage.includes("PERMISSION_DENIED")) {
-          errorMessage = "Gemini API 权限受限，请稍后重试";
-        } else if (rawMessage.includes("rate limit")) {
           errorMessage = "Gemini API 请求频率过高，请稍后重试";
         } else {
           errorMessage = rawMessage.substring(0, 100) || errorMessage;
@@ -1489,44 +1499,47 @@ export async function generateGeminiImage(
       return { success: false, error: errorMessage };
     }
 
-    const data = JSON.parse(result.data);
+    // 解析 SSE 流式响应，拼接所有 delta.content
+    const fullContent = parseSSEResponse(result.data);
 
-    if (!data.choices || !data.choices[0]?.message?.content) {
+    if (!fullContent) {
+      console.error("[Gemini-Image] Empty content from SSE stream");
       return { success: false, error: "API 未返回图片内容" };
     }
 
-    const content = data.choices[0].message.content;
-
     // 提取 Base64 图片数据
-    // 格式可能是: ![image](data:image/jpeg;base64,/9j/4AAQ...) 
-    // 或者直接: data:image/jpeg;base64,/9j/4AAQ...
-    const base64Match = content.indexOf('base64,');
-    if (base64Match === -1) {
-      console.error("[Gemini-Image] No base64 image in response, content preview:", content.substring(0, 200));
-      return { success: false, error: "API 未返回有效图片" };
+    // 格式可能是: ![image](data:image/jpeg;base64,/9j/4AAQ...)
+    // 或者: data:image/jpeg;base64,/9j/4AAQ...
+    // 或者包含 URL: https://...xxx.png
+    const base64Match = fullContent.indexOf('base64,');
+    if (base64Match !== -1) {
+      // Base64 格式的图片
+      let imageBase64 = fullContent.substring(base64Match + 7);
+
+      // 如果是 markdown 格式 ![image](data:...), 需要移除末尾的 )
+      const closingParen = imageBase64.indexOf(')');
+      if (closingParen !== -1) {
+        imageBase64 = imageBase64.substring(0, closingParen);
+      }
+      // 移除引号、换行符和空格
+      imageBase64 = imageBase64.replace(/["'\n\r\s]/g, '');
+
+      console.log("[Gemini-Image] Image generated successfully (base64):", {
+        sizeKB: (Buffer.from(imageBase64, 'base64').length / 1024).toFixed(2),
+      });
+
+      return { success: true, imageBase64 };
     }
 
-    // 提取 base64 数据，处理可能的 markdown 格式
-    let imageBase64 = content.substring(base64Match + 7);
-
-    // 如果是 markdown 格式 ![image](data:...), 需要移除末尾的 )
-    const closingParen = imageBase64.indexOf(')');
-    if (closingParen !== -1) {
-      imageBase64 = imageBase64.substring(0, closingParen);
+    // 检查是否返回了图片 URL
+    const urlMatch = fullContent.match(/https?:\/\/[^\s"')\]]+\.(png|jpg|jpeg|webp)[^\s"')\]]*/i);
+    if (urlMatch) {
+      console.log("[Gemini-Image] Image generated successfully (URL):", urlMatch[0]);
+      return { success: true, imageUrl: urlMatch[0] };
     }
 
-    // 移除可能的换行符和空格
-    imageBase64 = imageBase64.trim();
-
-    console.log("[Gemini-Image] Image generated successfully:", {
-      sizeKB: (Buffer.from(imageBase64, 'base64').length / 1024).toFixed(2),
-      tokens: data.usage?.total_tokens,
-    });
-
-    return {
-      success: true,
-      imageBase64,
-    };
+    console.error("[Gemini-Image] No image in response, content preview:", fullContent.substring(0, 300));
+    return { success: false, error: "API 未返回有效图片" };
 
   } catch (error) {
     console.error("[Gemini-Image] Generate error:", error);
@@ -1535,6 +1548,38 @@ export async function generateGeminiImage(
       error: error instanceof Error ? error.message : "Network error"
     };
   }
+}
+
+/**
+ * 解析 SSE (Server-Sent Events) 流式响应
+ * 拼接所有 delta.content / delta.reasoning_content 到一个完整字符串
+ */
+function parseSSEResponse(rawData: string): string {
+  let fullContent = '';
+  const lines = rawData.split('\n');
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith('data:')) continue;
+
+    const jsonStr = trimmed.substring(5).trim();
+    if (jsonStr === '[DONE]') break;
+
+    try {
+      const chunk = JSON.parse(jsonStr);
+      const delta = chunk.choices?.[0]?.delta;
+      if (delta?.content) {
+        fullContent += delta.content;
+      }
+      if (delta?.reasoning_content) {
+        fullContent += delta.reasoning_content;
+      }
+    } catch {
+      // 跳过无法解析的行
+    }
+  }
+
+  return fullContent;
 }
 
 /**

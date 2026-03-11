@@ -316,11 +316,12 @@ async function publishItem(
             item.video_url,
             {
                 title: item.title,
-                privacyLevel: item.publish_tasks?.privacy_level || 'SELF_ONLY',
+                privacyLevel: item.publish_tasks?.privacy_level,
                 disableDuet: !item.publish_tasks?.allow_duet,
                 disableComment: !item.publish_tasks?.allow_comment,
                 disableStitch: !item.publish_tasks?.allow_stitch,
                 brandContentToggle: item.publish_tasks?.brand_content_toggle,
+                brandOrganicToggle: item.publish_tasks?.brand_organic_toggle,
                 isAigc: item.publish_tasks?.is_aigc ?? true,
                 videoCoverTimestampMs: item.cover_timestamp_ms,
             }

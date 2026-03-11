@@ -269,8 +269,48 @@ export async function POST(request: Request) {
               estimatedTime: "处理中（可能需要2-4分钟）",
             },
           });
-        } else if (!geminiResult.success || !geminiResult.imageBase64) {
+        } else if (!geminiResult.success || (!geminiResult.imageBase64 && !geminiResult.imageUrl)) {
           result = { success: false, error: geminiResult.error || "Gemini 图片生成失败" };
+        } else if (geminiResult.imageUrl) {
+          // 新 API 直接返回了图片 URL，无需上传到 OSS
+          const taskId = requestId || `gemini-${Date.now()}`;
+          const finalUrl = geminiResult.imageUrl;
+
+          if (userId) {
+            try {
+              const supabase = createAdminClient();
+              await supabase.from("generations").insert({
+                user_id: userId,
+                task_id: taskId,
+                type: "image",
+                source: source,
+                prompt: prompt || null,
+                model: "gemini-3-pro-image",
+                aspect_ratio: aspectRatio,
+                quality: "2k",
+                source_image_url: sourceImageUrl || null,
+                status: "completed",
+                result_url: finalUrl,
+                image_url: finalUrl,
+                credit_cost: creditCost,
+                created_at: new Date().toISOString(),
+                completed_at: new Date().toISOString(),
+              });
+            } catch (dbError) {
+              console.error("[Generate Image] DB insert error:", dbError);
+            }
+          }
+
+          return NextResponse.json({
+            success: true,
+            data: {
+              taskId,
+              status: "completed",
+              imageUrl: finalUrl,
+              model: "gemini-3-pro-image",
+              estimatedTime: "已完成",
+            },
+          });
         } else {
           // 将 Base64 上传到 OSS
           const uploadResult = await uploadBase64ImageToOSS(
