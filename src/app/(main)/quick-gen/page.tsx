@@ -976,19 +976,33 @@ export default function QuickGeneratorPage() {
   // 下载内容
   const handleDownloadContent = useCallback(async (url: string, type: "video" | "image") => {
     try {
-      const response = await fetch(url);
-      const blob = await response.blob();
-      const blobUrl = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = blobUrl;
-      link.download = `quick-gen-${Date.now()}.${type === "video" ? "mp4" : "jpg"}`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(blobUrl);
-      toast({ title: "✅ 下载成功" });
+      const filename = `quick-gen-${Date.now()}.${type === "video" ? "mp4" : "jpg"}`;
+      
+      // 使用下载代理（避免 CORS 跨域限制）
+      const params = new URLSearchParams({ url, filename });
+      const proxyUrl = `/api/download-proxy?${params}`;
+      const response = await fetch(proxyUrl);
+      
+      if (response.ok) {
+        const blob = await response.blob();
+        const blobUrl = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = blobUrl;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(blobUrl);
+        toast({ title: "✅ 下载成功" });
+      } else {
+        // 代理失败时直接在新标签页打开
+        window.open(url, "_blank");
+        toast({ title: "⚠️ 代理下载失败，已在新窗口打开" });
+      }
     } catch {
-      toast({ variant: "destructive", title: "下载失败" });
+      // 出错时直接在新标签页打开
+      window.open(url, "_blank");
+      toast({ variant: "destructive", title: "下载失败，已在新窗口打开" });
     }
   }, [toast]);
 
