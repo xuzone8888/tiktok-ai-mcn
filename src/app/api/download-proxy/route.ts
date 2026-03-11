@@ -189,7 +189,7 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ error: `分片请求失败: ${result.statusCode}` }, { status: 502 });
       }
 
-      return new NextResponse(result.body, {
+      return new NextResponse(new Uint8Array(result.body), {
         status: 206,
         headers: {
           "Content-Type": "application/octet-stream",
@@ -213,7 +213,7 @@ export async function GET(request: NextRequest) {
 
     const contentType = result.headers["content-type"] || "application/octet-stream";
 
-    return new NextResponse(result.body, {
+    return new NextResponse(new Uint8Array(result.body), {
       status: 200,
       headers: {
         "Content-Type": contentType,
