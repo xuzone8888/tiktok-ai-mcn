@@ -1394,21 +1394,32 @@ export async function generateGeminiImage(
       textContent = `生成的图片请使用 ${params.aspectRatio} 的宽高比例。${textContent}`;
     }
 
-    // 如果有源图片，将 URL 嵌入提示词中（上游 API 不支持 image_url 数组格式）
-    if (params.sourceImageUrl) {
-      textContent = `参考这张图片: ${params.sourceImageUrl}\n\n${textContent}`;
-      console.log("[Gemini-Image] Image-to-image mode, embedding URL in text prompt");
-    }
-
     // 根据比例选择模型（landscape 或 portrait）
     const isPortrait = params.aspectRatio === "9:16" || params.aspectRatio === "3:4" || params.aspectRatio === "2:3";
     const geminiModel = isPortrait
       ? "gemini-3.0-pro-image-portrait-2k"
       : "gemini-3.0-pro-image-landscape-2k";
 
-    // 始终使用字符串格式的 content（上游 API 要求）
+    // 构建消息内容：
+    // - 图生图模式：使用数组格式（上游 API 支持 image_url，会下载图片）
+    // - 纯文本生图：使用字符串格式（上游 API 要求）
+    let messageContent: string | Array<{ type: string; text?: string; image_url?: { url: string } }>;
+
+    if (params.sourceImageUrl && typeof params.sourceImageUrl === "string") {
+      // 图生图：使用数组格式，API 会下载并参考源图
+      messageContent = [
+        { type: "text", text: textContent },
+        { type: "image_url", image_url: { url: params.sourceImageUrl } },
+      ];
+      console.log("[Gemini-Image] Image-to-image mode, using array content format with URL:", params.sourceImageUrl.substring(0, 80));
+    } else {
+      // 纯文本生图：使用字符串格式
+      messageContent = textContent;
+      console.log("[Gemini-Image] Text-to-image mode, using string content format");
+    }
+
     const messages = [
-      { role: "user", content: textContent }
+      { role: "user", content: messageContent }
     ];
 
     const requestBody = JSON.stringify({
