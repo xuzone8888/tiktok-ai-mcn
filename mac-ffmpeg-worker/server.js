@@ -215,13 +215,14 @@ app.post('/api/render', async (req, res) => {
 app.post('/api/preview', async (req, res) => {
     const taskId = crypto.randomUUID().slice(0, 8);
 
+    let workDir = '';
     try {
         const { imageUrl, subtitle, aspectRatio = '9:16' } = req.body;
         if (!imageUrl || !subtitle) {
             return res.status(400).json({ error: 'imageUrl and subtitle required' });
         }
 
-        const workDir = path.join(TEMP_DIR, `preview_${taskId}`);
+        workDir = path.join(TEMP_DIR, `preview_${taskId}`);
         fs.mkdirSync(workDir, { recursive: true });
 
         // 下载图片
@@ -255,6 +256,7 @@ app.post('/api/preview', async (req, res) => {
         res.send(imageBuffer);
 
     } catch (error) {
+        cleanup(workDir);
         console.error(`[Preview ${taskId}] Error:`, error);
         res.status(500).json({ error: error.message });
     }

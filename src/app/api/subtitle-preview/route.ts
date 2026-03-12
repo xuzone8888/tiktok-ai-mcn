@@ -78,12 +78,12 @@ export async function POST(request: NextRequest) {
             }
 
             localImagePath = imagePath;
+            originalImageUrl = imagePath;
 
             // 处理各种路径格式
             if (imagePath.startsWith('/uploads/')) {
                 localImagePath = path.join(process.cwd(), 'public', imagePath);
             } else if (imagePath.startsWith('http')) {
-                originalImageUrl = imagePath;  // 保留原始 URL 给 Worker
                 try {
                     const tmpPath = path.join(PREVIEW_DIR, `input_${Date.now()}.jpg`);
                     const response = await fetch(imagePath);
@@ -190,6 +190,12 @@ export async function POST(request: NextRequest) {
         }
 
         const imageBuffer = fs.readFileSync(outputPath);
+
+        // #10 清理 HTTP 下载的临时输入图片（以 input_ 开头且在 PREVIEW_DIR 中）
+        if (localImagePath.startsWith(PREVIEW_DIR) && path.basename(localImagePath).startsWith('input_')) {
+            try { fs.unlinkSync(localImagePath); } catch {}
+        }
+
         return new NextResponse(imageBuffer, {
             headers: { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=300' },
         });

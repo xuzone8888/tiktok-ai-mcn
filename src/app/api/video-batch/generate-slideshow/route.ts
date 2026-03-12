@@ -787,6 +787,18 @@ export async function POST(req: NextRequest) {
         }
         console.log(`[Slideshow API] Upload complete. Success: ${successCount}/${results.length}`);
 
+        // #9 清理下载的临时图片目录
+        const tempDirsToClean = new Set<string>();
+        for (const group of localImageGroups) {
+            for (const filePath of group) {
+                tempDirsToClean.add(path.dirname(filePath));
+            }
+        }
+        for (const dir of tempDirsToClean) {
+            fs.rm(dir, { recursive: true, force: true }).catch(() => {});
+        }
+        console.log(`[Slideshow API] 🧹 Cleaned ${tempDirsToClean.size} temp image dirs`);
+
         // 扣除积分
         const actualCredits = successCount * creditsPerVideo;
         if (actualCredits > 0) {
