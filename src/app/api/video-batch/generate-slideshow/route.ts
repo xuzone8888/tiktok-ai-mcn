@@ -482,23 +482,18 @@ export async function POST(req: NextRequest) {
             // 🔧 跟踪 TTS 失败的音色 ID（55000 错误），后续视频自动避开
             const blacklistedVoiceIds = new Set<string>();
 
-            for (let i = 0; i < localImageGroups.length; i++) {
-                const rawVoiceText = generatedCaptions[i] || subtitle?.text || '';
-                let voiceText = stripEmoji(rawVoiceText); // 过滤 emoji
+            // 🚀 TTS 并行化：基准测试结果 — 豆包 8 并发 77/s，ElevenLabs 5 并发 1.7/s
+            const TTS_CONCURRENCY = 5;
 
-                // ℹ️ 文本长度由 AI 端 fixCaptionLength 控制 + 合并端 outputDuration 弹性延长
-                // 不再在此裁剪（之前的 charsPerSec 值对英文严重错误，导致文本被过度截断）
+            // 单个 TTS 任务（含重试逻辑）
+            async function processSingleTTS(i: number): Promise<VoiceoverData | null> {
+                const rawVoiceText = generatedCaptions[i] || subtitle?.text || '';
+                const voiceText = stripEmoji(rawVoiceText);
 
                 console.log(`[Slideshow API] 🎤 TTS ${i + 1} voiceText="${voiceText.substring(0, 80)}" (len=${voiceText.length})`);
-                await dbg(`📝 TTS V${i + 1} INPUT: len=${voiceText.length}, text="${voiceText.substring(0, 60)}"`);
                 if (!voiceText) {
-                    console.warn(`[Slideshow API] ❌ TTS ${i + 1}: SKIPPED — no text for voiceover`);
-                    voiceovers.push(null);
-                    continue;
-                }
-
-                if (voiceText !== rawVoiceText) {
-                    console.log(`[Slideshow API] Stripped emojis from TTS text: "${rawVoiceText}" -> "${voiceText}"`);
+                    console.warn(`[Slideshow API] ❌ TTS ${i + 1}: SKIPPED — no text`);
+                    return null;
                 }
 
                 try {
@@ -510,26 +505,18 @@ export async function POST(req: NextRequest) {
                         const langPool = PRESET_VOICES.filter(v => v.lang === language && !blacklistedVoiceIds.has(v.id));
                         if (langPool.length > 0) {
                             actualVoiceId = langPool[Math.floor(Math.random() * langPool.length)].id;
-                            console.log(`[Slideshow API] ⚠️ TTS ${i + 1}: assigned voice blacklisted, switched to ${actualVoiceId}`);
+                            console.log(`[Slideshow API] ⚠️ TTS ${i + 1}: voice blacklisted, switched to ${actualVoiceId}`);
                         }
                     }
 
-                    console.log(`[Slideshow API] Generating TTS ${i + 1}/${localImageGroups.length} with voiceId=${actualVoiceId}...`);
-
-                    // 🔧 TTS 间隔：测试证实豆包无限流（0s也能3/3成功），保留 2s 安全间隔
-                    if (i > 0) {
-                        const waitSec = 2;
-                        console.log(`[Slideshow API] ⏳ Waiting ${waitSec}s before TTS ${i + 1}...`);
-                        await new Promise(r => setTimeout(r, waitSec * 1000));
-                    }
+                    console.log(`[Slideshow API] TTS ${i + 1}/${localImageGroups.length} voiceId=${actualVoiceId}`);
 
                     // TTS 重试机制 — 3次重试，遇到 55000 自动切换音色
                     let ttsResult: { audio: Buffer; duration: number; timestamps: any[] } | null = null;
                     const maxAttempts = 3;
                     for (let attempt = 0; attempt < maxAttempts; attempt++) {
                         try {
-                            const isDoubaoVoice = actualVoiceId.startsWith('zh_');
-                            await dbg(`🔊 TTS V${i + 1} attempt ${attempt + 1}: voiceId=${actualVoiceId}, engine=${isDoubaoVoice ? 'doubao' : 'elevenlabs'}`);
+                            const isDoubaoVoice = actualVoiceId.startsWith('zh_') || actualVoiceId.startsWith('ICL_');
 
                             ttsResult = isDoubaoVoice
                                 ? await doubaoTextToSpeechWithTimestamps(actualVoiceId, voiceText)
@@ -537,65 +524,52 @@ export async function POST(req: NextRequest) {
                                     stability: 0.5,
                                     similarity_boost: 0.75,
                                 });
-                            break; // 成功就跳出
+                            break;
                         } catch (retryErr: any) {
                             const errMsg = retryErr.message || '';
                             const is55000 = errMsg.includes('55000') || errMsg.includes('mismatched');
 
-                            await dbg(`⚠️ TTS V${i + 1} attempt ${attempt + 1}/${maxAttempts} failed: ${errMsg} (is55000=${is55000})`);
-
                             if (is55000) {
-                                // 55000 错误：音色不可用，加入黑名单，立即切换到其他音色
                                 blacklistedVoiceIds.add(actualVoiceId);
-                                console.warn(`[Slideshow API] 🔴 TTS ${i + 1}: voice "${actualVoiceId}" → 55000 error, blacklisting and switching...`);
-
+                                console.warn(`[Slideshow API] 🔴 TTS ${i + 1}: voice "${actualVoiceId}" → 55000, blacklisting...`);
                                 const language = aiCaption?.language || 'en';
                                 const availablePool = PRESET_VOICES.filter(v => v.lang === language && !blacklistedVoiceIds.has(v.id));
                                 if (availablePool.length > 0) {
                                     actualVoiceId = availablePool[Math.floor(Math.random() * availablePool.length)].id;
-                                    console.log(`[Slideshow API] 🔄 TTS ${i + 1}: switched to "${actualVoiceId}", retrying...`);
-                                    await dbg(`🔄 TTS V${i + 1}: switched to ${actualVoiceId}`);
-                                    // 切换后立即重试（不等待）
                                     continue;
-                                } else {
-                                    console.error(`[Slideshow API] ❌ TTS ${i + 1}: no available voices left after blacklisting`);
-                                    break;
-                                }
+                                } else { break; }
                             }
 
                             if (attempt < maxAttempts - 1) {
-                                console.warn(`[Slideshow API] ⚠️ TTS ${i + 1} attempt ${attempt + 1} failed: ${errMsg}, retrying in 3s...`);
                                 await new Promise(r => setTimeout(r, 3000));
-                            } else {
-                                throw retryErr; // 最后一次失败才抛出
-                            }
+                            } else { throw retryErr; }
                         }
                     }
 
                     if (ttsResult) {
-                        console.log(`[Slideshow API] ✅ TTS ${i + 1} generated: ${ttsResult.audio.length} bytes, ${ttsResult.duration.toFixed(2)}s, ${ttsResult.timestamps.length} words`);
-                        voiceovers.push({
-                            buffer: ttsResult.audio,
-                            duration: ttsResult.duration,
-                            timestamps: ttsResult.timestamps,
-                        });
-                    } else {
-                        console.error(`[Slideshow API] ❌ TTS ${i + 1}: no result after retries`);
-                        voiceovers.push(null);
+                        console.log(`[Slideshow API] ✅ TTS ${i + 1}: ${ttsResult.audio.length} bytes, ${ttsResult.duration.toFixed(2)}s`);
+                        return { buffer: ttsResult.audio, duration: ttsResult.duration, timestamps: ttsResult.timestamps };
                     }
+                    return null;
                 } catch (voiceError: any) {
-                    console.error(`[Slideshow API] ❌ TTS ${i + 1} FAILED after retries:`, voiceError.message);
-                    await dbg(`❌ TTS V${i + 1} FAILED: ${voiceError.message}`);
-                    voiceovers.push(null);
+                    console.error(`[Slideshow API] ❌ TTS ${i + 1} FAILED:`, voiceError.message);
+                    return null;
                 }
             }
-            console.log(`\n🟡🟡🟡 CHECK-3: ALL TTS SUMMARY 🟡🟡🟡`);
-            for (let vi = 0; vi < voiceovers.length; vi++) {
-                const vo = voiceovers[vi];
-                console.log(`  V${vi + 1}: ${vo ? `✅ ${vo.buffer.length} bytes, ${vo.duration.toFixed(2)}s` : '❌ NULL (no audio)'}`);
+
+            // 分批并行执行 TTS
+            const ttsStartTime = Date.now();
+            const totalTTS = localImageGroups.length;
+            for (let batchStart = 0; batchStart < totalTTS; batchStart += TTS_CONCURRENCY) {
+                const batchEnd = Math.min(batchStart + TTS_CONCURRENCY, totalTTS);
+                const batchIndices = Array.from({ length: batchEnd - batchStart }, (_, j) => batchStart + j);
+                console.log(`[Slideshow API] 🚀 TTS batch ${Math.floor(batchStart / TTS_CONCURRENCY) + 1}: items ${batchStart + 1}-${batchEnd}`);
+
+                const batchResults = await Promise.all(batchIndices.map(i => processSingleTTS(i)));
+                batchResults.forEach(result => voiceovers.push(result));
             }
-            console.log(`[Slideshow API] 🎤 Voiceover generation complete: ${voiceovers.filter(v => v !== null).length}/${voiceovers.length} successful`);
-            await dbg(`🎤 TTS COMPLETE: ${voiceovers.map((v, i) => `V${i + 1}=${v ? `${v.duration.toFixed(1)}s` : 'NULL'}`).join(', ')}`);
+            const ttsElapsed = ((Date.now() - ttsStartTime) / 1000).toFixed(1);
+            console.log(`[Slideshow API] 🎤 TTS complete: ${voiceovers.filter(v => v !== null).length}/${totalTTS} in ${ttsElapsed}s (concurrency=${TTS_CONCURRENCY})`)
         } else {
             console.log('[Slideshow API] ⚠️ Voice DISABLED or no voiceId — skipping TTS entirely');
         }
