@@ -139,7 +139,11 @@ app.post('/api/render', async (req, res) => {
         ];
 
         if (musicPath) args.push('--music', musicPath);
-        if (subtitle && subtitle.text) args.push('--subtitle', JSON.stringify(subtitle));
+        if (subtitle && subtitle.text) {
+            // 注入 durationPerImage, 确保 Python 计算 TextOverlay 时间正确
+            subtitle.durationPerImage = durationPerImage;
+            args.push('--subtitle', JSON.stringify(subtitle));
+        }
 
         log(`Running FFmpeg...`);
         const ffmpegResult = await runPython(args);
