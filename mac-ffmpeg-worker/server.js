@@ -71,10 +71,23 @@ app.get('/health', (req, res) => {
 // ========================================
 // POST /api/render — 完整视频渲染
 // ========================================
+let activeRenders = 0;
+const MAX_CONCURRENT_RENDERS = 3;  // M4 Max 16核，3并发最优（~12核 + ~4.5GB RAM）
+
 app.post('/api/render', async (req, res) => {
     const startTime = Date.now();
     const taskId = crypto.randomUUID().slice(0, 8);
     const log = (msg) => console.log(`[Render ${taskId}] ${msg}`);
+
+    // 并发控制：超过上限返回 503，ECS 会自动回退到本地渲染
+    if (activeRenders >= MAX_CONCURRENT_RENDERS) {
+        log(`Rejected: ${activeRenders}/${MAX_CONCURRENT_RENDERS} renders active`);
+        return res.status(503).json({ error: 'Worker busy', activeRenders });
+    }
+    activeRenders++;
+    log(`Start (${activeRenders}/${MAX_CONCURRENT_RENDERS} active)`);
+
+    const workDir = path.join(TEMP_DIR, taskId);
 
     try {
         const {
@@ -94,7 +107,6 @@ app.post('/api/render', async (req, res) => {
         log(`Start: ${images.length} images, ${aspectRatio}, ${transition}, bgm=${bgm}, voice=${!!voiceover}`);
 
         // 1. 下载图片到本地
-        const workDir = path.join(TEMP_DIR, taskId);
         fs.mkdirSync(workDir, { recursive: true });
 
         const localImages = [];
@@ -188,8 +200,12 @@ app.post('/api/render', async (req, res) => {
         });
 
     } catch (error) {
+        cleanup(workDir);
         console.error(`[Render ${taskId}] Error:`, error);
         res.status(500).json({ error: error.message });
+    } finally {
+        activeRenders--;
+        log(`Done (${activeRenders}/${MAX_CONCURRENT_RENDERS} active)`);
     }
 });
 
