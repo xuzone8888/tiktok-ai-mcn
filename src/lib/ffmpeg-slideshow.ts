@@ -518,9 +518,15 @@ export async function generateSlideshowBatch(
     imageUrlGroups?: string[][],
     voiceovers?: ({ buffer: Buffer; duration: number; timestamps: Array<{ word: string; start: number; end: number }> } | null)[]
 ): Promise<SlideshowResult[]> {
-    const results: SlideshowResult[] = [];
+    // 🚀 滑动窗口并发：始终保持 N 个任务在跑，一个完成立刻补一个
+    const RENDER_CONCURRENCY = 3;  // 匹配 Worker MAX_CONCURRENT_RENDERS
+    const total = imageGroups.length;
+    const results: SlideshowResult[] = new Array(total);
 
-    for (let i = 0; i < imageGroups.length; i++) {
+    console.log(`[Slideshow] Batch: ${total} videos, concurrency=${RENDER_CONCURRENCY}`);
+
+    // 单个视频渲染任务
+    async function renderOne(i: number): Promise<void> {
         const images = imageGroups[i];
 
         // 随机选择音乐
@@ -529,24 +535,45 @@ export async function generateSlideshowBatch(
             musicPath = musicPool[Math.floor(Math.random() * musicPool.length)];
         }
 
-        // 使用对应索引的字幕配置
         const subtitle = subtitleConfigs[i] || undefined;
 
-        console.log(`[Slideshow] Processing video ${i + 1}/${imageGroups.length}`);
-        console.log(`[Slideshow] Video ${i + 1} subtitle text: ${subtitle?.text?.substring(0, 50)}...`);
+        console.log(`[Slideshow] Processing video ${i + 1}/${total}`);
 
-        const result = await generateSlideshow({
-            images,
-            musicPath,
-            subtitle,
-            ...options,
-            // Mac Worker 支持：传递 OSS URL + 配音数据
-            imageUrls: imageUrlGroups?.[i],
-            voiceover: voiceovers?.[i] || null,
-        });
-
-        results.push(result);
+        try {
+            results[i] = await generateSlideshow({
+                images,
+                musicPath,
+                subtitle,
+                ...options,
+                imageUrls: imageUrlGroups?.[i],
+                voiceover: voiceovers?.[i] || null,
+            });
+        } catch (err: any) {
+            console.error(`[Slideshow] Video ${i + 1} unexpected error:`, err.message);
+            results[i] = { success: false, error: err.message };
+        }
     }
+
+    // 滑动窗口执行器（类似 p-limit）
+    let nextIndex = 0;
+    const workers: Promise<void>[] = [];
+
+    async function worker(): Promise<void> {
+        while (nextIndex < total) {
+            const i = nextIndex++;
+            await renderOne(i);
+        }
+    }
+
+    // 启动 N 个 worker，每个 worker 循环取任务直到全部完成
+    const workerCount = Math.min(RENDER_CONCURRENCY, total);
+    for (let w = 0; w < workerCount; w++) {
+        workers.push(worker());
+    }
+    await Promise.allSettled(workers);
+
+    const successCount = results.filter(r => r?.success).length;
+    console.log(`[Slideshow] Batch complete: ${successCount}/${total} succeeded`);
 
     return results;
 }
