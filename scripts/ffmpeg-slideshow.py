@@ -274,9 +274,12 @@ def generate_slideshow(
             resize_image(img_path, output_img, target_size)
             processed_images.append(output_img)
         
-        # 🎬 注入 aspect_ratio 到 subtitle 配置，供下游函数使用
+        # 🎬 注入运行时参数到 subtitle 配置，供下游函数使用
         if subtitle:
             subtitle['_aspect_ratio'] = aspect_ratio
+            # 🔧 关键修复：注入（可能被配音延长后的）实际 duration_per_image
+            # 否则 overlay 时间轴会使用默认值 2.0，导致所有 overlay 挤在第一张图上
+            subtitle['durationPerImage'] = duration_per_image
         
         # Step 2: 构建 FFmpeg 命令
         if transition == "none":
