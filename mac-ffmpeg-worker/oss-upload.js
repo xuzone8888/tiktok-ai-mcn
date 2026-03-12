@@ -16,6 +16,12 @@ const ossConfig = {
     timeout: 300000,
 };
 
+let _ossClient = null;
+function getOSSClient() {
+    if (!_ossClient) _ossClient = new OSS(ossConfig);
+    return _ossClient;
+}
+
 const CUSTOM_DOMAIN = process.env.ALIYUN_OSS_CUSTOM_DOMAIN || 'media.toryxai.com';
 
 /**
@@ -26,7 +32,7 @@ async function uploadToOSS(buffer, objectPath, contentType) {
         throw new Error('OSS credentials not configured — check .env');
     }
 
-    const client = new OSS(ossConfig);
+    const client = getOSSClient();
     const result = await client.put(objectPath, Buffer.from(buffer), {
         headers: {
             'Content-Type': contentType,

@@ -142,8 +142,9 @@ async function mergeVoiceover(videoPath, audioBuffer, voiceDuration, workDir) {
         });
 
         proc.on('error', (err) => {
+            console.error('[MergeAudio] proc spawn error:', err.message);
             fsp.unlink(voiceoverPath).catch(() => {});
-            reject(err);
+            resolve(videoPath); // 与 ECS 行为一致：降级返回原视频
         });
     });
 }

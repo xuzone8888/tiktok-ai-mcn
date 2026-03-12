@@ -110,12 +110,18 @@ app.post('/api/render', async (req, res) => {
         fs.mkdirSync(workDir, { recursive: true });
 
         const localImages = [];
+        const IMG_TIMEOUT = 10000;  // 单图下载超时 10s
+        const IMG_MAX_SIZE = 20 * 1024 * 1024;  // 单图最大 20MB
         for (let i = 0; i < images.length; i++) {
             const imgPath = path.join(workDir, `${String(i).padStart(4, '0')}.jpg`);
             try {
-                const resp = await fetch(images[i]);
+                const ac = new AbortController();
+                const timer = setTimeout(() => ac.abort(), IMG_TIMEOUT);
+                const resp = await fetch(images[i], { signal: ac.signal });
+                clearTimeout(timer);
                 if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
                 const buf = Buffer.from(await resp.arrayBuffer());
+                if (buf.length > IMG_MAX_SIZE) throw new Error(`Image too large: ${(buf.length / 1024 / 1024).toFixed(1)}MB > 20MB`);
                 await fsp.writeFile(imgPath, buf);
                 localImages.push(imgPath);
             } catch (e) {

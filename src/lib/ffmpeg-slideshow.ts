@@ -276,7 +276,7 @@ async function runPythonScript(args: string[]): Promise<{ success: boolean; stdo
 // ========================================
 const MAC_WORKER_URL = process.env.MAC_WORKER_URL || 'http://127.0.0.1:9091';
 const MAC_WORKER_TOKEN = process.env.MAC_WORKER_TOKEN || '';
-const MAC_WORKER_TIMEOUT = 120000; // 120 秒超时
+const MAC_WORKER_TIMEOUT = 300000; // 300 秒超时（与 Worker Python 一致）
 
 /**
  * 调用 Mac Studio Worker 进行远程渲染
@@ -294,7 +294,7 @@ async function callMacWorker(options: SlideshowOptions): Promise<SlideshowResult
     const body: Record<string, unknown> = {
         images: imageUrls,
         subtitle: subtitle || undefined,
-        bgm: 'random',
+        bgm: options.musicPath ? 'random' : 'none',
         aspectRatio,
         durationPerImage,
         transition,
@@ -305,7 +305,7 @@ async function callMacWorker(options: SlideshowOptions): Promise<SlideshowResult
         body.voiceover = {
             base64: voiceover.buffer.toString('base64'),
             duration: voiceover.duration,
-            timestamps: voiceover.timestamps,
+            // timestamps 不再传递 — Worker 从 subtitle.wordTimestamps 获取
         };
     }
 

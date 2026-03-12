@@ -5,6 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import {
     generateSlideshowBatch,
     shuffleAndGroup,
@@ -799,13 +800,17 @@ export async function POST(req: NextRequest) {
         }
         console.log(`[Slideshow API] 🧹 Cleaned ${tempDirsToClean.size} temp image dirs`);
 
-        // 扣除积分
+        // 扣除积分（原子操作）
         const actualCredits = successCount * creditsPerVideo;
         if (actualCredits > 0) {
-            await supabase
-                .from('profiles')
-                .update({ credits: profile.credits - actualCredits } as never)
-                .eq('id', user.id);
+            const adminSupabase = createAdminClient();
+            await adminSupabase.rpc('deduct_credits' as never, {
+                p_user_id: user.id,
+                p_amount: actualCredits,
+                p_description: `视频生成 - ${successCount}个视频`,
+                p_reference_type: 'slideshow_batch',
+                p_reference_id: crypto.randomUUID(),
+            } as never);
         }
 
         return NextResponse.json({
