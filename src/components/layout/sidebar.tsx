@@ -68,21 +68,27 @@ const navGroups: NavGroup[] = [
       },
     ],
   },
-  // --- 模特仓库 ---
+  // --- 数字人星系 ---
   {
-    header: "模特仓库",
+    header: "数字人星系",
     items: [
       {
-        title: "模特资源库",
+        title: "创建新角色",
+        href: "/character/create",
+        icon: Sparkles,
+        description: "AI 角色捏脸舱",
+      },
+      {
+        title: "模特资源广场",
         href: "/models",
         icon: Users,
         description: "浏览全部 AI 模特",
       },
       {
-        title: "专属模特仓",
+        title: "我的专属阵营",
         href: "/team",
         icon: UserCheck,
-        description: "已签约的专属模特",
+        description: "已签约的专属模特与自建角色",
       },
     ],
   },
