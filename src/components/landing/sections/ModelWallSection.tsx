@@ -1,108 +1,104 @@
 "use client";
 
+import { useState } from "react";
 import Image from "next/image";
-import ReflectiveCard from "@/components/ui/ReflectiveCard";
-
-// 24张高质量单人头像 - 全部独特
-const singleAvatars = [
-    '/images/landing/avatar-1.png',
-    '/images/landing/avatar-2.png',
-    '/images/landing/avatar-3.png',
-    '/images/landing/avatar-4.png',
-    '/images/landing/avatar-5.png',
-    '/images/landing/avatar-6.png',
-    '/images/landing/avatar-7.png',
-    '/images/landing/avatar-8.png',
-    '/images/landing/avatar-9-v2.png',
-    '/images/landing/avatar-10-v2.png',
-    '/images/landing/avatar-11.png',
-    '/images/landing/avatar-12-v2.png',
-    '/images/landing/avatar-13.png',
-    '/images/landing/avatar-14.png',
-    '/images/landing/avatar-15-v2.png',
-    '/images/landing/avatar-16.png',
-    '/images/landing/avatar-17.png',
-    '/images/landing/avatar-18.png',
-    '/images/landing/avatar-19.png',
-    '/images/landing/avatar-20.png',
-    '/images/landing/avatar-21.png',
-    '/images/landing/avatar-22.png',
-    '/images/landing/avatar-23.png',
-    '/images/landing/avatar-24.png',
-];
-
-// 创建24个头像显示位置
-const modelAvatars = singleAvatars.map((src, i) => ({
-    id: i + 1,
-    src,
-    name: `Model ${i + 1}`,
-}));
+import { Plus } from "lucide-react";
+import {
+    characterShowcase,
+    styleFilters,
+    type CharacterStyle,
+} from "../data/landing-data";
 
 export default function ModelWallSection() {
+    const [activeFilter, setActiveFilter] = useState<CharacterStyle | "all">(
+        "all"
+    );
+
+    const filtered =
+        activeFilter === "all"
+            ? characterShowcase
+            : characterShowcase.filter((c) => c.style === activeFilter);
+
     return (
-        <section className="relative z-10 py-24">
+        <div className="py-16">
             <div className="container max-w-7xl mx-auto px-6">
                 {/* 标题 */}
-                <div className="text-center mb-16">
+                <div className="text-center mb-8">
                     <h2 className="text-4xl md:text-5xl font-bold text-white mb-4">
-                        不是 1 个达人，是 <span className="font-mono">1000</span> 个 AI 模特
+                        你的角色，
+                        <span className="font-mono">千变万化</span>
                     </h2>
                     <p className="text-gray-500 text-lg">
-                        24/7 不眠不休 · 无需沟通 · 无需寄样
+                        任何风格、任何人设，60 秒打造专属 AI 角色
                     </p>
                 </div>
 
-                {/* 头像墙 */}
-                <div className="max-w-6xl mx-auto">
-                    <ReflectiveCard className="!rounded-3xl p-8">
-                        <div className="grid grid-cols-6 md:grid-cols-8 gap-4">
-                            {modelAvatars.map((avatar) => (
-                                <div
-                                    key={avatar.id}
-                                    className="aspect-square rounded-xl overflow-hidden border border-white/10 group hover:border-white/30 hover:scale-105 transition-all cursor-pointer relative bg-[#1a1a1a]"
-                                >
-                                    {/* 头像显示逻辑 */}
-                                    <div className="relative w-full h-full">
-                                        <Image
-                                            src={avatar.src}
-                                            alt={avatar.name}
-                                            fill
-                                            className="object-cover grayscale group-hover:grayscale-0 transition-all duration-300"
-                                        />
-                                    </div>
-
-                                    {/* Hover overlay */}
-                                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-center pb-2 pointer-events-none">
-                                        <span className="text-xs text-white font-medium">#{avatar.id}</span>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-
-                        {/* 底部统计 */}
-                        <div className="mt-8 pt-6 border-t border-white/10 flex justify-center gap-12">
-                            <div className="text-center">
-                                <div className="text-3xl font-mono font-bold text-white">
-                                    1000+
-                                </div>
-                                <div className="text-sm text-gray-500">可用模特</div>
-                            </div>
-                            <div className="text-center">
-                                <div className="text-3xl font-mono font-bold text-white">
-                                    50+
-                                </div>
-                                <div className="text-sm text-gray-500">风格类型</div>
-                            </div>
-                            <div className="text-center">
-                                <div className="text-3xl font-mono font-bold text-white">
-                                    24/7
-                                </div>
-                                <div className="text-sm text-gray-500">全天候在线</div>
-                            </div>
-                        </div>
-                    </ReflectiveCard>
+                {/* 风格筛选 pill */}
+                <div className="flex gap-2 justify-center mb-10 flex-wrap">
+                    {styleFilters.map((f) => (
+                        <button
+                            key={f.id}
+                            onClick={() => setActiveFilter(f.id)}
+                            className={`px-4 py-2 text-sm rounded-full transition-all ${
+                                activeFilter === f.id
+                                    ? "bg-white text-black font-medium"
+                                    : "border border-white/20 text-gray-400 hover:text-white hover:border-white/40"
+                            }`}
+                        >
+                            {f.label}
+                        </button>
+                    ))}
                 </div>
+
+                {/* 名片网格 */}
+                <div className="max-w-5xl mx-auto">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        {filtered.map((char) => (
+                            <div
+                                key={char.id}
+                                className="group rounded-2xl overflow-hidden border border-white/10 bg-[#111] hover:border-white/30 hover:scale-[1.02] transition-all cursor-pointer"
+                            >
+                                {/* 图片区 */}
+                                <div className="aspect-[4/5] relative overflow-hidden">
+                                    <Image
+                                        src={char.src}
+                                        alt={`${char.name} - ${char.role}`}
+                                        fill
+                                        sizes="(max-width: 768px) 50vw, 25vw"
+                                        className="object-cover group-hover:scale-105 transition-transform duration-300"
+                                    />
+                                </div>
+                                {/* 信息区 */}
+                                <div className="p-3">
+                                    <div className="text-white text-sm font-medium">
+                                        {char.name}
+                                    </div>
+                                    <div className="text-xs text-gray-500 mt-0.5">
+                                        {char.role}
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
+                {/* 创建 CTA（网格外部，避免对齐问题） */}
+                <div className="max-w-5xl mx-auto mt-6">
+                    <button className="w-full py-4 rounded-2xl border-2 border-dashed border-white/20 flex items-center justify-center gap-3 hover:border-white/50 hover:bg-white/5 transition-all cursor-pointer group">
+                        <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center group-hover:bg-white/20 transition-colors">
+                            <Plus className="w-4 h-4 text-white" />
+                        </div>
+                        <span className="text-sm text-gray-400 group-hover:text-white transition-colors">
+                            创建我的角色
+                        </span>
+                    </button>
+                </div>
+
+                {/* 底部号召 */}
+                <p className="text-center text-gray-500 text-sm mt-8">
+                    写实 · 动漫 · 3D · 插画 — 你想要的风格，AI 都能实现
+                </p>
             </div>
-        </section>
+        </div>
     );
 }

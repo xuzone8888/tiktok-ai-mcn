@@ -76,6 +76,7 @@
     background: transparent;
     border: none;
     color: white;
+    color-scheme: dark;
     font-family: 'Inter', sans-serif;
     font-size: 15px;
     font-weight: 400;
@@ -83,6 +84,9 @@
     width: 100%;
     padding: 14px 0;
     letter-spacing: 0.01em;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: geometricPrecision;
 }
 
 .input-field::placeholder {
@@ -111,16 +115,18 @@
 }
 
 /* ===== 浏览器自动填充样式覆盖 ===== */
-/* Chrome/Safari/Edge 自动填充背景覆盖 - 完全透明 */
+/* 使用 color-scheme: dark + 超长 transition 延迟，完美隐藏 autofill 背景 */
 .input-field:-webkit-autofill,
 .input-field:-webkit-autofill:hover,
 .input-field:-webkit-autofill:focus,
 .input-field:-webkit-autofill:active {
-    -webkit-box-shadow: 0 0 0 30px transparent inset !important;
     -webkit-text-fill-color: #ffffff !important;
     caret-color: #ffffff !important;
-    transition: background-color 5000s ease-in-out 0s;
-    background-color: transparent !important;
+    font-family: 'Inter', sans-serif !important;
+    font-size: 15px !important;
+    font-weight: 400 !important;
+    letter-spacing: 0.01em !important;
+    transition: background-color 600000s 0s, box-shadow 600000s 0s !important;
 }
 
 /* Firefox 自动填充 */
