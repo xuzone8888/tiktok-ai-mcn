@@ -3,7 +3,7 @@
 import Link from "next/link";
 import ReflectiveCard from "@/components/ui/ReflectiveCard";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Sparkles, Shield, Globe, FileText, Eye, Database, Share2, Lock, UserCheck, Cookie, Users, RefreshCw, Phone, BookOpen, Server, Key, Settings, ExternalLink } from "lucide-react";
+import { ArrowLeft, Sparkles, Shield, Globe, FileText, Eye, Database, Share2, Lock, UserCheck, Cookie, Users, RefreshCw, Phone, BookOpen, Server, Key, Settings, ExternalLink, ShoppingBag, Cpu } from "lucide-react";
 import { useState } from "react";
 
 export default function PrivacyPage() {
@@ -41,8 +41,8 @@ export default function PrivacyPage() {
         <div className="container max-w-4xl mx-auto px-6">
           <div className="mb-12">
             <h1 className="text-4xl font-bold mb-4">{lang === "en" ? "Privacy Policy" : "隐私政策"}</h1>
-            <p className="text-gray-400">{lang === "en" ? "Updated Date: January 22, 2026" : "更新日期：2026年1月22日"}</p>
-            <p className="text-gray-400">{lang === "en" ? "Effective Date: January 22, 2026" : "生效日期：2026年1月22日"}</p>
+            <p className="text-gray-400">{lang === "en" ? "Updated Date: March 17, 2026" : "更新日期：2026年3月17日"}</p>
+            <p className="text-gray-400">{lang === "en" ? "Effective Date: March 17, 2026" : "生效日期：2026年3月17日"}</p>
           </div>
 
           <div className="space-y-6 text-gray-300">
@@ -138,6 +138,7 @@ export default function PrivacyPage() {
                   <p className="leading-relaxed">{lang === "en" ? 'We guarantee your rights to query, copy, correct, supplement, delete, withdraw consent, and cancel your account regarding personal information.' : '我们保障您对个人信息的查询、复制、更正、补充、删除、撤回同意和注销账户的权利。'}</p>
                   <p className="leading-relaxed mt-3">{lang === "en" ? 'You can manage your personal information through the settings function in the application or by contacting customer service.' : '您可以通过应用程序中的设置功能或联系客服来管理您的个人信息。'}</p>
                   <p className="leading-relaxed mt-3">{lang === "en" ? 'For account cancellation, you can find the cancellation entrance in "Settings - Account Security". After cancellation, we will delete or anonymize your relevant data.' : '对于账户注销，您可以在"设置 - 账户安全"中找到注销入口。注销后，我们将删除或匿名化您的相关数据。'}</p>
+                  <p className="leading-relaxed mt-3">{lang === "en" ? '3.4 TikTok Authorization Revocation: You may revoke ToryX\'s access to your TikTok account at any time through your TikTok account settings. Once authorization is revoked, we will delete all associated TikTok data (including access tokens and user identifiers) within 30 days.' : '3.4 TikTok 授权撤回：您可以随时通过 TikTok 账户设置撤回 ToryX 对您 TikTok 账户的访问授权。授权撤回后，我们将在 30 天内删除所有相关的 TikTok 数据（包括访问令牌和用户标识符）。'}</p>
                 </div>
               </div>
             </ReflectiveCard>
@@ -148,9 +149,10 @@ export default function PrivacyPage() {
                 <div className="p-3 rounded-lg bg-yellow-500/10 text-yellow-400 shrink-0"><Lock className="h-6 w-6" /></div>
                 <div>
                   <h2 className="text-xl font-bold text-white mb-3">{lang === "en" ? "4. How We Protect the Security of Personal Information" : "四、我们如何保护个人信息安全"}</h2>
-                  <p className="leading-relaxed"><strong>{lang === "en" ? "4.1 Security Measures:" : "4.1 安全措施："}</strong> {lang === "en" ? "We adopt technical means such as encryption and de-identification, as well as strict management systems to protect your personal information." : "我们采用加密、去标识化等技术手段以及严格的管理制度来保护您的个人信息。"}</p>
-                  <p className="leading-relaxed mt-3"><strong>{lang === "en" ? "4.2 Emergency Plan:" : "4.2 应急预案："}</strong> {lang === "en" ? "We establish an emergency plan for security incidents. Once a leakage or other incident occurs, we will launch it promptly and inform you." : "我们建立安全事件应急预案。一旦发生泄露或其他事件，我们将及时启动并告知您。"}</p>
-                  <p className="leading-relaxed mt-3"><strong>{lang === "en" ? "4.3 Security Prompt:" : "4.3 安全提示："}</strong> {lang === "en" ? "Please understand that the internet environment is not 100% secure. Please keep your account information properly." : "请理解互联网环境并非100%安全。请妥善保管您的账户信息。"}</p>
+                  <p className="leading-relaxed"><strong>{lang === "en" ? "4.1 Security Measures:" : "4.1 安全措施："}</strong> {lang === "en" ? "We adopt technical means such as encryption and de-identification, as well as strict management systems to protect your personal information. Data in transit is encrypted using TLS 1.2 or above. Data at rest is encrypted using AES-256 standard. Access to sensitive data follows the principle of least privilege." : "我们采用加密、去标识化等技术手段以及严格的管理制度来保护您的个人信息。传输中的数据使用 TLS 1.2 及以上协议加密。静态数据使用 AES-256 标准加密。敏感数据的访问遵循最小权限原则。"}</p>
+                  <p className="leading-relaxed mt-3"><strong>{lang === "en" ? "4.2 Emergency Plan:" : "4.2 应急预案："}</strong> {lang === "en" ? "We establish an emergency plan for security incidents. Once a leakage or other incident occurs, we will launch it promptly, inform affected users, and report to relevant authorities as required by law." : "我们建立安全事件应急预案。一旦发生泄露或其他事件，我们将及时启动并告知受影响的用户，并按法律要求向相关机构报告。"}</p>
+                  <p className="leading-relaxed mt-3"><strong>{lang === "en" ? "4.3 Network Security:" : "4.3 网络安全："}</strong> {lang === "en" ? "We implement network segregation, anti-virus software, multi-factor authentication, and strict password policies to protect our systems and your data." : "我们实施网络隔离、防病毒软件、多因素认证和严格的密码策略来保护我们的系统和您的数据。"}</p>
+                  <p className="leading-relaxed mt-3"><strong>{lang === "en" ? "4.4 Security Prompt:" : "4.4 安全提示："}</strong> {lang === "en" ? "Please understand that the internet environment is not 100% secure. Please keep your account information properly." : "请理解互联网环境并非100%安全。请妥善保管您的账户信息。"}</p>
                 </div>
               </div>
             </ReflectiveCard>
@@ -161,8 +163,9 @@ export default function PrivacyPage() {
                 <div className="p-3 rounded-lg bg-orange-500/10 text-orange-400 shrink-0"><Server className="h-6 w-6" /></div>
                 <div>
                   <h2 className="text-xl font-bold text-white mb-3">{lang === "en" ? "5. How We Store Personal Information" : "五、我们如何存储个人信息"}</h2>
-                  <p className="leading-relaxed"><strong>{lang === "en" ? "5.1 Storage Location:" : "5.1 存储地点："}</strong> {lang === "en" ? "Your personal information will be stored within the territory of the People's Republic of China. If cross-border transmission is required, we will follow relevant laws and regulations." : "您的个人信息将存储在中华人民共和国境内。如需跨境传输，我们将遵循相关法律法规。"}</p>
-                  <p className="leading-relaxed mt-3"><strong>{lang === "en" ? "5.2 Storage Period:" : "5.2 存储期限："}</strong> {lang === "en" ? "We only retain your personal information for the period necessary to provide services. After account cancellation, we will delete or anonymize your information, unless otherwise stipulated by laws." : "我们仅在提供服务所必需的期间内保留您的个人信息。账户注销后，我们将删除或匿名化您的信息，法律另有规定除外。"}</p>
+                  <p className="leading-relaxed"><strong>{lang === "en" ? "5.1 Storage Location:" : "5.1 存储地点："}</strong> {lang === "en" ? "Your personal information is stored in the United States (Supabase cloud database) and China (Alibaba Cloud application server). TikTok-related data, including OAuth access tokens and user identifiers, is stored exclusively on servers located in the United States. All cross-border data transmission is conducted in compliance with applicable laws and regulations." : "您的个人信息存储于美国（Supabase 云数据库）和中国（阿里云应用服务器）。TikTok 相关数据（包括 OAuth 访问令牌和用户标识符）仅存储在位于美国的服务器上。所有跨境数据传输均遵守适用的法律法规。"}</p>
+                  <p className="leading-relaxed mt-3"><strong>{lang === "en" ? "5.2 Storage Period:" : "5.2 存储期限："}</strong> {lang === "en" ? "We only retain your personal information for the period necessary to provide services. Specific retention periods include: OAuth access tokens are stored until expiration and automatically refreshed; product showcase data is fetched in real-time via API and not permanently stored; video files are deleted from our servers after successful upload to TikTok. After account cancellation, we will delete or anonymize your information within 30 days, unless otherwise stipulated by laws." : "我们仅在提供服务所必需的期间内保留您的个人信息。具体保留期限包括：OAuth 访问令牌存储至过期后自动刷新；橱窗商品数据通过 API 实时获取，不做持久化存储；视频文件在成功上传至 TikTok 后从我们的服务器删除。账户注销后，我们将在 30 天内删除或匿名化您的信息，法律另有规定除外。"}</p>
+                  <p className="leading-relaxed mt-3"><strong>{lang === "en" ? "5.3 Data Deletion:" : "5.3 数据删除："}</strong> {lang === "en" ? "You may request deletion of your personal data at any time by contacting us at toryxai@outlook.com. Upon receiving a valid deletion request, we will process it within 30 days. When a seller revokes TikTok authorization or when a service contract ends, we will promptly delete all associated TikTok data." : "您可以随时通过联系 toryxai@outlook.com 请求删除您的个人数据。收到有效的删除请求后，我们将在 30 天内处理。当卖家撤回 TikTok 授权或服务合同终止时，我们将及时删除所有相关的 TikTok 数据。"}</p>
                 </div>
               </div>
             </ReflectiveCard>
@@ -194,41 +197,94 @@ export default function PrivacyPage() {
               </div>
             </ReflectiveCard>
 
-            {/* 8. Contact Us */}
-            <ReflectiveCard className="!rounded-xl">
-              <div className="flex items-start gap-4 p-6">
-                <div className="p-3 rounded-lg bg-teal-500/10 text-teal-400 shrink-0"><Phone className="h-6 w-6" /></div>
-                <div>
-                  <h2 className="text-xl font-bold text-white mb-3">{lang === "en" ? "8. Contact Us" : "八、联系我们"}</h2>
-                  <p className="leading-relaxed">{lang === "en" ? 'If you have questions, suggestions, or complaints about personal information protection issues, you can contact us:' : '如您对个人信息保护问题有疑问、建议或投诉，可以联系我们：'}</p>
-                  <p className="leading-relaxed mt-3">{lang === "en" ? "Email to: " : "发送邮件至："}<span className="text-cyan-400">toryxai@outlook.com</span></p>
-                  <p className="leading-relaxed mt-3">{lang === "en" ? 'We will verify your identity and reply within fifteen working days as soon as possible.' : '我们将核实您的身份并尽快在十五个工作日内回复。'}</p>
-                </div>
-              </div>
-            </ReflectiveCard>
 
-            {/* 9. Others */}
+            {/* 8. TikTok Platform Data Integration */}
             <ReflectiveCard className="!rounded-xl">
               <div className="flex items-start gap-4 p-6">
-                <div className="p-3 rounded-lg bg-violet-500/10 text-violet-400 shrink-0"><ExternalLink className="h-6 w-6" /></div>
+                <div className="p-3 rounded-lg bg-violet-500/10 text-violet-400 shrink-0"><ShoppingBag className="h-6 w-6" /></div>
                 <div>
-                  <h2 className="text-xl font-bold text-white mb-3">{lang === "en" ? "9. Others (Third-Party Service Statement)" : "九、其他（第三方服务声明）"}</h2>
-                  <p className="leading-relaxed">{lang === "en" ? 'When ToryX integrates third-party services (such as TikTok, YouTube), it will follow the data policies of relevant platforms.' : '当ToryX集成第三方服务（如TikTok、YouTube）时，将遵循相关平台的数据政策。'}</p>
+                  <h2 className="text-xl font-bold text-white mb-3">{lang === "en" ? "8. TikTok Platform Data Integration" : "八、TikTok 平台数据集成"}</h2>
+
+                  <h3 className="text-lg font-medium text-white mt-4 mb-2">{lang === "en" ? "8.1 OAuth Authorization" : "8.1 OAuth 授权"}</h3>
+                  <p className="leading-relaxed">{lang === "en" ? 'ToryX integrates with TikTok via OAuth 2.0 authorization. Depending on the features you use, you may authorize the following permissions:' : 'ToryX 通过 OAuth 2.0 授权与 TikTok 集成。根据您使用的功能，您可能授权以下权限：'}</p>
+                  <p className="leading-relaxed mt-3 text-sm text-gray-400">{lang === "en" ? 'Content Posting API (TikTok for Developers):' : '内容发布 API (TikTok for Developers)：'}</p>
+                  <ul className="list-disc pl-6 space-y-2 mt-1 text-gray-300">
+                    <li><strong>video.publish</strong> — {lang === "en" ? "Permission to directly post videos and photos to your TikTok account" : "直接向您的 TikTok 账户发布视频和图片的权限"}</li>
+                    <li><strong>user.info.basic</strong> — {lang === "en" ? "Permission to access your basic profile information (username, avatar)" : "访问您的基本个人资料信息（用户名、头像）的权限"}</li>
+                  </ul>
+                  <p className="leading-relaxed mt-3 text-sm text-gray-400">{lang === "en" ? 'TikTok Shop API (Affiliate Creator):' : 'TikTok Shop API (联盟创作者)：'}</p>
+                  <ul className="list-disc pl-6 space-y-2 mt-1 text-gray-300">
+                    <li><strong>creator.video.write</strong> — {lang === "en" ? "Permission to publish shoppable videos with product links on your behalf" : "代您发布带商品链接的橱窗带货视频的权限"}</li>
+                    <li><strong>creator.affiliate.info</strong> — {lang === "en" ? "Permission to access your product showcase information" : "访问您的橱窗商品信息的权限"}</li>
+                  </ul>
+                  <p className="leading-relaxed mt-3">{lang === "en" ? 'You may revoke any of these authorizations at any time through your TikTok account settings.' : '您可以随时通过 TikTok 账户设置撤回任何这些授权。'}</p>
+
+                  <h3 className="text-lg font-medium text-white mt-4 mb-2">{lang === "en" ? "8.2 Data We Access" : "8.2 我们访问的数据"}</h3>
                   <ul className="list-disc pl-6 space-y-2 mt-3 text-gray-300">
-                    <li>{lang === "en" ? "If you authorize a TikTok account, it means you agree to accept the " : "如您授权TikTok账户，即表示您同意接受"}<Link href="https://www.tiktok.com/legal/privacy-policy?lang=en" target="_blank" className="text-cyan-400 hover:underline">{lang === "en" ? "TikTok Privacy Policy" : "TikTok隐私政策"}</Link></li>
-                    <li>{lang === "en" ? "ToryX will use Google/YouTube API services. If you authorize a YouTube account, it means you agree to accept the " : "ToryX将使用Google/YouTube API服务。如您授权YouTube账户，即表示您同意接受"}<Link href="https://www.google.com/policies/privacy" target="_blank" className="text-cyan-400 hover:underline">{lang === "en" ? "Google Privacy Policy" : "Google隐私政策"}</Link></li>
-                    <li>{lang === "en" ? "To revoke Google/YouTube authorization: " : "如需撤销Google/YouTube授权："}<Link href="https://security.google.com/settings/security/permissions" target="_blank" className="text-cyan-400 hover:underline">{lang === "en" ? "Google Security Settings Page" : "Google安全设置页面"}</Link></li>
+                    <li><strong>{lang === "en" ? "Basic Profile:" : "基本个人资料："}</strong> {lang === "en" ? "Username, display name, avatar (for identifying connected accounts within ToryX)" : "用户名、显示名称、头像（用于在 ToryX 内识别已连接的账号）"}</li>
+                    <li><strong>{lang === "en" ? "Content Publishing (Direct Post):" : "内容发布（Direct Post）："}</strong> {lang === "en" ? "We directly publish AI-generated videos and photos to your TikTok account on your behalf, with your confirmation" : "经您确认后，我们代您将 AI 生成的视频和图片直接发布到您的 TikTok 账户"}</li>
+                    <li><strong>{lang === "en" ? "Showcase Products (TikTok Shop):" : "橱窗商品 (TikTok Shop)："}</strong> {lang === "en" ? "Product ID, name, price, commission rate, images (to enable product selection for shoppable video creation)" : "商品 ID、名称、价格、佣金率、图片（用于带货视频创作时的商品选择）"}</li>
+                    <li><strong>{lang === "en" ? "Shoppable Video Publishing:" : "带货视频发布："}</strong> {lang === "en" ? "We upload and publish shoppable content with product links to TikTok on your behalf" : "我们代您上传并发布带商品链接的带货内容到 TikTok"}</li>
+                  </ul>
+
+                  <h3 className="text-lg font-medium text-white mt-4 mb-2">{lang === "en" ? "8.3 How We Use This Data" : "8.3 数据使用方式"}</h3>
+                  <ul className="list-disc pl-6 space-y-2 mt-3 text-gray-300">
+                    <li>{lang === "en" ? "Basic profile information is displayed within ToryX to identify connected accounts" : "基本个人资料信息在 ToryX 内展示，用于标识已连接的账号"}</li>
+                    <li>{lang === "en" ? "AI-generated videos are published directly to your TikTok account via the Content Posting API (Direct Post mode)" : "AI 生成的视频通过内容发布 API（Direct Post 模式）直接发布到您的 TikTok 账户"}</li>
+                    <li>{lang === "en" ? "Showcase product data is used to help you select products for shoppable video creation" : "橱窗商品数据用于帮助您选择商品进行带货视频创作"}</li>
+                    <li>{lang === "en" ? "Video files are temporarily processed on our servers and uploaded to TikTok, then deleted from our servers" : "视频文件在我们的服务器上临时处理并上传至 TikTok，然后从我们的服务器中删除"}</li>
+                  </ul>
+                  <p className="leading-relaxed mt-3 font-semibold">{lang === "en" ? 'We do not sell, share, or transfer your TikTok data to any third party.' : '我们不会向任何第三方出售、共享或转让您的 TikTok 数据。'}</p>
+
+                  <h3 className="text-lg font-medium text-white mt-4 mb-2">{lang === "en" ? "8.4 Data Retention for TikTok Data" : "8.4 TikTok 数据保留"}</h3>
+                  <ul className="list-disc pl-6 space-y-2 mt-3 text-gray-300">
+                    <li>{lang === "en" ? "OAuth tokens: stored until expiration; access tokens are automatically refreshed, refresh tokens require re-authorization upon expiration" : "OAuth 令牌：存储至过期；访问令牌自动刷新，刷新令牌到期后需重新授权"}</li>
+                    <li>{lang === "en" ? "Showcase product information: fetched in real-time via API, not permanently stored" : "橱窗商品信息：通过 API 实时获取，不做持久化存储"}</li>
+                    <li>{lang === "en" ? "Video files: deleted from our servers after successful upload to TikTok" : "视频文件：成功上传至 TikTok 后从我们的服务器删除"}</li>
+                    <li>{lang === "en" ? "Upon authorization revocation: all TikTok-related data is deleted within 30 days" : "授权撤回后：所有 TikTok 相关数据在 30 天内删除"}</li>
                   </ul>
                 </div>
               </div>
             </ReflectiveCard>
 
-            {/* Contact Info */}
+            {/* 9. AIGC Content Disclosure */}
             <ReflectiveCard className="!rounded-xl">
               <div className="flex items-start gap-4 p-6">
-                <div className="p-3 rounded-lg bg-white/10 text-white shrink-0"><Key className="h-6 w-6" /></div>
+                <div className="p-3 rounded-lg bg-fuchsia-500/10 text-fuchsia-400 shrink-0"><Cpu className="h-6 w-6" /></div>
                 <div>
-                  <h2 className="text-xl font-bold text-white mb-3">{lang === "en" ? "Contact Information" : "联系信息"}</h2>
+                  <h2 className="text-xl font-bold text-white mb-3">{lang === "en" ? "9. AIGC Content Disclosure" : "九、AIGC 内容披露"}</h2>
+                  <p className="leading-relaxed">{lang === "en" ? 'ToryX is an AI-powered content creation platform. Videos generated through our platform are created using artificial intelligence technology, including AI-generated characters, voiceovers, and scripts.' : 'ToryX 是一个 AI 驱动的内容创作平台。通过我们平台生成的视频使用人工智能技术创建，包括 AI 生成的角色、配音和脚本。'}</p>
+                  <p className="leading-relaxed mt-3">{lang === "en" ? 'In compliance with TikTok\'s content policies, all AI-generated videos published through ToryX to TikTok will be automatically labeled as AIGC (AI-Generated Content). This labeling ensures transparency and compliance with platform regulations regarding synthetic media.' : '为遵守 TikTok 的内容政策，通过 ToryX 发布到 TikTok 的所有 AI 生成视频将自动标注为 AIGC（AI 生成内容）。此标注确保了合成媒体相关平台法规的透明度和合规性。'}</p>
+                  <p className="leading-relaxed mt-3">{lang === "en" ? 'Users acknowledge and agree that AI-generated content published through ToryX will carry appropriate AIGC disclosures as required by applicable platform rules and regulations.' : '用户确认并同意，通过 ToryX 发布的 AI 生成内容将按照适用的平台规则和法规附带适当的 AIGC 披露标注。'}</p>
+                </div>
+              </div>
+            </ReflectiveCard>
+
+            {/* 11. Third-Party Services */}
+            <ReflectiveCard className="!rounded-xl">
+              <div className="flex items-start gap-4 p-6">
+                <div className="p-3 rounded-lg bg-emerald-500/10 text-emerald-400 shrink-0"><ExternalLink className="h-6 w-6" /></div>
+                <div>
+                  <h2 className="text-xl font-bold text-white mb-3">{lang === "en" ? "10. Third-Party Services" : "十、第三方服务"}</h2>
+                  <p className="leading-relaxed">{lang === "en" ? 'When ToryX integrates third-party services, it will follow the data policies of relevant platforms.' : '当 ToryX 集成第三方服务时，将遵循相关平台的数据政策。'}</p>
+                  <ul className="list-disc pl-6 space-y-2 mt-3 text-gray-300">
+                    <li>{lang === "en" ? "TikTok: " : "TikTok："}<Link href="https://www.tiktok.com/legal/privacy-policy?lang=en" target="_blank" className="text-cyan-400 hover:underline">{lang === "en" ? "TikTok Privacy Policy" : "TikTok 隐私政策"}</Link></li>
+                    <li>{lang === "en" ? "TikTok Developer: " : "TikTok 开发者："}<Link href="https://www.tiktok.com/legal/tik-tok-developer-terms-of-service?lang=en" target="_blank" className="text-cyan-400 hover:underline">{lang === "en" ? "TikTok Developer Terms of Service" : "TikTok 开发者服务条款"}</Link></li>
+                    <li>{lang === "en" ? "TikTok Shop Developer: " : "TikTok Shop 开发者："}<Link href="https://partner.tiktokshop.com/docv2/page/6507ead7b99d5302be949ba9" target="_blank" className="text-cyan-400 hover:underline">{lang === "en" ? "TikTok Shop Developer Terms" : "TikTok Shop 开发者条款"}</Link></li>
+                    <li>{lang === "en" ? "Google/YouTube: " : "Google/YouTube："}<Link href="https://www.google.com/policies/privacy" target="_blank" className="text-cyan-400 hover:underline">{lang === "en" ? "Google Privacy Policy" : "Google 隐私政策"}</Link></li>
+                    <li>{lang === "en" ? "To revoke Google/YouTube authorization: " : "撤销 Google/YouTube 授权："}<Link href="https://security.google.com/settings/security/permissions" target="_blank" className="text-cyan-400 hover:underline">{lang === "en" ? "Google Security Settings" : "Google 安全设置"}</Link></li>
+                  </ul>
+                </div>
+              </div>
+            </ReflectiveCard>
+
+            {/* 11. Contact Us */}
+            <ReflectiveCard className="!rounded-xl">
+              <div className="flex items-start gap-4 p-6">
+                <div className="p-3 rounded-lg bg-teal-500/10 text-teal-400 shrink-0"><Phone className="h-6 w-6" /></div>
+                <div>
+                  <h2 className="text-xl font-bold text-white mb-3">{lang === "en" ? "11. Contact Us" : "十一、联系我们"}</h2>
+                  <p className="leading-relaxed">{lang === "en" ? 'If you have questions, suggestions, or complaints about personal information protection, data deletion requests, or any privacy-related matters, you can contact us:' : '如您对个人信息保护、数据删除请求或任何隐私相关事项有疑问、建议或投诉，可以联系我们：'}</p>
                   <div className="grid sm:grid-cols-2 gap-4 mt-4">
                     <div>
                       <p className="text-gray-400 text-sm">{lang === "en" ? "Company" : "公司"}</p>
@@ -247,6 +303,7 @@ export default function PrivacyPage() {
                       <p className="text-white">{lang === "en" ? "Wuhan, Hubei Province, China" : "中国湖北省武汉市"}</p>
                     </div>
                   </div>
+                  <p className="leading-relaxed mt-4">{lang === "en" ? 'We will verify your identity and respond within fifteen (15) working days.' : '我们将核实您的身份并在十五 (15) 个工作日内回复。'}</p>
                 </div>
               </div>
             </ReflectiveCard>

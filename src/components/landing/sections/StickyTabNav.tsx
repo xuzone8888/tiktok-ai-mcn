@@ -27,6 +27,8 @@ type TabId = (typeof tabs)[number]["id"];
 
 export default function StickyTabNav() {
     const [activeTab, setActiveTab] = useState<TabId>("character-engine");
+    const [isStuck, setIsStuck] = useState(false);
+    const tabBarRef = useRef<HTMLDivElement>(null);
 
     // 3 个 section 的 ref
     const sectionRefs = useRef<Record<TabId, HTMLElement | null>>({
@@ -34,6 +36,18 @@ export default function StickyTabNav() {
         "content-creation": null,
         "efficiency-compliance": null,
     });
+
+    // 检测 Tab 栏是否已吸顶
+    useEffect(() => {
+        const handleScroll = () => {
+            if (tabBarRef.current) {
+                const rect = tabBarRef.current.getBoundingClientRect();
+                setIsStuck(rect.top <= 66);
+            }
+        };
+        window.addEventListener("scroll", handleScroll, { passive: true });
+        return () => window.removeEventListener("scroll", handleScroll);
+    }, []);
 
     // IntersectionObserver 监听
     useEffect(() => {
@@ -95,7 +109,12 @@ export default function StickyTabNav() {
         <div>
             {/* ========== Sticky Tab 栏 ========== */}
             <div
-                className="z-40 border-b border-white/5 backdrop-blur-xl bg-black/80"
+                ref={tabBarRef}
+                className={`z-40 border-b transition-all duration-300 ${
+                    isStuck
+                        ? "border-white/5 backdrop-blur-xl bg-[#0a0a0f]/80"
+                        : "border-transparent bg-transparent"
+                }`}
                 style={{
                     position: "sticky",
                     // @ts-expect-error -webkit-sticky for iOS Safari
@@ -126,54 +145,41 @@ export default function StickyTabNav() {
                         ))}
                     </div>
                 </div>
-                {/* 当前 Tab 底部指示条 */}
-                <div className="container max-w-7xl mx-auto px-6">
-                    <div className="flex gap-1">
-                        {tabs.map((tab) => (
-                            <div
-                                key={tab.id}
-                                className={`h-0.5 flex-1 transition-colors duration-300 ${
-                                    activeTab === tab.id
-                                        ? "bg-white"
-                                        : "bg-transparent"
-                                }`}
-                            />
-                        ))}
-                    </div>
-                </div>
             </div>
 
-            {/* ========== Section 1: 角色引擎 ========== */}
+            {/* FeatureModelSection 在 Tab Section 之前 */}
+            <FeatureModelSection />
+
+            {/* ========== Section 1: 角色引擎 → "你的角色，千变万化" ========== */}
             <section
                 id="character-engine"
                 ref={setSectionRef("character-engine")}
                 aria-label="角色引擎"
                 className="scroll-mt-[120px]"
             >
-                <FeatureModelSection />
                 <ModelWallSection />
+                <FeatureAiCopySection />
             </section>
 
-            {/* ========== Section 2: 内容创作 ========== */}
+            {/* ========== Section 2: 内容创作 → "从灵感到成品，极速出片" ========== */}
             <section
                 id="content-creation"
                 ref={setSectionRef("content-creation")}
                 aria-label="内容创作"
                 className="scroll-mt-[120px]"
             >
-                <FeatureAiCopySection />
                 <GenerationEngineSection />
+                <MatrixSection />
+                <WhyUsSection />
             </section>
 
-            {/* ========== Section 3: 效率与合规 ========== */}
+            {/* ========== Section 3: 效率与合规 → "做合规的创作者，走得更远" ========== */}
             <section
                 id="efficiency-compliance"
                 ref={setSectionRef("efficiency-compliance")}
                 aria-label="效率与合规"
                 className="scroll-mt-[120px]"
             >
-                <MatrixSection />
-                <WhyUsSection />
                 <LiveStatsSection />
             </section>
         </div>
