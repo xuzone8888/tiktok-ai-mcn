@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Sparkles, Search, MessageSquare, Book, Zap, Shield } from "lucide-react";
+import { ArrowLeft, Zap, Book, HelpCircle, Shield } from "lucide-react";
 
 export default function HelpPage() {
     return (
@@ -37,46 +37,34 @@ export default function HelpPage() {
             {/* Hero Section */}
             <main className="relative z-10 py-20 px-6 text-center">
                 <h1 className="text-4xl md:text-5xl font-bold mb-6">我们能帮你什么？</h1>
-                <p className="text-xl text-gray-400 mb-10 max-w-2xl mx-auto">
-                    搜索问题，浏览指南，或直接联系我们
+                <p className="text-xl text-gray-400 mb-16 max-w-2xl mx-auto">
+                    浏览指南了解平台功能，或直接联系我们获取帮助
                 </p>
-
-                {/* 搜索框 */}
-                <div className="max-w-xl mx-auto mb-16 relative">
-                    <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none">
-                        <Search className="h-5 w-5 text-gray-500" />
-                    </div>
-                    <input
-                        type="text"
-                        placeholder="搜索常见问题..."
-                        className="w-full pl-12 pr-4 py-4 bg-white/5 border border-white/10 rounded-2xl text-white placeholder:text-gray-500 focus:outline-none focus:border-white/30 focus:ring-1 focus:ring-white/30 transition-all font-medium"
-                    />
-                </div>
 
                 {/* 帮助分类 */}
                 <div className="container max-w-5xl mx-auto grid md:grid-cols-3 gap-6 text-left">
-                    <Link href="#" className="group">
+                    <Link href="/auth/register" className="group">
                         <div className="h-full bg-white/5 border border-white/10 rounded-2xl p-8 hover:bg-white/10 transition-all">
                             <div className="w-12 h-12 rounded-xl bg-white/10 flex items-center justify-center mb-6 text-white group-hover:scale-110 transition-transform">
                                 <Zap className="h-6 w-6" />
                             </div>
                             <h3 className="text-xl font-bold mb-3">快速入门</h3>
-                            <p className="text-gray-400 leading-relaxed">了解如何注册账号，绑定 TikTok，并生成你的第一条视频。</p>
+                            <p className="text-gray-400 leading-relaxed">注册账号即送 100 积分，创建你的首个 AI 角色，60 秒生成第一条视频。</p>
                         </div>
                     </Link>
-                    <Link href="#" className="group">
+                    <Link href="/#character-engine" className="group">
                         <div className="h-full bg-white/5 border border-white/10 rounded-2xl p-8 hover:bg-white/10 transition-all">
                             <div className="w-12 h-12 rounded-xl bg-white/10 flex items-center justify-center mb-6 text-white group-hover:scale-110 transition-transform">
                                 <Book className="h-6 w-6" />
                             </div>
                             <h3 className="text-xl font-bold mb-3">使用指南</h3>
-                            <p className="text-gray-400 leading-relaxed">深入了解 AI 模特库、视频编辑器和批量生成工具的高级用法。</p>
+                            <p className="text-gray-400 leading-relaxed">深入了解 AI 角色库、视频生成引擎和批量创作工具的高级用法。</p>
                         </div>
                     </Link>
-                    <Link href="#" className="group">
+                    <Link href="/#faq" className="group">
                         <div className="h-full bg-white/5 border border-white/10 rounded-2xl p-8 hover:bg-white/10 transition-all">
                             <div className="w-12 h-12 rounded-xl bg-white/10 flex items-center justify-center mb-6 text-white group-hover:scale-110 transition-transform">
-                                <Shield className="h-6 w-6" />
+                                <HelpCircle className="h-6 w-6" />
                             </div>
                             <h3 className="text-xl font-bold mb-3">常见问题</h3>
                             <p className="text-gray-400 leading-relaxed">关于账号计费、版权归属和平台规则的常见疑问解答。</p>

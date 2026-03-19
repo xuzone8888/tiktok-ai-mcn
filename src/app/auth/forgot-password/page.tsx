@@ -75,10 +75,17 @@ export default function ForgotPasswordPage() {
   if (isSent) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center p-4 relative overflow-hidden">
-        {/* Background Atmosphere */}
-        <div className="absolute inset-0">
-          <div className="absolute top-1/4 left-1/4 w-[500px] h-[500px] bg-white/[0.02] rounded-full blur-3xl" />
-          <div className="absolute bottom-1/4 right-1/4 w-[500px] h-[500px] bg-[#00ff9d]/[0.05] rounded-full blur-3xl" />
+        {/* 多重光晕背景 */}
+        <div className="absolute inset-0 pointer-events-none">
+          <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:64px_64px]" />
+          <div
+            className="absolute top-0 left-0 w-[800px] h-[800px] -translate-x-1/4 -translate-y-1/4 mix-blend-screen"
+            style={{ background: 'radial-gradient(circle, rgba(168,85,247,0.15) 0%, rgba(168,85,247,0) 60%)' }}
+          />
+          <div
+            className="absolute bottom-0 right-0 w-[800px] h-[800px] translate-x-1/4 translate-y-1/4 mix-blend-screen"
+            style={{ background: 'radial-gradient(circle, rgba(16,185,129,0.12) 0%, rgba(16,185,129,0) 60%)' }}
+          />
         </div>
 
         <div className="w-full max-w-[440px] relative z-10">
@@ -118,7 +125,7 @@ export default function ForgotPasswordPage() {
               {/* Action Button */}
               <Button
                 onClick={() => router.push("/auth/login")}
-                className="w-full h-12 bg-gradient-to-b from-white to-gray-100 hover:to-white text-black font-bold text-base rounded-xl transition-all duration-300 hover:scale-[1.02] shadow-[0_0_20px_rgba(255,255,255,0.3),inset_0_1px_0_rgba(255,255,255,1)] hover:shadow-[0_0_30px_rgba(255,255,255,0.5),inset_0_1px_0_rgba(255,255,255,1)] group border-t border-white"
+                className="w-full h-12 bg-gradient-to-r from-[#10b981] to-[#059669] hover:from-[#34d399] hover:to-[#10b981] text-white font-semibold text-[15px] rounded-xl transition-all duration-300 hover:scale-[1.02] shadow-[0_0_20px_rgba(16,185,129,0.2)] hover:shadow-[0_0_30px_rgba(16,185,129,0.4)] border-none group"
               >
                 <span className="flex items-center justify-center gap-2">
                   返回登录
@@ -139,39 +146,41 @@ export default function ForgotPasswordPage() {
   // 初始状态：输入邮箱
   return (
     <div className="min-h-screen bg-black flex items-center justify-center p-4 relative overflow-hidden">
-      {/* Background Atmosphere */}
-      <div className="absolute inset-0">
-        <div className="absolute top-1/4 left-1/4 w-[500px] h-[500px] bg-white/[0.02] rounded-full blur-3xl" />
-        <div className="absolute bottom-1/4 right-1/4 w-[500px] h-[500px] bg-[#00ff9d]/[0.05] rounded-full blur-3xl" />
+      {/* 多重光晕背景 */}
+      <div className="absolute inset-0 pointer-events-none">
+        <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:64px_64px]" />
+        <div
+          className="absolute top-0 left-0 w-[800px] h-[800px] -translate-x-1/4 -translate-y-1/4 mix-blend-screen"
+          style={{ background: 'radial-gradient(circle, rgba(168,85,247,0.15) 0%, rgba(168,85,247,0) 60%)' }}
+        />
+        <div
+          className="absolute bottom-0 right-0 w-[800px] h-[800px] translate-x-1/4 translate-y-1/4 mix-blend-screen"
+          style={{ background: 'radial-gradient(circle, rgba(16,185,129,0.12) 0%, rgba(16,185,129,0) 60%)' }}
+        />
+        <div
+          className="absolute top-1/2 left-1/2 w-[1000px] h-[1000px] -translate-x-1/2 -translate-y-1/2 mix-blend-screen opacity-50"
+          style={{ background: 'radial-gradient(circle, rgba(59,130,246,0.08) 0%, rgba(59,130,246,0) 60%)' }}
+        />
       </div>
 
       <div className="w-full max-w-[460px] relative z-10">
-        <ReflectiveCard className="py-8 px-10 login-expand">
-          {/* Header - ToryX Logo */}
-          <div className="flex flex-col items-center mb-6">
+        {/* 毛玻璃容器 */}
+        <div className="w-full bg-white/[0.03] backdrop-blur-2xl border border-white/10 rounded-[2rem] p-8 sm:p-10 shadow-[0_20px_50px_rgba(0,0,0,0.5)] relative overflow-hidden">
+          {/* 玻璃边缘折射高光 */}
+          <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-white/30 to-transparent opacity-50" />
+
+          {/* Logo */}
+          <div className="flex justify-center mb-6">
             <img
               src="/images/toryx_logo_text.png"
               alt="ToryX AI"
-              className="h-12 mt-4 mb-3 drop-shadow-[0_0_20px_rgba(16,185,129,0.3)]"
+              className="h-10 drop-shadow-[0_0_20px_rgba(16,185,129,0.3)]"
             />
-            <span className="text-xs text-white/30 tracking-[0.15em] uppercase">
-              AI 内容智造工厂
-            </span>
           </div>
 
           {/* Title */}
           <div className="text-center mb-6">
-            <h1
-              className="text-[24px] font-semibold tracking-[-0.02em] mb-2"
-              style={{
-                background: 'linear-gradient(180deg, #ffffff 0%, #e8e8e8 25%, #c0c0c0 50%, #a0a0a0 75%, #d0d0d0 100%)',
-                WebkitBackgroundClip: 'text',
-                WebkitTextFillColor: 'transparent',
-                filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.3))',
-              }}
-            >
-              找回密码
-            </h1>
+            <h2 className="text-2xl font-semibold text-white mb-2 tracking-tight">找回密码</h2>
             <p className="text-sm text-white/40">
               输入您的注册邮箱，我们将发送密码重置链接
             </p>
@@ -179,9 +188,9 @@ export default function ForgotPasswordPage() {
 
           {/* Form */}
           <form onSubmit={handleSendResetEmail}>
-            <div className="space-y-4 pb-2">
+            <div className="space-y-4">
               <ReflectiveInput
-                icon={<Mail className="w-5 h-5" />}
+                icon={<Mail className="w-5 h-5 text-white/50" />}
                 type="email"
                 placeholder="请输入注册邮箱"
                 value={email}
@@ -193,7 +202,7 @@ export default function ForgotPasswordPage() {
               <Button
                 type="submit"
                 disabled={isLoading || !email}
-                className="w-full h-12 bg-gradient-to-b from-white to-gray-100 hover:to-white text-black font-bold text-base rounded-xl transition-all duration-300 hover:scale-[1.02] shadow-[0_0_20px_rgba(255,255,255,0.3),inset_0_1px_0_rgba(255,255,255,1)] hover:shadow-[0_0_30px_rgba(255,255,255,0.5),inset_0_1px_0_rgba(255,255,255,1)] mt-2 group border-t border-white disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full h-12 bg-gradient-to-r from-[#10b981] to-[#059669] hover:from-[#34d399] hover:to-[#10b981] text-white font-semibold text-[15px] rounded-xl transition-all duration-300 hover:scale-[1.02] shadow-[0_0_20px_rgba(16,185,129,0.2)] hover:shadow-[0_0_30px_rgba(16,185,129,0.4)] border-none group disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <span className="flex items-center justify-center gap-2">
                   {isLoading ? (
@@ -211,7 +220,7 @@ export default function ForgotPasswordPage() {
               </Button>
 
               {/* Back to Login */}
-              <div className="text-center mt-4">
+              <div className="text-center pt-2">
                 <Link
                   href="/auth/login"
                   className="text-sm text-white/50 hover:text-[#10b981] transition-colors inline-flex items-center gap-1"
@@ -222,7 +231,7 @@ export default function ForgotPasswordPage() {
               </div>
             </div>
           </form>
-        </ReflectiveCard>
+        </div>
       </div>
     </div>
   );

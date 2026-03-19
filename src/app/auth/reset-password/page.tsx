@@ -117,23 +117,40 @@ export default function ResetPasswordPage() {
     }
   };
 
+  // 统一的多重光晕背景
+  const Background = () => (
+    <div className="absolute inset-0 pointer-events-none">
+      <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:64px_64px]" />
+      <div
+        className="absolute top-0 left-0 w-[800px] h-[800px] -translate-x-1/4 -translate-y-1/4 mix-blend-screen"
+        style={{ background: 'radial-gradient(circle, rgba(168,85,247,0.15) 0%, rgba(168,85,247,0) 60%)' }}
+      />
+      <div
+        className="absolute bottom-0 right-0 w-[800px] h-[800px] translate-x-1/4 translate-y-1/4 mix-blend-screen"
+        style={{ background: 'radial-gradient(circle, rgba(16,185,129,0.12) 0%, rgba(16,185,129,0) 60%)' }}
+      />
+      <div
+        className="absolute top-1/2 left-1/2 w-[1000px] h-[1000px] -translate-x-1/2 -translate-y-1/2 mix-blend-screen opacity-50"
+        style={{ background: 'radial-gradient(circle, rgba(59,130,246,0.08) 0%, rgba(59,130,246,0) 60%)' }}
+      />
+    </div>
+  );
+
   // ==========================================
   // 渲染：加载中状态
   // ==========================================
   if (pageState === "loading") {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center p-4 relative overflow-hidden">
-        <div className="absolute inset-0">
-          <div className="absolute top-1/4 left-1/4 w-[500px] h-[500px] bg-white/[0.02] rounded-full blur-3xl" />
-          <div className="absolute bottom-1/4 right-1/4 w-[500px] h-[500px] bg-[#00ff9d]/[0.05] rounded-full blur-3xl" />
-        </div>
+        <Background />
         <div className="w-full max-w-[460px] relative z-10">
-          <ReflectiveCard className="py-12 px-10">
+          <div className="w-full bg-white/[0.03] backdrop-blur-2xl border border-white/10 rounded-[2rem] p-12 shadow-[0_20px_50px_rgba(0,0,0,0.5)] relative overflow-hidden">
+            <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-white/30 to-transparent opacity-50" />
             <div className="flex flex-col items-center space-y-4">
               <Loader2 className="w-10 h-10 text-[#10b981] animate-spin" />
               <p className="text-white/50 text-sm">正在验证重置链接...</p>
             </div>
-          </ReflectiveCard>
+          </div>
         </div>
       </div>
     );
@@ -145,12 +162,10 @@ export default function ResetPasswordPage() {
   if (pageState === "expired") {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center p-4 relative overflow-hidden">
-        <div className="absolute inset-0">
-          <div className="absolute top-1/4 left-1/4 w-[500px] h-[500px] bg-white/[0.02] rounded-full blur-3xl" />
-          <div className="absolute bottom-1/4 right-1/4 w-[500px] h-[500px] bg-[#00ff9d]/[0.05] rounded-full blur-3xl" />
-        </div>
+        <Background />
         <div className="w-full max-w-[460px] relative z-10">
-          <ReflectiveCard className="py-10 px-10">
+          <div className="w-full bg-white/[0.03] backdrop-blur-2xl border border-white/10 rounded-[2rem] p-8 sm:p-10 shadow-[0_20px_50px_rgba(0,0,0,0.5)] relative overflow-hidden">
+            <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-white/30 to-transparent opacity-50" />
             <div className="text-center space-y-6">
               <div className="flex justify-center">
                 <div
@@ -171,7 +186,7 @@ export default function ResetPasswordPage() {
               </div>
               <Button
                 onClick={() => router.push("/auth/forgot-password")}
-                className="w-full h-12 bg-gradient-to-b from-white to-gray-100 hover:to-white text-black font-bold text-base rounded-xl transition-all duration-300 hover:scale-[1.02] shadow-[0_0_20px_rgba(255,255,255,0.3),inset_0_1px_0_rgba(255,255,255,1)] hover:shadow-[0_0_30px_rgba(255,255,255,0.5),inset_0_1px_0_rgba(255,255,255,1)] group border-t border-white"
+                className="w-full h-12 bg-gradient-to-r from-[#10b981] to-[#059669] hover:from-[#34d399] hover:to-[#10b981] text-white font-semibold text-[15px] rounded-xl transition-all duration-300 hover:scale-[1.02] shadow-[0_0_20px_rgba(16,185,129,0.2)] hover:shadow-[0_0_30px_rgba(16,185,129,0.4)] border-none group"
               >
                 <span className="flex items-center justify-center gap-2">
                   重新发送重置邮件
@@ -185,7 +200,7 @@ export default function ResetPasswordPage() {
                 返回登录
               </Link>
             </div>
-          </ReflectiveCard>
+          </div>
         </div>
       </div>
     );
@@ -197,10 +212,7 @@ export default function ResetPasswordPage() {
   if (pageState === "success") {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center p-4 relative overflow-hidden">
-        <div className="absolute inset-0">
-          <div className="absolute top-1/4 left-1/4 w-[500px] h-[500px] bg-white/[0.02] rounded-full blur-3xl" />
-          <div className="absolute bottom-1/4 right-1/4 w-[500px] h-[500px] bg-[#00ff9d]/[0.05] rounded-full blur-3xl" />
-        </div>
+        <Background />
         <div className="w-full max-w-[460px] relative z-10">
           <ReflectiveCard className="py-10 px-10">
             <div className="text-center space-y-6">
@@ -223,7 +235,7 @@ export default function ResetPasswordPage() {
               </div>
               <Button
                 onClick={() => router.push("/auth/login")}
-                className="w-full h-12 bg-gradient-to-b from-white to-gray-100 hover:to-white text-black font-bold text-base rounded-xl transition-all duration-300 hover:scale-[1.02] shadow-[0_0_20px_rgba(255,255,255,0.3),inset_0_1px_0_rgba(255,255,255,1)] hover:shadow-[0_0_30px_rgba(255,255,255,0.5),inset_0_1px_0_rgba(255,255,255,1)] group border-t border-white"
+                className="w-full h-12 bg-gradient-to-r from-[#10b981] to-[#059669] hover:from-[#34d399] hover:to-[#10b981] text-white font-semibold text-[15px] rounded-xl transition-all duration-300 hover:scale-[1.02] shadow-[0_0_20px_rgba(16,185,129,0.2)] hover:shadow-[0_0_30px_rgba(16,185,129,0.4)] border-none group"
               >
                 <span className="flex items-center justify-center gap-2">
                   立即前往登录
@@ -242,49 +254,34 @@ export default function ResetPasswordPage() {
   // ==========================================
   return (
     <div className="min-h-screen bg-black flex items-center justify-center p-4 relative overflow-hidden">
-      {/* Background Atmosphere */}
-      <div className="absolute inset-0">
-        <div className="absolute top-1/4 left-1/4 w-[500px] h-[500px] bg-white/[0.02] rounded-full blur-3xl" />
-        <div className="absolute bottom-1/4 right-1/4 w-[500px] h-[500px] bg-[#00ff9d]/[0.05] rounded-full blur-3xl" />
-      </div>
+      <Background />
 
       <div className="w-full max-w-[460px] relative z-10">
-        <ReflectiveCard className="py-8 px-10 login-expand">
-          {/* Header - ToryX Logo */}
-          <div className="flex flex-col items-center mb-6">
+        {/* 毛玻璃容器 */}
+        <div className="w-full bg-white/[0.03] backdrop-blur-2xl border border-white/10 rounded-[2rem] p-8 sm:p-10 shadow-[0_20px_50px_rgba(0,0,0,0.5)] relative overflow-hidden">
+          {/* 玻璃边缘折射高光 */}
+          <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-white/30 to-transparent opacity-50" />
+
+          {/* Logo */}
+          <div className="flex justify-center mb-6">
             <img
               src="/images/toryx_logo_text.png"
               alt="ToryX AI"
-              className="h-12 mt-4 mb-3 drop-shadow-[0_0_20px_rgba(16,185,129,0.3)]"
+              className="h-10 drop-shadow-[0_0_20px_rgba(16,185,129,0.3)]"
             />
-            <span className="text-xs text-white/30 tracking-[0.15em] uppercase">
-              AI 内容智造工厂
-            </span>
           </div>
 
           {/* Title */}
           <div className="text-center mb-6">
-            <h1
-              className="text-[24px] font-semibold tracking-[-0.02em] mb-2"
-              style={{
-                background: 'linear-gradient(180deg, #ffffff 0%, #e8e8e8 25%, #c0c0c0 50%, #a0a0a0 75%, #d0d0d0 100%)',
-                WebkitBackgroundClip: 'text',
-                WebkitTextFillColor: 'transparent',
-                filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.3))',
-              }}
-            >
-              设置新密码
-            </h1>
-            <p className="text-sm text-white/40">
-              请输入您的新密码
-            </p>
+            <h2 className="text-2xl font-semibold text-white mb-2 tracking-tight">设置新密码</h2>
+            <p className="text-sm text-white/40">请输入您的新密码</p>
           </div>
 
           {/* Form */}
           <form onSubmit={handleResetPassword}>
-            <div className="space-y-4 pb-2">
+            <div className="space-y-4">
               <ReflectiveInput
-                icon={<Lock className="w-5 h-5" />}
+                icon={<Lock className="w-5 h-5 text-white/50" />}
                 type="password"
                 placeholder="新密码（至少 6 位）"
                 value={newPassword}
@@ -292,7 +289,7 @@ export default function ResetPasswordPage() {
                 disabled={isSubmitting}
               />
               <ReflectiveInput
-                icon={<Lock className="w-5 h-5" />}
+                icon={<Lock className="w-5 h-5 text-white/50" />}
                 type="password"
                 placeholder="确认新密码"
                 value={confirmPassword}
@@ -304,7 +301,7 @@ export default function ResetPasswordPage() {
               <Button
                 type="submit"
                 disabled={isSubmitting || !newPassword || !confirmPassword}
-                className="w-full h-12 bg-gradient-to-b from-white to-gray-100 hover:to-white text-black font-bold text-base rounded-xl transition-all duration-300 hover:scale-[1.02] shadow-[0_0_20px_rgba(255,255,255,0.3),inset_0_1px_0_rgba(255,255,255,1)] hover:shadow-[0_0_30px_rgba(255,255,255,0.5),inset_0_1px_0_rgba(255,255,255,1)] mt-2 group border-t border-white disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full h-12 bg-gradient-to-r from-[#10b981] to-[#059669] hover:from-[#34d399] hover:to-[#10b981] text-white font-semibold text-[15px] rounded-xl transition-all duration-300 hover:scale-[1.02] shadow-[0_0_20px_rgba(16,185,129,0.2)] hover:shadow-[0_0_30px_rgba(16,185,129,0.4)] border-none group disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <span className="flex items-center justify-center gap-2">
                   {isSubmitting ? (
@@ -322,7 +319,7 @@ export default function ResetPasswordPage() {
               </Button>
             </div>
           </form>
-        </ReflectiveCard>
+        </div>
       </div>
     </div>
   );

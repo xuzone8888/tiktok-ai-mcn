@@ -6,7 +6,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import ReflectiveInput from "@/components/ui/ReflectiveInput";
 import { Button } from "@/components/ui/button";
-import { Mail, Lock, Smartphone, ArrowRight, Loader2, KeyRound, Users, Wand2, Globe } from "lucide-react";
+import { Mail, Lock, Smartphone, ArrowRight, Loader2, KeyRound, Fingerprint, Sparkles, Globe } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 // 包装组件以支持 useSearchParams
@@ -358,16 +358,16 @@ function LoginPageContent() {
           {/* 特色胶囊 */}
           <div className="flex flex-wrap gap-4">
             <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 backdrop-blur-md">
-              <Users className="w-4 h-4 text-[#a855f7]" />
-              <span className="text-sm font-medium text-white/80">专属角色定制</span>
+              <Fingerprint className="w-4 h-4 text-[#a855f7]" />
+              <span className="text-sm font-medium text-white/80">角色 IP 孵化</span>
             </div>
             <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 backdrop-blur-md">
-              <Wand2 className="w-4 h-4 text-[#3b82f6]" />
-              <span className="text-sm font-medium text-white/80">智能剧本分镜</span>
+              <Sparkles className="w-4 h-4 text-[#3b82f6]" />
+              <span className="text-sm font-medium text-white/80">前沿 AI 模型</span>
             </div>
             <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 backdrop-blur-md">
               <Globe className="w-4 h-4 text-[#10b981]" />
-              <span className="text-sm font-medium text-white/80">多语种极速触达</span>
+              <span className="text-sm font-medium text-white/80">内容链接全球</span>
             </div>
           </div>
         </div>

@@ -1,3 +1,6 @@
+import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import PricingSection from "@/components/landing/sections/PricingSection";
 import FooterSection from "@/components/landing/sections/FooterSection";
 
@@ -15,8 +18,29 @@ export default function PricingPage() {
                 <div className="absolute top-0 left-0 right-0 h-[500px] bg-gradient-to-b from-white/[0.02] to-transparent" />
             </div>
 
+            {/* 导航栏 */}
+            <header className="relative z-50 border-b border-white/5 backdrop-blur-xl bg-black/20">
+                <div className="container max-w-7xl mx-auto px-6 py-4">
+                    <nav className="flex items-center justify-between">
+                        <Link href="/" className="flex items-center gap-3 group">
+                            <img
+                                src="/images/toryx_logo_text.png"
+                                alt="ToryX AI"
+                                className="h-8 drop-shadow-[0_0_15px_rgba(16,185,129,0.3)]"
+                            />
+                        </Link>
+                        <Link href="/">
+                            <Button variant="ghost" className="text-gray-300 hover:text-white">
+                                <ArrowLeft className="h-4 w-4 mr-2" />
+                                返回首页
+                            </Button>
+                        </Link>
+                    </nav>
+                </div>
+            </header>
+
             {/* 主要内容 */}
-            <main className="relative z-10 pt-20">
+            <main className="relative z-10 pt-8">
                 <PricingSection />
                 <FooterSection />
             </main>

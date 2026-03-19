@@ -1,10 +1,44 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Sparkles, MessageSquare, Shield } from "lucide-react";
+import { ArrowLeft, MessageSquare, Mail, Shield } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 
 export default function FeedbackPage() {
+    const { toast } = useToast();
+    const [feedbackType, setFeedbackType] = useState("功能建议");
+    const [description, setDescription] = useState("");
+    const [contactEmail, setContactEmail] = useState("");
+
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+
+        if (!description.trim()) {
+            toast({
+                variant: "destructive",
+                title: "请填写反馈内容",
+                description: "问题描述不能为空",
+            });
+            return;
+        }
+
+        // 组装邮件内容
+        const subject = encodeURIComponent(`[ToryX 反馈] ${feedbackType}`);
+        const body = encodeURIComponent(
+            `反馈类型：${feedbackType}\n\n问题描述：\n${description}\n\n联系邮箱：${contactEmail || "未提供"}`
+        );
+        const mailtoLink = `mailto:toryxai@outlook.com?subject=${subject}&body=${body}`;
+
+        window.open(mailtoLink, "_blank");
+
+        toast({
+            title: "📧 即将打开邮箱",
+            description: "请通过邮箱客户端发送反馈，我们会尽快回复",
+        });
+    };
+
     return (
         <div className="min-h-screen bg-[#0a0a0f] text-white">
             {/* 背景装饰 */}
@@ -47,22 +81,24 @@ export default function FeedbackPage() {
                         </p>
                     </div>
 
-                    <form className="space-y-6 bg-white/5 border border-white/10 rounded-2xl p-8" onSubmit={(e) => e.preventDefault()}>
+                    <form className="space-y-6 bg-white/5 border border-white/10 rounded-2xl p-8" onSubmit={handleSubmit}>
                         <div>
                             <label className="block text-sm font-medium text-gray-400 mb-2">反馈类型</label>
                             <div className="grid grid-cols-3 gap-3">
-                                <label className="cursor-pointer">
-                                    <input type="radio" name="type" className="peer sr-only" defaultChecked />
-                                    <div className="text-center py-3 rounded-xl bg-black/20 border border-white/10 peer-checked:bg-white peer-checked:text-black peer-checked:border-white transition-all text-sm font-medium">功能建议</div>
-                                </label>
-                                <label className="cursor-pointer">
-                                    <input type="radio" name="type" className="peer sr-only" />
-                                    <div className="text-center py-3 rounded-xl bg-black/20 border border-white/10 peer-checked:bg-white peer-checked:text-black peer-checked:border-white transition-all text-sm font-medium">Bug 报告</div>
-                                </label>
-                                <label className="cursor-pointer">
-                                    <input type="radio" name="type" className="peer sr-only" />
-                                    <div className="text-center py-3 rounded-xl bg-black/20 border border-white/10 peer-checked:bg-white peer-checked:text-black peer-checked:border-white transition-all text-sm font-medium">其他</div>
-                                </label>
+                                {["功能建议", "Bug 报告", "其他"].map((type) => (
+                                    <label key={type} className="cursor-pointer">
+                                        <input
+                                            type="radio"
+                                            name="type"
+                                            className="peer sr-only"
+                                            checked={feedbackType === type}
+                                            onChange={() => setFeedbackType(type)}
+                                        />
+                                        <div className="text-center py-3 rounded-xl bg-black/20 border border-white/10 peer-checked:bg-white peer-checked:text-black peer-checked:border-white transition-all text-sm font-medium">
+                                            {type}
+                                        </div>
+                                    </label>
+                                ))}
                             </div>
                         </div>
 
@@ -70,6 +106,8 @@ export default function FeedbackPage() {
                             <label className="block text-sm font-medium text-gray-400 mb-2">问题描述</label>
                             <textarea
                                 rows={5}
+                                value={description}
+                                onChange={(e) => setDescription(e.target.value)}
                                 className="w-full bg-black/20 border border-white/10 rounded-xl p-4 text-white placeholder:text-gray-600 focus:outline-none focus:border-white/30 transition-colors resize-none"
                                 placeholder="请详细描述你遇到的问题或建议..."
                             ></textarea>
@@ -79,14 +117,24 @@ export default function FeedbackPage() {
                             <label className="block text-sm font-medium text-gray-400 mb-2">联系邮箱 (选填)</label>
                             <input
                                 type="email"
+                                value={contactEmail}
+                                onChange={(e) => setContactEmail(e.target.value)}
                                 className="w-full bg-black/20 border border-white/10 rounded-xl p-4 text-white placeholder:text-gray-600 focus:outline-none focus:border-white/30 transition-colors"
                                 placeholder="your@email.com"
                             />
                         </div>
 
-                        <Button className="w-full h-12 bg-white text-black hover:bg-gray-200 font-bold text-lg rounded-xl mt-4">
-                            提交反馈
+                        <Button
+                            type="submit"
+                            className="w-full h-12 bg-white text-black hover:bg-gray-200 font-bold text-lg rounded-xl mt-4 group"
+                        >
+                            <Mail className="w-5 h-5 mr-2" />
+                            通过邮件发送反馈
                         </Button>
+
+                        <p className="text-xs text-gray-500 text-center">
+                            点击后将打开您的邮箱客户端，反馈内容会自动填入邮件
+                        </p>
                     </form>
                 </div>
             </main>
