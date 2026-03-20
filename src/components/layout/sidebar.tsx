@@ -171,6 +171,12 @@ const navGroups: NavGroup[] = [
         description: "TikTok Shop 商品视频",
       },
       {
+        title: "带货账号绑定",
+        href: "/shop-publish/accounts",
+        icon: UserCheck,
+        description: "TikTok Shop 账号管理",
+      },
+      {
         title: "账号管理",
         href: "/publish/accounts",
         icon: Users,
