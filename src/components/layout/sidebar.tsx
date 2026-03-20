@@ -23,6 +23,7 @@ import {
   Copy,
   CreditCard,
   LayoutTemplate,
+  ShoppingBag,
 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -162,6 +163,12 @@ const navGroups: NavGroup[] = [
         href: "/publish",
         icon: Send,
         description: "多平台视频分发",
+      },
+      {
+        title: "橱窗视频发布",
+        href: "/shop-publish",
+        icon: ShoppingBag,
+        description: "TikTok Shop 商品视频",
       },
       {
         title: "账号管理",
