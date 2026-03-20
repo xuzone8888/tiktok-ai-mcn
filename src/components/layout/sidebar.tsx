@@ -11,16 +11,13 @@ import {
   ChevronLeft,
   ChevronRight,
   Sparkles,
-  Film,
   Lock,
   Zap,
   Link2,
-  ImageIcon,
   Images,
   Camera,
   Send,
   Clapperboard,
-  Copy,
   CreditCard,
   LayoutTemplate,
   ShoppingBag,
@@ -46,6 +43,8 @@ interface NavItem {
   description?: string;
   comingSoon?: boolean;
   comingSoonMessage?: string;
+  beta?: boolean;
+  badge?: string;
 }
 
 interface NavGroup {
@@ -63,58 +62,34 @@ const navGroups: NavGroup[] = [
     header: null,
     items: [
       {
-        title: "数据驾驶舱",
+        title: "数据总览",
         href: "/dashboard",
         icon: LayoutDashboard,
         description: "运营数据概览",
       },
     ],
   },
-  // --- 数字人星系 ---
+  // --- AI 角色中心 ---
   {
-    header: "数字人星系",
+    header: "AI 角色中心",
     items: [
       {
-        title: "创建新角色",
+        title: "创建角色",
         href: "/character/create",
         icon: Sparkles,
-        description: "AI 角色捏脸舱",
+        description: "创建专属 AI 角色",
       },
       {
-        title: "模特资源广场",
+        title: "角色市场",
         href: "/models",
         icon: Users,
-        description: "浏览全部 AI 模特",
+        description: "浏览全部 AI 角色",
       },
       {
-        title: "我的专属阵营",
+        title: "我的角色",
         href: "/team",
         icon: UserCheck,
-        description: "已签约的专属模特与自建角色",
-      },
-    ],
-  },
-  // --- 图片工坊 ---
-  {
-    header: "图片工坊",
-    items: [
-      {
-        title: "极速造片机",
-        href: "/quick-gen",
-        icon: Zap,
-        description: "AI 快速生成图片",
-      },
-      {
-        title: "批量制图线",
-        href: "/pro-studio/image-batch",
-        icon: Images,
-        description: "批量图片生产",
-      },
-      {
-        title: "商图精修台",
-        href: "/image-factory",
-        icon: Camera,
-        description: "电商图片精修",
+        description: "已签约与自建的角色",
       },
     ],
   },
@@ -130,57 +105,88 @@ const navGroups: NavGroup[] = [
       },
     ],
   },
-  // --- 视频产线 ---
+  // --- 图片制作 ---
   {
-    header: "视频产线",
+    header: "图片制作",
     items: [
       {
-        title: "批量流水线",
-        href: "/pro-studio/video-batch",
-        icon: Clapperboard,
-        description: "批量视频生产",
+        title: "快速生图",
+        href: "/quick-gen",
+        icon: Zap,
+        description: "AI 快速生成图片",
       },
       {
-        title: "链接转化机",
-        href: "/link-video",
-        icon: Link2,
-        description: "链接一键成片",
-      },
-      {
-        title: "图片转视频",
-        href: "/pro-studio/image-slideshow",
+        title: "多图生成",
+        href: "/pro-studio/image-batch",
         icon: Images,
-        description: "图片轮播合成视频",
+        description: "多张图片同时生成",
+        badge: "多条",
+      },
+      {
+        title: "商图精修",
+        href: "/image-factory",
+        icon: Camera,
+        description: "电商商品图精修",
       },
     ],
   },
-  // --- 矩阵发货 ---
+  // --- 视频制作 ---
   {
-    header: "矩阵发货",
+    header: "视频制作",
     items: [
       {
-        title: "视频发布站",
-        href: "/publish",
-        icon: Send,
-        description: "多平台视频分发",
+        title: "素材生成视频",
+        href: "/pro-studio/video-batch",
+        icon: Clapperboard,
+        description: "多个视频同时生成",
+        badge: "多条",
       },
       {
-        title: "橱窗视频发布",
-        href: "/shop-publish",
-        icon: ShoppingBag,
-        description: "TikTok Shop 商品视频",
+        title: "链接生成视频",
+        href: "/link-video",
+        icon: Link2,
+        description: "通过链接一键生成视频",
       },
       {
-        title: "带货账号绑定",
-        href: "/shop-publish/accounts",
-        icon: UserCheck,
-        description: "TikTok Shop 账号管理",
+        title: "图片生成视频",
+        href: "/pro-studio/image-slideshow",
+        icon: Images,
+        description: "图片合成视频",
+        badge: "多条",
       },
+    ],
+  },
+  // --- 内容发布 ---
+  {
+    header: "内容发布",
+    items: [
       {
-        title: "账号管理",
+        title: "TikTok 账号绑定",
         href: "/publish/accounts",
         icon: Users,
-        description: "TikTok 账号绑定",
+        description: "绑定 TikTok 发布账号",
+        beta: true,
+      },
+      {
+        title: "TikTok 视频发布",
+        href: "/publish",
+        icon: Send,
+        description: "发布视频到 TikTok",
+        beta: true,
+      },
+      {
+        title: "TikTok Shop 账号绑定",
+        href: "/shop-publish/accounts",
+        icon: UserCheck,
+        description: "绑定 TikTok Shop 账号",
+        beta: true,
+      },
+      {
+        title: "TikTok Shop 带货发布",
+        href: "/shop-publish",
+        icon: ShoppingBag,
+        description: "发布带货视频到 TikTok Shop",
+        beta: true,
       },
     ],
   },
@@ -189,16 +195,16 @@ const navGroups: NavGroup[] = [
     header: "生产归档",
     items: [
       {
-        title: "成品交付单",
+        title: "生成记录",
         href: "/assets",
         icon: Package,
-        description: "查看历史作品",
+        description: "查看历史生成内容",
       },
     ],
   },
-  // --- 账户中心 ---
+  // --- 账户 ---
   {
-    header: "账户中心",
+    header: "账户",
     items: [
       {
         title: "充值中心",
@@ -309,12 +315,24 @@ export function Sidebar() {
         </div>
 
         {!collapsed && (
-          <span className={cn(
-            "text-sm transition-all duration-300 group-hover:translate-x-0.5",
-            isActive && "font-bold tracking-wide text-transparent bg-clip-text bg-gradient-to-r from-white to-white/90"
-          )}>
-            {item.title}
-          </span>
+          <div className="flex items-center gap-1.5">
+            <span className={cn(
+              "text-sm transition-all duration-300 group-hover:translate-x-0.5",
+              isActive && "font-bold tracking-wide text-transparent bg-clip-text bg-gradient-to-r from-white to-white/90"
+            )}>
+              {item.title}
+            </span>
+            {item.beta && (
+              <span className="rounded-full bg-blue-500/15 px-1.5 py-0.5 text-[10px] font-medium text-blue-400/70 shrink-0">
+                BETA
+              </span>
+            )}
+            {item.badge && (
+              <span className="rounded-full bg-mermaid-cyan/15 px-1.5 py-0.5 text-[10px] font-medium text-mermaid-cyan/70 shrink-0">
+                {item.badge}
+              </span>
+            )}
+          </div>
         )}
 
         {/* Hover glow effect */}
