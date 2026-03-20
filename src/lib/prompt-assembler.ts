@@ -2,8 +2,8 @@
  * Prompt 组装模块
  * 
  * 功能：
- * - 从数据库获取 AI 模特的 trigger_word
- * - 将 trigger_word 注入到用户 Prompt 中
+ * - 从数据库获取 AI 角色的 trigger_word 或 description
+ * - 将角色描述注入到用户 Prompt 中
  * - 保证 trigger_word 对前端不可见
  */
 
@@ -26,62 +26,34 @@ export interface PromptAssemblyOptions {
 }
 
 // ============================================================================
-// Mock 模特唤醒词数据库 (生产环境应从 Supabase 查询)
-// ============================================================================
-
-const MOCK_MODEL_TRIGGER_WORDS: Record<string, string> = {
-  // 这些 ID 对应 mock-data.ts 中的模特 ID
-  "model-001": "@luna_fashion_v1",      // Luna AI
-  "model-002": "@alex_fitness_v1",      // Alex Storm
-  "model-003": "@mia_beauty_v1",        // Mia Rose
-  "model-004": "@max_tech_v1",          // Marcus Tech
-  "model-005": "@sophia_lifestyle_v2",  // Sophia Chen
-  "model-006": "@leo_food_v1",          // Leo Foodie
-  "model-007": "@emma_luxury_v1",       // Emma Grace
-  "model-008": "@jake_street_v1",       // Jake Urban
-  "model-009": "@yuki_kawaii_v1",       // Yuki Tanaka
-  "model-010": "@daniel_kstyle_v1",     // Daniel Kim
-  
-  // 也支持通过名字查询 (备用)
-  "Luna AI": "@luna_fashion_v1",
-  "Alex Storm": "@alex_fitness_v1",
-  "Mia Rose": "@mia_beauty_v1",
-  "Marcus Tech": "@max_tech_v1",
-  "Sophia Chen": "@sophia_lifestyle_v2",
-  "Leo Foodie": "@leo_food_v1",
-  "Emma Grace": "@emma_luxury_v1",
-  "Jake Urban": "@jake_street_v1",
-  "Yuki Tanaka": "@yuki_kawaii_v1",
-  "Daniel Kim": "@daniel_kstyle_v1",
-  
-  // Auto Match 模式 - AI 自动选择最佳模特
-  "auto": "@ai_model_auto",
-};
-
-// ============================================================================
 // 核心函数
 // ============================================================================
 
+import { createAdminClient } from "@/lib/supabase/admin";
+
 /**
- * 从数据库获取模特的 trigger_word
+ * 从数据库获取角色的 trigger_word（兜底 description）
  * 
- * @param modelId - 模特 ID 或 "auto" (自动匹配)
- * @returns trigger_word 或 null
+ * @param modelId - 角色 ID
+ * @returns trigger_word / description 或 null
  */
 export async function getModelTriggerWord(modelId: string): Promise<string | null> {
-  // 生产环境：从 Supabase 查询
-  // const { data, error } = await supabase
-  //   .from('ai_models')
-  //   .select('trigger_word')
-  //   .eq('id', modelId)
-  //   .eq('is_active', true)
-  //   .single();
-  // 
-  // if (error || !data) return null;
-  // return data.trigger_word;
+  try {
+    const supabase = createAdminClient();
+    const { data, error } = await supabase
+      .from("ai_models")
+      .select("trigger_word, description, name")
+      .eq("id", modelId)
+      .eq("is_active", true)
+      .single();
 
-  // 开发环境：使用 Mock 数据
-  return MOCK_MODEL_TRIGGER_WORDS[modelId] || null;
+    if (error || !data) return null;
+    // 兜底逻辑：trigger_word → description → null
+    return data.trigger_word || data.description || null;
+  } catch {
+    console.error("[PromptAssembler] Failed to fetch model data:", modelId);
+    return null;
+  }
 }
 
 /**

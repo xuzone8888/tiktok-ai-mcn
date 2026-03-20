@@ -69,11 +69,16 @@ export async function POST(request: Request) {
       description = "",
       avatar_url,
       reference_images,
+      preview_video_url,
       character_type,
       dna_config,
       style_tags = [],
       gender,
       age_range,
+      // 多角度参考图状态
+      reference_sheet_url,
+      reference_status,
+      reference_task_id,
     } = body;
 
     // 参数校验
@@ -102,19 +107,26 @@ export async function POST(request: Request) {
     const insertData = {
       name: name.trim(),
       description,
-      // 头像自动提取：avatar_url = reference_images[0]（前端 CSS 裁切正面半身像）
+      // avatar_url = Hero Shot 4K（展示用）
       avatar_url: avatar_url || reference_images[0],
-      reference_images,
+      reference_images: reference_images as unknown as import("@/types/database").Json,
+      preview_video_url: preview_video_url || null,
       character_type: character_type || "realistic",
-      dna_config: dna_config || {},
+      dna_config: (dna_config || {}) as unknown as import("@/types/database").Json,
       style_tags,
-      gender: gender || null,
+      gender: (gender || null) as "male" | "female" | "neutral" | null,
       age_range: age_range || null,
-      // 自动设置字段
-      source: "user_created",
+      // 多角度参考图状态
+      reference_sheet_url: reference_sheet_url || null,
+      reference_status: reference_status || "none",
+      reference_task_id: reference_task_id || null,
+      // 角色归属
+      source: "user_created" as const,
       owner_id: userId,
       is_active: true,
-      // 自建角色不计价
+      is_public: false,
+      publish_price: 100,
+      // 自建角色不计价（通过广场 publish_price 单独定价）
       price_daily: 0,
       price_weekly: 0,
       price_monthly: 0,
@@ -130,8 +142,7 @@ export async function POST(request: Request) {
       imagesCount: reference_images.length,
     });
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data, error } = await (supabase as any)
+    const { data, error } = await supabase
       .from("ai_models")
       .insert(insertData)
       .select("id")

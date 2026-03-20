@@ -1,11 +1,13 @@
 /**
- * VEO3 任务状态查询
- * 
- * GET /api/video-batch/veo-status/[taskId]
+ * VEO3 批量视频状态查询（使用高瑞 gaorui-veo-api）
+ *
+ * GET /api/video-batch/veo-status/{taskId}
+ *
+ * 用于所有 VEO3 模型的异步轮询查询（veo3-fast / veo3-std / veo3-4k 全部是 async 模式）
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { queryVeo3Result } from "@/lib/veo3-api";
+import { queryVeoResult } from "@/lib/gaorui-veo-api";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export async function GET(
@@ -24,7 +26,7 @@ export async function GET(
 
     console.log("[VEO3 Status] Querying task:", taskId);
 
-    const result = await queryVeo3Result(taskId);
+    const result = await queryVeoResult(taskId);
 
     if (!result.success || !result.task) {
       console.error("[VEO3 Status] Query failed:", result.error);
@@ -38,19 +40,19 @@ export async function GET(
     console.log("[VEO3 Status] Task status:", {
       taskId,
       status: task.status,
-      hasUrl: !!task.resultUrl,
+      hasUrl: !!task.videoUrl,
       progress: task.progress,
     });
 
     // 如果任务完成，更新数据库记录
-    if (task.status === "completed" && task.resultUrl) {
+    if (task.status === "completed" && task.videoUrl) {
       try {
         const supabase = createAdminClient();
         const { error: updateError } = await supabase
           .from("generations")
           .update({
             status: "completed",
-            result_url: task.resultUrl,
+            result_url: task.videoUrl,
             updated_at: new Date().toISOString(),
           })
           .eq("task_id", taskId);
@@ -88,7 +90,7 @@ export async function GET(
       data: {
         taskId: task.taskId,
         status: task.status,
-        videoUrl: task.resultUrl,
+        videoUrl: task.videoUrl,
         progress: task.progress,
         errorMessage: task.errorMessage,
       },

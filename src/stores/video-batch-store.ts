@@ -19,7 +19,7 @@ import {
   type PipelineStep,
   type VideoBatchGlobalSettings,
   type VideoBatchTaskMode,
-  type ApiLineType,
+
   getVideoBatchTotalPrice,
 } from "@/types/video-batch";
 
@@ -237,7 +237,9 @@ const initialState: VideoBatchState = {
     aiModelName: null,
     aiModelTriggerWord: null,
     aiModelCover: null,       // 修复：之前遗漏的字段
-    apiLine: "line1",         // 新增：默认线路1
+    characterId: null,        // Veo3 自建角色 ID
+    characterName: null,      // Veo3 自建角色名称
+    characterRefUrl: null,    // Veo3 自建角色参考图 URL
   },
   selectedTaskIds: {},
   editingTaskId: null,
@@ -275,7 +277,6 @@ export const useVideoBatchStore = create<VideoBatchState & VideoBatchActions>()(
             modelType: globalSettings.modelType,
             duration: globalSettings.duration,
             quality: globalSettings.quality,
-            apiLine: globalSettings.apiLine,
             // AI 模特配置
             useAiModel: globalSettings.useAiModel,
             aiModelId: globalSettings.aiModelId || undefined,
@@ -318,7 +319,6 @@ export const useVideoBatchStore = create<VideoBatchState & VideoBatchActions>()(
               modelType: globalSettings.modelType,
               duration: globalSettings.duration,
               quality: globalSettings.quality,
-              apiLine: globalSettings.apiLine,
               // AI 模特配置
               useAiModel: globalSettings.useAiModel,
               aiModelId: globalSettings.aiModelId || undefined,
@@ -357,7 +357,6 @@ export const useVideoBatchStore = create<VideoBatchState & VideoBatchActions>()(
               modelType: globalSettings.modelType,
               duration: globalSettings.duration,
               quality: globalSettings.quality,
-              apiLine: globalSettings.apiLine,
               groupName: '默认', // 默认任务组
               doubaoTalkingScript: null,
               doubaoAiVideoPrompt: null,
@@ -401,7 +400,6 @@ export const useVideoBatchStore = create<VideoBatchState & VideoBatchActions>()(
             modelType: sourceTask.modelType,
             duration: sourceTask.duration,
             quality: sourceTask.quality,
-            apiLine: sourceTask.apiLine,   // 复制原任务的线路配置
             groupName: sourceTask.groupName || '默认', // 继承源任务的组名
             doubaoTalkingScript: null,  // 重置生成结果
             doubaoAiVideoPrompt: null,
@@ -450,7 +448,6 @@ export const useVideoBatchStore = create<VideoBatchState & VideoBatchActions>()(
               modelType: globalSettings.modelType,
               duration: globalSettings.duration,
               quality: globalSettings.quality,
-              apiLine: globalSettings.apiLine,
               groupName: '默认', // 默认任务组
               doubaoTalkingScript: null,
               doubaoAiVideoPrompt: null,

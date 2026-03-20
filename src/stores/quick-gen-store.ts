@@ -45,8 +45,8 @@ export interface QuickGenVideoTask {
 export interface QuickGenImageTask {
   id: string;
   prompt: string;
-  model: "nano-banana" | "nano-banana-pro";
-  tier: "fast" | "pro";
+  model: "nano-banana" | "nano-banana-pro" | "gemini-1k" | "gemini-2k" | "gemini-4k";
+  tier: "fast" | "pro" | "1k" | "2k" | "4k";  // 新增分辨率 tier
   aspectRatio: string;
   resolution: "1k" | "2k" | "4k";
   sourceImageUrls: string[];

@@ -1,9 +1,12 @@
 /**
- * 角色捏脸舱 — 主页面
+ * 角色捏脸舱 — V3 全屏步骤切换主页面
  *
  * 路由: /character/create
- * 布局: flex 左右两栏（左 40% / 右 60%）
- * 职责: 仅负责布局编排，不持有任何业务状态（Zustand 通信）
+ * V3: 从左右分栏改为 4 个全屏步骤
+ *   Step 1 — 角色设定（配置 DNA + 提示词）
+ *   Step 2 — 生成中（全屏等待动效）
+ *   Step 3 — 角色就位（Hero Shot 冲击 + 多角度 + 保存）
+ *   Step 4 — 活化角色视频（Veo3 图生视频）
  */
 
 "use client";
@@ -11,132 +14,125 @@
 import { useEffect } from "react";
 import { CreationWorkspace } from "./components/creation-workspace";
 import { CastingPreview } from "./components/casting-preview";
+import {
+  useCharacterStudioStore,
+  useCharacterCurrentStep,
+} from "@/stores/character-studio-store";
 
 export default function CharacterCreatePage() {
+  const setUserInfo = useCharacterStudioStore((s) => s.setUserInfo);
+  const setCurrentStep = useCharacterStudioStore((s) => s.setCurrentStep);
+  const heroImageUrl = useCharacterStudioStore((s) => s.heroImageUrl);
+  const generationStatus = useCharacterStudioStore((s) => s.generationStatus);
+  const currentStep = useCharacterCurrentStep();
+
   // 页面标题
   useEffect(() => {
     document.title = "角色捏脸舱 | ToryX AI MCN";
   }, []);
 
+  // 获取用户 ID 和积分
+  useEffect(() => {
+    fetch("/api/user/credits")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.userId) {
+          setUserInfo(data.userId, data.credits ?? 0);
+        }
+      })
+      .catch((err) => {
+        console.error("[CharacterStudio] Failed to fetch user info:", err);
+      });
+  }, [setUserInfo]);
+
   return (
-    <div className="character-studio-page">
-      {/* 页面标题栏 */}
-      <div className="studio-header">
-        <div className="studio-header-glow" />
-        <h1 className="studio-title">
-          <span className="studio-title-icon">✨</span>
-          角色捏脸舱
-          <span className="studio-title-sub">Character Studio</span>
-        </h1>
-        <p className="studio-subtitle">
-          注入 DNA 特征，铸造专属数字角色
-        </p>
-      </div>
+    <div className="character-create-page">
+      {/* Step 1 — 角色设定（保持在 container 内） */}
+      {currentStep === 1 && <CreationWorkspace />}
 
-      {/* 两栏布局 */}
-      <div className="studio-content">
-        {/* 左栏 40% — 创作工作台 */}
-        <div className="studio-left">
-          <CreationWorkspace />
-        </div>
+      {/* 当已有生成结果且在 Step 1 时，显示"查看已生成角色"入口 */}
+      {currentStep === 1 && heroImageUrl && generationStatus === "completed" && (
+        <button
+          className="view-result-floating"
+          onClick={() => setCurrentStep(3)}
+          type="button"
+        >
+          <span className="view-result-dot" />
+          👁 查看已生成角色
+        </button>
+      )}
 
-        {/* 右栏 60% — 铸造预览区 */}
-        <div className="studio-right">
+      {/* Step 2/3/4 — 全屏步骤（突破 container 限制） */}
+      {currentStep >= 2 && (
+        <div className="fullscreen-step">
           <CastingPreview />
         </div>
-      </div>
+      )}
 
       <style jsx>{`
-        .character-studio-page {
-          min-height: 100vh;
-          padding: 1.5rem;
-          max-width: 1600px;
-          margin: 0 auto;
+        .character-create-page {
+          min-height: 100%;
         }
 
-        .studio-header {
-          position: relative;
-          margin-bottom: 1.5rem;
-          padding: 1.25rem 1.5rem;
-          background: linear-gradient(
-            135deg,
-            rgba(0, 242, 234, 0.08) 0%,
-            rgba(79, 70, 229, 0.08) 100%
-          );
-          border: 1px solid rgba(255, 255, 255, 0.06);
-          border-radius: 1rem;
-          overflow: hidden;
+        /* 全屏步骤：fixed 全屏遮罩，覆盖 sidebar + header */
+        .fullscreen-step {
+          position: fixed;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          z-index: 50;
+          background: #0a0a0f;
+          overflow-y: auto;
         }
 
-        .studio-header-glow {
-          position: absolute;
-          top: -50%;
-          right: -10%;
-          width: 300px;
-          height: 300px;
-          background: radial-gradient(
-            circle,
-            rgba(0, 242, 234, 0.15) 0%,
-            transparent 70%
-          );
-          pointer-events: none;
-        }
-
-        .studio-title {
-          position: relative;
-          font-size: 1.5rem;
-          font-weight: 700;
-          color: #f0f0f0;
+        .view-result-floating {
+          position: fixed;
+          bottom: 1.5rem;
+          left: 50%;
+          transform: translateX(-50%);
+          z-index: 40;
           display: flex;
           align-items: center;
           gap: 0.5rem;
-          margin: 0;
+          padding: 0.65rem 1.4rem;
+          border-radius: 2rem;
+          border: 1px solid rgba(0, 242, 234, 0.15);
+          background: rgba(10, 10, 15, 0.85);
+          backdrop-filter: blur(20px);
+          color: #00F2EA;
+          font-size: 0.82rem;
+          font-weight: 500;
+          cursor: pointer;
+          transition: all 0.25s;
+          animation: floatUp 0.5s ease-out;
+          box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
         }
-
-        .studio-title-icon {
-          font-size: 1.25rem;
+        .view-result-floating:hover {
+          background: rgba(0, 242, 234, 0.12);
+          border-color: rgba(0, 242, 234, 0.3);
+          transform: translateX(-50%) translateY(-2px);
+          box-shadow: 0 8px 30px rgba(0, 242, 234, 0.15);
         }
-
-        .studio-title-sub {
-          font-size: 0.75rem;
-          font-weight: 400;
-          color: rgba(255, 255, 255, 0.35);
-          margin-left: 0.5rem;
-          letter-spacing: 0.05em;
+        @keyframes floatUp {
+          0% { opacity: 0; transform: translateX(-50%) translateY(20px); }
+          100% { opacity: 1; transform: translateX(-50%) translateY(0); }
         }
-
-        .studio-subtitle {
-          position: relative;
-          margin: 0.25rem 0 0;
-          font-size: 0.85rem;
-          color: rgba(255, 255, 255, 0.45);
+        .view-result-dot {
+          width: 6px;
+          height: 6px;
+          border-radius: 50%;
+          background: #00F2EA;
+          box-shadow: 0 0 6px #00F2EA;
+          animation: dotBlink 1.5s ease-in-out infinite;
         }
-
-        .studio-content {
-          display: flex;
-          gap: 1.5rem;
-          align-items: flex-start;
+        @keyframes resultBtnPulse {
+          0%, 100% { box-shadow: 0 0 0 0 rgba(0, 242, 234, 0); }
+          50% { box-shadow: 0 0 0 6px rgba(0, 242, 234, 0.08); }
         }
-
-        .studio-left {
-          width: 40%;
-          min-width: 380px;
-          flex-shrink: 0;
-        }
-
-        .studio-right {
-          flex: 1;
-          min-width: 0;
-        }
-
-        @media (max-width: 1024px) {
-          .studio-content {
-            flex-direction: column;
-          }
-          .studio-left {
-            width: 100%;
-            min-width: 0;
-          }
+        @keyframes dotBlink {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.3; }
         }
       `}</style>
     </div>

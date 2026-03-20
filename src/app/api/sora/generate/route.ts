@@ -1,17 +1,29 @@
 /**
- * Sora 视频生成 API
- * 
- * POST /api/sora/generate - 创建视频生成任务
- * GET /api/sora/generate - 获取积分定价
+ * @deprecated 2026-03-19 — 已废弃，由 /api/generate/video 替代
+ *
+ * Sora 视频生成 API（旧版路由，保留仅供历史兼容）
+ *
+ * 注意: sora-api.ts 已删除，此路由不再可用。
+ * 如需恢复，请参考 suchuang-api.ts (submitSora2) 或 sora-api-real.ts。
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import {
-  createSoraTask,
-  getCreditsPrice,
-  VideoDuration,
-  CREDITS_PRICING,
-} from "@/lib/sora-api";
+
+/** @deprecated 旧版类型 */
+type VideoDuration = "5s" | "10s" | "15s" | "20s";
+
+/** @deprecated 旧版定价 */
+const CREDITS_PRICING: Record<VideoDuration, number> = {
+  "5s": 30,
+  "10s": 50,
+  "15s": 80,
+  "20s": 120,
+};
+
+function getCreditsPrice(duration: VideoDuration): number {
+  return CREDITS_PRICING[duration];
+}
+
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -88,36 +100,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 创建 Sora 生成任务
-    const result = await createSoraTask(user.id, {
-      prompt,
-      duration: videoDuration,
-      model_id,
-      product_id,
-      aspect_ratio: aspect_ratio || "9:16",
-    });
-
-    if (!result.success || !result.task) {
-      // 退还积分
-      await adminSupabase
-        .from("profiles")
-        .update({ credits: profile.credits })
-        .eq("id", user.id);
-
-      return NextResponse.json(
-        { error: result.error || "创建任务失败" },
-        { status: 500 }
-      );
-    }
-
-    return NextResponse.json({
-      success: true,
-      task_id: result.task.id,
-      status: result.task.status,
-      credits_used: creditsRequired,
-      new_balance: profile.credits - creditsRequired,
-      pricing: CREDITS_PRICING,
-    });
+    // 此路由已废弃，createSoraTask 已移除
+    // 请使用 /api/video-batch/generate-sora-video 或 /api/generate/video
+    return NextResponse.json(
+      { error: "此接口已废弃，请使用新版批量视频生成接口" },
+      { status: 410 }
+    );
   } catch (error: unknown) {
     console.error("[Sora Generate API] Error:", error);
     return NextResponse.json(

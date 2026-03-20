@@ -65,8 +65,9 @@ function getVideoConfigSummary(config: any): string {
     const modelLabels: Record<string, string> = {
         "sora2": "Sora2",
         "sora2-pro": "Sora2 Pro",
-        "veo3": "VEO3",
-        "veo3-quality": "VEO3 HD",
+        "veo3-fast": "Veo3\uff08\u5feb\u901f\uff09",
+        "veo3-std": "Veo3\uff08\u6807\u51c6\uff09",
+        "veo3-4k": "Veo3\uff084K\uff09",
     }
     const gs = config.globalSettings || config
     if (gs.modelType) {

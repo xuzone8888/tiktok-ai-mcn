@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useCallback, useRef, useEffect } from "react";
-import type { VideoDuration } from "@/lib/sora-api";
+/** @deprecated 旧版类型，仅供 /studio 旧页面兼容 */
+type VideoDuration = "5s" | "10s" | "15s" | "20s";
 
 // ============================================================================
 // 类型定义

@@ -44,6 +44,10 @@ const allowedDomains = [
   "videos-sg.ss2.life",
   // 望景API (备用线路)
   "60.205.120.27",
+  // 高瑞API (VEO3 视频)
+  "gaorui.cc",
+  // 阿里云 OSS（VEO3/Sora 视频存储）
+  "aliyuncs.com",
 ];
 
 function isAllowedDomain(url: string): boolean {
@@ -57,13 +61,20 @@ function isAllowedDomain(url: string): boolean {
   }
 }
 
-/** 获取望景API的auth header（服务端注入，不暴露给前端） */
+/** 获取需要鉴权的 API 的 auth header（服务端注入，不暴露给前端） */
 function getAuthHeaders(videoUrl: string): Record<string, string> {
   try {
     const urlObj = new URL(videoUrl);
     // 望景API 的 /content 端点需要 Bearer token
     if (urlObj.hostname === "60.205.120.27" && urlObj.pathname.includes('/v1/videos/')) {
       const key = process.env.WANGJING_API_KEY;
+      if (key) {
+        return { 'Authorization': `Bearer ${key}` };
+      }
+    }
+    // 高瑞API (VEO3) 的 /v1/videos/{id}/content 需要 Bearer token
+    if (urlObj.hostname === "gaorui.cc" && urlObj.pathname.includes('/v1/videos/')) {
+      const key = process.env.VEO3_GAORUI_API_KEY;
       if (key) {
         return { 'Authorization': `Bearer ${key}` };
       }

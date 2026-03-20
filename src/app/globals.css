@@ -5,9 +5,20 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Fix hydration issues with generic modal */
+.radix-state-open { /* Just ensures proper cleanup */ }
+
 @layer utilities {
   .text-balance {
     text-wrap: balance;
+  }
+
+  /* Typography enhancements */
+  .tracking-tight-ios {
+    letter-spacing: -0.015em;
+  }
+  .tabular-lining {
+    font-variant-numeric: tabular-nums lining-nums;
   }
 }
 

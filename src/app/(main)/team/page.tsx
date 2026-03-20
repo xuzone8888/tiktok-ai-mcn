@@ -38,7 +38,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-// 从 API 获取签约模特
+// 从 API 获取签约角色
 interface HiredModel {
   id: string;
   name: string;
@@ -60,6 +60,23 @@ interface HiredModel {
   contract_end_date: string;
   days_remaining: number;
   contract_status: string;
+}
+
+// 自建角色
+interface MyCharacter {
+  id: string;
+  name: string;
+  description: string | null;
+  avatar_url: string | null;
+  reference_sheet_url: string | null;
+  reference_status: string; // none | pending | completed | failed
+  reference_task_id: string | null;
+  preview_video_url: string | null;
+  character_type: string;
+  style_tags: string[];
+  is_public: boolean;
+  publish_price: number;
+  created_at: string;
 }
 import { useToast } from "@/hooks/use-toast";
 
@@ -88,6 +105,20 @@ function getStatusConfig(daysRemaining: number) {
   return { color: "bg-neon-green", text: "有效", badge: "neon-success" as const };
 }
 
+// 参考图状态配置
+function getReferenceStatusConfig(status: string) {
+  switch (status) {
+    case "completed":
+      return { dot: "bg-neon-green", text: "可引用", canUse: true };
+    case "pending":
+      return { dot: "bg-amber-400 animate-pulse", text: "生成中", canUse: false };
+    case "failed":
+      return { dot: "bg-neon-red", text: "不可引用", canUse: false };
+    default:
+      return { dot: "bg-white/30", text: "未生成", canUse: false };
+  }
+}
+
 // ============================================================================
 // Empty State
 // ============================================================================
@@ -101,17 +132,27 @@ function EmptyState() {
         <div className="absolute inset-0 bg-gradient-to-r from-tiktok-cyan/20 to-tiktok-pink/20 blur-3xl" />
         <Users className="relative h-24 w-24 text-muted-foreground/30" />
       </div>
-      <h3 className="text-xl font-semibold mb-2">暂无签约模特</h3>
+      <h3 className="text-xl font-semibold mb-2">还没有角色</h3>
       <p className="text-muted-foreground max-w-sm mb-6">
-        前往模特资源库聘用您的第一位 AI 模特，开始创作精彩内容。
+        创建您的专属 AI 角色，或前往角色资源广场聘用官方角色。
       </p>
-      <Button
-        onClick={() => router.push("/models")}
-        variant="white-glow"
-      >
-        <Sparkles className="mr-2 h-4 w-4" />
-        浏览模特
-      </Button>
+      <div className="flex gap-3">
+        <Button
+          onClick={() => router.push("/character/create")}
+          variant="white-glow"
+        >
+          <Sparkles className="mr-2 h-4 w-4" />
+          创建角色
+        </Button>
+        <Button
+          onClick={() => router.push("/models")}
+          variant="outline"
+          className="border-white/10 text-white/70 hover:border-white/30 hover:text-white"
+        >
+          <Plus className="mr-2 h-4 w-4" />
+          浏览广场
+        </Button>
+      </div>
     </div>
   );
 }
@@ -273,6 +314,157 @@ function TeamMemberCard({ model, onUseInStudio, onRenew }: TeamMemberCardProps) 
 }
 
 // ============================================================================
+// My Character Card (自建角色)
+// ============================================================================
+
+interface MyCharacterCardProps {
+  character: MyCharacter;
+  onUseInStudio: (characterId: string) => void;
+  onRetryReference: (characterId: string) => void;
+  onPublish: (character: MyCharacter) => void;
+  onDelete: (characterId: string) => void;
+}
+
+function MyCharacterCard({ character, onUseInStudio, onRetryReference, onPublish, onDelete }: MyCharacterCardProps) {
+  const refStatus = getReferenceStatusConfig(character.reference_status);
+
+  return (
+    <div
+      className={cn(
+        "group relative overflow-hidden rounded-2xl border transition-all duration-300",
+        "bg-[#0B0C10]/60 backdrop-blur-md",
+        "border-white/10 hover:border-mermaid-pink/30",
+        "hover:shadow-2xl hover:shadow-mermaid-pink/10 hover:-translate-y-1",
+      )}
+    >
+      {/* 顶部图片遮罩 */}
+      <div className="absolute inset-0 bg-gradient-to-t from-[#0B0C10] via-transparent to-transparent opacity-90 z-10 pointer-events-none" />
+      {/* Image Section */}
+      <div className="relative aspect-[4/3] overflow-hidden bg-white/5">
+        {character.avatar_url ? (
+          <img
+            src={character.avatar_url}
+            alt={character.name}
+            className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-110"
+          />
+        ) : (
+          <div className="h-full w-full flex items-center justify-center">
+            <Sparkles className="h-16 w-16 text-white/10" />
+          </div>
+        )}
+
+        <div className="absolute inset-0 bg-gradient-to-t from-[#0B0C10] via-transparent to-transparent" />
+
+        {/* Top Left: 自建标签 + 参考图状态 */}
+        <div className="absolute top-3 left-3 flex flex-col gap-2 z-20">
+          <Badge
+            variant="outline"
+            className="bg-mermaid-pink/10 text-mermaid-pink border-mermaid-pink/20 backdrop-blur-md font-medium"
+          >
+            🎨 自建
+          </Badge>
+          <Badge
+            variant="outline"
+            className={cn(
+              "backdrop-blur-md border font-medium flex items-center gap-1.5",
+              refStatus.canUse
+                ? "bg-neon-green/10 text-neon-green border-neon-green/20"
+                : character.reference_status === "pending"
+                  ? "bg-amber-400/10 text-amber-400 border-amber-400/20"
+                  : character.reference_status === "failed"
+                    ? "bg-neon-red/10 text-neon-red border-neon-red/20"
+                    : "bg-white/5 text-white/50 border-white/10"
+            )}
+          >
+            <span className={cn("h-2 w-2 rounded-full", refStatus.dot)} />
+            {refStatus.text}
+          </Badge>
+        </div>
+
+        {/* Top Right: 已发布标记 */}
+        {character.is_public && (
+          <div className="absolute top-3 right-3 z-20">
+            <Badge className="bg-mermaid-cyan/20 text-mermaid-cyan border-mermaid-cyan/20 backdrop-blur-md">
+              📢 已发布
+            </Badge>
+          </div>
+        )}
+
+        {/* Bottom Content */}
+        <div className="absolute bottom-0 left-0 right-0 z-20 pointer-events-none">
+          <div className="p-4 pt-12 bg-gradient-to-t from-[#0B0C10] via-[#0B0C10]/90 to-transparent">
+            <h3 className="text-xl font-bold text-white tracking-tight group-hover:text-mermaid-pink transition-colors duration-300 relative z-30 pointer-events-auto">{character.name}</h3>
+            <p className="text-sm text-white/70 font-medium relative z-30 pointer-events-auto">{character.character_type}</p>
+
+            {character.style_tags.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 mt-2 relative z-30 pointer-events-auto">
+                {character.style_tags.slice(0, 3).map((tag) => (
+                  <span key={tag} className="px-2 py-0.5 text-xs rounded-full bg-white/10 text-white/90 backdrop-blur-sm border border-white/5">
+                    {tag}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Info Section */}
+      <div className="relative z-20 p-4 space-y-3 -mt-1.5 bg-gradient-to-b from-[#0B0C10] to-transparent">
+        {/* 永久 + 创建时间 */}
+        <div className="flex items-center justify-between text-sm">
+          <Badge variant="outline" className="bg-white/5 text-white/60 border-white/10">
+            ✴️ 永久
+          </Badge>
+          <span className="text-xs text-white/40">
+            {new Date(character.created_at).toLocaleDateString("zh-CN", { month: "short", day: "numeric" })}
+          </span>
+        </div>
+
+        {/* Action Buttons */}
+        <div className="flex gap-2">
+          <Button
+            onClick={() => onUseInStudio(character.id)}
+            disabled={!refStatus.canUse && character.reference_status !== "none"}
+            className={cn(
+              "flex-1 relative overflow-hidden group/btn font-bold transition-all duration-300",
+              refStatus.canUse
+                ? "bg-white/5 border border-white/10 hover:border-mermaid-pink/50 text-white hover:shadow-[0_0_20px_rgba(236,72,153,0.2)]"
+                : "bg-white/5 border border-white/5 text-white/30 cursor-not-allowed"
+            )}
+          >
+            <span className="relative z-10 flex items-center justify-center gap-2">
+              <Zap className="h-4 w-4" />
+              去创作
+            </span>
+          </Button>
+
+          {/* 重试参考图 */}
+          {character.reference_status === "failed" && (
+            <Button
+              variant="outline"
+              onClick={() => onRetryReference(character.id)}
+              className="border-neon-red/30 text-neon-red hover:bg-neon-red/10 hover:border-neon-red/50"
+            >
+              <RefreshCw className="h-4 w-4" />
+            </Button>
+          )}
+
+          {/* 发布 / 删除 */}
+          <Button
+            variant="outline"
+            onClick={() => character.is_public ? onDelete(character.id) : onPublish(character)}
+            className="border-white/10 text-white/50 hover:bg-white/10 hover:text-white hover:border-white/30"
+          >
+            {character.is_public ? <span className="text-xs">下架</span> : <span className="text-xs">发布</span>}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
 // Main Page
 // ============================================================================
 
@@ -289,20 +481,24 @@ export default function TeamPage() {
   const { toast } = useToast();
 
   const [models, setModels] = useState<HiredModel[]>([]);
+  const [myCharacters, setMyCharacters] = useState<MyCharacter[]>([]);
   const [loading, setLoading] = useState(true);
   const [renewDialogOpen, setRenewDialogOpen] = useState(false);
   const [selectedModel, setSelectedModel] = useState<HiredModel | null>(null);
   const [renewPeriod, setRenewPeriod] = useState("monthly");
   const [isRenewing, setIsRenewing] = useState(false);
+  // 发布弹窗状态
+  const [publishDialogOpen, setPublishDialogOpen] = useState(false);
+  const [publishTarget, setPublishTarget] = useState<MyCharacter | null>(null);
+  const [publishPrice, setPublishPrice] = useState(100);
+  const [isPublishing, setIsPublishing] = useState(false);
   // Fetch hired models - 使用 /api/contracts API
   const fetchModels = useCallback(async () => {
-    setLoading(true);
     try {
       const response = await fetch("/api/contracts?status=active");
       const result = await response.json();
 
       if (result.success && result.data) {
-        // 将合约数据转换为 HiredModel 格式
         const hiredModels: HiredModel[] = result.data
           .filter((contract: any) => contract.ai_models)
           .map((contract: any) => {
@@ -311,7 +507,6 @@ export default function TeamPage() {
             const now = new Date();
             const daysRemaining = Math.max(0, Math.ceil((endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
 
-            // 处理 style_tags
             let tags: string[] = [];
             if (model.style_tags) {
               if (typeof model.style_tags === "string") {
@@ -345,40 +540,183 @@ export default function TeamPage() {
             };
           });
 
-        // Sort by days remaining (expiring first)
         const sorted = hiredModels.sort((a, b) => a.days_remaining - b.days_remaining);
         setModels(sorted);
-        console.log(`[Team Page] Loaded ${sorted.length} hired models`);
       } else {
-        console.error("[Team Page] Failed to fetch:", result.error);
-        toast({
-          variant: "destructive",
-          title: "加载失败",
-          description: result.error || "无法获取您的签约模特",
-        });
         setModels([]);
       }
     } catch (error) {
-      console.error("[Team Page] Error:", error);
+      console.error("[Team Page] Hired models error:", error);
       setModels([]);
-    } finally {
-      setLoading(false);
     }
-  }, [toast]);
+  }, []);
+
+  // Fetch self-created characters - 独立查询
+  const fetchMyCharacters = useCallback(async () => {
+    try {
+      const userDataStr = localStorage.getItem("user-data");
+      let userId = "";
+      if (userDataStr) {
+        try {
+          const userData = JSON.parse(userDataStr);
+          userId = userData?.id || userData?.user?.id || "";
+        } catch { /* ignore */ }
+      }
+      if (!userId) return;
+
+      const response = await fetch(`/api/characters?userId=${userId}`);
+      const result = await response.json();
+
+      if (result.success && result.data) {
+        // 安全解析 style_tags（可能是 text[] 或 JSON string）
+        const parsed = (result.data as any[]).map((ch: any) => {
+          let tags: string[] = [];
+          if (ch.style_tags) {
+            if (typeof ch.style_tags === "string") {
+              try { tags = JSON.parse(ch.style_tags); } catch { tags = [ch.style_tags]; }
+            } else if (Array.isArray(ch.style_tags)) {
+              tags = ch.style_tags;
+            }
+          }
+          return { ...ch, style_tags: tags };
+        });
+        setMyCharacters(parsed);
+      } else {
+        setMyCharacters([]);
+      }
+    } catch (error) {
+      console.error("[Team Page] My characters error:", error);
+      setMyCharacters([]);
+    }
+  }, []);
+
+  // Unified data load
+  const fetchAll = useCallback(async () => {
+    setLoading(true);
+    await Promise.all([fetchModels(), fetchMyCharacters()]);
+    setLoading(false);
+  }, [fetchModels, fetchMyCharacters]);
 
   // Initial load
   useEffect(() => {
-    fetchModels();
-  }, [fetchModels]);
+    fetchAll();
+  }, [fetchAll]);
 
   // Handle "Use in Studio"
-  const handleUseInStudio = (modelId: string) => {
-    router.push(`/quick-gen?modelId=${modelId}`);
+  const handleUseInStudio = (id: string) => {
+    router.push(`/quick-gen?modelId=${id}`);
   };
 
   // Handle refresh
   const handleRefresh = () => {
-    fetchModels();
+    fetchAll();
+  };
+
+  // Handle retry reference image
+  const handleRetryReference = async (characterId: string) => {
+    try {
+      const response = await fetch("/api/characters/retry-reference", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ characterId }),
+      });
+      const result = await response.json();
+      if (result.success) {
+        toast({ title: "🔄 参考图正在重新生成" });
+        fetchMyCharacters();
+      } else {
+        toast({ variant: "destructive", title: "重试失败", description: result.error });
+      }
+    } catch {
+      toast({ variant: "destructive", title: "网络错误" });
+    }
+  };
+
+  // Handle publish - 打开发布弹窗
+  const handlePublish = (character: MyCharacter) => {
+    if (character.is_public) {
+      // 已发布 → 下架
+      handleUnpublish(character.id);
+    } else {
+      // 未发布 → 打开设价弹窗
+      setPublishTarget(character);
+      setPublishPrice(character.publish_price || 100);
+      setPublishDialogOpen(true);
+    }
+  };
+
+  // Handle confirm publish
+  const handleConfirmPublish = async () => {
+    if (!publishTarget) return;
+    setIsPublishing(true);
+    try {
+      const userDataStr = localStorage.getItem("user-data");
+      let userId = "";
+      if (userDataStr) {
+        try { const u = JSON.parse(userDataStr); userId = u?.id || u?.user?.id || ""; } catch { /* */ }
+      }
+      const response = await fetch("/api/characters/publish", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ characterId: publishTarget.id, price: publishPrice, userId }),
+      });
+      const result = await response.json();
+      if (result.success) {
+        toast({ title: "📢 发布成功", description: `${publishTarget.name} 已发布到角色资源广场，定价 ${publishPrice} 积分` });
+        setPublishDialogOpen(false);
+        fetchMyCharacters();
+      } else {
+        toast({ variant: "destructive", title: "发布失败", description: result.error });
+      }
+    } catch {
+      toast({ variant: "destructive", title: "网络错误" });
+    } finally {
+      setIsPublishing(false);
+    }
+  };
+
+  // Handle unpublish
+  const handleUnpublish = async (characterId: string) => {
+    if (!confirm("确定要从广场下架这个角色吗？")) return;
+    try {
+      const userDataStr = localStorage.getItem("user-data");
+      let userId = "";
+      if (userDataStr) {
+        try { const u = JSON.parse(userDataStr); userId = u?.id || u?.user?.id || ""; } catch { /* */ }
+      }
+      const response = await fetch(`/api/characters/publish?characterId=${characterId}&userId=${userId}`, { method: "DELETE" });
+      const result = await response.json();
+      if (result.success) {
+        toast({ title: "✅ 已从广场下架" });
+        fetchMyCharacters();
+      } else {
+        toast({ variant: "destructive", title: "下架失败", description: result.error });
+      }
+    } catch {
+      toast({ variant: "destructive", title: "网络错误" });
+    }
+  };
+
+  // Handle delete
+  const handleDelete = async (characterId: string) => {
+    if (!confirm("确定要删除这个角色吗？此操作不可撤销。")) return;
+    try {
+      const userDataStr = localStorage.getItem("user-data");
+      let userId = "";
+      if (userDataStr) {
+        try { const u = JSON.parse(userDataStr); userId = u?.id || u?.user?.id || ""; } catch { /* */ }
+      }
+      const response = await fetch(`/api/characters?id=${characterId}&userId=${userId}`, { method: "DELETE" });
+      const result = await response.json();
+      if (result.success) {
+        toast({ title: "✅ 角色已删除" });
+        fetchMyCharacters();
+      } else {
+        toast({ variant: "destructive", title: "删除失败", description: result.error });
+      }
+    } catch {
+      toast({ variant: "destructive", title: "网络错误" });
+    }
   };
 
   // Handle renew dialog open
@@ -436,8 +774,10 @@ export default function TeamPage() {
 
   // Stats
   const totalModels = models.length;
+  const totalCharacters = myCharacters.length;
   const expiringModels = models.filter(m => m.days_remaining <= 3).length;
   const totalGenerations = models.reduce((sum, m) => sum + m.total_generations, 0);
+  const hasAnyContent = totalModels > 0 || totalCharacters > 0;
 
   return (
     <div className="space-y-6">
@@ -446,10 +786,10 @@ export default function TeamPage() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight flex items-center gap-3">
             <div className="h-8 w-1.5 rounded-full bg-gradient-to-b from-mermaid-lime to-mermaid-cyan shadow-[0_0_10px_rgba(0,242,234,0.5)]" />
-            <span className="text-white drop-shadow-lg">专属模特仓</span>
+            <span className="text-white drop-shadow-lg">专属阵营</span>
           </h1>
           <p className="mt-2 text-white/60">
-            管理您已签约的 AI 模特
+            管理您的自建角色和签约角色
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -463,20 +803,28 @@ export default function TeamPage() {
             刷新
           </Button>
           <Button
-            onClick={() => router.push("/models")}
+            onClick={() => router.push("/character/create")}
             className="relative rounded-full font-bold text-black transition-all duration-500 bg-gradient-to-r from-[#CCFF00] via-[#00F2EA] to-[#EC4899] hover:scale-[1.02] hover:shadow-[0_0_20px_rgba(0,242,234,0.5)] border border-white/20 overflow-hidden group shadow-[0_0_20px_rgba(0,242,234,0.2)]"
           >
             <div className="absolute inset-0 bg-gradient-to-b from-white/40 to-transparent" />
             <div className="absolute inset-0 bg-[linear-gradient(110deg,transparent,rgba(255,255,255,0.4),transparent)] bg-[length:200%_100%] opacity-0 group-hover:opacity-100 group-hover:animate-shimmer transition-opacity duration-300" />
             <span className="relative z-10 flex items-center justify-center gap-2">
               <Plus className="mr-2 h-4 w-4" />
-              聘用更多
+              创建角色
             </span>
+          </Button>
+          <Button
+            onClick={() => router.push("/models")}
+            variant="outline"
+            className="rounded-full border-white/10 text-white/70 hover:border-white/30 hover:text-white"
+          >
+            <Sparkles className="mr-2 h-4 w-4" />
+            浏览广场
           </Button>
         </div>
       </div>
 
-      {/* Stats Cards - Titanium Glass */}
+      {/* Stats Cards */}
       <div className="grid gap-4 md:grid-cols-3">
         <Card variant="glass" className="group hover:border-mermaid-cyan/30 transition-all duration-300">
           <CardContent className="flex items-center gap-4 p-5">
@@ -484,8 +832,8 @@ export default function TeamPage() {
               <UserCheck className="h-7 w-7 text-white/70 group-hover:text-mermaid-cyan transition-colors" />
             </div>
             <div>
-              <p className="text-3xl font-bold text-white tracking-tight group-hover:text-mermaid-cyan transition-colors">{totalModels}</p>
-              <p className="text-sm text-white/60">签约模特</p>
+              <p className="text-3xl font-bold text-white tracking-tight group-hover:text-mermaid-cyan transition-colors">{totalCharacters + totalModels}</p>
+              <p className="text-sm text-white/60">全部角色 (自建 {totalCharacters} / 签约 {totalModels})</p>
             </div>
           </CardContent>
         </Card>
@@ -554,19 +902,52 @@ export default function TeamPage() {
             </div>
           ))}
         </div>
-      ) : models.length === 0 ? (
+      ) : !hasAnyContent ? (
         <EmptyState />
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-          {models.map((model) => (
-            <TeamMemberCard
-              key={model.id}
-              model={model}
-              onUseInStudio={handleUseInStudio}
-              onRenew={handleOpenRenewDialog}
-            />
-          ))}
-        </div>
+        <>
+          {/* 自建角色 */}
+          {myCharacters.length > 0 && (
+            <div className="space-y-3">
+              <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                <span className="h-5 w-1 rounded-full bg-mermaid-pink" />
+                🎨 我的角色 <span className="text-white/40 font-normal text-sm">({myCharacters.length})</span>
+              </h2>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+                {myCharacters.map((char) => (
+                  <MyCharacterCard
+                    key={char.id}
+                    character={char}
+                    onUseInStudio={handleUseInStudio}
+                    onRetryReference={handleRetryReference}
+                    onPublish={handlePublish}
+                    onDelete={handleDelete}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* 签约角色 */}
+          {models.length > 0 && (
+            <div className="space-y-3">
+              <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                <span className="h-5 w-1 rounded-full bg-mermaid-cyan" />
+                🤝 签约角色 <span className="text-white/40 font-normal text-sm">({models.length})</span>
+              </h2>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+                {models.map((model) => (
+                  <TeamMemberCard
+                    key={model.id}
+                    model={model}
+                    onUseInStudio={handleUseInStudio}
+                    onRenew={handleOpenRenewDialog}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+        </>
       )}
 
       {/* Contract Timeline - JCUI 2.0 Aurora Style */}
@@ -665,7 +1046,7 @@ export default function TeamPage() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <RefreshCw className="h-5 w-5 text-tiktok-cyan" />
-              续约模特
+              续约角色
             </DialogTitle>
             <DialogDescription>
               为 {selectedModel?.name} 续约合约
@@ -750,6 +1131,76 @@ export default function TeamPage() {
                   <RefreshCw className="mr-2 h-4 w-4" />
                   确认续约
                 </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Publish Dialog */}
+      <Dialog open={publishDialogOpen} onOpenChange={setPublishDialogOpen}>
+        <DialogContent className="bg-background border-border/50 max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              📢 发布角色到广场
+            </DialogTitle>
+            <DialogDescription>
+              设置 {publishTarget?.name} 的聘用价格（积分），其他用户聘用后积分将 100% 转入你的账户。
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            {publishTarget && (
+              <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/30">
+                <div className="h-12 w-12 rounded-lg overflow-hidden bg-gradient-to-br from-blue-500/20 to-mermaid-pink/20">
+                  {publishTarget.avatar_url ? (
+                    <img src={publishTarget.avatar_url} alt={publishTarget.name} className="h-full w-full object-cover" />
+                  ) : (
+                    <div className="h-full w-full flex items-center justify-center">
+                      <Sparkles className="h-5 w-5 text-muted-foreground" />
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <p className="font-medium">{publishTarget.name}</p>
+                  <p className="text-sm text-muted-foreground">{publishTarget.character_type}</p>
+                </div>
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-white/70">聘用价格（积分）</label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  min={0}
+                  max={99999}
+                  value={publishPrice}
+                  onChange={(e) => setPublishPrice(Math.max(0, parseInt(e.target.value) || 0))}
+                  className="flex-1 px-3 py-2 rounded-lg border border-white/10 bg-white/5 text-white text-center text-lg font-bold focus:outline-none focus:border-mermaid-cyan/50"
+                />
+                <span className="text-sm text-white/50">积分</span>
+              </div>
+              <p className="text-xs text-white/40">每次被聘用，你将获得 {publishPrice} 积分收益</p>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPublishDialogOpen(false)} className="border-white/10">
+              取消
+            </Button>
+            <Button
+              onClick={handleConfirmPublish}
+              disabled={isPublishing || publishPrice < 0}
+              className="bg-gradient-to-r from-mermaid-cyan to-mermaid-pink text-black font-bold"
+            >
+              {isPublishing ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  发布中...
+                </>
+              ) : (
+                "确认发布"
               )}
             </Button>
           </DialogFooter>

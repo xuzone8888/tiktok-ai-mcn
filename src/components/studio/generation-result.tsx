@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { useDownloadStore } from "@/stores/download-store";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
@@ -66,13 +67,8 @@ export function GenerationResult({
 
   const handleDownload = () => {
     if (videoUrl) {
-      const link = document.createElement("a");
-      link.href = videoUrl;
-      link.download = `tiktok-ai-mcn-video-${Date.now()}.mp4`;
-      link.target = "_blank";
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      const { download } = useDownloadStore.getState();
+      download(videoUrl, `video-${Date.now()}.mp4`, "video");
     }
   };
 

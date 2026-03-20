@@ -526,13 +526,18 @@ function useImageTaskExecutor() {
       }
 
       // 调用 API - 使用正确的参数格式
+      // 构建 sourceImageUrls 数组：用户上传图 + 角色参考图
+      const apiSourceImageUrls: string[] = [];
+      if (remoteImageUrl) apiSourceImageUrls.push(remoteImageUrl);
+      if (task.config.characterRefUrl) apiSourceImageUrls.push(task.config.characterRefUrl);
+
       const response = await fetch("/api/generate/image", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           mode: task.config.action,  // "generate" | "upscale" | "nine_grid"
           model: task.config.model,
-          sourceImageUrl: remoteImageUrl,
+          sourceImageUrls: apiSourceImageUrls.length > 0 ? apiSourceImageUrls : undefined,
           aspectRatio: task.config.aspectRatio,
           resolution: task.config.resolution,
           prompt: task.config.action === "generate" ? (task.config.prompt || "High quality product photo") : undefined,
@@ -851,14 +856,17 @@ function useQuickGenImageTaskExecutor() {
           updateTaskStatus(activeTask.id, "generating", { progress: 10 });
 
           // 调用图片生成 API
+          // 检测是否为新 Gemini 模型，传 imageModel 参数给后端路由
+          const isGeminiModel = activeTask.model.startsWith("gemini-");
           const response = await fetch("/api/generate/image", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               mode: "generate",
-              model: activeTask.model,
+              model: isGeminiModel ? undefined : activeTask.model,  // 旧模型用 model
+              imageModel: isGeminiModel ? activeTask.model : undefined,  // 新模型用 imageModel
               prompt: activeTask.prompt,
-              sourceImageUrl: activeTask.sourceImageUrls.length > 0 ? activeTask.sourceImageUrls[0] : undefined,
+              sourceImageUrls: activeTask.sourceImageUrls.length > 0 ? activeTask.sourceImageUrls : undefined,
               tier: activeTask.tier,
               aspectRatio: activeTask.aspectRatio,
               resolution: activeTask.resolution,

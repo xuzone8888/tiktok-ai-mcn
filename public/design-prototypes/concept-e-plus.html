@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Concept E Pro: Precision Ring Pro</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;700&display=swap');
+
+        body { margin: 0; padding: 0; background: #050508; height: 100vh; display: flex; align-items: center; justify-content: center; overflow: hidden; font-family: "Inter", -apple-system, sans-serif; color: white; flex-direction: column;}
+        
+        /* Moving subtle grid */
+        .grid-bg { 
+            position: absolute; width: 200%; height: 200%; top: -50%; left: -50%;
+            background-image: 
+                linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
+            background-size: 40px 40px; 
+            pointer-events: none; 
+            animation: panGrid 60s linear infinite;
+        }
+        
+        @keyframes panGrid { 0% { transform: translate(0, 0); } 100% { transform: translate(-40px, -40px); } }
+
+        .grid-fade { position: absolute; inset: 0; background: radial-gradient(circle at center, transparent 10%, #050508 70%); pointer-events: none; }
+
+        .loader-container { position: relative; width: 220px; height: 220px; display: flex; align-items: center; justify-content: center; margin-bottom: 40px; }
+
+        /* Outer Conic Gradient Ring */
+        .outer-ring {
+            position: absolute; width: 100%; height: 100%; border-radius: 50%;
+            background: conic-gradient(from 0deg, #00F2EA, #CCFF00, #EC4899, #00F2EA);
+            /* Creating the ring using a mask */
+            -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #fff calc(100% - 2px));
+            mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #fff calc(100% - 2px));
+            animation: spinFast 3s linear infinite;
+            filter: drop-shadow(0 0 10px rgba(0,242,234,0.3));
+        }
+
+        /* Inner dashed tracking ring */
+        .inner-ring {
+            position: absolute; width: 85%; height: 85%; border-radius: 50%;
+            border: 1px dashed rgba(255,255,255,0.15);
+            animation: spinReverse 20s linear infinite;
+        }
+
+        @keyframes spinFast { 100% { transform: rotate(360deg); } }
+        @keyframes spinReverse { 100% { transform: rotate(-360deg); } }
+
+        /* Percentage and Text Inside */
+        .center-content { position: absolute; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; }
+        
+        .percentage { 
+            font-size: 3rem; font-weight: 300; margin: 0; 
+            font-family: 'JetBrains Mono', monospace; font-variant-numeric: tabular-nums;
+            background: linear-gradient(135deg, #ffffff 0%, #a1a1aa 100%);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            text-shadow: 0 0 20px rgba(0,242,234,0.2); 
+        }
+
+        .eta { font-size: 0.7rem; color: #71717a; font-family: 'JetBrains Mono', monospace; letter-spacing: 0.05em; text-transform: uppercase; }
+
+        .info-panel { text-align: center; z-index: 10; display: flex; flex-direction: column; align-items: center; gap: 12px; width: 400px; }
+        
+        .status-badge { 
+            display: inline-flex; align-items: center; gap: 8px; padding: 6px 16px; border-radius: 6px; 
+            background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); 
+            font-size: 0.85rem; color: #f4f4f5; font-weight: 500; letter-spacing: 0.02em; 
+            box-shadow: 0 4px 20px rgba(0,0,0,0.5); backdrop-filter: blur(10px);
+        }
+        
+        .dot { width: 6px; height: 6px; background: #00F2EA; border-radius: 50%; box-shadow: 0 0 8px #00F2EA; animation: pulseDot 1.5s ease-in-out infinite; }
+        
+        @keyframes pulseDot { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.3; transform: scale(0.8); } }
+
+        /* Terminal Microcopy Stream */
+        .terminal-stream {
+            font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: #52525b; text-align: center; height: 16px; overflow: hidden; width: 100%;
+        }
+    </style>
+</head>
+<body>
+    <div class="grid-bg"></div>
+    <div class="grid-fade"></div>
+
+    <div class="loader-container">
+        <div class="outer-ring"></div>
+        <div class="inner-ring"></div>
+        
+        <div class="center-content">
+            <p class="percentage" id="perc">82<span style="font-size:1.5rem;color:#71717a">%</span></p>
+            <div class="eta">ETA 00:14s</div>
+        </div>
+    </div>
+
+    <div class="info-panel">
+        <div class="status-badge">
+            <div class="dot"></div>
+            AI 正在构建角色模型...
+        </div>
+        <div class="terminal-stream" id="term-text">
+            [SYS] 解析角色基础设定与特征...
+        </div>
+    </div>
+
+    <script>
+        const logs = [
+            "[SYS] 解析角色基础设定与特征...",
+            "[MOD] 构建 4K 精美立绘骨架...",
+            "[NET] 请求多角度参考视图同步...",
+            "[ACT] 应用 Mermaid Iris 色彩配置...",
+            "[SYS] 提升纹理分辨率至高定版...",
+            "[OK] 三视图生成中，稳定连接已建立...",
+            "[ACT] 面部细节与情绪特征渲染中...",
+            "[SYS] 正在写入角色资产至云端舱..."
+        ];
+        let idx = 0;
+        setInterval(() => {
+            idx = (idx + 1) % logs.length;
+            const term = document.getElementById('term-text');
+            term.style.opacity = '0';
+            setTimeout(() => {
+                term.innerText = logs[idx];
+                term.style.opacity = '1';
+                // slight glitch flash color
+                if (Math.random() > 0.7) { term.style.color = '#00F2EA'; setTimeout(()=>term.style.color = '#52525b', 100); }
+            }, 100);
+        }, 800);
+    </script>
+</body>
+</html>

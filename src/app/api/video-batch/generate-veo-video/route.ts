@@ -1,14 +1,20 @@
 /**
- * VEO3 视频生成 (异步模式)
- * 
+ * VEO3 批量视频生成（使用高瑞 gaorui-veo-api）
+ *
  * POST /api/video-batch/generate-veo-video
- * 
- * 提交任务后立即返回 veoTaskId，前端通过轮询获取状态
+ *
+ * 三个模型（全部 async, POST /v1/videos, multipart/form-data）:
+ * - veo3-fast  → veo3.1-fast (纯提示词)
+ * - veo3-std   → veo_3_1-components (≤3张参考图URL)
+ * - veo3-4k    → veo3.1-fast-4K (≤2张参考图)
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { submitVeo3, Veo3ModelType } from "@/lib/veo3-api";
+import { submitVeo3Video, type GaoruiVeoModel } from "@/lib/gaorui-veo-api";
 import { createAdminClient } from "@/lib/supabase/admin";
+
+// 所有 VEO3 模型都是异步模式, maxDuration 用于 Next.js route handler 的最大运行时间
+export const maxDuration = 600;
 
 // ============================================================================
 // 请求/响应类型
@@ -16,15 +22,23 @@ import { createAdminClient } from "@/lib/supabase/admin";
 
 interface RequestBody {
   aiVideoPrompt: string;
-  mainGridImageUrl?: string; // 图生视频时的参考图
+  mainGridImageUrl?: string;       // 参考图（veo3-std/veo3-4k 用）
+  characterRefUrl?: string;        // 自建角色参考图 URL
   aspectRatio: "9:16" | "16:9";
-  quality?: "fast" | "quality";  // VEO3 质量选项
+  modelType: "veo3-fast" | "veo3-std" | "veo3-4k";
   taskId: string;
   userId?: string;
   creditCost?: number;
   mode?: "image_to_video" | "prompt_to_video";
-  groupName?: string; // 任务分组名称
+  groupName?: string;
 }
+
+// 模型映射: VideoModelType → GaoruiVeoModel
+const MODEL_MAP: Record<string, GaoruiVeoModel> = {
+  "veo3-fast": "veo3.1-fast",
+  "veo3-std": "veo_3_1-components",
+  "veo3-4k": "veo3.1-fast-4K",
+};
 
 // ============================================================================
 // API Handler
@@ -36,8 +50,9 @@ export async function POST(request: NextRequest) {
     const {
       aiVideoPrompt,
       mainGridImageUrl,
+      characterRefUrl,
       aspectRatio,
-      quality = "fast",
+      modelType = "veo3-fast",
       taskId,
       userId,
       creditCost = 0,
@@ -55,14 +70,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 图片模式下必须提供主图
-    if (!isPromptMode && !mainGridImageUrl) {
-      return NextResponse.json(
-        { success: false, error: "请提供参考图片 URL" },
-        { status: 400 }
-      );
-    }
-
     if (!taskId) {
       return NextResponse.json(
         { success: false, error: "请提供任务ID" },
@@ -70,30 +77,44 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 获取 VEO3 模型名称
-    const veo3Model: Veo3ModelType = quality === "quality" ? "veo3.1-quality" : "veo3.1-fast";
+    // 获取 gaorui 模型名称
+    const gaoruiModel = MODEL_MAP[modelType];
+    if (!gaoruiModel) {
+      return NextResponse.json(
+        { success: false, error: `未知模型类型: ${modelType}` },
+        { status: 400 }
+      );
+    }
 
-    console.log("[VEO3 Batch] Submitting VEO3 video (async mode):", {
+    // 构建图片 URL 列表
+    const imageUrls: string[] = [];
+    if (mainGridImageUrl) imageUrls.push(mainGridImageUrl);
+    if (characterRefUrl) imageUrls.push(characterRefUrl);
+
+    // veo3-fast 不支持参考图
+    const finalImageUrls = modelType === "veo3-fast" ? [] : imageUrls;
+
+    console.log("[VEO3 Batch] Submitting VEO3 video:", {
       taskId,
-      model: veo3Model,
+      modelType,
+      gaoruiModel,
       aspectRatio,
-      quality,
       promptLength: aiVideoPrompt.length,
       userId: userId || "(not provided)",
       creditCost,
-      hasMainImage: !!mainGridImageUrl,
+      imageCount: finalImageUrls.length,
       mode,
     });
 
-    // 提交 VEO3 视频生成任务
-    const submitResult = await submitVeo3({
+    // 调用统一入口
+    const submitResult = await submitVeo3Video({
       prompt: aiVideoPrompt,
-      model: veo3Model,
+      model: gaoruiModel,
       aspectRatio: aspectRatio,
-      ...(mainGridImageUrl && { imageUrls: [mainGridImageUrl] }),
+      ...(finalImageUrls.length > 0 && { imageUrls: finalImageUrls }),
     });
 
-    if (!submitResult.success || !submitResult.taskId) {
+    if (!submitResult.success) {
       console.error("[VEO3 Batch] VEO3 submit failed:", submitResult.error);
       return NextResponse.json(
         { success: false, error: submitResult.error || "视频提交失败" },
@@ -101,10 +122,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // 全部为 async 模式: 返回 taskId，前端需要轮询
     const veoTaskId = submitResult.taskId;
-    console.log("[VEO3 Batch] VEO3 task submitted (async):", veoTaskId);
 
-    // 在数据库中创建 processing 状态的记录
+    console.log("[VEO3 Batch] VEO3 task submitted (async):", {
+      taskId: veoTaskId,
+    });
+
+    // 在数据库中创建记录
     if (userId) {
       try {
         const supabase = createAdminClient();
@@ -116,15 +141,16 @@ export async function POST(request: NextRequest) {
             type: "video",
             source: isPromptMode ? "batch_video_prompt_veo3" : "batch_video_veo3",
             prompt: aiVideoPrompt,
-            model: veo3Model,
-            duration: 8, // VEO3 固定 8 秒
+            model: gaoruiModel,
+            duration: 8,
             aspect_ratio: aspectRatio,
-            quality: quality,
+            quality: modelType === "veo3-4k" ? "4k" : "standard",
             source_image_url: mainGridImageUrl || null,
             status: "processing",
+            result_url: null,
             credit_cost: creditCost,
             group_name: groupName || "默认",
-            use_pro: quality === "quality",
+            use_pro: modelType === "veo3-4k",
             created_at: new Date().toISOString(),
           })
           .select()
@@ -133,30 +159,29 @@ export async function POST(request: NextRequest) {
         if (insertError) {
           console.error("[VEO3 Batch] Failed to create DB record:", insertError);
         } else {
-          console.log("[VEO3 Batch] Created processing record in DB:", {
+          console.log("[VEO3 Batch] Created DB record:", {
             id: insertedData?.id,
             taskId: veoTaskId,
-            userId: userId,
+            status: "processing",
           });
         }
       } catch (dbError) {
-        console.error("[VEO3 Batch] Failed to create DB record (exception):", dbError);
+        console.error("[VEO3 Batch] DB error:", dbError);
       }
-    } else {
-      console.warn("[VEO3 Batch] No userId provided, skipping DB record creation for task:", veoTaskId);
     }
 
-    // 立即返回任务 ID，不等待完成
+    // 返回结果
     return NextResponse.json({
       success: true,
       data: {
-        veoTaskId,
+        veoTaskId: submitResult.taskId,
         status: "processing",
+        syncMode: false,
         message: "VEO3 视频任务已提交，请通过轮询接口查询状态",
       },
     });
   } catch (error) {
-    console.error("[VEO3 Batch] Error submitting VEO3 video:", error);
+    console.error("[VEO3 Batch] Error:", error);
     return NextResponse.json(
       {
         success: false,

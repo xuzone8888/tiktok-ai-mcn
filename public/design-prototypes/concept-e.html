@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Concept E: The Precision Ring</title>
+    <style>
+        body { margin: 0; padding: 0; background: #0a0a0f; height: 100vh; display: flex; align-items: center; justify-content: center; overflow: hidden; font-family: "Inter", -apple-system, sans-serif; color: white; flex-direction: column;}
+        
+        /* Subtle architectural dot grid */
+        .grid-bg { position: absolute; inset: 0; background-image: radial-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px); background-size: 32px 32px; pointer-events: none; }
+        
+        /* Central fade to put focus on the ring */
+        .grid-fade { position: absolute; inset: 0; background: radial-gradient(circle at center, transparent 20%, #0a0a0f 80%); pointer-events: none; }
+
+        .loader-wrapper { position: relative; width: 140px; height: 140px; display: flex; align-items: center; justify-content: center; margin-bottom: 30px; }
+
+        /* Very thin SVG circle for high-end feel */
+        .svg-ring { position: absolute; inset: 0; width: 100%; height: 100%; transform: rotate(-90deg); }
+        .ring-bg { fill: none; stroke: rgba(255,255,255,0.05); stroke-width: 1.5; }
+        .ring-progress { fill: none; stroke: url(#gradient); stroke-width: 2; stroke-linecap: round; stroke-dasharray: 400; stroke-dashoffset: 280; animation: dash 8s ease-in-out infinite alternate; filter: drop-shadow(0 0 4px rgba(0,242,234,0.4)); }
+
+        @keyframes dash { 0% { stroke-dashoffset: 350; } 100% { stroke-dashoffset: 50; } }
+
+        /* Crisp central icon */
+        .center-icon { width: 32px; height: 32px; color: #fff; filter: drop-shadow(0 0 8px rgba(255,255,255,0.2)); animation: gentlePulse 3s infinite; }
+        
+        @keyframes gentlePulse { 0%, 100% { opacity: 0.8; transform: scale(0.95); } 50% { opacity: 1; transform: scale(1); } }
+
+        .info-panel { text-align: center; z-index: 10; display: flex; flex-direction: column; align-items: center; gap: 8px;}
+        .percentage { font-size: 2.5rem; font-weight: 300; letter-spacing: -0.04em; margin: 0; background: linear-gradient(to right, #fff, #94a3b8); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-variant-numeric: tabular-nums; }
+        
+        .status-badge { display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: 999px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); font-size: 0.75rem; color: #cbd5e1; font-weight: 500; letter-spacing: 0.02em; }
+        .dot { width: 6px; height: 6px; background: #00F2EA; border-radius: 50%; box-shadow: 0 0 6px #00F2EA; animation: blink 1.5s infinite; }
+        
+        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+    </style>
+</head>
+<body>
+    <div class="grid-bg"></div>
+    <div class="grid-fade"></div>
+
+    <div class="loader-wrapper">
+        <svg class="svg-ring" viewBox="0 0 140 140">
+            <defs>
+                <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                    <stop offset="0%" stop-color="#00F2EA" />
+                    <stop offset="50%" stop-color="#CCFF00" />
+                    <stop offset="100%" stop-color="#EC4899" />
+                </linearGradient>
+            </defs>
+            <circle class="ring-bg" cx="70" cy="70" r="64" />
+            <circle class="ring-progress" cx="70" cy="70" r="64" />
+        </svg>
+        <!-- Inline crisp DNA/Layers icon representation -->
+        <svg class="center-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line>
+        </svg>
+    </div>
+
+    <div class="info-panel">
+        <p class="percentage">74%</p>
+        <div class="status-badge">
+            <div class="dot"></div>
+            Generating Character Model
+        </div>
+    </div>
+</body>
+</html>

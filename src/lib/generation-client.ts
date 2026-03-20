@@ -12,6 +12,7 @@ import {
   type ImageResolution,
   type GenerationStatus,
   VIDEO_MODEL_PRICING,
+  VIDEO_MODEL_CONFIG,
 } from "@/types/generation";
 
 // ============================================================================
@@ -23,6 +24,7 @@ export interface SubmitVideoParams {
   model: VideoModel;
   aspectRatio: ImageAspectRatio;
   sourceImageUrl?: string;
+  sourceImageUrls?: string[];  // VEO3 多张参考图
   modelId?: string;  // AI 模特 ID
   userId?: string;
 }
@@ -30,9 +32,11 @@ export interface SubmitVideoParams {
 export interface SubmitVideoResult {
   success: boolean;
   taskId?: string;
+  videoUrl?: string;      // 同步模式直接返回
   status?: GenerationStatus;
   estimatedTime?: string;
   usePro?: boolean;
+  responseMode?: "sync" | "async";
   error?: string;
 }
 
@@ -42,7 +46,12 @@ export interface SubmitVideoResult {
 export async function submitVideoGeneration(params: SubmitVideoParams): Promise<SubmitVideoResult> {
   try {
     const { model, ...rest } = params;
-    const duration = VIDEO_MODEL_PRICING[model].apiDuration;
+
+    // 新模型：从 VIDEO_MODEL_CONFIG 读取配置
+    const newConfig = VIDEO_MODEL_CONFIG[model];
+    // 旧模型：从 VIDEO_MODEL_PRICING 读取
+    const oldConfig = VIDEO_MODEL_PRICING[model];
+    const duration = newConfig?.duration || oldConfig?.apiDuration || 15;
 
     const response = await fetch("/api/generate/video", {
       method: "POST",
@@ -50,6 +59,7 @@ export async function submitVideoGeneration(params: SubmitVideoParams): Promise<
       body: JSON.stringify({
         ...rest,
         duration,
+        videoModel: model,  // 新字段：传递完整模型标识
         size: "small",
       }),
     });
@@ -70,9 +80,11 @@ export async function submitVideoGeneration(params: SubmitVideoParams): Promise<
     return {
       success: true,
       taskId: result.data.taskId,
+      videoUrl: result.data.videoUrl,
       status: result.data.status,
       estimatedTime: result.data.estimatedTime,
       usePro: result.data.usePro,
+      responseMode: result.data.responseMode,
     };
   } catch (error) {
     console.error("[Generation Client] Submit video error:", error);
@@ -95,12 +107,15 @@ export interface VideoTaskStatus {
  */
 export async function queryVideoStatus(
   taskId: string,
-  usePro: boolean = false
+  usePro: boolean = false,
+  videoModel?: string  // 新增：VEO3 查询需要传递模型名
 ): Promise<{ success: boolean; task?: VideoTaskStatus; error?: string }> {
   try {
-    const response = await fetch(
-      `/api/generate/video?taskId=${encodeURIComponent(taskId)}&usePro=${usePro}`
-    );
+    let url = `/api/generate/video?taskId=${encodeURIComponent(taskId)}&usePro=${usePro}`;
+    if (videoModel) {
+      url += `&videoModel=${encodeURIComponent(videoModel)}`;
+    }
+    const response = await fetch(url);
     const responseText = await response.text();
     let result;
     try {

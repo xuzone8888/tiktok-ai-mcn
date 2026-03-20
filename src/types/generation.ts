@@ -3,6 +3,10 @@
  * 
  * 共享的生成类型定义和计费逻辑
  * 用于 Quick Generator 和 Pro Studio (Batch) 页面
+ * 
+ * 2026-03-19 重构：统一 API 封装
+ * - 新增 VideoModel (5模型) + ImageModel (3模型) + 配置表
+ * - 旧类型 (NanoTier, 旧 VideoModel) 标记 @deprecated
  */
 
 // ============================================================================
@@ -15,18 +19,31 @@ export type OutputMode = "video" | "image";
 /** 图片来源类型 */
 export type SourceType = "local_upload" | "nano_banana";
 
-/** NanoBanana 质量层级 */
+/** @deprecated 使用 ImageModel 替代 */
 export type NanoTier = "fast" | "pro";
 
 /** 图片处理类型 */
 export type ProcessingType = "upscale" | "9grid";
 
+// ============================================================================
+// 新模型类型定义 (2026-03-19 统一封装)
+// ============================================================================
+
 /** 视频模型选项 */
-export type VideoModel = 
-  | "sora2-10s"       // Sora2 标清 10秒
-  | "sora2-15s"       // Sora2 标清 15秒
-  | "sora2-pro-15s-hd" // Sora2 Pro 15秒高清
-  | "sora2-pro-25s";   // Sora2 Pro 25秒标清
+export type VideoModel =
+  | "sora2-new-10s"     // 速创 Sora2-NEW 10秒
+  | "sora2-new-15s"     // 速创 Sora2-NEW 15秒
+  | "veo3-components"   // 高瑞 VEO3.1 Components (8s, 3图+首尾帧)
+  | "veo3-fast"         // 高瑞 VEO3.1 Fast (8s, 最快)
+  | "veo3-fast-4k"      // 高瑞 VEO3.1 Fast 4K (8s, 超清)
+  // @deprecated — 旧模型，迁移期间保留
+  | "sora2-10s" | "sora2-15s" | "sora2-pro-15s-hd" | "sora2-pro-25s";
+
+/** 图片模型选项 */
+export type ImageModel =
+  | "gemini-1k"        // 高瑞 flash (1K, 快速~10s)
+  | "gemini-2k"        // xas231 portrait (2K, ~90s, 默认)
+  | "gemini-4k";       // 高瑞 pro-preview (4K, ~25s)
 
 /** 视频宽高比 */
 export type VideoAspectRatio = "9:16" | "16:9";
@@ -40,8 +57,8 @@ export type ImageResolution = "1k" | "2k" | "4k";
 /** 图片处理动作 */
 export type ImageProcessAction = "generate" | "upscale" | "nine_grid";
 
-/** AI 模特选择模式 */
-export type AiCastMode = "auto" | "team" | "all";
+/** AI 角色选择模式 */
+export type AiCastMode = "auto" | "team" | "all" | "character";
 
 /** 批量生成数量 */
 export type BatchCount = 1 | 2 | 3 | 4;
@@ -93,6 +110,11 @@ export interface DisplayModel {
   is_hired?: boolean;
   days_remaining?: number;
   contract_end_date?: string | null;
+  // === Phase 3: 角色系统字段 ===
+  source?: "official" | "user_created";
+  description?: string | null;
+  reference_sheet_url?: string | null;
+  reference_status?: string;
 }
 
 // ============================================================================
@@ -104,8 +126,120 @@ export interface VideoGenerationConfig {
   model: VideoModel;
   aspectRatio: VideoAspectRatio;
   sourceImageUrl?: string;
+  sourceImageUrls?: string[];  // VEO3 支持多张参考图
   modelId?: string;  // AI 模特 ID
+  characterPid?: string;  // Sora2 角色 pid (如 @eldenzrzl.marmaladec)
 }
+
+/** 视频模型配置项 */
+export interface VideoModelConfig {
+  label: string;           // UI 显示名
+  provider: "suchuang" | "gaorui";
+  apiModel: string;        // 传给 API 的实际模型名
+  endpoint: string;        // API 端点路径
+  duration: number;        // 固定时长（秒）
+  credits: number;         // 积分（后续统一调整）
+  supportsRefImage: boolean;
+  maxImages: number;
+  supportsCharacter: boolean;
+  quality: "standard" | "4k";
+  responseMode: "sync" | "async";
+  requestFormat: "messages" | "prompt" | "multipart";
+  estimatedTime: string;
+}
+
+/**
+ * 视频模型配置表 (新版)
+ *
+ * 5 个模型:
+ * - Sora2 10秒 / 15秒 (速创 wuyinkeji)
+ * - VEO3 参考图版 / 快速版 / 4K超清 (高瑞 gaorui)
+ */
+export const VIDEO_MODEL_CONFIG: Record<string, VideoModelConfig> = {
+  "sora2-new-10s": {
+    label: "Sora2 10秒",
+    provider: "suchuang",
+    apiModel: "sora2-new",
+    endpoint: "/api/sora2-new/submit",
+    duration: 10,
+    credits: 20,
+    supportsRefImage: true,
+    maxImages: 1,
+    supportsCharacter: true,
+    quality: "standard",
+    responseMode: "async",
+    requestFormat: "prompt",
+    estimatedTime: "3~5分钟",
+  },
+  "sora2-new-15s": {
+    label: "Sora2 15秒",
+    provider: "suchuang",
+    apiModel: "sora2-new",
+    endpoint: "/api/sora2-new/submit",
+    duration: 15,
+    credits: 20,
+    supportsRefImage: true,
+    maxImages: 1,
+    supportsCharacter: true,
+    quality: "standard",
+    responseMode: "async",
+    requestFormat: "prompt",
+    estimatedTime: "3~5分钟",
+  },
+  "veo3-components": {
+    label: "VEO3 参考图版 8秒",
+    provider: "gaorui",
+    apiModel: "veo_3_1-components",
+    endpoint: "/v1/videos",
+    duration: 8,
+    credits: 10,
+    supportsRefImage: true,
+    maxImages: 3,
+    supportsCharacter: false,
+    quality: "standard",
+    responseMode: "async",
+    requestFormat: "multipart",
+    estimatedTime: "~90秒",
+  },
+  "veo3-fast": {
+    label: "VEO3 快速版 8秒",
+    provider: "gaorui",
+    apiModel: "veo3.1-fast",
+    endpoint: "/v1/videos",
+    duration: 8,
+    credits: 8,
+    supportsRefImage: false,
+    maxImages: 0,
+    supportsCharacter: false,
+    quality: "standard",
+    responseMode: "async",
+    requestFormat: "multipart",
+    estimatedTime: "~76秒",
+  },
+  "veo3-fast-4k": {
+    label: "VEO3 4K超清 8秒",
+    provider: "gaorui",
+    apiModel: "veo3.1-fast-4K",
+    endpoint: "/v1/videos",
+    duration: 8,
+    credits: 10,
+    supportsRefImage: true,
+    maxImages: 2,
+    supportsCharacter: false,
+    quality: "4k",
+    responseMode: "async",
+    requestFormat: "multipart",
+    estimatedTime: "~6.6分钟",
+  },
+};
+
+/** 获取新视频模型列表（仅新模型，用于 UI 渲染） */
+export const NEW_VIDEO_MODELS: VideoModel[] = [
+  "sora2-new-10s", "sora2-new-15s",
+  "veo3-components", "veo3-fast", "veo3-fast-4k",
+];
+
+// --- @deprecated 旧视频配置，迁移期间保留 ---
 
 export interface VideoModelPricing {
   label: string;
@@ -113,18 +247,11 @@ export interface VideoModelPricing {
   credits: number;
   apiDuration: 10 | 15 | 25;
   quality: "standard" | "hd";
-  apiModel: string; // 对应 API 的模型名
+  apiModel: string;
 }
 
-/**
- * 视频模型定价配置
- * 
- * 快速单个视频功能扣分机制：
- * - 标准款（10秒/15秒 横/竖屏）：20 积分/条
- * - PRO 款（25秒 横/竖屏）：320 积分/条
- * - PRO 高清款（15秒 横/竖屏）：320 积分/条
- */
-export const VIDEO_MODEL_PRICING: Record<VideoModel, VideoModelPricing> = {
+/** @deprecated 使用 VIDEO_MODEL_CONFIG 替代 */
+export const VIDEO_MODEL_PRICING: Record<string, VideoModelPricing> = {
   "sora2-10s": { 
     label: "Sora2 标清 10秒", 
     duration: "10秒", 
@@ -160,42 +287,145 @@ export const VIDEO_MODEL_PRICING: Record<VideoModel, VideoModelPricing> = {
 };
 
 // ============================================================================
-// 图片生成配置
+// 图片生成配置 (新版)
 // ============================================================================
 
 export interface ImageGenerationConfig {
   prompt: string;
-  tier: NanoTier;
+  model: ImageModel;           // 新：使用 ImageModel
+  tier?: NanoTier;             // @deprecated 旧字段，兼容用
   aspectRatio: ImageAspectRatio;
-  resolution: ImageResolution;
+  resolution?: ImageResolution;
   sourceImageUrls?: string[];
 }
+
+/** 图片模型配置项 */
+/** 供应商 fallback 配置 */
+export interface ImageModelFallback {
+  provider: string;
+  apiModel: string;
+  hostname: string;
+  path: string;
+  nativePath?: string;
+  imageSize?: string;
+}
+
+export interface ImageModelConfig {
+  label: string;
+  provider: string;
+  apiModel: string;        // 调 API 用的 model 名
+  hostname: string;        // 供应商域名
+  path: string;            // API 路径
+  nativePath?: string;     // 高瑞原生格式路径（支持 imageConfig）
+  imageSize?: string;      // 原生格式的 imageSize 参数（如 "2K"、"4K"）
+  resolution: string;      // 输出分辨率描述（UI 显示用）
+  credits: number;         // 积分
+  estimatedTime: string;
+  stream: boolean;         // 是否需要 stream: true
+  authFormat: "bearer";    // 认证格式
+  fallback?: ImageModelFallback;  // 主供应商失败时的备用供应商
+}
+
+/**
+ * 图片模型配置表 (新版)
+ *
+ * 3 个模型:
+ * - 1K 快速 (高瑞 flash)
+ * - 2K 高清 (xas231 portrait, 默认)
+ * - 4K 超清 (高瑞 pro-preview)
+ */
+export const IMAGE_MODEL_CONFIG: Record<ImageModel, ImageModelConfig> = {
+  "gemini-1k": {
+    label: "1K 快速",
+    provider: "gaorui",
+    apiModel: "gemini-2.5-flash-image",
+    hostname: "gaorui.cc",
+    path: "/v1/chat/completions",
+    nativePath: "/v1beta/models/gemini-2.5-flash-image:generateContent",
+    resolution: "~1024px",
+    credits: 5,
+    estimatedTime: "~10秒",
+    stream: true,
+    authFormat: "bearer",
+  },
+  "gemini-2k": {
+    label: "2K 高清",
+    provider: "xas231",
+    apiModel: "gemini-3.0-pro-image-portrait-2k",
+    hostname: "api.xas231.online",
+    path: "/v1/chat/completions",
+    resolution: "~2048px",
+    credits: 10,
+    estimatedTime: "~90秒",
+    stream: true,
+    authFormat: "bearer",
+    // 2K fallback: xas231 失败自动切高瑞
+    fallback: {
+      provider: "gaorui",
+      apiModel: "gemini-2.5-flash-image",
+      hostname: "gaorui.cc",
+      path: "/v1/chat/completions",
+      nativePath: "/v1beta/models/gemini-2.5-flash-image:generateContent",
+    },
+  },
+  "gemini-4k": {
+    label: "4K 超清",
+    provider: "gaorui",
+    apiModel: "gemini-3-pro-image-preview",
+    hostname: "gaorui.cc",
+    path: "/v1/chat/completions",
+    nativePath: "/v1beta/models/gemini-3-pro-image-preview:generateContent",
+    imageSize: "4K",
+    resolution: "~4096px",
+    credits: 15,
+    estimatedTime: "~25秒",
+    stream: true,
+    authFormat: "bearer",
+  },
+};
+
+/** 图片模型列表（用于 UI 渲染） */
+export const IMAGE_MODELS: ImageModel[] = ["gemini-1k", "gemini-2k", "gemini-4k"];
+
+// ============================================================================
+// Sora2 角色创建 (辅助接口)
+// ============================================================================
+
+/** Sora2 角色创建参数 */
+export interface CharacterCreateParams {
+  url: string;           // 角色视频 URL
+  timestamps?: string;   // 截取范围，如 "0,3"（最多3秒）
+}
+
+/** 角色创建结果 */
+export interface CharacterCreateResult {
+  success: boolean;
+  pid?: string;          // 角色 pid，如 "eldenzrzl.marmaladec"
+  taskId?: string;
+  error?: string;
+}
+
+// --- @deprecated 旧图片配置，迁移期间保留 ---
 
 export interface NanoPricing {
   label: string;
   credits: number;
 }
 
-/**
- * 图片生成定价配置
- * 
- * 快速单个图片/批量生产图片扣分机制：
- * - Nano Banana Fast: 10 积分/次
- * - Nano Banana Pro: 28 积分/次
- */
+/** @deprecated 使用 IMAGE_MODEL_CONFIG 替代 */
 export const NANO_PRICING: Record<NanoTier, NanoPricing> = {
   fast: { label: "Fast", credits: 10 },
   pro: { label: "Pro", credits: 28 },
 };
 
-// Pro 版本分辨率定价
+/** @deprecated */
 export const NANO_PRO_RESOLUTION_PRICING: Record<ImageResolution, number> = {
   "1k": 28,
   "2k": 28,
   "4k": 28,
 };
 
-// 图片增强定价
+/** @deprecated */
 export const IMAGE_ENHANCEMENT_PRICING = {
   upscale_2k: 10,
   upscale_4k: 10,
@@ -210,11 +440,12 @@ export const IMAGE_ENHANCEMENT_PRICING = {
 export interface ImageBatchTaskConfig {
   sourceImageUrl: string; // 纯提示词模式下为空字符串
   sourceImageName: string;
-  model: "nano-banana" | "nano-banana-pro";
+  model: ImageModel | "nano-banana" | "nano-banana-pro";  // 兼容旧任务 + 新 Gemini 模型
   action: ImageProcessAction;
   aspectRatio: ImageAspectRatio;
   resolution: ImageResolution;
   prompt: string;
+  characterRefUrl?: string; // 引用角色的多角度参考图 URL
 }
 
 /** 图片批量任务状态 */
@@ -349,6 +580,58 @@ export const NANO_PRO_ASPECT_OPTIONS: AspectRatioOption[] = [
   { value: "2:3", label: "2:3" },
 ];
 
+// ============================================================================
+// Gemini 图片批量 — 统一配置（替代 NANO 分离的两套配置）
+// ============================================================================
+
+/** Gemini 图片模型积分表 */
+export const GEMINI_IMAGE_PRICING: Record<ImageModel, number> = {
+  "gemini-1k": 5,
+  "gemini-2k": 10,
+  "gemini-4k": 15,
+};
+
+/** Gemini 图片批量 Action 配置（统一，不再分快速/Pro） */
+export interface GeminiActionConfig {
+  credits: number;  // 基础积分标记（实际按 model 的 GEMINI_IMAGE_PRICING 计算）
+  label: string;
+  description: string;
+  promptHint: string;
+}
+
+export const GEMINI_ACTION_PRICING: Record<ImageProcessAction, GeminiActionConfig> = {
+  generate: {
+    credits: 0,
+    label: "AI 生成",
+    description: "根据提示词和参考图生成新图片",
+    promptHint: "描述你想要生成的图片内容...",
+  },
+  upscale: {
+    credits: 0,
+    label: "高清放大",
+    description: "将图片放大并增强清晰度（无需提示词）",
+    promptHint: "",
+  },
+  nine_grid: {
+    credits: 0,
+    label: "九宫格",
+    description: "适配视频的 9 宫格高清图，突出产品角度 + 细节",
+    promptHint: "",
+  },
+};
+
+/** Gemini 统一宽高比选项（合并 NANO_FAST + NANO_PRO） */
+export const GEMINI_ASPECT_OPTIONS: AspectRatioOption[] = [
+  { value: "auto", label: "自动" },
+  { value: "1:1", label: "1:1 方形" },
+  { value: "16:9", label: "16:9 横屏" },
+  { value: "9:16", label: "9:16 竖屏" },
+  { value: "4:3", label: "4:3" },
+  { value: "3:4", label: "3:4" },
+  { value: "3:2", label: "3:2" },
+  { value: "2:3", label: "2:3" },
+];
+
 export interface ResolutionOption {
   value: ImageResolution;
   label: string;
@@ -373,12 +656,22 @@ export function calculateVideoCost(model: VideoModel): number {
 
 /**
  * 计算图片生成费用
+ * 
+ * 支持两种调用方式：
+ * - 新版：calculateImageCost("gemini-1k") → 从 IMAGE_MODEL_CONFIG 读取
+ * - 旧版：calculateImageCost("fast", "1k", false) → 从 NANO_PRICING 读取（@deprecated）
  */
 export function calculateImageCost(
-  tier: NanoTier, 
+  modelOrTier: ImageModel | NanoTier, 
   resolution: ImageResolution = "1k",
   isPro: boolean = false
 ): number {
+  // 新版：直接传 ImageModel
+  if (modelOrTier in IMAGE_MODEL_CONFIG) {
+    return IMAGE_MODEL_CONFIG[modelOrTier as ImageModel].credits;
+  }
+  // 旧版：NanoTier 兼容（批量页面仍在用）
+  const tier = modelOrTier as NanoTier;
   if (isPro) {
     return NANO_PRO_RESOLUTION_PRICING[resolution];
   }

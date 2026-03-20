@@ -16,10 +16,11 @@ import {
   type ImageAspectRatio,
   type ImageResolution,
   type ImageProcessAction,
+  type ImageModel,
   type ImageBatchTask,
   type ImageBatchTaskConfig,
-  NANO_FAST_ACTION_PRICING,
-  NANO_PRO_ACTION_PRICING,
+  GEMINI_IMAGE_PRICING,
+  GEMINI_ACTION_PRICING,
 } from "@/types/generation";
 
 // ============================================================================
@@ -28,7 +29,7 @@ import {
 
 export type ImageBatchTaskStatus = "pending" | "processing" | "completed" | "failed";
 export type ImageBatchJobStatus = "idle" | "running" | "paused" | "completed" | "cancelled";
-export type ImageModelType = "nano-banana" | "nano-banana-pro";
+export type ImageModelType = ImageModel;
 
 /** 批量场景类型 */
 export type BatchScenario = "prompt" | "image" | "excel";
@@ -52,6 +53,11 @@ export interface ImageBatchGlobalSettings {
   aspectRatio: ImageAspectRatio;
   resolution: ImageResolution; // 仅 Pro 模式生效
   prompt: string; // 全局提示词
+  // 角色引用
+  characterId?: string;
+  characterName?: string;
+  characterRefUrl?: string;      // reference_sheet_url
+  characterDescription?: string;
 }
 
 export interface ImageBatchState {
@@ -224,19 +230,13 @@ const generateId = () => `img-${Date.now()}-${Math.random().toString(36).substr(
  * 计算单个任务的积分消耗
  */
 export const getImageTaskCost = (config: ImageBatchTaskConfig): number => {
-  const { model, action, resolution = "1k" } = config;
-
-  if (model === "nano-banana") {
-    // 快速模式
-    return NANO_FAST_ACTION_PRICING[action]?.credits || 10;
-  } else {
-    // Pro 模式
-    const actionConfig = NANO_PRO_ACTION_PRICING[action as "generate" | "nine_grid"];
-    if (actionConfig?.resolutionPricing) {
-      return actionConfig.resolutionPricing[resolution] || actionConfig.credits;
-    }
-    return actionConfig?.credits || 28;
+  const { model } = config;
+  // Gemini 模型：直接从统一积分表读取
+  if (model in GEMINI_IMAGE_PRICING) {
+    return GEMINI_IMAGE_PRICING[model as ImageModel] || 10;
   }
+  // 兼容旧任务（localStorage 中可能有旧的 nano-banana 任务）
+  return model === "nano-banana" ? 10 : 28;
 };
 
 /**
@@ -250,11 +250,7 @@ export const getImageTotalCost = (tasks: ImageBatchTask[]): number => {
  * 获取动作的提示词
  */
 export const getActionPromptHint = (model: ImageModelType, action: ImageProcessAction): string => {
-  if (model === "nano-banana") {
-    return NANO_FAST_ACTION_PRICING[action]?.promptHint || "";
-  } else {
-    return NANO_PRO_ACTION_PRICING[action as "generate" | "nine_grid"]?.promptHint || "";
-  }
+  return GEMINI_ACTION_PRICING[action]?.promptHint || "";
 };
 
 // ============================================================================
@@ -265,11 +261,15 @@ const initialState: ImageBatchState = {
   tasks: [],
   jobStatus: "idle",
   globalSettings: {
-    model: "nano-banana",
+    model: "gemini-1k",
     action: "generate",  // 默认使用 AI 生成
     aspectRatio: "auto",
     resolution: "1k",
     prompt: "",
+    characterId: undefined,
+    characterName: undefined,
+    characterRefUrl: undefined,
+    characterDescription: undefined,
   },
   selectedTaskIds: {},
   maxConcurrent: 3,
@@ -588,13 +588,8 @@ export const useImageBatchStore = create<ImageBatchState & ImageBatchActions>()(
             (state.globalSettings as Record<string, unknown>)[key] = value;
 
             // 如果切换模型，需要校验 action
-            if (key === "model") {
-              const model = value as ImageModelType;
-              if (model === "nano-banana-pro" && state.globalSettings.action === "upscale") {
-                // Pro 模式不支持单独的 upscale，重置为 generate
-                state.globalSettings.action = "generate";
-              }
-            }
+            // Gemini 模型无需校验 action 限制
+            // (旧 nano-banana-pro && upscale 校验已移除)
           });
         },
 
@@ -746,6 +741,13 @@ export const useImageBatchStore = create<ImageBatchState & ImageBatchActions>()(
           const createTask = (prompt: string, sourceUrl = "", sourceName = ""): ImageBatchTask => {
             const id = generateId();
             newIds.push(id);
+
+            // 如果有角色引用且有 description，注入到 prompt
+            let finalPrompt = prompt;
+            if (globalSettings.characterDescription && globalSettings.characterRefUrl) {
+              finalPrompt = `Featuring ${globalSettings.characterDescription}, ${prompt}`;
+            }
+
             return {
               id,
               index: tasks.length + newIds.length - 1,
@@ -757,7 +759,8 @@ export const useImageBatchStore = create<ImageBatchState & ImageBatchActions>()(
                 action: globalSettings.action,
                 aspectRatio: globalSettings.aspectRatio,
                 resolution: globalSettings.resolution,
-                prompt: prompt,  // 始终传递提示词，图生图也需要
+                prompt: finalPrompt,  // 始终传递提示词，图生图也需要
+                characterRefUrl: globalSettings.characterRefUrl || undefined,
               },
               createdAt: new Date().toISOString(),
             };

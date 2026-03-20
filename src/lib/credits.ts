@@ -1,32 +1,45 @@
 /**
  * 积分配置和工具函数
  * 
- * 积分扣分规则：
+ * 2026-03-19 更新：新增新模型积分配置
  * 
- * 1. 快速单个视频功能扣分机制
- *    - 标准款（10秒/15秒 横/竖屏）：20 积分/条
- *    - PRO款（25秒 横/竖屏）：320 积分/条
- *    - PRO高清款（15秒 横/竖屏）：320 积分/条
+ * 新模型积分（从 VIDEO_MODEL_CONFIG / IMAGE_MODEL_CONFIG 读取）：
+ * - Sora2 10秒/15秒: 20 积分
+ * - VEO3 参考图版: 10 积分
+ * - VEO3 快速版: 8 积分
+ * - VEO3 4K超清: 10 积分
+ * - Gemini 1K: 5 积分
+ * - Gemini 2K: 10 积分
+ * - Gemini 4K: 15 积分
  * 
- * 2. 快速单个图片功能扣分机制
- *    - Nano Banana Fast: 10 积分/次
- *    - Nano Banana Pro: 28 积分/次
- * 
- * 3. 批量生产图片
- *    - Nano Banana: 10 积分/次
- *    - Nano Banana Pro: 28 积分/次
- * 
- * 4. 批量生产视频
- *    - 标准款（10秒/15秒 横/竖屏）：20 积分/条
- *    - PRO款（25秒 横/竖屏）：350 积分/条
- *    - PRO高清款（15秒 横/竖屏）：350 积分/条
+ * @deprecated 旧模型积分（迁移期间保留）：
+ * - sora2-10s/15s: 20 积分
+ * - sora2-pro-15s-hd/25s: 320/350 积分
+ * - nano-banana: 10 积分
+ * - nano-banana-pro: 28 积分
  */
 
+import { VIDEO_MODEL_CONFIG, IMAGE_MODEL_CONFIG, type VideoModel, type ImageModel } from '@/types/generation';
+
 // ============================================================================
-// 积分定价配置
+// 新模型积分配置（从配置表读取）
 // ============================================================================
 
-/** 快速单个视频定价 */
+/** 获取新视频模型积分 */
+export function getNewVideoCost(model: VideoModel): number {
+  return VIDEO_MODEL_CONFIG[model]?.credits || 20;
+}
+
+/** 获取新图片模型积分 */
+export function getNewImageCost(model: ImageModel): number {
+  return IMAGE_MODEL_CONFIG[model]?.credits || 10;
+}
+
+// ============================================================================
+// @deprecated 旧积分定价配置（迁移期间保留）
+// ============================================================================
+
+/** @deprecated 快速单个视频定价 */
 export const QUICK_VIDEO_CREDITS = {
   "sora2-10s": 20,         // 标清 10秒
   "sora2-15s": 20,         // 标清 15秒
@@ -34,7 +47,7 @@ export const QUICK_VIDEO_CREDITS = {
   "sora2-pro-25s": 320,    // PRO 标清 25秒
 } as const;
 
-/** 批量生产视频定价 */
+/** @deprecated 批量生产视频定价 */
 export const BATCH_VIDEO_CREDITS = {
   "sora2-10s": 20,         // 标清 10秒
   "sora2-15s": 20,         // 标清 15秒
@@ -42,7 +55,7 @@ export const BATCH_VIDEO_CREDITS = {
   "sora2-pro-25s": 350,    // PRO 标清 25秒
 } as const;
 
-/** 图片生成定价（快速单个图片/批量生产图片通用） */
+/** @deprecated 图片生成定价 */
 export const IMAGE_CREDITS = {
   "nano-banana": 10,      // Nano Banana Fast
   "nano-banana-pro": 28,  // Nano Banana Pro

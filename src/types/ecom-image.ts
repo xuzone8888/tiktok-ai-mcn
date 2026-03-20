@@ -25,7 +25,7 @@ export type EcomTaskStatus =
   | 'partial_success'    // 部分成功（五图套装可能有部分失败）
   | 'failed';            // 失败
 
-/** 图片模型类型 */
+/** @deprecated 使用 generation.ts 中的 ImageModel 替代 */
 export type ImageModelType = 'nano-banana' | 'nano-banana-pro';
 
 /** 语言 */

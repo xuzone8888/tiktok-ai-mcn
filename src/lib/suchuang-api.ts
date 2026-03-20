@@ -1,11 +1,14 @@
 /**
  * 速创 API 统一接口
  * 
+ * 2026-03-19 重构：
+ * - line1 (scd666) 和 line2 (望京) 已剔除，仅 line3 (无印科技 wuyinkeji) 可用
+ * - NanoBanana 已替换为 Gemini Image，保留查询函数兼容历史任务
+ * - 新增角色创建接口 (sora2_character)
+ *
  * 文档:
- * - NanoBanana: https://api.wuyinkeji.com/doc/18
- * - NanoBanana Pro: https://api.wuyinkeji.com/doc/43
- * - Sora2: https://api.wuyinkeji.com/doc/40
- * - Sora2 Pro: https://api.wuyinkeji.com/doc/41
+ * - Sora2-NEW: https://api.wuyinkeji.com/doc/40
+ * - 角色创建: /api/async/video_sora_character
  */
 
 import https from 'https';
@@ -17,7 +20,7 @@ import https from 'https';
 const API_BASE_URL = process.env.SUCHUANG_API_ENDPOINT || "https://api.wuyinkeji.com";
 const API_KEY = process.env.SUCHUANG_API_KEY || "";
 
-// 备用线路 (line2) - 望景API (OpenAI 兼容格式)
+// @deprecated 备用线路 (line2) - 望景API - 已剔除，保留配置避免引用报错
 const WANGJING_API_BASE = process.env.WANGJING_API_ENDPOINT || "http://60.205.120.27:35208";
 const WANGJING_API_KEY = process.env.WANGJING_API_KEY || "";
 
@@ -484,7 +487,7 @@ interface Sora2SubmitResponse {
 export async function submitSora2(
   params: Sora2Params & { model?: Sora2ModelType },
   apiKey?: string,
-  apiLine: "line1" | "line2" | "line3" = "line1"
+  apiLine: "line1" | "line2" | "line3" = "line3"
 ): Promise<{ success: boolean; taskId?: string; error?: string }> {
 
   // ========== Line2: 望景API (OpenAI 兼容格式) ==========
@@ -840,7 +843,7 @@ export async function querySora2Result(
   taskId: string,
   usePro: boolean = false,
   apiKey?: string,
-  apiLine: "line1" | "line2" | "line3" = "line1"
+  apiLine: "line1" | "line2" | "line3" = "line3"
 ): Promise<{ success: boolean; task?: TaskStatus; error?: string; raw?: unknown }> {
 
   // ========== Line2: 望景API 查询 (OpenAI 兼容格式) ==========
@@ -1354,9 +1357,10 @@ export async function testApiConnection(apiKey?: string): Promise<{
 
 export interface GeminiImageParams {
   prompt: string;
-  sourceImageUrl?: string; // 可选的参考图片
-  aspectRatio?: string;    // 图片比例 如 "9:16", "16:9", "1:1"
-  resolution?: string;     // 分辨率 如 "1024x1024"
+  sourceImageUrl?: string;   // 可选的单张参考图片（向下兼容）
+  sourceImageUrls?: string[]; // 可选的多张参考图片（新增，优先使用）
+  aspectRatio?: string;      // 图片比例 如 "9:16", "16:9", "1:1"
+  resolution?: string;       // 分辨率 如 "1024x1024"
 }
 
 export interface GeminiImageResult {
@@ -1405,13 +1409,18 @@ export async function generateGeminiImage(
     // - 纯文本生图：使用字符串格式（上游 API 要求）
     let messageContent: string | Array<{ type: string; text?: string; image_url?: { url: string } }>;
 
-    if (params.sourceImageUrl && typeof params.sourceImageUrl === "string") {
-      // 图生图：使用数组格式，API 会下载并参考源图
+    // 合并 sourceImageUrls 和 sourceImageUrl（向下兼容）
+    const allImageUrls = params.sourceImageUrls?.length
+      ? params.sourceImageUrls
+      : (params.sourceImageUrl ? [params.sourceImageUrl] : []);
+
+    if (allImageUrls.length > 0) {
+      // 图生图：使用数组格式，API 会下载并参考源图（支持多张）
       messageContent = [
         { type: "text", text: textContent },
-        { type: "image_url", image_url: { url: params.sourceImageUrl } },
+        ...allImageUrls.map(url => ({ type: "image_url" as const, image_url: { url } })),
       ];
-      console.log("[Gemini-Image] Image-to-image mode, using array content format with URL:", params.sourceImageUrl.substring(0, 80));
+      console.log(`[Gemini-Image] Image-to-image mode, ${allImageUrls.length} reference image(s):`, allImageUrls.map(u => u.substring(0, 60)));
     } else {
       // 纯文本生图：使用字符串格式
       messageContent = textContent;
@@ -1713,5 +1722,165 @@ export async function getWangjingBalance(): Promise<{
       success: false,
       error: error instanceof Error ? error.message : 'Network error',
     };
+  }
+}
+
+// ============================================================================
+// Sora2 角色创建接口 (2026-03-19 新增)
+// ============================================================================
+
+/**
+ * 提交 Sora2 角色创建任务
+ *
+ * API: POST https://api.wuyinkeji.com/api/async/video_sora_character
+ * 认证: Authorization: {key} (无 Bearer)
+ * 计费: 0.1元/次
+ *
+ * @param url 角色视频 URL
+ * @param timestamps 截取范围，如 "0,3"（最多3秒）
+ * @returns taskId 用于轮询查询
+ */
+export async function submitCharacterCreate(
+  url: string,
+  timestamps?: string
+): Promise<{ success: boolean; taskId?: string; error?: string }> {
+  const key = WUYINKEJI_API_KEY;
+  if (!key) {
+    return { success: false, error: "WUYINKEJI_API_KEY 未配置" };
+  }
+
+  try {
+    const endpoint = `${WUYINKEJI_API_BASE}/api/async/video_sora_character`;
+    const requestBody = JSON.stringify({
+      url,
+      ...(timestamps && { timestamps }),
+    });
+
+    console.log("[Sora2-Character] Submitting:", { url: url.substring(0, 50) + "...", timestamps });
+
+    const result = await new Promise<{ data: string; statusCode: number }>((resolve, reject) => {
+      const urlObj = new URL(endpoint);
+      const options = {
+        hostname: urlObj.hostname,
+        port: 443,
+        path: urlObj.pathname,
+        method: 'POST',
+        family: 4,
+        timeout: 30000,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': key,  // 无 Bearer
+          'Content-Length': String(Buffer.byteLength(requestBody)),
+        },
+      };
+
+      const req = https.request(options, (res) => {
+        let data = '';
+        res.on('data', (chunk: string) => data += chunk);
+        res.on('end', () => resolve({ data, statusCode: res.statusCode || 0 }));
+      });
+
+      req.on('error', reject);
+      req.on('timeout', () => {
+        req.destroy();
+        reject(new Error('Request timeout'));
+      });
+
+      req.write(requestBody);
+      req.end();
+    });
+
+    console.log("[Sora2-Character] Response:", result.statusCode, result.data.substring(0, 200));
+
+    if (result.statusCode >= 400) {
+      return { success: false, error: `角色创建服务错误 (${result.statusCode})` };
+    }
+
+    const data = JSON.parse(result.data);
+    const taskId = data.data?.id;
+
+    if (taskId) {
+      return { success: true, taskId: String(taskId) };
+    }
+
+    return { success: false, error: data.msg || "未返回任务 ID" };
+  } catch (error) {
+    console.error("[Sora2-Character] Submit error:", error);
+    return { success: false, error: error instanceof Error ? error.message : "Network error" };
+  }
+}
+
+/**
+ * 查询角色创建结果
+ *
+ * API: GET https://api.wuyinkeji.com/api/async/detail?key={key}&id={taskId}
+ * 返回: status=2 时 result[0] = 角色 pid
+ *
+ * @param taskId 角色创建任务 ID
+ * @returns pid 角色引用 ID (在 prompt 中用 @pid 引用)
+ */
+export async function queryCharacterResult(
+  taskId: string
+): Promise<{ success: boolean; status: "pending" | "completed" | "failed"; pid?: string; error?: string }> {
+  const key = WUYINKEJI_API_KEY;
+  if (!key) {
+    return { success: false, status: "failed", error: "WUYINKEJI_API_KEY 未配置" };
+  }
+
+  try {
+    const queryUrl = `${WUYINKEJI_API_BASE}/api/async/detail?key=${encodeURIComponent(key)}&id=${encodeURIComponent(taskId)}`;
+
+    const result = await new Promise<{ data: string; statusCode: number }>((resolve, reject) => {
+      const urlObj = new URL(queryUrl);
+      const options = {
+        hostname: urlObj.hostname,
+        port: 443,
+        path: `${urlObj.pathname}${urlObj.search}`,
+        method: 'GET',
+        family: 4,
+        timeout: 15000,
+        headers: { 'Accept': 'application/json' },
+      };
+
+      const req = https.request(options, (res) => {
+        let data = '';
+        res.on('data', (chunk: string) => data += chunk);
+        res.on('end', () => resolve({ data, statusCode: res.statusCode || 0 }));
+      });
+
+      req.on('error', reject);
+      req.on('timeout', () => {
+        req.destroy();
+        reject(new Error('Request timeout'));
+      });
+
+      req.end();
+    });
+
+    if (!result.data) {
+      return { success: false, status: "pending", error: "查询无响应" };
+    }
+
+    const data = JSON.parse(result.data);
+    console.log("[Sora2-Character] Query:", { taskId, status: data.data?.status, hasResult: !!data.data?.result });
+
+    const status = data.data?.status;
+
+    if (status === 2) {
+      // 完成：result[0] 是角色 pid
+      const pid = data.data?.result?.[0];
+      if (pid) {
+        return { success: true, status: "completed", pid };
+      }
+      return { success: false, status: "failed", error: "角色创建完成但无 pid" };
+    } else if (status === 1) {
+      return { success: false, status: "failed", error: data.data?.fail_reason || "角色创建失败" };
+    }
+
+    // status === 0 或其他 → 仍在处理中
+    return { success: true, status: "pending" };
+  } catch (error) {
+    console.error("[Sora2-Character] Query error:", error);
+    return { success: false, status: "failed", error: error instanceof Error ? error.message : "Network error" };
   }
 }

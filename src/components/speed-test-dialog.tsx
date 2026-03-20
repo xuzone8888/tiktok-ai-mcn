@@ -25,15 +25,36 @@ import {
   Download,
   Signal,
 } from "lucide-react";
-import {
-  type SpeedTestResult,
-  getCachedSpeedTestResults,
-  getRecommendedRoutes,
-  fetchAvailableRoutes,
-  testRouteSpeed,
-  saveSpeedTestResults,
-  type DownloadRoute,
-} from "@/lib/download-manager";
+// 测速功能暂停，类型定义保留在本地（后期重做时移走）
+interface SpeedTestResult {
+  routeId: string;
+  status: "pending" | "testing" | "success" | "failed" | "timeout";
+  speed: number;
+  latency: number;
+  size?: number;
+  duration?: number;
+  error?: string;
+  testedAt?: number;
+}
+
+interface DownloadRoute {
+  id: string;
+  name: string;
+  description: string;
+  testSize: number;
+  priority: number;
+}
+
+// 这些函数暂时返回空数据（测速功能后期重做）
+function getCachedSpeedTestResults(): SpeedTestResult[] { return []; }
+function getRecommendedRoutes(results: SpeedTestResult[]): SpeedTestResult[] {
+  return [...results].filter(r => r.status === "success" && r.speed > 0).sort((a, b) => b.speed - a.speed);
+}
+async function fetchAvailableRoutes(): Promise<DownloadRoute[]> { return []; }
+async function testRouteSpeed(routeId: string): Promise<SpeedTestResult> {
+  return { routeId, status: "failed", speed: 0, latency: 0, error: "测速功能暂停", testedAt: Date.now() };
+}
+function saveSpeedTestResults(_results: SpeedTestResult[]): void { /* noop */ }
 
 interface SpeedTestDialogProps {
   open: boolean;

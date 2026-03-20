@@ -12,7 +12,8 @@ import {
   Clock,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { VideoDuration } from "@/lib/sora-api";
+/** @deprecated 旧版类型，仅供 /studio 旧页面兼容 */
+type VideoDuration = "5s" | "10s" | "15s" | "20s";
 
 export type GenerationType = "video" | "image";
 

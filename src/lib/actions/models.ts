@@ -1,10 +1,10 @@
 /**
- * 前端模特数据接口 (Server Actions)
+ * 角色数据接口 (Server Actions)
  * 
  * ⚠️ 安全注意：
- * - 仅返回 active 状态的模特
+ * - 仅返回 active 状态的角色
  * - 显式选择安全字段，绝对禁止返回 trigger_word
- * - 用于前端模特市场、我的团队、Quick Generator 等页面
+ * - 用于角色资源广场、专属阵营、Quick Generator 等页面
  */
 
 "use server";
@@ -40,6 +40,11 @@ export interface PublicModel {
   created_at: string;
   is_hired_by_others?: boolean;  // 是否已被其他人聘用
   hired_count?: number;          // 当前被聘用数量
+  // === Phase 2 角色系统字段 ===
+  source: "official" | "user_created";
+  publish_price: number;             // 社区角色聘用价格（积分）
+  reference_sheet_url: string | null;
+  reference_status: string;          // none | pending | completed | failed
 }
 
 /**
@@ -100,7 +105,13 @@ const SAFE_MODEL_FIELDS = `
   total_generations,
   is_featured,
   is_trending,
-  created_at
+  created_at,
+  source,
+  owner_id,
+  is_public,
+  publish_price,
+  reference_sheet_url,
+  reference_status
 `;
 
 /**
@@ -184,7 +195,7 @@ function toPublicModel(model: any): PublicModel {
     tags: tags,
     category: model.category || "general",
     gender: model.gender || null,
-    base_price: model.price_monthly || 0,      // base_price 映射自 price_monthly
+    base_price: model.price_monthly || 0,
     price_monthly: model.price_monthly || 0,
     rating: parseFloat(model.rating) || 0,
     total_rentals: model.total_rentals || 0,
@@ -192,6 +203,11 @@ function toPublicModel(model: any): PublicModel {
     is_featured: model.is_featured || false,
     is_trending: model.is_trending || false,
     created_at: model.created_at,
+    // Phase 2 角色系统字段
+    source: model.source || "official",
+    publish_price: model.publish_price || 100,
+    reference_sheet_url: model.reference_sheet_url || null,
+    reference_status: model.reference_status || "none",
   };
 
   // 双重保护：确保敏感字段不存在
@@ -250,10 +266,12 @@ export async function getMarketplaceModels(options?: {
     });
 
     // 1. 构建查询 - 只选择安全字段
+    // 广场只显示：官方角色 + 已公开的社区角色
     let query = supabase
       .from("ai_models")
       .select(SAFE_MODEL_FIELDS, { count: "exact" })
       .eq("is_active", true)
+      .or("source.eq.official,and(source.eq.user_created,is_public.eq.true)")
       .order("created_at", { ascending: false });
 
     // 2. 应用筛选条件
@@ -380,52 +398,77 @@ export async function getUserHiredModels(
       throw contractsError;
     }
 
-    if (!contracts || contracts.length === 0) {
-      console.log("[Models Action] No active contracts found for user");
-      return {
-        success: true,
-        data: { models: [], total: 0 },
-      };
+    let hiredModels: HiredModel[] = [];
+
+    if (contracts && contracts.length > 0) {
+      // 2. 获取关联的角色信息
+      const modelIds = contracts.map((c: any) => c.model_id).filter(Boolean);
+      
+      const { data: models, error: modelsError } = await supabase
+        .from("ai_models")
+        .select(SAFE_MODEL_FIELDS)
+        .in("id", modelIds);
+
+      if (modelsError) {
+        console.error("[Models Action] Models query error:", modelsError);
+        throw modelsError;
+      }
+
+      // 3. 合并数据并转换格式
+      const modelsMap = new Map(models?.map((m: any) => [m.id, m]) || []);
+
+      hiredModels = contracts
+        .filter((contract: any) => modelsMap.has(contract.model_id))
+        .map((contract: any) => {
+          const model = modelsMap.get(contract.model_id);
+          const publicModel = toPublicModel(model);
+
+          return {
+            ...publicModel,
+            contract_id: contract.id,
+            contract_end_date: contract.end_date,
+            contract_status: contract.status,
+            days_remaining: getDaysRemaining(contract.end_date),
+          };
+        });
     }
 
-    // 2. 获取关联的模特信息
-    const modelIds = contracts.map((c: any) => c.model_id).filter(Boolean);
-    
-    const { data: models, error: modelsError } = await supabase
+    // 4. 查询用户自建角色（永久拥有，无需合约）
+    const adminSupabase = createAdminClient();
+    const { data: ownCharacters, error: ownError } = await adminSupabase
       .from("ai_models")
       .select(SAFE_MODEL_FIELDS)
-      .in("id", modelIds);
+      .eq("source", "user_created")
+      .eq("owner_id", userId)
+      .order("created_at", { ascending: false });
 
-    if (modelsError) {
-      console.error("[Models Action] Models query error:", modelsError);
-      throw modelsError;
+    if (ownError) {
+      console.error("[Models Action] Own characters query error:", ownError);
+      // 不抛异常，自建角色查询失败不影响签约角色返回
     }
 
-    // 3. 合并数据并转换格式
-    const modelsMap = new Map(models?.map((m: any) => [m.id, m]) || []);
+    // 自建角色转为 HiredModel 格式（永久有效）
+    const ownModels: HiredModel[] = (ownCharacters || []).map((ch: any) => {
+      const publicModel = toPublicModel(ch);
+      return {
+        ...publicModel,
+        contract_id: `own_${ch.id}`,
+        contract_end_date: "2099-12-31T23:59:59Z",
+        contract_status: "permanent",
+        days_remaining: 99999,
+      };
+    });
 
-    const hiredModels: HiredModel[] = contracts
-      .filter((contract: any) => modelsMap.has(contract.model_id))
-      .map((contract: any) => {
-        const model = modelsMap.get(contract.model_id);
-        const publicModel = toPublicModel(model);
+    // 5. 合并：自建角色在前 + 签约角色在后
+    const allModels = [...ownModels, ...hiredModels];
 
-        return {
-          ...publicModel,
-          contract_id: contract.id,
-          contract_end_date: contract.end_date,
-          contract_status: contract.status,
-          days_remaining: getDaysRemaining(contract.end_date),
-        };
-      });
-
-    console.log(`[Models Action] Fetched ${hiredModels.length} hired models for user ${userId}`);
+    console.log(`[Models Action] Fetched ${hiredModels.length} hired + ${ownModels.length} own characters for user ${userId}`);
 
     return {
       success: true,
       data: {
-        models: hiredModels,
-        total: hiredModels.length,
+        models: allModels,
+        total: allModels.length,
       },
     };
   } catch (error) {
@@ -455,12 +498,13 @@ export async function getPublicModelById(
 
     const supabase = await createClient();
 
-    // 只选择安全字段
+    // 只选择安全字段，且只允许查询广场可见角色
     const { data: model, error } = await supabase
       .from("ai_models")
       .select(SAFE_MODEL_FIELDS)
       .eq("id", modelId)
       .eq("is_active", true)
+      .or("source.eq.official,and(source.eq.user_created,is_public.eq.true)")
       .single();
 
     if (error) {
@@ -513,11 +557,12 @@ export async function searchModels(
     const supabase = await createClient();
     const searchTerm = `%${query.trim()}%`;
 
-    // 只选择安全字段
+    // 只选择安全字段，同样仅搜索广场可见角色
     const { data: models, error } = await supabase
       .from("ai_models")
       .select(SAFE_MODEL_FIELDS)
       .eq("is_active", true)
+      .or("source.eq.official,and(source.eq.user_created,is_public.eq.true)")
       .or(`name.ilike.${searchTerm},category.ilike.${searchTerm}`)
       .order("rating", { ascending: false })
       .limit(limit);

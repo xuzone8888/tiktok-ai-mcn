@@ -220,8 +220,9 @@ export function generateVideoConfigPreview(config: {
     const modelLabels: Record<string, string> = {
         "sora2": "Sora 2.0",
         "sora2-pro": "Sora 2.0 Pro",
-        "veo3": "VEO3 快速版",
-        "veo3-quality": "VEO3 高清版",
+        "veo3-fast": "Veo3（快速）",
+        "veo3-std": "Veo3（标准）",
+        "veo3-4k": "Veo3（4K）",
     }
     items.push({
         icon: <Film className="h-3.5 w-3.5" />,

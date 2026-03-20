@@ -14,6 +14,9 @@ import {
   generateGeminiImage,
   uploadBase64ImageToOSS,
 } from "@/lib/suchuang-api";
+import { submitGeminiImage } from "@/lib/gemini-image-api";
+import { IMAGE_MODEL_CONFIG, type ImageModel } from "@/types/generation";
+import { getNewImageCost } from "@/lib/credits";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 // 增加请求体大小限制以支持 base64 图片 (50MB)
@@ -59,14 +62,23 @@ export async function POST(request: Request) {
       mode,           // "generate" | "upscale" | "nine_grid"
       prompt,
       sourceImageUrl,
+      sourceImageUrls,          // 多张参考图 URL 数组
       model = "nano-banana",        // "nano-banana" | "nano-banana-pro"
+      imageModel,                   // 新模型: "gemini-1k" | "gemini-2k" | "gemini-4k"
       tier = "fast",                // "fast" | "pro" (for nano-banana)
       aspectRatio = "auto",
       resolution = "1k",            // "1k" | "2k" | "4k" (for nano-banana-pro)
       userId,
       source = "quick_gen",         // "quick_gen" | "batch_image"
-      requestId,                    // 前端生成的 ID，用于确保前端始终知道 taskId
+      requestId,                    // 前端生成的 ID
     } = body;
+
+    // 合并多图来源：优先 sourceImageUrls，兼容旧的单张 sourceImageUrl
+    const allSourceImageUrls: string[] = sourceImageUrls?.length
+      ? sourceImageUrls
+      : (sourceImageUrl ? [sourceImageUrl] : []);
+    // 第一张图用于 DB 记录和 Pro 模式
+    const primarySourceImageUrl = allSourceImageUrls[0] || null;
 
     console.log("[Generate Image] Request received:", {
       mode,
@@ -75,7 +87,8 @@ export async function POST(request: Request) {
       hasPrompt: !!prompt,
       promptLength: prompt?.length || 0,
       promptPreview: prompt?.substring(0, 100) || "(empty)",
-      hasSourceImage: !!sourceImageUrl,
+      hasSourceImage: allSourceImageUrls.length > 0,
+      sourceImageCount: allSourceImageUrls.length,
     });
 
     // ============================================
@@ -89,8 +102,11 @@ export async function POST(request: Request) {
         : ENHANCEMENT_CREDITS.upscale_2k;
     } else if (mode === "nine_grid") {
       creditCost = ENHANCEMENT_CREDITS.nine_grid;
+    } else if (imageModel && IMAGE_MODEL_CONFIG[imageModel as ImageModel]) {
+      // 新模型：从配置表读取积分
+      creditCost = getNewImageCost(imageModel as ImageModel);
     } else {
-      // 普通生成
+      // 旧模型
       if (model === "nano-banana-pro") {
         creditCost = NANO_BANANA_CREDITS["nano-banana-pro"][resolution as "1k" | "2k" | "4k"] || 30;
       } else {
@@ -191,7 +207,7 @@ export async function POST(request: Request) {
 
     if (mode === "upscale") {
       // 图片放大高清
-      if (!sourceImageUrl) {
+      if (!primarySourceImageUrl) {
         return NextResponse.json(
           { success: false, error: "Source image URL is required for upscale" },
           { status: 400 }
@@ -199,18 +215,18 @@ export async function POST(request: Request) {
       }
 
       console.log("[Generate Image] Upscaling image:", {
-        sourceImageUrl: sourceImageUrl.substring(0, 50) + "...",
+        sourceImageUrl: primarySourceImageUrl!.substring(0, 50) + "...",
         targetResolution: resolution,
       });
 
       result = await upscaleImage(
-        sourceImageUrl,
+        primarySourceImageUrl!,
         resolution as "2k" | "4k"
       );
 
     } else if (mode === "nine_grid") {
       // 九宫格多角度
-      if (!sourceImageUrl) {
+      if (!primarySourceImageUrl) {
         return NextResponse.json(
           { success: false, error: "Source image URL is required for nine grid" },
           { status: 400 }
@@ -218,17 +234,17 @@ export async function POST(request: Request) {
       }
 
       console.log("[Generate Image] Generating nine grid:", {
-        sourceImageUrl: sourceImageUrl.substring(0, 50) + "...",
+        sourceImageUrl: primarySourceImageUrl!.substring(0, 50) + "...",
         productDescription: prompt,
       });
 
-      result = await generateNineGrid(sourceImageUrl, prompt);
+      result = await generateNineGrid(primarySourceImageUrl!, prompt);
 
     } else {
       // 普通图片生成
       // 如果有源图片，允许空 prompt 或短 prompt
       // 如果没有源图片，至少需要 2 个字符的 prompt
-      if (!sourceImageUrl && (!prompt || prompt.trim().length < 2)) {
+      if (allSourceImageUrls.length === 0 && (!prompt || prompt.trim().length < 2)) {
         return NextResponse.json(
           { success: false, error: "请输入至少 2 个字符的提示词" },
           { status: 400 }
@@ -238,21 +254,79 @@ export async function POST(request: Request) {
       console.log("[Generate Image] Generating image:", {
         model,
         prompt: prompt.substring(0, 50) + "...",
-        hasSourceImage: !!sourceImageUrl,
+        hasSourceImage: allSourceImageUrls.length > 0,
+        sourceImageCount: allSourceImageUrls.length,
         aspectRatio,
         resolution: model === "nano-banana-pro" ? resolution : undefined,
       });
 
       // ================================================================
+      // 新模型路由：imageModel 参数驱动
+      // ================================================================
+      if (imageModel && IMAGE_MODEL_CONFIG[imageModel as ImageModel]) {
+        console.log("[Generate Image] Using new Gemini model:", imageModel);
+        const geminiResult = await submitGeminiImage({
+          model: imageModel as ImageModel,
+          prompt: prompt || "",
+          sourceImageUrls: allSourceImageUrls.length > 0 ? allSourceImageUrls : undefined,
+          aspectRatio,
+        });
+
+        if (!geminiResult.success || !geminiResult.imageUrl) {
+          result = { success: false, error: geminiResult.error || "图片生成失败" };
+        } else {
+          const taskId = requestId || `gemini-${Date.now()}`;
+          const config = IMAGE_MODEL_CONFIG[imageModel as ImageModel];
+
+          if (userId) {
+            try {
+              const supabase = createAdminClient();
+              await supabase.from("generations").insert({
+                user_id: userId,
+                task_id: taskId,
+                type: "image",
+                source: source,
+                prompt: prompt || null,
+                model: imageModel,
+                aspect_ratio: aspectRatio,
+                quality: config.resolution,
+                source_image_url: primarySourceImageUrl || null,
+                status: "completed",
+                result_url: geminiResult.imageUrl,
+                image_url: geminiResult.imageUrl,
+                credit_cost: creditCost,
+                created_at: new Date().toISOString(),
+                completed_at: new Date().toISOString(),
+              });
+            } catch (dbError) {
+              console.error("[Generate Image] DB insert error:", dbError);
+            }
+          }
+
+          return NextResponse.json({
+            success: true,
+            data: {
+              taskId,
+              status: "completed",
+              imageUrl: geminiResult.imageUrl,
+              model: imageModel,
+              estimatedTime: config.estimatedTime,
+            },
+          });
+        }
+      }
+      // ================================================================
+      // 旧模型路由（@deprecated，迁移期间保留）
+      // ================================================================
       // nano-banana (快速模式) 直接使用 Gemini 3 Pro Image API
       // nano-banana-pro 继续使用原 NanoBanana API (支持 2K/4K)
       // ================================================================
-      if (model === "nano-banana") {
+      else if (model === "nano-banana") {
         // 使用 Gemini API（同步返回，更快更便宜）
         console.log("[Generate Image] Using Gemini 3 Pro Image API...");
         const geminiResult = await generateGeminiImage({
           prompt,
-          sourceImageUrl,
+          sourceImageUrls: allSourceImageUrls.length > 0 ? allSourceImageUrls : undefined,
           aspectRatio,
         });
 
@@ -288,7 +362,7 @@ export async function POST(request: Request) {
                 model: "gemini-3-pro-image",
                 aspect_ratio: aspectRatio,
                 quality: "2k",
-                source_image_url: sourceImageUrl || null,
+                source_image_url: primarySourceImageUrl || null,
                 status: "completed",
                 result_url: finalUrl,
                 image_url: finalUrl,
@@ -338,7 +412,7 @@ export async function POST(request: Request) {
                   model: "gemini-3-pro-image",
                   aspect_ratio: aspectRatio,
                   quality: "1k",
-                  source_image_url: sourceImageUrl || null,
+                  source_image_url: primarySourceImageUrl || null,
                   status: "completed",
                   result_url: uploadResult.url,
                   image_url: uploadResult.url,
@@ -369,7 +443,7 @@ export async function POST(request: Request) {
         result = await submitNanoBanana({
           model: model as "nano-banana" | "nano-banana-pro",
           prompt,
-          img_url: sourceImageUrl,
+          img_url: primarySourceImageUrl || undefined,
           aspectRatio: aspectRatio as "auto" | "1:1" | "16:9" | "9:16" | "4:3" | "3:4",
           resolution: resolution as "1k" | "2k" | "4k",
         });
@@ -429,7 +503,7 @@ export async function POST(request: Request) {
           model: model,
           aspect_ratio: aspectRatio,
           quality: resolution,
-          source_image_url: sourceImageUrl || null,
+          source_image_url: primarySourceImageUrl || null,
           status: "processing",
           credit_cost: creditCost,
           created_at: new Date().toISOString(),

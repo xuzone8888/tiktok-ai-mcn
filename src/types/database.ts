@@ -105,6 +105,18 @@ export interface Database {
           metadata: Json;
           created_at: string;
           updated_at: string;
+          // === Phase 1: 角色系统字段 ===
+          source: string;
+          owner_id: string | null;
+          reference_images: Json;
+          character_type: string;
+          dna_config: Json;
+          reference_sheet_url: string | null;
+          reference_status: string;
+          reference_task_id: string | null;
+          preview_video_url: string | null;
+          is_public: boolean;
+          publish_price: number;
         };
         Insert: {
           id?: string;
@@ -129,6 +141,18 @@ export interface Database {
           trigger_word?: string | null;
           capabilities?: Json;
           metadata?: Json;
+          // === Phase 1: 角色系统字段 ===
+          source?: string;
+          owner_id?: string | null;
+          reference_images?: Json;
+          character_type?: string;
+          dna_config?: Json;
+          reference_sheet_url?: string | null;
+          reference_status?: string;
+          reference_task_id?: string | null;
+          preview_video_url?: string | null;
+          is_public?: boolean;
+          publish_price?: number;
         };
         Update: {
           name?: string;
@@ -154,6 +178,18 @@ export interface Database {
           total_generations?: number;
           capabilities?: Json;
           metadata?: Json;
+          // === Phase 1: 角色系统字段 ===
+          source?: string;
+          owner_id?: string | null;
+          reference_images?: Json;
+          character_type?: string;
+          dna_config?: Json;
+          reference_sheet_url?: string | null;
+          reference_status?: string;
+          reference_task_id?: string | null;
+          preview_video_url?: string | null;
+          is_public?: boolean;
+          publish_price?: number;
         };
         Relationships: [];
       };

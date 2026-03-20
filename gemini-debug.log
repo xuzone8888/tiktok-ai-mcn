@@ -1,0 +1,899 @@
+[2026-03-19T09:34:55.990Z] [Gemini-Image] Submitting: {
+  "model": "gemini-2.5-flash-image",
+  "provider": "gaorui",
+  "hostname": "gaorui.cc",
+  "imageCount": 1,
+  "prompt": "给人物换件衣服..."
+}
+[2026-03-19T09:35:05.423Z] [Gemini-Image] Response status: 200 data length: 3543
+[2026-03-19T09:35:05.423Z] [Gemini-Image] Raw response first 1000: data: {"id":"chatcmpl-20260319173455237898510JNG6oYNU","object":"chat.completion.chunk","created":1773912903,"model":"gemini-2.5-flash-image","system_fingerprint":null,"choices":[{"delta":{"content":"","role":"assistant"},"logprobs":null,"finish_reason":null,"index":0}],"usage":null}
+
+data: {"id":"chatcmpl-20260319173455237898510JNG6oYNU","object":"chat.completion.chunk","created":1773912903,"model":"gemini-2.5-flash-image","system_fingerprint":null,"choices":[{"delta":{"content":"好的"},"logprobs":null,"finish_reason":null,"index":0}],"usage":null}
+
+data: {"id":"chatcmpl-20260319173455237898510JNG6oYNU","object":"chat.completion.chunk","created":1773912903,"model":"gemini-2.5-flash-image","system_fingerprint":null,"choices":[{"delta":{"content":"，"},"logprobs":null,"finish_reason":null,"index":0}],"usage":null}
+
+data: {"id":"chatcmpl-20260319173455237898510JNG6oYNU","object":"chat.completion.chunk","created":1773912903,"model":"gemini-2.5-flash-image","system_fingerprint":null,"choices"
+[2026-03-19T09:35:05.433Z] [Gemini-Image] fullContent length: 14
+[2026-03-19T09:35:05.434Z] [Gemini-Image] fullContent first 300: 好的，想换成什么样的衣服呢？
+[2026-03-19T09:35:05.434Z] [Gemini-Image] fullContent last 100: 好的，想换成什么样的衣服呢？
+[2026-03-19T09:35:05.434Z] [Gemini-Image] No image found in response, raw data first 500: data: {"id":"chatcmpl-20260319173455237898510JNG6oYNU","object":"chat.completion.chunk","created":1773912903,"model":"gemini-2.5-flash-image","system_fingerprint":null,"choices":[{"delta":{"content":"","role":"assistant"},"logprobs":null,"finish_reason":null,"index":0}],"usage":null}
+
+data: {"id":"chatcmpl-20260319173455237898510JNG6oYNU","object":"chat.completion.chunk","created":1773912903,"model":"gemini-2.5-flash-image","system_fingerprint":null,"choices":[{"delta":{"content":"好的"},"logprobs
+[2026-03-19T09:36:25.877Z] [Gemini-Image] Submitting: {
+  "model": "gemini-2.5-flash-image",
+  "provider": "gaorui",
+  "hostname": "gaorui.cc",
+  "imageCount": 1,
+  "prompt": "给人物换件衣服..."
+}
+[2026-03-19T09:37:16.284Z] [Gemini-Image] Response status: 200 data length: 2878496
+[2026-03-19T09:37:16.287Z] [Gemini-Image] Raw response first 1000: data: {"id":"chatcmpl-20260319173625166450345wYeryo6M","object":"chat.completion.chunk","created":1773912993,"model":"gemini-2.5-flash-image","system_fingerprint":null,"choices":[{"delta":{"content":"","role":"assistant"},"logprobs":null,"finish_reason":null,"index":0}],"usage":null}
+
+data: {"id":"chatcmpl-20260319173625166450345wYeryo6M","object":"chat.completion.chunk","created":1773912993,"model":"gemini-2.5-flash-image","system_fingerprint":null,"choices":[{"delta":{"content":"`"},"logprobs":null,"finish_reason":null,"index":0}],"usage":null}
+
+data: {"id":"chatcmpl-20260319173625166450345wYeryo6M","object":"chat.completion.chunk","created":1773912993,"model":"gemini-2.5-flash-image","system_fingerprint":null,"choices":[{"delta":{"content":"![image](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAwAAAAVACAIAAABwa6iPAABV/GNhQlgAAFX8anVtYgAAAB5qdW1kYzJwYQARABCAAACqADibcQNjMnBhAAAAF9tqdW1iAAAAR2p1bWRjMm1hABEAEIAAAKoAOJtxA3VybjpjMnBhOjRkNTg4ODRjLTIzZjctODMwMi1lZDNlLTQ2NmJiZmRhYTcxYgAAABO
+[2026-03-19T09:37:16.290Z] [Gemini-Image] fullContent length: 2877089
+[2026-03-19T09:37:16.291Z] [Gemini-Image] fullContent first 300: `![image](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAwAAAAVACAIAAABwa6iPAABV/GNhQlgAAFX8anVtYgAAAB5qdW1kYzJwYQARABCAAACqADibcQNjMnBhAAAAF9tqdW1iAAAAR2p1bWRjMm1hABEAEIAAAKoAOJtxA3VybjpjMnBhOjRkNTg4ODRjLTIzZjctODMwMi1lZDNlLTQ2NmJiZmRhYTcxYgAAABOEanVtYgAAAChqdW1kYzJjcwARABCAAACqADibcQNjMnBhLnNpZ25h
+[2026-03-19T09:37:16.291Z] [Gemini-Image] fullContent last 100: 8ApKzgo1ChEGqVYowIUJdGqXhqBxAwxH9CVSCtXmjQml8XkMGnMBq0JdEyTFg82oJJqpP8/rZEKa2hvIGcAAAAASUVORK5CYII=)
+[2026-03-19T09:37:16.306Z] [Gemini-Image] Found base64 data URI, total length: 2877078
+[2026-03-19T09:37:16.307Z] [Gemini-Image] Got base64 data, uploading to storage...
+[2026-03-19T09:37:18.339Z] [Gemini-Image] Upload error: {
+  "name": "StorageApiError",
+  "message": "Bucket not found",
+  "status": 400,
+  "statusCode": "404"
+}
+[2026-03-19T09:40:42.366Z] [Gemini-Image] Submitting: {
+  "model": "gemini-2.5-flash-image",
+  "provider": "gaorui",
+  "hostname": "gaorui.cc",
+  "imageCount": 1,
+  "prompt": "给人物换件衣服..."
+}
+[2026-03-19T09:41:08.292Z] [Gemini-Image] Response status: 200 data length: 2865408
+[2026-03-19T09:41:08.293Z] [Gemini-Image] Raw response first 1000: data: {"id":"chatcmpl-20260319174041915949515nh7EGmwC","object":"chat.completion.chunk","created":1773913248,"model":"gemini-2.5-flash-image","system_fingerprint":null,"choices":[{"delta":{"content":"","role":"assistant"},"logprobs":null,"finish_reason":null,"index":0}],"usage":null}
+
+data: {"id":"chatcmpl-20260319174041915949515nh7EGmwC","object":"chat.completion.chunk","created":1773913248,"model":"gemini-2.5-flash-image","system_fingerprint":null,"choices":[{"delta":{"content":"当然"},"logprobs":null,"finish_reason":null,"index":0}],"usage":null}
+
+data: {"id":"chatcmpl-20260319174041915949515nh7EGmwC","object":"chat.completion.chunk","created":1773913248,"model":"gemini-2.5-flash-image","system_fingerprint":null,"choices":[{"delta":{"content":"！你"},"logprobs":null,"finish_reason":null,"index":0}],"usage":null}
+
+data: {"id":"chatcmpl-20260319174041915949515nh7EGmwC","object":"chat.completion.chunk","created":1773913248,"model":"gemini-2.5-flash-image","system_fingerprint":null,"choices
+[2026-03-19T09:41:08.297Z] [Gemini-Image] fullContent length: 2862142
+[2026-03-19T09:41:08.298Z] [Gemini-Image] fullContent first 300: 当然！你喜欢这个新造型吗？ ![image](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAwAAAAVACAIAAABwa6iPAABV/GNhQlgAAFX8anVtYgAAAB5qdW1kYzJwYQARABCAAACqADibcQNjMnBhAAAAF9tqdW1iAAAAR2p1bWRjMm1hABEAEIAAAKoAOJtxA3VybjpjMnBhOjRkNTg4ODRjLTIzZjctODMwMi1lZDNlLTQ2NmJiZmRhYTcxYgAAABOEanVtYgAAAChqdW1kYzJjcwARABCAAACqADibcQN
+[2026-03-19T09:41:08.298Z] [Gemini-Image] fullContent last 100: M2LmQDQB03FI+HQdwyWgcczSfhq2AIEBhCZFFItBbYV/X+1gQ7HiFEJJLArOGAeC4+pIv5fjKHVk5lQG/QAAAAASUVORK5CYII=)
+[2026-03-19T09:41:08.305Z] [Gemini-Image] Found base64 data URI, total length: 2862118
+[2026-03-19T09:41:08.306Z] [Gemini-Image] Got base64 data, uploading to OSS...
+[2026-03-19T09:41:11.551Z] [Gemini-Image] Uploaded to OSS: https://media.toryxai.com/images/gemini-gen/1773913268338-w2tqi5y5.png
+[2026-03-19T09:41:29.508Z] [Gemini-Image] Submitting: {
+  "model": "gemini-2.5-flash-image",
+  "provider": "gaorui",
+  "hostname": "gaorui.cc",
+  "imageCount": 1,
+  "prompt": "给人物换件衣服..."
+}
+[2026-03-19T09:41:46.550Z] [Gemini-Image] Response status: 200 data length: 2912047
+[2026-03-19T09:41:46.552Z] [Gemini-Image] Raw response first 1000: data: {"id":"chatcmpl-20260319174128494853407xHPavJAh","object":"chat.completion.chunk","created":1773913294,"model":"gemini-2.5-flash-image","system_fingerprint":null,"choices":[{"delta":{"content":"","role":"assistant"},"logprobs":null,"finish_reason":null,"index":0}],"usage":null}
+
+data: {"id":"chatcmpl-20260319174128494853407xHPavJAh","object":"chat.completion.chunk","created":1773913294,"model":"gemini-2.5-flash-image","system_fingerprint":null,"choices":[{"delta":{"content":"好的"},"logprobs":null,"finish_reason":null,"index":0}],"usage":null}
+
+data: {"id":"chatcmpl-20260319174128494853407xHPavJAh","object":"chat.completion.chunk","created":1773913294,"model":"gemini-2.5-flash-image","system_fingerprint":null,"choices":[{"delta":{"content":"，请"},"logprobs":null,"finish_reason":null,"index":0}],"usage":null}
+
+data: {"id":"chatcmpl-20260319174128494853407xHPavJAh","object":"chat.completion.chunk","created":1773913294,"model":"gemini-2.5-flash-image","system_fingerprint":null,"choices
+[2026-03-19T09:41:46.556Z] [Gemini-Image] fullContent length: 2908514
+[2026-03-19T09:41:46.558Z] [Gemini-Image] fullContent first 300: 好的，请看这张照片，我给人物换了一件衣服。 ![image](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAwAAAAVACAIAAABwa6iPAABV/GNhQlgAAFX8anVtYgAAAB5qdW1kYzJwYQARABCAAACqADibcQNjMnBhAAAAF9tqdW1iAAAAR2p1bWRjMm1hABEAEIAAAKoAOJtxA3VybjpjMnBhOjRkNTg4ODRjLTIzZjctODMwMi1lZDNlLTQ2NmJiZmRhYTcxYgAAABOEanVtYgAAAChqdW1kYzJjcwARABCAAAC
+[2026-03-19T09:41:46.558Z] [Gemini-Image] fullContent last 100: 3NIbPAdGoVLp6x7DrGEbLaIy5PyeXIBQ8iishk0HoMp4nBlXLaYhSR94NEJHAqWjpQV+/8AY8wxiKJYZdYAAAAASUVORK5CYII=)
+[2026-03-19T09:41:46.575Z] [Gemini-Image] Found base64 data URI, total length: 2908482
+[2026-03-19T09:41:46.576Z] [Gemini-Image] Got base64 data, uploading to OSS...
+[2026-03-19T09:41:49.619Z] [Gemini-Image] Uploaded to OSS: https://media.toryxai.com/images/gemini-gen/1773913306579-4whcei6j.png
+[2026-03-19T09:54:50.120Z] [Gemini-Image] Native format: source images will be included via download
+[2026-03-19T09:54:52.814Z] [Gemini-Image] Native Gemini format: {
+  "model": "gemini-2.5-flash-image",
+  "path": "/v1beta/models/gemini-2.5-flash-image:generateContent?key=sk-Sog9lW0afH0oQeZmTJL",
+  "imageConfig": {
+    "aspectRatio": "9:16"
+  },
+  "partsCount": 2
+}
+[2026-03-19T09:54:52.815Z] [Gemini-Image] Submitting: {
+  "model": "gemini-2.5-flash-image",
+  "provider": "gaorui",
+  "hostname": "gaorui.cc",
+  "native": true,
+  "imageCount": 1,
+  "prompt": "帮我给人物换件泳衣..."
+}
+[2026-03-19T09:55:08.242Z] [Gemini-Image] Response status: 200 data length: 3172064
+[2026-03-19T09:55:08.244Z] [Gemini-Image] Raw response first 1000: {
+  "candidates": [
+    {
+      "content": {
+        "parts": [
+          {
+            "text": "好的，请看换上泳衣后的效果！ "
+          },
+          {
+            "inlineData": {
+              "mimeType": "image/png",
+              "data": "iVBORw0KGgoAAAANSUhEUgAAAwAAAAVACAIAAABwa6iPAABV/GNhQlgAAFX8anVtYgAAAB5qdW1kYzJwYQARABCAAACqADibcQNjMnBhAAAAF9tqdW1iAAAAR2p1bWRjMm1hABEAEIAAAKoAOJtxA3VybjpjMnBhOjFkMWM4ZDg3LWYxMTQtNGRhMi1iNTQ0LTRmZjJhMDUwYjY0ZgAAABOEanVtYgAAAChqdW1kYzJjcwARABCAAACqADibcQNjMnBhLnNpZ25hdHVyZQAAABNUY2JvctKEWQauogEmGCGCWQPCMIIDvjCCA0SgAwIBAgITf8DFXrYCzoMPnf3QSrAMRZ64JjAKBggqhkjOPQQDAzBRMQswCQYDVQQGEwJVUzETMBEGA1UECgwKR29vZ2xlIExMQzEtMCsGA1UEAwwkR29vZ2xlIEMyUEEgTWVkaWEgU2VydmljZXMgMVAgSUNBIEczMB4XDTI1MTAzMDIyMzQ0N1oXDTI2MTAyNTIyMzQ0NlowazELMAkGA1UEBhMCVVMxEzARBgNVBAoTCkdvb2dsZSBMTEMxHDAaBgNVBAsTE0dvb2dsZSBTeXN0ZW0gNjAwMzIxKTAnBgNVBAMTIEdvb2dsZSBNZWRpYSBQcm9jZXNzaW5nIFNlcnZpY2VzMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEawavchc+90s/hPWHxK3FFJ3MlrNDMsBT9MKpPwTIQKlgKDEGTNCDKZ7pSr9psMwxnQyVriy
+[2026-03-19T09:55:08.251Z] [Gemini-Image] Native: no inline_data found in response: {"candidates":[{"content":{"parts":[{"text":"好的，请看换上泳衣后的效果！ "},{"inlineData":{"mimeType":"image/png","data":"iVBORw0KGgoAAAANSUhEUgAAAwAAAAVACAIAAABwa6iPAABV/GNhQlgAAFX8anVtYgAAAB5qdW1kYzJwYQARABCAAACqADibcQNjMnBhAAAAF9tqdW1iAAAAR2p1bWRjMm1hABEAEIAAAKoAOJtxA3VybjpjMnBhOjFkMWM4ZDg3LWYxMTQtNGRhMi1iNTQ0LTRmZjJhMDUwYjY0ZgAAABOEanVtYgAAAChqdW1kYzJjcwARABCAAACqADibcQNjMnBhLnNpZ25hdHVyZQAAABNUY2JvctKEWQauogEmGCGCWQPCMIIDvjCCA0SgAwIBAgITf8DFXrYCzoMPnf3QSrAMRZ64JjAKBggqhkjOPQQDAzBRMQswCQYDVQQGEwJVUzETMBE
+[2026-03-19T09:55:08.251Z] [Gemini-Image] No image found in response, raw data first 500: {
+  "candidates": [
+    {
+      "content": {
+        "parts": [
+          {
+            "text": "好的，请看换上泳衣后的效果！ "
+          },
+          {
+            "inlineData": {
+              "mimeType": "image/png",
+              "data": "iVBORw0KGgoAAAANSUhEUgAAAwAAAAVACAIAAABwa6iPAABV/GNhQlgAAFX8anVtYgAAAB5qdW1kYzJwYQARABCAAACqADibcQNjMnBhAAAAF9tqdW1iAAAAR2p1bWRjMm1hABEAEIAAAKoAOJtxA3VybjpjMnBhOjFkMWM4ZDg3LWYxMTQtNGRhMi1iNTQ0LTRmZjJhMDUwYjY0ZgAAABOEanVtYgAAAChqdW1kYzJjcwARABCAAACqADibcQNjMnBhLnNpZ25hdHV
+[2026-03-19T09:55:53.823Z] [Gemini-Image] Native format: source images will be included via download
+[2026-03-19T09:55:55.794Z] [Gemini-Image] Native Gemini format: {
+  "model": "gemini-2.5-flash-image",
+  "path": "/v1beta/models/gemini-2.5-flash-image:generateContent?key=sk-Sog9lW0afH0oQeZmTJL",
+  "imageConfig": {
+    "aspectRatio": "9:16"
+  },
+  "partsCount": 2
+}
+[2026-03-19T09:55:55.795Z] [Gemini-Image] Submitting: {
+  "model": "gemini-2.5-flash-image",
+  "provider": "gaorui",
+  "hostname": "gaorui.cc",
+  "native": true,
+  "imageCount": 1,
+  "prompt": "帮我给人物换件泳衣..."
+}
+[2026-03-19T09:56:12.488Z] [Gemini-Image] Response status: 200 data length: 3177753
+[2026-03-19T09:56:12.490Z] [Gemini-Image] Raw response first 1000: {
+  "candidates": [
+    {
+      "content": {
+        "parts": [
+          {
+            "text": "当然，没问题！ "
+          },
+          {
+            "inlineData": {
+              "mimeType": "image/png",
+              "data": "iVBORw0KGgoAAAANSUhEUgAAAwAAAAVACAIAAABwa6iPAABV/GNhQlgAAFX8anVtYgAAAB5qdW1kYzJwYQARABCAAACqADibcQNjMnBhAAAAF9tqdW1iAAAAR2p1bWRjMm1hABEAEIAAAKoAOJtxA3VybjpjMnBhOmZhMzZiMTJlLTM3YzctODE1YS04ZjA4LTQxNjg3OGIxYzk2YgAAABOEanVtYgAAAChqdW1kYzJjcwARABCAAACqADibcQNjMnBhLnNpZ25hdHVyZQAAABNUY2JvctKEWQauogEmGCGCWQPCMIIDvjCCA0SgAwIBAgITf8DFXrYCzoMPnf3QSrAMRZ64JjAKBggqhkjOPQQDAzBRMQswCQYDVQQGEwJVUzETMBEGA1UECgwKR29vZ2xlIExMQzEtMCsGA1UEAwwkR29vZ2xlIEMyUEEgTWVkaWEgU2VydmljZXMgMVAgSUNBIEczMB4XDTI1MTAzMDIyMzQ0N1oXDTI2MTAyNTIyMzQ0NlowazELMAkGA1UEBhMCVVMxEzARBgNVBAoTCkdvb2dsZSBMTEMxHDAaBgNVBAsTE0dvb2dsZSBTeXN0ZW0gNjAwMzIxKTAnBgNVBAMTIEdvb2dsZSBNZWRpYSBQcm9jZXNzaW5nIFNlcnZpY2VzMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEawavchc+90s/hPWHxK3FFJ3MlrNDMsBT9MKpPwTIQKlgKDEGTNCDKZ7pSr9psMwxnQyVriyKysDz6P
+[2026-03-19T09:56:12.496Z] [Gemini-Image] Native: no inline_data found in response: {"candidates":[{"content":{"parts":[{"text":"当然，没问题！ "},{"inlineData":{"mimeType":"image/png","data":"iVBORw0KGgoAAAANSUhEUgAAAwAAAAVACAIAAABwa6iPAABV/GNhQlgAAFX8anVtYgAAAB5qdW1kYzJwYQARABCAAACqADibcQNjMnBhAAAAF9tqdW1iAAAAR2p1bWRjMm1hABEAEIAAAKoAOJtxA3VybjpjMnBhOmZhMzZiMTJlLTM3YzctODE1YS04ZjA4LTQxNjg3OGIxYzk2YgAAABOEanVtYgAAAChqdW1kYzJjcwARABCAAACqADibcQNjMnBhLnNpZ25hdHVyZQAAABNUY2JvctKEWQauogEmGCGCWQPCMIIDvjCCA0SgAwIBAgITf8DFXrYCzoMPnf3QSrAMRZ64JjAKBggqhkjOPQQDAzBRMQswCQYDVQQGEwJVUzETMBEGA1UECg
+[2026-03-19T09:56:12.496Z] [Gemini-Image] No image found in response, raw data first 500: {
+  "candidates": [
+    {
+      "content": {
+        "parts": [
+          {
+            "text": "当然，没问题！ "
+          },
+          {
+            "inlineData": {
+              "mimeType": "image/png",
+              "data": "iVBORw0KGgoAAAANSUhEUgAAAwAAAAVACAIAAABwa6iPAABV/GNhQlgAAFX8anVtYgAAAB5qdW1kYzJwYQARABCAAACqADibcQNjMnBhAAAAF9tqdW1iAAAAR2p1bWRjMm1hABEAEIAAAKoAOJtxA3VybjpjMnBhOmZhMzZiMTJlLTM3YzctODE1YS04ZjA4LTQxNjg3OGIxYzk2YgAAABOEanVtYgAAAChqdW1kYzJjcwARABCAAACqADibcQNjMnBhLnNpZ25hdHVyZQAAAB
+[2026-03-19T09:56:47.159Z] [Gemini-Image] Native format: source images will be included via download
+[2026-03-19T09:56:49.504Z] [Gemini-Image] Native Gemini format: {
+  "model": "gemini-3-pro-image-preview",
+  "path": "/v1beta/models/gemini-3-pro-image-preview:generateContent?key=sk-Sog9lW0afH0oQeZ",
+  "imageConfig": {
+    "aspectRatio": "9:16",
+    "imageSize": "4K"
+  },
+  "partsCount": 2
+}
+[2026-03-19T09:56:49.504Z] [Gemini-Image] Submitting: {
+  "model": "gemini-3-pro-image-preview",
+  "provider": "gaorui",
+  "hostname": "gaorui.cc",
+  "native": true,
+  "imageCount": 1,
+  "prompt": "帮我给人物换件泳衣..."
+}
+[2026-03-19T09:57:47.973Z] [Gemini-Image] Response status: 200 data length: 21240121
+[2026-03-19T09:57:47.982Z] [Gemini-Image] Raw response first 1000: {
+  "candidates": [
+    {
+      "content": {
+        "parts": [
+          {
+            "inlineData": {
+              "mimeType": "image/jpeg",
+              "data": "/9j/4AAQSkZJRgABAQAAAQABAAD/61YGSlAAAQAAAAEAAFX8anVtYgAAAB5qdW1kYzJwYQARABCAAACqADibcQNjMnBhAAAAF9tqdW1iAAAAR2p1bWRjMm1hABEAEIAAAKoAOJtxA3VybjpjMnBhOmZhMzZiMTJlLTM3YzctODE1YS04ZjA4LTQxNjg3OGIxYzk2YgAAABOEanVtYgAAAChqdW1kYzJjcwARABCAAACqADibcQNjMnBhLnNpZ25hdHVyZQAAABNUY2JvctKEWQauogEmGCGCWQPCMIIDvjCCA0SgAwIBAgITf8DFXrYCzoMPnf3QSrAMRZ64JjAKBggqhkjOPQQDAzBRMQswCQYDVQQGEwJVUzETMBEGA1UECgwKR29vZ2xlIExMQzEtMCsGA1UEAwwkR29vZ2xlIEMyUEEgTWVkaWEgU2VydmljZXMgMVAgSUNBIEczMB4XDTI1MTAzMDIyMzQ0N1oXDTI2MTAyNTIyMzQ0NlowazELMAkGA1UEBhMCVVMxEzARBgNVBAoTCkdvb2dsZSBMTEMxHDAaBgNVBAsTE0dvb2dsZSBTeXN0ZW0gNjAwMzIxKTAnBgNVBAMTIEdvb2dsZSBNZWRpYSBQcm9jZXNzaW5nIFNlcnZpY2VzMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEawavchc+90s/hPWHxK3FFJ3MlrNDMsBT9MKpPwTIQKlgKDEGTNCDKZ7pSr9psMwxnQyVriyKysDz6Pfmk73qFaOCAd8wggHbMA4GA1UdDwEB/wQEAwIGwDAfBgNVHSUEGDAWBggrBgEFBQcDB
+[2026-03-19T09:57:48.023Z] [Gemini-Image] Native: no inline_data found in response: {"candidates":[{"content":{"parts":[{"inlineData":{"mimeType":"image/jpeg","data":"/9j/4AAQSkZJRgABAQAAAQABAAD/61YGSlAAAQAAAAEAAFX8anVtYgAAAB5qdW1kYzJwYQARABCAAACqADibcQNjMnBhAAAAF9tqdW1iAAAAR2p1bWRjMm1hABEAEIAAAKoAOJtxA3VybjpjMnBhOmZhMzZiMTJlLTM3YzctODE1YS04ZjA4LTQxNjg3OGIxYzk2YgAAABOEanVtYgAAAChqdW1kYzJjcwARABCAAACqADibcQNjMnBhLnNpZ25hdHVyZQAAABNUY2JvctKEWQauogEmGCGCWQPCMIIDvjCCA0SgAwIBAgITf8DFXrYCzoMPnf3QSrAMRZ64JjAKBggqhkjOPQQDAzBRMQswCQYDVQQGEwJVUzETMBEGA1UECgwKR29vZ2xlIExMQzEtMCsGA1UEAwwkR
+[2026-03-19T09:57:48.024Z] [Gemini-Image] No image found in response, raw data first 500: {
+  "candidates": [
+    {
+      "content": {
+        "parts": [
+          {
+            "inlineData": {
+              "mimeType": "image/jpeg",
+              "data": "/9j/4AAQSkZJRgABAQAAAQABAAD/61YGSlAAAQAAAAEAAFX8anVtYgAAAB5qdW1kYzJwYQARABCAAACqADibcQNjMnBhAAAAF9tqdW1iAAAAR2p1bWRjMm1hABEAEIAAAKoAOJtxA3VybjpjMnBhOmZhMzZiMTJlLTM3YzctODE1YS04ZjA4LTQxNjg3OGIxYzk2YgAAABOEanVtYgAAAChqdW1kYzJjcwARABCAAACqADibcQNjMnBhLnNpZ25hdHVyZQAAABNUY2JvctKEWQauogEmGCGCWQPCMIIDvjCCA0SgAwIBAgITf8DFXrYCzoMPnf3QSrAMR
+[2026-03-19T10:00:16.261Z] [Gemini-Image] Native format: source images will be included via download
+[2026-03-19T10:00:18.280Z] [Gemini-Image] Native Gemini format: {
+  "model": "gemini-2.5-flash-image",
+  "path": "/v1beta/models/gemini-2.5-flash-image:generateContent?key=sk-Sog9lW0afH0oQeZmTJL",
+  "imageConfig": {
+    "aspectRatio": "9:16"
+  },
+  "partsCount": 2
+}
+[2026-03-19T10:00:18.280Z] [Gemini-Image] Submitting: {
+  "model": "gemini-2.5-flash-image",
+  "provider": "gaorui",
+  "hostname": "gaorui.cc",
+  "native": true,
+  "imageCount": 1,
+  "prompt": "帮我给人物换件泳衣..."
+}
+[2026-03-19T10:00:34.717Z] [Gemini-Image] Response status: 200 data length: 3042829
+[2026-03-19T10:00:34.719Z] [Gemini-Image] Raw response first 1000: {
+  "candidates": [
+    {
+      "content": {
+        "parts": [
+          {
+            "text": "好的，我已经为她换上了一件泳衣！"
+          },
+          {
+            "inlineData": {
+              "mimeType": "image/png",
+              "data": "iVBORw0KGgoAAAANSUhEUgAAAwAAAAVACAIAAABwa6iPAABV+2NhQlgAAFX7anVtYgAAAB5qdW1kYzJwYQARABCAAACqADibcQNjMnBhAAAAF9tqdW1iAAAAR2p1bWRjMm1hABEAEIAAAKoAOJtxA3VybjpjMnBhOjFkMWM4ZDg3LWYxMTQtNGRhMi1iNTQ0LTRmZjJhMDUwYjY0ZgAAABOEanVtYgAAAChqdW1kYzJjcwARABCAAACqADibcQNjMnBhLnNpZ25hdHVyZQAAABNUY2JvctKEWQauogEmGCGCWQPCMIIDvjCCA0SgAwIBAgITf8DFXrYCzoMPnf3QSrAMRZ64JjAKBggqhkjOPQQDAzBRMQswCQYDVQQGEwJVUzETMBEGA1UECgwKR29vZ2xlIExMQzEtMCsGA1UEAwwkR29vZ2xlIEMyUEEgTWVkaWEgU2VydmljZXMgMVAgSUNBIEczMB4XDTI1MTAzMDIyMzQ0N1oXDTI2MTAyNTIyMzQ0NlowazELMAkGA1UEBhMCVVMxEzARBgNVBAoTCkdvb2dsZSBMTEMxHDAaBgNVBAsTE0dvb2dsZSBTeXN0ZW0gNjAwMzIxKTAnBgNVBAMTIEdvb2dsZSBNZWRpYSBQcm9jZXNzaW5nIFNlcnZpY2VzMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEawavchc+90s/hPWHxK3FFJ3MlrNDMsBT9MKpPwTIQKlgKDEGTNCDKZ7pSr9psMwxnQyVri
+[2026-03-19T10:00:34.722Z] [Gemini-Image] Native: found inlineData, mime: image/png length: 3041976
+[2026-03-19T10:00:34.722Z] [Gemini-Image] Got base64 data, uploading to OSS...
+[2026-03-19T10:00:38.041Z] [Gemini-Image] Uploaded to OSS: https://media.toryxai.com/images/gemini-gen/1773914434777-ggtsyluz.png
+[2026-03-19T10:01:30.771Z] [Gemini-Image] Native format: source images will be included via download
+[2026-03-19T10:01:33.276Z] [Gemini-Image] Native Gemini format: {
+  "model": "gemini-2.5-flash-image",
+  "path": "/v1beta/models/gemini-2.5-flash-image:generateContent?key=sk-Sog9lW0afH0oQeZmTJL",
+  "imageConfig": {
+    "aspectRatio": "1:1"
+  },
+  "partsCount": 2
+}
+[2026-03-19T10:01:33.276Z] [Gemini-Image] Submitting: {
+  "model": "gemini-2.5-flash-image",
+  "provider": "gaorui",
+  "hostname": "gaorui.cc",
+  "native": true,
+  "imageCount": 1,
+  "prompt": "给人物换件衣服..."
+}
+[2026-03-19T10:01:40.255Z] [Gemini-Image] Response status: 200 data length: 608
+[2026-03-19T10:01:40.255Z] [Gemini-Image] Raw response first 1000: {
+  "candidates": [
+    {
+      "content": {
+        "parts": [
+          {
+            "text": "好的，想要给她换件什么样的衣服呢？"
+          }
+        ],
+        "role": "model"
+      },
+      "finishReason": "STOP",
+      "index": 0
+    }
+  ],
+  "usageMetadata": {
+    "promptTokenCount": 264,
+    "candidatesTokenCount": 10,
+    "totalTokenCount": 274,
+    "promptTokensDetails": [
+      {
+        "modality": "TEXT",
+        "tokenCount": 6
+      },
+      {
+        "modality": "IMAGE",
+        "tokenCount": 258
+      }
+    ]
+  },
+  "modelVersion": "gemini-2.5-flash-image",
+  "responseId": "gsm7aZrGEoLQz7IP-p_-2A0"
+}
+
+[2026-03-19T10:01:40.255Z] [Gemini-Image] Native: no inline_data found in response: {"candidates":[{"content":{"parts":[{"text":"好的，想要给她换件什么样的衣服呢？"}],"role":"model"},"finishReason":"STOP","index":0}],"usageMetadata":{"promptTokenCount":264,"candidatesTokenCount":10,"totalTokenCount":274,"promptTokensDetails":[{"modality":"TEXT","tokenCount":6},{"modality":"IMAGE","tokenCount":258}]},"modelVersion":"gemini-2.5-flash-image","responseId":"gsm7aZrGEoLQz7IP-p_-2A0"}
+[2026-03-19T10:01:40.256Z] [Gemini-Image] No image found in response, raw data first 500: {
+  "candidates": [
+    {
+      "content": {
+        "parts": [
+          {
+            "text": "好的，想要给她换件什么样的衣服呢？"
+          }
+        ],
+        "role": "model"
+      },
+      "finishReason": "STOP",
+      "index": 0
+    }
+  ],
+  "usageMetadata": {
+    "promptTokenCount": 264,
+    "candidatesTokenCount": 10,
+    "totalTokenCount": 274,
+    "promptTokensDetails": [
+      {
+        "modality": "TEXT",
+        "tokenCount": 6
+      },
+      {
+        "modality": "IMAGE",
+        "tokenCount": 258
+[2026-03-19T10:03:15.810Z] [Gemini-Image] Native format: source images will be included via download
+[2026-03-19T10:03:18.425Z] [Gemini-Image] Native Gemini format: {
+  "model": "gemini-2.5-flash-image",
+  "path": "/v1beta/models/gemini-2.5-flash-image:generateContent?key=sk-Sog9lW0afH0oQeZmTJL",
+  "imageConfig": {
+    "aspectRatio": "4:3"
+  },
+  "partsCount": 2
+}
+[2026-03-19T10:03:18.426Z] [Gemini-Image] Submitting: {
+  "model": "gemini-2.5-flash-image",
+  "provider": "gaorui",
+  "hostname": "gaorui.cc",
+  "native": true,
+  "imageCount": 1,
+  "prompt": "给人物换件泳衣..."
+}
+[2026-03-19T10:03:33.319Z] [Gemini-Image] Response status: 200 data length: 2930149
+[2026-03-19T10:03:33.321Z] [Gemini-Image] Raw response first 1000: {
+  "candidates": [
+    {
+      "content": {
+        "parts": [
+          {
+            "inlineData": {
+              "mimeType": "image/png",
+              "data": "iVBORw0KGgoAAAANSUhEUgAABKAAAANgCAIAAACUdIfRAABV/WNhQlgAAFX9anVtYgAAAB5qdW1kYzJwYQARABCAAACqADibcQNjMnBhAAAAF9tqdW1iAAAAR2p1bWRjMm1hABEAEIAAAKoAOJtxA3VybjpjMnBhOmZhMzZiMTJlLTM3YzctODE1YS04ZjA4LTQxNjg3OGIxYzk2YgAAABOEanVtYgAAAChqdW1kYzJjcwARABCAAACqADibcQNjMnBhLnNpZ25hdHVyZQAAABNUY2JvctKEWQauogEmGCGCWQPCMIIDvjCCA0SgAwIBAgITf8DFXrYCzoMPnf3QSrAMRZ64JjAKBggqhkjOPQQDAzBRMQswCQYDVQQGEwJVUzETMBEGA1UECgwKR29vZ2xlIExMQzEtMCsGA1UEAwwkR29vZ2xlIEMyUEEgTWVkaWEgU2VydmljZXMgMVAgSUNBIEczMB4XDTI1MTAzMDIyMzQ0N1oXDTI2MTAyNTIyMzQ0NlowazELMAkGA1UEBhMCVVMxEzARBgNVBAoTCkdvb2dsZSBMTEMxHDAaBgNVBAsTE0dvb2dsZSBTeXN0ZW0gNjAwMzIxKTAnBgNVBAMTIEdvb2dsZSBNZWRpYSBQcm9jZXNzaW5nIFNlcnZpY2VzMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEawavchc+90s/hPWHxK3FFJ3MlrNDMsBT9MKpPwTIQKlgKDEGTNCDKZ7pSr9psMwxnQyVriyKysDz6Pfmk73qFaOCAd8wggHbMA4GA1UdDwEB/wQEAwIGwDAfBgNVHSUEGDAWBg
+[2026-03-19T10:03:33.323Z] [Gemini-Image] Native: found inlineData, mime: image/png length: 2929360
+[2026-03-19T10:03:33.323Z] [Gemini-Image] Got base64 data, uploading to OSS...
+[2026-03-19T10:03:36.649Z] [Gemini-Image] Uploaded to OSS: https://media.toryxai.com/images/gemini-gen/1773914613325-evywg0zk.png
+[2026-03-19T10:03:53.017Z] [Gemini-Image] Native format: source images will be included via download
+[2026-03-19T10:03:55.190Z] [Gemini-Image] Native Gemini format: {
+  "model": "gemini-2.5-flash-image",
+  "path": "/v1beta/models/gemini-2.5-flash-image:generateContent?key=sk-Sog9lW0afH0oQeZmTJL",
+  "imageConfig": {
+    "aspectRatio": "1:1"
+  },
+  "partsCount": 2
+}
+[2026-03-19T10:03:55.190Z] [Gemini-Image] Submitting: {
+  "model": "gemini-2.5-flash-image",
+  "provider": "gaorui",
+  "hostname": "gaorui.cc",
+  "native": true,
+  "imageCount": 1,
+  "prompt": "给人物换件泳衣..."
+}
+[2026-03-19T10:04:10.057Z] [Gemini-Image] Response status: 200 data length: 3049309
+[2026-03-19T10:04:10.058Z] [Gemini-Image] Raw response first 1000: {
+  "candidates": [
+    {
+      "content": {
+        "parts": [
+          {
+            "inlineData": {
+              "mimeType": "image/png",
+              "data": "iVBORw0KGgoAAAANSUhEUgAABAAAAAQACAIAAADwf7zUAABV/GNhQlgAAFX8anVtYgAAAB5qdW1kYzJwYQARABCAAACqADibcQNjMnBhAAAAF9tqdW1iAAAAR2p1bWRjMm1hABEAEIAAAKoAOJtxA3VybjpjMnBhOmZhMzZiMTJlLTM3YzctODE1YS04ZjA4LTQxNjg3OGIxYzk2YgAAABOEanVtYgAAAChqdW1kYzJjcwARABCAAACqADibcQNjMnBhLnNpZ25hdHVyZQAAABNUY2JvctKEWQauogEmGCGCWQPCMIIDvjCCA0SgAwIBAgITf8DFXrYCzoMPnf3QSrAMRZ64JjAKBggqhkjOPQQDAzBRMQswCQYDVQQGEwJVUzETMBEGA1UECgwKR29vZ2xlIExMQzEtMCsGA1UEAwwkR29vZ2xlIEMyUEEgTWVkaWEgU2VydmljZXMgMVAgSUNBIEczMB4XDTI1MTAzMDIyMzQ0N1oXDTI2MTAyNTIyMzQ0NlowazELMAkGA1UEBhMCVVMxEzARBgNVBAoTCkdvb2dsZSBMTEMxHDAaBgNVBAsTE0dvb2dsZSBTeXN0ZW0gNjAwMzIxKTAnBgNVBAMTIEdvb2dsZSBNZWRpYSBQcm9jZXNzaW5nIFNlcnZpY2VzMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEawavchc+90s/hPWHxK3FFJ3MlrNDMsBT9MKpPwTIQKlgKDEGTNCDKZ7pSr9psMwxnQyVriyKysDz6Pfmk73qFaOCAd8wggHbMA4GA1UdDwEB/wQEAwIGwDAfBgNVHSUEGDAWBg
+[2026-03-19T10:04:10.061Z] [Gemini-Image] Native: found inlineData, mime: image/png length: 3048520
+[2026-03-19T10:04:10.062Z] [Gemini-Image] Got base64 data, uploading to OSS...
+[2026-03-19T10:04:13.204Z] [Gemini-Image] Uploaded to OSS: https://media.toryxai.com/images/gemini-gen/1773914650064-71xy69m2.png
+[2026-03-19T10:04:43.208Z] [Gemini-Image] Native format: source images will be included via download
+[2026-03-19T10:04:45.463Z] [Gemini-Image] Native Gemini format: {
+  "model": "gemini-2.5-flash-image",
+  "path": "/v1beta/models/gemini-2.5-flash-image:generateContent?key=sk-Sog9lW0afH0oQeZmTJL",
+  "imageConfig": {
+    "aspectRatio": "9:16"
+  },
+  "partsCount": 2
+}
+[2026-03-19T10:04:45.463Z] [Gemini-Image] Submitting: {
+  "model": "gemini-2.5-flash-image",
+  "provider": "gaorui",
+  "hostname": "gaorui.cc",
+  "native": true,
+  "imageCount": 1,
+  "prompt": "给人物换件泳衣..."
+}
+[2026-03-19T10:04:59.758Z] [Gemini-Image] Response status: 200 data length: 3248882
+[2026-03-19T10:04:59.760Z] [Gemini-Image] Raw response first 1000: {
+  "candidates": [
+    {
+      "content": {
+        "parts": [
+          {
+            "inlineData": {
+              "mimeType": "image/png",
+              "data": "iVBORw0KGgoAAAANSUhEUgAAAwAAAAVACAIAAABwa6iPAABV/GNhQlgAAFX8anVtYgAAAB5qdW1kYzJwYQARABCAAACqADibcQNjMnBhAAAAF9tqdW1iAAAAR2p1bWRjMm1hABEAEIAAAKoAOJtxA3VybjpjMnBhOmZhMzZiMTJlLTM3YzctODE1YS04ZjA4LTQxNjg3OGIxYzk2YgAAABOEanVtYgAAAChqdW1kYzJjcwARABCAAACqADibcQNjMnBhLnNpZ25hdHVyZQAAABNUY2JvctKEWQauogEmGCGCWQPCMIIDvjCCA0SgAwIBAgITf8DFXrYCzoMPnf3QSrAMRZ64JjAKBggqhkjOPQQDAzBRMQswCQYDVQQGEwJVUzETMBEGA1UECgwKR29vZ2xlIExMQzEtMCsGA1UEAwwkR29vZ2xlIEMyUEEgTWVkaWEgU2VydmljZXMgMVAgSUNBIEczMB4XDTI1MTAzMDIyMzQ0N1oXDTI2MTAyNTIyMzQ0NlowazELMAkGA1UEBhMCVVMxEzARBgNVBAoTCkdvb2dsZSBMTEMxHDAaBgNVBAsTE0dvb2dsZSBTeXN0ZW0gNjAwMzIxKTAnBgNVBAMTIEdvb2dsZSBNZWRpYSBQcm9jZXNzaW5nIFNlcnZpY2VzMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEawavchc+90s/hPWHxK3FFJ3MlrNDMsBT9MKpPwTIQKlgKDEGTNCDKZ7pSr9psMwxnQyVriyKysDz6Pfmk73qFaOCAd8wggHbMA4GA1UdDwEB/wQEAwIGwDAfBgNVHSUEGDAWBg
+[2026-03-19T10:04:59.762Z] [Gemini-Image] Native: found inlineData, mime: image/png length: 3248096
+[2026-03-19T10:04:59.762Z] [Gemini-Image] Got base64 data, uploading to OSS...
+[2026-03-19T10:05:02.979Z] [Gemini-Image] Uploaded to OSS: https://media.toryxai.com/images/gemini-gen/1773914699764-6agiv4bg.png
+[2026-03-19T10:06:14.405Z] [Gemini-Image] Native format: source images will be included via download
+[2026-03-19T10:06:17.132Z] [Gemini-Image] Native Gemini format: {
+  "model": "gemini-2.5-flash-image",
+  "path": "/v1beta/models/gemini-2.5-flash-image:generateContent?key=sk-Sog9lW0afH0oQeZmTJL",
+  "imageConfig": {
+    "aspectRatio": "4:3"
+  },
+  "partsCount": 2
+}
+[2026-03-19T10:06:17.133Z] [Gemini-Image] Submitting: {
+  "model": "gemini-2.5-flash-image",
+  "provider": "gaorui",
+  "hostname": "gaorui.cc",
+  "native": true,
+  "imageCount": 1,
+  "prompt": "给人物换件泳衣..."
+}
+[2026-03-19T10:06:35.561Z] [Gemini-Image] Response status: 200 data length: 2887124
+[2026-03-19T10:06:35.563Z] [Gemini-Image] Raw response first 1000: {
+  "candidates": [
+    {
+      "content": {
+        "parts": [
+          {
+            "text": "没问题，这是人物穿着泳衣的样子。\n "
+          },
+          {
+            "inlineData": {
+              "mimeType": "image/png",
+              "data": "iVBORw0KGgoAAAANSUhEUgAABKAAAANgCAIAAACUdIfRAABV/WNhQlgAAFX9anVtYgAAAB5qdW1kYzJwYQARABCAAACqADibcQNjMnBhAAAAF9tqdW1iAAAAR2p1bWRjMm1hABEAEIAAAKoAOJtxA3VybjpjMnBhOjg2MjdiYjc1LTg2ZDctNjg3Zi05MTVmLTQ0M2U1OGUyZWYwYgAAABOEanVtYgAAAChqdW1kYzJjcwARABCAAACqADibcQNjMnBhLnNpZ25hdHVyZQAAABNUY2JvctKEWQauogEmGCGCWQPCMIIDvjCCA0SgAwIBAgITf8DFXrYCzoMPnf3QSrAMRZ64JjAKBggqhkjOPQQDAzBRMQswCQYDVQQGEwJVUzETMBEGA1UECgwKR29vZ2xlIExMQzEtMCsGA1UEAwwkR29vZ2xlIEMyUEEgTWVkaWEgU2VydmljZXMgMVAgSUNBIEczMB4XDTI1MTAzMDIyMzQ0N1oXDTI2MTAyNTIyMzQ0NlowazELMAkGA1UEBhMCVVMxEzARBgNVBAoTCkdvb2dsZSBMTEMxHDAaBgNVBAsTE0dvb2dsZSBTeXN0ZW0gNjAwMzIxKTAnBgNVBAMTIEdvb2dsZSBNZWRpYSBQcm9jZXNzaW5nIFNlcnZpY2VzMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEawavchc+90s/hPWHxK3FFJ3MlrNDMsBT9MKpPwTIQKlgKDEGTNCDKZ7pSr9psMwxnQy
+[2026-03-19T10:06:35.566Z] [Gemini-Image] Native: found inlineData, mime: image/png length: 2886268
+[2026-03-19T10:06:35.567Z] [Gemini-Image] Got base64 data, uploading to OSS...
+[2026-03-19T10:06:38.467Z] [Gemini-Image] Uploaded to OSS: https://media.toryxai.com/images/gemini-gen/1773914795568-5aia6fxm.png
+[2026-03-19T10:07:30.491Z] [Gemini-Image] Native format: source images will be included via download
+[2026-03-19T10:07:32.385Z] [Gemini-Image] Native Gemini format: {
+  "model": "gemini-3-pro-image-preview",
+  "path": "/v1beta/models/gemini-3-pro-image-preview:generateContent?key=sk-Sog9lW0afH0oQeZ",
+  "imageConfig": {
+    "aspectRatio": "4:3",
+    "imageSize": "4K"
+  },
+  "partsCount": 2
+}
+[2026-03-19T10:07:32.385Z] [Gemini-Image] Submitting: {
+  "model": "gemini-3-pro-image-preview",
+  "provider": "gaorui",
+  "hostname": "gaorui.cc",
+  "native": true,
+  "imageCount": 1,
+  "prompt": "给人物换件泳衣..."
+}
+[2026-03-19T10:08:23.937Z] [Gemini-Image] Response status: 200 data length: 22597089
+[2026-03-19T10:08:23.949Z] [Gemini-Image] Raw response first 1000: {
+  "candidates": [
+    {
+      "content": {
+        "parts": [
+          {
+            "inlineData": {
+              "mimeType": "image/jpeg",
+              "data": "/9j/4AAQSkZJRgABAQAAAQABAAD/61YFSlAAAQAAAAEAAFX7anVtYgAAAB5qdW1kYzJwYQARABCAAACqADibcQNjMnBhAAAAF9tqdW1iAAAAR2p1bWRjMm1hABEAEIAAAKoAOJtxA3VybjpjMnBhOjg2MjdiYjc1LTg2ZDctNjg3Zi05MTVmLTQ0M2U1OGUyZWYwYgAAABOEanVtYgAAAChqdW1kYzJjcwARABCAAACqADibcQNjMnBhLnNpZ25hdHVyZQAAABNUY2JvctKEWQauogEmGCGCWQPCMIIDvjCCA0SgAwIBAgITf8DFXrYCzoMPnf3QSrAMRZ64JjAKBggqhkjOPQQDAzBRMQswCQYDVQQGEwJVUzETMBEGA1UECgwKR29vZ2xlIExMQzEtMCsGA1UEAwwkR29vZ2xlIEMyUEEgTWVkaWEgU2VydmljZXMgMVAgSUNBIEczMB4XDTI1MTAzMDIyMzQ0N1oXDTI2MTAyNTIyMzQ0NlowazELMAkGA1UEBhMCVVMxEzARBgNVBAoTCkdvb2dsZSBMTEMxHDAaBgNVBAsTE0dvb2dsZSBTeXN0ZW0gNjAwMzIxKTAnBgNVBAMTIEdvb2dsZSBNZWRpYSBQcm9jZXNzaW5nIFNlcnZpY2VzMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEawavchc+90s/hPWHxK3FFJ3MlrNDMsBT9MKpPwTIQKlgKDEGTNCDKZ7pSr9psMwxnQyVriyKysDz6Pfmk73qFaOCAd8wggHbMA4GA1UdDwEB/wQEAwIGwDAfBgNVHSUEGDAWBggrBgEFBQcDB
+[2026-03-19T10:08:23.961Z] [Gemini-Image] Native: found inlineData, mime: image/jpeg length: 10699120
+[2026-03-19T10:08:23.961Z] [Gemini-Image] Got base64 data, uploading to OSS...
+[2026-03-19T10:08:27.843Z] [Gemini-Image] Uploaded to OSS: https://media.toryxai.com/images/gemini-gen/1773914903966-k7golt89.jpeg
+[2026-03-19T10:10:25.529Z] [Gemini-Image] Native format: source images will be included via download
+[2026-03-19T10:10:27.766Z] [Gemini-Image] Native Gemini format: {
+  "model": "gemini-3-pro-image-preview",
+  "path": "/v1beta/models/gemini-3-pro-image-preview:generateContent?key=sk-Sog9lW0afH0oQeZ",
+  "imageConfig": {
+    "aspectRatio": "1:1",
+    "imageSize": "4K"
+  },
+  "partsCount": 2
+}
+[2026-03-19T10:10:27.766Z] [Gemini-Image] Submitting: {
+  "model": "gemini-3-pro-image-preview",
+  "provider": "gaorui",
+  "hostname": "gaorui.cc",
+  "native": true,
+  "imageCount": 1,
+  "prompt": "给人物换件泳衣..."
+}
+[2026-03-19T10:11:36.686Z] [Gemini-Image] Response status: 200 data length: 23962681
+[2026-03-19T10:11:36.697Z] [Gemini-Image] Raw response first 1000: {
+  "candidates": [
+    {
+      "content": {
+        "parts": [
+          {
+            "inlineData": {
+              "mimeType": "image/jpeg",
+              "data": "/9j/4AAQSkZJRgABAQAAAQABAAD/61YGSlAAAQAAAAEAAFX8anVtYgAAAB5qdW1kYzJwYQARABCAAACqADibcQNjMnBhAAAAF9tqdW1iAAAAR2p1bWRjMm1hABEAEIAAAKoAOJtxA3VybjpjMnBhOjA3ZTU4YzVjLTA5MzYtODIwNC0zZjY4LTRhNGM3NmQ0MWZkOAAAABOEanVtYgAAAChqdW1kYzJjcwARABCAAACqADibcQNjMnBhLnNpZ25hdHVyZQAAABNUY2JvctKEWQauogEmGCGCWQPCMIIDvjCCA0SgAwIBAgITf8DFXrYCzoMPnf3QSrAMRZ64JjAKBggqhkjOPQQDAzBRMQswCQYDVQQGEwJVUzETMBEGA1UECgwKR29vZ2xlIExMQzEtMCsGA1UEAwwkR29vZ2xlIEMyUEEgTWVkaWEgU2VydmljZXMgMVAgSUNBIEczMB4XDTI1MTAzMDIyMzQ0N1oXDTI2MTAyNTIyMzQ0NlowazELMAkGA1UEBhMCVVMxEzARBgNVBAoTCkdvb2dsZSBMTEMxHDAaBgNVBAsTE0dvb2dsZSBTeXN0ZW0gNjAwMzIxKTAnBgNVBAMTIEdvb2dsZSBNZWRpYSBQcm9jZXNzaW5nIFNlcnZpY2VzMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEawavchc+90s/hPWHxK3FFJ3MlrNDMsBT9MKpPwTIQKlgKDEGTNCDKZ7pSr9psMwxnQyVriyKysDz6Pfmk73qFaOCAd8wggHbMA4GA1UdDwEB/wQEAwIGwDAfBgNVHSUEGDAWBggrBgEFBQcDB
+[2026-03-19T10:11:36.712Z] [Gemini-Image] Native: found inlineData, mime: image/jpeg length: 11106988
+[2026-03-19T10:11:36.712Z] [Gemini-Image] Got base64 data, uploading to OSS...
+[2026-03-19T10:11:40.755Z] [Gemini-Image] Uploaded to OSS: https://media.toryxai.com/images/gemini-gen/1773915096719-n55haxun.jpeg
+[2026-03-19T10:23:28.493Z] [Gemini-Image] Native format: source images will be included via download
+[2026-03-19T10:23:31.393Z] [Gemini-Image] Native Gemini format: {
+  "model": "gemini-2.5-flash-image",
+  "path": "/v1beta/models/gemini-2.5-flash-image:generateContent?key=sk-Sog9lW0afH0oQeZmTJL",
+  "imageConfig": {
+    "aspectRatio": "16:9"
+  },
+  "partsCount": 2
+}
+[2026-03-19T10:23:31.393Z] [Gemini-Image] Submitting: {
+  "model": "gemini-2.5-flash-image",
+  "provider": "gaorui",
+  "hostname": "gaorui.cc",
+  "native": true,
+  "imageCount": 1,
+  "prompt": "​给人物换件衣服⁠​..."
+}
+[2026-03-19T10:23:48.457Z] [Gemini-Image] Response status: 200 data length: 3911057
+[2026-03-19T10:23:48.459Z] [Gemini-Image] Raw response first 1000: {
+  "candidates": [
+    {
+      "content": {
+        "parts": [
+          {
+            "inlineData": {
+              "mimeType": "image/png",
+              "data": "iVBORw0KGgoAAAANSUhEUgAABUAAAAMACAIAAABq7Fo6AABV/GNhQlgAAFX8anVtYgAAAB5qdW1kYzJwYQARABCAAACqADibcQNjMnBhAAAAF9tqdW1iAAAAR2p1bWRjMm1hABEAEIAAAKoAOJtxA3VybjpjMnBhOjljNWFiYjhmLWFkMDAtZGNiZS04MWM2LTRiMmM3YjgwMmVmYwAAABOEanVtYgAAAChqdW1kYzJjcwARABCAAACqADibcQNjMnBhLnNpZ25hdHVyZQAAABNUY2JvctKEWQauogEmGCGCWQPCMIIDvjCCA0SgAwIBAgITf8DFXrYCzoMPnf3QSrAMRZ64JjAKBggqhkjOPQQDAzBRMQswCQYDVQQGEwJVUzETMBEGA1UECgwKR29vZ2xlIExMQzEtMCsGA1UEAwwkR29vZ2xlIEMyUEEgTWVkaWEgU2VydmljZXMgMVAgSUNBIEczMB4XDTI1MTAzMDIyMzQ0N1oXDTI2MTAyNTIyMzQ0NlowazELMAkGA1UEBhMCVVMxEzARBgNVBAoTCkdvb2dsZSBMTEMxHDAaBgNVBAsTE0dvb2dsZSBTeXN0ZW0gNjAwMzIxKTAnBgNVBAMTIEdvb2dsZSBNZWRpYSBQcm9jZXNzaW5nIFNlcnZpY2VzMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEawavchc+90s/hPWHxK3FFJ3MlrNDMsBT9MKpPwTIQKlgKDEGTNCDKZ7pSr9psMwxnQyVriyKysDz6Pfmk73qFaOCAd8wggHbMA4GA1UdDwEB/wQEAwIGwDAfBgNVHSUEGDAWBg
+[2026-03-19T10:23:48.462Z] [Gemini-Image] Native: found inlineData, mime: image/png length: 3910268
+[2026-03-19T10:23:48.463Z] [Gemini-Image] Got base64 data, uploading to OSS...
+[2026-03-19T10:23:52.332Z] [Gemini-Image] Uploaded to OSS: https://media.toryxai.com/images/gemini-gen/1773915828508-u118gvfp.png
+[2026-03-19T11:37:53.907Z] [Gemini-Image] Native format: source images will be included via download
+[2026-03-19T11:37:56.203Z] [Gemini-Image] Native Gemini format: {
+  "model": "gemini-2.5-flash-image",
+  "path": "/v1beta/models/gemini-2.5-flash-image:generateContent?key=sk-Sog9lW0afH0oQeZmTJL",
+  "imageConfig": {},
+  "partsCount": 2
+}
+[2026-03-19T11:37:56.203Z] [Gemini-Image] Submitting: {
+  "model": "gemini-2.5-flash-image",
+  "provider": "gaorui",
+  "hostname": "gaorui.cc",
+  "native": true,
+  "imageCount": 1,
+  "prompt": "给人物换件衣服..."
+}
+[2026-03-19T11:38:04.230Z] [Gemini-Image] Response status: 200 data length: 559
+[2026-03-19T11:38:04.231Z] [Gemini-Image] Raw response first 1000: {
+  "candidates": [
+    {
+      "content": {
+        "parts": [
+          {
+            "text": ""
+          }
+        ],
+        "role": "model"
+      },
+      "finishReason": "STOP",
+      "index": 0
+    }
+  ],
+  "usageMetadata": {
+    "promptTokenCount": 264,
+    "totalTokenCount": 264,
+    "promptTokensDetails": [
+      {
+        "modality": "TEXT",
+        "tokenCount": 6
+      },
+      {
+        "modality": "IMAGE",
+        "tokenCount": 258
+      }
+    ]
+  },
+  "modelVersion": "gemini-2.5-flash-image",
+  "responseId": "GuC7acGjEuWO6dkP8_WlqQ4"
+}
+
+[2026-03-19T11:38:04.231Z] [Gemini-Image] Native: no inline_data found in response: {"candidates":[{"content":{"parts":[{"text":""}],"role":"model"},"finishReason":"STOP","index":0}],"usageMetadata":{"promptTokenCount":264,"totalTokenCount":264,"promptTokensDetails":[{"modality":"TEXT","tokenCount":6},{"modality":"IMAGE","tokenCount":258}]},"modelVersion":"gemini-2.5-flash-image","responseId":"GuC7acGjEuWO6dkP8_WlqQ4"}
+[2026-03-19T11:38:04.231Z] [Gemini-Image] No image found in response, raw data first 500: {
+  "candidates": [
+    {
+      "content": {
+        "parts": [
+          {
+            "text": ""
+          }
+        ],
+        "role": "model"
+      },
+      "finishReason": "STOP",
+      "index": 0
+    }
+  ],
+  "usageMetadata": {
+    "promptTokenCount": 264,
+    "totalTokenCount": 264,
+    "promptTokensDetails": [
+      {
+        "modality": "TEXT",
+        "tokenCount": 6
+      },
+      {
+        "modality": "IMAGE",
+        "tokenCount": 258
+      }
+    ]
+  },
+  "modelVersion": "gemini-2.5
+[2026-03-19T11:39:54.828Z] [Gemini-Image] Native format: source images will be included via download
+[2026-03-19T11:39:57.148Z] [Gemini-Image] Native Gemini format: {
+  "model": "gemini-2.5-flash-image",
+  "path": "/v1beta/models/gemini-2.5-flash-image:generateContent?key=sk-Sog9lW0afH0oQeZmTJL",
+  "imageConfig": {
+    "aspectRatio": "1:1"
+  },
+  "partsCount": 2
+}
+[2026-03-19T11:39:57.148Z] [Gemini-Image] Submitting: {
+  "model": "gemini-2.5-flash-image",
+  "provider": "gaorui",
+  "hostname": "gaorui.cc",
+  "native": true,
+  "imageCount": 1,
+  "prompt": "给人物换件衣服！换泳衣！..."
+}
+[2026-03-19T11:40:15.823Z] [Gemini-Image] Response status: 200 data length: 3806438
+[2026-03-19T11:40:15.825Z] [Gemini-Image] Raw response first 1000: {
+  "candidates": [
+    {
+      "content": {
+        "parts": [
+          {
+            "text": "当然！这是她穿着泳衣的样子：\n"
+          },
+          {
+            "inlineData": {
+              "mimeType": "image/png",
+              "data": "iVBORw0KGgoAAAANSUhEUgAABAAAAAQACAIAAADwf7zUAABV/WNhQlgAAFX9anVtYgAAAB5qdW1kYzJwYQARABCAAACqADibcQNjMnBhAAAAF9tqdW1iAAAAR2p1bWRjMm1hABEAEIAAAKoAOJtxA3VybjpjMnBhOjljNWFiYjhmLWFkMDAtZGNiZS04MWM2LTRiMmM3YjgwMmVmYwAAABOEanVtYgAAAChqdW1kYzJjcwARABCAAACqADibcQNjMnBhLnNpZ25hdHVyZQAAABNUY2JvctKEWQauogEmGCGCWQPCMIIDvjCCA0SgAwIBAgITf8DFXrYCzoMPnf3QSrAMRZ64JjAKBggqhkjOPQQDAzBRMQswCQYDVQQGEwJVUzETMBEGA1UECgwKR29vZ2xlIExMQzEtMCsGA1UEAwwkR29vZ2xlIEMyUEEgTWVkaWEgU2VydmljZXMgMVAgSUNBIEczMB4XDTI1MTAzMDIyMzQ0N1oXDTI2MTAyNTIyMzQ0NlowazELMAkGA1UEBhMCVVMxEzARBgNVBAoTCkdvb2dsZSBMTEMxHDAaBgNVBAsTE0dvb2dsZSBTeXN0ZW0gNjAwMzIxKTAnBgNVBAMTIEdvb2dsZSBNZWRpYSBQcm9jZXNzaW5nIFNlcnZpY2VzMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEawavchc+90s/hPWHxK3FFJ3MlrNDMsBT9MKpPwTIQKlgKDEGTNCDKZ7pSr9psMwxnQyVri
+[2026-03-19T11:40:15.830Z] [Gemini-Image] Native: found inlineData, mime: image/png length: 3805584
+[2026-03-19T11:40:15.830Z] [Gemini-Image] Got base64 data, uploading to OSS...
+[2026-03-19T11:40:19.094Z] [Gemini-Image] Uploaded to OSS: https://media.toryxai.com/images/gemini-gen/1773920415869-j5cglbze.png
+[2026-03-19T11:42:40.345Z] [Gemini-Image] Native format: source images will be included via download
+[2026-03-19T11:42:42.658Z] [Gemini-Image] Native Gemini format: {
+  "model": "gemini-2.5-flash-image",
+  "path": "/v1beta/models/gemini-2.5-flash-image:generateContent?key=sk-Sog9lW0afH0oQeZmTJL",
+  "imageConfig": {},
+  "partsCount": 2
+}
+[2026-03-19T11:42:42.658Z] [Gemini-Image] Submitting: {
+  "model": "gemini-2.5-flash-image",
+  "provider": "gaorui",
+  "hostname": "gaorui.cc",
+  "native": true,
+  "imageCount": 1,
+  "prompt": "给人物换件泳装，背景换成大海边。..."
+}
+[2026-03-19T11:43:00.172Z] [Gemini-Image] Response status: 200 data length: 2742342
+[2026-03-19T11:43:00.174Z] [Gemini-Image] Raw response first 1000: {
+  "candidates": [
+    {
+      "content": {
+        "parts": [
+          {
+            "text": "好的，没问题。请看：\n"
+          },
+          {
+            "inlineData": {
+              "mimeType": "image/png",
+              "data": "iVBORw0KGgoAAAANSUhEUgAAAwAAAAVACAIAAABwa6iPAABV/GNhQlgAAFX8anVtYgAAAB5qdW1kYzJwYQARABCAAACqADibcQNjMnBhAAAAF9tqdW1iAAAAR2p1bWRjMm1hABEAEIAAAKoAOJtxA3VybjpjMnBhOmFkNzliMTU3LTJlN2YtZGVmNC03YzNlLTRiZTRjZDk1YmY3YgAAABOEanVtYgAAAChqdW1kYzJjcwARABCAAACqADibcQNjMnBhLnNpZ25hdHVyZQAAABNUY2JvctKEWQauogEmGCGCWQPCMIIDvjCCA0SgAwIBAgITf8DFXrYCzoMPnf3QSrAMRZ64JjAKBggqhkjOPQQDAzBRMQswCQYDVQQGEwJVUzETMBEGA1UECgwKR29vZ2xlIExMQzEtMCsGA1UEAwwkR29vZ2xlIEMyUEEgTWVkaWEgU2VydmljZXMgMVAgSUNBIEczMB4XDTI1MTAzMDIyMzQ0N1oXDTI2MTAyNTIyMzQ0NlowazELMAkGA1UEBhMCVVMxEzARBgNVBAoTCkdvb2dsZSBMTEMxHDAaBgNVBAsTE0dvb2dsZSBTeXN0ZW0gNjAwMzIxKTAnBgNVBAMTIEdvb2dsZSBNZWRpYSBQcm9jZXNzaW5nIFNlcnZpY2VzMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEawavchc+90s/hPWHxK3FFJ3MlrNDMsBT9MKpPwTIQKlgKDEGTNCDKZ7pSr9psMwxnQyVriyKys
+[2026-03-19T11:43:00.176Z] [Gemini-Image] Native: found inlineData, mime: image/png length: 2741492
+[2026-03-19T11:43:00.176Z] [Gemini-Image] Got base64 data, uploading to OSS...
+[2026-03-19T11:43:03.505Z] [Gemini-Image] Uploaded to OSS: https://media.toryxai.com/images/gemini-gen/1773920580198-9bachkcr.png
+[2026-03-19T13:28:00.659Z] [Gemini-Image] Native Gemini format: {
+  "model": "gemini-2.5-flash-image",
+  "path": "/v1beta/models/gemini-2.5-flash-image:generateContent?key=sk-Sog9lW0afH0oQeZmTJL",
+  "imageConfig": {},
+  "partsCount": 1
+}
+[2026-03-19T13:28:00.660Z] [Gemini-Image] Submitting: {
+  "model": "gemini-2.5-flash-image",
+  "provider": "gaorui",
+  "hostname": "gaorui.cc",
+  "native": true,
+  "imageCount": 0,
+  "prompt": "帮我生成一个时尚女孩的，中国女孩的照片，比较贴合 TikTok 的风格。..."
+}
+[2026-03-19T13:28:08.288Z] [Gemini-Image] xas231 model variant: gemini-3.0-pro-image-landscape-2k for aspect: auto
+[2026-03-19T13:28:08.289Z] [Gemini-Image] Submitting: {
+  "model": "gemini-3.0-pro-image-portrait-2k",
+  "provider": "xas231",
+  "hostname": "api.xas231.online",
+  "native": false,
+  "imageCount": 0,
+  "prompt": "帮我生成一个时尚女孩的，中国女孩的照片，比较贴合 TikTok 的风格。..."
+}
+[2026-03-19T13:28:11.661Z] [Gemini-Image] Native Gemini format: {
+  "model": "gemini-3-pro-image-preview",
+  "path": "/v1beta/models/gemini-3-pro-image-preview:generateContent?key=sk-Sog9lW0afH0oQeZ",
+  "imageConfig": {
+    "imageSize": "4K"
+  },
+  "partsCount": 1
+}
+[2026-03-19T13:28:11.662Z] [Gemini-Image] Submitting: {
+  "model": "gemini-3-pro-image-preview",
+  "provider": "gaorui",
+  "hostname": "gaorui.cc",
+  "native": true,
+  "imageCount": 0,
+  "prompt": "帮我生成一个时尚女孩的，中国女孩的照片，比较贴合 TikTok 的风格。..."
+}
+[2026-03-19T13:28:15.532Z] [Gemini-Image] Response status: 200 data length: 2417718
+[2026-03-19T13:28:15.534Z] [Gemini-Image] Raw response first 1000: {
+  "candidates": [
+    {
+      "content": {
+        "parts": [
+          {
+            "text": "没问题，这有一张中国时尚女孩的照片，你可以看看。 "
+          },
+          {
+            "inlineData": {
+              "mimeType": "image/png",
+              "data": "iVBORw0KGgoAAAANSUhEUgAABAAAAAQACAIAAADwf7zUAAAXfmNhQlgAABd+anVtYgAAAB5qdW1kYzJwYQARABCAAACqADibcQNjMnBhAAAAF1hqdW1iAAAAR2p1bWRjMm1hABEAEIAAAKoAOJtxA3VybjpjMnBhOjc0NjFiNjg0LTJmYzktZDE1OC00YzY3LTQyNjE0YzlmN2JiZgAAABMBanVtYgAAAChqdW1kYzJjcwARABCAAACqADibcQNjMnBhLnNpZ25hdHVyZQAAABLRY2JvctKEWQYrogEmGCGCWQM/MIIDOzCCAsCgAwIBAgIUAJ6vFWKBqUkCFltI/1ipbSSYHs4wCgYIKoZIzj0EAwMwUTELMAkGA1UEBhMCVVMxEzARBgNVBAoMCkdvb2dsZSBMTEMxLTArBgNVBAMMJEdvb2dsZSBDMlBBIE1lZGlhIFNlcnZpY2VzIDFQIElDQSBHMzAeFw0yNjAyMTcxNTE3MTJaFw0yNzAyMTIxNTE3MTFaMGsxCzAJBgNVBAYTAlVTMRMwEQYDVQQKEwpHb29nbGUgTExDMRwwGgYDVQQLExNHb29nbGUgU3lzdGVtIDYwMDMyMSkwJwYDVQQDEyBHb29nbGUgTWVkaWEgUHJvY2Vzc2luZyBTZXJ2aWNlczBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABLBjir7O78duFgwA85LMipPVJpwNGfPRe9uLhP2QbYYvWYLwkqIuwXGpMdIYJ
+[2026-03-19T13:28:15.537Z] [Gemini-Image] Native: found inlineData, mime: image/png length: 2416928
+[2026-03-19T13:28:15.538Z] [Gemini-Image] Got base64 data, uploading to OSS...
+[2026-03-19T13:28:19.356Z] [Gemini-Image] Uploaded to OSS: https://media.toryxai.com/images/gemini-gen/1773926895650-h9vo7umw.png
+[2026-03-19T13:28:40.502Z] [Gemini-Image] Native format: source images will be included via download
+[2026-03-19T13:28:44.760Z] [Gemini-Image] Native Gemini format: {
+  "model": "gemini-2.5-flash-image",
+  "path": "/v1beta/models/gemini-2.5-flash-image:generateContent?key=sk-Sog9lW0afH0oQeZmTJL",
+  "imageConfig": {},
+  "partsCount": 2
+}
+[2026-03-19T13:28:44.761Z] [Gemini-Image] Submitting: {
+  "model": "gemini-2.5-flash-image",
+  "provider": "gaorui",
+  "hostname": "gaorui.cc",
+  "native": true,
+  "imageCount": 1,
+  "prompt": "帮我给图中的人物换一件泳装。..."
+}
+[2026-03-19T13:28:51.033Z] [Gemini-Image] Response status: 200 data length: 605
+[2026-03-19T13:28:51.033Z] [Gemini-Image] Raw response first 1000: {
+  "candidates": [
+    {
+      "content": {
+        "parts": [
+          {
+            "text": "好的，这就为你更换泳装。\n"
+          }
+        ],
+        "role": "model"
+      },
+      "finishReason": "STOP",
+      "index": 0
+    }
+  ],
+  "usageMetadata": {
+    "promptTokenCount": 270,
+    "candidatesTokenCount": 9,
+    "totalTokenCount": 279,
+    "promptTokensDetails": [
+      {
+        "modality": "TEXT",
+        "tokenCount": 12
+      },
+      {
+        "modality": "IMAGE",
+        "tokenCount": 258
+      }
+    ]
+  },
+  "modelVersion": "gemini-2.5-flash-image",
+  "responseId": "Efq7acDzB5jkz7IP4bPE0AI"
+}
+
+[2026-03-19T13:28:51.034Z] [Gemini-Image] Native: no inline_data found in response: {"candidates":[{"content":{"parts":[{"text":"好的，这就为你更换泳装。\n"}],"role":"model"},"finishReason":"STOP","index":0}],"usageMetadata":{"promptTokenCount":270,"candidatesTokenCount":9,"totalTokenCount":279,"promptTokensDetails":[{"modality":"TEXT","tokenCount":12},{"modality":"IMAGE","tokenCount":258}]},"modelVersion":"gemini-2.5-flash-image","responseId":"Efq7acDzB5jkz7IP4bPE0AI"}
+[2026-03-19T13:28:51.034Z] [Gemini-Image] No image found in response, raw data first 500: {
+  "candidates": [
+    {
+      "content": {
+        "parts": [
+          {
+            "text": "好的，这就为你更换泳装。\n"
+          }
+        ],
+        "role": "model"
+      },
+      "finishReason": "STOP",
+      "index": 0
+    }
+  ],
+  "usageMetadata": {
+    "promptTokenCount": 270,
+    "candidatesTokenCount": 9,
+    "totalTokenCount": 279,
+    "promptTokensDetails": [
+      {
+        "modality": "TEXT",
+        "tokenCount": 12
+      },
+      {
+        "modality": "IMAGE",
+        "tokenCount": 258
+  
+[2026-03-19T13:28:52.207Z] [Gemini-Image] xas231 model variant: gemini-3.0-pro-image-portrait-2k for aspect: 9:16
+[2026-03-19T13:28:52.208Z] [Gemini-Image] Submitting: {
+  "model": "gemini-3.0-pro-image-portrait-2k",
+  "provider": "xas231",
+  "hostname": "api.xas231.online",
+  "native": false,
+  "imageCount": 1,
+  "prompt": "帮我给图中的人物换一件泳装。..."
+}
+[2026-03-19T13:28:57.098Z] [Gemini-Image] Response status: 200 data length: 1824
+[2026-03-19T13:28:57.099Z] [Gemini-Image] Raw response first 1000: data: {"id": "chatcmpl-1773926887", "object": "chat.completion.chunk", "created": 1773926887, "model": "flow2api", "choices": [{"index": 0, "delta": {"role": "assistant", "reasoning_content": "✨ 图片生成任务已启动\n"}, "finish_reason": null}]}
+
+data: {"id": "chatcmpl-1773926887", "object": "chat.completion.chunk", "created": 1773926887, "model": "flow2api", "choices": [{"index": 0, "delta": {"reasoning_content": "初始化生成环境...\n"}, "finish_reason": null}]}
+
+data: {"id": "chatcmpl-1773926887", "object": "chat.completion.chunk", "created": 1773926887, "model": "flow2api", "choices": [{"index": 0, "delta": {"reasoning_content": "正在生成图片...\n"}, "finish_reason": null}]}
+
+data: {"id": "chatcmpl-1773926920", "object": "chat.completion.chunk", "created": 1773926920, "model": "flow2api", "choices": [{"index": 0, "delta": {"reasoning_content": "正在放大图片到 2K...\n"}, "finish_reason": null}]}
+
+data: {"id": "chatcmpl-1773926935", "object": "chat.completion.chunk", "created": 1773926935, "model": "flow2api", "choi
+[2026-03-19T13:28:57.100Z] [Gemini-Image] fullContent length: 90
+[2026-03-19T13:28:57.101Z] [Gemini-Image] fullContent first 300: ![Generated Image](https://flow.xas231.online/tmp/500b4bc092ae707ce32be84c651eeb19_2K.jpg)
+[2026-03-19T13:28:57.101Z] [Gemini-Image] fullContent last 100: ![Generated Image](https://flow.xas231.online/tmp/500b4bc092ae707ce32be84c651eeb19_2K.jpg)
+[2026-03-19T13:28:57.101Z] [Gemini-Image] Found URL in markdown: https://flow.xas231.online/tmp/500b4bc092ae707ce32be84c651eeb19_2K.jpg
+[2026-03-19T13:28:57.102Z] [Gemini-Image] Got image URL: https://flow.xas231.online/tmp/500b4bc092ae707ce32be84c651eeb19_2K.jpg...
+[2026-03-19T13:29:50.955Z] [Gemini-Image] Response status: 200 data length: 24479865
+[2026-03-19T13:29:50.969Z] [Gemini-Image] Raw response first 1000: {
+  "candidates": [
+    {
+      "content": {
+        "parts": [
+          {
+            "inlineData": {
+              "mimeType": "image/jpeg",
+              "data": "/9j/4AAQSkZJRgABAQEBLAEsAAD/6xeISlAAAQAAAAEAABd+anVtYgAAAB5qdW1kYzJwYQARABCAAACqADibcQNjMnBhAAAAF1hqdW1iAAAAR2p1bWRjMm1hABEAEIAAAKoAOJtxA3VybjpjMnBhOjdkZGFiMWUzLTEyZTktNjA1Yi01NDQ2LTQ5YmJmNDEzNzI2ZQAAABMBanVtYgAAAChqdW1kYzJjcwARABCAAACqADibcQNjMnBhLnNpZ25hdHVyZQAAABLRY2JvctKEWQYrogEmGCGCWQM/MIIDOzCCAsCgAwIBAgIUAJ6vFWKBqUkCFltI/1ipbSSYHs4wCgYIKoZIzj0EAwMwUTELMAkGA1UEBhMCVVMxEzARBgNVBAoMCkdvb2dsZSBMTEMxLTArBgNVBAMMJEdvb2dsZSBDMlBBIE1lZGlhIFNlcnZpY2VzIDFQIElDQSBHMzAeFw0yNjAyMTcxNTE3MTJaFw0yNzAyMTIxNTE3MTFaMGsxCzAJBgNVBAYTAlVTMRMwEQYDVQQKEwpHb29nbGUgTExDMRwwGgYDVQQLExNHb29nbGUgU3lzdGVtIDYwMDMyMSkwJwYDVQQDEyBHb29nbGUgTWVkaWEgUHJvY2Vzc2luZyBTZXJ2aWNlczBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABLBjir7O78duFgwA85LMipPVJpwNGfPRe9uLhP2QbYYvWYLwkqIuwXGpMdIYJ5OtG6kKVtfi3xS50maSO0eJywCjggFaMIIBVjAOBgNVHQ8BAf8EBAMCBsAwHwYDVR0lBBgwFgYIKwYBBQUHA
+[2026-03-19T13:29:50.989Z] [Gemini-Image] Native: found inlineData, mime: image/jpeg length: 12361200
+[2026-03-19T13:29:50.989Z] [Gemini-Image] Got base64 data, uploading to OSS...
+[2026-03-19T13:29:56.458Z] [Gemini-Image] Uploaded to OSS: https://media.toryxai.com/images/gemini-gen/1773926990997-o8r9kgrr.jpeg
+[2026-03-19T13:30:16.523Z] [Gemini-Image] Response status: 200 data length: 2257
+[2026-03-19T13:30:16.523Z] [Gemini-Image] Raw response first 1000: data: {"id": "chatcmpl-1773926933", "object": "chat.completion.chunk", "created": 1773926933, "model": "flow2api", "choices": [{"index": 0, "delta": {"role": "assistant", "reasoning_content": "✨ 图片生成任务已启动\n"}, "finish_reason": null}]}
+
+data: {"id": "chatcmpl-1773926933", "object": "chat.completion.chunk", "created": 1773926933, "model": "flow2api", "choices": [{"index": 0, "delta": {"reasoning_content": "初始化生成环境...\n"}, "finish_reason": null}]}
+
+data: {"id": "chatcmpl-1773926933", "object": "chat.completion.chunk", "created": 1773926933, "model": "flow2api", "choices": [{"index": 0, "delta": {"reasoning_content": "上传 1 张参考图片...\n"}, "finish_reason": null}]}
+
+data: {"id": "chatcmpl-1773926940", "object": "chat.completion.chunk", "created": 1773926940, "model": "flow2api", "choices": [{"index": 0, "delta": {"reasoning_content": "已上传第 1/1 张图片\n"}, "finish_reason": null}]}
+
+data: {"id": "chatcmpl-1773926940", "object": "chat.completion.chunk", "created": 1773926940, "model": "flow2api", "c
+[2026-03-19T13:30:16.524Z] [Gemini-Image] fullContent length: 90
+[2026-03-19T13:30:16.524Z] [Gemini-Image] fullContent first 300: ![Generated Image](https://flow.xas231.online/tmp/580c6bbf44e858198571c93dd6fa6d57_2K.jpg)
+[2026-03-19T13:30:16.525Z] [Gemini-Image] fullContent last 100: ![Generated Image](https://flow.xas231.online/tmp/580c6bbf44e858198571c93dd6fa6d57_2K.jpg)
+[2026-03-19T13:30:16.525Z] [Gemini-Image] Found URL in markdown: https://flow.xas231.online/tmp/580c6bbf44e858198571c93dd6fa6d57_2K.jpg
+[2026-03-19T13:30:16.525Z] [Gemini-Image] Got image URL: https://flow.xas231.online/tmp/580c6bbf44e858198571c93dd6fa6d57_2K.jpg...
+[2026-03-19T13:37:35.505Z] [Gemini-Image] Native Gemini format: {
+  "model": "gemini-3-pro-image-preview",
+  "path": "/v1beta/models/gemini-3-pro-image-preview:generateContent?key=sk-Sog9lW0afH0oQeZ",
+  "imageConfig": {
+    "aspectRatio": "16:9",
+    "imageSize": "4K"
+  },
+  "partsCount": 1
+}
+[2026-03-19T13:37:35.506Z] [Gemini-Image] Submitting: {
+  "model": "gemini-3-pro-image-preview",
+  "provider": "gaorui",
+  "hostname": "gaorui.cc",
+  "native": true,
+  "imageCount": 0,
+  "prompt": "帮我做一个纯欲风的中国女孩。..."
+}
+[2026-03-19T13:38:22.653Z] [Gemini-Image] Response status: 200 data length: 21775749
+[2026-03-19T13:38:22.666Z] [Gemini-Image] Raw response first 1000: {
+  "candidates": [
+    {
+      "content": {
+        "parts": [
+          {
+            "inlineData": {
+              "mimeType": "image/jpeg",
+              "data": "/9j/4AAQSkZJRgABAQEBLAEsAAD/6xeISlAAAQAAAAEAABd+anVtYgAAAB5qdW1kYzJwYQARABCAAACqADibcQNjMnBhAAAAF1hqdW1iAAAAR2p1bWRjMm1hABEAEIAAAKoAOJtxA3VybjpjMnBhOjAyNzE5ODgyLTNiYTQtMDRiMS1hYTIyLTRhOTZjYWQ5ZDMxOQAAABMBanVtYgAAAChqdW1kYzJjcwARABCAAACqADibcQNjMnBhLnNpZ25hdHVyZQAAABLRY2JvctKEWQYrogEmGCGCWQM/MIIDOzCCAsCgAwIBAgIUAJ6vFWKBqUkCFltI/1ipbSSYHs4wCgYIKoZIzj0EAwMwUTELMAkGA1UEBhMCVVMxEzARBgNVBAoMCkdvb2dsZSBMTEMxLTArBgNVBAMMJEdvb2dsZSBDMlBBIE1lZGlhIFNlcnZpY2VzIDFQIElDQSBHMzAeFw0yNjAyMTcxNTE3MTJaFw0yNzAyMTIxNTE3MTFaMGsxCzAJBgNVBAYTAlVTMRMwEQYDVQQKEwpHb29nbGUgTExDMRwwGgYDVQQLExNHb29nbGUgU3lzdGVtIDYwMDMyMSkwJwYDVQQDEyBHb29nbGUgTWVkaWEgUHJvY2Vzc2luZyBTZXJ2aWNlczBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABLBjir7O78duFgwA85LMipPVJpwNGfPRe9uLhP2QbYYvWYLwkqIuwXGpMdIYJ5OtG6kKVtfi3xS50maSO0eJywCjggFaMIIBVjAOBgNVHQ8BAf8EBAMCBsAwHwYDVR0lBBgwFgYIKwYBBQUHA
+[2026-03-19T13:38:22.684Z] [Gemini-Image] Native: found inlineData, mime: image/jpeg length: 11237396
+[2026-03-19T13:38:22.685Z] [Gemini-Image] Got base64 data, uploading to OSS...
+[2026-03-19T13:38:27.512Z] [Gemini-Image] Uploaded to OSS: https://media.toryxai.com/images/gemini-gen/1773927502762-a8dfdzqs.jpeg

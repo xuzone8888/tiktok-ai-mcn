@@ -74,15 +74,14 @@ export async function GET(
       );
     }
 
-    // 从 URL 参数获取是否为 Pro 模式和 API 线路
+    // 从 URL 参数获取是否为 Pro 模式
     const searchParams = request.nextUrl.searchParams;
     const isPro = searchParams.get("isPro") === "true";
-    const apiLine = (searchParams.get("apiLine") as "line1" | "line2" | "line3") || "line1";
 
-    console.log("[Sora Status] Querying task:", taskId, "isPro:", isPro, "apiLine:", apiLine);
+    console.log("[Sora Status] Querying task:", taskId, "isPro:", isPro);
 
-    // 查询 Sora2 任务状态
-    const result = await querySora2Result(taskId, isPro, undefined, apiLine);
+    // 查询 Sora2 任务状态 (固定使用 line3)
+    const result = await querySora2Result(taskId, isPro, undefined, "line3");
 
     if (!result.success) {
       console.error("[Sora Status] Query failed:", result.error);
@@ -192,16 +191,6 @@ export async function GET(
     // 对需要鉴权的视频 URL（如望景API的 /content 端点）包装为代理 URL
     // 这样前端无论是 <video src> 播放还是下载都通过代理自动带 auth
     let finalVideoUrl = task.resultUrl;
-    if (finalVideoUrl && apiLine === "line2") {
-      try {
-        const urlObj = new URL(finalVideoUrl);
-        // 望景API 的 /content 端点需要 Bearer Token，浏览器无法直连
-        if (urlObj.hostname === "60.205.120.27" || finalVideoUrl.includes('/v1/videos/')) {
-          const origin = request.nextUrl.origin;
-          finalVideoUrl = `${origin}/api/download-proxy?url=${encodeURIComponent(finalVideoUrl)}&filename=video-${taskId.slice(-8)}.mp4`;
-        }
-      } catch { /* use original URL */ }
-    }
 
     return NextResponse.json({
       success: true,

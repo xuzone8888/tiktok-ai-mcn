@@ -40,7 +40,11 @@ export async function GET(request: NextRequest) {
           is_trending,
           total_rentals,
           total_generations,
-          rating
+          rating,
+          source,
+          reference_sheet_url,
+          reference_status,
+          created_at
         )
       `)
       .eq("user_id", user.id);
@@ -82,7 +86,8 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST: 创建新合约（签约模特）或续约
+// POST: 创建新合约（签约角色）或续约
+// 支持官方角色（积分归平台）和社区角色（积分 100% 归创作者）
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -90,7 +95,7 @@ export async function POST(request: NextRequest) {
 
     if (!model_id || !rental_period) {
       return NextResponse.json(
-        { success: false, error: "请选择模特和租约周期" },
+        { success: false, error: "请选择角色和租约周期" },
         { status: 400 }
       );
     }
@@ -107,7 +112,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 获取模特信息
+    // 获取角色信息
     const { data: model, error: modelError } = await adminSupabase
       .from("ai_models")
       .select("*")
@@ -116,8 +121,20 @@ export async function POST(request: NextRequest) {
 
     if (modelError || !model) {
       return NextResponse.json(
-        { success: false, error: "模特不存在" },
+        { success: false, error: "角色不存在" },
         { status: 404 }
+      );
+    }
+
+    // 判断角色来源
+    const isCommunityCharacter = model.source === "user_created";
+    const creatorId = model.owner_id;
+
+    // 阻止创作者聘用自己的角色（自建角色已永久拥有）
+    if (isCommunityCharacter && creatorId === user.id) {
+      return NextResponse.json(
+        { success: false, error: "无法聘用自己创建的角色，你已永久拥有该角色" },
+        { status: 400 }
       );
     }
 
@@ -141,9 +158,8 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 【独占签约检查】检查该模特是否已被其他用户签约
-    // 只有当用户没有该模特的有效合约时才需要检查
-    if (!existingContract || new Date(existingContract.end_date) <= new Date()) {
+    // 【独占签约检查】仅官方角色需要独占检查，社区角色允许多人聘用
+    if (!isCommunityCharacter && (!existingContract || new Date(existingContract.end_date) <= new Date())) {
       const { data: otherContracts } = await adminSupabase
         .from("contracts")
         .select("id, user_id, end_date")
@@ -157,21 +173,28 @@ export async function POST(request: NextRequest) {
         return NextResponse.json(
           {
             success: false,
-            error: "该模特已被其他用户签约，暂时无法聘用。请等待当前签约到期后再试。"
+            error: "该角色已被其他用户签约，暂时无法聘用。请等待当前签约到期后再试。"
           },
           { status: 400 }
         );
       }
     }
 
-    // 计算价格
-    const prices: Record<string, number> = {
-      daily: model.price_daily || 10,
-      weekly: model.price_weekly || 50,
-      monthly: model.price_monthly || 150,
-      yearly: model.price_yearly || 1200,
-    };
-    const price = prices[rental_period];
+    // 计算价格：社区角色用 publish_price，官方角色用周期定价
+    let price: number;
+    if (isCommunityCharacter) {
+      // 社区角色：统一使用 publish_price，不区分周期
+      price = model.publish_price || 100;
+    } else {
+      // 官方角色：按周期定价
+      const prices: Record<string, number> = {
+        daily: model.price_daily || 10,
+        weekly: model.price_weekly || 50,
+        monthly: model.price_monthly || 150,
+        yearly: model.price_yearly || 1200,
+      };
+      price = prices[rental_period];
+    }
 
     if (!price) {
       return NextResponse.json(
@@ -206,7 +229,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 扣除积分
+    // 扣除聊用者积分
     const { error: deductError } = await adminSupabase
       .from("profiles")
       .update({ credits: profile.credits - price })
@@ -217,6 +240,29 @@ export async function POST(request: NextRequest) {
         { success: false, error: "扣除积分失败" },
         { status: 500 }
       );
+    }
+
+    // 社区角色积分分成：100% 归创作者
+    if (isCommunityCharacter && creatorId && creatorId !== user.id) {
+      const { data: creatorProfile } = await adminSupabase
+        .from("profiles")
+        .select("credits")
+        .eq("id", creatorId)
+        .single();
+
+      if (creatorProfile) {
+        const { error: revenueError } = await adminSupabase
+          .from("profiles")
+          .update({ credits: creatorProfile.credits + price })
+          .eq("id", creatorId);
+
+        if (revenueError) {
+          console.error("[Contracts API] Revenue transfer failed:", revenueError);
+          // 不中断流程，合约已建立，收益转账可后续补充
+        } else {
+          console.log(`[Contracts API] Revenue transferred: ${price} credits to creator ${creatorId}`);
+        }
+      }
     }
 
     // 计算结束日期

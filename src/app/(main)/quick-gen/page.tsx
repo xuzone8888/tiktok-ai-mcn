@@ -74,6 +74,7 @@ import {
   useQuickGenProcessedGridImages,
   useQuickGenSelectedGridIndex,
 } from "@/stores/quick-gen-store";
+import { useDownloadStore } from "@/stores/download-store";
 
 // ============================================================================
 // 类型定义 - 从共享模块导入
@@ -87,17 +88,21 @@ import {
   type VideoAspectRatio,
   type ImageAspectRatio,
   type ImageResolution,
+  type ImageModel,
   type AiCastMode,
   type CanvasState,
   type DisplayModel,
   type NanoTier,
   VIDEO_MODEL_PRICING,
+  IMAGE_MODEL_CONFIG,
   IMAGE_ASPECT_OPTIONS,
   IMAGE_RESOLUTION_OPTIONS,
   calculateVideoCost,
   calculateImageCost,
   calculateEnhancementCost,
 } from "@/types/generation";
+import { CharacterPicker } from "@/components/character-picker";
+import { useApiHealth } from "@/hooks/use-api-health";
 
 // 本地类型 (仅用于此页面)
 type BatchCount = 1 | 2;
@@ -132,12 +137,22 @@ export default function QuickGeneratorPage() {
   // ================================================================
   // Image Mode: Settings
   // ================================================================
-  const [imageNanoTier, setImageNanoTier] = useState<NanoTier>("fast");
+  const [imageNanoTier, setImageNanoTier] = useState<NanoTier>("fast");  // @deprecated 保留兼容
+  const [imageModel, setImageModel] = useState<ImageModel>("gemini-1k");  // 默认 1K 快速
+  const apiHealth = useApiHealth();
   const [imageAspectRatio, setImageAspectRatio] = useState<ImageAspectRatio>("auto");
   const [imageResolution, setImageResolution] = useState<ImageResolution>("1k");
 
   // Image Mode: 多图上传 (最多4张)
   const [imageUploadedFiles, setImageUploadedFiles] = useState<Array<{ url: string; name: string }>>([]);
+
+  // Image Mode: 角色引用
+  const [imageCharacterId, setImageCharacterId] = useState<string | null>(null);
+  const [imageCharacterData, setImageCharacterData] = useState<{
+    name: string;
+    refUrl: string;       // reference_sheet_url
+    description?: string;
+  } | null>(null);
 
   // ================================================================
   // Video Mode: Step 2 - Content Configuration
@@ -225,10 +240,10 @@ export default function QuickGeneratorPage() {
     return calculateVideoCost(videoModel);
   }, [videoModel]);
 
-  // Image Mode: Generate Image Cost (基于 tier)
+  // Image Mode: Generate Image Cost (基于新模型)
   const generateImageCost = useMemo(() => {
-    return calculateImageCost(imageNanoTier, imageResolution, imageNanoTier === "pro");
-  }, [imageNanoTier, imageResolution]);
+    return calculateImageCost(imageModel);
+  }, [imageModel]);
 
   // 当前总费用
   const totalCost = useMemo(() => {
@@ -973,38 +988,12 @@ export default function QuickGeneratorPage() {
     setFullscreenPreview({ open: false, url: "", type: "image" });
   }, []);
 
-  // 下载内容
-  const handleDownloadContent = useCallback(async (url: string, type: "video" | "image") => {
-    try {
-      const filename = `quick-gen-${Date.now()}.${type === "video" ? "mp4" : "jpg"}`;
-      
-      // 使用下载代理（避免 CORS 跨域限制）
-      const params = new URLSearchParams({ url, filename });
-      const proxyUrl = `/api/download-proxy?${params}`;
-      const response = await fetch(proxyUrl);
-      
-      if (response.ok) {
-        const blob = await response.blob();
-        const blobUrl = URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        link.href = blobUrl;
-        link.download = filename;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(blobUrl);
-        toast({ title: "✅ 下载成功" });
-      } else {
-        // 代理失败时直接在新标签页打开
-        window.open(url, "_blank");
-        toast({ title: "⚠️ 代理下载失败，已在新窗口打开" });
-      }
-    } catch {
-      // 出错时直接在新标签页打开
-      window.open(url, "_blank");
-      toast({ variant: "destructive", title: "下载失败，已在新窗口打开" });
-    }
-  }, [toast]);
+  // 下载内容（统一下载管理器）
+  const handleDownloadContent = useCallback((url: string, type: "video" | "image") => {
+    const { download } = useDownloadStore.getState();
+    const filename = `quick-gen-${Date.now()}.${type === "video" ? "mp4" : "png"}`;
+    download(url, filename, type);
+  }, []);
 
   // 删除内容（重置状态）
   const handleDeleteContent = useCallback(() => {
@@ -1201,15 +1190,27 @@ export default function QuickGeneratorPage() {
           }
         }
 
+        // 如果选了角色且有参考图，加入到 sourceImageUrls
+        if (imageCharacterData?.refUrl) {
+          sourceImageUrls.push(imageCharacterData.refUrl);
+          console.log("[Quick Gen] Character reference image added:", imageCharacterData.refUrl.substring(0, 60));
+        }
+
+        // 构建最终 prompt：注入角色描述
+        let finalPrompt = prompt.trim() || "高质量产品照片，专业灯光，干净背景";
+        if (imageCharacterData?.description && imageCharacterData?.refUrl) {
+          finalPrompt = `Featuring ${imageCharacterData.description}, ${finalPrompt}`;
+        }
+
         // 创建后台任务 - 由 BackgroundTaskManager 执行
-        const model = imageNanoTier === "pro" ? "nano-banana-pro" : "nano-banana";
+        // 新版：使用 imageModel (gemini-1k/2k/4k)
 
         createImageTask({
-          prompt: prompt.trim() || "高质量产品照片，专业灯光，干净背景",
-          model: model as "nano-banana" | "nano-banana-pro",
-          tier: imageNanoTier,
+          prompt: finalPrompt,
+          model: imageModel,
+          tier: imageModel.replace("gemini-", "") as "1k" | "2k" | "4k",
           aspectRatio: imageAspectRatio,
-          resolution: imageNanoTier === "pro" ? imageResolution : "1k",
+          resolution: imageModel.replace("gemini-", "") as "1k" | "2k" | "4k",
           sourceImageUrls,
           creditCost: totalCost,
         });
@@ -1547,23 +1548,68 @@ export default function QuickGeneratorPage() {
         {/* ======================================== */}
         {outputMode === "image" && (
           <Card className="border-border/50 bg-card/50">
-            <CardHeader className="pb-3">
+            <CardHeader className="pb-4 pt-3 px-4">
               <CardTitle className="text-sm flex items-center gap-2">
                 <Sparkles className="h-4 w-4 text-mermaid-pink" />
                 图片生成设置
               </CardTitle>
-              <CardDescription className="text-xs">使用 Nano Banana AI 生成/增强图片 (最多支持 4 张参考图)</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              {/* 多图上传区域 - 最多4张 */}
+            <CardContent className="space-y-6 px-4 pb-4">
+              {/* 引用角色 — 薄行按钮 */}
               <div>
-                <Label className="text-xs text-muted-foreground mb-2 block flex items-center gap-1.5">
+                <Label className="text-xs text-muted-foreground mb-1.5 block flex items-center gap-1.5">
+                  <User className="h-3.5 w-3.5 text-mermaid-pink" />
+                  <span className="font-medium">引用角色</span>
+                  <span className="text-muted-foreground ml-1">(可选)</span>
+                </Label>
+                {imageCharacterData ? (
+                  <div className="flex items-center gap-2 p-1.5 rounded-lg bg-mermaid-pink/10 border border-mermaid-pink/20">
+                    <div className="h-7 w-7 rounded-md overflow-hidden bg-white/10 flex-shrink-0">
+                      {imageCharacterData.refUrl ? (
+                        <img src={imageCharacterData.refUrl} alt={imageCharacterData.name} className="h-full w-full object-cover" />
+                      ) : (
+                        <div className="h-full w-full flex items-center justify-center">
+                          <User className="h-3.5 w-3.5 text-mermaid-pink" />
+                        </div>
+                      )}
+                    </div>
+                    <span className="text-xs font-medium text-white truncate flex-1">{imageCharacterData.name}</span>
+                    <button
+                      onClick={() => { setImageCharacterId(null); setImageCharacterData(null); }}
+                      className="h-5 w-5 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors flex-shrink-0"
+                    >
+                      <X className="h-3 w-3 text-white/60" />
+                    </button>
+                  </div>
+                ) : (
+                  <CharacterPicker
+                    variant="compact"
+                    selectedId={imageCharacterId}
+                    onSelect={(character) => {
+                      if (!character) {
+                        setImageCharacterId(null);
+                        setImageCharacterData(null);
+                        return;
+                      }
+                      setImageCharacterId(character.id);
+                      setImageCharacterData({
+                        name: character.name,
+                        refUrl: character.reference_sheet_url || "",
+                        description: character.description || undefined,
+                      });
+                    }}
+                  />
+                )}
+              </div>
+
+              {/* 参考图片 — 完整 4 列 */}
+              <div>
+                <Label className="text-xs text-muted-foreground mb-1.5 block flex items-center gap-1.5">
                   <FileImage className="h-3.5 w-3.5 text-purple-400" />
                   <span className="font-medium">参考图片</span>
                   <span className="text-muted-foreground ml-1">(可选，最多4张)</span>
                 </Label>
                 <div className="grid grid-cols-4 gap-2">
-                  {/* 已上传的图片 */}
                   {imageUploadedFiles.map((file, index) => (
                     <div key={index} className="relative aspect-square rounded-lg overflow-hidden thumb-surface group">
                       <img src={file.url} alt={file.name} className="w-full h-full object-cover" />
@@ -1572,7 +1618,6 @@ export default function QuickGeneratorPage() {
                           URL.revokeObjectURL(file.url);
                           setImageUploadedFiles(prev => {
                             const updated = prev.filter((_, i) => i !== index);
-                            // 如果删除后没有图片了，重置 canvas 状态
                             if (updated.length === 0) {
                               setCanvasState("empty");
                             }
@@ -1588,7 +1633,6 @@ export default function QuickGeneratorPage() {
                       </div>
                     </div>
                   ))}
-                  {/* 添加更多图片按钮 */}
                   {imageUploadedFiles.length < 4 && (
                     <label className="dropzone aspect-square flex flex-col items-center justify-center gap-1">
                       <input
@@ -1607,13 +1651,12 @@ export default function QuickGeneratorPage() {
 
                           setImageUploadedFiles(prev => {
                             const updated = [...prev, ...newFiles];
-                            // 上传图片后设置预览状态
                             if (updated.length > 0) {
                               setCanvasState("preview");
                             }
                             return updated;
                           });
-                          e.target.value = ""; // Reset input
+                          e.target.value = "";
                         }}
                         className="hidden"
                       />
@@ -1624,27 +1667,23 @@ export default function QuickGeneratorPage() {
                     </label>
                   )}
                 </div>
-                {imageUploadedFiles.length > 0 && (
-                  <p className="text-xs text-muted-foreground mt-1.5">
-                    已上传 {imageUploadedFiles.length}/4 张图片
-                  </p>
-                )}
               </div>
 
-              {/* 【修复2】Prompt Input for Image Mode - Prominent */}
+              {/* 提示词 Prompt — autoFocus */}
               <div>
-                <Label className="text-xs text-muted-foreground mb-2 block flex items-center gap-1.5">
+                <Label className="text-xs text-muted-foreground mb-1.5 block flex items-center gap-1.5">
                   <Wand2 className="h-3.5 w-3.5 text-amber-400" />
                   <span className="font-medium">提示词 Prompt</span>
                   <span className="text-muted-foreground ml-1">(推荐)</span>
                 </Label>
                 <div className="relative">
                   <Textarea
+                    autoFocus
                     value={prompt}
                     onChange={(e) => setPrompt(e.target.value)}
                     placeholder="描述你想要生成的图片效果... (例如：'摄影棚灯光、白色背景、产品摄影')"
                     disabled={canvasState === "generating"}
-                    className="bg-[#0B0C10]/40 border-white/10 focus:border-mermaid-cyan/50 text-white placeholder:text-white/30 resize-none text-sm pr-16 min-h-[180px] rounded-xl"
+                    className="bg-[#0B0C10]/40 border-white/10 focus:border-mermaid-cyan/50 text-white placeholder:text-white/30 resize-none text-sm pr-16 min-h-[150px] rounded-xl"
                   />
                   <Button size="sm" variant="ghost" onClick={handleEnhancePrompt}
                     disabled={isEnhancingPrompt || !prompt.trim()}
@@ -1655,59 +1694,53 @@ export default function QuickGeneratorPage() {
                 </div>
               </div>
 
-              {/* Quality Tier Selection */}
+              {/* 画质等级 — 横向 3 列 */}
               <div>
-                <Label className="text-xs text-muted-foreground mb-2 block">画质等级</Label>
-                <div className="flex gap-2">
-                  <Button variant="outline" size="sm" onClick={() => setImageNanoTier("fast")}
-                    className={cn("flex-1 h-10 flex-col gap-0.5", imageNanoTier === "fast" ? "bg-transparent border-mermaid-cyan text-mermaid-cyan ring-1 ring-mermaid-cyan/50" : "btn-subtle")}>
-                    <span className="font-semibold">Fast</span>
-                    <span className="text-xs opacity-70">10 Credits</span>
-                  </Button>
-                  <Button variant="outline" size="sm" onClick={() => setImageNanoTier("pro")}
-                    className={cn("flex-1 h-10 flex-col gap-0.5", imageNanoTier === "pro" ? "bg-transparent border-mermaid-pink text-mermaid-pink ring-1 ring-mermaid-pink/50" : "btn-subtle")}>
-                    <span className="font-semibold">Pro</span>
-                    <span className="text-xs opacity-70">28 Credits</span>
-                  </Button>
+                <Label className="text-xs text-muted-foreground mb-1.5 block">画质等级</Label>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {(Object.entries(IMAGE_MODEL_CONFIG) as [ImageModel, typeof IMAGE_MODEL_CONFIG[ImageModel]][]).map(([key, config]) => {
+                    const healthStatus = apiHealth.getModelStatus(key);
+                    return (
+                    <Button key={key} variant="outline" size="sm" onClick={() => setImageModel(key)}
+                      className={cn("h-8 text-xs px-2", imageModel === key ? "bg-mermaid-pink/20 border-mermaid-pink/50 text-mermaid-pink" : "btn-subtle",
+                        healthStatus === "offline" && "opacity-50"
+                      )}>
+                      <span className="flex flex-col items-center leading-tight">
+                        <span className="font-medium flex items-center gap-1">
+                          <span className={cn("h-1.5 w-1.5 rounded-full flex-shrink-0",
+                            healthStatus === "online" ? "bg-emerald-400" :
+                            healthStatus === "degraded" ? "bg-amber-400" :
+                            healthStatus === "offline" ? "bg-red-400" : "bg-white/20"
+                          )} />
+                          {config.label}
+                        </span>
+                        <span className="text-[10px] opacity-70">{config.credits} pts</span>
+                      </span>
+                    </Button>
+                    );
+                  })}
                 </div>
               </div>
 
-              {/* Aspect Ratio */}
-              <div>
-                <Label className="text-xs text-muted-foreground mb-2 block">画面比例</Label>
-                <Select value={imageAspectRatio} onValueChange={(v) => setImageAspectRatio(v as ImageAspectRatio)}>
-                  <SelectTrigger className="bg-[#0B0C10]/40 border-white/10 focus:border-mermaid-cyan/50 text-white h-9 rounded-lg">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="bg-popover/95 border-border/50 backdrop-blur-xl">
-                    {IMAGE_ASPECT_OPTIONS.map((opt) => (
-                      <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Resolution (仅 Pro 模式显示) */}
-              {imageNanoTier === "pro" && (
-                <div>
-                  <Label className="text-xs text-muted-foreground mb-2 block">Resolution</Label>
-                  <Select value={imageResolution} onValueChange={(v) => setImageResolution(v as ImageResolution)}>
-                    <SelectTrigger className="bg-[#0B0C10]/40 border-white/10 focus:border-mermaid-cyan/50 text-white h-9 rounded-lg">
+              {/* 画面比例 + 自动下载 — 同行 */}
+              <div className="flex items-center gap-3">
+                <div className="flex-1">
+                  <Label className="text-xs text-muted-foreground mb-1.5 block">画面比例</Label>
+                  <Select value={imageAspectRatio} onValueChange={(v) => setImageAspectRatio(v as ImageAspectRatio)}>
+                    <SelectTrigger className="bg-[#0B0C10]/40 border-white/10 focus:border-mermaid-cyan/50 text-white h-8 rounded-lg text-xs">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent className="bg-popover/95 border-border/50 backdrop-blur-xl">
-                      {IMAGE_RESOLUTION_OPTIONS.map((opt) => (
+                      {IMAGE_ASPECT_OPTIONS.map((opt) => (
                         <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
-              )}
-
-              {/* Auto Download */}
-              <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-white/5">
-                <Label className="text-xs flex items-center gap-1.5"><Download className="h-3.5 w-3.5 text-mermaid-cyan" />自动下载</Label>
-                <Switch checked={autoDownload} onCheckedChange={setAutoDownload} className="data-[state=checked]:bg-mermaid-cyan scale-90" />
+                <div className="flex items-center gap-2 pt-5">
+                  <Label className="text-xs flex items-center gap-1 text-muted-foreground whitespace-nowrap"><Download className="h-3 w-3 text-mermaid-cyan" />自动下载</Label>
+                  <Switch checked={autoDownload} onCheckedChange={setAutoDownload} className="data-[state=checked]:bg-mermaid-cyan scale-90" />
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -2010,13 +2043,35 @@ export default function QuickGeneratorPage() {
           <div className="absolute inset-0 flex flex-col items-center justify-center p-8">
             {/* 点击可全屏预览 */}
             <div
-              className="relative max-w-full max-h-[65%] cursor-pointer group"
+              className="relative cursor-pointer group"
+              style={{
+                maxWidth: outputMode === "image" && (imageAspectRatio === "9:16" || imageAspectRatio === "3:4" || imageAspectRatio === "2:3")
+                  ? "40%" : "90%",
+                maxHeight: "70vh",
+              }}
               onClick={() => handleOpenFullscreen(resultUrl, outputMode)}
             >
               {outputMode === "video" ? (
-                <video src={resultUrl} controls autoPlay loop className="max-w-full max-h-[450px] rounded-xl group-hover:ring-2 group-hover:ring-mermaid-cyan/50 transition-all" />
+                <video src={resultUrl} controls autoPlay loop className="w-full h-full max-h-[70vh] rounded-xl group-hover:ring-2 group-hover:ring-mermaid-cyan/50 transition-all" />
               ) : (
-                <img src={resultUrl} alt="Generated" className="max-w-full max-h-[450px] object-contain rounded-xl group-hover:ring-2 group-hover:ring-mermaid-cyan/50 transition-all" />
+                <img
+                  src={resultUrl}
+                  alt="Generated"
+                  className="w-full h-full max-h-[70vh] object-contain rounded-xl group-hover:ring-2 group-hover:ring-mermaid-cyan/50 transition-all animate-in fade-in duration-500"
+                />
+              )}
+              {/* 分辨率 Badge */}
+              {outputMode === "image" && (
+                <div className="absolute top-3 left-3 flex gap-1.5">
+                  <span className="bg-black/70 backdrop-blur-sm px-2.5 py-1 rounded-full text-xs font-bold text-mermaid-cyan border border-mermaid-cyan/30">
+                    {imageModel === "gemini-1k" ? "1K" : imageModel === "gemini-2k" ? "2K" : "4K"}
+                  </span>
+                  {imageAspectRatio && imageAspectRatio !== "auto" && (
+                    <span className="bg-black/70 backdrop-blur-sm px-2.5 py-1 rounded-full text-xs font-medium text-white/70">
+                      {imageAspectRatio}
+                    </span>
+                  )}
+                </div>
               )}
               <div className="absolute top-3 right-3 bg-black/70 px-3 py-1.5 rounded-full text-xs font-medium opacity-0 group-hover:opacity-100 transition-opacity">
                 🔍 点击全屏查看
@@ -2076,18 +2131,21 @@ export default function QuickGeneratorPage() {
           </DialogHeader>
 
           <Tabs value={tempSelectedMode} onValueChange={(v) => setTempSelectedMode(v as AiCastMode)} className="mt-4">
-            <TabsList className="grid w-full grid-cols-3 bg-black/30 h-10">
+            <TabsList className="grid w-full grid-cols-4 bg-black/30 h-10">
               <TabsTrigger value="auto" className="data-[state=active]:bg-mermaid-cyan/20 data-[state=active]:text-mermaid-cyan">
-                <Bot className="h-4 w-4 mr-2" />Auto Match
+                <Bot className="h-4 w-4 mr-1" />Auto
               </TabsTrigger>
               <TabsTrigger value="team" className="data-[state=active]:bg-mermaid-pink/20 data-[state=active]:text-mermaid-pink">
-                <Users className="h-4 w-4 mr-2" />My Team
+                <Users className="h-4 w-4 mr-1" />Team
                 {myTeamModels.length > 0 && (
-                  <span className="ml-1.5 text-xs bg-mermaid-pink/30 px-1.5 py-0.5 rounded-full">{myTeamModels.length}</span>
+                  <span className="ml-1 text-xs bg-mermaid-pink/30 px-1.5 py-0.5 rounded-full">{myTeamModels.length}</span>
                 )}
               </TabsTrigger>
+              <TabsTrigger value="character" className="data-[state=active]:bg-blue-500/20 data-[state=active]:text-blue-400">
+                <Sparkles className="h-4 w-4 mr-1" />我的角色
+              </TabsTrigger>
               <TabsTrigger value="all" className="data-[state=active]:bg-purple-500/20 data-[state=active]:text-purple-400">
-                <Sparkles className="h-4 w-4 mr-2" />All Models
+                <Sparkles className="h-4 w-4 mr-1" />All
               </TabsTrigger>
             </TabsList>
 
@@ -2299,6 +2357,24 @@ export default function QuickGeneratorPage() {
                   </p>
                 </div>
               )}
+            </TabsContent>
+
+            {/* 我的角色 Tab */}
+            <TabsContent value="character" className="mt-4">
+              <CharacterPicker
+                variant="inline"
+                selectedId={tempSelectedModelId}
+                onSelect={(ch) => {
+                  if (ch) {
+                    setTempSelectedModelId(ch.id);
+                  } else {
+                    setTempSelectedModelId(null);
+                  }
+                }}
+                maxHeight="360px"
+                title="我的角色"
+                placeholder="搜索角色名称..."
+              />
             </TabsContent>
           </Tabs>
 

@@ -23,6 +23,7 @@ import {
   Play
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useDownloadStore } from "@/stores/download-store";
 import type { Product } from "@/types/product";
 
 interface ProductDetailSheetProps {
@@ -65,13 +66,20 @@ export function ProductDetailSheet({
   };
 
   const handleDownload = (url: string, index: number) => {
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `${product.name}-${index + 1}.jpg`;
-    link.target = "_blank";
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    const { download } = useDownloadStore.getState();
+    download(url, `${product.name}-${index + 1}.png`, "image");
+  };
+
+  const handleDownloadAll = () => {
+    const imgs = product.processed_images?.grid_images;
+    if (!imgs?.length) return;
+    const { batchDownload } = useDownloadStore.getState();
+    const items = imgs.map((url: string, i: number) => ({
+      url,
+      filename: `${product.name}-${i + 1}.png`,
+      type: "image" as const,
+    }));
+    batchDownload(items);
   };
 
   return (
@@ -262,7 +270,7 @@ export function ProductDetailSheet({
                 <Sparkles className="mr-2 h-4 w-4" />
                 使用此产品创作
               </Button>
-              <Button variant="outline" className="border-border/50 hover:bg-white/5">
+              <Button variant="outline" className="border-border/50 hover:bg-white/5" onClick={handleDownloadAll}>
                 <Download className="mr-2 h-4 w-4" />
                 下载全部
               </Button>

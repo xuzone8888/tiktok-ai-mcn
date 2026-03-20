@@ -6,39 +6,6 @@
 // 基础类型
 // ============================================================================
 
-// ============================================================================
-// API 线路配置
-// ============================================================================
-
-/** API 线路类型 */
-export type ApiLineType = "line1" | "line2" | "line3";
-
-/** API 线路配置详情 */
-export interface ApiLineConfig {
-  id: ApiLineType;
-  name: string;
-  description: string;
-}
-
-/** 可用的 API 线路 */
-export const API_LINES: Record<ApiLineType, ApiLineConfig> = {
-  line1: {
-    id: "line1",
-    name: "默认线路",
-    description: "速创 API"
-  },
-  line2: {
-    id: "line2",
-    name: "备用线路",
-    description: "望景API sora-2 (10/15秒)"
-  },
-  line3: {
-    id: "line3",
-    name: "备用线路2",
-    description: "无印科技 sora2-new (10/15秒, ¥0.5/次)"
-  },
-} as const;
-
 /** 视频任务状态 */
 export type VideoBatchTaskStatus =
   | "pending"           // 待处理
@@ -59,7 +26,7 @@ export type VideoDuration = 8 | 10 | 15 | 25;
 export type VideoQuality = "standard" | "hd";
 
 /** 视频模型类型 */
-export type VideoModelType = "sora2" | "sora2-pro" | "veo3" | "veo3-quality";
+export type VideoModelType = "sora2" | "sora2-pro" | "veo3-fast" | "veo3-std" | "veo3-4k";
 
 /** 流水线步骤 */
 export type PipelineStep = 0 | 1 | 2 | 3 | 4;
@@ -81,8 +48,8 @@ export function getAvailableDurations(modelType: VideoModelType, quality: VideoQ
       return [15]; // 高清只有 15 秒
     }
     return [25]; // Pro 标清只有 25 秒
-  } else if (modelType === "veo3" || modelType === "veo3-quality") {
-    return [8]; // VEO3 固定 8 秒
+  } else if (modelType === "veo3-fast" || modelType === "veo3-std" || modelType === "veo3-4k") {
+    return [8]; // VEO3 全系固定 8 秒
   }
   return [15]; // 默认
 }
@@ -90,13 +57,13 @@ export function getAvailableDurations(modelType: VideoModelType, quality: VideoQ
 /** 获取可用的质量选项 */
 export function getAvailableQualities(modelType: VideoModelType): VideoQuality[] {
   if (modelType === "sora2") {
-    return ["standard"]; // 标清版只有标清
+    return ["standard"];
   } else if (modelType === "sora2-pro") {
-    return ["standard", "hd"]; // Pro 版有标清和高清
-  } else if (modelType === "veo3") {
-    return ["standard"]; // VEO3 快速版
-  } else if (modelType === "veo3-quality") {
-    return ["hd"]; // VEO3 高清版
+    return ["standard", "hd"];
+  } else if (modelType === "veo3-fast" || modelType === "veo3-std") {
+    return ["standard"];
+  } else if (modelType === "veo3-4k") {
+    return ["hd"];
   }
   return ["standard"];
 }
@@ -138,15 +105,17 @@ export interface VideoBatchTask {
   customPrompt?: string;      // 用户输入的提示词
   referenceImageUrl?: string; // 可选的参考图片
 
-  // AI 模特配置（任务创建时保存）
+  // AI 模特配置（任务创建时保存, Sora2 用）
   useAiModel?: boolean;       // 是否使用 AI 模特
   aiModelId?: string;         // AI 模特 ID（不暴露给用户）
   aiModelName?: string;       // AI 模特显示名称（用户可见）
+  // Veo3 自建角色配置（任务创建时保存）
+  characterRefUrl?: string;   // 自建角色参考图 URL
 
   modelType: VideoModelType;
   duration: VideoDuration;
   quality: VideoQuality;
-  apiLine?: ApiLineType;          // 任务创建时使用的 API 线路
+  // apiLine 已移除 (2026-03-20), Sora 固定走 line3
 
   // 豆包 AI 生成结果
   doubaoTalkingScript: string | null;   // 步骤1: 口播脚本 (C01-C07)
@@ -179,14 +148,17 @@ export interface VideoBatchGlobalSettings {
   quality: VideoQuality;
   language: "en" | "zh";
   autoStart: boolean;
-  // AI 模特配置
+  // AI 模特配置 (Sora2 签约模特)
   useAiModel: boolean;
   aiModelId: string | null;
   aiModelName: string | null;        // 显示名称（用户可见）
   aiModelTriggerWord: string | null; // 触发词（后台使用，不暴露给用户）
   aiModelCover: string | null;       // AI 模特封面图URL
-  // API 线路配置
-  apiLine: ApiLineType;              // API 线路选择
+  // Veo3 自建角色配置
+  characterId: string | null;        // 自建角色 ID
+  characterName: string | null;      // 自建角色名称
+  characterRefUrl: string | null;    // 自建角色参考图 URL
+  // API 线路已移除 (2026-03-20), Sora 固定走 line3
 }
 
 // ============================================================================
@@ -283,9 +255,10 @@ export const VIDEO_BATCH_PRICING = {
   // Sora2 Pro
   sora2Pro_15s_hd: 350, // 15秒 高清 = 350积分
   sora2Pro_25s: 350,    // 25秒 标清 = 350积分
-  // VEO3 (固定 8 秒)
-  veo3_fast: 30,        // VEO3 快速版 = 30积分
-  veo3_quality: 80,     // VEO3 高清版 = 80积分
+  // VEO3 (高瑞 gaorui, 固定 8 秒)
+  veo3_fast: 30,        // VEO3 快速版 = 30积分 (纯提示词)
+  veo3_std: 50,         // VEO3 标准版 = 50积分 (≤3张参考图)
+  veo3_4k: 80,          // VEO3 4K超清 = 80积分 (≤2张参考图)
 };
 
 /** 获取视频生成总价 */
@@ -294,29 +267,17 @@ export function getVideoBatchTotalPrice(
   duration: VideoDuration,
   quality: VideoQuality
 ): number {
-  // 标准款：10秒/15秒 = 20积分
   if (modelType === "sora2") {
     if (duration === 10) return VIDEO_BATCH_PRICING.sora2_10s;
     if (duration === 15) return VIDEO_BATCH_PRICING.sora2_15s;
   }
-
-  // PRO 款
   if (modelType === "sora2-pro") {
-    // PRO 高清款 15秒 = 350积分
     if (quality === "hd" && duration === 15) return VIDEO_BATCH_PRICING.sora2Pro_15s_hd;
-    // PRO 款 25秒 = 350积分
     if (duration === 25) return VIDEO_BATCH_PRICING.sora2Pro_25s;
   }
-
-  // VEO3 快速版
-  if (modelType === "veo3") {
-    return VIDEO_BATCH_PRICING.veo3_fast;
-  }
-
-  // VEO3 高清版
-  if (modelType === "veo3-quality") {
-    return VIDEO_BATCH_PRICING.veo3_quality;
-  }
+  if (modelType === "veo3-fast") return VIDEO_BATCH_PRICING.veo3_fast;
+  if (modelType === "veo3-std") return VIDEO_BATCH_PRICING.veo3_std;
+  if (modelType === "veo3-4k") return VIDEO_BATCH_PRICING.veo3_4k;
 
   return VIDEO_BATCH_PRICING.sora2_15s; // 默认
 }

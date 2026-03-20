@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JCUI 2.0 - 高定角色展示 (Genshin Reveal Concept)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: #050508;
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      overflow: hidden; /* 防止全屏滚动 */
+      color: #fff;
+    }
+
+    /* 全屏主角层 */
+    .hero-bg-container {
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      overflow: hidden;
+      background: #050508;
+    }
+
+    .hero-bg-image {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: center 20%;
+      /* 进场动效参数 */
+      animation: hero-reveal-scale 1.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+
+    /* 压暗遮罩：左侧留给人物主体，右下区域加深给控制台留出干净背景 */
+    .hero-vignette {
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(circle at 30% 40%, transparent 20%, rgba(5, 5, 8, 0.8) 120%),
+                  linear-gradient(to left, rgba(5, 5, 8, 0.9) 0%, rgba(5, 5, 8, 0) 60%),
+                  linear-gradient(to top, rgba(5, 5, 8, 0.8) 0%, rgba(5, 5, 8, 0) 30%);
+      pointer-events: none;
+      opacity: 0;
+      animation: hero-reveal-opacity 1s ease-out 0.2s forwards;
+    }
+
+    @keyframes hero-reveal-scale {
+      0% { transform: scale(1.08); filter: brightness(0.5); }
+      100% { transform: scale(1); filter: brightness(1); }
+    }
+
+    @keyframes hero-reveal-opacity {
+      0% { opacity: 0; }
+      100% { opacity: 1; }
+    }
+
+    /* 返回按钮 */
+    .btn-back {
+      position: absolute;
+      top: 2rem;
+      left: 2rem;
+      z-index: 50;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.6rem 1.2rem;
+      border-radius: 2rem;
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: rgba(255, 255, 255, 0.8);
+      font-size: 0.85rem;
+      cursor: pointer;
+      transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+    .btn-back:hover {
+      background: rgba(255, 255, 255, 0.1);
+      border-color: rgba(0, 242, 234, 0.3);
+      color: #00F2EA;
+      transform: translateX(-4px);
+    }
+
+    /* 右侧控制台 - Air Glass */
+    .air-glass-console {
+      position: absolute;
+      right: 4%;
+      top: 50%;
+      transform: translateY(-50%) translateX(40px);
+      width: 440px;
+      z-index: 20;
+      
+      background: rgba(20, 20, 25, 0.5);
+      backdrop-filter: blur(40px);
+      -webkit-backdrop-filter: blur(40px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 24px;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.8),
+                  0 0 40px rgba(0, 242, 234, 0.05);
+      
+      padding: 2.5rem;
+      opacity: 0;
+      animation: console-reveal 1s cubic-bezier(0.16, 1, 0.3, 1) 0.3s forwards;
+    }
+
+    @keyframes console-reveal {
+      0% { opacity: 0; transform: translateY(-50%) translateX(40px); }
+      100% { opacity: 1; transform: translateY(-50%) translateX(0); }
+    }
+
+    /* 表单组件 */
+    .console-section {
+      margin-bottom: 2rem;
+    }
+
+    .console-label {
+      display: block;
+      font-size: 0.8rem;
+      color: rgba(255, 255, 255, 0.6);
+      margin-bottom: 0.75rem;
+      letter-spacing: 0.05em;
+    }
+
+    .mer-input {
+      width: 100%;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 12px;
+      padding: 0.8rem 1rem;
+      color: #fff;
+      font-size: 0.95rem;
+      transition: all 0.3s ease;
+      outline: none;
+    }
+    .mer-input:focus {
+      border-color: rgba(0, 242, 234, 0.4);
+      background: rgba(0, 242, 234, 0.02);
+      box-shadow: 0 0 0 2px rgba(0, 242, 234, 0.1);
+    }
+    .mer-input::placeholder {
+      color: rgba(255, 255, 255, 0.2);
+    }
+
+    /* 并排的胶囊组 */
+    .pill-group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+    .mer-pill {
+      padding: 0.4rem 1rem;
+      border-radius: 2rem;
+      font-size: 0.8rem;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: rgba(255, 255, 255, 0.7);
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+    .mer-pill.active {
+      background: rgba(255, 255, 255, 0.95);
+      color: #050508;
+      border-color: transparent;
+      font-weight: 500;
+      box-shadow: 0 4px 15px rgba(255, 255, 255, 0.2);
+    }
+    .mer-pill:hover:not(.active) {
+      background: rgba(255, 255, 255, 0.1);
+      border-color: rgba(204, 255, 0, 0.5); /* Mermaid Lime Hover */
+      color: #CCFF00;
+    }
+
+    /* 按钮系统 */
+    .btn-save {
+      width: 100%;
+      padding: 0.9rem;
+      border-radius: 14px;
+      font-weight: 600;
+      font-size: 0.95rem;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      background: rgba(255, 255, 255, 0.05);
+      color: #fff;
+      cursor: pointer;
+      transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+    .btn-save:hover {
+      background: rgba(255, 255, 255, 0.1);
+      border-color: rgba(255, 255, 255, 0.3);
+      transform: scale(1.02);
+    }
+
+    .btn-activate {
+      width: 100%;
+      padding: 0.9rem;
+      border-radius: 14px;
+      font-weight: 600;
+      font-size: 0.95rem;
+      background: linear-gradient(90deg, #00F2EA, #CCFF00, #EC4899);
+      color: #050508;
+      border: none;
+      cursor: pointer;
+      position: relative;
+      overflow: hidden;
+      margin-top: 1rem;
+      transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      box-shadow: 0 8px 25px rgba(204, 255, 0, 0.15), 0 0 15px rgba(236, 72, 153, 0.2);
+    }
+    .btn-activate:hover {
+      transform: scale(1.02);
+      box-shadow: 0 12px 35px rgba(204, 255, 0, 0.3), 0 0 25px rgba(236, 72, 153, 0.4);
+    }
+    .btn-activate::after {
+      content: '';
+      position: absolute;
+      top: 0; left: -100%;
+      width: 50%; height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.6), transparent);
+      transform: skewX(-20deg);
+      transition: 0.5s;
+    }
+    .btn-activate:hover::after {
+      left: 150%;
+      transition: 0.8s;
+    }
+
+    /* 极细分割线 */
+    .divider {
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
+      margin: 2rem 0;
+      position: relative;
+    }
+    .divider-text {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: #15151A; /* 匹配面板大致颜色，防止文字重叠混乱，或者留空 */
+      padding: 0 0.8rem;
+      font-size: 0.75rem;
+      color: rgba(255, 255, 255, 0.4);
+      border-radius: 1rem;
+      /* 这里为了好处理背景色的混合，我们用小圆角包裹 */
+      background: rgba(20, 20, 25, 0.8);
+      backdrop-filter: blur(10px);
+    }
+    
+    /* 辅助文本 */
+    .helper-text {
+      font-size: 0.75rem;
+      color: rgba(255, 255, 255, 0.4);
+      text-align: center;
+      margin-top: 0.8rem;
+    }
+
+    /* 顶部装饰发光点 */
+    .console-glow-dot {
+      position: absolute;
+      top: -150px;
+      right: -100px;
+      width: 300px;
+      height: 300px;
+      background: radial-gradient(circle, rgba(0, 242, 234, 0.15) 0%, transparent 70%);
+      pointer-events: none;
+      border-radius: 50%;
+    }
+
+  </style>
+</head>
+<body>
+
+  <!-- 返回按钮 -->
+  <button class="btn-back">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+    重新配置
+  </button>
+
+  <!-- 全屏沉浸背景 (使用高质量人像占位) -->
+  <div class="hero-bg-container">
+    <!-- 使用一张唯美且具有质感的角色图片作为示例，致敬用户的精美猫猫 -->
+    <img src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=1964&auto=format&fit=crop" class="hero-bg-image" alt="Hero Background">
+    <div class="hero-vignette"></div>
+  </div>
+
+  <!-- 悬浮主操作面板 (Air Glass) -->
+  <div class="air-glass-console">
+    <div class="console-glow-dot"></div>
+    
+    <div class="console-section">
+      <label class="console-label">角色名称 <span class="text-[#00F2EA]">*</span></label>
+      <input type="text" class="mer-input" placeholder="请输入角色名称" value="赛琳娜" />
+    </div>
+
+    <div class="console-section" style="margin-bottom: 1.5rem;">
+      <label class="console-label">核心风格序列</label>
+      <div class="pill-group">
+        <div class="mer-pill">国风未来</div>
+        <div class="mer-pill">空灵</div>
+        <div class="mer-pill">极光元素</div>
+        <div class="mer-pill">+ 注入新序列</div>
+      </div>
+    </div>
+
+    <button class="btn-save">
+      <span style="opacity: 0.7; margin-right: 6px;">💾</span> 保存当前角色
+    </button>
+    <div class="helper-text">保存后可在角色库中随时调用</div>
+
+    <div class="divider">
+      <div class="divider-text">生成视频 (可选)</div>
+    </div>
+
+    <div class="console-section" style="margin-top: 2rem;">
+      <label class="console-label">预设动作库</label>
+      <div class="pill-group" style="margin-bottom: 1rem;">
+        <div class="mer-pill active">走路</div>
+        <div class="mer-pill">打招呼</div>
+        <div class="mer-pill">转身</div>
+        <div class="mer-pill">自定义</div>
+      </div>
+    </div>
+
+    <button class="btn-activate">
+      ▶ 生成动态视频 (消耗 10 积分)
+    </button>
+    <div class="helper-text">将自动生成一段 8 秒的展示视频</div>
+
+  </div>
+
+</body>
+</html>

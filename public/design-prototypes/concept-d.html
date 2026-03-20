@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Concept D: The Creative Stack</title>
+    <style>
+        body { margin: 0; padding: 0; background: #0a0a0f; height: 100vh; display: flex; align-items: center; justify-content: center; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, sans-serif; color: white; flex-direction: column;}
+        
+        .ambient-light { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; background: radial-gradient(circle at 50% 30%, rgba(0, 242, 234, 0.04), transparent 60%); }
+
+        .stack-container { position: relative; width: 160px; height: 160px; perspective: 1000px; margin-bottom: 40px; transform-style: preserve-3d; }
+        
+        .layer { position: absolute; inset: 0; background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 24px; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); transform: rotateX(60deg) rotateZ(45deg); box-shadow: 0 10px 30px rgba(0,0,0,0.5); /* Mermaid iris top borders */ }
+        
+        .l1 { transform: rotateX(60deg) rotateZ(45deg) translateZ(0px); border-top: 1px solid rgba(0,242,234,0.4); animation: float1 4s ease-in-out infinite alternate; }
+        .l2 { transform: rotateX(60deg) rotateZ(45deg) translateZ(40px); background: rgba(204,255,0,0.02); border-top: 1px solid rgba(204,255,0,0.4); animation: float2 4s ease-in-out infinite alternate; animation-delay: 0.5s; width: 80%; height: 80%; left: 10%; top: 10%; }
+        .l3 { transform: rotateX(60deg) rotateZ(45deg) translateZ(80px); background: rgba(236,72,153,0.02); border-top: 1px solid rgba(236,72,153,0.4); animation: float3 4s ease-in-out infinite alternate; animation-delay: 1s; width: 60%; height: 60%; left: 20%; top: 20%; }
+
+        @keyframes float1 { from { transform: rotateX(60deg) rotateZ(45deg) translateZ(-5px); } to { transform: rotateX(60deg) rotateZ(45deg) translateZ(5px); } }
+        @keyframes float2 { from { transform: rotateX(60deg) rotateZ(45deg) translateZ(35px); } to { transform: rotateX(60deg) rotateZ(45deg) translateZ(45px); } }
+        @keyframes float3 { from { transform: rotateX(60deg) rotateZ(45deg) translateZ(75px); } to { transform: rotateX(60deg) rotateZ(45deg) translateZ(85px); } }
+
+        .text-container { text-align: center; z-index: 10; width: 300px; }
+        .title { font-size: 1.1rem; font-weight: 500; letter-spacing: 0.02em; margin-bottom: 8px; color: #f8fafc; }
+        .subtitle { font-size: 0.85rem; color: #94a3b8; font-weight: 400; letter-spacing: 0.01em; animation: fadeText 3s infinite; }
+        
+        @keyframes fadeText { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+
+        .progress-line-bg { width: 200px; height: 2px; background: rgba(255,255,255,0.05); margin: 20px auto 0; border-radius: 2px; overflow: hidden; position: relative; }
+        .progress-line-fill { position: absolute; left: 0; top: 0; height: 100%; width: 30%; background: linear-gradient(90deg, #00F2EA, #CCFF00, #EC4899); border-radius: 2px; box-shadow: 0 0 10px rgba(0,242,234,0.3); animation: progress 10s ease-in-out forwards; }
+        
+        @keyframes progress { from { width: 10%; } to { width: 85%; } }
+    </style>
+</head>
+<body>
+    <div class="ambient-light"></div>
+
+    <div class="stack-container">
+        <div class="layer l1"></div>
+        <div class="layer l2"></div>
+        <div class="layer l3"></div>
+    </div>
+
+    <div class="text-container">
+        <div class="title">Synthesizing Character Context</div>
+        <div class="subtitle" id="status-text">Processing visual traits...</div>
+        <div class="progress-line-bg">
+            <div class="progress-line-fill"></div>
+        </div>
+    </div>
+
+    <script>
+        const statuses = ["Processing visual traits...", "Structuring character skeleton...", "Applying cinematic lighting...", "Refining ultra-high-res output..."];
+        let count = 0;
+        setInterval(() => {
+            count = (count + 1) % statuses.length;
+            document.getElementById('status-text').innerText = statuses[count];
+        }, 2500);
+    </script>
+</body>
+</html>

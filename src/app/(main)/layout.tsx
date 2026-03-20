@@ -1,5 +1,6 @@
 import { Sidebar, Header } from "@/components/layout";
 import { BackgroundTaskManager } from "@/components/background-task-manager";
+import { DownloadWidget } from "@/components/download-widget";
 
 export default function MainLayout({
   children,
@@ -25,6 +26,8 @@ export default function MainLayout({
       </div>
       {/* 后台任务管理器 - 处理视频/图片批量任务 */}
       <BackgroundTaskManager />
+      {/* 全局下载管理器浮窗 */}
+      <DownloadWidget />
     </div>
   );
 }

@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Concept C: Cyber-Vision HUD</title>
+    <style>
+        body { margin: 0; padding: 0; background: #000; height: 100vh; display: flex; align-items: center; justify-content: center; overflow: hidden; color: #00F2EA; font-family: monospace; }
+        
+        .scanline { position: absolute; inset: 0; background: linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,0) 50%, rgba(0,0,0,0.2) 50%, rgba(0,0,0,0.2)); background-size: 100% 4px; z-index: 50; pointer-events: none; }
+        .vignette { position: absolute; inset: 0; background: radial-gradient(circle, transparent 50%, #000 120%); z-index: 40; pointer-events: none; }
+
+        .hud-container { position: relative; width: 300px; height: 300px; display: flex; align-items: center; justify-content: center; }
+        
+        .ring { position: absolute; border-radius: 50%; box-sizing: border-box; }
+        .r1 { width: 100%; height: 100%; border: 1px solid rgba(0,242,234,0.2); border-top: 2px solid #00F2EA; animation: spin 4s linear infinite; }
+        .r2 { width: 80%; height: 80%; border: 1px dashed rgba(204,255,0,0.4); animation: spin-reverse 8s linear infinite; }
+        .r3 { width: 60%; height: 60%; border: 4px dotted rgba(236,72,153,0.3); animation: spin 12s linear infinite; }
+        .crosshair { position: absolute; width: 100%; height: 100%; }
+        .crosshair::before, .crosshair::after { content: ''; position: absolute; background: rgba(0,242,234,0.5); }
+        .crosshair::before { width: 100%; height: 1px; top: 50%; left: 0; }
+        .crosshair::after { width: 1px; height: 100%; left: 50%; top: 0; }
+
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+        @keyframes spin-reverse { 100% { transform: rotate(-360deg); } }
+
+        .data-panel { position: absolute; bottom: 15%; text-align: center; width: 100%; }
+        .glitch-text { font-size: 1.2rem; font-weight: bold; letter-spacing: 0.2em; text-shadow: 0 0 5px #00F2EA; }
+        .sub-data { font-size: 0.7rem; color: rgba(204,255,0,0.7); margin-top: 10px; }
+        
+        /* Simulating energy bars on the side */
+        .bar-container { position: absolute; right: 10%; height: 200px; width: 10px; display: flex; flex-direction: column; justify-content: flex-end; gap: 2px; }
+        .bar { width: 100%; background: #00F2EA; opacity: 0.2; }
+        .bar.active { opacity: 0.8; box-shadow: 0 0 10px #00F2EA; }
+    </style>
+</head>
+<body>
+    <div class="scanline"></div>
+    <div class="vignette"></div>
+
+    <div class="hud-container">
+        <div class="ring r1"></div>
+        <div class="ring r2"></div>
+        <div class="ring r3"></div>
+        <div class="crosshair"></div>
+    </div>
+
+    <div class="data-panel">
+        <div class="glitch-text" id="glitch">0xAEF92B...</div>
+        <div class="sub-data">SYS.RENDERING_CORE_ONLINE // 82%</div>
+    </div>
+
+    <div class="bar-container">
+        <!-- Static simulation of equalizer -->
+        <div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar active"></div>
+        <div class="bar active"></div><div class="bar active"></div><div class="bar active"></div><div class="bar active"></div>
+        <div class="bar active"></div><div class="bar active"></div>
+    </div>
+
+    <script>
+        const texts = ["0x8F32C1...", "DECODING...", "NEURAL_LINK", "精美立绘渲染中_"];
+        let i = 0;
+        setInterval(() => {
+            document.getElementById('glitch').innerText = texts[i];
+            i = (i + 1) % texts.length;
+        }, 800);
+    </script>
+</body>
+</html>

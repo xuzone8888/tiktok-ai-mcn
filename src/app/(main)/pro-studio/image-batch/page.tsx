@@ -77,23 +77,29 @@ import {
   Info,
   Save,
   LayoutTemplate,
+  User,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import Link from "next/link";
 
 // 线路检测组件
 import { SpeedTestDialog } from "@/components/speed-test-dialog";
-import { getCachedSpeedTestResults, getBestRouteId } from "@/lib/download-manager";
+// 下载管理（测速功能暂停，后期重做）
+// import { getCachedSpeedTestResults, getBestRouteId } from "@/lib/download-manager";
 
 // Types
 import {
   type ImageProcessAction,
-  NANO_FAST_ASPECT_OPTIONS,
-  NANO_PRO_ASPECT_OPTIONS,
-  IMAGE_RESOLUTION_OPTIONS,
-  NANO_FAST_ACTION_PRICING,
-  NANO_PRO_ACTION_PRICING,
+  type ImageModel,
+  GEMINI_ASPECT_OPTIONS,
+  GEMINI_ACTION_PRICING,
+  GEMINI_IMAGE_PRICING,
+  IMAGE_MODEL_CONFIG,
 } from "@/types/generation";
+import { useApiHealth } from "@/hooks/use-api-health";
+
+// Download Store
+import { useDownloadStore } from "@/stores/download-store";
 
 // Store
 import {
@@ -116,6 +122,8 @@ import {
 import {
   type ImageBatchTask,
 } from "@/types/generation";
+
+import { CharacterPicker } from "@/components/character-picker";
 
 // Templates
 import { SaveTemplateDialog } from "@/components/studio/SaveTemplateDialog";
@@ -195,11 +203,8 @@ function TaskCard({
   };
 
   const getActionLabel = () => {
-    const { model, action } = task.config;
-    if (model === "nano-banana") {
-      return NANO_FAST_ACTION_PRICING[action]?.label || action;
-    }
-    return NANO_PRO_ACTION_PRICING[action as "generate" | "nine_grid"]?.label || action;
+    const { action } = task.config;
+    return GEMINI_ACTION_PRICING[action]?.label || action;
   };
 
   return (
@@ -316,8 +321,8 @@ function TaskCard({
 
         {/* 任务配置信息 - Neon Chips */}
         <div className="flex flex-wrap gap-1.5">
-          <Badge variant="outline" className={cn("text-[10px] h-5 px-1.5 border-white/5 bg-white/5 font-normal", task.config.model === 'nano-banana' ? 'text-mermaid-cyan' : 'text-mermaid-pink')}>
-            {task.config.model === "nano-banana" ? "TURBO" : "PRO"}
+          <Badge variant="outline" className={cn("text-[10px] h-5 px-1.5 border-white/5 bg-white/5 font-normal", task.config.model === 'gemini-4k' ? 'text-mermaid-pink' : task.config.model === 'gemini-2k' ? 'text-amber-400' : 'text-mermaid-cyan')}>
+            {task.config.model === "gemini-4k" ? "4K" : task.config.model === "gemini-2k" ? "2K" : "1K"}
           </Badge>
           <Badge variant="outline" className="text-[10px] h-5 px-1.5 border-white/5 text-white/50 bg-white/5 font-normal">
             {getActionLabel()}
@@ -376,32 +381,10 @@ function TaskCard({
                       size="icon"
                       variant="ghost"
                       className="h-7 w-7 text-white/40 hover:text-emerald-400 hover:bg-emerald-400/10 transition-colors rounded-lg"
-                      onClick={async (e) => {
+                      onClick={(e) => {
                         e.stopPropagation();
                         const filename = (task.config.sourceImageName?.replace(/\.[^.]+$/, '') || 'image') + '-result.png';
-                        try {
-                          const params = new URLSearchParams({
-                            url: task.resultUrl!,
-                            filename,
-                          });
-                          const proxyUrl = `/api/download-proxy?${params}`;
-                          const response = await fetch(proxyUrl);
-                          if (response.ok) {
-                            const blob = await response.blob();
-                            const blobUrl = URL.createObjectURL(blob);
-                            const link = document.createElement('a');
-                            link.href = blobUrl;
-                            link.download = filename;
-                            document.body.appendChild(link);
-                            link.click();
-                            document.body.removeChild(link);
-                            URL.revokeObjectURL(blobUrl);
-                          } else {
-                            window.open(task.resultUrl, '_blank');
-                          }
-                        } catch {
-                          window.open(task.resultUrl, '_blank');
-                        }
+                        useDownloadStore.getState().download(task.resultUrl!, filename, "image");
                       }}
                     >
                       <Download className="h-3.5 w-3.5" />
@@ -494,22 +477,14 @@ export default function ImageBatchPage() {
   // Local State
   const [userId, setUserId] = useState<string | null>(null);
   const [userCredits, setUserCredits] = useState(0);
+  const apiHealth = useApiHealth();
   const [previewTask, setPreviewTask] = useState<ImageBatchTask | null>(null);
 
   // 启动任务弹窗状态
   const [showStartDialog, setShowStartDialog] = useState(false);
 
-  // 批量下载状态
-  const [isDownloading, setIsDownloading] = useState(false);
+  // 批量下载由 useDownloadStore 统一管理，已移除旧 state
   const [showSpeedTest, setShowSpeedTest] = useState(false);
-  const [downloadProgress, setDownloadProgress] = useState({
-    show: false,
-    total: 0,
-    current: 0,
-    success: 0,
-    failed: 0,
-    currentFilename: "",
-  });
 
   // Template State
   const [showCreateDialog, setShowCreateDialog] = useState(false);
@@ -784,7 +759,7 @@ export default function ImageBatchPage() {
             signal: controller.signal,
             body: JSON.stringify({
               mode: task.config.action,
-              model: task.config.model,
+              imageModel: task.config.model,  // Gemini 路由参数
               sourceImageUrl: imageUrlForApi,
               aspectRatio: task.config.aspectRatio,
               resolution: task.config.resolution,
@@ -998,21 +973,12 @@ export default function ImageBatchPage() {
 
   // 获取可用的 action 列表
   const getAvailableActions = () => {
-    if (globalSettings.model === "nano-banana") {
-      return Object.entries(NANO_FAST_ACTION_PRICING).map(([key, value]) => ({
-        value: key as ImageProcessAction,
-        label: value.label,
-        description: value.description,
-        credits: value.credits,
-      }));
-    } else {
-      return Object.entries(NANO_PRO_ACTION_PRICING).map(([key, value]) => ({
-        value: key as ImageProcessAction,
-        label: value.label,
-        description: value.description,
-        credits: value.credits,
-      }));
-    }
+    return Object.entries(GEMINI_ACTION_PRICING).map(([key, value]) => ({
+      value: key as ImageProcessAction,
+      label: value.label,
+      description: value.description,
+      credits: GEMINI_IMAGE_PRICING[globalSettings.model] || 10,
+    }));
   };
 
   return (
@@ -1079,20 +1045,15 @@ export default function ImageBatchPage() {
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <button
-                          disabled={isDownloading}
                           className="h-8 px-3 rounded-lg text-xs font-medium text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 hover:bg-emerald-500/20 transition-all flex items-center gap-1.5"
                         >
-                          {isDownloading ? (
-                            <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                          ) : (
-                            <Download className="h-3 w-3 mr-1" />
-                          )}
+                          <Download className="h-3 w-3 mr-1" />
                           下载 ({tasks.filter(t => selectedTaskIds[t.id] && t.status === "completed" && t.resultUrl).length})
                         </button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="start" className="bg-[#16181D]/95 backdrop-blur-xl border-white/10">
                         <DropdownMenuItem
-                          onClick={async () => {
+                          onClick={() => {
                             const completedSelectedTasks = tasks.filter(
                               t => selectedTaskIds[t.id] && t.status === "completed" && t.resultUrl
                             );
@@ -1101,92 +1062,14 @@ export default function ImageBatchPage() {
                               return;
                             }
 
-                            // 获取最佳线路
-                            const cachedResults = getCachedSpeedTestResults();
-                            const bestRoute = getBestRouteId(cachedResults);
-
-                            setIsDownloading(true);
-                            setDownloadProgress({
-                              show: true,
-                              total: completedSelectedTasks.length,
-                              current: 0,
-                              success: 0,
-                              failed: 0,
-                              currentFilename: "准备中...",
-                            });
-
-                            let successCount = 0;
-                            let failedCount = 0;
-
-                            // 逐个通过代理下载
-                            for (let i = 0; i < completedSelectedTasks.length; i++) {
-                              const task = completedSelectedTasks[i];
+                            // 使用统一下载管理器逐个下载
+                            const { download } = useDownloadStore.getState();
+                            completedSelectedTasks.forEach((task, i) => {
                               if (task.resultUrl) {
                                 const filename = `图片-${i + 1}.png`;
-                                setDownloadProgress(prev => ({
-                                  ...prev,
-                                  currentFilename: filename,
-                                }));
-
-                                try {
-                                  // 构建代理URL
-                                  const params = new URLSearchParams({
-                                    url: task.resultUrl,
-                                    filename,
-                                    ...(bestRoute && { route: bestRoute }),
-                                  });
-                                  const proxyUrl = `/api/download-proxy?${params}`;
-                                  const response = await fetch(proxyUrl);
-
-                                  if (response.ok) {
-                                    const blob = await response.blob();
-                                    const blobUrl = URL.createObjectURL(blob);
-                                    const link = document.createElement("a");
-                                    link.href = blobUrl;
-                                    link.download = filename;
-                                    document.body.appendChild(link);
-                                    link.click();
-                                    document.body.removeChild(link);
-                                    URL.revokeObjectURL(blobUrl);
-                                    successCount++;
-                                  } else {
-                                    // 代理失败，尝试直接下载
-                                    const link = document.createElement("a");
-                                    link.href = task.resultUrl;
-                                    link.download = filename;
-                                    link.target = "_blank";
-                                    document.body.appendChild(link);
-                                    link.click();
-                                    document.body.removeChild(link);
-                                    successCount++;
-                                  }
-                                } catch (err) {
-                                  console.error("Download failed:", err);
-                                  failedCount++;
-                                }
-
-                                setDownloadProgress(prev => ({
-                                  ...prev,
-                                  current: i + 1,
-                                  success: successCount,
-                                  failed: failedCount,
-                                }));
-
-                                // 间隔 600ms 避免浏览器阻止
-                                await new Promise(r => setTimeout(r, 600));
+                                download(task.resultUrl, filename, "image");
                               }
-                            }
-
-                            setIsDownloading(false);
-                            toast({
-                              title: `✅ 下载完成`,
-                              description: `成功 ${successCount} 张${failedCount > 0 ? `，失败 ${failedCount} 张` : ""}`,
                             });
-
-                            // 3秒后关闭进度弹窗
-                            setTimeout(() => {
-                              setDownloadProgress(prev => ({ ...prev, show: false }));
-                            }, 3000);
                           }}
                           className="flex items-center gap-2 cursor-pointer text-white/80 hover:text-white focus:text-white"
                         >
@@ -1536,31 +1419,9 @@ export default function ImageBatchPage() {
               {previewTask?.status === "completed" && previewTask.resultUrl && (
                 <Button
                   variant="white-glow"
-                  onClick={async () => {
+                  onClick={() => {
                     const filename = (previewTask.config.sourceImageName?.replace(/\.[^.]+$/, '') || 'image') + '-result.png';
-                    try {
-                      const params = new URLSearchParams({
-                        url: previewTask.resultUrl!,
-                        filename,
-                      });
-                      const proxyUrl = `/api/download-proxy?${params}`;
-                      const response = await fetch(proxyUrl);
-                      if (response.ok) {
-                        const blob = await response.blob();
-                        const blobUrl = URL.createObjectURL(blob);
-                        const link = document.createElement('a');
-                        link.href = blobUrl;
-                        link.download = filename;
-                        document.body.appendChild(link);
-                        link.click();
-                        document.body.removeChild(link);
-                        URL.revokeObjectURL(blobUrl);
-                      } else {
-                        window.open(previewTask.resultUrl, '_blank');
-                      }
-                    } catch {
-                      window.open(previewTask.resultUrl, '_blank');
-                    }
+                    useDownloadStore.getState().download(previewTask.resultUrl!, filename, "image");
                   }}
                 >
                   <Download className="h-4 w-4 mr-2" />
@@ -1712,7 +1573,7 @@ export default function ImageBatchPage() {
                 <div className="flex flex-wrap items-center gap-3">
                   <div className="px-3 py-1.5 rounded-full bg-purple-500/10 text-purple-400 border border-purple-500/20 text-xs font-medium flex items-center gap-2">
                     <Film className="h-3.5 w-3.5" />
-                    {globalSettings.model === "nano-banana" ? "快速模式" : "专业模式"}
+                    {IMAGE_MODEL_CONFIG[globalSettings.model]?.label || globalSettings.model}
                   </div>
                   <div className="px-3 py-1.5 rounded-full bg-mermaid-cyan/10 text-mermaid-cyan border border-mermaid-cyan/20 text-xs font-medium flex items-center gap-2">
                     <Wand2 className="h-3.5 w-3.5" />
@@ -1722,12 +1583,6 @@ export default function ImageBatchPage() {
                     <Square className="h-3.5 w-3.5" />
                     {globalSettings.aspectRatio}
                   </div>
-                  {globalSettings.model === "nano-banana-pro" && (
-                    <div className="px-3 py-1.5 rounded-full bg-mermaid-pink/10 text-mermaid-pink border border-mermaid-pink/20 text-xs font-medium flex items-center gap-2">
-                      <Monitor className="h-3.5 w-3.5" />
-                      {globalSettings.resolution?.toUpperCase()}
-                    </div>
-                  )}
                   <div className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs font-bold font-mono">
                     <Zap className="h-3.5 w-3.5" />
                     {getImageTaskCost({
@@ -1888,47 +1743,16 @@ export default function ImageBatchPage() {
         <SpeedTestDialog
           open={showSpeedTest}
           onClose={() => setShowSpeedTest(false)}
-          onComplete={(results) => {
-            const bestRoute = getBestRouteId(results);
-            if (bestRoute) {
-              toast({
-                title: "✅ 线路检测完成",
-                description: `推荐使用 ${results.find(r => r.routeId === bestRoute)?.routeId || bestRoute} 线路`,
-              });
-            }
+          onComplete={() => {
+            toast({
+              title: "✅ 线路检测完成",
+              description: "线路检测功能后期重做",
+            });
           }}
         />
 
-        {/* 批量下载进度弹窗 */}
-        <Dialog open={downloadProgress.show} onOpenChange={(open) => !open && setDownloadProgress(prev => ({ ...prev, show: false }))}>
-          <DialogContent className="max-w-md bg-black/95 border-white/10">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                {downloadProgress.current >= downloadProgress.total ? (
-                  <CheckCircle2 className="h-5 w-5 text-emerald-500" />
-                ) : (
-                  <Download className="h-5 w-5 text-tiktok-cyan animate-pulse" />
-                )}
-                {downloadProgress.current >= downloadProgress.total ? "下载完成" : "批量下载中"}
-              </DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4 py-4">
-              <Progress
-                value={(downloadProgress.current / downloadProgress.total) * 100}
-                className="h-3"
-              />
-              <div className="flex justify-between text-sm text-muted-foreground">
-                <span>进度: {downloadProgress.current} / {downloadProgress.total}</span>
-                <span>成功: {downloadProgress.success} / 失败: {downloadProgress.failed}</span>
-              </div>
-              {downloadProgress.currentFilename && (
-                <div className="text-xs text-muted-foreground truncate">
-                  当前: {downloadProgress.currentFilename}
-                </div>
-              )}
-            </div>
-          </DialogContent>
-        </Dialog>
+
+        {/* 批量下载进度由 DownloadFloatingWidget 统一显示 */}
 
         {/* ============================================ */}
         {/* 创建任务对话框 - Mermaid Edition */}
@@ -1966,30 +1790,34 @@ export default function ImageBatchPage() {
                     模型引擎
                   </Label>
                   <div className="flex items-center p-1 rounded-full bg-[#050505]/60 border border-white/5">
-                    <button
-                      onClick={() => updateGlobalSettings("model", "nano-banana")}
-                      className={cn(
-                        "px-4 py-2 rounded-full text-xs font-bold transition-all flex items-center gap-2",
-                        globalSettings.model === "nano-banana"
-                          ? "bg-white/10 text-white border border-white/10"
-                          : "text-white/40 hover:text-white hover:bg-white/5"
-                      )}
-                    >
-                      <Zap className={cn("h-3.5 w-3.5", globalSettings.model === "nano-banana" ? "text-mermaid-cyan" : "text-white/40")} />
-                      快速版
-                    </button>
-                    <button
-                      onClick={() => updateGlobalSettings("model", "nano-banana-pro")}
-                      className={cn(
-                        "px-4 py-2 rounded-full text-xs font-bold transition-all flex items-center gap-2",
-                        globalSettings.model === "nano-banana-pro"
-                          ? "bg-white/10 text-white border border-white/10"
-                          : "text-white/40 hover:text-white hover:bg-white/5"
-                      )}
-                    >
-                      <Sparkles className={cn("h-3.5 w-3.5", globalSettings.model === "nano-banana-pro" ? "text-mermaid-pink" : "text-white/40")} />
-                      专业版
-                    </button>
+                    {([
+                      { model: "gemini-1k" as ImageModel, icon: <Zap className="h-3.5 w-3.5" />, color: "text-mermaid-cyan" },
+                      { model: "gemini-2k" as ImageModel, icon: <Sparkles className="h-3.5 w-3.5" />, color: "text-amber-400" },
+                      { model: "gemini-4k" as ImageModel, icon: <Monitor className="h-3.5 w-3.5" />, color: "text-mermaid-pink" },
+                    ] as const).map(({ model, icon, color }) => {
+                      const healthStatus = apiHealth.getModelStatus(model);
+                      return (
+                      <button
+                        key={model}
+                        onClick={() => updateGlobalSettings("model", model)}
+                        className={cn(
+                          "px-4 py-2 rounded-full text-xs font-bold transition-all flex items-center gap-2",
+                          globalSettings.model === model
+                            ? "bg-white/10 text-white border border-white/10"
+                            : "text-white/40 hover:text-white hover:bg-white/5",
+                          healthStatus === "offline" && "opacity-50"
+                        )}
+                      >
+                        <span className={cn("h-1.5 w-1.5 rounded-full flex-shrink-0",
+                          healthStatus === "online" ? "bg-emerald-400" :
+                          healthStatus === "degraded" ? "bg-amber-400" :
+                          healthStatus === "offline" ? "bg-red-400" : "bg-white/20"
+                        )} />
+                        <span className={cn(globalSettings.model === model ? color : "text-white/40")}>{icon}</span>
+                        {IMAGE_MODEL_CONFIG[model]?.label}
+                      </button>
+                      );
+                    })}
                   </div>
                 </div>
 
@@ -2032,7 +1860,7 @@ export default function ImageBatchPage() {
                     尺寸比例
                   </Label>
                   <div className="flex gap-1.5">
-                    {(globalSettings.model === "nano-banana" ? NANO_FAST_ASPECT_OPTIONS : NANO_PRO_ASPECT_OPTIONS).slice(0, 4).map((opt) => (
+                    {GEMINI_ASPECT_OPTIONS.slice(0, 4).map((opt) => (
                       <button
                         key={opt.value}
                         onClick={() => updateGlobalSettings("aspectRatio", opt.value)}
@@ -2049,36 +1877,34 @@ export default function ImageBatchPage() {
                     ))}
                   </div>
                 </div>
-
-                {/* Pro 模式分辨率 */}
-                {globalSettings.model === "nano-banana-pro" && (
-                  <>
-                    <div className="h-10 w-px bg-white/5" />
-                    <div className="space-y-2">
-                      <Label className="text-[10px] uppercase tracking-wider text-white/30 font-bold flex items-center gap-2">
-                        <Monitor className="h-3 w-3" />
-                        画质
-                      </Label>
-                      <div className="flex gap-1.5">
-                        {IMAGE_RESOLUTION_OPTIONS.map((opt) => (
-                          <button
-                            key={opt.value}
-                            onClick={() => updateGlobalSettings("resolution", opt.value)}
-                            className={cn(
-                              "px-3 py-2 rounded-lg text-xs font-bold border transition-all",
-                              globalSettings.resolution === opt.value
-                                ? "bg-mermaid-pink/10 border-mermaid-pink/30 text-mermaid-pink"
-                                : "bg-black/20 border-white/5 text-white/30 hover:border-white/20 hover:text-white"
-                            )}
-                          >
-                            {opt.label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </>
-                )}
               </div>
+
+              {/* 角色引用 */}
+              {globalSettings.action === "generate" && (
+                <div className="space-y-2">
+                  <Label className="text-[10px] uppercase tracking-wider text-white/30 font-bold flex items-center gap-2">
+                    <User className="h-3 w-3" />
+                    引用角色
+                  </Label>
+                  <CharacterPicker
+                    variant="compact"
+                    selectedId={globalSettings.characterId || null}
+                    onSelect={(character) => {
+                      if (!character) {
+                        updateGlobalSettings('characterId', undefined);
+                        updateGlobalSettings('characterName', undefined);
+                        updateGlobalSettings('characterRefUrl', undefined);
+                        updateGlobalSettings('characterDescription', undefined);
+                        return;
+                      }
+                      updateGlobalSettings('characterId', character.id);
+                      updateGlobalSettings('characterName', character.name);
+                      updateGlobalSettings('characterRefUrl', character.reference_sheet_url || '');
+                      updateGlobalSettings('characterDescription', character.description || '');
+                    }}
+                  />
+                </div>
+              )}
 
               {/* 提示词输入区 */}
               {globalSettings.action === "generate" && (
@@ -2273,7 +2099,7 @@ export default function ImageBatchPage() {
         }
         configPreview={
           [
-            { icon: <Film className="h-3.5 w-3.5" />, label: "模型", value: globalSettings.model === "nano-banana-pro" ? "专业版" : "快速版" },
+            { icon: <Film className="h-3.5 w-3.5" />, label: "模型", value: IMAGE_MODEL_CONFIG[globalSettings.model]?.label || globalSettings.model },
             { icon: <Wand2 className="h-3.5 w-3.5" />, label: "处理", value: globalSettings.action === "upscale" ? "高清放大" : globalSettings.action === "generate" ? "AI生成" : "九宫格" },
             { icon: <Square className="h-3.5 w-3.5" />, label: "比例", value: globalSettings.aspectRatio || "自动" },
             { icon: <Monitor className="h-3.5 w-3.5" />, label: "分辨率", value: globalSettings.resolution?.toUpperCase() || "1K" },

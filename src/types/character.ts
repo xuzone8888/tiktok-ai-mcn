@@ -52,12 +52,22 @@ export interface Character {
   description: string;
   avatar_url: string | null;
   reference_images: string[];
+  preview_video_url: string | null;
   character_type: string;
   dna_config: CharacterDna | Record<string, unknown>;
   style_tags: string[];
   gender: string | null;
   age_range: string | null;
-  voice_id: string | null;
+  /** 多角度合成参考图 URL（用于图片/视频生产引用） */
+  reference_sheet_url: string | null;
+  /** 参考图生成状态：none | pending | completed | failed */
+  reference_status: string;
+  /** 参考图异步任务 ID */
+  reference_task_id: string | null;
+  /** 是否已发布到角色资源广场 */
+  is_public: boolean;
+  /** 广场发布价格（积分） */
+  publish_price: number;
   source: "user_created";
   owner_id: string;
   is_active: boolean;
@@ -76,11 +86,18 @@ export interface CreateCharacterRequest {
   description?: string;
   avatar_url: string;
   reference_images: string[];
+  preview_video_url?: string;
   character_type: string;
   dna_config: CharacterDna | Record<string, unknown>;
   style_tags?: string[];
   gender?: string;
   age_range?: string;
+  /** 多角度合成参考图 URL */
+  reference_sheet_url?: string;
+  /** 参考图生成状态 */
+  reference_status?: string;
+  /** 参考图异步任务 ID */
+  reference_task_id?: string;
 }
 
 /** 生成角色图片请求体 */
@@ -88,6 +105,8 @@ export interface GenerateCharacterRequest {
   prompt: string;
   sourceImageUrl?: string;
   userId: string;
+  type?: "hero" | "reference";
+  heroImageUrl?: string;
 }
 
 /** 增强提示词请求体 */

@@ -3,10 +3,15 @@
  * 
  * POST /api/generate/video - 提交视频生成任务
  * GET /api/generate/video?taskId=xxx - 查询任务状态
+ *
+ * 2026-03-19 更新：支持新模型 (Sora2-NEW + VEO3)
  */
 
 import { NextResponse } from "next/server";
 import { submitSora2, querySora2Result } from "@/lib/suchuang-api";
+import { submitVeo3Video, queryVeoResult } from "@/lib/gaorui-veo-api";
+import { VIDEO_MODEL_CONFIG, type VideoModel } from "@/types/generation";
+import { getNewVideoCost } from "@/lib/credits";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 // ============================================================================
@@ -17,20 +22,14 @@ import { createAdminClient } from "@/lib/supabase/admin";
 // - PRO 高清款（15秒 横/竖屏）：320 积分/条
 // ============================================================================
 
-function getVideoCreditCost(duration: number, quality: string): number {
-  // PRO 高清款 15秒
-  if (duration === 15 && quality === "hd") {
-    return 320;
+function getVideoCreditCost(duration: number, quality: string, videoModel?: string): number {
+  // 新模型：从 VIDEO_MODEL_CONFIG 读取积分
+  if (videoModel && VIDEO_MODEL_CONFIG[videoModel]) {
+    return getNewVideoCost(videoModel as VideoModel);
   }
-  // PRO 款 25秒
-  if (duration === 25) {
-    return 320;
-  }
-  // 标准款 10秒/15秒
-  if (duration === 10 || duration === 15) {
-    return 20;
-  }
-  // 默认
+  // 旧模型兼容
+  if (duration === 15 && quality === "hd") return 320;
+  if (duration === 25) return 320;
   return 20;
 }
 
@@ -63,8 +62,10 @@ export async function POST(request: Request) {
       aspectRatio = "9:16",
       quality = "standard",
       apiModel,
+      videoModel,       // 新模型：如 "sora2-new-10s", "veo3-fast" 等
       modelId,
       sourceImageUrl,
+      sourceImageUrls,  // VEO3 多张参考图
       userId,
     } = body;
 
@@ -75,10 +76,10 @@ export async function POST(request: Request) {
       );
     }
 
-    // 验证时长 - 支持 10, 15, 20, 25 秒
-    if (![10, 15, 20, 25].includes(duration)) {
+    // 验证时长 - 支持 8 (VEO3), 10, 15, 20, 25 秒
+    if (![8, 10, 15, 20, 25].includes(duration)) {
       return NextResponse.json(
-        { success: false, error: "Duration must be 10, 15, 20, or 25 seconds" },
+        { success: false, error: "Duration must be 8, 10, 15, 20, or 25 seconds" },
         { status: 400 }
       );
     }
@@ -86,7 +87,7 @@ export async function POST(request: Request) {
     // ============================================
     // 计算费用并扣除积分
     // ============================================
-    const creditCost = getVideoCreditCost(duration, quality);
+    const creditCost = getVideoCreditCost(duration, quality, videoModel);
 
     if (userId) {
       const supabase = createAdminClient();
@@ -150,53 +151,57 @@ export async function POST(request: Request) {
       if (modelId === "auto" && userId) {
         console.log("[Generate Video] Auto mode: selecting random model for user:", userId);
 
-        // 查询用户已签约且未过期的模特
+        // 查询用户已签约且未过期的角色
         const { data: contracts } = await supabase
           .from("contracts")
-          .select("model_id, ai_models!inner(id, name, trigger_word)")
+          .select("model_id, ai_models!inner(id, name, trigger_word, description, reference_sheet_url, source)")
           .eq("user_id", userId)
           .eq("status", "active")
           .gt("end_date", new Date().toISOString());
 
         if (contracts && contracts.length > 0) {
-          // 随机选择一个模特
+          // 随机选择一个角色
           const randomIndex = Math.floor(Math.random() * contracts.length);
           const selectedContract = contracts[randomIndex];
-          const modelData = selectedContract.ai_models as { id: string; name: string; trigger_word: string | null };
+          const modelData = selectedContract.ai_models as any;
 
-          if (modelData?.trigger_word) {
-            triggerWord = modelData.trigger_word;
+          // 兆底逻辑：trigger_word → description → name
+          const characterPrompt = modelData?.trigger_word || modelData?.description || modelData?.name;
+          if (characterPrompt) {
+            triggerWord = characterPrompt;
             actualModelId = modelData.id;
-            finalPrompt = `Professional video featuring ${triggerWord}. ${prompt}`;
-            console.log("[Generate Video] Auto mode - Injected trigger word:", {
+            finalPrompt = `Professional video featuring ${characterPrompt}. ${prompt}`;
+            console.log("[Generate Video] Auto mode - Injected character prompt:", {
               modelName: modelData.name,
-              triggerWord: triggerWord,
+              usedField: modelData.trigger_word ? "trigger_word" : modelData.description ? "description" : "name",
               selectedFromCount: contracts.length,
             });
           } else {
-            console.log("[Generate Video] Auto mode - Selected model has no trigger_word:", modelData?.name);
+            console.log("[Generate Video] Auto mode - Selected model has no prompt data:", modelData?.name);
           }
         } else {
           console.log("[Generate Video] Auto mode - No active contracts found for user");
         }
       } else if (modelId !== "auto") {
-        // 直接使用指定的模特 ID
+        // 直接使用指定的角色 ID
         const { data: model } = await supabase
           .from("ai_models")
-          .select("trigger_word, name")
+          .select("trigger_word, name, description, reference_sheet_url, source")
           .eq("id", modelId)
           .single();
 
-        if (model?.trigger_word) {
-          triggerWord = model.trigger_word;
+        // 兆底逻辑：trigger_word → description → name
+        const characterPrompt = model?.trigger_word || model?.description || model?.name;
+        if (characterPrompt) {
+          triggerWord = characterPrompt;
           actualModelId = modelId;
-          finalPrompt = `Professional video featuring ${triggerWord}. ${prompt}`;
-          console.log("[Generate Video] Injected trigger word:", {
-            modelName: model.name,
-            triggerWord: triggerWord,
+          finalPrompt = `Professional video featuring ${characterPrompt}. ${prompt}`;
+          console.log("[Generate Video] Injected character prompt:", {
+            modelName: model?.name,
+            usedField: model?.trigger_word ? "trigger_word" : model?.description ? "description" : "name",
           });
         } else {
-          console.log("[Generate Video] Model not found or has no trigger_word:", modelId);
+          console.log("[Generate Video] Model not found or has no prompt data:", modelId);
         }
       }
     }
@@ -218,14 +223,39 @@ export async function POST(request: Request) {
       usePro: isPro,
     });
 
-    // 提交到速创 API - 使用新的统一接口
-    const result = await submitSora2({
-      prompt: finalPrompt,
-      duration: duration as 10 | 15 | 25,
-      aspectRatio: aspectRatio as "9:16" | "16:9",
-      url: sourceImageUrl,
-      model: apiModel, // 直接使用传入的 API 模型名
-    });
+    // 根据 videoModel 选择路由
+    const modelConfig = videoModel ? VIDEO_MODEL_CONFIG[videoModel] : null;
+
+    let result: { success: boolean; taskId?: string; videoUrl?: string; error?: string };
+    let responseMode: "sync" | "async" = "async";
+
+    if (modelConfig && modelConfig.provider === "gaorui") {
+      // VEO3 模型→高瑞网关
+      console.log("[Generate Video] Routing to Gaorui VEO3:", videoModel);
+      const veoResult = await submitVeo3Video({
+        prompt: finalPrompt,
+        model: modelConfig.apiModel as any,
+        aspectRatio: aspectRatio as "9:16" | "16:9",
+        imageUrls: sourceImageUrls || (sourceImageUrl ? [sourceImageUrl] : undefined),
+      });
+      responseMode = veoResult.mode;
+      result = {
+        success: veoResult.success,
+        taskId: veoResult.taskId,
+        videoUrl: veoResult.videoUrl,
+        error: veoResult.error,
+      };
+    } else {
+      // Sora2 模型→速创网关（默认）
+      const sora2Duration = modelConfig?.duration || duration;
+      result = await submitSora2({
+        prompt: finalPrompt,
+        duration: sora2Duration as 10 | 15 | 25,
+        aspectRatio: aspectRatio as "9:16" | "16:9",
+        url: sourceImageUrl,
+        model: apiModel,
+      });
+    }
 
     if (!result.success) {
       console.error("[Generate Video] Submit failed:", result.error);
@@ -276,12 +306,14 @@ export async function POST(request: Request) {
           source: "quick_gen",
           prompt: prompt,
           // 将模特信息暂存在 metadata 中，方便日后迁移
-          model: apiModel || `sora2-${duration}s`,
+          model: videoModel || apiModel || `sora2-${duration}s`,
           duration,
           aspect_ratio: aspectRatio,
           quality: quality,
           source_image_url: sourceImageUrl || null,
-          status: "processing",
+          status: responseMode === "sync" && result.videoUrl ? "completed" : "processing",
+          result_url: result.videoUrl || null,
+          video_url: result.videoUrl || null,
           credit_cost: creditCost,
           use_pro: isPro,
           metadata: {
@@ -308,10 +340,12 @@ export async function POST(request: Request) {
     return NextResponse.json({
       success: true,
       data: {
-        taskId: result.taskId,
-        status: "processing",
-        estimatedTime: ESTIMATED_TIME_MAP[duration] || "5-6 minutes",
+        taskId: result.taskId || "sync-" + Date.now(),
+        status: responseMode === "sync" && result.videoUrl ? "completed" : "processing",
+        videoUrl: result.videoUrl || null,
+        estimatedTime: modelConfig?.estimatedTime || ESTIMATED_TIME_MAP[duration] || "5-6 minutes",
         usePro: isPro,
+        responseMode,
       },
     });
   } catch (error) {
@@ -332,6 +366,7 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const taskId = searchParams.get("taskId");
     const usePro = searchParams.get("usePro") === "true";
+    const videoModel = searchParams.get("videoModel");  // 新增：用于路由到不同查询接口
 
     if (!taskId) {
       return NextResponse.json(
@@ -340,9 +375,32 @@ export async function GET(request: Request) {
       );
     }
 
-    console.log("[Generate Video] Querying task:", taskId, { usePro });
+    console.log("[Generate Video] Querying task:", taskId, { usePro, videoModel });
 
-    const result = await querySora2Result(taskId, usePro);
+    // 根据 videoModel 路由查询
+    const modelConfig = videoModel ? VIDEO_MODEL_CONFIG[videoModel] : null;
+
+    let result: { success: boolean; task?: { taskId: string; status: string; resultUrl?: string; errorMessage?: string; createdAt?: string; updatedAt?: string }; error?: string };
+
+    if (modelConfig && modelConfig.provider === "gaorui") {
+      // VEO3 异步查询
+      const veoResult = await queryVeoResult(taskId);
+      const veoTask = veoResult.task;
+      result = {
+        success: veoResult.success,
+        task: veoTask ? {
+          taskId: veoTask.taskId,
+          status: veoTask.status,
+          resultUrl: veoTask.videoUrl,
+          errorMessage: veoTask.errorMessage,
+          createdAt: veoTask.createdAt,
+        } : undefined,
+        error: veoResult.error,
+      };
+    } else {
+      // Sora2 查询（默认）
+      result = await querySora2Result(taskId, usePro);
+    }
 
     if (!result.success) {
       return NextResponse.json(

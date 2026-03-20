@@ -1,10 +1,17 @@
 /**
- * 角色图片生成 API
+ * 角色图片生成 API — V4 后台孵化版
  *
- * POST /api/characters/generate — 提交角色多角度参考图生成任务
- * GET  /api/characters/generate?taskId=xxx — 查询生成任务状态
+ * POST /api/characters/generate
+ *   type="hero"(默认): 提交 Hero Shot（扣 20 积分），返回 heroTaskId + refPrompt
+ *   type="reference":   提交多角度参考图（不扣积分，用 heroImageUrl 做参考），返回 referenceTaskId
  *
- * 复用 suchuang-api.ts 的 submitNanoBanana() + queryNanoBananaResult()
+ * GET  /api/characters/generate?taskId=xxx — 查询任意任务状态（通用）
+ *
+ * V4 变更:
+ * - Hero 阶段一次扣 20 积分
+ * - 多角度由前端 Hero 完成后自动提交（传入 heroImageUrl 做参考）
+ * - 中文 prompt 自动翻译为英文
+ * - 退款规则: Hero 失败退 20
  */
 
 import { NextResponse } from "next/server";
@@ -13,9 +20,9 @@ import {
   queryNanoBananaResult,
 } from "@/lib/suchuang-api";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { callDoubaoAPI } from "@/lib/doubao-api-client";
 import type { GenerateCharacterRequest } from "@/types/character";
 
-// 审查报告第 2 条：必须声明超时，生图耗时 5-20 秒
 export const maxDuration = 60;
 export const dynamic = "force-dynamic";
 
@@ -23,15 +30,69 @@ export const dynamic = "force-dynamic";
 // 积分配置
 // ============================================================================
 
-const CHARACTER_GENERATE_CREDITS = 10; // 角色生成 = 10 积分/次
+const HERO_GENERATE_CREDITS = 20; // Hero 阶段一次扣完（含多角度预扣）
 
 // ============================================================================
-// 多角度生成结构模板
+// 中文翻译
 // ============================================================================
 
+async function translateIfChinese(prompt: string): Promise<string> {
+  const hasChinese = /[\u4e00-\u9fff]/.test(prompt);
+  if (!hasChinese) return prompt.trim();
+
+  console.log("[Character Generate] Detected Chinese, translating...");
+  try {
+    const result = await callDoubaoAPI(
+      [
+        {
+          role: "system",
+          content:
+            "Translate the following text into natural, fluent English suitable as an AI image generation prompt. Preserve all visual details and artistic intent. Output ONLY the English text, nothing else.",
+        },
+        { role: "user", content: prompt.trim() },
+      ],
+      { maxTokens: 512, temperature: 0.3, maxRetries: 2 }
+    );
+
+    if (result.success && result.content) {
+      const translated = result.content
+        .replace(/^["'`]+|["'`]+$/g, "")
+        .trim();
+      console.log("[Character Generate] Translated:", translated.substring(0, 80));
+      return translated;
+    }
+  } catch (err) {
+    console.error("[Character Generate] Translation failed, using original:", err);
+  }
+  return prompt.trim(); // 翻译失败回退原文
+}
+
+// ============================================================================
+// Prompt 模板
+// ============================================================================
+
+/** Hero Shot: 电影级单人立绘 (Pro 4K, 3:4) */
+const HERO_SHOT_TEMPLATE = `
+
+Create a single stunning character portrait in 3:4 vertical composition.
+This should be a cinematic hero shot with dramatic lighting, 
+showing the character from mid-thigh up in a confident, dynamic pose.
+
+Requirements:
+- Professional studio quality, ultra detailed
+- Dramatic cinematic lighting with rim light
+- Character fills 70-80% of the frame
+- Slight dynamic angle (not straight-on)
+- Rich background atmosphere matching the character's theme
+- 4K resolution, sharp focus on face and upper body
+- Magazine cover quality composition`;
+
+/** 多角度参考图: 基于参考图的转面图 (标准, 16:9) */
 const MULTI_ANGLE_TEMPLATE = `
 
-Generate a single composite image showing this exact CHARACTER from 7 different camera angles arranged in a clean grid layout on a pure white background:
+Based on the reference image provided, generate a character model sheet showing this EXACT same character from 7 different camera angles in a clean grid layout on a pure white background.
+
+The character's design, colors, proportions, clothing, accessories, and overall aesthetic MUST exactly match the reference image.
 
 Row 1 (full body, natural standing pose, 4 panels):
 front view | left 3/4 profile | right 3/4 profile | back view
@@ -40,21 +101,21 @@ Row 2 (close-up headshot, 3 panels centered):
 front face | left profile face | right profile face
 
 Critical requirements:
-- Every panel must show the SAME CHARACTER with identical features, design, colors, and overall aesthetic
-- Consistent proportions across all views
+- Character must be IDENTICAL to the reference image in every panel
+- Maintain exact same art style, color palette, and proportions
+- Consistent lighting across all views
 - Clean separation between panels
 - Professional character sheet / model sheet layout
 - High quality, detailed rendering`;
 
 // ============================================================================
-// POST — 提交角色图片生成任务
+// POST — Hero / Reference 分派
 // ============================================================================
 
 export async function POST(request: Request) {
   try {
     const body: GenerateCharacterRequest = await request.json();
-
-    const { prompt, sourceImageUrl, userId } = body;
+    const { prompt, sourceImageUrl, userId, type = "hero", heroImageUrl } = body;
 
     if (!prompt || !prompt.trim()) {
       return NextResponse.json(
@@ -71,7 +132,47 @@ export async function POST(request: Request) {
     }
 
     // ============================================
-    // 积分检查与扣除（复用乐观锁模式）
+    // type = "reference" — 多角度参考图（不扣积分）
+    // ============================================
+    if (type === "reference") {
+      if (!heroImageUrl) {
+        return NextResponse.json(
+          { success: false, error: "heroImageUrl is required for reference type" },
+          { status: 400 }
+        );
+      }
+
+      // 翻译 prompt（可能已经是英文）
+      const englishPrompt = await translateIfChinese(prompt);
+      const refPrompt = `${englishPrompt}.${MULTI_ANGLE_TEMPLATE}`;
+
+      console.log("[Character Generate] Submitting reference task:", {
+        promptLength: refPrompt.length,
+        heroImageUrl: heroImageUrl.substring(0, 60),
+      });
+
+      const refResult = await submitNanoBanana({
+        model: "nano-banana",
+        prompt: refPrompt,
+        img_url: heroImageUrl,
+        aspectRatio: "16:9",
+      });
+
+      if (!refResult.success || !refResult.taskId) {
+        return NextResponse.json(
+          { success: false, error: refResult.error || "多角度参考图提交失败" },
+          { status: 500 }
+        );
+      }
+
+      return NextResponse.json({
+        success: true,
+        referenceTaskId: refResult.taskId,
+      });
+    }
+
+    // ============================================
+    // type = "hero"（默认）— Hero Shot + 积分扣除
     // ============================================
     const supabase = createAdminClient();
 
@@ -90,11 +191,11 @@ export async function POST(request: Request) {
 
     const currentCredits = (profileData as { credits: number }).credits;
 
-    if (currentCredits < CHARACTER_GENERATE_CREDITS) {
+    if (currentCredits < HERO_GENERATE_CREDITS) {
       return NextResponse.json(
         {
           success: false,
-          error: `积分不足！需要 ${CHARACTER_GENERATE_CREDITS} 积分，当前余额 ${currentCredits}`,
+          error: `积分不足！需要 ${HERO_GENERATE_CREDITS} 积分，当前余额 ${currentCredits}`,
         },
         { status: 400 }
       );
@@ -117,11 +218,11 @@ export async function POST(request: Request) {
       const latestCredits =
         (latestProfile as unknown as { credits: number })?.credits || 0;
 
-      if (latestCredits < CHARACTER_GENERATE_CREDITS) {
+      if (latestCredits < HERO_GENERATE_CREDITS) {
         return NextResponse.json(
           {
             success: false,
-            error: `积分不足！需要 ${CHARACTER_GENERATE_CREDITS} 积分，当前余额 ${latestCredits}`,
+            error: `积分不足！需要 ${HERO_GENERATE_CREDITS} 积分，当前余额 ${latestCredits}`,
           },
           { status: 400 }
         );
@@ -130,7 +231,7 @@ export async function POST(request: Request) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error: deductError } = await (supabase as any)
         .from("profiles")
-        .update({ credits: latestCredits - CHARACTER_GENERATE_CREDITS })
+        .update({ credits: latestCredits - HERO_GENERATE_CREDITS })
         .eq("id", userId)
         .eq("credits", latestCredits); // 乐观锁
 
@@ -154,37 +255,31 @@ export async function POST(request: Request) {
       );
     }
 
-    console.log("[Character Generate] Credits deducted:", {
+    // 翻译中文 prompt
+    const englishPrompt = await translateIfChinese(prompt);
+    const heroPrompt = `${englishPrompt}.${HERO_SHOT_TEMPLATE}`;
+
+    console.log("[Character Generate] Submitting hero task:", {
       userId,
-      cost: CHARACTER_GENERATE_CREDITS,
+      cost: HERO_GENERATE_CREDITS,
       before: currentCredits,
-      after: currentCredits - CHARACTER_GENERATE_CREDITS,
-    });
-
-    // ============================================
-    // 拼接终极提示词并提交生成任务
-    // ============================================
-    const finalPrompt = `${prompt.trim()}.${MULTI_ANGLE_TEMPLATE}`;
-
-    console.log("[Character Generate] Submitting task:", {
-      promptLength: finalPrompt.length,
-      promptPreview: prompt.substring(0, 80),
+      after: currentCredits - HERO_GENERATE_CREDITS,
+      promptLength: heroPrompt.length,
+      promptPreview: englishPrompt.substring(0, 80),
       hasSourceImage: !!sourceImageUrl,
     });
 
-    const result = await submitNanoBanana(
-      {
-        model: "nano-banana",
-        prompt: finalPrompt,
-        img_url: sourceImageUrl || undefined,
-        aspectRatio: "16:9",
-      }
-    );
+    const heroResult = await submitNanoBanana({
+      model: "nano-banana-pro",
+      prompt: heroPrompt,
+      img_url: sourceImageUrl || undefined,
+      aspectRatio: "3:4",
+      resolution: "4k",
+    });
 
-    if (!result.success || !result.taskId) {
-      console.error("[Character Generate] Submit failed:", result.error);
-
-      // 生成失败，尝试退还积分
+    if (!heroResult.success || !heroResult.taskId) {
+      // Hero 失败 → 全额退 20
+      console.error("[Character Generate] Hero failed, refunding", HERO_GENERATE_CREDITS);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await (supabase as any)
         .from("profiles")
@@ -194,17 +289,18 @@ export async function POST(request: Request) {
       return NextResponse.json(
         {
           success: false,
-          error: result.error || "角色图片生成失败，积分已退还",
+          error: `Hero Shot 生成失败，积分已退还。${heroResult.error || ""}`,
         },
         { status: 500 }
       );
     }
 
-    console.log("[Character Generate] Task submitted:", result.taskId);
+    console.log("[Character Generate] Hero task submitted:", heroResult.taskId);
 
     return NextResponse.json({
       success: true,
-      taskId: result.taskId,
+      heroTaskId: heroResult.taskId,
+      refPrompt: englishPrompt, // 传回翻译后的英文 prompt 给前端
     });
   } catch (error) {
     console.error("[Character Generate] Unexpected error:", error);
@@ -216,7 +312,7 @@ export async function POST(request: Request) {
 }
 
 // ============================================================================
-// GET — 查询生成任务状态（轮询）
+// GET — 查询生成任务状态（通用轮询，Hero 和多角度共用）
 // ============================================================================
 
 export async function GET(request: Request) {

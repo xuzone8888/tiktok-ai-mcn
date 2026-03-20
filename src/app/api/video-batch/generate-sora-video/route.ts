@@ -25,7 +25,6 @@ interface RequestBody {
   userId?: string;
   creditCost?: number;
   mode?: "image_to_video" | "prompt_to_video"; // 任务模式
-  apiLine?: "line1" | "line2" | "line3"; // API 线路选择
   groupName?: string; // 任务分组名称
 }
 
@@ -47,7 +46,6 @@ export async function POST(request: NextRequest) {
       userId,
       creditCost = 0,
       mode = "image_to_video",
-      apiLine = "line1",
       groupName,
     } = body;
 
@@ -97,7 +95,6 @@ export async function POST(request: NextRequest) {
       creditCost,
       hasMainImage: !!mainGridImageUrl,
       mode,
-      apiLine,
     });
 
     // 提交 Sora2 视频生成任务
@@ -108,7 +105,7 @@ export async function POST(request: NextRequest) {
       aspectRatio: aspectRatio,
       ...(mainGridImageUrl && { url: mainGridImageUrl }), // 有图片时才传
       model: sora2Model,
-    }, undefined, apiLine);
+    }, undefined, "line3");  // 固定使用 line3 (无印科技)
 
     if (!submitResult.success || !submitResult.taskId) {
       console.error("[Video Batch] Sora submit failed:", submitResult.error);

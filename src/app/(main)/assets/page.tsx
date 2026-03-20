@@ -5,6 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
+import { useDownloadStore } from "@/stores/download-store";
 import JSZip from "jszip";
 import {
   History,
@@ -314,34 +315,11 @@ export default function TaskLogPage() {
 
   const handleDownload = async (task: TaskLogItem) => {
     if (!task.resultUrl) return;
-
-    try {
-      setDownloading(task.id);
-      const filename = `${task.type}-${task.id.slice(-6)}.${task.type === "video" ? "mp4" : "png"}`;
-      // 使用代理下载，避免 CORS 问题
-      const proxyUrl = `/api/download-proxy?url=${encodeURIComponent(task.resultUrl)}&filename=${encodeURIComponent(filename)}`;
-
-      const a = document.createElement("a");
-      a.href = proxyUrl;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-
-      toast({
-        title: "开始下载",
-        description: filename,
-      });
-    } catch (error) {
-      console.error("[Download] Error:", error);
-      toast({
-        title: "下载失败",
-        description: "请稍后重试或使用新窗口打开",
-        variant: "destructive",
-      });
-    } finally {
-      setDownloading(null);
-    }
+    const { download } = useDownloadStore.getState();
+    const type = task.type === "video" ? "video" : "image";
+    const ext = task.type === "video" ? "mp4" : "png";
+    const filename = `${task.type}-${task.id.slice(-6)}.${ext}`;
+    download(task.resultUrl, filename, type);
   };
 
   // ============================================================================

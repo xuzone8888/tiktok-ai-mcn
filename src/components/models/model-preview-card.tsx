@@ -137,6 +137,16 @@ export const ModelPreviewCard = memo(function ModelPreviewCard({
 
         {/* Top Left Badges */}
         <div className="absolute top-3 left-3 flex flex-col gap-2 z-10">
+          {/* 来源标签 */}
+          {model.source === "user_created" ? (
+            <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-500/20 border border-blue-400/30 text-xs font-bold text-blue-300 backdrop-blur-md">
+              👤 社区
+            </span>
+          ) : (
+            <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/20 border border-amber-400/30 text-xs font-bold text-amber-300 backdrop-blur-md">
+              🏅 官方
+            </span>
+          )}
           {model.is_trending && (
             <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-gradient-to-r from-mermaid-cyan to-mermaid-pink text-xs font-bold text-black shadow-[0_0_10px_rgba(0,242,234,0.3)]">
               <TrendingUp className="h-3 w-3" />
@@ -155,7 +165,8 @@ export const ModelPreviewCard = memo(function ModelPreviewCard({
               已签约
             </span>
           )}
-          {!hasActiveContract && model.is_hired_by_others && (
+          {/* 社区角色允许多人聘用，不显示“已被聘用”标签 */}
+          {!hasActiveContract && model.is_hired_by_others && model.source !== "user_created" && (
             <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/10 border border-white/20 text-xs font-medium text-white/70 backdrop-blur-md">
               <Users className="h-3 w-3" />
               已被聘用
@@ -196,13 +207,17 @@ export const ModelPreviewCard = memo(function ModelPreviewCard({
       <div className="relative z-20 -mt-px p-4 space-y-3 bg-[#0B0C10]">
         {/* Price */}
         <div className="flex items-center justify-between">
-          <span className="text-sm text-muted-foreground">Monthly Rate</span>
+          <span className="text-sm text-muted-foreground">
+            {model.source === "user_created" ? "聘用价格" : "Monthly Rate"}
+          </span>
           <div className="flex items-center gap-1.5">
             <Coins className="h-4 w-4 text-mermaid-cyan" />
             <span className="font-bold text-lg tracking-tight text-white/90">
-              {model.base_price.toLocaleString()}
+              {(model.source === "user_created" ? model.publish_price : model.base_price).toLocaleString()}
             </span>
-            <span className="text-xs text-mermaid-cyan/70">Credits</span>
+            <span className="text-xs text-mermaid-cyan/70">
+              {model.source === "user_created" ? "积分" : "Credits"}
+            </span>
           </div>
         </div>
 
@@ -216,12 +231,12 @@ export const ModelPreviewCard = memo(function ModelPreviewCard({
             <CheckCircle2 className="mr-2 h-4 w-4" />
             管理团队
           </Button>
-        ) : model.is_hired_by_others ? (
+        ) : model.is_hired_by_others && model.source !== "user_created" ? (
           <Button
             variant="outline"
             className="w-full border-orange-500/50 text-orange-400 cursor-not-allowed opacity-70"
             disabled
-            title="该模特已被其他用户签约，请等待签约到期后再试"
+            title="该角色已被其他用户签约，请等待签约到期后再试"
           >
             <Users className="mr-2 h-4 w-4" />
             暂不可用

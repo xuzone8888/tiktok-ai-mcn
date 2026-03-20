@@ -16,6 +16,7 @@ import {
   Shield,
   Zap,
   Wand2,
+  Activity,
 } from "lucide-react";
 
 const adminNavItems = [
@@ -38,6 +39,11 @@ const adminNavItems = [
     title: "提示词配置",
     href: "/admin/prompts",
     icon: Wand2,
+  },
+  {
+    title: "API 状态",
+    href: "/admin/api-health",
+    icon: Activity,
   },
   {
     title: "操作日志",

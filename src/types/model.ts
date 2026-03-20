@@ -1,4 +1,4 @@
-// AI 模特相关类型定义
+// AI 角色相关类型定义
 
 export interface AIModel {
   id: string;
@@ -12,7 +12,7 @@ export interface AIModel {
   style_tags: string[];
   gender: "male" | "female" | "neutral" | null;
   age_range?: string;
-  // AI模特触发词 - 用于在视频生成时指定模特外观
+  // AI角色触发词 - 用于在视频生成时指定角色外观
   trigger_word?: string;
   price_daily: number;
   price_weekly: number;
@@ -32,6 +32,13 @@ export interface AIModel {
   };
   created_at: string;
   updated_at?: string;
+  // === Phase 3: 角色系统字段 ===
+  source?: string;
+  owner_id?: string | null;
+  is_public?: boolean;
+  reference_sheet_url?: string | null;
+  reference_status?: string;
+  publish_price?: number;
 }
 
 export type ContractStatus = "active" | "expired" | "cancelled";

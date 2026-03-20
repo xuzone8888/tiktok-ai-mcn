@@ -83,6 +83,9 @@ const config: Config = {
         glow: "glow 2s ease-in-out infinite alternate",
         shimmer: "shimmer 2s linear infinite",
       },
+      transitionTimingFunction: {
+        spring: "cubic-bezier(0.175, 0.885, 0.32, 1.275)",
+      },
       keyframes: {
         shimmer: {
           from: { backgroundPosition: "0 0" },
