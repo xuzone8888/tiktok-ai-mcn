@@ -44,3 +44,5 @@ test-slideshow/
 *.mp4
 nohup.out
 __pycache__/
+# Template preview videos (served from OSS CDN)
+public/videos/templates/

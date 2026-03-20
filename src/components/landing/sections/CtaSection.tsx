@@ -18,10 +18,10 @@ export default function CtaSection() {
 
                         {/* 标题 */}
                         <h2 className="text-3xl md:text-5xl font-bold text-white mb-6">
-                            您的竞争对手正在用 AI 抢占流量
+                            创建你的第一个 AI 角色
                         </h2>
                         <p className="text-gray-400 text-lg md:text-xl mb-10 max-w-2xl mx-auto">
-                            别让犹豫成为您的成本
+                            加入正在用 ToryX 持续创作的创作者们
                         </p>
 
                         {/* CTA 按钮 */}
@@ -34,16 +34,16 @@ export default function CtaSection() {
                             </Link>
                             <Link href="/pricing">
                                 <div className="px-10 py-4 border border-white/20 text-white rounded-xl font-medium text-lg hover:bg-white/10 transition-all">
-                                    查看价格
+                                    了解价格
                                 </div>
                             </Link>
                         </div>
 
-                        {/* 徽章 */}
+                        {/* 底标 */}
                         <div className="mt-8 inline-flex items-center gap-2 px-4 py-2 rounded-full bg-emerald-500/10 border border-emerald-500/30">
                             <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
                             <span className="text-sm text-emerald-400">
-                                注册送 100 积分
+                                注册送 100 积分，可创建首个 AI 角色
                             </span>
                         </div>
                     </div>

@@ -3,16 +3,17 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowRight, Play, Users } from "lucide-react";
+import { ArrowRight, Play, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import ReflectiveCard from "@/components/ui/ReflectiveCard";
-import { heroData } from "../data/landing-data";
+import { heroData, scenarioCarousel } from "../data/landing-data";
 import { createClient } from "@/lib/supabase/client";
 
 export default function HeroSection() {
     const router = useRouter();
     const [isLoggedIn, setIsLoggedIn] = useState(false);
     const [showLoginModal, setShowLoginModal] = useState(false);
+    const [currentScenario, setCurrentScenario] = useState(0);
 
     useEffect(() => {
         const checkAuth = async () => {
@@ -23,13 +24,22 @@ export default function HeroSection() {
         checkAuth();
     }, []);
 
-    const handleGoToModels = () => {
+    // 场景轮播
+    useEffect(() => {
+        const timer = setInterval(() => {
+            setCurrentScenario((prev) => (prev + 1) % scenarioCarousel.length);
+        }, 3500);
+        return () => clearInterval(timer);
+    }, []);
+
+    const handleStartCreate = () => {
         if (isLoggedIn) {
             router.push("/models");
         } else {
             setShowLoginModal(true);
         }
     };
+
     return (
         <section className="relative z-10 pt-24 pb-32">
             <div className="container max-w-7xl mx-auto px-6">
@@ -38,7 +48,6 @@ export default function HeroSection() {
                     <div className="container max-w-7xl mx-auto px-6 py-4">
                         <nav className="flex items-center justify-between">
                             <Link href="/" className="flex items-center gap-3 group">
-                                {/* ToryX Logo - Full Text Logo */}
                                 <img
                                     src="/images/toryx_logo_text.png"
                                     alt="ToryX AI"
@@ -49,23 +58,44 @@ export default function HeroSection() {
                             {/* 导航链接 */}
                             <div className="hidden md:flex items-center gap-1">
                                 <Link
+                                    href="/models"
+                                    className="px-4 py-2 text-sm text-gray-400 hover:text-white hover:bg-white/5 rounded-lg transition-all"
+                                >
+                                    角色市场
+                                </Link>
+                                <Link
+                                    href="#character-engine"
+                                    className="px-4 py-2 text-sm text-gray-400 hover:text-white hover:bg-white/5 rounded-lg transition-all"
+                                >
+                                    功能
+                                </Link>
+                                <Link
                                     href="/pricing"
                                     className="px-4 py-2 text-sm text-gray-400 hover:text-white hover:bg-white/5 rounded-lg transition-all"
                                 >
                                     价格
                                 </Link>
-                                <Link
-                                    href="/privacy"
-                                    className="px-4 py-2 text-sm text-gray-400 hover:text-white hover:bg-white/5 rounded-lg transition-all"
-                                >
-                                    隐私政策
-                                </Link>
-                                <Link
-                                    href="/terms"
-                                    className="px-4 py-2 text-sm text-gray-400 hover:text-white hover:bg-white/5 rounded-lg transition-all"
-                                >
-                                    服务条款
-                                </Link>
+                                {/* 更多下拉 */}
+                                <div className="relative group/more">
+                                    <button className="px-4 py-2 text-sm text-gray-400 hover:text-white hover:bg-white/5 rounded-lg transition-all flex items-center gap-1">
+                                        更多
+                                        <ChevronDown className="h-3 w-3" />
+                                    </button>
+                                    <div className="absolute top-full right-0 mt-2 w-40 py-2 bg-black/90 border border-white/10 rounded-xl backdrop-blur-xl opacity-0 invisible group-hover/more:opacity-100 group-hover/more:visible transition-all">
+                                        <Link
+                                            href="/privacy"
+                                            className="block px-4 py-2 text-sm text-gray-400 hover:text-white hover:bg-white/5 transition-all"
+                                        >
+                                            隐私政策
+                                        </Link>
+                                        <Link
+                                            href="/terms"
+                                            className="block px-4 py-2 text-sm text-gray-400 hover:text-white hover:bg-white/5 transition-all"
+                                        >
+                                            服务条款
+                                        </Link>
+                                    </div>
+                                </div>
                             </div>
 
                             <div className="flex items-center gap-3">
@@ -103,8 +133,8 @@ export default function HeroSection() {
                     </div>
 
                     {/* 主标题 */}
-                    <h1 className="text-4xl md:text-5xl lg:text-6xl xl:text-7xl font-bold leading-[1.1] mb-6 text-white whitespace-nowrap">
-                        从商品链接，到 TikTok 爆款视频
+                    <h1 className="text-4xl md:text-5xl lg:text-6xl xl:text-7xl font-bold leading-[1.1] mb-6 text-white">
+                        {heroData.headline}
                     </h1>
 
                     {/* 副标题 */}
@@ -113,7 +143,7 @@ export default function HeroSection() {
                     </p>
 
                     {/* Reflective 输入框 */}
-                    <div className="max-w-2xl mx-auto mb-10">
+                    <div className="max-w-2xl mx-auto mb-6">
                         <ReflectiveCard className="!rounded-2xl" roughness={0.6}>
                             <div className="flex items-center p-2">
                                 <input
@@ -122,14 +152,32 @@ export default function HeroSection() {
                                     className="flex-1 bg-transparent text-white placeholder-gray-500 px-4 py-3 text-lg outline-none"
                                 />
                                 <button
-                                    onClick={handleGoToModels}
+                                    onClick={handleStartCreate}
                                     className="bg-gradient-to-b from-white to-gray-100 text-black hover:to-white px-6 py-3 rounded-xl font-medium flex items-center shadow-[0_0_20px_rgba(255,255,255,0.3),inset_0_1px_0_rgba(255,255,255,1)] hover:shadow-[0_0_25px_rgba(255,255,255,0.5),inset_0_1px_0_rgba(255,255,255,1)] transition-all duration-300 border-t border-white"
                                 >
-                                    去选择模特
+                                    开始创作
                                     <ArrowRight className="h-4 w-4 ml-2" />
                                 </button>
                             </div>
                         </ReflectiveCard>
+                    </div>
+
+                    {/* 场景轮播 */}
+                    <div className="h-8 mb-10 flex items-center justify-center overflow-hidden">
+                        <div
+                            className="transition-all duration-500 ease-in-out"
+                            key={currentScenario}
+                        >
+                            {(() => {
+                                const Icon = scenarioCarousel[currentScenario].icon;
+                                return (
+                                    <span className="text-gray-500 text-sm inline-flex items-center gap-1.5">
+                                        <Icon className="w-4 h-4" />
+                                        「{scenarioCarousel[currentScenario].text}」
+                                    </span>
+                                );
+                            })()}
+                        </div>
                     </div>
 
                     {/* 登录弹窗 */}
@@ -138,7 +186,7 @@ export default function HeroSection() {
                             <ReflectiveCard className="!rounded-2xl max-w-md w-full mx-4">
                                 <div className="p-8 text-center">
                                     <h3 className="text-2xl font-bold text-white mb-4">请先登录</h3>
-                                    <p className="text-gray-400 mb-6">登录后即可选择 AI 模特，开始生成视频</p>
+                                    <p className="text-gray-400 mb-6">登录后即可创建 AI 角色，开始生成内容</p>
                                     <div className="flex flex-col gap-3">
                                         <Link href="/auth/login?redirect=/models">
                                             <button className="w-full bg-gradient-to-b from-white to-gray-100 text-black hover:to-white py-3 rounded-xl font-medium transition-all">
@@ -178,7 +226,7 @@ export default function HeroSection() {
                                 </div>
                             </ReflectiveCard>
                         </Link>
-                        <Link href="/contact">
+                        <Link href="#character-engine">
                             <Button
                                 variant="outline"
                                 size="lg"

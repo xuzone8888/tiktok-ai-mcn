@@ -1,104 +1,51 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
 import ReflectiveCard from "@/components/ui/ReflectiveCard";
-import { liveStats } from "../data/landing-data";
-
-// 解析数字字符串（如 "28,942"）为数字
-function parseStatValue(value: string): number {
-    return parseInt(value.replace(/,/g, ""), 10);
-}
-
-// 格式化数字为带逗号的字符串
-function formatNumber(num: number): string {
-    return num.toLocaleString("en-US");
-}
-
-// CountUp Hook
-function useCountUp(target: number, duration: number = 2000) {
-    const [count, setCount] = useState(0);
-    const [hasStarted, setHasStarted] = useState(false);
-    const ref = useRef<HTMLDivElement>(null);
-
-    useEffect(() => {
-        const observer = new IntersectionObserver(
-            (entries) => {
-                if (entries[0].isIntersecting && !hasStarted) {
-                    setHasStarted(true);
-                }
-            },
-            { threshold: 0.3 }
-        );
-
-        if (ref.current) {
-            observer.observe(ref.current);
-        }
-
-        return () => observer.disconnect();
-    }, [hasStarted]);
-
-    useEffect(() => {
-        if (!hasStarted) return;
-
-        const startTime = Date.now();
-        const endTime = startTime + duration;
-
-        const tick = () => {
-            const now = Date.now();
-            const progress = Math.min((now - startTime) / duration, 1);
-            // Ease out cubic
-            const eased = 1 - Math.pow(1 - progress, 3);
-            setCount(Math.floor(eased * target));
-
-            if (now < endTime) {
-                requestAnimationFrame(tick);
-            } else {
-                setCount(target);
-            }
-        };
-
-        requestAnimationFrame(tick);
-    }, [hasStarted, target, duration]);
-
-    return { count, ref };
-}
+import { complianceCards } from "../data/landing-data";
 
 export default function LiveStatsSection() {
     return (
-        <section className="relative z-10 py-24 bg-gradient-to-b from-transparent via-white/[0.01] to-transparent">
+        <div className="py-16">
             <div className="container max-w-7xl mx-auto px-6">
                 {/* 标题 */}
                 <div className="text-center mb-16">
                     <div className="text-xs text-gray-500 uppercase tracking-widest mb-4">
-                        实时数据
+                        合规保障
                     </div>
-                    <h2 className="text-4xl md:text-5xl font-bold text-white">
-                        运转中的 AI 工厂
+                    <h2 className="text-4xl md:text-5xl font-bold text-white mb-4">
+                        做合规的创作者，走得更远
                     </h2>
+                    <p className="text-gray-500 text-lg">
+                        我们比你更重视平台规则
+                    </p>
                 </div>
 
-                {/* 统计卡片 */}
-                <div className="grid md:grid-cols-3 gap-6 max-w-5xl mx-auto">
-                    {liveStats.map((stat, index) => {
-                        const targetValue = parseStatValue(stat.value);
-                        const { count, ref } = useCountUp(targetValue, 2000);
-
-                        return (
-                            <ReflectiveCard key={index} className="!rounded-2xl" active={true}>
-                                <div className="p-8 text-center" ref={ref}>
-                                    <stat.icon className="h-8 w-8 text-gray-500 mx-auto mb-4" />
-                                    <div className="text-4xl md:text-5xl font-mono font-bold text-white mb-2">
-                                        {formatNumber(count)}
-                                    </div>
-                                    <div className="text-sm text-gray-500 uppercase tracking-wider">
-                                        {stat.label}
-                                    </div>
+                {/* 合规卡片 */}
+                <div className="grid md:grid-cols-3 lg:grid-cols-5 gap-4 max-w-6xl mx-auto">
+                    {complianceCards.map((card, index) => (
+                        <ReflectiveCard key={index} className="!rounded-2xl" active={card.status === "ready"}>
+                            <div className="p-6 text-center">
+                                <div className="w-10 h-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center mb-3 mx-auto">
+                                    <card.icon className="w-5 h-5 text-gray-400" />
                                 </div>
-                            </ReflectiveCard>
-                        );
-                    })}
+                                <h3 className="text-base font-bold text-white mb-2">
+                                    {card.title}
+                                </h3>
+                                <p className="text-gray-400 text-sm leading-relaxed">
+                                    {card.desc}
+                                </p>
+                                {card.status === "coming" && (
+                                    <div className="mt-3">
+                                        <span className="px-2 py-0.5 text-xs rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                                            即将推出
+                                        </span>
+                                    </div>
+                                )}
+                            </div>
+                        </ReflectiveCard>
+                    ))}
                 </div>
             </div>
-        </section>
+        </div>
     );
 }

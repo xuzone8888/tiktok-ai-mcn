@@ -82,21 +82,24 @@ export default function ContactPage() {
                             </div>
                         </div>
 
-                        {/* 社交媒体 */}
+                        {/* 直接联系提示 */}
                         <div className="md:col-span-2 bg-gradient-to-r from-gray-900 to-black border border-white/10 rounded-2xl p-8 flex flex-col md:flex-row items-center justify-between gap-6">
                             <div className="flex items-center gap-4">
                                 <div className="w-12 h-12 rounded-xl bg-white/10 flex items-center justify-center text-white">
                                     <Globe className="h-6 w-6" />
                                 </div>
                                 <div>
-                                    <h3 className="text-lg font-bold">关注 ToryX 官方账号</h3>
-                                    <p className="text-gray-400 text-sm">获取最新 AI 视频生成教程与案例</p>
+                                    <h3 className="text-lg font-bold">有其他问题？</h3>
+                                    <p className="text-gray-400 text-sm">欢迎通过邮件联系我们，我们通常在 24 小时内回复</p>
                                 </div>
                             </div>
                             <div className="flex gap-4">
-                                <Button variant="outline" className="border-white/20 hover:bg-white/10">TikTok</Button>
-                                <Button variant="outline" className="border-white/20 hover:bg-white/10">YouTube</Button>
-                                <Button variant="outline" className="border-white/20 hover:bg-white/10">Twitter</Button>
+                                <Link href="/feedback">
+                                    <Button variant="outline" className="border-white/20 hover:bg-white/10">提交反馈</Button>
+                                </Link>
+                                <Link href="/help">
+                                    <Button variant="outline" className="border-white/20 hover:bg-white/10">帮助中心</Button>
+                                </Link>
                             </div>
                         </div>
                     </div>

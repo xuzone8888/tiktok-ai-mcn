@@ -1,30 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { Zap, Shield } from "lucide-react";
-import { footerLinks, partnerLogos } from "../data/landing-data";
+import { Shield } from "lucide-react";
+import { footerLinks } from "../data/landing-data";
 
 export default function FooterSection() {
     return (
         <footer className="relative z-10 border-t border-white/5 py-16 bg-black/50 backdrop-blur-sm">
             <div className="container max-w-7xl mx-auto px-6">
-                {/* Logo 带 */}
-                <div className="mb-12 pb-12 border-b border-white/5">
-                    <div className="text-center text-xs text-gray-500 uppercase tracking-widest mb-6">
-                        受到领先品牌信赖
-                    </div>
-                    <div className="flex items-center justify-center gap-12 flex-wrap">
-                        {partnerLogos.map((logo, index) => (
-                            <span
-                                key={index}
-                                className="text-gray-600 text-sm font-medium opacity-50 hover:opacity-100 transition-opacity"
-                            >
-                                {logo}
-                            </span>
-                        ))}
-                    </div>
-                </div>
-
                 {/* 链接区域 */}
                 <div className="grid md:grid-cols-5 gap-8 mb-12">
                     <div className="md:col-span-2">
@@ -36,7 +19,7 @@ export default function FooterSection() {
                             />
                         </Link>
                         <p className="text-gray-500 text-sm leading-relaxed max-w-xs">
-                            AI 驱动的短视频创作平台，让每一个创作者都能高效产出专业级内容。
+                            AI 角色驱动的内容创作平台，帮助每位创作者持续产出专业级内容。
                         </p>
                     </div>
 

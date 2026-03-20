@@ -5,14 +5,14 @@ import { comparisonData } from "../data/landing-data";
 
 export default function WhyUsSection() {
     return (
-        <section className="relative z-10 py-24">
+        <div className="py-16">
             <div className="container max-w-7xl mx-auto px-6">
                 {/* 标题 */}
                 <div className="text-center mb-16">
                     <h2 className="text-4xl md:text-5xl font-bold text-white mb-4">
-                        更聪明的选择
+                        更聪明的创作方式
                     </h2>
-                    <p className="text-gray-500 text-lg">降维打击，效率碾压</p>
+                    <p className="text-gray-500 text-lg">同样一条优质短视频，你选哪种方式？</p>
                 </div>
 
                 {/* 对比表 */}
@@ -75,6 +75,6 @@ export default function WhyUsSection() {
                     </ReflectiveCard>
                 </div>
             </div>
-        </section>
+        </div>
     );
 }

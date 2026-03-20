@@ -41,8 +41,8 @@ export default function TermsPage() {
         <div className="container max-w-4xl mx-auto px-6">
           <div className="mb-12">
             <h1 className="text-4xl font-bold mb-4">{lang === "en" ? "Terms of Service" : "服务条款"}</h1>
-            <p className="text-gray-400">{lang === "en" ? "Last Updated: January 22, 2026" : "最后更新日期：2026年1月22日"}</p>
-            <p className="text-gray-400">{lang === "en" ? "Effective Date: January 22, 2026" : "生效日期：2026年1月22日"}</p>
+            <p className="text-gray-400">{lang === "en" ? "Last Updated: March 17, 2026" : "最后更新日期：2026年3月17日"}</p>
+            <p className="text-gray-400">{lang === "en" ? "Effective Date: March 17, 2026" : "生效日期：2026年3月17日"}</p>
           </div>
 
           <div className="space-y-8 text-gray-300">
@@ -273,16 +273,24 @@ export default function TermsPage() {
               </div>
             </ReflectiveCard>
 
-            {/* 16. Other Terms (TikTok Related) */}
+            {/* 16. TikTok Platform Integration Terms */}
             <ReflectiveCard className="!rounded-xl">
               <div className="flex items-start gap-4 p-6">
                 <div className="p-3 rounded-lg bg-fuchsia-500/10 text-fuchsia-400 shrink-0"><Youtube className="h-6 w-6" /></div>
                 <div>
-                  <h2 className="text-xl font-bold text-white mb-3">{lang === "en" ? "16. Other Terms (TikTok Related)" : "十六、其他条款（TikTok相关）"}</h2>
-                  <p className="leading-loose">{lang === "en" ? '16.1 Your authorization to use your TikTok account in "ToryX" software and related services shall be deemed as your agreement to TikTok\'s relevant terms of service.' : '16.1 您授权在"ToryX"软件及相关服务中使用您的TikTok账户，即视为您同意TikTok的相关服务条款。'}</p>
-                  <p className="leading-loose mt-3">{lang === "en" ? "Related Links:" : "相关链接："}</p>
+                  <h2 className="text-xl font-bold text-white mb-3">{lang === "en" ? "16. TikTok Platform Integration Terms" : "十六、TikTok 平台集成条款"}</h2>
+                  <p className="leading-loose">{lang === "en" ? '16.1 Service Description: ToryX integrates with the TikTok platform through two API systems: (a) Content Posting API — for directly publishing AI-generated videos and photos to your TikTok account (Direct Post mode); (b) TikTok Shop API — for publishing shoppable videos with product links from your product showcase. You must authorize the corresponding TikTok account before using each service.' : '16.1 服务描述：ToryX 通过两套 API 系统与 TikTok 平台集成：(a) 内容发布 API — 将 AI 生成的视频和图片直接发布到您的 TikTok 账户（Direct Post 模式）；(b) TikTok Shop API — 发布带有橱窗商品链接的带货视频。您需要先授权相应的 TikTok 账户才能使用各项服务。'}</p>
+                  <p className="leading-loose mt-3">{lang === "en" ? '16.2 User Responsibilities: You are solely responsible for all content published through ToryX to TikTok. You must ensure that content complies with TikTok\'s Community Guidelines, Terms of Service, and applicable laws. You are responsible for compliance with all AIGC content disclosure requirements.' : '16.2 用户责任：您对通过 ToryX 发布到 TikTok 的所有内容承担全部责任。您必须确保内容符合 TikTok 的社区准则、服务条款和适用法律。您有责任遵守所有 AIGC 内容披露要求。'}</p>
+                  <p className="leading-loose mt-3">{lang === "en" ? '16.3 Content Publishing: ToryX publishes content to TikTok on your behalf using the Direct Post mode. Once published, review and management of the content are subject to TikTok platform rules. ToryX does not guarantee that content will pass TikTok\'s review process. Content posted during the Sandbox/testing phase may be restricted to private visibility until the app is fully approved.' : '16.3 内容发布：ToryX 使用 Direct Post 模式代您将内容发布到 TikTok。发布后，内容的审核和管理遵循 TikTok 平台规则。ToryX 不保证内容一定通过 TikTok 的审核流程。在 Sandbox/测试阶段发布的内容可能被限制为私密可见，直到应用通过完整审核。'}</p>
+                  <p className="leading-loose mt-3">{lang === "en" ? '16.4 Showcase Product Data (TikTok Shop): Product information displayed on the platform is sourced from your TikTok Shop showcase, including product name, price, commission rate, and images. This information is used solely to help you select products for shoppable video creation and is not stored permanently on our servers.' : '16.4 橱窗商品数据（TikTok Shop）：平台展示的商品信息来源于您的 TikTok Shop 橱窗，包括商品名称、价格、佣金率和图片。此信息仅用于帮助您选择商品进行带货视频创作，不会永久存储在我们的服务器上。'}</p>
+                  <p className="leading-loose mt-3">{lang === "en" ? '16.5 Branded/Commercial Content Disclosure: If your published content promotes a brand, product, or service — whether through paid partnerships, gifted collaborations, or any form of compensation — you must enable TikTok\'s "Disclose commercial content" setting. ToryX may apply this setting automatically when publishing shoppable videos with product links.' : '16.5 品牌/商业内容披露：如果您发布的内容推广品牌、产品或服务 — 无论是通过付费合作、赠品合作还是任何形式的报酬 — 您必须启用 TikTok 的"披露商业内容"设置。当发布带商品链接的带货视频时，ToryX 可能会自动应用此设置。'}</p>
+                  <p className="leading-loose mt-3">{lang === "en" ? '16.6 Data and Authorization Revocation: You may revoke ToryX\'s access to your TikTok account at any time. Upon revocation, we will delete all associated TikTok data within 30 days. Please refer to our Privacy Policy for detailed data handling practices.' : '16.6 数据和授权撤回：您可以随时撤回 ToryX 对您 TikTok 账户的访问权限。撤回后，我们将在 30 天内删除所有相关的 TikTok 数据。详细的数据处理方式请参见我们的隐私政策。'}</p>
+                  <p className="leading-loose mt-3">{lang === "en" ? "16.7 Related Terms:" : "16.7 相关条款："}</p>
                   <ul className="list-disc pl-6 space-y-1 mt-2 text-gray-300 text-sm">
                     <li><Link href="https://www.tiktok.com/legal/page/row/terms-of-service/en" target="_blank" className="text-cyan-400 hover:underline">TikTok Terms of Service</Link></li>
+                    <li><Link href="https://www.tiktok.com/legal/tik-tok-developer-terms-of-service?lang=en" target="_blank" className="text-cyan-400 hover:underline">TikTok Developer Terms of Service</Link></li>
+                    <li><Link href="https://partner.tiktokshop.com/docv2/page/6507ead7b99d5302be949ba9" target="_blank" className="text-cyan-400 hover:underline">TikTok Shop Developer Terms of Service</Link></li>
+                    <li><Link href="https://www.tiktok.com/legal/privacy-policy?lang=en" target="_blank" className="text-cyan-400 hover:underline">TikTok Privacy Policy</Link></li>
                   </ul>
                 </div>
               </div>
@@ -297,6 +305,33 @@ export default function TermsPage() {
                   <p className="leading-loose">{lang === "en" ? '17.1 Subscription Upgrade and Downgrade: When changing from one paid plan to another, the new plan will be prorated by calculating the remaining days of the two plans and their respective daily rates.' : '17.1 订阅升级和降级：从一个付费计划更改为另一个付费计划时，新计划将通过计算两个计划的剩余天数及其各自的日费率进行按比例计算。'}</p>
                   <p className="leading-loose mt-3">{lang === "en" ? '17.2 Fee Changes: We may change plan fees from time to time and will notify you in advance. Price changes will take effect at the beginning of the next subscription period. If you do not agree to the price change, you must cancel your subscription before the price change takes effect.' : '17.2 费用变更：我们可能会不时更改计划费用，并会提前通知您。价格变更将在下一个订阅期开始时生效。如果您不同意价格变更，您必须在价格变更生效前取消订阅。'}</p>
                   <p className="leading-loose mt-3">{lang === "en" ? '17.3 Subscription Cancellation: You can cancel your subscription at any time. After cancellation, your subscription will expire at the end of the current cycle. Paid fees are non-refundable.' : '17.3 订阅取消：您可以随时取消订阅。取消后，您的订阅将在当前周期结束时到期。已付费用不予退还。'}</p>
+                </div>
+              </div>
+            </ReflectiveCard>
+
+            {/* 18. AIGC Content Terms */}
+            <ReflectiveCard className="!rounded-xl">
+              <div className="flex items-start gap-4 p-6">
+                <div className="p-3 rounded-lg bg-cyan-500/10 text-cyan-400 shrink-0"><Sparkles className="h-6 w-6" /></div>
+                <div>
+                  <h2 className="text-xl font-bold text-white mb-3">{lang === "en" ? "18. AIGC Content Terms" : "十八、AIGC 内容条款"}</h2>
+                  <p className="leading-loose">{lang === "en" ? '18.1 ToryX uses artificial intelligence technology to generate video content, including AI characters, voiceovers, and scripts. All content generated through ToryX is AI-generated content (AIGC).' : '18.1 ToryX 使用人工智能技术生成视频内容，包括 AI 角色、配音和脚本。通过 ToryX 生成的所有内容均为 AI 生成内容 (AIGC)。'}</p>
+                  <p className="leading-loose mt-3">{lang === "en" ? '18.2 AI-generated videos published through ToryX to TikTok will be automatically labeled as AIGC in compliance with TikTok\'s content policies. You authorize ToryX to apply this labeling to your published content.' : '18.2 通过 ToryX 发布到 TikTok 的 AI 生成视频将按照 TikTok 的内容政策自动标注为 AIGC。您授权 ToryX 对您发布的内容应用此标注。'}</p>
+                  <p className="leading-loose mt-3">{lang === "en" ? '18.3 AI characters created on ToryX are original AI-generated artwork with no real-person likeness concerns, and are safe for commercial use. However, you shall not use AI-generated content to mislead, deceive, or impersonate real individuals.' : '18.3 在 ToryX 上创建的 AI 角色是原创的 AI 生成艺术作品，不涉及真人肖像权问题，可安全用于商业场景。但您不得使用 AI 生成内容来误导、欺骗或冒充真实个人。'}</p>
+                  <p className="leading-loose mt-3">{lang === "en" ? '18.4 You understand and agree that AI-generated content may not be perfect and may contain errors. ToryX does not guarantee the accuracy, quality, or suitability of AI-generated content for any specific purpose.' : '18.4 您理解并同意，AI 生成的内容可能不完美并可能包含错误。ToryX 不保证 AI 生成内容的准确性、质量或适合任何特定目的。'}</p>
+                </div>
+              </div>
+            </ReflectiveCard>
+
+            {/* 19. Cross-border Data Transfer */}
+            <ReflectiveCard className="!rounded-xl">
+              <div className="flex items-start gap-4 p-6">
+                <div className="p-3 rounded-lg bg-blue-500/10 text-blue-400 shrink-0"><Globe className="h-6 w-6" /></div>
+                <div>
+                  <h2 className="text-xl font-bold text-white mb-3">{lang === "en" ? "19. Cross-border Data Transfer" : "十九、跨境数据传输"}</h2>
+                  <p className="leading-loose">{lang === "en" ? '19.1 ToryX stores user data on servers located in the United States (Supabase) and China (Alibaba Cloud). TikTok-related data, including OAuth tokens and user identifiers, is stored exclusively on US-based servers.' : '19.1 ToryX 将用户数据存储在位于美国 (Supabase) 和中国 (阿里云) 的服务器上。TikTok 相关数据，包括 OAuth 令牌和用户标识符，仅存储在美国服务器上。'}</p>
+                  <p className="leading-loose mt-3">{lang === "en" ? '19.2 All data transmission between servers is encrypted using TLS 1.2 or above. We comply with applicable data protection laws and regulations governing cross-border data transfers.' : '19.2 服务器之间的所有数据传输均使用 TLS 1.2 及以上协议加密。我们遵守管辖跨境数据传输的适用数据保护法律法规。'}</p>
+                  <p className="leading-loose mt-3">{lang === "en" ? '19.3 By using ToryX, you consent to the transfer and processing of your data as described in this section and in our Privacy Policy.' : '19.3 使用 ToryX 即表示您同意按照本条款和我们的隐私政策中描述的方式传输和处理您的数据。'}</p>
                 </div>
               </div>
             </ReflectiveCard>

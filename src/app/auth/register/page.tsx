@@ -7,7 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 import ReflectiveCard from "@/components/ui/ReflectiveCard";
 import ReflectiveInput from "@/components/ui/ReflectiveInput";
 import { Button } from "@/components/ui/button";
-import { Zap, Mail, Lock, User, ArrowRight, Github, Chrome, Loader2, Gift } from "lucide-react";
+import { Mail, Lock, User, ArrowRight, Loader2, Gift, Fingerprint, Sparkles, Globe } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 export default function RegisterPage() {
@@ -115,13 +115,41 @@ export default function RegisterPage() {
     }
   };
 
+  // Google 注册（复用登录页逻辑）
+  const handleGoogleRegister = async () => {
+    try {
+      const supabase = createClient();
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: `${window.location.origin}/auth/login`,
+        },
+      });
+      if (error) throw error;
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Google 注册失败",
+        description: error.message || "请稍后重试",
+      });
+    }
+  };
+
   // 注册成功后的邮箱验证提示页面
   if (isSuccess) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center p-4 relative overflow-hidden">
-        <div className="absolute inset-0">
-          <div className="absolute top-1/4 left-1/4 w-[500px] h-[500px] bg-white/[0.02] rounded-full blur-3xl" />
-          <div className="absolute bottom-1/4 right-1/4 w-[500px] h-[500px] bg-[#00ff9d]/[0.05] rounded-full blur-3xl" />
+        {/* 统一的多重光晕背景 */}
+        <div className="absolute inset-0 pointer-events-none">
+          <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:64px_64px]" />
+          <div
+            className="absolute top-0 left-0 w-[800px] h-[800px] -translate-x-1/4 -translate-y-1/4 mix-blend-screen"
+            style={{ background: 'radial-gradient(circle, rgba(168,85,247,0.15) 0%, rgba(168,85,247,0) 60%)' }}
+          />
+          <div
+            className="absolute bottom-0 right-0 w-[800px] h-[800px] translate-x-1/4 translate-y-1/4 mix-blend-screen"
+            style={{ background: 'radial-gradient(circle, rgba(16,185,129,0.12) 0%, rgba(16,185,129,0) 60%)' }}
+          />
         </div>
 
         <div className="w-full max-w-[440px] relative z-10">
@@ -166,7 +194,7 @@ export default function RegisterPage() {
               {/* Action Button */}
               <Button
                 onClick={() => router.push("/auth/login")}
-                className="w-full h-12 bg-gradient-to-b from-white to-gray-100 hover:to-white text-black font-bold text-base rounded-xl transition-all duration-300 hover:scale-[1.02] shadow-[0_0_20px_rgba(255,255,255,0.3),inset_0_1px_0_rgba(255,255,255,1)] hover:shadow-[0_0_30px_rgba(255,255,255,0.5),inset_0_1px_0_rgba(255,255,255,1)] group border-t border-white"
+                className="w-full h-12 bg-gradient-to-r from-[#10b981] to-[#059669] hover:from-[#34d399] hover:to-[#10b981] text-white font-semibold text-[15px] rounded-xl transition-all duration-300 hover:scale-[1.02] shadow-[0_0_20px_rgba(16,185,129,0.2)] hover:shadow-[0_0_30px_rgba(16,185,129,0.4)] border-none group"
               >
                 <span className="flex items-center justify-center gap-2">
                   我已验证，前往登录
@@ -185,162 +213,202 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="min-h-screen bg-black flex items-center justify-center p-4 relative overflow-hidden">
-      {/* Background Atmosphere */}
-      <div className="absolute inset-0">
-        <div className="absolute top-1/4 left-1/4 w-[500px] h-[500px] bg-white/[0.02] rounded-full blur-3xl" />
-        <div className="absolute bottom-1/4 right-1/4 w-[500px] h-[500px] bg-[#00ff9d]/[0.05] rounded-full blur-3xl" />
+    <div className="min-h-screen bg-black flex relative overflow-hidden">
+      {/* 1. 多重光晕全局背景 */}
+      <div className="absolute inset-0 pointer-events-none z-0">
+        {/* 动态细网格 */}
+        <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:64px_64px]" />
+
+        {/* 多重光晕混叠 */}
+        <div
+          className="absolute top-0 left-0 w-[800px] h-[800px] -translate-x-1/4 -translate-y-1/4 mix-blend-screen"
+          style={{ background: 'radial-gradient(circle, rgba(168,85,247,0.15) 0%, rgba(168,85,247,0) 60%)' }}
+        />
+        <div
+          className="absolute bottom-0 right-0 w-[800px] h-[800px] translate-x-1/4 translate-y-1/4 mix-blend-screen"
+          style={{ background: 'radial-gradient(circle, rgba(16,185,129,0.12) 0%, rgba(16,185,129,0) 60%)' }}
+        />
+        <div
+          className="absolute top-1/2 left-1/2 w-[1000px] h-[1000px] -translate-x-1/2 -translate-y-1/2 mix-blend-screen opacity-50"
+          style={{ background: 'radial-gradient(circle, rgba(59,130,246,0.08) 0%, rgba(59,130,246,0) 60%)' }}
+        />
       </div>
 
-      <div className="w-full max-w-[480px] relative z-10">
-        <ReflectiveCard className="py-8 px-10 login-expand">
-          {/* Header - ToryX Logo */}
-          <div className="flex flex-col items-center mb-5">
+      {/* 限制最大宽度的中央容器 */}
+      <div className="w-full max-w-7xl mx-auto flex relative z-10">
+        {/* 2. 左侧：品牌叙事区 (大屏显示) */}
+        <div className="hidden lg:flex flex-col flex-1 p-12 lg:p-20 justify-center">
+          <div className="max-w-xl">
+            {/* Logo */}
             <img
               src="/images/toryx_logo_text.png"
               alt="ToryX AI"
-              className="h-10 mt-2 mb-3 drop-shadow-[0_0_20px_rgba(16,185,129,0.3)]"
+              className="h-14 mb-12 drop-shadow-[0_0_30px_rgba(16,185,129,0.4)]"
             />
-            <span
-              className="text-[28px] font-semibold tracking-[-0.02em]"
-              style={{
-                background: 'linear-gradient(180deg, #ffffff 0%, #e8e8e8 25%, #c0c0c0 50%, #a0a0a0 75%, #d0d0d0 100%)',
-                WebkitBackgroundClip: 'text',
-                WebkitTextFillColor: 'transparent',
-                filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.3))',
-              }}
-            >
-              创建账号
-            </span>
-            <span className="text-xs text-white/30 tracking-[0.1em] mt-1">
-              加入 ToryX 开始创作
-            </span>
-          </div>
 
-          {/* Form */}
-          <form onSubmit={handleRegister}>
-            <div className="space-y-4 pb-2">
-              {/* Name */}
-              <ReflectiveInput
-                icon={<User className="w-5 h-5" />}
-                placeholder="用户名"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                disabled={isLoading}
-              />
+            {/* 大标题 */}
+            <h1 className="text-5xl lg:text-6xl font-bold tracking-tight mb-6 leading-tight">
+              <span className="bg-clip-text text-transparent bg-gradient-to-r from-white via-white/90 to-white/60">
+                开启你的
+                <br />AI 创作之旅
+              </span>
+            </h1>
 
-              {/* Email */}
-              <ReflectiveInput
-                icon={<Mail className="w-5 h-5" />}
-                type="email"
-                placeholder="邮箱地址"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                disabled={isLoading}
-              />
+            {/* 副标题 */}
+            <p className="text-lg text-white/50 mb-12 leading-relaxed">
+              注册 ToryX 账号 · 创建专属 AI 角色 · 一键生成专业级带货短视频。
+            </p>
 
-              {/* Password */}
-              <ReflectiveInput
-                icon={<Lock className="w-5 h-5" />}
-                type="password"
-                placeholder="密码（至少6位）"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                disabled={isLoading}
-              />
-
-              {/* Confirm Password */}
-              <ReflectiveInput
-                icon={<Lock className="w-5 h-5" />}
-                type="password"
-                placeholder="确认密码"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                disabled={isLoading}
-              />
-
-              {/* Bonus Info */}
-              <div className="flex items-center justify-center gap-2 p-3 rounded-xl bg-[#10b981]/10 border border-[#10b981]/20">
-                <Gift className="w-4 h-4 text-[#10b981]" />
-                <p className="text-sm text-white/70">
-                  新用户注册即送 <span className="text-[#10b981] font-bold">100 积分</span>
-                </p>
+            {/* 特色胶囊 */}
+            <div className="flex flex-wrap gap-4">
+              <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 backdrop-blur-md">
+                <Fingerprint className="w-4 h-4 text-[#a855f7]" />
+                <span className="text-sm font-medium text-white/80">角色 IP 孵化</span>
               </div>
-
-              {/* Submit Button */}
-              <Button
-                type="submit"
-                disabled={isLoading}
-                className="w-full h-12 bg-gradient-to-b from-white to-gray-100 hover:to-white text-black font-bold text-base rounded-xl transition-all duration-300 hover:scale-[1.02] shadow-[0_0_20px_rgba(255,255,255,0.3),inset_0_1px_0_rgba(255,255,255,1)] hover:shadow-[0_0_30px_rgba(255,255,255,0.5),inset_0_1px_0_rgba(255,255,255,1)] mt-2 group relative overflow-hidden border-t border-white disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <span className="relative z-10 flex items-center justify-center gap-2">
-                  {isLoading ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      注册中...
-                    </>
-                  ) : (
-                    <>
-                      立即注册
-                      <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-                    </>
-                  )}
-                </span>
-              </Button>
-
-              {/* Divider */}
-              <div className="relative flex py-2 items-center">
-                <div className="flex-grow border-t border-white/10" />
-                <span className="flex-shrink mx-4 text-white/20 text-xs uppercase tracking-widest">
-                  Or continue with
-                </span>
-                <div className="flex-grow border-t border-white/10" />
+              <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 backdrop-blur-md">
+                <Sparkles className="w-4 h-4 text-[#3b82f6]" />
+                <span className="text-sm font-medium text-white/80">前沿 AI 模型</span>
               </div>
-
-              {/* Social Login */}
-              <div className="grid grid-cols-2 gap-4">
-                <button
-                  type="button"
-                  className="h-10 flex items-center justify-center gap-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-white/80 transition-all text-sm font-medium group"
-                >
-                  <Github className="w-4 h-4 group-hover:text-white" />
-                  GitHub
-                </button>
-                <button
-                  type="button"
-                  className="h-10 flex items-center justify-center gap-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-white/80 transition-all text-sm font-medium group"
-                >
-                  <Chrome className="w-4 h-4 text-blue-400 group-hover:text-blue-300" />
-                  Google
-                </button>
-              </div>
-
-              {/* Login Link */}
-              <div className="text-center">
-                <p className="text-white/40 text-sm">
-                  已有账号？
-                  <Link href="/auth/login" className="text-[#10b981] hover:text-[#34d399] ml-1 transition-colors font-medium">
-                    立即登录
-                  </Link>
-                </p>
-              </div>
-
-              {/* Footer */}
-              <div className="text-center">
-                <p className="text-white/30 text-xs">
-                  注册即代表您同意
-                  <Link href="/terms" className="text-white/50 hover:text-[#10b981] mx-1 transition-colors underline decoration-white/20 underline-offset-4">
-                    服务条款
-                  </Link>
-                  和
-                  <Link href="/privacy" className="text-white/50 hover:text-[#10b981] mx-1 transition-colors underline decoration-white/20 underline-offset-4">
-                    隐私政策
-                  </Link>
-                </p>
+              <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 backdrop-blur-md">
+                <Globe className="w-4 h-4 text-[#10b981]" />
+                <span className="text-sm font-medium text-white/80">内容链接全球</span>
               </div>
             </div>
-          </form>
-        </ReflectiveCard>
+          </div>
+        </div>
+
+        {/* 3. 右侧：注册表单区 */}
+        <div className="w-full lg:w-[500px] xl:w-[600px] flex items-center justify-center p-6 sm:p-12">
+
+          {/* 高定毛玻璃容器 */}
+          <div className="w-full max-w-[460px] bg-white/[0.03] backdrop-blur-2xl border border-white/10 rounded-[2rem] p-8 sm:p-10 shadow-[0_20px_50px_rgba(0,0,0,0.5)] relative overflow-hidden group/card">
+            {/* 玻璃边缘折射高光 */}
+            <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-white/30 to-transparent opacity-50" />
+
+            {/* 移动端显示的 Logo */}
+            <div className="flex justify-center mb-6 lg:hidden">
+              <img src="/images/toryx_logo_text.png" alt="ToryX AI" className="h-10 drop-shadow-[0_0_20px_rgba(16,185,129,0.3)]" />
+            </div>
+
+            {/* 表单头部 */}
+            <div className="text-center lg:text-left mb-6">
+              <h2 className="text-2xl font-semibold text-white mb-2 tracking-tight">创建账号</h2>
+              <p className="text-sm text-white/40">注册 ToryX 账号以开始创作</p>
+            </div>
+
+            {/* Google 大按钮 */}
+            <button
+              type="button"
+              onClick={handleGoogleRegister}
+              className="w-full h-12 flex items-center justify-center gap-3 bg-white hover:bg-gray-50 text-black font-semibold text-[15px] rounded-xl transition-all duration-300 hover:scale-[1.02] shadow-[0_0_20px_rgba(255,255,255,0.1)] hover:shadow-[0_0_30px_rgba(255,255,255,0.25)] mb-5"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24">
+                <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/>
+                <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+                <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+              </svg>
+              继续使用 Google 注册
+            </button>
+
+            {/* 分割线 */}
+            <div className="flex items-center gap-4 mb-5">
+              <div className="flex-1 h-px bg-white/5" />
+              <span className="text-white/20 text-xs tracking-widest uppercase">或者</span>
+              <div className="flex-1 h-px bg-white/5" />
+            </div>
+
+            {/* 表单主体 */}
+            <form onSubmit={handleRegister}>
+              <div className="space-y-3">
+                {/* Name */}
+                <ReflectiveInput
+                  icon={<User className="w-5 h-5 text-white/50" />}
+                  placeholder="用户名"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  disabled={isLoading}
+                />
+
+                {/* Email */}
+                <ReflectiveInput
+                  icon={<Mail className="w-5 h-5 text-white/50" />}
+                  type="email"
+                  placeholder="邮箱地址"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  disabled={isLoading}
+                />
+
+                {/* Password */}
+                <ReflectiveInput
+                  icon={<Lock className="w-5 h-5 text-white/50" />}
+                  type="password"
+                  placeholder="密码（至少6位）"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  disabled={isLoading}
+                />
+
+                {/* Confirm Password */}
+                <ReflectiveInput
+                  icon={<Lock className="w-5 h-5 text-white/50" />}
+                  type="password"
+                  placeholder="确认密码"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  disabled={isLoading}
+                />
+
+                {/* Bonus Info */}
+                <div className="flex items-center justify-center gap-2 p-2.5 rounded-xl bg-[#10b981]/10 border border-[#10b981]/20">
+                  <Gift className="w-4 h-4 text-[#10b981]" />
+                  <p className="text-sm text-white/70">
+                    新用户注册即送 <span className="text-[#10b981] font-bold">100 积分</span>
+                  </p>
+                </div>
+
+                {/* Submit Button */}
+                <Button
+                  type="submit"
+                  disabled={isLoading}
+                  className="w-full h-12 bg-gradient-to-r from-[#10b981] to-[#059669] hover:from-[#34d399] hover:to-[#10b981] text-white font-semibold text-[15px] rounded-xl transition-all duration-300 hover:scale-[1.02] shadow-[0_0_20px_rgba(16,185,129,0.2)] hover:shadow-[0_0_30px_rgba(16,185,129,0.4)] border-none group disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <span className="flex items-center justify-center gap-2">
+                    {isLoading ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        注册中...
+                      </>
+                    ) : (
+                      <>
+                        立即注册
+                        <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                      </>
+                    )}
+                  </span>
+                </Button>
+
+                {/* 底部链接 */}
+                <div className="pt-4 text-center space-y-3">
+                  <p className="text-white/50 text-sm">
+                    已有账号？
+                    <Link href="/auth/login" className="text-white hover:text-[#10b981] ml-2 font-medium transition-colors">
+                      立即登录
+                    </Link>
+                  </p>
+                  <p className="text-white/30 text-xs">
+                    注册即代表您同意我们的
+                    <Link href="/terms" className="text-white/50 hover:text-white mx-1 transition-colors hover:underline underline-offset-4">服务条款</Link>
+                    和
+                    <Link href="/privacy" className="text-white/50 hover:text-white mx-1 transition-colors hover:underline underline-offset-4">隐私政策</Link>
+                  </p>
+                </div>
+
+              </div>
+            </form>
+          </div>
+        </div>
       </div>
     </div>
   );

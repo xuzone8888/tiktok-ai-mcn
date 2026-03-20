@@ -22,6 +22,7 @@ import {
   Clapperboard,
   Copy,
   CreditCard,
+  LayoutTemplate,
 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -113,6 +114,18 @@ const navGroups: NavGroup[] = [
         href: "/image-factory",
         icon: Camera,
         description: "电商图片精修",
+      },
+    ],
+  },
+  // --- 创作灵感 ---
+  {
+    header: "创作灵感",
+    items: [
+      {
+        title: "模板中心",
+        href: "/templates",
+        icon: LayoutTemplate,
+        description: "发现灵感模板",
       },
     ],
   },
