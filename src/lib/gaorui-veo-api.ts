@@ -184,10 +184,12 @@ export async function submitVeoComponents(
     // aspect_ratio
     parts.push(`--${boundary}\r\nContent-Disposition: form-data; name="aspect_ratio"\r\n\r\n${params.aspectRatio || "9:16"}`);
 
-    // 参考图片 URL — Go 后端期望 images 为 JSON 数组 []string
+    // 参考图片 URL — Go 后端期望 images 为 []string，
+    // multipart form-data 中通过重复同名字段传数组
     if (params.imageUrls && params.imageUrls.length > 0) {
-      const imagesJson = JSON.stringify(params.imageUrls.slice(0, 3));
-      parts.push(`--${boundary}\r\nContent-Disposition: form-data; name="images"\r\n\r\n${imagesJson}`);
+      for (const url of params.imageUrls.slice(0, 3)) {
+        parts.push(`--${boundary}\r\nContent-Disposition: form-data; name="images"\r\n\r\n${url}`);
+      }
     }
 
     const bodyStr = parts.join("\r\n") + `\r\n--${boundary}--\r\n`;
