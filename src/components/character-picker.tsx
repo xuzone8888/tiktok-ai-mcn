@@ -225,11 +225,13 @@ export function CharacterPicker({
       // 获取自建角色（dataSource !== "hired" 时才请求）
       let ownChars: CharacterOption[] = [];
       if (dataSource !== "hired") {
-        const userDataStr = localStorage.getItem("user-data");
+        // 通过 session 认证获取 userId
         let userId = "";
-        if (userDataStr) {
-          try { const u = JSON.parse(userDataStr); userId = u?.id || u?.user?.id || ""; } catch { /* */ }
-        }
+        try {
+          const creditsRes = await fetch("/api/user/credits");
+          const creditsData = await creditsRes.json();
+          userId = creditsData?.userId || "";
+        } catch { /* ignore */ }
         if (userId) {
           const charRes = await fetch("/api/characters?userId=" + userId);
           const charResult = await charRes.json();

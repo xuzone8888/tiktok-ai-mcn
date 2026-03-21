@@ -345,7 +345,7 @@ function MyCharacterCard({ character, onUseInStudio, onRetryReference, onPublish
           <img
             src={character.avatar_url}
             alt={character.name}
-            className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-110"
+            className="h-full w-full object-cover object-top transition-transform duration-700 group-hover:scale-110"
           />
         ) : (
           <div className="h-full w-full flex items-center justify-center">
