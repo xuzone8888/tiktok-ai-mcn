@@ -28,7 +28,7 @@ export default function CharacterCreatePage() {
 
   // 页面标题
   useEffect(() => {
-    document.title = "角色捏脸舱 | ToryX AI MCN";
+    document.title = "创建角色 | ToryX AI MCN";
   }, []);
 
   // 获取用户 ID 和积分

@@ -278,7 +278,7 @@ export default function ModelsPage() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight flex items-center gap-3">
             <div className="h-8 w-1.5 rounded-full bg-gradient-to-b from-mermaid-lime to-mermaid-cyan shadow-[0_0_10px_rgba(0,242,234,0.5)]" />
-            <span className="text-white drop-shadow-lg">模特资源库</span>
+            <span className="text-white drop-shadow-lg">角色市场</span>
           </h1>
           <p className="mt-2 text-white/60">
             发现顶级 AI 模特，打造您的创意团队
