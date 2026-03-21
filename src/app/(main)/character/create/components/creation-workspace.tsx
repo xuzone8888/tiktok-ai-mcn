@@ -13,11 +13,23 @@ import type { CharacterDna } from "@/types/character";
 import { 
   Sparkles, Keyboard, Lightbulb, Wand2, ImagePlus, 
   CloudUpload, Hourglass, RefreshCw, Dna, VenetianMask, 
-  User, Ruler, Scissors, Shirt, Loader2
+  User, Ruler, Scissors, Shirt, Loader2, Info
 } from "lucide-react";
 
+// ====== Stitch V3: 三色配色系统 ======
+const GROUP_COLORS: Record<string, { bg: string; text: string; shadow: string; iconColor: string; tagBg: string; tagBorder: string; tagText: string }> = {
+  species:  { bg: '#5ffff7', text: '#00605c', shadow: '0 0 15px rgba(95,255,247,0.2)',  iconColor: '#5ffff7', tagBg: 'rgba(95,255,247,0.1)',  tagBorder: 'rgba(95,255,247,0.2)',  tagText: '#5ffff7' },
+  baseDna:  { bg: '#c3f400', text: '#455900', shadow: '0 0 15px rgba(195,244,0,0.2)',  iconColor: '#c3f400', tagBg: 'rgba(195,244,0,0.1)',  tagBorder: 'rgba(195,244,0,0.2)',  tagText: '#c3f400' },
+  genderAge:{ bg: '#ff6daf', text: '#4b002a', shadow: '0 0 15px rgba(255,109,175,0.2)', iconColor: '#ff6daf', tagBg: 'rgba(255,109,175,0.1)', tagBorder: 'rgba(255,109,175,0.2)', tagText: '#ff6daf' },
+  bodyType: { bg: '#5ffff7', text: '#00605c', shadow: '0 0 15px rgba(95,255,247,0.2)',  iconColor: '#5ffff7', tagBg: 'rgba(95,255,247,0.1)',  tagBorder: 'rgba(95,255,247,0.2)',  tagText: '#5ffff7' },
+  hair:     { bg: '#c3f400', text: '#455900', shadow: '0 0 15px rgba(195,244,0,0.2)',  iconColor: '#c3f400', tagBg: 'rgba(195,244,0,0.1)',  tagBorder: 'rgba(195,244,0,0.2)',  tagText: '#c3f400' },
+  outfit:   { bg: '#ff6daf', text: '#4b002a', shadow: '0 0 15px rgba(255,109,175,0.2)', iconColor: '#ff6daf', tagBg: 'rgba(255,109,175,0.1)', tagBorder: 'rgba(255,109,175,0.2)', tagText: '#ff6daf' },
+};
+const DEFAULT_COLOR = GROUP_COLORS.species;
+
 function getGroupIcon(key: string) {
-  const props = { className: "w-4 h-4 opacity-70" };
+  const color = (GROUP_COLORS[key] || DEFAULT_COLOR).iconColor;
+  const props = { className: "w-4 h-4", style: { color } };
   const map: Record<string, React.ReactNode> = {
     species: <Dna {...props} />,
     baseDna: <VenetianMask {...props} />,
@@ -94,10 +106,11 @@ function GenerateButton({ store, isGenerating, handleGenerate }: { store: any, i
 }
 
 function DnaGroup({ group, store, handleSelect, getSelected }: any) {
+  const colorConfig = GROUP_COLORS[group.key] || DEFAULT_COLOR;
   return (
-    <div className="relative group p-5 sm:p-6 !rounded-[24px] border border-white/20 hover:border-[#00F2EA]/40 bg-white/[0.07] hover:bg-white/[0.08] backdrop-blur-md shadow-[0_8px_32px_rgba(0,0,0,0.3),inset_0_1px_1px_rgba(255,255,255,0.4)] hover:shadow-[0_12px_40px_rgba(0,0,0,0.4),0_0_30px_rgba(0,242,234,0.15),inset_0_1px_1px_rgba(255,255,255,0.4)] transition-all duration-500 ease-spring h-full overflow-hidden">
-      <div className="absolute inset-0 bg-gradient-to-b from-[#00F2EA]/[0.05] to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none" />
-      <div className="text-xs font-bold text-white/50 mb-3 sm:mb-4 uppercase tracking-[0.2em] flex items-center gap-2 relative z-10 group-hover:text-[#00F2EA]/90 transition-colors">
+    <div className="relative group p-6 rounded-[32px] border border-white/[0.08] bg-white/[0.03] backdrop-blur-[24px] shadow-[0_8px_32px_rgba(0,0,0,0.3)] hover:shadow-[0_12px_40px_rgba(0,0,0,0.4)] transition-all duration-500 ease-spring h-full overflow-hidden">
+      <div className="absolute inset-0 bg-gradient-to-b from-white/[0.03] to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none" />
+      <div className="text-xs font-bold text-white/50 mb-4 uppercase tracking-[0.2em] flex items-center gap-2 relative z-10 transition-colors">
         {getGroupIcon(group.key)} <span className="pt-[1px]">{group.label}</span>
       </div>
       <div className="flex flex-wrap gap-2.5 relative z-10">
@@ -108,11 +121,16 @@ function DnaGroup({ group, store, handleSelect, getSelected }: any) {
               key={opt.value}
               type="button"
               onClick={() => handleSelect(group.key, opt.value)}
-              className={`px-4 py-2 rounded-full text-[13px] tracking-wide transition-all duration-500 ease-spring active:scale-95
+              className={`px-4 py-2 rounded-full text-[13px] font-bold tracking-wide transition-all duration-300 active:scale-95
                 ${isSelected 
-                  ? 'bg-gradient-to-b from-white to-white/95 text-[#0F172A] font-extrabold border border-white shadow-[0_4px_20px_rgba(0,242,234,0.3),inset_0_-2px_4px_rgba(0,0,0,0.1)] ring-1 ring-[#00F2EA]/40' 
-                  : 'bg-white/[0.03] shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)] text-white/60 hover:text-white border border-white/10 hover:bg-white/[0.1] hover:border-[#00F2EA]/30 hover:shadow-[0_4px_15px_rgba(0,242,234,0.15),inset_0_1px_1px_rgba(255,255,255,0.2)]'
+                  ? '' 
+                  : 'bg-white/[0.03] text-white/60 hover:text-white border border-white/[0.05] hover:bg-white/[0.08] hover:border-white/20'
                 }`}
+              style={isSelected ? {
+                backgroundColor: colorConfig.bg,
+                color: colorConfig.text,
+                boxShadow: colorConfig.shadow,
+              } : undefined}
             >
               {opt.label}
             </button>
@@ -304,13 +322,13 @@ export function CreationWorkspace() {
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_bottom_left,rgba(204,255,0,0.03),transparent_40%)] pointer-events-none mix-blend-screen" />
       
       {/* 1. Titanium Header & 全局模式切换 (左右分布) */}
-      <div className="mb-6 lg:mb-8 relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="mb-8 lg:mb-12 relative z-10 flex flex-col sm:flex-row sm:items-end justify-between gap-6">
         <div>
-          <h1 className="text-2xl lg:text-3xl font-bold flex items-center gap-3 drop-shadow-lg text-white tracking-tight-ios text-balance">
-            <Sparkles className="w-7 h-7 text-tiktok-cyan" fill="currentColor" />
-            创建角色
-            <span className="text-xs lg:text-sm font-normal text-white/40 tracking-widest uppercase mt-1 lg:mt-2 ml-1 lg:ml-2">Character Forge</span>
-          </h1>
+          <div className="flex items-center gap-3">
+            <Sparkles className="w-8 h-8 lg:w-10 lg:h-10 text-[#5ffff7]" fill="currentColor" />
+            <h1 className="text-3xl lg:text-5xl font-extrabold text-white drop-shadow-lg tracking-tight">创建角色</h1>
+          </div>
+          <p className="text-lg lg:text-xl font-bold text-white/50 mt-1">Character Forge</p>
           <p className="mt-2 text-white/50 text-xs lg:text-sm flex items-center gap-1.5"><Dna className="w-3.5 h-3.5" /> 注入 DNA 特征，铸造专属数字角色</p>
         </div>
         
@@ -332,14 +350,14 @@ export function CreationWorkspace() {
       </div>
 
       {/* 2. 主分栏架构 (1:1 终极对称) */}
-      <div className="flex flex-col xl:grid xl:grid-cols-2 gap-8 relative items-stretch">
+      <div className="flex flex-col lg:grid lg:grid-cols-12 gap-8 relative items-stretch">
         
         {/* 左侧工作台 */}
-        <div className="workspace-left flex flex-col w-full h-full">
+        <div className="lg:col-span-7 flex flex-col w-full h-full">
 
           {/* 面板内容切换 */}
           {store.creationMode === "dna" ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {optionGroups.map((group: any, idx: number) => (
                 <div key={group.key} className="animate-in fade-in slide-in-from-bottom-8 duration-700 ease-out" style={{ animationDelay: `${idx * 100}ms`, animationFillMode: 'backwards' }}>
                   <DnaGroup group={group} store={store} handleSelect={handleDnaPillSelect} getSelected={getSelectedValues} />
@@ -365,7 +383,7 @@ export function CreationWorkspace() {
         </div>
 
         {/* 右侧核心控制台 (1:1等比例镜像) */}
-        <div className="workspace-right w-full relative h-full">
+        <div className="lg:col-span-5 w-full relative h-full">
           <div className="p-5 lg:p-7 !rounded-[32px] flex flex-col gap-6 relative h-full bg-white/[0.05] backdrop-blur-[100px] border border-white/20 shadow-[0_30px_60px_-15px_rgba(0,0,0,0.4),inset_0_1px_1px_rgba(255,255,255,0.3)] min-h-[400px] overflow-hidden">
             <div className="absolute inset-0 bg-gradient-to-t from-white/[0.05] to-transparent pointer-events-none" />
             
@@ -376,23 +394,54 @@ export function CreationWorkspace() {
               {store.creationMode === "dna" && (
                 <div className="prompt-section flex flex-col gap-3 shrink-0 flex-1">
                   <div className="flex justify-between items-center">
-                    <span className="text-xs lg:text-sm font-medium text-white/70 flex items-center gap-1.5"><Lightbulb className="w-4 h-4 text-yellow-200/80" /> 智能提示词联动</span>
+                    <span className="text-xs lg:text-sm font-bold text-white/80 flex items-center gap-1.5"><Lightbulb className="w-4 h-4 text-[#5ffff7]" /> 智能提示词联动</span>
                     <button
                       type="button"
                       onClick={handleEnhancePrompt}
                       disabled={!store.prompt.trim() || store.isEnhancing}
-                      className="px-3 lg:px-4 py-1.5 rounded-full border shadow-[0_2px_10px_rgba(0,0,0,0.1)] backdrop-blur-md bg-white/10 text-white/80 hover:text-white border-white/20 hover:border-[#EC4899]/50 hover:bg-white/[0.15] hover:shadow-[0_0_20px_rgba(236,72,153,0.3)] transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5 min-w-[90px] group/enhance"
+                      className="px-4 py-1.5 rounded-full border backdrop-blur-md bg-white/[0.06] text-[#5ffff7] border-white/[0.08] hover:bg-white/[0.1] transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5 min-w-[90px] text-xs font-bold group/enhance"
                     >
                       {store.isEnhancing ? <><Loader2 className="w-3.5 h-3.5 animate-spin text-[#CCFF00]" />施法中</> : <><Wand2 className="w-3.5 h-3.5 text-[#EC4899] group-hover/enhance:drop-shadow-[0_0_8px_rgba(236,72,153,0.8)] transition-all" /> AI 扩写</>}
                     </button>
                   </div>
+
+                  {/* Stitch V3: 已选特征标签条 */}
+                  {(() => {
+                    const allSelected: { label: string; groupKey: string }[] = [];
+                    optionGroups.forEach((g: any) => {
+                      const selected = getSelectedValues(g.key);
+                      g.options.forEach((opt: any) => {
+                        if (selected.includes(opt.value)) {
+                          allSelected.push({ label: opt.label, groupKey: g.key });
+                        }
+                      });
+                    });
+                    if (allSelected.length === 0) return null;
+                    return (
+                      <div className="flex flex-wrap gap-2 p-3 bg-black/40 rounded-xl border border-white/5">
+                        {allSelected.map(({ label, groupKey }) => {
+                          const c = GROUP_COLORS[groupKey] || DEFAULT_COLOR;
+                          return (
+                            <span
+                              key={`${groupKey}-${label}`}
+                              className="flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider"
+                              style={{ backgroundColor: c.tagBg, borderWidth: 1, borderStyle: 'solid', borderColor: c.tagBorder, color: c.tagText }}
+                            >
+                              <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ backgroundColor: c.tagText }} />
+                              {label}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
                   
-                  <div className={`relative rounded-2xl transition-all duration-500 bg-white/[0.02] backdrop-blur-[40px] shadow-[inset_0_1px_3px_rgba(255,255,255,0.05),0_4px_20px_rgba(0,0,0,0.4)] border flex-1 flex flex-col ${store.isEnhancing ? 'border-[#CCFF00]/50 shadow-[0_0_30px_rgba(204,255,0,0.2),inset_0_1px_5px_rgba(255,255,255,0.3)]' : 'border-white/10 hover:border-[#EC4899]/30 hover:bg-[#EC4899]/[0.02] hover:shadow-[0_0_20px_rgba(236,72,153,0.1)]'}`}>
+                  <div className={`relative rounded-2xl transition-all duration-500 bg-black/30 backdrop-blur-[40px] shadow-[inset_0_1px_3px_rgba(255,255,255,0.05),0_4px_20px_rgba(0,0,0,0.4)] border flex-1 flex flex-col ${store.isEnhancing ? 'border-[#CCFF00]/50 shadow-[0_0_30px_rgba(204,255,0,0.2),inset_0_1px_5px_rgba(255,255,255,0.3)]' : 'border-white/[0.08] hover:border-[#5ffff7]/20'}`}>
                     {store.isEnhancing && (
                       <div className="absolute inset-0 border-2 border-[#CCFF00]/50 rounded-2xl animate-pulse pointer-events-none z-10" />
                     )}
                     <TypewriterTextArea
-                      className="flex-1 w-full min-h-[140px] bg-transparent p-4 lg:p-5 text-white/90 text-[15px] font-mono leading-loose tracking-wide focus:outline-none resize-none relative z-0 custom-scrollbar block selection:bg-[#00F2EA]/30"
+                      className="flex-1 w-full min-h-[140px] bg-transparent p-4 lg:p-6 text-white/90 text-[15px] font-mono leading-loose tracking-wide focus:outline-none resize-none relative z-0 custom-scrollbar block selection:bg-[#00F2EA]/30"
                       value={store.prompt}
                       onChange={(val) => store.setPrompt(val)}
                       placeholders={[
@@ -401,6 +450,10 @@ export function CreationWorkspace() {
                         "或者在这里输入你天马行空的灵感，让 AI 施展魔法..."
                       ]}
                     />
+                    {/* Stitch V3: Prompt 脚注 */}
+                    <div className="absolute bottom-3 right-4 text-[10px] text-white/30 flex items-center gap-1 bg-black/40 px-2 py-1 rounded backdrop-blur pointer-events-none">
+                      <Info className="w-3 h-3" /> 输入词将自动结合左侧 DNA 特征
+                    </div>
                   </div>
                 </div>
               )}
@@ -422,8 +475,8 @@ export function CreationWorkspace() {
                     const file = e.dataTransfer.files?.[0];
                     if(file) handleImageUpload(file);
                   }}
-                  className={`relative rounded-2xl transition-all duration-300 flex flex-col items-center justify-center overflow-hidden min-h-[90px] lg:min-h-[110px]
-                    ${store.referenceImageUrl ? 'border border-white/20 p-0 bg-white/[0.05] shadow-lg' : 'border border-dashed border-white/30 hover:border-[#CCFF00]/40 hover:bg-[#CCFF00]/[0.03] cursor-pointer p-4 lg:p-5 bg-black/20 shadow-[inset_0_1px_4px_rgba(0,0,0,0.3)] hover:shadow-[0_0_20px_rgba(204,255,0,0.1)] backdrop-blur-xl group'}
+                  className={`relative rounded-2xl transition-all duration-300 flex flex-col items-center justify-center overflow-hidden
+                    ${store.referenceImageUrl ? 'border border-white/20 p-0 bg-white/[0.05] shadow-lg' : 'border-2 border-dashed border-white/[0.08] hover:border-[#5ffff7]/30 cursor-pointer py-4 bg-white/[0.02] hover:bg-white/[0.04] backdrop-blur-xl group'}
                     ${isUploading ? 'opacity-50' : ''}`}
                 >
                   <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={e => {if(e.target.files) handleImageUpload(e.target.files[0])}} />
@@ -453,8 +506,9 @@ export function CreationWorkspace() {
             </div>
 
             {/* PC 端的悬浮生成按钮 (绝对固定在右侧控制台底部) */}
-            <div className="hidden lg:block shrink-0 pt-4 border-t border-white/10 mt-auto relative z-10">
+            <div className="hidden lg:block shrink-0 pt-6 mt-auto relative z-10">
               <GenerateButton store={store} isGenerating={isGenerating} handleGenerate={handleGenerate} />
+              <p className="text-center text-xs text-white/30 mt-3 font-medium">预计生成时间: 15-20 秒</p>
             </div>
             
           </div>
