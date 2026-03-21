@@ -169,9 +169,32 @@ export async function POST(request: Request) {
 
       console.log("[Character Generate] Reference image ready (sync):", geminiResult.imageUrl.substring(0, 60));
 
+      // xas231 返回的是临时 URL (flow.xas231.online/tmp/)，约 2 小时后过期
+      // 需要下载图片并上传到 OSS 持久化存储
+      let permanentUrl = geminiResult.imageUrl;
+      try {
+        const { uploadImageBuffer, generateMediaPath, getPublicUrl } = await import('@/lib/oss');
+        const imgResponse = await fetch(geminiResult.imageUrl);
+        if (imgResponse.ok) {
+          const imgBuffer = Buffer.from(await imgResponse.arrayBuffer());
+          const contentType = imgResponse.headers.get('content-type') || 'image/jpeg';
+          const ext = contentType.split('/')[1] || 'jpg';
+          const objectPath = generateMediaPath(
+            'images',
+            'character-reference',
+            `ref-sheet-${Date.now()}.${ext}`
+          );
+          permanentUrl = await uploadImageBuffer(imgBuffer, objectPath, contentType);
+          console.log("[Character Generate] Reference uploaded to OSS:", permanentUrl.substring(0, 80));
+        }
+      } catch (ossErr) {
+        console.error("[Character Generate] OSS upload failed, using temp URL:", ossErr);
+        // fallback: 继续使用临时 URL，至少短期内可用
+      }
+
       return NextResponse.json({
         success: true,
-        referenceImageUrl: geminiResult.imageUrl,  // 同步直接返回图片 URL
+        referenceImageUrl: permanentUrl,
       });
     }
 
