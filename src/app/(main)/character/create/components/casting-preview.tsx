@@ -297,14 +297,7 @@ export function CastingPreview() {
 
     store.setIsSaving(true);
     try {
-      const userDataStr = localStorage.getItem("user-data");
-      let userId = "";
-      if (userDataStr) {
-        try {
-          const userData = JSON.parse(userDataStr);
-          userId = userData?.id || userData?.user?.id || "";
-        } catch { /* ignore */ }
-      }
+      const userId = store.userId;
 
       if (!userId) {
         alert("请先登录");
@@ -1255,32 +1248,36 @@ export function CastingPreview() {
 
         .btn-save {
           width: 100%;
-          padding: 0.85rem 1rem;
+          padding: 1rem 1.2rem;
           border-radius: 0.75rem;
-          background: rgba(255, 255, 255, 0.08);
-          border: 1px solid rgba(255, 255, 255, 0.12);
+          background: linear-gradient(135deg, rgba(0, 242, 234, 0.15), rgba(204, 255, 0, 0.1));
+          border: 1px solid rgba(0, 242, 234, 0.3);
           color: rgba(255, 255, 255, 0.95);
-          font-size: 0.9rem;
+          font-size: 0.95rem;
           font-weight: 600;
           cursor: pointer;
           transition: all 0.3s;
           display: flex;
           align-items: center;
           justify-content: center;
-          box-shadow: 0 4px 15px -3px rgba(0,0,0,0.3),
+          min-height: 48px;
+          box-shadow: 0 4px 15px -3px rgba(0, 242, 234, 0.2),
                       inset 0 1px 0 rgba(255,255,255,0.1);
         }
 
         .btn-save:hover:not(:disabled) {
-          background: rgba(255, 255, 255, 0.14);
-          border-color: rgba(255, 255, 255, 0.25);
-          box-shadow: 0 6px 20px -3px rgba(0,0,0,0.4),
+          background: linear-gradient(135deg, rgba(0, 242, 234, 0.25), rgba(204, 255, 0, 0.18));
+          border-color: rgba(0, 242, 234, 0.5);
+          box-shadow: 0 6px 20px -3px rgba(0, 242, 234, 0.3),
                       inset 0 1px 0 rgba(255,255,255,0.15);
           transform: translateY(-1px);
         }
         .btn-save:disabled {
-           opacity: 0.4;
+           opacity: 0.5;
            cursor: not-allowed;
+           background: rgba(255, 255, 255, 0.06);
+           border-color: rgba(255, 255, 255, 0.1);
+           box-shadow: none;
         }
 
         .btn-activate {
