@@ -492,6 +492,18 @@ export default function TeamPage() {
   const [publishTarget, setPublishTarget] = useState<MyCharacter | null>(null);
   const [publishPrice, setPublishPrice] = useState(100);
   const [isPublishing, setIsPublishing] = useState(false);
+  const [userId, setUserId] = useState("");
+
+  // 获取当前用户 ID（通过 session 认证）
+  useEffect(() => {
+    fetch("/api/user/credits")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.userId) setUserId(data.userId);
+      })
+      .catch((err) => console.error("[Team] Failed to get userId:", err));
+  }, []);
+
   // Fetch hired models - 使用 /api/contracts API
   const fetchModels = useCallback(async () => {
     try {
@@ -554,14 +566,6 @@ export default function TeamPage() {
   // Fetch self-created characters - 独立查询
   const fetchMyCharacters = useCallback(async () => {
     try {
-      const userDataStr = localStorage.getItem("user-data");
-      let userId = "";
-      if (userDataStr) {
-        try {
-          const userData = JSON.parse(userDataStr);
-          userId = userData?.id || userData?.user?.id || "";
-        } catch { /* ignore */ }
-      }
       if (!userId) return;
 
       const response = await fetch(`/api/characters?userId=${userId}`);
@@ -588,7 +592,7 @@ export default function TeamPage() {
       console.error("[Team Page] My characters error:", error);
       setMyCharacters([]);
     }
-  }, []);
+  }, [userId]);
 
   // Unified data load
   const fetchAll = useCallback(async () => {
@@ -650,11 +654,7 @@ export default function TeamPage() {
     if (!publishTarget) return;
     setIsPublishing(true);
     try {
-      const userDataStr = localStorage.getItem("user-data");
-      let userId = "";
-      if (userDataStr) {
-        try { const u = JSON.parse(userDataStr); userId = u?.id || u?.user?.id || ""; } catch { /* */ }
-      }
+
       const response = await fetch("/api/characters/publish", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -679,11 +679,7 @@ export default function TeamPage() {
   const handleUnpublish = async (characterId: string) => {
     if (!confirm("确定要从广场下架这个角色吗？")) return;
     try {
-      const userDataStr = localStorage.getItem("user-data");
-      let userId = "";
-      if (userDataStr) {
-        try { const u = JSON.parse(userDataStr); userId = u?.id || u?.user?.id || ""; } catch { /* */ }
-      }
+
       const response = await fetch(`/api/characters/publish?characterId=${characterId}&userId=${userId}`, { method: "DELETE" });
       const result = await response.json();
       if (result.success) {
@@ -701,11 +697,7 @@ export default function TeamPage() {
   const handleDelete = async (characterId: string) => {
     if (!confirm("确定要删除这个角色吗？此操作不可撤销。")) return;
     try {
-      const userDataStr = localStorage.getItem("user-data");
-      let userId = "";
-      if (userDataStr) {
-        try { const u = JSON.parse(userDataStr); userId = u?.id || u?.user?.id || ""; } catch { /* */ }
-      }
+
       const response = await fetch(`/api/characters?id=${characterId}&userId=${userId}`, { method: "DELETE" });
       const result = await response.json();
       if (result.success) {
