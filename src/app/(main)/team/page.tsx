@@ -323,9 +323,10 @@ interface MyCharacterCardProps {
   onRetryReference: (characterId: string) => void;
   onPublish: (character: MyCharacter) => void;
   onDelete: (characterId: string) => void;
+  onPreview: (character: MyCharacter) => void;
 }
 
-function MyCharacterCard({ character, onUseInStudio, onRetryReference, onPublish, onDelete }: MyCharacterCardProps) {
+function MyCharacterCard({ character, onUseInStudio, onRetryReference, onPublish, onDelete, onPreview }: MyCharacterCardProps) {
   const refStatus = getReferenceStatusConfig(character.reference_status);
 
   return (
@@ -340,7 +341,7 @@ function MyCharacterCard({ character, onUseInStudio, onRetryReference, onPublish
       {/* 顶部图片遮罩 */}
       <div className="absolute inset-0 bg-gradient-to-t from-[#0B0C10] via-transparent to-transparent opacity-90 z-10 pointer-events-none" />
       {/* Image Section */}
-      <div className="relative aspect-[9/16] overflow-hidden bg-white/5">
+      <div className="relative aspect-[9/16] overflow-hidden bg-white/5 cursor-pointer" onClick={() => onPreview(character)}>
         {character.avatar_url ? (
           <img
             src={character.avatar_url}
@@ -493,6 +494,7 @@ export default function TeamPage() {
   const [publishPrice, setPublishPrice] = useState(100);
   const [isPublishing, setIsPublishing] = useState(false);
   const [userId, setUserId] = useState("");
+  const [previewCharacter, setPreviewCharacter] = useState<MyCharacter | null>(null);
 
   // 获取当前用户 ID（通过 session 认证）
   useEffect(() => {
@@ -905,7 +907,7 @@ export default function TeamPage() {
                 <span className="h-5 w-1 rounded-full bg-mermaid-pink" />
                 🎨 我的角色 <span className="text-white/40 font-normal text-sm">({myCharacters.length})</span>
               </h2>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-5">
                 {myCharacters.map((char) => (
                   <MyCharacterCard
                     key={char.id}
@@ -914,6 +916,7 @@ export default function TeamPage() {
                     onRetryReference={handleRetryReference}
                     onPublish={handlePublish}
                     onDelete={handleDelete}
+                    onPreview={setPreviewCharacter}
                   />
                 ))}
               </div>
@@ -1198,6 +1201,47 @@ export default function TeamPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* 角色预览弹窗 */}
+      {previewCharacter && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm"
+          onClick={() => setPreviewCharacter(null)}
+        >
+          <div
+            className="relative max-w-4xl max-h-[90vh] w-full mx-4 rounded-2xl overflow-hidden bg-[#0B0C10] border border-white/10 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => setPreviewCharacter(null)}
+              className="absolute top-4 right-4 z-10 w-8 h-8 rounded-full bg-black/60 text-white/70 hover:text-white hover:bg-black/80 flex items-center justify-center transition-colors"
+            >
+              ✕
+            </button>
+            <div className="p-4 border-b border-white/10">
+              <h3 className="text-lg font-bold text-white">{previewCharacter.name}</h3>
+              <p className="text-sm text-white/50">{previewCharacter.character_type} · 多角度参考图</p>
+            </div>
+            <div className="p-4 flex items-center justify-center" style={{ maxHeight: 'calc(90vh - 80px)' }}>
+              {previewCharacter.reference_sheet_url ? (
+                <img
+                  src={previewCharacter.reference_sheet_url}
+                  alt={`${previewCharacter.name} 多角度参考图`}
+                  className="max-w-full max-h-[75vh] object-contain rounded-lg"
+                />
+              ) : previewCharacter.avatar_url ? (
+                <img
+                  src={previewCharacter.avatar_url}
+                  alt={previewCharacter.name}
+                  className="max-w-full max-h-[75vh] object-contain rounded-lg"
+                />
+              ) : (
+                <div className="text-white/30 text-center py-20">暂无参考图</div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
