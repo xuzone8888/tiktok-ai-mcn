@@ -150,14 +150,14 @@ export async function POST(request: Request) {
     console.log("[Character Activate] Submitting Veo3 task:", {
       promptPreview: prompt.substring(0, 80),
       imageUrl: imageUrl.substring(0, 60) + "...",
-      model: "veo_3_1-components",
+      model: "veo3.1-fast-4K",
     });
 
     const result = await submitVeo3Video({
       prompt: prompt.trim(),
       imageUrls: [imageUrl],
       aspectRatio: "9:16",
-      model: "veo_3_1-components",
+      model: "veo3.1-fast-4K",
     });
 
     if (!result.success || !result.taskId) {
