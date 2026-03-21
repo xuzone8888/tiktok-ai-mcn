@@ -302,7 +302,7 @@ export default function TikTokAccountsPage() {
                     <div className="w-1.5 h-14 rounded-full bg-gradient-to-b from-[#CCFF00] via-[#00F2EA] to-[#EC4899]" />
                     <div>
                         <h1 className="text-2xl font-bold text-white flex items-center gap-2">
-                            TikTok 账号管理
+                            TikTok 账号绑定
                         </h1>
                         <p className="text-white/50 text-sm mt-0.5">
                             绑定和管理您的 TikTok 账号，用于发布视频内容

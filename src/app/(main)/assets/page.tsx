@@ -514,7 +514,7 @@ export default function TaskLogPage() {
         <div className="flex items-center gap-3">
           <div>
             <h1 className="text-3xl font-bold tracking-tight text-white drop-shadow-lg">
-              成品交付单
+              生成记录
             </h1>
             <p className="mt-2 text-white/60">
               查看和下载您生成的视频与图片内容

@@ -1126,7 +1126,7 @@ export default function PublishPage() {
                 <div>
                     <h1 className="text-3xl font-bold tracking-tight flex items-center gap-3">
                         <div className="h-8 w-1.5 rounded-full bg-gradient-to-b from-mermaid-lime to-mermaid-cyan shadow-[0_0_10px_rgba(0,242,234,0.5)]" />
-                        <span className="text-white drop-shadow-lg">视频发布站</span>
+                        <span className="text-white drop-shadow-lg">TikTok 视频发布</span>
                     </h1>
                     <p className="mt-1 text-white/60 ml-[19px]">
                         一键发布至多平台，智能调度分发任务

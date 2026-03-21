@@ -2225,7 +2225,7 @@ C07: [story CTA, inspiring, <50 chars]`,
         <div className="mb-10 animate-in fade-in slide-in-from-top-4 duration-500">
           <h1 className="text-3xl font-bold tracking-tight flex items-center gap-3">
             <div className="h-8 w-1.5 rounded-full bg-gradient-to-b from-mermaid-lime to-mermaid-cyan shadow-[0_0_10px_rgba(0,242,234,0.5)]" />
-            <span className="text-white drop-shadow-lg">批量视频线</span>
+            <span className="text-white drop-shadow-lg">素材生成视频</span>
           </h1>
           <p className="mt-2 text-white/60">
             一键生成多个视频，支持 SORA2 Pro / VEO3 多模型流水线处理

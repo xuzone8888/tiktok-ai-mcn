@@ -1276,7 +1276,7 @@ export default function QuickGeneratorPage() {
           <div>
             <h1 className="text-3xl font-bold tracking-tight flex items-center gap-3">
               <div className="h-8 w-1.5 rounded-full bg-gradient-to-b from-mermaid-lime to-mermaid-cyan shadow-[0_0_10px_rgba(0,242,234,0.5)]" />
-              <span className="text-white drop-shadow-lg">极速造片机</span>
+              <span className="text-white drop-shadow-lg">快速生图</span>
             </h1>
           </div>
           <div className="flex items-center gap-2">

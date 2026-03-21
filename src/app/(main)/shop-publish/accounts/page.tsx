@@ -289,7 +289,7 @@ export default function ShopAccountsPage() {
                     <div>
                         <h1 className="text-2xl font-bold text-white flex items-center gap-2">
                             <Store className="h-6 w-6" />
-                            TikTok Shop 账号管理
+                            TikTok Shop 账号绑定
                         </h1>
                         <p className="text-white/50 text-sm mt-0.5">
                             绑定和管理您的 TikTok Shop 达人账号，用于发布橱窗视频

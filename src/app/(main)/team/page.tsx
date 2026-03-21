@@ -134,7 +134,7 @@ function EmptyState() {
       </div>
       <h3 className="text-xl font-semibold mb-2">还没有角色</h3>
       <p className="text-muted-foreground max-w-sm mb-6">
-        创建您的专属 AI 角色，或前往角色资源广场聘用官方角色。
+        创建您的专属 AI 角色，或前往角色市场聘用官方角色。
       </p>
       <div className="flex gap-3">
         <Button
@@ -662,7 +662,7 @@ export default function TeamPage() {
       });
       const result = await response.json();
       if (result.success) {
-        toast({ title: "📢 发布成功", description: `${publishTarget.name} 已发布到角色资源广场，定价 ${publishPrice} 积分` });
+        toast({ title: "📢 发布成功", description: `${publishTarget.name} 已发布到角色市场，定价 ${publishPrice} 积分` });
         setPublishDialogOpen(false);
         fetchMyCharacters();
       } else {
@@ -786,7 +786,7 @@ export default function TeamPage() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight flex items-center gap-3">
             <div className="h-8 w-1.5 rounded-full bg-gradient-to-b from-mermaid-lime to-mermaid-cyan shadow-[0_0_10px_rgba(0,242,234,0.5)]" />
-            <span className="text-white drop-shadow-lg">专属阵营</span>
+            <span className="text-white drop-shadow-lg">我的角色</span>
           </h1>
           <p className="mt-2 text-white/60">
             管理您的自建角色和签约角色

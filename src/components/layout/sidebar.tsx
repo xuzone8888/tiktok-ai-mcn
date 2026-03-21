@@ -44,7 +44,6 @@ interface NavItem {
   comingSoon?: boolean;
   comingSoonMessage?: string;
   beta?: boolean;
-  badge?: string;
 }
 
 interface NavGroup {
@@ -120,7 +119,6 @@ const navGroups: NavGroup[] = [
         href: "/pro-studio/image-batch",
         icon: Images,
         description: "多张图片同时生成",
-        badge: "多条",
       },
       {
         title: "商图精修",
@@ -139,7 +137,6 @@ const navGroups: NavGroup[] = [
         href: "/pro-studio/video-batch",
         icon: Clapperboard,
         description: "多个视频同时生成",
-        badge: "多条",
       },
       {
         title: "链接生成视频",
@@ -152,7 +149,6 @@ const navGroups: NavGroup[] = [
         href: "/pro-studio/image-slideshow",
         icon: Images,
         description: "图片合成视频",
-        badge: "多条",
       },
     ],
   },
@@ -325,11 +321,6 @@ export function Sidebar() {
             {item.beta && (
               <span className="rounded-full bg-blue-500/15 px-1.5 py-0.5 text-[10px] font-medium text-blue-400/70 shrink-0">
                 BETA
-              </span>
-            )}
-            {item.badge && (
-              <span className="rounded-full bg-mermaid-cyan/15 px-1.5 py-0.5 text-[10px] font-medium text-mermaid-cyan/70 shrink-0">
-                {item.badge}
               </span>
             )}
           </div>

@@ -287,7 +287,7 @@ export default function ShopPublishPage() {
                 <div>
                     <h1 className="text-2xl font-bold text-white flex items-center gap-2">
                         <ShoppingBag className="h-6 w-6" />
-                        橱窗视频发布
+                        TikTok Shop 带货发布
                     </h1>
                     <p className="text-white/50 text-sm mt-0.5">
                         发布带商品链接的视频到 TikTok Shop

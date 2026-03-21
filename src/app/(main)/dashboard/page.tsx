@@ -194,7 +194,7 @@ export default function DashboardPage() {
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold tracking-tight flex items-center gap-3">
           <div className="h-8 w-1.5 rounded-full bg-gradient-to-b from-mermaid-lime to-mermaid-cyan shadow-[0_0_10px_rgba(0,242,234,0.5)]" />
-          <span className="text-white drop-shadow-lg">数据驾驶舱</span>
+          <span className="text-white drop-shadow-lg">数据总览</span>
         </h1>
         <p className="mt-2 text-white/60">
           欢迎回来！这是您的运营数据概览
