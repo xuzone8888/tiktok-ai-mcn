@@ -29,10 +29,7 @@ export function CastingPreview() {
   const [showRefBanner, setShowRefBanner] = useState(false);
   const [refBannerClosing, setRefBannerClosing] = useState(false);
 
-  // ====== 视频生成状态 ======
-  const [videoStage, setVideoStage] = useState<"idle" | "generating" | "completed">("idle");
-  const [genProgress, setGenProgress] = useState(0);
-  const [genTimeLeft, setGenTimeLeft] = useState(60);
+
 
   // ====== 幻影进度条与终端流状态 ======
   const [fakeProgress, setFakeProgress] = useState(0);
@@ -265,97 +262,7 @@ export function CastingPreview() {
     return data.data.id;
   };
 
-  // ====== 启动视频生成（内部函数）======
-  const doStartVideoGeneration = async () => {
-    if (showRefBanner) setRefBannerClosing(true);
-    setVideoStage("generating");
-    setGenProgress(0);
-    setGenTimeLeft(60);
 
-    const res = await fetch("/api/characters/activate", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        referenceImageUrl: store.referenceSheetUrl,
-        prompt: store.refPrompt || store.prompt || "A character performing a natural movement",
-        userId: store.userId,
-      }),
-    });
-    const data = await res.json();
-    if (!data.success || !data.taskId) {
-      alert(data.error || "视频生成提交失败");
-      setVideoStage("idle");
-      return;
-    }
-    store.setActivationTaskId(data.taskId);
-    store.setIsActivating(true);
-
-    // 轮询视频状态
-    let pollCount = 0;
-    const poll = async () => {
-      pollCount++;
-      try {
-        const r = await fetch(`/api/characters/activate?taskId=${data.taskId}`);
-        const d = await r.json();
-        if (d.success && d.task?.status === "completed" && d.task.resultUrl) {
-          store.setActivationResult(d.task.resultUrl);
-          store.setIsActivating(false);
-          setVideoStage("completed");
-          setGenProgress(100);
-
-          // 自动回写视频到角色记录
-          const savedId = useCharacterStudioStore.getState().savedCharacterId;
-          const savedUserId = useCharacterStudioStore.getState().userId;
-          if (savedId && savedUserId) {
-            fetch("/api/characters", {
-              method: "PATCH",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                characterId: savedId,
-                userId: savedUserId,
-                preview_video_url: d.task.resultUrl,
-              }),
-            }).then(() => {
-              console.log("[PATCH] ✅ Video linked to character:", savedId);
-            }).catch((err) => {
-              console.error("[PATCH] Failed to link video:", err);
-            });
-          }
-          return;
-        }
-        if (d.task?.status === "failed" || pollCount >= 120) {
-          alert("视频生成失败，请重试");
-          setVideoStage("idle");
-          store.setIsActivating(false);
-          return;
-        }
-      } catch { /* 静默重试 */ }
-      setGenProgress(prev => Math.min(95, prev + 0.8));
-      setGenTimeLeft(prev => Math.max(0, prev - 3));
-      setTimeout(poll, 3000);
-    };
-    poll();
-  };
-
-  // ====== 一键保存并生成视频 ======
-  const handleSaveAndGenerate = useCallback(async () => {
-    if (store.isSaving || store.savedCharacterId) return;
-    store.setIsSaving(true);
-    try {
-      const characterId = await doSaveCharacter();
-      if (!characterId) return;
-
-      // 保存成功，立即启动视频生成
-      await doStartVideoGeneration();
-    } catch (error) {
-      console.error("[SaveAndGenerate] Error:", error);
-      alert("操作失败，请重试");
-      setVideoStage("idle");
-    } finally {
-      store.setIsSaving(false);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [store, generatedImageUrl, showRefBanner]);
 
   // ====== 仅保存角色（不生成视频）======
   const handleSaveOnly = useCallback(async () => {
@@ -364,7 +271,7 @@ export function CastingPreview() {
     try {
       const characterId = await doSaveCharacter();
       if (characterId) {
-        alert("✅ 角色已保存！你可以在「我的角色」中查看。");
+        alert("✅ 角色已保存！前往「我的角色」可活化角色生成视频。");
       }
     } catch (error) {
       console.error("[SaveOnly] Error:", error);
@@ -574,7 +481,7 @@ export function CastingPreview() {
           </div>
 
           {/* ===== 多角度参考图横幅弹窗（仅 idle 阶段显示） ===== */}
-          {showRefBanner && store.referenceSheetUrl && videoStage === "idle" && (
+          {showRefBanner && store.referenceSheetUrl && (
             <div
               className={`ref-banner ${refBannerClosing ? 'ref-banner--closing' : ''}`}
               onAnimationEnd={() => {
@@ -617,42 +524,7 @@ export function CastingPreview() {
             </div>
           )}
 
-          {/* ===== 视频生成中 / 完成后播放器 ===== */}
-          {videoStage !== "idle" && (
-            <div className="video-player-container">
-              {videoStage === "generating" ? (
-                <div className="video-generating">
-                  <div className="video-generating__pulse" />
-                  <svg className="video-generating__icon" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                    strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                    <polygon points="5 3 19 12 5 21 5 3"/>
-                  </svg>
-                  <p className="video-generating__title">动态视频生成中</p>
-                  <p className="video-generating__subtitle">Veo3 正在为角色赋予生命...</p>
-                  <div className="video-generating__bar-track">
-                    <div className="video-generating__bar-fill" style={{ width: `${genProgress}%` }} />
-                  </div>
-                  <p className="video-generating__time">预计剩余 {genTimeLeft} 秒</p>
-                </div>
-              ) : (
-                <div className="video-completed">
-                  {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
-                  <video
-                    className="video-completed__player"
-                    src={store.activationVideoUrl || undefined}
-                    autoPlay
-                    loop
-                    muted
-                    playsInline
-                  />
-                  <div className="video-completed__badge">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-                    8s · 9:16
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
+
 
           {/* 悬浮主操作面板 (Abyssal Void Console) */}
           <div className="air-glass-console">
@@ -732,63 +604,27 @@ export function CastingPreview() {
               <>
                 <button 
                   className="btn-save"
-                  onClick={handleSaveAndGenerate}
+                  onClick={handleSaveOnly}
                   disabled={!store.characterName.trim() || !generatedImageUrl || !store.referenceReady || store.isSaving}
                   type="button"
                 >
                   {store.isSaving ? (
-                    <><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '8px', animation: 'spin 2s linear infinite' }}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> 保存并生成中...</>
+                    <><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '8px', animation: 'spin 2s linear infinite' }}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> 保存中...</>
                   ) : store.referenceReady ? (
-                    <><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style={{ marginRight: '8px' }}><polygon points="5 3 19 12 5 21 5 3"/></svg> 保存角色并生成视频（消耗 10 积分）</>
+                    <><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '8px' }}><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg> 保存角色</>
                   ) : (
                     <><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '8px', animation: 'spin 2s linear infinite' }}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> 多角度参考图生成中...</>
                   )}
                 </button>
                 <div className="helper-text">
                   {generatedImageUrl && !store.referenceReady
-                    ? "参考图就绪后即可保存角色并生成视频"
-                    : store.referenceReady
-                      ? <button type="button" onClick={handleSaveOnly} disabled={store.isSaving || !store.characterName.trim()} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', cursor: 'pointer', fontSize: '0.72rem', textDecoration: 'underline', padding: 0 }}>仅保存角色（不消耗积分）</button>
-                      : "保存后可在角色库中随时调用"}
+                    ? "参考图就绪后即可保存角色"
+                    : "保存后可在「我的角色」中活化角色生成视频"}
                 </div>
               </>
             )}
 
-            {/* ===== 视频生成进度 / 完成 ===== */}
-            {videoStage === "generating" && (
-              <div className="gen-status-panel" style={{ marginTop: '0.75rem' }}>
-                <div className="gen-status-panel__icon">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ animation: 'spin 2s linear infinite' }}>
-                    <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
-                  </svg>
-                </div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: '0.8rem', color: 'white', fontWeight: 600, marginBottom: '6px' }}>Veo3 正在生成...</div>
-                  <div style={{ height: '3px', borderRadius: '2px', background: 'rgba(255,255,255,0.06)', overflow: 'hidden' }}>
-                    <div style={{ height: '100%', borderRadius: '2px', width: `${genProgress}%`, background: 'linear-gradient(90deg, #CCFF00, #00F2EA)', transition: 'width 0.3s linear', boxShadow: '0 0 8px rgba(0,242,234,0.5)' }} />
-                  </div>
-                  <div style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.3)', marginTop: '4px' }}>预计剩余 {genTimeLeft} 秒 · 9:16 竖版 · 8 秒</div>
-                </div>
-              </div>
-            )}
-            {videoStage === "completed" && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginTop: '0.75rem' }}>
-                <a
-                  className="btn-activate btn-activate--ready"
-                  href={store.activationVideoUrl || '#'}
-                  download
-                  style={{ textDecoration: 'none', textAlign: 'center' }}
-                >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '6px', display: 'inline', verticalAlign: '-2px' }}>
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                    <polyline points="7 10 12 15 17 10"/>
-                    <line x1="12" y1="15" x2="12" y2="3"/>
-                  </svg>
-                  下载视频
-                </a>
-                <div className="helper-text">✓ 视频已生成 · 8 秒 · 9:16 竖版</div>
-              </div>
-            )}
+
           </div>
         </>
       )}

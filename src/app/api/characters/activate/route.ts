@@ -22,11 +22,12 @@ const ACTIVATE_CREDITS = 10; // 角色活化视频 = 10 积分/次
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { referenceImageUrl, heroImageUrl, prompt, userId } = body as {
+    const { referenceImageUrl, heroImageUrl, prompt, userId, characterId } = body as {
       referenceImageUrl?: string;
       heroImageUrl?: string;
       prompt: string;
       userId: string;
+      characterId?: string;
     };
     const imageUrl = referenceImageUrl || heroImageUrl; // 兼容旧前端
 
@@ -201,6 +202,7 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const taskId = searchParams.get("taskId");
+    const characterId = searchParams.get("characterId");
 
     if (!taskId) {
       return NextResponse.json(
@@ -220,12 +222,57 @@ export async function GET(request: Request) {
 
     // 映射字段以保持前端兼容 (videoUrl → resultUrl)
     const task = result.task;
+    let finalVideoUrl = task?.videoUrl;
+
+    // 视频完成 → 持久化到 OSS + PATCH DB
+    if (task?.status === "completed" && task.videoUrl && characterId) {
+      try {
+        // 先检查 DB 是否已有永久 URL（防止重复下载上传）
+        const supabase = createAdminClient();
+        const { data: existing } = await supabase
+          .from("ai_models")
+          .select("preview_video_url")
+          .eq("id", characterId)
+          .single();
+
+        const alreadyPersisted = existing?.preview_video_url?.includes('media.toryxai.com') ?? false;
+
+        if (!alreadyPersisted) {
+          const { uploadVideoBuffer, generateMediaPath } = await import('@/lib/oss');
+          const videoResponse = await fetch(task.videoUrl);
+          if (videoResponse.ok) {
+            const videoBuffer = Buffer.from(await videoResponse.arrayBuffer());
+            const objectPath = generateMediaPath(
+              'videos',
+              'character-activate',
+              `activate-${characterId}-${Date.now()}.mp4`
+            );
+            finalVideoUrl = await uploadVideoBuffer(videoBuffer, objectPath, 'video/mp4');
+            console.log("[Character Activate] Video uploaded to OSS:", finalVideoUrl.substring(0, 80));
+
+            // PATCH DB
+            await (supabase as ReturnType<typeof createAdminClient>)
+              .from("ai_models")
+              .update({ preview_video_url: finalVideoUrl })
+              .eq("id", characterId);
+            console.log("[Character Activate] DB patched with OSS URL for:", characterId);
+          }
+        } else {
+          finalVideoUrl = existing?.preview_video_url ?? undefined;
+          console.log("[Character Activate] Already persisted, using existing URL");
+        }
+      } catch (ossErr) {
+        console.error("[Character Activate] OSS upload failed, using temp URL:", ossErr);
+        // fallback: 继续使用临时 URL
+      }
+    }
+
     return NextResponse.json({
       success: true,
       task: task ? {
         taskId: task.taskId,
         status: task.status,
-        resultUrl: task.videoUrl,
+        resultUrl: finalVideoUrl,
         errorMessage: task.errorMessage,
         progress: task.progress,
         createdAt: task.createdAt,

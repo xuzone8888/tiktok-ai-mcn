@@ -324,10 +324,15 @@ interface MyCharacterCardProps {
   onPublish: (character: MyCharacter) => void;
   onDelete: (characterId: string) => void;
   onPreview: (character: MyCharacter) => void;
+  onActivate: (character: MyCharacter) => void;
+  activatingId: string | null;
 }
 
-function MyCharacterCard({ character, onUseInStudio, onRetryReference, onPublish, onDelete, onPreview }: MyCharacterCardProps) {
+function MyCharacterCard({ character, onUseInStudio, onRetryReference, onPublish, onDelete, onPreview, onActivate, activatingId }: MyCharacterCardProps) {
   const refStatus = getReferenceStatusConfig(character.reference_status);
+  const [isHovered, setIsHovered] = useState(false);
+  const isActivating = activatingId === character.id;
+  const hasVideo = !!character.preview_video_url;
 
   return (
     <div
@@ -340,9 +345,24 @@ function MyCharacterCard({ character, onUseInStudio, onRetryReference, onPublish
     >
       {/* 顶部图片遮罩 */}
       <div className="absolute inset-0 bg-gradient-to-t from-[#0B0C10] via-transparent to-transparent opacity-90 z-10 pointer-events-none" />
-      {/* Image Section */}
-      <div className="relative aspect-[9/16] overflow-hidden bg-white/5 cursor-pointer" onClick={() => onPreview(character)}>
-        {character.avatar_url ? (
+      {/* Image / Video Section */}
+      <div
+        className="relative aspect-[9/16] overflow-hidden bg-white/5 cursor-pointer"
+        onClick={() => onPreview(character)}
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
+      >
+        {/* 悬浮播放视频 */}
+        {isHovered && hasVideo ? (
+          <video
+            src={character.preview_video_url!}
+            autoPlay
+            muted
+            loop
+            playsInline
+            className="h-full w-full object-cover transition-transform duration-700"
+          />
+        ) : character.avatar_url ? (
           <img
             src={character.avatar_url}
             alt={character.name}
@@ -408,6 +428,31 @@ function MyCharacterCard({ character, onUseInStudio, onRetryReference, onPublish
             )}
           </div>
         </div>
+
+        {/* 右下角活化角标 */}
+        {!hasVideo && !isActivating && character.reference_status === "completed" && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onActivate(character); }}
+            className="absolute bottom-14 right-3 z-30 px-3 py-1.5 rounded-full text-xs font-bold text-white flex items-center gap-1.5 transition-all duration-300 hover:scale-105 hover:shadow-lg cursor-pointer"
+            style={{
+              background: 'linear-gradient(135deg, #8B5CF6, #EC4899)',
+              boxShadow: '0 2px 12px rgba(139, 92, 246, 0.4)',
+            }}
+          >
+            ✨ 活化角色
+          </button>
+        )}
+        {isActivating && (
+          <div
+            className="absolute bottom-14 right-3 z-30 px-3 py-1.5 rounded-full text-xs font-bold text-white/80 flex items-center gap-1.5"
+            style={{
+              background: 'linear-gradient(135deg, #8B5CF6AA, #EC4899AA)',
+            }}
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ animation: 'spin 1.5s linear infinite' }}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+            活化中...
+          </div>
+        )}
       </div>
 
       {/* Info Section */}
@@ -495,6 +540,8 @@ export default function TeamPage() {
   const [isPublishing, setIsPublishing] = useState(false);
   const [userId, setUserId] = useState("");
   const [previewCharacter, setPreviewCharacter] = useState<MyCharacter | null>(null);
+  // 活化角色状态
+  const [activatingId, setActivatingId] = useState<string | null>(null);
 
   // 获取当前用户 ID（通过 session 认证）
   useEffect(() => {
@@ -713,6 +760,67 @@ export default function TeamPage() {
     }
   };
 
+  // Handle activate character (生成视频)
+  const handleActivate = async (character: MyCharacter) => {
+    if (activatingId) {
+      toast({ variant: "destructive", title: "请等待当前角色活化完成" });
+      return;
+    }
+    if (!character.reference_sheet_url) {
+      toast({ variant: "destructive", title: "该角色尚无多角度参考图，无法活化" });
+      return;
+    }
+
+    setActivatingId(character.id);
+    const activatePrompt = `${character.description || character.name}, performing a natural and lively movement, cinematic quality, smooth animation`;
+
+    try {
+      const res = await fetch("/api/characters/activate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          referenceImageUrl: character.reference_sheet_url,
+          prompt: activatePrompt,
+          userId,
+          characterId: character.id,
+        }),
+      });
+      const data = await res.json();
+      if (!data.success || !data.taskId) {
+        toast({ variant: "destructive", title: "活化失败", description: data.error || "提交失败" });
+        setActivatingId(null);
+        return;
+      }
+
+      // 轮询视频状态
+      let pollCount = 0;
+      const poll = async () => {
+        pollCount++;
+        try {
+          const r = await fetch(`/api/characters/activate?taskId=${data.taskId}&characterId=${character.id}`);
+          const d = await r.json();
+          if (d.success && d.task?.status === "completed" && d.task.resultUrl) {
+            toast({ title: "🎬 角色活化成功！", description: `${character.name} 已生成动态视频` });
+            setActivatingId(null);
+            fetchMyCharacters();
+            return;
+          }
+          if (d.task?.status === "failed" || pollCount >= 120) {
+            const errMsg = d.task?.errorMessage || "视频生成失败，请重试";
+            toast({ variant: "destructive", title: "活化失败", description: errMsg });
+            setActivatingId(null);
+            return;
+          }
+        } catch { /* 网络波动，继续轮询 */ }
+        setTimeout(poll, 3000);
+      };
+      poll();
+    } catch {
+      toast({ variant: "destructive", title: "网络错误" });
+      setActivatingId(null);
+    }
+  };
+
   // Handle renew dialog open
   const handleOpenRenewDialog = (model: HiredModel) => {
     setSelectedModel(model);
@@ -917,6 +1025,8 @@ export default function TeamPage() {
                     onPublish={handlePublish}
                     onDelete={handleDelete}
                     onPreview={setPreviewCharacter}
+                    onActivate={handleActivate}
+                    activatingId={activatingId}
                   />
                 ))}
               </div>
@@ -1209,7 +1319,7 @@ export default function TeamPage() {
           onClick={() => setPreviewCharacter(null)}
         >
           <div
-            className="relative max-w-4xl max-h-[90vh] w-full mx-4 rounded-2xl overflow-hidden bg-[#0B0C10] border border-white/10 shadow-2xl"
+            className="relative max-w-5xl max-h-[90vh] w-full mx-4 rounded-2xl overflow-hidden bg-[#0B0C10] border border-white/10 shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             <button
@@ -1220,23 +1330,65 @@ export default function TeamPage() {
             </button>
             <div className="p-4 border-b border-white/10">
               <h3 className="text-lg font-bold text-white">{previewCharacter.name}</h3>
-              <p className="text-sm text-white/50">{previewCharacter.character_type} · 多角度参考图</p>
+              <p className="text-sm text-white/50">
+                {previewCharacter.character_type}
+                {previewCharacter.preview_video_url ? ' · 多角度参考图 + 动态视频' : ' · 多角度参考图'}
+              </p>
             </div>
-            <div className="p-4 flex items-center justify-center" style={{ maxHeight: 'calc(90vh - 80px)' }}>
-              {previewCharacter.reference_sheet_url ? (
-                <img
-                  src={previewCharacter.reference_sheet_url}
-                  alt={`${previewCharacter.name} 多角度参考图`}
-                  className="max-w-full max-h-[75vh] object-contain rounded-lg"
-                />
-              ) : previewCharacter.avatar_url ? (
-                <img
-                  src={previewCharacter.avatar_url}
-                  alt={previewCharacter.name}
-                  className="max-w-full max-h-[75vh] object-contain rounded-lg"
-                />
+            <div className="p-4" style={{ maxHeight: 'calc(90vh - 80px)', overflow: 'auto' }}>
+              {previewCharacter.preview_video_url ? (
+                /* 有视频：左右分栏 */
+                <div className="flex gap-4 items-start">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs text-white/40 mb-2">🖼 多角度参考图</p>
+                    {previewCharacter.reference_sheet_url ? (
+                      <img
+                        src={previewCharacter.reference_sheet_url}
+                        alt={`${previewCharacter.name} 多角度参考图`}
+                        className="w-full object-contain rounded-lg"
+                      />
+                    ) : previewCharacter.avatar_url ? (
+                      <img
+                        src={previewCharacter.avatar_url}
+                        alt={previewCharacter.name}
+                        className="w-full object-contain rounded-lg"
+                      />
+                    ) : (
+                      <div className="text-white/30 text-center py-20">暂无参考图</div>
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs text-white/40 mb-2">🎬 动态视频</p>
+                    {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+                    <video
+                      src={previewCharacter.preview_video_url}
+                      controls
+                      autoPlay
+                      loop
+                      playsInline
+                      className="w-full rounded-lg"
+                    />
+                  </div>
+                </div>
               ) : (
-                <div className="text-white/30 text-center py-20">暂无参考图</div>
+                /* 无视频：全屏参考图 */
+                <div className="flex items-center justify-center">
+                  {previewCharacter.reference_sheet_url ? (
+                    <img
+                      src={previewCharacter.reference_sheet_url}
+                      alt={`${previewCharacter.name} 多角度参考图`}
+                      className="max-w-full max-h-[75vh] object-contain rounded-lg"
+                    />
+                  ) : previewCharacter.avatar_url ? (
+                    <img
+                      src={previewCharacter.avatar_url}
+                      alt={previewCharacter.name}
+                      className="max-w-full max-h-[75vh] object-contain rounded-lg"
+                    />
+                  ) : (
+                    <div className="text-white/30 text-center py-20">暂无参考图</div>
+                  )}
+                </div>
               )}
             </div>
           </div>
