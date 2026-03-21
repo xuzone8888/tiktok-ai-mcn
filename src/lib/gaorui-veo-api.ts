@@ -527,7 +527,14 @@ export async function submitVeoFast4K(
     console.log("[Gaorui-VEO] Fast-4K response (status:", result.statusCode, "):", result.data.substring(0, 300));
 
     if (result.statusCode >= 400) {
-      return { success: false, error: `VEO3 4K 服务错误 (${result.statusCode})` };
+      let errorDetail = `VEO3 4K 服务错误 (${result.statusCode})`;
+      try {
+        const errBody = JSON.parse(result.data);
+        const msg = errBody.error?.message || errBody.message || errBody.detail || JSON.stringify(errBody).substring(0, 200);
+        errorDetail = `VEO3 4K (${result.statusCode}): ${msg}`;
+      } catch { /* 无法解析错误响应 */ }
+      console.error("[Gaorui-VEO] Fast-4K API error:", errorDetail);
+      return { success: false, error: errorDetail };
     }
 
     const data = JSON.parse(result.data);
