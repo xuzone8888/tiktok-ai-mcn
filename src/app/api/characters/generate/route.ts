@@ -19,6 +19,7 @@ import {
   submitNanoBanana,
   queryNanoBananaResult,
 } from "@/lib/suchuang-api";
+import { submitGeminiImage } from "@/lib/gemini-image-api";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { callDoubaoAPI } from "@/lib/doubao-api-client";
 import type { GenerateCharacterRequest } from "@/types/character";
@@ -146,28 +147,31 @@ export async function POST(request: Request) {
       const englishPrompt = await translateIfChinese(prompt);
       const refPrompt = `${englishPrompt}.${MULTI_ANGLE_TEMPLATE}`;
 
-      console.log("[Character Generate] Submitting reference task:", {
+      console.log("[Character Generate] Submitting reference task (gemini-2k):", {
         promptLength: refPrompt.length,
         heroImageUrl: heroImageUrl.substring(0, 60),
       });
 
-      const refResult = await submitNanoBanana({
-        model: "nano-banana",
+      // 使用 gemini-2k (xas231) — 同步返回，2K 画质
+      const geminiResult = await submitGeminiImage({
+        model: "gemini-2k",
         prompt: refPrompt,
-        img_url: heroImageUrl,
+        sourceImageUrls: [heroImageUrl],
         aspectRatio: "16:9",
       });
 
-      if (!refResult.success || !refResult.taskId) {
+      if (!geminiResult.success || !geminiResult.imageUrl) {
         return NextResponse.json(
-          { success: false, error: refResult.error || "多角度参考图提交失败" },
+          { success: false, error: geminiResult.error || "多角度参考图生成失败" },
           { status: 500 }
         );
       }
 
+      console.log("[Character Generate] Reference image ready (sync):", geminiResult.imageUrl.substring(0, 60));
+
       return NextResponse.json({
         success: true,
-        referenceTaskId: refResult.taskId,
+        referenceImageUrl: geminiResult.imageUrl,  // 同步直接返回图片 URL
       });
     }
 

@@ -155,8 +155,15 @@ export function CastingPreview() {
         }),
       });
       const data = await res.json();
-      if (data.success && data.referenceTaskId) {
+      // gemini-2k 同步返回图片 URL
+      if (data.success && data.referenceImageUrl) {
+        store.setReferenceResult(data.referenceImageUrl);
+        console.log("[AutoRef] ✅ Reference ready (sync):", data.referenceImageUrl.substring(0, 60));
+      } else if (data.success && data.referenceTaskId) {
+        // 兼容旧异步模式
         store.setReferenceTaskId(data.referenceTaskId);
+      } else {
+        console.error("[AutoRef] Failed:", data.error);
       }
     } catch (err) {
       console.error("[AutoRef] 静默失败:", err);
@@ -1879,8 +1886,10 @@ export function CastingPreview() {
           border: 1px solid rgba(255, 255, 255, 0.15);
           border-top: 1px solid rgba(255, 255, 255, 0.45);
           border-radius: 100px;
-          padding: 0.85rem 2.5rem;
+          padding: 1rem 3rem;
+          min-width: 200px;
           color: #000;
+          font-size: 1rem;
           font-weight: 800;
           letter-spacing: 0.5px;
           box-shadow: 
