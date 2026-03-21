@@ -761,9 +761,12 @@ export default function ImageBatchPage() {
               mode: task.config.action,
               imageModel: task.config.model,  // Gemini 路由参数
               sourceImageUrl: imageUrlForApi,
+              sourceImageUrls: [globalSettings.characterRefUrl, imageUrlForApi].filter(Boolean),
               aspectRatio: task.config.aspectRatio,
               resolution: task.config.resolution,
-              prompt: task.config.prompt,
+              prompt: globalSettings.characterRefUrl && globalSettings.characterDescription
+                ? `Featuring ${globalSettings.characterDescription}, ${task.config.prompt}`
+                : task.config.prompt,
               userId: currentUserId,
               source: "batch_image",
               requestId,
