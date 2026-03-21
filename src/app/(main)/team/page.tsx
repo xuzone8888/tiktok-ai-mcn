@@ -340,7 +340,7 @@ function MyCharacterCard({ character, onUseInStudio, onRetryReference, onPublish
       {/* 顶部图片遮罩 */}
       <div className="absolute inset-0 bg-gradient-to-t from-[#0B0C10] via-transparent to-transparent opacity-90 z-10 pointer-events-none" />
       {/* Image Section */}
-      <div className="relative aspect-[4/3] overflow-hidden bg-white/5">
+      <div className="relative aspect-[9/16] overflow-hidden bg-white/5">
         {character.avatar_url ? (
           <img
             src={character.avatar_url}
@@ -905,7 +905,7 @@ export default function TeamPage() {
                 <span className="h-5 w-1 rounded-full bg-mermaid-pink" />
                 🎨 我的角色 <span className="text-white/40 font-normal text-sm">({myCharacters.length})</span>
               </h2>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
                 {myCharacters.map((char) => (
                   <MyCharacterCard
                     key={char.id}
