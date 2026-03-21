@@ -223,7 +223,7 @@ export function CastingPreview() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          heroImageUrl: generatedImageUrl,
+          referenceImageUrl: store.referenceSheetUrl,
           prompt: store.refPrompt || store.prompt || "A character performing a natural movement",
           userId: store.userId,
         }),
@@ -280,6 +280,10 @@ export function CastingPreview() {
     }
     if (!generatedImageUrl) {
       alert("角色图片尚未生成完成");
+      return;
+    }
+    if (!store.referenceReady || !store.referenceSheetUrl) {
+      alert("多角度参考图尚未就绪，请稍候再保存");
       return;
     }
     if (store.isSaving) return;
@@ -691,13 +695,17 @@ export function CastingPreview() {
             <button 
               className="btn-save"
               onClick={handleSave}
-              disabled={!store.characterName.trim() || !generatedImageUrl || store.isSaving}
+              disabled={!store.characterName.trim() || !generatedImageUrl || !store.referenceReady || store.isSaving}
               type="button"
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.7, marginRight: '8px' }}><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
               {store.isSaving ? "保存中..." : "保存当前角色"}
             </button>
-            <div className="helper-text">保存后可在角色库中随时调用</div>
+            <div className="helper-text">
+              {generatedImageUrl && !store.referenceReady
+                ? "多角度参考图生成中，请稍候..."
+                : "保存后可在角色库中随时调用"}
+            </div>
 
             <div className="divider">
               <div className="divider-text">动态视频</div>

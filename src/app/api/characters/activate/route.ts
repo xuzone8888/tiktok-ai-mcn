@@ -22,16 +22,18 @@ const ACTIVATE_CREDITS = 10; // 角色活化视频 = 10 积分/次
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { heroImageUrl, prompt, userId } = body as {
-      heroImageUrl: string;
+    const { referenceImageUrl, heroImageUrl, prompt, userId } = body as {
+      referenceImageUrl?: string;
+      heroImageUrl?: string;
       prompt: string;
       userId: string;
     };
+    const imageUrl = referenceImageUrl || heroImageUrl; // 兼容旧前端
 
     // 参数校验
-    if (!heroImageUrl) {
+    if (!imageUrl) {
       return NextResponse.json(
-        { success: false, error: "heroImageUrl is required" },
+        { success: false, error: "referenceImageUrl is required" },
         { status: 400 }
       );
     }
@@ -146,14 +148,15 @@ export async function POST(request: Request) {
     // ============================================
     console.log("[Character Activate] Submitting Veo3 task:", {
       promptPreview: prompt.substring(0, 80),
-      heroImageUrl: heroImageUrl.substring(0, 60) + "...",
+      imageUrl: imageUrl.substring(0, 60) + "...",
+      model: "veo_3_1-components",
     });
 
     const result = await submitVeo3Video({
       prompt: prompt.trim(),
-      imageUrls: [heroImageUrl],
+      imageUrls: [imageUrl],
       aspectRatio: "9:16",
-      model: "veo3.1-fast",
+      model: "veo_3_1-components",
     });
 
     if (!result.success || !result.taskId) {
