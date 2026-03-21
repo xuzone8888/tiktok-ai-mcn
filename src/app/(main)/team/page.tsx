@@ -772,7 +772,8 @@ export default function TeamPage() {
     }
 
     setActivatingId(character.id);
-    const activatePrompt = `${character.description || character.name}, performing a natural and lively movement, cinematic quality, smooth animation`;
+    // Prompt 基于参考图 — 角色展示/打招呼，风格匹配原图
+    const activatePrompt = `Reference this multi-view character sheet to accurately recreate the character's appearance, outfit, and style. Match the art style and visual tone of the original image. Animate the character in a lively, expressive showcase — natural movement, genuine charm, as if greeting someone they're happy to see. Cinematic lighting, smooth animation, 4K.`;
 
     try {
       const res = await fetch("/api/characters/activate", {
