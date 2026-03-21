@@ -169,6 +169,69 @@ export async function POST(request: Request) {
 }
 
 // ============================================================================
+// PATCH — 更新角色字段（如 preview_video_url）
+// ============================================================================
+
+export async function PATCH(request: Request) {
+  try {
+    const body = await request.json();
+    const { characterId, userId, preview_video_url } = body as {
+      characterId: string;
+      userId: string;
+      preview_video_url?: string;
+    };
+
+    if (!characterId || !userId) {
+      return NextResponse.json(
+        { success: false, error: "characterId and userId are required" },
+        { status: 400 }
+      );
+    }
+
+    const supabase = createAdminClient();
+
+    // 构建更新对象（只更新传入的字段）
+    const updateData: Record<string, unknown> = {};
+    if (preview_video_url !== undefined) {
+      updateData.preview_video_url = preview_video_url;
+    }
+
+    if (Object.keys(updateData).length === 0) {
+      return NextResponse.json(
+        { success: false, error: "No fields to update" },
+        { status: 400 }
+      );
+    }
+
+    // 验证 owner_id 匹配后更新（双重安全）
+    const { error } = await supabase
+      .from("ai_models")
+      .update(updateData)
+      .eq("id", characterId)
+      .eq("owner_id", userId)
+      .eq("source", "user_created");
+
+    if (error) {
+      console.error("[Characters API] PATCH error:", error);
+      return NextResponse.json(
+        { success: false, error: error.message },
+        { status: 500 }
+      );
+    }
+
+    console.log("[Characters API] Character updated:", { characterId, fields: Object.keys(updateData) });
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error("[Characters API] PATCH unexpected error:", error);
+    return NextResponse.json(
+      { success: false, error: "Internal server error" },
+      { status: 500 }
+    );
+  }
+}
+
+// ============================================================================
 // DELETE — 删除角色（验证 owner_id 匹配）
 // ============================================================================
 

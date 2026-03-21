@@ -70,6 +70,7 @@ export interface CharacterStudioState {
   characterName: string;
   characterTags: string[];
   isSaving: boolean;
+  savedCharacterId: string | null;
 
   // AI 魔法棒
   isEnhancing: boolean;
@@ -112,6 +113,7 @@ export interface CharacterStudioActions {
   setCharacterName: (name: string) => void;
   setCharacterTags: (tags: string[]) => void;
   setIsSaving: (saving: boolean) => void;
+  setSavedCharacterId: (id: string | null) => void;
   setIsEnhancing: (enhancing: boolean) => void;
   setUserInfo: (userId: string, credits: number) => void;
   reset: () => void;
@@ -143,6 +145,7 @@ const initialState: CharacterStudioState = {
   characterName: "",
   characterTags: [],
   isSaving: false,
+  savedCharacterId: null,
   isEnhancing: false,
   userId: null,
   userCredits: 0,
@@ -360,6 +363,12 @@ export const useCharacterStudioStore = create<
         setIsSaving: (saving) => {
           set((state) => {
             state.isSaving = saving;
+          });
+        },
+
+        setSavedCharacterId: (id) => {
+          set((state) => {
+            state.savedCharacterId = id;
           });
         },
 
