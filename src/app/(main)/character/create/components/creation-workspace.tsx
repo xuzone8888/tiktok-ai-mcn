@@ -308,7 +308,7 @@ export function CreationWorkspace() {
         <div>
           <h1 className="text-2xl lg:text-3xl font-bold flex items-center gap-3 drop-shadow-lg text-white tracking-tight-ios text-balance">
             <Sparkles className="w-7 h-7 text-tiktok-cyan" fill="currentColor" />
-            角色捏脸舱
+            创建角色
             <span className="text-xs lg:text-sm font-normal text-white/40 tracking-widest uppercase mt-1 lg:mt-2 ml-1 lg:ml-2">Character Forge</span>
           </h1>
           <p className="mt-2 text-white/50 text-xs lg:text-sm flex items-center gap-1.5"><Dna className="w-3.5 h-3.5" /> 注入 DNA 特征，铸造专属数字角色</p>
