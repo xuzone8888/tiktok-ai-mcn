@@ -170,32 +170,19 @@ export async function submitVeoComponents(
   if (!key) return { success: false, error: "高瑞 API Key 未配置" };
 
   try {
-    const boundary = `----VeoComp${Date.now()}`;
-    const parts: string[] = [];
+    // Go 后端通过 json.Unmarshal 解析请求体，images 为 []string
+    const jsonBody = JSON.stringify({
+      model: "veo_3_1-components",
+      prompt: params.prompt,
+      enhance_prompt: true,
+      enable_upsample: true,
+      aspect_ratio: params.aspectRatio || "9:16",
+      images: params.imageUrls?.slice(0, 3) || [],
+    });
 
-    // model (下划线格式，经测试确认)
-    parts.push(`--${boundary}\r\nContent-Disposition: form-data; name="model"\r\n\r\nveo_3_1-components`);
-    // prompt
-    parts.push(`--${boundary}\r\nContent-Disposition: form-data; name="prompt"\r\n\r\n${params.prompt}`);
-    // enhance_prompt
-    parts.push(`--${boundary}\r\nContent-Disposition: form-data; name="enhance_prompt"\r\n\r\ntrue`);
-    // enable_upsample
-    parts.push(`--${boundary}\r\nContent-Disposition: form-data; name="enable_upsample"\r\n\r\ntrue`);
-    // aspect_ratio
-    parts.push(`--${boundary}\r\nContent-Disposition: form-data; name="aspect_ratio"\r\n\r\n${params.aspectRatio || "9:16"}`);
+    const bodyBuffer = Buffer.from(jsonBody, 'utf-8');
 
-    // 参考图片 URL — Go 后端期望 images 为 []string，
-    // multipart form-data 中通过重复同名字段传数组
-    if (params.imageUrls && params.imageUrls.length > 0) {
-      for (const url of params.imageUrls.slice(0, 3)) {
-        parts.push(`--${boundary}\r\nContent-Disposition: form-data; name="images"\r\n\r\n${url}`);
-      }
-    }
-
-    const bodyStr = parts.join("\r\n") + `\r\n--${boundary}--\r\n`;
-    const bodyBuffer = Buffer.from(bodyStr, 'utf-8');
-
-    console.log("[Gaorui-VEO] Submitting Components task (multipart):", {
+    console.log("[Gaorui-VEO] Submitting Components task (JSON):", {
       model: "veo_3_1-components",
       imageCount: params.imageUrls?.length || 0,
       aspectRatio: params.aspectRatio || "9:16",
@@ -211,7 +198,7 @@ export async function submitVeoComponents(
         method: "POST",
         family: 4,
         headers: {
-          'Content-Type': `multipart/form-data; boundary=${boundary}`,
+          'Content-Type': 'application/json',
           'Authorization': `Bearer ${key}`,
           'Accept': 'application/json',
           'Content-Length': String(bodyBuffer.length),
