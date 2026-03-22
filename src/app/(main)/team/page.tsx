@@ -505,18 +505,18 @@ function MyCharacterCard({ character, onUseInStudio, onRetryReference, onPublish
           >
             {character.is_public ? <span className="text-xs">下架</span> : <span className="text-xs">发布</span>}
           </Button>
-
-          {/* 删除 — hover 时显示 */}
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => onDelete(character.id)}
-            className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity duration-300 text-white/30 hover:text-red-400 hover:bg-red-500/10"
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </Button>
         </div>
       </div>
+
+      {/* 删除 — 卡片右上角，hover 时显示 */}
+      <Button
+        variant="ghost"
+        size="icon"
+        onClick={(e) => { e.stopPropagation(); onDelete(character.id); }}
+        className="absolute top-2 right-2 z-20 h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity duration-300 text-white/40 hover:text-red-400 hover:bg-black/50 rounded-full backdrop-blur-sm"
+      >
+        <Trash2 className="h-3.5 w-3.5" />
+      </Button>
     </div>
   );
 }
