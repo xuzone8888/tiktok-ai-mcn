@@ -661,7 +661,7 @@ export function CastingPreview() {
                           method: "POST",
                           headers: { "Content-Type": "application/json" },
                           body: JSON.stringify({
-                            url: videoUrl,
+                            sourceUrl: videoUrl,
                             userId: store.userId,
                             folder: "model-demos",
                           }),

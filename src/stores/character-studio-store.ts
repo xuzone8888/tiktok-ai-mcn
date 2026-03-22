@@ -481,6 +481,17 @@ export const useCharacterStudioStore = create<
         creationMode: state.creationMode,
         dnaConfig: state.dnaConfig,
         prompt: state.prompt,
+        // Sora2 关键状态 — 防止 Next.js 水合时被 rehydration 重置为 null
+        forgeMode: state.forgeMode,
+        currentStep: state.currentStep,
+        generationStatus: state.generationStatus,
+        heroTaskId: state.heroTaskId,
+        heroImageUrl: state.heroImageUrl,
+        sora2VideoUrl: state.sora2VideoUrl,
+        sora2VideoOssUrl: state.sora2VideoOssUrl,
+        sora2Pid: state.sora2Pid,
+        sora2PidTaskId: state.sora2PidTaskId,
+        errorMessage: state.errorMessage,
       }),
     }
   )
