@@ -34,7 +34,9 @@ export function CastingPreview() {
 
 
   // ====== 幻影进度条与终端流状态 ======
-  const [fakeProgress, setFakeProgress] = useState(0);
+  const [fakeProgress, setFakeProgress] = useState(() =>
+    generationStatus === "polling" ? 60 : 0
+  );
   const [terminalLog, setTerminalLog] = useState("[SYS] 初始化引擎组件...");
   
   const LOG_MESSAGES = [
@@ -51,8 +53,6 @@ export function CastingPreview() {
   // 当进入 generating 状态时，启动进度与日志轮询
   useEffect(() => {
     if (generationStatus === "generating" || generationStatus === "polling") {
-      // 如果已在 polling（比如回到页面），从较高进度开始，避免从0重来
-      setFakeProgress((prev) => prev > 0 ? Math.max(prev, 50) : 0);
       
       const progressTimer = setInterval(() => {
         setFakeProgress((prev) => {
@@ -647,6 +647,12 @@ export function CastingPreview() {
                   <button
                     className="hero-btn hero-btn--primary"
                     onClick={async () => {
+                      // 先缓存视频 URL — 防止异步过程中 store 状态被清空
+                      const videoUrl = store.sora2VideoUrl;
+                      if (!videoUrl) {
+                        alert("视频 URL 丢失，请重新铸造角色");
+                        return;
+                      }
                       setSora2Confirming(true);
                       setSora2ConfirmStep("oss");
                       try {
@@ -655,7 +661,7 @@ export function CastingPreview() {
                           method: "POST",
                           headers: { "Content-Type": "application/json" },
                           body: JSON.stringify({
-                            url: store.sora2VideoUrl,
+                            url: videoUrl,
                             userId: store.userId,
                             folder: "model-demos",
                           }),
@@ -665,7 +671,7 @@ export function CastingPreview() {
                           method: "POST",
                           headers: { "Content-Type": "application/json" },
                           body: JSON.stringify({
-                            videoUrl: store.sora2VideoUrl,
+                            videoUrl: videoUrl,
                           }),
                         }).then(r => r.json());
 
