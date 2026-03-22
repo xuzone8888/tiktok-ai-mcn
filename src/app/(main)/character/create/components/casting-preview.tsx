@@ -674,6 +674,7 @@ export function CastingPreview() {
                           headers: { "Content-Type": "application/json" },
                           body: JSON.stringify({
                             videoUrl: videoUrl,
+                            timestamps: "0,3",  // 文档要求最多3秒，取前3秒提取角色特征
                           }),
                         }).then(r => r.json());
 
