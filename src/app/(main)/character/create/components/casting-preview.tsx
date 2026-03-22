@@ -656,7 +656,7 @@ export function CastingPreview() {
                       setSora2Confirming(true);
                       setSora2ConfirmStep("oss");
                       try {
-                        // 并行执行 OSS 转存 + pid 提取
+                        // 并行执行 OSS 转存 + PID 提取（更快）
                         const ossPromise = fetch("/api/upload/transfer-to-oss", {
                           method: "POST",
                           headers: { "Content-Type": "application/json" },
@@ -677,10 +677,10 @@ export function CastingPreview() {
 
                         const [ossResult, pidResult] = await Promise.all([ossPromise, pidPromise]);
 
-                        // OSS 转存结果
-                        if (ossResult.success && ossResult.url) {
-                          store.setSora2VideoOssUrl(ossResult.url);
-                          console.log("[Sora2-Confirm] OSS URL:", ossResult.url);
+                        // OSS 转存结果 — 注意 API 返回 { success, data: { url } }
+                        if (ossResult.success && ossResult.data?.url) {
+                          store.setSora2VideoOssUrl(ossResult.data.url);
+                          console.log("[Sora2-Confirm] OSS URL:", ossResult.data.url);
                         } else {
                           console.warn("[Sora2-Confirm] OSS transfer failed:", ossResult.error);
                         }
@@ -691,7 +691,7 @@ export function CastingPreview() {
                           setSora2ConfirmStep("pid");
                           // 轮询 pid 状态
                           let pidPollCount = 0;
-                          const MAX_PID_POLLS = 100;
+                          const MAX_PID_POLLS = 200; // 增加到 200 次 (10分钟)
                           const pollPid = async () => {
                             try {
                               const res = await fetch(`/api/characters/create-sora?taskId=${pidResult.taskId}`);
