@@ -778,7 +778,8 @@ export function CastingPreview() {
       )}
 
       {/* 状态 4：保存/激活面板 (Abyssal Void Console) */}
-      {generationStatus === "completed" && (generatedImageUrl || store.sora2VideoUrl) && showSavePanel && (
+      {/* 状态 4：保存/激活面板 — 影视/写真模式要求 generatedImageUrl，Sora2 模式要求 sora2Pid */}
+      {((generationStatus === "completed" && (generatedImageUrl || store.sora2VideoUrl)) || (store.forgeMode === "sora2" && store.sora2Pid)) && showSavePanel && (
         <>
           {/* 返回英雄出场页 */}
           <button
@@ -794,7 +795,11 @@ export function CastingPreview() {
           <div className="hero-bg-container">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src={generatedImageUrl || store.sora2VideoUrl || ""}
+              src={
+                store.forgeMode === "sora2"
+                  ? (store.heroImageUrl || "/sora2-hero-bg.png")  // Sora2 模式：用参考图或占位背景
+                  : (generatedImageUrl || "/sora2-hero-bg.png")   // 影视/写真模式：用生成图
+              }
               className="hero-bg-image"
               alt="Hero Background"
             />
@@ -926,7 +931,7 @@ export function CastingPreview() {
                 <button 
                   className="btn-save"
                   onClick={handleSaveOnly}
-                  disabled={!store.characterName.trim() || !generatedImageUrl || !store.referenceReady || store.isSaving}
+                  disabled={!store.characterName.trim() || (store.forgeMode !== "sora2" && !generatedImageUrl) || (store.forgeMode !== "sora2" && !store.referenceReady) || (store.forgeMode === "sora2" && !store.sora2Pid) || store.isSaving}
                   type="button"
                 >
                   {store.isSaving ? (
@@ -1150,7 +1155,9 @@ export function CastingPreview() {
         .preview-failed {
           text-align: center;
           padding: 3rem;
-           /* ===== Genshin Hero Reveal Completed State ===== */
+        }
+
+        /* ===== Genshin Hero Reveal Completed State ===== */
         .hero-bg-container {
           position: absolute;
           inset: 0;
