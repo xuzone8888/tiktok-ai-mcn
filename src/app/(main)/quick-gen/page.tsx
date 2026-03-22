@@ -414,10 +414,9 @@ export default function QuickGeneratorPage() {
       }
 
     } else {
-      setOutputMode("video");
-
-      // 设置视频参数
-      if (item.prompt) setPrompt(item.prompt);
+      // [封装] 视频模式暂时关闭，不对用户开放
+      // setOutputMode("video");
+      setOutputMode("image");
       if (item.video_model) setVideoModel(item.video_model as VideoModel);
       if (item.video_aspect_ratio) setVideoAspectRatio(item.video_aspect_ratio as VideoAspectRatio);
       if (item.video_use_ai_model !== undefined) setUseAiModel(item.video_use_ai_model);
@@ -615,8 +614,9 @@ export default function QuickGeneratorPage() {
         // 图片任务
         setOutputMode("image");
       } else {
-        // 视频任务
-        setOutputMode("video");
+        // [封装] 视频模式暂时关闭
+        // setOutputMode("video");
+        setOutputMode("image");
       }
       return;
     }
@@ -626,7 +626,9 @@ export default function QuickGeneratorPage() {
       setProcessedImages(storedGridImages);
       setCurrentImageIndex(storedGridIndex);
       setCanvasState("selection");
-      setOutputMode("video"); // 九宫格是视频模式的前置步骤
+      // [封装] 视频模式暂时关闭
+      // setOutputMode("video"); // 九宫格是视频模式的前置步骤
+      setOutputMode("image");
       console.log("[QuickGen] Restored grid images from store:", storedGridImages.length);
     }
   }, [recentTasks, storedGridImages, storedGridIndex]); // 依赖 recentTasks 以便数据加载后触发

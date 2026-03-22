@@ -86,6 +86,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // 验证角色参考图 URL 为 OSS 永久地址
+    if (characterRefUrl && !characterRefUrl.includes("media.toryxai.com")) {
+      console.warn("[VEO3 Batch] characterRefUrl is not a permanent OSS URL:", characterRefUrl.substring(0, 80));
+      return NextResponse.json(
+        { success: false, error: "角色参考图地址已过期，请到「我的角色」重新生成参考图" },
+        { status: 400 }
+      );
+    }
+
     // 构建图片 URL 列表
     const imageUrls: string[] = [];
     if (mainGridImageUrl) imageUrls.push(mainGridImageUrl);

@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>ToryX AI - Template Detail</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;800;900&amp;family=Space+Grotesk:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "outline": "#75757a",
+                        "on-error": "#490006",
+                        "inverse-primary": "#006b67",
+                        "on-primary-fixed-variant": "#00635f",
+                        "surface": "#050505",
+                        "surface-container-lowest": "#000000",
+                        "on-tertiary-fixed-variant": "#740044",
+                        "error": "#ff716c",
+                        "on-error-container": "#ffa8a3",
+                        "error-container": "#9f0519",
+                        "on-secondary-fixed": "#354500",
+                        "secondary-container": "#506600",
+                        "tertiary-dim": "#ff67ad",
+                        "tertiary-fixed-dim": "#ff73b1",
+                        "on-secondary-container": "#efffbc",
+                        "inverse-surface": "#faf8fe",
+                        "surface-bright": "#2a2c32",
+                        "secondary-dim": "#b7e500",
+                        "on-primary": "#00605c",
+                        "tertiary-fixed": "#ff8cbc",
+                        "surface-variant": "#24252b",
+                        "surface-dim": "#050505",
+                        "tertiary-container": "#fa53a4",
+                        "outline-variant": "#47484c",
+                        "surface-container-high": "#16181D",
+                        "primary-fixed-dim": "#00e6df",
+                        "inverse-on-surface": "#54555a",
+                        "surface-container-highest": "#24252b",
+                        "tertiary": "#FF00E5",
+                        "surface-container": "#0B0C10",
+                        "surface-tint": "#00FF9F",
+                        "on-secondary-fixed-variant": "#4e6300",
+                        "on-tertiary-fixed": "#37001d",
+                        "on-background": "#faf8fe",
+                        "primary-container": "#00B3FF",
+                        "primary": "#00B3FF",
+                        "secondary-fixed-dim": "#b7e500",
+                        "on-surface": "#faf8fe",
+                        "on-primary-container": "#005653",
+                        "on-surface-variant": "#abaab0",
+                        "error-dim": "#d7383b",
+                        "secondary": "#00FF9F",
+                        "on-tertiary-container": "#2f0018",
+                        "on-primary-fixed": "#004441",
+                        "on-secondary": "#455900",
+                        "primary-fixed": "#16f6ee",
+                        "primary-dim": "#00e6df",
+                        "on-tertiary": "#4b002a",
+                        "background": "#050505",
+                        "surface-container-low": "#0B0C10",
+                        "secondary-fixed": "#00FF9F"
+                    },
+                    fontFamily: {
+                        "headline": ["Inter"],
+                        "body": ["Inter"],
+                        "label": ["Space Grotesk"]
+                    },
+                    borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+                },
+            },
+        }
+    </script>
+<style>
+        .fractal-noise {
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+            opacity: 0.08;
+            pointer-events: none;
+        }
+        .mermaid-gradient {
+            background: linear-gradient(135deg, #00FF9F 0%, #00B3FF 50%, #FF00E5 100%);
+        }
+        .cyber-accent-gradient {
+            background: linear-gradient(to bottom, #00FF9F, #00B3FF);
+        }
+        .neon-glow {
+            box-shadow: 0 0 20px rgba(0, 179, 255, 0.3);
+        }
+        .purple-glow:hover {
+            box-shadow: 0 0 15px rgba(255, 0, 229, 0.5);
+            border-color: rgba(255, 0, 229, 0.4) !important;
+        }
+        .glass-edge {
+            border-top: 1px solid rgba(255, 255, 255, 0.15);
+            border-left: 1px solid rgba(255, 255, 255, 0.1);
+        }
+    
+        .mermaid-glass-cta {
+            background: linear-gradient(135deg, #CCFF00 0%, #00F2EA 50%, #EC4899 100%);
+            color: #000000 !important;
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: 0.15em;
+            box-shadow: 0 0 20px rgba(0, 242, 234, 0.3);
+            position: relative;
+            overflow: hidden;
+            transition: all 0.3s ease;
+        }
+        .mermaid-glass-cta::after {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: linear-gradient(to right, transparent, rgba(255, 255, 255, 0.3), transparent);
+            transform: rotate(45deg);
+            animation: shimmer 3s infinite;
+        }
+        @keyframes shimmer {
+            0% { transform: translateX(-150%) rotate(45deg); }
+            100% { transform: translateX(150%) rotate(45deg); }
+        }
+        .mermaid-glass-cta:hover {
+            box-shadow: 0 0 30px rgba(0, 242, 234, 0.5);
+            transform: scale(0.98);
+        }
+    </style>
+</head>
+<body class="bg-surface font-body text-on-surface selection:bg-primary/30 min-h-screen overflow-hidden">
+<!-- Fractal Texture Overlay -->
+<div class="fixed inset-0 fractal-noise z-[60]"></div>
+<!-- Top Navigation Anchor (Shared Component) -->
+<header class="fixed top-0 w-full flex justify-between items-center px-8 py-4 bg-[#050505]/80 backdrop-blur-md border-b border-white/10 z-50 shadow-[0_0_20px_rgba(0,179,255,0.1)]">
+<div class="flex items-center gap-8">
+<span class="text-2xl font-black tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-[#00FF9F] via-[#00B3FF] to-[#FF00E5]">ToryX AI</span>
+<nav class="hidden md:flex gap-6">
+<a class="text-[#abaab0] hover:text-[#faf8fe] transition-colors font-label uppercase tracking-wider text-xs" href="#">Models</a>
+<a class="text-[#00B3FF] border-b-2 border-[#00B3FF] pb-1 font-label uppercase tracking-wider text-xs" href="#">Templates</a>
+<a class="text-[#abaab0] hover:text-[#faf8fe] transition-colors font-label uppercase tracking-wider text-xs" href="#">Projects</a>
+<a class="text-[#abaab0] hover:text-[#faf8fe] transition-colors font-label uppercase tracking-wider text-xs" href="#">Vault</a>
+</nav>
+</div>
+<div class="flex items-center gap-4">
+<button class="material-symbols-outlined text-on-surface-variant hover:text-primary transition-colors">notifications</button>
+<button class="material-symbols-outlined text-on-surface-variant hover:text-primary transition-colors">settings</button>
+<div class="h-8 w-8 rounded-full overflow-hidden border border-white/20">
+<img alt="User avatar" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBDs0d_et_4npKfB0fnstRgqcrDk__yy7ftVQa8TIfXC2ykNr8aXLpzIlzds1H0TYttAN5mCpoDtHPyNYnkL6mqvFWxTHMGpvJaXjn4NER8-Xk___JbO8KhKqCSRvP4BYipe2cvSLY7Tgy_BiPcAXQLHMd9ir8aQGhYY3WyD1X1qY1FiQ4hhXsEIlu6E5m1yWbX28fr0tkVjstRbWpl03qfrXqDrOYyWaZWBJlwgSGLscQjbrQaWb2_eN5AFWFb-R-Cbz4q5PPq7Hk"/>
+</div>
+<button class="px-5 py-2 mermaid-gradient text-surface-container-lowest font-black text-xs uppercase tracking-widest rounded-sm hover:scale-95 transition-all duration-200">Create</button>
+</div>
+</header>
+<!-- Background Content (Simulated Dashboard) -->
+<main class="pt-24 px-8 grid grid-cols-4 gap-6 opacity-40 blur-[2px]">
+<div class="col-span-2 h-64 bg-surface-container rounded-xl border border-white/5"></div>
+<div class="h-64 bg-surface-container rounded-xl border border-white/5"></div>
+<div class="h-64 bg-surface-container rounded-xl border border-white/5"></div>
+<div class="h-48 bg-surface-container rounded-xl border border-white/5"></div>
+<div class="col-span-3 h-48 bg-surface-container rounded-xl border border-white/5"></div>
+</main>
+<!-- Modal Overlay -->
+<div class="fixed inset-0 z-[100] flex items-center justify-center bg-surface-container-lowest/60 backdrop-blur-md p-4 md:p-8">
+<!-- The Central Modal -->
+<div class="relative w-full max-w-6xl h-full max-h-[800px] bg-[#16181D] rounded-2xl border border-white/10 shadow-[0_0_60px_-15px_rgba(0,0,0,0.8)] flex flex-col md:flex-row overflow-hidden glass-edge">
+<!-- Modal Internal Noise -->
+<div class="absolute inset-0 fractal-noise opacity-[0.05] z-0 pointer-events-none"></div>
+<!-- Left Section: Immersive Preview -->
+<div class="relative w-full md:w-[45%] h-64 md:h-full p-6 z-10">
+<div class="relative w-full h-full rounded-xl overflow-hidden border border-white/10 bg-black group">
+<img alt="Futuristic cityscape" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBUentOsDf4qVm5kg-TjBn0l22adOg2jNll7U-NKglwXxs96nkYTIGuAn6-QvH--jF8-fca4H-ZfhALm72Ct1tpEG6Kq66J9cuA3Ncmkm2EfOhi6w1SubzfOIb4zV8iDLWYYG16WUSQzuEQFGQmo3AnVhSpA084q4RlddgQHPz5qk1UT3adyP5nDIUDwPX58U9UZ4dk8KUINH8xao1NqEDsrB2x3Z-Oal2oIRo2HB4846vKWoAokrdPvWEhiP5GWU6-aM9JeJlx3Co"/>
+<div class="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent flex items-end p-8">
+<div class="flex items-center gap-4">
+<div class="w-12 h-12 rounded-full bg-white/10 backdrop-blur-md flex items-center justify-center border border-white/20 hover:scale-110 transition-transform cursor-pointer">
+<span class="material-symbols-outlined text-white" style="font-variation-settings: 'FILL' 1;">play_arrow</span>
+</div>
+<div>
+<p class="text-xs font-label text-white/60 tracking-widest uppercase">Live Preview</p>
+<p class="text-white font-bold tracking-tight">Vortex Engine v4.2</p>
+</div>
+</div>
+</div>
+<!-- Refractive edge effect -->
+<div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-secondary via-primary to-tertiary opacity-40"></div>
+</div>
+</div>
+<!-- Right Section: Configuration Panel -->
+<div class="relative flex-1 p-8 md:p-12 z-10 flex flex-col justify-between overflow-y-auto">
+<div>
+<!-- Header -->
+<div class="flex items-start gap-6 mb-8">
+<div class="w-[6px] h-12 cyber-accent-gradient rounded-full"></div>
+<div>
+<h1 class="text-4xl md:text-5xl font-black tracking-tighter text-on-surface leading-none mb-2">Neon Synthwave Soul</h1>
+<div class="flex gap-3">
+<span class="text-[10px] font-label font-bold uppercase tracking-[0.2em] px-2 py-0.5 rounded-sm bg-tertiary/20 text-tertiary border border-tertiary/30">Premium</span>
+<span class="text-[10px] font-label font-bold uppercase tracking-[0.2em] px-2 py-0.5 rounded-sm bg-primary/20 text-primary border border-primary/30">Editor's Choice</span>
+</div>
+</div>
+</div>
+<!-- Metadata -->
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10">
+<div class="bg-surface-container-low p-4 rounded-lg border border-white/5">
+<p class="text-[10px] font-label text-on-surface-variant uppercase tracking-widest mb-1">Resolution</p>
+<p class="font-label text-sm text-white font-medium">1080x1920</p>
+</div>
+<div class="bg-surface-container-low p-4 rounded-lg border border-white/5">
+<p class="text-[10px] font-label text-on-surface-variant uppercase tracking-widest mb-1">Frame Rate</p>
+<p class="font-label text-sm text-white font-medium">60 FPS</p>
+</div>
+<div class="bg-surface-container-low p-4 rounded-lg border border-white/5">
+<p class="text-[10px] font-label text-on-surface-variant uppercase tracking-widest mb-1">Duration</p>
+<p class="font-label text-sm text-white font-medium">0:15s</p>
+</div>
+<div class="bg-surface-container-low p-4 rounded-lg border border-white/5">
+<p class="text-[10px] font-label text-on-surface-variant uppercase tracking-widest mb-1">Engine</p>
+<p class="font-label text-sm text-white font-medium">Neural_RTX</p>
+</div>
+</div>
+<!-- Description -->
+<div class="mb-8 relative">
+<h3 class="text-xs font-label text-on-surface-variant uppercase tracking-[0.3em] mb-4">Generation Prompt</h3>
+<div class="relative group rounded-lg overflow-hidden border border-white/10 bg-[#16181D]">
+<!-- Blurred/Locked Content -->
+<div class="p-4 min-h-[100px] opacity-20 blur-[6px] select-none pointer-events-none">
+<p class="text-sm leading-relaxed font-mono">
+                /imagine prompt: A hyper-realistic 1980s retro-futuristic cityscape at night, neon grids, volumetric fog, refractive chrome surfaces, deep purple and cyan lighting, synthwave aesthetic, 8k resolution, cinematic lighting, highly detailed textures --ar 9:16 --v 6.0
+            </p>
+</div>
+<!-- Unlock Overlay -->
+<div class="absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-[2px]">
+<button class="h-14 px-8 mermaid-glass-cta text-xs rounded-sm flex items-center justify-center gap-2">
+<span>Unlock with Credits</span>
+<div class="flex items-center gap-1 bg-black/10 px-2 py-0.5 rounded-full">
+<span class="material-symbols-outlined text-sm">bolt</span>
+<span>5 Credits</span>
+</div>
+</button>
+</div>
+</div>
+</div><div class="mb-10">
+<h3 class="text-xs font-label text-on-surface-variant uppercase tracking-[0.3em] mb-4">Artistic Direction</h3>
+<p class="text-on-surface-variant leading-relaxed font-body max-w-xl">
+                        A high-octane visual journey through 1980s retro-futurism. This template utilizes ToryX's proprietary <span class="text-primary font-bold">DeepLight™</span> rendering engine to simulate volumetric fog, refractive chrome surfaces, and procedurally generated neon grids.
+                    </p>
+</div>
+<!-- Style Tags -->
+<div class="flex flex-wrap gap-2 mb-12">
+<span class="px-3 py-1 bg-white/5 border border-white/10 rounded-full text-xs font-label text-on-surface-variant hover:border-primary/50 transition-colors cursor-default">Cyberpunk</span>
+<span class="px-3 py-1 bg-white/5 border border-white/10 rounded-full text-xs font-label text-on-surface-variant hover:border-primary/50 transition-colors cursor-default">Cinematic</span>
+<span class="px-3 py-1 bg-white/5 border border-white/10 rounded-full text-xs font-label text-on-surface-variant hover:border-primary/50 transition-colors cursor-default">Synthwave</span>
+<span class="px-3 py-1 bg-white/5 border border-white/10 rounded-full text-xs font-label text-on-surface-variant hover:border-primary/50 transition-colors cursor-default">High Dynamic Range</span>
+</div>
+</div>
+<!-- Footer Actions -->
+<div class="flex flex-col sm:flex-row items-center gap-4 pt-8 border-t border-white/5">
+<button class="w-full sm:flex-1 h-14 mermaid-glass-cta flex items-center justify-center gap-3 text-sm rounded-sm">
+<span>Use Template</span>
+<span class="material-symbols-outlined text-xl">bolt</span>
+</button>
+<div class="flex gap-3 w-full sm:w-auto">
+<button class="h-14 w-14 flex items-center justify-center rounded-sm bg-white/5 border border-white/10 text-on-surface-variant hover:text-tertiary transition-all group purple-glow">
+<span class="material-symbols-outlined transition-transform group-hover:scale-110" data-weight="fill">favorite</span>
+</button>
+<button class="h-14 w-14 flex items-center justify-center rounded-sm bg-white/5 border border-white/10 text-on-surface-variant hover:text-tertiary transition-all group purple-glow">
+<span class="material-symbols-outlined transition-transform group-hover:rotate-12">share</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Close Action (Absolute Positioned) -->
+<button class="absolute top-6 right-6 z-20 w-10 h-10 flex items-center justify-center rounded-full bg-black/20 hover:bg-white/10 transition-all text-white/50 hover:text-white purple-glow border border-transparent">
+<span class="material-symbols-outlined text-2xl">close</span>
+</button>
+</div>
+</div>
+<!-- Side Navigation Anchor (Shared Component) -->
+<aside class="fixed left-0 top-0 h-full w-20 flex flex-col items-center pt-24 pb-8 bg-[#0B0C10] border-r border-white/5 z-40">
+<div class="flex flex-col gap-8 flex-1">
+<button class="w-12 h-12 flex items-center justify-center text-[#abaab0] hover:bg-white/5 transition-colors rounded-lg">
+<span class="material-symbols-outlined">grid_view</span>
+</button>
+<button class="w-12 h-12 flex items-center justify-center bg-gradient-to-r from-[#00B3FF]/10 to-transparent text-[#00B3FF] border-l-4 border-[#00B3FF]">
+<span class="material-symbols-outlined">video_library</span>
+</button>
+<button class="w-12 h-12 flex items-center justify-center text-[#abaab0] hover:bg-white/5 transition-colors rounded-lg">
+<span class="material-symbols-outlined">insights</span>
+</button>
+<button class="w-12 h-12 flex items-center justify-center text-[#abaab0] hover:bg-white/5 transition-colors rounded-lg">
+<span class="material-symbols-outlined">group</span>
+</button>
+<button class="w-12 h-12 flex items-center justify-center text-[#abaab0] hover:bg-white/5 transition-colors rounded-lg">
+<span class="material-symbols-outlined">payments</span>
+</button>
+</div>
+<div class="flex flex-col gap-4">
+<button class="w-12 h-12 flex items-center justify-center text-[#abaab0] hover:bg-white/5 transition-colors rounded-lg">
+<span class="material-symbols-outlined">help_outline</span>
+</button>
+<button class="w-12 h-12 flex items-center justify-center text-[#abaab0] hover:bg-white/5 transition-colors rounded-lg">
+<span class="material-symbols-outlined">logout</span>
+</button>
+</div>
+</aside>
+</body></html>

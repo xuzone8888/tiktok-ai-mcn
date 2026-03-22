@@ -140,9 +140,14 @@ export async function POST(request: Request) {
     let finalPrompt = prompt;
     let triggerWord: string | null = null;
     let actualModelId: string | null = null;
+    let characterRefImageUrl: string | null = null; // 角色参考图 URL（用于 VEO imageUrls）
+
+    // 判断是否是 VEO 模型（VEO 通过 imageUrls 识别角色，不需要 prompt 注入）
+    const modelConfig = videoModel ? VIDEO_MODEL_CONFIG[videoModel] : null;
+    const isVeoModel = modelConfig && modelConfig.provider === "gaorui";
 
     // 调试日志：记录收到的 modelId
-    console.log("[Generate Video] Received modelId:", modelId, "userId:", userId);
+    console.log("[Generate Video] Received modelId:", modelId, "userId:", userId, "isVeoModel:", !!isVeoModel);
 
     if (modelId) {
       const supabase = createAdminClient();
@@ -170,11 +175,21 @@ export async function POST(request: Request) {
           if (characterPrompt) {
             triggerWord = characterPrompt;
             actualModelId = modelData.id;
-            finalPrompt = `Professional video featuring ${characterPrompt}. ${prompt}`;
-            console.log("[Generate Video] Auto mode - Injected character prompt:", {
+            characterRefImageUrl = modelData?.reference_sheet_url || null;
+
+            if (isVeoModel) {
+              // VEO：不注入 prompt，角色通过 imageUrls 传入
+              finalPrompt = prompt;
+              console.log("[Generate Video] VEO auto mode - using user prompt directly, character via imageUrls");
+            } else {
+              // Sora2：通过 prompt 注入角色描述
+              finalPrompt = `Professional video featuring ${characterPrompt}. ${prompt}`;
+            }
+            console.log("[Generate Video] Auto mode - Selected character:", {
               modelName: modelData.name,
               usedField: modelData.trigger_word ? "trigger_word" : modelData.description ? "description" : "name",
               selectedFromCount: contracts.length,
+              isVeoModel: !!isVeoModel,
             });
           } else {
             console.log("[Generate Video] Auto mode - Selected model has no prompt data:", modelData?.name);
@@ -195,15 +210,34 @@ export async function POST(request: Request) {
         if (characterPrompt) {
           triggerWord = characterPrompt;
           actualModelId = modelId;
-          finalPrompt = `Professional video featuring ${characterPrompt}. ${prompt}`;
-          console.log("[Generate Video] Injected character prompt:", {
+          characterRefImageUrl = model?.reference_sheet_url || null;
+
+          if (isVeoModel) {
+            // VEO：不注入 prompt，角色通过 imageUrls 传入
+            finalPrompt = prompt;
+            console.log("[Generate Video] VEO mode - using user prompt directly, character via imageUrls");
+          } else {
+            // Sora2：通过 prompt 注入角色描述
+            finalPrompt = `Professional video featuring ${characterPrompt}. ${prompt}`;
+          }
+          console.log("[Generate Video] Injected character:", {
             modelName: model?.name,
             usedField: model?.trigger_word ? "trigger_word" : model?.description ? "description" : "name",
+            isVeoModel: !!isVeoModel,
           });
         } else {
           console.log("[Generate Video] Model not found or has no prompt data:", modelId);
         }
       }
+    }
+
+    // 验证角色参考图 URL 为 OSS 永久地址
+    if (characterRefImageUrl && !characterRefImageUrl.includes("media.toryxai.com")) {
+      console.warn("[Generate Video] characterRefImageUrl is not a permanent OSS URL:", characterRefImageUrl.substring(0, 80));
+      return NextResponse.json(
+        { success: false, error: "角色参考图地址已过期，请到「我的角色」重新生成参考图" },
+        { status: 400 }
+      );
     }
 
     // 添加质量提升词
@@ -215,6 +249,7 @@ export async function POST(request: Request) {
     console.log("[Generate Video] Submitting task:", {
       originalPrompt: prompt.substring(0, 50) + "...",
       hasTriggerWord: !!triggerWord,
+      hasCharacterRefImage: !!characterRefImageUrl,
       duration,
       aspectRatio,
       quality,
@@ -223,8 +258,7 @@ export async function POST(request: Request) {
       usePro: isPro,
     });
 
-    // 根据 videoModel 选择路由
-    const modelConfig = videoModel ? VIDEO_MODEL_CONFIG[videoModel] : null;
+    // 根据 videoModel 选择路由（modelConfig 已在上面声明）
 
     let result: { success: boolean; taskId?: string; videoUrl?: string; error?: string };
     let responseMode: "sync" | "async" = "async";
@@ -232,11 +266,23 @@ export async function POST(request: Request) {
     if (modelConfig && modelConfig.provider === "gaorui") {
       // VEO3 模型→高瑞网关
       console.log("[Generate Video] Routing to Gaorui VEO3:", videoModel);
+
+      // 合并用户上传图 + 角色参考图到 imageUrls
+      const mergedImageUrls: string[] = [];
+      if (sourceImageUrls) {
+        mergedImageUrls.push(...sourceImageUrls);
+      } else if (sourceImageUrl) {
+        mergedImageUrls.push(sourceImageUrl);
+      }
+      if (characterRefImageUrl) {
+        mergedImageUrls.push(characterRefImageUrl);
+      }
+
       const veoResult = await submitVeo3Video({
         prompt: finalPrompt,
         model: modelConfig.apiModel as any,
         aspectRatio: aspectRatio as "9:16" | "16:9",
-        imageUrls: sourceImageUrls || (sourceImageUrl ? [sourceImageUrl] : undefined),
+        imageUrls: mergedImageUrls.length > 0 ? mergedImageUrls : undefined,
       });
       responseMode = veoResult.mode;
       result = {

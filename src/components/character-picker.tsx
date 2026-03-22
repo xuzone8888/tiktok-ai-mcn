@@ -405,58 +405,74 @@ export function CharacterPicker({
           </button>
         )}
 
-        {/* 精简小弹窗 */}
+        {/* 角色选择弹窗 */}
         <Dialog open={compactOpen} onOpenChange={setCompactOpen}>
-          <DialogContent className="bg-[#0B0C10]/98 backdrop-blur-2xl border border-white/10 max-w-sm p-0 rounded-2xl overflow-hidden">
-            <DialogHeader className="px-4 pt-4 pb-2">
-              <DialogTitle className="text-sm font-medium flex items-center gap-2 text-white">
-                <Users className="h-4 w-4 text-mermaid-cyan" />
+          <DialogContent className="bg-[#0B0C10]/98 backdrop-blur-2xl border border-white/10 max-w-lg p-0 rounded-2xl overflow-hidden shadow-[0_0_40px_rgba(0,0,0,0.5)]">
+            <DialogHeader className="px-5 pt-5 pb-3">
+              <DialogTitle className="text-base font-semibold flex items-center gap-2.5 text-white">
+                <div className="h-7 w-7 rounded-lg bg-gradient-to-br from-mermaid-cyan/20 to-mermaid-pink/20 flex items-center justify-center">
+                  <Users className="h-4 w-4 text-mermaid-cyan" />
+                </div>
                 选择角色
               </DialogTitle>
-              <DialogDescription className="text-xs text-white/40">
+              <DialogDescription className="text-sm text-white/40 mt-1">
                 点击选择一个角色用于生成
               </DialogDescription>
             </DialogHeader>
-            <div className="px-4 pb-4 max-h-[50vh] overflow-y-auto">
+            <div className="px-5 pb-5 max-h-[60vh] overflow-y-auto space-y-2">
               {loading ? (
-                <div className="py-8 text-center text-white/40 text-sm">加载中...</div>
+                <div className="py-12 text-center text-white/40 text-sm">加载中...</div>
               ) : readyCharacters.length === 0 ? (
-                <div className="py-8 text-center text-white/40 text-sm">暂无可用角色</div>
+                <div className="py-12 text-center text-white/40 text-sm">暂无可用角色</div>
               ) : (
-                <div className="grid grid-cols-2 gap-2">
-                  {readyCharacters.map((character) => (
-                    <button
-                      key={character.id}
-                      onClick={() => {
-                        onSelect(character);
-                        setCompactOpen(false);
-                      }}
-                      className={cn(
-                        "flex items-center gap-2 p-2.5 rounded-xl border transition-all text-left",
-                        selectedId === character.id
-                          ? "border-mermaid-cyan/50 bg-mermaid-cyan/10"
-                          : "border-white/10 bg-white/5 hover:border-white/20 hover:bg-white/8"
+                readyCharacters.map((character) => (
+                  <button
+                    key={character.id}
+                    onClick={() => {
+                      onSelect(character);
+                      setCompactOpen(false);
+                    }}
+                    className={cn(
+                      "flex items-center gap-3.5 p-3 rounded-xl border transition-all text-left w-full group",
+                      selectedId === character.id
+                        ? "border-mermaid-cyan/50 bg-mermaid-cyan/10 shadow-[0_0_20px_rgba(0,242,234,0.12)]"
+                        : "border-white/10 bg-white/5 hover:border-white/25 hover:bg-white/8"
+                    )}
+                  >
+                    {/* 头像 */}
+                    <div className="h-12 w-12 rounded-xl overflow-hidden bg-white/10 flex-shrink-0 ring-1 ring-white/10">
+                      {character.avatar_url ? (
+                        <img src={character.avatar_url} alt={character.name} className="h-full w-full object-cover" />
+                      ) : (
+                        <div className="h-full w-full flex items-center justify-center bg-gradient-to-br from-white/5 to-white/10">
+                          <Sparkles className="h-5 w-5 text-white/30" />
+                        </div>
                       )}
-                    >
-                      <div className="h-8 w-8 rounded-lg overflow-hidden bg-white/10 flex-shrink-0">
-                        {character.avatar_url ? (
-                          <img src={character.avatar_url} alt={character.name} className="h-full w-full object-cover" />
+                    </div>
+                    {/* 信息 */}
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-medium text-white truncate">{character.name}</p>
+                        {character.source === "user_created" ? (
+                          <Badge variant="secondary" className="text-[10px] px-1.5 py-0 bg-blue-500/20 text-blue-300 border-0 flex-shrink-0">自建</Badge>
                         ) : (
-                          <div className="h-full w-full flex items-center justify-center">
-                            <Sparkles className="h-3 w-3 text-white/30" />
-                          </div>
+                          <Badge variant="secondary" className="text-[10px] px-1.5 py-0 bg-emerald-500/20 text-emerald-300 border-0 flex-shrink-0">签约</Badge>
                         )}
                       </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-xs font-medium text-white truncate">{character.name}</p>
-                        <p className="text-[10px] text-white/40 truncate">{character.category}</p>
+                      <p className="text-xs text-white/40 truncate mt-0.5">{character.category}</p>
+                    </div>
+                    {/* 参考图缩略预览 */}
+                    {character.reference_sheet_url && (
+                      <div className="h-10 w-14 rounded-lg overflow-hidden bg-white/5 flex-shrink-0 ring-1 ring-white/10 opacity-70 group-hover:opacity-100 transition-opacity">
+                        <img src={character.reference_sheet_url} alt="参考图" className="h-full w-full object-cover" />
                       </div>
-                      {selectedId === character.id && (
-                        <CheckCircle2 className="h-4 w-4 text-mermaid-cyan flex-shrink-0" />
-                      )}
-                    </button>
-                  ))}
-                </div>
+                    )}
+                    {/* 选中标记 */}
+                    {selectedId === character.id && (
+                      <CheckCircle2 className="h-5 w-5 text-mermaid-cyan flex-shrink-0" />
+                    )}
+                  </button>
+                ))
               )}
             </div>
           </DialogContent>
