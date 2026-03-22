@@ -20,6 +20,7 @@ import {
   Play,
   Star,
   Zap,
+  Trash2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -496,13 +497,23 @@ function MyCharacterCard({ character, onUseInStudio, onRetryReference, onPublish
             </Button>
           )}
 
-          {/* 发布 / 删除 */}
+          {/* 发布 / 下架 */}
           <Button
             variant="outline"
-            onClick={() => character.is_public ? onDelete(character.id) : onPublish(character)}
+            onClick={() => onPublish(character)}
             className="border-white/10 text-white/50 hover:bg-white/10 hover:text-white hover:border-white/30"
           >
             {character.is_public ? <span className="text-xs">下架</span> : <span className="text-xs">发布</span>}
+          </Button>
+
+          {/* 删除 — hover 时显示 */}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => onDelete(character.id)}
+            className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity duration-300 text-white/30 hover:text-red-400 hover:bg-red-500/10"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
           </Button>
         </div>
       </div>

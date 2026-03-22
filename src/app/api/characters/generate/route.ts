@@ -170,12 +170,17 @@ export async function POST(request: Request) {
       console.log("[Character Generate] Reference image ready (sync):", geminiResult.imageUrl.substring(0, 60));
 
       // xas231 返回的是临时 URL (flow.xas231.online/tmp/)，约 2 小时后过期
-      // 需要下载图片并上传到 OSS 持久化存储
-      let permanentUrl = geminiResult.imageUrl;
-      try {
-        const { uploadImageBuffer, generateMediaPath, getPublicUrl } = await import('@/lib/oss');
-        const imgResponse = await fetch(geminiResult.imageUrl);
-        if (imgResponse.ok) {
+      // 必须下载图片并上传到 OSS 持久化存储，不允许存临时 URL
+      let permanentUrl: string | null = null;
+      const maxOssRetries = 2;
+
+      for (let attempt = 1; attempt <= maxOssRetries; attempt++) {
+        try {
+          const { uploadImageBuffer, generateMediaPath } = await import('@/lib/oss');
+          const imgResponse = await fetch(geminiResult.imageUrl);
+          if (!imgResponse.ok) {
+            throw new Error(`Failed to download temp image: ${imgResponse.status}`);
+          }
           const imgBuffer = Buffer.from(await imgResponse.arrayBuffer());
           const contentType = imgResponse.headers.get('content-type') || 'image/jpeg';
           const ext = contentType.split('/')[1] || 'jpg';
@@ -186,10 +191,21 @@ export async function POST(request: Request) {
           );
           permanentUrl = await uploadImageBuffer(imgBuffer, objectPath, contentType);
           console.log("[Character Generate] Reference uploaded to OSS:", permanentUrl.substring(0, 80));
+          break; // 成功，跳出重试循环
+        } catch (ossErr) {
+          console.error(`[Character Generate] OSS upload attempt ${attempt}/${maxOssRetries} failed:`, ossErr);
+          if (attempt < maxOssRetries) {
+            await new Promise(r => setTimeout(r, 1000 * attempt)); // 等待后重试
+          }
         }
-      } catch (ossErr) {
-        console.error("[Character Generate] OSS upload failed, using temp URL:", ossErr);
-        // fallback: 继续使用临时 URL，至少短期内可用
+      }
+
+      if (!permanentUrl) {
+        console.error("[Character Generate] OSS upload failed after all retries, refusing to store temp URL");
+        return NextResponse.json(
+          { success: false, error: "参考图持久化失败，请重试生成" },
+          { status: 500 }
+        );
       }
 
       return NextResponse.json({
