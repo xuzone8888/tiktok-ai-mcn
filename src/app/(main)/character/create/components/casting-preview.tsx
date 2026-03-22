@@ -29,7 +29,9 @@ export function CastingPreview() {
   const [showRefBanner, setShowRefBanner] = useState(false);
   const [refBannerClosing, setRefBannerClosing] = useState(false);
   const [sora2Confirming, setSora2Confirming] = useState(false);
-  const [sora2ConfirmStep, setSora2ConfirmStep] = useState(""); // "" | "oss" | "pid" | "done"
+  const [sora2ConfirmStep, setSora2ConfirmStep] = useState(""); // "" | "oss" | "pid" | "done" | "error"
+  const [sora2PidError, setSora2PidError] = useState(""); // PID 提取失败时的错误信息
+
 
 
 
@@ -704,16 +706,16 @@ export function CastingPreview() {
                                 return;
                               }
                               if (data.status === "failed") {
-                                alert(`角色 PID 提取失败: ${data.error || "未知错误"}`);
                                 setSora2Confirming(false);
-                                setSora2ConfirmStep("");
+                                setSora2ConfirmStep("error");
+                                setSora2PidError(data.error || "提取失败，请重试");
                                 return;
                               }
                               pidPollCount++;
                               if (pidPollCount >= MAX_PID_POLLS) {
-                                alert("PID 提取超时，请重试");
                                 setSora2Confirming(false);
-                                setSora2ConfirmStep("");
+                                setSora2ConfirmStep("error");
+                                setSora2PidError("提取超时（服务繁忙），请点击重试");
                                 return;
                               }
                               setTimeout(pollPid, 3000);
@@ -724,9 +726,9 @@ export function CastingPreview() {
                           };
                           pollPid();
                         } else {
-                          alert(`PID 提取失败: ${pidResult.error || "未知错误"}`);
+                          setSora2ConfirmStep("error");
+                          setSora2PidError(pidResult.error || "提交失败，请重试");
                           setSora2Confirming(false);
-                          setSora2ConfirmStep("");
                         }
                       } catch (error) {
                         console.error("[Sora2-Confirm] Error:", error);
@@ -758,8 +760,28 @@ export function CastingPreview() {
                   <div style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "center", marginBottom: 8 }}>
                     <span style={{ width: 10, height: 10, borderRadius: "50%", background: "#a855f7", boxShadow: "0 0 8px #a855f7", animation: "dotBlink 1.5s ease-in-out infinite", display: "inline-block" }} />
                     {sora2ConfirmStep === "oss" && "正在转存视频到永久存储..."}
-                    {sora2ConfirmStep === "pid" && "正在提取角色特征编码..."}
+                    {sora2ConfirmStep === "pid" && "正在提取角色特征编码...(可能需要数分钟)"}
                   </div>
+                </div>
+              )}
+
+              {/* PID 提取失败：显示错误 + 重试按钮 */}
+              {sora2ConfirmStep === "error" && sora2PidError && (
+                <div style={{ textAlign: "center" }}>
+                  <div style={{ color: "#f87171", fontSize: 13, marginBottom: 12, padding: "8px 12px", background: "rgba(248,113,113,0.1)", borderRadius: 8, border: "1px solid rgba(248,113,113,0.2)" }}>
+                    ⚠ {sora2PidError}
+                  </div>
+                  <button
+                    className="hero-btn hero-btn--primary"
+                    onClick={() => {
+                      setSora2ConfirmStep("");
+                      setSora2PidError("");
+                    }}
+                    type="button"
+                    style={{ fontSize: 14 }}
+                  >
+                    🔄 重新提取 PID
+                  </button>
                 </div>
               )}
 

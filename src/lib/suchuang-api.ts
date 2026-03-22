@@ -1875,6 +1875,11 @@ export async function queryCharacterResult(
       return { success: false, status: "failed", error: "角色创建完成但无 pid" };
     } else if (status === 1) {
       return { success: false, status: "failed", error: data.data?.fail_reason || "角色创建失败" };
+    } else if (status === 3) {
+      // 无印科技系统错误 — 快速失败，不继续轮询
+      const msg = data.data?.message || "system error";
+      console.error("[Sora2-Character] System error:", msg);
+      return { success: false, status: "failed", error: `提取失败（服务繁忙），请重试` };
     }
 
     // status === 0 或其他 → 仍在处理中
