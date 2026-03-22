@@ -45,6 +45,7 @@ export interface CharacterOption {
   reference_sheet_url?: string | null;
   reference_status?: string;
   trigger_word?: string | null;
+  forge_type?: string | null;
   is_hired?: boolean;
   days_remaining?: number;
   contract_status?: string;
@@ -73,6 +74,8 @@ interface CharacterPickerProps {
   placeholder?: string;
   /** 最大高度 */
   maxHeight?: string;
+  /** 按铸造类型过滤：veo=写真角色, sora2=影视角色 */
+  forgeType?: "veo" | "sora2";
 }
 
 // ============================================================================
@@ -141,6 +144,16 @@ const CharacterCard = memo(function CharacterCard({
               自建
             </Badge>
           )}
+          {character.forge_type === "sora2" && (
+            <Badge variant="secondary" className="text-[10px] px-1.5 py-0 bg-purple-500/20 text-purple-300 border-0">
+              🎬 影视
+            </Badge>
+          )}
+          {character.forge_type === "veo" && (
+            <Badge variant="secondary" className="text-[10px] px-1.5 py-0 bg-cyan-500/20 text-cyan-300 border-0">
+              🖼️ 写真
+            </Badge>
+          )}
         </div>
         <p className="text-xs text-white/50 truncate mt-0.5">
           {character.category}
@@ -174,6 +187,7 @@ export function CharacterPicker({
   title = "选择角色",
   placeholder = "搜索角色名称...",
   maxHeight = "360px",
+  forgeType,
 }: CharacterPickerProps) {
   const [characters, setCharacters] = useState<CharacterOption[]>([]);
   const [loading, setLoading] = useState(false);
@@ -246,7 +260,8 @@ export function CharacterPicker({
               source: "user_created" as const,
               reference_sheet_url: ch.reference_sheet_url,
               reference_status: ch.reference_status || "none",
-              trigger_word: null,
+              trigger_word: ch.trigger_word || null,
+              forge_type: ch.forge_type || null,
               is_hired: false,
               contract_status: "permanent",
             }));
@@ -263,6 +278,19 @@ export function CharacterPicker({
       } else {
         // 全部：自建在前
         finalList = [...ownChars, ...opts];
+      }
+
+      // 按 forgeType 过滤
+      if (forgeType) {
+        finalList = finalList.filter((c) => {
+          if (forgeType === "sora2") {
+            return c.forge_type === "sora2" || (c.trigger_word && c.trigger_word.startsWith("@"));
+          }
+          if (forgeType === "veo") {
+            return c.forge_type === "veo" || (!c.trigger_word?.startsWith("@") && c.reference_sheet_url);
+          }
+          return true;
+        });
       }
 
       setCharacters(finalList);

@@ -117,6 +117,7 @@ export interface Database {
           preview_video_url: string | null;
           is_public: boolean;
           publish_price: number;
+          forge_type: string | null;
         };
         Insert: {
           id?: string;
@@ -153,6 +154,7 @@ export interface Database {
           preview_video_url?: string | null;
           is_public?: boolean;
           publish_price?: number;
+          forge_type?: string | null;
         };
         Update: {
           name?: string;
@@ -190,6 +192,7 @@ export interface Database {
           preview_video_url?: string | null;
           is_public?: boolean;
           publish_price?: number;
+          forge_type?: string | null;
         };
         Relationships: [];
       };

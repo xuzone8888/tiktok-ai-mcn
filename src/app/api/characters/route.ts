@@ -79,6 +79,9 @@ export async function POST(request: Request) {
       reference_sheet_url,
       reference_status,
       reference_task_id,
+      // V5: Sora2 影视角色
+      trigger_word,
+      forge_type,
     } = body;
 
     // 参数校验
@@ -94,7 +97,8 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
-    if (!reference_images || reference_images.length === 0) {
+    // Sora2 角色不需要参考图（使用视频截帧代替），VEO 角色必须有参考图
+    if (forge_type !== "sora2" && (!reference_images || reference_images.length === 0)) {
       return NextResponse.json(
         { success: false, error: "至少需要一张参考图" },
         { status: 400 }
@@ -133,6 +137,9 @@ export async function POST(request: Request) {
       price_yearly: 0,
       // 默认分类
       category: character_type === "animal" ? "动物角色" : "自建角色",
+      // V5: Sora2 影视角色
+      trigger_word: trigger_word || null,
+      forge_type: forge_type || "veo",
     };
 
     console.log("[Characters API] Creating character:", {

@@ -28,6 +28,8 @@ export function CastingPreview() {
   const [showSavePanel, setShowSavePanel] = useState(false);
   const [showRefBanner, setShowRefBanner] = useState(false);
   const [refBannerClosing, setRefBannerClosing] = useState(false);
+  const [sora2Confirming, setSora2Confirming] = useState(false);
+  const [sora2ConfirmStep, setSora2ConfirmStep] = useState(""); // "" | "oss" | "pid" | "done"
 
 
 
@@ -75,9 +77,10 @@ export function CastingPreview() {
     }
   }, [generationStatus]);
 
-  // ====== 真实 API 任务轮询机制 ======
+  // ====== 真实 API 任务轮询机制（VEO 专用）======
   useEffect(() => {
-    if (generationStatus !== "polling" || !store.heroTaskId) return;
+    // Sora2 模式走自己的轮询，此处仅处理 VEO
+    if (generationStatus !== "polling" || !store.heroTaskId || store.forgeMode === "sora2") return;
 
     let pollCount = 0;
     const MAX_POLLS = 120; // 最长等待约 6 分钟 (120 * 3s)
@@ -135,7 +138,54 @@ export function CastingPreview() {
     return () => {
       isPolling = false;
     };
-  }, [generationStatus, store.heroTaskId, store]);
+  }, [generationStatus, store.heroTaskId, store.forgeMode, store]);
+
+  // ====== Sora2 视频生成轮询 ======
+  useEffect(() => {
+    if (generationStatus !== "polling" || !store.heroTaskId || store.forgeMode !== "sora2") return;
+
+    let pollCount = 0;
+    const MAX_POLLS = 200; // Sora2 耗时更长，约 10 分钟
+    let isPolling = true;
+
+    const pollSora2 = async () => {
+      try {
+        const res = await fetch(`/api/video-batch/sora-status/${store.heroTaskId}`);
+        if (!res.ok) throw new Error(`Sora2 poll failed: ${res.status}`);
+        const data = await res.json();
+
+        if (data.status === "completed" && data.resultUrl) {
+          console.log("[Sora2-Poll] ✅ Video ready:", data.resultUrl.substring(0, 80));
+          store.setSora2VideoResult(data.resultUrl);
+          return;
+        }
+
+        if (data.status === "failed") {
+          store.setGenerationFailed(data.error || "Sora2 视频生成失败");
+          return;
+        }
+
+        pollCount++;
+        if (pollCount >= MAX_POLLS) {
+          store.setGenerationFailed("视频生成超时，请稍后重试");
+          return;
+        }
+
+        if (isPolling) setTimeout(pollSora2, 3000);
+      } catch (err) {
+        console.error("[Sora2-Poll] Error:", err);
+        pollCount++;
+        if (pollCount >= MAX_POLLS) {
+          store.setGenerationFailed("网络连接断开，请重试");
+        } else if (isPolling) {
+          setTimeout(pollSora2, 3000);
+        }
+      }
+    };
+
+    pollSora2();
+    return () => { isPolling = false; };
+  }, [generationStatus, store.heroTaskId, store.forgeMode, store]);
   // ===================================
 
   // ====== 多角度自动提交 ======
@@ -248,6 +298,7 @@ export function CastingPreview() {
         style_tags: store.characterTags,
         gender: store.dnaConfig.gender,
         age_range: store.dnaConfig.ageGroup || null,
+        forge_type: "veo",
       }),
     });
 
@@ -262,6 +313,55 @@ export function CastingPreview() {
     return data.data.id;
   };
 
+  // ====== Sora2 角色保存 ======
+  const doSaveSora2Character = async (): Promise<string | null> => {
+    if (!store.characterName.trim()) {
+      alert("请先输入角色名称");
+      return null;
+    }
+    if (!store.sora2Pid) {
+      alert("角色 PID 尚未提取完成，请稍候");
+      return null;
+    }
+    if (!store.userId) {
+      alert("请先登录");
+      return null;
+    }
+
+    // 使用视频第一帧截图作为头像（如果有 OSS URL 则用 OSS，否则用临时 URL）
+    const videoUrl = store.sora2VideoOssUrl || store.sora2VideoUrl;
+
+    const response = await fetch("/api/characters", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        userId: store.userId,
+        name: store.characterName.trim(),
+        description: store.prompt,
+        avatar_url: videoUrl, // Sora2 角色用视频 URL 作为头像占位
+        reference_images: [videoUrl],
+        preview_video_url: store.sora2VideoOssUrl || null,
+        character_type: store.dnaConfig.species,
+        dna_config: store.dnaConfig,
+        style_tags: store.characterTags,
+        gender: store.dnaConfig.gender,
+        age_range: store.dnaConfig.ageGroup || null,
+        trigger_word: store.sora2Pid,
+        forge_type: "sora2",
+      }),
+    });
+
+    const data = await response.json();
+    if (!data.success) {
+      alert(`保存失败: ${data.error}`);
+      return null;
+    }
+
+    store.setSavedCharacterId(data.data.id);
+    console.log("[Save] ✅ Sora2 Character saved, ID:", data.data.id, "PID:", store.sora2Pid);
+    return data.data.id;
+  };
+
 
 
   // ====== 仅保存角色（不生成视频）======
@@ -269,7 +369,9 @@ export function CastingPreview() {
     if (store.isSaving || store.savedCharacterId) return;
     store.setIsSaving(true);
     try {
-      const characterId = await doSaveCharacter();
+      const characterId = store.forgeMode === "sora2"
+        ? await doSaveSora2Character()
+        : await doSaveCharacter();
       if (characterId) {
         alert("✅ 角色已保存！前往「我的角色」可活化角色生成视频。");
       }
@@ -341,6 +443,30 @@ export function CastingPreview() {
               <span key={terminalLog} className="animate-pulse">{terminalLog}</span>
             </div>
           </div>
+
+          {/* Sora2 收起按钮 */}
+          {store.forgeMode === "sora2" && (
+            <div style={{ position: "absolute", top: 24, right: 24, zIndex: 10 }}>
+              <button
+                type="button"
+                onClick={() => store.setIsMinimized(true)}
+                style={{
+                  padding: "8px 16px",
+                  borderRadius: 20,
+                  background: "rgba(255,255,255,0.08)",
+                  border: "1px solid rgba(255,255,255,0.15)",
+                  color: "rgba(255,255,255,0.7)",
+                  fontSize: 13,
+                  fontWeight: 500,
+                  cursor: "pointer",
+                  backdropFilter: "blur(10px)",
+                  transition: "all 0.2s",
+                }}
+              >
+                ⬇️ 收起
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -359,8 +485,8 @@ export function CastingPreview() {
         </div>
       )}
 
-      {/* 状态 3：生成完毕 — 角色卡片居中展示 (Hero Reveal Card) */}
-      {generationStatus === "completed" && generatedImageUrl && !showSavePanel && (
+      {/* 状态 3：生成完毕 — VEO 写真角色卡片展示 (Hero Reveal Card) */}
+      {generationStatus === "completed" && store.forgeMode !== "sora2" && generatedImageUrl && !showSavePanel && (
         <>
           {/* 返回/重新配置 */}
           <button
@@ -456,8 +582,171 @@ export function CastingPreview() {
         </>
       )}
 
+      {/* 状态 3-Sora2：影视角色视频预览 + 确认 */}
+      {generationStatus === "completed" && store.forgeMode === "sora2" && store.sora2VideoUrl && !showSavePanel && (
+        <>
+          {/* 返回/重新配置 */}
+          <button
+            className="btn-back-floating"
+            onClick={() => store.setCurrentStep(1)}
+            type="button"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+            重新配置
+          </button>
+
+          <div className="hero-card-stage">
+            {/* 视频背景层 */}
+            <div className="hero-blur-bg" style={{ background: "radial-gradient(circle at center, rgba(168,85,247,0.15), transparent 70%)" }} />
+            <div className="hero-shockwave" />
+
+            {/* 视频播放器 */}
+            <div className="hero-card" style={{ aspectRatio: "9/16", maxHeight: "70vh" }}>
+              <video
+                src={store.sora2VideoUrl}
+                className="hero-card-img"
+                style={{ objectFit: "cover", width: "100%", height: "100%" }}
+                autoPlay
+                loop
+                muted
+                playsInline
+                controls
+              />
+            </div>
+
+            {/* 操作按钮 */}
+            <div className="hero-card-actions">
+              {!sora2Confirming && !store.sora2Pid && (
+                <>
+                  <button
+                    className="hero-btn hero-btn--primary"
+                    onClick={async () => {
+                      setSora2Confirming(true);
+                      setSora2ConfirmStep("oss");
+                      try {
+                        // 并行执行 OSS 转存 + pid 提取
+                        const ossPromise = fetch("/api/upload/transfer-to-oss", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({
+                            url: store.sora2VideoUrl,
+                            userId: store.userId,
+                            folder: "model-demos",
+                          }),
+                        }).then(r => r.json());
+
+                        const pidPromise = fetch("/api/characters/create-sora", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({
+                            videoUrl: store.sora2VideoUrl,
+                          }),
+                        }).then(r => r.json());
+
+                        const [ossResult, pidResult] = await Promise.all([ossPromise, pidPromise]);
+
+                        // OSS 转存结果
+                        if (ossResult.success && ossResult.url) {
+                          store.setSora2VideoOssUrl(ossResult.url);
+                          console.log("[Sora2-Confirm] OSS URL:", ossResult.url);
+                        } else {
+                          console.warn("[Sora2-Confirm] OSS transfer failed:", ossResult.error);
+                        }
+
+                        // PID 提取任务提交
+                        if (pidResult.success && pidResult.taskId) {
+                          store.setSora2PidTaskId(pidResult.taskId);
+                          setSora2ConfirmStep("pid");
+                          // 轮询 pid 状态
+                          let pidPollCount = 0;
+                          const MAX_PID_POLLS = 100;
+                          const pollPid = async () => {
+                            try {
+                              const res = await fetch(`/api/characters/create-sora?taskId=${pidResult.taskId}`);
+                              const data = await res.json();
+                              if (data.status === "completed" && data.pid) {
+                                store.setSora2Pid(data.pid);
+                                setSora2ConfirmStep("done");
+                                setSora2Confirming(false);
+                                console.log("[Sora2-Confirm] PID:", data.pid);
+                                return;
+                              }
+                              if (data.status === "failed") {
+                                alert(`角色 PID 提取失败: ${data.error || "未知错误"}`);
+                                setSora2Confirming(false);
+                                setSora2ConfirmStep("");
+                                return;
+                              }
+                              pidPollCount++;
+                              if (pidPollCount >= MAX_PID_POLLS) {
+                                alert("PID 提取超时，请重试");
+                                setSora2Confirming(false);
+                                setSora2ConfirmStep("");
+                                return;
+                              }
+                              setTimeout(pollPid, 3000);
+                            } catch {
+                              pidPollCount++;
+                              if (pidPollCount < MAX_PID_POLLS) setTimeout(pollPid, 3000);
+                            }
+                          };
+                          pollPid();
+                        } else {
+                          alert(`PID 提取失败: ${pidResult.error || "未知错误"}`);
+                          setSora2Confirming(false);
+                          setSora2ConfirmStep("");
+                        }
+                      } catch (error) {
+                        console.error("[Sora2-Confirm] Error:", error);
+                        alert("确认角色失败，请重试");
+                        setSora2Confirming(false);
+                        setSora2ConfirmStep("");
+                      }
+                    }}
+                    type="button"
+                  >
+                    ✅ 确认角色
+                  </button>
+                  <button
+                    className="hero-btn"
+                    onClick={() => {
+                      store.startGeneration();
+                      store.setForgeMode("sora2");
+                    }}
+                    type="button"
+                    style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.15)", color: "rgba(255,255,255,0.7)" }}
+                  >
+                    🔄 重新铸造
+                  </button>
+                </>
+              )}
+
+              {sora2Confirming && (
+                <div style={{ textAlign: "center", color: "rgba(255,255,255,0.7)", fontSize: 14 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "center", marginBottom: 8 }}>
+                    <span style={{ width: 10, height: 10, borderRadius: "50%", background: "#a855f7", boxShadow: "0 0 8px #a855f7", animation: "dotBlink 1.5s ease-in-out infinite", display: "inline-block" }} />
+                    {sora2ConfirmStep === "oss" && "正在转存视频到永久存储..."}
+                    {sora2ConfirmStep === "pid" && "正在提取角色特征编码..."}
+                  </div>
+                </div>
+              )}
+
+              {store.sora2Pid && (
+                <button
+                  className="hero-btn hero-btn--primary"
+                  onClick={() => setShowSavePanel(true)}
+                  type="button"
+                >
+                  ✦ 保存角色 (PID: {store.sora2Pid.substring(0, 15)}...)
+                </button>
+              )}
+            </div>
+          </div>
+        </>
+      )}
+
       {/* 状态 4：保存/激活面板 (Abyssal Void Console) */}
-      {generationStatus === "completed" && generatedImageUrl && showSavePanel && (
+      {generationStatus === "completed" && (generatedImageUrl || store.sora2VideoUrl) && showSavePanel && (
         <>
           {/* 返回英雄出场页 */}
           <button
@@ -473,7 +762,7 @@ export function CastingPreview() {
           <div className="hero-bg-container">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src={generatedImageUrl}
+              src={generatedImageUrl || store.sora2VideoUrl || ""}
               className="hero-bg-image"
               alt="Hero Background"
             />

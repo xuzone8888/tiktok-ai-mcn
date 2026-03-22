@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback, useRef, useEffect, Fragment } from "react";
 import {
   useCharacterStudioStore,
   useCharacterIsGenerating,
@@ -13,7 +13,8 @@ import type { CharacterDna } from "@/types/character";
 import { 
   Sparkles, Keyboard, Lightbulb, Wand2, ImagePlus, 
   CloudUpload, Hourglass, RefreshCw, Dna, VenetianMask, 
-  User, Ruler, Scissors, Shirt, Loader2, Info
+  User, Ruler, Scissors, Shirt, Loader2, Info,
+  Camera, Film, X
 } from "lucide-react";
 
 // ====== Stitch V3: 三色配色系统 ======
@@ -263,9 +264,20 @@ export function CreationWorkspace() {
     }
   };
 
+  // ====== 铸造方式弹窗 ======
+  const [showForgeDialog, setShowForgeDialog] = useState(false);
+
   const handleGenerate = async () => {
     if (!store.prompt.trim() || isGenerating) return;
+    // 打开铸造方式选择弹窗
+    setShowForgeDialog(true);
+  };
+
+  const handleForgeSelect = async (mode: "veo" | "sora2") => {
+    setShowForgeDialog(false);
+    store.setForgeMode(mode);
     store.startGeneration();
+
     try {
       let userId = store.userId;
       if (!userId) {
@@ -282,23 +294,44 @@ export function CreationWorkspace() {
         store.setGenerationFailed("请先登录后再生成角色");
         return;
       }
-      const response = await fetch("/api/characters/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          type: "hero",
-          prompt: store.prompt,
-          sourceImageUrl: store.referenceImageUrl || undefined,
-          userId,
-        }),
-      });
-      const data = await response.json();
-      if (!data.success) {
-        store.setGenerationFailed(data.error || "生成失败");
-        return;
+
+      if (mode === "veo") {
+        // 写真角色：走现有 VEO 流程
+        const response = await fetch("/api/characters/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            type: "hero",
+            prompt: store.prompt,
+            sourceImageUrl: store.referenceImageUrl || undefined,
+            userId,
+          }),
+        });
+        const data = await response.json();
+        if (!data.success) {
+          store.setGenerationFailed(data.error || "生成失败");
+          return;
+        }
+        if (data.refPrompt) store.setRefPrompt(data.refPrompt);
+        store.setTaskIds(data.heroTaskId || null, null);
+      } else {
+        // 影视角色：调 Sora2 生成角色视频
+        const response = await fetch("/api/characters/generate-sora-character-video", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            prompt: store.prompt,
+            userId,
+          }),
+        });
+        const data = await response.json();
+        if (!data.success) {
+          store.setGenerationFailed(data.error || "视频生成失败");
+          return;
+        }
+        // 存任务 ID，轮询在 casting-preview 中进行
+        store.setTaskIds(data.taskId, null);
       }
-      if (data.refPrompt) store.setRefPrompt(data.refPrompt);
-      store.setTaskIds(data.heroTaskId || null, null);
     } catch (error) {
       store.setGenerationFailed("网络错误，请重试");
     }
@@ -520,6 +553,62 @@ export function CreationWorkspace() {
         <div className="absolute inset-0 bg-black/60 backdrop-blur-xl rounded-2xl -z-10 shadow-[0_-10px_40px_rgba(0,0,0,0.5)]" />
         <GenerateButton store={store} isGenerating={isGenerating} handleGenerate={handleGenerate} />
       </div>
+
+      {/* ===== 铸造方式选择弹窗 ===== */}
+      {showForgeDialog && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-md" onClick={() => setShowForgeDialog(false)} />
+          <div className="relative w-[92vw] max-w-lg mx-auto bg-gradient-to-b from-[#1a1a22] to-[#0e0e13] border border-white/10 rounded-3xl shadow-2xl p-6 animate-in fade-in zoom-in-95 duration-200">
+            <button onClick={() => setShowForgeDialog(false)} className="absolute top-4 right-4 text-white/40 hover:text-white/80 transition-colors">
+              <X className="w-5 h-5" />
+            </button>
+            <h3 className="text-xl font-bold text-white mb-1">选择铸造方式</h3>
+            <p className="text-sm text-white/40 mb-5">不同铸造方式适用于不同的使用场景</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {/* 写真角色 */}
+              <button
+                onClick={() => handleForgeSelect("veo")}
+                className="group text-left p-5 rounded-2xl border border-white/10 bg-white/[0.03] hover:bg-white/[0.08] hover:border-cyan-400/30 transition-all duration-200"
+              >
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-10 h-10 rounded-xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center">
+                    <Camera className="w-5 h-5 text-cyan-400" />
+                  </div>
+                  <div>
+                    <p className="text-white font-bold text-[15px]">写真角色</p>
+                    <p className="text-[11px] text-white/30">使用模型：VEO</p>
+                  </div>
+                </div>
+                <p className="text-xs text-white/50 leading-relaxed mb-3">可用于快速生图、多图生成、VEO 视频生成</p>
+                <div className="flex items-center justify-between text-[11px]">
+                  <span className="text-white/30">⏱️ ~20秒</span>
+                  <span className="text-cyan-400/70 font-medium">20 积分</span>
+                </div>
+              </button>
+              {/* 影视角色 */}
+              <button
+                onClick={() => handleForgeSelect("sora2")}
+                className="group text-left p-5 rounded-2xl border border-white/10 bg-white/[0.03] hover:bg-white/[0.08] hover:border-purple-400/30 transition-all duration-200"
+              >
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-10 h-10 rounded-xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center">
+                    <Film className="w-5 h-5 text-purple-400" />
+                  </div>
+                  <div>
+                    <p className="text-white font-bold text-[15px]">影视角色</p>
+                    <p className="text-[11px] text-white/30">使用模型：Sora2</p>
+                  </div>
+                </div>
+                <p className="text-xs text-white/50 leading-relaxed mb-3">可用于 Sora2 视频生成，角色形象精准一致</p>
+                <div className="flex items-center justify-between text-[11px]">
+                  <span className="text-white/30">⏱️ ~3-5分钟</span>
+                  <span className="text-purple-400/70 font-medium">20 积分</span>
+                </div>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* iOS 原生级滚动条全局样式与重置 */}
       <style jsx global>{`

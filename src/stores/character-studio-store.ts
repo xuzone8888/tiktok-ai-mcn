@@ -75,6 +75,15 @@ export interface CharacterStudioState {
   // AI 魔法棒
   isEnhancing: boolean;
 
+  // V5: Sora2 影视角色创建
+  forgeMode: "veo" | "sora2";
+  sora2VideoUrl: string | null;
+  sora2VideoOssUrl: string | null;
+  sora2VideoTaskId: string | null;
+  sora2Pid: string | null;
+  sora2PidTaskId: string | null;
+  isMinimized: boolean;
+
   // 用户信息
   userId: string | null;
   userCredits: number;
@@ -116,6 +125,15 @@ export interface CharacterStudioActions {
   setSavedCharacterId: (id: string | null) => void;
   setIsEnhancing: (enhancing: boolean) => void;
   setUserInfo: (userId: string, credits: number) => void;
+
+  // V5: Sora2 影视角色
+  setForgeMode: (mode: "veo" | "sora2") => void;
+  setSora2VideoResult: (url: string) => void;
+  setSora2VideoOssUrl: (url: string) => void;
+  setSora2Pid: (pid: string) => void;
+  setSora2PidTaskId: (taskId: string) => void;
+  setIsMinimized: (v: boolean) => void;
+
   reset: () => void;
 }
 
@@ -147,6 +165,13 @@ const initialState: CharacterStudioState = {
   isSaving: false,
   savedCharacterId: null,
   isEnhancing: false,
+  forgeMode: "veo",
+  sora2VideoUrl: null,
+  sora2VideoOssUrl: null,
+  sora2VideoTaskId: null,
+  sora2Pid: null,
+  sora2PidTaskId: null,
+  isMinimized: false,
   userId: null,
   userCredits: 0,
 };
@@ -268,6 +293,13 @@ export const useCharacterStudioStore = create<
             state.referenceReady = false;
             state.errorMessage = null;
             state.refPrompt = null;
+            // Sora2 重置
+            state.sora2VideoUrl = null;
+            state.sora2VideoOssUrl = null;
+            state.sora2VideoTaskId = null;
+            state.sora2Pid = null;
+            state.sora2PidTaskId = null;
+            state.isMinimized = false;
           });
         },
 
@@ -382,6 +414,49 @@ export const useCharacterStudioStore = create<
           set((state) => {
             state.userId = userId;
             state.userCredits = credits;
+          });
+        },
+
+        // ===== V5: Sora2 影视角色 =====
+
+        setForgeMode: (mode) => {
+          set((state) => {
+            state.forgeMode = mode;
+          });
+        },
+
+        setSora2VideoResult: (url) => {
+          set((state) => {
+            state.sora2VideoUrl = url;
+            // 视频生成完成 → 跳 Step 3
+            if (state.currentStep === 2) {
+              state.currentStep = 3;
+              state.generationStatus = "completed";
+            }
+          });
+        },
+
+        setSora2VideoOssUrl: (url) => {
+          set((state) => {
+            state.sora2VideoOssUrl = url;
+          });
+        },
+
+        setSora2Pid: (pid) => {
+          set((state) => {
+            state.sora2Pid = pid;
+          });
+        },
+
+        setSora2PidTaskId: (taskId) => {
+          set((state) => {
+            state.sora2PidTaskId = taskId;
+          });
+        },
+
+        setIsMinimized: (v) => {
+          set((state) => {
+            state.isMinimized = v;
           });
         },
 

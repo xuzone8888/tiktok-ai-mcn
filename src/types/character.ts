@@ -98,6 +98,10 @@ export interface CreateCharacterRequest {
   reference_status?: string;
   /** 参考图异步任务 ID */
   reference_task_id?: string;
+  /** Sora2 角色 @pid */
+  trigger_word?: string;
+  /** 铸造类型：veo 写真角色 | sora2 影视角色 */
+  forge_type?: "veo" | "sora2";
 }
 
 /** 生成角色图片请求体 */

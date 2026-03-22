@@ -3260,6 +3260,7 @@ C07: [story CTA, inspiring, <50 chars]`,
                     <CharacterPicker
                       variant="compact"
                       dataSource={isVeo3Model ? "user_created" : "hired"}
+                      forgeType={isVeo3Model ? "veo" : "sora2"}
                       selectedId={isVeo3Model ? veo3CharacterId : selectedModelId}
                       onSelect={handleCharacterSelect}
                       title={isVeo3Model ? "选择自建角色" : "选择签约模特"}
