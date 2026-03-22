@@ -51,7 +51,8 @@ export function CastingPreview() {
   // 当进入 generating 状态时，启动进度与日志轮询
   useEffect(() => {
     if (generationStatus === "generating" || generationStatus === "polling") {
-      setFakeProgress(0);
+      // 如果已在 polling（比如回到页面），从较高进度开始，避免从0重来
+      setFakeProgress((prev) => prev > 0 ? Math.max(prev, 50) : 0);
       
       const progressTimer = setInterval(() => {
         setFakeProgress((prev) => {
@@ -152,16 +153,31 @@ export function CastingPreview() {
       try {
         const res = await fetch(`/api/video-batch/sora-status/${store.heroTaskId}`);
         if (!res.ok) throw new Error(`Sora2 poll failed: ${res.status}`);
-        const data = await res.json();
+        const json = await res.json();
 
-        if (data.status === "completed" && data.resultUrl) {
-          console.log("[Sora2-Poll] ✅ Video ready:", data.resultUrl.substring(0, 80));
-          store.setSora2VideoResult(data.resultUrl);
+        // sora-status API 返回 { success, data: { status, videoUrl, ... } }
+        const task = json.data;
+        if (!task) {
+          console.warn("[Sora2-Poll] No data in response:", json);
+          pollCount++;
+          if (pollCount >= MAX_POLLS) {
+            store.setGenerationFailed("视频生成超时，请稍后重试");
+          } else if (isPolling) {
+            setTimeout(pollSora2, 3000);
+          }
           return;
         }
 
-        if (data.status === "failed") {
-          store.setGenerationFailed(data.error || "Sora2 视频生成失败");
+        console.log(`[Sora2-Poll] #${pollCount} status:`, task.status);
+
+        if (task.status === "completed" && task.videoUrl) {
+          console.log("[Sora2-Poll] ✅ Video ready:", task.videoUrl.substring(0, 80));
+          store.setSora2VideoResult(task.videoUrl);
+          return;
+        }
+
+        if (task.status === "failed") {
+          store.setGenerationFailed(task.errorMessage || "Sora2 视频生成失败");
           return;
         }
 
