@@ -551,6 +551,8 @@ export default function TeamPage() {
   const [isPublishing, setIsPublishing] = useState(false);
   const [userId, setUserId] = useState("");
   const [previewCharacter, setPreviewCharacter] = useState<MyCharacter | null>(null);
+  // 删除确认弹窗状态
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   // 活化角色状态
   const [activatingId, setActivatingId] = useState<string | null>(null);
 
@@ -753,11 +755,16 @@ export default function TeamPage() {
     }
   };
 
-  // Handle delete
-  const handleDelete = async (characterId: string) => {
-    if (!confirm("确定要删除这个角色吗？此操作不可撤销。")) return;
-    try {
+  // Handle delete — 打开确认弹窗
+  const handleDelete = (characterId: string) => {
+    setDeleteTargetId(characterId);
+  };
 
+  const confirmDelete = async () => {
+    if (!deleteTargetId) return;
+    const characterId = deleteTargetId;
+    setDeleteTargetId(null);
+    try {
       const response = await fetch(`/api/characters?id=${characterId}&userId=${userId}`, { method: "DELETE" });
       const result = await response.json();
       if (result.success) {
@@ -1319,6 +1326,26 @@ export default function TeamPage() {
               ) : (
                 "确认发布"
               )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 删除确认弹窗 */}
+      <Dialog open={!!deleteTargetId} onOpenChange={(open) => { if (!open) setDeleteTargetId(null); }}>
+        <DialogContent className="bg-background border-border/50 max-w-sm">
+          <DialogHeader>
+            <DialogTitle>确认删除</DialogTitle>
+            <DialogDescription>
+              确定要删除这个角色吗？此操作不可撤销。
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setDeleteTargetId(null)}>
+              取消
+            </Button>
+            <Button variant="destructive" onClick={confirmDelete}>
+              删除
             </Button>
           </DialogFooter>
         </DialogContent>
