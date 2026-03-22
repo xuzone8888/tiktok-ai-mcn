@@ -1,6 +1,7 @@
 import { Sidebar, Header } from "@/components/layout";
 import { BackgroundTaskManager } from "@/components/background-task-manager";
 import { DownloadWidget } from "@/components/download-widget";
+import { ForgeStatusFloat } from "@/components/forge-status-float";
 
 export default function MainLayout({
   children,
@@ -28,6 +29,8 @@ export default function MainLayout({
       <BackgroundTaskManager />
       {/* 全局下载管理器浮窗 */}
       <DownloadWidget />
+      {/* 全局铸造状态浮窗 — 离开角色创建页面后仍可见 */}
+      <ForgeStatusFloat />
     </div>
   );
 }
