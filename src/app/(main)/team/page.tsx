@@ -513,7 +513,7 @@ function MyCharacterCard({ character, onUseInStudio, onRetryReference, onPublish
         variant="ghost"
         size="icon"
         onClick={(e) => { e.stopPropagation(); onDelete(character.id); }}
-        className="absolute top-2 right-2 z-20 h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity duration-300 text-white/40 hover:text-red-400 hover:bg-black/50 rounded-full backdrop-blur-sm"
+        className="absolute top-2 right-2 z-20 h-7 w-7 opacity-30 hover:opacity-100 transition-opacity duration-300 text-white/50 hover:text-red-400 hover:bg-black/50 rounded-full backdrop-blur-sm"
       >
         <Trash2 className="h-3.5 w-3.5" />
       </Button>
