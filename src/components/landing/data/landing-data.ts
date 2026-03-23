@@ -299,9 +299,9 @@ export const faqItems: FaqItem[] = [
 export const footerLinks = {
     product: [
         { label: "角色市场", href: "/models" },
-        { label: "快速视频生成", href: "/quick-gen" },
-        { label: "电商图片工厂", href: "/image-factory" },
-        { label: "批量视频制作", href: "/pro-studio/video-batch" },
+        { label: "快速生图", href: "/quick-gen" },
+        { label: "商图精修", href: "/image-factory" },
+        { label: "素材生成视频", href: "/pro-studio/video-batch" },
     ],
     support: [
         { label: "价格方案", href: "/pricing" },
