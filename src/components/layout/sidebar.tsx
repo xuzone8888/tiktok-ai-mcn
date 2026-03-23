@@ -152,9 +152,9 @@ const navGroups: NavGroup[] = [
       },
     ],
   },
-  // --- 内容发布 ---
+  // --- 社媒内容发布 ---
   {
-    header: "内容发布",
+    header: "社媒内容发布",
     items: [
       {
         title: "TikTok 账号绑定",
@@ -170,6 +170,12 @@ const navGroups: NavGroup[] = [
         description: "发布视频到 TikTok",
         beta: true,
       },
+    ],
+  },
+  // --- 电商内容发布 ---
+  {
+    header: "电商内容发布",
+    items: [
       {
         title: "TikTok Shop 账号绑定",
         href: "/shop-publish/accounts",
