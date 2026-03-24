@@ -1178,7 +1178,7 @@ export default function PublishPage() {
                         <span className="text-white drop-shadow-lg">TikTok 视频发布</span>
                     </h1>
                     <p className="mt-1 text-white/60 ml-[19px]">
-                        视频发布至 TikTok，支持预约发布与批量调度
+                        视频发布至 TikTok，支持多条内容预约发布
                     </p>
                 </div>
 
