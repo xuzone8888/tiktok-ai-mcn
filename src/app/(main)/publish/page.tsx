@@ -2206,7 +2206,7 @@ export default function PublishPage() {
                                                 value={scheduledDate}
                                                 onChange={(e) => setScheduledDate(e.target.value)}
                                                 min={format(new Date(), 'yyyy-MM-dd')}
-                                                className="px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
+                                                className="px-4 py-2 bg-[#1a1a2e] border border-white/10 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/50 [color-scheme:dark]"
                                             />
                                         </div>
                                         <div className="relative">
