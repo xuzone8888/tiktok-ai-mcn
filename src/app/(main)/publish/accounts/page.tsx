@@ -405,84 +405,90 @@ export default function TikTokAccountsPage() {
 
                     <div className="grid gap-4">
                         {groupAccounts.map((account) => (
-                            <Card key={account.id} className="overflow-hidden">
-                                <CardHeader className="pb-4">
+                            <div key={account.id} className="relative rounded-2xl bg-white/[0.03] border border-white/[0.08] overflow-hidden transition-all duration-300 hover:border-white/[0.12] hover:bg-white/[0.04]" style={{ boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04), 0 4px 24px rgba(0,0,0,0.2)' }}>
+                                {/* Top accent line */}
+                                <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-cyan-500/30 to-transparent" />
+
+                                <div className="p-5">
                                     <div className="flex items-start justify-between">
                                         <div className="flex items-center gap-4">
-                                            {/* Avatar */}
+                                            {/* Avatar with gradient ring */}
                                             <div className="relative">
-                                                {account.avatar_url ? (
-                                                    <img
-                                                        src={account.avatar_url}
-                                                        alt={account.display_name || "TikTok"}
-                                                        className="w-16 h-16 rounded-full object-cover border-2 border-white shadow-md"
-                                                    />
-                                                ) : (
-                                                    <div className="w-16 h-16 rounded-full bg-gradient-to-r from-cyan-500 to-pink-500 flex items-center justify-center text-white text-xl font-bold">
-                                                        {(account.display_name || "T").charAt(0).toUpperCase()}
-                                                    </div>
-                                                )}
+                                                <div className="w-14 h-14 rounded-full p-[2px] bg-gradient-to-br from-[#CCFF00] via-[#00F2EA] to-[#EC4899]">
+                                                    {account.avatar_url ? (
+                                                        <img
+                                                            src={account.avatar_url}
+                                                            alt={account.display_name || "TikTok"}
+                                                            className="w-full h-full rounded-full object-cover border-2 border-neutral-950"
+                                                        />
+                                                    ) : (
+                                                        <div className="w-full h-full rounded-full bg-neutral-900 border-2 border-neutral-950 flex items-center justify-center text-white text-lg font-bold">
+                                                            {(account.display_name || "T").charAt(0).toUpperCase()}
+                                                        </div>
+                                                    )}
+                                                </div>
                                                 {account.status === "active" && (
-                                                    <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-green-500 rounded-full border-2 border-white flex items-center justify-center">
-                                                        <CheckCircle className="h-3 w-3 text-white" />
+                                                    <div className="absolute -bottom-0.5 -right-0.5 w-5 h-5 bg-emerald-500 rounded-full border-[2.5px] border-neutral-950 flex items-center justify-center" style={{ boxShadow: '0 0 8px rgba(52,211,153,0.5)' }}>
+                                                        <CheckCircle className="h-2.5 w-2.5 text-white" />
                                                     </div>
                                                 )}
                                             </div>
 
                                             {/* Account Info */}
                                             <div>
-                                                <CardTitle className="text-lg flex items-center gap-2">
-                                                    @{account.display_name || account.open_id.substring(0, 8)}
-                                                    <Badge variant={account.status === "active" ? "default" : "destructive"}>
-                                                        {account.status === "active" ? "已授权" : "需重新授权"}
-                                                    </Badge>
-                                                </CardTitle>
-                                                <CardDescription className="flex items-center gap-4 mt-1">
-                                                    <span className="font-semibold text-cyan-500">{formatNumber(account.follower_count)} 粉丝</span>
-                                                    <span>视频: {formatNumber(account.video_count)}</span>
-                                                    <span>获赞: {formatNumber(account.likes_count)}</span>
-                                                </CardDescription>
-                                                {/* TikTok Username / Handle - only show if we have a real username */}
-                                                {account.username && (
-                                                    <div className="flex items-center gap-1.5 mt-2">
-                                                        <span className="text-xs text-muted-foreground">用户名:</span>
-                                                        <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono text-cyan-500">
-                                                            @{account.username}
-                                                        </code>
-                                                        <button
-                                                            onClick={() => copyOpenId(account.username!)}
-                                                            className="p-1 hover:bg-muted rounded transition-colors"
-                                                            title="复制用户名"
-                                                        >
-                                                            <Copy className="h-3 w-3 text-muted-foreground" />
-                                                        </button>
-                                                    </div>
-                                                )}
+                                                <div className="flex items-center gap-2.5">
+                                                    <h3 className="text-[17px] font-bold text-white tracking-tight">
+                                                        @{account.display_name || account.open_id.substring(0, 8)}
+                                                    </h3>
+                                                    {account.status === "active" ? (
+                                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/20">
+                                                            <CheckCircle className="w-3 h-3" /> 已授权
+                                                        </span>
+                                                    ) : (
+                                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-red-500/15 text-red-400 border border-red-500/20">
+                                                            <AlertTriangle className="w-3 h-3" /> 需重新授权
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                {/* Stats row */}
+                                                <div className="flex items-center gap-3 mt-1.5">
+                                                    <span className="inline-flex items-center gap-1 text-[13px] font-semibold text-cyan-400">
+                                                        <Users className="w-3.5 h-3.5 text-cyan-500/60" />
+                                                        {formatNumber(account.follower_count)} <span className="font-normal text-white/30">粉丝</span>
+                                                    </span>
+                                                    <span className="text-white/10">·</span>
+                                                    <span className="text-[13px] text-white/40">
+                                                        视频 <span className="text-white/60 font-medium">{formatNumber(account.video_count)}</span>
+                                                    </span>
+                                                    <span className="text-white/10">·</span>
+                                                    <span className="text-[13px] text-white/40">
+                                                        获赞 <span className="text-white/60 font-medium">{formatNumber(account.likes_count)}</span>
+                                                    </span>
+                                                </div>
                                             </div>
                                         </div>
 
                                         {/* Action Buttons */}
                                         <div className="flex items-center gap-2">
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
+                                            <button
                                                 onClick={() => handleRefresh(account.id)}
                                                 disabled={refreshingId === account.id}
+                                                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-[13px] font-medium bg-white/[0.04] border border-white/[0.08] text-white/70 hover:bg-white/[0.08] hover:text-white hover:border-white/[0.15] transition-all duration-200 disabled:opacity-40"
                                             >
                                                 {refreshingId === account.id ? (
-                                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
                                                 ) : (
-                                                    <RefreshCw className="h-4 w-4" />
+                                                    <RefreshCw className="h-3.5 w-3.5" />
                                                 )}
-                                                <span className="ml-2 hidden sm:inline">刷新授权</span>
-                                            </Button>
+                                                <span className="hidden sm:inline">刷新授权</span>
+                                            </button>
 
                                             <AlertDialog>
                                                 <AlertDialogTrigger asChild>
-                                                    <Button variant="outline" size="sm" className="text-destructive hover:text-destructive">
-                                                        <Trash2 className="h-4 w-4" />
-                                                        <span className="ml-2 hidden sm:inline">解绑</span>
-                                                    </Button>
+                                                    <button className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-[13px] font-medium bg-white/[0.04] border border-white/[0.08] text-red-400/70 hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/20 transition-all duration-200">
+                                                        <Trash2 className="h-3.5 w-3.5" />
+                                                        <span className="hidden sm:inline">解绑</span>
+                                                    </button>
                                                 </AlertDialogTrigger>
                                                 <AlertDialogContent>
                                                     <AlertDialogHeader>
@@ -504,78 +510,69 @@ export default function TikTokAccountsPage() {
                                             </AlertDialog>
                                         </div>
                                     </div>
-                                </CardHeader>
 
-                                <CardContent className="pt-0">
-                                    <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
-                                        <div className="flex items-center gap-1">
-                                            <span>类型:</span>
-                                            <Badge variant="outline">
-                                                {ACCOUNT_TYPE_LABELS[account.account_type] || account.account_type}
-                                            </Badge>
-                                        </div>
-                                        <div className="flex items-center gap-1">
-                                            <span>授权到期:</span>
+                                    {/* Bottom meta row */}
+                                    <div className="flex flex-wrap items-center gap-3 mt-4 pt-3.5 border-t border-white/[0.05]">
+                                        <span className="inline-flex items-center gap-1.5 text-[12px] text-white/35 px-2.5 py-1 rounded-lg bg-white/[0.03] border border-white/[0.05]">
+                                            类型
+                                            <span className="text-white/55 font-medium">{ACCOUNT_TYPE_LABELS[account.account_type] || account.account_type}</span>
+                                        </span>
+                                        <span className={`inline-flex items-center gap-1.5 text-[12px] px-2.5 py-1 rounded-lg border ${isTokenExpiringSoon(account.token_expires_at) ? 'text-red-400/80 bg-red-500/[0.06] border-red-500/15' : 'text-emerald-400/70 bg-emerald-500/[0.04] border-emerald-500/10'}`}>
                                             {isTokenExpiringSoon(account.token_expires_at) ? (
-                                                <Badge variant="destructive" className="flex items-center gap-1">
+                                                <>
                                                     <AlertTriangle className="h-3 w-3" />
-                                                    {formatDistanceToNow(new Date(account.token_expires_at), {
-                                                        addSuffix: true,
-                                                        locale: zhCN
-                                                    })}
-                                                </Badge>
+                                                    {formatDistanceToNow(new Date(account.token_expires_at), { addSuffix: false, locale: zhCN })}内到期
+                                                </>
                                             ) : (
-                                                <span>
-                                                    {formatDistanceToNow(new Date(account.token_expires_at), {
-                                                        addSuffix: true,
-                                                        locale: zhCN
-                                                    })}
-                                                </span>
+                                                <>
+                                                    <CheckCircle className="h-3 w-3" />
+                                                    约{formatDistanceToNow(new Date(account.token_expires_at), { addSuffix: false, locale: zhCN })}后到期
+                                                </>
                                             )}
-                                        </div>
-                                        <div className="flex items-center gap-1">
-                                            <span>绑定时间:</span>
-                                            <span>
-                                                {format(new Date(account.created_at), 'yyyy-MM-dd HH:mm', { locale: zhCN })}
-                                            </span>
-                                        </div>
+                                        </span>
+                                        <span className="inline-flex items-center gap-1.5 text-[12px] text-white/35 px-2.5 py-1 rounded-lg bg-white/[0.03] border border-white/[0.05]">
+                                            绑定时间
+                                            <span className="text-white/50">{format(new Date(account.created_at), 'yyyy-MM-dd HH:mm', { locale: zhCN })}</span>
+                                        </span>
                                     </div>
-                                </CardContent>
-                            </Card>
+                                </div>
+                            </div>
                         ))}
                     </div>
                 </div>
             ))}
 
-            {/* Info Card */}
+            {/* Info Banner */}
             {accounts.length > 0 && (
-                <Card className="bg-gradient-to-r from-cyan-500/10 to-pink-500/10 border-cyan-500/20">
-                    <CardContent className="flex items-start gap-3 py-4">
-                        <ExternalLink className="h-5 w-5 text-cyan-500 mt-0.5 shrink-0" />
-                        <div className="text-sm">
-                            <p className="font-medium text-foreground">关于 TikTok 授权</p>
-                            <p className="text-muted-foreground mt-1">
-                                TikTok 授权有效期通常为 90 天。建议定期刷新授权以确保发布功能正常工作。
-                                如果授权过期，需要重新绑定账号。
-                            </p>
-                        </div>
-                    </CardContent>
-                </Card>
+                <div className="flex items-start gap-3 px-5 py-4 rounded-xl bg-gradient-to-r from-cyan-500/[0.04] via-transparent to-pink-500/[0.04] border border-white/[0.06]">
+                    <div className="w-8 h-8 rounded-lg bg-cyan-500/10 border border-cyan-500/15 flex items-center justify-center shrink-0 mt-0.5">
+                        <ExternalLink className="h-4 w-4 text-cyan-400/70" />
+                    </div>
+                    <div>
+                        <p className="text-[13px] font-semibold text-white/70">关于 TikTok 授权</p>
+                        <p className="text-[12px] text-white/35 mt-0.5 leading-relaxed">
+                            TikTok 授权有效期为 90 天。建议定期点击「刷新授权」以延长有效期。如果授权过期超过 90 天，需要重新绑定账号。
+                        </p>
+                    </div>
+                </div>
             )}
             {/* Binding Method Selection Modal */}
             <Dialog open={showBindingModal} onOpenChange={setShowBindingModal}>
-                <DialogContent className="sm:max-w-lg">
-                    <DialogHeader>
-                        <DialogTitle className="flex items-center gap-2 text-xl">
-                            <UserPlus className="h-5 w-5 text-pink-500" />
+                <DialogContent className="sm:max-w-[460px] p-0 overflow-hidden bg-neutral-950/95 backdrop-blur-2xl border border-white/[0.08] shadow-[0_32px_64px_rgba(0,0,0,0.8)]">
+                    {/* Header */}
+                    <div className="px-6 pt-6 pb-4">
+                        <DialogTitle className="flex items-center gap-3 text-[22px] font-bold tracking-tight text-white">
+                            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#CCFF00]/20 via-[#00F2EA]/15 to-[#EC4899]/20 border border-white/10 flex items-center justify-center" style={{ boxShadow: '0 0 20px rgba(0,242,234,0.15), inset 0 1px 1px rgba(255,255,255,0.1)' }}>
+                                <UserPlus className="h-[18px] w-[18px] text-[#00F2EA]" />
+                            </div>
                             选择绑定方式
                         </DialogTitle>
-                        <DialogDescription>
+                        <DialogDescription className="text-[13px] text-white/40 mt-1.5 pl-12">
                             选择一种方式来绑定您的 TikTok 账号
                         </DialogDescription>
-                    </DialogHeader>
+                    </div>
 
-                    <div className="grid gap-4 py-4">
+                    <div className="px-5 pb-5 space-y-3">
                         {/* QR Code Scan - Recommended */}
                         <button
                             onClick={() => {
@@ -583,29 +580,33 @@ export default function TikTokAccountsPage() {
                                 handleConnect();
                             }}
                             disabled={connecting}
-                            className="flex items-start gap-4 p-4 rounded-xl border-2 border-cyan-500/50 bg-gradient-to-r from-cyan-500/10 to-pink-500/10 hover:from-cyan-500/20 hover:to-pink-500/20 transition-all text-left relative overflow-hidden group"
+                            className="group relative w-full flex items-start gap-4 p-4 rounded-xl border border-cyan-500/25 bg-gradient-to-br from-cyan-500/[0.06] via-transparent to-pink-500/[0.04] hover:from-cyan-500/[0.12] hover:to-pink-500/[0.08] hover:border-cyan-400/40 transition-all duration-300 text-left overflow-hidden"
+                            style={{ boxShadow: '0 0 1px rgba(0,242,234,0.3), inset 0 1px 0 rgba(255,255,255,0.04)' }}
                         >
-                            <div className="absolute top-2 right-2">
-                                <Badge className="bg-gradient-to-r from-cyan-500 to-pink-500 text-white text-xs">
-                                    <Sparkles className="h-3 w-3 mr-1" />
+                            {/* Recommended Badge */}
+                            <div className="absolute top-3 right-3">
+                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-semibold bg-gradient-to-r from-cyan-500/90 to-pink-500/90 text-white shadow-sm" style={{ boxShadow: '0 0 12px rgba(0,242,234,0.3)' }}>
+                                    <Sparkles className="h-3 w-3" />
                                     推荐
-                                </Badge>
+                                </span>
                             </div>
-                            <div className="w-12 h-12 rounded-full bg-cyan-500/20 flex items-center justify-center shrink-0">
-                                <Smartphone className="h-6 w-6 text-cyan-500" />
+                            {/* Icon */}
+                            <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-cyan-400/15 via-cyan-500/10 to-transparent border border-cyan-400/20 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform duration-300" style={{ boxShadow: '0 0 16px rgba(0,242,234,0.12), inset 0 1px 1px rgba(255,255,255,0.08)' }}>
+                                <Smartphone className="h-5 w-5 text-cyan-400 group-hover:drop-shadow-[0_0_6px_rgba(34,211,238,0.5)] transition-all duration-300" />
                             </div>
-                            <div className="flex-1 min-w-0">
-                                <h4 className="font-semibold text-lg mb-1">📱 扫码绑定</h4>
-                                <p className="text-sm text-muted-foreground mb-2">
+                            {/* Content */}
+                            <div className="flex-1 min-w-0 pt-0.5">
+                                <h4 className="text-[15px] font-semibold text-white mb-1 tracking-tight">扫码绑定</h4>
+                                <p className="text-[12px] text-white/40 mb-2.5 leading-relaxed">
                                     使用 TikTok APP 扫描二维码完成授权，更安全便捷
                                 </p>
-                                <div className="flex flex-wrap gap-2">
-                                    <Badge variant="outline" className="text-xs">
-                                        ✓ 无需输入密码
-                                    </Badge>
-                                    <Badge variant="outline" className="text-xs">
-                                        ✓ 手机确认更安全
-                                    </Badge>
+                                <div className="flex flex-wrap gap-1.5">
+                                    <span className="inline-flex items-center gap-1 text-[11px] text-white/50 px-2 py-0.5 rounded-md bg-white/[0.04] border border-white/[0.06]">
+                                        <CheckCircle className="w-3 h-3 text-emerald-400/70" /> 无需输入密码
+                                    </span>
+                                    <span className="inline-flex items-center gap-1 text-[11px] text-white/50 px-2 py-0.5 rounded-md bg-white/[0.04] border border-white/[0.06]">
+                                        <CheckCircle className="w-3 h-3 text-emerald-400/70" /> 手机确认更安全
+                                    </span>
                                 </div>
                             </div>
                         </button>
@@ -617,27 +618,32 @@ export default function TikTokAccountsPage() {
                                 handleConnect();
                             }}
                             disabled={connecting}
-                            className="flex items-start gap-4 p-4 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 transition-all text-left group"
+                            className="group relative w-full flex items-start gap-4 p-4 rounded-xl border border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.05] hover:border-white/[0.12] transition-all duration-300 text-left"
                         >
-                            <div className="w-12 h-12 rounded-full bg-white/10 flex items-center justify-center shrink-0">
-                                <Globe className="h-6 w-6 text-muted-foreground" />
+                            {/* Icon */}
+                            <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-white/[0.06] via-white/[0.03] to-transparent border border-white/[0.08] flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform duration-300">
+                                <Globe className="h-5 w-5 text-white/40 group-hover:text-white/60 transition-colors duration-300" />
                             </div>
-                            <div className="flex-1 min-w-0">
-                                <h4 className="font-semibold text-lg mb-1">🌐 网页登录绑定</h4>
-                                <p className="text-sm text-muted-foreground mb-2">
+                            {/* Content */}
+                            <div className="flex-1 min-w-0 pt-0.5">
+                                <h4 className="text-[15px] font-semibold text-white/80 mb-1 tracking-tight group-hover:text-white transition-colors">网页登录绑定</h4>
+                                <p className="text-[12px] text-white/35 mb-2.5 leading-relaxed">
                                     跳转到 TikTok 网站使用账号密码登录授权
                                 </p>
-                                <div className="flex flex-wrap gap-2">
-                                    <Badge variant="outline" className="text-xs">
+                                <div className="flex flex-wrap gap-1.5">
+                                    <span className="inline-flex items-center text-[11px] text-white/40 px-2 py-0.5 rounded-md bg-white/[0.03] border border-white/[0.05]">
                                         适合已登录网页版用户
-                                    </Badge>
+                                    </span>
                                 </div>
                             </div>
                         </button>
                     </div>
 
-                    <div className="text-xs text-muted-foreground text-center">
-                        <p>绑定成功后，授权有效期为 90 天，可随时刷新或解绑</p>
+                    {/* Footer */}
+                    <div className="px-6 pb-5 pt-1">
+                        <p className="text-[11px] text-white/25 text-center leading-relaxed">
+                            绑定成功后，授权有效期为 90 天，可随时刷新或解绑
+                        </p>
                     </div>
                 </DialogContent>
             </Dialog>

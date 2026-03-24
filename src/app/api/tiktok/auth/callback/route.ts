@@ -68,7 +68,9 @@ export async function GET(request: NextRequest) {
         const userInfo = await getUserInfo(tokenResponse.access_token);
 
         // Calculate token expiration
-        const tokenExpiresAt = calculateTokenExpiration(tokenResponse.expires_in);
+        // Use refresh_expires_in (≈90 days) for display — this is the real auth lifespan
+        // expires_in is just the access_token TTL (≈24h) which auto-refreshes
+        const tokenExpiresAt = calculateTokenExpiration(tokenResponse.refresh_expires_in);
 
         // Check if this TikTok account is already linked
         const { data: existingAccount } = await supabase

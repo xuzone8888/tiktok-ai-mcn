@@ -42,8 +42,8 @@ export async function POST(
         // Get updated user info
         const userInfo = await getUserInfo(tokenResponse.access_token);
 
-        // Calculate new expiration
-        const tokenExpiresAt = calculateTokenExpiration(tokenResponse.expires_in);
+        // Use refresh_expires_in (≈90 days) — the real auth lifespan users see
+        const tokenExpiresAt = calculateTokenExpiration(tokenResponse.refresh_expires_in);
 
         // Update the account
         const { error: updateError } = await supabase
