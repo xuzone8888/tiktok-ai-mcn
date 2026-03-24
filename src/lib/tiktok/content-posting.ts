@@ -7,7 +7,8 @@ import {
 } from './types';
 
 // TikTok Content Posting API endpoints
-const TIKTOK_PUBLISH_VIDEO_INIT = 'https://open.tiktokapis.com/v2/post/publish/video/init/';
+// [临时] 草稿箱模式：Direct Post 审核通过后改回 /v2/post/publish/video/init/
+const TIKTOK_PUBLISH_VIDEO_INIT = 'https://open.tiktokapis.com/v2/post/publish/inbox/video/init/';
 const TIKTOK_PUBLISH_STATUS = 'https://open.tiktokapis.com/v2/post/publish/status/fetch/';
 const TIKTOK_CREATOR_INFO = 'https://open.tiktokapis.com/v2/post/publish/creator_info/query/';
 
@@ -88,20 +89,13 @@ export async function initVideoPublishFromUrl(
         videoCoverTimestampMs?: number;
     }
 ): Promise<string> {
-    const requestBody: TikTokPublishVideoRequest = {
-        post_info: {
-            title: postInfo.title,
-            privacy_level: postInfo.privacyLevel,
-            disable_duet: postInfo.disableDuet ?? false,
-            disable_comment: postInfo.disableComment ?? false,
-            disable_stitch: postInfo.disableStitch ?? false,
-            brand_content_toggle: postInfo.brandContentToggle ?? false,
-            brand_organic_toggle: postInfo.brandOrganicToggle ?? false,
-            is_aigc: postInfo.isAigc ?? true,
-            ...(postInfo.videoCoverTimestampMs !== undefined && { video_cover_timestamp_ms: postInfo.videoCoverTimestampMs }),
-        },
+    // [临时] Inbox 端点不接受 post_info，只发 source_info
+    // Direct Post 审核通过后恢复以下 post_info：
+    // post_info: { title, privacy_level, disable_duet, disable_comment, disable_stitch,
+    //   brand_content_toggle, brand_organic_toggle, is_aigc, video_cover_timestamp_ms }
+    const requestBody = {
         source_info: {
-            source: 'PULL_FROM_URL',
+            source: 'PULL_FROM_URL' as const,
             video_url: videoUrl,
         },
     };

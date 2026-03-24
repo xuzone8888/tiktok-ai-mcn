@@ -163,7 +163,7 @@ export default function PublishPage() {
     // Schedule settings
     const [publishMode, setPublishMode] = useState<'now' | 'scheduled'>('now')
     const [scheduledDate, setScheduledDate] = useState('')
-    const [scheduledTime, setScheduledTime] = useState('09:00')
+    const [scheduledTime, setScheduledTime] = useState('')
     // Interval mode: preset values or custom (all in minutes)
     const [intervalMode, setIntervalMode] = useState<'0' | '3' | '5' | '10' | '30' | '60' | '120' | '360' | '720' | '1440' | 'custom'>('5')
     const [customInterval, setCustomInterval] = useState(5)
@@ -2163,7 +2163,27 @@ export default function PublishPage() {
                                         <button
                                             key={id}
                                             type="button"
-                                            onClick={() => setPublishMode(id)}
+                                            onClick={() => {
+                                                setPublishMode(id)
+                                                // 切换到预约发布时，如果日期为空，自动填入当前时间最近的整点
+                                                if (id === 'scheduled' && !scheduledDate) {
+                                                    const now = new Date()
+                                                    // 对齐到最近的整点
+                                                    const mins = now.getMinutes()
+                                                    if (mins >= 30) {
+                                                        now.setHours(now.getHours() + 1)
+                                                    }
+                                                    now.setMinutes(0)
+                                                    // 格式化日期和时间
+                                                    const y = now.getFullYear()
+                                                    const m = String(now.getMonth() + 1).padStart(2, '0')
+                                                    const d = String(now.getDate()).padStart(2, '0')
+                                                    const h = String(now.getHours()).padStart(2, '0')
+                                                    const min = String(now.getMinutes()).padStart(2, '0')
+                                                    setScheduledDate(`${y}-${m}-${d}`)
+                                                    setScheduledTime(`${h}:${min}`)
+                                                }
+                                            }}
                                             className={`flex items-center gap-2 px-6 py-2.5 rounded-lg text-sm font-medium transition-all duration-300 ${isActive
                                                 ? 'bg-white/10 text-white shadow-lg shadow-black/20 ring-1 ring-white/10'
                                                 : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'
@@ -2189,17 +2209,70 @@ export default function PublishPage() {
                                                 className="px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
                                             />
                                         </div>
-                                        <div>
+                                        <div className="relative">
                                             <label className="block text-sm text-gray-400 mb-1">时间</label>
-                                            <input
-                                                type="time"
-                                                value={scheduledTime}
-                                                onChange={(e) => setScheduledTime(e.target.value)}
-                                                className="px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
-                                            />
+                                            <div className="relative">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        const el = document.getElementById('time-dropdown')
+                                                        if (el) el.classList.toggle('hidden')
+                                                    }}
+                                                    className="flex items-center justify-between gap-2 px-4 py-2 bg-[#1a1a2e] border border-white/10 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/50 cursor-pointer min-w-[120px] w-full"
+                                                >
+                                                    <span>{scheduledTime || '选择时间'}</span>
+                                                    <ChevronDown className="w-4 h-4 text-gray-400" />
+                                                </button>
+                                                <div
+                                                    id="time-dropdown"
+                                                    className="hidden absolute top-full left-0 mt-1 w-full bg-[#1a1a2e] border border-white/10 rounded-lg max-h-[240px] overflow-y-auto z-50 shadow-xl shadow-black/40"
+                                                >
+                                                    {Array.from({ length: 24 }, (_, i) => {
+                                                        const h = String(i).padStart(2, '0')
+                                                        const val = `${h}:00`
+                                                        return (
+                                                            <button
+                                                                key={val}
+                                                                type="button"
+                                                                onClick={() => {
+                                                                    setScheduledTime(val)
+                                                                    document.getElementById('time-dropdown')?.classList.add('hidden')
+                                                                }}
+                                                                className={`w-full text-left px-4 py-2 text-sm hover:bg-white/10 transition-colors ${scheduledTime === val ? 'bg-cyan-500/20 text-cyan-300' : 'text-white'}`}
+                                                            >
+                                                                {val}
+                                                            </button>
+                                                        )
+                                                    })}
+                                                </div>
+                                            </div>
                                         </div>
                                     </div>
-                                    <p className="text-xs text-gray-500">* 以上时间均为北京时间 (UTC+8)</p>
+                                    {/* 时区对比 & 校验 */}
+                                    {scheduledDate && scheduledTime && (() => {
+                                        const bjTime = new Date(`${scheduledDate}T${scheduledTime}`)
+                                        const isPast = bjTime.getTime() <= Date.now()
+                                        // 美东时间（自动处理夏令时）
+                                        const usEastDate = bjTime.toLocaleDateString('en-US', { timeZone: 'America/New_York', month: '2-digit', day: '2-digit' })
+                                        const usEastTime = bjTime.toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit', hour12: true })
+                                        const usEastDay = bjTime.toLocaleDateString('en-US', { timeZone: 'America/New_York', weekday: 'short' })
+                                        const bjDay = bjTime.toLocaleDateString('zh-CN', { timeZone: 'Asia/Shanghai', weekday: 'short' })
+                                        const bjDateStr = `${scheduledDate.slice(5).replace('-', '/')} ${scheduledTime}`
+                                        return (
+                                            <div className="space-y-1">
+                                                <p className="text-xs text-gray-400">
+                                                    <span className="inline-block px-1 py-0.5 bg-red-500/20 text-red-300 rounded text-[10px] font-medium mr-1">北京</span>
+                                                    {bjDateStr} ({bjDay})
+                                                    <span className="mx-2 text-gray-600">→</span>
+                                                    <span className="inline-block px-1 py-0.5 bg-blue-500/20 text-blue-300 rounded text-[10px] font-medium mr-1">美东</span>
+                                                    {usEastDate} {usEastTime} ({usEastDay})
+                                                </p>
+                                                {isPast && (
+                                                    <p className="text-xs text-red-400">⚠️ 所选时间已过，请选择未来的时间</p>
+                                                )}
+                                            </div>
+                                        )
+                                    })()}
                                 </div>
                             )}
 
