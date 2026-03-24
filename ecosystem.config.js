@@ -7,8 +7,7 @@ module.exports = {
   apps: [
     {
       name: 'tiktok-ai-mcn',
-      script: 'npm',
-      args: 'start',
+      script: 'server.js',
       cwd: '/var/www/tiktok-ai-mcn',
       instances: 1,
       exec_mode: 'fork',
@@ -32,9 +31,10 @@ module.exports = {
       wait_ready: true,
       listen_timeout: 10000,
 
-      // 健康检查
+      // 崩溃保护：最少运行 10s 才算有效启动，最多重启 50 次，每次间隔 3s
       min_uptime: '10s',
-      max_restarts: 10,
+      max_restarts: 50,
+      restart_delay: 3000,
     },
   ],
 };
