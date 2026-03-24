@@ -24,7 +24,7 @@ export function ScheduledQueue() {
                 // 转换为 TaskGroup 格式
                 const scheduledTasks = (data.tasks || [])
                     .filter((t: PublishTask) =>
-                        ['scheduled', 'pending', 'processing'].includes(t.status) ||
+                        ['scheduled', 'pending', 'running'].includes(t.status) ||
                         (t.pending_count && t.pending_count > 0)
                     )
                     .map((t: PublishTask): TaskGroup => ({

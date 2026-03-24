@@ -87,7 +87,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
         }
 
         // Don't allow deleting tasks that are currently processing
-        if (task.status === 'processing') {
+        if (task.status === 'running') {
             return NextResponse.json({
                 error: '任务正在处理中，无法删除'
             }, { status: 400 })

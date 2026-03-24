@@ -30,8 +30,9 @@ function getWxPay(): WxPay | null {
     wxPayInstance = new WxPay({
       appid: config.appid,
       mchid: config.mchid,
-      publicKey: Buffer.from(''),  // Native 支付不需要平台证书公钥来下单
-      privateKey: Buffer.from(config.privateKey),
+      serial_no: config.serialNo,  // 传入序列号，跳过 publicKey 的证书解析
+      publicKey: Buffer.from('PLACEHOLDER'),  // Native 下单不需要平台公钥，但 SDK 要求非空
+      privateKey: Buffer.from(config.privateKey.replace(/\\n/g, '\n')),
       key: config.apiV3Key,
     });
     return wxPayInstance;

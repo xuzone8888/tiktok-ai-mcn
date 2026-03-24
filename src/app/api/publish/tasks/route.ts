@@ -91,7 +91,7 @@ export async function GET(request: NextRequest) {
 
         if (status) {
             if (status === 'in_progress') {
-                query = query.in('status', ['pending', 'processing', 'scheduled'])
+                query = query.in('status', ['pending', 'running', 'scheduled'])
             } else {
                 query = query.eq('status', status)
             }
@@ -148,6 +148,35 @@ export async function POST(request: NextRequest) {
         // 校验 privacy_level 必填（TikTok 审核要求：不可替用户选择隐私级别）
         if (!body.privacy_level) {
             return NextResponse.json({ error: '请选择可见范围' }, { status: 400 })
+        }
+
+        // Fix 4: 校验标题长度（TikTok 限制 ≤ 2200 字符）
+        if (body.caption && body.caption.length > 2200) {
+            return NextResponse.json({ error: '标题不能超过2200个字符' }, { status: 400 })
+        }
+        for (const video of body.videos) {
+            if (video.title && video.title.length > 2200) {
+                return NextResponse.json({ error: `视频"${video.name}"的标题超过2200个字符` }, { status: 400 })
+            }
+        }
+
+        // Fix 5: 校验 Hashtag 数量（TikTok 2025 政策限制 ≤ 5 个）
+        const checkHashtagLimit = (text: string, label: string) => {
+            const hashtagCount = (text.match(/#[^\s#]+/g) || []).length
+            if (hashtagCount > 5) {
+                return NextResponse.json({ error: `${label}中Hashtag数量不能超过5个（当前${hashtagCount}个）` }, { status: 400 })
+            }
+            return null
+        }
+        if (body.caption) {
+            const err = checkHashtagLimit(body.caption, '全局标题')
+            if (err) return err
+        }
+        for (const video of body.videos) {
+            if (video.title) {
+                const err = checkHashtagLimit(video.title, `视频"${video.name}"的标题`)
+                if (err) return err
+            }
         }
 
         // Verify all accounts belong to the user and are authorized

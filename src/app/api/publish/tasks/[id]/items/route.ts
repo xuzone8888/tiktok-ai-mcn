@@ -10,11 +10,11 @@ import { createClient } from '@/lib/supabase/server'
 
 export async function GET(
     request: NextRequest,
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
         const supabase = await createClient()
-        const taskId = params.id
+        const { id: taskId } = await params
 
         // 验证用户登录
         const { data: { user }, error: authError } = await supabase.auth.getUser()

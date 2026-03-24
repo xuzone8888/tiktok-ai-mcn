@@ -12,11 +12,11 @@ import { createClient } from '@/lib/supabase/server'
 
 export async function DELETE(
     request: NextRequest,
-    { params }: { params: { id: string; itemId: string } }
+    { params }: { params: Promise<{ id: string; itemId: string }> }
 ) {
     try {
         const supabase = await createClient()
-        const { id: taskId, itemId } = params
+        const { id: taskId, itemId } = await params
 
         // 验证用户登录
         const { data: { user }, error: authError } = await supabase.auth.getUser()

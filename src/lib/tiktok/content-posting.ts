@@ -248,7 +248,7 @@ export function isValidVideoUrl(url: string): boolean {
         const hasValidExtension = validExtensions.some(ext =>
             urlObj.pathname.toLowerCase().includes(ext)
         );
-        return hasValidExtension || urlObj.pathname.includes('/video/');
+        return hasValidExtension;
     } catch {
         return false;
     }
@@ -272,7 +272,7 @@ export async function deleteVideo(
                 'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-                share_id: tiktokShareId
+                video_id: tiktokShareId  // W6: TikTok API 使用 video_id 而非 share_id
             }),
         });
 

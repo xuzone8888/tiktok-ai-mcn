@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { Search, Loader2, ListFilter, AlertTriangle, Trash2 } from 'lucide-react'
+import { Search, AlertTriangle, Trash2, ListTodo } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -96,6 +96,11 @@ export function TaskManager() {
         fetchTasks(true)
     }, [activeTab, dateRange])
 
+    // W2 fix: 分页变化时加载更多
+    useEffect(() => {
+        if (page > 1) fetchTasks(false)
+    }, [page])
+
     const handleViewDetail = (taskId: string) => {
         const task = tasks.find(t => t.id === taskId)
         if (task) {
@@ -172,12 +177,15 @@ export function TaskManager() {
                 })
             }
 
+            // 乐观更新本地状态
+            // deleteTikTokVideo 仅在被删项是 published 状态时由 TaskGroupDetail 传入 true
             setTasks(prev => prev.map(t => {
                 if (t.id === selectedTask?.id) {
                     return {
                         ...t,
                         total_items: t.total_items - 1,
-                        published_count: deleteTikTokVideo ? t.published_count - 1 : t.published_count
+                        // 只有删除已发布的项才减少 published_count
+                        published_count: deleteTikTokVideo ? Math.max(0, t.published_count - 1) : t.published_count
                     }
                 }
                 return t
@@ -212,9 +220,9 @@ export function TaskManager() {
     return (
         <div className="space-y-4">
             {/* 7天清理提示 */}
-            <div className="flex items-center gap-2 p-3 bg-white/5 border border-white/5 rounded-lg text-zinc-500 text-xs">
+            <div className="flex items-center gap-2 px-3 py-2.5 bg-amber-500/5 border border-amber-500/10 rounded-lg text-amber-500/70 text-xs">
                 <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-                <span>任务记录将在创建后 <strong>7 天</strong> 自动清理，请及时下载或备份重要数据</span>
+                <span>任务记录将在创建后 <strong className="text-amber-400/80">7 天</strong> 自动清理，请及时下载或备份重要数据</span>
             </div>
 
             {/* 筛选区域 */}
@@ -251,7 +259,7 @@ export function TaskManager() {
                             placeholder="搜索任务..."
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
-                            className="pl-9 h-9 bg-white/5 border-white/10"
+                            className="pl-9 h-9 bg-white/5 border-white/10 focus:border-[#CCFF00]/30 focus:ring-1 focus:ring-[#CCFF00]/20 transition-all"
                         />
                     </div>
                 </div>
@@ -259,16 +267,35 @@ export function TaskManager() {
 
             {/* 任务列表 */}
             {loading && page === 1 ? (
-                <div className="flex justify-center py-20">
-                    <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                    {[1, 2, 3].map(i => (
+                        <div key={i} className="rounded-xl border border-white/5 bg-zinc-900/40 p-5 animate-pulse">
+                            <div className="flex items-start justify-between mb-4">
+                                <div className="h-5 bg-white/[0.08] rounded w-2/3" />
+                                <div className="h-5 bg-white/[0.08] rounded w-16" />
+                            </div>
+                            <div className="grid grid-cols-3 gap-3 mb-4">
+                                <div className="h-10 bg-white/[0.08] rounded" />
+                                <div className="h-10 bg-white/[0.08] rounded" />
+                                <div className="h-10 bg-white/[0.08] rounded" />
+                            </div>
+                            <div className="h-4 bg-white/[0.08] rounded w-1/3 mt-4" />
+                        </div>
+                    ))}
                 </div>
             ) : tasks.length === 0 ? (
-                <div className="text-center py-20 bg-white/5 border rounded-xl border-dashed border-white/10">
-                    <p className="text-gray-400">暂无任务数据</p>
+                <div className="text-center py-16 bg-white/[0.02] border rounded-xl border-dashed border-white/10">
+                    <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-white/5 mb-4">
+                        <ListTodo className="w-7 h-7 text-zinc-600" />
+                    </div>
+                    <p className="text-zinc-400 mb-1">暂无任务数据</p>
+                    <p className="text-xs text-zinc-600 mb-5">创建发布任务后，这里会展示任务状态和数据统计</p>
                 </div>
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                    {tasks.map(task => (
+                    {tasks
+                        .filter(task => !searchQuery || task.name?.toLowerCase().includes(searchQuery.toLowerCase()))
+                        .map(task => (
                         <TaskGroupCard
                             key={task.id}
                             task={task}
@@ -282,8 +309,13 @@ export function TaskManager() {
 
             {hasMore && !loading && tasks.length > 0 && (
                 <div className="flex justify-center pt-4">
-                    <Button variant="ghost" onClick={() => setPage(p => p + 1)}>
-                        加载更多
+                    <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={() => setPage(p => p + 1)}
+                        className="border-white/10 hover:border-white/20 text-zinc-400 hover:text-white transition-colors"
+                    >
+                        加载更多任务
                     </Button>
                 </div>
             )}

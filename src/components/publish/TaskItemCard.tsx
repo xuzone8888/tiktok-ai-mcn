@@ -36,7 +36,7 @@ export interface TaskItem {
 interface TaskItemCardProps {
     item: TaskItem
     onDelete: (itemId: string, isPublished: boolean) => void
-    onViewDetail: (item: TaskItem) => void
+    onViewDetail?: (item: TaskItem) => void
 }
 
 const statusConfig: Record<string, { label: string; className: string; icon: any }> = {
@@ -95,7 +95,7 @@ export function TaskItemCard({ item, onDelete, onViewDetail }: TaskItemCardProps
     return (
         <div
             className="group relative overflow-hidden rounded-lg border border-white/5 bg-zinc-900/30 p-3 transition-all hover:bg-zinc-900/50 hover:border-white/10"
-            onClick={() => onViewDetail(item)}
+            onClick={() => onViewDetail?.(item)}
         >
             <div className="flex gap-3">
                 {/* 封面缩略图 */}
@@ -194,10 +194,7 @@ export function TaskItemCard({ item, onDelete, onViewDetail }: TaskItemCardProps
                                 </div>
                             ) : (
                                 <span className="text-xs text-zinc-600">
-                                    {isPublished
-                                        ? `发布于 ${formatDate(item.published_at)}`
-                                        : `计划 ${formatDate(item.scheduled_at)}`
-                                    }
+                                    计划 {formatDate(item.scheduled_at)}
                                 </span>
                             )}
                         </div>

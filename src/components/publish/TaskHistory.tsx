@@ -21,7 +21,7 @@ import { format } from 'date-fns'
 const statusConfig = {
     pending: { label: '待处理', color: 'bg-gray-500', icon: Clock },
     scheduled: { label: '定时中', color: 'bg-blue-500', icon: Clock },
-    processing: { label: '执行中', color: 'bg-yellow-500', icon: Loader2 },
+    running: { label: '执行中', color: 'bg-yellow-500', icon: Loader2 },
     completed: { label: '已完成', color: 'bg-green-500', icon: CheckCircle2 },
     failed: { label: '失败', color: 'bg-red-500', icon: XCircle },
     partial_failed: { label: '部分失败', color: 'bg-orange-500', icon: AlertTriangle },
@@ -124,7 +124,7 @@ export function TaskHistory() {
                                         <Badge className={cn('text-white text-xs', config.color)}>
                                             <StatusIcon className={cn(
                                                 'w-3 h-3 mr-1',
-                                                task.status === 'processing' && 'animate-spin'
+                                                task.status === 'running' && 'animate-spin'
                                             )} />
                                             {config.label}
                                         </Badge>

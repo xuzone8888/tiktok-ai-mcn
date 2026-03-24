@@ -54,7 +54,7 @@ export interface SelectedVideo {
 export interface PublishTask {
     id: string
     name?: string
-    status: 'pending' | 'processing' | 'completed' | 'failed' | 'scheduled' | 'partial_failed' | 'cancelled'
+    status: 'pending' | 'running' | 'completed' | 'failed' | 'scheduled' | 'partial_failed' | 'cancelled'
     video_count: number
     account_count: number
     total_items: number

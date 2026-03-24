@@ -24,10 +24,10 @@ export function getTikTokOAuthConfig() {
         clientSecret,
         redirectUri,
         scopes: [
-            'user.info.basic',   // 获取头像、昵称（creator_info 展示）
-            'video.publish',     // 发布视频（PULL_FROM_URL 模式）
-            // ❌ 已移除 user.info.stats — 未使用，审核会拒
-            // ❌ 已移除 video.upload — 我们用 PULL_FROM_URL，不需要 upload scope
+            'user.info.basic',   // 获取头像、昵称（Login Kit 自带）
+            'video.publish',     // 直接发布视频到用户主页
+            'video.upload',      // 媒体传输（PULL_FROM_URL 也需要此 scope）
+            'user.info.stats',   // 粉丝数、获赞数等统计数据
         ],
     };
 }
@@ -175,11 +175,12 @@ export async function getUserInfo(accessToken: string): Promise<TikTokUserInfo> 
         'avatar_url',
         'avatar_url_100',
         'display_name',
-        // 以下字段需要 user.info.profile 权限（暂未申请）：
+        // 以下字段需要 user.info.profile 权限（未申请，不影响核心功能）：
         // 'bio_description',
         // 'profile_deep_link',
         // 'is_verified',
         // 'username',
+        // 以下字段需要 user.info.stats 权限（已获批）：
         'follower_count',
         'following_count',
         'likes_count',

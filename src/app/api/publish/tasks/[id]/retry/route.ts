@@ -84,14 +84,21 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             return NextResponse.json({ error: '重置任务状态失败' }, { status: 500 })
         }
 
-        // Update task status back to processing
+        // Update task status back to running
         await supabase
             .from('publish_tasks')
-            .update({ status: 'processing' })
+            .update({ status: 'running' })  // W9: DB CHECK 约束使用 'running'
             .eq('id', id)
 
-        // In production, trigger the background job to process these items
-        // For now, we just return success
+        // 触发后台重新处理（fire and forget）
+        import('@/lib/publish-processor').then(({ processPublishQueue }) => {
+            processPublishQueue({
+                taskId: id,
+                mode: 'immediate'
+            }).catch(err => {
+                console.error('Retry background processing failed:', err)
+            })
+        })
 
         return NextResponse.json({
             success: true,

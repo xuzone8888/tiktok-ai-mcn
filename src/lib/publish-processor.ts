@@ -200,6 +200,7 @@ async function queryPendingItems(
                 allow_duet,
                 allow_stitch,
                 brand_content_toggle,
+                brand_organic_toggle,
                 is_aigc
             )
         `)
@@ -276,7 +277,7 @@ async function updateTasksToProcessing(
 ): Promise<void> {
     const { error } = await supabase
         .from('publish_tasks')
-        .update({ status: 'processing' })
+        .update({ status: 'running' })  // W9: DB CHECK 约束使用 'running' 而非 'processing'
         .in('id', taskIds)
         .in('status', ['pending', 'scheduled'])
 
@@ -354,6 +355,7 @@ async function publishItem(
                 .update({
                     status: 'published',
                     tiktok_share_id: result.postId,
+                    tiktok_video_id: result.postId,  // W5: sync-stats 依赖此字段查询视频统计
                     published_at: new Date().toISOString()
                 })
                 .eq('id', item.id)

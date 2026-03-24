@@ -34,13 +34,16 @@ import {
     UserCheck,
     Hash,
     Zap,
-    MessageCircle,
+    MessageSquare,
     Repeat2,
     Scissors,
     ShieldCheck,
     ExternalLink,
     Info,
-    ChevronDown
+    ChevronDown,
+    Eye,
+    Tag,
+    Handshake
 } from 'lucide-react'
 import { format, addMinutes } from 'date-fns'
 import { zhCN } from 'date-fns/locale'
@@ -58,6 +61,14 @@ import {
 const TIKTOK_VIDEO_FORMATS = ['.mp4', '.webm', '.mov']
 const TIKTOK_MAX_FILE_SIZE = 4 * 1024 * 1024 * 1024 // 4GB
 const TIKTOK_MAX_DURATION = 10 * 60 * 1000 // 10 minutes in ms
+
+// Privacy dropdown options config (shared between trigger and panel)
+const PRIVACY_OPTIONS: Record<string, { icon: any, label: string, desc: string, gradient: string, border: string, glow: string, textColor: string, hoverBg: string }> = {
+    'PUBLIC_TO_EVERYONE': { icon: Globe2, label: '公开', desc: '所有人可见', gradient: 'from-cyan-400/30 via-cyan-500/15 to-transparent', border: 'border-cyan-400/30', glow: '0 0 10px rgba(34,211,238,0.2), inset 0 1px 1px rgba(255,255,255,0.1)', textColor: 'text-cyan-300', hoverBg: 'hover:bg-cyan-500/10' },
+    'MUTUAL_FOLLOW_FRIENDS': { icon: Users, label: '好友', desc: '互关好友可见', gradient: 'from-violet-400/30 via-purple-500/15 to-transparent', border: 'border-violet-400/30', glow: '0 0 10px rgba(139,92,246,0.2), inset 0 1px 1px rgba(255,255,255,0.1)', textColor: 'text-violet-300', hoverBg: 'hover:bg-violet-500/10' },
+    'FOLLOWER_OF_CREATOR': { icon: Eye, label: '粉丝', desc: '粉丝可见', gradient: 'from-pink-400/30 via-rose-500/15 to-transparent', border: 'border-pink-400/30', glow: '0 0 10px rgba(244,114,182,0.2), inset 0 1px 1px rgba(255,255,255,0.1)', textColor: 'text-pink-300', hoverBg: 'hover:bg-pink-500/10' },
+    'SELF_ONLY': { icon: Lock, label: '仅自己', desc: '仅自己可见', gradient: 'from-slate-400/30 via-gray-500/15 to-transparent', border: 'border-slate-400/30', glow: '0 0 10px rgba(148,163,184,0.15), inset 0 1px 1px rgba(255,255,255,0.1)', textColor: 'text-slate-300', hoverBg: 'hover:bg-slate-500/10' },
+}
 
 // Asset from delivery order
 interface AssetItem {
@@ -192,6 +203,27 @@ export default function PublishPage() {
 
     // Privacy level for TikTok publishing — 初始为 null（无默认值，TikTok 审核要求）
     const [privacyLevel, setPrivacyLevel] = useState<string | null>(null)
+    const [privacyDropdownOpen, setPrivacyDropdownOpen] = useState(false)
+    const privacyDropdownRef = useRef<HTMLDivElement>(null)
+
+    // Click-outside handler for privacy dropdown
+    useEffect(() => {
+        if (!privacyDropdownOpen) return
+        const handleClickOutside = (e: MouseEvent) => {
+            if (privacyDropdownRef.current && !privacyDropdownRef.current.contains(e.target as Node)) {
+                setPrivacyDropdownOpen(false)
+            }
+        }
+        const handleEscape = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') setPrivacyDropdownOpen(false)
+        }
+        document.addEventListener('mousedown', handleClickOutside)
+        document.addEventListener('keydown', handleEscape)
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside)
+            document.removeEventListener('keydown', handleEscape)
+        }
+    }, [privacyDropdownOpen])
 
     // AI generated content flag (default ON - ToryX 是 AI 创作工具，所有内容默认标记 AI 生成)
     const [isAiGenerated, setIsAiGenerated] = useState(true)
@@ -1789,213 +1821,299 @@ export default function PublishPage() {
                                 </div>
                             )}
 
-                            {/* ===== 可见范围（动态下拉，无默认值） ===== */}
-                            <div className="mt-4">
-                                <label className="block text-sm font-medium text-gray-300 mb-3">
-                                    可见范围 <span className="text-red-400">*</span>
-                                </label>
-                                <div className="relative">
-                                    <select
-                                        value={privacyLevel || ''}
-                                        onChange={(e) => setPrivacyLevel(e.target.value || null)}
-                                        className="w-full px-4 py-3 bg-black/40 border border-white/10 rounded-xl text-white appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500/50 transition-all"
-                                    >
-                                        <option value="" disabled>请选择可见范围</option>
-                                        {(creatorInfo?.privacy_level_options || ['PUBLIC_TO_EVERYONE', 'MUTUAL_FOLLOW_FRIENDS', 'FOLLOWER_OF_CREATOR', 'SELF_ONLY']).map(option => {
-                                            const labels: Record<string, string> = {
-                                                'PUBLIC_TO_EVERYONE': '🌐 公开 - 所有人可见',
-                                                'MUTUAL_FOLLOW_FRIENDS': '👥 好友 - 互关好友可见',
-                                                'FOLLOWER_OF_CREATOR': '📢 粉丝 - 粉丝可见',
-                                                'SELF_ONLY': '🔒 仅自己 - 仅自己可见',
-                                            }
-                                            // Branded Content 时禁用 SELF_ONLY
-                                            const disabled = brandedContent && option === 'SELF_ONLY'
-                                            return (
-                                                <option key={option} value={option} disabled={disabled}>
-                                                    {labels[option] || option}{disabled ? ' (品牌合作不可选)' : ''}
-                                                </option>
-                                            )
-                                        })}
-                                    </select>
-                                    <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-                                </div>
-                                {!privacyLevel && selectedAccounts.length > 0 && (
-                                    <p className="text-xs text-amber-400 mt-2 flex items-center gap-1">
-                                        <Info className="w-3 h-3" />
-                                        请选择可见范围后才能发布
-                                    </p>
-                                )}
-                            </div>
+                            {/* ===== 新版紧凑设置区 ===== */}
+                            <div className="space-y-3 pt-2">
+                                {/* 可见的范围 */}
+                                <div className="space-y-2">
+                                    <label className="block text-sm font-medium text-gray-300">
+                                        可见范围 <span className="text-red-500">*</span>
+                                    </label>
+                                    <div className="relative" ref={privacyDropdownRef}>
+                                        {/* Glow backdrop on focus */}
+                                        <div className={`absolute inset-0 bg-gradient-to-r from-cyan-500/20 to-purple-500/20 rounded-xl transition-opacity duration-300 pointer-events-none ${privacyDropdownOpen ? 'opacity-100' : 'opacity-0'}`} />
+                                        {/* Trigger button */}
+                                        <button
+                                            type="button"
+                                            onClick={() => setPrivacyDropdownOpen(!privacyDropdownOpen)}
+                                            className={`w-full flex items-center gap-3 pl-3 pr-10 py-3 bg-white/[0.04] border rounded-xl text-white cursor-pointer focus:outline-none transition-all font-medium relative z-0 ${privacyDropdownOpen ? 'border-cyan-500/50' : 'border-white/10'}`}
+                                        >
+                                            {(() => {
+                                                if (privacyLevel && PRIVACY_OPTIONS[privacyLevel]) {
+                                                    const cfg = PRIVACY_OPTIONS[privacyLevel]
+                                                    const IconComp = cfg.icon
+                                                    return (
+                                                        <>
+                                                            <div className={`w-7 h-7 rounded-lg bg-gradient-to-br ${cfg.gradient} border ${cfg.border} flex items-center justify-center shrink-0`} style={{boxShadow: cfg.glow}}>
+                                                                <IconComp className={`w-3.5 h-3.5 ${cfg.textColor} drop-shadow-[0_0_3px_rgba(255,255,255,0.3)]`} />
+                                                            </div>
+                                                            <span>{cfg.label} - {cfg.desc}</span>
+                                                        </>
+                                                    )
+                                                }
+                                                return (
+                                                    <>
+                                                        <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-cyan-400/20 via-cyan-500/10 to-transparent border border-cyan-400/20 flex items-center justify-center shrink-0" style={{boxShadow: '0 0 10px rgba(34,211,238,0.15), inset 0 1px 1px rgba(255,255,255,0.1)'}}>
+                                                            <Globe2 className="w-3.5 h-3.5 text-cyan-300 drop-shadow-[0_0_3px_rgba(34,211,238,0.5)]" />
+                                                        </div>
+                                                        <span className="text-gray-500">请选择可见范围</span>
+                                                    </>
+                                                )
+                                            })()}
+                                        </button>
+                                        <ChevronDown className={`absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none z-10 transition-transform duration-200 ${privacyDropdownOpen ? 'rotate-180' : ''}`} />
 
-                            {/* ===== 互动设置（默认全部关闭） ===== */}
-                            <div className="mt-4 space-y-3">
-                                <label className="block text-sm font-medium text-gray-300">
-                                    互动设置
-                                </label>
-                                {[
-                                    { key: 'comment', label: '允许评论', icon: MessageCircle, value: allowComment, setter: setAllowComment, disabled: creatorInfo?.comment_disabled },
-                                    { key: 'duet', label: '允许合拍', icon: Repeat2, value: allowDuet, setter: setAllowDuet, disabled: creatorInfo?.duet_disabled },
-                                    { key: 'stitch', label: '允许剪辑引用', icon: Scissors, value: allowStitch, setter: setAllowStitch, disabled: creatorInfo?.stitch_disabled },
-                                ].map(({ key, label, icon: Icon, value, setter, disabled }) => (
-                                    <div key={key} className="flex items-center justify-between p-3 bg-black/20 rounded-lg border border-white/5">
-                                        <div className="flex items-center gap-2">
-                                            <Icon className={`w-4 h-4 ${disabled ? 'text-gray-600' : value ? 'text-cyan-400' : 'text-gray-500'}`} />
-                                            <span className={`text-sm ${disabled ? 'text-gray-600' : 'text-gray-300'}`}>{label}</span>
-                                            {disabled && <span className="text-[10px] text-gray-600 bg-white/5 px-1.5 py-0.5 rounded">创作者已禁用</span>}
+                                        {/* Dropdown panel */}
+                                        {privacyDropdownOpen && (
+                                            <div className="absolute top-full left-0 right-0 mt-1 bg-neutral-900/95 backdrop-blur-xl border border-white/10 rounded-xl overflow-hidden z-50 shadow-2xl shadow-black/50 animate-in fade-in slide-in-from-top-2 duration-200">
+                                                {(creatorInfo?.privacy_level_options || ['PUBLIC_TO_EVERYONE', 'MUTUAL_FOLLOW_FRIENDS', 'FOLLOWER_OF_CREATOR', 'SELF_ONLY']).map(option => {
+                                                    const cfg = PRIVACY_OPTIONS[option]
+                                                    if (!cfg) return null
+                                                    const IconComp = cfg.icon
+                                                    const isSelected = privacyLevel === option
+                                                    const isDisabled = brandedContent && option === 'SELF_ONLY'
+                                                    return (
+                                                        <button
+                                                            key={option}
+                                                            type="button"
+                                                            disabled={isDisabled}
+                                                            onClick={() => {
+                                                                setPrivacyLevel(option)
+                                                                setPrivacyDropdownOpen(false)
+                                                            }}
+                                                            className={`w-full flex items-center gap-3 px-4 py-3 transition-colors ${isDisabled ? 'opacity-40 cursor-not-allowed' : cfg.hoverBg + ' cursor-pointer'} ${isSelected ? 'bg-white/[0.06]' : ''}`}
+                                                        >
+                                                            <div className={`w-7 h-7 rounded-lg bg-gradient-to-br ${cfg.gradient} border ${cfg.border} flex items-center justify-center shrink-0 transition-all`} style={{boxShadow: cfg.glow}}>
+                                                                <IconComp className={`w-3.5 h-3.5 ${cfg.textColor} drop-shadow-[0_0_3px_rgba(255,255,255,0.3)]`} />
+                                                            </div>
+                                                            <div className="flex-1 text-left">
+                                                                <p className="text-sm font-medium text-white">{cfg.label}</p>
+                                                                <p className="text-[11px] text-gray-500">{cfg.desc}{isDisabled ? ' (品牌合作不可选)' : ''}</p>
+                                                            </div>
+                                                            {isSelected && (
+                                                                <Check className="w-4 h-4 text-cyan-400 shrink-0" />
+                                                            )}
+                                                        </button>
+                                                    )
+                                                })}
+                                            </div>
+                                        )}
+                                    </div>
+                                    {!privacyLevel && selectedAccounts.length > 0 && (
+                                        <p className="text-xs text-amber-400 flex items-center gap-1 mt-1">
+                                            <Info className="w-3 h-3" />
+                                            请选择可见范围后才能发布
+                                        </p>
+                                    )}
+                                </div>
+
+                                {/* 互动设置 */}
+                                <div className="grid grid-cols-3 bg-white/[0.03] rounded-xl border border-white/10 divide-x divide-white/10">
+                                    {[
+                                        { key: 'comment', label: '允许评论', desc: '其他用户可在视频下方留言', icon: MessageSquare, value: allowComment, setter: setAllowComment, disabled: creatorInfo?.comment_disabled, gradientFrom: 'from-sky-400/25', gradientVia: 'via-blue-500/15', borderColor: 'border-sky-400/25', glowColor: '0 0 12px rgba(56,189,248,0.2), inset 0 1px 1px rgba(255,255,255,0.1)', activeColor: 'text-sky-300 drop-shadow-[0_0_4px_rgba(56,189,248,0.6)]', iconColor: 'text-sky-400/60' },
+                                        { key: 'duet', label: '允许合拍', desc: '其他用户可与你的视频合拍', icon: Repeat2, value: allowDuet, setter: setAllowDuet, disabled: creatorInfo?.duet_disabled, gradientFrom: 'from-emerald-400/25', gradientVia: 'via-green-500/15', borderColor: 'border-emerald-400/25', glowColor: '0 0 12px rgba(52,211,153,0.2), inset 0 1px 1px rgba(255,255,255,0.1)', activeColor: 'text-emerald-300 drop-shadow-[0_0_4px_rgba(52,211,153,0.6)]', iconColor: 'text-emerald-400/60' },
+                                        { key: 'stitch', label: '允许引用', desc: '其他用户可使用你的视频片段', icon: Scissors, value: allowStitch, setter: setAllowStitch, disabled: creatorInfo?.stitch_disabled, gradientFrom: 'from-orange-400/25', gradientVia: 'via-amber-500/15', borderColor: 'border-orange-400/25', glowColor: '0 0 12px rgba(251,146,60,0.2), inset 0 1px 1px rgba(255,255,255,0.1)', activeColor: 'text-orange-300 drop-shadow-[0_0_4px_rgba(251,146,60,0.6)]', iconColor: 'text-orange-400/60' },
+                                    ].map(({ key, label, desc, icon: Icon, value, setter, disabled, gradientFrom, gradientVia, borderColor, glowColor, activeColor, iconColor }) => (
+                                        <div key={key} className="flex items-center justify-between px-4 py-3 hover:bg-white/[0.03] transition-colors">
+                                            <div className="flex items-center gap-2.5">
+                                                 <div className={`w-7 h-7 rounded-lg bg-gradient-to-br ${disabled ? 'from-gray-500/10 via-gray-400/5 to-transparent border-white/5' : `${gradientFrom} ${gradientVia} to-transparent ${borderColor}`} border flex items-center justify-center shrink-0 transition-all duration-300`} style={{boxShadow: disabled ? 'none' : (value ? glowColor : 'inset 0 1px 1px rgba(255,255,255,0.05)')}}>
+                                                     <Icon className={`w-4 h-4 transition-all duration-300 ${disabled ? 'text-gray-600' : value ? activeColor : iconColor}`} />
+                                                 </div>
+                                                 <div>
+                                                     <p className={`text-sm ${disabled ? 'text-gray-600' : 'text-gray-200'}`}>{label}</p>
+                                                     <p className="text-[11px] text-gray-500 leading-tight">{desc}</p>
+                                                 </div>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                role="switch"
+                                                aria-checked={value}
+                                                aria-label={`${label}开关`}
+                                                disabled={disabled}
+                                                onClick={() => setter(!value)}
+                                                title={disabled ? '该账号已禁用此功能' : undefined}
+                                                className={`relative w-12 h-[26px] shrink-0 rounded-full transition-all duration-300 outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/50 ${disabled ? 'bg-white/5 border border-white/10 cursor-not-allowed' : value ? 'bg-gradient-to-r from-cyan-500 to-blue-500 border border-cyan-400/30' : 'bg-white/[0.08] border border-white/15'}`}
+                                                style={{boxShadow: disabled ? 'none' : value ? '0 0 12px rgba(34,211,238,0.3), inset 0 1px 1px rgba(255,255,255,0.15)' : 'inset 0 2px 4px rgba(0,0,0,0.3), inset 0 0 0 1px rgba(255,255,255,0.03)'}}
+                                            >
+                                                <span className={`absolute top-[3px] w-5 h-5 text-[9px] font-bold tracking-tight flex items-center justify-center rounded-full transition-all duration-300 ${value && !disabled ? 'left-[23px] bg-white text-cyan-600' : 'left-[3px] bg-gray-300 text-gray-500'}`} style={{boxShadow: value && !disabled ? '0 0 8px rgba(34,211,238,0.4), 0 2px 4px rgba(0,0,0,0.2)' : '0 1px 3px rgba(0,0,0,0.3)'}}>
+                                                    {value && !disabled ? 'ON' : 'OFF'}
+                                                </span>
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                {/* 内容宣言 */}
+                                <div className="grid grid-cols-1 md:grid-cols-2 bg-white/[0.03] rounded-xl border border-white/10 divide-y md:divide-y-0 md:divide-x divide-white/10">
+                                    {/* AI 生成内容 */}
+                                    <div className="flex items-center justify-between px-4 py-3 hover:bg-white/[0.03] transition-colors">
+                                        <div className="flex items-center gap-2.5">
+                                            <div className={`w-7 h-7 rounded-lg bg-gradient-to-br ${isAiGenerated ? 'from-purple-400/25 via-violet-500/15 to-transparent border-purple-400/25' : 'from-gray-500/10 via-gray-400/5 to-transparent border-white/5'} border flex items-center justify-center shrink-0 transition-all duration-300`} style={{boxShadow: isAiGenerated ? '0 0 12px rgba(168,85,247,0.25), inset 0 1px 1px rgba(255,255,255,0.1)' : 'inset 0 1px 1px rgba(255,255,255,0.05)'}}>
+                                                <Sparkles className={`w-4 h-4 transition-all duration-300 ${isAiGenerated ? 'text-purple-300 drop-shadow-[0_0_4px_rgba(168,85,247,0.6)]' : 'text-gray-500'}`} />
+                                            </div>
+                                            <div>
+                                                <p className="text-sm font-medium text-white">AI 生成内容</p>
+                                                <p className="text-[11px] text-gray-500">标记视频为AI生成，符合TikTok政策</p>
+                                            </div>
                                         </div>
                                         <button
                                             type="button"
-                                            disabled={disabled}
-                                            onClick={() => setter(!value)}
-                                            className={`relative w-10 h-5 rounded-full transition-colors duration-300 ${disabled ? 'bg-white/5 cursor-not-allowed' : value ? 'bg-cyan-500' : 'bg-white/10'}`}
+                                            role="switch"
+                                            aria-checked={isAiGenerated}
+                                            aria-label="AI生成内容开关"
+                                            onClick={() => setIsAiGenerated(!isAiGenerated)}
+                                            className={`relative w-12 h-[26px] shrink-0 rounded-full transition-all duration-300 outline-none focus-visible:ring-2 focus-visible:ring-purple-500/50 ${isAiGenerated ? 'bg-gradient-to-r from-purple-500 to-violet-500 border border-purple-400/30' : 'bg-white/[0.08] border border-white/15'}`}
+                                            style={{boxShadow: isAiGenerated ? '0 0 12px rgba(168,85,247,0.3), inset 0 1px 1px rgba(255,255,255,0.15)' : 'inset 0 2px 4px rgba(0,0,0,0.3), inset 0 0 0 1px rgba(255,255,255,0.03)'}}
                                         >
-                                            <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-md transition-all duration-300 ${value && !disabled ? 'left-5' : 'left-0.5'}`} />
+                                            <span className={`absolute top-[3px] w-5 h-5 text-[9px] font-bold tracking-tight flex items-center justify-center rounded-full transition-all duration-300 ${isAiGenerated ? 'left-[23px] bg-white text-purple-600' : 'left-[3px] bg-gray-300 text-gray-500'}`} style={{boxShadow: isAiGenerated ? '0 0 8px rgba(168,85,247,0.4), 0 2px 4px rgba(0,0,0,0.2)' : '0 1px 3px rgba(0,0,0,0.3)'}}>
+                                                {isAiGenerated ? 'ON' : 'OFF'}
+                                            </span>
                                         </button>
                                     </div>
-                                ))}
-                            </div>
 
-                            {/* ===== 商业内容披露 ===== */}
-                            <div className="mt-4">
-                                <div className="flex items-center justify-between p-4 bg-black/30 rounded-xl border border-white/10">
-                                    <div className="flex items-center gap-3">
-                                        <ShieldCheck className={`w-5 h-5 ${contentDisclosure ? 'text-amber-400' : 'text-gray-500'}`} />
-                                        <div>
-                                            <p className="text-sm font-medium text-white">商业内容披露</p>
-                                            <p className="text-xs text-gray-500">声明此内容包含商业推广</p>
-                                        </div>
-                                    </div>
-                                    <button
-                                        type="button"
-                                        onClick={() => {
-                                            if (contentDisclosure) {
-                                                setContentDisclosure(false)
-                                                setYourBrand(false)
-                                                setBrandedContent(false)
-                                            } else {
-                                                setContentDisclosure(true)
-                                            }
-                                        }}
-                                        className={`relative w-12 h-6 rounded-full transition-colors duration-300 ${contentDisclosure ? 'bg-amber-500' : 'bg-white/10'}`}
-                                    >
-                                        <span className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow-md transition-all duration-300 ${contentDisclosure ? 'left-7' : 'left-1'}`} />
-                                    </button>
-                                </div>
-
-                                {contentDisclosure && (
-                                    <div className="mt-3 ml-4 space-y-2">
-                                        <label className="flex items-center gap-3 p-3 bg-black/20 rounded-lg border border-white/5 cursor-pointer hover:bg-white/5 transition-colors">
-                                            <input
-                                                type="checkbox"
-                                                checked={yourBrand}
-                                                onChange={(e) => setYourBrand(e.target.checked)}
-                                                className="w-4 h-4 rounded border-white/20 bg-white/5 text-amber-500 focus:ring-amber-500/50"
-                                            />
-                                            <div>
-                                                <p className="text-sm text-white">自有品牌推广</p>
-                                                <p className="text-[11px] text-gray-500">标记为 &quot;Promotional content&quot;</p>
+                                    {/* 商业内容披露 */}
+                                    <div className="flex flex-col">
+                                        <div className="flex items-center justify-between px-4 py-3 hover:bg-white/[0.03] transition-colors">
+                                            <div className="flex items-center gap-2.5">
+                                                <div className={`w-7 h-7 rounded-lg bg-gradient-to-br ${contentDisclosure ? 'from-amber-400/25 via-yellow-500/15 to-transparent border-amber-400/25' : 'from-gray-500/10 via-gray-400/5 to-transparent border-white/5'} border flex items-center justify-center shrink-0 transition-all duration-300`} style={{boxShadow: contentDisclosure ? '0 0 12px rgba(245,158,11,0.25), inset 0 1px 1px rgba(255,255,255,0.1)' : 'inset 0 1px 1px rgba(255,255,255,0.05)'}}>
+                                                    <ShieldCheck className={`w-4 h-4 transition-all duration-300 ${contentDisclosure ? 'text-amber-300 drop-shadow-[0_0_4px_rgba(245,158,11,0.6)]' : 'text-gray-500'}`} />
+                                                </div>
+                                                <div>
+                                                    <p className="text-sm font-medium text-white">商业内容披露</p>
+                                                    <p className="text-[11px] text-gray-500">声明此内容包含商业推广</p>
+                                                </div>
                                             </div>
-                                        </label>
-                                        <label className="flex items-center gap-3 p-3 bg-black/20 rounded-lg border border-white/5 cursor-pointer hover:bg-white/5 transition-colors">
-                                            <input
-                                                type="checkbox"
-                                                checked={brandedContent}
-                                                onChange={(e) => {
-                                                    setBrandedContent(e.target.checked)
-                                                    // Branded Content 选中时，自动清除 SELF_ONLY
-                                                    if (e.target.checked && privacyLevel === 'SELF_ONLY') {
-                                                        setPrivacyLevel(null)
+                                            <button
+                                                type="button"
+                                                role="switch"
+                                                aria-checked={contentDisclosure}
+                                                aria-label="商业内容披露开关"
+                                                onClick={() => {
+                                                    if (contentDisclosure) {
+                                                        setContentDisclosure(false)
+                                                        setYourBrand(false)
+                                                        setBrandedContent(false)
+                                                    } else {
+                                                        setContentDisclosure(true)
                                                     }
                                                 }}
-                                                className="w-4 h-4 rounded border-white/20 bg-white/5 text-amber-500 focus:ring-amber-500/50"
-                                            />
-                                            <div>
-                                                <p className="text-sm text-white">品牌合作内容</p>
-                                                <p className="text-[11px] text-gray-500">标记为 &quot;Paid partnership&quot;</p>
+                                                className={`relative w-12 h-[26px] shrink-0 rounded-full transition-all duration-300 outline-none focus-visible:ring-2 focus-visible:ring-amber-500/50 ${contentDisclosure ? 'bg-gradient-to-r from-amber-500 to-orange-500 border border-amber-400/30' : 'bg-white/[0.08] border border-white/15'}`}
+                                                style={{boxShadow: contentDisclosure ? '0 0 12px rgba(245,158,11,0.3), inset 0 1px 1px rgba(255,255,255,0.15)' : 'inset 0 2px 4px rgba(0,0,0,0.3), inset 0 0 0 1px rgba(255,255,255,0.03)'}}
+                                            >
+                                                <span className={`absolute top-[3px] w-5 h-5 text-[9px] font-bold tracking-tight flex items-center justify-center rounded-full transition-all duration-300 ${contentDisclosure ? 'left-[23px] bg-white text-amber-600' : 'left-[3px] bg-gray-300 text-gray-500'}`} style={{boxShadow: contentDisclosure ? '0 0 8px rgba(245,158,11,0.4), 0 2px 4px rgba(0,0,0,0.2)' : '0 1px 3px rgba(0,0,0,0.3)'}}>
+                                                    {contentDisclosure ? 'ON' : 'OFF'}
+                                                </span>
+                                            </button>
+                                        </div>
+                                        
+                                        {/* 商业属性展开配置 */}
+                                        {contentDisclosure && (
+                                            <div className="px-4 pb-3 pt-1 space-y-2">
+                                                <label className="flex items-center gap-3 p-2.5 bg-gradient-to-r from-amber-500/[0.06] to-transparent rounded-xl border border-amber-400/10 cursor-pointer hover:border-amber-400/25 hover:from-amber-500/[0.1] transition-all duration-200 group">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={yourBrand}
+                                                        onChange={(e) => setYourBrand(e.target.checked)}
+                                                        className="sr-only"
+                                                    />
+                                                    <div className={`w-5 h-5 rounded-md border flex items-center justify-center shrink-0 transition-all duration-200 ${yourBrand ? 'bg-amber-500 border-amber-400 shadow-[0_0_8px_rgba(245,158,11,0.3)]' : 'bg-white/5 border-white/20 group-hover:border-white/30'}`}>
+                                                        {yourBrand && <Check className="w-3 h-3 text-white" />}
+                                                    </div>
+                                                    <div className={`w-5 h-5 rounded-md bg-gradient-to-br from-amber-400/20 to-transparent border border-amber-400/15 flex items-center justify-center shrink-0`}>
+                                                        <Tag className="w-3 h-3 text-amber-400/70" />
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-xs text-gray-300 group-hover:text-white transition-colors">自有品牌推广</p>
+                                                        <p className="text-[10px] text-gray-600">推广自己的品牌或产品</p>
+                                                    </div>
+                                                </label>
+                                                <label className="flex items-center gap-3 p-2.5 bg-gradient-to-r from-amber-500/[0.06] to-transparent rounded-xl border border-amber-400/10 cursor-pointer hover:border-amber-400/25 hover:from-amber-500/[0.1] transition-all duration-200 group">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={brandedContent}
+                                                        onChange={(e) => {
+                                                            setBrandedContent(e.target.checked)
+                                                            if (e.target.checked && privacyLevel === 'SELF_ONLY') {
+                                                                setPrivacyLevel(null)
+                                                            }
+                                                        }}
+                                                        className="sr-only"
+                                                    />
+                                                    <div className={`w-5 h-5 rounded-md border flex items-center justify-center shrink-0 transition-all duration-200 ${brandedContent ? 'bg-amber-500 border-amber-400 shadow-[0_0_8px_rgba(245,158,11,0.3)]' : 'bg-white/5 border-white/20 group-hover:border-white/30'}`}>
+                                                        {brandedContent && <Check className="w-3 h-3 text-white" />}
+                                                    </div>
+                                                    <div className={`w-5 h-5 rounded-md bg-gradient-to-br from-amber-400/20 to-transparent border border-amber-400/15 flex items-center justify-center shrink-0`}>
+                                                        <Handshake className="w-3 h-3 text-amber-400/70" />
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-xs text-gray-300 group-hover:text-white transition-colors">品牌合作内容</p>
+                                                        <p className="text-[10px] text-gray-600">与第三方品牌的商业合作</p>
+                                                    </div>
+                                                </label>
+                                                
+                                                {/* 验证提示 */}
+                                                {disclosureIncomplete && (
+                                                    <p className="text-[10px] text-amber-400 flex items-center gap-1 mt-1">
+                                                        <AlertCircle className="w-3 h-3" />
+                                                        请勾选披露类型
+                                                    </p>
+                                                )}
+                                                {brandedPrivacyConflict && (
+                                                    <p className="text-[10px] text-red-400 flex items-center gap-1 mt-1">
+                                                        <AlertCircle className="w-3 h-3" />
+                                                        品牌合作内容不可设为仅自己可见
+                                                    </p>
+                                                )}
                                             </div>
-                                        </label>
-                                        {disclosureIncomplete && (
-                                            <p className="text-xs text-amber-400 flex items-center gap-1 mt-1">
-                                                <Info className="w-3 h-3" />
-                                                请选择至少一种披露类型
-                                            </p>
                                         )}
-                                        {brandedPrivacyConflict && (
-                                            <p className="text-xs text-red-400 flex items-center gap-1 mt-1">
-                                                <AlertCircle className="w-3 h-3" />
-                                                品牌合作内容不能设为仅自己可见
-                                            </p>
-                                        )}
+                                    </div>
+                                </div>
+
+                                {/* ===== 1.7 发布上限 + 1.8 时长校验警告 ===== */}
+                                {overDuration && (
+                                    <div className="flex items-start gap-2.5 px-3.5 py-2.5 bg-red-500/[0.08] border border-red-500/15 rounded-xl">
+                                        <div className="w-5 h-5 rounded-md bg-red-500/15 border border-red-500/20 flex items-center justify-center shrink-0 mt-0.5">
+                                            <AlertCircle className="w-3 h-3 text-red-400" />
+                                        </div>
+                                        <p className="text-xs text-red-400 leading-relaxed">
+                                            视频时长超过该创作者允许的最大时长 ({maxDurationSec}秒)，请缩短视频后再发布
+                                        </p>
                                     </div>
                                 )}
-                            </div>
-
-                            {/* ===== AI Generated Content Toggle (默认 ON) ===== */}
-                            <div className="mt-4 flex items-center justify-between p-4 bg-black/30 rounded-xl border border-white/10">
-                                <div className="flex items-center gap-3">
-                                    <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-purple-500/20 to-pink-500/20 flex items-center justify-center">
-                                        <Sparkles className="w-5 h-5 text-purple-400" />
+                                {creatorInfoError && (
+                                    <div className="flex items-start gap-2.5 px-3.5 py-2.5 bg-amber-500/[0.08] border border-amber-500/15 rounded-xl">
+                                        <div className="w-5 h-5 rounded-md bg-amber-500/15 border border-amber-500/20 flex items-center justify-center shrink-0 mt-0.5">
+                                            <AlertCircle className="w-3 h-3 text-amber-400" />
+                                        </div>
+                                        <p className="text-xs text-amber-400 leading-relaxed">
+                                            无法获取创作者信息：{creatorInfoError}
+                                        </p>
                                     </div>
-                                    <div>
-                                        <p className="text-sm font-medium text-white">AI 生成内容</p>
-                                        <p className="text-xs text-gray-500">标记视频为 AI 生成，符合 TikTok 政策</p>
-                                    </div>
-                                </div>
-                                <button
-                                    type="button"
-                                    onClick={() => setIsAiGenerated(!isAiGenerated)}
-                                    className={`relative w-12 h-6 rounded-full transition-colors duration-300 ${isAiGenerated ? 'bg-purple-500' : 'bg-white/10'}`}
-                                >
-                                    <span className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow-md transition-all duration-300 ${isAiGenerated ? 'left-7' : 'left-1'}`} />
-                                </button>
-                            </div>
+                                )}
 
-                            {/* ===== 1.7 发布上限 + 1.8 时长校验警告 ===== */}
-                            {overDuration && (
-                                <div className="mt-3 px-3 py-2 bg-red-500/10 border border-red-500/20 rounded-lg">
-                                    <p className="text-xs text-red-400 flex items-center gap-1">
-                                        <AlertCircle className="w-3 h-3 flex-shrink-0" />
-                                        视频时长超过该创作者允许的最大时长 ({maxDurationSec}秒)，请缩短视频后再发布
+                                {/* ===== 法律声明 (动态文案) ===== */}
+                                <div className="flex items-start gap-3 px-4 py-3 bg-gradient-to-r from-cyan-500/[0.04] via-transparent to-purple-500/[0.04] rounded-xl border border-white/[0.06] relative overflow-hidden">
+                                    {/* Gradient left accent */}
+                                    <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-gradient-to-b from-cyan-400/60 via-cyan-500/40 to-purple-500/30 rounded-l-xl" />
+                                    {/* Icon */}
+                                    <div className="w-6 h-6 rounded-md bg-gradient-to-br from-cyan-400/15 via-cyan-500/10 to-transparent border border-cyan-400/15 flex items-center justify-center shrink-0 mt-0.5" style={{boxShadow: '0 0 8px rgba(34,211,238,0.1), inset 0 1px 1px rgba(255,255,255,0.08)'}}>
+                                        <ShieldCheck className="w-3 h-3 text-cyan-400/70" />
+                                    </div>
+                                    {/* Text */}
+                                    <p className="text-[11px] text-gray-500 leading-relaxed">
+                                        发布即表示您同意 TikTok{' '}
+                                        {brandedContent ? (
+                                            <>
+                                                <a href="https://www.tiktok.com/legal/page/global/bc-policy/en" target="_blank" rel="noopener noreferrer" className="text-cyan-400/80 hover:text-cyan-300 transition-colors inline-flex items-center gap-0.5 group underline decoration-cyan-400/20 underline-offset-2 hover:decoration-cyan-400/50">
+                                                    Branded Content Policy <ExternalLink className="w-2.5 h-2.5 opacity-40 group-hover:opacity-80" />
+                                                </a>
+                                                {' '}&{' '}
+                                            </>
+                                        ) : null}
+                                        <a href="https://www.tiktok.com/legal/page/global/music-usage-confirmation/en" target="_blank" rel="noopener noreferrer" className="text-cyan-400/80 hover:text-cyan-300 transition-colors inline-flex items-center gap-0.5 group underline decoration-cyan-400/20 underline-offset-2 hover:decoration-cyan-400/50">
+                                            Music Usage Confirmation <ExternalLink className="w-2.5 h-2.5 opacity-40 group-hover:opacity-80" />
+                                        </a>
                                     </p>
                                 </div>
-                            )}
-                            {creatorInfoError && (
-                                <div className="mt-3 px-3 py-2 bg-amber-500/10 border border-amber-500/20 rounded-lg">
-                                    <p className="text-xs text-amber-400 flex items-center gap-1">
-                                        <AlertCircle className="w-3 h-3 flex-shrink-0" />
-                                        无法获取创作者信息：{creatorInfoError}
-                                    </p>
-                                </div>
-                            )}
-
-                            {/* ===== 用户同意声明 ===== */}
-                            <div className="mt-4 px-3 py-2 bg-black/20 rounded-lg border border-white/5">
-                                <p className="text-[11px] text-gray-500 leading-relaxed">
-                                    By posting, you agree to TikTok&apos;s{' '}
-                                    {brandedContent && (
-                                        <>
-                                            <a
-                                                href="https://www.tiktok.com/legal/page/global/bc-policy/en"
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                className="text-cyan-400 hover:text-cyan-300 underline underline-offset-2 inline-flex items-center gap-0.5"
-                                            >
-                                                Branded Content Policy
-                                                <ExternalLink className="w-2.5 h-2.5" />
-                                            </a>
-                                            {' and '}
-                                        </>
-                                    )}
-                                    <a
-                                        href="https://www.tiktok.com/legal/page/global/music-usage-confirmation/en"
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="text-cyan-400 hover:text-cyan-300 underline underline-offset-2 inline-flex items-center gap-0.5"
-                                    >
-                                        Music Usage Confirmation
-                                        <ExternalLink className="w-2.5 h-2.5" />
-                                    </a>
-                                </p>
                             </div>
                         </div >
                     </section >

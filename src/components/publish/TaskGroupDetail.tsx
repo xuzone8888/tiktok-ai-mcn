@@ -136,7 +136,7 @@ export function TaskGroupDetail({
         }
     }
 
-    const canCancel = task && ['pending', 'scheduled', 'processing'].includes(task.status) && task.pending_count > 0
+    const canCancel = task && ['pending', 'scheduled', 'running'].includes(task.status) && task.pending_count > 0
     const hasPublishedVideos = task && task.published_count > 0
 
     // 同步TikTok视频统计数据
@@ -289,7 +289,6 @@ export function TaskGroupDetail({
                                         key={item.id}
                                         item={item}
                                         onDelete={() => handleDeleteClick(item.id, item.status === 'published')}
-                                        onViewDetail={() => { }} // Could be a modal for video preview
                                     />
                                 ))}
                             </div>

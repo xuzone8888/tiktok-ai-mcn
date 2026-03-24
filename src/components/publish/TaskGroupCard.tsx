@@ -9,7 +9,7 @@ import { cn } from '@/lib/utils'
 export interface TaskGroup {
     id: string
     name: string
-    status: 'pending' | 'processing' | 'completed' | 'failed' | 'scheduled' | 'partial_failed' | 'cancelled'
+    status: 'pending' | 'running' | 'completed' | 'failed' | 'scheduled' | 'partial_failed' | 'cancelled'
     total_items: number
     published_count: number
     pending_count: number
@@ -31,7 +31,7 @@ interface TaskGroupCardProps {
 const statusConfig: Record<string, { label: string; className: string; icon: any }> = {
     pending: { label: '待处理', className: 'text-zinc-400 border-zinc-500/30 bg-zinc-500/10', icon: Clock },
     scheduled: { label: '定时中', className: 'text-blue-400 border-blue-500/30 bg-blue-500/10', icon: Clock },
-    processing: { label: '执行中', className: 'text-amber-400 border-amber-500/30 bg-amber-500/10', icon: Clock },
+    running: { label: '执行中', className: 'text-amber-400 border-amber-500/30 bg-amber-500/10', icon: Clock },
     completed: { label: '已完成', className: 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10', icon: CheckCircle },
     failed: { label: '失败', className: 'text-rose-400 border-rose-500/30 bg-rose-500/10', icon: XCircle },
     partial_failed: { label: '部分失败', className: 'text-orange-400 border-orange-500/30 bg-orange-500/10', icon: AlertTriangle },
@@ -47,7 +47,9 @@ export function TaskGroupCard({ task, onViewDetail, onCancelPending, onDelete }:
         const date = new Date(dateStr)
         const now = new Date()
         const isToday = date.toDateString() === now.toDateString()
-        const isTomorrow = new Date(now.setDate(now.getDate() + 1)).toDateString() === date.toDateString()
+        const tomorrow = new Date(now)
+        tomorrow.setDate(tomorrow.getDate() + 1)
+        const isTomorrow = tomorrow.toDateString() === date.toDateString()
 
         const timeStr = date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
 
@@ -71,7 +73,7 @@ export function TaskGroupCard({ task, onViewDetail, onCancelPending, onDelete }:
         }
     }
 
-    const canCancel = ['pending', 'scheduled', 'processing'].includes(task.status) && task.pending_count > 0
+    const canCancel = ['pending', 'scheduled', 'running'].includes(task.status) && task.pending_count > 0
 
     // Calculate progress for subtle background indicator if needed, or visual bar
     const progress = task.total_items > 0
@@ -89,9 +91,7 @@ export function TaskGroupCard({ task, onViewDetail, onCancelPending, onDelete }:
                     <h3 className="font-medium text-zinc-100 text-base flex items-center gap-2 min-w-0">
                         <span className="truncate" title={task.name}>{task.name || '未命名任务组'}</span>
                     </h3>
-                    <div className="text-xs text-zinc-500 font-mono truncate">
-                        ID: {task.id.slice(0, 8)}...
-                    </div>
+
                 </div>
                 <Badge variant="outline" className={cn('text-xs px-2 py-0.5 h-6 font-normal', config.className)}>
                     <StatusIcon className="w-3 h-3 mr-1.5" />
@@ -100,17 +100,25 @@ export function TaskGroupCard({ task, onViewDetail, onCancelPending, onDelete }:
             </div>
 
             {/* Metrics Grid */}
-            <div className="grid grid-cols-2 gap-4 mb-4">
+            <div className="grid grid-cols-3 gap-3 mb-4">
                 <div className="flex flex-col">
                     <span className="text-2xl font-bold text-white tracking-tight">{task.published_count}</span>
                     <span className="text-xs text-zinc-500">发布成功</span>
                 </div>
-                <div className="flex flex-col pl-4 border-l border-white/5">
+                <div className="flex flex-col pl-3 border-l border-white/5">
                     <span className="text-2xl font-bold text-white tracking-tight">
                         {task.status === 'completed' || task.status === 'partial_failed' ? (task.total_views || '-') : '-'}
                     </span>
                     <span className="text-xs text-zinc-500 flex items-center gap-1">
-                        总播放量 <Play className="w-2.5 h-2.5" />
+                        播放量 <Play className="w-2.5 h-2.5" />
+                    </span>
+                </div>
+                <div className="flex flex-col pl-3 border-l border-white/5">
+                    <span className="text-2xl font-bold text-white tracking-tight">
+                        {task.status === 'completed' || task.status === 'partial_failed' ? (task.total_likes || '-') : '-'}
+                    </span>
+                    <span className="text-xs text-zinc-500 flex items-center gap-1">
+                        点赞数 <Heart className="w-2.5 h-2.5" />
                     </span>
                 </div>
             </div>
@@ -165,7 +173,7 @@ export function TaskGroupCard({ task, onViewDetail, onCancelPending, onDelete }:
             {progress > 0 && progress < 100 && (
                 <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-zinc-800">
                     <div
-                        className="h-full bg-blue-500/50"
+                        className="h-full bg-gradient-to-r from-[#CCFF00]/60 to-emerald-500/60 rounded-full"
                         style={{ width: `${progress}%` }}
                     />
                 </div>
