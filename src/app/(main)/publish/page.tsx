@@ -1178,7 +1178,7 @@ export default function PublishPage() {
                         <span className="text-white drop-shadow-lg">TikTok 视频发布</span>
                     </h1>
                     <p className="mt-1 text-white/60 ml-[19px]">
-                        一键发布至多平台，智能调度分发任务
+                        视频发布至 TikTok，支持预约发布与批量调度
                     </p>
                 </div>
 
@@ -2417,6 +2417,37 @@ export default function PublishPage() {
                                                 <Calendar className="w-3.5 h-3.5 text-pink-400" />
                                                 <span className="text-pink-400">{scheduledDate} {scheduledTime}</span>
                                             </>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Publish Settings Summary */}
+                                <div className="hidden lg:flex flex-col justify-center px-5 h-full">
+                                    <span className="text-[10px] text-gray-500 uppercase tracking-wider font-bold mb-1">发布设置</span>
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                        {privacyLevel && (
+                                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-white/5 text-[10px] text-gray-400">
+                                                <Globe2 className="w-2.5 h-2.5" />
+                                                {privacyLevel === 'PUBLIC_TO_EVERYONE' ? '公开' : privacyLevel === 'MUTUAL_FOLLOW_FRIENDS' ? '好友' : privacyLevel === 'FOLLOWER_OF_CREATOR' ? '粉丝' : '仅自己'}
+                                            </span>
+                                        )}
+                                        {allowComment && (
+                                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-cyan-500/10 text-[10px] text-cyan-400">
+                                                <MessageSquare className="w-2.5 h-2.5" />评论
+                                            </span>
+                                        )}
+                                        {allowDuet && (
+                                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-cyan-500/10 text-[10px] text-cyan-400">
+                                                <Repeat2 className="w-2.5 h-2.5" />合拍
+                                            </span>
+                                        )}
+                                        {allowStitch && (
+                                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-cyan-500/10 text-[10px] text-cyan-400">
+                                                <Scissors className="w-2.5 h-2.5" />引用
+                                            </span>
+                                        )}
+                                        {!privacyLevel && !allowComment && !allowDuet && !allowStitch && (
+                                            <span className="text-[10px] text-gray-500">默认</span>
                                         )}
                                     </div>
                                 </div>
