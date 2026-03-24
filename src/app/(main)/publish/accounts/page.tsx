@@ -551,7 +551,7 @@ export default function TikTokAccountsPage() {
                     <div>
                         <p className="text-[13px] font-semibold text-white/70">关于 TikTok 授权</p>
                         <p className="text-[12px] text-white/35 mt-0.5 leading-relaxed">
-                            TikTok 授权有效期为 90 天。建议定期点击「刷新授权」以延长有效期。如果授权过期超过 90 天，需要重新绑定账号。
+                            TikTok 授权有效期约为 1 年（365 天）。如果授权过期，需要重新绑定账号。点击「刷新授权」可同步最新的账号数据。
                         </p>
                     </div>
                 </div>
@@ -642,7 +642,7 @@ export default function TikTokAccountsPage() {
                     {/* Footer */}
                     <div className="px-6 pb-5 pt-1">
                         <p className="text-[11px] text-white/25 text-center leading-relaxed">
-                            绑定成功后，授权有效期为 90 天，可随时刷新或解绑
+                            绑定成功后，授权有效期约为 1 年，可随时刷新或解绑
                         </p>
                     </div>
                 </DialogContent>
