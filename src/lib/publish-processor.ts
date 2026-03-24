@@ -22,6 +22,32 @@ const MAX_ITEMS_PER_RUN = 50   // 每次最多处理任务项数
 const PUBLISH_TIMEOUT_MS = 300000  // 单个发布超时 5 分钟（TikTok 需从 URL 下载视频）
 const POLL_INTERVAL_MS = 8000  // 轮询间隔 8 秒（避免触发限频）
 
+// OSS 加速域名（已在 TikTok URL Properties 白名单中验证通过）
+const OSS_ACCELERATE_HOST = 'tokfactory-videos.oss-accelerate.aliyuncs.com'
+
+/**
+ * 将视频 URL 转为 OSS 加速域名
+ * TikTok 海外服务器通过加速域名下载视频更快，避免超时
+ */
+function toAcceleratedUrl(url: string): string {
+    try {
+        const u = new URL(url)
+        // 匹配 OSS 原始域名
+        if (u.hostname === 'tokfactory-videos.oss-cn-beijing.aliyuncs.com') {
+            u.hostname = OSS_ACCELERATE_HOST
+            return u.toString()
+        }
+        // 匹配 media 自定义域名（通过 ECS 反代到 OSS）
+        if (u.hostname === 'media.toryxai.com' || u.hostname === 'media.tokfactoryai.com') {
+            u.hostname = OSS_ACCELERATE_HOST
+            return u.toString()
+        }
+        return url
+    } catch {
+        return url
+    }
+}
+
 // ============================================================================
 // 类型定义
 // ============================================================================
@@ -311,10 +337,16 @@ async function publishItem(
 
         console.log('[Publisher] Publishing:', item.id, item.video_url.substring(0, 60))
 
+        // 将视频 URL 转为 OSS 加速域名（海外 TikTok 服务器下载更快）
+        const acceleratedUrl = toAcceleratedUrl(item.video_url)
+        if (acceleratedUrl !== item.video_url) {
+            console.log('[Publisher] Using accelerated URL:', acceleratedUrl.substring(0, 80))
+        }
+
         // 调用 TikTok 发布 API
         const publishId = await initVideoPublishFromUrl(
             account.access_token,
-            item.video_url,
+            acceleratedUrl,
             {
                 title: item.title,
                 privacyLevel: item.publish_tasks?.privacy_level,
