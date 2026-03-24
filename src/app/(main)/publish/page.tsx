@@ -2165,15 +2165,19 @@ export default function PublishPage() {
                                             type="button"
                                             onClick={() => {
                                                 setPublishMode(id)
-                                                // 切换到预约发布时，如果日期为空，自动填入当前时间最近的整点
+                                                // 切换到预约发布时，如果日期为空，自动填入当前时间最近的整点或半点
                                                 if (id === 'scheduled' && !scheduledDate) {
                                                     const now = new Date()
-                                                    // 对齐到最近的整点
+                                                    // 对齐到最近的 30 分钟整点
                                                     const mins = now.getMinutes()
-                                                    if (mins >= 30) {
+                                                    if (mins < 15) {
+                                                        now.setMinutes(0)
+                                                    } else if (mins < 45) {
+                                                        now.setMinutes(30)
+                                                    } else {
                                                         now.setHours(now.getHours() + 1)
+                                                        now.setMinutes(0)
                                                     }
-                                                    now.setMinutes(0)
                                                     // 格式化日期和时间
                                                     const y = now.getFullYear()
                                                     const m = String(now.getMonth() + 1).padStart(2, '0')
@@ -2211,39 +2215,81 @@ export default function PublishPage() {
                                         </div>
                                         <div className="relative">
                                             <label className="block text-sm text-gray-400 mb-1">时间</label>
-                                            <div className="relative">
-                                                <button
-                                                    type="button"
-                                                    onClick={() => {
-                                                        const el = document.getElementById('time-dropdown')
-                                                        if (el) el.classList.toggle('hidden')
-                                                    }}
-                                                    className="flex items-center justify-between gap-2 px-4 py-2 bg-[#1a1a2e] border border-white/10 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/50 cursor-pointer min-w-[120px] w-full"
-                                                >
-                                                    <span>{scheduledTime || '选择时间'}</span>
-                                                    <ChevronDown className="w-4 h-4 text-gray-400" />
-                                                </button>
-                                                <div
-                                                    id="time-dropdown"
-                                                    className="hidden absolute top-full left-0 mt-1 w-full bg-[#1a1a2e] border border-white/10 rounded-lg max-h-[240px] overflow-y-auto z-50 shadow-xl shadow-black/40"
-                                                >
-                                                    {Array.from({ length: 24 }, (_, i) => {
-                                                        const h = String(i).padStart(2, '0')
-                                                        const val = `${h}:00`
-                                                        return (
-                                                            <button
-                                                                key={val}
-                                                                type="button"
-                                                                onClick={() => {
-                                                                    setScheduledTime(val)
-                                                                    document.getElementById('time-dropdown')?.classList.add('hidden')
-                                                                }}
-                                                                className={`w-full text-left px-4 py-2 text-sm hover:bg-white/10 transition-colors ${scheduledTime === val ? 'bg-cyan-500/20 text-cyan-300' : 'text-white'}`}
-                                                            >
-                                                                {val}
-                                                            </button>
-                                                        )
-                                                    })}
+                                            <div className="flex items-center gap-1">
+                                                {/* Hour dropdown */}
+                                                <div className="relative">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            document.getElementById('minute-dropdown')?.classList.add('hidden')
+                                                            document.getElementById('hour-dropdown')?.classList.toggle('hidden')
+                                                        }}
+                                                        className="flex items-center justify-between gap-1 px-3 py-2 bg-[#1a1a2e] border border-white/10 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/50 cursor-pointer min-w-[70px]"
+                                                    >
+                                                        <span>{scheduledTime?.split(':')[0] || '00'}</span>
+                                                        <ChevronDown className="w-3 h-3 text-gray-400" />
+                                                    </button>
+                                                    <div
+                                                        id="hour-dropdown"
+                                                        className="hidden absolute top-full left-0 mt-1 w-full bg-[#1a1a2e] border border-white/10 rounded-lg max-h-[200px] overflow-y-auto z-50 shadow-xl shadow-black/40"
+                                                    >
+                                                        {Array.from({ length: 24 }, (_, i) => {
+                                                            const h = String(i).padStart(2, '0')
+                                                            const currentH = scheduledTime?.split(':')[0] || '00'
+                                                            return (
+                                                                <button
+                                                                    key={h}
+                                                                    type="button"
+                                                                    onClick={() => {
+                                                                        const currentM = scheduledTime?.split(':')[1] || '00'
+                                                                        setScheduledTime(`${h}:${currentM}`)
+                                                                        document.getElementById('hour-dropdown')?.classList.add('hidden')
+                                                                    }}
+                                                                    className={`w-full text-left px-3 py-1.5 text-sm hover:bg-white/10 transition-colors ${currentH === h ? 'bg-cyan-500/20 text-cyan-300' : 'text-white'}`}
+                                                                >
+                                                                    {h}
+                                                                </button>
+                                                            )
+                                                        })}
+                                                    </div>
+                                                </div>
+                                                <span className="text-white/50 text-lg font-bold">:</span>
+                                                {/* Minute dropdown */}
+                                                <div className="relative">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            document.getElementById('hour-dropdown')?.classList.add('hidden')
+                                                            document.getElementById('minute-dropdown')?.classList.toggle('hidden')
+                                                        }}
+                                                        className="flex items-center justify-between gap-1 px-3 py-2 bg-[#1a1a2e] border border-white/10 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/50 cursor-pointer min-w-[70px]"
+                                                    >
+                                                        <span>{scheduledTime?.split(':')[1] || '00'}</span>
+                                                        <ChevronDown className="w-3 h-3 text-gray-400" />
+                                                    </button>
+                                                    <div
+                                                        id="minute-dropdown"
+                                                        className="hidden absolute top-full left-0 mt-1 w-full bg-[#1a1a2e] border border-white/10 rounded-lg max-h-[200px] overflow-y-auto z-50 shadow-xl shadow-black/40"
+                                                    >
+                                                        {Array.from({ length: 60 }, (_, i) => {
+                                                            const m = String(i).padStart(2, '0')
+                                                            const currentM = scheduledTime?.split(':')[1] || '00'
+                                                            return (
+                                                                <button
+                                                                    key={m}
+                                                                    type="button"
+                                                                    onClick={() => {
+                                                                        const currentH = scheduledTime?.split(':')[0] || '00'
+                                                                        setScheduledTime(`${currentH}:${m}`)
+                                                                        document.getElementById('minute-dropdown')?.classList.add('hidden')
+                                                                    }}
+                                                                    className={`w-full text-left px-3 py-1.5 text-sm hover:bg-white/10 transition-colors ${currentM === m ? 'bg-cyan-500/20 text-cyan-300' : 'text-white'}`}
+                                                                >
+                                                                    {m}
+                                                                </button>
+                                                            )
+                                                        })}
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>
