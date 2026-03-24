@@ -19,8 +19,8 @@ import { initVideoPublishFromUrl, waitForPublishComplete } from '@/lib/tiktok/co
 
 const MAX_CONCURRENT = 20      // 最大并发数
 const MAX_ITEMS_PER_RUN = 50   // 每次最多处理任务项数
-const PUBLISH_TIMEOUT_MS = 120000  // 单个发布超时 2 分钟
-const POLL_INTERVAL_MS = 5000  // 轮询间隔 5 秒
+const PUBLISH_TIMEOUT_MS = 300000  // 单个发布超时 5 分钟（TikTok 需从 URL 下载视频）
+const POLL_INTERVAL_MS = 8000  // 轮询间隔 8 秒（避免触发限频）
 
 // ============================================================================
 // 类型定义
