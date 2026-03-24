@@ -17,14 +17,18 @@ export function ForgeStatusFloat() {
   const errorMessage = useCharacterStudioStore((s) => s.errorMessage);
   const sora2VideoUrl = useCharacterStudioStore((s) => s.sora2VideoUrl);
   const heroImageUrl = useCharacterStudioStore((s) => s.heroImageUrl);
+  const savedCharacterId = useCharacterStudioStore((s) => s.savedCharacterId);
 
   const pathname = usePathname();
   const router = useRouter();
 
   // 只在不在角色创建页面时、且正在生成/已完成未保存时显示
+  // 保存成功后（savedCharacterId 有值）自动隐藏
   const isOnCreatePage = pathname === "/character/create";
-  const isActive = generationStatus === "polling" || generationStatus === "failed" || 
-    (generationStatus === "completed" && (heroImageUrl || sora2VideoUrl));
+  const isActive = !savedCharacterId && (
+    generationStatus === "polling" || generationStatus === "failed" || 
+    (generationStatus === "completed" && (heroImageUrl || sora2VideoUrl))
+  );
 
   if (isOnCreatePage || !isActive) return null;
 
