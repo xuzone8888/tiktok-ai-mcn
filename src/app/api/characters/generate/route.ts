@@ -1,22 +1,19 @@
 /**
- * 角色图片生成 API — V4 后台孵化版
+ * 角色图片生成 API — V5 Gemini 同步版
  *
  * POST /api/characters/generate
- *   type="hero"(默认): 提交 Hero Shot（扣 20 积分），返回 heroTaskId + refPrompt
- *   type="reference":   提交多角度参考图（不扣积分，用 heroImageUrl 做参考），返回 referenceTaskId
+ *   type="hero"(默认): 生成 Hero Shot（扣 20 积分）
+ *     → 使用 Gemini 4K 同步生成，结果直接上传 OSS，返回永久 imageUrl
+ *     → 不再使用 nanoBanana-pro（openpt.wuyinkeji.com 临时 CDN 已废弃）
+ *   type="reference":  生成多角度参考图（不扣积分，用 heroImageUrl 做参考）
+ *     → 使用 Gemini 2K，结果上传 OSS
  *
- * GET  /api/characters/generate?taskId=xxx — 查询任意任务状态（通用）
- *
- * V4 变更:
- * - Hero 阶段一次扣 20 积分
- * - 多角度由前端 Hero 完成后自动提交（传入 heroImageUrl 做参考）
- * - 中文 prompt 自动翻译为英文
- * - 退款规则: Hero 失败退 20
+ * GET /api/characters/generate?taskId=xxx
+ *   → 仅保留做历史 nanoBanana 任务兼容查询，新流程不再使用
  */
 
 import { NextResponse } from "next/server";
 import {
-  submitNanoBanana,
   queryNanoBananaResult,
 } from "@/lib/suchuang-api";
 import { submitGeminiImage } from "@/lib/gemini-image-api";
@@ -24,7 +21,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { callDoubaoAPI } from "@/lib/doubao-api-client";
 import type { GenerateCharacterRequest } from "@/types/character";
 
-export const maxDuration = 60;
+export const maxDuration = 120; // Gemini 4K 最长约 25s，留足余量
 export const dynamic = "force-dynamic";
 
 // ============================================================================
@@ -302,7 +299,7 @@ export async function POST(request: Request) {
     const englishPrompt = await translateIfChinese(prompt);
     const heroPrompt = `${englishPrompt}.${HERO_SHOT_TEMPLATE}`;
 
-    console.log("[Character Generate] Submitting hero task:", {
+    console.log("[Character Generate] Generating Hero Shot via Gemini 4K:", {
       userId,
       cost: HERO_GENERATE_CREDITS,
       before: currentCredits,
@@ -312,15 +309,17 @@ export async function POST(request: Request) {
       hasSourceImage: !!sourceImageUrl,
     });
 
-    const heroResult = await submitNanoBanana({
-      model: "nano-banana-pro",
+    // V5: 使用 Gemini 4K（高瑞）同步生成 Hero Shot
+    // - 结果由 submitGeminiImage 自动上传 OSS → 返回永久 URL
+    // - 不再使用 nanoBanana-pro（openpt.wuyinkeji.com 临时 CDN）
+    const heroResult = await submitGeminiImage({
+      model: "gemini-4k",
       prompt: heroPrompt,
-      img_url: sourceImageUrl || undefined,
+      sourceImageUrls: sourceImageUrl ? [sourceImageUrl] : undefined,
       aspectRatio: "3:4",
-      resolution: "4k",
     });
 
-    if (!heroResult.success || !heroResult.taskId) {
+    if (!heroResult.success || !heroResult.imageUrl) {
       // Hero 失败 → 全额退 20
       console.error("[Character Generate] Hero failed, refunding", HERO_GENERATE_CREDITS);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -338,12 +337,14 @@ export async function POST(request: Request) {
       );
     }
 
-    console.log("[Character Generate] Hero task submitted:", heroResult.taskId);
+    console.log("[Character Generate] Hero Shot ready (OSS):", heroResult.imageUrl.substring(0, 80));
 
+    // 同步返回图片 URL（永久 OSS URL）+ 英文 prompt（给前端触发多角度生成）
+    // heroTaskId 不再存在，前端收到 heroImageUrl 直接展示，无需轮询
     return NextResponse.json({
       success: true,
-      heroTaskId: heroResult.taskId,
-      refPrompt: englishPrompt, // 传回翻译后的英文 prompt 给前端
+      heroImageUrl: heroResult.imageUrl,  // 永久 OSS URL
+      refPrompt: englishPrompt,
     });
   } catch (error) {
     console.error("[Character Generate] Unexpected error:", error);
@@ -379,6 +380,8 @@ export async function GET(request: Request) {
       );
     }
 
+    // 注意：新流程（V5）Hero Shot 已改为同步 Gemini 生成，不再经过此 GET 轮询
+    // 此 GET handler 仅保留用于查询历史 nanoBanana 任务（兼容旧前端）
     return NextResponse.json({
       success: true,
       task: result.task,

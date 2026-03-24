@@ -296,7 +296,7 @@ export function CreationWorkspace() {
       }
 
       if (mode === "veo") {
-        // 写真角色：走现有 VEO 流程
+        // 写真角色：Gemini 4K 同步生成 Hero Shot（V5）
         const response = await fetch("/api/characters/generate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -312,8 +312,14 @@ export function CreationWorkspace() {
           store.setGenerationFailed(data.error || "生成失败");
           return;
         }
-        if (data.refPrompt) store.setRefPrompt(data.refPrompt);
-        store.setTaskIds(data.heroTaskId || null, null);
+        // V5: 直接拿到永久图片 URL，无需 taskId 轮询
+        if (data.heroImageUrl) {
+          if (data.refPrompt) store.setRefPrompt(data.refPrompt);
+          store.setHeroResult(data.heroImageUrl);
+          // hero 完成后，casting-preview 里的 autoSubmitReference 会被 heroReady 触发
+        } else {
+          store.setGenerationFailed("Hero Shot 生成失败，未返回图片");
+        }
       } else {
         // 影视角色：调 Sora2 生成角色视频
         const response = await fetch("/api/characters/generate-sora-character-video", {

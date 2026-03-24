@@ -9,7 +9,7 @@
 
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import {
   useCharacterStudioStore,
   useCharacterGenerationStatus,
@@ -234,6 +234,25 @@ export function CastingPreview() {
       console.error("[AutoRef] 静默失败:", err);
     }
   };
+
+  // ====== V5: heroReady 后自动触发多角度生成（Gemini 同步流程）======
+  // 注意：必须放在 autoSubmitReference 声明之后
+  const hasAutoSubmittedRef = useRef(false);
+  useEffect(() => {
+    if (
+      store.heroReady &&
+      store.heroImageUrl &&
+      store.forgeMode !== "sora2" &&
+      !store.referenceReady &&
+      !store.referenceTaskId &&
+      !hasAutoSubmittedRef.current
+    ) {
+      hasAutoSubmittedRef.current = true;
+      autoSubmitReference(store.heroImageUrl, store.refPrompt || store.prompt);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [store.heroReady, store.heroImageUrl, store.forgeMode, store.referenceReady, store.referenceTaskId]);
+  // ====================================
 
   // ====== 多角度轮询 ======
   useEffect(() => {
