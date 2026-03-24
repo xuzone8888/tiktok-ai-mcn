@@ -1277,7 +1277,7 @@ export default function PublishPage() {
                         <div className="bg-black/40 p-1.5 rounded-xl inline-flex gap-1 mb-4">
                             {[
                                 { id: 'upload' as VideoSourceType, label: '本地上传', Icon: Upload },
-                                { id: 'asset' as VideoSourceType, label: '从成品库选择', Icon: FileVideo }
+                                { id: 'asset' as VideoSourceType, label: '从视频制作区选择', Icon: FileVideo }
                             ].map(({ id, label, Icon }) => {
                                 const isActive = videoSource === id
                                 return (
@@ -1448,7 +1448,7 @@ export default function PublishPage() {
                                         <p className="text-xs truncate">{video.name}</p>
                                         <div className="flex items-center gap-1 mt-1">
                                             <span className={`text-[10px] px-1.5 py-0.5 rounded ${video.type === 'asset' ? 'bg-cyan-500/30 text-cyan-300' : 'bg-green-500/30 text-green-300'}`}>
-                                                {video.type === 'asset' ? '成品库' : '本地'}
+                                                {video.type === 'asset' ? '制作区' : '本地'}
                                             </span>
                                         </div>
                                     </div>
@@ -1494,7 +1494,7 @@ export default function PublishPage() {
                                 {videoSource === 'asset' ? (
                                     <>
                                         <FileVideo className="w-8 h-8" />
-                                        <span className="text-xs text-center px-2">从成品库选择</span>
+                                        <span className="text-xs text-center px-2">从视频制作区选择</span>
                                     </>
                                 ) : (
                                     <>
@@ -2522,22 +2522,27 @@ export default function PublishPage() {
                 )
             }
 
-            {/* Asset Selector Modal (成品库选择器) */}
+            {/* Asset Selector Modal (视频制作区选择器) */}
             {
                 showAssetModal && (
                     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
                         <div className="bg-gray-900 rounded-2xl border border-white/10 w-full max-w-4xl max-h-[80vh] overflow-hidden shadow-2xl">
-                            <div className="flex items-center justify-between p-4 border-b border-white/10">
-                                <div>
-                                    <h3 className="text-lg font-semibold">从成品库选择视频</h3>
-                                    <p className="text-xs text-gray-400 mt-1">💡 单击多选，双击快速选择单个视频</p>
+                            <div className="flex items-center justify-between p-5 border-b border-white/[0.06] bg-gradient-to-r from-gray-900 via-gray-900 to-gray-800">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500/20 to-pink-500/20 flex items-center justify-center">
+                                        <FileVideo className="w-5 h-5 text-cyan-400" />
+                                    </div>
+                                    <div>
+                                        <h3 className="text-lg font-bold text-white">从视频制作区选择</h3>
+                                        <p className="text-xs text-gray-500 mt-0.5">单击多选 · 双击快速添加</p>
+                                    </div>
                                 </div>
                                 <button
                                     onClick={() => {
                                         setShowAssetModal(false)
                                         setSelectedAssetIds([])
                                     }}
-                                    className="p-2 rounded-lg hover:bg-white/10 transition-colors"
+                                    className="p-2 rounded-lg hover:bg-white/10 transition-colors text-gray-400 hover:text-white"
                                 >
                                     <X className="w-5 h-5" />
                                 </button>
@@ -2548,10 +2553,12 @@ export default function PublishPage() {
                                         <Loader2 className="w-8 h-8 animate-spin text-cyan-400" />
                                     </div>
                                 ) : assets.length === 0 ? (
-                                    <div className="text-center py-12">
-                                        <Video className="w-16 h-16 mx-auto mb-4 text-gray-600" />
-                                        <p className="text-gray-400 mb-2">成品库暂无视频</p>
-                                        <p className="text-sm text-gray-500">请先在快速生成或批量工坊生成视频</p>
+                                    <div className="text-center py-16">
+                                        <div className="w-20 h-20 mx-auto mb-5 rounded-2xl bg-white/[0.03] border border-white/[0.06] flex items-center justify-center">
+                                            <Video className="w-10 h-10 text-gray-600" />
+                                        </div>
+                                        <p className="text-gray-300 font-medium mb-1">暂无可选视频</p>
+                                        <p className="text-sm text-gray-500">前往「素材生成视频」创建你的第一条视频</p>
                                         <button
                                             onClick={() => {
                                                 setShowAssetModal(false)
@@ -2689,13 +2696,17 @@ export default function PublishPage() {
                             )}
 
                             {/* Footer */}
-                            <div className="flex items-center justify-between p-4 border-t border-white/10 bg-white/5">
-                                <p className="text-sm text-gray-400">
-                                    已选择 <span className="text-cyan-400 font-semibold">{selectedAssetIds.length}</span> 个视频
+                            <div className="flex items-center justify-between p-4 border-t border-white/[0.06] bg-gray-900/80 backdrop-blur-xl">
+                                <div className="flex items-center gap-3">
+                                    <div className="flex items-center gap-1.5">
+                                        <span className="text-sm text-gray-500">已选</span>
+                                        <span className="text-lg font-bold text-cyan-400 font-mono">{selectedAssetIds.length}</span>
+                                        <span className="text-sm text-gray-500">个</span>
+                                    </div>
                                     {selectedVideos.filter(v => v.type === 'asset').length > 0 && (
-                                        <span className="text-gray-500 ml-2">（已添加 {selectedVideos.filter(v => v.type === 'asset').length} 个）</span>
+                                        <span className="text-xs text-gray-600 px-2 py-0.5 rounded-full bg-white/5">已添加 {selectedVideos.filter(v => v.type === 'asset').length} 个</span>
                                     )}
-                                </p>
+                                </div>
                                 <div className="flex gap-2">
                                     <button
                                         onClick={() => {
