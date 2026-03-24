@@ -53,5 +53,9 @@ app.prepare().then(() => {
     })
     .listen(port, () => {
       console.log(`[Server] Ready on http://${hostname}:${port}`)
+      // 通知 PM2 应用已就绪（配合 wait_ready 选项）
+      if (process.send) {
+        process.send('ready')
+      }
     })
 })
