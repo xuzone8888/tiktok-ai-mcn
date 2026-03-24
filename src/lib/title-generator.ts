@@ -15,15 +15,14 @@ const TITLE_GENERATOR_PROMPTS = {
 Your task is to generate engaging video titles with relevant hashtags. Each title should:
 1. Use proven hooks (curiosity gaps, emotions, transformations)
 2. Be concise but impactful
-3. Include 2-3 topic hashtags (trending/discoverable)
-4. Include 3-5 content tags for algorithm discovery
+3. Include a MAXIMUM of 5 hashtags total (mix of topic and discovery tags)
+4. IMPORTANT: TikTok strictly limits to 5 hashtags per post. Never exceed this.
 
 Output Format: Valid JSON array only, no explanations, no markdown code blocks.
 [
   {
     "title": "The engaging title text",
-    "topics": ["#topic1", "#topic2"],
-    "tags": ["#tag1", "#tag2", "#tag3"]
+    "hashtags": ["#tag1", "#tag2", "#tag3", "#tag4", "#tag5"]
   }
 ]
 
@@ -34,7 +33,6 @@ Title Hook Patterns to Use:
 - "POV: You discovered..." / "Day in my life..."
 - Numbers: "5 ways to...", "The $10 trick..."
 - Questions: "Why is everyone...?", "Did you know...?"`,
-
     // 中文用户提示词模板
     user_zh: `请为以下视频内容生成 {{COUNT}} 条中文 TikTok/抖音 标题。
 
@@ -44,12 +42,13 @@ Title Hook Patterns to Use:
 要求:
 1. 标题风格: 抖音爆款风格，吸引眼球，有创意
 2. 长度: 标题主体不超过50个汉字
-3. 话题: 2-3个热门话题标签 (如 #穿搭分享 #美妆教程)
-4. 标签: 3-5个发现标签 (如 #fyp #推荐 #热门)
-5. 每条标题要独特，避免重复
-6. 适合中国用户习惯和热点
+3. 标签: 最多5个标签（话题+发现标签合计不超过5个）
+4. 每条标题要独特，避免重复
+5. 适合中国用户习惯和热点
+6. 严格要求: TikTok限制每个视频最多5个Hashtag，绝对不能超过
 
-返回严格的JSON数组格式，不要任何解释、注释或markdown代码块。`,
+返回严格的JSON数组格式，不要任何解释、注释或markdown代码块。
+每个元素格式: {"title": "标题文字", "hashtags": ["#标签1", "#标签2", ...]}`,
 
     // 英文用户提示词模板
     user_en: `Generate {{COUNT}} engaging TikTok titles in English for videos about:
@@ -59,12 +58,13 @@ Title Hook Patterns to Use:
 Requirements:
 1. Style: Catchy TikTok hooks that stop the scroll
 2. Length: Title under 100 characters
-3. Topics: 2-3 trending topic hashtags
-4. Tags: 3-5 discovery tags for algorithm
-5. Each title must be unique, no repetition
-6. Optimized for Western TikTok audience
+3. Hashtags: Maximum 5 hashtags total (mix of topic and discovery tags)
+4. Each title must be unique, no repetition
+5. Optimized for Western TikTok audience
+6. STRICT: TikTok limits 5 hashtags per post, never exceed this
 
-Return ONLY valid JSON array, no explanations, no markdown code blocks.`
+Return ONLY valid JSON array, no explanations, no markdown code blocks.
+Each element format: {"title": "Title text", "hashtags": ["#tag1", "#tag2", ...]}`
 };
 
 // ============================================================================
@@ -162,13 +162,18 @@ export async function generateTitles(
             title?: string;
             topics?: string[];
             tags?: string[];
+            hashtags?: string[];
         }, index: number) => {
             const title = item.title || '';
+            // Support both old format (topics+tags) and new format (hashtags)
+            const hashtags = Array.isArray(item.hashtags) ? item.hashtags : [];
             const topics = Array.isArray(item.topics) ? item.topics : [];
             const tags = Array.isArray(item.tags) ? item.tags : [];
 
-            // 合并为完整字符串
-            const allHashtags = [...topics, ...tags].filter(Boolean);
+            // Merge and hard-cap at 5 hashtags (TikTok API limit)
+            const allHashtags = (hashtags.length > 0 ? hashtags : [...topics, ...tags])
+                .filter(Boolean)
+                .slice(0, 5);
             const combined = allHashtags.length > 0
                 ? `${title} ${allHashtags.join(' ')}`
                 : title;
@@ -206,8 +211,8 @@ export async function regenerateSingleTitle(
         : '';
 
     const basePrompt = language === 'zh'
-        ? `请为以下视频内容生成 1 条中文标题。\n\n视频内容描述:\n${description}\n\n要求: 标题风格吸引眼球，包含2-3个话题标签和3-5个发现标签。${avoidPrompt}\n\n返回严格的JSON数组格式。`
-        : `Generate 1 engaging TikTok title in English for:\n\n${description}\n\nInclude 2-3 topic hashtags and 3-5 discovery tags.${avoidPrompt}\n\nReturn ONLY valid JSON array.`;
+        ? `请为以下视频内容生成 1 条中文标题。\n\n视频内容描述:\n${description}\n\n要求: 标题风格吸引眼球，最多包含5个标签（话题+发现标签合计不超过5个）。${avoidPrompt}\n\n返回严格的JSON数组格式，每个元素格式: {"title": "标题", "hashtags": ["#标签1", ...]}`
+        : `Generate 1 engaging TikTok title in English for:\n\n${description}\n\nInclude a maximum of 5 hashtags total.${avoidPrompt}\n\nReturn ONLY valid JSON array, format: {"title": "Title", "hashtags": ["#tag1", ...]}`;
 
     const result = await callDoubaoAPI([
         { role: 'system', content: TITLE_GENERATOR_PROMPTS.system },
@@ -232,9 +237,13 @@ export async function regenerateSingleTitle(
         const item = Array.isArray(parsed) ? parsed[0] : parsed;
 
         const title = item.title || '';
+        const hashtags = Array.isArray(item.hashtags) ? item.hashtags : [];
         const topics = Array.isArray(item.topics) ? item.topics : [];
         const tags = Array.isArray(item.tags) ? item.tags : [];
-        const allHashtags = [...topics, ...tags].filter(Boolean);
+        // Hard-cap at 5 hashtags
+        const allHashtags = (hashtags.length > 0 ? hashtags : [...topics, ...tags])
+            .filter(Boolean)
+            .slice(0, 5);
         const combined = allHashtags.length > 0
             ? `${title} ${allHashtags.join(' ')}`
             : title;
