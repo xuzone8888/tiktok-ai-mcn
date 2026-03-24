@@ -335,11 +335,11 @@ export default function TikTokAccountsPage() {
                     {/* Sort Dropdown */}
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                            <Button variant="outline" size="sm" className="gap-2">
-                                <ArrowUpDown className="h-4 w-4" />
-                                排序: {SORT_OPTIONS.find(o => o.value === sortBy)?.label}
-                                <ChevronDown className="h-3 w-3" />
-                            </Button>
+                            <button className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg text-[13px] font-medium bg-white/[0.04] border border-white/[0.08] text-white/60 hover:bg-white/[0.08] hover:text-white/80 hover:border-white/[0.15] transition-all duration-200">
+                                <ArrowUpDown className="h-3.5 w-3.5 text-white/40" />
+                                排序: <span className="text-white/80">{SORT_OPTIONS.find(o => o.value === sortBy)?.label}</span>
+                                <ChevronDown className="h-3 w-3 text-white/30 ml-0.5" />
+                            </button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                             {SORT_OPTIONS.map(option => (
@@ -355,15 +355,18 @@ export default function TikTokAccountsPage() {
                     </DropdownMenu>
 
                     {/* Group Toggle */}
-                    <Button
-                        variant={groupBy === 'type' ? 'default' : 'outline'}
-                        size="sm"
+                    <button
                         onClick={() => setGroupBy(groupBy === 'none' ? 'type' : 'none')}
-                        className="gap-2"
+                        className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-lg text-[13px] font-medium border transition-all duration-200 ${
+                            groupBy === 'type'
+                                ? 'bg-cyan-500/10 border-cyan-500/25 text-cyan-400 hover:bg-cyan-500/15'
+                                : 'bg-white/[0.04] border-white/[0.08] text-white/60 hover:bg-white/[0.08] hover:text-white/80 hover:border-white/[0.15]'
+                        }`}
+                        style={groupBy === 'type' ? { boxShadow: '0 0 12px rgba(0,242,234,0.1)' } : undefined}
                     >
-                        <Hash className="h-4 w-4" />
+                        <Hash className="h-3.5 w-3.5" />
                         按类型分组
-                    </Button>
+                    </button>
                 </div>
             )}
 
