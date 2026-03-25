@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { Search, AlertTriangle, Trash2, ListTodo } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -95,6 +95,30 @@ export function TaskManager() {
         setPage(1)
         fetchTasks(true)
     }, [activeTab, dateRange])
+
+    // 自动轮询：有进行中的任务时每 10 秒刷新
+    const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+    useEffect(() => {
+        const hasActive = tasks.some(t => ['pending', 'running', 'scheduled'].includes(t.status))
+        if (hasActive) {
+            if (!pollRef.current) {
+                pollRef.current = setInterval(() => {
+                    fetchTasks(true)
+                }, 10_000)
+            }
+        } else {
+            if (pollRef.current) {
+                clearInterval(pollRef.current)
+                pollRef.current = null
+            }
+        }
+        return () => {
+            if (pollRef.current) {
+                clearInterval(pollRef.current)
+                pollRef.current = null
+            }
+        }
+    }, [tasks, fetchTasks])
 
     // W2 fix: 分页变化时加载更多
     useEffect(() => {

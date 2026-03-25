@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Clock, CheckCircle, XCircle, AlertTriangle, ChevronRight, Square, Play, Heart, Trash2 } from 'lucide-react'
+import { Clock, CheckCircle, XCircle, AlertTriangle, ChevronRight, Square, Play, Heart, Trash2, Info } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
@@ -130,6 +130,12 @@ export function TaskGroupCard({ task, onViewDetail, onCancelPending, onDelete }:
                         <span>计划: {formatDate(task.scheduled_at)}</span>
                     ) : (
                         <span>创建: {formatDate(task.created_at)}</span>
+                    )}
+                    {['running', 'completed'].includes(task.status) && (
+                        <span className="flex items-center gap-1 mt-1 text-blue-400/50">
+                            <Info className="w-3 h-3" />
+                            发布后可能需要几分钟才能在 TikTok 显示
+                        </span>
                     )}
                 </div>
 
