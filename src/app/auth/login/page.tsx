@@ -8,12 +8,15 @@ import ReflectiveInput from "@/components/ui/ReflectiveInput";
 import { Button } from "@/components/ui/button";
 import { Mail, Lock, Smartphone, ArrowRight, Loader2, KeyRound, Fingerprint, Sparkles, Globe } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useLang } from "@/contexts/LangContext";
+import { LangToggle } from "@/components/ui/LangToggle";
 
 // 包装组件以支持 useSearchParams
 function LoginPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { toast } = useToast();
+  const { lang } = useLang();
 
   // 获取重定向目标
   const redirectTo = searchParams.get('redirect') || '/models';
@@ -33,12 +36,10 @@ function LoginPageContent() {
   // 处理 URL hash 中的 auth token（从 Supabase magic link 回调）
   useEffect(() => {
     const handleAuthCallback = async () => {
-      // 检查 URL hash 中是否有 access_token
       const hash = window.location.hash;
       if (hash && hash.includes('access_token')) {
         console.log("Detected auth callback with tokens in URL hash");
 
-        // 解析 hash 中的参数
         const params = new URLSearchParams(hash.substring(1));
         const accessToken = params.get('access_token');
         const refreshToken = params.get('refresh_token');
@@ -47,7 +48,6 @@ function LoginPageContent() {
           try {
             const supabase = createClient();
 
-            // 使用 token 设置 session
             const { data, error } = await supabase.auth.setSession({
               access_token: accessToken,
               refresh_token: refreshToken,
@@ -57,21 +57,18 @@ function LoginPageContent() {
               console.error("Failed to set session:", error);
               toast({
                 variant: "destructive",
-                title: "登录失败",
-                description: "Session 设置失败，请重试",
+                title: lang === "en" ? "Sign In Failed" : "登录失败",
+                description: lang === "en" ? "Session setup failed, please try again" : "Session 设置失败，请重试",
               });
-              // 清除 URL hash
               window.history.replaceState(null, '', window.location.pathname);
               return;
             }
 
             if (data.session) {
               toast({
-                title: "🎉 登录成功！",
-                description: "正在跳转到控制台...",
+                title: lang === "en" ? "🎉 Signed In!" : "🎉 登录成功！",
+                description: lang === "en" ? "Redirecting..." : "正在跳转到控制台...",
               });
-
-              // 跳转到目标页面
               window.location.replace(redirectTo);
             }
           } catch (err) {
@@ -92,8 +89,8 @@ function LoginPageContent() {
     if (!email || !password) {
       toast({
         variant: "destructive",
-        title: "请填写完整信息",
-        description: "邮箱和密码不能为空",
+        title: lang === "en" ? "Please fill in all fields" : "请填写完整信息",
+        description: lang === "en" ? "Email and password are required" : "邮箱和密码不能为空",
       });
       return;
     }
@@ -111,8 +108,8 @@ function LoginPageContent() {
 
       if (data.user) {
         toast({
-          title: "登录成功！",
-          description: "正在跳转到控制台...",
+          title: lang === "en" ? "Signed In!" : "登录成功！",
+          description: lang === "en" ? "Redirecting..." : "正在跳转到控制台...",
         });
         setTimeout(() => {
           window.location.href = redirectTo;
@@ -122,8 +119,8 @@ function LoginPageContent() {
       console.error("Login error:", error);
       toast({
         variant: "destructive",
-        title: "登录失败",
-        description: error.message || "请检查邮箱和密码是否正确",
+        title: lang === "en" ? "Sign In Failed" : "登录失败",
+        description: error.message || (lang === "en" ? "Check your email and password" : "请检查邮箱和密码是否正确"),
       });
     } finally {
       setIsLoading(false);
@@ -148,19 +145,18 @@ function LoginPageContent() {
     if (!phone) {
       toast({
         variant: "destructive",
-        title: "请输入手机号",
-        description: "手机号不能为空",
+        title: lang === "en" ? "Phone number required" : "请输入手机号",
+        description: lang === "en" ? "Please enter your phone number" : "手机号不能为空",
       });
       return;
     }
 
-    // 格式化并验证手机号
     const formattedPhone = phone.replace(/^\+?86/, '').replace(/\s/g, '');
     if (!/^1[3-9]\d{9}$/.test(formattedPhone)) {
       toast({
         variant: "destructive",
-        title: "手机号格式错误",
-        description: "请输入正确的11位手机号",
+        title: lang === "en" ? "Invalid Phone Number" : "手机号格式错误",
+        description: lang === "en" ? "Please enter a valid 11-digit phone number" : "请输入正确的11位手机号",
       });
       return;
     }
@@ -183,15 +179,17 @@ function LoginPageContent() {
       setPhoneSent(true);
       setPhoneCountdown(60);
       toast({
-        title: "✅ 验证码已发送",
-        description: `请查看手机 ${formattedPhone.slice(0, 3)}****${formattedPhone.slice(-4)} 短信`,
+        title: lang === "en" ? "✅ Code Sent" : "✅ 验证码已发送",
+        description: lang === "en"
+          ? `Check ${formattedPhone.slice(0, 3)}****${formattedPhone.slice(-4)} for the SMS code`
+          : `请查看手机 ${formattedPhone.slice(0, 3)}****${formattedPhone.slice(-4)} 短信`,
       });
     } catch (error: any) {
       console.error("Send SMS error:", error);
       toast({
         variant: "destructive",
-        title: "发送失败",
-        description: error.message || "请稍后重试",
+        title: lang === "en" ? "Send Failed" : "发送失败",
+        description: error.message || (lang === "en" ? "Please try again" : "请稍后重试"),
       });
     } finally {
       setIsSendingSms(false);
@@ -205,8 +203,8 @@ function LoginPageContent() {
     if (!phone || !code) {
       toast({
         variant: "destructive",
-        title: "请填写完整信息",
-        description: "手机号和验证码不能为空",
+        title: lang === "en" ? "Please fill in all fields" : "请填写完整信息",
+        description: lang === "en" ? "Phone and code are required" : "手机号和验证码不能为空",
       });
       return;
     }
@@ -228,7 +226,6 @@ function LoginPageContent() {
         throw new Error(result.message);
       }
 
-      // 使用返回的 token 登录
       const supabase = createClient();
       const { data, error } = await supabase.auth.verifyOtp({
         email: result.email,
@@ -237,22 +234,19 @@ function LoginPageContent() {
       });
 
       if (error || !data.session) {
-        // OTP 验证失败，使用 actionLink 作为备选方案
-        // 但要把 redirect_to 参数改成当前环境的域名
         console.warn("OTP verify failed, using adaptive actionLink:", error);
         console.log("Original actionLink:", result.actionLink);
 
         if (result.actionLink) {
           toast({
-            title: result.isNewUser ? "🎉 注册成功！" : "登录成功！",
-            description: "正在完成登录...",
+            title: result.isNewUser
+              ? (lang === "en" ? "🎉 Registered!" : "🎉 注册成功！")
+              : (lang === "en" ? "Signed In!" : "登录成功！"),
+            description: lang === "en" ? "Completing sign in..." : "正在完成登录...",
           });
 
-          // 只修改 redirect_to 参数，保持 Supabase 的 auth 域名不变
           const actionUrl = new URL(result.actionLink);
           const currentOrigin = window.location.origin;
-
-          // 更新 redirect_to 参数为当前域名 + 目标页面
           actionUrl.searchParams.set('redirect_to', `${currentOrigin}${redirectTo}`);
 
           const adaptedLink = actionUrl.toString();
@@ -261,13 +255,15 @@ function LoginPageContent() {
           return;
         }
 
-        throw new Error("登录验证失败，请重新获取验证码");
+        throw new Error(lang === "en" ? "Login failed, please request a new code" : "登录验证失败，请重新获取验证码");
       }
 
       // OTP 验证成功
       toast({
-        title: result.isNewUser ? "🎉 注册成功！" : "登录成功！",
-        description: "正在跳转到控制台...",
+        title: result.isNewUser
+          ? (lang === "en" ? "🎉 Registered!" : "🎉 注册成功！")
+          : (lang === "en" ? "Signed In!" : "登录成功！"),
+        description: lang === "en" ? "Redirecting..." : "正在跳转到控制台...",
       });
 
       setIsLoading(false);
@@ -277,8 +273,8 @@ function LoginPageContent() {
       console.error("Phone login error:", error);
       toast({
         variant: "destructive",
-        title: "验证失败",
-        description: error.message || "验证码错误或已过期",
+        title: lang === "en" ? "Verification Failed" : "验证失败",
+        description: error.message || (lang === "en" ? "Code incorrect or expired" : "验证码错误或已过期"),
       });
       setIsLoading(false);
     }
@@ -298,8 +294,8 @@ function LoginPageContent() {
     } catch (error: any) {
       toast({
         variant: "destructive",
-        title: "Google 登录失败",
-        description: error.message || "请稍后重试",
+        title: lang === "en" ? "Google Sign In Failed" : "Google 登录失败",
+        description: error.message || (lang === "en" ? "Please try again" : "请稍后重试"),
       });
     }
   };
@@ -310,12 +306,14 @@ function LoginPageContent() {
 
   return (
     <div className="min-h-screen bg-black flex relative overflow-hidden">
+      {/* 右上角语言切换 */}
+      <div className="absolute top-4 right-4 z-50">
+        <LangToggle />
+      </div>
+
       {/* 1. 极致深邃的全局背景层 */}
       <div className="absolute inset-0 pointer-events-none z-0">
-        {/* 动态细网格 */}
         <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:64px_64px]" />
-        
-        {/* 多重光晕混叠 */}
         <div 
           className="absolute top-0 left-0 w-[800px] h-[800px] -translate-x-1/4 -translate-y-1/4 mix-blend-screen"
           style={{ background: 'radial-gradient(circle, rgba(168,85,247,0.15) 0%, rgba(168,85,247,0) 60%)' }}
@@ -330,7 +328,6 @@ function LoginPageContent() {
         />
       </div>
 
-      {/* 限制最大宽度的中央容器，防止超宽屏两边间距过大 */}
       <div className="w-full max-w-7xl mx-auto flex relative z-10">
         {/* 2. 左侧：高定品牌叙事区 (大屏显示) */}
         <div className="hidden lg:flex flex-col flex-1 p-12 lg:p-20 justify-center">
@@ -345,29 +342,40 @@ function LoginPageContent() {
           {/* 大标题 */}
           <h1 className="text-5xl lg:text-6xl font-bold tracking-tight mb-6 leading-tight">
             <span className="bg-clip-text text-transparent bg-gradient-to-r from-white via-white/90 to-white/60">
-              你的专属 AI 角色，
-              <br />让创作从此不同
+              {lang === "en" ? (
+                <>Your Exclusive AI Character,<br />Redefining Creation</>
+              ) : (
+                <>你的专属 AI 角色，<br />让创作从此不同</>
+              )}
             </span>
           </h1>
           
           {/* 副标题 */}
           <p className="text-lg text-white/50 mb-12 leading-relaxed">
-            创建独一无二的 AI 角色 · 持续产出专业级短视频 · 极大提升达人与电商内容创作效率。
+            {lang === "en"
+              ? "Create a unique AI character · Produce professional short videos consistently · Elevate your content creation efficiency."
+              : "创建独一无二的 AI 角色 · 持续产出专业级短视频 · 极大提升达人与电商内容创作效率。"}
           </p>
 
           {/* 特色胶囊 */}
           <div className="flex flex-wrap gap-4">
             <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 backdrop-blur-md">
               <Fingerprint className="w-4 h-4 text-[#a855f7]" />
-              <span className="text-sm font-medium text-white/80">角色 IP 孵化</span>
+              <span className="text-sm font-medium text-white/80">
+                {lang === "en" ? "Character IP" : "角色 IP 孵化"}
+              </span>
             </div>
             <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 backdrop-blur-md">
               <Sparkles className="w-4 h-4 text-[#3b82f6]" />
-              <span className="text-sm font-medium text-white/80">前沿 AI 模型</span>
+              <span className="text-sm font-medium text-white/80">
+                {lang === "en" ? "Cutting-edge AI" : "前沿 AI 模型"}
+              </span>
             </div>
             <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 backdrop-blur-md">
               <Globe className="w-4 h-4 text-[#10b981]" />
-              <span className="text-sm font-medium text-white/80">内容链接全球</span>
+              <span className="text-sm font-medium text-white/80">
+                {lang === "en" ? "Global Reach" : "内容链接全球"}
+              </span>
             </div>
           </div>
         </div>
@@ -388,8 +396,12 @@ function LoginPageContent() {
 
           {/* 表单头部 */}
           <div className="text-center lg:text-left mb-8">
-            <h2 className="text-2xl font-semibold text-white mb-2 tracking-tight">欢迎回来</h2>
-            <p className="text-sm text-white/40">登录您的 ToryX 账号以继续</p>
+            <h2 className="text-2xl font-semibold text-white mb-2 tracking-tight">
+              {lang === "en" ? "Welcome Back" : "欢迎回来"}
+            </h2>
+            <p className="text-sm text-white/40">
+              {lang === "en" ? "Sign in to your ToryX account" : "登录您的 ToryX 账号以继续"}
+            </p>
           </div>
 
           {/* Google 大按钮 */}
@@ -404,13 +416,15 @@ function LoginPageContent() {
               <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
               <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
             </svg>
-            继续使用 Google 登录
+            {lang === "en" ? "Continue with Google" : "继续使用 Google 登录"}
           </button>
 
           {/* 分割线 */}
           <div className="flex items-center gap-4 mb-6">
             <div className="flex-1 h-px bg-white/5" />
-            <span className="text-white/20 text-xs tracking-widest uppercase">或者</span>
+            <span className="text-white/20 text-xs tracking-widest uppercase">
+              {lang === "en" ? "or" : "或者"}
+            </span>
             <div className="flex-1 h-px bg-white/5" />
           </div>
 
@@ -423,7 +437,7 @@ function LoginPageContent() {
                 loginMethod === "password" ? "text-white bg-white/10 shadow-sm" : "text-white/40 hover:text-white/70 hover:bg-white/5"
               }`}
             >
-              密码登录
+              {lang === "en" ? "Password" : "密码登录"}
             </button>
             <button
               type="button"
@@ -432,7 +446,7 @@ function LoginPageContent() {
                 loginMethod === "phone" ? "text-white bg-white/10 shadow-sm" : "text-white/40 hover:text-white/70 hover:bg-white/5"
               }`}
             >
-              验证码登录
+              {lang === "en" ? "Verification Code" : "验证码登录"}
             </button>
           </div>
 
@@ -445,7 +459,7 @@ function LoginPageContent() {
                 <>
                   <ReflectiveInput
                     icon={<Smartphone className="w-5 h-5 text-white/50" />}
-                    placeholder="请输入手机号"
+                    placeholder={lang === "en" ? "Enter phone number" : "请输入手机号"}
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
                     disabled={isLoading || isSendingSms}
@@ -453,7 +467,7 @@ function LoginPageContent() {
                   <div className="relative">
                     <ReflectiveInput
                       icon={<KeyRound className="w-5 h-5 text-white/50" />}
-                      placeholder="请输入 6 位验证码"
+                      placeholder={lang === "en" ? "Enter 6-digit code" : "请输入 6 位验证码"}
                       value={code}
                       onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
                       disabled={isLoading}
@@ -465,7 +479,11 @@ function LoginPageContent() {
                       disabled={phoneCountdown > 0 || isSendingSms || !phone}
                       className="absolute right-3 top-1/2 -translate-y-1/2 text-sm font-medium text-[#10b981] hover:text-[#34d399] transition-colors disabled:text-white/20 disabled:cursor-not-allowed bg-black/20 px-3 py-1.5 rounded-md"
                     >
-                      {isSendingSms ? "发送中..." : phoneCountdown > 0 ? `${phoneCountdown}s` : "获取验证码"}
+                      {isSendingSms
+                        ? (lang === "en" ? "Sending..." : "发送中...")
+                        : phoneCountdown > 0
+                          ? `${phoneCountdown}s`
+                          : (lang === "en" ? "Get Code" : "获取验证码")}
                     </button>
                   </div>
                   
@@ -478,11 +496,11 @@ function LoginPageContent() {
                       {isLoading ? (
                         <>
                           <Loader2 className="w-4 h-4 animate-spin" />
-                          验证中...
+                          {lang === "en" ? "Verifying..." : "验证中..."}
                         </>
                       ) : (
                         <>
-                          登录 / 注册
+                          {lang === "en" ? "Sign In / Register" : "登录 / 注册"}
                           <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
                         </>
                       )}
@@ -497,7 +515,7 @@ function LoginPageContent() {
                   <ReflectiveInput
                     icon={<Mail className="w-5 h-5 text-white/50" />}
                     type="email"
-                    placeholder="请输入邮箱地址"
+                    placeholder={lang === "en" ? "Enter email address" : "请输入邮箱地址"}
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     disabled={isLoading}
@@ -505,7 +523,7 @@ function LoginPageContent() {
                   <ReflectiveInput
                     icon={<Lock className="w-5 h-5 text-white/50" />}
                     type="password"
-                    placeholder="请输入密码"
+                    placeholder={lang === "en" ? "Enter password" : "请输入密码"}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     disabled={isLoading}
@@ -513,7 +531,7 @@ function LoginPageContent() {
                   
                   <div className="flex justify-end pt-1 pb-2">
                     <Link href="/auth/forgot-password" className="text-sm text-white/40 hover:text-[#10b981] hover:underline underline-offset-4 transition-all">
-                      忘记密码？
+                      {lang === "en" ? "Forgot password?" : "忘记密码？"}
                     </Link>
                   </div>
 
@@ -526,11 +544,11 @@ function LoginPageContent() {
                       {isLoading ? (
                         <>
                           <Loader2 className="w-4 h-4 animate-spin" />
-                          登录中...
+                          {lang === "en" ? "Signing In..." : "登录中..."}
                         </>
                       ) : (
                         <>
-                          登 录
+                          {lang === "en" ? "Sign In" : "登 录"}
                           <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
                         </>
                       )}
@@ -542,16 +560,20 @@ function LoginPageContent() {
               {/* 底部链接 */}
               <div className="pt-6 text-center space-y-4">
                 <p className="text-white/50 text-sm">
-                  还没有账号？
+                  {lang === "en" ? "Don't have an account?" : "还没有账号？"}
                   <Link href="/auth/register" className="text-white hover:text-[#10b981] ml-2 font-medium transition-colors">
-                    立即注册
+                    {lang === "en" ? "Sign Up" : "立即注册"}
                   </Link>
                 </p>
                 <p className="text-white/30 text-xs">
-                  登录即代表您同意我们的
-                  <Link href="/terms" className="text-white/50 hover:text-white mx-1 transition-colors hover:underline underline-offset-4">服务条款</Link>
-                  和
-                  <Link href="/privacy" className="text-white/50 hover:text-white mx-1 transition-colors hover:underline underline-offset-4">隐私政策</Link>
+                  {lang === "en" ? "By signing in you agree to our" : "登录即代表您同意我们的"}
+                  <Link href="/terms" className="text-white/50 hover:text-white mx-1 transition-colors hover:underline underline-offset-4">
+                    {lang === "en" ? "Terms of Service" : "服务条款"}
+                  </Link>
+                  {lang === "en" ? "and" : "和"}
+                  <Link href="/privacy" className="text-white/50 hover:text-white mx-1 transition-colors hover:underline underline-offset-4">
+                    {lang === "en" ? "Privacy Policy" : "隐私政策"}
+                  </Link>
                 </p>
               </div>
 
@@ -569,7 +591,7 @@ export default function LoginPage() {
   return (
     <Suspense fallback={
       <div className="min-h-screen bg-black flex items-center justify-center">
-        <div className="text-white/50">加载中...</div>
+        <div className="text-white/50">Loading...</div>
       </div>
     }>
       <LoginPageContent />

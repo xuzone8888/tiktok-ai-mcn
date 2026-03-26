@@ -9,10 +9,13 @@ import ReflectiveInput from "@/components/ui/ReflectiveInput";
 import { Button } from "@/components/ui/button";
 import { Mail, Lock, User, ArrowRight, Loader2, Gift, Fingerprint, Sparkles, Globe } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useLang } from "@/contexts/LangContext";
+import { LangToggle } from "@/components/ui/LangToggle";
 
 export default function RegisterPage() {
   const router = useRouter();
   const { toast } = useToast();
+  const { lang } = useLang();
 
   // 表单状态
   const [name, setName] = useState("");
@@ -31,8 +34,8 @@ export default function RegisterPage() {
     if (!name || !email || !password || !confirmPassword) {
       toast({
         variant: "destructive",
-        title: "请填写完整信息",
-        description: "所有字段都是必填的",
+        title: lang === "en" ? "Please fill in all fields" : "请填写完整信息",
+        description: lang === "en" ? "All fields are required" : "所有字段都是必填的",
       });
       return;
     }
@@ -40,8 +43,8 @@ export default function RegisterPage() {
     if (password !== confirmPassword) {
       toast({
         variant: "destructive",
-        title: "密码不匹配",
-        description: "两次输入的密码不一致",
+        title: lang === "en" ? "Passwords Don't Match" : "密码不匹配",
+        description: lang === "en" ? "Your passwords don't match" : "两次输入的密码不一致",
       });
       return;
     }
@@ -49,8 +52,8 @@ export default function RegisterPage() {
     if (password.length < 6) {
       toast({
         variant: "destructive",
-        title: "密码太短",
-        description: "密码至少需要6个字符",
+        title: lang === "en" ? "Password Too Short" : "密码太短",
+        description: lang === "en" ? "Password must be at least 6 characters" : "密码至少需要6个字符",
       });
       return;
     }
@@ -60,21 +63,17 @@ export default function RegisterPage() {
     try {
       const supabase = createClient();
 
-      // 注册用户
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: {
-          data: {
-            name,
-          },
+          data: { name },
         },
       });
 
       if (error) throw error;
 
       if (data.user) {
-        // 创建用户 profile
         const { error: profileError } = await supabase
           .from("profiles")
           .insert({
@@ -82,7 +81,7 @@ export default function RegisterPage() {
             email: data.user.email!,
             name,
             role: "user",
-            credits: 100, // 新用户赠送 100 积分
+            credits: 100,
           } as any);
 
         if (profileError) {
@@ -91,11 +90,10 @@ export default function RegisterPage() {
 
         setIsSuccess(true);
         toast({
-          title: "🎉 注册成功！",
-          description: "请检查您的邮箱确认账号",
+          title: lang === "en" ? "🎉 Registration Successful!" : "🎉 注册成功！",
+          description: lang === "en" ? "Please check your email to confirm" : "请检查您的邮箱确认账号",
         });
 
-        // 如果邮箱验证被禁用，直接跳转
         if (data.session) {
           setTimeout(() => {
             router.push("/models");
@@ -107,15 +105,15 @@ export default function RegisterPage() {
       console.error("Registration error:", error);
       toast({
         variant: "destructive",
-        title: "注册失败",
-        description: error.message || "请稍后重试",
+        title: lang === "en" ? "Registration Failed" : "注册失败",
+        description: error.message || (lang === "en" ? "Please try again" : "请稍后重试"),
       });
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Google 注册（复用登录页逻辑）
+  // Google 注册
   const handleGoogleRegister = async () => {
     try {
       const supabase = createClient();
@@ -129,8 +127,8 @@ export default function RegisterPage() {
     } catch (error: any) {
       toast({
         variant: "destructive",
-        title: "Google 注册失败",
-        description: error.message || "请稍后重试",
+        title: lang === "en" ? "Google Sign Up Failed" : "Google 注册失败",
+        description: error.message || (lang === "en" ? "Please try again" : "请稍后重试"),
       });
     }
   };
@@ -139,7 +137,11 @@ export default function RegisterPage() {
   if (isSuccess) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center p-4 relative overflow-hidden">
-        {/* 统一的多重光晕背景 */}
+        {/* 右上角语言切换 */}
+        <div className="absolute top-4 right-4 z-50">
+          <LangToggle />
+        </div>
+
         <div className="absolute inset-0 pointer-events-none">
           <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:64px_64px]" />
           <div
@@ -155,7 +157,6 @@ export default function RegisterPage() {
         <div className="w-full max-w-[440px] relative z-10">
           <ReflectiveCard className="py-10 px-10">
             <div className="text-center space-y-6">
-              {/* Success Icon */}
               <div className="flex justify-center">
                 <div
                   className="w-20 h-20 rounded-2xl flex items-center justify-center animate-bounce"
@@ -168,42 +169,49 @@ export default function RegisterPage() {
                 </div>
               </div>
 
-              {/* Title */}
               <div className="space-y-3">
-                <h2 className="text-2xl font-bold text-white">📧 请验证邮箱</h2>
+                <h2 className="text-2xl font-bold text-white">
+                  {lang === "en" ? "📧 Verify Your Email" : "📧 请验证邮箱"}
+                </h2>
                 <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30">
                   <p className="text-amber-200 text-sm font-medium">
-                    ⚠️ 重要提示：您必须点击邮件中的确认链接才能登录
+                    {lang === "en"
+                      ? "⚠️ Important: You must click the link in the email to sign in"
+                      : "⚠️ 重要提示：您必须点击邮件中的确认链接才能登录"}
                   </p>
                 </div>
-                <p className="text-white/50">验证邮件已发送至：</p>
+                <p className="text-white/50">
+                  {lang === "en" ? "Verification email sent to:" : "验证邮件已发送至："}
+                </p>
                 <p className="text-[#10b981] font-semibold text-lg break-all">{email}</p>
               </div>
 
-              {/* Steps */}
               <div className="p-4 rounded-xl bg-white/5 border border-white/10 text-left space-y-2">
-                <p className="text-sm text-white/60">📋 验证步骤：</p>
+                <p className="text-sm text-white/60">
+                  {lang === "en" ? "📋 Steps:" : "📋 验证步骤："}
+                </p>
                 <ol className="text-sm text-white/40 space-y-1 list-decimal list-inside">
-                  <li>打开您的邮箱（包括垃圾邮件文件夹）</li>
-                  <li>找到来自 ToryX 的验证邮件</li>
-                  <li>点击邮件中的 "确认邮箱" 链接</li>
-                  <li>验证成功后即可登录</li>
+                  <li>{lang === "en" ? "Open your inbox (including spam)" : "打开您的邮箱（包括垃圾邮件文件夹）"}</li>
+                  <li>{lang === "en" ? "Find the email from ToryX" : "找到来自 ToryX 的验证邮件"}</li>
+                  <li>{lang === "en" ? 'Click the "Confirm Email" link' : '点击邮件中的 "确认邮箱" 链接'}</li>
+                  <li>{lang === "en" ? "Sign in after verification" : "验证成功后即可登录"}</li>
                 </ol>
               </div>
 
-              {/* Action Button */}
               <Button
                 onClick={() => router.push("/auth/login")}
                 className="w-full h-12 bg-gradient-to-r from-[#10b981] to-[#059669] hover:from-[#34d399] hover:to-[#10b981] text-white font-semibold text-[15px] rounded-xl transition-all duration-300 hover:scale-[1.02] shadow-[0_0_20px_rgba(16,185,129,0.2)] hover:shadow-[0_0_30px_rgba(16,185,129,0.4)] border-none group"
               >
                 <span className="flex items-center justify-center gap-2">
-                  我已验证，前往登录
+                  {lang === "en" ? "I've Verified, Go Sign In" : "我已验证，前往登录"}
                   <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
                 </span>
               </Button>
 
               <p className="text-xs text-white/30">
-                💡 没有收到邮件？请检查垃圾邮件文件夹，或等待1-2分钟后刷新邮箱
+                {lang === "en"
+                  ? "💡 No email? Check spam or wait 1-2 min and refresh"
+                  : "💡 没有收到邮件？请检查垃圾邮件文件夹，或等待1-2分钟后刷新邮箱"}
               </p>
             </div>
           </ReflectiveCard>
@@ -214,12 +222,14 @@ export default function RegisterPage() {
 
   return (
     <div className="min-h-screen bg-black flex relative overflow-hidden">
+      {/* 右上角语言切换 */}
+      <div className="absolute top-4 right-4 z-50">
+        <LangToggle />
+      </div>
+
       {/* 1. 多重光晕全局背景 */}
       <div className="absolute inset-0 pointer-events-none z-0">
-        {/* 动态细网格 */}
         <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:64px_64px]" />
-
-        {/* 多重光晕混叠 */}
         <div
           className="absolute top-0 left-0 w-[800px] h-[800px] -translate-x-1/4 -translate-y-1/4 mix-blend-screen"
           style={{ background: 'radial-gradient(circle, rgba(168,85,247,0.15) 0%, rgba(168,85,247,0) 60%)' }}
@@ -234,44 +244,50 @@ export default function RegisterPage() {
         />
       </div>
 
-      {/* 限制最大宽度的中央容器 */}
       <div className="w-full max-w-7xl mx-auto flex relative z-10">
         {/* 2. 左侧：品牌叙事区 (大屏显示) */}
         <div className="hidden lg:flex flex-col flex-1 p-12 lg:p-20 justify-center">
           <div className="max-w-xl">
-            {/* Logo */}
             <img
               src="/images/toryx_logo_text.png"
               alt="ToryX AI"
               className="h-14 mb-12 drop-shadow-[0_0_30px_rgba(16,185,129,0.4)]"
             />
 
-            {/* 大标题 */}
             <h1 className="text-5xl lg:text-6xl font-bold tracking-tight mb-6 leading-tight">
               <span className="bg-clip-text text-transparent bg-gradient-to-r from-white via-white/90 to-white/60">
-                开启你的
-                <br />AI 创作之旅
+                {lang === "en" ? (
+                  <>Start Your<br />AI Creative Journey</>
+                ) : (
+                  <>开启你的<br />AI 创作之旅</>
+                )}
               </span>
             </h1>
 
-            {/* 副标题 */}
             <p className="text-lg text-white/50 mb-12 leading-relaxed">
-              注册 ToryX 账号 · 创建专属 AI 角色 · 一键生成专业级带货短视频。
+              {lang === "en"
+                ? "Register a ToryX account · Create your exclusive AI character · Generate professional short videos in one click."
+                : "注册 ToryX 账号 · 创建专属 AI 角色 · 一键生成专业级带货短视频。"}
             </p>
 
-            {/* 特色胶囊 */}
             <div className="flex flex-wrap gap-4">
               <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 backdrop-blur-md">
                 <Fingerprint className="w-4 h-4 text-[#a855f7]" />
-                <span className="text-sm font-medium text-white/80">角色 IP 孵化</span>
+                <span className="text-sm font-medium text-white/80">
+                  {lang === "en" ? "Character IP" : "角色 IP 孵化"}
+                </span>
               </div>
               <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 backdrop-blur-md">
                 <Sparkles className="w-4 h-4 text-[#3b82f6]" />
-                <span className="text-sm font-medium text-white/80">前沿 AI 模型</span>
+                <span className="text-sm font-medium text-white/80">
+                  {lang === "en" ? "Cutting-edge AI" : "前沿 AI 模型"}
+                </span>
               </div>
               <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 backdrop-blur-md">
                 <Globe className="w-4 h-4 text-[#10b981]" />
-                <span className="text-sm font-medium text-white/80">内容链接全球</span>
+                <span className="text-sm font-medium text-white/80">
+                  {lang === "en" ? "Global Reach" : "内容链接全球"}
+                </span>
               </div>
             </div>
           </div>
@@ -280,23 +296,22 @@ export default function RegisterPage() {
         {/* 3. 右侧：注册表单区 */}
         <div className="w-full lg:w-[500px] xl:w-[600px] flex items-center justify-center p-6 sm:p-12">
 
-          {/* 高定毛玻璃容器 */}
           <div className="w-full max-w-[460px] bg-white/[0.03] backdrop-blur-2xl border border-white/10 rounded-[2rem] p-8 sm:p-10 shadow-[0_20px_50px_rgba(0,0,0,0.5)] relative overflow-hidden group/card">
-            {/* 玻璃边缘折射高光 */}
             <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-white/30 to-transparent opacity-50" />
 
-            {/* 移动端显示的 Logo */}
             <div className="flex justify-center mb-6 lg:hidden">
               <img src="/images/toryx_logo_text.png" alt="ToryX AI" className="h-10 drop-shadow-[0_0_20px_rgba(16,185,129,0.3)]" />
             </div>
 
-            {/* 表单头部 */}
             <div className="text-center lg:text-left mb-6">
-              <h2 className="text-2xl font-semibold text-white mb-2 tracking-tight">创建账号</h2>
-              <p className="text-sm text-white/40">注册 ToryX 账号以开始创作</p>
+              <h2 className="text-2xl font-semibold text-white mb-2 tracking-tight">
+                {lang === "en" ? "Create Account" : "创建账号"}
+              </h2>
+              <p className="text-sm text-white/40">
+                {lang === "en" ? "Start creating with ToryX" : "注册 ToryX 账号以开始创作"}
+              </p>
             </div>
 
-            {/* Google 大按钮 */}
             <button
               type="button"
               onClick={handleGoogleRegister}
@@ -308,67 +323,61 @@ export default function RegisterPage() {
                 <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
                 <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
               </svg>
-              继续使用 Google 注册
+              {lang === "en" ? "Continue with Google" : "继续使用 Google 注册"}
             </button>
 
-            {/* 分割线 */}
             <div className="flex items-center gap-4 mb-5">
               <div className="flex-1 h-px bg-white/5" />
-              <span className="text-white/20 text-xs tracking-widest uppercase">或者</span>
+              <span className="text-white/20 text-xs tracking-widest uppercase">
+                {lang === "en" ? "or" : "或者"}
+              </span>
               <div className="flex-1 h-px bg-white/5" />
             </div>
 
-            {/* 表单主体 */}
             <form onSubmit={handleRegister}>
               <div className="space-y-3">
-                {/* Name */}
                 <ReflectiveInput
                   icon={<User className="w-5 h-5 text-white/50" />}
-                  placeholder="用户名"
+                  placeholder={lang === "en" ? "Username" : "用户名"}
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   disabled={isLoading}
                 />
-
-                {/* Email */}
                 <ReflectiveInput
                   icon={<Mail className="w-5 h-5 text-white/50" />}
                   type="email"
-                  placeholder="邮箱地址"
+                  placeholder={lang === "en" ? "Email address" : "邮箱地址"}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   disabled={isLoading}
                 />
-
-                {/* Password */}
                 <ReflectiveInput
                   icon={<Lock className="w-5 h-5 text-white/50" />}
                   type="password"
-                  placeholder="密码（至少6位）"
+                  placeholder={lang === "en" ? "Password (min. 6 chars)" : "密码（至少6位）"}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   disabled={isLoading}
                 />
-
-                {/* Confirm Password */}
                 <ReflectiveInput
                   icon={<Lock className="w-5 h-5 text-white/50" />}
                   type="password"
-                  placeholder="确认密码"
+                  placeholder={lang === "en" ? "Confirm password" : "确认密码"}
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   disabled={isLoading}
                 />
 
-                {/* Bonus Info */}
                 <div className="flex items-center justify-center gap-2 p-2.5 rounded-xl bg-[#10b981]/10 border border-[#10b981]/20">
                   <Gift className="w-4 h-4 text-[#10b981]" />
                   <p className="text-sm text-white/70">
-                    新用户注册即送 <span className="text-[#10b981] font-bold">100 积分</span>
+                    {lang === "en" ? "New users get" : "新用户注册即送"}{" "}
+                    <span className="text-[#10b981] font-bold">
+                      {lang === "en" ? "100 free credits" : "100 积分"}
+                    </span>
                   </p>
                 </div>
 
-                {/* Submit Button */}
                 <Button
                   type="submit"
                   disabled={isLoading}
@@ -378,30 +387,33 @@ export default function RegisterPage() {
                     {isLoading ? (
                       <>
                         <Loader2 className="w-4 h-4 animate-spin" />
-                        注册中...
+                        {lang === "en" ? "Signing Up..." : "注册中..."}
                       </>
                     ) : (
                       <>
-                        立即注册
+                        {lang === "en" ? "Sign Up" : "立即注册"}
                         <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
                       </>
                     )}
                   </span>
                 </Button>
 
-                {/* 底部链接 */}
                 <div className="pt-4 text-center space-y-3">
                   <p className="text-white/50 text-sm">
-                    已有账号？
+                    {lang === "en" ? "Already have an account?" : "已有账号？"}
                     <Link href="/auth/login" className="text-white hover:text-[#10b981] ml-2 font-medium transition-colors">
-                      立即登录
+                      {lang === "en" ? "Sign In" : "立即登录"}
                     </Link>
                   </p>
                   <p className="text-white/30 text-xs">
-                    注册即代表您同意我们的
-                    <Link href="/terms" className="text-white/50 hover:text-white mx-1 transition-colors hover:underline underline-offset-4">服务条款</Link>
-                    和
-                    <Link href="/privacy" className="text-white/50 hover:text-white mx-1 transition-colors hover:underline underline-offset-4">隐私政策</Link>
+                    {lang === "en" ? "By signing up you agree to our" : "注册即代表您同意我们的"}
+                    <Link href="/terms" className="text-white/50 hover:text-white mx-1 transition-colors hover:underline underline-offset-4">
+                      {lang === "en" ? "Terms of Service" : "服务条款"}
+                    </Link>
+                    {lang === "en" ? "and" : "和"}
+                    <Link href="/privacy" className="text-white/50 hover:text-white mx-1 transition-colors hover:underline underline-offset-4">
+                      {lang === "en" ? "Privacy Policy" : "隐私政策"}
+                    </Link>
                   </p>
                 </div>
 
