@@ -23,6 +23,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
+import { useLang } from "@/contexts/LangContext";
 
 // ============================================================================
 // 类型定义
@@ -43,6 +44,8 @@ interface UserProfile {
 export default function SettingsPage() {
     const router = useRouter();
     const { toast } = useToast();
+    const { lang } = useLang();
+    const t = lang === "en";
     const [user, setUser] = useState<UserProfile | null>(null);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
@@ -105,8 +108,8 @@ export default function SettingsPage() {
             if (error) throw error;
 
             toast({
-                title: "保存成功",
-                description: "您的个人信息已更新",
+                title: t ? "Saved" : "保存成功",
+                description: t ? "Your profile has been updated" : "您的个人信息已更新",
             });
 
             // Update local state
@@ -114,8 +117,8 @@ export default function SettingsPage() {
         } catch (error) {
             console.error("[SettingsPage] Save error:", error);
             toast({
-                title: "保存失败",
-                description: "请稍后重试",
+                title: t ? "Save Failed" : "保存失败",
+                description: t ? "Please try again" : "请稍后重试",
                 variant: "destructive",
             });
         } finally {
@@ -138,29 +141,29 @@ export default function SettingsPage() {
     const settingsSections = [
         {
             id: "profile",
-            title: "个人信息",
+            title: t ? "Profile" : "个人信息",
             icon: User,
-            description: "管理您的基本资料",
+            description: t ? "Manage your basic info" : "管理您的基本资料",
         },
         {
             id: "security",
-            title: "安全设置",
+            title: t ? "Security" : "安全设置",
             icon: Lock,
-            description: "密码和登录安全",
+            description: t ? "Password & login security" : "密码和登录安全",
             comingSoon: true,
         },
         {
             id: "notifications",
-            title: "通知偏好",
+            title: t ? "Notifications" : "通知偏好",
             icon: Bell,
-            description: "消息通知设置",
+            description: t ? "Message notification settings" : "消息通知设置",
             comingSoon: true,
         },
         {
             id: "appearance",
-            title: "外观主题",
+            title: t ? "Appearance" : "外观主题",
             icon: Palette,
-            description: "界面显示设置",
+            description: t ? "UI display settings" : "界面显示设置",
             comingSoon: true,
         },
     ];
@@ -176,8 +179,8 @@ export default function SettingsPage() {
                     <ArrowLeft className="h-5 w-5" />
                 </Link>
                 <div>
-                    <h1 className="text-2xl font-bold text-white">账号设置</h1>
-                    <p className="text-sm text-white/50">管理您的账户信息和偏好</p>
+                    <h1 className="text-2xl font-bold text-white">{t ? "Account Settings" : "账号设置"}</h1>
+                    <p className="text-sm text-white/50">{t ? "Manage your account" : "管理您的账户信息和偏好"}</p>
                 </div>
             </div>
 
@@ -201,7 +204,7 @@ export default function SettingsPage() {
                             <span className="flex-1">{section.title}</span>
                             {section.comingSoon && (
                                 <span className="rounded bg-white/10 px-1.5 py-0.5 text-[10px] text-white/40">
-                                    即将推出
+                                    {t ? "Soon" : "即将推出"}
                                 </span>
                             )}
                         </button>
@@ -210,7 +213,7 @@ export default function SettingsPage() {
 
                 {/* Main Content */}
                 <div className="rounded-2xl border border-white/10 bg-[#0B0C10]/80 p-6 backdrop-blur-xl">
-                    <h2 className="mb-6 text-lg font-bold text-white">个人信息</h2>
+                    <h2 className="mb-6 text-lg font-bold text-white">{t ? "Personal Info" : "个人信息"}</h2>
 
                     <div className="space-y-6">
                         {/* Avatar Section */}
@@ -235,9 +238,9 @@ export default function SettingsPage() {
                                     className="border-white/10 text-white/60 hover:bg-white/5 hover:text-white"
                                     disabled
                                 >
-                                    更换头像
+                                    {t ? "Change Avatar" : "更换头像"}
                                 </Button>
-                                <p className="mt-1 text-xs text-white/40">即将支持</p>
+                                <p className="mt-1 text-xs text-white/40">{t ? "Coming soon" : "即将支持"}</p>
                             </div>
                         </div>
 
@@ -245,20 +248,20 @@ export default function SettingsPage() {
                         <div className="grid gap-4 sm:grid-cols-2">
                             <div className="space-y-2">
                                 <Label htmlFor="name" className="text-white/60">
-                                    显示名称
+                                    {t ? "Display Name" : "显示名称"}
                                 </Label>
                                 <Input
                                     id="name"
                                     value={name}
                                     onChange={(e) => setName(e.target.value)}
                                     className="border-white/10 bg-white/5 text-white placeholder:text-white/30 focus:border-mermaid-cyan/50"
-                                    placeholder="请输入您的名称"
+                                    placeholder={t ? "Enter your name" : "请输入您的名称"}
                                 />
                             </div>
 
                             <div className="space-y-2">
                                 <Label htmlFor="email" className="text-white/60">
-                                    邮箱地址
+                                    {t ? "Email" : "邮箱地址"}
                                 </Label>
                                 <Input
                                     id="email"
@@ -266,19 +269,19 @@ export default function SettingsPage() {
                                     disabled
                                     className="border-white/10 bg-white/5 text-white/50"
                                 />
-                                <p className="text-xs text-white/40">邮箱暂不支持修改</p>
+                                <p className="text-xs text-white/40">{t ? "Email cannot be changed" : "邮箱暂不支持修改"}</p>
                             </div>
 
                             <div className="space-y-2">
                                 <Label htmlFor="phone" className="text-white/60">
-                                    手机号码
+                                    {t ? "Phone Number" : "手机号码"}
                                 </Label>
                                 <Input
                                     id="phone"
                                     value={phone}
                                     onChange={(e) => setPhone(e.target.value)}
                                     className="border-white/10 bg-white/5 text-white placeholder:text-white/30 focus:border-mermaid-cyan/50"
-                                    placeholder="请输入手机号"
+                                    placeholder={t ? "Enter phone number" : "请输入手机号"}
                                 />
                             </div>
                         </div>
@@ -293,12 +296,12 @@ export default function SettingsPage() {
                                 {saving ? (
                                     <>
                                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                        保存中...
+                                        {t ? "Saving..." : "保存中..."}
                                     </>
                                 ) : (
                                     <>
                                         <Save className="mr-2 h-4 w-4" />
-                                        保存更改
+                                        {t ? "Save Changes" : "保存更改"}
                                     </>
                                 )}
                             </Button>

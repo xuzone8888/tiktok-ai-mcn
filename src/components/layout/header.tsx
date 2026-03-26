@@ -32,6 +32,7 @@ import { cn } from "@/lib/utils";
 import { type UserRole, isAdmin } from "@/lib/admin";
 import { createClient } from "@/lib/supabase/client";
 import { LangToggle } from "@/components/ui/LangToggle";
+import { useLang } from "@/contexts/LangContext";
 
 // ============================================================================
 // 类型定义
@@ -54,6 +55,7 @@ interface CurrentUser {
 
 export function Header() {
   const router = useRouter();
+  const { lang } = useLang();
   const [user, setUser] = useState<CurrentUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [loggingOut, setLoggingOut] = useState(false);
@@ -176,7 +178,7 @@ export function Header() {
             variant="outline"
             className="border-tiktok-cyan/50 text-tiktok-cyan hover:bg-tiktok-cyan/10"
           >
-            <Link href="/auth/login">登录</Link>
+            <Link href="/auth/login">{lang === "en" ? "Sign In" : "登录"}</Link>
           </Button>
         )}
 
@@ -230,7 +232,7 @@ export function Header() {
                     <p className="text-xs text-muted-foreground">{user.email}</p>
                     <p className="text-xs text-amber-400">
                       <Zap className="h-3 w-3 inline mr-1" />
-                      {user.credits.toLocaleString()} 积分
+                      {user.credits.toLocaleString()} {lang === "en" ? "credits" : "积分"}
                     </p>
                   </div>
                 </DropdownMenuLabel>
@@ -241,7 +243,7 @@ export function Header() {
                 <DropdownMenuItem asChild>
                   <Link href="/profile" className="cursor-pointer">
                     <UserCircle className="h-4 w-4 mr-2" />
-                    个人中心
+                    {lang === "en" ? "Profile" : "个人中心"}
                   </Link>
                 </DropdownMenuItem>
 
@@ -249,7 +251,7 @@ export function Header() {
                 <DropdownMenuItem asChild>
                   <Link href="/settings" className="cursor-pointer">
                     <Settings className="h-4 w-4 mr-2" />
-                    设置
+                    {lang === "en" ? "Settings" : "设置"}
                   </Link>
                 </DropdownMenuItem>
 
@@ -268,9 +270,9 @@ export function Header() {
                         )}
                       >
                         <Shield className="h-4 w-4 mr-2" />
-                        <span className="font-medium">管理后台</span>
+                        <span className="font-medium">{lang === "en" ? "Admin Portal" : "管理后台"}</span>
                         <span className="ml-auto text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 border border-red-500/30">
-                          {user.role === "super_admin" ? "超管" : "管理"}
+                          {user.role === "super_admin" ? (lang === "en" ? "Super Admin" : "超管") : (lang === "en" ? "Admin" : "管理")}
                         </span>
                       </Link>
                     </DropdownMenuItem>
@@ -290,7 +292,7 @@ export function Header() {
                   ) : (
                     <LogOut className="h-4 w-4 mr-2" />
                   )}
-                  {loggingOut ? "登出中..." : "退出登录"}
+                  {loggingOut ? (lang === "en" ? "Signing out..." : "登出中...") : (lang === "en" ? "Sign Out" : "退出登录")}
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

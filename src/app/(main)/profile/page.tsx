@@ -18,6 +18,7 @@ import {
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import { type UserRole, isAdmin } from "@/lib/admin";
+import { useLang } from "@/contexts/LangContext";
 
 // ============================================================================
 // 类型定义
@@ -38,6 +39,8 @@ interface UserProfile {
 // ============================================================================
 
 export default function ProfilePage() {
+    const { lang } = useLang();
+    const t = lang === "en";
     const [user, setUser] = useState<UserProfile | null>(null);
     const [loading, setLoading] = useState(true);
 
@@ -91,12 +94,12 @@ export default function ProfilePage() {
         return (
             <div className="flex h-[60vh] flex-col items-center justify-center gap-4">
                 <UserCircle className="h-16 w-16 text-white/20" />
-                <p className="text-white/50">请先登录</p>
+                <p className="text-white/50">{t ? "Please sign in first" : "请先登录"}</p>
                 <Link
                     href="/auth/login"
                     className="rounded-full bg-gradient-to-r from-[#CCFF00] to-[#00F2EA] px-6 py-2 font-bold text-black transition-transform hover:scale-105"
                 >
-                    去登录
+                    {t ? "Sign In" : "去登录"}
                 </Link>
             </div>
         );
@@ -104,29 +107,29 @@ export default function ProfilePage() {
 
     const quickLinks = [
         {
-            title: "账号设置",
-            description: "修改密码、绑定手机等",
+            title: t ? "Account Settings" : "账号设置",
+            description: t ? "Password, phone & more" : "修改密码、绑定手机等",
             href: "/settings",
             icon: Settings,
             color: "from-[#00F2EA] to-[#00F2EA]/50",
         },
         {
-            title: "积分明细",
-            description: "查看积分消费记录",
+            title: t ? "Credit History" : "积分明细",
+            description: t ? "View credit usage" : "查看积分消费记录",
             href: "/settings?tab=credits",
             icon: History,
             color: "from-[#CCFF00] to-[#CCFF00]/50",
         },
         {
-            title: "API 密钥",
-            description: "管理开发者密钥",
+            title: t ? "API Keys" : "API 密钥",
+            description: t ? "Manage developer keys" : "管理开发者密钥",
             href: "/settings?tab=api",
             icon: KeyRound,
             color: "from-[#EC4899] to-[#EC4899]/50",
         },
         {
-            title: "充值中心",
-            description: "购买更多积分",
+            title: t ? "Recharge" : "充值中心",
+            description: t ? "Buy more credits" : "购买更多积分",
             href: "/settings?tab=billing",
             icon: CreditCard,
             color: "from-[#8B5CF6] to-[#8B5CF6]/50",
@@ -137,8 +140,8 @@ export default function ProfilePage() {
         <div className="container mx-auto max-w-4xl px-4 py-8">
             {/* Page Header */}
             <div className="mb-8">
-                <h1 className="text-2xl font-bold text-white">个人中心</h1>
-                <p className="text-sm text-white/50">管理您的账户信息和偏好设置</p>
+                <h1 className="text-2xl font-bold text-white">{t ? "Profile" : "个人中心"}</h1>
+                <p className="text-sm text-white/50">{t ? "Manage your account and preferences" : "管理您的账户信息和偏好设置"}</p>
             </div>
 
             {/* User Profile Card */}
@@ -193,14 +196,14 @@ export default function ProfilePage() {
                                         ? "bg-amber-500/20 text-amber-400 border border-amber-500/30"
                                         : "bg-white/10 text-white/60 border border-white/10"
                             )}>
-                                {user.role === "super_admin" ? "超级管理员" : user.role === "admin" ? "管理员" : "普通用户"}
+                                {user.role === "super_admin" ? (t ? "Super Admin" : "超级管理员") : user.role === "admin" ? (t ? "Admin" : "管理员") : (t ? "User" : "普通用户")}
                             </span>
                         </div>
                     </div>
 
                     {/* Credits Display */}
                     <div className="shrink-0 rounded-2xl border border-white/10 bg-black/40 p-4 text-center sm:text-right">
-                        <div className="text-xs font-medium uppercase tracking-wider text-white/40">当前积分</div>
+                        <div className="text-xs font-medium uppercase tracking-wider text-white/40">{t ? "Credits" : "当前积分"}</div>
                         <div className="mt-1 flex items-center justify-center gap-2 sm:justify-end">
                             <Zap className="h-5 w-5 fill-[#CCFF00]/20 text-[#CCFF00]" />
                             <span className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-[#CCFF00] to-[#00F2EA]">

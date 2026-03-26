@@ -31,9 +31,10 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
+import { useLang } from "@/contexts/LangContext";
 
 // ============================================================================
-// 类型定义
+// Types
 // ============================================================================
 
 interface NavItem {
@@ -47,200 +48,206 @@ interface NavItem {
 }
 
 interface NavGroup {
-  header: string | null; // null = 无标题的顶级项
+  header: string | null;
   items: NavItem[];
 }
 
 // ============================================================================
-// 导航配置 - 平铺分组结构 (一键直达)
+// Nav Data — bilingual via getNavGroups(lang)
 // ============================================================================
 
-const navGroups: NavGroup[] = [
-  // --- 顶级 (无标题) ---
-  {
-    header: null,
-    items: [
-      {
-        title: "数据总览",
-        href: "/dashboard",
-        icon: LayoutDashboard,
-        description: "运营数据概览",
-      },
-    ],
-  },
-  // --- AI 角色中心 ---
-  {
-    header: "AI 角色中心",
-    items: [
-      {
-        title: "创建角色",
-        href: "/character/create",
-        icon: Sparkles,
-        description: "创建专属 AI 角色",
-      },
-      {
-        title: "角色市场",
-        href: "/models",
-        icon: Users,
-        description: "浏览全部 AI 角色",
-      },
-      {
-        title: "我的角色",
-        href: "/team",
-        icon: UserCheck,
-        description: "已签约与自建的角色",
-      },
-    ],
-  },
-  // --- 创作灵感 ---
-  {
-    header: "创作灵感",
-    items: [
-      {
-        title: "模板中心",
-        href: "/templates",
-        icon: LayoutTemplate,
-        description: "发现灵感模板",
-      },
-    ],
-  },
-  // --- 图片制作 ---
-  {
-    header: "图片制作",
-    items: [
-      {
-        title: "快速生图",
-        href: "/quick-gen",
-        icon: Zap,
-        description: "AI 快速生成图片",
-      },
-      {
-        title: "多图生成",
-        href: "/pro-studio/image-batch",
-        icon: Images,
-        description: "多张图片同时生成",
-      },
-      {
-        title: "商图精修",
-        href: "/image-factory",
-        icon: Camera,
-        description: "电商商品图精修",
-      },
-    ],
-  },
-  // --- 视频制作 ---
-  {
-    header: "视频制作",
-    items: [
-      {
-        title: "素材生成视频",
-        href: "/pro-studio/video-batch",
-        icon: Clapperboard,
-        description: "多个视频同时生成",
-      },
-      {
-        title: "链接生成视频",
-        href: "/link-video",
-        icon: Link2,
-        description: "通过链接一键生成视频",
-      },
-      {
-        title: "图片生成视频",
-        href: "/pro-studio/image-slideshow",
-        icon: Images,
-        description: "图片合成视频",
-      },
-    ],
-  },
-  // --- 社媒内容发布 ---
-  {
-    header: "社媒内容发布",
-    items: [
-      {
-        title: "TikTok 账号绑定",
-        href: "/publish/accounts",
-        icon: Users,
-        description: "绑定 TikTok 发布账号",
-        beta: true,
-      },
-      {
-        title: "TikTok 视频发布",
-        href: "/publish",
-        icon: Send,
-        description: "发布视频到 TikTok",
-        beta: true,
-      },
-    ],
-  },
-  // --- 电商内容发布 ---
-  {
-    header: "电商内容发布",
-    items: [
-      {
-        title: "TikTok Shop 账号绑定",
-        href: "/shop-publish/accounts",
-        icon: UserCheck,
-        description: "绑定 TikTok Shop 账号",
-        beta: true,
-      },
-      {
-        title: "TikTok Shop 带货发布",
-        href: "/shop-publish",
-        icon: ShoppingBag,
-        description: "发布带货视频到 TikTok Shop",
-        beta: true,
-      },
-    ],
-  },
-  // --- 生产归档 ---
-  {
-    header: "生产归档",
-    items: [
-      {
-        title: "生成记录",
-        href: "/assets",
-        icon: Package,
-        description: "查看历史生成内容",
-      },
-    ],
-  },
-  // --- 账户 ---
-  {
-    header: "账户",
-    items: [
-      {
-        title: "充值中心",
-        href: "/recharge",
-        icon: CreditCard,
-        description: "积分充值购买",
-      },
-    ],
-  },
-];
+function getNavGroups(lang: string): NavGroup[] {
+  const t = lang === "en";
+  return [
+    // --- Top Level ---
+    {
+      header: null,
+      items: [
+        {
+          title: t ? "Dashboard" : "数据总览",
+          href: "/dashboard",
+          icon: LayoutDashboard,
+          description: t ? "Overview" : "运营数据概览",
+        },
+      ],
+    },
+    // --- AI Characters ---
+    {
+      header: t ? "AI Characters" : "AI 角色中心",
+      items: [
+        {
+          title: t ? "Create Character" : "创建角色",
+          href: "/character/create",
+          icon: Sparkles,
+          description: t ? "Create your AI character" : "创建专属 AI 角色",
+        },
+        {
+          title: t ? "Character Market" : "角色市场",
+          href: "/models",
+          icon: Users,
+          description: t ? "Browse all AI characters" : "浏览全部 AI 角色",
+        },
+        {
+          title: t ? "My Characters" : "我的角色",
+          href: "/team",
+          icon: UserCheck,
+          description: t ? "Contracted & custom" : "已签约与自建的角色",
+        },
+      ],
+    },
+    // --- Creative Studio ---
+    {
+      header: t ? "Creative Studio" : "创作灵感",
+      items: [
+        {
+          title: t ? "Templates" : "模板中心",
+          href: "/templates",
+          icon: LayoutTemplate,
+          description: t ? "Discover templates" : "发现灵感模板",
+        },
+      ],
+    },
+    // --- Image Creation ---
+    {
+      header: t ? "Image Creation" : "图片制作",
+      items: [
+        {
+          title: t ? "Quick Image" : "快速生图",
+          href: "/quick-gen",
+          icon: Zap,
+          description: t ? "AI image generation" : "AI 快速生成图片",
+        },
+        {
+          title: t ? "Batch Images" : "多图生成",
+          href: "/pro-studio/image-batch",
+          icon: Images,
+          description: t ? "Generate multiple images" : "多张图片同时生成",
+        },
+        {
+          title: t ? "Product Photo" : "商图精修",
+          href: "/image-factory",
+          icon: Camera,
+          description: t ? "E-commerce photo retouching" : "电商商品图精修",
+        },
+      ],
+    },
+    // --- Video Creation ---
+    {
+      header: t ? "Video Creation" : "视频制作",
+      items: [
+        {
+          title: t ? "Batch Videos" : "素材生成视频",
+          href: "/pro-studio/video-batch",
+          icon: Clapperboard,
+          description: t ? "Generate multiple videos" : "多个视频同时生成",
+        },
+        {
+          title: t ? "Link to Video" : "链接生成视频",
+          href: "/link-video",
+          icon: Link2,
+          description: t ? "Generate video from URL" : "通过链接一键生成视频",
+        },
+        {
+          title: t ? "Image to Video" : "图片生成视频",
+          href: "/pro-studio/image-slideshow",
+          icon: Images,
+          description: t ? "Convert images to video" : "图片合成视频",
+        },
+      ],
+    },
+    // --- Social Publishing ---
+    {
+      header: t ? "Social Publishing" : "社媒内容发布",
+      items: [
+        {
+          title: t ? "TikTok Accounts" : "TikTok 账号绑定",
+          href: "/publish/accounts",
+          icon: Users,
+          description: t ? "Connect TikTok accounts" : "绑定 TikTok 发布账号",
+          beta: true,
+        },
+        {
+          title: t ? "TikTok Publish" : "TikTok 视频发布",
+          href: "/publish",
+          icon: Send,
+          description: t ? "Publish to TikTok" : "发布视频到 TikTok",
+          beta: true,
+        },
+      ],
+    },
+    // --- Shop Publishing ---
+    {
+      header: t ? "Shop Publishing" : "电商内容发布",
+      items: [
+        {
+          title: t ? "Shop Accounts" : "TikTok Shop 账号绑定",
+          href: "/shop-publish/accounts",
+          icon: UserCheck,
+          description: t ? "Connect TikTok Shop" : "绑定 TikTok Shop 账号",
+          beta: true,
+        },
+        {
+          title: t ? "Shop Publish" : "TikTok Shop 带货发布",
+          href: "/shop-publish",
+          icon: ShoppingBag,
+          description: t ? "Publish to TikTok Shop" : "发布带货视频到 TikTok Shop",
+          beta: true,
+        },
+      ],
+    },
+    // --- Archive ---
+    {
+      header: t ? "Archive" : "生产归档",
+      items: [
+        {
+          title: t ? "Generated Assets" : "生成记录",
+          href: "/assets",
+          icon: Package,
+          description: t ? "View generation history" : "查看历史生成内容",
+        },
+      ],
+    },
+    // --- Account ---
+    {
+      header: t ? "Account" : "账户",
+      items: [
+        {
+          title: t ? "Recharge" : "充值中心",
+          href: "/recharge",
+          icon: CreditCard,
+          description: t ? "Buy credits" : "积分充值购买",
+        },
+      ],
+    },
+  ];
+}
 
 // ============================================================================
-// Sidebar 组件
+// Sidebar Component
 // ============================================================================
 
 export function Sidebar() {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
   const { toast } = useToast();
+  const { lang } = useLang();
 
-  // 处理即将推出项点击
+  const navGroups = getNavGroups(lang);
+
+  // Handle coming-soon item click
   const handleComingSoonClick = (item: NavItem) => {
     toast({
-      title: "🚀 即将推出",
-      description: item.comingSoonMessage || "此功能正在开发中",
+      title: lang === "en" ? "🚀 Coming Soon" : "🚀 即将推出",
+      description: item.comingSoonMessage || (lang === "en" ? "This feature is under development" : "此功能正在开发中"),
     });
   };
 
-  // 渲染单个导航项
+  // Render single nav item
   const renderNavItem = (item: NavItem, isActive: boolean) => {
     const Icon = item.icon;
     const isComingSoon = item.comingSoon;
 
-    // Coming Soon 项 - 不可点击，柔和显示，徽章小巧
+    // Coming Soon items — not clickable, soft display
     if (isComingSoon) {
       return (
         <Tooltip key={item.href}>
@@ -259,7 +266,7 @@ export function Sidebar() {
                 )}
               >
                 <Icon className="h-4 w-4" />
-                {/* Coming Soon 锁定图标 */}
+                {/* Coming Soon lock icon */}
                 <div className="absolute -right-1 -top-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-amber-500/20 border border-amber-500/40">
                   <Lock className="h-2 w-2 text-amber-400/80" />
                 </div>
@@ -270,7 +277,7 @@ export function Sidebar() {
                   <div className="flex items-center gap-1.5">
                     <span className="text-sm opacity-40">{item.title}</span>
                     <span className="rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium text-amber-400/70">
-                      即将推出
+                      {lang === "en" ? "Coming Soon" : "即将推出"}
                     </span>
                   </div>
                 </div>
@@ -278,7 +285,7 @@ export function Sidebar() {
             </button>
           </TooltipTrigger>
           <TooltipContent side="right" className="max-w-[250px]">
-            <p className="font-medium">🚀 即将推出</p>
+            <p className="font-medium">{lang === "en" ? "🚀 Coming Soon" : "🚀 即将推出"}</p>
             <p className="text-xs text-muted-foreground mt-1">
               {item.comingSoonMessage}
             </p>
@@ -287,7 +294,7 @@ export function Sidebar() {
       );
     }
 
-    // 正常导航项 - 磁性悬停效果
+    // Normal nav item — magnetic hover effect
     return (
       <Link
         key={item.href}
@@ -300,7 +307,7 @@ export function Sidebar() {
             : "text-white/60 hover:bg-white/[0.05] hover:text-white hover:translate-x-1"
         )}
       >
-        {/* Active indicator - 右侧霓虹光条 */}
+        {/* Active indicator - right neon bar */}
         {isActive && (
           <div className="absolute right-0 top-1/2 h-6 w-[3px] -translate-y-1/2 rounded-l-full bg-mermaid-cyan shadow-[0_0_10px_#00F2EA]" />
         )}
@@ -397,8 +404,6 @@ export function Sidebar() {
               {/* Group Items */}
               <div className="space-y-0.5">
                 {group.items.map((item) => {
-                  // Fix: Use exact match to prevent parent highlighting when on child page
-                  // e.g., /publish should not be active when on /publish/accounts
                   const isActive = pathname === item.href;
                   return renderNavItem(item, isActive);
                 })}
@@ -407,7 +412,7 @@ export function Sidebar() {
           ))}
         </nav>
 
-        {/* Sidebar Footer - 底部装饰区 */}
+        {/* Sidebar Footer */}
         <div className={cn(
           "mt-auto border-t border-border/50 p-4",
           collapsed && "px-2"

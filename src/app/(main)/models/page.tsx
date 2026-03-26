@@ -19,6 +19,7 @@ import { getMarketplaceModels, type PublicModel } from "@/lib/actions/models";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import type { AIModel } from "@/types/model";
+import { useLang } from "@/contexts/LangContext";
 
 // ============================================================================
 // Types & Constants
@@ -28,14 +29,14 @@ type ModelWithContract = PublicModel & {
   has_active_contract?: boolean;
 };
 
-const categories = [
-  { id: "all", label: "全部", icon: Sparkles },
-  { id: "fashion", label: "时尚", icon: Star },
-  { id: "beauty", label: "美妆", icon: Star },
-  { id: "fitness", label: "健身", icon: Star },
-  { id: "lifestyle", label: "生活方式", icon: Star },
-  { id: "tech", label: "科技", icon: Star },
-  { id: "food", label: "美食", icon: Star },
+const ALL_CATEGORIES = [
+  { id: "all",       labelZh: "全部",   labelEn: "All",       icon: Sparkles },
+  { id: "fashion",  labelZh: "时尚",   labelEn: "Fashion",   icon: Star },
+  { id: "beauty",   labelZh: "美妆",   labelEn: "Beauty",   icon: Star },
+  { id: "fitness",  labelZh: "健身",   labelEn: "Fitness",  icon: Star },
+  { id: "lifestyle",labelZh: "生活方式",labelEn: "Lifestyle",icon: Star },
+  { id: "tech",     labelZh: "科技",   labelEn: "Tech",     icon: Star },
+  { id: "food",     labelZh: "美食",   labelEn: "Food",     icon: Star },
 ];
 
 // ============================================================================
@@ -44,11 +45,14 @@ const categories = [
 
 function EmptyState({
   hasFilters,
-  onClearFilters
+  onClearFilters,
+  lang,
 }: {
   hasFilters: boolean;
   onClearFilters: () => void;
+  lang: string;
 }) {
+  const t = lang === "en";
   return (
     <div className="flex flex-col items-center justify-center py-24 text-center">
       <div className="relative mb-6">
@@ -58,9 +62,9 @@ function EmptyState({
 
       {hasFilters ? (
         <>
-          <h3 className="text-xl font-semibold mb-2 text-white">没有找到匹配的模特</h3>
+          <h3 className="text-xl font-semibold mb-2 text-white">{t ? "No models found" : "没有找到匹配的模特"}</h3>
           <p className="text-white/60 max-w-sm mb-6">
-            尝试调整搜索条件或筛选器来找到您想要的模特。
+            {t ? "Try adjusting your search or filters." : "尝试调整搜索条件或筛选器来找到您想要的模特。"}
           </p>
           <Button
             variant="outline"
@@ -68,14 +72,14 @@ function EmptyState({
             className="border-white/10 hover:border-mermaid-cyan/50 text-white/70 hover:text-white hover:bg-white/5"
           >
             <RefreshCw className="mr-2 h-4 w-4" />
-            清除所有筛选
+            {t ? "Clear all filters" : "清除所有筛选"}
           </Button>
         </>
       ) : (
         <>
-          <h3 className="text-xl font-semibold mb-2 text-white">暂无可用模特</h3>
+          <h3 className="text-xl font-semibold mb-2 text-white">{t ? "No models available" : "暂无可用模特"}</h3>
           <p className="text-white/60 max-w-sm">
-            模特资源库暂时为空，请稍后再来或联系客服。
+            {t ? "Model library is empty..." : "模特资源库暂时为空，请稍后再来或联系客服。"}
           </p>
         </>
       )}
@@ -112,6 +116,9 @@ function LoadingSkeleton() {
 
 export default function ModelsPage() {
   const { toast } = useToast();
+  const { lang } = useLang();
+  const t = lang === "en";
+  const categories = ALL_CATEGORIES.map(c => ({ ...c, label: t ? c.labelEn : c.labelZh }));
 
   // Data state
   const [models, setModels] = useState<ModelWithContract[]>([]);
@@ -151,8 +158,8 @@ export default function ModelsPage() {
         console.error("[Models Page] Failed to fetch:", result.error);
         toast({
           variant: "destructive",
-          title: "加载失败",
-          description: result.error || "无法获取模特列表",
+          title: t ? "Load Failed" : "加载失败",
+          description: result.error || (t ? "Could not fetch models" : "无法获取模特列表"),
         });
         setModels([]);
       }
@@ -160,8 +167,8 @@ export default function ModelsPage() {
       console.error("[Models Page] Error:", error);
       toast({
         variant: "destructive",
-        title: "加载失败",
-        description: "网络错误，请重试",
+        title: t ? "Load Failed" : "加载失败",
+        description: t ? "Network error, please retry" : "网络错误，请重试",
       });
       setModels([]);
     } finally {
@@ -231,8 +238,8 @@ export default function ModelsPage() {
       )
     );
     toast({
-      title: "🎉 签约成功！",
-      description: "模特已加入您的团队",
+      title: t ? "🎉 Signed!" : "🎉 签约成功！",
+      description: t ? "Character added to your team" : "模特已加入您的团队",
     });
   };
 
@@ -278,10 +285,10 @@ export default function ModelsPage() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight flex items-center gap-3">
             <div className="h-8 w-1.5 rounded-full bg-gradient-to-b from-mermaid-lime to-mermaid-cyan shadow-[0_0_10px_rgba(0,242,234,0.5)]" />
-            <span className="text-white drop-shadow-lg">角色市场</span>
+            <span className="text-white drop-shadow-lg">{t ? "Character Market" : "角色市场"}</span>
           </h1>
           <p className="mt-2 text-white/60">
-            发现顶级 AI 模特，打造您的创意团队
+            {t ? "Discover top AI models for your team" : "发现顶级 AI 模特，打造您的创意团队"}
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -295,7 +302,7 @@ export default function ModelsPage() {
         <div className="relative flex-1 min-w-[200px] max-w-md">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/40" />
           <Input
-            placeholder="搜索名称、风格、类别..."
+            placeholder={t ? "Search name, style, category..." : "搜索名称、风格、类别..."}
             className="pl-10 bg-white/5 border-white/10 focus:border-mermaid-cyan/50 text-white placeholder:text-white/30"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
@@ -313,7 +320,7 @@ export default function ModelsPage() {
           onClick={() => setShowTrending(!showTrending)}
         >
           <TrendingUp className="mr-2 h-4 w-4" />
-          热门
+          {t ? "Hot" : "热门"}
         </Button>
 
         <Button
@@ -327,12 +334,12 @@ export default function ModelsPage() {
           onClick={() => setShowFeatured(!showFeatured)}
         >
           <Star className="mr-2 h-4 w-4" />
-          推荐
+          {t ? "Featured" : "推荐"}
         </Button>
 
         <Button variant="outline" className="border-white/10 hover:bg-white/5 text-white/70 hover:text-white hover:border-white/20">
           <Filter className="mr-2 h-4 w-4" />
-          高级筛选
+          {t ? "Filters" : "高级筛选"}
         </Button>
       </div>
 
@@ -370,7 +377,7 @@ export default function ModelsPage() {
           <Users className="h-5 w-5 text-mermaid-cyan drop-shadow-[0_0_5px_rgba(0,242,234,0.5)]" />
           <span className="text-sm">
             <span className="font-bold text-white">{filteredModels.length}</span>
-            <span className="text-white/40 ml-1">位可用模特</span>
+            <span className="text-white/40 ml-1">{t ? "available" : "位可用模特"}</span>
           </span>
         </div>
         <div className="flex items-center gap-2">
@@ -379,7 +386,7 @@ export default function ModelsPage() {
             <span className="font-bold text-white">
               {filteredModels.filter((m) => m.has_active_contract).length}
             </span>
-            <span className="text-white/40 ml-1">位已签约</span>
+            <span className="text-white/40 ml-1">{t ? "contracted" : "位已签约"}</span>
           </span>
         </div>
       </div>
@@ -388,7 +395,7 @@ export default function ModelsPage() {
       {loading ? (
         <LoadingSkeleton />
       ) : filteredModels.length === 0 ? (
-        <EmptyState hasFilters={hasFilters} onClearFilters={clearFilters} />
+        <EmptyState hasFilters={hasFilters} onClearFilters={clearFilters} lang={lang} />
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
           {filteredModels.map((model) => (

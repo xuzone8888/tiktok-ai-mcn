@@ -20,6 +20,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useLang } from "@/contexts/LangContext";
 
 interface UserStats {
   credits: {
@@ -79,20 +80,29 @@ function calculateChange(current: number, previous: number): { value: string; tr
   return { value: "0%", trend: "neutral" };
 }
 
-function formatDate(dateString: string): string {
+function formatDate(dateString: string, lang: string): string {
   const date = new Date(dateString);
   const now = new Date();
   const diff = now.getTime() - date.getTime();
 
-  if (diff < 60000) return "刚刚";
-  if (diff < 3600000) return `${Math.floor(diff / 60000)} 分钟前`;
-  if (diff < 86400000) return `${Math.floor(diff / 3600000)} 小时前`;
-  if (diff < 604800000) return `${Math.floor(diff / 86400000)} 天前`;
-
-  return date.toLocaleDateString("zh-CN", { month: "short", day: "numeric" });
+  if (lang === "en") {
+    if (diff < 60000) return "just now";
+    if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
+    if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
+    if (diff < 604800000) return `${Math.floor(diff / 86400000)}d ago`;
+    return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  } else {
+    if (diff < 60000) return "刚刚";
+    if (diff < 3600000) return `${Math.floor(diff / 60000)} 分钟前`;
+    if (diff < 86400000) return `${Math.floor(diff / 3600000)} 小时前`;
+    if (diff < 604800000) return `${Math.floor(diff / 86400000)} 天前`;
+    return date.toLocaleDateString("zh-CN", { month: "short", day: "numeric" });
+  }
 }
 
 export default function DashboardPage() {
+  const { lang } = useLang();
+  const t = lang === "en";
   const [stats, setStats] = useState<UserStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -108,11 +118,11 @@ export default function DashboardPage() {
       if (result.success) {
         setStats(result.data);
       } else {
-        setError(result.error || "获取数据失败");
+        setError(result.error || (t ? "Failed to load data" : "获取数据失败"));
       }
     } catch (err) {
       console.error("[Dashboard] Error:", err);
-      setError("网络错误，请稍后重试");
+      setError(t ? "Network error, please retry" : "网络错误，请稍后重试");
     } finally {
       setLoading(false);
     }
@@ -120,6 +130,7 @@ export default function DashboardPage() {
 
   useEffect(() => {
     fetchStats();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   if (loading) {
@@ -127,7 +138,7 @@ export default function DashboardPage() {
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="flex flex-col items-center gap-3">
           <Loader2 className="h-8 w-8 animate-spin text-tiktok-cyan" />
-          <p className="text-muted-foreground">加载数据中...</p>
+          <p className="text-muted-foreground">{t ? "Loading..." : "加载数据中..."}</p>
         </div>
       </div>
     );
@@ -141,47 +152,55 @@ export default function DashboardPage() {
           <p className="text-muted-foreground">{error}</p>
           <Button variant="outline" onClick={fetchStats} className="gap-2">
             <RefreshCw className="h-4 w-4" />
-            重试
+            {t ? "Retry" : "重试"}
           </Button>
         </div>
       </div>
     );
   }
 
-  // 计算变化率（保留供将来使用）
+  // Calculate change rates (kept for future use)
   const _videosChange = calculateChange(stats?.videos.thisMonth || 0, stats?.videos.lastMonth || 0);
   const _imagesChange = calculateChange(stats?.images.thisMonth || 0, stats?.images.lastMonth || 0);
-  void _videosChange; void _imagesChange; // suppress unused warnings
+  void _videosChange; void _imagesChange;
 
   const statCards = [
     {
-      title: "当前积分",
+      title: t ? "Credits" : "当前积分",
       value: formatNumber(stats?.credits.current || 0),
-      change: `本月消耗 ${formatNumber(stats?.credits.thisMonth || 0)}`,
+      change: t
+        ? `Used ${formatNumber(stats?.credits.thisMonth || 0)} this month`
+        : `本月消耗 ${formatNumber(stats?.credits.thisMonth || 0)}`,
       trend: "neutral" as const,
       icon: Zap,
       color: "amber",
     },
     {
-      title: "签约模特",
+      title: t ? "Characters" : "签约模特",
       value: stats?.models.active?.toString() || "0",
-      change: stats?.models.expiringSoon ? `${stats.models.expiringSoon} 个即将到期` : "全部正常",
+      change: stats?.models.expiringSoon
+        ? (t ? `${stats.models.expiringSoon} expiring soon` : `${stats.models.expiringSoon} 个即将到期`)
+        : (t ? "All good" : "全部正常"),
       trend: stats?.models.expiringSoon ? "down" : "up" as "up" | "down",
       icon: Users,
       color: "cyan",
     },
     {
-      title: "生成视频",
+      title: t ? "Videos" : "生成视频",
       value: formatNumber(stats?.videos.total || 0),
-      change: `本月 ${formatNumber(stats?.videos.thisMonth || 0)} 条`,
+      change: t
+        ? `${formatNumber(stats?.videos.thisMonth || 0)} this month`
+        : `本月 ${formatNumber(stats?.videos.thisMonth || 0)} 条`,
       trend: "neutral" as const,
       icon: Video,
       color: "pink",
     },
     {
-      title: "生成图片",
+      title: t ? "Images" : "生成图片",
       value: formatNumber(stats?.images.total || 0),
-      change: `本月 ${formatNumber(stats?.images.thisMonth || 0)} 张`,
+      change: t
+        ? `${formatNumber(stats?.images.thisMonth || 0)} this month`
+        : `本月 ${formatNumber(stats?.images.thisMonth || 0)} 张`,
       trend: "neutral" as const,
       icon: ImageIcon,
       color: "cyan",
@@ -194,15 +213,15 @@ export default function DashboardPage() {
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold tracking-tight flex items-center gap-3">
           <div className="h-8 w-1.5 rounded-full bg-gradient-to-b from-mermaid-lime to-mermaid-cyan shadow-[0_0_10px_rgba(0,242,234,0.5)]" />
-          <span className="text-white drop-shadow-lg">数据总览</span>
+          <span className="text-white drop-shadow-lg">{t ? "Dashboard" : "数据总览"}</span>
         </h1>
         <p className="mt-2 text-white/60">
-          欢迎回来！这是您的运营数据概览
+          {t ? "Welcome back! Here's your overview." : "欢迎回来！这是您的运营数据概览"}
         </p>
       </div>
       <Button variant="mermaid-ghost" size="sm" onClick={fetchStats} className="gap-2">
         <RefreshCw className="h-4 w-4" />
-        刷新数据
+        {t ? "Refresh" : "刷新数据"}
       </Button>
 
       {/* Stats Grid */}
@@ -260,75 +279,83 @@ export default function DashboardPage() {
         })}
       </div>
 
-      {/* 详细统计 */}
+      {/* Detailed Stats */}
       <div className="grid gap-6 lg:grid-cols-2">
-        {/* 视频统计 */}
+        {/* Video Stats */}
         <Card variant="mermaid" className="group">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Video className="h-5 w-5 text-mermaid-pink" />
-              视频生成统计
+              {t ? "Video Stats" : "视频生成统计"}
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-3 gap-4">
               <div className="text-center p-4 rounded-xl border border-transparent hover:bg-white/10 transition-all duration-300 group/item cursor-default">
                 <div className="text-2xl font-bold text-white/90 group-hover/item:text-white transition-colors duration-300">{stats?.videos.total || 0}</div>
-                <div className="text-xs text-white/40 mt-1">总生成数</div>
+                <div className="text-xs text-white/40 mt-1">{t ? "Total" : "总生成数"}</div>
               </div>
               <div className="text-center p-4 rounded-xl border border-transparent hover:bg-white/10 transition-all duration-300 group/item cursor-default">
                 <div className="text-2xl font-bold text-white/90 group-hover/item:text-neon-green group-hover/item:scale-105 transition-all duration-300">{stats?.videos.completed || 0}</div>
-                <div className="text-xs text-white/40 group-hover/item:text-neon-green/70 transition-colors mt-1">成功</div>
+                <div className="text-xs text-white/40 group-hover/item:text-neon-green/70 transition-colors mt-1">{t ? "Success" : "成功"}</div>
               </div>
               <div className="text-center p-4 rounded-xl border border-transparent hover:bg-white/10 transition-all duration-300 group/item cursor-default">
                 <div className="text-2xl font-bold text-white/90 group-hover/item:text-neon-red group-hover/item:scale-105 transition-all duration-300">{stats?.videos.failed || 0}</div>
-                <div className="text-xs text-white/40 group-hover/item:text-neon-red/70 transition-colors mt-1">失败</div>
+                <div className="text-xs text-white/40 group-hover/item:text-neon-red/70 transition-colors mt-1">{t ? "Failed" : "失败"}</div>
               </div>
             </div>
             <div className="mt-4 pt-4 border-t border-white/5">
               <div className="flex justify-between text-sm">
-                <span className="text-white/40">本月生成</span>
-                <span className="font-medium text-white/80">{stats?.videos.thisMonth || 0} 条</span>
+                <span className="text-white/40">{t ? "This month" : "本月生成"}</span>
+                <span className="font-medium text-white/80">
+                  {stats?.videos.thisMonth || 0}{t ? " clips" : " 条"}
+                </span>
               </div>
               <div className="flex justify-between text-sm mt-2">
-                <span className="text-white/40">上月生成</span>
-                <span className="font-medium text-white/80">{stats?.videos.lastMonth || 0} 条</span>
+                <span className="text-white/40">{t ? "Last month" : "上月生成"}</span>
+                <span className="font-medium text-white/80">
+                  {stats?.videos.lastMonth || 0}{t ? " clips" : " 条"}
+                </span>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        {/* 图片统计 */}
+        {/* Image Stats */}
         <Card variant="mermaid" className="group">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <ImageIcon className="h-5 w-5 text-mermaid-cyan" />
-              图片生成统计
+              {t ? "Image Stats" : "图片生成统计"}
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-3 gap-4">
               <div className="text-center p-4 rounded-xl border border-transparent hover:bg-white/10 transition-all duration-300 group/item cursor-default">
                 <div className="text-2xl font-bold text-white/90 group-hover/item:text-white transition-colors duration-300">{stats?.images.total || 0}</div>
-                <div className="text-xs text-white/40 mt-1">总生成数</div>
+                <div className="text-xs text-white/40 mt-1">{t ? "Total" : "总生成数"}</div>
               </div>
               <div className="text-center p-4 rounded-xl border border-transparent hover:bg-white/10 transition-all duration-300 group/item cursor-default">
                 <div className="text-2xl font-bold text-white/90 group-hover/item:text-neon-green group-hover/item:scale-105 transition-all duration-300">{stats?.images.completed || 0}</div>
-                <div className="text-xs text-white/40 group-hover/item:text-neon-green/70 transition-colors mt-1">成功</div>
+                <div className="text-xs text-white/40 group-hover/item:text-neon-green/70 transition-colors mt-1">{t ? "Success" : "成功"}</div>
               </div>
               <div className="text-center p-4 rounded-xl border border-transparent hover:bg-white/10 transition-all duration-300 group/item cursor-default">
                 <div className="text-2xl font-bold text-white/90 group-hover/item:text-neon-red group-hover/item:scale-105 transition-all duration-300">{stats?.images.failed || 0}</div>
-                <div className="text-xs text-white/40 group-hover/item:text-neon-red/70 transition-colors mt-1">失败</div>
+                <div className="text-xs text-white/40 group-hover/item:text-neon-red/70 transition-colors mt-1">{t ? "Failed" : "失败"}</div>
               </div>
             </div>
             <div className="mt-4 pt-4 border-t border-white/5">
               <div className="flex justify-between text-sm">
-                <span className="text-white/40">本月生成</span>
-                <span className="font-medium text-white/80">{stats?.images.thisMonth || 0} 张</span>
+                <span className="text-white/40">{t ? "This month" : "本月生成"}</span>
+                <span className="font-medium text-white/80">
+                  {stats?.images.thisMonth || 0}{t ? " imgs" : " 张"}
+                </span>
               </div>
               <div className="flex justify-between text-sm mt-2">
-                <span className="text-white/40">上月生成</span>
-                <span className="font-medium text-white/80">{stats?.images.lastMonth || 0} 张</span>
+                <span className="text-white/40">{t ? "Last month" : "上月生成"}</span>
+                <span className="font-medium text-white/80">
+                  {stats?.images.lastMonth || 0}{t ? " imgs" : " 张"}
+                </span>
               </div>
             </div>
           </CardContent>
@@ -342,7 +369,7 @@ export default function DashboardPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Clock className="h-5 w-5 text-white/70" />
-              最近活动
+              {t ? "Recent Activity" : "最近活动"}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -373,7 +400,7 @@ export default function DashboardPage() {
                       <Loader2 className="h-4 w-4 text-neon-warning animate-spin" />
                     )}
                     <span className="text-xs text-white/30">
-                      {formatDate(activity.createdAt)}
+                      {formatDate(activity.createdAt, lang)}
                     </span>
                   </div>
                 </div>
@@ -381,8 +408,8 @@ export default function DashboardPage() {
             ) : (
               <div className="text-center py-8 text-white/30">
                 <Play className="h-12 w-12 mx-auto mb-3 opacity-20" />
-                <p>暂无活动记录</p>
-                <p className="text-xs mt-1">开始生成视频或图片后将在这里显示</p>
+                <p>{t ? "No activity yet" : "暂无活动记录"}</p>
+                <p className="text-xs mt-1">{t ? "Start generating to see activity here" : "开始生成视频或图片后将在这里显示"}</p>
               </div>
             )}
           </CardContent>
@@ -393,15 +420,35 @@ export default function DashboardPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <TrendingUp className="h-5 w-5 text-white/70" />
-              快速操作
+              {t ? "Quick Actions" : "快速操作"}
             </CardTitle>
           </CardHeader>
           <CardContent className="grid gap-3">
             {[
-              { title: "快速生成视频", desc: "即时造片台", href: "/quick-gen", color: "cyan" },
-              { title: "批量生产视频", desc: "批量产线区", href: "/pro-studio/video-batch", color: "pink" },
-              { title: "批量处理图片", desc: "批量产线区", href: "/pro-studio/image-batch", color: "cyan" },
-              { title: "查看生产轨迹", desc: "历史生成记录", href: "/assets", color: "pink" },
+              {
+                title: t ? "Quick Video" : "快速生成视频",
+                desc: t ? "Quick Studio" : "即时造片台",
+                href: "/quick-gen",
+                color: "cyan",
+              },
+              {
+                title: t ? "Batch Videos" : "批量生产视频",
+                desc: t ? "Batch Production" : "批量产线区",
+                href: "/pro-studio/video-batch",
+                color: "pink",
+              },
+              {
+                title: t ? "Batch Images" : "批量处理图片",
+                desc: t ? "Batch Production" : "批量产线区",
+                href: "/pro-studio/image-batch",
+                color: "cyan",
+              },
+              {
+                title: t ? "View Assets" : "查看生产轨迹",
+                desc: t ? "Generation history" : "历史生成记录",
+                href: "/assets",
+                color: "pink",
+              },
             ].map((action, index) => (
               <Link key={index} href={action.href}>
                 <button

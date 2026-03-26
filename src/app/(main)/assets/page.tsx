@@ -47,6 +47,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { useLang } from "@/contexts/LangContext";
 
 interface TaskLogItem {
   id: string;
@@ -74,35 +75,47 @@ interface TaskStats {
   totalCreditsUsed: number;
 }
 
-const typeFilters = [
-  { value: "all", label: "全部" },
-  { value: "video", label: "视频" },
-  { value: "image", label: "图片" },
-];
+function getTypeFilters(lang: string) {
+  const t = lang === "en";
+  return [
+    { value: "all",   label: t ? "All"   : "全部" },
+    { value: "video", label: t ? "Video" : "视频" },
+    { value: "image", label: t ? "Image" : "图片" },
+  ];
+}
 
-const statusFilters = [
-  { value: "all", label: "全部状态" },
-  { value: "completed", label: "已完成" },
-  { value: "processing", label: "处理中" },
-  { value: "failed", label: "失败" },
-];
+function getStatusFilters(lang: string) {
+  const t = lang === "en";
+  return [
+    { value: "all",        label: t ? "All Status"   : "全部状态" },
+    { value: "completed",  label: t ? "Completed"    : "已完成" },
+    { value: "processing", label: t ? "Processing"   : "处理中" },
+    { value: "failed",     label: t ? "Failed"       : "失败" },
+  ];
+}
 
-const sourceFilters = [
-  { value: "all", label: "全部来源" },
-  { value: "quick_gen", label: "快速生成" },
-  { value: "batch_video", label: "批量视频" },
-  { value: "batch_image", label: "批量图片" },
-  { value: "link_video", label: "链接秒变" },
-  { value: "ecom_factory", label: "电商工厂" },
-];
+function getSourceFilters(lang: string) {
+  const t = lang === "en";
+  return [
+    { value: "all",          label: t ? "All Sources"   : "全部来源" },
+    { value: "quick_gen",    label: t ? "Quick Gen"     : "快速生成" },
+    { value: "batch_video",  label: t ? "Batch Video"   : "批量视频" },
+    { value: "batch_image",  label: t ? "Batch Image"   : "批量图片" },
+    { value: "link_video",   label: t ? "Link to Video" : "链接秒变" },
+    { value: "ecom_factory", label: t ? "Ecom Factory"  : "电商工厂" },
+  ];
+}
 
-const dateFilters = [
-  { value: "all", label: "全部时间" },
-  { value: "today", label: "今天" },
-  { value: "3days", label: "最近3天" },
-  { value: "7days", label: "最近7天" },
-  { value: "custom", label: "自定义" },
-];
+function getDateFilters(lang: string) {
+  const t = lang === "en";
+  return [
+    { value: "all",    label: t ? "All Time"    : "全部时间" },
+    { value: "today",  label: t ? "Today"       : "今天" },
+    { value: "3days",  label: t ? "Last 3 days" : "最近3天" },
+    { value: "7days",  label: t ? "Last 7 days" : "最近7天" },
+    { value: "custom", label: t ? "Custom"      : "自定义" },
+  ];
+}
 
 function getSourceColor(source: string): string {
   switch (source) {
@@ -125,9 +138,9 @@ function getSourceColor(source: string): string {
   }
 }
 
-function formatDate(dateString: string): string {
+function formatDate(dateString: string, lang: string): string {
   const date = new Date(dateString);
-  return date.toLocaleDateString("zh-CN", {
+  return date.toLocaleDateString(lang === "en" ? "en-US" : "zh-CN", {
     month: "short",
     day: "numeric",
     hour: "2-digit",
@@ -135,49 +148,48 @@ function formatDate(dateString: string): string {
   });
 }
 
-function getExpiryStatus(expiresAt: string): { text: string; isExpiringSoon: boolean; isExpired: boolean } {
+function getExpiryStatus(expiresAt: string, lang: string): { text: string; isExpiringSoon: boolean; isExpired: boolean } {
+  const t = lang === "en";
   const now = new Date();
   const expiry = new Date(expiresAt);
   const diff = expiry.getTime() - now.getTime();
   const days = Math.ceil(diff / (1000 * 60 * 60 * 24));
 
   if (diff <= 0) {
-    return { text: "已过期", isExpiringSoon: false, isExpired: true };
+    return { text: t ? "Expired" : "已过期", isExpiringSoon: false, isExpired: true };
   }
   if (days <= 1) {
-    return { text: "即将过期", isExpiringSoon: true, isExpired: false };
+    return { text: t ? "Expiring soon" : "即将过期", isExpiringSoon: true, isExpired: false };
   }
   if (days <= 3) {
-    return { text: `${days}天后过期`, isExpiringSoon: true, isExpired: false };
+    return { text: t ? `Expires in ${days}d` : `${days}天后过期`, isExpiringSoon: true, isExpired: false };
   }
-  return { text: `${days}天后过期`, isExpiringSoon: false, isExpired: false };
+  return { text: t ? `Expires in ${days}d` : `${days}天后过期`, isExpiringSoon: false, isExpired: false };
 }
 
-function getSourceLabel(source: string): string {
+function getSourceLabel(source: string, lang: string): string {
+  const t = lang === "en";
   switch (source) {
-    case "quick_gen":
-      return "快速生成";
-    case "batch_video":
-      return "批量视频";
-    case "batch_video_prompt":
-      return "Sora文生视频";
-    case "batch_video_veo3":
-      return "VEO3视频";
-    case "batch_video_prompt_veo3":
-      return "VEO3文生";
-    case "batch_image":
-      return "批量图片";
-    case "link_video":
-      return "链接秒变";
-    case "ecom_factory":
-      return "电商工厂";
-    default:
-      return "未知来源";
+    case "quick_gen":              return t ? "Quick Gen"      : "快速生成";
+    case "batch_video":            return t ? "Batch Video"    : "批量视频";
+    case "batch_video_prompt":     return t ? "Sora T2V"       : "Sora文生视频";
+    case "batch_video_veo3":       return t ? "VEO3 Video"     : "VEO3视频";
+    case "batch_video_prompt_veo3":return t ? "VEO3 T2V"       : "VEO3文生";
+    case "batch_image":            return t ? "Batch Image"    : "批量图片";
+    case "link_video":             return t ? "Link to Video"  : "链接秒变";
+    case "ecom_factory":           return t ? "Ecom Factory"   : "电商工厂";
+    default:                       return t ? "Unknown"        : "未知来源";
   }
 }
 
 export default function TaskLogPage() {
   const { toast } = useToast();
+  const { lang } = useLang();
+  const t = lang === "en";
+  const typeFilters = getTypeFilters(lang);
+  const statusFilters = getStatusFilters(lang);
+  const sourceFilters = getSourceFilters(lang);
+  const dateFilters = getDateFilters(lang);
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedType, setSelectedType] = useState("all");
@@ -276,23 +288,27 @@ export default function TaskLogPage() {
         console.log("[TaskLog] Refresh result:", result.data);
         if (result.data.completed > 0 || result.data.failed > 0) {
           toast({
-            title: "任务状态已更新",
-            description: `${result.data.completed} 个完成，${result.data.failed} 个失败`,
+            title: t ? "Status Updated" : "任务状态已更新",
+            description: t
+              ? `${result.data.completed} done, ${result.data.failed} failed`
+              : `${result.data.completed} 个完成，${result.data.failed} 个失败`,
           });
           // 通过 ref 调用最新的 fetchTasks（包含当前筛选值），重新加载列表
           fetchTasksRef.current();
         } else {
           toast({
-            title: "暂无变化",
-            description: `${result.data.total || 0} 个任务仍在处理中`,
+            title: t ? "No changes" : "暂无变化",
+            description: t
+              ? `${result.data.total || 0} task(s) still processing`
+              : `${result.data.total || 0} 个任务仍在处理中`,
           });
         }
       }
     } catch (error) {
       console.error("[TaskLog] Refresh error:", error);
       toast({
-        title: "刷新失败",
-        description: "请稍后重试",
+        title: t ? "Refresh Failed" : "刷新失败",
+        description: t ? "Please retry" : "请稍后重试",
         variant: "destructive",
       });
     } finally {
@@ -327,7 +343,7 @@ export default function TaskLogPage() {
   // ============================================================================
 
   const isSelectable = (task: TaskLogItem) => {
-    const expiry = getExpiryStatus(task.expiresAt);
+    const expiry = getExpiryStatus(task.expiresAt, lang);
     return task.status === "completed" && !!task.resultUrl && !expiry.isExpired;
   };
 
@@ -360,17 +376,21 @@ export default function TaskLogPage() {
   const handleBatchExportTxt = () => {
     const selected = getSelectedTasks();
     if (selected.length === 0) {
-      toast({ title: "没有选中的任务", variant: "destructive" });
+      toast({ title: t ? "No items selected" : "没有选中的任务", variant: "destructive" });
       return;
     }
     // 按分组归类
     const grouped = new Map<string, string[]>();
-    for (const t of selected) {
-      if (!t.resultUrl) continue;
-      const group = t.groupName && t.groupName !== "默认" ? t.groupName : (t.source === "ecom_factory" ? "电商工厂" : "未分组");
+    for (const task of selected) {
+      if (!task.resultUrl) continue;
+      const group = task.groupName && task.groupName !== "默认"
+        ? task.groupName
+        : (task.source === "ecom_factory"
+          ? (t ? "Ecom Factory" : "电商工厂")
+          : (t ? "Ungrouped" : "未分组"));
       if (!grouped.has(group)) grouped.set(group, []);
       // 将相对代理路径补全为完整 URL（让迅雷等第三方工具可用）
-      let exportUrl = t.resultUrl;
+      let exportUrl = task.resultUrl;
       if (exportUrl.startsWith('/api/')) {
         exportUrl = `${window.location.origin}${exportUrl}`;
       }
@@ -379,7 +399,7 @@ export default function TaskLogPage() {
     // 生成带分组标题的 TXT
     const lines: string[] = [];
     Array.from(grouped.entries()).forEach(([group, urls]) => {
-      lines.push(`# === ${group} (${urls.length}个) ===`);
+      lines.push(`# === ${group} (${urls.length}${t ? " files" : "个"}) ===`);
       lines.push(...urls);
       lines.push(""); // 空行分隔
     });
@@ -393,15 +413,17 @@ export default function TaskLogPage() {
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
     toast({
-      title: "✅ 导出成功",
-      description: `已导出 ${selected.length} 个地址（${grouped.size}个分组），请用 IDM/迅雷 批量下载`,
+      title: t ? "✅ Exported" : "✅ 导出成功",
+      description: t
+        ? `Exported ${selected.length} URLs (${grouped.size} groups). Use IDM/Thunder to batch download.`
+        : `已导出 ${selected.length} 个地址（${grouped.size}个分组），请用 IDM/迅雷 批量下载`,
     });
   };
 
   const handleBatchZipDownload = async () => {
     const selected = getSelectedTasks();
     if (selected.length === 0) {
-      toast({ title: "没有选中的任务", variant: "destructive" });
+      toast({ title: t ? "No items selected" : "没有选中的任务", variant: "destructive" });
       return;
     }
 
@@ -411,8 +433,10 @@ export default function TaskLogPage() {
 
     setZipProgress({ current: 0, total: selected.length });
     toast({
-      title: "📦 开始打包下载",
-      description: `正在下载 ${selected.length} 个文件，可继续其他操作`,
+      title: t ? "📦 Packing..." : "📦 开始打包下载",
+      description: t
+        ? `Downloading ${selected.length} files in background`
+        : `正在下载 ${selected.length} 个文件，可继续其他操作`,
     });
 
     try {
@@ -451,7 +475,7 @@ export default function TaskLogPage() {
 
       if (zipAbortRef.current) {
         setZipProgress(null);
-        toast({ title: "已取消打包", variant: "destructive" });
+        toast({ title: t ? "❌ Cancelled" : "已取消打包", variant: "destructive" });
         return;
       }
 
@@ -467,12 +491,12 @@ export default function TaskLogPage() {
       URL.revokeObjectURL(url);
 
       toast({
-        title: "✅ 打包完成",
-        description: `已下载 ${completed} 个文件`,
+        title: t ? "✅ Pack Done" : "✅ 打包完成",
+        description: t ? `Downloaded ${completed} files` : `已下载 ${completed} 个文件`,
       });
     } catch (error) {
       console.error("[BatchZip] Error:", error);
-      toast({ title: "打包失败", description: "请稍后重试", variant: "destructive" });
+      toast({ title: t ? "Pack Failed" : "打包失败", description: t ? "Please retry" : "请稍后重试", variant: "destructive" });
     } finally {
       setZipProgress(null);
     }
@@ -494,16 +518,11 @@ export default function TaskLogPage() {
 
   const getStatusLabel = (status: string) => {
     switch (status) {
-      case "completed":
-        return "已完成";
-      case "failed":
-        return "失败";
-      case "processing":
-        return "处理中";
-      case "pending":
-        return "等待中";
-      default:
-        return status;
+      case "completed":  return t ? "Done"       : "已完成";
+      case "failed":     return t ? "Failed"     : "失败";
+      case "processing": return t ? "Processing" : "处理中";
+      case "pending":    return t ? "Pending"    : "等待中";
+      default:           return status;
     }
   };
 
@@ -514,15 +533,15 @@ export default function TaskLogPage() {
         <div className="flex items-center gap-3">
           <div>
             <h1 className="text-3xl font-bold tracking-tight text-white drop-shadow-lg">
-              生成记录
+              {t ? "Generated Assets" : "生成记录"}
             </h1>
             <p className="mt-2 text-white/60">
-              查看和下载您生成的视频与图片内容
+              {t ? "View and download your generated videos and images" : "查看和下载您生成的视频与图片内容"}
             </p>
           </div>
           <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/10 border border-amber-500/30 self-start mt-1">
             <AlertTriangle className="h-3.5 w-3.5 text-amber-400" />
-            <span className="text-xs text-amber-400">内容保留7天</span>
+            <span className="text-xs text-amber-400">{t ? "Content kept 7 days" : "内容保留7天"}</span>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -535,7 +554,7 @@ export default function TaskLogPage() {
               className="gap-2 text-tiktok-cyan border-tiktok-cyan/30 hover:bg-tiktok-cyan/10"
             >
               <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
-              刷新状态 ({stats.processingTasks})
+              {t ? `Refresh (${stats.processingTasks})` : `刷新状态 (${stats.processingTasks})`}
             </Button>
           )}
           <Button
@@ -555,7 +574,7 @@ export default function TaskLogPage() {
               className="gap-2 bg-gradient-to-r from-mermaid-cyan/10 to-mermaid-pink/10 border-mermaid-cyan/30 text-mermaid-cyan hover:from-mermaid-cyan/20 hover:to-mermaid-pink/20 hover:border-mermaid-cyan/50 transition-all"
             >
               <CheckSquare className="h-4 w-4" />
-              批量选择
+              {t ? "Select" : "批量选择"}
             </Button>
           ) : (
             <Button
@@ -565,7 +584,7 @@ export default function TaskLogPage() {
               className="gap-2 text-white/60 border-white/20 hover:text-white hover:bg-white/10"
             >
               <X className="h-4 w-4" />
-              退出选择
+              {t ? "Done" : "退出选择"}
             </Button>
           )}
         </div>
@@ -579,7 +598,7 @@ export default function TaskLogPage() {
               <History className="h-6 w-6 text-white/70 group-hover:text-mermaid-cyan transition-colors" />
             </div>
             <div>
-              <p className="text-sm text-white/40">总任务数</p>
+              <p className="text-sm text-white/40">{t ? "Total" : "总任务数"}</p>
               <p className="text-2xl font-bold text-white tracking-tight group-hover:text-mermaid-cyan transition-colors">{stats?.totalTasks || 0}</p>
             </div>
           </CardContent>
@@ -590,7 +609,7 @@ export default function TaskLogPage() {
               <Video className="h-6 w-6 text-white/70 group-hover:text-mermaid-pink transition-colors" />
             </div>
             <div>
-              <p className="text-sm text-white/40">视频</p>
+              <p className="text-sm text-white/40">{t ? "Videos" : "视频"}</p>
               <p className="text-2xl font-bold text-white tracking-tight group-hover:text-mermaid-pink transition-colors">{stats?.totalVideos || 0}</p>
             </div>
           </CardContent>
@@ -601,7 +620,7 @@ export default function TaskLogPage() {
               <ImageIcon className="h-6 w-6 text-white/70 group-hover:text-mermaid-cyan transition-colors" />
             </div>
             <div>
-              <p className="text-sm text-white/40">图片</p>
+              <p className="text-sm text-white/40">{t ? "Images" : "图片"}</p>
               <p className="text-2xl font-bold text-white tracking-tight group-hover:text-mermaid-cyan transition-colors">{stats?.totalImages || 0}</p>
             </div>
           </CardContent>
@@ -612,7 +631,7 @@ export default function TaskLogPage() {
               <CheckCircle className="h-6 w-6 text-neon-green drop-shadow" />
             </div>
             <div>
-              <p className="text-sm text-white/40">成功率</p>
+              <p className="text-sm text-white/40">{t ? "Success Rate" : "成功率"}</p>
               <p className="text-2xl font-bold text-neon-green tracking-tight">
                 {stats && stats.totalTasks > 0
                   ? Math.round((stats.completedTasks / stats.totalTasks) * 100)
@@ -632,7 +651,7 @@ export default function TaskLogPage() {
             <div className="relative flex-1 max-w-md group">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/30 group-focus-within:text-mermaid-cyan transition-colors" />
               <Input
-                placeholder="搜索提示词或模型..."
+                placeholder={t ? "Search prompt or model..." : "搜索提示词或模型..."}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-10 bg-white/5 border-white/10 focus-visible:ring-1 focus-visible:ring-mermaid-cyan/50 focus-visible:border-mermaid-cyan/50 transition-all placeholder:text-white/20 text-white rounded-xl"
@@ -680,7 +699,7 @@ export default function TaskLogPage() {
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between border-t border-white/5 pt-4">
             {/* Source Filter */}
             <div className="flex flex-wrap gap-2">
-              <span className="text-white/40 text-sm flex items-center mr-2">来源:</span>
+              <span className="text-white/40 text-sm flex items-center mr-2">{t ? "Source:" : "来源:"}</span>
               {sourceFilters.map((filter) => (
                 <Button
                   key={filter.value}
@@ -699,7 +718,7 @@ export default function TaskLogPage() {
 
             {/* Date Filter */}
             <div className="flex flex-wrap gap-2 items-center">
-              <span className="text-white/40 text-sm flex items-center mr-2">时间:</span>
+              <span className="text-white/40 text-sm flex items-center mr-2">{t ? "Time:" : "时间:"}</span>
               {dateFilters.map((filter) => (
                 <Button
                   key={filter.value}
@@ -748,7 +767,7 @@ export default function TaskLogPage() {
             <div className="flex items-center gap-2">
               <span className="text-white/40 text-sm flex items-center">
                 <FolderOpen className="h-4 w-4 mr-1" />
-                分组:
+                {t ? "Group:" : "分组:"}
               </span>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -760,7 +779,7 @@ export default function TaskLogPage() {
                       : "bg-white/5 text-white/60 border-white/5 hover:bg-white/10 hover:text-white"
                       }`}
                   >
-                    {selectedGroup === "all" ? "全部分组" : selectedGroup}
+                    {selectedGroup === "all" ? (t ? "All Groups" : "全部分组") : selectedGroup}
                     <ChevronDown className="h-3 w-3" />
                   </Button>
                 </DropdownMenuTrigger>
@@ -769,7 +788,7 @@ export default function TaskLogPage() {
                     onClick={() => setSelectedGroup("all")}
                     className={`focus:bg-white/10 cursor-pointer ${selectedGroup === "all" ? "text-mermaid-cyan" : ""}`}
                   >
-                    全部分组
+                    {t ? "All Groups" : "全部分组"}
                   </DropdownMenuItem>
                   {availableGroups.length > 0 ? (
                     <>
@@ -787,7 +806,7 @@ export default function TaskLogPage() {
                     </>
                   ) : (
                     <DropdownMenuItem disabled className="text-white/30 text-sm">
-                      暂无自定义分组
+                      {t ? "No custom groups" : "暂无自定义分组"}
                     </DropdownMenuItem>
                   )}
                 </DropdownMenuContent>
@@ -829,9 +848,9 @@ export default function TaskLogPage() {
         <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
           <CardContent className="flex flex-col items-center justify-center py-16">
             <History className="h-16 w-16 text-muted-foreground/50 mb-4" />
-            <h3 className="text-lg font-medium mb-2">暂无任务记录</h3>
+            <h3 className="text-lg font-medium mb-2">{t ? "No records yet" : "暂无任务记录"}</h3>
             <p className="text-muted-foreground text-center max-w-md">
-              开始使用快速生成或批量生产功能后，您的生成记录将显示在这里
+              {t ? "Your generated content will appear here after using Quick Gen or Batch Production." : "开始使用快速生成或批量生产功能后，您的生成记录将显示在这里"}
             </p>
           </CardContent>
         </Card>
@@ -842,7 +861,7 @@ export default function TaskLogPage() {
         viewMode === "grid" ? (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {filteredTasks.map((task) => {
-              const expiry = getExpiryStatus(task.expiresAt);
+                  const expiry = getExpiryStatus(task.expiresAt, lang);
 
               return (
                 <Card
@@ -879,7 +898,7 @@ export default function TaskLogPage() {
                       ) : (
                         <img
                           src={task.resultUrl}
-                          alt={task.prompt || "生成图片"}
+                          alt={task.prompt || (t ? "Generated Image" : "生成图片")}
                           className="w-full h-full object-cover hover:scale-105 transition-transform duration-700"
                         />
                       )
@@ -943,12 +962,12 @@ export default function TaskLogPage() {
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex-1 min-w-0 overflow-hidden">
                         <p className="font-medium text-sm text-white/90 group-hover:text-mermaid-cyan transition-colors line-clamp-2 leading-tight">
-                          {task.prompt || "未命名任务"}
+                          {task.prompt || (t ? "Unnamed task" : "未命名任务")}
                         </p>
                         <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                           {/* Colored Source Badge */}
                           <span className={`text-xs px-1.5 py-0.5 rounded border ${getSourceColor(task.source)}`}>
-                            {getSourceLabel(task.source)}
+                            {getSourceLabel(task.source, lang)}
                           </span>
                           {/* Task ID */}
                           <span className="text-xs text-white/50 font-mono">
@@ -956,11 +975,11 @@ export default function TaskLogPage() {
                           </span>
                           <span className="text-xs text-white/40">·</span>
                           <span className="text-xs text-white/40 whitespace-nowrap">
-                            {task.credits} 积分
+                            {task.credits} {t ? "credits" : "积分"}
                           </span>
                         </div>
                         <p className="text-xs text-white/30 mt-1">
-                          {new Date(task.createdAt).toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                          {new Date(task.createdAt).toLocaleString(lang === "en" ? "en-US" : "zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}
                         </p>
                       </div>
                       <div className="flex items-center gap-1 shrink-0">
@@ -991,15 +1010,15 @@ export default function TaskLogPage() {
                               <>
                                 <DropdownMenuItem onClick={() => setPreviewTask(task)} className="focus:bg-white/10 focus:text-mermaid-cyan">
                                   <Eye className="h-4 w-4 mr-2" />
-                                  预览
+                                  {t ? "Preview" : "预览"}
                                 </DropdownMenuItem>
                                 <DropdownMenuItem onClick={() => handleDownload(task)} className="focus:bg-white/10 focus:text-mermaid-cyan">
                                   <Download className="h-4 w-4 mr-2" />
-                                  下载
+                                  {t ? "Download" : "下载"}
                                 </DropdownMenuItem>
                                 <DropdownMenuItem onClick={() => window.open(task.resultUrl!, "_blank")} className="focus:bg-white/10 focus:text-mermaid-cyan">
                                   <ExternalLink className="h-4 w-4 mr-2" />
-                                  新窗口打开
+                                  {t ? "Open in new tab" : "新窗口打开"}
                                 </DropdownMenuItem>
                               </>
                             )}
@@ -1017,7 +1036,7 @@ export default function TaskLogPage() {
             <CardContent className="p-0">
               <div className="divide-y divide-white/5">
                 {filteredTasks.map((task) => {
-                  const expiry = getExpiryStatus(task.expiresAt);
+                      const expiry = getExpiryStatus(task.expiresAt, lang);
 
                   return (
                     <div
@@ -1045,7 +1064,7 @@ export default function TaskLogPage() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
                           <p className="font-medium truncate text-white/90 group-hover:text-mermaid-cyan transition-colors">
-                            {task.prompt?.substring(0, 50) || "未命名任务"}
+                            {task.prompt?.substring(0, 50) || (t ? "Unnamed task" : "未命名任务")}
                           </p>
                           <span className="text-xs text-white/50 font-mono shrink-0">
                             #{task.id.slice(-4).toUpperCase()}
@@ -1053,7 +1072,7 @@ export default function TaskLogPage() {
                         </div>
                         <div className="flex items-center gap-2 mt-0.5">
                           <span className={`text-xs px-1.5 py-0.5 rounded border ${getSourceColor(task.source)}`}>
-                            {getSourceLabel(task.source)}
+                            {getSourceLabel(task.source, lang)}
                           </span>
                           <span className="text-xs text-white/40">·</span>
                           <span className="text-sm text-white/40">{task.model}</span>
@@ -1064,10 +1083,10 @@ export default function TaskLogPage() {
                         <span className="text-sm text-white/70">{getStatusLabel(task.status)}</span>
                       </div>
                       <div className="text-sm text-white/40 hidden md:block">
-                        {task.credits} 积分
+                        {task.credits} {t ? "credits" : "积分"}
                       </div>
                       <div className="text-sm text-white/40 hidden lg:block">
-                        {new Date(task.createdAt).toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                        {new Date(task.createdAt).toLocaleString(lang === "en" ? "en-US" : "zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}
                       </div>
                       {expiry.isExpiringSoon && !expiry.isExpired && (
                         <div className="flex items-center gap-1 px-2 py-1 rounded-full text-xs bg-neon-warning/20 text-neon-warning">
@@ -1123,11 +1142,11 @@ export default function TaskLogPage() {
             {loadingMore ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin" />
-                加载中...
+                {t ? "Loading..." : "加载中..."}
               </>
             ) : (
               <>
-                加载更多
+                {t ? "Load more" : "加载更多"}
               </>
             )}
           </Button>
@@ -1144,7 +1163,7 @@ export default function TaskLogPage() {
               ) : (
                 <ImageIcon className="h-5 w-5 text-tiktok-cyan" />
               )}
-              {previewTask?.type === "video" ? "视频预览" : "图片预览"}
+              {previewTask?.type === "video" ? (t ? "Video Preview" : "视频预览") : (t ? "Image Preview" : "图片预览")}
             </DialogTitle>
           </DialogHeader>
 
@@ -1159,37 +1178,37 @@ export default function TaskLogPage() {
             ) : previewTask?.resultUrl ? (
               <img
                 src={previewTask.resultUrl}
-                alt={previewTask.prompt || "预览图片"}
+                alt={previewTask.prompt || (t ? "Preview" : "预览图片")}
                 className="w-full max-h-[50vh] rounded-lg object-contain"
               />
             ) : null}
 
             <div className="space-y-1.5 text-sm p-3 rounded-lg bg-muted/30">
               <div className="flex justify-between">
-                <span className="text-muted-foreground">提示词</span>
-                <span className="max-w-[200px] truncate text-right">{previewTask?.prompt || "无"}</span>
+                <span className="text-muted-foreground">{t ? "Prompt" : "提示词"}</span>
+                <span className="max-w-[200px] truncate text-right">{previewTask?.prompt || (t ? "None" : "无")}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted-foreground">来源</span>
-                <span>{getSourceLabel(previewTask?.source || "")}</span>
+                <span className="text-muted-foreground">{t ? "Source" : "来源"}</span>
+                <span>{getSourceLabel(previewTask?.source || "", lang)}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted-foreground">模型</span>
+                <span className="text-muted-foreground">{t ? "Model" : "模型"}</span>
                 <span>{previewTask?.model}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted-foreground">积分</span>
+                <span className="text-muted-foreground">{t ? "Credits" : "积分"}</span>
                 <span>{previewTask?.credits}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted-foreground">时间</span>
-                <span>{previewTask?.createdAt && formatDate(previewTask.createdAt)}</span>
+                <span className="text-muted-foreground">{t ? "Time" : "时间"}</span>
+                <span>{previewTask?.createdAt && formatDate(previewTask.createdAt, lang)}</span>
               </div>
             </div>
 
             <div className="flex justify-end gap-2 pt-2">
               <Button variant="outline" size="sm" onClick={() => setPreviewTask(null)}>
-                关闭
+                {t ? "Close" : "关闭"}
               </Button>
               {previewTask?.resultUrl && (
                 <Button
@@ -1199,7 +1218,7 @@ export default function TaskLogPage() {
                   onClick={() => handleDownload(previewTask)}
                 >
                   <Download className="h-4 w-4" />
-                  下载
+                  {t ? "Download" : "下载"}
                 </Button>
               )}
             </div>
@@ -1217,7 +1236,7 @@ export default function TaskLogPage() {
             <div className="flex items-center gap-2 pr-3 border-r border-white/10">
               <CheckSquare className="h-4 w-4 text-mermaid-cyan" />
               <span className="text-sm font-medium text-white">
-                已选 <span className="text-mermaid-cyan font-bold">{selectedIds.size}</span> 个
+                {t ? "Selected" : "已选"} <span className="text-mermaid-cyan font-bold">{selectedIds.size}</span> {t ? "items" : "个"}
               </span>
             </div>
 
@@ -1229,7 +1248,7 @@ export default function TaskLogPage() {
               className="text-white/60 hover:text-white hover:bg-white/10 text-sm"
             >
               <Square className="h-3.5 w-3.5 mr-1.5" />
-              全选成功
+              {t ? "Select completed" : "全选成功"}
             </Button>
 
             {/* 导出TXT (推荐) */}
@@ -1240,8 +1259,8 @@ export default function TaskLogPage() {
               className="gap-2 bg-gradient-to-r from-mermaid-cyan to-blue-500 text-black font-medium hover:from-mermaid-cyan/90 hover:to-blue-500/90 disabled:opacity-40"
             >
               <FileDown className="h-4 w-4" />
-              导出TXT
-              <span className="text-[10px] opacity-70">推荐</span>
+              {t ? "Export TXT" : "导出txt"}
+              <span className="text-[10px] opacity-70">{t ? "Recommended" : "推荐"}</span>
             </Button>
 
             {/* 打包ZIP */}
@@ -1253,7 +1272,7 @@ export default function TaskLogPage() {
               className="gap-2 text-white/70 border-white/20 hover:text-white hover:bg-white/10 disabled:opacity-40"
             >
               <Package className="h-4 w-4" />
-              打包ZIP
+              {t ? "Pack ZIP" : "打包ZIP"}
             </Button>
 
             {/* 取消 */}
@@ -1278,7 +1297,7 @@ export default function TaskLogPage() {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Package className="h-4 w-4 text-mermaid-cyan animate-pulse" />
-                <span className="text-sm font-medium text-white">正在打包下载...</span>
+                <span className="text-sm font-medium text-white">{t ? "Packing..." : "正在打包下载..."}</span>
               </div>
               <button
                 onClick={() => { zipAbortRef.current = true; }}
@@ -1295,8 +1314,8 @@ export default function TaskLogPage() {
               />
             </div>
             <div className="flex items-center justify-between text-xs text-white/40">
-              <span>{zipProgress.current}/{zipProgress.total} 文件</span>
-              <span>完成后将自动下载</span>
+              <span>{zipProgress.current}/{zipProgress.total} {t ? "files" : "文件"}</span>
+              <span>{t ? "Will auto-download when done" : "完成后将自动下载"}</span>
             </div>
           </div>
         </div>

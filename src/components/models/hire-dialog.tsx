@@ -23,6 +23,7 @@ import {
 import { cn } from "@/lib/utils";
 import { hireModel } from "@/lib/actions/contracts";
 import type { AIModel, RentalPeriod } from "@/types/model";
+import { useLang } from "@/contexts/LangContext";
 
 interface HireDialogProps {
   model: AIModel | null;
@@ -53,6 +54,8 @@ export function HireDialog({
   const [result, setResult] = useState<"success" | "error" | "already_hired" | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
   const [newBalance, setNewBalance] = useState<number | null>(null);
+  const { lang } = useLang();
+  const t = lang === "en";
 
   if (!model) return null;
 
@@ -71,7 +74,7 @@ export function HireDialog({
     if (!canAfford || !userId) {
       if (!userId) {
         setResult("error");
-        setErrorMessage("请先登录后再进行签约");
+        setErrorMessage(t ? "Please sign in to contract this character" : "请先登录后再进行签约");
       }
       return;
     }
@@ -105,19 +108,19 @@ export function HireDialog({
         // 处理特定错误类型
         if (response.errorCode === "ALREADY_HIRED") {
           setResult("already_hired");
-          setErrorMessage(response.error || "该模特已在您的团队中");
+          setErrorMessage(response.error || (t ? "Character already in your team" : "该模特已在您的团队中"));
         } else if (response.errorCode === "INSUFFICIENT_BALANCE") {
           setResult("error");
-          setErrorMessage(response.error || "余额不足");
+          setErrorMessage(response.error || (t ? "Insufficient credits" : "余额不足"));
         } else {
           setResult("error");
-          setErrorMessage(response.error || "签约失败，请重试");
+          setErrorMessage(response.error || (t ? "Contract failed, please retry" : "签约失败，请重试"));
         }
       }
     } catch (error) {
       console.error("[HireDialog] Error:", error);
       setResult("error");
-      setErrorMessage(error instanceof Error ? error.message : "网络错误，请重试");
+      setErrorMessage(error instanceof Error ? error.message : (t ? "Network error, please retry" : "网络错误，请重试"));
     } finally {
       setIsProcessing(false);
     }

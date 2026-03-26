@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { PublicModel } from "@/lib/actions/models";
+import { useLang } from "@/contexts/LangContext";
 
 interface ModelPreviewCardProps {
   model: PublicModel & { is_hired_by_others?: boolean; hired_count?: number };
@@ -34,6 +35,8 @@ export const ModelPreviewCard = memo(function ModelPreviewCard({
   const [isMuted, setIsMuted] = useState(true);
   const [videoError, setVideoError] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const { lang } = useLang();
+  const t = lang === "en";
 
   const handleMouseEnter = useCallback(() => {
     setIsHovering(true);
@@ -140,36 +143,36 @@ export const ModelPreviewCard = memo(function ModelPreviewCard({
           {/* 来源标签 */}
           {model.source === "user_created" ? (
             <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-500/20 border border-blue-400/30 text-xs font-bold text-blue-300 backdrop-blur-md">
-              👤 社区
+              👤 {t ? "Community" : "社区"}
             </span>
           ) : (
             <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/20 border border-amber-400/30 text-xs font-bold text-amber-300 backdrop-blur-md">
-              🏅 官方
+              🏅 {t ? "Official" : "官方"}
             </span>
           )}
           {model.is_trending && (
             <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-gradient-to-r from-mermaid-cyan to-mermaid-pink text-xs font-bold text-black shadow-[0_0_10px_rgba(0,242,234,0.3)]">
               <TrendingUp className="h-3 w-3" />
-              热门
+              {t ? "Hot" : "热门"}
             </span>
           )}
           {model.is_featured && !model.is_trending && (
             <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-gradient-to-r from-mermaid-lime to-mermaid-cyan text-xs font-bold text-black shadow-[0_0_10px_rgba(204,255,0,0.3)]">
               <Star className="h-3 w-3" />
-              推荐
+              {t ? "Featured" : "推荐"}
             </span>
           )}
           {hasActiveContract && (
             <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-neon-green/20 border border-neon-green/30 text-xs font-bold text-neon-green backdrop-blur-md shadow-[0_0_10px_rgba(34,197,94,0.2)]">
               <CheckCircle2 className="h-3 w-3" />
-              已签约
+              {t ? "Contracted" : "已签约"}
             </span>
           )}
           {/* 社区角色允许多人聘用，不显示“已被聘用”标签 */}
           {!hasActiveContract && model.is_hired_by_others && model.source !== "user_created" && (
             <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/10 border border-white/20 text-xs font-medium text-white/70 backdrop-blur-md">
               <Users className="h-3 w-3" />
-              已被聘用
+              {t ? "Taken" : "已被聘用"}
             </span>
           )}
         </div>
@@ -208,7 +211,7 @@ export const ModelPreviewCard = memo(function ModelPreviewCard({
         {/* Price */}
         <div className="flex items-center justify-between">
           <span className="text-sm text-muted-foreground">
-            {model.source === "user_created" ? "聘用价格" : "Monthly Rate"}
+            {model.source === "user_created" ? (t ? "Hire Price" : "聘用价格") : "Monthly Rate"}
           </span>
           <div className="flex items-center gap-1.5">
             <Coins className="h-4 w-4 text-mermaid-cyan" />
@@ -216,7 +219,7 @@ export const ModelPreviewCard = memo(function ModelPreviewCard({
               {(model.source === "user_created" ? model.publish_price : model.base_price).toLocaleString()}
             </span>
             <span className="text-xs text-mermaid-cyan/70">
-              {model.source === "user_created" ? "积分" : "Credits"}
+              {model.source === "user_created" ? (t ? "credits" : "积分") : "Credits"}
             </span>
           </div>
         </div>
@@ -229,17 +232,17 @@ export const ModelPreviewCard = memo(function ModelPreviewCard({
             onClick={onManage}
           >
             <CheckCircle2 className="mr-2 h-4 w-4" />
-            管理团队
+            {t ? "Manage Team" : "管理团队"}
           </Button>
         ) : model.is_hired_by_others && model.source !== "user_created" ? (
           <Button
             variant="outline"
             className="w-full border-orange-500/50 text-orange-400 cursor-not-allowed opacity-70"
             disabled
-            title="该角色已被其他用户签约，请等待签约到期后再试"
+            title={t ? "This character has been contracted by another user, please retry later" : "该角色已被其他用户签约，请等待签约到期后再试"}
           >
             <Users className="mr-2 h-4 w-4" />
-            暂不可用
+            {t ? "Unavailable" : "暂不可用"}
           </Button>
         ) : (
           <button
@@ -250,7 +253,7 @@ export const ModelPreviewCard = memo(function ModelPreviewCard({
             <div className="absolute inset-0 bg-[linear-gradient(110deg,transparent,rgba(255,255,255,0.4),transparent)] bg-[length:200%_100%] opacity-0 group-hover/btn:opacity-100 group-hover/btn:animate-shimmer transition-opacity duration-300" />
             <span className="relative z-10 flex items-center justify-center gap-2">
               <Sparkles className="h-4 w-4 fill-black/20" />
-              立即聘用
+              {t ? "Hire Now" : "立即聘用"}
             </span>
           </button>
         )}

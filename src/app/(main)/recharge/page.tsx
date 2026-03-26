@@ -22,15 +22,18 @@ import {
 import { PaymentModal } from "@/components/payment/PaymentModal";
 import type { PayChannel, CreditPack } from "@/lib/payment/types";
 import { DEFAULT_CREDIT_PACKS } from "@/lib/payment/types";
+import { useLang } from "@/contexts/LangContext";
 
-// 支付渠道选项
-const PAY_CHANNELS: { id: PayChannel; name: string; icon: string; color: string }[] = [
-  { id: "wechat_native", name: "微信支付", icon: "💚", color: "#07C160" },
-  { id: "alipay_qr",     name: "支付宝",   icon: "💙", color: "#1677FF" },
-];
+// Note: Pay channel display names are provided in handlePurchase context with lang
 
 export default function PricingPage() {
   const router = useRouter();
+  const { lang } = useLang();
+  const t = lang === "en";
+  const PAY_CHANNELS: { id: PayChannel; name: string; icon: string; color: string }[] = [
+    { id: "wechat_native", name: t ? "WeChat Pay" : "微信支付", icon: "💚", color: "#07C160" },
+    { id: "alipay_qr",     name: t ? "Alipay"     : "支付宝",   icon: "💙", color: "#1677FF" },
+  ];
   const [selectedPack, setSelectedPack] = useState<CreditPack | null>(null);
   const [selectedChannel, setSelectedChannel] = useState<PayChannel>("wechat_native");
   const [isLoading, setIsLoading] = useState(false);
@@ -54,7 +57,7 @@ export default function PricingPage() {
   // 发起支付
   const handlePurchase = useCallback(async () => {
     if (!selectedPack) {
-      setError("请先选择积分包");
+      setError(t ? "Please select a credit pack" : "请先选择积分包");
       return;
     }
 
@@ -74,7 +77,7 @@ export default function PricingPage() {
       const data = await res.json();
 
       if (!data.success) {
-        setError(data.error || "创建订单失败");
+        setError(data.error || (t ? "Failed to create order" : "创建订单失败"));
         return;
       }
 
@@ -87,7 +90,7 @@ export default function PricingPage() {
         payChannel: selectedChannel,
       });
     } catch (err) {
-      setError("网络错误，请重试");
+      setError(t ? "Network error, please retry" : "网络错误，请重试");
     } finally {
       setIsLoading(false);
     }
@@ -108,16 +111,16 @@ export default function PricingPage() {
           <div>
             <h1 className="text-2xl font-bold text-white flex items-center gap-2">
               <CreditCard className="h-7 w-7 text-mermaid-cyan" />
-              充值中心
+              {t ? "Recharge" : "充值中心"}
             </h1>
-            <p className="text-white/40 mt-1">选择积分包，快速充值</p>
+            <p className="text-white/40 mt-1">{t ? "Choose a credit pack" : "选择积分包，快速充值"}</p>
           </div>
           <button
             onClick={() => router.push("/recharge/orders")}
             className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-white/50 hover:text-white/70 text-sm transition-all"
           >
             <History className="h-4 w-4" />
-            订单记录
+            {t ? "Order History" : "订单记录"}
           </button>
         </div>
       </div>
@@ -125,7 +128,7 @@ export default function PricingPage() {
       {/* 积分包选择 */}
       <div className="mb-8">
         <h2 className="text-sm font-medium text-white/50 uppercase tracking-wider mb-4">
-          选择积分包
+          {t ? "Choose a Pack" : "选择积分包"}
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {DEFAULT_CREDIT_PACKS.map((pack) => {
@@ -162,7 +165,7 @@ export default function PricingPage() {
                   <span className={`text-3xl font-bold ${isSelected ? "text-white" : "text-white/80"}`}>
                     {pack.credits.toLocaleString()}
                   </span>
-                  <span className="text-sm text-white/30 ml-1">积分</span>
+                  <span className="text-sm text-white/30 ml-1">{t ? "Credits" : "积分"}</span>
                 </div>
 
                 {/* 包名 */}
@@ -175,7 +178,7 @@ export default function PricingPage() {
 
                 {/* 单价 */}
                 <p className="text-xs text-white/25 mt-1">
-                  ≈ ¥{(pack.price_cents / pack.credits / 100).toFixed(3)}/积分
+                  ≈ ¥{(pack.price_cents / pack.credits / 100).toFixed(3)}/{t ? "credit" : "积分"}
                 </p>
 
                 {/* 选中指示 */}
@@ -193,7 +196,7 @@ export default function PricingPage() {
       {/* 支付方式选择 */}
       <div className="mb-8">
         <h2 className="text-sm font-medium text-white/50 uppercase tracking-wider mb-4">
-          支付方式
+          {t ? "Payment Method" : "支付方式"}
         </h2>
         <div className="flex gap-3">
           {PAY_CHANNELS.map((channel) => {
@@ -249,14 +252,14 @@ export default function PricingPage() {
           {isLoading ? (
             <>
               <Loader2 className="h-5 w-5 animate-spin" />
-              创建订单中...
+              {t ? "Creating order..." : "创建订单中..."}
             </>
           ) : (
             <>
               <Zap className="h-5 w-5" />
               {selectedPack
-                ? `立即支付 ${selectedPack.price_display}`
-                : "请选择积分包"
+                ? (t ? `Pay ${selectedPack.price_display}` : `立即支付 ${selectedPack.price_display}`)
+                : (t ? "Select a pack" : "请选择积分包")
               }
               {selectedPack && <ChevronRight className="h-4 w-4" />}
             </>
@@ -265,7 +268,7 @@ export default function PricingPage() {
 
         {selectedPack && (
           <p className="text-sm text-white/30">
-            将获得 <span className="text-mermaid-cyan font-medium">{selectedPack.credits.toLocaleString()}</span> 积分
+            {t ? "You will receive" : "将获得"} <span className="text-mermaid-cyan font-medium">{selectedPack.credits.toLocaleString()}</span> {t ? "credits" : "积分"}
           </p>
         )}
       </div>
@@ -274,15 +277,15 @@ export default function PricingPage() {
       <div className="mt-12 flex items-center gap-6 text-xs text-white/20">
         <div className="flex items-center gap-1.5">
           <ShieldCheck className="h-4 w-4" />
-          <span>安全支付</span>
+          <span>{t ? "Secure Payment" : "安全支付"}</span>
         </div>
         <div className="flex items-center gap-1.5">
           <Clock className="h-4 w-4" />
-          <span>即时到账</span>
+          <span>{t ? "Instant Credit" : "即时到账"}</span>
         </div>
         <div className="flex items-center gap-1.5">
           <Sparkles className="h-4 w-4" />
-          <span>充值无门槛</span>
+          <span>{t ? "No Minimum" : "充值无门槛"}</span>
         </div>
       </div>
 
