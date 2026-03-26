@@ -6,10 +6,15 @@ import { Plus } from "lucide-react";
 import {
     characterShowcase,
     styleFilters,
+    styleFiltersEn,
     type CharacterStyle,
 } from "../data/landing-data";
+import { useLang } from "@/contexts/LangContext";
 
 export default function ModelWallSection() {
+    const { lang } = useLang();
+    const filters = lang === "en" ? styleFiltersEn : styleFilters;
+
     const [activeFilter, setActiveFilter] = useState<CharacterStyle | "all">(
         "all"
     );
@@ -25,17 +30,22 @@ export default function ModelWallSection() {
                 {/* 标题 */}
                 <div className="text-center mb-8">
                     <h2 className="text-4xl md:text-5xl font-bold text-white mb-4">
-                        你的角色，
-                        <span className="font-mono">千变万化</span>
+                        {lang === "en" ? (
+                            <>Your Character, <span className="font-mono">Endlessly Versatile</span></>
+                        ) : (
+                            <>你的角色，<span className="font-mono">千变万化</span></>
+                        )}
                     </h2>
                     <p className="text-gray-500 text-lg">
-                        任何风格、任何人设，60 秒打造专属 AI 角色
+                        {lang === "en"
+                            ? "Any style, any persona — build your exclusive AI character in 60 seconds"
+                            : "任何风格、任何人设，60 秒打造专属 AI 角色"}
                     </p>
                 </div>
 
                 {/* 风格筛选 pill */}
                 <div className="flex gap-2 justify-center mb-10 flex-wrap">
-                    {styleFilters.map((f) => (
+                    {filters.map((f) => (
                         <button
                             key={f.id}
                             onClick={() => setActiveFilter(f.id)}
@@ -82,21 +92,23 @@ export default function ModelWallSection() {
                     </div>
                 </div>
 
-                {/* 创建 CTA（网格外部，避免对齐问题） */}
+                {/* 创建 CTA */}
                 <div className="max-w-5xl mx-auto mt-6">
                     <button className="w-full py-4 rounded-2xl border-2 border-dashed border-white/20 flex items-center justify-center gap-3 hover:border-white/50 hover:bg-white/5 transition-all cursor-pointer group">
                         <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center group-hover:bg-white/20 transition-colors">
                             <Plus className="w-4 h-4 text-white" />
                         </div>
                         <span className="text-sm text-gray-400 group-hover:text-white transition-colors">
-                            创建我的角色
+                            {lang === "en" ? "Create My Character" : "创建我的角色"}
                         </span>
                     </button>
                 </div>
 
                 {/* 底部号召 */}
                 <p className="text-center text-gray-500 text-sm mt-8">
-                    写实 · 动漫 · 3D · 插画 — 你想要的风格，AI 都能实现
+                    {lang === "en"
+                        ? "Realistic · Anime · 3D · Illustration — whatever style you want, AI can do it"
+                        : "写实 · 动漫 · 3D · 插画 — 你想要的风格，AI 都能实现"}
                 </p>
             </div>
         </div>

@@ -360,3 +360,127 @@ export const characterShowcase: CharacterShowcaseItem[] = [
     { id: 15, name: "豆子",   role: "生活Vlog", style: "illustration", src: "/images/landing/char-illust-3.png" },
     { id: 16, name: "阿花",   role: "手绘教程", style: "illustration", src: "/images/landing/char-illust-4.png" },
 ];
+
+// ============================================
+// ✦ ENGLISH TRANSLATIONS (parallel data)
+// All original Chinese variables above are untouched.
+// ============================================
+
+export const heroDataEn = {
+    badge: "AI Character-Driven · Premium Content Creation",
+    headline: "Your Exclusive AI Character, Redefining Creation",
+    subheadline:
+        "Create a unique AI character · Produce professional short videos consistently · Unleash your creative potential",
+    ctaPrimary: "Start Creating",
+    ctaSecondary: "Learn More",
+    inputPlaceholder: "Describe the character you want to create...",
+};
+
+export const scenarioCarouselEn: ScenarioItem[] = [
+    { icon: Video,         text: "Daily channel with fixed persona — no on-camera, no editing" },
+    { icon: GraduationCap, text: "AI character turns your course into a video series" },
+    { icon: Globe,         text: "Great content but only in Chinese? Character speaks 10 languages to the world" },
+    { icon: ShoppingBag,   text: "200 products, zero influencers — 60-second shoppable video, done" },
+];
+
+export const characterEngineCardsEn: CharacterCard[] = [
+    { icon: Palette,     title: "Appearance",        desc: "Upload a reference image and AI generates your exclusive avatar — no influencer cancellation risk" },
+    { icon: Mic,         title: "Voice",              desc: "30+ voice styles, Chinese/English/Japanese/Korean — your character speaks natively to any audience" },
+    { icon: Store,       title: "Character Market",   desc: "Thousands of ready-to-use characters, bookable by day, week, or month" },
+    { icon: Fingerprint, title: "Consistent Persona", desc: "Set personality and style once — 100 videos, one coherent character" },
+];
+
+export const contentWorkshopExamplesEn: ContentExample[] = [
+    { icon: Clapperboard, label: "Drama",     text: "3 roommates' apartment diary — one episode a day, impossible to stop" },
+    { icon: BookOpen,     label: "Knowledge", text: "Understand quantum computing in 3 minutes — even a 5th-grader gets it" },
+    { icon: Target,       label: "Review",    text: "I carried this bag for a week and got asked for the link every day" },
+    { icon: Microscope,   label: "Science",   text: "Why are airplane windows round? The answer will surprise you" },
+];
+
+export const workflowStepsEn: WorkflowStep[] = [
+    { step: "01", title: "Pick a Character", desc: "Choose from the character library — as easy as casting an actor",     icon: Users },
+    { step: "02", title: "Define Content",   desc: "Tell the AI what to express — script and storyboard auto-generated",  icon: Wand2 },
+    { step: "03", title: "Get Your Video",   desc: "Multi-model rendering + subtitles & voice — 4K delivered instantly",  icon: Rocket },
+];
+
+export const possibilitiesDataEn: PossibilityItem[] = [
+    { icon: PenTool,     title: "Content Creation",    desc: "Daily posts, series, knowledge-sharing, creative expression", status: "ready" },
+    { icon: Globe,       title: "Multilingual Reach",  desc: "Same content, auto-generated in 10+ languages",               status: "ready" },
+    { icon: Share2,      title: "Platform Publishing", desc: "One-click publish with automatic compliance labeling",         status: "ready" },
+    { icon: ShoppingBag, title: "Commerce & Sales",    desc: "Character explains products and links to your store",          status: "coming" },
+];
+
+export const comparisonDataEn = {
+    traditional: {
+        label: "Traditional Workflow",
+        steps: ["Write script (2 days)", "Book shoot (3 days)", "Film & edit (2 days)"],
+        total: "7 days",
+    },
+    toryx: {
+        label: "ToryX AI Character",
+        steps: ["Enter idea (10 sec)", "Pick character (10 sec)", "AI generates (60 sec)"],
+        total: "2 min",
+    },
+    improvement: "Let AI characters handle the repetitive work for you",
+};
+
+export const faqItemsEn: FaqItem[] = [
+    {
+        question: "What types of content can AI characters create?",
+        answer: "Short videos, educational content, drama skits, product reviews, brand stories, and more — almost any topic. AI characters adapt to your chosen persona and style.",
+    },
+    {
+        question: "Who owns the copyright to an AI character?",
+        answer: "You do. AI character appearances are original creations without any real person's likeness, making them safe for commercial use.",
+    },
+    {
+        question: "Will published content be labeled as AI-generated?",
+        answer: "Yes — we proactively apply AIGC labels, which complies with platform requirements and does not reduce recommendation traffic. Transparent labeling actually builds more trust.",
+    },
+    {
+        question: "What languages are supported?",
+        answer: "30+ languages including Chinese, English, Japanese, and Korean. One character can produce multilingual content to reach a global audience.",
+    },
+    {
+        question: "Is there a free trial?",
+        answer: "Yes — get 100 credits on sign-up to fully experience core features, including creating an AI character and generating videos.",
+    },
+];
+
+export const footerLinksEn = {
+    product: [
+        { label: "Character Market",  href: "/models" },
+        { label: "Quick Image Gen",   href: "/quick-gen" },
+        { label: "Product Image Pro", href: "/image-factory" },
+        { label: "Video Batch Gen",   href: "/pro-studio/video-batch" },
+    ],
+    support: [
+        { label: "Pricing",     href: "/pricing" },
+        { label: "Help Center", href: "/help" },
+        { label: "Contact Us",  href: "/contact" },
+        { label: "Feedback",    href: "/feedback" },
+    ],
+    legal: [
+        { label: "Terms of Service", href: "/terms" },
+        { label: "Privacy Policy",   href: "/privacy" },
+        { label: "Legal Notice",     href: "/legal" },
+    ],
+};
+
+export const styleFiltersEn: readonly { id: CharacterStyle | "all"; label: string }[] = [
+    { id: "all",          label: "All" },
+    { id: "realistic",    label: "Realistic" },
+    { id: "anime",        label: "Anime" },
+    { id: "3d",           label: "3D" },
+    { id: "illustration", label: "Illustration" },
+];
+
+export const complianceCardsEn: ComplianceCard[] = [
+    { icon: BadgeCheck,  title: "AIGC Labeling",    desc: "AI content auto-labeled — platforms actually reward it with more reach", status: "ready" },
+    { icon: ShieldCheck, title: "Original & Safe",  desc: "AI character appearances are original — zero portrait rights disputes",  status: "ready" },
+    { icon: FileCheck,   title: "Review-Ready",     desc: "Privacy, interactions, and brand disclosures — all fully compliant",     status: "ready" },
+    { icon: Settings,    title: "User Control",     desc: "Every setting is your choice — no hidden defaults or pre-checks",        status: "ready" },
+    { icon: Scan,        title: "Pre-Publish Check", desc: "One-click compliance scan before publishing — avoid throttling",        status: "coming" },
+];
+
+

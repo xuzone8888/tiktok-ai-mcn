@@ -4,10 +4,10 @@ import Link from "next/link";
 import ReflectiveCard from "@/components/ui/ReflectiveCard";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Sparkles, Shield, Globe, FileText, Users, UserCheck, AlertTriangle, BookOpen, Scale, Gavel, RefreshCw, Phone, CreditCard, Megaphone, Receipt, ShieldX, Layers, Baby, MoreHorizontal, Youtube, DollarSign } from "lucide-react";
-import { useState } from "react";
+import { useLang } from "@/contexts/LangContext";
 
 export default function TermsPage() {
-  const [lang, setLang] = useState<"en" | "zh">("zh");
+  const { lang, setLang } = useLang();
 
   return (
     <div className="min-h-screen bg-[#0a0a0f] text-white">

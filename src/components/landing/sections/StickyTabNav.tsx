@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import { useLang } from "@/contexts/LangContext";
 import FeatureModelSection from "./FeatureModelSection";
 import ModelWallSection from "./ModelWallSection";
 import FeatureAiCopySection from "./FeatureAiCopySection";
@@ -13,19 +14,29 @@ import LiveStatsSection from "./LiveStatsSection";
 // Tab 配置
 // ============================================
 
-const tabs = [
-    { id: "character-engine", label: "角色引擎", shortLabel: "角色" },
-    { id: "content-creation", label: "内容创作", shortLabel: "内容" },
+const tabsZh = [
+    { id: "character-engine",     label: "角色引擎",  shortLabel: "角色" },
+    { id: "content-creation",     label: "内容创作",  shortLabel: "内容" },
     { id: "efficiency-compliance", label: "效率与合规", shortLabel: "信任" },
 ] as const;
 
-type TabId = (typeof tabs)[number]["id"];
+const tabsEn = [
+    { id: "character-engine",     label: "Character Engine",       shortLabel: "Engine"    },
+    { id: "content-creation",     label: "Content Creation",       shortLabel: "Content"   },
+    { id: "efficiency-compliance", label: "Efficiency & Compliance", shortLabel: "Trust"    },
+] as const;
+
+type TabId = (typeof tabsZh)[number]["id"];
+
+
 
 // ============================================
 // StickyTabNav 组件
 // ============================================
 
 export default function StickyTabNav() {
+    const { lang } = useLang();
+    const tabs = lang === "en" ? tabsEn : tabsZh;
     const [activeTab, setActiveTab] = useState<TabId>("character-engine");
     const [isStuck, setIsStuck] = useState(false);
     const tabBarRef = useRef<HTMLDivElement>(null);

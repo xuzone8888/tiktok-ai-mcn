@@ -1,28 +1,36 @@
 "use client";
 
 import ReflectiveCard from "@/components/ui/ReflectiveCard";
-import { complianceCards } from "../data/landing-data";
+import { complianceCards, complianceCardsEn } from "../data/landing-data";
+import { useLang } from "@/contexts/LangContext";
 
 export default function LiveStatsSection() {
+    const { lang } = useLang();
+    const cards = lang === "en" ? complianceCardsEn : complianceCards;
+
     return (
         <div className="py-16">
             <div className="container max-w-7xl mx-auto px-6">
                 {/* 标题 */}
                 <div className="text-center mb-16">
                     <div className="text-xs text-gray-500 uppercase tracking-widest mb-4">
-                        合规保障
+                        {lang === "en" ? "Compliance & Trust" : "合规保障"}
                     </div>
                     <h2 className="text-4xl md:text-5xl font-bold text-white mb-4">
-                        做合规的创作者，走得更远
+                        {lang === "en"
+                            ? "Stay Compliant, Go Further"
+                            : "做合规的创作者，走得更远"}
                     </h2>
                     <p className="text-gray-500 text-lg">
-                        我们比你更重视平台规则
+                        {lang === "en"
+                            ? "We care about platform rules even more than you do"
+                            : "我们比你更重视平台规则"}
                     </p>
                 </div>
 
                 {/* 合规卡片 */}
                 <div className="grid md:grid-cols-3 lg:grid-cols-5 gap-4 max-w-6xl mx-auto">
-                    {complianceCards.map((card, index) => (
+                    {cards.map((card, index) => (
                         <ReflectiveCard key={index} className="!rounded-2xl" active={card.status === "ready"}>
                             <div className="p-6 text-center">
                                 <div className="w-10 h-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center mb-3 mx-auto">
@@ -37,7 +45,7 @@ export default function LiveStatsSection() {
                                 {card.status === "coming" && (
                                     <div className="mt-3">
                                         <span className="px-2 py-0.5 text-xs rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30">
-                                            即将推出
+                                            {lang === "en" ? "Coming Soon" : "即将推出"}
                                         </span>
                                     </div>
                                 )}

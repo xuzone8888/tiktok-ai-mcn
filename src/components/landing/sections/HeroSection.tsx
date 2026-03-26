@@ -6,14 +6,20 @@ import { useRouter } from "next/navigation";
 import { ArrowRight, Play, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import ReflectiveCard from "@/components/ui/ReflectiveCard";
-import { heroData, scenarioCarousel } from "../data/landing-data";
+import { heroData, heroDataEn, scenarioCarousel, scenarioCarouselEn } from "../data/landing-data";
 import { createClient } from "@/lib/supabase/client";
+import { useLang } from "@/contexts/LangContext";
+import { LangToggle } from "@/components/ui/LangToggle";
 
 export default function HeroSection() {
     const router = useRouter();
+    const { lang } = useLang();
     const [isLoggedIn, setIsLoggedIn] = useState(false);
     const [showLoginModal, setShowLoginModal] = useState(false);
     const [currentScenario, setCurrentScenario] = useState(0);
+
+    const hero = lang === "en" ? heroDataEn : heroData;
+    const carousel = lang === "en" ? scenarioCarouselEn : scenarioCarousel;
 
     useEffect(() => {
         const checkAuth = async () => {
@@ -27,10 +33,10 @@ export default function HeroSection() {
     // 场景轮播
     useEffect(() => {
         const timer = setInterval(() => {
-            setCurrentScenario((prev) => (prev + 1) % scenarioCarousel.length);
+            setCurrentScenario((prev) => (prev + 1) % carousel.length);
         }, 3500);
         return () => clearInterval(timer);
-    }, []);
+    }, [carousel.length]);
 
     const handleStartCreate = () => {
         if (isLoggedIn) {
@@ -61,24 +67,24 @@ export default function HeroSection() {
                                     href="/models"
                                     className="px-4 py-2 text-sm text-gray-400 hover:text-white hover:bg-white/5 rounded-lg transition-all"
                                 >
-                                    角色市场
+                                    {lang === "en" ? "Characters" : "角色市场"}
                                 </Link>
                                 <Link
                                     href="#character-engine"
                                     className="px-4 py-2 text-sm text-gray-400 hover:text-white hover:bg-white/5 rounded-lg transition-all"
                                 >
-                                    功能
+                                    {lang === "en" ? "Features" : "功能"}
                                 </Link>
                                 <Link
                                     href="/pricing"
                                     className="px-4 py-2 text-sm text-gray-400 hover:text-white hover:bg-white/5 rounded-lg transition-all"
                                 >
-                                    价格
+                                    {lang === "en" ? "Pricing" : "价格"}
                                 </Link>
                                 {/* 更多下拉 */}
                                 <div className="relative group/more">
                                     <button className="px-4 py-2 text-sm text-gray-400 hover:text-white hover:bg-white/5 rounded-lg transition-all flex items-center gap-1">
-                                        更多
+                                        {lang === "en" ? "More" : "更多"}
                                         <ChevronDown className="h-3 w-3" />
                                     </button>
                                     <div className="absolute top-full right-0 mt-2 w-40 py-2 bg-black/90 border border-white/10 rounded-xl backdrop-blur-xl opacity-0 invisible group-hover/more:opacity-100 group-hover/more:visible transition-all">
@@ -86,25 +92,27 @@ export default function HeroSection() {
                                             href="/privacy"
                                             className="block px-4 py-2 text-sm text-gray-400 hover:text-white hover:bg-white/5 transition-all"
                                         >
-                                            隐私政策
+                                            {lang === "en" ? "Privacy Policy" : "隐私政策"}
                                         </Link>
                                         <Link
                                             href="/terms"
                                             className="block px-4 py-2 text-sm text-gray-400 hover:text-white hover:bg-white/5 transition-all"
                                         >
-                                            服务条款
+                                            {lang === "en" ? "Terms of Service" : "服务条款"}
                                         </Link>
                                     </div>
                                 </div>
                             </div>
 
                             <div className="flex items-center gap-3">
+                                {/* Language Toggle */}
+                                <LangToggle />
                                 <Link href="/auth/login">
                                     <Button
                                         variant="ghost"
                                         className="text-gray-300 hover:text-white hover:bg-white/10"
                                     >
-                                        登录
+                                        {lang === "en" ? "Sign In" : "登录"}
                                     </Button>
                                 </Link>
                                 <Link href="/auth/register">
@@ -115,7 +123,7 @@ export default function HeroSection() {
                                         roughness={0.5}
                                     >
                                         <div className="px-4 py-2 text-sm font-medium">
-                                            免费注册
+                                            {lang === "en" ? "Sign Up Free" : "免费注册"}
                                         </div>
                                     </ReflectiveCard>
                                 </Link>
@@ -129,17 +137,17 @@ export default function HeroSection() {
                     {/* 徽章 */}
                     <div className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-white/5 border border-white/10 mb-10">
                         <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                        <span className="text-sm text-gray-400">{heroData.badge}</span>
+                        <span className="text-sm text-gray-400">{hero.badge}</span>
                     </div>
 
                     {/* 主标题 */}
                     <h1 className="text-4xl md:text-5xl lg:text-6xl xl:text-7xl font-bold leading-[1.1] mb-6 text-white">
-                        {heroData.headline}
+                        {hero.headline}
                     </h1>
 
                     {/* 副标题 */}
                     <p className="text-xl md:text-2xl text-gray-400 mb-12 max-w-3xl mx-auto">
-                        {heroData.subheadline}
+                        {hero.subheadline}
                     </p>
 
                     {/* Reflective 输入框 */}
@@ -148,14 +156,14 @@ export default function HeroSection() {
                             <div className="flex items-center p-2">
                                 <input
                                     type="text"
-                                    placeholder={heroData.inputPlaceholder}
+                                    placeholder={hero.inputPlaceholder}
                                     className="flex-1 bg-transparent text-white placeholder-gray-500 px-4 py-3 text-lg outline-none"
                                 />
                                 <button
                                     onClick={handleStartCreate}
                                     className="bg-gradient-to-b from-white to-gray-100 text-black hover:to-white px-6 py-3 rounded-xl font-medium flex items-center shadow-[0_0_20px_rgba(255,255,255,0.3),inset_0_1px_0_rgba(255,255,255,1)] hover:shadow-[0_0_25px_rgba(255,255,255,0.5),inset_0_1px_0_rgba(255,255,255,1)] transition-all duration-300 border-t border-white"
                                 >
-                                    开始创作
+                                    {hero.ctaPrimary}
                                     <ArrowRight className="h-4 w-4 ml-2" />
                                 </button>
                             </div>
@@ -169,11 +177,11 @@ export default function HeroSection() {
                             key={currentScenario}
                         >
                             {(() => {
-                                const Icon = scenarioCarousel[currentScenario].icon;
+                                const Icon = carousel[currentScenario].icon;
                                 return (
                                     <span className="text-gray-500 text-sm inline-flex items-center gap-1.5">
                                         <Icon className="w-4 h-4" />
-                                        「{scenarioCarousel[currentScenario].text}」
+                                        「{carousel[currentScenario].text}」
                                     </span>
                                 );
                             })()}
@@ -185,24 +193,30 @@ export default function HeroSection() {
                         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm">
                             <ReflectiveCard className="!rounded-2xl max-w-md w-full mx-4">
                                 <div className="p-8 text-center">
-                                    <h3 className="text-2xl font-bold text-white mb-4">请先登录</h3>
-                                    <p className="text-gray-400 mb-6">登录后即可创建 AI 角色，开始生成内容</p>
+                                    <h3 className="text-2xl font-bold text-white mb-4">
+                                        {lang === "en" ? "Sign In Required" : "请先登录"}
+                                    </h3>
+                                    <p className="text-gray-400 mb-6">
+                                        {lang === "en"
+                                            ? "Sign in to create your AI character and start generating content"
+                                            : "登录后即可创建 AI 角色，开始生成内容"}
+                                    </p>
                                     <div className="flex flex-col gap-3">
                                         <Link href="/auth/login?redirect=/models">
                                             <button className="w-full bg-gradient-to-b from-white to-gray-100 text-black hover:to-white py-3 rounded-xl font-medium transition-all">
-                                                立即登录
+                                                {lang === "en" ? "Sign In" : "立即登录"}
                                             </button>
                                         </Link>
                                         <Link href="/auth/register?redirect=/models">
                                             <button className="w-full bg-white/10 text-white border border-white/20 py-3 rounded-xl font-medium hover:bg-white/20 transition-all">
-                                                免费注册
+                                                {lang === "en" ? "Sign Up Free" : "免费注册"}
                                             </button>
                                         </Link>
                                         <button
                                             onClick={() => setShowLoginModal(false)}
                                             className="text-gray-500 hover:text-white text-sm mt-2"
                                         >
-                                            取消
+                                            {lang === "en" ? "Cancel" : "取消"}
                                         </button>
                                     </div>
                                 </div>
@@ -221,7 +235,7 @@ export default function HeroSection() {
                             >
                                 <div className="flex items-center px-8 py-4 text-lg font-medium">
                                     <Play className="h-5 w-5 mr-3" />
-                                    {heroData.ctaPrimary}
+                                    {hero.ctaPrimary}
                                     <ArrowRight className="h-5 w-5 ml-3 group-hover:translate-x-1 transition-transform" />
                                 </div>
                             </ReflectiveCard>
@@ -232,7 +246,7 @@ export default function HeroSection() {
                                 size="lg"
                                 className="h-14 px-8 text-lg border-white/20 text-white hover:bg-white/10"
                             >
-                                {heroData.ctaSecondary}
+                                {hero.ctaSecondary}
                             </Button>
                         </Link>
                     </div>

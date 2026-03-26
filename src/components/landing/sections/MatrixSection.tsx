@@ -2,19 +2,25 @@
 
 import ReflectiveCard from "@/components/ui/ReflectiveCard";
 import { Lock } from "lucide-react";
-import { possibilitiesData } from "../data/landing-data";
+import { possibilitiesData, possibilitiesDataEn } from "../data/landing-data";
+import { useLang } from "@/contexts/LangContext";
 
 export default function MatrixSection() {
+    const { lang } = useLang();
+    const data = lang === "en" ? possibilitiesDataEn : possibilitiesData;
+
     return (
         <div className="py-16">
             <div className="container max-w-7xl mx-auto px-6">
                 {/* 标题 */}
                 <div className="text-center mb-16">
                     <h2 className="text-4xl md:text-5xl font-bold text-white mb-4">
-                        一个角色，无限可能
+                        {lang === "en" ? "One Character, Infinite Possibilities" : "一个角色，无限可能"}
                     </h2>
                     <p className="text-gray-500 text-lg">
-                        优质内容是起点，你的角色能做的远不止一件事
+                        {lang === "en"
+                            ? "Great content is just the start — your character can do so much more"
+                            : "优质内容是起点，你的角色能做的远不止一件事"}
                     </p>
                 </div>
 
@@ -23,7 +29,7 @@ export default function MatrixSection() {
                     <ReflectiveCard className="!rounded-3xl" active={true}>
                         <div className="p-8">
                             <div className="grid md:grid-cols-2 gap-6">
-                                {possibilitiesData.map((item, index) => (
+                                {data.map((item, index) => (
                                     <div
                                         key={index}
                                         className="p-6 rounded-2xl bg-white/[0.03] border border-white/10 hover:border-white/20 transition-all group"
@@ -39,12 +45,12 @@ export default function MatrixSection() {
                                                     </h3>
                                                     {item.status === "coming" && (
                                                         <span className="px-2 py-0.5 text-xs rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30">
-                                                            即将推出
+                                                            {lang === "en" ? "Coming Soon" : "即将推出"}
                                                         </span>
                                                     )}
                                                     {item.status === "ready" && (
                                                         <span className="px-2 py-0.5 text-xs rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                                                            已上线
+                                                            {lang === "en" ? "Live" : "已上线"}
                                                         </span>
                                                     )}
                                                 </div>
@@ -63,7 +69,10 @@ export default function MatrixSection() {
                 {/* 底标 */}
                 <div className="mt-8 text-center">
                     <p className="text-gray-600 text-sm inline-flex items-center justify-center w-full gap-1">
-                        <Lock className="w-4 h-4" /> 严格遵循平台准则 · AI 内容透明标注
+                        <Lock className="w-4 h-4" />
+                        {lang === "en"
+                            ? "Strictly compliant with platform guidelines · AI content transparently labeled"
+                            : "严格遵循平台准则 · AI 内容透明标注"}
                     </p>
                 </div>
             </div>

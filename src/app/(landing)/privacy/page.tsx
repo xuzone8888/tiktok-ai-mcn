@@ -4,10 +4,10 @@ import Link from "next/link";
 import ReflectiveCard from "@/components/ui/ReflectiveCard";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Sparkles, Shield, Globe, FileText, Eye, Database, Share2, Lock, UserCheck, Cookie, Users, RefreshCw, Phone, BookOpen, Server, Key, Settings, ExternalLink, ShoppingBag, Cpu } from "lucide-react";
-import { useState } from "react";
+import { useLang } from "@/contexts/LangContext";
 
 export default function PrivacyPage() {
-  const [lang, setLang] = useState<"en" | "zh">("zh");
+  const { lang, setLang } = useLang();
 
   return (
     <div className="min-h-screen bg-[#0a0a0f] text-white">

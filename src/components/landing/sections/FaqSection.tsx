@@ -3,10 +3,13 @@
 import { useState } from "react";
 import { ChevronDown } from "lucide-react";
 import ReflectiveCard from "@/components/ui/ReflectiveCard";
-import { faqItems } from "../data/landing-data";
+import { faqItems, faqItemsEn } from "../data/landing-data";
+import { useLang } from "@/contexts/LangContext";
 
 export default function FaqSection() {
     const [openIndex, setOpenIndex] = useState<number | null>(null);
+    const { lang } = useLang();
+    const faqs = lang === "en" ? faqItemsEn : faqItems;
 
     return (
         <section className="relative z-10 py-24">
@@ -14,14 +17,16 @@ export default function FaqSection() {
                 {/* 标题 */}
                 <div className="text-center mb-16">
                     <h2 className="text-4xl md:text-5xl font-bold text-white mb-4">
-                        常见问题
+                        {lang === "en" ? "Frequently Asked Questions" : "常见问题"}
                     </h2>
-                    <p className="text-gray-500 text-lg">消除您的疑虑</p>
+                    <p className="text-gray-500 text-lg">
+                        {lang === "en" ? "Clear up your doubts" : "消除您的疑虑"}
+                    </p>
                 </div>
 
                 {/* FAQ 列表 */}
                 <div className="max-w-3xl mx-auto space-y-4">
-                    {faqItems.map((item, index) => (
+                    {faqs.map((item, index) => (
                         <ReflectiveCard
                             key={index}
                             className="!rounded-xl cursor-pointer"

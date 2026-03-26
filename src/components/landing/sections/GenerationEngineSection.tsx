@@ -1,25 +1,35 @@
 "use client";
 
 import ReflectiveCard from "@/components/ui/ReflectiveCard";
-import { workflowSteps } from "../data/landing-data";
+import { workflowSteps, workflowStepsEn } from "../data/landing-data";
+import { useLang } from "@/contexts/LangContext";
 
 export default function GenerationEngineSection() {
+    const { lang } = useLang();
+    const steps = lang === "en" ? workflowStepsEn : workflowSteps;
+
     return (
         <div className="py-16">
             <div className="container max-w-7xl mx-auto px-6">
                 {/* 标题 */}
                 <div className="text-center mb-16">
                     <h2 className="text-4xl md:text-5xl font-bold text-white mb-4">
-                        从灵感到成品，<span className="text-gray-400">极速出片</span>
+                        {lang === "en" ? (
+                            <>From Idea to Finished Video, <span className="text-gray-400">at Lightning Speed</span></>
+                        ) : (
+                            <>从灵感到成品，<span className="text-gray-400">极速出片</span></>
+                        )}
                     </h2>
                     <p className="text-gray-500 text-lg">
-                        你负责想法，AI 角色负责执行
+                        {lang === "en"
+                            ? "You bring the idea — the AI character handles execution"
+                            : "你负责想法，AI 角色负责执行"}
                     </p>
                 </div>
 
                 {/* 3 步流程 */}
                 <div className="grid md:grid-cols-3 gap-8 lg:gap-12 max-w-5xl mx-auto">
-                    {workflowSteps.map((item, index) => (
+                    {steps.map((item, index) => (
                         <div key={index} className="relative group">
                             {/* 连接线 */}
                             {index < 2 && (

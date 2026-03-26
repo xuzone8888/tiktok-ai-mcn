@@ -31,7 +31,7 @@ import {
 import { cn } from "@/lib/utils";
 import { type UserRole, isAdmin } from "@/lib/admin";
 import { createClient } from "@/lib/supabase/client";
-import { ThemeToggle } from "@/components/theme-toggle";
+import { LangToggle } from "@/components/ui/LangToggle";
 
 // ============================================================================
 // 类型定义
@@ -182,8 +182,8 @@ export function Header() {
 
 
 
-        {/* Theme Toggle */}
-        <ThemeToggle />
+        {/* Language Toggle */}
+        <LangToggle />
 
         {user && (
           <>
