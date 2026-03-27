@@ -88,9 +88,11 @@ Requirements:
 /** 多角度参考图: 基于参考图的转面图 (标准, 16:9) */
 const MULTI_ANGLE_TEMPLATE = `
 
-Based on the reference image provided, generate a character model sheet showing this EXACT same character from 7 different camera angles in a clean grid layout on a pure white background.
+Based on the reference image provided, generate a multi-angle turnaround of this EXACT same character from 7 different camera angles in a clean grid layout on a pure white background.
 
-The character's design, colors, proportions, clothing, accessories, and overall aesthetic MUST exactly match the reference image.
+CRITICAL STYLE RULE: You MUST preserve the EXACT same rendering style as the reference image. If the reference is photorealistic, the output must be photorealistic. If the reference is anime/cartoon/illustration, the output must match that exact same art style. Do NOT change or deviate from the reference image's visual style under any circumstances.
+
+The character's face, body proportions, clothing, colors, textures, accessories, and overall appearance MUST exactly match the reference image.
 
 Row 1 (full body, natural standing pose, 4 panels):
 front view | left 3/4 profile | right 3/4 profile | back view
@@ -99,12 +101,13 @@ Row 2 (close-up headshot, 3 panels centered):
 front face | left profile face | right profile face
 
 Critical requirements:
-- Character must be IDENTICAL to the reference image in every panel
-- Maintain exact same art style, color palette, and proportions
+- Rendering style must be IDENTICAL to the reference image (do not change art style)
+- Character must look like the SAME person/character in every panel
+- Maintain exact same color palette, proportions, and level of detail
 - Consistent lighting across all views
 - Clean separation between panels
-- Professional character sheet / model sheet layout
-- High quality, detailed rendering`;
+- High quality, detailed rendering, sharp focus`;
+
 
 // ============================================================================
 // POST — Hero / Reference 分派
