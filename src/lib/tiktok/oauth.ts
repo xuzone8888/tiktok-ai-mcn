@@ -67,6 +67,7 @@ export function buildAuthorizationUrl(userId: string): {
         state: state,
         code_challenge: codeChallenge,
         code_challenge_method: 'S256',
+        disable_auto_auth: '1',
     });
 
     const authUrl = `${TIKTOK_AUTH_URL}?${params.toString()}`;
