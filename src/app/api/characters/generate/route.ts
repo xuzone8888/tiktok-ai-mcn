@@ -144,14 +144,15 @@ export async function POST(request: Request) {
       const englishPrompt = await translateIfChinese(prompt);
       const refPrompt = `${englishPrompt}.${MULTI_ANGLE_TEMPLATE}`;
 
-      console.log("[Character Generate] Submitting reference task (gemini-2k):", {
+      console.log("[Character Generate] Submitting reference task (gemini-4k, gaorui native):", {
         promptLength: refPrompt.length,
         heroImageUrl: heroImageUrl.substring(0, 60),
       });
 
-      // 使用 gemini-2k (xas231) — 同步返回，2K 画质
+      // 使用 gemini-4k (高瑞原生格式) — 返回 base64 → 内部上传 OSS → 永久 URL
+      // 之前用 gemini-2k (xas231) 返回临时 URL，阿里云 ECS 下载该临时 URL 经常 ETIMEDOUT
       const geminiResult = await submitGeminiImage({
-        model: "gemini-2k",
+        model: "gemini-4k",
         prompt: refPrompt,
         sourceImageUrls: [heroImageUrl],
         aspectRatio: "16:9",
@@ -164,35 +165,42 @@ export async function POST(request: Request) {
         );
       }
 
-      console.log("[Character Generate] Reference image ready (sync):", geminiResult.imageUrl.substring(0, 60));
+      console.log("[Character Generate] Reference image ready:", geminiResult.imageUrl.substring(0, 80));
 
-      // xas231 返回的是临时 URL (flow.xas231.online/tmp/)，约 2 小时后过期
-      // 必须下载图片并上传到 OSS 持久化存储，不允许存临时 URL
+      // gemini-4k (gaorui native) 返回 base64 → submitGeminiImage 内部已上传 OSS → 永久 URL
+      // 检查是否已是永久 OSS URL，若是则直接使用，无需再次下载转存
       let permanentUrl: string | null = null;
-      const maxOssRetries = 2;
+      const isAlreadyPermanent = geminiResult.imageUrl.includes('aliyuncs.com') || geminiResult.imageUrl.includes('oss-cn-');
 
-      for (let attempt = 1; attempt <= maxOssRetries; attempt++) {
-        try {
-          const { uploadImageBuffer, generateMediaPath } = await import('@/lib/oss');
-          const imgResponse = await fetch(geminiResult.imageUrl);
-          if (!imgResponse.ok) {
-            throw new Error(`Failed to download temp image: ${imgResponse.status}`);
-          }
-          const imgBuffer = Buffer.from(await imgResponse.arrayBuffer());
-          const contentType = imgResponse.headers.get('content-type') || 'image/jpeg';
-          const ext = contentType.split('/')[1] || 'jpg';
-          const objectPath = generateMediaPath(
-            'images',
-            'character-reference',
-            `ref-sheet-${Date.now()}.${ext}`
-          );
-          permanentUrl = await uploadImageBuffer(imgBuffer, objectPath, contentType);
-          console.log("[Character Generate] Reference uploaded to OSS:", permanentUrl.substring(0, 80));
-          break; // 成功，跳出重试循环
-        } catch (ossErr) {
-          console.error(`[Character Generate] OSS upload attempt ${attempt}/${maxOssRetries} failed:`, ossErr);
-          if (attempt < maxOssRetries) {
-            await new Promise(r => setTimeout(r, 1000 * attempt)); // 等待后重试
+      if (isAlreadyPermanent) {
+        permanentUrl = geminiResult.imageUrl;
+        console.log("[Character Generate] Reference already on OSS, skip re-upload");
+      } else {
+        // fallback: 如果返回的是临时 URL（例如 fallback 到 xas231），仍需下载转存
+        const maxOssRetries = 2;
+        for (let attempt = 1; attempt <= maxOssRetries; attempt++) {
+          try {
+            const { uploadImageBuffer, generateMediaPath } = await import('@/lib/oss');
+            const imgResponse = await fetch(geminiResult.imageUrl);
+            if (!imgResponse.ok) {
+              throw new Error(`Failed to download temp image: ${imgResponse.status}`);
+            }
+            const imgBuffer = Buffer.from(await imgResponse.arrayBuffer());
+            const contentType = imgResponse.headers.get('content-type') || 'image/jpeg';
+            const ext = contentType.split('/')[1] || 'jpg';
+            const objectPath = generateMediaPath(
+              'images',
+              'character-reference',
+              `ref-sheet-${Date.now()}.${ext}`
+            );
+            permanentUrl = await uploadImageBuffer(imgBuffer, objectPath, contentType);
+            console.log("[Character Generate] Reference uploaded to OSS:", permanentUrl.substring(0, 80));
+            break;
+          } catch (ossErr) {
+            console.error(`[Character Generate] OSS upload attempt ${attempt}/${maxOssRetries} failed:`, ossErr);
+            if (attempt < maxOssRetries) {
+              await new Promise(r => setTimeout(r, 1000 * attempt));
+            }
           }
         }
       }
