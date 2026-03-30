@@ -1,13 +1,15 @@
 /**
- * VEO3 批量视频状态查询（使用高瑞 gaorui-veo-api）
+ * Grok Imagine 批量视频状态查询
  *
- * GET /api/video-batch/veo-status/{taskId}
+ * GET /api/video-batch/grok-status/{taskId}
  *
- * 用于所有 VEO3 模型的异步轮询查询（veo3-fast / veo3-std / veo3-4k 全部是 async 模式）
+ * 速创 wuyinkeji API:
+ *   查询: GET /api/async/detail?key=...&id=...
+ *   状态: 0=处理中, 2=完成, 3=失败
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { queryVeoResult } from "@/lib/gaorui-veo-api";
+import { queryGrokImagineResult } from "@/lib/grok-imagine-api";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export async function GET(
@@ -24,12 +26,12 @@ export async function GET(
       );
     }
 
-    console.log("[VEO3 Status] Querying task:", taskId);
+    console.log("[Grok Status] Querying task:", taskId);
 
-    const result = await queryVeoResult(taskId);
+    const result = await queryGrokImagineResult(taskId);
 
     if (!result.success || !result.task) {
-      console.error("[VEO3 Status] Query failed:", result.error);
+      console.error("[Grok Status] Query failed:", result.error);
       return NextResponse.json({
         success: false,
         error: result.error || "查询失败",
@@ -37,11 +39,11 @@ export async function GET(
     }
 
     const task = result.task;
-    console.log("[VEO3 Status] Task status:", {
+    console.log("[Grok Status] Task status:", {
       taskId,
       status: task.status,
       hasUrl: !!task.videoUrl,
-      progress: task.progress,
+      duration: task.duration,
     });
 
     // 如果任务完成，更新数据库记录
@@ -58,12 +60,12 @@ export async function GET(
           .eq("task_id", taskId);
 
         if (updateError) {
-          console.error("[VEO3 Status] Failed to update DB record:", updateError);
+          console.error("[Grok Status] Failed to update DB record:", updateError);
         } else {
-          console.log("[VEO3 Status] Updated DB record to completed:", taskId);
+          console.log("[Grok Status] Updated DB record to completed:", taskId);
         }
       } catch (dbError) {
-        console.error("[VEO3 Status] DB update error:", dbError);
+        console.error("[Grok Status] DB update error:", dbError);
       }
     } else if (task.status === "failed") {
       try {
@@ -77,25 +79,26 @@ export async function GET(
           .eq("task_id", taskId);
 
         if (updateError) {
-          console.error("[VEO3 Status] Failed to update failed status:", updateError);
+          console.error("[Grok Status] Failed to update failed status:", updateError);
         }
       } catch (dbError) {
-        console.error("[VEO3 Status] DB update error:", dbError);
+        console.error("[Grok Status] DB update error:", dbError);
       }
     }
 
+    // 统一返回格式（与 VEO/Sora 兼容）
     return NextResponse.json({
       success: true,
       data: {
         taskId: task.taskId,
         status: task.status,
         videoUrl: task.videoUrl,
-        progress: task.progress,
+        progress: task.status === "completed" ? 100 : task.status === "failed" ? 0 : 50,
         errorMessage: task.errorMessage,
       },
     });
   } catch (error) {
-    console.error("[VEO3 Status] Error:", error);
+    console.error("[Grok Status] Error:", error);
     return NextResponse.json(
       {
         success: false,

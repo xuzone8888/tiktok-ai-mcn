@@ -143,22 +143,22 @@ async function downloadImage(url: string): Promise<Buffer> {
 }
 
 // ============================================================================
-// VEO3 Components (异步, POST /v1/videos, multipart/form-data)
+// VEO3 Components (异步, POST /v1/videos, application/json)
 // ============================================================================
 
 /**
  * 提交 VEO3 Components 视频生成任务（异步轮询）
  *
  * 文档: POST /v1/videos (application/json)
- * 实测: 必须 multipart/form-data (与 fast/4K 一致, /v1/videos 端点统一要求)
+ * 仅支持模型 veo_3_1-components
  *
- * Body (multipart/form-data):
- *   model: "veo_3_1-components" (string, 必需, 下划线格式)
+ * Body (application/json):
+ *   model: "veo_3_1-components" (string, 必需)
  *   prompt: 提示词 (string, 必需)
- *   enhance_prompt: "true" (string, 必需)
- *   enable_upsample: "true" (string, 必需)
+ *   images: 参考图 URL 数组 (string[], 可选, 最多 3 张)
+ *   enhance_prompt: true (boolean, 必需)
+ *   enable_upsample: true (boolean/string, 必需)
  *   aspect_ratio: "9:16" 或 "16:9" (string, 必需)
- *   images: 参考图 URL (string, 可选, 最多 3 张, 每张一个 field)
  *
  * 响应: { id, status: "queued", ... }
  */
@@ -170,58 +170,32 @@ export async function submitVeoComponents(
   if (!key) return { success: false, error: "高瑞 API Key 未配置" };
 
   try {
-    const boundary = `----VeoComp${Date.now()}`;
-    const parts: string[] = [];
+    // 按文档要求使用 application/json 格式
+    const jsonBody: Record<string, unknown> = {
+      model: "veo3.1-fast-components",
+      prompt: params.prompt,
+      enhance_prompt: true,
+      enable_upsample: true,
+      aspect_ratio: params.aspectRatio || "9:16",
+    };
 
-    // model
-    parts.push(`--${boundary}\r\nContent-Disposition: form-data; name="model"\r\n\r\nveo_3_1-components`);
-    // prompt
-    parts.push(`--${boundary}\r\nContent-Disposition: form-data; name="prompt"\r\n\r\n${params.prompt}`);
-    // enhance_prompt
-    parts.push(`--${boundary}\r\nContent-Disposition: form-data; name="enhance_prompt"\r\n\r\ntrue`);
-    // enable_upsample
-    parts.push(`--${boundary}\r\nContent-Disposition: form-data; name="enable_upsample"\r\n\r\ntrue`);
-    // aspect_ratio
-    parts.push(`--${boundary}\r\nContent-Disposition: form-data; name="aspect_ratio"\r\n\r\n${params.aspectRatio || "9:16"}`);
-
-    // 参考图片 — 下载后以二进制文件方式上传（与 submitVeoFast 相同策略）
-    // 彻底绕过 images 字段的 JSON 序列化问题
-    let bodyBuffer: Buffer;
+    // 参考图片: 文档要求传 URL 字符串数组（最多 3 张）
     if (params.imageUrls && params.imageUrls.length > 0) {
-      const imageUrl = params.imageUrls[0];
-      console.log("[Gaorui-VEO] Downloading reference image for components:", imageUrl.substring(0, 80));
-      try {
-        const imageData = await downloadImage(imageUrl);
-        const fileName = "reference.png";
-        const textPart = parts.join("\r\n") + "\r\n";
-        const filePart = `--${boundary}\r\nContent-Disposition: form-data; name="input_reference"; filename="${fileName}"\r\nContent-Type: image/png\r\n\r\n`;
-        const endPart = `\r\n--${boundary}--\r\n`;
-
-        bodyBuffer = Buffer.concat([
-          Buffer.from(textPart, 'utf-8'),
-          Buffer.from(filePart, 'utf-8'),
-          imageData,
-          Buffer.from(endPart, 'utf-8'),
-        ]);
-      } catch (imgError) {
-        console.error("[Gaorui-VEO] Failed to download reference image:", imgError);
-        const textPart = parts.join("\r\n") + `\r\n--${boundary}--\r\n`;
-        bodyBuffer = Buffer.from(textPart, 'utf-8');
-      }
-    } else {
-      const textPart = parts.join("\r\n") + `\r\n--${boundary}--\r\n`;
-      bodyBuffer = Buffer.from(textPart, 'utf-8');
+      jsonBody.images = params.imageUrls.slice(0, 3);
     }
 
-    console.log("[Gaorui-VEO] Submitting Components task (multipart+file):", {
-      model: "veo_3_1-components",
-      hasImage: !!(params.imageUrls && params.imageUrls.length > 0),
+    const bodyStr = JSON.stringify(jsonBody);
+
+    console.log("[Gaorui-VEO] Submitting Components task (JSON):", {
+      model: "veo3.1-fast-components",
+      imageCount: params.imageUrls?.length || 0,
       aspectRatio: params.aspectRatio || "9:16",
-      bodySize: bodyBuffer.length,
+      bodyLength: bodyStr.length,
       prompt: params.prompt.substring(0, 50) + "...",
     });
 
     const result = await new Promise<{ data: string; statusCode: number }>((resolve, reject) => {
+      const bodyBuffer = Buffer.from(bodyStr, 'utf-8');
       const req = https.request({
         hostname: new URL(GAORUI_API_BASE).hostname,
         port: 443,
@@ -229,9 +203,9 @@ export async function submitVeoComponents(
         method: "POST",
         family: 4,
         headers: {
-          'Content-Type': `multipart/form-data; boundary=${boundary}`,
-          'Authorization': `Bearer ${key}`,
+          'Content-Type': 'application/json',
           'Accept': 'application/json',
+          'Authorization': `Bearer ${key}`,
           'Content-Length': String(bodyBuffer.length),
         },
         timeout: 120000,
@@ -620,13 +594,9 @@ export async function queryVeoResult(
       progress = Math.round(data.detail.pending_info.progress_pct * 100);
     }
 
-    // video_url: 文档字段
-    let videoUrl = data.video_url || undefined;
-
-    // 如果已完成但 video_url 为空, 使用 /v1/videos/{id}/content 作为下载地址
-    if (taskStatus === "completed" && !videoUrl) {
-      videoUrl = getVeoVideoContentUrl(taskId);
-    }
+    // video_url: 查询接口返回的视频下载地址
+    // 注意: /v1/videos/{id}/content 端点目前「开发中」(404)，不使用
+    const videoUrl = data.video_url || data.result_url || undefined;
 
     return {
       success: true,

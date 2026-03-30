@@ -26,7 +26,7 @@ export type VideoDuration = 8 | 10 | 15 | 25;
 export type VideoQuality = "standard" | "hd";
 
 /** 视频模型类型 */
-export type VideoModelType = "sora2" | "sora2-pro" | "veo3-fast" | "veo3-std" | "veo3-4k";
+export type VideoModelType = "sora2" | "sora2-pro" | "veo3-fast" | "veo3-std" | "veo3-4k" | "grok";
 
 /** 流水线步骤 */
 export type PipelineStep = 0 | 1 | 2 | 3 | 4;
@@ -50,6 +50,8 @@ export function getAvailableDurations(modelType: VideoModelType, quality: VideoQ
     return [25]; // Pro 标清只有 25 秒
   } else if (modelType === "veo3-fast" || modelType === "veo3-std" || modelType === "veo3-4k") {
     return [8]; // VEO3 全系固定 8 秒
+  } else if (modelType === "grok") {
+    return [10, 15]; // Grok Imagine 支持 10/15 秒
   }
   return [15]; // 默认
 }
@@ -64,6 +66,8 @@ export function getAvailableQualities(modelType: VideoModelType): VideoQuality[]
     return ["standard"];
   } else if (modelType === "veo3-4k") {
     return ["hd"];
+  } else if (modelType === "grok") {
+    return ["standard"];
   }
   return ["standard"];
 }
@@ -259,6 +263,9 @@ export const VIDEO_BATCH_PRICING = {
   veo3_fast: 30,        // VEO3 快速版 = 30积分 (纯提示词)
   veo3_std: 50,         // VEO3 标准版 = 50积分 (≤3张参考图)
   veo3_4k: 80,          // VEO3 4K超清 = 80积分 (≤2张参考图)
+  // Grok Imagine (速创 wuyinkeji, 0.05元/秒)
+  grok_10s: 5,          // Grok 10秒 = 5积分 (0.50元)
+  grok_15s: 8,          // Grok 15秒 = 8积分 (0.75元)
 };
 
 /** 获取视频生成总价 */
@@ -278,6 +285,10 @@ export function getVideoBatchTotalPrice(
   if (modelType === "veo3-fast") return VIDEO_BATCH_PRICING.veo3_fast;
   if (modelType === "veo3-std") return VIDEO_BATCH_PRICING.veo3_std;
   if (modelType === "veo3-4k") return VIDEO_BATCH_PRICING.veo3_4k;
+  if (modelType === "grok") {
+    if (duration === 10) return VIDEO_BATCH_PRICING.grok_10s;
+    return VIDEO_BATCH_PRICING.grok_15s;
+  }
 
   return VIDEO_BATCH_PRICING.sora2_15s; // 默认
 }

@@ -48,6 +48,10 @@ const allowedDomains = [
   "gaorui.cc",
   // 阿里云 OSS（VEO3/Sora 视频存储）
   "aliyuncs.com",
+  // OVH S3（VEO3 视频 video_url 存储）
+  "io.cloud.ovh.us",
+  // Grok Imagine 视频下载
+  "zhoushurencz1.top",
 ];
 
 function isAllowedDomain(url: string): boolean {

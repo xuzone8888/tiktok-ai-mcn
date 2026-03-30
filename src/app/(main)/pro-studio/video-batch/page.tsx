@@ -2003,13 +2003,16 @@ C07: [story CTA, inspiring, <50 chars]`,
         // 计算积分消耗
         const taskCreditCost = getVideoBatchTotalPrice(taskModelType, taskDuration, taskQuality);
 
-        // 判断是否使用 VEO3 模型
+        // 判断模型类型以选择 API 端点
         const isVeo3Model = taskModelType === "veo3-fast" || taskModelType === "veo3-std" || taskModelType === "veo3-4k";
-        const apiEndpoint = isVeo3Model
-          ? "/api/video-batch/generate-veo-video"
-          : "/api/video-batch/generate-sora-video";
+        const isGrokModel = taskModelType === "grok";
+        const apiEndpoint = isGrokModel
+          ? "/api/video-batch/generate-grok-video"
+          : isVeo3Model
+            ? "/api/video-batch/generate-veo-video"
+            : "/api/video-batch/generate-sora-video";
 
-        console.log(`[Video Batch] Calling ${isVeo3Model ? 'VEO3' : 'Sora2'} API with userId:`, currentUserId);
+        console.log(`[Video Batch] Calling ${isGrokModel ? 'Grok' : isVeo3Model ? 'VEO3' : 'Sora2'} API with userId:`, currentUserId);
         const videoResponse = await fetch(apiEndpoint, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -2043,8 +2046,10 @@ C07: [story CTA, inspiring, <50 chars]`,
 
 
         // async 模式：获取任务 ID
-        const soraTaskId = isVeo3Model ? videoResult.data.veoTaskId : videoResult.data.soraTaskId;
-        console.log(`[Video Batch] ${isVeo3Model ? 'VEO3' : 'Sora2'} task submitted (async):`, soraTaskId);
+        const soraTaskId = isGrokModel
+          ? videoResult.data.grokTaskId
+          : isVeo3Model ? videoResult.data.veoTaskId : videoResult.data.soraTaskId;
+        console.log(`[Video Batch] ${isGrokModel ? 'Grok' : isVeo3Model ? 'VEO3' : 'Sora2'} task submitted (async):`, soraTaskId);
 
         // 更新状态为正在生成视频
         updateTaskStatus(task.id, "generating_video", {
@@ -2055,10 +2060,12 @@ C07: [story CTA, inspiring, <50 chars]`,
 
         // ==================== Step 3.5: 轮询视频任务状态 ====================
         const isPro = taskModelType === "sora2-pro" || taskQuality === "hd" || taskDuration === 25;
-        const maxPollTime = isVeo3Model ? 10 * 60 * 1000 : (isPro ? 35 * 60 * 1000 : 10 * 60 * 1000);
-        const statusApiPath = isVeo3Model
-          ? `/api/video-batch/veo-status/${soraTaskId}`
-          : `/api/video-batch/sora-status/${soraTaskId}?isPro=${isPro}`;
+        const maxPollTime = (isVeo3Model || isGrokModel) ? 10 * 60 * 1000 : (isPro ? 35 * 60 * 1000 : 10 * 60 * 1000);
+        const statusApiPath = isGrokModel
+          ? `/api/video-batch/grok-status/${soraTaskId}`
+          : isVeo3Model
+            ? `/api/video-batch/veo-status/${soraTaskId}`
+            : `/api/video-batch/sora-status/${soraTaskId}?isPro=${isPro}`;
         const pollInterval = 15 * 1000; // 15秒轮询一次（减少请求频率）
         const startTime = Date.now();
 
@@ -2228,7 +2235,7 @@ C07: [story CTA, inspiring, <50 chars]`,
             <span className="text-white drop-shadow-lg">素材生成视频</span>
           </h1>
           <p className="mt-2 text-white/60">
-            一键生成多个视频，支持 SORA2 Pro / VEO3 多模型流水线处理
+            一键生成多个视频，支持 Grok / VEO3 多模型流水线处理
           </p>
         </div>
 
@@ -3151,13 +3158,14 @@ C07: [story CTA, inspiring, <50 chars]`,
                   {/* 模型选择 */}
                   <div className="space-y-2">
                     <Label className="text-xs text-white/60">模型</Label>
-                    <div className="grid grid-cols-5 gap-1.5">
+                    <div className="grid grid-cols-6 gap-1.5">
                       {[
-                        { id: "sora2", name: "Sora2", sub: "", dur: 15, qual: "standard" },
-                        { id: "sora2-pro", name: "Sora Pro", sub: "", dur: 15, qual: "hd" },
+                        { id: "grok", name: "Grok", sub: "10/15秒", dur: 10, qual: "standard" },
                         { id: "veo3-fast", name: "Veo3（快速）", sub: "纯提示词", dur: 8, qual: "standard" },
                         { id: "veo3-std", name: "Veo3（标准）", sub: "≤3张参考图", dur: 8, qual: "standard" },
                         { id: "veo3-4k", name: "Veo3（4K）", sub: "≤2张参考图", dur: 8, qual: "hd" },
+                        { id: "sora2", name: "Sora2", sub: "停服中", dur: 15, qual: "standard" },
+                        { id: "sora2-pro", name: "Sora Pro", sub: "停服中", dur: 15, qual: "hd" },
                       ].map((m) => {
                         const healthStatus = apiHealth.getModelStatus(m.id);
                         return (
@@ -3739,7 +3747,7 @@ C07: [story CTA, inspiring, <50 chars]`,
           defaultName={`${globalSettings.modelType}-${globalSettings.duration}s-${globalSettings.aspectRatio}`}
           isUploading={isUploadingTemplate}
           configPreview={[
-            { icon: <Film className="h-3.5 w-3.5" />, label: "模型", value: globalSettings.modelType === "sora2" ? "Sora 2.0" : globalSettings.modelType === "sora2-pro" ? "Sora 2.0 Pro" : globalSettings.modelType === "veo3-fast" ? "Veo3（快速）" : globalSettings.modelType === "veo3-std" ? "Veo3（标准）" : "Veo3（4K）" },
+            { icon: <Film className="h-3.5 w-3.5" />, label: "模型", value: globalSettings.modelType === "grok" ? "Grok Imagine" : globalSettings.modelType === "sora2" ? "Sora 2.0" : globalSettings.modelType === "sora2-pro" ? "Sora 2.0 Pro" : globalSettings.modelType === "veo3-fast" ? "Veo3（快速）" : globalSettings.modelType === "veo3-std" ? "Veo3（标准）" : "Veo3（4K）" },
             { icon: <Clock className="h-3.5 w-3.5" />, label: "时长", value: `${globalSettings.duration}秒` },
             { icon: <Monitor className="h-3.5 w-3.5" />, label: "比例", value: globalSettings.aspectRatio },
             { icon: <UserCircle className="h-3.5 w-3.5" />, label: "AI模特", value: useAiModel && selectedModelName ? selectedModelName : "未使用" },
