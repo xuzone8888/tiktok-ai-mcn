@@ -194,33 +194,62 @@ export async function submitVeoComponents(
       prompt: params.prompt.substring(0, 50) + "...",
     });
 
-    const result = await new Promise<{ data: string; statusCode: number }>((resolve, reject) => {
-      const bodyBuffer = Buffer.from(bodyStr, 'utf-8');
-      const req = https.request({
-        hostname: new URL(GAORUI_API_BASE).hostname,
-        port: 443,
-        path: "/v1/videos",
-        method: "POST",
-        family: 4,
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'Authorization': `Bearer ${key}`,
-          'Content-Length': String(bodyBuffer.length),
-        },
-        timeout: 120000,
-      }, (res) => {
-        let data = '';
-        res.on('data', (chunk: Buffer) => data += chunk);
-        res.on('end', () => resolve({ data, statusCode: res.statusCode || 0 }));
-      });
-      req.on('error', reject);
-      req.on('timeout', () => { req.destroy(); reject(new Error('Request timeout')); });
-      req.write(bodyBuffer);
-      req.end();
-    });
+    // 带重试的请求（防止偶发 504 网关超时）
+    const MAX_RETRIES = 2;
+    let result: { data: string; statusCode: number } | null = null;
 
-    console.log("[Gaorui-VEO] Components response (status:", result.statusCode, "):", result.data.substring(0, 300));
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        result = await new Promise<{ data: string; statusCode: number }>((resolve, reject) => {
+          const bodyBuffer = Buffer.from(bodyStr, 'utf-8');
+          const req = https.request({
+            hostname: new URL(GAORUI_API_BASE).hostname,
+            port: 443,
+            path: "/v1/videos",
+            method: "POST",
+            family: 4,
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+              'Authorization': `Bearer ${key}`,
+              'Content-Length': String(bodyBuffer.length),
+            },
+            timeout: 120000,
+          }, (res) => {
+            let data = '';
+            res.on('data', (chunk: Buffer) => data += chunk);
+            res.on('end', () => resolve({ data, statusCode: res.statusCode || 0 }));
+          });
+          req.on('error', reject);
+          req.on('timeout', () => { req.destroy(); reject(new Error('Request timeout')); });
+          req.write(bodyBuffer);
+          req.end();
+        });
+
+        console.log(`[Gaorui-VEO] Components response (attempt ${attempt + 1}, status: ${result.statusCode}):`, result.data.substring(0, 300));
+
+        // 5xx 且还有重试次数 → 重试
+        if (result.statusCode >= 500 && attempt < MAX_RETRIES) {
+          const waitMs = 3000 * (attempt + 1);
+          console.log(`[Gaorui-VEO] Components 5xx, retrying in ${waitMs}ms (${attempt + 1}/${MAX_RETRIES})`);
+          await new Promise(resolve => setTimeout(resolve, waitMs));
+          continue;
+        }
+        break;
+      } catch (reqError) {
+        console.error(`[Gaorui-VEO] Components request error (attempt ${attempt + 1}):`, reqError);
+        if (attempt < MAX_RETRIES) {
+          const waitMs = 3000 * (attempt + 1);
+          await new Promise(resolve => setTimeout(resolve, waitMs));
+          continue;
+        }
+        throw reqError;
+      }
+    }
+
+    if (!result) {
+      return { success: false, error: "请求失败，所有重试已用尽" };
+    }
 
     if (result.statusCode >= 400) {
       let errorDetail = `VEO3 服务错误 (${result.statusCode})`;
