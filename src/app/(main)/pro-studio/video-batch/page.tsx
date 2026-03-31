@@ -3236,9 +3236,9 @@ C07: [story CTA, inspiring, <50 chars]`,
                     <div className="grid grid-cols-6 gap-1.5">
                       {[
                         { id: "grok", name: "Grok", sub: "10/15秒", dur: 10, qual: "standard" },
-                        { id: "veo3-fast", name: "Veo3（快速）", sub: "纯提示词", dur: 8, qual: "standard" },
+                        { id: "veo3-fast", name: "Veo3（快速）", sub: "首尾帧", dur: 8, qual: "standard" },
                         { id: "veo3-std", name: "Veo3（标准）", sub: "≤3张参考图", dur: 8, qual: "standard" },
-                        { id: "veo3-4k", name: "Veo3（4K）", sub: "≤2张参考图", dur: 8, qual: "hd" },
+                        { id: "veo3-4k", name: "Veo3（4K）", sub: "首尾帧", dur: 8, qual: "hd" },
                         { id: "sora2", name: "Sora2", sub: "停服中", dur: 15, qual: "standard" },
                         { id: "sora2-pro", name: "Sora Pro", sub: "停服中", dur: 15, qual: "hd" },
                       ].map((m) => {
