@@ -1622,18 +1622,21 @@ C07: [story CTA, inspiring, <50 chars]`,
   const setSelectedModelTriggerWord = (value: string | null) => updateGlobalSettings("aiModelTriggerWord", value);
   const setSelectedModelCover = (value: string | null) => updateGlobalSettings("aiModelCover", value);
 
-  // Veo3 自建角色设置函数
+  // Veo3 / Grok 自建角色设置函数
   const veo3CharacterId = globalSettings.characterId;
   const veo3CharacterName = globalSettings.characterName;
   const veo3CharacterRefUrl = globalSettings.characterRefUrl;
   const isVeo3Model = globalSettings.modelType === "veo3-fast" || globalSettings.modelType === "veo3-std" || globalSettings.modelType === "veo3-4k";
+  const isGrokModel = globalSettings.modelType === "grok";
+  // VEO 和 Grok 都使用自建角色的参考图（reference_sheet_url）
+  const useRefImageModel = isVeo3Model || isGrokModel;
   const apiHealth = useApiHealth();
 
   // 统一角色选中回调
   const handleCharacterSelect = useCallback((character: CharacterOption | null) => {
     if (!character) {
       // 清除选择
-      if (isVeo3Model) {
+      if (useRefImageModel) {
         updateGlobalSettings("characterId", null);
         updateGlobalSettings("characterName", null);
         updateGlobalSettings("characterRefUrl", null);
@@ -1647,8 +1650,8 @@ C07: [story CTA, inspiring, <50 chars]`,
       return;
     }
 
-    if (isVeo3Model) {
-      // Veo3：存自建角色参考图
+    if (useRefImageModel) {
+      // Veo3 / Grok：存自建角色参考图
       updateGlobalSettings("characterId", character.id);
       updateGlobalSettings("characterName", character.name);
       updateGlobalSettings("characterRefUrl", character.reference_sheet_url || null);
@@ -1660,7 +1663,7 @@ C07: [story CTA, inspiring, <50 chars]`,
       setSelectedModelTriggerWord(character.trigger_word || character.description || character.name);
       setSelectedModelCover(character.avatar_url);
     }
-  }, [isVeo3Model, updateGlobalSettings, setUseAiModel, setSelectedModelId, setSelectedModelName, setSelectedModelTriggerWord, setSelectedModelCover]);
+  }, [useRefImageModel, updateGlobalSettings, setUseAiModel, setSelectedModelId, setSelectedModelName, setSelectedModelTriggerWord, setSelectedModelCover]);
 
   // 任务处理锁，防止重复执行
   const processingTasksRef = useRef<Set<string>>(new Set());
@@ -2019,7 +2022,7 @@ C07: [story CTA, inspiring, <50 chars]`,
           body: JSON.stringify({
             aiVideoPrompt: finalVideoPrompt,
             mainGridImageUrl: mainGridImageUrl || undefined,
-            ...(isVeo3Model && (task.characterRefUrl || globalSettings.characterRefUrl) && {
+            ...((isVeo3Model || isGrokModel) && (task.characterRefUrl || globalSettings.characterRefUrl) && {
               characterRefUrl: task.characterRefUrl || globalSettings.characterRefUrl,
             }),
             aspectRatio: taskAspectRatio,
@@ -3176,9 +3179,9 @@ C07: [story CTA, inspiring, <50 chars]`,
                             updateGlobalSettings("modelType", m.id as VideoModelType);
                             updateGlobalSettings("duration", m.dur as VideoDuration);
                             updateGlobalSettings("quality", m.qual as VideoQuality);
-                            const wasVeo3 = prevModelType === "veo3-fast" || prevModelType === "veo3-std" || prevModelType === "veo3-4k";
-                            const isVeo3Now = m.id === "veo3-fast" || m.id === "veo3-std" || m.id === "veo3-4k";
-                            if (wasVeo3 !== isVeo3Now) {
+                            const wasRefImageModel = prevModelType === "veo3-fast" || prevModelType === "veo3-std" || prevModelType === "veo3-4k" || prevModelType === "grok";
+                            const isRefImageNow = m.id === "veo3-fast" || m.id === "veo3-std" || m.id === "veo3-4k" || m.id === "grok";
+                            if (wasRefImageModel !== isRefImageNow) {
                               setUseAiModel(false);
                               setSelectedModelId(null);
                               setSelectedModelName(null);
@@ -3216,7 +3219,8 @@ C07: [story CTA, inspiring, <50 chars]`,
                   <div className="space-y-2">
                     <Label className="text-xs text-white/60">时长</Label>
                     <div className="flex gap-2">
-                      {(globalSettings.modelType === "sora2" ? [10, 15] :
+                      {(globalSettings.modelType === "grok" ? [10, 15] :
+                        globalSettings.modelType === "sora2" ? [10, 15] :
                         globalSettings.modelType === "sora2-pro" ? [15, 25] : [8]).map((dur) => (
                           <button
                             key={dur}
@@ -3263,15 +3267,15 @@ C07: [story CTA, inspiring, <50 chars]`,
                   {/* 引用角色 — 统一 UI，按模型切换数据源 */}
                   <div className="space-y-2">
                     <Label className="text-xs text-white/60">
-                      {isVeo3Model ? "引用角色（自建角色）" : "引用角色（签约模特）"}
+                      {useRefImageModel ? "引用角色（自建角色）" : "引用角色（签约模特）"}
                     </Label>
                     <CharacterPicker
                       variant="compact"
-                      dataSource={isVeo3Model ? "user_created" : "hired"}
-                      forgeType={isVeo3Model ? "veo" : "sora2"}
-                      selectedId={isVeo3Model ? veo3CharacterId : selectedModelId}
+                      dataSource={useRefImageModel ? "user_created" : "hired"}
+                      forgeType={useRefImageModel ? "veo" : "sora2"}
+                      selectedId={useRefImageModel ? veo3CharacterId : selectedModelId}
                       onSelect={handleCharacterSelect}
-                      title={isVeo3Model ? "选择自建角色" : "选择签约模特"}
+                      title={useRefImageModel ? "选择自建角色" : "选择签约模特"}
                     />
                   </div>
 

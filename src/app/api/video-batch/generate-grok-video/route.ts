@@ -17,6 +17,7 @@ export const maxDuration = 60;
 interface RequestBody {
   aiVideoPrompt: string;
   mainGridImageUrl?: string;
+  characterRefUrl?: string;
   aspectRatio: "9:16" | "16:9";
   durationSeconds?: number;
   taskId: string;
@@ -32,6 +33,7 @@ export async function POST(request: NextRequest) {
     const {
       aiVideoPrompt,
       mainGridImageUrl,
+      characterRefUrl,
       aspectRatio = "9:16",
       durationSeconds = 10,
       taskId,
@@ -61,9 +63,19 @@ export async function POST(request: NextRequest) {
     // 时长映射（只允许 10/15）
     const duration = (durationSeconds === 15 ? 15 : 10) as 10 | 15;
 
+    // 验证角色参考图 URL 为 OSS 永久地址
+    if (characterRefUrl && !characterRefUrl.includes("media.toryxai.com")) {
+      console.warn("[Grok Batch] characterRefUrl is not a permanent OSS URL:", characterRefUrl.substring(0, 80));
+      return NextResponse.json(
+        { success: false, error: "角色参考图地址已过期，请到「我的角色」重新生成参考图" },
+        { status: 400 }
+      );
+    }
+
     // 构建参考图数组
     const imageUrls: string[] = [];
     if (mainGridImageUrl) imageUrls.push(mainGridImageUrl);
+    if (characterRefUrl) imageUrls.push(characterRefUrl);
 
     console.log("[Grok Batch] Submitting Grok Imagine video:", {
       taskId,

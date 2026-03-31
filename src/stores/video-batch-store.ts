@@ -280,6 +280,8 @@ export const useVideoBatchStore = create<VideoBatchState & VideoBatchActions>()(
             // AI 模特配置
             useAiModel: globalSettings.useAiModel,
             aiModelId: globalSettings.aiModelId || undefined,
+            // 自建角色参考图（VEO3/Grok 用）
+            characterRefUrl: globalSettings.characterRefUrl || undefined,
             groupName: groupName?.trim() || '默认', // 任务组名称
             doubaoTalkingScript: null,
             doubaoAiVideoPrompt: null,
@@ -322,6 +324,8 @@ export const useVideoBatchStore = create<VideoBatchState & VideoBatchActions>()(
               // AI 模特配置
               useAiModel: globalSettings.useAiModel,
               aiModelId: globalSettings.aiModelId || undefined,
+              // 自建角色参考图（VEO3/Grok 用）
+              characterRefUrl: globalSettings.characterRefUrl || undefined,
               doubaoTalkingScript: null,
               doubaoAiVideoPrompt: null,
               soraTaskId: null,
