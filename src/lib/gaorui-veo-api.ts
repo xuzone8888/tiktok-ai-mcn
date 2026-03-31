@@ -150,10 +150,10 @@ async function downloadImage(url: string): Promise<Buffer> {
  * 提交 VEO3 Components 视频生成任务（异步轮询）
  *
  * 文档: POST /v1/videos (application/json)
- * 仅支持模型 veo_3_1-components
+ * 模型: veo3.1-fast-components
  *
  * Body (application/json):
- *   model: "veo_3_1-components" (string, 必需)
+ *   model: "veo3.1-fast-components" (string, 必需)
  *   prompt: 提示词 (string, 必需)
  *   images: 参考图 URL 数组 (string[], 可选, 最多 3 张)
  *   enhance_prompt: true (boolean, 必需)
@@ -285,13 +285,16 @@ export async function submitVeoComponents(
  * 提交 VEO3 Fast 视频生成任务（异步轮询）
  *
  * 文档: POST /v1/videos (multipart/form-data)
- * 不支持模型 veo_3_1-components
+ *
+ * 支持两种图生视频模式:
+ * - 首尾帧模式: imageUrls[0]=首帧, imageUrls[1]=尾帧(可选)
+ * - 纯文生视频: 不传 imageUrls
  *
  * Body (multipart/form-data):
  *   model: "veo3.1-fast" (string, 必需)
  *   prompt: 提示词 (string, 必需)
  *   seconds: "8" (string, 必需)
- *   input_reference: 参考图 (file, 必需)
+ *   input_reference[]: 首帧/尾帧 (file[], 可选, 最多2张)
  *   size: "16x9" 或 "9x16" (string, 必需)
  *   watermark: "false" (string, 可选)
  *
@@ -323,32 +326,43 @@ export async function submitVeoFast(
     // watermark
     parts.push(`--${boundary}\r\nContent-Disposition: form-data; name="watermark"\r\n\r\nfalse`);
 
-    // input_reference（如果有参考图 URL，先下载再作为 file 上传）
+    // input_reference[]（首帧/尾帧, 最多 2 张, 逐张下载后 file 上传）
     let bodyBuffer: Buffer;
     if (params.imageUrls && params.imageUrls.length > 0) {
-      const imageUrl = params.imageUrls[0];
-      console.log("[Gaorui-VEO] Downloading reference image:", imageUrl.substring(0, 80));
-      try {
-        const imageData = await downloadImage(imageUrl);
-        const fileName = "reference.png";
-        const textPart = parts.join("\r\n") + "\r\n";
-        const filePart = `--${boundary}\r\nContent-Disposition: form-data; name="input_reference"; filename="${fileName}"\r\nContent-Type: image/png\r\n\r\n`;
-        const endPart = `\r\n--${boundary}--\r\n`;
+      const imagesToUpload = params.imageUrls.slice(0, 2); // 首帧 + 尾帧(可选)
+      const downloadedImages: { data: Buffer; name: string }[] = [];
 
-        bodyBuffer = Buffer.concat([
-          Buffer.from(textPart, 'utf-8'),
-          Buffer.from(filePart, 'utf-8'),
-          imageData,
-          Buffer.from(endPart, 'utf-8'),
-        ]);
-      } catch (imgError) {
-        console.error("[Gaorui-VEO] Failed to download reference image:", imgError);
-        // 无图片时继续（不含 input_reference）
+      for (let i = 0; i < imagesToUpload.length; i++) {
+        const imageUrl = imagesToUpload[i];
+        const label = i === 0 ? "first_frame" : "last_frame";
+        console.log(`[Gaorui-VEO] Fast: Downloading ${label} ${i + 1}/${imagesToUpload.length}:`, imageUrl.substring(0, 80));
+        try {
+          const imageData = await downloadImage(imageUrl);
+          downloadedImages.push({ data: imageData, name: `${label}.png` });
+        } catch (imgError) {
+          console.error(`[Gaorui-VEO] Fast: Failed to download ${label}:`, imgError);
+        }
+      }
+
+      if (downloadedImages.length > 0) {
+        const textPart = parts.join("\r\n") + "\r\n";
+        const bufferParts: Buffer[] = [Buffer.from(textPart, 'utf-8')];
+
+        for (const img of downloadedImages) {
+          const filePart = `--${boundary}\r\nContent-Disposition: form-data; name="input_reference[]"; filename="${img.name}"\r\nContent-Type: image/png\r\n\r\n`;
+          bufferParts.push(Buffer.from(filePart, 'utf-8'));
+          bufferParts.push(img.data);
+          bufferParts.push(Buffer.from("\r\n", 'utf-8'));
+        }
+
+        bufferParts.push(Buffer.from(`--${boundary}--\r\n`, 'utf-8'));
+        bodyBuffer = Buffer.concat(bufferParts);
+      } else {
         const textPart = parts.join("\r\n") + `\r\n--${boundary}--\r\n`;
         bodyBuffer = Buffer.from(textPart, 'utf-8');
       }
     } else {
-      // 无参考图
+      // 无参考图（纯文生视频）
       const textPart = parts.join("\r\n") + `\r\n--${boundary}--\r\n`;
       bodyBuffer = Buffer.from(textPart, 'utf-8');
     }
@@ -356,7 +370,7 @@ export async function submitVeoFast(
     console.log("[Gaorui-VEO] Submitting Fast task (multipart):", {
       model: "veo3.1-fast",
       size,
-      hasImage: !!(params.imageUrls && params.imageUrls.length > 0),
+      imageCount: params.imageUrls?.length || 0,
       bodySize: bodyBuffer.length,
       prompt: params.prompt.substring(0, 50) + "...",
     });
@@ -389,7 +403,14 @@ export async function submitVeoFast(
     console.log("[Gaorui-VEO] Fast response (status:", result.statusCode, "):", result.data.substring(0, 300));
 
     if (result.statusCode >= 400) {
-      return { success: false, error: `VEO3 服务错误 (${result.statusCode})` };
+      let errorDetail = `VEO3 服务错误 (${result.statusCode})`;
+      try {
+        const errBody = JSON.parse(result.data);
+        const msg = errBody.error?.message || errBody.message || errBody.detail || JSON.stringify(errBody).substring(0, 200);
+        errorDetail = `VEO3 (${result.statusCode}): ${msg}`;
+      } catch { /* 无法解析错误响应 */ }
+      console.error("[Gaorui-VEO] Fast API error:", errorDetail);
+      return { success: false, error: errorDetail };
     }
 
     const data = JSON.parse(result.data);
@@ -416,13 +437,16 @@ export async function submitVeoFast(
  *
  * 文档: POST /v1/videos (multipart/form-data)
  * 格式与 veo3.1-fast 一致，model 改为 "veo3.1-fast-4K"
- * 支持最多 2 张参考图
+ *
+ * 支持两种图生视频模式:
+ * - 首尾帧模式: imageUrls[0]=首帧, imageUrls[1]=尾帧(可选)
+ * - 纯文生视频: 不传 imageUrls
  *
  * Body (multipart/form-data):
  *   model: "veo3.1-fast-4K" (string, 必需)
  *   prompt: 提示词 (string, 必需)
  *   seconds: "8" (string, 必需)
- *   input_reference: 参考图 (file, 可选)
+ *   input_reference[]: 首帧/尾帧 (file[], 可选, 最多2张)
  *   size: "16x9" 或 "9x16" (string, 必需)
  *   watermark: "false" (string, 可选)
  *
@@ -476,7 +500,7 @@ export async function submitVeoFast4K(
         const bufferParts: Buffer[] = [Buffer.from(textPart, 'utf-8')];
 
         for (const img of downloadedImages) {
-          const filePart = `--${boundary}\r\nContent-Disposition: form-data; name="input_reference"; filename="${img.name}"\r\nContent-Type: image/png\r\n\r\n`;
+          const filePart = `--${boundary}\r\nContent-Disposition: form-data; name="input_reference[]"; filename="${img.name}"\r\nContent-Type: image/png\r\n\r\n`;
           bufferParts.push(Buffer.from(filePart, 'utf-8'));
           bufferParts.push(img.data);
           bufferParts.push(Buffer.from("\r\n", 'utf-8'));

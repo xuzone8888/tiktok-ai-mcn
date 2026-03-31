@@ -3,10 +3,10 @@
  *
  * POST /api/video-batch/generate-veo-video
  *
- * 三个模型（全部 async, POST /v1/videos, multipart/form-data）:
- * - veo3-fast  → veo3.1-fast (纯提示词)
- * - veo3-std   → veo_3_1-components (≤3张参考图URL)
- * - veo3-4k    → veo3.1-fast-4K (≤2张参考图)
+ * 三个模型（全部 async, POST /v1/videos）:
+ * - veo3-fast  → veo3.1-fast (文生视频 / 首尾帧图生视频)
+ * - veo3-std   → veo3.1-fast-components (≤3张参考图URL, application/json)
+ * - veo3-4k    → veo3.1-fast-4K (文生视频 / 首尾帧图生视频)
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -22,8 +22,10 @@ export const maxDuration = 600;
 
 interface RequestBody {
   aiVideoPrompt: string;
-  mainGridImageUrl?: string;       // 参考图（veo3-std/veo3-4k 用）
+  mainGridImageUrl?: string;       // 参考图（veo3-std components 用）
   characterRefUrl?: string;        // 自建角色参考图 URL
+  firstFrameUrl?: string;          // 首帧图片 URL（veo3-fast/veo3-4k 用）
+  lastFrameUrl?: string;           // 尾帧图片 URL（veo3-fast/veo3-4k 用，可选）
   aspectRatio: "9:16" | "16:9";
   modelType: "veo3-fast" | "veo3-std" | "veo3-4k";
   taskId: string;
@@ -51,6 +53,8 @@ export async function POST(request: NextRequest) {
       aiVideoPrompt,
       mainGridImageUrl,
       characterRefUrl,
+      firstFrameUrl,
+      lastFrameUrl,
       aspectRatio,
       modelType = "veo3-fast",
       taskId,
@@ -96,12 +100,24 @@ export async function POST(request: NextRequest) {
     }
 
     // 构建图片 URL 列表
+    // - veo3-std (components): mainGridImageUrl + characterRefUrl (参考图, 最多3张)
+    // - veo3-fast / veo3-4k: firstFrameUrl + lastFrameUrl (首尾帧) 或 mainGridImageUrl (兼容)
     const imageUrls: string[] = [];
-    if (mainGridImageUrl) imageUrls.push(mainGridImageUrl);
-    if (characterRefUrl) imageUrls.push(characterRefUrl);
 
-    // veo3-fast 不支持参考图
-    const finalImageUrls = modelType === "veo3-fast" ? [] : imageUrls;
+    if (modelType === "veo3-std") {
+      // Components 模型: 参考图模式
+      if (mainGridImageUrl) imageUrls.push(mainGridImageUrl);
+      if (characterRefUrl) imageUrls.push(characterRefUrl);
+    } else {
+      // Fast / 4K 模型: 首尾帧模式
+      if (firstFrameUrl) {
+        imageUrls.push(firstFrameUrl);
+        if (lastFrameUrl) imageUrls.push(lastFrameUrl);
+      } else if (mainGridImageUrl) {
+        // 兼容: 没有首帧但有素材图时，当作首帧使用
+        imageUrls.push(mainGridImageUrl);
+      }
+    }
 
     console.log("[VEO3 Batch] Submitting VEO3 video:", {
       taskId,
@@ -111,7 +127,9 @@ export async function POST(request: NextRequest) {
       promptLength: aiVideoPrompt.length,
       userId: userId || "(not provided)",
       creditCost,
-      imageCount: finalImageUrls.length,
+      imageCount: imageUrls.length,
+      hasFirstFrame: !!firstFrameUrl,
+      hasLastFrame: !!lastFrameUrl,
       mode,
     });
 
@@ -120,7 +138,7 @@ export async function POST(request: NextRequest) {
       prompt: aiVideoPrompt,
       model: gaoruiModel,
       aspectRatio: aspectRatio,
-      ...(finalImageUrls.length > 0 && { imageUrls: finalImageUrls }),
+      ...(imageUrls.length > 0 && { imageUrls }),
     });
 
     if (!submitResult.success) {
@@ -154,7 +172,7 @@ export async function POST(request: NextRequest) {
             duration: 8,
             aspect_ratio: aspectRatio,
             quality: modelType === "veo3-4k" ? "4k" : "standard",
-            source_image_url: mainGridImageUrl || null,
+            source_image_url: mainGridImageUrl || firstFrameUrl || null,
             status: "processing",
             result_url: null,
             credit_cost: creditCost,

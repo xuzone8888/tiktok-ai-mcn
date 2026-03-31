@@ -115,6 +115,9 @@ export interface VideoBatchTask {
   aiModelName?: string;       // AI 模特显示名称（用户可见）
   // Veo3 自建角色配置（任务创建时保存）
   characterRefUrl?: string;   // 自建角色参考图 URL
+  // Veo3 首尾帧配置（veo3-fast / veo3-4k 用）
+  firstFrameUrl?: string;     // 首帧图片 URL（已上传 OSS）
+  lastFrameUrl?: string;      // 尾帧图片 URL（已上传 OSS，可选）
 
   modelType: VideoModelType;
   duration: VideoDuration;

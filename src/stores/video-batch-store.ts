@@ -60,7 +60,7 @@ export interface VideoBatchActions {
   createTask: (images: TaskImageInfo[], groupName?: string) => string;
 
   /** 从提示词创建任务（纯提示词模式） */
-  createTaskFromPrompt: (prompt: string, referenceImageUrl?: string, count?: number, groupName?: string) => string[];
+  createTaskFromPrompt: (prompt: string, referenceImageUrl?: string, count?: number, groupName?: string, options?: { firstFrameUrl?: string; lastFrameUrl?: string }) => string[];
 
   /** 批量创建空任务 */
   createEmptyTasks: (count: number) => string[];
@@ -302,7 +302,7 @@ export const useVideoBatchStore = create<VideoBatchState & VideoBatchActions>()(
           return id;
         },
 
-        createTaskFromPrompt: (prompt, referenceImageUrl, count = 1, groupName) => {
+        createTaskFromPrompt: (prompt, referenceImageUrl, count = 1, groupName, options) => {
           const { globalSettings } = get();
           const newIds: string[] = [];
 
@@ -326,6 +326,9 @@ export const useVideoBatchStore = create<VideoBatchState & VideoBatchActions>()(
               aiModelId: globalSettings.aiModelId || undefined,
               // 自建角色参考图（VEO3/Grok 用）
               characterRefUrl: globalSettings.characterRefUrl || undefined,
+              // 首尾帧（veo3-fast / veo3-4k 用）
+              firstFrameUrl: options?.firstFrameUrl || undefined,
+              lastFrameUrl: options?.lastFrameUrl || undefined,
               doubaoTalkingScript: null,
               doubaoAiVideoPrompt: null,
               soraTaskId: null,

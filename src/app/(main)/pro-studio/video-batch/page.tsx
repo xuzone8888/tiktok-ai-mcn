@@ -1124,6 +1124,11 @@ export default function VideoBatchPage() {
   const [groupNameInput, setGroupNameInput] = useState(""); // 分组名称
   const [referenceImageFile, setReferenceImageFile] = useState<File | null>(null);
   const [referenceImageUrl, setReferenceImageUrl] = useState("");
+  // 首尾帧（veo3-fast / veo3-4k 自由创作模式用）
+  const [firstFrameFile, setFirstFrameFile] = useState<File | null>(null);
+  const [firstFrameUrl, setFirstFrameUrl] = useState("");
+  const [lastFrameFile, setLastFrameFile] = useState<File | null>(null);
+  const [lastFrameUrl, setLastFrameUrl] = useState("");
 
   // 删除任务组确认弹窗
   const [deleteGroupDialog, setDeleteGroupDialog] = useState<{ open: boolean; groupName: string; count: number }>({
@@ -1862,7 +1867,8 @@ C07: [story CTA, inspiring, <50 chars]`,
           updateTaskStatus(task.id, "generating_video", { currentStep: 3, progress: 20 });
 
           finalVideoPrompt = task.customPrompt || "";
-          mainGridImageUrl = task.referenceImageUrl || "";
+          // 兼容: 首帧 URL 优先，回退到旧的 referenceImageUrl
+          mainGridImageUrl = task.firstFrameUrl || task.referenceImageUrl || "";
 
           // 如果使用AI模特且有trigger word，添加到提示词中
           if (useAiModel && selectedModelTriggerWord) {
@@ -2024,6 +2030,11 @@ C07: [story CTA, inspiring, <50 chars]`,
             mainGridImageUrl: mainGridImageUrl || undefined,
             ...((isVeo3Model || isGrokModel) && (task.characterRefUrl || globalSettings.characterRefUrl) && {
               characterRefUrl: task.characterRefUrl || globalSettings.characterRefUrl,
+            }),
+            // 首尾帧（veo3-fast / veo3-4k 用）
+            ...(isVeo3Model && task.firstFrameUrl && {
+              firstFrameUrl: task.firstFrameUrl,
+              ...(task.lastFrameUrl && { lastFrameUrl: task.lastFrameUrl }),
             }),
             aspectRatio: taskAspectRatio,
             durationSeconds: taskDuration,
@@ -2829,41 +2840,102 @@ C07: [story CTA, inspiring, <50 chars]`,
                       />
                     </div>
 
-                    {/* 可选参考图 + 分组名 */}
+                    {/* 可选参考图 / 首尾帧 + 分组名 */}
                     <div className="grid grid-cols-2 gap-4 pt-2">
                       <div className="space-y-2">
-                        <Label className="text-xs text-white/60">📷 参考图 (可选)</Label>
-                        <div
-                          className="h-24 border border-dashed border-white/20 rounded-lg flex items-center justify-center bg-white/5 hover:bg-white/10 cursor-pointer transition-all"
-                          onClick={() => document.getElementById('ref-image-upload')?.click()}
-                        >
-                          {referenceImageUrl ? (
-                            <div className="relative w-full h-full">
-                              <img src={referenceImageUrl} alt="参考图" className="w-full h-full object-cover rounded-lg" />
-                              <button
-                                onClick={(e) => { e.stopPropagation(); setReferenceImageUrl(""); setReferenceImageFile(null); }}
-                                className="absolute -top-2 -right-2 h-5 w-5 bg-red-500 rounded-full flex items-center justify-center"
-                              >
-                                <X className="h-3 w-3 text-white" />
-                              </button>
+                        {/* VEO fast/4K: 首尾帧双图上传; 其他模型: 单张参考图 */}
+                        {(globalSettings.modelType === "veo3-fast" || globalSettings.modelType === "veo3-4k") ? (
+                          <>
+                            <Label className="text-xs text-white/60">🎬 首尾帧 (图生视频)</Label>
+                            <div className="grid grid-cols-2 gap-2">
+                              {/* 首帧 */}
+                              <div>
+                                <div
+                                  className="h-20 border border-dashed border-white/20 rounded-lg flex items-center justify-center bg-white/5 hover:bg-white/10 cursor-pointer transition-all"
+                                  onClick={() => document.getElementById('first-frame-upload')?.click()}
+                                >
+                                  {firstFrameUrl ? (
+                                    <div className="relative w-full h-full">
+                                      <img src={firstFrameUrl} alt="首帧" className="w-full h-full object-cover rounded-lg" />
+                                      <button
+                                        onClick={(e) => { e.stopPropagation(); setFirstFrameUrl(""); setFirstFrameFile(null); }}
+                                        className="absolute -top-1.5 -right-1.5 h-4 w-4 bg-red-500 rounded-full flex items-center justify-center"
+                                      >
+                                        <X className="h-2.5 w-2.5 text-white" />
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <span className="text-[10px] text-white/40">首帧</span>
+                                  )}
+                                </div>
+                                <input id="first-frame-upload" type="file" accept="image/*" className="hidden" onChange={(e) => {
+                                  const file = e.target.files?.[0];
+                                  if (file) { setFirstFrameFile(file); setFirstFrameUrl(URL.createObjectURL(file)); }
+                                }} />
+                              </div>
+                              {/* 尾帧 */}
+                              <div>
+                                <div
+                                  className="h-20 border border-dashed border-white/20 rounded-lg flex items-center justify-center bg-white/5 hover:bg-white/10 cursor-pointer transition-all"
+                                  onClick={() => document.getElementById('last-frame-upload')?.click()}
+                                >
+                                  {lastFrameUrl ? (
+                                    <div className="relative w-full h-full">
+                                      <img src={lastFrameUrl} alt="尾帧" className="w-full h-full object-cover rounded-lg" />
+                                      <button
+                                        onClick={(e) => { e.stopPropagation(); setLastFrameUrl(""); setLastFrameFile(null); }}
+                                        className="absolute -top-1.5 -right-1.5 h-4 w-4 bg-red-500 rounded-full flex items-center justify-center"
+                                      >
+                                        <X className="h-2.5 w-2.5 text-white" />
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <span className="text-[10px] text-white/40">尾帧 (选填)</span>
+                                  )}
+                                </div>
+                                <input id="last-frame-upload" type="file" accept="image/*" className="hidden" onChange={(e) => {
+                                  const file = e.target.files?.[0];
+                                  if (file) { setLastFrameFile(file); setLastFrameUrl(URL.createObjectURL(file)); }
+                                }} />
+                              </div>
                             </div>
-                          ) : (
-                            <span className="text-xs text-white/40">点击上传</span>
-                          )}
-                        </div>
-                        <input
-                          id="ref-image-upload"
-                          type="file"
-                          accept="image/*"
-                          className="hidden"
-                          onChange={(e) => {
-                            const file = e.target.files?.[0];
-                            if (file) {
-                              setReferenceImageFile(file);
-                              setReferenceImageUrl(URL.createObjectURL(file));
-                            }
-                          }}
-                        />
+                          </>
+                        ) : (
+                          <>
+                            <Label className="text-xs text-white/60">📷 参考图 (可选)</Label>
+                            <div
+                              className="h-24 border border-dashed border-white/20 rounded-lg flex items-center justify-center bg-white/5 hover:bg-white/10 cursor-pointer transition-all"
+                              onClick={() => document.getElementById('ref-image-upload')?.click()}
+                            >
+                              {referenceImageUrl ? (
+                                <div className="relative w-full h-full">
+                                  <img src={referenceImageUrl} alt="参考图" className="w-full h-full object-cover rounded-lg" />
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); setReferenceImageUrl(""); setReferenceImageFile(null); }}
+                                    className="absolute -top-2 -right-2 h-5 w-5 bg-red-500 rounded-full flex items-center justify-center"
+                                  >
+                                    <X className="h-3 w-3 text-white" />
+                                  </button>
+                                </div>
+                              ) : (
+                                <span className="text-xs text-white/40">点击上传</span>
+                              )}
+                            </div>
+                            <input
+                              id="ref-image-upload"
+                              type="file"
+                              accept="image/*"
+                              className="hidden"
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) {
+                                  setReferenceImageFile(file);
+                                  setReferenceImageUrl(URL.createObjectURL(file));
+                                }
+                              }}
+                            />
+                          </>
+                        )}
                       </div>
                       <div className="space-y-2">
                         <Label className="text-xs text-white/60 flex items-center gap-1">
@@ -3400,6 +3472,11 @@ C07: [story CTA, inspiring, <50 chars]`,
                     const currentImages = [...newTaskImages];
                     const currentRefFile = referenceImageFile;
                     const currentRefUrl = referenceImageUrl;
+                    // 首尾帧快照
+                    const currentFirstFrameFile = firstFrameFile;
+                    const currentFirstFrameUrl = firstFrameUrl;
+                    const currentLastFrameFile = lastFrameFile;
+                    const currentLastFrameUrl = lastFrameUrl;
 
                     setShowCreateDialog(false);
                     toast({ title: `⏳ 正在创建 ${currentCount} 个任务...` });
@@ -3411,6 +3488,10 @@ C07: [story CTA, inspiring, <50 chars]`,
                           setNewTaskImages([]);
                         } else {
                           let uploadedRefUrl = "";
+                          let uploadedFirstFrameUrl = "";
+                          let uploadedLastFrameUrl = "";
+
+                          // 上传参考图（非首尾帧模型用）
                           if (currentRefFile) {
                             try {
                               const formData = new FormData();
@@ -3423,12 +3504,52 @@ C07: [story CTA, inspiring, <50 chars]`,
                             }
                           }
 
-                          createTaskFromPrompt(currentPrompt, uploadedRefUrl || undefined, currentCount, currentGroup || undefined);
+                          // 上传首帧
+                          if (currentFirstFrameFile) {
+                            try {
+                              const formData = new FormData();
+                              formData.append("file", currentFirstFrameFile);
+                              const uploadRes = await fetch("/api/upload/image", { method: "POST", body: formData });
+                              const uploadResult = await uploadRes.json();
+                              if (uploadResult.success && uploadResult.data?.url) uploadedFirstFrameUrl = uploadResult.data.url;
+                            } catch (e) {
+                              console.error("Upload first frame failed:", e);
+                            }
+                          }
+
+                          // 上传尾帧
+                          if (currentLastFrameFile) {
+                            try {
+                              const formData = new FormData();
+                              formData.append("file", currentLastFrameFile);
+                              const uploadRes = await fetch("/api/upload/image", { method: "POST", body: formData });
+                              const uploadResult = await uploadRes.json();
+                              if (uploadResult.success && uploadResult.data?.url) uploadedLastFrameUrl = uploadResult.data.url;
+                            } catch (e) {
+                              console.error("Upload last frame failed:", e);
+                            }
+                          }
+
+                          createTaskFromPrompt(
+                            currentPrompt,
+                            uploadedRefUrl || undefined,
+                            currentCount,
+                            currentGroup || undefined,
+                            (uploadedFirstFrameUrl || uploadedLastFrameUrl) ? {
+                              firstFrameUrl: uploadedFirstFrameUrl || undefined,
+                              lastFrameUrl: uploadedLastFrameUrl || undefined,
+                            } : undefined
+                          );
                           setPromptInput("");
                           setGroupNameInput("");
                           if (currentRefUrl.startsWith("blob:")) URL.revokeObjectURL(currentRefUrl);
                           setReferenceImageUrl("");
                           setReferenceImageFile(null);
+                          // 清理首尾帧
+                          if (currentFirstFrameUrl.startsWith("blob:")) URL.revokeObjectURL(currentFirstFrameUrl);
+                          if (currentLastFrameUrl.startsWith("blob:")) URL.revokeObjectURL(currentLastFrameUrl);
+                          setFirstFrameUrl(""); setFirstFrameFile(null);
+                          setLastFrameUrl(""); setLastFrameFile(null);
                         }
                         setBatchCreateCount(1);
                         toast({ title: `✅ 已创建 ${currentCount} 个任务` });
