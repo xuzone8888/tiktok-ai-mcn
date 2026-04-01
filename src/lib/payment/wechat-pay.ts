@@ -80,15 +80,17 @@ export async function createWechatNativeOrder(
       },
     }) as any;
 
-    if (result.status === 200 && result.code_url) {
-      return { success: true, code_url: result.code_url };
+    const codeUrl = result.code_url || result.data?.code_url;
+    if (result.status === 200 && codeUrl) {
+      return { success: true, code_url: codeUrl };
     }
 
-    console.error('[WechatPay] Native order failed:', result);
-    return { success: false, error: result.message || '微信下单失败' };
-  } catch (error) {
-    console.error('[WechatPay] Native order error:', error);
-    return { success: false, error: '微信支付服务异常' };
+    console.error('[WechatPay] Native order failed. Full response:', JSON.stringify(result, null, 2));
+    return { success: false, error: result.message || result.detail?.message || '微信下单失败' };
+  } catch (error: any) {
+    console.error('[WechatPay] Native order error:', error?.message || error);
+    console.error('[WechatPay] Error details:', JSON.stringify(error?.response?.data || error?.data || {}, null, 2));
+    return { success: false, error: `微信支付服务异常: ${error?.message || '未知错误'}` };
   }
 }
 
