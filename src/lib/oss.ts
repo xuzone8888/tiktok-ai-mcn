@@ -163,7 +163,7 @@ export async function uploadBuffer(
  * @returns Public HTTPS URL of the uploaded video
  */
 export async function uploadVideoBuffer(
-    buffer: Buffer,
+    buffer: Buffer | ArrayBuffer | Uint8Array,
     objectPath: string,
     contentType: string = 'video/mp4'
 ): Promise<string> {

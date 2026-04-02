@@ -36,6 +36,11 @@ export type VideoModel =
   | "veo3-components"   // 高瑞 VEO3.1 Components (8s, 3图+首尾帧)
   | "veo3-fast"         // 高瑞 VEO3.1 Fast (8s, 最快)
   | "veo3-fast-4k"      // 高瑞 VEO3.1 Fast 4K (8s, 超清)
+  // Seedance 2.0 (火山方舟)
+  | "seedance-5s"       // Seedance 2.0 5秒 高清1080P
+  | "seedance-10s"      // Seedance 2.0 10秒 高清1080P
+  | "seedance-5s-pro"   // Seedance 2.0 5秒 Pro 原生720P
+  | "seedance-10s-pro"  // Seedance 2.0 10秒 Pro 原生720P
   // @deprecated — 旧模型，迁移期间保留
   | "sora2-10s" | "sora2-15s" | "sora2-pro-15s-hd" | "sora2-pro-25s";
 
@@ -134,7 +139,7 @@ export interface VideoGenerationConfig {
 /** 视频模型配置项 */
 export interface VideoModelConfig {
   label: string;           // UI 显示名
-  provider: "suchuang" | "gaorui";
+  provider: "suchuang" | "gaorui" | "volcengine";
   apiModel: string;        // 传给 API 的实际模型名
   endpoint: string;        // API 端点路径
   duration: number;        // 固定时长（秒）
@@ -142,7 +147,7 @@ export interface VideoModelConfig {
   supportsRefImage: boolean;
   maxImages: number;
   supportsCharacter: boolean;
-  quality: "standard" | "4k";
+  quality: "standard" | "hd" | "4k";
   responseMode: "sync" | "async";
   requestFormat: "messages" | "prompt" | "multipart";
   estimatedTime: string;
@@ -231,12 +236,74 @@ export const VIDEO_MODEL_CONFIG: Record<string, VideoModelConfig> = {
     requestFormat: "multipart",
     estimatedTime: "~6.6分钟",
   },
+  // Seedance 2.0 (火山方舟 volcengine)
+  "seedance-5s": {
+    label: "Seedance 2.0 5秒 · 高清1080P",
+    provider: "volcengine",
+    apiModel: "ep-m-20260402170020-b466n",
+    endpoint: "/api/seedance/submit",
+    duration: 5,
+    credits: 233,
+    supportsRefImage: true,
+    maxImages: 1,
+    supportsCharacter: false,
+    quality: "standard",
+    responseMode: "async",
+    requestFormat: "messages",
+    estimatedTime: "~2分钟",
+  },
+  "seedance-10s": {
+    label: "Seedance 2.0 10秒 · 高清1080P",
+    provider: "volcengine",
+    apiModel: "ep-m-20260402170020-b466n",
+    endpoint: "/api/seedance/submit",
+    duration: 10,
+    credits: 466,
+    supportsRefImage: true,
+    maxImages: 1,
+    supportsCharacter: false,
+    quality: "standard",
+    responseMode: "async",
+    requestFormat: "messages",
+    estimatedTime: "~2分钟",
+  },
+  "seedance-5s-pro": {
+    label: "Seedance 2.0 5秒 Pro · 原生720P",
+    provider: "volcengine",
+    apiModel: "ep-m-20260402170020-b466n",
+    endpoint: "/api/seedance/submit",
+    duration: 5,
+    credits: 497,
+    supportsRefImage: true,
+    maxImages: 1,
+    supportsCharacter: false,
+    quality: "hd",
+    responseMode: "async",
+    requestFormat: "messages",
+    estimatedTime: "~2分钟",
+  },
+  "seedance-10s-pro": {
+    label: "Seedance 2.0 10秒 Pro · 原生720P",
+    provider: "volcengine",
+    apiModel: "ep-m-20260402170020-b466n",
+    endpoint: "/api/seedance/submit",
+    duration: 10,
+    credits: 994,
+    supportsRefImage: true,
+    maxImages: 1,
+    supportsCharacter: false,
+    quality: "hd",
+    responseMode: "async",
+    requestFormat: "messages",
+    estimatedTime: "~3分钟",
+  },
 };
 
 /** 获取新视频模型列表（仅新模型，用于 UI 渲染） */
 export const NEW_VIDEO_MODELS: VideoModel[] = [
   "sora2-new-10s", "sora2-new-15s",
   "veo3-components", "veo3-fast", "veo3-fast-4k",
+  "seedance-5s", "seedance-10s", "seedance-5s-pro", "seedance-10s-pro",
 ];
 
 // --- @deprecated 旧视频配置，迁移期间保留 ---
@@ -245,7 +312,7 @@ export interface VideoModelPricing {
   label: string;
   duration: string;
   credits: number;
-  apiDuration: 10 | 15 | 25;
+  apiDuration: 5 | 8 | 10 | 15 | 25;
   quality: "standard" | "hd";
   apiModel: string;
 }
@@ -283,6 +350,39 @@ export const VIDEO_MODEL_PRICING: Record<string, VideoModelPricing> = {
     apiDuration: 25,
     quality: "standard",
     apiModel: "sora2-pro-portrait-25s",
+  },
+  // Seedance 2.0 (Quick Gen 模型选择器使用)
+  "seedance-5s": {
+    label: "Seedance 2.0 5秒 · 高清1080P",
+    duration: "5秒",
+    credits: 233,
+    apiDuration: 5,
+    quality: "standard",
+    apiModel: "seedance-5s",
+  },
+  "seedance-10s": {
+    label: "Seedance 2.0 10秒 · 高清1080P",
+    duration: "10秒",
+    credits: 466,
+    apiDuration: 10,
+    quality: "standard",
+    apiModel: "seedance-10s",
+  },
+  "seedance-5s-pro": {
+    label: "Seedance 2.0 5秒 Pro · 原生720P",
+    duration: "5秒",
+    credits: 497,
+    apiDuration: 5,
+    quality: "hd",
+    apiModel: "seedance-5s-pro",
+  },
+  "seedance-10s-pro": {
+    label: "Seedance 2.0 10秒 Pro · 原生720P",
+    duration: "10秒",
+    credits: 994,
+    apiDuration: 10,
+    quality: "hd",
+    apiModel: "seedance-10s-pro",
   },
 };
 

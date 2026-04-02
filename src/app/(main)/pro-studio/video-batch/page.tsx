@@ -541,6 +541,10 @@ const VideoTaskCard = memo(function VideoTaskCard({
       return "8秒 标准";
     } else if (taskModelType === "veo3-4k") {
       return "8秒 4K";
+    } else if (taskModelType === "seedance") {
+      return `${taskDuration}秒 1080P`;
+    } else if (taskModelType === "seedance-pro") {
+      return `${taskDuration}秒 Pro`;
     } else if (taskModelType === "sora2") {
       return `${taskDuration}秒`;
     } else {
@@ -708,6 +712,11 @@ const VideoTaskCard = memo(function VideoTaskCard({
           {(taskModelType === "veo3-fast" || taskModelType === "veo3-std" || taskModelType === "veo3-4k") && (
             <Badge variant="outline" className="text-[10px] h-5 px-1.5 bg-teal-500/10 border-teal-500/30 text-teal-400">
               VEO3
+            </Badge>
+          )}
+          {(taskModelType === "seedance" || taskModelType === "seedance-pro") && (
+            <Badge variant="outline" className="text-[10px] h-5 px-1.5 bg-orange-500/10 border-orange-500/30 text-orange-400">
+              🔥 Seedance
             </Badge>
           )}
           {hasAiModel && (
@@ -921,6 +930,10 @@ function VideoPlayerDialog({ task, open, onClose, onDownload }: VideoPlayerDialo
       return "8秒 标准";
     } else if (modelType === "veo3-4k") {
       return "8秒 4K";
+    } else if (modelType === "seedance") {
+      return `${duration}秒 1080P`;
+    } else if (modelType === "seedance-pro") {
+      return `${duration}秒 Pro`;
     } else if (modelType === "sora2-pro") {
       if (quality === "hd") return `${duration}秒 高清`;
       return `${duration}秒 标清`;
@@ -2015,35 +2028,49 @@ C07: [story CTA, inspiring, <50 chars]`,
         // 判断模型类型以选择 API 端点
         const isVeo3Model = taskModelType === "veo3-fast" || taskModelType === "veo3-std" || taskModelType === "veo3-4k";
         const isGrokModel = taskModelType === "grok";
-        const apiEndpoint = isGrokModel
-          ? "/api/video-batch/generate-grok-video"
-          : isVeo3Model
-            ? "/api/video-batch/generate-veo-video"
-            : "/api/video-batch/generate-sora-video";
+        const isSeedanceModel = taskModelType === "seedance" || taskModelType === "seedance-pro";
+        const apiEndpoint = isSeedanceModel
+          ? "/api/seedance/submit"
+          : isGrokModel
+            ? "/api/video-batch/generate-grok-video"
+            : isVeo3Model
+              ? "/api/video-batch/generate-veo-video"
+              : "/api/video-batch/generate-sora-video";
 
-        console.log(`[Video Batch] Calling ${isGrokModel ? 'Grok' : isVeo3Model ? 'VEO3' : 'Sora2'} API with userId:`, currentUserId);
+        console.log(`[Video Batch] Calling ${isSeedanceModel ? 'Seedance' : isGrokModel ? 'Grok' : isVeo3Model ? 'VEO3' : 'Sora2'} API with userId:`, currentUserId);
+
+        // Seedance 模型使用不同的请求格式
+        const requestBody = isSeedanceModel ? {
+          prompt: finalVideoPrompt,
+          model: taskModelType === "seedance-pro"
+            ? (taskDuration === 5 ? "seedance-5s-pro" : "seedance-10s-pro")
+            : (taskDuration === 5 ? "seedance-5s" : "seedance-10s"),
+          ratio: taskAspectRatio,
+          imageUrl: mainGridImageUrl || undefined,
+          userId: currentUserId,
+        } : {
+          aiVideoPrompt: finalVideoPrompt,
+          mainGridImageUrl: mainGridImageUrl || undefined,
+          ...((isVeo3Model || isGrokModel) && (task.characterRefUrl || globalSettings.characterRefUrl) && {
+            characterRefUrl: task.characterRefUrl || globalSettings.characterRefUrl,
+          }),
+          ...(isVeo3Model && task.firstFrameUrl && {
+            firstFrameUrl: task.firstFrameUrl,
+            ...(task.lastFrameUrl && { lastFrameUrl: task.lastFrameUrl }),
+          }),
+          aspectRatio: taskAspectRatio,
+          durationSeconds: taskDuration,
+          modelType: taskModelType,
+          taskId: task.id,
+          userId: currentUserId,
+          creditCost: taskCreditCost,
+          mode: isPromptMode ? "prompt_to_video" : "image_to_video",
+        };
+
         const videoResponse = await fetch(apiEndpoint, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            aiVideoPrompt: finalVideoPrompt,
-            mainGridImageUrl: mainGridImageUrl || undefined,
-            ...((isVeo3Model || isGrokModel) && (task.characterRefUrl || globalSettings.characterRefUrl) && {
-              characterRefUrl: task.characterRefUrl || globalSettings.characterRefUrl,
-            }),
-            // 首尾帧（veo3-fast / veo3-4k 用）
-            ...(isVeo3Model && task.firstFrameUrl && {
-              firstFrameUrl: task.firstFrameUrl,
-              ...(task.lastFrameUrl && { lastFrameUrl: task.lastFrameUrl }),
-            }),
-            aspectRatio: taskAspectRatio,
-            durationSeconds: taskDuration,
-            modelType: taskModelType,
-            taskId: task.id,
-            userId: currentUserId,
-            creditCost: taskCreditCost,
-            mode: isPromptMode ? "prompt_to_video" : "image_to_video",
-          }),
+          body: JSON.stringify(requestBody),
         });
 
         const videoText = await videoResponse.text();
@@ -2060,10 +2087,12 @@ C07: [story CTA, inspiring, <50 chars]`,
 
 
         // async 模式：获取任务 ID
-        const soraTaskId = isGrokModel
-          ? videoResult.data.grokTaskId
-          : isVeo3Model ? videoResult.data.veoTaskId : videoResult.data.soraTaskId;
-        console.log(`[Video Batch] ${isGrokModel ? 'Grok' : isVeo3Model ? 'VEO3' : 'Sora2'} task submitted (async):`, soraTaskId);
+        const soraTaskId = isSeedanceModel
+          ? videoResult.data.taskId
+          : isGrokModel
+            ? videoResult.data.grokTaskId
+            : isVeo3Model ? videoResult.data.veoTaskId : videoResult.data.soraTaskId;
+        console.log(`[Video Batch] ${isSeedanceModel ? 'Seedance' : isGrokModel ? 'Grok' : isVeo3Model ? 'VEO3' : 'Sora2'} task submitted (async):`, soraTaskId);
 
         // 更新状态为正在生成视频
         updateTaskStatus(task.id, "generating_video", {
@@ -2074,13 +2103,15 @@ C07: [story CTA, inspiring, <50 chars]`,
 
         // ==================== Step 3.5: 轮询视频任务状态 ====================
         const isPro = taskModelType === "sora2-pro" || taskQuality === "hd" || taskDuration === 25;
-        const maxPollTime = (isVeo3Model || isGrokModel) ? 10 * 60 * 1000 : (isPro ? 35 * 60 * 1000 : 10 * 60 * 1000);
-        const statusApiPath = isGrokModel
-          ? `/api/video-batch/grok-status/${soraTaskId}`
-          : isVeo3Model
-            ? `/api/video-batch/veo-status/${soraTaskId}`
-            : `/api/video-batch/sora-status/${soraTaskId}?isPro=${isPro}`;
-        const pollInterval = 15 * 1000; // 15秒轮询一次（减少请求频率）
+        const maxPollTime = isSeedanceModel ? 5 * 60 * 1000 : (isVeo3Model || isGrokModel) ? 10 * 60 * 1000 : (isPro ? 35 * 60 * 1000 : 10 * 60 * 1000);
+        const statusApiPath = isSeedanceModel
+          ? `/api/seedance/status?taskId=${soraTaskId}&model=${requestBody.model || 'seedance-5s'}&ratio=${taskAspectRatio}`
+          : isGrokModel
+            ? `/api/video-batch/grok-status/${soraTaskId}`
+            : isVeo3Model
+              ? `/api/video-batch/veo-status/${soraTaskId}`
+              : `/api/video-batch/sora-status/${soraTaskId}?isPro=${isPro}`;
+        const pollInterval = isSeedanceModel ? 5 * 1000 : 15 * 1000;
         const startTime = Date.now();
 
         let videoUrl: string | undefined;
@@ -3239,6 +3270,8 @@ C07: [story CTA, inspiring, <50 chars]`,
                         { id: "veo3-fast", name: "Veo3（快速）", sub: "首尾帧", dur: 8, qual: "standard" },
                         { id: "veo3-std", name: "Veo3（标准）", sub: "≤3张参考图", dur: 8, qual: "standard" },
                         { id: "veo3-4k", name: "Veo3（4K）", sub: "首尾帧", dur: 8, qual: "hd" },
+                        { id: "seedance", name: "Seedance 2.0", sub: "5/10秒 1080P", dur: 5, qual: "standard" },
+                        { id: "seedance-pro", name: "Seedance Pro", sub: "5/10秒 720P", dur: 5, qual: "hd" },
                         { id: "sora2", name: "Sora2", sub: "停服中", dur: 15, qual: "standard" },
                         { id: "sora2-pro", name: "Sora Pro", sub: "停服中", dur: 15, qual: "hd" },
                       ].map((m) => {
@@ -3293,7 +3326,9 @@ C07: [story CTA, inspiring, <50 chars]`,
                     <div className="flex gap-2">
                       {(globalSettings.modelType === "grok" ? [10, 15] :
                         globalSettings.modelType === "sora2" ? [10, 15] :
-                        globalSettings.modelType === "sora2-pro" ? [15, 25] : [8]).map((dur) => (
+                        globalSettings.modelType === "sora2-pro" ? [15, 25] :
+                        (globalSettings.modelType === "seedance" || globalSettings.modelType === "seedance-pro") ? [5, 10] :
+                        [8]).map((dur) => (
                           <button
                             key={dur}
                             onClick={() => updateGlobalSettings("duration", dur as VideoDuration)}
@@ -3872,7 +3907,7 @@ C07: [story CTA, inspiring, <50 chars]`,
           defaultName={`${globalSettings.modelType}-${globalSettings.duration}s-${globalSettings.aspectRatio}`}
           isUploading={isUploadingTemplate}
           configPreview={[
-            { icon: <Film className="h-3.5 w-3.5" />, label: "模型", value: globalSettings.modelType === "grok" ? "Grok Imagine" : globalSettings.modelType === "sora2" ? "Sora 2.0" : globalSettings.modelType === "sora2-pro" ? "Sora 2.0 Pro" : globalSettings.modelType === "veo3-fast" ? "Veo3（快速）" : globalSettings.modelType === "veo3-std" ? "Veo3（标准）" : "Veo3（4K）" },
+            { icon: <Film className="h-3.5 w-3.5" />, label: "模型", value: globalSettings.modelType === "grok" ? "Grok Imagine" : globalSettings.modelType === "sora2" ? "Sora 2.0" : globalSettings.modelType === "sora2-pro" ? "Sora 2.0 Pro" : globalSettings.modelType === "veo3-fast" ? "Veo3（快速）" : globalSettings.modelType === "veo3-std" ? "Veo3（标准）" : globalSettings.modelType === "veo3-4k" ? "Veo3（4K）" : globalSettings.modelType === "seedance" ? "Seedance 2.0" : globalSettings.modelType === "seedance-pro" ? "Seedance 2.0 Pro" : "Veo3（4K）" },
             { icon: <Clock className="h-3.5 w-3.5" />, label: "时长", value: `${globalSettings.duration}秒` },
             { icon: <Monitor className="h-3.5 w-3.5" />, label: "比例", value: globalSettings.aspectRatio },
             { icon: <UserCircle className="h-3.5 w-3.5" />, label: "AI模特", value: useAiModel && selectedModelName ? selectedModelName : "未使用" },

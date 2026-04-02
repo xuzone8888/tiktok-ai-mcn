@@ -310,62 +310,151 @@ function useVideoTaskExecutor() {
 
       const mainGridImageUrl = uploadedUrls[0];
 
-      // 确保 userId 已获取
-      console.log("[VideoTaskExecutor] Calling generate-sora-video with userId:", userIdRef.current);
+      // 判断是否为 Seedance 模型
+      const isSeedanceBatch = globalSettings.modelType.startsWith("seedance");
 
-      const videoRes = await fetch("/api/video-batch/generate-sora-video", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          aiVideoPrompt: finalVideoPrompt,
-          mainGridImageUrl: mainGridImageUrl,
-          aspectRatio: globalSettings.aspectRatio,
-          durationSeconds: globalSettings.duration,
-          quality: globalSettings.quality,
-          modelType: globalSettings.modelType,
-          taskId: taskId,
-          userId: userIdRef.current, // 传递用户 ID 以写入任务日志
-        }),
-      });
+      if (isSeedanceBatch) {
+        // ========================================
+        // Seedance 2.0 批量路由
+        // ========================================
+        console.log("[VideoTaskExecutor] Calling Seedance submit for batch task:", taskId);
 
-      // 检查响应状态
-      if (!videoRes.ok) {
-        const contentType = videoRes.headers.get("content-type") || "";
-        if (contentType.includes("text/html")) {
-          console.error("[VideoTaskExecutor] Video API returned HTML instead of JSON, status:", videoRes.status);
-          throw new Error(`视频生成服务暂时不可用 (${videoRes.status})，请稍后重试`);
+        // Seedance 模型映射
+        const seedanceModel = globalSettings.duration === 5
+          ? (globalSettings.modelType === "seedance-pro" ? "seedance-5s-pro" : "seedance-5s")
+          : (globalSettings.modelType === "seedance-pro" ? "seedance-10s-pro" : "seedance-10s");
+
+        const videoRes = await fetch("/api/seedance/submit", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            prompt: finalVideoPrompt,
+            model: seedanceModel,
+            ratio: globalSettings.aspectRatio,
+            imageUrl: mainGridImageUrl,
+            userId: userIdRef.current,
+          }),
+        });
+
+        if (!videoRes.ok) {
+          const contentType = videoRes.headers.get("content-type") || "";
+          if (contentType.includes("text/html")) {
+            throw new Error(`视频生成服务暂时不可用 (${videoRes.status})，请稍后重试`);
+          }
         }
-      }
 
-      const videoText = await videoRes.text();
-      let videoResult;
-      try {
-        videoResult = JSON.parse(videoText);
-      } catch (e) {
-        console.error("[VideoTaskExecutor] Failed to parse video response:", videoText, e);
-        throw new Error("视频生成服务响应格式错误");
-      }
-      if (!videoResult.success) {
-        throw new Error(videoResult.error || "视频生成失败");
-      }
+        const videoText = await videoRes.text();
+        let videoResult;
+        try {
+          videoResult = JSON.parse(videoText);
+        } catch (e) {
+          console.error("[VideoTaskExecutor] Failed to parse Seedance response:", videoText, e);
+          throw new Error("视频生成服务响应格式错误");
+        }
+        if (!videoResult.success) {
+          throw new Error(videoResult.error || "视频生成失败");
+        }
 
-      // 任务成功
-      updateTaskStatus(taskId, "success", {
-        currentStep: 4 as PipelineStep,
-        progress: 100,
-        soraTaskId: videoResult.data.soraTaskId,
-        soraVideoUrl: videoResult.data.videoUrl,
-      });
+        const seedanceTaskId = videoResult.data.taskId;
 
-      // 显示成功通知
-      toast({
-        title: "🎉 视频生成完成",
-        description: (
-          <a href="/pro-studio/video-batch" className="text-tiktok-cyan hover:underline flex items-center gap-1">
-            批量视频任务已完成，点击查看 <ExternalLink className="h-3 w-3" />
-          </a>
-        ),
-      });
+        // 轮询 Seedance 状态
+        const maxSeedanceAttempts = 60;
+        for (let i = 0; i < maxSeedanceAttempts; i++) {
+          await new Promise(r => setTimeout(r, 5000));
+          updateTaskStatus(taskId, "generating_video", { currentStep: 4, progress: Math.min(80 + i, 98) });
+
+          const statusRes = await fetch(`/api/seedance/status?taskId=${seedanceTaskId}&model=${seedanceModel}&ratio=${globalSettings.aspectRatio}`);
+          const statusText = await statusRes.text();
+          let statusData;
+          try {
+            statusData = JSON.parse(statusText);
+          } catch {
+            continue;
+          }
+
+          if (statusData.success && statusData.data) {
+            if (statusData.data.status === "completed" && statusData.data.videoUrl) {
+              // 成功
+              updateTaskStatus(taskId, "success", {
+                currentStep: 4 as PipelineStep,
+                progress: 100,
+                soraTaskId: seedanceTaskId,
+                soraVideoUrl: statusData.data.videoUrl,
+              });
+              toast({
+                title: "🎉 视频生成完成",
+                description: (
+                  <a href="/pro-studio/video-batch" className="text-tiktok-cyan hover:underline flex items-center gap-1">
+                    批量视频任务已完成，点击查看 <ExternalLink className="h-3 w-3" />
+                  </a>
+                ),
+              });
+              return; // 提前返回
+            } else if (statusData.data.status === "failed") {
+              throw new Error(statusData.data.errorMessage || "视频生成失败");
+            }
+          }
+        }
+        throw new Error("Seedance 任务超时");
+
+      } else {
+        // ========================================
+        // 原有 Sora2/VEO3/Grok 路由
+        // ========================================
+        console.log("[VideoTaskExecutor] Calling generate-sora-video with userId:", userIdRef.current);
+
+        const videoRes = await fetch("/api/video-batch/generate-sora-video", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            aiVideoPrompt: finalVideoPrompt,
+            mainGridImageUrl: mainGridImageUrl,
+            aspectRatio: globalSettings.aspectRatio,
+            durationSeconds: globalSettings.duration,
+            quality: globalSettings.quality,
+            modelType: globalSettings.modelType,
+            taskId: taskId,
+            userId: userIdRef.current,
+          }),
+        });
+
+        if (!videoRes.ok) {
+          const contentType = videoRes.headers.get("content-type") || "";
+          if (contentType.includes("text/html")) {
+            console.error("[VideoTaskExecutor] Video API returned HTML instead of JSON, status:", videoRes.status);
+            throw new Error(`视频生成服务暂时不可用 (${videoRes.status})，请稍后重试`);
+          }
+        }
+
+        const videoText = await videoRes.text();
+        let videoResult;
+        try {
+          videoResult = JSON.parse(videoText);
+        } catch (e) {
+          console.error("[VideoTaskExecutor] Failed to parse video response:", videoText, e);
+          throw new Error("视频生成服务响应格式错误");
+        }
+        if (!videoResult.success) {
+          throw new Error(videoResult.error || "视频生成失败");
+        }
+
+        // 任务成功
+        updateTaskStatus(taskId, "success", {
+          currentStep: 4 as PipelineStep,
+          progress: 100,
+          soraTaskId: videoResult.data.soraTaskId,
+          soraVideoUrl: videoResult.data.videoUrl,
+        });
+
+        toast({
+          title: "🎉 视频生成完成",
+          description: (
+            <a href="/pro-studio/video-batch" className="text-tiktok-cyan hover:underline flex items-center gap-1">
+              批量视频任务已完成，点击查看 <ExternalLink className="h-3 w-3" />
+            </a>
+          ),
+        });
+      }
 
     } catch (error) {
       console.error("[VideoTask] Error:", error);
@@ -712,34 +801,71 @@ function useQuickGenTaskExecutor() {
           // 新任务，调用 API
           updateTaskStatus(activeTask.id, "generating", { progress: 10 });
 
-          const response = await fetch("/api/generate/video", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              prompt: activeTask.prompt,
-              duration: activeTask.duration,
-              aspectRatio: activeTask.aspectRatio,
-              quality: activeTask.quality,
-              apiModel: activeTask.apiModel,
-              modelId: activeTask.modelId,
-              sourceImageUrl: activeTask.sourceImageUrl,
-              userId: userIdRef.current, // 传递用户 ID 以写入任务日志
-            }),
-          });
+          // 判断是否为 Seedance 模型
+          const isSeedance = activeTask.model.startsWith("seedance-");
 
-          const responseText = await response.text();
-          let result;
-          try {
-            result = JSON.parse(responseText);
-          } catch (e) {
-            console.error("[QuickGenTaskExecutor] Failed to parse video generation response:", responseText, e);
-            throw new Error("视频生成服务响应格式错误");
+          if (isSeedance) {
+            // ========================================
+            // Seedance 2.0 路由（火山方舟）
+            // ========================================
+            const response = await fetch("/api/seedance/submit", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                prompt: activeTask.prompt,
+                model: activeTask.model,
+                ratio: activeTask.aspectRatio,
+                imageUrl: activeTask.sourceImageUrl,
+                userId: userIdRef.current,
+              }),
+            });
+
+            const responseText = await response.text();
+            let result;
+            try {
+              result = JSON.parse(responseText);
+            } catch (e) {
+              console.error("[QuickGenTaskExecutor] Failed to parse Seedance response:", responseText, e);
+              throw new Error("视频生成服务响应格式错误");
+            }
+            if (!result.success) throw new Error(result.error || "提交失败");
+
+            updateTaskStatus(activeTask.id, "polling", {
+              progress: 20, taskId: result.data.taskId, creditsDeducted: true
+            });
+          } else {
+            // ========================================
+            // 原有 Sora2/VEO3 路由
+            // ========================================
+            const response = await fetch("/api/generate/video", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                prompt: activeTask.prompt,
+                duration: activeTask.duration,
+                aspectRatio: activeTask.aspectRatio,
+                quality: activeTask.quality,
+                apiModel: activeTask.apiModel,
+                modelId: activeTask.modelId,
+                sourceImageUrl: activeTask.sourceImageUrl,
+                userId: userIdRef.current,
+              }),
+            });
+
+            const responseText = await response.text();
+            let result;
+            try {
+              result = JSON.parse(responseText);
+            } catch (e) {
+              console.error("[QuickGenTaskExecutor] Failed to parse video generation response:", responseText, e);
+              throw new Error("视频生成服务响应格式错误");
+            }
+            if (!result.success) throw new Error(result.error || "提交失败");
+
+            updateTaskStatus(activeTask.id, "polling", {
+              progress: 20, taskId: result.data.taskId, creditsDeducted: true
+            });
           }
-          if (!result.success) throw new Error(result.error || "提交失败");
-
-          updateTaskStatus(activeTask.id, "polling", {
-            progress: 20, taskId: result.data.taskId, creditsDeducted: true
-          });
         }
 
         // 轮询查询结果
@@ -747,14 +873,24 @@ function useQuickGenTaskExecutor() {
         const task = state.activeVideoTask;
         if (!task || !task.taskId) return;
 
+        const isSeedanceModel = task.model.startsWith("seedance-");
         const usePro = task.quality === "hd" || task.duration === 25;
-        const maxAttempts = usePro ? 120 : 40;
+        const maxAttempts = isSeedanceModel ? 60 : (usePro ? 120 : 40);
+        const pollInterval = isSeedanceModel ? 5000 : 10000; // Seedance 轮询间隔更短
 
         for (let i = 0; i < maxAttempts; i++) {
-          await new Promise(r => setTimeout(r, 10000));
+          await new Promise(r => setTimeout(r, pollInterval));
           updateTaskStatus(task.id, "polling", { progress: Math.min(20 + i * 2, 90) });
 
-          const statusRes = await fetch(`/api/generate/video?taskId=${task.taskId}&usePro=${usePro}`);
+          let statusRes;
+          if (isSeedanceModel) {
+            // Seedance 状态查询
+            statusRes = await fetch(`/api/seedance/status?taskId=${task.taskId}&model=${task.model}&ratio=${task.aspectRatio}`);
+          } else {
+            // 原有 Sora2/VEO3 状态查询
+            statusRes = await fetch(`/api/generate/video?taskId=${task.taskId}&usePro=${usePro}`);
+          }
+
           const statusText = await statusRes.text();
           let statusData;
           try {
@@ -765,9 +901,9 @@ function useQuickGenTaskExecutor() {
           }
 
           if (statusData.success && statusData.data) {
-            if (statusData.data.status === "completed" && statusData.data.videoUrl) {
+            if (statusData.data.status === "completed" && (statusData.data.videoUrl || statusData.data.video_url)) {
               updateTaskStatus(task.id, "completed", {
-                progress: 100, resultUrl: statusData.data.videoUrl, completedAt: new Date().toISOString()
+                progress: 100, resultUrl: statusData.data.videoUrl || statusData.data.video_url, completedAt: new Date().toISOString()
               });
               toast({
                 title: "🎉 快速视频生成完成",

@@ -20,13 +20,13 @@ export type VideoBatchTaskStatus =
 export type VideoAspectRatio = "9:16" | "16:9";
 
 /** 视频时长 */
-export type VideoDuration = 8 | 10 | 15 | 25;
+export type VideoDuration = 5 | 8 | 10 | 15 | 25;
 
 /** 视频质量 */
 export type VideoQuality = "standard" | "hd";
 
 /** 视频模型类型 */
-export type VideoModelType = "sora2" | "sora2-pro" | "veo3-fast" | "veo3-std" | "veo3-4k" | "grok";
+export type VideoModelType = "sora2" | "sora2-pro" | "veo3-fast" | "veo3-std" | "veo3-4k" | "grok" | "seedance" | "seedance-pro";
 
 /** 流水线步骤 */
 export type PipelineStep = 0 | 1 | 2 | 3 | 4;
@@ -52,6 +52,8 @@ export function getAvailableDurations(modelType: VideoModelType, quality: VideoQ
     return [8]; // VEO3 全系固定 8 秒
   } else if (modelType === "grok") {
     return [10, 15]; // Grok Imagine 支持 10/15 秒
+  } else if (modelType === "seedance" || modelType === "seedance-pro") {
+    return [5, 10]; // Seedance 2.0 支持 5/10 秒
   }
   return [15]; // 默认
 }
@@ -68,6 +70,10 @@ export function getAvailableQualities(modelType: VideoModelType): VideoQuality[]
     return ["hd"];
   } else if (modelType === "grok") {
     return ["standard"];
+  } else if (modelType === "seedance") {
+    return ["standard"]; // 标准版 480p→1080p
+  } else if (modelType === "seedance-pro") {
+    return ["hd"]; // Pro 原生 720p
   }
   return ["standard"];
 }
@@ -269,6 +275,12 @@ export const VIDEO_BATCH_PRICING = {
   // Grok Imagine (速创 wuyinkeji, 0.05元/秒)
   grok_10s: 5,          // Grok 10秒 = 5积分 (0.50元)
   grok_15s: 8,          // Grok 15秒 = 8积分 (0.75元)
+  // Seedance 2.0 标准版 (480p→1080p超分)
+  seedance_5s: 233,     // Seedance 2.0 5秒 高清1080P (¥2.33)
+  seedance_10s: 466,    // Seedance 2.0 10秒 高清1080P (¥4.66)
+  // Seedance 2.0 Pro (720p原生)
+  seedancePro_5s: 497,  // Seedance 2.0 5秒 Pro 原生720P (¥4.97)
+  seedancePro_10s: 994, // Seedance 2.0 10秒 Pro 原生720P (¥9.94)
 };
 
 /** 获取视频生成总价 */
@@ -291,6 +303,14 @@ export function getVideoBatchTotalPrice(
   if (modelType === "grok") {
     if (duration === 10) return VIDEO_BATCH_PRICING.grok_10s;
     return VIDEO_BATCH_PRICING.grok_15s;
+  }
+  if (modelType === "seedance") {
+    if (duration === 5) return VIDEO_BATCH_PRICING.seedance_5s;
+    return VIDEO_BATCH_PRICING.seedance_10s;
+  }
+  if (modelType === "seedance-pro") {
+    if (duration === 5) return VIDEO_BATCH_PRICING.seedancePro_5s;
+    return VIDEO_BATCH_PRICING.seedancePro_10s;
   }
 
   return VIDEO_BATCH_PRICING.sora2_15s; // 默认

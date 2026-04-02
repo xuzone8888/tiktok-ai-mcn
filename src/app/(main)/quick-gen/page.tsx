@@ -1443,10 +1443,32 @@ export default function QuickGeneratorPage() {
                   <div>
                     <Label className="text-xs text-muted-foreground mb-2 block">模型 & 时长</Label>
                     <div className="space-y-1.5">
-                      {(Object.entries(VIDEO_MODEL_PRICING) as [VideoModel, typeof VIDEO_MODEL_PRICING[VideoModel]][]).map(([key, value]) => (
+                      {/* Sora2 模型 */}
+                      {(Object.entries(VIDEO_MODEL_PRICING) as [VideoModel, typeof VIDEO_MODEL_PRICING[VideoModel]][])
+                        .filter(([key]) => key.startsWith("sora2"))
+                        .map(([key, value]) => (
                         <Button key={key} variant="outline" size="sm" onClick={() => setVideoModel(key)}
                           className={cn("w-full justify-between h-8", videoModel === key ? "bg-mermaid-cyan/20 border-mermaid-cyan/50 text-mermaid-cyan" : "btn-subtle")}>
                           <span className="flex items-center gap-1.5"><Clock className="h-3.5 w-3.5" />{value.label}</span>
+                          <span className="text-xs">{value.credits} pts</span>
+                        </Button>
+                      ))}
+                      {/* Seedance 2.0 分组 */}
+                      <div className="flex items-center gap-2 pt-2 pb-1">
+                        <div className="h-px flex-1 bg-gradient-to-r from-orange-500/30 to-transparent" />
+                        <span className="text-[10px] text-orange-400/80 font-medium tracking-wider">🔥 SEEDANCE 2.0</span>
+                        <div className="h-px flex-1 bg-gradient-to-l from-orange-500/30 to-transparent" />
+                      </div>
+                      {(Object.entries(VIDEO_MODEL_PRICING) as [VideoModel, typeof VIDEO_MODEL_PRICING[VideoModel]][])
+                        .filter(([key]) => key.startsWith("seedance"))
+                        .map(([key, value]) => (
+                        <Button key={key} variant="outline" size="sm" onClick={() => setVideoModel(key)}
+                          className={cn("w-full justify-between h-8", videoModel === key ? "bg-orange-500/20 border-orange-500/50 text-orange-400" : "btn-subtle")}>
+                          <span className="flex items-center gap-1.5">
+                            <Clock className="h-3.5 w-3.5" />
+                            {value.label}
+                            <span className="text-[9px] px-1 py-0.5 rounded bg-orange-500/20 text-orange-400">🔊</span>
+                          </span>
                           <span className="text-xs">{value.credits} pts</span>
                         </Button>
                       ))}
