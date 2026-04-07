@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getCreatorInfo } from '@/lib/tiktok/content-posting'
+import { refreshAccessToken } from '@/lib/tiktok/oauth'
 
 /**
  * GET /api/publish/creator-info?account_id=xxx
@@ -31,10 +32,10 @@ export async function GET(request: NextRequest) {
             return NextResponse.json({ error: '缺少 account_id 参数' }, { status: 400 })
         }
 
-        // 查询账号信息（验证归属并获取 access_token）
+        // 查询账号信息（验证归属并获取 token）
         const { data: account, error: accountError } = await supabase
             .from('tiktok_accounts')
-            .select('id, access_token, token_expires_at, display_name, avatar_url')
+            .select('id, access_token, refresh_token, display_name, avatar_url')
             .eq('id', accountId)
             .eq('user_id', user.id)
             .single()
@@ -43,13 +44,29 @@ export async function GET(request: NextRequest) {
             return NextResponse.json({ error: '账号不存在或无权访问' }, { status: 404 })
         }
 
-        // 检查 token 是否过期
-        if (account.token_expires_at && new Date(account.token_expires_at) <= new Date()) {
-            return NextResponse.json({ error: '账号授权已过期，请重新授权' }, { status: 401 })
+        // 刷新 access_token（token_expires_at 存的是 refresh_token 90天寿命，无法判断 access_token 是否有效）
+        let accessToken = account.access_token
+        if (account.refresh_token) {
+            try {
+                const tokenResponse = await refreshAccessToken(account.refresh_token)
+                accessToken = tokenResponse.access_token
+                // 写回数据库
+                await supabase
+                    .from('tiktok_accounts')
+                    .update({
+                        access_token: tokenResponse.access_token,
+                        refresh_token: tokenResponse.refresh_token,
+                        updated_at: new Date().toISOString(),
+                    })
+                    .eq('id', accountId)
+            } catch (refreshError) {
+                console.error('[CreatorInfo] Token refresh failed:', refreshError)
+                return NextResponse.json({ error: '账号授权已过期，请重新授权', error_type: 'auth_expired' }, { status: 401 })
+            }
         }
 
         // 调用 TikTok creator_info API
-        const creatorInfo = await getCreatorInfo(account.access_token)
+        const creatorInfo = await getCreatorInfo(accessToken)
 
         return NextResponse.json({
             success: true,
@@ -72,6 +89,6 @@ export async function GET(request: NextRequest) {
     } catch (error) {
         console.error('[CreatorInfo] Error:', error)
         const message = error instanceof Error ? error.message : '获取创作者信息失败'
-        return NextResponse.json({ error: message }, { status: 500 })
+        return NextResponse.json({ error: message, error_type: 'api_error' }, { status: 500 })
     }
 }

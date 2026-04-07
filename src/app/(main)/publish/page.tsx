@@ -246,6 +246,7 @@ export default function PublishPage() {
     const [creatorInfo, setCreatorInfo] = useState<CreatorInfoData | null>(null)
     const [creatorInfoLoading, setCreatorInfoLoading] = useState(false)
     const [creatorInfoError, setCreatorInfoError] = useState<string | null>(null)
+    const [creatorInfoErrorType, setCreatorInfoErrorType] = useState<'auth_expired' | 'api_error' | null>(null)
 
     // 互动开关 — 默认全部关闭（TikTok 审核要求：默认 unchecked）
     const [allowComment, setAllowComment] = useState(false)
@@ -292,6 +293,7 @@ export default function PublishPage() {
         setBrandedContent(false)
         setCreatorInfo(null)
         setCreatorInfoError(null)
+        setCreatorInfoErrorType(null)
     }
 
     // AI Title Assistant state
@@ -1024,6 +1026,7 @@ export default function PublishPage() {
     const fetchCreatorInfo = useCallback(async (accountId: string) => {
         setCreatorInfoLoading(true)
         setCreatorInfoError(null)
+        setCreatorInfoErrorType(null)
         setCreatorInfo(null)
         // 重置依赖 creator_info 的状态
         setPrivacyLevel(null)
@@ -1035,12 +1038,17 @@ export default function PublishPage() {
             const res = await fetch(`/api/publish/creator-info?account_id=${accountId}`)
             const data = await res.json()
             if (!res.ok || !data.success) {
-                throw new Error(data.error || '获取创作者信息失败')
+                // 捕获后端返回的 error_type，避免前端用脆弱的字符串匹配
+                const errorType = data.error_type as 'auth_expired' | 'api_error' | undefined
+                setCreatorInfoErrorType(errorType || 'api_error')
+                setCreatorInfoError(data.error || '获取创作者信息失败')
+                return
             }
             setCreatorInfo(data.data)
         } catch (error) {
             const msg = error instanceof Error ? error.message : '获取创作者信息失败'
             setCreatorInfoError(msg)
+            setCreatorInfoErrorType('api_error')
             console.error('[CreatorInfo] Error:', error)
         } finally {
             setCreatorInfoLoading(false)
@@ -1054,6 +1062,7 @@ export default function PublishPage() {
         } else {
             setCreatorInfo(null)
             setCreatorInfoError(null)
+            setCreatorInfoErrorType(null)
         }
     }, [selectedAccounts, fetchCreatorInfo])
 
@@ -1661,21 +1670,69 @@ export default function PublishPage() {
                         </h2>
 
                         <div className="space-y-4">
-                            {/* Task Group Name */}
-                            <div>
-                                <label className="block text-sm font-medium text-gray-300 mb-2">
-                                    任务组名称 <span className="text-gray-500 font-normal">(可选)</span>
-                                </label>
-                                <input
-                                    type="text"
-                                    value={taskGroupName}
-                                    onChange={(e) => setTaskGroupName(e.target.value)}
-                                    placeholder="例如：今日穿搭分享、产品推广第3期..."
-                                    className="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500/50 transition-all text-sm"
-                                />
-                                <p className="text-xs text-gray-500 mt-1">为本次发布任务起个名字，方便后续在"发布记录"中查找</p>
-                            </div>
+                            {/* ===== Point 1a: Creator Info（必须第一个展示）===== */}
+                            {selectedAccounts.length === 1 && (
+                                <div className="p-4 bg-black/30 rounded-xl border border-white/10">
+                                    {creatorInfoLoading ? (
+                                        <div className="flex items-center gap-3">
+                                            <Loader2 className="w-5 h-5 animate-spin text-cyan-400" />
+                                            <span className="text-sm text-gray-400">获取创作者信息...</span>
+                                        </div>
+                                    ) : creatorInfoError ? (
+                                        <div className="flex items-center gap-2 text-red-400 text-sm">
+                                            <AlertCircle className="w-4 h-4" />
+                                            <span>
+                                                {creatorInfoErrorType === 'auth_expired'
+                                                    ? 'Account authorization has expired. Please re-authorize.'
+                                                    : 'Unable to load creator info. Please try again later.'
+                                                }
+                                            </span>
+                                        </div>
+                                    ) : creatorInfo ? (
+                                        <div className="flex items-center gap-3">
+                                            {creatorInfo.avatar_url ? (
+                                                <img src={creatorInfo.avatar_url} alt="" className="w-10 h-10 rounded-full border-2 border-cyan-500/30" />
+                                            ) : (
+                                                <div className="w-10 h-10 rounded-full bg-cyan-500/20 flex items-center justify-center">
+                                                    <UserCheck className="w-5 h-5 text-cyan-400" />
+                                                </div>
+                                            )}
+                                            <div>
+                                                <p className="text-sm font-medium text-white">{creatorInfo.nickname || creatorInfo.username}</p>
+                                                <p className="text-xs text-gray-500">@{creatorInfo.username}</p>
+                                            </div>
+                                        </div>
+                                    ) : null}
+                                </div>
+                            )}
 
+
+                            {/* ===== Point 1b/1c: 时长校验 + 发布上限警告 ===== */}
+                            {overDuration && (
+                                <div className="flex items-start gap-2.5 px-3.5 py-2.5 bg-red-500/[0.08] border border-red-500/15 rounded-xl">
+                                    <div className="w-5 h-5 rounded-md bg-red-500/15 border border-red-500/20 flex items-center justify-center shrink-0 mt-0.5">
+                                        <AlertCircle className="w-3 h-3 text-red-400" />
+                                    </div>
+                                    <p className="text-xs text-red-400 leading-relaxed">
+                                        视频时长超过该创作者允许的最大时长 ({maxDurationSec}秒)，请缩短视频后再发布
+                                    </p>
+                                </div>
+                            )}
+                            {creatorInfoError && (
+                                <div className="flex items-start gap-2.5 px-3.5 py-2.5 bg-amber-500/[0.08] border border-amber-500/15 rounded-xl">
+                                    <div className="w-5 h-5 rounded-md bg-amber-500/15 border border-amber-500/20 flex items-center justify-center shrink-0 mt-0.5">
+                                        <AlertCircle className="w-3 h-3 text-amber-400" />
+                                    </div>
+                                    <p className="text-xs text-amber-400 leading-relaxed">
+                                        {creatorInfoErrorType === 'auth_expired'
+                                            ? 'Account authorization has expired. Please re-authorize your TikTok account.'
+                                            : 'Unable to retrieve creator info. The account may have reached its posting limit. Please try again later.'
+                                        }
+                                    </p>
+                                </div>
+                            )}
+
+                            {/* ===== Point 2a: Title ===== */}
                             {/* Title Mode Selector */}
                             <div>
                                 <div className="flex items-center justify-between mb-2">
@@ -1813,39 +1870,9 @@ export default function PublishPage() {
                                 </div>
                             )}
 
-                            {/* ===== Creator Info 展示 ===== */}
-                            {selectedAccounts.length === 1 && (
-                                <div className="mt-4 p-4 bg-black/30 rounded-xl border border-white/10">
-                                    {creatorInfoLoading ? (
-                                        <div className="flex items-center gap-3">
-                                            <Loader2 className="w-5 h-5 animate-spin text-cyan-400" />
-                                            <span className="text-sm text-gray-400">获取创作者信息...</span>
-                                        </div>
-                                    ) : creatorInfoError ? (
-                                        <div className="flex items-center gap-2 text-red-400 text-sm">
-                                            <AlertCircle className="w-4 h-4" />
-                                            <span>{creatorInfoError}</span>
-                                        </div>
-                                    ) : creatorInfo ? (
-                                        <div className="flex items-center gap-3">
-                                            {creatorInfo.avatar_url ? (
-                                                <img src={creatorInfo.avatar_url} alt="" className="w-10 h-10 rounded-full border-2 border-cyan-500/30" />
-                                            ) : (
-                                                <div className="w-10 h-10 rounded-full bg-cyan-500/20 flex items-center justify-center">
-                                                    <UserCheck className="w-5 h-5 text-cyan-400" />
-                                                </div>
-                                            )}
-                                            <div>
-                                                <p className="text-sm font-medium text-white">{creatorInfo.nickname || creatorInfo.username}</p>
-                                                <p className="text-xs text-gray-500">@{creatorInfo.username}</p>
-                                            </div>
-                                        </div>
-                                    ) : null}
-                                </div>
-                            )}
-
-                            {/* ===== 新版紧凑设置区 ===== */}
+                            {/* ===== 紧凑设置区 ===== */}
                             <div className="space-y-3 pt-2">
+                                {/* Point 2b: 可见范围 */}
                                 {/* 可见的范围 */}
                                 <div className="space-y-2">
                                     <label className="block text-sm font-medium text-gray-300">
@@ -1908,9 +1935,9 @@ export default function PublishPage() {
                                                             <div className={`w-7 h-7 rounded-lg bg-gradient-to-br ${cfg.gradient} border ${cfg.border} flex items-center justify-center shrink-0 transition-all`} style={{boxShadow: cfg.glow}}>
                                                                 <IconComp className={`w-3.5 h-3.5 ${cfg.textColor} drop-shadow-[0_0_3px_rgba(255,255,255,0.3)]`} />
                                                             </div>
-                                                            <div className="flex-1 text-left">
+                                                            <div className="flex-1 text-left" title={isDisabled ? 'Branded content visibility cannot be set to private.' : undefined}>
                                                                 <p className="text-sm font-medium text-white">{cfg.label}</p>
-                                                                <p className="text-[11px] text-gray-500">{cfg.desc}{isDisabled ? ' (品牌合作不可选)' : ''}</p>
+                                                                <p className="text-[11px] text-gray-500">{cfg.desc}{isDisabled ? ' — Branded content visibility cannot be set to private.' : ''}</p>
                                                             </div>
                                                             {isSelected && (
                                                                 <Check className="w-4 h-4 text-cyan-400 shrink-0" />
@@ -1929,6 +1956,8 @@ export default function PublishPage() {
                                     )}
                                 </div>
 
+
+                                {/* Point 2c: 互动设置 */}
                                 {/* 互动设置 */}
                                 <div className="grid grid-cols-3 bg-white/[0.03] rounded-xl border border-white/10 divide-x divide-white/10">
                                     {[
@@ -1965,34 +1994,9 @@ export default function PublishPage() {
                                     ))}
                                 </div>
 
-                                {/* 内容宣言 */}
-                                <div className="grid grid-cols-1 md:grid-cols-2 bg-white/[0.03] rounded-xl border border-white/10 divide-y md:divide-y-0 md:divide-x divide-white/10">
-                                    {/* AI 生成内容 */}
-                                    <div className="flex items-center justify-between px-4 py-3 hover:bg-white/[0.03] transition-colors">
-                                        <div className="flex items-center gap-2.5">
-                                            <div className={`w-7 h-7 rounded-lg bg-gradient-to-br ${isAiGenerated ? 'from-purple-400/25 via-violet-500/15 to-transparent border-purple-400/25' : 'from-gray-500/10 via-gray-400/5 to-transparent border-white/5'} border flex items-center justify-center shrink-0 transition-all duration-300`} style={{boxShadow: isAiGenerated ? '0 0 12px rgba(168,85,247,0.25), inset 0 1px 1px rgba(255,255,255,0.1)' : 'inset 0 1px 1px rgba(255,255,255,0.05)'}}>
-                                                <Sparkles className={`w-4 h-4 transition-all duration-300 ${isAiGenerated ? 'text-purple-300 drop-shadow-[0_0_4px_rgba(168,85,247,0.6)]' : 'text-gray-500'}`} />
-                                            </div>
-                                            <div>
-                                                <p className="text-sm font-medium text-white">AI 生成内容</p>
-                                                <p className="text-[11px] text-gray-500">标记视频为AI生成，符合TikTok政策</p>
-                                            </div>
-                                        </div>
-                                        <button
-                                            type="button"
-                                            role="switch"
-                                            aria-checked={isAiGenerated}
-                                            aria-label="AI生成内容开关"
-                                            onClick={() => setIsAiGenerated(!isAiGenerated)}
-                                            className={`relative w-12 h-[26px] shrink-0 rounded-full transition-all duration-300 outline-none focus-visible:ring-2 focus-visible:ring-purple-500/50 ${isAiGenerated ? 'bg-gradient-to-r from-purple-500 to-violet-500 border border-purple-400/30' : 'bg-white/[0.08] border border-white/15'}`}
-                                            style={{boxShadow: isAiGenerated ? '0 0 12px rgba(168,85,247,0.3), inset 0 1px 1px rgba(255,255,255,0.15)' : 'inset 0 2px 4px rgba(0,0,0,0.3), inset 0 0 0 1px rgba(255,255,255,0.03)'}}
-                                        >
-                                            <span className={`absolute top-[3px] w-5 h-5 text-[9px] font-bold tracking-tight flex items-center justify-center rounded-full transition-all duration-300 ${isAiGenerated ? 'left-[23px] bg-white text-purple-600' : 'left-[3px] bg-gray-300 text-gray-500'}`} style={{boxShadow: isAiGenerated ? '0 0 8px rgba(168,85,247,0.4), 0 2px 4px rgba(0,0,0,0.2)' : '0 1px 3px rgba(0,0,0,0.3)'}}>
-                                                {isAiGenerated ? 'ON' : 'OFF'}
-                                            </span>
-                                        </button>
-                                    </div>
 
+                                {/* ===== Point 3a: 商业内容披露（独立块）===== */}
+                                <div className="bg-white/[0.03] rounded-xl border border-white/10">
                                     {/* 商业内容披露 */}
                                     <div className="flex flex-col">
                                         <div className="flex items-center justify-between px-4 py-3 hover:bg-white/[0.03] transition-colors">
@@ -2045,14 +2049,15 @@ export default function PublishPage() {
                                                         <Tag className="w-3 h-3 text-amber-400/70" />
                                                     </div>
                                                     <div>
-                                                        <p className="text-xs text-gray-300 group-hover:text-white transition-colors">自有品牌推广</p>
+                                                        <p className="text-xs text-gray-300 group-hover:text-white transition-colors">自有品牌推广 <span className="text-gray-500">(Promotional content)</span></p>
                                                         <p className="text-[10px] text-gray-600">推广自己的品牌或产品</p>
                                                     </div>
                                                 </label>
-                                                <label className="flex items-center gap-3 p-2.5 bg-gradient-to-r from-amber-500/[0.06] to-transparent rounded-xl border border-amber-400/10 cursor-pointer hover:border-amber-400/25 hover:from-amber-500/[0.1] transition-all duration-200 group">
+                                                <label className={`flex items-center gap-3 p-2.5 bg-gradient-to-r from-amber-500/[0.06] to-transparent rounded-xl border border-amber-400/10 transition-all duration-200 group ${privacyLevel === 'SELF_ONLY' ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer hover:border-amber-400/25 hover:from-amber-500/[0.1]'}`}>
                                                     <input
                                                         type="checkbox"
                                                         checked={brandedContent}
+                                                        disabled={privacyLevel === 'SELF_ONLY'}
                                                         onChange={(e) => {
                                                             setBrandedContent(e.target.checked)
                                                             if (e.target.checked && privacyLevel === 'SELF_ONLY') {
@@ -2068,52 +2073,49 @@ export default function PublishPage() {
                                                         <Handshake className="w-3 h-3 text-amber-400/70" />
                                                     </div>
                                                     <div>
-                                                        <p className="text-xs text-gray-300 group-hover:text-white transition-colors">品牌合作内容</p>
+                                                        <p className="text-xs text-gray-300 group-hover:text-white transition-colors">品牌合作内容 <span className="text-gray-500">(Paid partnership)</span></p>
                                                         <p className="text-[10px] text-gray-600">与第三方品牌的商业合作</p>
                                                     </div>
                                                 </label>
+                                                {privacyLevel === 'SELF_ONLY' && (
+                                                    <p className="text-[10px] text-gray-500 flex items-center gap-1">
+                                                        <Info className="w-3 h-3" />
+                                                        Branded content is not available when privacy is set to Only You
+                                                    </p>
+                                                )}
                                                 
                                                 {/* 验证提示 */}
                                                 {disclosureIncomplete && (
                                                     <p className="text-[10px] text-amber-400 flex items-center gap-1 mt-1">
                                                         <AlertCircle className="w-3 h-3" />
-                                                        请勾选披露类型
+                                                        You need to indicate if your content promotes yourself, a third party, or both.
                                                     </p>
                                                 )}
                                                 {brandedPrivacyConflict && (
                                                     <p className="text-[10px] text-red-400 flex items-center gap-1 mt-1">
                                                         <AlertCircle className="w-3 h-3" />
-                                                        品牌合作内容不可设为仅自己可见
+                                                        Branded content visibility cannot be set to private.
                                                     </p>
                                                 )}
+                                                {/* Point 3a: Content label prompt (TikTok Guidelines required) */}
+                                                {(yourBrand || brandedContent) && (
+                                                    <div className="flex items-center gap-2 px-3 py-2 bg-amber-500/[0.06] rounded-lg border border-amber-400/10">
+                                                        <Tag className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                                                        <p className="text-[11px] text-amber-300">
+                                                            {brandedContent
+                                                                ? "Your video will be labeled as 'Paid partnership'"
+                                                                : "Your video will be labeled as 'Promotional content'"
+                                                            }
+                                                        </p>
+                                                    </div>
+                                                )}
+
                                             </div>
                                         )}
                                     </div>
                                 </div>
 
-                                {/* ===== 1.7 发布上限 + 1.8 时长校验警告 ===== */}
-                                {overDuration && (
-                                    <div className="flex items-start gap-2.5 px-3.5 py-2.5 bg-red-500/[0.08] border border-red-500/15 rounded-xl">
-                                        <div className="w-5 h-5 rounded-md bg-red-500/15 border border-red-500/20 flex items-center justify-center shrink-0 mt-0.5">
-                                            <AlertCircle className="w-3 h-3 text-red-400" />
-                                        </div>
-                                        <p className="text-xs text-red-400 leading-relaxed">
-                                            视频时长超过该创作者允许的最大时长 ({maxDurationSec}秒)，请缩短视频后再发布
-                                        </p>
-                                    </div>
-                                )}
-                                {creatorInfoError && (
-                                    <div className="flex items-start gap-2.5 px-3.5 py-2.5 bg-amber-500/[0.08] border border-amber-500/15 rounded-xl">
-                                        <div className="w-5 h-5 rounded-md bg-amber-500/15 border border-amber-500/20 flex items-center justify-center shrink-0 mt-0.5">
-                                            <AlertCircle className="w-3 h-3 text-amber-400" />
-                                        </div>
-                                        <p className="text-xs text-amber-400 leading-relaxed">
-                                            无法获取创作者信息：{creatorInfoError}
-                                        </p>
-                                    </div>
-                                )}
-
-                                {/* ===== 法律声明 (动态文案) ===== */}
+                                {/* ===== Point 4: 法律声明 (动态文案) ===== */}
                                 <div className="flex items-start gap-3 px-4 py-3 bg-gradient-to-r from-cyan-500/[0.04] via-transparent to-purple-500/[0.04] rounded-xl border border-white/[0.06] relative overflow-hidden">
                                     {/* Gradient left accent */}
                                     <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-gradient-to-b from-cyan-400/60 via-cyan-500/40 to-purple-500/30 rounded-l-xl" />
@@ -2136,6 +2138,51 @@ export default function PublishPage() {
                                             Music Usage Confirmation <ExternalLink className="w-2.5 h-2.5 opacity-40 group-hover:opacity-80" />
                                         </a>
                                     </p>
+                                </div>
+
+                                {/* ===== AI 生成内容（独立块）===== */}
+                                <div className="bg-white/[0.03] rounded-xl border border-white/10">
+                                    {/* AI 生成内容 */}
+                                    <div className="flex items-center justify-between px-4 py-3 hover:bg-white/[0.03] transition-colors">
+                                        <div className="flex items-center gap-2.5">
+                                            <div className={`w-7 h-7 rounded-lg bg-gradient-to-br ${isAiGenerated ? 'from-purple-400/25 via-violet-500/15 to-transparent border-purple-400/25' : 'from-gray-500/10 via-gray-400/5 to-transparent border-white/5'} border flex items-center justify-center shrink-0 transition-all duration-300`} style={{boxShadow: isAiGenerated ? '0 0 12px rgba(168,85,247,0.25), inset 0 1px 1px rgba(255,255,255,0.1)' : 'inset 0 1px 1px rgba(255,255,255,0.05)'}}>
+                                                <Sparkles className={`w-4 h-4 transition-all duration-300 ${isAiGenerated ? 'text-purple-300 drop-shadow-[0_0_4px_rgba(168,85,247,0.6)]' : 'text-gray-500'}`} />
+                                            </div>
+                                            <div>
+                                                <p className="text-sm font-medium text-white">AI 生成内容</p>
+                                                <p className="text-[11px] text-gray-500">标记视频为AI生成，符合TikTok政策</p>
+                                            </div>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            role="switch"
+                                            aria-checked={isAiGenerated}
+                                            aria-label="AI生成内容开关"
+                                            onClick={() => setIsAiGenerated(!isAiGenerated)}
+                                            className={`relative w-12 h-[26px] shrink-0 rounded-full transition-all duration-300 outline-none focus-visible:ring-2 focus-visible:ring-purple-500/50 ${isAiGenerated ? 'bg-gradient-to-r from-purple-500 to-violet-500 border border-purple-400/30' : 'bg-white/[0.08] border border-white/15'}`}
+                                            style={{boxShadow: isAiGenerated ? '0 0 12px rgba(168,85,247,0.3), inset 0 1px 1px rgba(255,255,255,0.15)' : 'inset 0 2px 4px rgba(0,0,0,0.3), inset 0 0 0 1px rgba(255,255,255,0.03)'}}
+                                        >
+                                            <span className={`absolute top-[3px] w-5 h-5 text-[9px] font-bold tracking-tight flex items-center justify-center rounded-full transition-all duration-300 ${isAiGenerated ? 'left-[23px] bg-white text-purple-600' : 'left-[3px] bg-gray-300 text-gray-500'}`} style={{boxShadow: isAiGenerated ? '0 0 8px rgba(168,85,247,0.4), 0 2px 4px rgba(0,0,0,0.2)' : '0 1px 3px rgba(0,0,0,0.3)'}}>
+                                                {isAiGenerated ? 'ON' : 'OFF'}
+                                            </span>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {/* ===== 任务组名称（自有功能，放在 Guidelines 项之后）===== */}
+                                {/* Task Group Name */}
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                                        任务组名称 <span className="text-gray-500 font-normal">(可选)</span>
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={taskGroupName}
+                                        onChange={(e) => setTaskGroupName(e.target.value)}
+                                        placeholder="例如：今日穿搭分享、产品推广第3期..."
+                                        className="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500/50 transition-all text-sm"
+                                    />
+                                    <p className="text-xs text-gray-500 mt-1">为本次发布任务起个名字，方便后续在"发布记录"中查找</p>
                                 </div>
                             </div>
                         </div >
@@ -2518,7 +2565,15 @@ export default function PublishPage() {
                                 >
                                     取消
                                 </button>
-
+                                <div title={!canPublish ? (
+                                    disclosureIncomplete ? 'Please select a disclosure type before publishing.'
+                                    : brandedPrivacyConflict ? 'Branded content visibility cannot be set to private.'
+                                    : overDuration ? `Video exceeds maximum allowed duration (${maxDurationSec}s).`
+                                    : !privacyLevel ? 'Please select a privacy level.'
+                                    : selectedVideos.length === 0 ? 'Please select at least one video.'
+                                    : selectedAccounts.length === 0 ? 'Please select at least one account.'
+                                    : undefined
+                                ) : undefined}>
                                 <button
                                     onClick={handlePublish}
                                     disabled={!canPublish}
@@ -2545,6 +2600,19 @@ export default function PublishPage() {
                                         )}
                                     </div>
                                 </button>
+                                </div>
+                                {/* Inline reason when publish is blocked */}
+                                {!canPublish && (disclosureIncomplete || brandedPrivacyConflict || overDuration) && (
+                                    <p className="text-[10px] text-amber-400 flex items-center gap-1 mt-1">
+                                        <AlertCircle className="w-3 h-3 shrink-0" />
+                                        {disclosureIncomplete
+                                            ? 'Please select a disclosure type before publishing.'
+                                            : brandedPrivacyConflict
+                                            ? 'Branded content visibility cannot be set to private.'
+                                            : `Video exceeds maximum allowed duration (${maxDurationSec}s).`
+                                        }
+                                    </p>
+                                )}
 
                                 {/* 1.10 处理耗时提示 */}
                                 {isPublishing && (
