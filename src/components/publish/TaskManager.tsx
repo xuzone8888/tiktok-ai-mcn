@@ -268,6 +268,14 @@ export function TaskManager() {
                             ))}
                         </SelectContent>
                     </Select>
+
+                    {/* 7天清理提示 - 内联在筛选栏中，低调灰色 */}
+                    {tasks.length > 0 && (
+                        <span className="hidden sm:flex items-center gap-1.5 text-[11px] text-zinc-600 pl-1">
+                            <AlertTriangle className="w-3 h-3 shrink-0" />
+                            <span>记录 <strong className="text-zinc-500">7 天</strong> 后自动清理</span>
+                        </span>
+                    )}
                 </div>
 
                 <div className="flex items-center gap-2 w-full sm:w-auto">
@@ -338,13 +346,7 @@ export function TaskManager() {
                 </div>
             )}
 
-            {/* 7天清理提示 - 放在任务列表下方，仅有任务时显示 */}
-            {tasks.length > 0 && (
-                <div className="flex items-center gap-2 px-3 py-2 bg-amber-500/5 border border-amber-500/10 rounded-lg text-amber-500/60 text-[11px]">
-                    <AlertTriangle className="w-3 h-3 shrink-0" />
-                    <span>任务记录将在创建后 <strong className="text-amber-400/70">7 天</strong> 自动清理，请及时备份重要数据</span>
-                </div>
-            )}
+
 
             {/* 任务详情弹窗 */}
             <TaskGroupDetail
