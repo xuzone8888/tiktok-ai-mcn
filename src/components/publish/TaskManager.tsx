@@ -243,12 +243,6 @@ export function TaskManager() {
 
     return (
         <div className="space-y-4">
-            {/* 7天清理提示 */}
-            <div className="flex items-center gap-2 px-3 py-2.5 bg-amber-500/5 border border-amber-500/10 rounded-lg text-amber-500/70 text-xs">
-                <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-                <span>任务记录将在创建后 <strong className="text-amber-400/80">7 天</strong> 自动清理，请及时下载或备份重要数据</span>
-            </div>
-
             {/* 筛选区域 */}
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
@@ -341,6 +335,14 @@ export function TaskManager() {
                     >
                         加载更多任务
                     </Button>
+                </div>
+            )}
+
+            {/* 7天清理提示 - 放在任务列表下方，仅有任务时显示 */}
+            {tasks.length > 0 && (
+                <div className="flex items-center gap-2 px-3 py-2 bg-amber-500/5 border border-amber-500/10 rounded-lg text-amber-500/60 text-[11px]">
+                    <AlertTriangle className="w-3 h-3 shrink-0" />
+                    <span>任务记录将在创建后 <strong className="text-amber-400/70">7 天</strong> 自动清理，请及时备份重要数据</span>
                 </div>
             )}
 

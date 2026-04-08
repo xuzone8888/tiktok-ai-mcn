@@ -2617,7 +2617,7 @@ export default function PublishPage() {
                                 {/* 1.10 处理耗时提示 */}
                                 {isPublishing && (
                                     <p className="text-xs text-gray-500 mt-1">
-                                        TikTok 视频处理通常需要 1-2 分钟
+                                        发布后可能需要几分钟才能在 TikTok 上显示
                                     </p>
                                 )}
                             </div>
