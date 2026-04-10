@@ -1,0 +1,844 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>武汉观星文化传媒有限公司</title>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700;900&family=Inter:wght@300;400;600;700;900&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --blue-1: #0d1b2a;
+            --blue-2: #1b2838;
+            --blue-3: #1a3a5c;
+            --accent: #3b9eff;
+            --accent-light: #6bb8ff;
+            --accent-dark: #1a6fcc;
+            --accent-glow: rgba(59, 158, 255, 0.3);
+            --text-primary: #ffffff;
+            --text-secondary: rgba(255, 255, 255, 0.7);
+            --text-muted: rgba(168, 212, 245, 0.5);
+            --border: rgba(59, 158, 255, 0.15);
+            --card-bg: rgba(59, 158, 255, 0.06);
+            --card-bg-active: rgba(59, 158, 255, 0.12);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Noto Sans SC', 'Inter', -apple-system, sans-serif;
+            background: linear-gradient(135deg, var(--blue-1) 0%, var(--blue-2) 40%, var(--blue-3) 70%, var(--blue-1) 100%);
+            color: var(--text-primary);
+            overflow: hidden;
+            width: 100vw;
+            height: 100vh;
+            cursor: none;
+            user-select: none;
+        }
+
+        /* ===== Background ===== */
+        .bg-layer {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 0;
+        }
+        .bg-grid {
+            background-image:
+                linear-gradient(rgba(59,158,255,0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(59,158,255,0.03) 1px, transparent 1px);
+            background-size: 80px 80px;
+        }
+        .bg-orb {
+            position: absolute; border-radius: 50%; filter: blur(80px);
+            animation: orbFloat 25s infinite ease-in-out;
+        }
+        .bg-orb:nth-child(1) { width: 500px; height: 500px; top: -10%; left: -5%; background: rgba(59,158,255,0.08); animation-delay: 0s; }
+        .bg-orb:nth-child(2) { width: 400px; height: 400px; bottom: -10%; right: -5%; background: rgba(59,158,255,0.06); animation-delay: -8s; }
+        .bg-orb:nth-child(3) { width: 300px; height: 300px; top: 40%; left: 50%; background: rgba(99,184,255,0.04); animation-delay: -15s; }
+        @keyframes orbFloat {
+            0%,100% { transform: translate(0,0) scale(1); }
+            33% { transform: translate(40px,-30px) scale(1.1); }
+            66% { transform: translate(-30px,40px) scale(0.95); }
+        }
+
+        /* ===== SVG Icon System ===== */
+        .icon {
+            width: 24px; height: 24px; fill: none; stroke: var(--accent);
+            stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
+        }
+        .icon-lg { width: 36px; height: 36px; }
+        .icon-xl { width: 48px; height: 48px; stroke-width: 1.5; }
+
+        /* ===== Shared Layout ===== */
+        .slide {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            opacity: 0; transform: scale(0.98);
+            transition: opacity 1.2s ease, transform 1.2s ease;
+            pointer-events: none; z-index: 1;
+        }
+        .slide.visible {
+            opacity: 1; transform: scale(1); pointer-events: auto;
+        }
+
+        .page {
+            width: 100vw; height: 100vh;
+            display: flex; flex-direction: column;
+            padding: 50px 70px 40px;
+        }
+
+        /* ===== Header ===== */
+        .header {
+            display: flex; justify-content: space-between; align-items: center;
+            padding-bottom: 32px;
+            border-bottom: 1px solid var(--border);
+            flex-shrink: 0;
+        }
+        .logo-group { display: flex; align-items: center; gap: 24px; }
+        .logo-mark {
+            width: 68px; height: 68px;
+            background: linear-gradient(135deg, var(--accent), var(--accent-dark));
+            border-radius: 18px;
+            display: flex; align-items: center; justify-content: center;
+            box-shadow: 0 6px 24px var(--accent-glow);
+            position: relative; overflow: hidden;
+        }
+        .logo-mark svg { width: 36px; height: 36px; fill: white; stroke: none; }
+        .logo-mark::after {
+            content: ''; position: absolute; top: -50%; left: -50%;
+            width: 200%; height: 200%;
+            background: linear-gradient(45deg, transparent 40%, rgba(255,255,255,0.12) 50%, transparent 60%);
+            animation: shine 5s infinite;
+        }
+        @keyframes shine { 0% { transform: translateX(-100%) rotate(45deg); } 100% { transform: translateX(100%) rotate(45deg); } }
+
+        .brand-text h1 {
+            font-size: 32px; font-weight: 700; letter-spacing: 3px;
+            background: linear-gradient(90deg, #fff, var(--accent-light));
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        }
+        .brand-text p {
+            font-family: 'Inter'; font-size: 13px; color: var(--text-muted);
+            letter-spacing: 2px; text-transform: uppercase; margin-top: 4px;
+        }
+        .header-right { text-align: right; }
+        .header-slogan {
+            font-size: 17px; font-weight: 300; color: var(--text-secondary);
+            letter-spacing: 5px;
+        }
+        .clock {
+            font-family: 'Inter'; font-size: 13px; color: var(--text-muted);
+            margin-top: 6px; display: flex; align-items: center; justify-content: flex-end; gap: 8px;
+        }
+        .live-dot {
+            width: 7px; height: 7px; background: #34d399; border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0%,100% { box-shadow: 0 0 0 0 rgba(52,211,153,0.4); }
+            50% { box-shadow: 0 0 0 6px rgba(52,211,153,0); }
+        }
+
+        /* ===== Content Area ===== */
+        .content { flex: 1; padding-top: 36px; overflow: hidden; }
+
+        /* ===== Footer ===== */
+        .footer {
+            display: flex; justify-content: space-between; align-items: center;
+            padding-top: 24px; border-top: 1px solid var(--border);
+            flex-shrink: 0;
+        }
+        .footer-links { display: flex; gap: 36px; }
+        .footer-item {
+            display: flex; align-items: center; gap: 8px;
+            font-size: 13px; color: var(--text-muted);
+        }
+        .footer-item .icon { width: 16px; height: 16px; stroke: var(--text-muted); }
+        .footer-copy {
+            font-family: 'Inter'; font-size: 12px; color: rgba(168,212,245,0.25);
+        }
+
+        /* ===== Section Title ===== */
+        .stitle {
+            font-size: 20px; font-weight: 500; color: rgba(168,212,245,0.75);
+            letter-spacing: 3px; display: flex; align-items: center; gap: 10px;
+            margin-bottom: 20px;
+        }
+        .stitle::before {
+            content: ''; width: 4px; height: 20px; border-radius: 2px;
+            background: linear-gradient(180deg, var(--accent), var(--accent-dark));
+        }
+
+        /* ===== Cards ===== */
+        .card {
+            background: var(--card-bg); border: 1px solid var(--border);
+            border-radius: 16px; padding: 24px 28px;
+            transition: all 0.6s ease; position: relative; overflow: hidden;
+        }
+        .card::before {
+            content: ''; position: absolute; left: 0; top: 0;
+            width: 3px; height: 100%;
+            background: linear-gradient(180deg, var(--accent), transparent);
+            opacity: 0; transition: opacity 0.5s;
+        }
+        .card.active {
+            background: var(--card-bg-active);
+            border-color: rgba(59,158,255,0.3);
+            transform: translateX(6px);
+        }
+        .card.active::before { opacity: 1; }
+
+        .card-icon {
+            width: 50px; height: 50px; border-radius: 14px;
+            background: rgba(59,158,255,0.1);
+            display: flex; align-items: center; justify-content: center;
+            flex-shrink: 0;
+        }
+
+        /* ===== Stat Cards ===== */
+        .stat-card {
+            background: var(--card-bg); border: 1px solid var(--border);
+            border-radius: 16px; padding: 24px 20px; text-align: center;
+            position: relative; overflow: hidden;
+        }
+        .stat-card::after {
+            content: ''; position: absolute; bottom: 0; left: 0; width: 100%; height: 3px;
+            background: linear-gradient(90deg, transparent, var(--accent), transparent);
+            opacity: 0.4;
+        }
+        .stat-num {
+            font-family: 'Inter'; font-size: 38px; font-weight: 700;
+            background: linear-gradient(135deg, var(--accent), var(--accent-light));
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            line-height: 1.2;
+        }
+        .stat-unit {
+            font-size: 18px; -webkit-text-fill-color: rgba(168,212,245,0.6);
+        }
+        .stat-label {
+            font-size: 14px; color: var(--text-secondary); margin-top: 6px; letter-spacing: 2px;
+        }
+
+        /* ===== Slide Indicators ===== */
+        .indicators {
+            position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%);
+            display: flex; gap: 10px; z-index: 10;
+        }
+        .dot {
+            width: 36px; height: 4px; border-radius: 2px;
+            background: rgba(59,158,255,0.2); transition: all 0.5s;
+        }
+        .dot.active { background: var(--accent); width: 56px; }
+
+        /* ===== SLIDE 1 Specific ===== */
+        .s1-grid {
+            display: grid; grid-template-columns: 1fr 1fr; gap: 48px; height: 100%;
+        }
+        .s1-left { display: flex; flex-direction: column; gap: 16px; }
+        .s1-right { display: flex; flex-direction: column; gap: 28px; }
+        .s1-card { display: flex; align-items: center; gap: 20px; }
+        .s1-card h3 { font-size: 19px; font-weight: 600; letter-spacing: 1.5px; }
+        .s1-card p { font-size: 13px; color: var(--text-muted); margin-top: 4px; letter-spacing: 0.5px; }
+
+        .stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+
+        .highlights { display: flex; flex-direction: column; gap: 12px; }
+        .hl-item {
+            display: flex; align-items: center; gap: 14px;
+            padding: 14px 18px; border-radius: 12px;
+            background: rgba(59,158,255,0.03); border: 1px solid rgba(59,158,255,0.08);
+            transition: all 0.5s;
+        }
+        .hl-item.active {
+            background: rgba(59,158,255,0.1); border-color: rgba(59,158,255,0.25);
+        }
+        .hl-dot {
+            width: 8px; height: 8px; border-radius: 50%; background: var(--accent);
+            box-shadow: 0 0 10px var(--accent-glow); flex-shrink: 0;
+        }
+        .hl-text { font-size: 15px; color: var(--text-secondary); letter-spacing: 1.5px; }
+
+        /* ===== SLIDE 2: Business ===== */
+        .s2-grid {
+            display: grid; grid-template-columns: repeat(3, 1fr); gap: 28px; height: 100%;
+        }
+        .biz-card {
+            background: var(--card-bg); border: 1px solid var(--border);
+            border-radius: 20px; padding: 36px 28px;
+            display: flex; flex-direction: column; align-items: center;
+            text-align: center; gap: 16px; transition: all 0.6s;
+        }
+        .biz-card.active {
+            background: var(--card-bg-active); border-color: rgba(59,158,255,0.3);
+            transform: translateY(-4px);
+        }
+        .biz-icon {
+            width: 72px; height: 72px; border-radius: 18px;
+            background: linear-gradient(135deg, rgba(59,158,255,0.15), rgba(59,158,255,0.04));
+            display: flex; align-items: center; justify-content: center;
+        }
+        .biz-title { font-size: 21px; font-weight: 600; letter-spacing: 2px; }
+        .biz-desc {
+            font-size: 14px; color: var(--text-secondary); line-height: 1.9; letter-spacing: 1px;
+        }
+        .biz-tags { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: auto; }
+        .biz-tag {
+            padding: 5px 14px; border-radius: 20px; font-size: 12px;
+            background: rgba(59,158,255,0.08); border: 1px solid rgba(59,158,255,0.18);
+            color: var(--accent-light); letter-spacing: 1px;
+        }
+
+        /* ===== SLIDE 3: AI Platform ===== */
+        .s3-grid { display: grid; grid-template-columns: 1.2fr 1fr; gap: 48px; height: 100%; }
+        .s3-left { display: flex; flex-direction: column; gap: 20px; }
+        .platform-header {
+            display: flex; align-items: center; gap: 20px; margin-bottom: 8px;
+        }
+        .platform-badge {
+            padding: 6px 16px; border-radius: 20px; font-size: 12px;
+            background: linear-gradient(90deg, rgba(59,158,255,0.2), rgba(59,158,255,0.05));
+            border: 1px solid rgba(59,158,255,0.3);
+            color: var(--accent-light); letter-spacing: 1px;
+        }
+        .platform-name {
+            font-size: 36px; font-weight: 900; letter-spacing: 4px;
+            font-family: 'Inter', 'Noto Sans SC';
+            background: linear-gradient(135deg, var(--accent), var(--accent-light), #ffffff);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        }
+        .platform-sub {
+            font-size: 15px; color: var(--text-secondary); letter-spacing: 2px; line-height: 1.8;
+        }
+        .tech-list { display: flex; flex-direction: column; gap: 12px; }
+        .tech-item {
+            display: flex; align-items: center; gap: 14px;
+            padding: 16px 20px; border-radius: 14px;
+            background: var(--card-bg); border: 1px solid var(--border);
+            transition: all 0.5s;
+        }
+        .tech-item.active {
+            background: var(--card-bg-active); border-color: rgba(59,158,255,0.3);
+            transform: translateX(6px);
+        }
+        .tech-text h4 { font-size: 16px; font-weight: 500; letter-spacing: 1px; }
+        .tech-text p { font-size: 13px; color: var(--text-muted); margin-top: 3px; }
+
+        .s3-right { display: flex; flex-direction: column; gap: 16px; }
+        .cap-card {
+            background: var(--card-bg); border: 1px solid var(--border);
+            border-radius: 16px; padding: 22px 24px;
+            display: flex; align-items: flex-start; gap: 16px;
+            transition: all 0.5s;
+        }
+        .cap-card.active {
+            background: var(--card-bg-active); border-color: rgba(59,158,255,0.3);
+        }
+        .cap-icon {
+            width: 44px; height: 44px; border-radius: 12px;
+            background: rgba(59,158,255,0.1);
+            display: flex; align-items: center; justify-content: center;
+            flex-shrink: 0;
+        }
+        .cap-text h4 { font-size: 15px; font-weight: 600; letter-spacing: 1px; margin-bottom: 4px; }
+        .cap-text p { font-size: 13px; color: var(--text-muted); line-height: 1.6; }
+
+        /* ===== SLIDE 4: Vision ===== */
+        .s4-center {
+            display: flex; flex-direction: column; align-items: center;
+            justify-content: center; height: 100%; text-align: center; gap: 40px;
+        }
+        .vision-icon {
+            width: 100px; height: 100px; border-radius: 28px;
+            background: linear-gradient(135deg, var(--accent), var(--accent-dark));
+            display: flex; align-items: center; justify-content: center;
+            box-shadow: 0 12px 48px var(--accent-glow);
+            animation: visionPulse 4s infinite ease-in-out;
+        }
+        @keyframes visionPulse {
+            0%,100% { box-shadow: 0 12px 48px var(--accent-glow); }
+            50% { box-shadow: 0 12px 64px rgba(59,158,255,0.5); }
+        }
+        .vision-title {
+            font-size: 40px; font-weight: 700; letter-spacing: 6px;
+            background: linear-gradient(90deg, #fff, var(--accent-light));
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        }
+        .vision-desc {
+            font-size: 20px; color: var(--text-secondary); line-height: 2;
+            max-width: 900px; letter-spacing: 2px;
+        }
+        .vision-tags {
+            display: flex; gap: 16px; flex-wrap: wrap; justify-content: center;
+        }
+        .vision-tag {
+            padding: 10px 28px; border-radius: 28px; font-size: 15px;
+            background: rgba(59,158,255,0.08); border: 1px solid rgba(59,158,255,0.2);
+            color: var(--accent-light); letter-spacing: 2px;
+        }
+        .vision-numbers {
+            display: flex; gap: 60px; margin-top: 10px;
+        }
+        .vn-item { text-align: center; }
+        .vn-num {
+            font-family: 'Inter'; font-size: 48px; font-weight: 900;
+            background: linear-gradient(135deg, var(--accent), var(--accent-light));
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        }
+        .vn-label { font-size: 14px; color: var(--text-muted); margin-top: 4px; letter-spacing: 2px; }
+    </style>
+</head>
+<body>
+    <!-- Background -->
+    <div class="bg-layer"><div class="bg-orb"></div><div class="bg-orb"></div><div class="bg-orb"></div></div>
+    <div class="bg-layer bg-grid"></div>
+
+    <!-- SVG Icon Definitions -->
+    <svg style="display:none">
+        <defs>
+            <!-- Star -->
+            <symbol id="i-star" viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" fill="white" stroke="none"/></symbol>
+            <!-- Video/Live -->
+            <symbol id="i-video" viewBox="0 0 24 24"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></symbol>
+            <!-- Content/Edit -->
+            <symbol id="i-edit" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></symbol>
+            <!-- Users/People -->
+            <symbol id="i-users" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></symbol>
+            <!-- Code/Dev -->
+            <symbol id="i-code" viewBox="0 0 24 24"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></symbol>
+            <!-- Globe -->
+            <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></symbol>
+            <!-- Zap/AI -->
+            <symbol id="i-zap" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></symbol>
+            <!-- Award -->
+            <symbol id="i-award" viewBox="0 0 24 24"><circle cx="12" cy="8" r="7"/><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"/></symbol>
+            <!-- Briefcase -->
+            <symbol id="i-briefcase" viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></symbol>
+            <!-- Cpu/Tech -->
+            <symbol id="i-cpu" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2" ry="2"/><rect x="9" y="9" width="6" height="6"/><line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/><line x1="20" y1="9" x2="23" y2="9"/><line x1="20" y1="14" x2="23" y2="14"/><line x1="1" y1="9" x2="4" y2="9"/><line x1="1" y1="14" x2="4" y2="14"/></symbol>
+            <!-- Image -->
+            <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></symbol>
+            <!-- Mic -->
+            <symbol id="i-mic" viewBox="0 0 24 24"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></symbol>
+            <!-- User/Person -->
+            <symbol id="i-user" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></symbol>
+            <!-- Shield/Compliant -->
+            <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></symbol>
+            <!-- Shopping bag -->
+            <symbol id="i-shop" viewBox="0 0 24 24"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></symbol>
+            <!-- Target -->
+            <symbol id="i-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></symbol>
+            <!-- Map pin -->
+            <symbol id="i-pin" viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></symbol>
+            <!-- Link/Web -->
+            <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></symbol>
+            <!-- Mail -->
+            <symbol id="i-mail" viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></symbol>
+            <!-- Rocket -->
+            <symbol id="i-rocket" viewBox="0 0 24 24"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/><path d="M12 15l-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"/><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"/></symbol>
+            <!-- Play -->
+            <symbol id="i-play" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></symbol>
+            <!-- Trending up -->
+            <symbol id="i-trend" viewBox="0 0 24 24"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></symbol>
+        </defs>
+    </svg>
+
+    <!-- ==================== SLIDE 1: Company Overview ==================== -->
+    <div class="slide visible" id="slide1">
+        <div class="page">
+            <div class="header">
+                <div class="logo-group">
+                    <div class="logo-mark"><svg><use href="#i-star"/></svg></div>
+                    <div class="brand-text">
+                        <h1>武汉观星文化传媒有限公司</h1>
+                        <p>Wuhan Guanxing Culture Media Co., Ltd. &nbsp;·&nbsp; Est. 2016</p>
+                    </div>
+                </div>
+                <div class="header-right">
+                    <div class="header-slogan">观星引路 · 内容为王</div>
+                    <div class="clock"><div class="live-dot"></div><span class="clock-text"></span></div>
+                </div>
+            </div>
+            <div class="content">
+                <div class="s1-grid">
+                    <div class="s1-left">
+                        <div class="stitle">核心业务</div>
+                        <div class="card s1-card" data-idx="0">
+                            <div class="card-icon"><svg class="icon-xl"><use href="#i-video"/></svg></div>
+                            <div><h3>直播运营中心</h3><p>Live Streaming Operations · 淘宝直播官方认证MCN · 全平台直播策划与执行</p></div>
+                        </div>
+                        <div class="card s1-card" data-idx="1">
+                            <div class="card-icon"><svg class="icon-xl"><use href="#i-edit"/></svg></div>
+                            <div><h3>内容化运营中心</h3><p>Content Operations · 短视频内容策划 · 品牌全案推广 · 数据驱动增长</p></div>
+                        </div>
+                        <div class="card s1-card" data-idx="2">
+                            <div class="card-icon"><svg class="icon-xl"><use href="#i-users"/></svg></div>
+                            <div><h3>达人孵化部</h3><p>Creator Incubation · 系统化培训 · 全链路达人培养与运营管理</p></div>
+                        </div>
+                        <div class="card s1-card" data-idx="3">
+                            <div class="card-icon"><svg class="icon-xl"><use href="#i-code"/></svg></div>
+                            <div><h3>软件开发部</h3><p>Software Development · Star Gaze AI平台 · 智能内容创作工具研发</p></div>
+                        </div>
+                    </div>
+                    <div class="s1-right">
+                        <div class="stitle">运营数据</div>
+                        <div class="stats-row">
+                            <div class="stat-card">
+                                <div class="stat-num"><span class="counter" data-target="200" data-speed="fast">0</span><span class="stat-unit">+</span></div>
+                                <div class="stat-label">签约主播</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-num"><span class="counter" data-target="5000" data-speed="fast">0</span><span class="stat-unit">万+</span></div>
+                                <div class="stat-label">全网粉丝</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-num"><span class="counter" data-target="1000" data-speed="fast">0</span><span class="stat-unit">+</span></div>
+                                <div class="stat-label">服务品牌</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-num"><span class="counter" data-target="100" data-speed="fast">0</span><span class="stat-unit">人</span></div>
+                                <div class="stat-label">团队规模</div>
+                            </div>
+                        </div>
+                        <div class="stitle">企业荣誉</div>
+                        <div class="highlights">
+                            <div class="hl-item" data-hl="0"><div class="hl-dot"></div><div class="hl-text">淘宝直播官方认证MCN机构</div></div>
+                            <div class="hl-item" data-hl="1"><div class="hl-dot"></div><div class="hl-text">多次荣获淘宝直播现金奖励 & 优秀主播奖杯</div></div>
+                            <div class="hl-item" data-hl="2"><div class="hl-dot"></div><div class="hl-text">青山区创青谷孵化器优秀孵化企业</div></div>
+                            <div class="hl-item" data-hl="3"><div class="hl-dot"></div><div class="hl-text">多次承办阿里巴巴武汉地区线下推广活动</div></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="footer">
+                <div class="footer-links">
+                    <div class="footer-item"><svg class="icon"><use href="#i-pin"/></svg><span>武汉市 · 华中地区MCN服务商</span></div>
+                    <div class="footer-item"><svg class="icon"><use href="#i-link"/></svg><span>toryxai.com</span></div>
+                    <div class="footer-item"><svg class="icon"><use href="#i-mail"/></svg><span>contact@toryx.cn</span></div>
+                </div>
+                <div class="footer-copy">© 2016-2026 Wuhan Guanxing Culture Media Co., Ltd.</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== SLIDE 2: Business Capabilities ==================== -->
+    <div class="slide" id="slide2">
+        <div class="page">
+            <div class="header">
+                <div class="logo-group">
+                    <div class="logo-mark"><svg><use href="#i-star"/></svg></div>
+                    <div class="brand-text">
+                        <h1>武汉观星文化传媒有限公司</h1>
+                        <p>Wuhan Guanxing Culture Media Co., Ltd. &nbsp;·&nbsp; Est. 2016</p>
+                    </div>
+                </div>
+                <div class="header-right">
+                    <div class="header-slogan">专业服务 · 十年深耕</div>
+                    <div class="clock"><div class="live-dot"></div><span class="clock-text"></span></div>
+                </div>
+            </div>
+            <div class="content">
+                <div class="stitle">三大业务板块</div>
+                <div class="s2-grid">
+                    <div class="biz-card" data-biz="0">
+                        <div class="biz-icon"><svg class="icon-xl"><use href="#i-video"/></svg></div>
+                        <div class="biz-title">MCN直播电商</div>
+                        <div class="biz-desc">
+                            淘宝直播官方认证MCN<br>
+                            签约主播 200+<br>
+                            大规模主播招募与系统化培训<br>
+                            全链路品牌代运营服务
+                        </div>
+                        <div class="biz-tags">
+                            <span class="biz-tag">淘宝直播</span>
+                            <span class="biz-tag">主播孵化</span>
+                            <span class="biz-tag">品牌代运营</span>
+                            <span class="biz-tag">直播带货</span>
+                        </div>
+                    </div>
+                    <div class="biz-card" data-biz="1">
+                        <div class="biz-icon"><svg class="icon-xl"><use href="#i-globe"/></svg></div>
+                        <div class="biz-title">跨境电商出海</div>
+                        <div class="biz-desc">
+                            TikTok 海外账号运营<br>
+                            助力中国品牌拓展海外市场<br>
+                            多语言内容本地化<br>
+                            从内容创作到流量转化一站式服务
+                        </div>
+                        <div class="biz-tags">
+                            <span class="biz-tag">TikTok</span>
+                            <span class="biz-tag">TikTok Shop</span>
+                            <span class="biz-tag">跨境电商</span>
+                            <span class="biz-tag">品牌出海</span>
+                        </div>
+                    </div>
+                    <div class="biz-card" data-biz="2">
+                        <div class="biz-icon"><svg class="icon-xl"><use href="#i-target"/></svg></div>
+                        <div class="biz-title">内容营销策划</div>
+                        <div class="biz-desc">
+                            累计服务 1000+ 品牌商家<br>
+                            大型活动策划与执行<br>
+                            知名达人合作（天元邓刚等）<br>
+                            阿里巴巴线下推广执行团队
+                        </div>
+                        <div class="biz-tags">
+                            <span class="biz-tag">品牌推广</span>
+                            <span class="biz-tag">活动策划</span>
+                            <span class="biz-tag">达人合作</span>
+                            <span class="biz-tag">短视频</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="footer">
+                <div class="footer-links">
+                    <div class="footer-item"><svg class="icon"><use href="#i-pin"/></svg><span>武汉市 · 华中地区MCN服务商</span></div>
+                    <div class="footer-item"><svg class="icon"><use href="#i-link"/></svg><span>toryxai.com</span></div>
+                    <div class="footer-item"><svg class="icon"><use href="#i-mail"/></svg><span>contact@toryx.cn</span></div>
+                </div>
+                <div class="footer-copy">© 2016-2026 Wuhan Guanxing Culture Media Co., Ltd.</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== SLIDE 3: AI Platform ==================== -->
+    <div class="slide" id="slide3">
+        <div class="page">
+            <div class="header">
+                <div class="logo-group">
+                    <div class="logo-mark"><svg><use href="#i-star"/></svg></div>
+                    <div class="brand-text">
+                        <h1>武汉观星文化传媒有限公司</h1>
+                        <p>Wuhan Guanxing Culture Media Co., Ltd. &nbsp;·&nbsp; Est. 2016</p>
+                    </div>
+                </div>
+                <div class="header-right">
+                    <div class="header-slogan">AI 赋能 · 智能创作</div>
+                    <div class="clock"><div class="live-dot"></div><span class="clock-text"></span></div>
+                </div>
+            </div>
+            <div class="content">
+                <div class="s3-grid">
+                    <div class="s3-left">
+                        <div class="platform-header">
+                            <span class="platform-badge">AI PLATFORM</span>
+                            <span class="platform-badge">toryxai.com</span>
+                        </div>
+                        <div class="platform-name">Star Gaze</div>
+                        <div class="platform-sub">
+                            基于近十年内容生产经验，融合前沿 AI 技术的智能内容创作平台。<br>
+                            2025年启动研发，目前已持续迭代 8 个月。
+                        </div>
+                        <div class="stitle" style="margin-top:10px">核心技术栈</div>
+                        <div class="tech-list">
+                            <div class="tech-item" data-tech="0">
+                                <div class="cap-icon"><svg class="icon-lg"><use href="#i-cpu"/></svg></div>
+                                <div class="tech-text"><h4>大语言模型 (LLM)</h4><p>智能脚本生成 · 商品信息自动创作</p></div>
+                            </div>
+                            <div class="tech-item" data-tech="1">
+                                <div class="cap-icon"><svg class="icon-lg"><use href="#i-image"/></svg></div>
+                                <div class="tech-text"><h4>AI 图像生成</h4><p>多风格AI角色 · 无肖像权问题 · 商用安全</p></div>
+                            </div>
+                            <div class="tech-item" data-tech="2">
+                                <div class="cap-icon"><svg class="icon-lg"><use href="#i-mic"/></svg></div>
+                                <div class="tech-text"><h4>AI 语音合成</h4><p>多语种配音 · 字幕自动生成 · 视频渲染</p></div>
+                            </div>
+                            <div class="tech-item" data-tech="3">
+                                <div class="cap-icon"><svg class="icon-lg"><use href="#i-user"/></svg></div>
+                                <div class="tech-text"><h4>AI 数字人技术</h4><p>虚拟主播 · 定制化AI引擎 · 开源模型二次开发</p></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="s3-right">
+                        <div class="stitle">平台核心能力</div>
+                        <div class="cap-card" data-cap="0">
+                            <div class="cap-icon"><svg class="icon-lg"><use href="#i-zap"/></svg></div>
+                            <div class="cap-text"><h4>AI角色创建系统</h4><p>支持多种视觉风格，无真人肖像权问题，可安全用于商业场景</p></div>
+                        </div>
+                        <div class="cap-card" data-cap="1">
+                            <div class="cap-icon"><svg class="icon-lg"><use href="#i-edit"/></svg></div>
+                            <div class="cap-text"><h4>智能脚本生成</h4><p>基于商品信息自动生成营销脚本，配音与字幕一键渲染</p></div>
+                        </div>
+                        <div class="cap-card" data-cap="2">
+                            <div class="cap-icon"><svg class="icon-lg"><use href="#i-shop"/></svg></div>
+                            <div class="cap-text"><h4>TikTok Shop 直连</h4><p>与 TikTok Shop 橱窗直接集成，带货视频一键发布</p></div>
+                        </div>
+                        <div class="cap-card" data-cap="3">
+                            <div class="cap-icon"><svg class="icon-lg"><use href="#i-shield"/></svg></div>
+                            <div class="cap-text"><h4>AIGC 合规标注</h4><p>内置 AIGC 内容标注系统，确保平台合规运营</p></div>
+                        </div>
+                        <div class="cap-card" data-cap="4">
+                            <div class="cap-icon"><svg class="icon-lg"><use href="#i-play"/></svg></div>
+                            <div class="cap-text"><h4>自动化视频渲染</h4><p>语音配音+字幕+画面自动合成，批量生产高质量视频</p></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="footer">
+                <div class="footer-links">
+                    <div class="footer-item"><svg class="icon"><use href="#i-pin"/></svg><span>武汉市 · 华中地区MCN服务商</span></div>
+                    <div class="footer-item"><svg class="icon"><use href="#i-link"/></svg><span>toryxai.com</span></div>
+                    <div class="footer-item"><svg class="icon"><use href="#i-mail"/></svg><span>contact@toryx.cn</span></div>
+                </div>
+                <div class="footer-copy">© 2016-2026 Wuhan Guanxing Culture Media Co., Ltd.</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== SLIDE 4: Vision ==================== -->
+    <div class="slide" id="slide4">
+        <div class="page">
+            <div class="header">
+                <div class="logo-group">
+                    <div class="logo-mark"><svg><use href="#i-star"/></svg></div>
+                    <div class="brand-text">
+                        <h1>武汉观星文化传媒有限公司</h1>
+                        <p>Wuhan Guanxing Culture Media Co., Ltd. &nbsp;·&nbsp; Est. 2016</p>
+                    </div>
+                </div>
+                <div class="header-right">
+                    <div class="header-slogan">十年深耕 · 智领未来</div>
+                    <div class="clock"><div class="live-dot"></div><span class="clock-text"></span></div>
+                </div>
+            </div>
+            <div class="content">
+                <div class="s4-center">
+                    <div class="vision-icon"><svg style="width:52px;height:52px;fill:none;stroke:white;stroke-width:1.5"><use href="#i-rocket"/></svg></div>
+                    <div class="vision-title">内容驱动商业增长</div>
+                    <div class="vision-desc">
+                        凭借十年内容生产实战经验、百人专业团队和对 AI 创新技术的深度投入，<br>
+                        为 TikTok Shop 生态提供可靠、合规、高效的智能内容解决方案，<br>
+                        助力全球卖家实现内容驱动的商业增长。
+                    </div>
+                    <div class="vision-numbers">
+                        <div class="vn-item">
+                            <div class="vn-num"><span class="counter" data-target="10">0</span>年</div>
+                            <div class="vn-label">深耕经验</div>
+                        </div>
+                        <div class="vn-item">
+                            <div class="vn-num"><span class="counter" data-target="100">0</span>人</div>
+                            <div class="vn-label">专业团队</div>
+                        </div>
+                        <div class="vn-item">
+                            <div class="vn-num"><span class="counter" data-target="65">0</span>人</div>
+                            <div class="vn-label">内容制作</div>
+                        </div>
+                        <div class="vn-item">
+                            <div class="vn-num"><span class="counter" data-target="10">0</span>人</div>
+                            <div class="vn-label">技术研发</div>
+                        </div>
+                    </div>
+                    <div class="vision-tags">
+                        <span class="vision-tag">MCN 运营</span>
+                        <span class="vision-tag">直播电商</span>
+                        <span class="vision-tag">跨境出海</span>
+                        <span class="vision-tag">AI 智能创作</span>
+                        <span class="vision-tag">品牌推广</span>
+                        <span class="vision-tag">达人孵化</span>
+                    </div>
+                </div>
+            </div>
+            <div class="footer">
+                <div class="footer-links">
+                    <div class="footer-item"><svg class="icon"><use href="#i-pin"/></svg><span>武汉市 · 华中地区MCN服务商</span></div>
+                    <div class="footer-item"><svg class="icon"><use href="#i-link"/></svg><span>toryxai.com</span></div>
+                    <div class="footer-item"><svg class="icon"><use href="#i-mail"/></svg><span>contact@toryx.cn</span></div>
+                </div>
+                <div class="footer-copy">© 2016-2026 Wuhan Guanxing Culture Media Co., Ltd.</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Slide Indicators -->
+    <div class="indicators">
+        <div class="dot active"></div>
+        <div class="dot"></div>
+        <div class="dot"></div>
+        <div class="dot"></div>
+    </div>
+
+    <script>
+        // ===== Clock =====
+        function updateClocks() {
+            const now = new Date();
+            const str = now.toLocaleString('zh-CN', {
+                year:'numeric', month:'2-digit', day:'2-digit',
+                hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false
+            });
+            document.querySelectorAll('.clock-text').forEach(el => el.textContent = str);
+        }
+        updateClocks();
+        setInterval(updateClocks, 1000);
+
+        // ===== Counter Animation =====
+        function animateCounters() {
+            document.querySelectorAll('.counter').forEach(el => {
+                const target = parseInt(el.dataset.target);
+                const dur = 2200;
+                const step = target / (dur / 16);
+                let cur = 0;
+                const t = setInterval(() => {
+                    cur += step;
+                    if (cur >= target) { cur = target; clearInterval(t); }
+                    el.textContent = Math.floor(cur).toLocaleString();
+                }, 16);
+            });
+        }
+        setTimeout(animateCounters, 600);
+
+        // ===== Cyclic highlight: generic =====
+        function cycleActive(selector, interval) {
+            const items = document.querySelectorAll(selector);
+            if (!items.length) return;
+            let idx = 0;
+            function go() {
+                items.forEach(i => i.classList.remove('active'));
+                items[idx].classList.add('active');
+                idx = (idx + 1) % items.length;
+            }
+            go();
+            setInterval(go, interval);
+        }
+        cycleActive('.s1-card', 3000);
+        cycleActive('.hl-item', 2800);
+        cycleActive('.biz-card', 3500);
+        cycleActive('.tech-item', 3200);
+        cycleActive('.cap-card', 2600);
+
+        // ===== Slide rotation =====
+        const slides = document.querySelectorAll('.slide');
+        const dots = document.querySelectorAll('.dot');
+        let cur = 0;
+
+        function switchSlide() {
+            slides[cur].classList.remove('visible');
+            dots[cur].classList.remove('active');
+            cur = (cur + 1) % slides.length;
+            slides[cur].classList.add('visible');
+            dots[cur].classList.add('active');
+            // Re-animate counters on slide with counters
+            if (cur === 0 || cur === 3) {
+                setTimeout(() => {
+                    slides[cur].querySelectorAll('.counter').forEach(el => {
+                        el.textContent = '0';
+                    });
+                    slides[cur].querySelectorAll('.counter').forEach(el => {
+                        const target = parseInt(el.dataset.target);
+                        const dur = 2200;
+                        const step = target / (dur / 16);
+                        let c = 0;
+                        const t = setInterval(() => {
+                            c += step;
+                            if (c >= target) { c = target; clearInterval(t); }
+                            el.textContent = Math.floor(c).toLocaleString();
+                        }, 16);
+                    });
+                }, 300);
+            }
+        }
+        setInterval(switchSlide, 10000);
+
+        // ===== Fullscreen on click =====
+        document.addEventListener('click', () => {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen().catch(() => {});
+            }
+        });
+    </script>
+</body>
+</html>
