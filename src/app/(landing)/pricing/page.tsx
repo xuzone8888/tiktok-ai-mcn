@@ -5,7 +5,7 @@ import PricingSection from "@/components/landing/sections/PricingSection";
 import FooterSection from "@/components/landing/sections/FooterSection";
 
 export const metadata = {
-    title: "价格 - ToryX AI MCN",
+    title: "价格 - Star Gaze",
     description: "选择适合你的方案，从个人创作者到企业团队，总有一款适合你",
 };
 
@@ -23,11 +23,9 @@ export default function PricingPage() {
                 <div className="container max-w-7xl mx-auto px-6 py-4">
                     <nav className="flex items-center justify-between">
                         <Link href="/" className="flex items-center gap-3 group">
-                            <img
-                                src="/images/toryx_logo_text.png"
-                                alt="ToryX AI"
-                                className="h-8 drop-shadow-[0_0_15px_rgba(16,185,129,0.3)]"
-                            />
+                            <span className="text-lg font-bold text-white drop-shadow-[0_0_15px_rgba(16,185,129,0.3)]">
+                                Star Gaze
+                            </span>
                         </Link>
                         <Link href="/">
                             <Button variant="ghost" className="text-gray-300 hover:text-white">

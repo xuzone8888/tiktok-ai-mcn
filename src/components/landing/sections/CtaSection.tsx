@@ -29,8 +29,8 @@ export default function CtaSection() {
                         </h2>
                         <p className="text-gray-400 text-lg md:text-xl mb-10 max-w-2xl mx-auto">
                             {lang === "en"
-                                ? "Join creators already producing consistently with ToryX"
-                                : "加入正在用 ToryX 持续创作的创作者们"}
+                                ? "Join creators already producing consistently with Star Gaze"
+                                : "加入正在用 Star Gaze 持续创作的创作者们"}
                         </p>
 
                         {/* CTA 按钮 */}

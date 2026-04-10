@@ -261,11 +261,9 @@ export default function ResetPasswordPage() {
           <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-white/30 to-transparent opacity-50" />
 
           <div className="flex justify-center mb-6">
-            <img
-              src="/images/toryx_logo_text.png"
-              alt="ToryX AI"
-              className="h-10 drop-shadow-[0_0_20px_rgba(16,185,129,0.3)]"
-            />
+            <span className="text-xl font-bold text-white drop-shadow-[0_0_20px_rgba(16,185,129,0.3)]">
+                Star Gaze
+              </span>
           </div>
 
           <div className="text-center mb-6">

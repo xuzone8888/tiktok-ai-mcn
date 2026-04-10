@@ -17,8 +17,8 @@ const geistMono = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "ToryX - AI 内容智造工厂",
-  description: "AI 驱动的短视频内容智能生产平台",
+  title: "Star Gaze - Wuhan Guanxing Cultural Media",
+  description: "AI-powered short video content production platform",
 };
 
 export default function RootLayout({

@@ -24,7 +24,7 @@ export default function ExtensionPage() {
   const macCommand1 = `mkdir -p ~/Desktop/toryx-extractor && cat > ~/Desktop/toryx-extractor/manifest.json << 'EOF'
 {
   "manifest_version": 3,
-  "name": "ToryX 商品提取器",
+  "name": "Star Gaze 商品提取器",
   "version": "1.0",
   "permissions": ["activeTab", "scripting"],
   "action": {"default_title": "提取商品数据"},
@@ -40,7 +40,7 @@ EOF`;
 
   const winManifest = `{
   "manifest_version": 3,
-  "name": "ToryX 商品提取器",
+  "name": "Star Gaze 商品提取器",
   "version": "1.0",
   "permissions": ["activeTab", "scripting"],
   "action": {"default_title": "提取商品数据"},

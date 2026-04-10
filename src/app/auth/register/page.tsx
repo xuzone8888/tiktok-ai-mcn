@@ -192,7 +192,7 @@ export default function RegisterPage() {
                 </p>
                 <ol className="text-sm text-white/40 space-y-1 list-decimal list-inside">
                   <li>{lang === "en" ? "Open your inbox (including spam)" : "打开您的邮箱（包括垃圾邮件文件夹）"}</li>
-                  <li>{lang === "en" ? "Find the email from ToryX" : "找到来自 ToryX 的验证邮件"}</li>
+                  <li>{lang === "en" ? "Find the verification email in your inbox" : "找到验证邮件"}</li>
                   <li>{lang === "en" ? 'Click the "Confirm Email" link' : '点击邮件中的 "确认邮箱" 链接'}</li>
                   <li>{lang === "en" ? "Sign in after verification" : "验证成功后即可登录"}</li>
                 </ol>
@@ -248,11 +248,9 @@ export default function RegisterPage() {
         {/* 2. 左侧：品牌叙事区 (大屏显示) */}
         <div className="hidden lg:flex flex-col flex-1 p-12 lg:p-20 justify-center">
           <div className="max-w-xl">
-            <img
-              src="/images/toryx_logo_text.png"
-              alt="ToryX AI"
-              className="h-14 mb-12 drop-shadow-[0_0_30px_rgba(16,185,129,0.4)]"
-            />
+            <span className="text-3xl font-bold text-white mb-12 block drop-shadow-[0_0_30px_rgba(16,185,129,0.4)]">
+              Star Gaze<br />Cultural Media
+            </span>
 
             <h1 className="text-5xl lg:text-6xl font-bold tracking-tight mb-6 leading-tight">
               <span className="bg-clip-text text-transparent bg-gradient-to-r from-white via-white/90 to-white/60">
@@ -266,8 +264,8 @@ export default function RegisterPage() {
 
             <p className="text-lg text-white/50 mb-12 leading-relaxed">
               {lang === "en"
-                ? "Register a ToryX account · Create your exclusive AI character · Generate professional short videos in one click."
-                : "注册 ToryX 账号 · 创建专属 AI 角色 · 一键生成专业级带货短视频。"}
+                ? "Create your account · Build your exclusive AI character · Generate professional short videos in one click."
+                : "创建账号 · 打造专属 AI 角色 · 一键生成专业级带货短视频。"}
             </p>
 
             <div className="flex flex-wrap gap-4">
@@ -300,7 +298,7 @@ export default function RegisterPage() {
             <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-white/30 to-transparent opacity-50" />
 
             <div className="flex justify-center mb-6 lg:hidden">
-              <img src="/images/toryx_logo_text.png" alt="ToryX AI" className="h-10 drop-shadow-[0_0_20px_rgba(16,185,129,0.3)]" />
+              <span className="text-xl font-bold text-white drop-shadow-[0_0_20px_rgba(16,185,129,0.3)]">Star Gaze</span>
             </div>
 
             <div className="text-center lg:text-left mb-6">
@@ -308,7 +306,7 @@ export default function RegisterPage() {
                 {lang === "en" ? "Create Account" : "创建账号"}
               </h2>
               <p className="text-sm text-white/40">
-                {lang === "en" ? "Start creating with ToryX" : "注册 ToryX 账号以开始创作"}
+                {lang === "en" ? "Start creating with Star Gaze" : "注册账号以开始创作"}
               </p>
             </div>
 

@@ -16,11 +16,9 @@ export default function FooterSection() {
                 <div className="grid md:grid-cols-5 gap-8 mb-12">
                     <div className="md:col-span-2">
                         <Link href="/" className="flex items-center gap-3 mb-6">
-                            <img
-                                src="/images/toryx_logo_text.png"
-                                alt="ToryX AI"
-                                className="h-8 drop-shadow-[0_0_12px_rgba(16,185,129,0.3)]"
-                            />
+                            <span className="text-xl font-bold text-white drop-shadow-[0_0_12px_rgba(16,185,129,0.3)]">
+                                Star Gaze
+                            </span>
                         </Link>
                         <p className="text-gray-500 text-sm leading-relaxed max-w-xs">
                             {lang === "en"
@@ -88,8 +86,8 @@ export default function FooterSection() {
                 <div className="pt-8 border-t border-white/5 flex flex-col md:flex-row items-center justify-between gap-4">
                     <div className="text-gray-500 text-sm">
                         {lang === "en"
-                            ? `© ${new Date().getFullYear()} Wuhan Guanxing Cultural Media Co., Ltd. All rights reserved.`
-                            : `© ${new Date().getFullYear()} 武汉观星文化传媒有限公司 版权所有`}
+                            ? `© ${new Date().getFullYear()} Star Gaze by Wuhan Guanxing Cultural Media Co., Ltd. All rights reserved.`
+                            : `© ${new Date().getFullYear()} Star Gaze · 武汉观星文化传媒有限公司 版权所有`}
                     </div>
                     <div className="flex items-center gap-6 text-gray-500 text-sm">
                         <Link

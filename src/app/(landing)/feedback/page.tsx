@@ -25,7 +25,7 @@ export default function FeedbackPage() {
         }
 
         // 组装邮件内容
-        const subject = encodeURIComponent(`[ToryX 反馈] ${feedbackType}`);
+        const subject = encodeURIComponent(`[Star Gaze 反馈] ${feedbackType}`);
         const body = encodeURIComponent(
             `反馈类型：${feedbackType}\n\n问题描述：\n${description}\n\n联系邮箱：${contactEmail || "未提供"}`
         );
@@ -52,11 +52,9 @@ export default function FeedbackPage() {
                 <div className="container max-w-7xl mx-auto px-6 py-4">
                     <nav className="flex items-center justify-between">
                         <Link href="/" className="flex items-center gap-3 group">
-                            <img
-                                src="/images/toryx_logo_text.png"
-                                alt="ToryX AI"
-                                className="h-8 drop-shadow-[0_0_15px_rgba(16,185,129,0.3)]"
-                            />
+                            <span className="text-lg font-bold text-white drop-shadow-[0_0_15px_rgba(16,185,129,0.3)]">
+                                Star Gaze
+                            </span>
                         </Link>
                         <Link href="/">
                             <Button variant="ghost" className="text-gray-300 hover:text-white">
@@ -144,7 +142,7 @@ export default function FeedbackPage() {
                 <div className="container max-w-7xl mx-auto px-6">
                     <div className="flex flex-col md:flex-row items-center justify-between gap-4">
                         <div className="text-gray-500 text-sm">
-                            © {new Date().getFullYear()} Wuhan Guanxing Cultural Media Co., Ltd. All Rights Reserved.
+                            © {new Date().getFullYear()} Star Gaze by Wuhan Guanxing Cultural Media Co., Ltd. All Rights Reserved.
                         </div>
                         <div className="flex items-center gap-6 text-gray-500 text-sm">
                             <Link href="/terms" className="hover:text-white transition-colors">服务条款</Link>

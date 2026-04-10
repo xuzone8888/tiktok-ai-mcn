@@ -54,11 +54,9 @@ export default function HeroSection() {
                     <div className="container max-w-7xl mx-auto px-6 py-4">
                         <nav className="flex items-center justify-between">
                             <Link href="/" className="flex items-center gap-3 group">
-                                <img
-                                    src="/images/toryx_logo_text.png"
-                                    alt="ToryX AI"
-                                    className="h-8 drop-shadow-[0_0_15px_rgba(16,185,129,0.3)]"
-                                />
+                                <span className="text-lg font-bold text-white drop-shadow-[0_0_15px_rgba(16,185,129,0.3)]">
+                                    Star Gaze
+                                </span>
                             </Link>
 
                             {/* 导航链接 */}

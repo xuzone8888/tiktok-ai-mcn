@@ -77,7 +77,7 @@ export async function POST(request: NextRequest) {
     if (pay_channel === 'wechat_native') {
       const wxResult = await createWechatNativeOrder({
         orderNo,
-        description: `ToryX - ${pack.name}`,
+        description: `Star Gaze - ${pack.name}`,
         amountCents: pack.price_cents,
       });
 
@@ -95,7 +95,7 @@ export async function POST(request: NextRequest) {
       
       const alipayResult = await createAlipayQROrder({
         orderNo,
-        subject: `ToryX - ${pack.name}`,
+        subject: `Star Gaze - ${pack.name}`,
         totalAmountYuan: amountYuan,
       });
 

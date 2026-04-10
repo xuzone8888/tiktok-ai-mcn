@@ -22,11 +22,9 @@ export default function LegalPage() {
         <div className="container max-w-7xl mx-auto px-6 py-4">
           <nav className="flex items-center justify-between">
             <Link href="/" className="flex items-center gap-3">
-              <img
-                src="/images/toryx_logo_text.png"
-                alt="ToryX AI"
-                className="h-8 drop-shadow-[0_0_15px_rgba(16,185,129,0.3)]"
-              />
+              <span className="text-lg font-bold text-white drop-shadow-[0_0_15px_rgba(16,185,129,0.3)]">
+                Star Gaze
+              </span>
             </Link>
             <div className="flex items-center gap-4">
               {/* 双语切换 */}
@@ -59,18 +57,29 @@ export default function LegalPage() {
       <main className="relative z-10 py-16">
         <div className="container max-w-4xl mx-auto px-6">
           <div className="mb-12">
-            <h1 className="text-4xl font-bold mb-4">{lang === "en" ? "Legal Notice" : "法律声明"}</h1>
-            <p className="text-gray-400">{lang === "en" ? "Last Updated: January 22, 2026" : "最后更新日期：2026年1月22日"}</p>
+            <h1 className="text-4xl font-bold mb-4">{lang === "en" ? "Legal Notice - Wuhan Guanxing Cultural Media Co., Ltd. (Star Gaze)" : "法律声明 - 武汉观星文化传媒有限公司 (Star Gaze)"}</h1>
+            <p className="text-gray-400">{lang === "en" ? "Last Updated: April 10, 2026" : "最后更新日期：2026年4月10日"}</p>
           </div>
 
           <div className="space-y-6 text-gray-300">
+            {/* Brand & Operator */}
+            <ReflectiveCard className="!rounded-xl">
+              <div className="flex items-start gap-4 p-6">
+                <div className="p-3 rounded-lg bg-emerald-500/10 text-emerald-400 shrink-0"><Building className="h-6 w-6" /></div>
+                <div>
+                  <h2 className="text-xl font-bold text-white mb-3">{lang === "en" ? "Brand & Operator" : "品牌与运营主体"}</h2>
+                  <p className="leading-relaxed">{lang === "en" ? "Star Gaze is a brand operated by Wuhan Guanxing Cultural Media Co., Ltd. TikTok is a third-party platform. Our services are independently operated by Wuhan Guanxing Cultural Media Co., Ltd." : "Star Gaze 为武汉观星文化传媒有限公司运营品牌。TikTok 为第三方平台，本平台服务由武汉观星文化传媒有限公司独立运营。"}</p>
+                </div>
+              </div>
+            </ReflectiveCard>
+
             {/* 1. 权利归属 */}
             <ReflectiveCard className="!rounded-xl">
               <div className="flex items-start gap-4 p-6">
                 <div className="p-3 rounded-lg bg-cyan-500/10 text-cyan-400 shrink-0"><Scale className="h-6 w-6" /></div>
                 <div>
                   <h2 className="text-xl font-bold text-white mb-3">{lang === "en" ? "1. Ownership of Rights" : "一、权利归属"}</h2>
-                  <p className="leading-relaxed">{lang === "en" ? '1.1 The ToryX platform (hereinafter referred to as "this Platform") is operated and managed by Wuhan Guanxing Cultural Media Co., Ltd. (hereinafter referred to as "the Company").' : '1.1 ToryX 平台（以下简称"本平台"）由武汉观星文化传媒有限公司（以下简称"本公司"）运营和管理。'}</p>
+                  <p className="leading-relaxed">{lang === "en" ? '1.1 The Star Gaze platform (hereinafter referred to as "this Platform") is operated and managed by Wuhan Guanxing Cultural Media Co., Ltd. (hereinafter referred to as "the Company").' : '1.1 Star Gaze 平台（以下简称"本平台"）由武汉观星文化传媒有限公司（以下简称"本公司"）运营和管理。'}</p>
                   <p className="leading-relaxed mt-3">{lang === "en" ? '1.2 All content on this Platform, including but not limited to text, images, videos, audio, charts, logos, identifications, layout designs, column directories, software programs, databases, and other information (collectively "Platform Content"), is owned by the Company or the Company has obtained legal authorization.' : '1.2 本平台的所有内容，包括但不限于文字、图片、视频、音频、图表、标志、标识、版面设计、专栏目录、软件程序、数据库及其他信息（统称"平台内容"），其知识产权归本公司所有或本公司已获得合法授权。'}</p>
                   <p className="leading-relaxed mt-3">{lang === "en" ? '1.3 Without written permission from the Company, no one may copy, reprint, link, adapt, or otherwise use the Platform Content in any manner.' : '1.3 未经本公司书面许可，任何人不得以任何方式复制、转载、链接、改编或以其他方式使用本平台内容。'}</p>
                 </div>
@@ -83,7 +92,7 @@ export default function LegalPage() {
                 <div className="p-3 rounded-lg bg-purple-500/10 text-purple-400 shrink-0"><Bookmark className="h-6 w-6" /></div>
                 <div>
                   <h2 className="text-xl font-bold text-white mb-3">{lang === "en" ? "2. Trademark Statement" : "二、商标声明"}</h2>
-                  <p className="leading-relaxed">{lang === "en" ? '2.1 The names, logos, icons, and related product/service names, logos, and identifications (collectively "Trademarks") used on this Platform, including "ToryX", are registered trademarks or trademarks of the Company.' : '2.1 本平台使用的"ToryX"名称、标志、图标及相关的商品/服务名称、标志、标识（统称"商标"）为本公司的注册商标或商标。'}</p>
+                  <p className="leading-relaxed">{lang === "en" ? '2.1 The names, logos, icons, and related product/service names, logos, and identifications (collectively "Trademarks") used on this Platform are registered trademarks or trademarks of the Company.' : '2.1 本平台使用的名称、标志、图标及相关的商品/服务名称、标志、标识（统称"商标"）为本公司的注册商标或商标。'}</p>
                   <p className="leading-relaxed mt-3">{lang === "en" ? '2.2 Without written authorization from the Company, no one may display, use, or otherwise deal with these Trademarks, nor indicate to others that you have the right to do so.' : '2.2 未经本公司书面授权，任何人不得以任何方式展示、使用或做其他处理，也不得向他人表明您有权展示、使用或做其他处理。'}</p>
                   <p className="leading-relaxed mt-3">{lang === "en" ? '2.3 Other product and company names mentioned on this Platform may be trademarks of their respective owners.' : '2.3 本平台提及的其他产品和公司名称可能是其各自所有者的商标。'}</p>
                 </div>
@@ -227,7 +236,7 @@ export default function LegalPage() {
         <div className="container max-w-7xl mx-auto px-6">
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
             <div className="text-gray-500 text-sm">
-              © {new Date().getFullYear()} {lang === "en" ? "Wuhan Guanxing Cultural Media Co., Ltd. All rights reserved." : "武汉观星文化传媒有限公司 版权所有"}
+              © {new Date().getFullYear()} {lang === "en" ? "Star Gaze by Wuhan Guanxing Cultural Media Co., Ltd. All rights reserved." : "Star Gaze · 武汉观星文化传媒有限公司 版权所有"}
             </div>
             <div className="flex items-center gap-6 text-gray-500 text-sm">
               <Link href="/terms" className="hover:text-white transition-colors">{lang === "en" ? "Terms of Service" : "服务条款"}</Link>

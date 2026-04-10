@@ -333,11 +333,9 @@ function LoginPageContent() {
         <div className="hidden lg:flex flex-col flex-1 p-12 lg:p-20 justify-center">
         <div className="max-w-xl">
           {/* Logo */}
-          <img
-            src="/images/toryx_logo_text.png"
-            alt="ToryX AI"
-            className="h-14 mb-12 drop-shadow-[0_0_30px_rgba(16,185,129,0.4)]"
-          />
+          <span className="text-3xl font-bold text-white mb-12 block drop-shadow-[0_0_30px_rgba(16,185,129,0.4)]">
+            Star Gaze<br />Cultural Media
+          </span>
           
           {/* 大标题 */}
           <h1 className="text-5xl lg:text-6xl font-bold tracking-tight mb-6 leading-tight">
@@ -391,7 +389,7 @@ function LoginPageContent() {
           
           {/* 移动端显示的 Logo */}
           <div className="flex justify-center mb-8 lg:hidden">
-            <img src="/images/toryx_logo_text.png" alt="ToryX AI" className="h-10 drop-shadow-[0_0_20px_rgba(16,185,129,0.3)]" />
+            <span className="text-xl font-bold text-white drop-shadow-[0_0_20px_rgba(16,185,129,0.3)]">Star Gaze</span>
           </div>
 
           {/* 表单头部 */}
@@ -400,7 +398,7 @@ function LoginPageContent() {
               {lang === "en" ? "Welcome Back" : "欢迎回来"}
             </h2>
             <p className="text-sm text-white/40">
-              {lang === "en" ? "Sign in to your ToryX account" : "登录您的 ToryX 账号以继续"}
+              {lang === "en" ? "Sign in to your account" : "登录您的账号以继续"}
             </p>
           </div>
 

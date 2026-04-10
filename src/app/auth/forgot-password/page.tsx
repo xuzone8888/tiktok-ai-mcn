@@ -127,7 +127,7 @@ export default function ForgotPasswordPage() {
                 </p>
                 <ol className="text-sm text-white/40 space-y-1 list-decimal list-inside">
                   <li>{lang === "en" ? "Open your inbox (including spam)" : "打开您的邮箱（包括垃圾邮件文件夹）"}</li>
-                  <li>{lang === "en" ? "Find the email from ToryX" : "找到来自 ToryX 的密码重置邮件"}</li>
+                  <li>{lang === "en" ? "Find the password reset email in your inbox" : "找到密码重置邮件"}</li>
                   <li>{lang === "en" ? 'Click the "Reset Password" link' : '点击邮件中的"重置密码"链接'}</li>
                   <li>{lang === "en" ? "Set your new password" : "设置新密码即可"}</li>
                 </ol>
@@ -166,11 +166,9 @@ export default function ForgotPasswordPage() {
           <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-white/30 to-transparent opacity-50" />
 
           <div className="flex justify-center mb-6">
-            <img
-              src="/images/toryx_logo_text.png"
-              alt="ToryX AI"
-              className="h-10 drop-shadow-[0_0_20px_rgba(16,185,129,0.3)]"
-            />
+            <span className="text-xl font-bold text-white drop-shadow-[0_0_20px_rgba(16,185,129,0.3)]">
+              Star Gaze
+            </span>
           </div>
 
           <div className="text-center mb-6">

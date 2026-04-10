@@ -348,7 +348,7 @@ export function Sidebar() {
           collapsed ? "w-20" : "w-[260px]"
         )}
       >
-        {/* Final Brand Header - ToryX Hyper Glass */}
+        {/* Brand Header - Star Gaze */}
         <div className={cn(
           "flex items-center border-b border-white/5 bg-[#0B0C10] transition-all duration-300 relative overflow-hidden group/header",
           collapsed ? "justify-center h-16 w-full" : "h-20 px-5"
@@ -360,7 +360,7 @@ export function Sidebar() {
             {/* Icon Logo - Always visible */}
             <img
               src="/images/toryx_logo_icon_new.png"
-              alt="ToryX"
+              alt="Star Gaze"
               className={cn(
                 "drop-shadow-[0_0_15px_rgba(16,185,129,0.4)] rounded-xl",
                 collapsed ? "h-10 w-10" : "h-10 w-10"
@@ -368,11 +368,9 @@ export function Sidebar() {
             />
             {/* Text Logo - Only when expanded */}
             {!collapsed && (
-              <img
-                src="/images/toryx_logo_text.png"
-                alt="ToryX AI"
-                className="h-7 drop-shadow-[0_0_12px_rgba(16,185,129,0.3)]"
-              />
+              <span className="text-sm font-bold leading-tight text-white drop-shadow-[0_0_12px_rgba(16,185,129,0.3)]">
+                Star Gaze<br />Cultural Media
+              </span>
             )}
           </Link>
         </div>
@@ -416,7 +414,7 @@ export function Sidebar() {
         )}>
           {!collapsed ? (
             <div className="flex items-center justify-between text-[10px] text-white/30">
-              <span>© 2026 ToryX</span>
+              <span>© {new Date().getFullYear()} Star Gaze · Wuhan Guanxing Cultural Media Co., Ltd.</span>
               <span>v1.0</span>
             </div>
           ) : (

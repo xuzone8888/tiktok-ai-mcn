@@ -26,7 +26,7 @@ export default function TermsPage() {
                 <Sparkles className="h-6 w-6 text-white" />
               </div>
               <div className="flex flex-col">
-                <span className="text-xl font-bold text-white">ToryX</span>
+                <span className="text-xl font-bold text-white">Star Gaze</span>
                 <span className="text-[10px] text-gray-500 tracking-wider uppercase">
                   AI 内容智造工厂
                 </span>
@@ -81,13 +81,13 @@ export default function TermsPage() {
                     <ul className="space-y-2 text-sm text-gray-400">
                       {lang === "en" ? (
                         <>
-                          <li>1.1 By accessing or using ToryX platform, you agree to be bound by these Terms of Service.</li>
+                          <li>1.1 By accessing or using Star Gaze platform, you agree to be bound by these Terms of Service.</li>
                           <li>1.2 If you do not agree to these terms, please do not use our services.</li>
                           <li>1.3 We reserve the right to modify these terms at any time. Continued use constitutes acceptance of changes.</li>
                         </>
                       ) : (
                         <>
-                          <li>1.1 访问或使用 ToryX 平台即表示您同意接受本服务条款的约束。</li>
+                          <li>1.1 访问或使用 Star Gaze 平台即表示您同意接受本服务条款的约束。</li>
                           <li>1.2 如果您不同意这些条款，请勿使用我们的服务。</li>
                           <li>1.3 我们保留随时修改这些条款的权利，继续使用即表示接受更改。</li>
                         </>
@@ -224,13 +224,13 @@ export default function TermsPage() {
                     <ul className="space-y-2 text-sm text-gray-400">
                       {lang === "en" ? (
                         <>
-                          <li>6.1 ToryX platform, including all software, designs, and content, is owned by Wuhan Guanxing Cultural Media Co., Ltd.</li>
+                          <li>6.1 Star Gaze platform, including all software, designs, and content, is owned by Wuhan Guanxing Cultural Media Co., Ltd.</li>
                           <li>6.2 You may not copy, modify, or distribute our platform without written permission.</li>
                           <li>6.3 User-generated content remains the property of the user, subject to our license to host and display it.</li>
                         </>
                       ) : (
                         <>
-                          <li>6.1 ToryX 平台（包括所有软件、设计和内容）由武汉观星文化传媒有限公司所有。</li>
+                          <li>6.1 Star Gaze 平台（包括所有软件、设计和内容）由武汉观星文化传媒有限公司所有。</li>
                           <li>6.2 未经书面许可，您不得复制、修改或分发我们的平台。</li>
                           <li>6.3 用户生成的内容仍归用户所有，但受我们托管和展示许可的约束。</li>
                         </>

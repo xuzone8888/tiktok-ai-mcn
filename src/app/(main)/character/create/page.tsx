@@ -31,7 +31,7 @@ export default function CharacterCreatePage() {
 
   // 页面标题
   useEffect(() => {
-    document.title = "创建角色 | ToryX AI MCN";
+    document.title = "创建角色 | Star Gaze";
   }, []);
 
   // 获取用户 ID 和积分

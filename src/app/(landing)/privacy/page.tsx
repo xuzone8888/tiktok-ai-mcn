@@ -20,11 +20,9 @@ export default function PrivacyPage() {
         <div className="container max-w-7xl mx-auto px-6 py-4">
           <nav className="flex items-center justify-between">
             <Link href="/" className="flex items-center gap-3">
-              <img
-                src="/images/toryx_logo_text.png"
-                alt="ToryX AI"
-                className="h-8 drop-shadow-[0_0_15px_rgba(16,185,129,0.3)]"
-              />
+              <span className="text-lg font-bold text-white drop-shadow-[0_0_15px_rgba(16,185,129,0.3)]">
+                Star Gaze
+              </span>
             </Link>
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-2 bg-white/10 rounded-lg p-1">
@@ -40,9 +38,9 @@ export default function PrivacyPage() {
       <main className="relative z-10 py-16">
         <div className="container max-w-4xl mx-auto px-6">
           <div className="mb-12">
-            <h1 className="text-4xl font-bold mb-4">{lang === "en" ? "Privacy Policy" : "隐私政策"}</h1>
-            <p className="text-gray-400">{lang === "en" ? "Updated Date: March 17, 2026" : "更新日期：2026年3月17日"}</p>
-            <p className="text-gray-400">{lang === "en" ? "Effective Date: March 17, 2026" : "生效日期：2026年3月17日"}</p>
+            <h1 className="text-4xl font-bold mb-4">{lang === "en" ? "Privacy Policy - Wuhan Guanxing Cultural Media Co., Ltd. (Star Gaze)" : "隐私政策 - 武汉观星文化传媒有限公司 (Star Gaze)"}</h1>
+            <p className="text-gray-400">{lang === "en" ? "Updated Date: April 10, 2026" : "更新日期：2026年4月10日"}</p>
+            <p className="text-gray-400">{lang === "en" ? "Effective Date: April 10, 2026" : "生效日期：2026年4月10日"}</p>
           </div>
 
           <div className="space-y-6 text-gray-300">
@@ -52,8 +50,9 @@ export default function PrivacyPage() {
                 <div className="p-3 rounded-lg bg-cyan-500/10 text-cyan-400 shrink-0"><FileText className="h-6 w-6" /></div>
                 <div>
                   <h2 className="text-xl font-bold text-white mb-3">{lang === "en" ? "Introduction" : "引言"}</h2>
-                  <p className="leading-relaxed">{lang === "en" ? '"ToryX" refers to the client application labeled "ToryX (AI Content Manufacturing Factory)" and the official website, as well as the Software Development Kit (SDK) and Application Programming Interface (API) for third-party websites and applications, legally owned and operated by Wuhan Guanxing Cultural Media Co., Ltd. and its affiliates (hereinafter referred to as "we").' : '"ToryX"是指武汉观星文化传媒有限公司及其关联方（以下简称"我们"）依法拥有并运营的标注名称为"ToryX（AI内容制造工厂）"的客户端应用程序及官方网站，以及为第三方网站和应用程序提供的软件开发工具包（SDK）和应用程序编程接口（API）。'}</p>
-                  <p className="leading-relaxed mt-3">{lang === "en" ? 'As the operator of ToryX, we are fully aware of the importance of personal information to you, and we will protect your personal information and privacy security in accordance with laws and regulations. We have formulated this Privacy Policy and specially prompt you: We hope you carefully read and understand this Privacy Policy before using ToryX and related services so as to make appropriate choices.' : '作为ToryX的运营者，我们充分意识到个人信息对您的重要性，我们将依法保护您的个人信息和隐私安全。我们特制定本隐私政策并特别提示您：希望您在使用ToryX及相关服务前仔细阅读并理解本隐私政策，以做出适当的选择。'}</p>
+                  <p className="leading-relaxed font-semibold text-white/80 mb-4">{lang === "en" ? 'This Privacy Policy explains how Wuhan Guanxing Cultural Media Co., Ltd. ("Company", "we", "us"), operating under the brand name Star Gaze, collects, uses, stores, and protects personal information when users access our website, services, and TikTok-related integrations.' : '本隐私政策说明武汉观星文化传媒有限公司（以下简称"本公司"）作为 Star Gaze 品牌运营方，在用户访问本网站、使用本服务及相关 TikTok 集成能力时，如何收集、使用、存储和保护个人信息。'}</p>
+                  <p className="leading-relaxed">{lang === "en" ? '"Star Gaze" refers to the client application labeled "Star Gaze" and the official website, as well as the Software Development Kit (SDK) and Application Programming Interface (API) for third-party websites and applications, legally owned and operated by Wuhan Guanxing Cultural Media Co., Ltd. and its affiliates (hereinafter referred to as "we").' : '"Star Gaze"是指武汉观星文化传媒有限公司及其关联方（以下简称"我们"）依法拥有并运营的标注名称为"Star Gaze"的客户端应用程序及官方网站，以及为第三方网站和应用程序提供的软件开发工具包（SDK）和应用程序编程接口（API）。'}</p>
+                  <p className="leading-relaxed mt-3">{lang === "en" ? 'As the operator of Star Gaze, we are fully aware of the importance of personal information to you, and we will protect your personal information and privacy security in accordance with laws and regulations. We have formulated this Privacy Policy and specially prompt you: We hope you carefully read and understand this Privacy Policy before using Star Gaze and related services so as to make appropriate choices.' : '作为 Star Gaze 的运营者，我们充分意识到个人信息对您的重要性，我们将依法保护您的个人信息和隐私安全。我们特制定本隐私政策并特别提示您：希望您在使用 Star Gaze 及相关服务前仔细阅读并理解本隐私政策，以做出适当的选择。'}</p>
                 </div>
               </div>
             </ReflectiveCard>
@@ -64,7 +63,7 @@ export default function PrivacyPage() {
                 <div className="p-3 rounded-lg bg-purple-500/10 text-purple-400 shrink-0"><BookOpen className="h-6 w-6" /></div>
                 <div>
                   <h2 className="text-xl font-bold text-white mb-3">{lang === "en" ? "Summary" : "摘要"}</h2>
-                  <p className="leading-relaxed">{lang === "en" ? 'We will introduce to you how we handle personal information in different scenarios through this Privacy Policy. When you open or use ToryX, to implement the functions and services you choose to use, or to comply with laws and regulations, we will handle relevant information. Except for information necessary for ToryX\'s basic functions and services, and information required by laws and regulations, you can refuse our processing of other information, but this may result in our inability to provide corresponding functions and services.' : '我们将通过本隐私政策向您介绍我们如何在不同场景中处理个人信息。当您打开或使用ToryX时，为了实现您选择使用的功能和服务，或为了遵守法律法规，我们会处理相关信息。除ToryX基本功能和服务所必需的信息以及法律法规要求的信息外，您可以拒绝我们处理其他信息，但这可能导致我们无法提供相应的功能和服务。'}</p>
+                  <p className="leading-relaxed">{lang === "en" ? 'We will introduce to you how we handle personal information in different scenarios through this Privacy Policy. When you open or use Star Gaze, to implement the functions and services you choose to use, or to comply with laws and regulations, we will handle relevant information. Except for information necessary for Star Gaze\'s basic functions and services, and information required by laws and regulations, you can refuse our processing of other information, but this may result in our inability to provide corresponding functions and services.' : '我们将通过本隐私政策向您介绍我们如何在不同场景中处理个人信息。当您打开或使用 Star Gaze 时，为了实现您选择使用的功能和服务，或为了遵守法律法规，我们会处理相关信息。除Star Gaze 基本功能和服务所必需的信息以及法律法规要求的信息外，您可以拒绝我们处理其他信息，但这可能导致我们无法提供相应的功能和服务。'}</p>
                   <p className="leading-relaxed mt-3">{lang === "en" ? 'Important terms regarding your personal information rights and interests are prompted in bold, please pay special attention. The following text will help you understand in detail how we collect, use, store, transfer, disclose, and protect personal information; and help you understand the ways to query, correct, supplement, delete, copy, and transfer personal information.' : '涉及您个人信息权益的重要条款以加粗形式提示，请特别关注。以下内容将帮助您详细了解我们如何收集、使用、存储、传输、披露和保护个人信息；并帮助您了解查询、更正、补充、删除、复制和转移个人信息的方式。'}</p>
                 </div>
               </div>
@@ -79,14 +78,14 @@ export default function PrivacyPage() {
 
                   <h3 className="text-lg font-medium text-white mt-4 mb-2">{lang === "en" ? "1.1 Account Service" : "1.1 账户服务"}</h3>
                   <p className="leading-relaxed font-medium">{lang === "en" ? "1.1.1 Registration and Login" : "1.1.1 注册和登录"}</p>
-                  <p className="leading-relaxed mt-2">{lang === "en" ? 'When you register, log in to ToryX, and use related services, you can create an account via mobile phone number or email, and you can complete relevant network identity identification information (name, avatar, password). Collecting mobile phone numbers is necessary to perform national laws and regulations on network real-name registration.' : '当您注册、登录ToryX并使用相关服务时，您可以通过手机号码或邮箱创建账户，并可以完成相关网络身份识别信息（姓名、头像、密码）。收集手机号码是履行国家网络实名注册法律法规的必要条件。'}</p>
-                  <p className="leading-relaxed mt-2">{lang === "en" ? 'You can register and log in to ToryX using third-party accounts, but you need to authorize us to obtain your information on the third-party platform (avatar, nickname, and other public information) to generate a ToryX account bound to that third-party account.' : '您可以使用第三方账户注册和登录ToryX，但需要授权我们获取您在第三方平台上的信息（头像、昵称等公开信息），以生成绑定到该第三方账户的ToryX账户。'}</p>
+                  <p className="leading-relaxed mt-2">{lang === "en" ? 'When you register, log in to Star Gaze, and use related services, you can create an account via mobile phone number or email, and you can complete relevant network identity identification information (name, avatar, password). Collecting mobile phone numbers is necessary to perform national laws and regulations on network real-name registration.' : '当您注册、登录 Star Gaze并使用相关服务时，您可以通过手机号码或邮箱创建账户，并可以完成相关网络身份识别信息（姓名、头像、密码）。收集手机号码是履行国家网络实名注册法律法规的必要条件。'}</p>
+                  <p className="leading-relaxed mt-2">{lang === "en" ? 'You can register and log in to Star Gaze using third-party accounts, but you need to authorize us to obtain your information on the third-party platform (avatar, nickname, and other public information) to generate a Star Gaze account bound to that third-party account.' : '您可以使用第三方账户注册和登录 Star Gaze，但需要授权我们获取您在第三方平台上的信息（头像、昵称等公开信息），以生成绑定到该第三方账户的 Star Gaze 账户。'}</p>
 
                   <p className="leading-relaxed font-medium mt-4">{lang === "en" ? "1.1.2 Real-name Authentication" : "1.1.2 实名认证"}</p>
                   <p className="leading-relaxed mt-2">{lang === "en" ? 'When you use functions or services requiring real-name authentication, to comply with relevant legal and regulatory requirements, you need to provide real identity information (real name, ID number, or facial information) to complete real-name authentication.' : '当您使用需要实名认证的功能或服务时，为遵守相关法律法规要求，您需要提供真实身份信息（真实姓名、身份证号码或人脸信息）以完成实名认证。'}</p>
 
                   <h3 className="text-lg font-medium text-white mt-4 mb-2">{lang === "en" ? "1.2 Content Generation and Browsing" : "1.2 内容生成和浏览"}</h3>
-                  <p className="leading-relaxed">{lang === "en" ? 'During your use of ToryX to generate or browse content, we will record your usage. When you use search, we will collect your search keyword information and log records. When providing location-based content or services, with your authorization, we will use geographic location information.' : '在您使用ToryX生成或浏览内容期间，我们会记录您的使用情况。当您使用搜索时，我们会收集您的搜索关键词信息和日志记录。在提供基于位置的内容或服务时，经您授权，我们会使用地理位置信息。'}</p>
+                  <p className="leading-relaxed">{lang === "en" ? 'During your use of Star Gaze to generate or browse content, we will record your usage. When you use search, we will collect your search keyword information and log records. When providing location-based content or services, with your authorization, we will use geographic location information.' : '在您使用 Star Gaze 生成或浏览内容期间，我们会记录您的使用情况。当您使用搜索时，我们会收集您的搜索关键词信息和日志记录。在提供基于位置的内容或服务时，经您授权，我们会使用地理位置信息。'}</p>
 
                   <h3 className="text-lg font-medium text-white mt-4 mb-2">{lang === "en" ? "1.3 Other Functions" : "1.3 其他功能"}</h3>
                   <ul className="list-disc pl-6 space-y-2 text-gray-300 text-sm">
@@ -138,7 +137,7 @@ export default function PrivacyPage() {
                   <p className="leading-relaxed">{lang === "en" ? 'We guarantee your rights to query, copy, correct, supplement, delete, withdraw consent, and cancel your account regarding personal information.' : '我们保障您对个人信息的查询、复制、更正、补充、删除、撤回同意和注销账户的权利。'}</p>
                   <p className="leading-relaxed mt-3">{lang === "en" ? 'You can manage your personal information through the settings function in the application or by contacting customer service.' : '您可以通过应用程序中的设置功能或联系客服来管理您的个人信息。'}</p>
                   <p className="leading-relaxed mt-3">{lang === "en" ? 'For account cancellation, you can find the cancellation entrance in "Settings - Account Security". After cancellation, we will delete or anonymize your relevant data.' : '对于账户注销，您可以在"设置 - 账户安全"中找到注销入口。注销后，我们将删除或匿名化您的相关数据。'}</p>
-                  <p className="leading-relaxed mt-3">{lang === "en" ? '3.4 TikTok Authorization Revocation: You may revoke ToryX\'s access to your TikTok account at any time through your TikTok account settings. Once authorization is revoked, we will delete all associated TikTok data (including access tokens and user identifiers) within 30 days.' : '3.4 TikTok 授权撤回：您可以随时通过 TikTok 账户设置撤回 ToryX 对您 TikTok 账户的访问授权。授权撤回后，我们将在 30 天内删除所有相关的 TikTok 数据（包括访问令牌和用户标识符）。'}</p>
+                  <p className="leading-relaxed mt-3">{lang === "en" ? '3.4 TikTok Authorization Revocation: You may revoke Star Gaze\'s access to your TikTok account at any time through your TikTok account settings. Once authorization is revoked, we will delete all associated TikTok data (including access tokens and user identifiers) within 30 days.' : '3.4 TikTok 授权撤回：您可以随时通过 TikTok 账户设置撤回 Star Gaze 对您 TikTok 账户的访问授权。授权撤回后，我们将在 30 天内删除所有相关的 TikTok 数据（包括访问令牌和用户标识符）。'}</p>
                 </div>
               </div>
             </ReflectiveCard>
@@ -191,7 +190,7 @@ export default function PrivacyPage() {
                 <div className="p-3 rounded-lg bg-indigo-500/10 text-indigo-400 shrink-0"><RefreshCw className="h-6 w-6" /></div>
                 <div>
                   <h2 className="text-xl font-bold text-white mb-3">{lang === "en" ? "7. Access and Revision of Privacy Policy" : "七、隐私政策的访问和修订"}</h2>
-                  <p className="leading-relaxed"><strong>{lang === "en" ? "7.1 Access:" : "7.1 访问："}</strong> {lang === "en" ? "You can view this Privacy Policy in the footer of the ToryX website or in the application settings." : "您可以在ToryX网站页脚或应用程序设置中查看本隐私政策。"}</p>
+                  <p className="leading-relaxed"><strong>{lang === "en" ? "7.1 Access:" : "7.1 访问："}</strong> {lang === "en" ? "You can view this Privacy Policy in the footer of the Star Gaze website or in the application settings." : "您可以在Star Gaze 网站页脚或应用程序设置中查看本隐私政策。"}</p>
                   <p className="leading-relaxed mt-3"><strong>{lang === "en" ? "7.2 Updates:" : "7.2 更新："}</strong> {lang === "en" ? "We will revise this policy in due course and notify you through announcements or internal messages." : "我们将适时修订本政策，并通过公告或站内消息通知您。"}</p>
                 </div>
               </div>
@@ -204,9 +203,10 @@ export default function PrivacyPage() {
                 <div className="p-3 rounded-lg bg-violet-500/10 text-violet-400 shrink-0"><ShoppingBag className="h-6 w-6" /></div>
                 <div>
                   <h2 className="text-xl font-bold text-white mb-3">{lang === "en" ? "8. TikTok Platform Data Integration" : "八、TikTok 平台数据集成"}</h2>
+                  <p className="leading-relaxed mb-3 text-sm bg-white/5 rounded-lg p-3 border border-white/10">{lang === "en" ? 'Note: Star Gaze is registered as "Wuhan Guanxing Cultural Media" on TikTok for Developers (Content Posting API), and used under the TikTok Shop service provider account name "Star Gaze".' : '说明：Star Gaze 在 TikTok for Developers（内容发布 API）的注册应用名称为 "Wuhan Guanxing Cultural Media"，在 TikTok Shop 的服务商账户名称为 "Star Gaze"。'}</p>
 
                   <h3 className="text-lg font-medium text-white mt-4 mb-2">{lang === "en" ? "8.1 OAuth Authorization" : "8.1 OAuth 授权"}</h3>
-                  <p className="leading-relaxed">{lang === "en" ? 'ToryX integrates with TikTok via OAuth 2.0 authorization. Depending on the features you use, you may authorize the following permissions:' : 'ToryX 通过 OAuth 2.0 授权与 TikTok 集成。根据您使用的功能，您可能授权以下权限：'}</p>
+                  <p className="leading-relaxed">{lang === "en" ? 'Star Gaze integrates with TikTok via OAuth 2.0 authorization. Depending on the features you use, you may authorize the following permissions:' : 'Star Gaze 通过 OAuth 2.0 授权与 TikTok 集成。根据您使用的功能，您可能授权以下权限：'}</p>
                   <p className="leading-relaxed mt-3 text-sm text-gray-400">{lang === "en" ? 'Content Posting API (TikTok for Developers):' : '内容发布 API (TikTok for Developers)：'}</p>
                   <ul className="list-disc pl-6 space-y-2 mt-1 text-gray-300">
                     <li><strong>video.publish</strong> — {lang === "en" ? "Permission to directly post videos and photos to your TikTok account" : "直接向您的 TikTok 账户发布视频和图片的权限"}</li>
@@ -221,7 +221,7 @@ export default function PrivacyPage() {
 
                   <h3 className="text-lg font-medium text-white mt-4 mb-2">{lang === "en" ? "8.2 Data We Access" : "8.2 我们访问的数据"}</h3>
                   <ul className="list-disc pl-6 space-y-2 mt-3 text-gray-300">
-                    <li><strong>{lang === "en" ? "Basic Profile:" : "基本个人资料："}</strong> {lang === "en" ? "Username, display name, avatar (for identifying connected accounts within ToryX)" : "用户名、显示名称、头像（用于在 ToryX 内识别已连接的账号）"}</li>
+                    <li><strong>{lang === "en" ? "Basic Profile:" : "基本个人资料："}</strong> {lang === "en" ? "Username, display name, avatar (for identifying connected accounts within Star Gaze)" : "用户名、显示名称、头像（用于在 Star Gaze 内识别已连接的账号）"}</li>
                     <li><strong>{lang === "en" ? "Content Publishing (Direct Post):" : "内容发布（Direct Post）："}</strong> {lang === "en" ? "We directly publish AI-generated videos and photos to your TikTok account on your behalf, with your confirmation" : "经您确认后，我们代您将 AI 生成的视频和图片直接发布到您的 TikTok 账户"}</li>
                     <li><strong>{lang === "en" ? "Showcase Products (TikTok Shop):" : "橱窗商品 (TikTok Shop)："}</strong> {lang === "en" ? "Product ID, name, price, commission rate, images (to enable product selection for shoppable video creation)" : "商品 ID、名称、价格、佣金率、图片（用于带货视频创作时的商品选择）"}</li>
                     <li><strong>{lang === "en" ? "Shoppable Video Publishing:" : "带货视频发布："}</strong> {lang === "en" ? "We upload and publish shoppable content with product links to TikTok on your behalf" : "我们代您上传并发布带商品链接的带货内容到 TikTok"}</li>
@@ -229,7 +229,7 @@ export default function PrivacyPage() {
 
                   <h3 className="text-lg font-medium text-white mt-4 mb-2">{lang === "en" ? "8.3 How We Use This Data" : "8.3 数据使用方式"}</h3>
                   <ul className="list-disc pl-6 space-y-2 mt-3 text-gray-300">
-                    <li>{lang === "en" ? "Basic profile information is displayed within ToryX to identify connected accounts" : "基本个人资料信息在 ToryX 内展示，用于标识已连接的账号"}</li>
+                    <li>{lang === "en" ? "Basic profile information is displayed within Star Gaze to identify connected accounts" : "基本个人资料信息在 Star Gaze 内展示，用于标识已连接的账号"}</li>
                     <li>{lang === "en" ? "AI-generated videos are published directly to your TikTok account via the Content Posting API (Direct Post mode)" : "AI 生成的视频通过内容发布 API（Direct Post 模式）直接发布到您的 TikTok 账户"}</li>
                     <li>{lang === "en" ? "Showcase product data is used to help you select products for shoppable video creation" : "橱窗商品数据用于帮助您选择商品进行带货视频创作"}</li>
                     <li>{lang === "en" ? "Video files are temporarily processed on our servers and uploaded to TikTok, then deleted from our servers" : "视频文件在我们的服务器上临时处理并上传至 TikTok，然后从我们的服务器中删除"}</li>
@@ -253,9 +253,9 @@ export default function PrivacyPage() {
                 <div className="p-3 rounded-lg bg-fuchsia-500/10 text-fuchsia-400 shrink-0"><Cpu className="h-6 w-6" /></div>
                 <div>
                   <h2 className="text-xl font-bold text-white mb-3">{lang === "en" ? "9. AIGC Content Disclosure" : "九、AIGC 内容披露"}</h2>
-                  <p className="leading-relaxed">{lang === "en" ? 'ToryX is an AI-powered content creation platform. Videos generated through our platform are created using artificial intelligence technology, including AI-generated characters, voiceovers, and scripts.' : 'ToryX 是一个 AI 驱动的内容创作平台。通过我们平台生成的视频使用人工智能技术创建，包括 AI 生成的角色、配音和脚本。'}</p>
-                  <p className="leading-relaxed mt-3">{lang === "en" ? 'In compliance with TikTok\'s content policies, all AI-generated videos published through ToryX to TikTok will be automatically labeled as AIGC (AI-Generated Content). This labeling ensures transparency and compliance with platform regulations regarding synthetic media.' : '为遵守 TikTok 的内容政策，通过 ToryX 发布到 TikTok 的所有 AI 生成视频将自动标注为 AIGC（AI 生成内容）。此标注确保了合成媒体相关平台法规的透明度和合规性。'}</p>
-                  <p className="leading-relaxed mt-3">{lang === "en" ? 'Users acknowledge and agree that AI-generated content published through ToryX will carry appropriate AIGC disclosures as required by applicable platform rules and regulations.' : '用户确认并同意，通过 ToryX 发布的 AI 生成内容将按照适用的平台规则和法规附带适当的 AIGC 披露标注。'}</p>
+                  <p className="leading-relaxed">{lang === "en" ? 'Star Gaze is an AI-powered content creation platform. Videos generated through our platform are created using artificial intelligence technology, including AI-generated characters, voiceovers, and scripts.' : 'Star Gaze 是一个 AI 驱动的内容创作平台。通过我们平台生成的视频使用人工智能技术创建，包括 AI 生成的角色、配音和脚本。'}</p>
+                  <p className="leading-relaxed mt-3">{lang === "en" ? 'In compliance with TikTok\'s content policies, all AI-generated videos published through Star Gaze to TikTok will be automatically labeled as AIGC (AI-Generated Content). This labeling ensures transparency and compliance with platform regulations regarding synthetic media.' : '为遵守 TikTok 的内容政策，通过 Star Gaze 发布到 TikTok 的所有 AI 生成视频将自动标注为 AIGC（AI 生成内容）。此标注确保了合成媒体相关平台法规的透明度和合规性。'}</p>
+                  <p className="leading-relaxed mt-3">{lang === "en" ? 'Users acknowledge and agree that AI-generated content published through Star Gaze will carry appropriate AIGC disclosures as required by applicable platform rules and regulations.' : '用户确认并同意，通过 Star Gaze 发布的 AI 生成内容将按照适用的平台规则和法规附带适当的 AIGC 披露标注。'}</p>
                 </div>
               </div>
             </ReflectiveCard>
@@ -266,7 +266,7 @@ export default function PrivacyPage() {
                 <div className="p-3 rounded-lg bg-emerald-500/10 text-emerald-400 shrink-0"><ExternalLink className="h-6 w-6" /></div>
                 <div>
                   <h2 className="text-xl font-bold text-white mb-3">{lang === "en" ? "10. Third-Party Services" : "十、第三方服务"}</h2>
-                  <p className="leading-relaxed">{lang === "en" ? 'When ToryX integrates third-party services, it will follow the data policies of relevant platforms.' : '当 ToryX 集成第三方服务时，将遵循相关平台的数据政策。'}</p>
+                  <p className="leading-relaxed">{lang === "en" ? 'When Star Gaze integrates third-party services, it will follow the data policies of relevant platforms.' : '当 Star Gaze 集成第三方服务时，将遵循相关平台的数据政策。'}</p>
                   <ul className="list-disc pl-6 space-y-2 mt-3 text-gray-300">
                     <li>{lang === "en" ? "TikTok: " : "TikTok："}<Link href="https://www.tiktok.com/legal/privacy-policy?lang=en" target="_blank" className="text-cyan-400 hover:underline">{lang === "en" ? "TikTok Privacy Policy" : "TikTok 隐私政策"}</Link></li>
                     <li>{lang === "en" ? "TikTok Developer: " : "TikTok 开发者："}<Link href="https://www.tiktok.com/legal/tik-tok-developer-terms-of-service?lang=en" target="_blank" className="text-cyan-400 hover:underline">{lang === "en" ? "TikTok Developer Terms of Service" : "TikTok 开发者服务条款"}</Link></li>
@@ -315,7 +315,7 @@ export default function PrivacyPage() {
       <footer className="relative z-10 border-t border-white/5 py-8 bg-black/30">
         <div className="container max-w-7xl mx-auto px-6">
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-            <div className="text-gray-500 text-sm">© {new Date().getFullYear()} {lang === "en" ? "Wuhan Guanxing Cultural Media Co., Ltd. All Rights Reserved" : "武汉观星文化传媒有限公司 版权所有"}</div>
+            <div className="text-gray-500 text-sm">© {new Date().getFullYear()} {lang === "en" ? "Star Gaze by Wuhan Guanxing Cultural Media Co., Ltd. All Rights Reserved" : "Star Gaze · 武汉观星文化传媒有限公司 版权所有"}</div>
             <div className="flex items-center gap-6 text-gray-500 text-sm">
               <Link href="/terms" className="hover:text-white transition-colors">{lang === "en" ? "Terms" : "服务条款"}</Link>
               <Link href="/privacy" className="hover:text-white transition-colors">{lang === "en" ? "Privacy" : "隐私政策"}</Link>

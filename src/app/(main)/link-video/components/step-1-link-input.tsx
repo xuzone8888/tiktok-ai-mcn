@@ -70,7 +70,7 @@ const EXTRACT_SCRIPT = `
   // 复制到剪贴板
   const json = JSON.stringify(data, null, 2);
   navigator.clipboard.writeText('TORYX_DATA:' + json);
-  alert('商品数据已复制！请返回 ToryX 粘贴');
+  alert('商品数据已复制！请返回平台粘贴');
   return data;
 })();
 `;
@@ -483,7 +483,7 @@ export function Step1LinkInput() {
                   className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-amber-500 to-orange-500 text-white font-medium shadow-lg hover:shadow-xl transition-all text-sm"
                 >
                   <Star className="h-4 w-4" />
-                  ToryX 提取器（右键添加）
+                  Star Gaze 提取器（右键添加）
                 </a>
               </div>
               <p className="text-xs text-center text-muted-foreground">

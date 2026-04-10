@@ -12,6 +12,7 @@
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import { initVideoPublishFromUrl, waitForPublishComplete } from '@/lib/tiktok/content-posting'
+import { refreshAccessToken } from '@/lib/tiktok/oauth'
 
 // ============================================================================
 // 配置常量
@@ -77,6 +78,7 @@ interface PublishItem {
 interface Account {
     id: string
     access_token: string
+    refresh_token: string
 }
 
 /** 处理结果 */
@@ -153,14 +155,17 @@ export async function processPublishQueue(options: ProcessOptions): Promise<Proc
             return result
         }
 
-        // 3. 锁定任务项（状态改为 processing）
+        // 3. 发布前统一刷新所有涉及账号的 access_token
+        await refreshAccountTokens(supabase, accounts)
+
+        // 4. 锁定任务项（状态改为 processing）
         await lockItems(supabase, items.map(i => i.id))
 
-        // 4. 更新父任务状态为 processing
+        // 5. 更新父任务状态为 processing
         const taskIds = [...new Set(items.map(item => item.task_id))]
         await updateTasksToProcessing(supabase, taskIds)
 
-        // 5. 按 scheduled_at 时间顺序处理（支持间隔发布）
+        // 6. 按 scheduled_at 时间顺序处理（支持间隔发布）
         // 在"立即发布+间隔"模式下，等待直到每个任务的 scheduled_at 时间
         for (const item of items) {
             // 计算需要等待的时间
@@ -185,7 +190,7 @@ export async function processPublishQueue(options: ProcessOptions): Promise<Proc
             }
         }
 
-        // 6. 更新父任务最终状态
+        // 7. 更新父任务最终状态
         for (const taskId of taskIds) {
             await updateTaskFinalStatus(supabase, taskId)
         }
@@ -266,7 +271,7 @@ async function getAccounts(
 ): Promise<Map<string, Account>> {
     const { data, error } = await supabase
         .from('tiktok_accounts')
-        .select('id, access_token')
+        .select('id, access_token, refresh_token')
         .in('id', accountIds)
 
     if (error || !data) {
@@ -275,6 +280,43 @@ async function getAccounts(
     }
 
     return new Map(data.map(a => [a.id, a]))
+}
+
+/**
+ * 发布前统一刷新所有账号的 access_token
+ * 
+ * TikTok access_token 有效期仅 ~24h，但数据库 token_expires_at 存的是 refresh_token 的 90 天寿命，
+ * 无法可靠判断 access_token 是否过期。因此每次发布前统一刷新，确保 token 有效。
+ */
+async function refreshAccountTokens(
+    supabase: ReturnType<typeof createAdminClient>,
+    accounts: Map<string, Account>
+): Promise<void> {
+    for (const [accountId, account] of accounts) {
+        try {
+            console.log(`[Publisher] Refreshing token for account ${accountId}`)
+            const tokenResponse = await refreshAccessToken(account.refresh_token)
+
+            // 更新内存中的 token
+            account.access_token = tokenResponse.access_token
+            account.refresh_token = tokenResponse.refresh_token
+
+            // 写回数据库
+            await supabase
+                .from('tiktok_accounts')
+                .update({
+                    access_token: tokenResponse.access_token,
+                    refresh_token: tokenResponse.refresh_token,
+                    updated_at: new Date().toISOString(),
+                })
+                .eq('id', accountId)
+
+            console.log(`[Publisher] Token refreshed for account ${accountId}`)
+        } catch (error) {
+            console.error(`[Publisher] Failed to refresh token for account ${accountId}:`, error)
+            // 刷新失败不阻塞其他账号，但该账号的发布会在 publishItem 中失败
+        }
+    }
 }
 
 /**

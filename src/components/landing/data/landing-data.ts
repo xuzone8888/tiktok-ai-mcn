@@ -221,7 +221,7 @@ export const comparisonData = {
         total: "7 天",
     },
     toryx: {
-        label: "ToryX AI 角色",
+        label: "Star Gaze AI 角色",
         steps: ["输入想法 (10秒)", "选角色 (10秒)", "AI 生成 (60秒)"],
         total: "2 分钟",
     },
@@ -417,7 +417,7 @@ export const comparisonDataEn = {
         total: "7 days",
     },
     toryx: {
-        label: "ToryX AI Character",
+        label: "Star Gaze AI Character",
         steps: ["Enter idea (10 sec)", "Pick character (10 sec)", "AI generates (60 sec)"],
         total: "2 min",
     },
