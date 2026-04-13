@@ -1,9 +1,9 @@
 /**
- * 视频转存 OSS API
- * 
- * 将成品库的视频（第三方临时 URL）下载并上传到我们的 OSS
- * 返回永久可用的 OSS URL，可用于封面选择和 TikTok 发布
- * 
+ * Video Transfer to OSS API
+ *
+ * Downloads videos from temporary third-party URLs and uploads to our OSS.
+ * Returns a permanent OSS URL for cover selection and TikTok publishing.
+ *
  * POST /api/upload/transfer-to-oss
  * Body: { sourceUrl: string, filename?: string }
  * Returns: { success: boolean, data: { url: string, key: string } }
@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
 
         if (authError || !user) {
             return NextResponse.json(
-                { success: false, error: "请先登录" },
+                { success: false, error: "Authentication required. Please log in first." },
                 { status: 401 }
             )
         }
@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
 
         if (!sourceUrl) {
             return NextResponse.json(
-                { success: false, error: "缺少源视频 URL" },
+                { success: false, error: "Missing source video URL" },
                 { status: 400 }
             )
         }
@@ -60,7 +60,7 @@ export async function POST(request: NextRequest) {
             new URL(sourceUrl)
         } catch {
             return NextResponse.json(
-                { success: false, error: "无效的视频 URL" },
+                { success: false, error: "Invalid video URL" },
                 { status: 400 }
             )
         }
@@ -69,7 +69,7 @@ export async function POST(request: NextRequest) {
         if (!ossConfig.accessKeyId || !ossConfig.accessKeySecret) {
             console.error('[Transfer OSS] OSS not configured')
             return NextResponse.json(
-                { success: false, error: "存储服务未配置" },
+                { success: false, error: "Storage service not configured" },
                 { status: 500 }
             )
         }
@@ -90,17 +90,17 @@ export async function POST(request: NextRequest) {
             console.error('[Transfer OSS] Download failed:', downloadResponse.status, sourceUrl)
 
             // Provide specific error messages based on status code
-            let errorMessage = '下载视频失败'
+            let errorMessage = 'Failed to download video'
             if (downloadResponse.status === 403) {
-                errorMessage = '视频已过期或无访问权限 (403)'
+                errorMessage = 'Video expired or access denied (403)'
             } else if (downloadResponse.status === 404) {
-                errorMessage = '视频不存在 (404)'
+                errorMessage = 'Video not found (404)'
             } else if (downloadResponse.status === 410) {
-                errorMessage = '视频已被删除 (410)'
+                errorMessage = 'Video has been deleted (410)'
             } else if (downloadResponse.status >= 500) {
-                errorMessage = '源服务器错误，请稍后重试'
+                errorMessage = 'Source server error. Please try again later.'
             } else {
-                errorMessage = `下载失败 (HTTP ${downloadResponse.status})`
+                errorMessage = `Download failed (HTTP ${downloadResponse.status})`
             }
 
             return NextResponse.json(
@@ -148,7 +148,7 @@ export async function POST(request: NextRequest) {
         if (!result || !result.name) {
             console.error('[Transfer OSS] Upload failed:', result)
             return NextResponse.json(
-                { success: false, error: "上传到 OSS 失败" },
+                { success: false, error: "Failed to upload to storage" },
                 { status: 500 }
             )
         }
@@ -211,7 +211,7 @@ export async function POST(request: NextRequest) {
         })
 
         return NextResponse.json(
-            { success: false, error: error instanceof Error ? error.message : "视频转存失败", errorType: errorDetails.type },
+            { success: false, error: error instanceof Error ? error.message : "Video transfer failed", errorType: errorDetails.type },
             { status: 500 }
         )
     }

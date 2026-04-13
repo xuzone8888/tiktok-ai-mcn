@@ -126,7 +126,7 @@ const workflowSteps = [
   {
     step: "03",
     title: "下载发布",
-    desc: "批量下载成品，一键发布到 TikTok 等各大平台",
+    desc: "下载成品，审核确认后发布到 TikTok 等各大平台",
     icon: Rocket,
     color: "text-pink-400",
     gradient: "from-pink-500/20 to-pink-500/5"
@@ -442,7 +442,7 @@ export default function LandingPage() {
                 </div>
               </Link>
               <p className="text-gray-500 text-sm leading-relaxed max-w-xs">
-                AI 驱动的短视频创作平台，让每一个创作者都能高效产出专业级内容。支持一键发布到 TikTok 等各大平台。
+                AI 驱动的短视频创作平台，让每一个创作者都能高效产出专业级内容。支持发布到 TikTok 等各大平台。
               </p>
             </div>
 

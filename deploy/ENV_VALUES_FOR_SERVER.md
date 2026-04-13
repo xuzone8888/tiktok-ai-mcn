@@ -37,6 +37,21 @@ NEXT_PUBLIC_APP_URL=http://123.56.75.68:3000
 # 5. 管理员配置
 # ------------------------------------------
 ADMIN_EMAIL=admin@example.com
+
+# ------------------------------------------
+# 6. TikTok Content API
+# ------------------------------------------
+TIKTOK_CLIENT_KEY=从 TikTok Developer Portal 获取
+TIKTOK_CLIENT_SECRET=从 TikTok Developer Portal 获取
+TIKTOK_REDIRECT_URI=https://www.toryxai.com/api/tiktok/auth/callback
+
+# ------------------------------------------
+# 7. TikTok Shop OAuth (Partner Center)
+# ------------------------------------------
+TIKTOK_SHOP_APP_KEY=从 TikTok Shop Partner Center 获取
+TIKTOK_SHOP_APP_SECRET=从 TikTok Shop Partner Center 获取
+TIKTOK_SHOP_REDIRECT_URI=https://www.toryxai.com/api/tiktok-shop/auth/callback
+TIKTOK_SHOP_SERVICE_ID=从 TikTok Shop Partner Center 获取
 ```
 
 ## 🚀 使用方法

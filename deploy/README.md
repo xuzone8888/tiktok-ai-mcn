@@ -10,12 +10,31 @@ deploy/
 ├── setup-server.sh             # 服务器初始化脚本
 ├── deploy.sh                   # 应用部署脚本
 ├── check-env.sh                # 环境变量检查脚本
-└── nginx.conf.template         # Nginx 配置模板
+├── nginx.conf.template         # Nginx 配置模板
+├── ssl/
+│   ├── toryxai.com.conf            # 主站 Nginx vhost
+│   └── media.toryxai.com.conf      # 媒体代理 Nginx vhost (DNS 防御性配置)
+└── systemd/
+    └── nginx.service.d/
+        └── restart.conf             # Nginx 自恢复 systemd override
 
 项目根目录/
 ├── ecosystem.config.js         # PM2 进程管理配置
 └── ALIYUN_DEPLOYMENT_GUIDE.md  # 完整部署指南
 ```
+
+## 🗂️ 服务器配置文件映射
+
+以下文件需要部署到服务器对应路径，修改后需执行相应的重载命令。
+
+| 本地文件 | 服务器路径 | 重载命令 |
+|---------|-----------|---------|
+| `ssl/toryxai.com.conf` | `/etc/nginx/sites-available/toryxai.com` | `nginx -t && systemctl reload nginx` |
+| `ssl/media.toryxai.com.conf` | `/etc/nginx/sites-available/media.toryxai.com.conf` | `nginx -t && systemctl reload nginx` |
+| `systemd/nginx.service.d/restart.conf` | `/etc/systemd/system/nginx.service.d/restart.conf` | `systemctl daemon-reload` |
+
+> **注意**: 服务器上还有一个 `/etc/nginx/sites-enabled/tokfactoryai.com`，由 Certbot 自动生成管理，不在本仓库中维护。
+> 如需修改其 `listen` 参数（如添加 `http2`），需直接在服务器上操作。
 
 ---
 

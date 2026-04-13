@@ -41,6 +41,21 @@ SORA2_API_KEY=sk-SZPEdRnAdW3Dgu9DqTE4nNcqkv1fNG3oBULwmEhw6F329JLE
 SUCHUANG_API_KEY=从Vercel获取
 NEXT_PUBLIC_APP_URL=http://123.56.75.68:3000
 ADMIN_EMAIL=admin@example.com
+
+# ------------------------------------------
+# TikTok Content API
+# ------------------------------------------
+TIKTOK_CLIENT_KEY=从TikTok Developer Portal获取
+TIKTOK_CLIENT_SECRET=从TikTok Developer Portal获取
+TIKTOK_REDIRECT_URI=https://www.toryxai.com/api/tiktok/auth/callback
+
+# ------------------------------------------
+# TikTok Shop OAuth (Partner Center)
+# ------------------------------------------
+TIKTOK_SHOP_APP_KEY=从TikTok Shop Partner Center获取
+TIKTOK_SHOP_APP_SECRET=从TikTok Shop Partner Center获取
+TIKTOK_SHOP_REDIRECT_URI=https://www.toryxai.com/api/tiktok-shop/auth/callback
+TIKTOK_SHOP_SERVICE_ID=从TikTok Shop Partner Center获取
 ```
 
 

@@ -1,6 +1,6 @@
 /**
  * Video Upload API
- * 
+ *
  * Handles video file uploads to Aliyun OSS and returns public HTTPS URLs
  * for use in TikTok publishing.
  * 
@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
 
         if (authError || !user) {
             return NextResponse.json(
-                { error: '请先登录' },
+                { error: 'Authentication required. Please log in first.' },
                 { status: 401 }
             )
         }
@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
 
         if (!file) {
             return NextResponse.json(
-                { error: '请选择要上传的视频文件' },
+                { error: 'No video file selected. Please choose a file to upload.' },
                 { status: 400 }
             )
         }
@@ -59,7 +59,7 @@ export async function POST(request: NextRequest) {
 
         if (!ALLOWED_TYPES.includes(fileType) && !ALLOWED_EXTENSIONS.includes(fileExt)) {
             return NextResponse.json(
-                { error: `不支持的视频格式。支持的格式：${ALLOWED_EXTENSIONS.join(', ')}` },
+                { error: `Unsupported video format. Accepted formats: ${ALLOWED_EXTENSIONS.join(', ')}` },
                 { status: 400 }
             )
         }
@@ -68,7 +68,7 @@ export async function POST(request: NextRequest) {
         if (file.size > MAX_FILE_SIZE) {
             const sizeMB = Math.round(file.size / (1024 * 1024))
             return NextResponse.json(
-                { error: `视频文件过大 (${sizeMB}MB)。最大支持 500MB` },
+                { error: `File too large (${sizeMB}MB). Maximum allowed size is 500MB.` },
                 { status: 400 }
             )
         }
@@ -101,14 +101,14 @@ export async function POST(request: NextRequest) {
             // Handle specific OSS errors
             if (error.message.includes('credentials')) {
                 return NextResponse.json(
-                    { error: 'OSS 配置错误，请联系管理员' },
+                    { error: 'Storage service configuration error. Please contact support.' },
                     { status: 500 }
                 )
             }
         }
 
         return NextResponse.json(
-            { error: '视频上传失败，请稍后重试' },
+            { error: 'Video upload failed. Please try again later.' },
             { status: 500 }
         )
     }

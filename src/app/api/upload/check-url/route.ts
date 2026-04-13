@@ -1,9 +1,9 @@
 /**
- * URL 可用性检测 API
- * 
- * 服务端检测 URL 是否可访问（避免客户端 no-cors opaque 问题）
- * 返回准确的 HTTP 状态码
- * 
+ * URL Accessibility Check API
+ *
+ * Server-side URL reachability check (avoids client-side no-cors opaque response issues)
+ * Returns accurate HTTP status codes.
+ *
  * POST /api/upload/check-url
  * Body: { url: string }
  * Returns: { accessible: boolean, status?: number, reason?: string }
@@ -21,7 +21,7 @@ export async function POST(request: NextRequest) {
 
         if (!url) {
             return NextResponse.json(
-                { accessible: false, reason: "缺少 URL" },
+                { accessible: false, reason: "Missing URL parameter" },
                 { status: 400 }
             )
         }
@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
             new URL(url)
         } catch {
             return NextResponse.json(
-                { accessible: false, reason: "无效的 URL 格式" },
+                { accessible: false, reason: "Invalid URL format" },
                 { status: 400 }
             )
         }
@@ -62,8 +62,8 @@ export async function POST(request: NextRequest) {
 
             // Network error or timeout
             const reason = fetchError instanceof Error && fetchError.name === 'AbortError'
-                ? '请求超时'
-                : '网络错误'
+                ? 'Request timed out'
+                : 'Network error'
 
             return NextResponse.json({
                 accessible: false,
@@ -75,7 +75,7 @@ export async function POST(request: NextRequest) {
     } catch (error) {
         console.error('[Check URL] Error:', error)
         return NextResponse.json(
-            { accessible: false, reason: "检测失败" },
+            { accessible: false, reason: "Check failed" },
             { status: 500 }
         )
     }

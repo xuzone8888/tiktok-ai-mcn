@@ -193,13 +193,13 @@ export const possibilitiesData: PossibilityItem[] = [
     {
         icon: Globe,
         title: "多语种触达",
-        desc: "同一内容自动 10+ 语言版本",
+        desc: "支持多语种内容创作",
         status: "ready",
     },
     {
         icon: Share2,
         title: "平台发布",
-        desc: "一键发布，合规标注自动完成",
+        desc: "发布工作台，合规工具一站式整合",
         status: "ready",
     },
     {
@@ -236,7 +236,7 @@ export const complianceCards: ComplianceCard[] = [
     {
         icon: BadgeCheck,
         title: "AIGC 标注",
-        desc: "AI 内容自动标记，平台反而给更多推荐",
+        desc: "AI 内容透明标注，符合平台合规要求",
         status: "ready",
     },
     {
@@ -260,7 +260,7 @@ export const complianceCards: ComplianceCard[] = [
     {
         icon: Scan,
         title: "发布预检",
-        desc: "一键检测合规，避免限流",
+        desc: "发布前一键合规检测",
         status: "coming",
     },
 ];
@@ -280,7 +280,7 @@ export const faqItems: FaqItem[] = [
     },
     {
         question: "发布的内容会被标记为 AI 吗？",
-        answer: "是的，我们主动标注 AIGC，这符合平台要求且不影响推荐流量。合规标注反而能获得平台更多信任。",
+        answer: "是的，我们主动标注 AIGC，这符合平台要求。合规标注有助于建立平台信任。",
     },
     {
         question: "支持哪些语言？",
@@ -405,8 +405,8 @@ export const workflowStepsEn: WorkflowStep[] = [
 
 export const possibilitiesDataEn: PossibilityItem[] = [
     { icon: PenTool,     title: "Content Creation",    desc: "Daily posts, series, knowledge-sharing, creative expression", status: "ready" },
-    { icon: Globe,       title: "Multilingual Reach",  desc: "Same content, auto-generated in 10+ languages",               status: "ready" },
-    { icon: Share2,      title: "Platform Publishing", desc: "One-click publish with automatic compliance labeling",         status: "ready" },
+    { icon: Globe,       title: "Multilingual Reach",  desc: "Supports multilingual content creation across 10+ languages",    status: "ready" },
+    { icon: Share2,      title: "Platform Publishing", desc: "Publishing workspace with built-in compliance tools",         status: "ready" },
     { icon: ShoppingBag, title: "Commerce & Sales",    desc: "Character explains products and links to your store",          status: "coming" },
 ];
 
@@ -435,7 +435,7 @@ export const faqItemsEn: FaqItem[] = [
     },
     {
         question: "Will published content be labeled as AI-generated?",
-        answer: "Yes — we proactively apply AIGC labels, which complies with platform requirements and does not reduce recommendation traffic. Transparent labeling actually builds more trust.",
+        answer: "Yes — we proactively apply AIGC labels, which complies with platform requirements. Transparent labeling helps build trust with the platform.",
     },
     {
         question: "What languages are supported?",
@@ -476,11 +476,11 @@ export const styleFiltersEn: readonly { id: CharacterStyle | "all"; label: strin
 ];
 
 export const complianceCardsEn: ComplianceCard[] = [
-    { icon: BadgeCheck,  title: "AIGC Labeling",    desc: "AI content auto-labeled — platforms actually reward it with more reach", status: "ready" },
+    { icon: BadgeCheck,  title: "AIGC Labeling",    desc: "AI content transparently labeled — fully aligned with platform compliance requirements", status: "ready" },
     { icon: ShieldCheck, title: "Original & Safe",  desc: "AI character appearances are original — zero portrait rights disputes",  status: "ready" },
     { icon: FileCheck,   title: "Review-Ready",     desc: "Privacy, interactions, and brand disclosures — all fully compliant",     status: "ready" },
     { icon: Settings,    title: "User Control",     desc: "Every setting is your choice — no hidden defaults or pre-checks",        status: "ready" },
-    { icon: Scan,        title: "Pre-Publish Check", desc: "One-click compliance scan before publishing — avoid throttling",        status: "coming" },
+    { icon: Scan,        title: "Pre-Publish Check", desc: "One-click compliance scan before publishing to meet platform standards",        status: "coming" },
 ];
 
 

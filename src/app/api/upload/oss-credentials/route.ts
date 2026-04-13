@@ -1,9 +1,9 @@
 /**
- * OSS 直传凭证 API
- * 
- * 返回签名 URL，允许浏览器直接上传文件到 OSS
- * 不经过服务器，支持无限并发上传
- * 
+ * OSS Direct Upload Credentials API
+ *
+ * Returns signed URLs for browser-direct uploads to OSS
+ * Bypasses server, supports unlimited concurrent uploads.
+ *
  * POST /api/upload/oss-credentials
  * Body: { filename: string, contentType: string }
  * Returns: { uploadUrl: string, publicUrl: string, key: string }
@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
 
         if (authError || !user) {
             return NextResponse.json(
-                { success: false, error: "请先登录" },
+                { success: false, error: "Authentication required. Please log in first." },
                 { status: 401 }
             )
         }
@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
 
         if (!filename) {
             return NextResponse.json(
-                { success: false, error: "缺少文件名参数" },
+                { success: false, error: "Missing filename parameter" },
                 { status: 400 }
             )
         }
@@ -59,7 +59,7 @@ export async function POST(request: NextRequest) {
 
         if (!validTypes.includes(mimeType)) {
             return NextResponse.json(
-                { success: false, error: "不支持的视频格式" },
+                { success: false, error: "Unsupported video format" },
                 { status: 400 }
             )
         }
@@ -68,7 +68,7 @@ export async function POST(request: NextRequest) {
         if (!ossConfig.accessKeyId || !ossConfig.accessKeySecret) {
             console.error('[OSS Credentials] OSS not configured')
             return NextResponse.json(
-                { success: false, error: "存储服务未配置" },
+                { success: false, error: "Storage service not configured" },
                 { status: 500 }
             )
         }
@@ -113,7 +113,7 @@ export async function POST(request: NextRequest) {
     } catch (error) {
         console.error('[OSS Credentials] Error:', error)
         return NextResponse.json(
-            { success: false, error: error instanceof Error ? error.message : "生成上传凭证失败" },
+            { success: false, error: error instanceof Error ? error.message : "Failed to generate upload credentials" },
             { status: 500 }
         )
     }
