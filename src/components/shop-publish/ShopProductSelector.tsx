@@ -1,6 +1,6 @@
 'use client'
 
-// Shop Product Selector — 橱窗商品选择器
+// Shop Product Selector — showcase product picker
 // Pattern: grid cards with single-select mode
 // Data source: GET /api/shop-publish/products?account_id=xxx
 
@@ -19,6 +19,8 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
+import { useLang } from '@/contexts/LangContext'
+import SHOP_TEXT, { localizeError } from './shop-publish.i18n'
 
 // ============================================================
 // Types (aligned with ShopProduct from shop-types.ts)
@@ -63,6 +65,9 @@ export function ShopProductSelector({
     selectedProductId,
     onSelect,
 }: ShopProductSelectorProps) {
+    const { lang } = useLang()
+    const T = SHOP_TEXT.product
+
     const [products, setProducts] = useState<Product[]>([])
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
@@ -99,7 +104,7 @@ export function ShopProductSelector({
 
             if (!res.ok) {
                 const data = await res.json()
-                throw new Error(data.error || '获取商品列表失败')
+                throw new Error(data.error || 'Failed to load products')
             }
 
             const data = await res.json()
@@ -116,12 +121,12 @@ export function ShopProductSelector({
             setHasMore(!!data.next_page_token)
         } catch (err) {
             console.error('Failed to fetch showcase products:', err)
-            setError(err instanceof Error ? err.message : '获取商品列表失败')
+            setError(err instanceof Error ? localizeError(err.message, lang) : localizeError('Failed to load products', lang))
         } finally {
             setLoading(false)
             setLoadingMore(false)
         }
-    }, [accountId])
+    }, [accountId, lang])
 
     // Initial load when accountId changes
     useEffect(() => {
@@ -189,7 +194,7 @@ export function ShopProductSelector({
         return (
             <div className="flex flex-col items-center justify-center py-16">
                 <Loader2 className="w-8 h-8 animate-spin text-gray-400 mb-3" />
-                <p className="text-sm text-gray-500">加载橱窗商品中...</p>
+                <p className="text-sm text-gray-500">{T.loading[lang]}</p>
             </div>
         )
     }
@@ -209,7 +214,7 @@ export function ShopProductSelector({
                     className="gap-2"
                 >
                     <RefreshCw className="w-4 h-4" />
-                    重试
+                    {T.retry[lang]}
                 </Button>
             </div>
         )
@@ -222,9 +227,9 @@ export function ShopProductSelector({
                 <div className="w-16 h-16 rounded-full bg-gradient-to-br from-[#CCFF00]/20 via-[#00F2EA]/20 to-[#EC4899]/20 flex items-center justify-center mb-4 border border-white/10">
                     <ShoppingBag className="w-8 h-8 text-[#00F2EA]" />
                 </div>
-                <h3 className="text-lg font-semibold text-white mb-1">橱窗暂无商品</h3>
+                <h3 className="text-lg font-semibold text-white mb-1">{T.noProducts[lang]}</h3>
                 <p className="text-sm text-gray-500 text-center max-w-xs">
-                    请先在 TikTok Shop 中添加商品到您的橱窗
+                    {T.noProductsDesc[lang]}
                 </p>
             </div>
         )
@@ -237,14 +242,14 @@ export function ShopProductSelector({
                 <div className="relative flex-1">
                     <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-500" />
                     <Input
-                        placeholder="搜索商品名称..."
+                        placeholder={T.searchPlaceholder[lang]}
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                         className="pl-9 h-9 bg-white/5 border-white/10"
                     />
                 </div>
                 <span className="text-xs text-gray-500 whitespace-nowrap">
-                    {filteredProducts.length} 件商品
+                    {filteredProducts.length} {filteredProducts.length !== 1 ? T.productsCount[lang] : T.productCount[lang]}
                 </span>
                 <Button
                     variant="ghost"
@@ -261,7 +266,7 @@ export function ShopProductSelector({
                 <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-cyan-500/10 border border-cyan-500/30">
                     <Check className="w-4 h-4 text-cyan-400" />
                     <span className="text-sm text-cyan-300">
-                        已选择 1 件商品（点击可取消）
+                        {T.selected[lang]}
                     </span>
                 </div>
             )}
@@ -311,7 +316,7 @@ export function ShopProductSelector({
                                 {product.commission_rate && (
                                     <div className="absolute top-2 right-2">
                                         <Badge className="bg-gradient-to-r from-orange-500 to-pink-500 text-white text-[10px] px-1.5 py-0.5 border-0">
-                                            佣金 {formatCommission(product.commission_rate)}
+                                            {formatCommission(product.commission_rate)} {T.comm[lang]}
                                         </Badge>
                                     </div>
                                 )}
@@ -346,11 +351,11 @@ export function ShopProductSelector({
                         {loadingMore ? (
                             <>
                                 <Loader2 className="w-4 h-4 animate-spin" />
-                                加载中...
+                                {T.loadingMore[lang]}
                             </>
                         ) : (
                             <>
-                                加载更多
+                                {T.loadMore[lang]}
                                 <ChevronRight className="w-4 h-4" />
                             </>
                         )}
@@ -362,7 +367,7 @@ export function ShopProductSelector({
             {filteredProducts.length === 0 && searchQuery && (
                 <div className="text-center py-8">
                     <p className="text-sm text-gray-500">
-                        未找到匹配 &ldquo;{searchQuery}&rdquo; 的商品
+                        {T.noMatch[lang]} &ldquo;{searchQuery}&rdquo;
                     </p>
                 </div>
             )}

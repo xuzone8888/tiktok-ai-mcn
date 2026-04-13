@@ -1,6 +1,6 @@
 'use client'
 
-// Shop Task Manager — 橱窗发布任务管理
+// Shop Task Manager — task history management
 // Pattern: follows existing publish/TaskManager.tsx
 // Data source: GET /api/shop-publish/tasks, DELETE /api/shop-publish/tasks/[id]
 
@@ -19,6 +19,13 @@ import {
     ShoppingBag,
     FileVideo,
     Package,
+    Eye,
+    ShieldCheck,
+    ShieldAlert,
+    ShieldQuestion,
+    ShieldX,
+    ExternalLink,
+    Calendar,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -35,8 +42,10 @@ import {
 } from '@/components/ui/alert-dialog'
 import { useToast } from '@/hooks/use-toast'
 import { formatDistanceToNow } from 'date-fns'
-import { zhCN } from 'date-fns/locale'
+import { zhCN, enUS } from 'date-fns/locale'
 import { cn } from '@/lib/utils'
+import { useLang } from '@/contexts/LangContext'
+import SHOP_TEXT, { localizeError, type Lang } from './shop-publish.i18n'
 
 // ============================================================
 // Types (aligned with shop_publish_tasks / shop_publish_task_items)
@@ -52,6 +61,8 @@ interface TaskItem {
     product_anchor_title: string
     status: 'pending' | 'uploading' | 'prechecking' | 'publishing' | 'published' | 'failed'
     precheck_status: 'none' | 'pending' | 'passed' | 'warning' | 'rejected'
+    video_id: string | null
+    published_at: string | null
     error_message: string | null
     created_at: string
 }
@@ -70,60 +81,52 @@ interface Task {
 }
 
 // ============================================================
-// Status Config
+// Status Config — lang-parameterized
 // ============================================================
 
-const STATUS_CONFIG: Record<Task['status'], {
+function getStatusConfig(lang: Lang): Record<Task['status'], {
     label: string
     icon: React.ElementType
     color: string
     badgeVariant: 'default' | 'secondary' | 'destructive' | 'outline'
-}> = {
-    pending: {
-        label: '待处理',
-        icon: Clock,
-        color: 'text-gray-400',
-        badgeVariant: 'outline',
-    },
-    processing: {
-        label: '处理中',
-        icon: Play,
-        color: 'text-cyan-400',
-        badgeVariant: 'default',
-    },
-    completed: {
-        label: '已完成',
-        icon: CheckCircle2,
-        color: 'text-green-400',
-        badgeVariant: 'default',
-    },
-    partial_failed: {
-        label: '部分失败',
-        icon: AlertTriangle,
-        color: 'text-amber-400',
-        badgeVariant: 'secondary',
-    },
-    failed: {
-        label: '失败',
-        icon: XCircle,
-        color: 'text-red-400',
-        badgeVariant: 'destructive',
-    },
-    cancelled: {
-        label: '已取消',
-        icon: XCircle,
-        color: 'text-gray-500',
-        badgeVariant: 'outline',
-    },
+}> {
+    const T = SHOP_TEXT.taskMgr
+    return {
+        pending:        { label: T.statusPending[lang],    icon: Clock,          color: 'text-gray-400', badgeVariant: 'outline' },
+        processing:     { label: T.statusProcessing[lang], icon: Play,           color: 'text-cyan-400', badgeVariant: 'default' },
+        completed:      { label: T.statusCompleted[lang],  icon: CheckCircle2,   color: 'text-green-400', badgeVariant: 'default' },
+        partial_failed: { label: T.statusPartial[lang],    icon: AlertTriangle,  color: 'text-amber-400', badgeVariant: 'secondary' },
+        failed:         { label: T.statusFailed[lang],     icon: XCircle,        color: 'text-red-400', badgeVariant: 'destructive' },
+        cancelled:      { label: T.statusCancelled[lang],  icon: XCircle,        color: 'text-gray-500', badgeVariant: 'outline' },
+    }
 }
 
-const ITEM_STATUS_LABELS: Record<TaskItem['status'], { label: string; color: string }> = {
-    pending: { label: '待处理', color: 'text-gray-400' },
-    uploading: { label: '上传中', color: 'text-blue-400' },
-    prechecking: { label: '预检中', color: 'text-amber-400' },
-    publishing: { label: '发布中', color: 'text-cyan-400' },
-    published: { label: '已发布', color: 'text-green-400' },
-    failed: { label: '失败', color: 'text-red-400' },
+function getItemStatusLabels(lang: Lang): Record<TaskItem['status'], { label: string; color: string; icon: React.ElementType }> {
+    const T = SHOP_TEXT.taskMgr
+    return {
+        pending:     { label: T.itemPending[lang],     color: 'text-gray-400', icon: Clock },
+        uploading:   { label: T.itemUploading[lang],   color: 'text-blue-400', icon: Play },
+        prechecking: { label: T.itemPrechecking[lang], color: 'text-amber-400', icon: Eye },
+        publishing:  { label: T.itemPublishing[lang],  color: 'text-cyan-400', icon: Play },
+        published:   { label: T.itemPublished[lang],   color: 'text-green-400', icon: CheckCircle2 },
+        failed:      { label: T.itemFailed[lang],      color: 'text-red-400', icon: XCircle },
+    }
+}
+
+function getPrecheckConfig(lang: Lang): Record<TaskItem['precheck_status'], {
+    label: string
+    color: string
+    bgColor: string
+    icon: React.ElementType
+}> {
+    const T = SHOP_TEXT.taskMgr
+    return {
+        none:     { label: T.precheckSkipped[lang],  color: 'text-gray-500',  bgColor: 'bg-gray-500/10',  icon: ShieldQuestion },
+        pending:  { label: T.precheckPending[lang],  color: 'text-amber-400', bgColor: 'bg-amber-500/10', icon: ShieldQuestion },
+        passed:   { label: T.precheckPassed[lang],   color: 'text-green-400', bgColor: 'bg-green-500/10', icon: ShieldCheck },
+        warning:  { label: T.precheckWarning[lang],  color: 'text-amber-400', bgColor: 'bg-amber-500/10', icon: ShieldAlert },
+        rejected: { label: T.precheckRejected[lang], color: 'text-red-400',   bgColor: 'bg-red-500/10',   icon: ShieldX },
+    }
 }
 
 // ============================================================
@@ -132,6 +135,11 @@ const ITEM_STATUS_LABELS: Record<TaskItem['status'], { label: string; color: str
 
 export function ShopTaskManager() {
     const { toast } = useToast()
+    const { lang } = useLang()
+    const T = SHOP_TEXT.taskMgr
+    const STATUS_CONFIG = getStatusConfig(lang)
+    const ITEM_STATUS_LABELS = getItemStatusLabels(lang)
+    const PRECHECK_CONFIG = getPrecheckConfig(lang)
     const [tasks, setTasks] = useState<Task[]>([])
     const [loading, setLoading] = useState(true)
     const [page, setPage] = useState(1)
@@ -163,7 +171,7 @@ export function ShopTaskManager() {
             })
 
             const res = await fetch(`/api/shop-publish/tasks?${params}`)
-            if (!res.ok) throw new Error('获取任务列表失败')
+            if (!res.ok) throw new Error('Failed to load tasks')
 
             const data = await res.json()
             setTasks(data.tasks || [])
@@ -171,14 +179,14 @@ export function ShopTaskManager() {
         } catch (error) {
             console.error('Failed to fetch shop tasks:', error)
             toast({
-                title: '加载失败',
-                description: '无法获取任务列表',
+                title: T.listLoadFailed[lang],
+                description: T.listLoadFailedDesc[lang],
                 variant: 'destructive',
             })
         } finally {
             setLoading(false)
         }
-    }, [toast])
+    }, [toast, lang])
 
     // Initial load
     useEffect(() => {
@@ -192,6 +200,13 @@ export function ShopTaskManager() {
         if (hasProcessing) {
             pollRef.current = setInterval(() => {
                 fetchTasks(page)
+                // Also refresh expanded task items if the expanded task is still processing
+                if (expandedTaskId) {
+                    const expandedTask = tasks.find(t => t.id === expandedTaskId)
+                    if (expandedTask && expandedTask.status === 'processing') {
+                        fetchTaskItems(expandedTaskId)
+                    }
+                }
             }, 5000) // Poll every 5 seconds
         }
 
@@ -201,7 +216,8 @@ export function ShopTaskManager() {
                 pollRef.current = null
             }
         }
-    }, [tasks, page, fetchTasks])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [tasks, page, fetchTasks, expandedTaskId])
 
     // ============================================================
     // Task Item Detail
@@ -211,14 +227,15 @@ export function ShopTaskManager() {
         setLoadingItems(taskId)
         try {
             const res = await fetch(`/api/shop-publish/tasks/${taskId}`)
-            if (!res.ok) throw new Error('获取任务详情失败')
+            if (!res.ok) throw new Error('Failed to load task details')
 
             const data = await res.json()
             setTaskItems(prev => ({ ...prev, [taskId]: data.items || [] }))
         } catch (error) {
             console.error('Failed to fetch task items:', error)
             toast({
-                title: '加载详情失败',
+                title: T.detailLoadFailed[lang],
+                description: T.detailLoadFailedDesc[lang],
                 variant: 'destructive',
             })
         } finally {
@@ -231,8 +248,9 @@ export function ShopTaskManager() {
             setExpandedTaskId(null)
         } else {
             setExpandedTaskId(taskId)
-            // Fetch items if not cached
-            if (!taskItems[taskId]) {
+            // Always re-fetch items for processing tasks; use cache for completed ones
+            const task = tasks.find(t => t.id === taskId)
+            if (!taskItems[taskId] || (task && task.status === 'processing')) {
                 fetchTaskItems(taskId)
             }
         }
@@ -258,10 +276,10 @@ export function ShopTaskManager() {
 
             if (!res.ok) {
                 const data = await res.json()
-                throw new Error(data.error || '删除失败')
+                throw new Error(data.error || 'Delete failed')
             }
 
-            toast({ title: '任务已删除' })
+            toast({ title: T.taskDeleted[lang], description: T.taskDeletedDesc[lang] })
             setTasks(prev => prev.filter(t => t.id !== taskToDelete.id))
             setDeleteDialogOpen(false)
             setTaskToDelete(null)
@@ -272,8 +290,8 @@ export function ShopTaskManager() {
             }
         } catch (error) {
             toast({
-                title: '删除失败',
-                description: error instanceof Error ? error.message : '未知错误',
+                title: T.deleteFailed[lang],
+                description: error instanceof Error ? localizeError(error.message, lang) : '',
                 variant: 'destructive',
             })
         } finally {
@@ -288,6 +306,15 @@ export function ShopTaskManager() {
     const getProgressPercent = (task: Task) => {
         if (task.total_items === 0) return 0
         return Math.round(((task.success_count + task.failed_count) / task.total_items) * 100)
+    }
+
+    const dateLocale = lang === 'zh' ? zhCN : enUS
+    const formatRelativeTime = (dateStr: string) => {
+        try {
+            return formatDistanceToNow(new Date(dateStr), { addSuffix: true, locale: dateLocale })
+        } catch {
+            return dateStr
+        }
     }
 
     // ============================================================
@@ -306,9 +333,9 @@ export function ShopTaskManager() {
         return (
             <div className="text-center py-16 bg-white/5 border rounded-xl border-dashed border-white/10">
                 <ShoppingBag className="w-10 h-10 text-gray-600 mx-auto mb-3" />
-                <p className="text-gray-500 text-sm">暂无发布任务</p>
+                <p className="text-gray-500 text-sm">{T.noTasks[lang]}</p>
                 <p className="text-gray-600 text-xs mt-1">
-                    创建发布任务后，任务记录将显示在这里
+                    {T.noTasksDesc[lang]}
                 </p>
             </div>
         )
@@ -319,7 +346,7 @@ export function ShopTaskManager() {
             {/* Header */}
             <div className="flex items-center justify-between">
                 <h3 className="text-sm font-medium text-gray-400">
-                    共 {total} 个任务
+                    {total} {total !== 1 ? (lang === 'en' ? 'tasks' : '个任务') : (lang === 'en' ? 'task' : '个任务')}
                 </h3>
                 <Button
                     variant="ghost"
@@ -328,7 +355,6 @@ export function ShopTaskManager() {
                     className="text-gray-400 hover:text-white gap-2"
                 >
                     <RefreshCw className="w-3.5 h-3.5" />
-                    刷新
                 </Button>
             </div>
 
@@ -352,7 +378,7 @@ export function ShopTaskManager() {
                                     <div className="flex-1 min-w-0">
                                         <div className="flex items-center gap-2 mb-1">
                                             <h4 className="font-medium text-white truncate">
-                                                {task.task_name || '未命名任务'}
+                                                {task.task_name || 'Untitled Task'}
                                             </h4>
                                             <Badge variant={statusConfig.badgeVariant} className="shrink-0">
                                                 <StatusIcon className={cn('w-3 h-3 mr-1', statusConfig.color)} />
@@ -360,10 +386,7 @@ export function ShopTaskManager() {
                                             </Badge>
                                         </div>
                                         <p className="text-xs text-gray-500">
-                                            {formatDistanceToNow(new Date(task.created_at), {
-                                                addSuffix: true,
-                                                locale: zhCN,
-                                            })}
+                                            {formatRelativeTime(task.created_at)}
                                         </p>
                                     </div>
 
@@ -398,16 +421,16 @@ export function ShopTaskManager() {
                                         <div className="flex items-center gap-4 text-xs text-gray-500">
                                             <span className="flex items-center gap-1">
                                                 <Package className="w-3 h-3" />
-                                                总计 {task.total_items}
+                                                {task.total_items} {T.items[lang]}
                                             </span>
                                             {task.success_count > 0 && (
                                                 <span className="text-green-400">
-                                                    ✓ {task.success_count} 成功
+                                                    ✓ {task.success_count} {lang === 'en' ? 'succeeded' : '成功'}
                                                 </span>
                                             )}
                                             {task.failed_count > 0 && (
                                                 <span className="text-red-400">
-                                                    ✕ {task.failed_count} 失败
+                                                    ✕ {task.failed_count} {lang === 'en' ? 'failed' : '失败'}
                                                 </span>
                                             )}
                                         </div>
@@ -418,7 +441,7 @@ export function ShopTaskManager() {
                                 {task.status === 'pending' && (
                                     <div className="flex items-center gap-2 text-xs text-gray-500">
                                         <Package className="w-3 h-3" />
-                                        {task.total_items} 个视频待处理
+                                        {task.total_items} {lang === 'en' ? `video${task.total_items !== 1 ? 's' : ''} queued for processing` : '个视频待处理'}
                                     </div>
                                 )}
                             </div>
@@ -434,32 +457,78 @@ export function ShopTaskManager() {
                                         <div className="divide-y divide-white/5">
                                             {items.map((item, index) => {
                                                 const itemStatus = ITEM_STATUS_LABELS[item.status]
+                                                const ItemStatusIcon = itemStatus.icon
+                                                const precheckConfig = PRECHECK_CONFIG[item.precheck_status]
+                                                const PrecheckIcon = precheckConfig.icon
                                                 return (
-                                                    <div key={item.id} className="px-4 py-3 flex items-center gap-3">
-                                                        <span className="text-xs text-gray-600 w-6 text-right">
-                                                            {index + 1}
-                                                        </span>
-                                                        <FileVideo className="w-4 h-4 text-gray-500 shrink-0" />
-                                                        <div className="flex-1 min-w-0">
-                                                            <p className="text-sm text-white truncate">
-                                                                {item.title}
-                                                            </p>
-                                                            {item.error_message && (
-                                                                <p className="text-xs text-red-400 mt-0.5 truncate">
-                                                                    {item.error_message}
+                                                    <div key={item.id} className="px-4 py-3 space-y-2">
+                                                        {/* Row 1: Title + Status */}
+                                                        <div className="flex items-center gap-3">
+                                                            <span className="text-xs text-gray-600 w-6 text-right">
+                                                                {index + 1}
+                                                            </span>
+                                                            <FileVideo className="w-4 h-4 text-gray-500 shrink-0" />
+                                                            <div className="flex-1 min-w-0">
+                                                                <p className="text-sm text-white truncate">
+                                                                    {item.title}
                                                                 </p>
+                                                            </div>
+                                                            <div className="flex items-center gap-1.5">
+                                                                <ItemStatusIcon className={cn('w-3.5 h-3.5', itemStatus.color)} />
+                                                                <span className={cn('text-xs whitespace-nowrap', itemStatus.color)}>
+                                                                    {itemStatus.label}
+                                                                </span>
+                                                            </div>
+                                                        </div>
+
+                                                        {/* Row 2: Metadata badges */}
+                                                        <div className="flex items-center gap-2 ml-9 flex-wrap">
+                                                            {/* Precheck Status */}
+                                                            {item.precheck_status !== 'none' && (
+                                                                <Badge variant="outline" className={cn('text-[10px] gap-1 px-1.5 py-0', precheckConfig.color, precheckConfig.bgColor)}>
+                                                                    <PrecheckIcon className="w-3 h-3" />
+                                                                    {lang === 'en' ? 'Precheck' : '预检'}: {precheckConfig.label}
+                                                                </Badge>
+                                                            )}
+
+                                                            {/* Video ID */}
+                                                            {item.video_id && (
+                                                                <Badge variant="outline" className="text-[10px] gap-1 px-1.5 py-0 text-gray-400 bg-white/5">
+                                                                    <ExternalLink className="w-3 h-3" />
+                                                                    ID: {item.video_id.substring(0, 12)}...
+                                                                </Badge>
+                                                            )}
+
+                                                            {/* Published At */}
+                                                            {item.published_at && (
+                                                                <Badge variant="outline" className="text-[10px] gap-1 px-1.5 py-0 text-green-400 bg-green-500/10">
+                                                                    <Calendar className="w-3 h-3" />
+                                                                    {lang === 'en' ? 'Published' : '发布于'} {formatRelativeTime(item.published_at)}
+                                                                </Badge>
+                                                            )}
+
+                                                            {/* In-progress indicator */}
+                                                            {['uploading', 'prechecking', 'publishing'].includes(item.status) && (
+                                                                <Badge variant="outline" className="text-[10px] gap-1 px-1.5 py-0 text-cyan-400 bg-cyan-500/10 animate-pulse">
+                                                                    <Loader2 className="w-3 h-3 animate-spin" />
+                                                                    {lang === 'en' ? 'In progress...' : '处理中...'}
+                                                                </Badge>
                                                             )}
                                                         </div>
-                                                        <span className={cn('text-xs whitespace-nowrap', itemStatus.color)}>
-                                                            {itemStatus.label}
-                                                        </span>
+
+                                                        {/* Row 3: Error message */}
+                                                        {item.error_message && (
+                                                            <p className="text-xs text-red-400 ml-9 truncate">
+                                                                {item.error_message}
+                                                            </p>
+                                                        )}
                                                     </div>
                                                 )
                                             })}
                                         </div>
                                     ) : (
                                         <div className="text-center py-6 text-sm text-gray-500">
-                                            暂无子项数据
+                                            {lang === 'en' ? 'No item data available' : '暂无子项数据'}
                                         </div>
                                     )}
                                 </div>
@@ -475,23 +544,22 @@ export function ShopTaskManager() {
                     <AlertDialogHeader>
                         <AlertDialogTitle className="text-white flex items-center gap-2">
                             <Trash2 className="w-5 h-5 text-red-400" />
-                            删除任务
+                            {T.confirmDeleteTitle[lang]}
                         </AlertDialogTitle>
                         <AlertDialogDescription className="text-gray-400">
-                            确定要删除任务 &ldquo;{taskToDelete?.task_name || '未命名任务'}&rdquo; 吗？
-                            此操作不可撤销，所有关联的子项也将被删除。
+                            {T.confirmDeleteDesc[lang]}
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
                         <AlertDialogCancel className="bg-white/5 border-white/10 text-gray-300 hover:bg-white/10">
-                            取消
+                            {T.cancel[lang]}
                         </AlertDialogCancel>
                         <AlertDialogAction
                             onClick={confirmDelete}
                             disabled={deleting}
                             className="bg-red-600 hover:bg-red-700 text-white"
                         >
-                            {deleting ? '删除中...' : '确认删除'}
+                            {deleting ? T.deleting[lang] : T.deleteBtn[lang]}
                         </AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>

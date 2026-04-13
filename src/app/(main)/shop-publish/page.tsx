@@ -1,10 +1,10 @@
 "use client";
 
-// TikTok Shop 橱窗视频发布主页面
-// 5-step workflow: 选视频 → 选账号 → 选商品 → 设置 → 确认发布
+// TikTok Shop Shoppable Video Publishing
+// 5-step workflow: Select Video → Select Account → Select Product → Settings → Review & Publish
 // Bottom section: task history (ShopTaskManager)
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
     Video,
@@ -12,7 +12,7 @@ import {
     Users,
     Settings,
     Send,
-    ChevronLeft,
+
     ChevronRight,
     Loader2,
     Check,
@@ -21,6 +21,13 @@ import {
     Play,
     Package,
     RefreshCw,
+    Upload,
+    Link2,
+    X,
+    FileVideo,
+    ShieldCheck,
+    CheckSquare,
+    Square,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -32,6 +39,8 @@ import {
     type ShopPublishSettingsData,
 } from "@/components/shop-publish/ShopPublishSettings";
 import { ShopTaskManager } from "@/components/shop-publish/ShopTaskManager";
+import { useLang } from "@/contexts/LangContext";
+import SHOP_TEXT, { localizeError, getPlatformNoticeText, type Lang } from "@/components/shop-publish/shop-publish.i18n";
 
 // ============================================================
 // Types
@@ -68,19 +77,28 @@ interface VideoSource {
     source: 'assets' | 'upload' | 'url';
     name: string;
     thumbnail?: string;
+    localPreviewUrl?: string;
 }
 
 // ============================================================
 // Step Configuration
 // ============================================================
 
-const STEPS = [
-    { id: 1, label: '选择视频', icon: Video },
-    { id: 2, label: '选择账号', icon: Users },
-    { id: 3, label: '选择商品', icon: ShoppingBag },
-    { id: 4, label: '发布设置', icon: Settings },
-    { id: 5, label: '确认发布', icon: Send },
-] as const;
+function getSteps(lang: Lang) {
+    const S = SHOP_TEXT.steps;
+    return [
+        { id: 1, label: S.selectVideo[lang], icon: Video },
+        { id: 2, label: S.selectAccount[lang], icon: Users },
+        { id: 3, label: S.selectProduct[lang], icon: ShoppingBag },
+        { id: 4, label: S.settings[lang], icon: Settings },
+        { id: 5, label: S.reviewPublish[lang], icon: Send },
+    ] as const;
+}
+
+// Accepted video formats
+const ACCEPTED_VIDEO_TYPES = "video/mp4,video/webm,video/quicktime";
+const MAX_FILE_SIZE_MB = 500;
+const MAX_FILE_SIZE = MAX_FILE_SIZE_MB * 1024 * 1024;
 
 // ============================================================
 // Page Component
@@ -89,6 +107,8 @@ const STEPS = [
 export default function ShopPublishPage() {
     const { toast } = useToast();
     const router = useRouter();
+    const { lang } = useLang();
+    const STEPS = getSteps(lang);
     const [currentStep, setCurrentStep] = useState(1);
     const [submitting, setSubmitting] = useState(false);
 
@@ -102,12 +122,21 @@ export default function ShopPublishPage() {
         enable_precheck: false,
     });
 
-    // Account list for step 3
+    // Account list for step 2
     const [accounts, setAccounts] = useState<ShopAccount[]>([]);
     const [accountsLoading, setAccountsLoading] = useState(false);
 
     // Validation errors
     const [settingsErrors, setSettingsErrors] = useState<Partial<Record<keyof ShopPublishSettingsData, string>>>({});
+
+    // Step 1: Video upload state
+    const [videoInputMode, setVideoInputMode] = useState<'upload' | 'url'>('upload');
+    const [uploading, setUploading] = useState(false);
+    const [uploadProgress, setUploadProgress] = useState(0);
+    const fileInputRef = useRef<HTMLInputElement>(null);
+
+    // Step 5: AI Notice confirmation
+    const [confirmed, setConfirmed] = useState(false);
 
     // ============================================================
     // Fetch Accounts
@@ -117,24 +146,32 @@ export default function ShopPublishPage() {
         setAccountsLoading(true);
         try {
             const res = await fetch('/api/shop-publish/accounts');
-            if (!res.ok) throw new Error('获取账号失败');
+            if (!res.ok) throw new Error('Failed to load accounts');
             const data = await res.json();
             setAccounts(data.accounts || []);
         } catch (error) {
             console.error('Failed to fetch Shop accounts:', error);
             toast({
                 variant: 'destructive',
-                title: '加载账号失败',
-                description: '无法获取 Shop 账号列表',
+                title: SHOP_TEXT.toast.loadFailed[lang],
+                description: SHOP_TEXT.toast.loadFailedDesc[lang],
             });
         } finally {
             setAccountsLoading(false);
         }
-    }, [toast]);
+    }, [toast, lang]);
 
     useEffect(() => {
         fetchAccounts();
     }, [fetchAccounts]);
+
+    // ============================================================
+    // Reset confirmation when key content changes
+    // ============================================================
+
+    useEffect(() => {
+        setConfirmed(false);
+    }, [videoSource, selectedProduct, selectedAccountId, publishSettings.title, publishSettings.product_anchor_title, publishSettings.enable_precheck]);
 
     // ============================================================
     // Step Validation
@@ -142,11 +179,11 @@ export default function ShopPublishPage() {
 
     const isStepComplete = (step: number): boolean => {
         switch (step) {
-            case 1: return !!videoSource;
+            case 1: return !!videoSource && !uploading && !!videoSource.url;
             case 2: return !!selectedAccountId;
             case 3: return !!selectedProduct;
             case 4: return !!publishSettings.title.trim();
-            case 5: return true;
+            case 5: return [1, 2, 3, 4].every(s => isStepComplete(s));
             default: return false;
         }
     };
@@ -155,15 +192,16 @@ export default function ShopPublishPage() {
 
     const validateSettings = (): boolean => {
         const errors: Partial<Record<keyof ShopPublishSettingsData, string>> = {};
+        const V = SHOP_TEXT.validation;
 
         if (!publishSettings.title.trim()) {
-            errors.title = '请输入视频标题';
+            errors.title = V.titleRequired[lang];
         } else if (publishSettings.title.length > 150) {
-            errors.title = '标题不能超过 150 个字符';
+            errors.title = V.titleMaxLen[lang];
         }
 
         if (publishSettings.product_anchor_title.length > 40) {
-            errors.product_anchor_title = '锚点文案不能超过 40 个字符';
+            errors.product_anchor_title = V.anchorMaxLen[lang];
         }
 
         setSettingsErrors(errors);
@@ -183,32 +221,126 @@ export default function ShopPublishPage() {
         }
     };
 
-    const goPrev = () => {
-        if (currentStep > 1) {
-            setCurrentStep(s => s - 1);
+
+    // ============================================================
+    // Video Upload (A1)
+    // ============================================================
+
+    const handleFileSelect = async (file: File) => {
+        // Validate type
+        const validTypes = ['video/mp4', 'video/webm', 'video/quicktime'];
+        if (!validTypes.includes(file.type)) {
+            toast({
+                variant: 'destructive',
+                title: SHOP_TEXT.toast.unsupportedFmt[lang],
+                description: SHOP_TEXT.toast.unsupportedDesc[lang],
+            });
+            return;
+        }
+
+        // Validate size
+        if (file.size > MAX_FILE_SIZE) {
+            toast({
+                variant: 'destructive',
+                title: SHOP_TEXT.toast.fileTooLarge[lang],
+                description: `${lang === 'en' ? 'Maximum file size is' : '\u6700\u5927\u6587\u4ef6\u5927\u5c0f\u4e3a'} ${MAX_FILE_SIZE_MB}MB`,
+            });
+            return;
+        }
+
+        // Create local preview
+        const localPreviewUrl = URL.createObjectURL(file);
+
+        // Set preliminary video source for preview
+        setVideoSource({
+            url: '', // Will be filled after upload
+            source: 'upload',
+            name: file.name,
+            localPreviewUrl,
+        });
+
+        // Upload to server
+        setUploading(true);
+        setUploadProgress(10);
+
+        try {
+            const formData = new FormData();
+            formData.append('file', file);
+
+            setUploadProgress(30);
+
+            const res = await fetch('/api/upload/video', {
+                method: 'POST',
+                body: formData,
+            });
+
+            setUploadProgress(80);
+
+            if (!res.ok) {
+                const data = await res.json();
+                throw new Error(data.error || 'Upload failed');
+            }
+
+            const data = await res.json();
+            setUploadProgress(100);
+
+            // Update with server URL
+            setVideoSource({
+                url: data.url,
+                source: 'upload',
+                name: file.name,
+                localPreviewUrl,
+            });
+
+            toast({
+                title: SHOP_TEXT.toast.uploadOk[lang],
+                description: SHOP_TEXT.toast.uploadOkDesc[lang],
+            });
+        } catch (error) {
+            console.error('Upload failed:', error);
+            toast({
+                variant: 'destructive',
+                title: SHOP_TEXT.toast.uploadFailed[lang],
+                description: error instanceof Error ? localizeError(error.message, lang) : SHOP_TEXT.toast.tryAgain[lang],
+            });
+            // Clear video source on failure
+            setVideoSource(null);
+            URL.revokeObjectURL(localPreviewUrl);
+        } finally {
+            setUploading(false);
+            setUploadProgress(0);
         }
     };
 
-    const goToStep = (step: number) => {
-        // Can only go to completed steps or next step
-        if (step <= currentStep || (step === currentStep + 1 && canProceed)) {
-            if (step === 5 && currentStep === 4) {
-                if (!validateSettings()) return;
-            }
-            setCurrentStep(step);
+    const handleClearVideo = () => {
+        if (videoSource?.localPreviewUrl) {
+            URL.revokeObjectURL(videoSource.localPreviewUrl);
+        }
+        setVideoSource(null);
+        if (fileInputRef.current) {
+            fileInputRef.current.value = '';
         }
     };
 
     // ============================================================
-    // Submit
+    // Submit (A0.2: auto-trigger process after task creation)
     // ============================================================
 
     const handleSubmit = async () => {
-        if (!videoSource || !selectedProduct || !selectedAccountId || !publishSettings.title.trim()) {
+        if (!videoSource || !videoSource.url || !selectedProduct || !selectedAccountId || !publishSettings.title.trim()) {
             toast({
                 variant: 'destructive',
-                title: '信息不完整',
-                description: '请完成所有步骤',
+                title: SHOP_TEXT.toast.incomplete[lang],
+                description: uploading ? SHOP_TEXT.toast.waitUpload[lang] : SHOP_TEXT.toast.incompleteDesc[lang],
+            });
+            return;
+        }
+
+        if (!confirmed) {
+            toast({
+                variant: 'destructive',
+                title: SHOP_TEXT.toast.confirmRequired[lang],
+                description: SHOP_TEXT.toast.confirmDesc[lang],
             });
             return;
         }
@@ -219,7 +351,7 @@ export default function ShopPublishPage() {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    task_name: `Shop 发布 - ${publishSettings.title.substring(0, 30)}`,
+                    task_name: `Shop Publish — ${publishSettings.title.substring(0, 30)}`,
                     title_template: publishSettings.title,
                     enable_precheck: publishSettings.enable_precheck,
                     items: [
@@ -237,16 +369,21 @@ export default function ShopPublishPage() {
 
             if (!res.ok) {
                 const data = await res.json();
-                throw new Error(data.error || '创建任务失败');
+                throw new Error(data.error || 'Failed to create task');
             }
 
+            // A0.2: Fire-and-forget call to process route to start task execution
+            fetch('/api/shop-publish/process', { method: 'POST' }).catch(err => {
+                console.warn('[ShopPublish] Background process trigger failed (non-blocking):', err);
+            });
+
             toast({
-                title: '任务创建成功',
-                description: '视频发布任务已创建，可在下方查看进度',
+                title: SHOP_TEXT.toast.taskCreated[lang],
+                description: SHOP_TEXT.toast.taskCreatedDesc[lang],
             });
 
             // Reset form
-            setVideoSource(null);
+            handleClearVideo();
             setSelectedProduct(null);
             setSelectedAccountId(null);
             setPublishSettings({
@@ -254,13 +391,14 @@ export default function ShopPublishPage() {
                 product_anchor_title: '',
                 enable_precheck: false,
             });
+            setConfirmed(false);
             setCurrentStep(1);
         } catch (error) {
             console.error('Failed to create task:', error);
             toast({
                 variant: 'destructive',
-                title: '创建失败',
-                description: error instanceof Error ? error.message : '任务创建失败',
+                title: SHOP_TEXT.toast.createFailed[lang],
+                description: error instanceof Error ? localizeError(error.message, lang) : SHOP_TEXT.toast.taskFailed[lang],
             });
         } finally {
             setSubmitting(false);
@@ -287,379 +425,272 @@ export default function ShopPublishPage() {
                 <div>
                     <h1 className="text-2xl font-bold text-white flex items-center gap-2">
                         <ShoppingBag className="h-6 w-6" />
-                        TikTok Shop 带货发布
+                        {SHOP_TEXT.page.title[lang]}
                     </h1>
                     <p className="text-white/50 text-sm mt-0.5">
-                        发布带商品链接的视频到 TikTok Shop
+                        {SHOP_TEXT.page.subtitle[lang]}
                     </p>
                 </div>
             </div>
-
-            {/* Step Progress Indicator */}
-            <div className="flex items-center gap-1">
-                {STEPS.map((step, index) => {
+            {/* ============================================================ */}
+            {/* Vertical Section Flow — accordion-style */}
+            {/* ============================================================ */}
+            <div className="space-y-3">
+                {STEPS.map((step) => {
                     const Icon = step.icon;
-                    const isActive = currentStep === step.id;
-                    const isCompleted = currentStep > step.id || (step.id < currentStep && isStepComplete(step.id));
-                    const isClickable = step.id <= currentStep || (step.id === currentStep + 1 && canProceed);
+                    const stepNum = step.id;
+                    const isActive = currentStep === stepNum;
+                    const isCompleted = isStepComplete(stepNum) && !isActive;
+                    const isLocked = !isCompleted && (stepNum > currentStep + 1 || (stepNum === currentStep + 1 && !canProceed));
+                    const canOpen = isCompleted || stepNum <= currentStep || (stepNum === currentStep + 1 && canProceed);
 
                     return (
-                        <div key={step.id} className="flex items-center flex-1">
+                        <div
+                            key={stepNum}
+                            className={cn(
+                                'rounded-2xl border overflow-hidden transition-all duration-300',
+                                isActive
+                                    ? 'border-cyan-500/30 bg-white/5 shadow-[0_0_20px_rgba(0,242,234,0.08)]'
+                                    : isCompleted
+                                        ? 'border-green-500/20 bg-white/[0.03]'
+                                        : isLocked
+                                            ? 'border-white/5 bg-white/[0.02] opacity-50'
+                                            : 'border-white/10 bg-white/[0.03]'
+                            )}
+                        >
+                            {/* Section Header */}
                             <button
-                                onClick={() => goToStep(step.id)}
-                                disabled={!isClickable}
+                                onClick={() => {
+                                    if (!canOpen || isActive) return;
+                                    if (stepNum === 5 && currentStep === 4 && !validateSettings()) return;
+                                    setCurrentStep(stepNum);
+                                }}
+                                disabled={isLocked}
                                 className={cn(
-                                    'flex items-center gap-2 px-3 py-2 rounded-lg transition-all w-full',
-                                    isActive
-                                        ? 'bg-gradient-to-r from-cyan-500/20 to-pink-500/20 border border-cyan-500/30'
-                                        : isCompleted
-                                            ? 'bg-green-500/10 border border-green-500/20'
-                                            : 'bg-white/5 border border-white/5',
-                                    isClickable ? 'cursor-pointer hover:bg-white/10' : 'cursor-not-allowed opacity-50'
+                                    'w-full flex items-center gap-4 px-5 py-4 text-left transition-all',
+                                    canOpen && !isActive ? 'cursor-pointer hover:bg-white/5' : '',
+                                    isLocked ? 'cursor-not-allowed' : ''
                                 )}
                             >
                                 <div className={cn(
-                                    'w-7 h-7 rounded-full flex items-center justify-center shrink-0 text-xs font-bold',
+                                    'w-9 h-9 rounded-full flex items-center justify-center shrink-0 text-sm font-bold transition-all',
                                     isActive
-                                        ? 'bg-cyan-500 text-white'
+                                        ? 'bg-gradient-to-br from-cyan-500 to-pink-500 text-white shadow-lg shadow-cyan-500/20'
                                         : isCompleted
                                             ? 'bg-green-500 text-white'
-                                            : 'bg-white/10 text-gray-400'
+                                            : 'bg-white/10 text-gray-500'
                                 )}>
-                                    {isCompleted && !isActive ? (
-                                        <Check className="w-3.5 h-3.5" />
-                                    ) : (
-                                        <Icon className="w-3.5 h-3.5" />
+                                    {isCompleted ? <Check className="w-4 h-4" /> : <Icon className="w-4 h-4" />}
+                                </div>
+
+                                <div className="flex-1 min-w-0">
+                                    <span className={cn(
+                                        'text-sm font-semibold',
+                                        isActive ? 'text-white' : isCompleted ? 'text-green-300' : 'text-gray-500'
+                                    )}>
+                                        {step.label}
+                                    </span>
+                                    {isCompleted && !isActive && (
+                                        <p className="text-xs text-gray-500 mt-0.5 truncate">
+                                            {stepNum === 1 && videoSource?.name}
+                                            {stepNum === 2 && accounts.find(a => a.id === selectedAccountId)?.display_name}
+                                            {stepNum === 3 && selectedProduct?.shop?.name}
+                                            {stepNum === 4 && (
+                                                <>{publishSettings.title.substring(0, 30)}{publishSettings.title.length > 30 ? '...' : ''}{publishSettings.enable_precheck ? ` · ${SHOP_TEXT.review.precheckOn[lang]}` : ''}</>
+                                            )}
+                                        </p>
                                     )}
                                 </div>
-                                <span className={cn(
-                                    'text-xs font-medium truncate',
-                                    isActive ? 'text-white' : 'text-gray-500'
-                                )}>
-                                    {step.label}
-                                </span>
+
+                                {isCompleted && !isActive && (
+                                    <Badge variant="outline" className="text-green-400 border-green-500/30 shrink-0 text-[10px]">
+                                        <Check className="w-3 h-3 mr-1" />
+                                        {lang === 'en' ? 'Done' : '\u5df2\u5b8c\u6210'}
+                                    </Badge>
+                                )}
+                                {isActive && (
+                                    <Badge className="bg-cyan-500/20 text-cyan-300 border-cyan-500/30 shrink-0 text-[10px]">
+                                        {lang === 'en' ? 'Current' : '\u5f53\u524d'}
+                                    </Badge>
+                                )}
                             </button>
-                            {index < STEPS.length - 1 && (
-                                <ChevronRight className="w-4 h-4 text-gray-600 shrink-0 mx-1" />
+
+                            {/* Section Content */}
+                            {isActive && (
+                                <div className="px-5 pb-5 pt-1 border-t border-white/5">
+                                    {/* Step 1: Video */}
+                                    {stepNum === 1 && (
+                                        <div className="space-y-4">
+                                            <p className="text-sm text-gray-500">{SHOP_TEXT.video.sectionDesc[lang]}</p>
+                                            <div className="flex gap-2">
+                                                <button onClick={() => setVideoInputMode('upload')} className={cn('flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all', videoInputMode === 'upload' ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30' : 'bg-white/5 text-gray-400 border border-white/10 hover:bg-white/10')}>
+                                                    <Upload className="w-4 h-4" />{SHOP_TEXT.video.uploadTab[lang]}
+                                                </button>
+                                                <button onClick={() => setVideoInputMode('url')} className={cn('flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all', videoInputMode === 'url' ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30' : 'bg-white/5 text-gray-400 border border-white/10 hover:bg-white/10')}>
+                                                    <Link2 className="w-4 h-4" />{SHOP_TEXT.video.urlTab[lang]}
+                                                </button>
+                                            </div>
+                                            {videoInputMode === 'upload' && (
+                                                <div className="space-y-3">
+                                                    {!videoSource ? (
+                                                        <label className={cn('flex flex-col items-center justify-center py-12 rounded-xl border-2 border-dashed transition-all cursor-pointer', uploading ? 'border-cyan-500/50 bg-cyan-500/5' : 'border-white/10 bg-white/[0.02] hover:border-white/20 hover:bg-white/5')}>
+                                                            <input ref={fileInputRef} type="file" accept={ACCEPTED_VIDEO_TYPES} className="hidden" onChange={(e) => { const file = e.target.files?.[0]; if (file) handleFileSelect(file); }} disabled={uploading} />
+                                                            {uploading ? (<><Loader2 className="w-10 h-10 text-cyan-400 animate-spin mb-3" /><p className="text-sm text-cyan-300 font-medium">{SHOP_TEXT.video.uploading[lang]} {uploadProgress}%</p><div className="w-48 h-1.5 bg-white/10 rounded-full mt-2 overflow-hidden"><div className="h-full bg-gradient-to-r from-cyan-500 to-pink-500 rounded-full transition-all duration-300" style={{ width: `${uploadProgress}%` }} /></div></>) : (<><Upload className="w-10 h-10 text-gray-500 mb-3" /><p className="text-sm text-gray-400 font-medium">{SHOP_TEXT.video.dropzoneTitle[lang]}</p><p className="text-xs text-gray-600 mt-1">{SHOP_TEXT.video.dropzoneFormats[lang]} — {SHOP_TEXT.video.maxSize[lang]}</p></>)}
+                                                        </label>
+                                                    ) : (
+                                                        <div className="rounded-xl border border-white/10 bg-white/5 overflow-hidden">
+                                                            {videoSource.localPreviewUrl ? (<div className="relative aspect-video bg-black max-h-[300px]"><video src={videoSource.localPreviewUrl} className="w-full h-full object-contain" controls muted /></div>) : (<div className="flex items-center justify-center py-8 bg-white/[0.02]"><FileVideo className="w-12 h-12 text-gray-600" /></div>)}
+                                                            <div className="flex items-center gap-3 p-3 border-t border-white/5">
+                                                                <Play className="w-5 h-5 text-green-400 shrink-0" />
+                                                                <div className="flex-1 min-w-0"><p className="text-sm text-white truncate">{videoSource.name}</p></div>
+                                                                {!uploading && videoSource.url && (<Badge variant="outline" className="text-green-400 border-green-500/30 shrink-0">{SHOP_TEXT.video.videoReady[lang]}</Badge>)}
+                                                                {uploading && (<Badge variant="outline" className="text-cyan-400 border-cyan-500/30 shrink-0 animate-pulse">{SHOP_TEXT.video.uploading[lang]}</Badge>)}
+                                                                <button onClick={handleClearVideo} disabled={uploading} className="p-1.5 rounded-lg hover:bg-white/10 text-gray-400 hover:text-red-400 transition-all disabled:opacity-50"><X className="w-4 h-4" /></button>
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
+                                            {videoInputMode === 'url' && (
+                                                <div className="space-y-3">
+                                                    <div className="relative">
+                                                        <Video className="absolute left-3 top-3 h-5 w-5 text-gray-500" />
+                                                        <input type="url" value={videoSource?.source === 'url' ? videoSource.url : ''} onChange={(e) => { const url = e.target.value; if (url) { setVideoSource({ url, source: 'url', name: url.split('/').pop() || 'video' }); } else { setVideoSource(null); } }} placeholder={SHOP_TEXT.video.urlPlaceholder[lang]} className="w-full h-12 pl-11 pr-4 rounded-xl bg-white/5 border border-white/10 text-white placeholder:text-gray-600 focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500/50" />
+                                                    </div>
+                                                    {videoSource && videoSource.source === 'url' && (
+                                                        <div className="flex items-center gap-3 p-3 rounded-lg bg-green-500/10 border border-green-500/20">
+                                                            <Play className="w-5 h-5 text-green-400" /><div className="flex-1 min-w-0"><p className="text-sm text-green-300 truncate">{videoSource.name}</p></div>
+                                                            <Badge variant="outline" className="text-green-400 border-green-500/30">{SHOP_TEXT.video.videoReady[lang]}</Badge>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
+                                            {canProceed && (<div className="flex justify-end pt-2"><Button onClick={goNext} className="gap-2 bg-gradient-to-r from-cyan-500 to-pink-500 hover:from-cyan-600 hover:to-pink-600 text-white">{SHOP_TEXT.nav.continue[lang]}<ChevronRight className="w-4 h-4" /></Button></div>)}
+                                        </div>
+                                    )}
+
+                                    {/* Step 2: Account */}
+                                    {stepNum === 2 && (
+                                        <div className="space-y-4">
+                                            <div className="flex items-center justify-between">
+                                                <p className="text-sm text-gray-500">{lang === 'en' ? 'Choose a Shop account to publish the video' : '\u9009\u62e9\u4e00\u4e2a Shop \u8d26\u53f7\u53d1\u5e03\u89c6\u9891'}</p>
+                                                <Button variant="ghost" size="sm" onClick={fetchAccounts} className="text-gray-400 hover:text-white"><RefreshCw className={cn('w-4 h-4', accountsLoading && 'animate-spin')} /></Button>
+                                            </div>
+                                            {accountsLoading ? (
+                                                <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-gray-400" /></div>
+                                            ) : accounts.length === 0 ? (
+                                                <div className="text-center py-12">
+                                                    <Store className="w-10 h-10 text-gray-600 mx-auto mb-3" />
+                                                    <p className="text-sm text-gray-500 mb-4">{SHOP_TEXT.account.noAccounts[lang]}</p>
+                                                    <Button variant="outline" size="sm" onClick={() => router.push('/shop-publish/accounts')}>{SHOP_TEXT.account.manageAccounts[lang]}</Button>
+                                                </div>
+                                            ) : (
+                                                <div className="grid grid-cols-2 gap-3">
+                                                    {accounts.map(account => {
+                                                        const isValid = isAccountTokenValid(account);
+                                                        const isSelected = selectedAccountId === account.id;
+                                                        return (
+                                                            <div key={account.id} onClick={() => { if (!isValid) return; const newId = isSelected ? null : account.id; setSelectedAccountId(newId); if (newId !== selectedAccountId) setSelectedProduct(null); }} className={cn('relative p-3 rounded-xl border transition-all cursor-pointer', isSelected ? 'bg-cyan-500/10 border-cyan-500/50' : 'bg-white/5 border-white/10 hover:border-white/20', !isValid && 'opacity-50 cursor-not-allowed')}>
+                                                                <div className="flex items-center gap-3">
+                                                                    <div className="relative">
+                                                                        {account.avatar_url ? (<img src={account.avatar_url} alt={account.display_name || 'Shop'} className="w-10 h-10 rounded-full object-cover" />) : (<div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#00F2EA] to-[#EC4899] flex items-center justify-center text-white font-bold">{(account.display_name || 'S').charAt(0)}</div>)}
+                                                                        {isSelected && (<div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-cyan-500 flex items-center justify-center"><Check className="w-3 h-3 text-white" /></div>)}
+                                                                    </div>
+                                                                    <div className="flex-1 min-w-0">
+                                                                        <div className="flex items-center gap-2">
+                                                                            <span className="font-medium text-white truncate">{account.display_name || 'Shop Account'}</span>
+                                                                            {!isValid && (<span className="text-xs text-red-400 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{SHOP_TEXT.account.tokenExpired[lang]}</span>)}
+                                                                        </div>
+                                                                        {account.username && (<p className="text-xs text-gray-500">@{account.username}</p>)}
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            )}
+                                            {canProceed && (<div className="flex justify-end pt-2"><Button onClick={goNext} className="gap-2 bg-gradient-to-r from-cyan-500 to-pink-500 hover:from-cyan-600 hover:to-pink-600 text-white">{SHOP_TEXT.nav.continue[lang]}<ChevronRight className="w-4 h-4" /></Button></div>)}
+                                        </div>
+                                    )}
+
+                                    {/* Step 3: Product */}
+                                    {stepNum === 3 && (
+                                        <div className="space-y-4">
+                                            <p className="text-sm text-gray-500">{lang === 'en' ? 'Choose a product from your showcase (one per video)' : '\u4ece\u6a71\u7a97\u9009\u62e9\u5546\u54c1\uff08\u6bcf\u89c6\u9891\u4e00\u4e2a\uff09'}</p>
+                                            {selectedAccountId ? (
+                                                <ShopProductSelector accountId={selectedAccountId} selectedProductId={selectedProduct?.id} onSelect={(product) => setSelectedProduct(product as SelectedProduct | null)} />
+                                            ) : (
+                                                <div className="text-center py-12">
+                                                    <Store className="w-10 h-10 text-gray-600 mx-auto mb-3" />
+                                                    <p className="text-sm text-gray-500 mb-4">{lang === 'en' ? 'Please select a Shop account first' : '\u8bf7\u5148\u9009\u62e9 Shop \u8d26\u53f7'}</p>
+                                                    <Button variant="outline" size="sm" onClick={() => setCurrentStep(2)}>{lang === 'en' ? 'Back to Account Selection' : '\u8fd4\u56de\u9009\u62e9\u8d26\u53f7'}</Button>
+                                                </div>
+                                            )}
+                                            {canProceed && (<div className="flex justify-end pt-2"><Button onClick={goNext} className="gap-2 bg-gradient-to-r from-cyan-500 to-pink-500 hover:from-cyan-600 hover:to-pink-600 text-white">{SHOP_TEXT.nav.continue[lang]}<ChevronRight className="w-4 h-4" /></Button></div>)}
+                                        </div>
+                                    )}
+
+                                    {/* Step 4: Settings */}
+                                    {stepNum === 4 && (
+                                        <div className="space-y-4 pt-2">
+                                            <ShopPublishSettings value={publishSettings} onChange={(v) => { setPublishSettings(v); setSettingsErrors({}); }} errors={settingsErrors} />
+                                            {canProceed && (<div className="flex justify-end pt-2"><Button onClick={() => { if (validateSettings()) goNext(); }} className="gap-2 bg-gradient-to-r from-cyan-500 to-pink-500 hover:from-cyan-600 hover:to-pink-600 text-white">{SHOP_TEXT.nav.continue[lang]}<ChevronRight className="w-4 h-4" /></Button></div>)}
+                                        </div>
+                                    )}
+
+                                    {/* Step 5: Review & Submit */}
+                                    {stepNum === 5 && (
+                                        <div className="space-y-6 pt-2">
+                                            <p className="text-sm text-gray-500">{SHOP_TEXT.review.reviewDesc[lang]}</p>
+                                            <div className="space-y-3">
+                                                <div className="flex items-center gap-3 p-4 rounded-xl bg-white/5 border border-white/10">
+                                                    <Video className="w-5 h-5 text-cyan-400 shrink-0" />
+                                                    <div className="flex-1 min-w-0"><p className="text-xs text-gray-500 mb-0.5">{SHOP_TEXT.review.videoLabel[lang]}</p><p className="text-sm text-white truncate">{videoSource?.name || '\u2014'}</p></div>
+                                                    <Badge variant="outline" className="shrink-0">{videoSource?.source}</Badge>
+                                                </div>
+                                                <div className="flex items-center gap-3 p-4 rounded-xl bg-white/5 border border-white/10">
+                                                    <Package className="w-5 h-5 text-pink-400 shrink-0" />
+                                                    <div className="flex-1 min-w-0"><p className="text-xs text-gray-500 mb-0.5">{SHOP_TEXT.review.productLabel[lang]}</p><p className="text-sm text-white truncate">{selectedProduct?.shop.name || '\u2014'}</p></div>
+                                                </div>
+                                                <div className="flex items-center gap-3 p-4 rounded-xl bg-white/5 border border-white/10">
+                                                    <Store className="w-5 h-5 text-green-400 shrink-0" />
+                                                    <div className="flex-1 min-w-0"><p className="text-xs text-gray-500 mb-0.5">{SHOP_TEXT.review.accountLabel[lang]}</p><p className="text-sm text-white truncate">{accounts.find(a => a.id === selectedAccountId)?.display_name || '\u2014'}</p></div>
+                                                </div>
+                                                <div className="flex items-center gap-3 p-4 rounded-xl bg-white/5 border border-white/10">
+                                                    <Settings className="w-5 h-5 text-amber-400 shrink-0" />
+                                                    <div className="flex-1 min-w-0">
+                                                        <p className="text-xs text-gray-500 mb-0.5">{SHOP_TEXT.review.titleLabel[lang]}</p>
+                                                        <p className="text-sm text-white">{publishSettings.title || '\u2014'}</p>
+                                                        {publishSettings.product_anchor_title && (<p className="text-xs text-gray-500 mt-1">{SHOP_TEXT.review.anchorLabel[lang]}: {publishSettings.product_anchor_title}</p>)}
+                                                    </div>
+                                                    {publishSettings.enable_precheck && (<Badge variant="outline" className="text-green-400 border-green-500/30 shrink-0">{SHOP_TEXT.review.precheckOn[lang]}</Badge>)}
+                                                </div>
+                                            </div>
+                                            {(() => { const notice = getPlatformNoticeText(lang); const guidelines = SHOP_TEXT.review.guidelinesItems[lang]; return (
+                                                <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 space-y-3">
+                                                    <div className="flex items-center gap-2"><ShieldCheck className="w-5 h-5 text-amber-400" /><h3 className="text-sm font-semibold text-amber-300">{SHOP_TEXT.review.platformNotice[lang]}</h3></div>
+                                                    <div className="text-xs text-gray-400 space-y-1.5 leading-relaxed">
+                                                        <p>{notice.text1}</p><p>{notice.text2}</p>
+                                                        <ul className="list-disc list-inside space-y-0.5 ml-1">{guidelines.map((item: string, i: number) => (<li key={i}>{item}</li>))}</ul>
+                                                    </div>
+                                                    <button onClick={() => setConfirmed(!confirmed)} className="flex items-start gap-2 mt-2 group cursor-pointer w-full text-left">
+                                                        {confirmed ? (<CheckSquare className="w-5 h-5 text-green-400 shrink-0 mt-0.5" />) : (<Square className="w-5 h-5 text-gray-500 shrink-0 mt-0.5 group-hover:text-gray-300" />)}
+                                                        <span className={cn('text-sm', confirmed ? 'text-green-300' : 'text-gray-400 group-hover:text-gray-300')}>{notice.confirmText}</span>
+                                                    </button>
+                                                </div>
+                                            ); })()}
+                                            <div className="flex justify-end pt-2">
+                                                <Button onClick={handleSubmit} disabled={submitting || !canProceed || !confirmed} className="gap-2 bg-gradient-to-r from-[#CCFF00] via-[#00F2EA] to-[#EC4899] text-black font-bold hover:shadow-[0_0_25px_rgba(0,242,234,0.5)]">
+                                                    {submitting ? (<><Loader2 className="w-4 h-4 animate-spin" />{SHOP_TEXT.nav.submitting[lang]}</>) : (<><Send className="w-4 h-4" />{SHOP_TEXT.nav.createTask[lang]}</>)}
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
                             )}
                         </div>
                     );
                 })}
-            </div>
-
-            {/* Step Content */}
-            <div className="min-h-[400px] bg-white/5 rounded-2xl border border-white/10 p-6">
-                {/* Step 1: Select Video */}
-                {currentStep === 1 && (
-                    <div className="space-y-4">
-                        <h2 className="text-lg font-semibold text-white">选择要发布的视频</h2>
-                        <p className="text-sm text-gray-500">
-                            输入视频 URL 或从成品库选择视频
-                        </p>
-
-                        {/* Simple URL input for now — can be enhanced with VideoUploader in future */}
-                        <div className="space-y-3">
-                            <div className="relative">
-                                <Video className="absolute left-3 top-3 h-5 w-5 text-gray-500" />
-                                <input
-                                    type="url"
-                                    value={videoSource?.url || ''}
-                                    onChange={(e) => {
-                                        const url = e.target.value;
-                                        if (url) {
-                                            setVideoSource({
-                                                url,
-                                                source: 'url',
-                                                name: url.split('/').pop() || 'video',
-                                            });
-                                        } else {
-                                            setVideoSource(null);
-                                        }
-                                    }}
-                                    placeholder="输入视频文件的 URL 地址..."
-                                    className="w-full h-12 pl-11 pr-4 rounded-xl bg-white/5 border border-white/10 text-white placeholder:text-gray-600 focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500/50"
-                                />
-                            </div>
-
-                            {videoSource && (
-                                <div className="flex items-center gap-3 p-3 rounded-lg bg-green-500/10 border border-green-500/20">
-                                    <Play className="w-5 h-5 text-green-400" />
-                                    <div className="flex-1 min-w-0">
-                                        <p className="text-sm text-green-300 truncate">{videoSource.name}</p>
-                                        <p className="text-xs text-gray-500">来源: {videoSource.source}</p>
-                                    </div>
-                                    <Badge variant="outline" className="text-green-400 border-green-500/30">
-                                        已选择
-                                    </Badge>
-                                </div>
-                            )}
-                        </div>
-
-                        <div className="flex items-start gap-2 p-3 rounded-lg bg-white/5 text-xs text-gray-500">
-                            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-                            <p>
-                                支持 MP4 格式视频。建议 720p 以上分辨率，时长 15 秒至 10 分钟。
-                                视频将通过 TikTok Shop API 上传，请确保视频内容符合平台规范。
-                            </p>
-                        </div>
-                    </div>
-                )}
-
-                {/* Step 2: Select Account (BEFORE products — products depend on account) */}
-                {currentStep === 2 && (
-                    <div className="space-y-4">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <h2 className="text-lg font-semibold text-white">选择发布账号</h2>
-                                <p className="text-sm text-gray-500">
-                                    选择一个 Shop 账号，用于获取橱窗商品和发布视频
-                                </p>
-                            </div>
-                            <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={fetchAccounts}
-                                className="text-gray-400 hover:text-white"
-                            >
-                                <RefreshCw className={cn('w-4 h-4', accountsLoading && 'animate-spin')} />
-                            </Button>
-                        </div>
-
-                        {accountsLoading ? (
-                            <div className="flex justify-center py-12">
-                                <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
-                            </div>
-                        ) : accounts.length === 0 ? (
-                            <div className="text-center py-12">
-                                <Store className="w-10 h-10 text-gray-600 mx-auto mb-3" />
-                                <p className="text-sm text-gray-500 mb-4">暂无 Shop 账号</p>
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => router.push('/shop-publish/accounts')}
-                                >
-                                    前往绑定
-                                </Button>
-                            </div>
-                        ) : (
-                            <div className="grid grid-cols-2 gap-3">
-                                {accounts.map(account => {
-                                    const isValid = isAccountTokenValid(account);
-                                    const isSelected = selectedAccountId === account.id;
-
-                                    return (
-                                        <div
-                                            key={account.id}
-                                            onClick={() => {
-                                                if (!isValid) return;
-                                                const newId = isSelected ? null : account.id;
-                                                setSelectedAccountId(newId);
-                                                // Clear product selection when account changes
-                                                if (newId !== selectedAccountId) {
-                                                    setSelectedProduct(null);
-                                                }
-                                            }}
-                                            className={cn(
-                                                'relative p-3 rounded-xl border transition-all cursor-pointer',
-                                                isSelected
-                                                    ? 'bg-cyan-500/10 border-cyan-500/50'
-                                                    : 'bg-white/5 border-white/10 hover:border-white/20',
-                                                !isValid && 'opacity-50 cursor-not-allowed'
-                                            )}
-                                        >
-                                            <div className="flex items-center gap-3">
-                                                <div className="relative">
-                                                    {account.avatar_url ? (
-                                                        <img
-                                                            src={account.avatar_url}
-                                                            alt={account.display_name || 'Shop'}
-                                                            className="w-10 h-10 rounded-full object-cover"
-                                                        />
-                                                    ) : (
-                                                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#00F2EA] to-[#EC4899] flex items-center justify-center text-white font-bold">
-                                                            {(account.display_name || 'S').charAt(0)}
-                                                        </div>
-                                                    )}
-                                                    {isSelected && (
-                                                        <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-cyan-500 flex items-center justify-center">
-                                                            <Check className="w-3 h-3 text-white" />
-                                                        </div>
-                                                    )}
-                                                </div>
-                                                <div className="flex-1 min-w-0">
-                                                    <div className="flex items-center gap-2">
-                                                        <span className="font-medium text-white truncate">
-                                                            {account.display_name || 'Shop 账号'}
-                                                        </span>
-                                                        {!isValid && (
-                                                            <span className="text-xs text-red-400 flex items-center gap-1">
-                                                                <AlertCircle className="w-3 h-3" />
-                                                                已过期
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                    {account.username && (
-                                                        <p className="text-xs text-gray-500">@{account.username}</p>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                        )}
-                    </div>
-                )}
-
-                {/* Step 3: Select Product (after account, so we know whose showcase to load) */}
-                {currentStep === 3 && (
-                    <div className="space-y-4">
-                        <h2 className="text-lg font-semibold text-white">选择橱窗商品</h2>
-                        <p className="text-sm text-gray-500">
-                            从您的 TikTok Shop 橱窗中选择一个商品（每个视频只能关联一个商品）
-                        </p>
-
-                        {selectedAccountId ? (
-                            <ShopProductSelector
-                                accountId={selectedAccountId}
-                                selectedProductId={selectedProduct?.id}
-                                onSelect={(product) => setSelectedProduct(product as SelectedProduct | null)}
-                            />
-                        ) : (
-                            <div className="text-center py-12">
-                                <Store className="w-10 h-10 text-gray-600 mx-auto mb-3" />
-                                <p className="text-sm text-gray-500 mb-4">
-                                    请先在上一步选择 Shop 账号
-                                </p>
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => setCurrentStep(2)}
-                                >
-                                    返回选择账号
-                                </Button>
-                            </div>
-                        )}
-                    </div>
-                )}
-
-                {/* Step 4: Publish Settings */}
-                {currentStep === 4 && (
-                    <ShopPublishSettings
-                        value={publishSettings}
-                        onChange={(v) => {
-                            setPublishSettings(v);
-                            setSettingsErrors({});
-                        }}
-                        errors={settingsErrors}
-                    />
-                )}
-
-                {/* Step 5: Review & Submit */}
-                {currentStep === 5 && (
-                    <div className="space-y-6">
-                        <h2 className="text-lg font-semibold text-white">确认发布</h2>
-                        <p className="text-sm text-gray-500">
-                            请确认以下信息无误后提交发布任务
-                        </p>
-
-                        {/* Review Cards */}
-                        <div className="space-y-3">
-                            {/* Video */}
-                            <div className="flex items-center gap-3 p-4 rounded-xl bg-white/5 border border-white/10">
-                                <Video className="w-5 h-5 text-cyan-400 shrink-0" />
-                                <div className="flex-1 min-w-0">
-                                    <p className="text-xs text-gray-500 mb-0.5">视频</p>
-                                    <p className="text-sm text-white truncate">{videoSource?.name || '—'}</p>
-                                </div>
-                                <Badge variant="outline" className="shrink-0">
-                                    {videoSource?.source}
-                                </Badge>
-                            </div>
-
-                            {/* Product */}
-                            <div className="flex items-center gap-3 p-4 rounded-xl bg-white/5 border border-white/10">
-                                <Package className="w-5 h-5 text-pink-400 shrink-0" />
-                                <div className="flex-1 min-w-0">
-                                    <p className="text-xs text-gray-500 mb-0.5">商品</p>
-                                    <p className="text-sm text-white truncate">{selectedProduct?.shop.name || '—'}</p>
-                                </div>
-                            </div>
-
-                            {/* Account */}
-                            <div className="flex items-center gap-3 p-4 rounded-xl bg-white/5 border border-white/10">
-                                <Store className="w-5 h-5 text-green-400 shrink-0" />
-                                <div className="flex-1 min-w-0">
-                                    <p className="text-xs text-gray-500 mb-0.5">账号</p>
-                                    <p className="text-sm text-white truncate">
-                                        {accounts.find(a => a.id === selectedAccountId)?.display_name || '—'}
-                                    </p>
-                                </div>
-                            </div>
-
-                            {/* Title */}
-                            <div className="flex items-center gap-3 p-4 rounded-xl bg-white/5 border border-white/10">
-                                <Settings className="w-5 h-5 text-amber-400 shrink-0" />
-                                <div className="flex-1 min-w-0">
-                                    <p className="text-xs text-gray-500 mb-0.5">标题</p>
-                                    <p className="text-sm text-white">{publishSettings.title || '—'}</p>
-                                    {publishSettings.product_anchor_title && (
-                                        <p className="text-xs text-gray-500 mt-1">
-                                            锚点文案: {publishSettings.product_anchor_title}
-                                        </p>
-                                    )}
-                                </div>
-                                {publishSettings.enable_precheck && (
-                                    <Badge className="bg-green-500/20 text-green-400 border-green-500/30 shrink-0">
-                                        预检 ON
-                                    </Badge>
-                                )}
-                            </div>
-                        </div>
-                    </div>
-                )}
-            </div>
-
-            {/* Navigation Buttons */}
-            <div className="flex items-center justify-between">
-                <Button
-                    variant="outline"
-                    onClick={goPrev}
-                    disabled={currentStep === 1}
-                    className="gap-2"
-                >
-                    <ChevronLeft className="w-4 h-4" />
-                    上一步
-                </Button>
-
-                {currentStep < 5 ? (
-                    <Button
-                        onClick={goNext}
-                        disabled={!canProceed}
-                        className="gap-2 bg-gradient-to-r from-cyan-500 to-pink-500 hover:from-cyan-600 hover:to-pink-600 text-white"
-                    >
-                        下一步
-                        <ChevronRight className="w-4 h-4" />
-                    </Button>
-                ) : (
-                    <Button
-                        onClick={handleSubmit}
-                        disabled={submitting || !canProceed}
-                        className="gap-2 bg-gradient-to-r from-[#CCFF00] via-[#00F2EA] to-[#EC4899] text-black font-bold hover:shadow-[0_0_25px_rgba(0,242,234,0.5)]"
-                    >
-                        {submitting ? (
-                            <>
-                                <Loader2 className="w-4 h-4 animate-spin" />
-                                提交中...
-                            </>
-                        ) : (
-                            <>
-                                <Send className="w-4 h-4" />
-                                创建发布任务
-                            </>
-                        )}
-                    </Button>
-                )}
             </div>
 
             {/* Separator */}
@@ -669,7 +700,7 @@ export default function ShopPublishPage() {
             <div>
                 <div className="flex items-center gap-4 mb-4">
                     <div className="w-1 h-6 rounded-full bg-gradient-to-b from-[#00F2EA] to-[#EC4899]" />
-                    <h2 className="text-lg font-semibold text-white">发布任务历史</h2>
+                    <h2 className="text-lg font-semibold text-white">{SHOP_TEXT.page.taskHistory[lang]}</h2>
                 </div>
                 <ShopTaskManager />
             </div>

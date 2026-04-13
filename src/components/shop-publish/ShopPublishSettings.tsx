@@ -1,6 +1,6 @@
 'use client'
 
-// Shop Publish Settings — 发布设置表单
+// Shop Publish Settings — publishing settings form
 // Pattern: follows existing PublishSettings.tsx
 // Fields: title, product_anchor_title, enable_precheck
 
@@ -15,6 +15,8 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/utils'
+import { useLang } from '@/contexts/LangContext'
+import SHOP_TEXT from './shop-publish.i18n'
 
 // ============================================================
 // Types
@@ -48,6 +50,9 @@ export function ShopPublishSettings({
     onChange,
     errors,
 }: ShopPublishSettingsProps) {
+    const { lang } = useLang()
+    const T = SHOP_TEXT.settings
+
     const updateField = <K extends keyof ShopPublishSettingsData>(
         field: K,
         fieldValue: ShopPublishSettingsData[K]
@@ -60,21 +65,21 @@ export function ShopPublishSettings({
             {/* Section Title */}
             <div className="flex items-center gap-2">
                 <div className="w-1 h-6 rounded-full bg-gradient-to-b from-[#CCFF00] to-[#00F2EA]" />
-                <h3 className="text-lg font-semibold text-white">发布设置</h3>
+                <h3 className="text-lg font-semibold text-white">{T.sectionTitle[lang]}</h3>
             </div>
 
             {/* Video Title */}
             <div className="space-y-2">
                 <Label className="flex items-center gap-2 text-sm font-medium text-gray-300">
                     <Type className="w-4 h-4 text-cyan-400" />
-                    视频标题
-                    <span className="text-red-400">*</span>
+                    {T.videoTitle[lang]}
+                    <span className="text-red-400">{T.required[lang]}</span>
                 </Label>
                 <div className="relative">
                     <Input
                         value={value.title}
                         onChange={(e) => updateField('title', e.target.value)}
-                        placeholder="输入视频标题，让更多人看到你的商品..."
+                        placeholder={T.titlePlaceholder[lang]}
                         maxLength={TITLE_MAX_LENGTH}
                         className={cn(
                             'h-11 bg-white/5 border-white/10 pr-16',
@@ -99,8 +104,7 @@ export function ShopPublishSettings({
                 <div className="flex items-start gap-1.5 px-2 py-1.5 rounded-md bg-white/5">
                     <Info className="w-3.5 h-3.5 text-gray-500 mt-0.5 shrink-0" />
                     <p className="text-xs text-gray-500 leading-relaxed">
-                        标题直接影响视频曝光量。建议包含商品关键词和吸引观众的短语。
-                        TikTok 限制最多 {TITLE_MAX_LENGTH} 个字符。
+                        {T.titleHint[lang]} {T.titleLimit[lang].replace('{max}', String(TITLE_MAX_LENGTH))}
                     </p>
                 </div>
             </div>
@@ -109,13 +113,13 @@ export function ShopPublishSettings({
             <div className="space-y-2">
                 <Label className="flex items-center gap-2 text-sm font-medium text-gray-300">
                     <Tag className="w-4 h-4 text-pink-400" />
-                    商品锚点文案
+                    {T.anchorText[lang]}
                 </Label>
                 <div className="relative">
                     <Input
                         value={value.product_anchor_title}
                         onChange={(e) => updateField('product_anchor_title', e.target.value)}
-                        placeholder="例如：限时优惠 立即购买"
+                        placeholder={T.anchorPlaceholder[lang]}
                         maxLength={ANCHOR_MAX_LENGTH}
                         className={cn(
                             'h-11 bg-white/5 border-white/10 pr-12',
@@ -135,7 +139,7 @@ export function ShopPublishSettings({
                 <div className="flex items-start gap-1.5 px-2 py-1.5 rounded-md bg-white/5">
                     <Info className="w-3.5 h-3.5 text-gray-500 mt-0.5 shrink-0" />
                     <p className="text-xs text-gray-500 leading-relaxed">
-                        锚点文案会显示在视频中的商品链接上，引导用户点击购买。留空则使用商品默认名称。
+                        {T.anchorHint[lang]}
                     </p>
                 </div>
             </div>
@@ -148,10 +152,10 @@ export function ShopPublishSettings({
                     </div>
                     <div>
                         <Label className="text-sm font-medium text-white cursor-pointer">
-                            发布前预检
+                            {T.precheckLabel[lang]}
                         </Label>
                         <p className="text-xs text-gray-500 mt-0.5">
-                            提交前自动检查视频是否符合 TikTok Shop 规范
+                            {T.precheckDesc[lang]}
                         </p>
                     </div>
                 </div>

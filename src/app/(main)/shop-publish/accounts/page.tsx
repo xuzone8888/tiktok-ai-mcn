@@ -28,7 +28,9 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { formatDistanceToNow, format } from "date-fns";
-import { zhCN } from "date-fns/locale";
+import { zhCN, enUS } from "date-fns/locale";
+import { useLang } from "@/contexts/LangContext";
+import SHOP_TEXT, { localizeError, getAccountRemovedDesc, getRemoveDialogDesc, getInfoCardDesc, type Lang } from "@/components/shop-publish/shop-publish.i18n";
 import {
     AlertDialog,
     AlertDialogAction,
@@ -72,11 +74,14 @@ interface ShopAccount {
 
 type SortOption = 'auth_time_desc' | 'auth_time_asc' | 'name_asc';
 
-const SORT_OPTIONS: { value: SortOption; label: string }[] = [
-    { value: 'auth_time_desc', label: '授权时间 (近→远)' },
-    { value: 'auth_time_asc', label: '授权时间 (远→近)' },
-    { value: 'name_asc', label: '名称 (A-Z)' },
-];
+function getSortOptions(lang: Lang): { value: SortOption; label: string }[] {
+    const T = SHOP_TEXT.accounts
+    return [
+        { value: 'auth_time_desc', label: T.sortNewest[lang] },
+        { value: 'auth_time_asc', label: T.sortOldest[lang] },
+        { value: 'name_asc', label: T.sortName[lang] },
+    ]
+}
 
 // ============================================================
 // Page Component
@@ -89,6 +94,10 @@ export default function ShopAccountsPage() {
     const [refreshingId, setRefreshingId] = useState<string | null>(null);
     const [sortBy, setSortBy] = useState<SortOption>('auth_time_desc');
     const { toast } = useToast();
+    const { lang } = useLang();
+    const T = SHOP_TEXT.accounts;
+    const SORT_OPTIONS = getSortOptions(lang);
+    const dateLocale = lang === 'zh' ? zhCN : enUS;
 
     // ============================================================
     // URL param toast (success/error from OAuth callback redirect)
@@ -102,8 +111,8 @@ export default function ShopAccountsPage() {
 
         if (success && name) {
             toast({
-                title: "Shop 账号绑定成功",
-                description: `已成功绑定 TikTok Shop 账号: ${name}`,
+                title: T.connected[lang],
+                description: `${T.connectedDesc[lang]}: ${name}`,
             });
             window.history.replaceState({}, "", "/shop-publish/accounts");
         }
@@ -111,12 +120,12 @@ export default function ShopAccountsPage() {
         if (error) {
             toast({
                 variant: "destructive",
-                title: "绑定失败",
-                description: decodeURIComponent(error),
+                title: T.connectFailed[lang],
+                description: localizeError(decodeURIComponent(error), lang),
             });
             window.history.replaceState({}, "", "/shop-publish/accounts");
         }
-    }, [toast]);
+    }, [toast, lang]);
 
     // ============================================================
     // Data Fetching
@@ -132,13 +141,13 @@ export default function ShopAccountsPage() {
             console.error("Error fetching Shop accounts:", error);
             toast({
                 variant: "destructive",
-                title: "加载失败",
-                description: "无法加载 TikTok Shop 账号列表",
+                title: T.loadFailed[lang],
+                description: T.loadFailedDesc[lang],
             });
         } finally {
             setLoading(false);
         }
-    }, [toast]);
+    }, [toast, lang]);
 
     useEffect(() => {
         fetchAccounts();
@@ -180,8 +189,8 @@ export default function ShopAccountsPage() {
             console.error("Error connecting Shop:", error);
             toast({
                 variant: "destructive",
-                title: "连接失败",
-                description: "无法生成 Shop 授权链接，请稍后重试",
+                title: T.connectFailed[lang],
+                description: T.connectFailedDesc[lang],
             });
             setConnecting(false);
         }
@@ -197,66 +206,65 @@ export default function ShopAccountsPage() {
 
             if (!response.ok) {
                 const data = await response.json();
-                // ⚠️ 410 Gone = refresh token expired
                 if (response.status === 410) {
                     toast({
                         variant: "destructive",
-                        title: "授权已过期",
-                        description: data.error || "Refresh Token 已过期，请重新绑定账号",
+                        title: T.authExpired[lang],
+                        description: T.authExpiredDesc[lang],
                     });
-                    fetchAccounts(); // Refresh to show updated status
+                    fetchAccounts();
                     return;
                 }
-                throw new Error(data.error || "刷新失败");
+                throw new Error(data.error || "Refresh failed");
             }
 
             toast({
-                title: "刷新成功",
-                description: "Shop 账号授权已更新",
+                title: T.refreshOk[lang],
+                description: T.refreshOkDesc[lang],
             });
             fetchAccounts();
         } catch (error) {
             console.error("Error refreshing Shop token:", error);
             toast({
                 variant: "destructive",
-                title: "刷新失败",
-                description: error instanceof Error ? error.message : "无法刷新授权，请重新绑定账号",
+                title: T.refreshFailed[lang],
+                description: error instanceof Error ? localizeError(error.message, lang) : T.refreshFailedDesc[lang],
             });
         } finally {
             setRefreshingId(null);
         }
     };
 
-    // Disconnect account
-    const handleDisconnect = async (accountId: string) => {
+    // Remove account from Star Gaze
+    const handleRemoveAccount = async (accountId: string) => {
         try {
             const response = await fetch(`/api/shop-publish/accounts/${accountId}`, {
                 method: "DELETE",
             });
 
-            if (!response.ok) throw new Error("Failed to disconnect");
+            if (!response.ok) throw new Error("Failed to remove account");
 
             toast({
-                title: "解绑成功",
-                description: "TikTok Shop 账号已解绑",
+                title: T.removed[lang],
+                description: getAccountRemovedDesc(lang),
             });
             setAccounts(accounts.filter(a => a.id !== accountId));
         } catch (error) {
-            console.error("Error disconnecting Shop:", error);
+            console.error("Error removing Shop account:", error);
             toast({
                 variant: "destructive",
-                title: "解绑失败",
-                description: "无法解绑账号，请稍后重试",
+                title: T.removeFailed[lang],
+                description: T.removeFailedDesc[lang],
             });
         }
     };
 
-    // Copy open_id
-    const copyOpenId = (openId: string) => {
-        navigator.clipboard.writeText(openId);
+    // Copy username to clipboard
+    const copyUsername = (username: string) => {
+        navigator.clipboard.writeText(username);
         toast({
-            title: "已复制",
-            description: "唯一标识符已复制到剪贴板",
+            title: T.copied[lang],
+            description: T.copiedDesc[lang],
         });
     };
 
@@ -282,17 +290,17 @@ export default function ShopAccountsPage() {
 
     return (
         <div className="space-y-6">
-            {/* Page Header — JCUI 2.0 Titanium Bar */}
+            {/* Page Header */}
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-4">
                     <div className="w-1.5 h-14 rounded-full bg-gradient-to-b from-[#CCFF00] via-[#00F2EA] to-[#EC4899]" />
                     <div>
                         <h1 className="text-2xl font-bold text-white flex items-center gap-2">
                             <Store className="h-6 w-6" />
-                            TikTok Shop 账号绑定
+                            {T.title[lang]}
                         </h1>
                         <p className="text-white/50 text-sm mt-0.5">
-                            绑定和管理您的 TikTok Shop 达人账号，用于发布橱窗视频
+                            {T.subtitle[lang]}
                         </p>
                     </div>
                 </div>
@@ -308,7 +316,7 @@ export default function ShopAccountsPage() {
                     ) : (
                         <Plus className="h-4 w-4 relative z-10" />
                     )}
-                    <span className="relative z-10">绑定 Shop 账号</span>
+                    <span className="relative z-10">{T.connectBtn[lang]}</span>
                 </button>
             </div>
 
@@ -316,14 +324,14 @@ export default function ShopAccountsPage() {
             {!loading && accounts.length > 0 && (
                 <div className="flex items-center gap-3 flex-wrap">
                     <span className="text-sm text-muted-foreground">
-                        已绑定 {accounts.length} 个 Shop 账号
+                        {lang === 'en' ? `${accounts.length} ${T.accountsSummary[lang]}` : `${T.accountsSummary[lang].replace('个', accounts.length + ' 个')}`}
                     </span>
                     <div className="flex-1" />
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                             <Button variant="outline" size="sm" className="gap-2">
                                 <ArrowUpDown className="h-4 w-4" />
-                                排序: {SORT_OPTIONS.find(o => o.value === sortBy)?.label}
+                                {T.sortLabel[lang]} {SORT_OPTIONS.find(o => o.value === sortBy)?.label}
                                 <ChevronDown className="h-3 w-3" />
                             </Button>
                         </DropdownMenuTrigger>
@@ -349,16 +357,16 @@ export default function ShopAccountsPage() {
                 </div>
             )}
 
-            {/* Empty State — JCUI 2.0 Glass Panel */}
+            {/* Empty State */}
             {!loading && accounts.length === 0 && (
                 <div className="bg-white/5 rounded-2xl border border-white/10 backdrop-blur-sm">
                     <div className="flex flex-col items-center justify-center py-16">
                         <div className="w-20 h-20 rounded-full bg-gradient-to-br from-[#CCFF00]/20 via-[#00F2EA]/20 to-[#EC4899]/20 flex items-center justify-center mb-6 border border-white/10">
                             <Store className="h-10 w-10 text-[#00F2EA]" />
                         </div>
-                        <h3 className="text-xl font-bold text-white mb-2">还没有绑定 Shop 账号</h3>
+                        <h3 className="text-xl font-bold text-white mb-2">{T.noAccounts[lang]}</h3>
                         <p className="text-white/50 text-center max-w-md text-sm">
-                            绑定您的 TikTok Shop 达人账号后，可以直接从平台发布带商品链接的橱窗视频
+                            {T.noAccountsDesc[lang]}
                         </p>
                         <button
                             onClick={handleConnect}
@@ -367,7 +375,7 @@ export default function ShopAccountsPage() {
                         >
                             <div className="absolute inset-0 bg-gradient-to-b from-white/50 via-white/20 to-transparent pointer-events-none" />
                             <Plus className="h-4 w-4 relative z-10" />
-                            <span className="relative z-10">绑定 Shop 账号</span>
+                            <span className="relative z-10">{T.connectBtn[lang]}</span>
                         </button>
                     </div>
                 </div>
@@ -406,26 +414,26 @@ export default function ShopAccountsPage() {
                                             {account.display_name || account.open_id.substring(0, 8)}
                                             <Badge variant="outline" className="text-xs">
                                                 <Store className="h-3 w-3 mr-1" />
-                                                达人账号
+                                                {T.creator[lang]}
                                             </Badge>
                                             <Badge variant={account.status === "active" ? "default" : "destructive"}>
-                                                {account.status === "active" ? "已授权" : "需重新授权"}
+                                                {account.status === "active" ? T.authorized[lang] : T.reauthRequired[lang]}
                                             </Badge>
                                         </CardTitle>
                                         <CardDescription className="flex items-center gap-4 mt-1">
-                                            <span>粉丝: {account.follower_count}</span>
-                                            <span>视频: {account.video_count}</span>
+                                            <span>{T.followers[lang]}: {account.follower_count}</span>
+                                            <span>{T.videos[lang]}: {account.video_count}</span>
                                         </CardDescription>
                                         {account.username && (
                                             <div className="flex items-center gap-1.5 mt-2">
-                                                <span className="text-xs text-muted-foreground">用户名:</span>
+                                                <span className="text-xs text-muted-foreground">{T.usernameLabel[lang]}</span>
                                                 <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono text-cyan-500">
                                                     @{account.username}
                                                 </code>
                                                 <button
-                                                    onClick={() => copyOpenId(account.username!)}
+                                                    onClick={() => copyUsername(account.username!)}
                                                     className="p-1 hover:bg-muted rounded transition-colors"
-                                                    title="复制用户名"
+                                                    title={T.copyUsername[lang]}
                                                 >
                                                     <Copy className="h-3 w-3 text-muted-foreground" />
                                                 </button>
@@ -447,30 +455,30 @@ export default function ShopAccountsPage() {
                                         ) : (
                                             <RefreshCw className="h-4 w-4" />
                                         )}
-                                        <span className="ml-2 hidden sm:inline">刷新授权</span>
+                                        <span className="ml-2 hidden sm:inline">{T.refreshBtn[lang]}</span>
                                     </Button>
 
                                     <AlertDialog>
                                         <AlertDialogTrigger asChild>
                                             <Button variant="outline" size="sm" className="text-destructive hover:text-destructive">
                                                 <Trash2 className="h-4 w-4" />
-                                                <span className="ml-2 hidden sm:inline">解绑</span>
+                                                <span className="ml-2 hidden sm:inline">{T.removeBtn[lang]}</span>
                                             </Button>
                                         </AlertDialogTrigger>
-                                        <AlertDialogContent>
+                                    <AlertDialogContent>
                                             <AlertDialogHeader>
-                                                <AlertDialogTitle>确认解绑 Shop 账号？</AlertDialogTitle>
-                                                <AlertDialogDescription>
-                                                    解绑后，将无法向该账号发布橱窗视频。已创建的发布任务不会受到影响，但待发布的任务将失败。
+                                                <AlertDialogTitle>{T.removeDialogTitle[lang]}</AlertDialogTitle>
+                                                <AlertDialogDescription className="space-y-2">
+                                                    {(() => { const desc = getRemoveDialogDesc(lang); return (<><p>{desc.main}</p><p className="text-xs text-muted-foreground">{desc.note}</p></>); })()}
                                                 </AlertDialogDescription>
                                             </AlertDialogHeader>
                                             <AlertDialogFooter>
-                                                <AlertDialogCancel>取消</AlertDialogCancel>
+                                                <AlertDialogCancel>{T.removeDialogCancel[lang]}</AlertDialogCancel>
                                                 <AlertDialogAction
-                                                    onClick={() => handleDisconnect(account.id)}
+                                                    onClick={() => handleRemoveAccount(account.id)}
                                                     className="bg-destructive hover:bg-destructive/90"
                                                 >
-                                                    确认解绑
+                                                    {T.removeDialogConfirm[lang]}
                                                 </AlertDialogAction>
                                             </AlertDialogFooter>
                                         </AlertDialogContent>
@@ -483,20 +491,20 @@ export default function ShopAccountsPage() {
                             <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
                                 {/* Access Token Expiry */}
                                 <div className="flex items-center gap-1">
-                                    <span>Access Token:</span>
+                                    <span>{T.accessToken[lang]}:</span>
                                     {isTokenExpiringSoon(account.token_expires_at) ? (
                                         <Badge variant="destructive" className="flex items-center gap-1">
                                             <AlertTriangle className="h-3 w-3" />
                                             {formatDistanceToNow(new Date(account.token_expires_at), {
                                                 addSuffix: true,
-                                                locale: zhCN
+                                                locale: dateLocale,
                                             })}
                                         </Badge>
                                     ) : (
                                         <span>
                                             {formatDistanceToNow(new Date(account.token_expires_at), {
                                                 addSuffix: true,
-                                                locale: zhCN
+                                                locale: dateLocale,
                                             })}
                                         </span>
                                     )}
@@ -505,17 +513,17 @@ export default function ShopAccountsPage() {
                                 {/* Refresh Token Expiry — Shop-specific */}
                                 {account.refresh_token_expires_at && (
                                     <div className="flex items-center gap-1">
-                                        <span>Refresh Token:</span>
+                                        <span>{T.refreshToken[lang]}:</span>
                                         {isRefreshTokenExpired(account.refresh_token_expires_at) ? (
                                             <Badge variant="destructive" className="flex items-center gap-1">
                                                 <ShieldAlert className="h-3 w-3" />
-                                                已过期 — 需重新授权
+                                                {T.expiredReauth[lang]}
                                             </Badge>
                                         ) : (
                                             <span>
-                                                {formatDistanceToNow(new Date(account.refresh_token_expires_at), {
+                                            {formatDistanceToNow(new Date(account.refresh_token_expires_at), {
                                                     addSuffix: true,
-                                                    locale: zhCN
+                                                    locale: dateLocale,
                                                 })}
                                             </span>
                                         )}
@@ -524,9 +532,9 @@ export default function ShopAccountsPage() {
 
                                 {/* Binding time */}
                                 <div className="flex items-center gap-1">
-                                    <span>绑定时间:</span>
+                                    <span>{T.connectedAt[lang]}</span>
                                     <span>
-                                        {format(new Date(account.created_at), 'yyyy-MM-dd HH:mm', { locale: zhCN })}
+                                        {format(new Date(account.created_at), 'yyyy-MM-dd HH:mm')}
                                     </span>
                                 </div>
                             </div>
@@ -541,11 +549,9 @@ export default function ShopAccountsPage() {
                     <CardContent className="flex items-start gap-3 py-4">
                         <ExternalLink className="h-5 w-5 text-cyan-500 mt-0.5 shrink-0" />
                         <div className="text-sm">
-                            <p className="font-medium text-foreground">关于 TikTok Shop 授权</p>
+                            <p className="font-medium text-foreground">{T.infoCardTitle[lang]}</p>
                             <p className="text-muted-foreground mt-1">
-                                Shop Access Token 有效期约 7 天，可通过"刷新授权"按钮续期。
-                                Refresh Token 的有效期由您在 TikTok Shop 中设置的授权时长决定。
-                                当 Refresh Token 过期后，需要重新绑定账号。
+                                {getInfoCardDesc(lang)}
                             </p>
                         </div>
                     </CardContent>
