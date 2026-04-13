@@ -39,8 +39,8 @@ export default function TermsPage() {
         <div className="container max-w-4xl mx-auto px-6">
           <div className="mb-12">
             <h1 className="text-4xl font-bold mb-4">{lang === "en" ? "Terms of Service - Wuhan Guanxing Cultural Media Co., Ltd. (Star Gaze)" : "服务条款 - 武汉观星文化传媒有限公司 (Star Gaze)"}</h1>
-            <p className="text-gray-400">{lang === "en" ? "Last Updated: April 10, 2026" : "最后更新日期：2026年4月10日"}</p>
-            <p className="text-gray-400">{lang === "en" ? "Effective Date: April 10, 2026" : "生效日期：2026年4月10日"}</p>
+            <p className="text-gray-400">{lang === "en" ? "Last Updated: April 13, 2026" : "最后更新日期：2026年4月13日"}</p>
+            <p className="text-gray-400">{lang === "en" ? "Effective Date: April 13, 2026" : "生效日期：2026年4月13日"}</p>
           </div>
 
           <div className="space-y-8 text-gray-300">
@@ -237,7 +237,7 @@ export default function TermsPage() {
                   <h2 className="text-xl font-bold text-white mb-3">{lang === "en" ? "13. Special Agreement on Individual Services and Third-Party Services" : "十三、单项服务及第三方服务特别约定"}</h2>
                   <p className="leading-loose">{lang === "en" ? '13.1 "Star Gaze" software and related services contain information obtained by the Company in various legal ways, and also include other individual services legally operated by the Company and its affiliates. Certain individual services may require you to accept agreements specially formulated for such services.' : '13.1 "Star Gaze"软件及相关服务包含公司通过各种合法途径获取的信息，也包括公司及其关联方合法运营的其他单项服务。某些单项服务可能需要您接受专门为此类服务制定的协议。'}</p>
                   <p className="leading-loose mt-3">{lang === "en" ? '13.2 When you use software and related services provided by third parties in "Star Gaze", in addition to abiding by this Agreement, you may also need to agree to and abide by the third party\'s agreements and privacy policies. Disputes arising from third-party software and related services shall be resolved by you and the third party.' : '13.2 当您在"Star Gaze"中使用第三方提供的软件及相关服务时，除遵守本协议外，您可能还需要同意并遵守第三方的协议和隐私政策。因第三方软件及相关服务产生的争议由您与第三方解决。'}</p>
-                  <p className="leading-loose mt-3">{lang === "en" ? '13.3 "Star Gaze" integrates and uses third-party services including but not limited to TikTok and Alibaba Cloud. When you use these services, you agree to abide by their relevant terms of service.' : '13.3 "Star Gaze"集成并使用第三方服务，包括但不限于TikTok和阿里云。当您使用这些服务时，您同意遵守其相关服务条款。'}</p>
+                  <p className="leading-loose mt-3">{lang === "en" ? '13.3 "Star Gaze" integrates and uses third-party services including but not limited to TikTok and cloud infrastructure or platform service providers. When you use these services, you agree to abide by their relevant terms of service.' : '13.3 "Star Gaze"集成并使用第三方服务，包括但不限于 TikTok 以及云基础设施或平台服务提供商。当您使用这些服务时，您同意遵守其相关服务条款。'}</p>
                 </div>
               </div>
             </ReflectiveCard>
@@ -323,14 +323,14 @@ export default function TermsPage() {
               </div>
             </ReflectiveCard>
 
-            {/* 19. Cross-border Data Transfer */}
+            {/* 19. Data Hosting and Transfer */}
             <ReflectiveCard className="!rounded-xl">
               <div className="flex items-start gap-4 p-6">
                 <div className="p-3 rounded-lg bg-blue-500/10 text-blue-400 shrink-0"><Globe className="h-6 w-6" /></div>
                 <div>
-                  <h2 className="text-xl font-bold text-white mb-3">{lang === "en" ? "19. Cross-border Data Transfer" : "十九、跨境数据传输"}</h2>
-                  <p className="leading-loose">{lang === "en" ? '19.1 Star Gaze stores user data on servers located in the United States (Supabase) and China (Alibaba Cloud). TikTok-related data, including OAuth tokens and user identifiers, is stored exclusively on US-based servers.' : '19.1 Star Gaze 将用户数据存储在位于美国 (Supabase) 和中国 (阿里云) 的服务器上。TikTok 相关数据，包括 OAuth 令牌和用户标识符，仅存储在美国服务器上。'}</p>
-                  <p className="leading-loose mt-3">{lang === "en" ? '19.2 All data transmission between servers is encrypted using TLS 1.2 or above. We comply with applicable data protection laws and regulations governing cross-border data transfers.' : '19.2 服务器之间的所有数据传输均使用 TLS 1.2 及以上协议加密。我们遵守管辖跨境数据传输的适用数据保护法律法规。'}</p>
+                  <h2 className="text-xl font-bold text-white mb-3">{lang === "en" ? "19. Data Hosting and Transfer" : "十九、数据存储与传输"}</h2>
+                  <p className="leading-loose">{lang === "en" ? '19.1 Star Gaze stores and processes user data on infrastructure located in the United States. TikTok-related data, including OAuth tokens and user identifiers, is stored and processed on US-based servers.' : '19.1 Star Gaze 将用户数据存储并处理于位于美国的基础设施上。TikTok 相关数据，包括 OAuth 令牌和用户标识符，存储并处理于美国服务器上。'}</p>
+                  <p className="leading-loose mt-3">{lang === "en" ? '19.2 All data transmission between systems is encrypted using TLS 1.2 or above. We apply appropriate safeguards to protect data handled through our services.' : '19.2 系统之间的所有数据传输均使用 TLS 1.2 及以上协议加密。我们对通过本服务处理的数据采取适当的安全保护措施。'}</p>
                   <p className="leading-loose mt-3">{lang === "en" ? '19.3 By using Star Gaze, you consent to the transfer and processing of your data as described in this section and in our Privacy Policy.' : '19.3 使用 Star Gaze 即表示您同意按照本条款和我们的隐私政策中描述的方式传输和处理您的数据。'}</p>
                 </div>
               </div>

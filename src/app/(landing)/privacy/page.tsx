@@ -39,8 +39,8 @@ export default function PrivacyPage() {
         <div className="container max-w-4xl mx-auto px-6">
           <div className="mb-12">
             <h1 className="text-4xl font-bold mb-4">{lang === "en" ? "Privacy Policy - Wuhan Guanxing Cultural Media Co., Ltd. (Star Gaze)" : "隐私政策 - 武汉观星文化传媒有限公司 (Star Gaze)"}</h1>
-            <p className="text-gray-400">{lang === "en" ? "Updated Date: April 10, 2026" : "更新日期：2026年4月10日"}</p>
-            <p className="text-gray-400">{lang === "en" ? "Effective Date: April 10, 2026" : "生效日期：2026年4月10日"}</p>
+            <p className="text-gray-400">{lang === "en" ? "Updated Date: April 13, 2026" : "更新日期：2026年4月13日"}</p>
+            <p className="text-gray-400">{lang === "en" ? "Effective Date: April 13, 2026" : "生效日期：2026年4月13日"}</p>
           </div>
 
           <div className="space-y-6 text-gray-300">
@@ -162,7 +162,7 @@ export default function PrivacyPage() {
                 <div className="p-3 rounded-lg bg-orange-500/10 text-orange-400 shrink-0"><Server className="h-6 w-6" /></div>
                 <div>
                   <h2 className="text-xl font-bold text-white mb-3">{lang === "en" ? "5. How We Store Personal Information" : "五、我们如何存储个人信息"}</h2>
-                  <p className="leading-relaxed"><strong>{lang === "en" ? "5.1 Storage Location:" : "5.1 存储地点："}</strong> {lang === "en" ? "Your personal information is stored in the United States (Supabase cloud database) and China (Alibaba Cloud application server). TikTok-related data, including OAuth access tokens and user identifiers, is stored exclusively on servers located in the United States. All cross-border data transmission is conducted in compliance with applicable laws and regulations." : "您的个人信息存储于美国（Supabase 云数据库）和中国（阿里云应用服务器）。TikTok 相关数据（包括 OAuth 访问令牌和用户标识符）仅存储在位于美国的服务器上。所有跨境数据传输均遵守适用的法律法规。"}</p>
+                  <p className="leading-relaxed"><strong>{lang === "en" ? "5.1 Storage Location:" : "5.1 存储地点："}</strong> {lang === "en" ? "Your personal information is stored and processed on servers located in the United States. TikTok-related data, including OAuth access tokens and user identifiers, is stored and processed on US-based infrastructure. We apply appropriate safeguards to protect data handled in connection with our services." : "您的个人信息存储并处理于位于美国的服务器上。TikTok 相关数据（包括 OAuth 访问令牌和用户标识符）存储并处理于美国基础设施。我们对与本服务相关的数据采取适当的安全保护措施。"}</p>
                   <p className="leading-relaxed mt-3"><strong>{lang === "en" ? "5.2 Storage Period:" : "5.2 存储期限："}</strong> {lang === "en" ? "We only retain your personal information for the period necessary to provide services. Specific retention periods include: OAuth access tokens are stored until expiration and automatically refreshed; product showcase data is fetched in real-time via API and not permanently stored; video files are deleted from our servers after successful upload to TikTok. After account cancellation, we will delete or anonymize your information within 30 days, unless otherwise stipulated by laws." : "我们仅在提供服务所必需的期间内保留您的个人信息。具体保留期限包括：OAuth 访问令牌存储至过期后自动刷新；橱窗商品数据通过 API 实时获取，不做持久化存储；视频文件在成功上传至 TikTok 后从我们的服务器删除。账户注销后，我们将在 30 天内删除或匿名化您的信息，法律另有规定除外。"}</p>
                   <p className="leading-relaxed mt-3"><strong>{lang === "en" ? "5.3 Data Deletion:" : "5.3 数据删除："}</strong> {lang === "en" ? "You may request deletion of your personal data at any time by contacting us at toryxai@outlook.com. Upon receiving a valid deletion request, we will process it within 30 days. When a seller revokes TikTok authorization or when a service contract ends, we will promptly delete all associated TikTok data." : "您可以随时通过联系 toryxai@outlook.com 请求删除您的个人数据。收到有效的删除请求后，我们将在 30 天内处理。当卖家撤回 TikTok 授权或服务合同终止时，我们将及时删除所有相关的 TikTok 数据。"}</p>
                 </div>
