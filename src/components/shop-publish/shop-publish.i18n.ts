@@ -113,6 +113,13 @@ const SHOP_TEXT = {
     accountLabel:    { en: 'Account',                zh: '账号' },
     titleLabel:      { en: 'Title',                  zh: '标题' },
     anchorLabel:     { en: 'Anchor text',            zh: '锚点文案' },
+    captionLabel:    { en: 'Caption',                zh: '文案' },
+    confirmationLabel:{ en: 'Confirmation',          zh: '确认项' },
+    previewTitle:    { en: 'Publish Preview',        zh: '发布预览' },
+    previewNotice:   { en: 'Preview is for confirmation only. Actual delivery on TikTok may vary.',
+                       zh: '预览仅用于确认发布内容，实际 TikTok 展示可能略有差异' },
+    singleProductHint:{ en: 'Only 1 product can be attached per video', zh: '每条视频仅挂载 1 个商品' },
+    completeFirst:   { en: 'Please complete first',  zh: '请先完成' },
     precheckOn:      { en: 'Precheck ON',            zh: '预检已开启' },
     platformNotice:  { en: 'Platform Notice',        zh: '平台声明' },
     guidelinesItems: {
@@ -315,6 +322,9 @@ export function getPlatformNoticeText(lang: Lang) {
     confirmText: lang === 'en'
       ? "I have reviewed the content and confirm it complies with TikTok's guidelines and policies."
       : '我已审阅内容，确认其符合 TikTok 的指南和政策。',
+    disclaimer: lang === 'en'
+      ? `${brand} solely assists in creating publish tasks and does not represent official TikTok.`
+      : `${brand} 仅协助创建发布任务，不代表 TikTok 官方。`
   }
 }
 

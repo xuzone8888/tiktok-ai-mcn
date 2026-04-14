@@ -1,7 +1,7 @@
 "use client";
 
 // TikTok Shop Shoppable Video Publishing
-// 5-step workflow: Select Video → Select Account → Select Product → Settings → Review & Publish
+// Two-column layout: Left (5 config sections) + Right (Live Preview) + Bottom Action Bar
 // Bottom section: task history (ShopTaskManager)
 
 import { useState, useCallback, useEffect, useRef } from "react";
@@ -9,11 +9,8 @@ import { useRouter } from "next/navigation";
 import {
     Video,
     ShoppingBag,
-    Users,
     Settings,
     Send,
-
-    ChevronRight,
     Loader2,
     Check,
     AlertCircle,
@@ -29,6 +26,9 @@ import {
     CheckSquare,
     Square,
     ListFilter,
+    Users,
+    Eye,
+    RotateCcw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -83,21 +83,6 @@ interface VideoSource {
 
 type TabType = 'create' | 'tasks';
 
-// ============================================================
-// Step Configuration
-// ============================================================
-
-function getSteps(lang: Lang) {
-    const S = SHOP_TEXT.steps;
-    return [
-        { id: 1, label: S.selectVideo[lang], icon: Video },
-        { id: 2, label: S.selectAccount[lang], icon: Users },
-        { id: 3, label: S.selectProduct[lang], icon: ShoppingBag },
-        { id: 4, label: S.settings[lang], icon: Settings },
-        { id: 5, label: S.reviewPublish[lang], icon: Send },
-    ] as const;
-}
-
 // Accepted video formats
 const ACCEPTED_VIDEO_TYPES = "video/mp4,video/webm,video/quicktime";
 const MAX_FILE_SIZE_MB = 500;
@@ -111,12 +96,10 @@ export default function ShopPublishPage() {
     const { toast } = useToast();
     const router = useRouter();
     const { lang } = useLang();
-    const STEPS = getSteps(lang);
     const [activeTab, setActiveTab] = useState<TabType>('create');
-    const [currentStep, setCurrentStep] = useState(1);
     const [submitting, setSubmitting] = useState(false);
 
-    // Step data
+    // Core business state
     const [videoSource, setVideoSource] = useState<VideoSource | null>(null);
     const [selectedProduct, setSelectedProduct] = useState<SelectedProduct | null>(null);
     const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
@@ -126,21 +109,50 @@ export default function ShopPublishPage() {
         enable_precheck: false,
     });
 
-    // Account list for step 2
+    // Account list
     const [accounts, setAccounts] = useState<ShopAccount[]>([]);
     const [accountsLoading, setAccountsLoading] = useState(false);
 
     // Validation errors
     const [settingsErrors, setSettingsErrors] = useState<Partial<Record<keyof ShopPublishSettingsData, string>>>({});
 
-    // Step 1: Video upload state
+    // Video upload state
     const [videoInputMode, setVideoInputMode] = useState<'upload' | 'url'>('upload');
     const [uploading, setUploading] = useState(false);
     const [uploadProgress, setUploadProgress] = useState(0);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-    // Step 5: AI Notice confirmation
+    // Compliance confirmation
     const [confirmed, setConfirmed] = useState(false);
+
+    // Section refs for scroll-to
+    const accountSectionRef = useRef<HTMLDivElement>(null);
+
+    // ============================================================
+    // Derived: canSubmit (strict server-side alignment)
+    // ============================================================
+
+    const canSubmit =
+        !!videoSource &&
+        !!videoSource.url &&
+        !uploading &&
+        !!selectedAccountId &&
+        !!selectedProduct &&
+        !!publishSettings.title.trim() &&
+        confirmed;
+
+    // Missing items for action bar hint
+    const missingItems = [
+        !selectedAccountId ? SHOP_TEXT.review.accountLabel[lang] : null,
+        (!videoSource?.url || uploading) ? SHOP_TEXT.review.videoLabel[lang] : null,
+        !selectedProduct ? SHOP_TEXT.review.productLabel[lang] : null,
+        !publishSettings.title.trim() ? SHOP_TEXT.review.captionLabel[lang] : null,
+        !confirmed ? SHOP_TEXT.review.confirmationLabel[lang] : null,
+    ].filter(Boolean) as string[];
+
+    const submitHint = missingItems.length
+        ? `${SHOP_TEXT.review.completeFirst[lang]}: ${missingItems.join(' / ')}`
+        : '';
 
     // ============================================================
     // Fetch Accounts
@@ -178,21 +190,8 @@ export default function ShopPublishPage() {
     }, [videoSource, selectedProduct, selectedAccountId, publishSettings.title, publishSettings.product_anchor_title, publishSettings.enable_precheck]);
 
     // ============================================================
-    // Step Validation
+    // Validation
     // ============================================================
-
-    const isStepComplete = (step: number): boolean => {
-        switch (step) {
-            case 1: return !!videoSource && !uploading && !!videoSource.url;
-            case 2: return !!selectedAccountId;
-            case 3: return !!selectedProduct;
-            case 4: return !!publishSettings.title.trim();
-            case 5: return [1, 2, 3, 4].every(s => isStepComplete(s));
-            default: return false;
-        }
-    };
-
-    const canProceed = isStepComplete(currentStep);
 
     const validateSettings = (): boolean => {
         const errors: Partial<Record<keyof ShopPublishSettingsData, string>> = {};
@@ -213,21 +212,7 @@ export default function ShopPublishPage() {
     };
 
     // ============================================================
-    // Navigation
-    // ============================================================
-
-    const goNext = () => {
-        if (currentStep === 4) {
-            if (!validateSettings()) return;
-        }
-        if (currentStep < 5 && canProceed) {
-            setCurrentStep(s => s + 1);
-        }
-    };
-
-
-    // ============================================================
-    // Video Upload (A1)
+    // Video Upload
     // ============================================================
 
     const handleFileSelect = async (file: File) => {
@@ -327,7 +312,7 @@ export default function ShopPublishPage() {
     };
 
     // ============================================================
-    // Submit (A0.2: auto-trigger process after task creation)
+    // Submit
     // ============================================================
 
     const handleSubmit = async () => {
@@ -348,6 +333,8 @@ export default function ShopPublishPage() {
             });
             return;
         }
+
+        if (!validateSettings()) return;
 
         setSubmitting(true);
         try {
@@ -376,7 +363,7 @@ export default function ShopPublishPage() {
                 throw new Error(data.error || 'Failed to create task');
             }
 
-            // A0.2: Fire-and-forget call to process route to start task execution
+            // Fire-and-forget call to process route
             fetch('/api/shop-publish/process', { method: 'POST' }).catch(err => {
                 console.warn('[ShopPublish] Background process trigger failed (non-blocking):', err);
             });
@@ -396,7 +383,6 @@ export default function ShopPublishPage() {
                 enable_precheck: false,
             });
             setConfirmed(false);
-            setCurrentStep(1);
             setActiveTab('tasks');
         } catch (error) {
             console.error('Failed to create task:', error);
@@ -419,12 +405,33 @@ export default function ShopPublishPage() {
     };
 
     // ============================================================
+    // Helpers
+    // ============================================================
+
+    const selectedAccount = accounts.find(a => a.id === selectedAccountId);
+    const previewVideoSrc = videoSource?.localPreviewUrl ?? videoSource?.url;
+    // Anchor text fallback aligned with backend: product_anchor_title || publishSettings.title
+    const previewAnchorText = publishSettings.product_anchor_title || publishSettings.title || (lang === 'en' ? 'Shop Now' : '立即购买');
+    const notice = getPlatformNoticeText(lang);
+    const guidelines = SHOP_TEXT.review.guidelinesItems[lang];
+
+    const handleReset = () => {
+        handleClearVideo();
+        setSelectedProduct(null);
+        setSelectedAccountId(null);
+        setPublishSettings({ title: '', product_anchor_title: '', enable_precheck: false });
+        setConfirmed(false);
+    };
+
+    // ============================================================
     // Render
     // ============================================================
 
     return (
-        <div className="space-y-8">
+        <div className="space-y-6">
+            {/* ============================================================ */}
             {/* Page Header */}
+            {/* ============================================================ */}
             <div className="flex items-center justify-between gap-4 bg-white/[0.02] border border-white/5 p-4 rounded-2xl">
                 <div className="flex items-center gap-4">
                     <div className="w-1 h-10 rounded-full bg-gradient-to-b from-[#CCFF00] via-[#00F2EA] to-[#EC4899] opacity-80" />
@@ -443,10 +450,13 @@ export default function ShopPublishPage() {
                     className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 hover:border-white/20 transition-all text-sm shadow-sm font-medium"
                 >
                     <Settings className="w-4 h-4 text-white/70" />
-                    <span className="text-white/80">{lang === 'en' ? 'Accounts' : '账号管理'}</span>
+                    <span className="text-white/80">{SHOP_TEXT.account.manageAccounts[lang]}</span>
                 </button>
             </div>
+
+            {/* ============================================================ */}
             {/* Tabs */}
+            {/* ============================================================ */}
             <div className="flex gap-2 p-1.5 bg-white/[0.03] rounded-2xl border border-white/10 w-fit backdrop-blur-md">
                 {[
                     { id: 'create' as TabType, label: lang === 'en' ? 'Create' : '创建发布', icon: Send },
@@ -469,271 +479,419 @@ export default function ShopPublishPage() {
                 ))}
             </div>
 
+            {/* ============================================================ */}
+            {/* CREATE TAB — Two-Column Layout */}
+            {/* ============================================================ */}
             {activeTab === 'create' && (
-            <div className="space-y-3">
-                {STEPS.map((step) => {
-                    const Icon = step.icon;
-                    const stepNum = step.id;
-                    const isActive = currentStep === stepNum;
-                    const isCompleted = isStepComplete(stepNum) && !isActive;
-                    const isLocked = !isCompleted && (stepNum > currentStep + 1 || (stepNum === currentStep + 1 && !canProceed));
-                    const canOpen = isCompleted || stepNum <= currentStep || (stepNum === currentStep + 1 && canProceed);
+            <div className="flex flex-col lg:flex-row gap-6 items-start relative">
 
-                    return (
-                        <div
-                            key={stepNum}
-                            className={cn(
-                                'rounded-2xl border overflow-hidden transition-all duration-400',
-                                isActive
-                                    ? 'border-[#00F2EA]/30 bg-white/[0.06] shadow-[0_0_30px_rgba(0,242,234,0.06)]'
-                                    : isCompleted
-                                        ? 'border-white/10 bg-white/[0.04] hover:bg-white/[0.06]'
-                                        : isLocked
-                                            ? 'border-transparent bg-white/[0.02] opacity-40'
-                                            : 'border-transparent bg-white/[0.04] hover:bg-white/[0.06]'
-                            )}
-                        >
-                            {/* Section Header */}
-                            <button
-                                onClick={() => {
-                                    if (!canOpen || isActive) return;
-                                    if (stepNum === 5 && currentStep === 4 && !validateSettings()) return;
-                                    setCurrentStep(stepNum);
-                                }}
-                                disabled={isLocked}
-                                className={cn(
-                                    'w-full flex items-center gap-4 px-5 py-4 text-left transition-all',
-                                    canOpen && !isActive ? 'cursor-pointer hover:bg-white/5' : '',
-                                    isLocked ? 'cursor-not-allowed' : ''
-                                )}
-                            >
-                                <div className={cn(
-                                    'w-9 h-9 rounded-full flex items-center justify-center shrink-0 text-sm font-bold transition-all',
-                                    isActive
-                                        ? 'bg-gradient-to-br from-cyan-500 to-pink-500 text-white shadow-lg shadow-cyan-500/20'
-                                        : isCompleted
-                                            ? 'bg-green-500 text-white'
-                                            : 'bg-white/10 text-gray-500'
-                                )}>
-                                    {isCompleted ? <Check className="w-4 h-4" /> : <Icon className="w-4 h-4" />}
+                {/* ============================================================ */}
+                {/* LEFT COLUMN: 5-Section Form + Action Bar */}
+                {/* ============================================================ */}
+                <div className="flex-1 min-w-0 flex flex-col space-y-5">
+
+                    {/* ======== SECTION A: 发布账号 ======== */}
+                    <div ref={accountSectionRef} className="rounded-2xl border border-white/10 bg-white/[0.03] overflow-hidden">
+                        <div className="flex items-center gap-3 px-5 py-4 border-b border-white/5">
+                            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-cyan-500/20 to-pink-500/20 flex items-center justify-center">
+                                <Users className="w-4 h-4 text-cyan-400" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                                <h3 className="text-sm font-semibold text-white">{SHOP_TEXT.steps.selectAccount[lang]}</h3>
+                                <p className="text-xs text-gray-500">{lang === 'en' ? 'Choose a Shop account to publish the video' : '选择一个 Shop 账号发布视频'}</p>
+                            </div>
+                            <Button variant="ghost" size="sm" onClick={fetchAccounts} className="text-gray-400 hover:text-white shrink-0">
+                                <RefreshCw className={cn('w-4 h-4', accountsLoading && 'animate-spin')} />
+                            </Button>
+                        </div>
+                        <div className="p-5">
+                            {accountsLoading ? (
+                                <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-gray-400" /></div>
+                            ) : accounts.length === 0 ? (
+                                <div className="text-center py-8">
+                                    <Store className="w-10 h-10 text-gray-600 mx-auto mb-3" />
+                                    <p className="text-sm text-gray-500 mb-4">{SHOP_TEXT.account.noAccounts[lang]}</p>
+                                    <Button variant="outline" size="sm" onClick={() => router.push('/shop-publish/accounts')}>{SHOP_TEXT.account.manageAccounts[lang]}</Button>
                                 </div>
-
-                                <div className="flex-1 min-w-0">
-                                    <span className={cn(
-                                        'text-sm font-semibold',
-                                        isActive ? 'text-white' : isCompleted ? 'text-green-300' : 'text-gray-500'
-                                    )}>
-                                        {step.label}
-                                    </span>
-                                    {isCompleted && !isActive && (
-                                        <p className="text-xs text-gray-500 mt-0.5 truncate">
-                                            {stepNum === 1 && videoSource?.name}
-                                            {stepNum === 2 && accounts.find(a => a.id === selectedAccountId)?.display_name}
-                                            {stepNum === 3 && selectedProduct?.shop?.name}
-                                            {stepNum === 4 && (
-                                                <>{publishSettings.title.substring(0, 30)}{publishSettings.title.length > 30 ? '...' : ''}{publishSettings.enable_precheck ? ` · ${SHOP_TEXT.review.precheckOn[lang]}` : ''}</>
-                                            )}
-                                        </p>
-                                    )}
-                                </div>
-
-                                {isCompleted && !isActive && (
-                                    <Badge variant="outline" className="text-green-400 border-green-500/30 shrink-0 text-[10px]">
-                                        <Check className="w-3 h-3 mr-1" />
-                                        {lang === 'en' ? 'Done' : '\u5df2\u5b8c\u6210'}
-                                    </Badge>
-                                )}
-                                {isActive && (
-                                    <Badge className="bg-cyan-500/20 text-cyan-300 border-cyan-500/30 shrink-0 text-[10px]">
-                                        {lang === 'en' ? 'Current' : '\u5f53\u524d'}
-                                    </Badge>
-                                )}
-                            </button>
-
-                            {/* Section Content */}
-                            {isActive && (
-                                <div className="px-5 pb-5 pt-1 border-t border-white/5">
-                                    {/* Step 1: Video */}
-                                    {stepNum === 1 && (
-                                        <div className="space-y-4">
-                                            <p className="text-sm text-gray-500">{SHOP_TEXT.video.sectionDesc[lang]}</p>
-                                            <div className="flex gap-2">
-                                                <button onClick={() => setVideoInputMode('upload')} className={cn('flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all', videoInputMode === 'upload' ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30' : 'bg-white/5 text-gray-400 border border-white/10 hover:bg-white/10')}>
-                                                    <Upload className="w-4 h-4" />{SHOP_TEXT.video.uploadTab[lang]}
-                                                </button>
-                                                <button onClick={() => setVideoInputMode('url')} className={cn('flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all', videoInputMode === 'url' ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30' : 'bg-white/5 text-gray-400 border border-white/10 hover:bg-white/10')}>
-                                                    <Link2 className="w-4 h-4" />{SHOP_TEXT.video.urlTab[lang]}
-                                                </button>
-                                            </div>
-                                            {videoInputMode === 'upload' && (
-                                                <div className="space-y-3">
-                                                    {!videoSource ? (
-                                                        <label className={cn('flex flex-col items-center justify-center py-12 rounded-xl border-2 border-dashed transition-all cursor-pointer', uploading ? 'border-cyan-500/50 bg-cyan-500/5' : 'border-white/10 bg-white/[0.02] hover:border-white/20 hover:bg-white/5')}>
-                                                            <input ref={fileInputRef} type="file" accept={ACCEPTED_VIDEO_TYPES} className="hidden" onChange={(e) => { const file = e.target.files?.[0]; if (file) handleFileSelect(file); }} disabled={uploading} />
-                                                            {uploading ? (<><Loader2 className="w-10 h-10 text-cyan-400 animate-spin mb-3" /><p className="text-sm text-cyan-300 font-medium">{SHOP_TEXT.video.uploading[lang]} {uploadProgress}%</p><div className="w-48 h-1.5 bg-white/10 rounded-full mt-2 overflow-hidden"><div className="h-full bg-gradient-to-r from-cyan-500 to-pink-500 rounded-full transition-all duration-300" style={{ width: `${uploadProgress}%` }} /></div></>) : (<><Upload className="w-10 h-10 text-gray-500 mb-3" /><p className="text-sm text-gray-400 font-medium">{SHOP_TEXT.video.dropzoneTitle[lang]}</p><p className="text-xs text-gray-600 mt-1">{SHOP_TEXT.video.dropzoneFormats[lang]} — {SHOP_TEXT.video.maxSize[lang]}</p></>)}
-                                                        </label>
-                                                    ) : (
-                                                        <div className="rounded-xl border border-white/10 bg-white/5 overflow-hidden">
-                                                            {videoSource.localPreviewUrl ? (<div className="relative aspect-video bg-black max-h-[300px]"><video src={videoSource.localPreviewUrl} className="w-full h-full object-contain" controls muted /></div>) : (<div className="flex items-center justify-center py-8 bg-white/[0.02]"><FileVideo className="w-12 h-12 text-gray-600" /></div>)}
-                                                            <div className="flex items-center gap-3 p-3 border-t border-white/5">
-                                                                <Play className="w-5 h-5 text-green-400 shrink-0" />
-                                                                <div className="flex-1 min-w-0"><p className="text-sm text-white truncate">{videoSource.name}</p></div>
-                                                                {!uploading && videoSource.url && (<Badge variant="outline" className="text-green-400 border-green-500/30 shrink-0">{SHOP_TEXT.video.videoReady[lang]}</Badge>)}
-                                                                {uploading && (<Badge variant="outline" className="text-cyan-400 border-cyan-500/30 shrink-0 animate-pulse">{SHOP_TEXT.video.uploading[lang]}</Badge>)}
-                                                                <button onClick={handleClearVideo} disabled={uploading} className="p-1.5 rounded-lg hover:bg-white/10 text-gray-400 hover:text-red-400 transition-all disabled:opacity-50"><X className="w-4 h-4" /></button>
-                                                            </div>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            )}
-                                            {videoInputMode === 'url' && (
-                                                <div className="space-y-3">
+                            ) : (
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    {accounts.map(account => {
+                                        const isValid = isAccountTokenValid(account);
+                                        const isSelected = selectedAccountId === account.id;
+                                        return (
+                                            <div key={account.id} onClick={() => { if (!isValid) return; const newId = isSelected ? null : account.id; setSelectedAccountId(newId); if (newId !== selectedAccountId) setSelectedProduct(null); }} className={cn('relative p-3 rounded-xl border transition-all cursor-pointer', isSelected ? 'bg-cyan-500/10 border-cyan-500/50 shadow-[0_0_15px_rgba(0,242,234,0.08)]' : 'bg-white/[0.03] border-white/10 hover:border-white/20 hover:bg-white/[0.06]', !isValid && 'opacity-50 cursor-not-allowed')}>
+                                                <div className="flex items-center gap-3">
                                                     <div className="relative">
-                                                        <Video className="absolute left-3 top-3 h-5 w-5 text-gray-500" />
-                                                        <input type="url" value={videoSource?.source === 'url' ? videoSource.url : ''} onChange={(e) => { const url = e.target.value; if (url) { setVideoSource({ url, source: 'url', name: url.split('/').pop() || 'video' }); } else { setVideoSource(null); } }} placeholder={SHOP_TEXT.video.urlPlaceholder[lang]} className="w-full h-12 pl-11 pr-4 rounded-xl bg-white/5 border border-white/10 text-white placeholder:text-gray-600 focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500/50" />
+                                                        {account.avatar_url ? (<img src={account.avatar_url} alt={account.display_name || 'Shop'} className="w-10 h-10 rounded-full object-cover" />) : (<div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#00F2EA] to-[#EC4899] flex items-center justify-center text-white font-bold">{(account.display_name || 'S').charAt(0)}</div>)}
+                                                        {isSelected && (<div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-cyan-500 flex items-center justify-center"><Check className="w-3 h-3 text-white" /></div>)}
                                                     </div>
-                                                    {videoSource && videoSource.source === 'url' && (
-                                                        <div className="flex items-center gap-3 p-3 rounded-lg bg-green-500/10 border border-green-500/20">
-                                                            <Play className="w-5 h-5 text-green-400" /><div className="flex-1 min-w-0"><p className="text-sm text-green-300 truncate">{videoSource.name}</p></div>
-                                                            <Badge variant="outline" className="text-green-400 border-green-500/30">{SHOP_TEXT.video.videoReady[lang]}</Badge>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            )}
-                                            {canProceed && (<div className="flex justify-end pt-2"><Button onClick={goNext} className="gap-2 bg-gradient-to-r from-cyan-500 to-pink-500 hover:from-cyan-600 hover:to-pink-600 text-white">{SHOP_TEXT.nav.continue[lang]}<ChevronRight className="w-4 h-4" /></Button></div>)}
-                                        </div>
-                                    )}
-
-                                    {/* Step 2: Account */}
-                                    {stepNum === 2 && (
-                                        <div className="space-y-4">
-                                            <div className="flex items-center justify-between">
-                                                <p className="text-sm text-gray-500">{lang === 'en' ? 'Choose a Shop account to publish the video' : '\u9009\u62e9\u4e00\u4e2a Shop \u8d26\u53f7\u53d1\u5e03\u89c6\u9891'}</p>
-                                                <Button variant="ghost" size="sm" onClick={fetchAccounts} className="text-gray-400 hover:text-white"><RefreshCw className={cn('w-4 h-4', accountsLoading && 'animate-spin')} /></Button>
-                                            </div>
-                                            {accountsLoading ? (
-                                                <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-gray-400" /></div>
-                                            ) : accounts.length === 0 ? (
-                                                <div className="text-center py-12">
-                                                    <Store className="w-10 h-10 text-gray-600 mx-auto mb-3" />
-                                                    <p className="text-sm text-gray-500 mb-4">{SHOP_TEXT.account.noAccounts[lang]}</p>
-                                                    <Button variant="outline" size="sm" onClick={() => router.push('/shop-publish/accounts')}>{SHOP_TEXT.account.manageAccounts[lang]}</Button>
-                                                </div>
-                                            ) : (
-                                                <div className="grid grid-cols-2 gap-3">
-                                                    {accounts.map(account => {
-                                                        const isValid = isAccountTokenValid(account);
-                                                        const isSelected = selectedAccountId === account.id;
-                                                        return (
-                                                            <div key={account.id} onClick={() => { if (!isValid) return; const newId = isSelected ? null : account.id; setSelectedAccountId(newId); if (newId !== selectedAccountId) setSelectedProduct(null); }} className={cn('relative p-3 rounded-xl border transition-all cursor-pointer', isSelected ? 'bg-cyan-500/10 border-cyan-500/50' : 'bg-white/5 border-white/10 hover:border-white/20', !isValid && 'opacity-50 cursor-not-allowed')}>
-                                                                <div className="flex items-center gap-3">
-                                                                    <div className="relative">
-                                                                        {account.avatar_url ? (<img src={account.avatar_url} alt={account.display_name || 'Shop'} className="w-10 h-10 rounded-full object-cover" />) : (<div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#00F2EA] to-[#EC4899] flex items-center justify-center text-white font-bold">{(account.display_name || 'S').charAt(0)}</div>)}
-                                                                        {isSelected && (<div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-cyan-500 flex items-center justify-center"><Check className="w-3 h-3 text-white" /></div>)}
-                                                                    </div>
-                                                                    <div className="flex-1 min-w-0">
-                                                                        <div className="flex items-center gap-2">
-                                                                            <span className="font-medium text-white truncate">{account.display_name || 'Shop Account'}</span>
-                                                                            {!isValid && (<span className="text-xs text-red-400 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{SHOP_TEXT.account.tokenExpired[lang]}</span>)}
-                                                                        </div>
-                                                                        {account.username && (<p className="text-xs text-gray-500">@{account.username}</p>)}
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-                                                        );
-                                                    })}
-                                                </div>
-                                            )}
-                                            {canProceed && (<div className="flex justify-end pt-2"><Button onClick={goNext} className="gap-2 bg-gradient-to-r from-cyan-500 to-pink-500 hover:from-cyan-600 hover:to-pink-600 text-white">{SHOP_TEXT.nav.continue[lang]}<ChevronRight className="w-4 h-4" /></Button></div>)}
-                                        </div>
-                                    )}
-
-                                    {/* Step 3: Product */}
-                                    {stepNum === 3 && (
-                                        <div className="space-y-4">
-                                            <p className="text-sm text-gray-500">{lang === 'en' ? 'Choose a product from your showcase (one per video)' : '\u4ece\u6a71\u7a97\u9009\u62e9\u5546\u54c1\uff08\u6bcf\u89c6\u9891\u4e00\u4e2a\uff09'}</p>
-                                            {selectedAccountId ? (
-                                                <ShopProductSelector accountId={selectedAccountId} selectedProductId={selectedProduct?.id} onSelect={(product) => setSelectedProduct(product as SelectedProduct | null)} />
-                                            ) : (
-                                                <div className="text-center py-12">
-                                                    <Store className="w-10 h-10 text-gray-600 mx-auto mb-3" />
-                                                    <p className="text-sm text-gray-500 mb-4">{lang === 'en' ? 'Please select a Shop account first' : '\u8bf7\u5148\u9009\u62e9 Shop \u8d26\u53f7'}</p>
-                                                    <Button variant="outline" size="sm" onClick={() => setCurrentStep(2)}>{lang === 'en' ? 'Back to Account Selection' : '\u8fd4\u56de\u9009\u62e9\u8d26\u53f7'}</Button>
-                                                </div>
-                                            )}
-                                            {canProceed && (<div className="flex justify-end pt-2"><Button onClick={goNext} className="gap-2 bg-gradient-to-r from-cyan-500 to-pink-500 hover:from-cyan-600 hover:to-pink-600 text-white">{SHOP_TEXT.nav.continue[lang]}<ChevronRight className="w-4 h-4" /></Button></div>)}
-                                        </div>
-                                    )}
-
-                                    {/* Step 4: Settings */}
-                                    {stepNum === 4 && (
-                                        <div className="space-y-4 pt-2">
-                                            <ShopPublishSettings value={publishSettings} onChange={(v) => { setPublishSettings(v); setSettingsErrors({}); }} errors={settingsErrors} />
-                                            {canProceed && (<div className="flex justify-end pt-2"><Button onClick={() => { if (validateSettings()) goNext(); }} className="gap-2 bg-gradient-to-r from-cyan-500 to-pink-500 hover:from-cyan-600 hover:to-pink-600 text-white">{SHOP_TEXT.nav.continue[lang]}<ChevronRight className="w-4 h-4" /></Button></div>)}
-                                        </div>
-                                    )}
-
-                                    {/* Step 5: Review & Submit */}
-                                    {stepNum === 5 && (
-                                        <div className="space-y-6 pt-2">
-                                            <p className="text-sm text-gray-500">{SHOP_TEXT.review.reviewDesc[lang]}</p>
-                                            <div className="space-y-3">
-                                                <div className="flex items-center gap-3 p-4 rounded-xl bg-white/5 border border-white/10">
-                                                    <Video className="w-5 h-5 text-cyan-400 shrink-0" />
-                                                    <div className="flex-1 min-w-0"><p className="text-xs text-gray-500 mb-0.5">{SHOP_TEXT.review.videoLabel[lang]}</p><p className="text-sm text-white truncate">{videoSource?.name || '\u2014'}</p></div>
-                                                    <Badge variant="outline" className="shrink-0">{videoSource?.source}</Badge>
-                                                </div>
-                                                <div className="flex items-center gap-3 p-4 rounded-xl bg-white/5 border border-white/10">
-                                                    <Package className="w-5 h-5 text-pink-400 shrink-0" />
-                                                    <div className="flex-1 min-w-0"><p className="text-xs text-gray-500 mb-0.5">{SHOP_TEXT.review.productLabel[lang]}</p><p className="text-sm text-white truncate">{selectedProduct?.shop.name || '\u2014'}</p></div>
-                                                </div>
-                                                <div className="flex items-center gap-3 p-4 rounded-xl bg-white/5 border border-white/10">
-                                                    <Store className="w-5 h-5 text-green-400 shrink-0" />
-                                                    <div className="flex-1 min-w-0"><p className="text-xs text-gray-500 mb-0.5">{SHOP_TEXT.review.accountLabel[lang]}</p><p className="text-sm text-white truncate">{accounts.find(a => a.id === selectedAccountId)?.display_name || '\u2014'}</p></div>
-                                                </div>
-                                                <div className="flex items-center gap-3 p-4 rounded-xl bg-white/5 border border-white/10">
-                                                    <Settings className="w-5 h-5 text-amber-400 shrink-0" />
                                                     <div className="flex-1 min-w-0">
-                                                        <p className="text-xs text-gray-500 mb-0.5">{SHOP_TEXT.review.titleLabel[lang]}</p>
-                                                        <p className="text-sm text-white">{publishSettings.title || '\u2014'}</p>
-                                                        {publishSettings.product_anchor_title && (<p className="text-xs text-gray-500 mt-1">{SHOP_TEXT.review.anchorLabel[lang]}: {publishSettings.product_anchor_title}</p>)}
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="font-medium text-white text-sm truncate">{account.display_name || 'Shop Account'}</span>
+                                                            {!isValid && (<span className="text-xs text-red-400 flex items-center gap-1 shrink-0"><AlertCircle className="w-3 h-3" />{SHOP_TEXT.account.tokenExpired[lang]}</span>)}
+                                                        </div>
+                                                        {account.username && (<p className="text-xs text-gray-500">@{account.username}</p>)}
                                                     </div>
-                                                    {publishSettings.enable_precheck && (<Badge variant="outline" className="text-green-400 border-green-500/30 shrink-0">{SHOP_TEXT.review.precheckOn[lang]}</Badge>)}
                                                 </div>
                                             </div>
-                                            {(() => { const notice = getPlatformNoticeText(lang); const guidelines = SHOP_TEXT.review.guidelinesItems[lang]; return (
-                                                <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 space-y-3">
-                                                    <div className="flex items-center gap-2"><ShieldCheck className="w-5 h-5 text-amber-400" /><h3 className="text-sm font-semibold text-amber-300">{SHOP_TEXT.review.platformNotice[lang]}</h3></div>
-                                                    <div className="text-xs text-gray-400 space-y-1.5 leading-relaxed">
-                                                        <p>{notice.text1}</p><p>{notice.text2}</p>
-                                                        <ul className="list-disc list-inside space-y-0.5 ml-1">{guidelines.map((item: string, i: number) => (<li key={i}>{item}</li>))}</ul>
-                                                    </div>
-                                                    <button onClick={() => setConfirmed(!confirmed)} className="flex items-start gap-2 mt-2 group cursor-pointer w-full text-left">
-                                                        {confirmed ? (<CheckSquare className="w-5 h-5 text-green-400 shrink-0 mt-0.5" />) : (<Square className="w-5 h-5 text-gray-500 shrink-0 mt-0.5 group-hover:text-gray-300" />)}
-                                                        <span className={cn('text-sm', confirmed ? 'text-green-300' : 'text-gray-400 group-hover:text-gray-300')}>{notice.confirmText}</span>
-                                                    </button>
-                                                </div>
-                                            ); })()}
-                                            <div className="flex justify-end pt-2">
-                                                <Button onClick={handleSubmit} disabled={submitting || !canProceed || !confirmed} className="gap-2 bg-gradient-to-r from-[#CCFF00] via-[#00F2EA] to-[#EC4899] text-black font-bold hover:shadow-[0_0_25px_rgba(0,242,234,0.5)]">
-                                                    {submitting ? (<><Loader2 className="w-4 h-4 animate-spin" />{SHOP_TEXT.nav.submitting[lang]}</>) : (<><Send className="w-4 h-4" />{SHOP_TEXT.nav.createTask[lang]}</>)}
-                                                </Button>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* ======== SECTION B: 视频素材 ======== */}
+                    <div className="rounded-2xl border border-white/10 bg-white/[0.03] overflow-hidden">
+                        <div className="flex items-center gap-3 px-5 py-4 border-b border-white/5">
+                            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-cyan-500/20 to-pink-500/20 flex items-center justify-center">
+                                <Video className="w-4 h-4 text-cyan-400" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                                <h3 className="text-sm font-semibold text-white">{SHOP_TEXT.video.sectionTitle[lang]}</h3>
+                                <p className="text-xs text-gray-500">{SHOP_TEXT.video.sectionDesc[lang]}</p>
+                            </div>
+                        </div>
+                        <div className="p-5 space-y-4">
+                            <div className="flex gap-2">
+                                <button onClick={() => setVideoInputMode('upload')} className={cn('flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all', videoInputMode === 'upload' ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30' : 'bg-white/5 text-gray-400 border border-white/10 hover:bg-white/10')}>
+                                    <Upload className="w-4 h-4" />{SHOP_TEXT.video.uploadTab[lang]}
+                                </button>
+                                <button onClick={() => setVideoInputMode('url')} className={cn('flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all', videoInputMode === 'url' ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30' : 'bg-white/5 text-gray-400 border border-white/10 hover:bg-white/10')}>
+                                    <Link2 className="w-4 h-4" />{SHOP_TEXT.video.urlTab[lang]}
+                                </button>
+                            </div>
+                            {videoInputMode === 'upload' && (
+                                <div className="space-y-3">
+                                    {!videoSource ? (
+                                        <label className={cn('flex flex-col items-center justify-center py-12 rounded-xl border-2 border-dashed transition-all cursor-pointer', uploading ? 'border-cyan-500/50 bg-cyan-500/5' : 'border-white/10 bg-white/[0.02] hover:border-white/20 hover:bg-white/5')}>
+                                            <input ref={fileInputRef} type="file" accept={ACCEPTED_VIDEO_TYPES} className="hidden" onChange={(e) => { const file = e.target.files?.[0]; if (file) handleFileSelect(file); }} disabled={uploading} />
+                                            {uploading ? (<><Loader2 className="w-10 h-10 text-cyan-400 animate-spin mb-3" /><p className="text-sm text-cyan-300 font-medium">{SHOP_TEXT.video.uploading[lang]} {uploadProgress}%</p><div className="w-48 h-1.5 bg-white/10 rounded-full mt-2 overflow-hidden"><div className="h-full bg-gradient-to-r from-cyan-500 to-pink-500 rounded-full transition-all duration-300" style={{ width: `${uploadProgress}%` }} /></div></>) : (<><Upload className="w-10 h-10 text-gray-500 mb-3" /><p className="text-sm text-gray-400 font-medium">{SHOP_TEXT.video.dropzoneTitle[lang]}</p><p className="text-xs text-gray-600 mt-1">{SHOP_TEXT.video.dropzoneFormats[lang]} — {SHOP_TEXT.video.maxSize[lang]}</p></>)}
+                                        </label>
+                                    ) : (
+                                        <div className="rounded-xl border border-white/10 bg-white/5 overflow-hidden">
+                                            {videoSource.localPreviewUrl ? (<div className="relative aspect-video bg-black max-h-[300px]"><video src={videoSource.localPreviewUrl} className="w-full h-full object-contain" controls muted /></div>) : (<div className="flex items-center justify-center py-8 bg-white/[0.02]"><FileVideo className="w-12 h-12 text-gray-600" /></div>)}
+                                            <div className="flex items-center gap-3 p-3 border-t border-white/5">
+                                                <Play className="w-5 h-5 text-green-400 shrink-0" />
+                                                <div className="flex-1 min-w-0"><p className="text-sm text-white truncate">{videoSource.name}</p></div>
+                                                {!uploading && videoSource.url && (<Badge variant="outline" className="text-green-400 border-green-500/30 shrink-0">{SHOP_TEXT.video.videoReady[lang]}</Badge>)}
+                                                {uploading && (<Badge variant="outline" className="text-cyan-400 border-cyan-500/30 shrink-0 animate-pulse">{SHOP_TEXT.video.uploading[lang]}</Badge>)}
+                                                <button onClick={handleClearVideo} disabled={uploading} className="p-1.5 rounded-lg hover:bg-white/10 text-gray-400 hover:text-red-400 transition-all disabled:opacity-50"><X className="w-4 h-4" /></button>
                                             </div>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                            {videoInputMode === 'url' && (
+                                <div className="space-y-3">
+                                    <div className="relative">
+                                        <Video className="absolute left-3 top-3 h-5 w-5 text-gray-500" />
+                                        <input type="url" value={videoSource?.source === 'url' ? videoSource.url : ''} onChange={(e) => { const url = e.target.value; if (url) { setVideoSource({ url, source: 'url', name: url.split('/').pop() || 'video' }); } else { setVideoSource(null); } }} placeholder={SHOP_TEXT.video.urlPlaceholder[lang]} className="w-full h-12 pl-11 pr-4 rounded-xl bg-white/5 border border-white/10 text-white placeholder:text-gray-600 focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500/50" />
+                                    </div>
+                                    {videoSource && videoSource.source === 'url' && (
+                                        <div className="flex items-center gap-3 p-3 rounded-lg bg-green-500/10 border border-green-500/20">
+                                            <Play className="w-5 h-5 text-green-400" /><div className="flex-1 min-w-0"><p className="text-sm text-green-300 truncate">{videoSource.name}</p></div>
+                                            <Badge variant="outline" className="text-green-400 border-green-500/30">{SHOP_TEXT.video.videoReady[lang]}</Badge>
                                         </div>
                                     )}
                                 </div>
                             )}
                         </div>
-                    );
-                })}
+                    </div>
+
+                    {/* ======== SECTION C: 挂载商品 ======== */}
+                    <div className="rounded-2xl border border-white/10 bg-white/[0.03] overflow-hidden">
+                        <div className="flex items-center gap-3 px-5 py-4 border-b border-white/5">
+                            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-cyan-500/20 to-pink-500/20 flex items-center justify-center">
+                                <Package className="w-4 h-4 text-pink-400" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                                <h3 className="text-sm font-semibold text-white">{SHOP_TEXT.steps.selectProduct[lang]}</h3>
+                                <p className="text-xs text-gray-500">{SHOP_TEXT.review.singleProductHint[lang]}</p>
+                            </div>
+                        </div>
+                        <div className="p-5">
+                            {selectedAccountId ? (
+                                <div className="space-y-4">
+                                    {/* Selected product card */}
+                                    {selectedProduct && (
+                                        <div className="flex gap-4 p-4 rounded-xl border border-cyan-500/30 bg-cyan-500/5">
+                                            {selectedProduct.addition?.customized_main_images?.[0]?.url && (
+                                                <img src={selectedProduct.addition.customized_main_images[0].url} alt="Product" className="w-16 h-16 rounded-lg object-cover shrink-0" />
+                                            )}
+                                            <div className="flex-1 min-w-0 space-y-1">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-[10px] text-gray-500 uppercase tracking-wider">{lang === 'en' ? 'Shop' : '店铺'}</span>
+                                                    <span className="text-sm text-white font-medium truncate">{selectedProduct.shop.name}</span>
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-[10px] text-gray-500 uppercase tracking-wider">{lang === 'en' ? 'ID' : '商品 ID'}</span>
+                                                    <span className="text-xs text-gray-400 font-mono">{selectedProduct.id.substring(0, 16)}...</span>
+                                                </div>
+                                                <div className="flex items-center gap-3 pt-1">
+                                                    {selectedProduct.price?.original_price?.minimum_amount && (
+                                                        <span className="text-sm font-semibold text-[#CCFF00]">${selectedProduct.price.original_price.minimum_amount}</span>
+                                                    )}
+                                                    {selectedProduct.commission_rate != null && selectedProduct.commission_rate > 0 && (
+                                                        <Badge variant="outline" className="text-amber-400 border-amber-500/30 text-[10px]">{SHOP_TEXT.product.comm[lang]} {selectedProduct.commission_rate}%</Badge>
+                                                    )}
+                                                </div>
+                                            </div>
+                                            <button onClick={() => setSelectedProduct(null)} className="p-1.5 rounded-lg hover:bg-white/10 text-gray-400 hover:text-red-400 transition-all self-start shrink-0"><X className="w-4 h-4" /></button>
+                                        </div>
+                                    )}
+                                    <ShopProductSelector accountId={selectedAccountId} selectedProductId={selectedProduct?.id} onSelect={(product) => setSelectedProduct(product as SelectedProduct | null)} />
+                                </div>
+                            ) : (
+                                <div className="text-center py-8">
+                                    <Store className="w-10 h-10 text-gray-600 mx-auto mb-3" />
+                                    <p className="text-sm text-gray-500 mb-4">{lang === 'en' ? 'Please select a Shop account first' : '请先选择 Shop 账号'}</p>
+                                    <Button variant="outline" size="sm" onClick={() => accountSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>{lang === 'en' ? 'Go to Account Selection' : '去上方选择账号'}</Button>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* ======== SECTION D: 文案与发布设置 ======== */}
+                    <div className="rounded-2xl border border-white/10 bg-white/[0.03] overflow-hidden">
+                        <div className="flex items-center gap-3 px-5 py-4 border-b border-white/5">
+                            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-cyan-500/20 to-pink-500/20 flex items-center justify-center">
+                                <Settings className="w-4 h-4 text-amber-400" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                                <h3 className="text-sm font-semibold text-white">{SHOP_TEXT.settings.sectionTitle[lang]}</h3>
+                            </div>
+                        </div>
+                        <div className="p-5">
+                            <ShopPublishSettings value={publishSettings} onChange={(v) => { setPublishSettings(v); setSettingsErrors({}); }} errors={settingsErrors} />
+                        </div>
+                    </div>
+
+                    {/* ======== SECTION E: 合规确认 ======== */}
+                    <div className="rounded-2xl border border-amber-500/20 bg-amber-500/5 overflow-hidden">
+                        <div className="flex items-center gap-3 px-5 py-4 border-b border-amber-500/10">
+                            <div className="w-8 h-8 rounded-full bg-amber-500/10 flex items-center justify-center">
+                                <ShieldCheck className="w-4 h-4 text-amber-400" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                                <h3 className="text-sm font-semibold text-amber-300">{SHOP_TEXT.review.platformNotice[lang]}</h3>
+                            </div>
+                        </div>
+                        <div className="p-5 space-y-4">
+                            <div className="text-xs text-gray-400 space-y-1.5 leading-relaxed">
+                                <p>{notice.text1}</p>
+                                <p>{notice.text2}</p>
+                                <ul className="list-disc list-inside space-y-0.5 ml-1">{guidelines.map((item: string, i: number) => (<li key={i}>{item}</li>))}</ul>
+                            </div>
+                            <button onClick={() => setConfirmed(!confirmed)} className="flex items-start gap-3 mt-2 group cursor-pointer w-full text-left p-3 rounded-xl border border-white/5 hover:border-white/10 bg-white/[0.02] hover:bg-white/[0.04] transition-all">
+                                {confirmed ? (<CheckSquare className="w-5 h-5 text-green-400 shrink-0 mt-0.5" />) : (<Square className="w-5 h-5 text-gray-500 shrink-0 mt-0.5 group-hover:text-gray-300" />)}
+                                <span className={cn('text-sm', confirmed ? 'text-green-300' : 'text-gray-400 group-hover:text-gray-300')}>{notice.confirmText}</span>
+                            </button>
+                            <p className="text-[11px] text-gray-600 leading-relaxed">{notice.disclaimer}</p>
+                        </div>
+                    </div>
+
+                    {/* ============================================================ */}
+                    {/* Mobile Preview (shown before action bar on small screens) */}
+                    {/* ============================================================ */}
+                    <div className="lg:hidden">
+                        <MobilePreview
+                            lang={lang}
+                            previewVideoSrc={previewVideoSrc}
+                            selectedAccount={selectedAccount}
+                            publishSettings={publishSettings}
+                            selectedProduct={selectedProduct}
+                            previewAnchorText={previewAnchorText}
+                        />
+                    </div>
+
+                    {/* ============================================================ */}
+                    {/* STICKY ACTION BAR */}
+                    {/* ============================================================ */}
+                    <div className="sticky bottom-4 z-40 rounded-2xl border border-white/10 bg-gray-950/95 backdrop-blur-xl p-4 shadow-2xl shadow-black/50">
+                        {/* Status badges */}
+                        <div className="flex flex-wrap items-center gap-2 mb-3">
+                            <StatusBadge ok={!!selectedAccountId} label={SHOP_TEXT.review.accountLabel[lang]} />
+                            <StatusBadge ok={!!videoSource?.url && !uploading} label={SHOP_TEXT.review.videoLabel[lang]} />
+                            <StatusBadge ok={!!selectedProduct} label={SHOP_TEXT.review.productLabel[lang]} />
+                            <StatusBadge ok={!!publishSettings.title.trim()} label={SHOP_TEXT.review.captionLabel[lang]} />
+                            <StatusBadge ok={confirmed} label={SHOP_TEXT.review.confirmationLabel[lang]} />
+                        </div>
+                        {/* Hint + buttons */}
+                        <div className="flex items-center gap-3">
+                            <div className="flex-1 min-w-0">
+                                {submitHint && (
+                                    <p className="text-xs text-red-400/80 truncate">{submitHint}</p>
+                                )}
+                            </div>
+                            <Button variant="outline" size="sm" onClick={handleReset} className="text-gray-400 border-white/10 hover:text-white shrink-0">
+                                <RotateCcw className="w-3.5 h-3.5 mr-1.5" />{lang === 'en' ? 'Reset' : '重置'}
+                            </Button>
+                            <Button
+                                onClick={handleSubmit}
+                                disabled={!canSubmit || submitting}
+                                className="gap-2 bg-gradient-to-r from-[#CCFF00] via-[#00F2EA] to-[#EC4899] text-black font-bold hover:shadow-[0_0_25px_rgba(0,242,234,0.5)] disabled:opacity-40 disabled:shadow-none shrink-0"
+                            >
+                                {submitting ? (<><Loader2 className="w-4 h-4 animate-spin" />{SHOP_TEXT.nav.submitting[lang]}</>) : (<><Send className="w-4 h-4" />{SHOP_TEXT.nav.createTask[lang]}</>)}
+                            </Button>
+                        </div>
+                    </div>
+
+                </div>
+
+                {/* ============================================================ */}
+                {/* RIGHT COLUMN: Star Gaze Publish Preview (Desktop only, Sticky) */}
+                {/* ============================================================ */}
+                <div className="hidden lg:block w-[340px] shrink-0 sticky top-24">
+                    <div className="rounded-2xl border border-white/10 bg-white/[0.03] overflow-hidden">
+                        {/* Preview header */}
+                        <div className="flex items-center gap-2 px-4 py-3 border-b border-white/5">
+                            <Eye className="w-4 h-4 text-cyan-400" />
+                            <span className="text-sm font-semibold text-white">{SHOP_TEXT.review.previewTitle[lang]}</span>
+                        </div>
+
+                        {/* Phone mockup */}
+                        <div className="p-4">
+                            <div className="relative bg-gray-900 rounded-[24px] border-2 border-gray-700 overflow-hidden" style={{ aspectRatio: '9/16' }}>
+                                {/* Video background */}
+                                {previewVideoSrc ? (
+                                    <video
+                                        key={previewVideoSrc}
+                                        src={previewVideoSrc}
+                                        className="absolute inset-0 w-full h-full object-cover"
+                                        muted
+                                        playsInline
+                                        loop
+                                        autoPlay
+                                    />
+                                ) : (
+                                    <div className="absolute inset-0 flex items-center justify-center bg-gray-900">
+                                        <FileVideo className="w-12 h-12 text-gray-700" />
+                                    </div>
+                                )}
+
+                                {/* Overlay gradient */}
+                                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/30 pointer-events-none" />
+
+                                {/* Content overlay */}
+                                <div className="absolute bottom-0 left-0 right-0 p-4 space-y-2.5">
+                                    {/* Account info */}
+                                    {selectedAccount && (
+                                        <div className="flex items-center gap-2">
+                                            {selectedAccount.avatar_url ? (
+                                                <img src={selectedAccount.avatar_url} className="w-7 h-7 rounded-full object-cover border border-white/20" alt="" />
+                                            ) : (
+                                                <div className="w-7 h-7 rounded-full bg-gradient-to-br from-[#00F2EA] to-[#EC4899] flex items-center justify-center text-white text-xs font-bold">{(selectedAccount.display_name || 'S').charAt(0)}</div>
+                                            )}
+                                            <span className="text-white text-xs font-semibold drop-shadow-lg">@{selectedAccount.username || selectedAccount.display_name}</span>
+                                        </div>
+                                    )}
+
+                                    {/* Caption */}
+                                    {publishSettings.title && (
+                                        <p className="text-white text-xs leading-relaxed drop-shadow-lg line-clamp-2">{publishSettings.title}</p>
+                                    )}
+
+                                    {/* Product anchor — unconditionally shown when product is selected */}
+                                    {selectedProduct && (
+                                        <div className="flex items-center gap-2 bg-orange-500/90 rounded-lg px-2.5 py-1.5 w-fit max-w-full">
+                                            <ShoppingBag className="w-3.5 h-3.5 text-white shrink-0" />
+                                            <span className="text-white text-[11px] font-medium truncate">{previewAnchorText}</span>
+                                        </div>
+                                    )}
+
+                                    {/* Precheck badge */}
+                                    {publishSettings.enable_precheck && (
+                                        <div className="flex items-center gap-1">
+                                            <ShieldCheck className="w-3 h-3 text-green-400" />
+                                            <span className="text-green-400 text-[10px]">{SHOP_TEXT.review.precheckOn[lang]}</span>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Preview notice */}
+                        <div className="px-4 pb-4">
+                            <p className="text-center text-[10px] text-gray-600 leading-relaxed">{SHOP_TEXT.review.previewNotice[lang]}</p>
+                        </div>
+                    </div>
+                </div>
+
             </div>
             )}
 
+            {/* ============================================================ */}
+            {/* TASKS TAB */}
+            {/* ============================================================ */}
             {activeTab === 'tasks' && (
                 <div className="bg-white/5 rounded-2xl border border-white/10 p-6">
                     <ShopTaskManager />
                 </div>
             )}
+        </div>
+    );
+}
+
+// ============================================================
+// Sub-components
+// ============================================================
+
+function StatusBadge({ ok, label }: { ok: boolean; label: string }) {
+    return (
+        <span className={cn(
+            'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-medium border transition-colors',
+            ok
+                ? 'bg-green-500/10 text-green-400 border-green-500/20'
+                : 'bg-white/5 text-gray-500 border-white/5'
+        )}>
+            {ok ? <Check className="w-3 h-3" /> : <div className="w-3 h-3 rounded-full border border-gray-600" />}
+            {label}
+        </span>
+    );
+}
+
+function MobilePreview({ lang, previewVideoSrc, selectedAccount, publishSettings, selectedProduct, previewAnchorText }: {
+    lang: Lang;
+    previewVideoSrc: string | undefined;
+    selectedAccount: { display_name: string | null; avatar_url: string | null; username: string | null } | undefined;
+    publishSettings: ShopPublishSettingsData;
+    selectedProduct: { id: string } | null;
+    previewAnchorText: string;
+}) {
+    return (
+        <div className="rounded-2xl border border-white/10 bg-white/[0.03] overflow-hidden">
+            <div className="flex items-center gap-2 px-4 py-3 border-b border-white/5">
+                <Eye className="w-4 h-4 text-cyan-400" />
+                <span className="text-sm font-semibold text-white">{SHOP_TEXT.review.previewTitle[lang]}</span>
+            </div>
+            <div className="p-4">
+                <div className="relative bg-gray-900 rounded-2xl overflow-hidden" style={{ aspectRatio: '16/9', maxHeight: '200px' }}>
+                    {previewVideoSrc ? (
+                        <video key={previewVideoSrc} src={previewVideoSrc} className="absolute inset-0 w-full h-full object-cover" muted playsInline loop autoPlay />
+                    ) : (
+                        <div className="absolute inset-0 flex items-center justify-center"><FileVideo className="w-10 h-10 text-gray-700" /></div>
+                    )}
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent pointer-events-none" />
+                    <div className="absolute bottom-0 left-0 right-0 p-3 flex items-end justify-between gap-3">
+                        <div className="space-y-1 min-w-0">
+                            {selectedAccount && (
+                                <span className="text-white text-[10px] font-semibold drop-shadow">@{selectedAccount.username || selectedAccount.display_name}</span>
+                            )}
+                            {publishSettings.title && <p className="text-white text-[10px] truncate drop-shadow">{publishSettings.title}</p>}
+                        </div>
+                        {selectedProduct && (
+                            <div className="flex items-center gap-1 bg-orange-500/90 rounded px-2 py-1 shrink-0">
+                                <ShoppingBag className="w-3 h-3 text-white" />
+                                <span className="text-white text-[9px] font-medium max-w-[80px] truncate">{previewAnchorText}</span>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </div>
+            <div className="px-4 pb-3">
+                <p className="text-center text-[10px] text-gray-600">{SHOP_TEXT.review.previewNotice[lang]}</p>
+            </div>
         </div>
     );
 }
