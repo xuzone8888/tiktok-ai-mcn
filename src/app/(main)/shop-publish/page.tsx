@@ -425,29 +425,29 @@ export default function ShopPublishPage() {
     return (
         <div className="space-y-8">
             {/* Page Header */}
-            <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center justify-between gap-4 bg-white/[0.02] border border-white/5 p-4 rounded-2xl">
                 <div className="flex items-center gap-4">
-                    <div className="w-1.5 h-14 rounded-full bg-gradient-to-b from-[#CCFF00] via-[#00F2EA] to-[#EC4899]" />
+                    <div className="w-1 h-10 rounded-full bg-gradient-to-b from-[#CCFF00] via-[#00F2EA] to-[#EC4899] opacity-80" />
                     <div>
-                    <h1 className="text-2xl font-bold text-white flex items-center gap-2">
-                        <ShoppingBag className="h-6 w-6" />
+                    <h1 className="text-xl font-bold text-white flex items-center gap-2">
+                        <ShoppingBag className="h-5 w-5" />
                         {SHOP_TEXT.page.title[lang]}
                     </h1>
-                    <p className="text-white/50 text-sm mt-0.5">
+                    <p className="text-white/50 text-xs mt-1">
                         {SHOP_TEXT.page.subtitle[lang]}
                     </p>
                     </div>
                 </div>
                 <button
                     onClick={() => router.push('/shop-publish/accounts')}
-                    className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 hover:border-white/20 transition-all"
+                    className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 hover:border-white/20 transition-all text-sm shadow-sm font-medium"
                 >
                     <Settings className="w-4 h-4 text-white/70" />
                     <span className="text-white/80">{lang === 'en' ? 'Accounts' : '账号管理'}</span>
                 </button>
             </div>
             {/* Tabs */}
-            <div className="flex gap-1 p-1.5 bg-black/40 rounded-xl border border-white/10 w-fit backdrop-blur-md">
+            <div className="flex gap-2 p-1.5 bg-white/[0.03] rounded-2xl border border-white/10 w-fit backdrop-blur-md">
                 {[
                     { id: 'create' as TabType, label: lang === 'en' ? 'Create' : '创建发布', icon: Send },
                     { id: 'tasks' as TabType, label: lang === 'en' ? 'Tasks' : '任务管理', icon: ListFilter },
@@ -455,19 +455,16 @@ export default function ShopPublishPage() {
                     <button
                         key={tab.id}
                         onClick={() => setActiveTab(tab.id)}
-                        className={`group relative flex items-center gap-2 px-5 py-2.5 rounded-lg font-medium transition-all duration-300 overflow-hidden ${activeTab === tab.id
-                            ? 'bg-gradient-to-r from-[#CCFF00] via-[#00F2EA] to-[#EC4899] text-black shadow-[0_0_20px_rgba(0,242,234,0.4)]'
-                            : 'text-white/50 hover:text-white/80 hover:bg-white/5'
+                        className={`group relative flex items-center gap-2 px-6 py-2.5 rounded-xl transition-all duration-300 ${activeTab === tab.id
+                            ? 'bg-white/10 text-white shadow-lg border border-white/10'
+                            : 'text-white/40 hover:text-white hover:bg-white/5 border border-transparent'
                             }`}
                     >
                         {activeTab === tab.id && (
-                            <>
-                                <div className="absolute inset-0 bg-gradient-to-b from-white/50 via-white/20 to-transparent pointer-events-none" />
-                                <div className="absolute top-[10%] left-0 right-0 h-[40%] bg-gradient-to-b from-white/30 to-transparent pointer-events-none rounded-lg" />
-                            </>
+                            <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-[#CCFF00]/10 via-[#00F2EA]/10 to-[#EC4899]/10 pointer-events-none" />
                         )}
-                        <tab.icon className={`w-4 h-4 relative z-10 ${activeTab === tab.id ? 'text-black' : ''}`} />
-                        <span className="relative z-10">{tab.label}</span>
+                        <tab.icon className={`w-4 h-4 relative z-10 transition-colors ${activeTab === tab.id ? 'text-[#00F2EA]' : 'text-white/40 group-hover:text-white/80'}`} />
+                        <span className="relative z-10 text-sm font-medium">{tab.label}</span>
                     </button>
                 ))}
             </div>
@@ -486,14 +483,14 @@ export default function ShopPublishPage() {
                         <div
                             key={stepNum}
                             className={cn(
-                                'rounded-2xl border overflow-hidden transition-all duration-300',
+                                'rounded-2xl border overflow-hidden transition-all duration-400',
                                 isActive
-                                    ? 'border-cyan-500/30 bg-white/5 shadow-[0_0_20px_rgba(0,242,234,0.08)]'
+                                    ? 'border-[#00F2EA]/30 bg-white/[0.06] shadow-[0_0_30px_rgba(0,242,234,0.06)]'
                                     : isCompleted
-                                        ? 'border-green-500/20 bg-white/[0.03]'
+                                        ? 'border-white/10 bg-white/[0.04] hover:bg-white/[0.06]'
                                         : isLocked
-                                            ? 'border-white/5 bg-white/[0.02] opacity-50'
-                                            : 'border-white/10 bg-white/[0.03]'
+                                            ? 'border-transparent bg-white/[0.02] opacity-40'
+                                            : 'border-transparent bg-white/[0.04] hover:bg-white/[0.06]'
                             )}
                         >
                             {/* Section Header */}
