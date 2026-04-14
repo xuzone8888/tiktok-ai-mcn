@@ -28,6 +28,7 @@ import {
     ShieldCheck,
     CheckSquare,
     Square,
+    ListFilter,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -80,6 +81,8 @@ interface VideoSource {
     localPreviewUrl?: string;
 }
 
+type TabType = 'create' | 'tasks';
+
 // ============================================================
 // Step Configuration
 // ============================================================
@@ -109,6 +112,7 @@ export default function ShopPublishPage() {
     const router = useRouter();
     const { lang } = useLang();
     const STEPS = getSteps(lang);
+    const [activeTab, setActiveTab] = useState<TabType>('create');
     const [currentStep, setCurrentStep] = useState(1);
     const [submitting, setSubmitting] = useState(false);
 
@@ -393,6 +397,7 @@ export default function ShopPublishPage() {
             });
             setConfirmed(false);
             setCurrentStep(1);
+            setActiveTab('tasks');
         } catch (error) {
             console.error('Failed to create task:', error);
             toast({
@@ -420,9 +425,10 @@ export default function ShopPublishPage() {
     return (
         <div className="space-y-8">
             {/* Page Header */}
-            <div className="flex items-center gap-4">
-                <div className="w-1.5 h-14 rounded-full bg-gradient-to-b from-[#CCFF00] via-[#00F2EA] to-[#EC4899]" />
-                <div>
+            <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-4">
+                    <div className="w-1.5 h-14 rounded-full bg-gradient-to-b from-[#CCFF00] via-[#00F2EA] to-[#EC4899]" />
+                    <div>
                     <h1 className="text-2xl font-bold text-white flex items-center gap-2">
                         <ShoppingBag className="h-6 w-6" />
                         {SHOP_TEXT.page.title[lang]}
@@ -430,11 +436,43 @@ export default function ShopPublishPage() {
                     <p className="text-white/50 text-sm mt-0.5">
                         {SHOP_TEXT.page.subtitle[lang]}
                     </p>
+                    </div>
                 </div>
+                <button
+                    onClick={() => router.push('/shop-publish/accounts')}
+                    className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 hover:border-white/20 transition-all"
+                >
+                    <Settings className="w-4 h-4 text-white/70" />
+                    <span className="text-white/80">{lang === 'en' ? 'Accounts' : '账号管理'}</span>
+                </button>
             </div>
-            {/* ============================================================ */}
-            {/* Vertical Section Flow — accordion-style */}
-            {/* ============================================================ */}
+            {/* Tabs */}
+            <div className="flex gap-1 p-1.5 bg-black/40 rounded-xl border border-white/10 w-fit backdrop-blur-md">
+                {[
+                    { id: 'create' as TabType, label: lang === 'en' ? 'Create' : '创建发布', icon: Send },
+                    { id: 'tasks' as TabType, label: lang === 'en' ? 'Tasks' : '任务管理', icon: ListFilter },
+                ].map((tab) => (
+                    <button
+                        key={tab.id}
+                        onClick={() => setActiveTab(tab.id)}
+                        className={`group relative flex items-center gap-2 px-5 py-2.5 rounded-lg font-medium transition-all duration-300 overflow-hidden ${activeTab === tab.id
+                            ? 'bg-gradient-to-r from-[#CCFF00] via-[#00F2EA] to-[#EC4899] text-black shadow-[0_0_20px_rgba(0,242,234,0.4)]'
+                            : 'text-white/50 hover:text-white/80 hover:bg-white/5'
+                            }`}
+                    >
+                        {activeTab === tab.id && (
+                            <>
+                                <div className="absolute inset-0 bg-gradient-to-b from-white/50 via-white/20 to-transparent pointer-events-none" />
+                                <div className="absolute top-[10%] left-0 right-0 h-[40%] bg-gradient-to-b from-white/30 to-transparent pointer-events-none rounded-lg" />
+                            </>
+                        )}
+                        <tab.icon className={`w-4 h-4 relative z-10 ${activeTab === tab.id ? 'text-black' : ''}`} />
+                        <span className="relative z-10">{tab.label}</span>
+                    </button>
+                ))}
+            </div>
+
+            {activeTab === 'create' && (
             <div className="space-y-3">
                 {STEPS.map((step) => {
                     const Icon = step.icon;
@@ -692,18 +730,13 @@ export default function ShopPublishPage() {
                     );
                 })}
             </div>
+            )}
 
-            {/* Separator */}
-            <div className="border-t border-white/10" />
-
-            {/* Task History Section */}
-            <div>
-                <div className="flex items-center gap-4 mb-4">
-                    <div className="w-1 h-6 rounded-full bg-gradient-to-b from-[#00F2EA] to-[#EC4899]" />
-                    <h2 className="text-lg font-semibold text-white">{SHOP_TEXT.page.taskHistory[lang]}</h2>
+            {activeTab === 'tasks' && (
+                <div className="bg-white/5 rounded-2xl border border-white/10 p-6">
+                    <ShopTaskManager />
                 </div>
-                <ShopTaskManager />
-            </div>
+            )}
         </div>
     );
 }
