@@ -411,7 +411,7 @@ export default function ShopPublishPage() {
     const selectedAccount = accounts.find(a => a.id === selectedAccountId);
     const previewVideoSrc = videoSource?.localPreviewUrl ?? videoSource?.url;
     // Anchor text fallback aligned with backend: product_anchor_title || publishSettings.title
-    const previewAnchorText = publishSettings.product_anchor_title || publishSettings.title || (lang === 'en' ? 'Shop Now' : '立即购买');
+    const previewAnchorText = publishSettings.product_anchor_title || publishSettings.title;
     const notice = getPlatformNoticeText(lang);
     const guidelines = SHOP_TEXT.review.guidelinesItems[lang];
 
@@ -459,8 +459,8 @@ export default function ShopPublishPage() {
             {/* ============================================================ */}
             <div className="flex gap-2 p-1.5 bg-white/[0.03] rounded-2xl border border-white/10 w-fit backdrop-blur-md">
                 {[
-                    { id: 'create' as TabType, label: lang === 'en' ? 'Create' : '创建发布', icon: Send },
-                    { id: 'tasks' as TabType, label: lang === 'en' ? 'Tasks' : '任务管理', icon: ListFilter },
+                    { id: 'create' as TabType, label: SHOP_TEXT.page.tabCreate[lang], icon: Send },
+                    { id: 'tasks' as TabType, label: SHOP_TEXT.page.tabTasks[lang], icon: ListFilter },
                 ].map((tab) => (
                     <button
                         key={tab.id}
@@ -498,7 +498,7 @@ export default function ShopPublishPage() {
                             </div>
                             <div className="flex-1 min-w-0">
                                 <h3 className="text-sm font-semibold text-white">{SHOP_TEXT.steps.selectAccount[lang]}</h3>
-                                <p className="text-xs text-gray-500">{lang === 'en' ? 'Choose a Shop account to publish the video' : '选择一个 Shop 账号发布视频'}</p>
+                                <p className="text-xs text-gray-500">{SHOP_TEXT.account.sectionDesc[lang]}</p>
                             </div>
                             <Button variant="ghost" size="sm" onClick={fetchAccounts} className="text-gray-400 hover:text-white shrink-0">
                                 <RefreshCw className={cn('w-4 h-4', accountsLoading && 'animate-spin')} />
@@ -591,7 +591,7 @@ export default function ShopPublishPage() {
                                     {videoSource && videoSource.source === 'url' && (
                                         <div className="flex items-center gap-3 p-3 rounded-lg bg-green-500/10 border border-green-500/20">
                                             <Play className="w-5 h-5 text-green-400" /><div className="flex-1 min-w-0"><p className="text-sm text-green-300 truncate">{videoSource.name}</p></div>
-                                            <Badge variant="outline" className="text-green-400 border-green-500/30">{SHOP_TEXT.video.videoReady[lang]}</Badge>
+                                            <Badge variant="outline" className="text-amber-400 border-amber-500/30">{SHOP_TEXT.video.urlEntered[lang]}</Badge>
                                         </div>
                                     )}
                                 </div>
@@ -621,19 +621,24 @@ export default function ShopPublishPage() {
                                             )}
                                             <div className="flex-1 min-w-0 space-y-1">
                                                 <div className="flex items-center gap-2">
-                                                    <span className="text-[10px] text-gray-500 uppercase tracking-wider">{lang === 'en' ? 'Shop' : '店铺'}</span>
+                                                    <span className="text-[10px] text-gray-500 uppercase tracking-wider">{SHOP_TEXT.product.shopLabel[lang]}</span>
                                                     <span className="text-sm text-white font-medium truncate">{selectedProduct.shop.name}</span>
                                                 </div>
                                                 <div className="flex items-center gap-2">
-                                                    <span className="text-[10px] text-gray-500 uppercase tracking-wider">{lang === 'en' ? 'ID' : '商品 ID'}</span>
+                                                    <span className="text-[10px] text-gray-500 uppercase tracking-wider">{SHOP_TEXT.product.productIdLabel[lang]}</span>
                                                     <span className="text-xs text-gray-400 font-mono">{selectedProduct.id.substring(0, 16)}...</span>
                                                 </div>
                                                 <div className="flex items-center gap-3 pt-1">
-                                                    {selectedProduct.price?.original_price?.minimum_amount && (
-                                                        <span className="text-sm font-semibold text-[#CCFF00]">${selectedProduct.price.original_price.minimum_amount}</span>
-                                                    )}
+                                                    {selectedProduct.price?.original_price?.minimum_amount && (() => {
+                                                        const min = selectedProduct.price.original_price.minimum_amount;
+                                                        const max = selectedProduct.price.original_price.maximum_amount;
+                                                        const formatted = min === max
+                                                            ? `$${(parseInt(min) / 100).toFixed(2)}`
+                                                            : `$${(parseInt(min) / 100).toFixed(2)} - $${(parseInt(max) / 100).toFixed(2)}`;
+                                                        return <span className="text-sm font-semibold text-[#CCFF00]">{formatted}</span>;
+                                                    })()}
                                                     {selectedProduct.commission_rate != null && selectedProduct.commission_rate > 0 && (
-                                                        <Badge variant="outline" className="text-amber-400 border-amber-500/30 text-[10px]">{SHOP_TEXT.product.comm[lang]} {selectedProduct.commission_rate}%</Badge>
+                                                        <Badge variant="outline" className="text-amber-400 border-amber-500/30 text-[10px]">{SHOP_TEXT.product.comm[lang]} {(selectedProduct.commission_rate * 100).toFixed(1)}%</Badge>
                                                     )}
                                                 </div>
                                             </div>
@@ -645,8 +650,8 @@ export default function ShopPublishPage() {
                             ) : (
                                 <div className="text-center py-8">
                                     <Store className="w-10 h-10 text-gray-600 mx-auto mb-3" />
-                                    <p className="text-sm text-gray-500 mb-4">{lang === 'en' ? 'Please select a Shop account first' : '请先选择 Shop 账号'}</p>
-                                    <Button variant="outline" size="sm" onClick={() => accountSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>{lang === 'en' ? 'Go to Account Selection' : '去上方选择账号'}</Button>
+                                    <p className="text-sm text-gray-500 mb-4">{SHOP_TEXT.account.selectFirst[lang]}</p>
+                                    <Button variant="outline" size="sm" onClick={() => accountSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>{SHOP_TEXT.account.goSelectAccount[lang]}</Button>
                                 </div>
                             )}
                         </div>
@@ -725,7 +730,7 @@ export default function ShopPublishPage() {
                                 )}
                             </div>
                             <Button variant="outline" size="sm" onClick={handleReset} className="text-gray-400 border-white/10 hover:text-white shrink-0">
-                                <RotateCcw className="w-3.5 h-3.5 mr-1.5" />{lang === 'en' ? 'Reset' : '重置'}
+                                <RotateCcw className="w-3.5 h-3.5 mr-1.5" />{SHOP_TEXT.page.resetBtn[lang]}
                             </Button>
                             <Button
                                 onClick={handleSubmit}

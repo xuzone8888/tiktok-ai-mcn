@@ -23,6 +23,9 @@ const SHOP_TEXT = {
     subtitle:        { en: 'Publish shoppable videos with product links to TikTok Shop',
                        zh: '发布带商品链接的带货视频到 TikTok Shop' },
     taskHistory:     { en: 'Publish Task History',    zh: '发布任务历史' },
+    tabCreate:       { en: 'Create',                  zh: '创建发布' },
+    tabTasks:        { en: 'Tasks',                   zh: '任务管理' },
+    resetBtn:        { en: 'Reset',                   zh: '重置' },
   },
 
   // ====== Step labels (used in step indicator) ======
@@ -51,11 +54,13 @@ const SHOP_TEXT = {
     changeVideo:     { en: 'Change',                zh: '更换' },
     removeVideo:     { en: 'Remove',                zh: '移除' },
     videoReady:      { en: 'Video ready',           zh: '视频就绪' },
+    urlEntered:      { en: 'URL entered',           zh: '已输入链接' },
   },
 
   // ====== Step 2 — Account selection ======
   account: {
     sectionTitle:    { en: 'Select TikTok Shop Account', zh: '选择 TikTok Shop 账号' },
+    sectionDesc:     { en: 'Choose a Shop account to publish the video', zh: '选择一个 Shop 账号发布视频' },
     loadingAccounts: { en: 'Loading accounts...',   zh: '加载账号中...' },
     noAccounts:      { en: 'No connected accounts', zh: '暂无已连接账号' },
     noAccountsHint:  { en: 'Please connect a TikTok Shop account first',
@@ -63,6 +68,8 @@ const SHOP_TEXT = {
     manageAccounts:  { en: 'Manage Accounts',       zh: '管理账号' },
     tokenExpired:    { en: 'Token Expired',          zh: '令牌过期' },
     active:          { en: 'Active',                 zh: '有效' },
+    selectFirst:     { en: 'Please select a Shop account first', zh: '请先选择 Shop 账号' },
+    goSelectAccount: { en: 'Go to Account Selection', zh: '去上方选择账号' },
   },
 
   // ====== Step 3 — Product selection (ShopProductSelector) ======
@@ -81,6 +88,8 @@ const SHOP_TEXT = {
     noMatch:         { en: 'No products matching',   zh: '没有匹配的商品' },
     retry:           { en: 'Retry',                  zh: '重试' },
     comm:            { en: 'comm.',                   zh: '佣金' },
+    shopLabel:       { en: 'Shop',                    zh: '店铺' },
+    productIdLabel:  { en: 'Product ID',              zh: '商品 ID' },
   },
 
   // ====== Step 4 — Settings (ShopPublishSettings) ======
@@ -96,8 +105,8 @@ const SHOP_TEXT = {
                        zh: 'TikTok 允许最多 {max} 个字符。' },
     anchorText:      { en: 'Product Anchor Text',    zh: '商品锚点文案' },
     anchorPlaceholder:{ en: 'e.g. Limited Offer — Shop Now', zh: '如：限时优惠 — 立即购买' },
-    anchorHint:      { en: 'The anchor text appears on the product link overlay in your video, guiding viewers to click and purchase. Leave empty to use the default product name.',
-                       zh: '锚点文案显示在视频商品链接浮层上，引导观众点击购买。留空则使用默认商品名称。' },
+    anchorHint:      { en: 'The anchor text appears on the product link overlay in your video, guiding viewers to click and purchase. Leave empty to use the video title.',
+                       zh: '锚点文案显示在视频商品链接浮层上，引导观众点击购买。留空则使用视频标题。' },
     precheckLabel:   { en: 'Pre-Publish Compliance Check', zh: '发布前合规检查' },
     precheckDesc:    { en: 'Automatically verify your video meets TikTok Shop guidelines before publishing',
                        zh: '发布前自动检查视频是否符合 TikTok Shop 规范' },
