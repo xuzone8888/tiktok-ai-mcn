@@ -203,7 +203,7 @@ export default function ShopPublishPage() {
             errors.title = V.titleMaxLen[lang];
         }
 
-        if (publishSettings.product_anchor_title.length > 40) {
+        if (publishSettings.product_anchor_title.length > 30) {
             errors.product_anchor_title = V.anchorMaxLen[lang];
         }
 

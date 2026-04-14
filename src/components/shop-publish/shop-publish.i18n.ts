@@ -215,7 +215,7 @@ const SHOP_TEXT = {
   validation: {
     titleRequired:   { en: 'Video title is required',   zh: '请输入视频标题' },
     titleMaxLen:     { en: 'Title cannot exceed 150 characters', zh: '标题不能超过 150 个字符' },
-    anchorMaxLen:    { en: 'Anchor text cannot exceed 40 characters', zh: '锚点文案不能超过 40 个字符' },
+    anchorMaxLen:    { en: 'Anchor text cannot exceed 30 characters', zh: '锚点文案不能超过 30 个字符' },
   },
 
   // ====== accounts/page.tsx ======

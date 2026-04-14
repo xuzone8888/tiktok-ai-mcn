@@ -366,23 +366,21 @@ async function pollVideoStatus(accessToken: string, videoId: string): Promise<vo
         await sleep(VIDEO_STATUS_POLL_INTERVAL_MS);
 
         try {
-            const status = await getVideoStatus(accessToken, videoId);
+            const result = await getVideoStatus(accessToken, videoId);
 
-            // ⚠️ Status values not precisely documented
-            // Assume: numeric or string indicating success/failure
-            // Convert to string for safe comparison
-            const statusStr = String(status.status);
+            // Official API response: data.video.post_status = 'SUCCESS' | 'FAIL' | 'PROCESSING'
+            const postStatus = result.video?.post_status;
 
-            if (statusStr === 'published' || statusStr === '4' || statusStr === 'PUBLISHED') {
-                return; // Success
+            if (postStatus === 'SUCCESS') {
+                return; // Published successfully
             }
 
-            if (statusStr === 'failed' || statusStr === 'FAILED') {
-                throw new Error(`视频发布失败: ${status.reason || '未知原因'}`);
+            if (postStatus === 'FAIL') {
+                throw new Error('视频发布失败: TikTok returned FAIL status');
             }
 
-            // Still processing, continue polling
-            console.log(`[Processor] Video ${videoId}: status=${statusStr}, polling... (${i + 1}/${VIDEO_STATUS_POLL_MAX_ATTEMPTS})`);
+            // Still PROCESSING, continue polling
+            console.log(`[Processor] Video ${videoId}: post_status=${postStatus}, polling... (${i + 1}/${VIDEO_STATUS_POLL_MAX_ATTEMPTS})`);
         } catch (error) {
             // If it's our explicit error, rethrow
             if (error instanceof Error && error.message.startsWith('视频发布失败')) {

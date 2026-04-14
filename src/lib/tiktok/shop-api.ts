@@ -26,7 +26,8 @@ const SHOP_API_BASE = 'https://open-api.tiktokglobalshop.com';
 // Post Shoppable Video path (Round-8 Finding #2: may differ, keep as constant for easy switching)
 const SHOPPABLE_VIDEO_PATH = '/affiliate_creator/202505/videos';
 const SHOWCASE_PRODUCTS_PATH = '/affiliate_creator/202405/showcases/products'; // ⚠️ Version 202405!
-const CREATOR_PROFILE_PATH = '/affiliate_creator/202508/profiles';            // ⚠️ Version 202508!
+const CREATOR_PROFILE_PATH = '/affiliate_creator/202405/profiles';            // ⚠️ Version 202405 confirmed!
+const VIDEO_STATUS_PATH_PREFIX = '/affiliate_creator/202509/videos';           // ⚠️ Version 202509 for status!
 const FILE_INIT_PATH = '/open/202512/file/init';
 const VIDEO_PRECHECK_PATH = '/affiliate_creator/202505/videos/precheck';       // ⚠️ Needs runtime verification
 
@@ -304,22 +305,22 @@ export async function postShoppableVideo(
 
 /**
  * Get the status of a published shoppable video.
- * GET /affiliate_creator/202505/videos
+ * GET /affiliate_creator/202509/videos/{video_id}/status
  *
- * ⚠️ Status values are not precisely documented.
- * Might be numeric (1-4) or string enums. Verify at runtime.
+ * ⚠️ Confirmed via official docs:
+ *   - Version is 202509 (not 202505)
+ *   - video_id is a PATH parameter appended to the URL
+ *   - post_status enum: SUCCESS, FAIL, PROCESSING
  */
 export async function getVideoStatus(
     accessToken: string,
     videoId: string
 ): Promise<ShopVideoStatus> {
+    const path = `${VIDEO_STATUS_PATH_PREFIX}/${videoId}/status`;
     return shopApiRequest<ShopVideoStatus>(
         'GET',
-        SHOPPABLE_VIDEO_PATH,
-        accessToken,
-        {
-            queryParams: { video_id: videoId },
-        }
+        path,
+        accessToken
     );
 }
 

@@ -45,8 +45,9 @@ export interface ShopCreatorAvatar {
 }
 
 /**
- * Creator profile from GET /affiliate_creator/202508/profiles
+ * Creator profile from GET /affiliate_creator/202405/profiles
  * Required scope: creator.affiliate.info or creator.video.write
+ * ⚠️ Version is 202405, confirmed via official Partner Center docs
  */
 export interface ShopCreatorProfile {
     username: string;
@@ -127,13 +128,19 @@ export interface ShopVideoPostRequest {
 }
 
 /**
- * Video status response from GET /affiliate_creator/202505/videos
- * ⚠️ Status values not precisely documented. Verify at runtime.
+ * Video status response from GET /affiliate_creator/202509/videos/{video_id}/status
+ * ⚠️ Confirmed via official docs:
+ *   - Version is 202509 (not 202505)
+ *   - video_id is a PATH parameter, not query
+ *   - Response is wrapped in data.video
+ *   - post_status is a string enum: SUCCESS, FAIL, PROCESSING
  */
 export interface ShopVideoStatus {
-    video_id: string;
-    status: number | string; // 可能是 1-4 或字符串枚举，以实际 API 返回为准
-    reason?: string;
+    video: {
+        id: string;
+        post_status: 'SUCCESS' | 'FAIL' | 'PROCESSING';
+        post_time?: number;  // Unix timestamp
+    };
 }
 
 // ============================================================

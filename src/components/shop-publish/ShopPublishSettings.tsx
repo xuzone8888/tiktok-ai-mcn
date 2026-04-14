@@ -39,7 +39,7 @@ interface ShopPublishSettingsProps {
 // ============================================================
 
 const TITLE_MAX_LENGTH = 150 // TikTok video title limit
-const ANCHOR_MAX_LENGTH = 40  // Product anchor title limit
+const ANCHOR_MAX_LENGTH = 30  // Product anchor title limit (API error 16011007 if > 30)
 
 // ============================================================
 // Component
