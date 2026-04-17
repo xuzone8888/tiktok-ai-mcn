@@ -7,7 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 import ReflectiveCard from "@/components/ui/ReflectiveCard";
 import ReflectiveInput from "@/components/ui/ReflectiveInput";
 import { Button } from "@/components/ui/button";
-import { Mail, ArrowRight, ArrowLeft, Loader2 } from "lucide-react";
+import { Mail, ArrowRight, ArrowLeft, Loader2, Sparkles, Zap } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useLang } from "@/contexts/LangContext";
 import { LangToggle } from "@/components/ui/LangToggle";
@@ -166,9 +166,17 @@ export default function ForgotPasswordPage() {
           <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-white/30 to-transparent opacity-50" />
 
           <div className="flex justify-center mb-6">
-            <span className="text-xl font-bold text-white drop-shadow-[0_0_20px_rgba(16,185,129,0.3)]">
-              Star Gaze
-            </span>
+            <div className="flex flex-col items-center">
+              <div className="flex items-center gap-2">
+                <div className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-lg overflow-hidden shadow-[0_4_15px_rgba(34,211,238,0.3)]">
+                  <img src="/images/toryx_logo_icon_new.png" alt="Star Gaze Logo" className="h-full w-full object-cover scale-[1.05]" />
+                </div>
+                <div className="flex items-center tracking-wide">
+                  <span className="text-xl font-bold text-white tracking-tight">Star</span>
+                  <span className="text-xl font-light text-white/70 ml-1">Gaze</span>
+                </div>
+              </div>
+            </div>
           </div>
 
           <div className="text-center mb-6">

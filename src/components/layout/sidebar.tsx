@@ -363,21 +363,23 @@ export function Sidebar() {
           {/* Ambient Glow */}
           <div className="absolute top-0 left-1/2 -translate-x-1/2 w-2/3 h-1 bg-gradient-to-r from-transparent via-[#00f2ea]/20 to-transparent blur-sm group-hover/header:via-[#00f2ea]/40 transition-all duration-500" />
 
-          <Link href="/" className="group/logo relative flex shrink-0 items-center gap-3 transition-all duration-300 hover:scale-[1.03] active:scale-95">
-            {/* Icon Logo - Always visible */}
-            <img
-              src="/images/toryx_logo_icon_new.png"
-              alt="Star Gaze"
-              className={cn(
-                "drop-shadow-[0_0_15px_rgba(16,185,129,0.4)] rounded-xl",
-                collapsed ? "h-10 w-10" : "h-10 w-10"
-              )}
-            />
-            {/* Text Logo - Only when expanded */}
+          <Link href="/" className="group/logo relative flex shrink-0 items-center gap-3.5 transition-all duration-300 hover:scale-[1.03] active:scale-95">
+            {/* Original Image Logo with Fringe Trimming */}
+            <div className={cn(
+              "relative flex shrink-0 items-center justify-center rounded-[12px] overflow-hidden shadow-[0_0_15px_rgba(34,211,238,0.3)] ring-1 ring-white/10 transition-all group-hover/logo:shadow-[0_0_25px_rgba(34,211,238,0.4)]",
+              collapsed ? "h-10 w-10" : "h-11 w-11"
+            )}>
+              <img src="/images/toryx_logo_icon_new.png" alt="Star Gaze Logo" className="h-full w-full object-cover scale-[1.05]" />
+            </div>
+            
+            {/* Split Fat-Thin Typography */}
             {!collapsed && (
-              <span className="text-sm font-bold leading-tight text-white drop-shadow-[0_0_12px_rgba(16,185,129,0.3)]">
-                Star Gaze<br />Cultural Media
-              </span>
+              <div className="flex flex-col justify-center translate-y-[1px]">
+                <div className="flex items-center tracking-tight leading-none">
+                  <span className="text-[20px] font-extrabold text-white">Star</span>
+                  <span className="text-[20px] font-light text-white/70 ml-[3px]">Gaze</span>
+                </div>
+              </div>
             )}
           </Link>
         </div>

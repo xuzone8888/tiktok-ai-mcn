@@ -6,7 +6,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import ReflectiveInput from "@/components/ui/ReflectiveInput";
 import { Button } from "@/components/ui/button";
-import { Mail, Lock, Smartphone, ArrowRight, Loader2, KeyRound, Fingerprint, Sparkles, Globe } from "lucide-react";
+import { Mail, Lock, Smartphone, ArrowRight, Loader2, KeyRound, Fingerprint, Sparkles, Globe, Zap } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useLang } from "@/contexts/LangContext";
 import { LangToggle } from "@/components/ui/LangToggle";
@@ -330,54 +330,75 @@ function LoginPageContent() {
 
       <div className="w-full max-w-7xl mx-auto flex relative z-10">
         {/* 2. 左侧：高定品牌叙事区 (大屏显示) */}
-        <div className="hidden lg:flex flex-col flex-1 p-12 lg:p-20 justify-center">
-        <div className="max-w-xl">
-          {/* Logo */}
-          <span className="text-3xl font-bold text-white mb-12 block drop-shadow-[0_0_30px_rgba(16,185,129,0.4)]">
-            Star Gaze<br />Cultural Media
-          </span>
+        <div className="hidden lg:flex flex-col flex-1 p-12 lg:p-16 justify-between pb-12">
           
-          {/* 大标题 */}
-          <h1 className="text-5xl lg:text-6xl font-bold tracking-tight mb-6 leading-tight">
-            <span className="bg-clip-text text-transparent bg-gradient-to-r from-white via-white/90 to-white/60">
-              {lang === "en" ? (
-                <>Your Exclusive AI Character,<br />Redefining Creation</>
-              ) : (
-                <>你的专属 AI 角色，<br />让创作从此不同</>
-              )}
-            </span>
-          </h1>
-          
-          {/* 副标题 */}
-          <p className="text-lg text-white/50 mb-12 leading-relaxed">
-            {lang === "en"
-              ? "Create a unique AI character · Produce professional short videos consistently · Elevate your content creation efficiency."
-              : "创建独一无二的 AI 角色 · 持续产出专业级短视频 · 极大提升达人与电商内容创作效率。"}
-          </p>
+          {/* 中央视觉聚合区 (Logo + 文案) */}
+          <div className="flex-1 flex flex-col justify-center max-w-xl self-start">
+            
+            {/* 品牌 Logo (回归视觉中心，放大尺寸) */}
+            <div className="flex items-center gap-4 mb-16">
+              <div className="relative flex h-16 w-16 shrink-0 items-center justify-center rounded-[1.2rem] overflow-hidden shadow-[0_10_40px_rgba(34,211,238,0.25)] ring-1 ring-white/10">
+                <img src="/images/toryx_logo_icon_new.png" alt="Star Gaze Logo" className="h-full w-full object-cover scale-[1.05]" />
+              </div>
+              <h1 className="text-[34px] tracking-tight flex items-center gap-2">
+                <span className="font-extrabold text-white drop-shadow-md">Star</span>
+                <span className="font-light text-white/70">Gaze</span>
+              </h1>
+            </div>
 
-          {/* 特色胶囊 */}
-          <div className="flex flex-wrap gap-4">
-            <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 backdrop-blur-md">
-              <Fingerprint className="w-4 h-4 text-[#a855f7]" />
-              <span className="text-sm font-medium text-white/80">
-                {lang === "en" ? "Character IP" : "角色 IP 孵化"}
-              </span>
-            </div>
-            <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 backdrop-blur-md">
-              <Sparkles className="w-4 h-4 text-[#3b82f6]" />
-              <span className="text-sm font-medium text-white/80">
-                {lang === "en" ? "Cutting-edge AI" : "前沿 AI 模型"}
-              </span>
-            </div>
-            <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 backdrop-blur-md">
-              <Globe className="w-4 h-4 text-[#10b981]" />
-              <span className="text-sm font-medium text-white/80">
-                {lang === "en" ? "Global Reach" : "内容链接全球"}
-              </span>
+            <h1 className="text-5xl lg:text-[64px] font-extrabold tracking-tight mb-8 leading-[1.08]">
+              {lang === "en" ? (
+                <>
+                  <span className="block text-white mb-2">Your Exclusive</span>
+                  <span className="block bg-clip-text text-transparent bg-gradient-to-r from-emerald-400 via-[#00f2ea] to-cyan-500">AI Character</span>
+                  <span className="block text-white/90 mt-2">Redefining Creation</span>
+                </>
+              ) : (
+                <>
+                  <span className="block text-white mb-2">你的专属</span>
+                  <span className="block bg-clip-text text-transparent bg-gradient-to-r from-emerald-400 via-[#00f2ea] to-cyan-500">AI 角色</span>
+                  <span className="block text-white/90 mt-2">让创作从此不同</span>
+                </>
+              )}
+            </h1>
+            
+            <p className="text-lg text-white/50 mb-10 leading-relaxed font-light">
+              {lang === "en"
+                ? "Create a unique AI character · Produce professional short videos consistently · Elevate your content creation efficiency."
+                : "创建独一无二的 AI 角色 · 持续产出专业级短视频 · 极大提升达人与电商内容创作效率。"}
+            </p>
+
+            {/* 特色胶囊: 毛玻璃高定 */}
+            <div className="flex flex-wrap gap-4">
+              <div className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-white/[0.03] border border-white/10 backdrop-blur-xl hover:bg-white/[0.08] transition-colors shadow-sm">
+                <Fingerprint className="w-4 h-4 text-[#a855f7]" />
+                <span className="text-sm font-medium text-white/70">
+                  {lang === "en" ? "Character IP" : "角色 IP 孵化"}
+                </span>
+              </div>
+              <div className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-white/[0.03] border border-white/10 backdrop-blur-xl hover:bg-white/[0.08] transition-colors shadow-sm">
+                <Sparkles className="w-4 h-4 text-[#3b82f6]" />
+                <span className="text-sm font-medium text-white/70">
+                  {lang === "en" ? "Cutting-edge AI" : "前沿 AI 模型"}
+                </span>
+              </div>
+              <div className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-white/[0.03] border border-white/10 backdrop-blur-xl hover:bg-white/[0.08] transition-colors shadow-sm">
+                <Globe className="w-4 h-4 text-[#10b981]" />
+                <span className="text-sm font-medium text-white/70">
+                  {lang === "en" ? "Global Reach" : "内容链接全球"}
+                </span>
+              </div>
             </div>
           </div>
+          
+          {/* 底部: 公司实体法务声明区域 */}
+          <div className="pt-6 flex items-center gap-4 opacity-40 hover:opacity-100 transition-opacity mt-auto">
+            <div className="h-px w-8 bg-white/20"></div>
+            <p className="text-[10px] text-white/60 uppercase tracking-[0.2em] font-medium leading-tight">
+              Operated by Wuhan Guanxing Cultural Media Co., Ltd.
+            </p>
+          </div>
         </div>
-      </div>
 
         {/* 3. 右侧：交互表单区 */}
         <div className="w-full lg:w-[500px] xl:w-[600px] flex items-center justify-center p-6 sm:p-12">
@@ -389,7 +410,17 @@ function LoginPageContent() {
           
           {/* 移动端显示的 Logo */}
           <div className="flex justify-center mb-8 lg:hidden">
-            <span className="text-xl font-bold text-white drop-shadow-[0_0_20px_rgba(16,185,129,0.3)]">Star Gaze</span>
+            <div className="flex flex-col items-center">
+              <div className="flex items-center gap-2">
+                <div className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-lg overflow-hidden shadow-[0_4_15px_rgba(34,211,238,0.3)]">
+                  <img src="/images/toryx_logo_icon_new.png" alt="Star Gaze Logo" className="h-full w-full object-cover scale-[1.05]" />
+                </div>
+                <div className="flex items-center tracking-wide">
+                  <span className="text-xl font-bold text-white tracking-tight">Star</span>
+                  <span className="text-xl font-light text-white/70 ml-1">Gaze</span>
+                </div>
+              </div>
+            </div>
           </div>
 
           {/* 表单头部 */}

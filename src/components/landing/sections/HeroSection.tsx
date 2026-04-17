@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowRight, Play, ChevronDown } from "lucide-react";
+import { ArrowRight, Play, ChevronDown, Sparkles, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import ReflectiveCard from "@/components/ui/ReflectiveCard";
 import { heroData, heroDataEn, scenarioCarousel, scenarioCarouselEn } from "../data/landing-data";
@@ -53,10 +53,14 @@ export default function HeroSection() {
                 <header className="fixed top-0 left-0 right-0 z-50 border-b border-white/5 backdrop-blur-xl bg-black/30">
                     <div className="container max-w-7xl mx-auto px-6 py-4">
                         <nav className="flex items-center justify-between">
-                            <Link href="/" className="flex items-center gap-3 group">
-                                <span className="text-lg font-bold text-white drop-shadow-[0_0_15px_rgba(16,185,129,0.3)]">
-                                    Star Gaze
-                                </span>
+                            <Link href="/" className="flex items-center gap-2.5 group transition-transform hover:scale-105">
+                                <div className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-lg overflow-hidden shadow-[0_0_15px_rgba(34,211,238,0.3)]">
+                                    <img src="/images/toryx_logo_icon_new.png" alt="Star Gaze Logo" className="h-full w-full object-cover scale-[1.05]" />
+                                </div>
+                                <div className="flex items-center tracking-wide text-lg leading-none">
+                                    <span className="font-semibold text-white group-hover:text-emerald-50 transition-colors">Star</span>
+                                    <span className="font-light text-white/80 ml-1 group-hover:text-emerald-100 transition-colors">Gaze</span>
+                                </div>
                             </Link>
 
                             {/* 导航链接 */}
