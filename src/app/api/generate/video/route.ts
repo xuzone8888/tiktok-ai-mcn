@@ -13,6 +13,7 @@ import { submitVeo3Video, queryVeoResult } from "@/lib/gaorui-veo-api";
 import { VIDEO_MODEL_CONFIG, type VideoModel } from "@/types/generation";
 import { getNewVideoCost } from "@/lib/credits";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { transferVeoVideoToOSS, isOSSPermanentUrl } from "@/lib/transfer-veo-to-oss";
 
 // ============================================================================
 // 积分配置
@@ -430,19 +431,58 @@ export async function GET(request: Request) {
 
     if (modelConfig && modelConfig.provider === "gaorui") {
       // VEO3 异步查询
-      const veoResult = await queryVeoResult(taskId);
-      const veoTask = veoResult.task;
-      result = {
-        success: veoResult.success,
-        task: veoTask ? {
-          taskId: veoTask.taskId,
-          status: veoTask.status,
-          resultUrl: veoTask.videoUrl,
-          errorMessage: veoTask.errorMessage,
-          createdAt: veoTask.createdAt,
-        } : undefined,
-        error: veoResult.error,
-      };
+      // 先检查数据库是否已有 OSS URL（之前已转存过）
+      const supabaseCheck = createAdminClient();
+      const { data: existingGen } = await supabaseCheck
+        .from("generations")
+        .select("status, result_url, user_id")
+        .eq("task_id", taskId)
+        .single();
+
+      if (existingGen?.status === "completed" && existingGen?.result_url && isOSSPermanentUrl(existingGen.result_url)) {
+        // 已有 OSS URL，直接返回
+        console.log("[Generate Video] VEO already transferred to OSS, returning cached URL");
+        result = {
+          success: true,
+          task: {
+            taskId,
+            status: "completed",
+            resultUrl: existingGen.result_url,
+          },
+        };
+      } else {
+        const veoResult = await queryVeoResult(taskId);
+        const veoTask = veoResult.task;
+
+        // 如果 VEO 任务完成且 URL 不是 OSS，立即转存
+        let finalVideoUrl = veoTask?.videoUrl;
+        if (veoTask?.status === "completed" && finalVideoUrl && !isOSSPermanentUrl(finalVideoUrl)) {
+          console.log("[Generate Video] VEO completed, transferring to OSS...");
+          const transferResult = await transferVeoVideoToOSS(
+            taskId,
+            finalVideoUrl,
+            existingGen?.user_id || undefined
+          );
+          if (transferResult.success && transferResult.ossUrl) {
+            finalVideoUrl = transferResult.ossUrl;
+            console.log("[Generate Video] ✅ VEO OSS transfer success:", finalVideoUrl);
+          } else {
+            console.warn("[Generate Video] ⚠️ VEO OSS transfer failed, using original URL:", transferResult.error);
+          }
+        }
+
+        result = {
+          success: veoResult.success,
+          task: veoTask ? {
+            taskId: veoTask.taskId,
+            status: veoTask.status,
+            resultUrl: finalVideoUrl,
+            errorMessage: veoTask.errorMessage,
+            createdAt: veoTask.createdAt,
+          } : undefined,
+          error: veoResult.error,
+        };
+      }
     } else {
       // Sora2 查询（默认）
       result = await querySora2Result(taskId, usePro);
