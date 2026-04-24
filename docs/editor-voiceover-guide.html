@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>Star Gaze 审核视频 — 剪辑师配音指南</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; max-width: 780px; margin: 0 auto; padding: 30px; color: #1a1a1a; line-height: 1.8; font-size: 14px; }
+        
+        h1 { text-align: center; font-size: 22px; margin-bottom: 5px; }
+        .subtitle { text-align: center; color: #666; font-size: 13px; margin-bottom: 25px; }
+
+        /* 说明框 */
+        .intro { background: #f0f7ff; border: 1px solid #b3d4fc; border-radius: 8px; padding: 18px 22px; margin-bottom: 25px; }
+        .intro h3 { font-size: 15px; color: #1a5cb0; margin-bottom: 8px; }
+        .intro ul { list-style: none; padding: 0; }
+        .intro li { font-size: 13px; margin-bottom: 4px; padding-left: 16px; position: relative; }
+        .intro li::before { content: '•'; position: absolute; left: 0; color: #1a5cb0; }
+
+        /* 步骤卡片 */
+        .card { border: 1px solid #ddd; border-radius: 10px; margin-bottom: 16px; overflow: hidden; break-inside: avoid; }
+        .card-header { background: #f8f8f8; padding: 10px 18px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #eee; }
+        .card-step { font-size: 16px; font-weight: 700; color: #c47f17; }
+        .card-title { font-size: 15px; font-weight: 600; flex: 1; margin-left: 10px; }
+        .card-time { color: #999; font-size: 12px; background: #f0f0f0; padding: 2px 8px; border-radius: 10px; }
+        .card-body { padding: 14px 18px; }
+        
+        /* 关键步骤 */
+        .card.key { border-color: #e8a849; border-width: 2px; }
+        .card.key .card-header { background: #fff8ee; }
+        .card.key .card-step { color: #c0392b; }
+        .card.key .card-step::before { content: '⭐ '; }
+
+        /* 画面描述 */
+        .scene { background: #fafafa; border-left: 3px solid #c47f17; padding: 10px 14px; margin-bottom: 10px; border-radius: 0 6px 6px 0; }
+        .scene-label { font-size: 11px; color: #c47f17; font-weight: 700; letter-spacing: 1px; margin-bottom: 4px; }
+        .scene p { font-size: 14px; color: #333; }
+
+        /* 英文配音 */
+        .vo { background: #eef6ee; border-left: 3px solid #2d8a4e; padding: 10px 14px; margin-bottom: 10px; border-radius: 0 6px 6px 0; }
+        .vo-label { font-size: 11px; color: #2d8a4e; font-weight: 700; letter-spacing: 1px; margin-bottom: 4px; }
+        .vo .en { font-size: 15px; color: #1a1a1a; font-weight: 500; font-style: italic; margin-bottom: 6px; }
+        .vo .zh { font-size: 13px; color: #666; }
+
+        /* 剪辑提示 */
+        .edit-tip { background: #fff3f3; border-left: 3px solid #c0392b; padding: 8px 14px; font-size: 12px; color: #8b1a1a; border-radius: 0 6px 6px 0; }
+        .edit-tip::before { content: '⚠ 剪辑注意：'; font-weight: 700; }
+
+        .no-vo { background: #f5f5f5; border-left: 3px solid #999; padding: 8px 14px; font-size: 13px; color: #666; border-radius: 0 6px 6px 0; }
+
+        @media print {
+            body { padding: 15px; }
+            .card { break-inside: avoid; }
+        }
+    </style>
+</head>
+<body>
+
+<h1>Star Gaze 审核视频 — 剪辑师配音指南</h1>
+<p class="subtitle">TikTok Content Posting API 功能演示视频 · 共 17 个步骤 · 预计总时长 2-3 分钟</p>
+
+<div class="intro">
+    <h3>📌 剪辑师须知</h3>
+    <ul>
+        <li><b>视频内容</b>：这是一个软件功能演示视频，展示"Star Gaze"平台如何发布视频到 TikTok</li>
+        <li><b>配音语言</b>：全程英文配音（下方每一步都提供了英文原文 + 中文翻译）</li>
+        <li><b>配音风格</b>：专业、清晰、语速偏慢，类似产品介绍/教程视频</li>
+        <li><b>节奏要求</b>：配音在对应画面出现时开始念，念完后画面可以多停留 1-2 秒</li>
+        <li><b>标注 ⭐ 的步骤</b>：是关键段，配音节奏要更慢些，让观众有时间看清楚</li>
+        <li><b>背景音乐</b>：可加轻柔的科技感背景音乐（音量要低于配音）</li>
+    </ul>
+</div>
+
+<!-- Step 1 -->
+<div class="card">
+    <div class="card-header">
+        <span class="card-step">1</span>
+        <span class="card-title">打开发布页面</span>
+        <span class="card-time">~5秒</span>
+    </div>
+    <div class="card-body">
+        <div class="scene">
+            <div class="scene-label">📺 画面描述</div>
+            <p>用户打开浏览器，进入 Star Gaze 网站的发布页面。地址栏显示 toryxai.com/publish，页面标题和"创建发布 / 发布记录"两个标签可见。</p>
+        </div>
+        <div class="vo">
+            <div class="vo-label">🎙️ 英文配音</div>
+            <p class="en">This is Star Gaze. We're now on the Publish page where users can create and post videos to TikTok.</p>
+            <p class="zh">中文意思：这是 Star Gaze 平台。我们现在在发布页面，用户可以在这里创建并发布视频到 TikTok。</p>
+        </div>
+    </div>
+</div>
+
+<!-- Step 2 -->
+<div class="card">
+    <div class="card-header">
+        <span class="card-step">2</span>
+        <span class="card-title">上传视频</span>
+        <span class="card-time">~15秒</span>
+    </div>
+    <div class="card-body">
+        <div class="scene">
+            <div class="scene-label">📺 画面描述</div>
+            <p>用户点击上传区域，选择一个视频文件。上传完成后，视频的缩略图/封面出现在页面上。鼠标停在视频卡片上。</p>
+        </div>
+        <div class="vo">
+            <div class="vo-label">🎙️ 英文配音</div>
+            <p class="en">The user uploads a video file. A preview thumbnail is displayed once the upload completes.</p>
+            <p class="zh">中文意思：用户上传一个视频文件。上传完成后会显示预览缩略图。</p>
+        </div>
+    </div>
+</div>
+
+<!-- Step 3 -->
+<div class="card">
+    <div class="card-header">
+        <span class="card-step">3</span>
+        <span class="card-title">选择 TikTok 账号</span>
+        <span class="card-time">~10秒</span>
+    </div>
+    <div class="card-body">
+        <div class="scene">
+            <div class="scene-label">📺 画面描述</div>
+            <p>用户选择已绑定的 TikTok 账号。页面显示该账号的头像、昵称（如 "Army Artisan"）和 @用户名。</p>
+        </div>
+        <div class="vo">
+            <div class="vo-label">🎙️ 英文配音</div>
+            <p class="en">The user selects their connected TikTok account. The creator's avatar, display name, and username are shown.</p>
+            <p class="zh">中文意思：用户选择已绑定的 TikTok 账号。页面显示创作者的头像、昵称和用户名。</p>
+        </div>
+    </div>
+</div>
+
+<!-- Step 4 -->
+<div class="card">
+    <div class="card-header">
+        <span class="card-step">4</span>
+        <span class="card-title">编辑视频标题</span>
+        <span class="card-time">~12秒</span>
+    </div>
+    <div class="card-body">
+        <div class="scene">
+            <div class="scene-label">📺 画面描述</div>
+            <p>用户先手动输入标题文字，然后点击"AI 写标题"按钮让 AI 生成标题。AI 生成后，用户手动修改了几个字，证明标题可以自由编辑。</p>
+        </div>
+        <div class="vo">
+            <div class="vo-label">🎙️ 英文配音</div>
+            <p class="en">Users can manually enter a title, or use the AI title suggestion feature. The user always has full control to edit the title.</p>
+            <p class="zh">中文意思：用户可以手动输入标题，也可以使用 AI 标题建议功能。用户始终拥有完全的标题编辑权。</p>
+        </div>
+    </div>
+</div>
+
+<!-- Step 5 -->
+<div class="card">
+    <div class="card-header">
+        <span class="card-step">5</span>
+        <span class="card-title">设置可见范围</span>
+        <span class="card-time">~12秒</span>
+    </div>
+    <div class="card-body">
+        <div class="scene">
+            <div class="scene-label">📺 画面描述</div>
+            <p>可见范围显示"请选择可见范围"（没有默认选中任何选项）。有红色提示文字。用户点开下拉菜单，展示公开/好友/粉丝/仅自己四个选项，然后选择"公开"。</p>
+        </div>
+        <div class="vo">
+            <div class="vo-label">🎙️ 英文配音</div>
+            <p class="en">The privacy level has no default value. Users must manually select from the dropdown — Public, Friends, Followers Only, or Self Only.</p>
+            <p class="zh">中文意思：可见范围没有默认值。用户必须手动从下拉菜单中选择——公开、好友、粉丝可见或仅自己可见。</p>
+        </div>
+    </div>
+</div>
+
+<!-- Step 6 -->
+<div class="card">
+    <div class="card-header">
+        <span class="card-step">6</span>
+        <span class="card-title">互动设置展示</span>
+        <span class="card-time">~8秒</span>
+    </div>
+    <div class="card-body">
+        <div class="scene">
+            <div class="scene-label">📺 画面描述</div>
+            <p>画面展示三个互动开关（允许评论、允许合拍、允许引用），全部处于关闭 OFF 状态。用户可能会演示开启一个再关闭。</p>
+        </div>
+        <div class="vo">
+            <div class="vo-label">🎙️ 英文配音</div>
+            <p class="en">All interaction settings — comments, duets, and stitching — default to off, and can be toggled on by the user.</p>
+            <p class="zh">中文意思：所有互动设置——评论、合拍和引用——默认关闭，用户可以手动开启。</p>
+        </div>
+    </div>
+</div>
+
+<!-- Step 7 -->
+<div class="card">
+    <div class="card-header">
+        <span class="card-step">7</span>
+        <span class="card-title">商业内容披露 — 默认关闭</span>
+        <span class="card-time">~5秒</span>
+    </div>
+    <div class="card-body">
+        <div class="scene">
+            <div class="scene-label">📺 画面描述</div>
+            <p>展示"商业内容披露"的开关，处于关闭 OFF 状态。</p>
+        </div>
+        <div class="vo">
+            <div class="vo-label">🎙️ 英文配音</div>
+            <p class="en">The branded content disclosure is off by default.</p>
+            <p class="zh">中文意思：商业内容披露默认关闭。</p>
+        </div>
+    </div>
+</div>
+
+<!-- Step 8 -->
+<div class="card key">
+    <div class="card-header">
+        <span class="card-step">8</span>
+        <span class="card-title">打开披露但不选类型 → 发布被禁用</span>
+        <span class="card-time">~15秒</span>
+    </div>
+    <div class="card-body">
+        <div class="scene">
+            <div class="scene-label">📺 画面描述</div>
+            <p>用户打开商业披露开关，但故意不勾选任何子项。页面出现英文警告文字。然后滚动到底部，看到发布按钮变成灰色不可点击，旁边有英文提示。</p>
+        </div>
+        <div class="vo">
+            <div class="vo-label">🎙️ 英文配音</div>
+            <p class="en">When disclosure is enabled but no type is selected, the publish button is disabled, and a warning message is displayed.</p>
+            <p class="zh">中文意思：启用商业披露但未选择披露类型时，发布按钮被禁用，并显示警告信息。</p>
+        </div>
+        <div class="edit-tip">这是关键段！配音要慢，确保画面上的英文警告文字能被清楚看到。</div>
+    </div>
+</div>
+
+<!-- Step 9 -->
+<div class="card">
+    <div class="card-header">
+        <span class="card-step">9</span>
+        <span class="card-title">勾选"自有品牌推广"</span>
+        <span class="card-time">~8秒</span>
+    </div>
+    <div class="card-body">
+        <div class="scene">
+            <div class="scene-label">📺 画面描述</div>
+            <p>用户勾选"自有品牌推广"选项。页面显示标签提示 "Your video will be labeled as Promotional content"。</p>
+        </div>
+        <div class="vo">
+            <div class="vo-label">🎙️ 英文配音</div>
+            <p class="en">Selecting "Your Brand" labels the video as promotional content.</p>
+            <p class="zh">中文意思：选择"自有品牌推广"会将视频标记为推广内容。</p>
+        </div>
+    </div>
+</div>
+
+<!-- Step 10 -->
+<div class="card">
+    <div class="card-header">
+        <span class="card-step">10</span>
+        <span class="card-title">切换为"品牌合作内容"</span>
+        <span class="card-time">~8秒</span>
+    </div>
+    <div class="card-body">
+        <div class="scene">
+            <div class="scene-label">📺 画面描述</div>
+            <p>用户取消"自有品牌推广"，勾选"品牌合作内容"。标签变为 "Paid partnership"，底部法律链接也变了。</p>
+        </div>
+        <div class="vo">
+            <div class="vo-label">🎙️ 英文配音</div>
+            <p class="en">Selecting "Branded Content" labels the video as a paid partnership, and displays the Branded Content Policy link.</p>
+            <p class="zh">中文意思：选择"品牌合作内容"会将视频标记为付费合作，并显示品牌内容政策链接。</p>
+        </div>
+    </div>
+</div>
+
+<!-- Step 11 -->
+<div class="card">
+    <div class="card-header">
+        <span class="card-step">11</span>
+        <span class="card-title">两个都勾选</span>
+        <span class="card-time">~8秒</span>
+    </div>
+    <div class="card-body">
+        <div class="scene">
+            <div class="scene-label">📺 画面描述</div>
+            <p>用户把"自有品牌推广"也勾上（两个都选中），标签仍然显示 "Paid partnership"。</p>
+        </div>
+        <div class="vo">
+            <div class="vo-label">🎙️ 英文配音</div>
+            <p class="en">When both options are selected, the video is labeled as paid partnership.</p>
+            <p class="zh">中文意思：两项都勾选时，视频被标记为付费合作。</p>
+        </div>
+    </div>
+</div>
+
+<!-- Step 12 -->
+<div class="card key">
+    <div class="card-header">
+        <span class="card-step">12</span>
+        <span class="card-title">安全互锁 A：品牌合作 → "仅自己"被禁用</span>
+        <span class="card-time">~10秒</span>
+    </div>
+    <div class="card-body">
+        <div class="scene">
+            <div class="scene-label">📺 画面描述</div>
+            <p>在品牌合作内容勾选的状态下，用户打开可见范围下拉菜单。可以看到"仅自己"选项变成灰色，无法选择。</p>
+        </div>
+        <div class="vo">
+            <div class="vo-label">🎙️ 英文配音</div>
+            <p class="en">An important safety feature: when branded content is selected, the "Self Only" privacy option is automatically disabled.</p>
+            <p class="zh">中文意思：一个重要的安全特性：选择品牌合作内容时，"仅自己可见"隐私选项会自动禁用。</p>
+        </div>
+        <div class="edit-tip">关键段！画面需要清楚展示灰色的"仅自己"选项，配音节奏放慢。</div>
+    </div>
+</div>
+
+<!-- Step 13 -->
+<div class="card key">
+    <div class="card-header">
+        <span class="card-step">13</span>
+        <span class="card-title">安全互锁 B：仅自己 → 品牌合作被禁用</span>
+        <span class="card-time">~10秒</span>
+    </div>
+    <div class="card-body">
+        <div class="scene">
+            <div class="scene-label">📺 画面描述</div>
+            <p>用户先把可见范围改成"仅自己"，然后打开商业披露。可以看到"品牌合作内容"的勾选框变成灰色，无法勾选。</p>
+        </div>
+        <div class="vo">
+            <div class="vo-label">🎙️ 英文配音</div>
+            <p class="en">Similarly, when privacy is set to Self Only, the branded content option becomes unavailable.</p>
+            <p class="zh">中文意思：同样，当隐私设为"仅自己可见"时，品牌合作内容选项也变成不可用。</p>
+        </div>
+        <div class="edit-tip">关键段！与上一步是对称关系，要让观众理解这是双向保护。</div>
+    </div>
+</div>
+
+<!-- Step 14 -->
+<div class="card">
+    <div class="card-header">
+        <span class="card-step">14</span>
+        <span class="card-title">AI 生成内容标记</span>
+        <span class="card-time">~5秒</span>
+    </div>
+    <div class="card-body">
+        <div class="scene">
+            <div class="scene-label">📺 画面描述</div>
+            <p>画面滚动到 "AI 生成内容" 的声明区块，展示它和商业披露是分开的两个独立区块。</p>
+        </div>
+        <div class="vo">
+            <div class="vo-label">🎙️ 英文配音</div>
+            <p class="en">The AI-generated content disclosure is a separate, independent section.</p>
+            <p class="zh">中文意思：AI 生成内容声明是一个独立的区块。</p>
+        </div>
+    </div>
+</div>
+
+<!-- Step 15 -->
+<div class="card">
+    <div class="card-header">
+        <span class="card-step">15</span>
+        <span class="card-title">填写任务组名称</span>
+        <span class="card-time">~5秒</span>
+    </div>
+    <div class="card-body">
+        <div class="scene">
+            <div class="scene-label">📺 画面描述</div>
+            <p>用户在"任务组名称"输入框输入"Demo post"。</p>
+        </div>
+        <div class="no-vo">🔇 这一步不需要配音，可以保持背景音乐过渡。</div>
+    </div>
+</div>
+
+<!-- Step 16 -->
+<div class="card">
+    <div class="card-header">
+        <span class="card-step">16</span>
+        <span class="card-title">点击发布</span>
+        <span class="card-time">~10秒</span>
+    </div>
+    <div class="card-body">
+        <div class="scene">
+            <div class="scene-label">📺 画面描述</div>
+            <p>用户恢复正常设置（可见范围改为"仅自己"、关闭商业披露），确认所有必填项无误后，点击"创建任务"按钮。</p>
+        </div>
+        <div class="vo">
+            <div class="vo-label">🎙️ 英文配音</div>
+            <p class="en">The user clicks the publish button to initiate the upload. Publishing only happens after the user's explicit action.</p>
+            <p class="zh">中文意思：用户点击发布按钮开始上传。发布仅在用户主动操作后才会触发。</p>
+        </div>
+    </div>
+</div>
+
+<!-- Step 17 -->
+<div class="card key">
+    <div class="card-header">
+        <span class="card-step">17</span>
+        <span class="card-title">发布结果 + 状态追踪</span>
+        <span class="card-time">~10秒</span>
+    </div>
+    <div class="card-body">
+        <div class="scene">
+            <div class="scene-label">📺 画面描述</div>
+            <p>页面自动跳转到"发布记录"页面。任务卡片显示状态（执行中 → 已完成）。底部有提示文字"发布后可能需要几分钟才能在 TikTok 显示"。用户点击卡片查看详情弹窗。</p>
+        </div>
+        <div class="vo">
+            <div class="vo-label">🎙️ 英文配音</div>
+            <p class="en">The task status updates automatically. Once complete, the video has been successfully published to TikTok.</p>
+            <p class="zh">中文意思：任务状态会自动更新。完成后，视频已成功发布到 TikTok。</p>
+        </div>
+        <div class="edit-tip">最后一段，念完后画面多停 3-5 秒再结束视频。</div>
+    </div>
+</div>
+
+<hr style="margin: 25px 0; border-color: #eee;">
+<p style="text-align: center; color: #999; font-size: 11px;">
+    Star Gaze · TikTok Content Posting API 审核视频 · 剪辑师配音指南<br>
+    2026-04-17
+</p>
+
+</body>
+</html>

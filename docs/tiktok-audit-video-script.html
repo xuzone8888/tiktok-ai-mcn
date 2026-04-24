@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>TikTok Content Posting API — 审核视频录制脚本</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif; max-width: 800px; margin: 0 auto; padding: 40px 30px; color: #1a1a1a; line-height: 1.7; }
+        h1 { text-align: center; font-size: 24px; margin-bottom: 5px; }
+        h2 { text-align: center; font-size: 20px; margin-bottom: 10px; }
+        .subtitle { text-align: center; color: #666; font-size: 13px; margin-bottom: 5px; }
+        .ref-link { text-align: center; color: #999; font-size: 12px; margin-bottom: 30px; }
+        .ref-link a { color: #999; }
+
+        .prep-box { background: #fafafa; border: 1px solid #e0e0e0; border-radius: 8px; padding: 20px 25px; margin-bottom: 30px; }
+        .prep-box h3 { font-size: 15px; margin-bottom: 12px; }
+        .prep-box label { display: block; margin-bottom: 8px; font-size: 14px; }
+
+        .step { border: 1px solid #e5e5e5; border-radius: 10px; padding: 20px 25px; margin-bottom: 20px; position: relative; }
+        .step-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 12px; border-bottom: 2px solid #e8a849; padding-bottom: 8px; }
+        .step-number { font-size: 18px; font-weight: 700; color: #c47f17; }
+        .step-title { font-size: 16px; font-weight: 600; flex: 1; margin-left: 10px; }
+        .step-point { color: #c47f17; font-size: 13px; font-weight: 600; margin-left: 10px; }
+        .step-time { color: #888; font-size: 13px; white-space: nowrap; }
+        .step ol { padding-left: 20px; margin-bottom: 10px; }
+        .step li { margin-bottom: 6px; font-size: 14px; }
+        .step li strong { color: #c47f17; }
+
+        .step.highlight { border-color: #e8a849; border-width: 2px; }
+        .step.highlight .step-header { border-bottom-color: #c0392b; }
+        .step.highlight .step-number { color: #c0392b; }
+        .step.highlight .step-number::before { content: '⭐ '; }
+
+        .reviewer-box { background: #fff8f0; border-left: 3px solid #e8a849; padding: 10px 15px; margin-top: 10px; font-size: 13px; }
+        .reviewer-box strong { color: #c47f17; display: block; margin-bottom: 5px; }
+        .reviewer-box .check { color: #2d7d46; }
+
+        .critical-box { background: #fff0f0; border-left: 3px solid #c0392b; padding: 10px 15px; margin-top: 10px; font-size: 13px; }
+        .critical-box strong { color: #c0392b; display: block; margin-bottom: 5px; }
+
+        .hint-box { background: #f5f5f5; border: 1px solid #ddd; padding: 8px 12px; margin: 8px 0; font-family: monospace; font-size: 13px; border-radius: 4px; }
+
+        @media print {
+            .step { break-inside: avoid; }
+            body { padding: 20px; }
+        }
+    </style>
+</head>
+<body>
+
+<h1>TikTok Content Posting API</h1>
+<h2>审核视频录制脚本</h2>
+<p class="subtitle">对照 Content Sharing Guidelines (Point 1-5) 设计 · 覆盖全部 15 项合规检查点</p>
+<p class="ref-link">官方规范: <a href="https://developers.tiktok.com/doc/content-sharing-guidelines/">https://developers.tiktok.com/doc/content-sharing-guidelines/</a></p>
+
+<!-- 录制前准备 -->
+<div class="prep-box">
+    <h3>📋 录制前准备</h3>
+    <label>☐ 准备 1 个真实视频文件（9:16 竖屏，无水印/logo/宣传字，时长正常）</label>
+    <label>☐ 准备 1 个已绑定的 TikTok 账号（最好能返回"公开/粉丝/好友/仅自己"四个隐私选项）</label>
+    <label>☐ 浏览器整理干净：关闭书签栏、聊天悬浮窗、密码管理弹窗</label>
+    <label>☐ 页面缩放 100%，屏幕录制软件就绪（1920×1080，30fps）</label>
+    <label>☐ 发布页处于全新干净状态：无已选视频、无已选隐私、商业披露 OFF</label>
+    <label>☐ 全程不开 DevTools，不切代码，不跳剪，鼠标慢动</label>
+</div>
+
+<!-- Step 1 -->
+<div class="step">
+    <div class="step-header">
+        <span class="step-number">1</span>
+        <span class="step-title">进入发布页面</span>
+        <span class="step-time">~5秒</span>
+    </div>
+    <ol>
+        <li>打开 <strong>https://www.toryxai.com/publish</strong></li>
+        <li><strong>停留 2 秒</strong>，展示页面标题、"创建发布 / 发布记录" 标签</li>
+    </ol>
+    <div class="reviewer-box">
+        <strong>审核员需看到</strong>
+        <span class="check">✓ 正式产品页面，非测试环境</span><br>
+        <span class="check">✓ 页面标题为 TikTok 发布功能</span>
+    </div>
+</div>
+
+<!-- Step 2 -->
+<div class="step">
+    <div class="step-header">
+        <span class="step-number">2</span>
+        <span class="step-title">上传视频 + 展示 Preview</span>
+        <span class="step-point">Point 5a / 5b</span>
+        <span class="step-time">~15秒</span>
+    </div>
+    <ol>
+        <li>在 Step 1 点击添加视频（本地上传 或 从视频制作区选择）</li>
+        <li>等视频出现在已选列表</li>
+        <li><strong>停留 3 秒</strong>，鼠标指向视频卡片</li>
+    </ol>
+    <div class="reviewer-box">
+        <strong>审核员需看到</strong>
+        <span class="check">✓ 真实视频的缩略图 / 封面预览</span><br>
+        <span class="check">✓ 视频文件名可见</span><br>
+        <span class="check">✓ 视频内容无水印、无logo、无宣传文字</span>
+    </div>
+</div>
+
+<!-- Step 3 -->
+<div class="step">
+    <div class="step-header">
+        <span class="step-number">3</span>
+        <span class="step-title">选择账号 + 展示 Creator Info</span>
+        <span class="step-point">Point 1a</span>
+        <span class="step-time">~10秒</span>
+    </div>
+    <ol>
+        <li>Step 2 选择 TikTok 账号</li>
+        <li>滚动到 Step 3 顶部</li>
+        <li><strong>停留 3 秒</strong></li>
+    </ol>
+    <div class="reviewer-box">
+        <strong>审核员需看到</strong>
+        <span class="check">✓ Creator 头像</span><br>
+        <span class="check">✓ Creator 昵称（如 "Army Artisan"）</span><br>
+        <span class="check">✓ @username（如 "@user93816092905303"）</span>
+    </div>
+</div>
+
+<!-- Step 4 -->
+<div class="step">
+    <div class="step-header">
+        <span class="step-number">4</span>
+        <span class="step-title">Title 可编辑 + AI 辅助后用户可改</span>
+        <span class="step-point">Point 2a / 5b</span>
+        <span class="step-time">~12秒</span>
+    </div>
+    <ol>
+        <li>手动输入标题（例如 <code>Beautiful sunset view #nature</code>）</li>
+        <li><strong>停留 2 秒</strong></li>
+        <li>点击 <strong>"✦ AI 写标题"</strong> 按钮</li>
+        <li>AI 生成标题后，<strong>手动修改几个字</strong>（证明用户可编辑）</li>
+        <li><strong>停留 2 秒</strong></li>
+    </ol>
+    <div class="reviewer-box">
+        <strong>审核员需看到</strong>
+        <span class="check">✓ Title 可手动输入</span><br>
+        <span class="check">✓ AI 是辅助功能，不是强制</span><br>
+        <span class="check">✓ 用户对标题有最终控制权</span>
+    </div>
+</div>
+
+<!-- Step 5 -->
+<div class="step">
+    <div class="step-header">
+        <span class="step-number">5</span>
+        <span class="step-title">Privacy 无默认值 + 手动选择</span>
+        <span class="step-point">Point 2b</span>
+        <span class="step-time">~12秒</span>
+    </div>
+    <ol>
+        <li>展示 "可见范围" 显示 <strong>"请选择可见范围"</strong>（无默认值）</li>
+        <li>展示红色提示 <em>请选择可见范围后才能发布</em></li>
+        <li><strong>停 2 秒</strong></li>
+        <li>点击下拉框展开，<strong>停 3 秒</strong> 让审核员看到所有选项</li>
+        <li>选择 <strong>"公开 / Everyone"</strong></li>
+    </ol>
+    <div class="reviewer-box">
+        <strong>审核员需看到</strong>
+        <span class="check">✓ 没有预设默认隐私选项</span><br>
+        <span class="check">✓ 用户必须手动从下拉框选择</span><br>
+        <span class="check">✓ 选项来自 creator_info API 的 privacy_level_options</span>
+    </div>
+</div>
+
+<!-- Step 6 -->
+<div class="step">
+    <div class="step-header">
+        <span class="step-number">6</span>
+        <span class="step-title">互动设置默认 OFF</span>
+        <span class="step-point">Point 2c</span>
+        <span class="step-time">~8秒</span>
+    </div>
+    <ol>
+        <li><strong>停 2 秒</strong> — 展示三个互动开关都是 OFF</li>
+        <li>可选：手动开启"允许评论"演示一下，再关回去</li>
+    </ol>
+    <div class="reviewer-box">
+        <strong>审核员需看到</strong>
+        <span class="check">✓ 允许评论 — OFF</span><br>
+        <span class="check">✓ 允许合拍 — OFF</span><br>
+        <span class="check">✓ 允许引用 — OFF</span><br>
+        <span class="check">✓ 全部默认关闭，用户可手动开启</span>
+    </div>
+</div>
+
+<!-- Step 7 -->
+<div class="step">
+    <div class="step-header">
+        <span class="step-number">7</span>
+        <span class="step-title">商业内容披露默认 OFF</span>
+        <span class="step-point">Point 3a</span>
+        <span class="step-time">~5秒</span>
+    </div>
+    <ol>
+        <li><strong>停 2 秒</strong> — 展示 "商业内容披露" toggle 为 OFF 状态</li>
+    </ol>
+    <div class="reviewer-box">
+        <strong>审核员需看到</strong>
+        <span class="check">✓ 商业内容披露默认关闭</span>
+    </div>
+</div>
+
+<!-- Step 8 -->
+<div class="step highlight">
+    <div class="step-header">
+        <span class="step-number">8</span>
+        <span class="step-title">披露 ON + 未选子项 → 发布禁用</span>
+        <span class="step-point">Point 3a</span>
+        <span class="step-time">~15秒</span>
+    </div>
+    <ol>
+        <li>打开 toggle 为 <strong>ON</strong></li>
+        <li><strong>不勾选</strong>任何子项</li>
+        <li><strong>停 3 秒</strong> — 展示区块内提示：</li>
+    </ol>
+    <div class="hint-box">You need to indicate if your content promotes yourself, a third party, or both.</div>
+    <ol start="4">
+        <li>滚动到页面底部</li>
+        <li><strong>停 2 秒</strong> — 展示发布按钮灰色不可点击 + 旁边提示：</li>
+    </ol>
+    <div class="hint-box">Please select a disclosure type before publishing.</div>
+    <div class="critical-box">
+        <strong>⚠ 关键段 — 审核员需看到</strong>
+        <span class="check">✓ 披露开启但未选子项时，发布按钮被禁用</span><br>
+        <span class="check">✓ 两处英文提示文字清晰可见</span>
+    </div>
+</div>
+
+<!-- Step 9 -->
+<div class="step">
+    <div class="step-header">
+        <span class="step-number">9</span>
+        <span class="step-title">Your Brand Only → "Promotional content"</span>
+        <span class="step-point">Point 3a</span>
+        <span class="step-time">~8秒</span>
+    </div>
+    <ol>
+        <li>勾选 <strong>"自有品牌推广 (Promotional content)"</strong></li>
+        <li>确保 "品牌合作内容" 未勾选</li>
+        <li><strong>停 3 秒</strong></li>
+    </ol>
+    <div class="reviewer-box">
+        <strong>审核员需看到</strong>
+        <span class="check">✓ 标签提示：Your video will be labeled as 'Promotional content'</span><br>
+        <span class="check">✓ 法律声明只显示 Music Usage Confirmation</span>
+    </div>
+</div>
+
+<!-- Step 10 -->
+<div class="step">
+    <div class="step-header">
+        <span class="step-number">10</span>
+        <span class="step-title">Branded Content Only → "Paid partnership"</span>
+        <span class="step-point">Point 3a / 4</span>
+        <span class="step-time">~8秒</span>
+    </div>
+    <ol>
+        <li>取消 "自有品牌推广"</li>
+        <li>勾选 <strong>"品牌合作内容 (Paid partnership)"</strong></li>
+        <li><strong>停 3 秒</strong></li>
+    </ol>
+    <div class="reviewer-box">
+        <strong>审核员需看到</strong>
+        <span class="check">✓ 标签提示：Your video will be labeled as 'Paid partnership'</span><br>
+        <span class="check">✓ 法律声明变为 Branded Content Policy &amp; Music Usage Confirmation</span>
+    </div>
+</div>
+
+<!-- Step 11 -->
+<div class="step">
+    <div class="step-header">
+        <span class="step-number">11</span>
+        <span class="step-title">Both Selected → "Paid partnership"</span>
+        <span class="step-point">Point 3a / 4</span>
+        <span class="step-time">~8秒</span>
+    </div>
+    <ol>
+        <li>再勾选 "自有品牌推广"（此时两个都选中）</li>
+        <li><strong>停 3 秒</strong></li>
+    </ol>
+    <div class="reviewer-box">
+        <strong>审核员需看到</strong>
+        <span class="check">✓ 标签仍为：Your video will be labeled as 'Paid partnership'</span><br>
+        <span class="check">✓ 法律声明仍为：Branded Content Policy &amp; Music Usage Confirmation（双链接）</span>
+    </div>
+</div>
+
+<!-- Step 12 -->
+<div class="step highlight">
+    <div class="step-header">
+        <span class="step-number">12</span>
+        <span class="step-title">互锁 A：Branded Content → 仅自己被禁用</span>
+        <span class="step-point">Point 3b</span>
+        <span class="step-time">~10秒</span>
+    </div>
+    <ol>
+        <li>保持 "品牌合作内容" 勾选</li>
+        <li>打开可见范围下拉框</li>
+        <li><strong>停 3 秒</strong></li>
+    </ol>
+    <div class="critical-box">
+        <strong>⚠ 关键段 — 审核员需看到</strong>
+        <span class="check">✓ "仅自己" 选项灰掉 / 不可选</span><br>
+        <span class="check">✓ 提示文字：Branded content visibility cannot be set to private.</span>
+    </div>
+    <ol start="4">
+        <li>关闭下拉框</li>
+    </ol>
+</div>
+
+<!-- Step 13 -->
+<div class="step highlight">
+    <div class="step-header">
+        <span class="step-number">13</span>
+        <span class="step-title">互锁 B：先选仅自己 → Branded Content 被禁用</span>
+        <span class="step-point">Point 3b</span>
+        <span class="step-time">~10秒</span>
+    </div>
+    <ol>
+        <li>先取消品牌合作内容勾选，关闭商业披露</li>
+        <li>可见范围选择 <strong>"仅自己"</strong></li>
+        <li>重新打开商业内容披露</li>
+        <li><strong>停 3 秒</strong></li>
+    </ol>
+    <div class="critical-box">
+        <strong>⚠ 关键段 — 审核员需看到</strong>
+        <span class="check">✓ "品牌合作内容" checkbox 灰掉不可点</span><br>
+        <span class="check">✓ 提示：Branded content is not available when privacy is set to Only You</span>
+    </div>
+</div>
+
+<!-- Step 14 -->
+<div class="step">
+    <div class="step-header">
+        <span class="step-number">14</span>
+        <span class="step-title">AI 生成内容标记（独立区块）</span>
+        <span class="step-time">~5秒</span>
+    </div>
+    <ol>
+        <li>滚动到 "AI 生成内容" 区块</li>
+        <li><strong>停 2 秒</strong></li>
+    </ol>
+    <div class="reviewer-box">
+        <strong>审核员需看到</strong>
+        <span class="check">✓ AI 标记与商业披露是独立分开的区块</span>
+    </div>
+</div>
+
+<!-- Step 15 -->
+<div class="step">
+    <div class="step-header">
+        <span class="step-number">15</span>
+        <span class="step-title">任务组名称</span>
+        <span class="step-time">~5秒</span>
+    </div>
+    <ol>
+        <li>滚动到 "任务组名称（可选）"</li>
+        <li>输入一个名称（如 "Demo post"）</li>
+        <li><strong>停 1 秒</strong></li>
+    </ol>
+</div>
+
+<!-- Step 16 -->
+<div class="step">
+    <div class="step-header">
+        <span class="step-number">16</span>
+        <span class="step-title">恢复合法状态 + 创建任务</span>
+        <span class="step-point">Point 5c</span>
+        <span class="step-time">~10秒</span>
+    </div>
+    <p style="font-size: 14px; margin-bottom: 10px;">为了成功发布，恢复到最安全的发布组合：</p>
+    <ol>
+        <li>将可见范围改为 <strong>"仅自己"</strong>（最安全，不会意外公开测试视频）</li>
+        <li>关闭商业内容披露</li>
+        <li>确认：视频已选 ✓ 标题已填 ✓ 隐私已选 ✓</li>
+        <li>Step 4 选择 "立即发布"</li>
+        <li>点击 <strong>"创建任务"</strong> 按钮</li>
+    </ol>
+    <div class="reviewer-box">
+        <strong>审核员需看到</strong>
+        <span class="check">✓ 发布是用户主动点击后才发生，非自动上传</span>
+    </div>
+</div>
+
+<!-- Step 17 -->
+<div class="step highlight">
+    <div class="step-header">
+        <span class="step-number">17</span>
+        <span class="step-title">发布后提示 + 任务状态追踪</span>
+        <span class="step-point">Point 5d / 5e</span>
+        <span class="step-time">~10秒</span>
+    </div>
+    <ol>
+        <li>页面自动跳转到 <strong>"发布记录"</strong> 标签</li>
+        <li><strong>停 3 秒</strong> — 展示任务卡片</li>
+        <li>展示状态标签（执行中 / 待处理）</li>
+        <li>展示底部提示文字：</li>
+    </ol>
+    <div class="hint-box">发布后可能需要几分钟才能在 TikTok 显示</div>
+    <ol start="5">
+        <li><strong>等待 10-20 秒</strong>，观察状态自动轮询变化（页面每 10 秒自动刷新）</li>
+        <li>点击任务卡片打开详情弹窗</li>
+        <li><strong>停 3 秒</strong> — 展示子任务状态（processing / uploading / published / failed）</li>
+        <li>结束录制</li>
+    </ol>
+    <div class="critical-box">
+        <strong>⚠ 关键段 — 审核员需看到</strong>
+        <span class="check">✓ 发布后有处理时间提示</span><br>
+        <span class="check">✓ 任务状态会自动更新（轮询）</span><br>
+        <span class="check">✓ 用户可以了解发布进度</span>
+    </div>
+</div>
+
+<!-- 录制完成自查清单 -->
+<div style="margin-top: 30px; border: 2px solid #2d7d46; border-radius: 10px; padding: 25px;">
+    <h3 style="color: #2d7d46; margin-bottom: 10px;">☑ 录制完成自查清单</h3>
+    <p style="font-size: 13px; color: #666; margin-bottom: 15px;">录完后逐项打钩确认，每项都必须在视频中有清晰展示：</p>
+    <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+        <tr style="background: #f5f5f5;"><th style="padding: 8px; text-align: left; border: 1px solid #ddd;">#</th><th style="padding: 8px; text-align: left; border: 1px solid #ddd;">规范要点</th><th style="padding: 8px; text-align: right; border: 1px solid #ddd;">视频步骤</th></tr>
+        <tr><td style="padding: 8px; border: 1px solid #ddd;">1</td><td style="padding: 8px; border: 1px solid #ddd;">Creator nickname + avatar 展示</td><td style="padding: 8px; text-align: right; border: 1px solid #ddd;">步骤 3</td></tr>
+        <tr><td style="padding: 8px; border: 1px solid #ddd;">2</td><td style="padding: 8px; border: 1px solid #ddd;">Title 手动可编辑</td><td style="padding: 8px; text-align: right; border: 1px solid #ddd;">步骤 4</td></tr>
+        <tr><td style="padding: 8px; border: 1px solid #ddd;">3</td><td style="padding: 8px; border: 1px solid #ddd;">Privacy 无默认值 + 手动选择</td><td style="padding: 8px; text-align: right; border: 1px solid #ddd;">步骤 5</td></tr>
+        <tr><td style="padding: 8px; border: 1px solid #ddd;">4</td><td style="padding: 8px; border: 1px solid #ddd;">互动（评论/合拍/引用）全部默认 OFF</td><td style="padding: 8px; text-align: right; border: 1px solid #ddd;">步骤 6</td></tr>
+        <tr><td style="padding: 8px; border: 1px solid #ddd;">5</td><td style="padding: 8px; border: 1px solid #ddd;">商业披露默认 OFF</td><td style="padding: 8px; text-align: right; border: 1px solid #ddd;">步骤 7</td></tr>
+        <tr><td style="padding: 8px; border: 1px solid #ddd;">6</td><td style="padding: 8px; border: 1px solid #ddd;">披露 ON + 未选子项 → 发布禁用</td><td style="padding: 8px; text-align: right; border: 1px solid #ddd;">步骤 8</td></tr>
+        <tr><td style="padding: 8px; border: 1px solid #ddd;">7</td><td style="padding: 8px; border: 1px solid #ddd;">Promotional / Paid partnership 标签</td><td style="padding: 8px; text-align: right; border: 1px solid #ddd;">步骤 9-11</td></tr>
+        <tr><td style="padding: 8px; border: 1px solid #ddd;">8</td><td style="padding: 8px; border: 1px solid #ddd;">互锁：Branded ↔ 仅自己</td><td style="padding: 8px; text-align: right; border: 1px solid #ddd;">步骤 12-13</td></tr>
+        <tr><td style="padding: 8px; border: 1px solid #ddd;">9</td><td style="padding: 8px; border: 1px solid #ddd;">AI 生成内容标记独立</td><td style="padding: 8px; text-align: right; border: 1px solid #ddd;">步骤 14</td></tr>
+        <tr><td style="padding: 8px; border: 1px solid #ddd;">10</td><td style="padding: 8px; border: 1px solid #ddd;">用户主动点击发布</td><td style="padding: 8px; text-align: right; border: 1px solid #ddd;">步骤 16</td></tr>
+        <tr><td style="padding: 8px; border: 1px solid #ddd;">11</td><td style="padding: 8px; border: 1px solid #ddd;">发布后状态追踪 + 处理提示</td><td style="padding: 8px; text-align: right; border: 1px solid #ddd;">步骤 17</td></tr>
+    </table>
+</div>
+
+<hr style="margin: 30px 0;">
+<p style="text-align: center; color: #999; font-size: 12px;">
+    Star Gaze — TikTok Content Posting API 审核视频录制脚本<br>
+    更新于 2026-04-17 · 基于 Content Sharing Guidelines (Point 1-5)
+</p>
+
+</body>
+</html>

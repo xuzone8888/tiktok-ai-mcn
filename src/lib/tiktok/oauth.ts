@@ -105,8 +105,17 @@ export async function exchangeCodeForToken(
 
     const data = await response.json();
 
+    // Debug: log full response for troubleshooting
+    console.log('[TikTok OAuth] Token exchange response:', JSON.stringify(data, null, 2));
+
+    // Handle v2 API error format: { error: "error_code", error_description: "..." }
+    if (typeof data.error === 'string') {
+        throw new Error(`TikTok OAuth error: ${data.error} - ${data.error_description || 'no description'}`);
+    }
+
+    // Handle legacy error format: { error: { code: "...", message: "..." } }
     if (data.error && data.error.code !== 'ok') {
-        throw new Error(`TikTok OAuth error: ${data.error.message}`);
+        throw new Error(`TikTok OAuth error: ${data.error.code} - ${data.error.message}`);
     }
 
     return data as TikTokTokenResponse;
