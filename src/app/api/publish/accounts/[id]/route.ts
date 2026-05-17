@@ -1,7 +1,12 @@
 // Delete (disconnect) a TikTok account
 import { NextRequest, NextResponse } from 'next/server';
+
 import { createClient } from '@/lib/supabase/server';
+import { isUuid, mapAccountGroupError } from '@/lib/tiktok/account-groups';
+import { deleteDemoAccount, isTikTokGroupsDemoMode } from '@/lib/tiktok/demo-account-groups';
 import { revokeAccessToken } from '@/lib/tiktok/oauth';
+
+export const dynamic = 'force-dynamic';
 
 export async function DELETE(
     request: NextRequest,
@@ -9,6 +14,20 @@ export async function DELETE(
 ) {
     try {
         const { id } = await params;
+
+        if (!isUuid(id)) {
+            return NextResponse.json({ error: 'Account not found' }, { status: 404 });
+        }
+
+        if (isTikTokGroupsDemoMode()) {
+            try {
+                return NextResponse.json(deleteDemoAccount(id));
+            } catch (error) {
+                const mapped = mapAccountGroupError(error);
+                return NextResponse.json({ error: mapped.message }, { status: mapped.status });
+            }
+        }
+
         const supabase = await createClient();
 
         // Get current user

@@ -1,10 +1,22 @@
 // TikTok OAuth Authorization URL Generator
 import { NextResponse } from 'next/server';
+
 import { createClient } from '@/lib/supabase/server';
+import { isTikTokGroupsDemoMode } from '@/lib/tiktok/demo-account-groups';
 import { buildAuthorizationUrl } from '@/lib/tiktok/oauth';
+
+export const dynamic = 'force-dynamic';
 
 export async function POST() {
     try {
+        if (isTikTokGroupsDemoMode()) {
+            return NextResponse.json({
+                demo: true,
+                authUrl: '/publish/accounts?demo=1',
+                message: '本地预览模式已内置测试账号，真实 TikTok OAuth 绑定需在测试或生产环境验证。',
+            });
+        }
+
         // Get current user
         const supabase = await createClient();
         const { data: { user }, error: userError } = await supabase.auth.getUser();

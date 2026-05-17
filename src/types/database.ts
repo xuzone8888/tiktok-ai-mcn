@@ -561,10 +561,48 @@ export interface Database {
       // -----------------------------------------------------------------------
       // TikTok Accounts 表
       // -----------------------------------------------------------------------
+      tiktok_account_groups: {
+        Row: {
+          id: string;
+          user_id: string;
+          name: string;
+          color: string | null;
+          sort_order: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          name: string;
+          color?: string | null;
+          sort_order?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          user_id?: string;
+          name?: string;
+          color?: string | null;
+          sort_order?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "tiktok_account_groups_user_id_fkey";
+            columns: ["user_id"];
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
+
       tiktok_accounts: {
         Row: {
           id: string;
           user_id: string;
+          group_id: string | null;
           open_id: string;
           union_id: string | null;
           display_name: string | null;
@@ -576,6 +614,7 @@ export interface Database {
           access_token: string;
           refresh_token: string;
           token_expires_at: string | null;
+          refresh_token_expires_at: string | null;
           scopes: Json;
           account_type: string;
           status: string;
@@ -586,6 +625,7 @@ export interface Database {
         Insert: {
           id?: string;
           user_id: string;
+          group_id?: string | null;
           open_id: string;
           union_id?: string | null;
           display_name?: string | null;
@@ -597,12 +637,14 @@ export interface Database {
           access_token: string;
           refresh_token: string;
           token_expires_at?: string | null;
+          refresh_token_expires_at?: string | null;
           scopes?: Json;
           account_type?: string;
           status?: string;
           username?: string | null;
         };
         Update: {
+          group_id?: string | null;
           open_id?: string;
           union_id?: string | null;
           display_name?: string | null;
@@ -614,6 +656,7 @@ export interface Database {
           access_token?: string;
           refresh_token?: string;
           token_expires_at?: string | null;
+          refresh_token_expires_at?: string | null;
           scopes?: Json;
           account_type?: string;
           status?: string;
@@ -624,6 +667,12 @@ export interface Database {
             foreignKeyName: "tiktok_accounts_user_id_fkey";
             columns: ["user_id"];
             referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "tiktok_accounts_group_id_fkey";
+            columns: ["group_id"];
+            referencedRelation: "tiktok_account_groups";
             referencedColumns: ["id"];
           }
         ];
@@ -1469,6 +1518,56 @@ export interface Database {
         Args: Record<string, never>;
         Returns: number;
       };
+      create_tiktok_account_group: {
+        Args: {
+          p_name: string;
+          p_account_ids: string[];
+        };
+        Returns: {
+          id: string;
+          user_id: string;
+          name: string;
+          color: string | null;
+          sort_order: number;
+          created_at: string;
+          updated_at: string;
+        };
+      };
+      rename_tiktok_account_group: {
+        Args: {
+          p_group_id: string;
+          p_name: string;
+        };
+        Returns: {
+          id: string;
+          user_id: string;
+          name: string;
+          color: string | null;
+          sort_order: number;
+          created_at: string;
+          updated_at: string;
+        };
+      };
+      add_tiktok_accounts_to_group: {
+        Args: {
+          p_group_id: string;
+          p_account_ids: string[];
+        };
+        Returns: number;
+      };
+      remove_tiktok_account_from_group: {
+        Args: {
+          p_group_id: string;
+          p_account_id: string;
+        };
+        Returns: number;
+      };
+      delete_tiktok_account_group: {
+        Args: {
+          p_group_id: string;
+        };
+        Returns: number;
+      };
       // 新增函数 - 备料台和任务队列
       get_video_credits: {
         Args: {
@@ -1690,6 +1789,4 @@ export type UserDraftTask = Database["public"]["Views"]["user_draft_tasks"]["Row
 
 // 项目统计视图
 export type ProjectStats = Database["public"]["Views"]["project_stats"]["Row"];
-
-
 

@@ -1,7 +1,12 @@
 // Refresh TikTok access token
 import { NextRequest, NextResponse } from 'next/server';
+
 import { createClient } from '@/lib/supabase/server';
+import { isUuid, mapAccountGroupError } from '@/lib/tiktok/account-groups';
+import { isTikTokGroupsDemoMode, refreshDemoAccount } from '@/lib/tiktok/demo-account-groups';
 import { refreshAccessToken, getUserInfo, calculateTokenExpiration } from '@/lib/tiktok/oauth';
+
+export const dynamic = 'force-dynamic';
 
 export async function POST(
     request: NextRequest,
@@ -9,6 +14,20 @@ export async function POST(
 ) {
     try {
         const { id } = await params;
+
+        if (!isUuid(id)) {
+            return NextResponse.json({ error: 'Account not found' }, { status: 404 });
+        }
+
+        if (isTikTokGroupsDemoMode()) {
+            try {
+                return NextResponse.json(refreshDemoAccount(id));
+            } catch (error) {
+                const mapped = mapAccountGroupError(error);
+                return NextResponse.json({ error: mapped.message }, { status: mapped.status });
+            }
+        }
+
         const supabase = await createClient();
 
         // Get current user
