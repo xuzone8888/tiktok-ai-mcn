@@ -2,6 +2,7 @@
 
 import crypto from 'crypto';
 import { TikTokTokenResponse, TikTokRefreshTokenResponse, TikTokUserInfo, TikTokUserInfoResponse } from './types';
+import { isTikTokMockCredential, isTikTokTestMockEnabled } from './test-mock';
 
 // TikTok API endpoints
 const TIKTOK_AUTH_URL = 'https://www.tiktok.com/v2/auth/authorize/';
@@ -126,8 +127,11 @@ export async function refreshAccessToken(
     refreshToken: string
 ): Promise<TikTokRefreshTokenResponse> {
     if (
-        process.env.NODE_ENV !== 'production'
-        && (refreshToken.startsWith('mock-refresh') || refreshToken.startsWith('seed-refresh'))
+        isTikTokMockCredential(refreshToken)
+        && (
+            process.env.NODE_ENV !== 'production'
+            || isTikTokTestMockEnabled()
+        )
     ) {
         return {
             access_token: refreshToken.replace(/^mock-refresh/, 'mock-access').replace(/^seed-refresh/, 'seed-access'),

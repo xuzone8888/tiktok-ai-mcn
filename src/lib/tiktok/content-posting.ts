@@ -5,6 +5,7 @@ import {
     TikTokVideoUploadInitResponse,
     TikTokPublishStatusResponse
 } from './types';
+import { isTikTokMockCredential, isTikTokTestMockEnabled } from './test-mock';
 
 // TikTok Content Posting API endpoints
 const TIKTOK_PUBLISH_VIDEO_INIT = 'https://open.tiktokapis.com/v2/post/publish/video/init/';
@@ -23,12 +24,11 @@ export interface CreatorInfo {
 }
 
 function shouldUseLocalTikTokMock(accessToken: string, publishId?: string) {
-    return process.env.NODE_ENV !== 'production'
-        && (
-            accessToken.startsWith('mock-access-')
-            || accessToken.startsWith('seed-access-')
-            || !!publishId?.startsWith('mock-publish-')
-        )
+    const mockCredential = isTikTokMockCredential(accessToken) || isTikTokMockCredential(publishId)
+    return mockCredential && (
+        process.env.NODE_ENV !== 'production'
+        || isTikTokTestMockEnabled()
+    )
 }
 
 function getMockCreatorInfo(accessToken: string): CreatorInfo {

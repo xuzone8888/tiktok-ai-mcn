@@ -2015,6 +2015,15 @@ ALIYUN_OSS_CUSTOM_DOMAIN
 CRON_SECRET
 ```
 
+测试环境如需使用脚本账号跑通多账号能力检查和模拟发布，可临时开启服务端 TikTok mock：
+
+```text
+TIKTOK_TEST_MOCK_MODE=true
+TIKTOK_TEST_MOCK_ALLOWED_SUPABASE_PROJECTS=wjfgusdwudsynbsyveoe
+```
+
+注意：这个开关只用于测试库验证脚本账号。正式发布验收、正式库、正式部署都必须删除或关闭 `TIKTOK_TEST_MOCK_MODE`，并使用真实 TikTok 授权账号。
+
 如果 AI 标题推荐在本地联调，需要补充对应模型服务的环境变量；如果暂时不联调 AI，可先用占位响应验证页面流程。
 
 数据库验证必须提前做：

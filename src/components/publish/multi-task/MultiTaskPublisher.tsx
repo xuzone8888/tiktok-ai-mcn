@@ -315,7 +315,7 @@ export function MultiTaskPublisher({ onCreated }: MultiTaskPublisherProps) {
     const readyVideos = videos.filter((video) => video.status === 'done' && video.url)
     const hasUploading = videos.some((video) => video.status === 'uploading' || video.status === 'pending')
     const capabilitySummary = capabilities?.summary || null
-    const availablePrivacyOptions = capabilitySummary?.privacy_level_options?.length
+    const availablePrivacyOptions = capabilitySummary
         ? capabilitySummary.privacy_level_options
         : privacyOptions.map((option) => option.value)
     const displayedPrivacyOptions = privacyOptions.filter((option) => availablePrivacyOptions.includes(option.value))
