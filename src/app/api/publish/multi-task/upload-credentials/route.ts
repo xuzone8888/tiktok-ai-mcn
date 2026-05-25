@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import crypto from 'crypto'
 
 import { createClient } from '@/lib/supabase/server'
 import { isTikTokGroupsDemoMode } from '@/lib/tiktok/demo-account-groups'

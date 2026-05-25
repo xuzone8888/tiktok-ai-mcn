@@ -799,7 +799,7 @@ export function MultiTaskPublisher({ onCreated }: MultiTaskPublisherProps) {
             const payload = {
                 ...buildPayload(),
                 preview_token: preview?.previewToken,
-                idempotency_key: crypto.randomUUID(),
+                idempotency_key: makePlanSeed(),
                 name: taskName.trim(),
             }
             const res = await fetch('/api/publish/multi-task/tasks', {
