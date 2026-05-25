@@ -99,7 +99,11 @@ export function TaskManager() {
     // 自动轮询：有进行中的任务时每 10 秒刷新
     const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
     useEffect(() => {
-        const hasActive = tasks.some(t => ['pending', 'running', 'scheduled'].includes(t.status))
+        const hasActive = tasks.some(t =>
+            ['pending', 'running', 'scheduled'].includes(t.status)
+            || (t.active_count || 0) > 0
+            || (t.confirming_count || 0) > 0
+        )
         if (hasActive) {
             if (!pollRef.current) {
                 pollRef.current = setInterval(() => {
@@ -226,7 +230,7 @@ export function TaskManager() {
 
     const handleCancelPending = async (taskId: string) => {
         try {
-            const res = await fetch(`/api/publish/tasks/${taskId}/cancel`, {
+            const res = await fetch(`/api/publish/tasks/${taskId}/cancel-pending`, {
                 method: 'POST'
             })
             if (!res.ok) throw new Error('取消失败')
@@ -366,7 +370,7 @@ export function TaskManager() {
                             删除任务组
                         </AlertDialogTitle>
                         <AlertDialogDescription className="text-gray-400">
-                            确定要删除任务组 "{taskToDelete?.name || '未命名任务组'}" 吗？
+                            确定要删除任务组 &quot;{taskToDelete?.name || '未命名任务组'}&quot; 吗？
                             {taskToDelete && taskToDelete.published_count > 0 && (
                                 <span className="block mt-2 text-amber-400">
                                     此任务组有 {taskToDelete.published_count} 个已发布视频

@@ -16,6 +16,7 @@ const CRON_SECRET = process.env.CRON_SECRET || ''
 
 // API 配置
 export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
 export const maxDuration = 300  // 5 分钟超时
 
 export async function GET(request: NextRequest) {
@@ -24,7 +25,7 @@ export async function GET(request: NextRequest) {
     try {
         // 1. 验证 cron secret（生产环境必须）
         const cronSecret = request.headers.get('x-cron-secret')
-        if (CRON_SECRET && cronSecret !== CRON_SECRET) {
+        if (process.env.NODE_ENV === 'production' && CRON_SECRET && cronSecret !== CRON_SECRET) {
             console.log('[Scheduler] Unauthorized request')
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
         }
@@ -42,7 +43,7 @@ export async function GET(request: NextRequest) {
 
         return NextResponse.json({
             success: true,
-            processed: result.success + result.failed,
+            processed: result.success + result.failed + (result.confirming || 0),
             results: result,
             duration_ms: duration
         })

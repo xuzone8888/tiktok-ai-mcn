@@ -178,7 +178,7 @@ export function AssetLibraryModal({
         }
     }
 
-    // 批量转存
+    // 多文件转存
     const startBatchTransfer = async () => {
         const assetsToTransfer = selectedAssetIds
             .map(id => assets.find(a => a.id === id))
@@ -201,7 +201,7 @@ export function AssetLibraryModal({
         let failed = 0
         const addedVideos: SelectedVideo[] = []
 
-        // 分批处理
+        // 分组处理
         for (let i = 0; i < assetsToTransfer.length; i += CONCURRENT_TRANSFER_LIMIT) {
             const chunk = assetsToTransfer.slice(i, i + CONCURRENT_TRANSFER_LIMIT)
             const chunkIds = chunk.map(a => a.id)
@@ -232,12 +232,12 @@ export function AssetLibraryModal({
         if (failed > 0) {
             toast({
                 variant: 'destructive',
-                title: '批量转存完成',
+                title: '多文件转存完成',
                 description: `成功 ${completed} 个，失败 ${failed} 个`,
             })
         } else {
             toast({
-                title: '✅ 批量转存完成',
+                title: '✅ 多文件转存完成',
                 description: `已添加 ${completed} 个视频到发布列表`,
             })
         }

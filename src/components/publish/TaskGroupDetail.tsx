@@ -1,9 +1,8 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { X, ChevronLeft, ChevronRight, Loader2, Square, Trash2, RefreshCw, Play, Heart, ChevronDown } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Loader2, Square, Trash2, RefreshCw, Play, Heart } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
 import {
     Sheet,
     SheetContent,
@@ -165,6 +164,40 @@ export function TaskGroupDetail({
     }
 
     if (!task) return null
+    const isMultiTask = task.workflow === 'multi_task'
+    const detailStats = isMultiTask
+        ? [
+            { label: '总数', value: task.total_items, className: 'text-white' },
+            { label: '已发布', value: task.published_count, className: 'text-emerald-400' },
+            { label: '待发', value: task.pending_count, className: 'text-blue-400' },
+            { label: '执行中', value: task.active_count || 0, className: 'text-amber-300' },
+            { label: '结果确认中', value: task.confirming_count || 0, className: 'text-violet-300' },
+            { label: '失败', value: task.failed_count, className: task.failed_count > 0 ? 'text-rose-400' : 'text-zinc-700' },
+            { label: '需确认', value: task.review_count || 0, className: (task.review_count || 0) > 0 ? 'text-orange-300' : 'text-zinc-700' },
+        ]
+        : [
+            { label: '总数', value: task.total_items, className: 'text-white' },
+            { label: '成功', value: task.published_count, className: 'text-emerald-500' },
+            { label: '待发', value: task.pending_count, className: 'text-blue-500' },
+            { label: '失败', value: task.failed_count, className: task.failed_count > 0 ? 'text-rose-500' : 'text-zinc-700' },
+        ]
+    const statusOptions = isMultiTask
+        ? [
+            { value: 'all', label: '全部状态' },
+            { value: 'pending', label: '待发' },
+            { value: 'processing', label: '执行中' },
+            { value: 'uploading', label: '结果确认中' },
+            { value: 'published', label: '已发布' },
+            { value: 'failed', label: '失败' },
+            { value: 'review', label: '需确认' },
+            { value: 'cancelled', label: '已停止' },
+        ]
+        : [
+            { value: 'all', label: '全部状态' },
+            { value: 'pending', label: '待发布' },
+            { value: 'published', label: '已发布' },
+            { value: 'failed', label: '失败' },
+        ]
 
     return (
         <>
@@ -184,25 +217,22 @@ export function TaskGroupDetail({
                         </div>
 
                         {/* Dark Stats Grid */}
-                        <div className="grid grid-cols-4 gap-4 p-4 rounded-lg bg-zinc-900/50 border border-white/5">
-                            <div className="flex flex-col items-center justify-center border-r border-white/5 pr-4">
-                                <span className="text-xs text-zinc-500 uppercase tracking-wider font-medium">总数</span>
-                                <span className="text-2xl font-bold text-white mt-1">{task.total_items}</span>
-                            </div>
-                            <div className="flex flex-col items-center justify-center border-r border-white/5 pr-4">
-                                <span className="text-xs text-zinc-500 uppercase tracking-wider font-medium">成功</span>
-                                <span className="text-2xl font-bold text-emerald-500 mt-1">{task.published_count}</span>
-                            </div>
-                            <div className="flex flex-col items-center justify-center border-r border-white/5 pr-4">
-                                <span className="text-xs text-zinc-500 uppercase tracking-wider font-medium">待发</span>
-                                <span className="text-2xl font-bold text-blue-500 mt-1">{task.pending_count}</span>
-                            </div>
-                            <div className="flex flex-col items-center justify-center">
-                                <span className="text-xs text-zinc-500 uppercase tracking-wider font-medium">失败</span>
-                                <span className={`text-2xl font-bold mt-1 ${task.failed_count > 0 ? 'text-rose-500' : 'text-zinc-700'}`}>
-                                    {task.failed_count}
-                                </span>
-                            </div>
+                        <div className={cn(
+                            'grid gap-3 p-4 rounded-lg bg-zinc-900/50 border border-white/5',
+                            isMultiTask ? 'grid-cols-3 sm:grid-cols-4' : 'grid-cols-4'
+                        )}>
+                            {detailStats.map((stat, index) => (
+                                <div
+                                    key={stat.label}
+                                    className={cn(
+                                        'flex flex-col items-center justify-center',
+                                        index < detailStats.length - 1 && 'sm:border-r sm:border-white/5 sm:pr-3'
+                                    )}
+                                >
+                                    <span className="text-xs text-zinc-500 uppercase tracking-wider font-medium">{stat.label}</span>
+                                    <span className={cn('text-2xl font-bold mt-1', stat.className)}>{stat.value}</span>
+                                </div>
+                            ))}
                         </div>
                     </SheetHeader>
 
@@ -214,10 +244,11 @@ export function TaskGroupDetail({
                                     <SelectValue placeholder="全部状态" />
                                 </SelectTrigger>
                                 <SelectContent className="bg-zinc-900 border-white/10 text-zinc-300">
-                                    <SelectItem value="all">全部状态</SelectItem>
-                                    <SelectItem value="pending">待发布</SelectItem>
-                                    <SelectItem value="published">已发布</SelectItem>
-                                    <SelectItem value="failed">失败</SelectItem>
+                                    {statusOptions.map(option => (
+                                        <SelectItem key={option.value} value={option.value}>
+                                            {option.label}
+                                        </SelectItem>
+                                    ))}
                                 </SelectContent>
                             </Select>
 

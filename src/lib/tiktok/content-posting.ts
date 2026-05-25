@@ -22,8 +22,41 @@ export interface CreatorInfo {
     max_video_post_duration_sec: number;
 }
 
+function shouldUseLocalTikTokMock(accessToken: string, publishId?: string) {
+    return process.env.NODE_ENV !== 'production'
+        && (
+            accessToken.startsWith('mock-access-')
+            || accessToken.startsWith('seed-access-')
+            || !!publishId?.startsWith('mock-publish-')
+        )
+}
+
+function getMockCreatorInfo(accessToken: string): CreatorInfo {
+    const suffix = accessToken.split('-').slice(-1)[0] || 'test'
+
+    return {
+        creator_avatar_url: '',
+        creator_username: `local_creator_${suffix}`,
+        creator_nickname: `Local Creator ${suffix}`,
+        privacy_level_options: [
+            'PUBLIC_TO_EVERYONE',
+            'MUTUAL_FOLLOW_FRIENDS',
+            'FOLLOWER_OF_CREATOR',
+            'SELF_ONLY',
+        ],
+        comment_disabled: false,
+        duet_disabled: true,
+        stitch_disabled: false,
+        max_video_post_duration_sec: 600,
+    }
+}
+
 // Get creator info (available privacy levels, duet/stitch settings)
 export async function getCreatorInfo(accessToken: string): Promise<CreatorInfo> {
+    if (shouldUseLocalTikTokMock(accessToken)) {
+        return getMockCreatorInfo(accessToken)
+    }
+
     const response = await fetch(TIKTOK_CREATOR_INFO, {
         method: 'POST',
         headers: {
@@ -88,6 +121,15 @@ export async function initVideoPublishFromUrl(
         videoCoverTimestampMs?: number;
     }
 ): Promise<string> {
+    if (shouldUseLocalTikTokMock(accessToken)) {
+        const suffix = Math.random().toString(36).slice(2, 10)
+        console.log('[TikTok Publish] Local mock init:', {
+            videoUrl: videoUrl.substring(0, 80) + '...',
+            title: postInfo.title?.substring(0, 50),
+        })
+        return `mock-publish-${Date.now()}-${suffix}`
+    }
+
     const requestBody: TikTokPublishVideoRequest = {
         post_info: {
             title: postInfo.title,
@@ -162,6 +204,31 @@ export async function checkPublishStatus(
     failReason?: string;
     postId?: string;
 }> {
+    if (shouldUseLocalTikTokMock(accessToken, publishId)) {
+        if (publishId.includes('failed')) {
+            return {
+                status: 'FAILED',
+                failReason: 'Local mock failure for verification',
+            }
+        }
+
+        if (publishId.includes('processing')) {
+            return { status: 'PROCESSING_UPLOAD' }
+        }
+
+        if (publishId.includes('inbox')) {
+            return {
+                status: 'SEND_TO_USER_INBOX',
+                postId: `mock-post-${publishId.slice(-10)}`,
+            }
+        }
+
+        return {
+            status: 'PUBLISH_COMPLETE',
+            postId: `mock-post-${publishId.slice(-10)}`,
+        }
+    }
+
     const response = await fetch(TIKTOK_PUBLISH_STATUS, {
         method: 'POST',
         headers: {

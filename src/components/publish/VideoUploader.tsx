@@ -224,7 +224,7 @@ export function VideoUploader({ onVideosAdded, disabled }: VideoUploaderProps) {
         }
 
         // 限制并发上传数为 5 (浏览器对同一域名的并发限制通常为 6)
-        // 这样既能提高批量上传速度，又能避免全部同时开始导致的拥塞
+        // 这样既能提高多文件上传速度，又能避免全部同时开始导致的拥塞
         await asyncPool(5, validFiles, uploadSingleFile)
 
         // 清理状态

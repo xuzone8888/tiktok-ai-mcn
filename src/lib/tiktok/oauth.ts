@@ -125,6 +125,21 @@ export async function exchangeCodeForToken(
 export async function refreshAccessToken(
     refreshToken: string
 ): Promise<TikTokRefreshTokenResponse> {
+    if (
+        process.env.NODE_ENV !== 'production'
+        && (refreshToken.startsWith('mock-refresh') || refreshToken.startsWith('seed-refresh'))
+    ) {
+        return {
+            access_token: refreshToken.replace(/^mock-refresh/, 'mock-access').replace(/^seed-refresh/, 'seed-access'),
+            refresh_token: refreshToken,
+            expires_in: 86400,
+            open_id: `local-${refreshToken.slice(-12)}`,
+            refresh_expires_in: 60 * 24 * 60 * 60,
+            token_type: 'Bearer',
+            scope: 'user.info.basic,video.upload,video.publish,user.info.stats',
+        }
+    }
+
     const config = getTikTokOAuthConfig();
 
     const response = await fetch(TIKTOK_TOKEN_URL, {
@@ -190,7 +205,7 @@ export async function getUserInfo(accessToken: string): Promise<TikTokUserInfo> 
         // 'profile_deep_link',
         // 'is_verified',
         // 'username',
-        // 以下字段需要 user.info.stats 权限（已获批）：
+        // 以下字段需要 user.info.stats 权限（已授权）：
         'follower_count',
         'following_count',
         'likes_count',

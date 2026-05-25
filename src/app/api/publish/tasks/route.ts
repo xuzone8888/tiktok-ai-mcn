@@ -4,6 +4,63 @@ import { processPublishQueue } from '@/lib/publish-processor'
 
 // TikTok content posting types - define locally since we're not using the actual upload functions yet
 type VideoPrivacyLevel = 'PUBLIC_TO_EVERYONE' | 'MUTUAL_FOLLOW_FRIENDS' | 'FOLLOWER_OF_CREATOR' | 'SELF_ONLY'
+const REVIEW_ERROR_CODE = 'WORKER_INTERRUPTED_NEEDS_REVIEW'
+
+function getPlanConfigRecord(value: unknown): Record<string, any> {
+    return value && typeof value === 'object' ? value as Record<string, any> : {}
+}
+
+function summarizeTaskItems(task: any) {
+    const items = Array.isArray(task.items) ? task.items : []
+    const isMultiTask = task.workflow === 'multi_task'
+    const publishedCount = items.filter((i: { status: string }) => i.status === 'published').length
+    const scheduledCount = items.filter((i: { status: string }) => i.status === 'pending' || i.status === 'scheduled').length
+    const activeCount = items.filter((i: { status: string }) => i.status === 'processing').length
+    const confirmingCount = items.filter((i: { status: string }) => i.status === 'uploading').length
+    const reviewCount = items.filter((i: { status: string; error_code?: string | null }) => i.status === 'failed' && i.error_code === REVIEW_ERROR_CODE).length
+    const failedCount = items.filter((i: { status: string; error_code?: string | null }) => i.status === 'failed' && i.error_code !== REVIEW_ERROR_CODE).length
+    const cancelledCount = items.filter((i: { status: string }) => i.status === 'cancelled').length
+    const nextScheduledAt = items
+        .filter((i: { status: string; scheduled_at?: string | null }) => ['pending', 'scheduled'].includes(i.status) && i.scheduled_at)
+        .map((i: { scheduled_at: string }) => i.scheduled_at)
+        .sort()[0] || null
+    const scheduledTimes = items
+        .filter((i: { scheduled_at?: string | null }) => i.scheduled_at)
+        .map((i: { scheduled_at: string }) => i.scheduled_at)
+        .sort()
+    const lastScheduledAt = scheduledTimes.length > 0 ? scheduledTimes[scheduledTimes.length - 1] : null
+    const planConfig = getPlanConfigRecord(task.plan_config)
+    const group = getPlanConfigRecord(planConfig.group)
+
+    let displayStatus = task.status
+    if (isMultiTask) {
+        if (reviewCount > 0) displayStatus = 'needs_review'
+        else if (activeCount > 0) displayStatus = 'running'
+        else if (confirmingCount > 0) displayStatus = 'confirming'
+        else if (scheduledCount > 0 && publishedCount > 0) displayStatus = 'scheduled'
+        else if (scheduledCount > 0) displayStatus = 'scheduled'
+        else if (failedCount > 0 && publishedCount > 0) displayStatus = 'partial_failed'
+        else if (failedCount > 0) displayStatus = 'failed'
+        else if (publishedCount > 0 && publishedCount === items.length) displayStatus = 'completed'
+    }
+
+    return {
+        isMultiTask,
+        publishedCount,
+        scheduledCount,
+        activeCount,
+        confirmingCount,
+        reviewCount,
+        failedCount,
+        cancelledCount,
+        nextScheduledAt,
+        lastScheduledAt,
+        displayStatus,
+        accountGroupName: typeof group.name === 'string' ? group.name : null,
+        videoCount: new Set(items.map((i: { video_url: string }) => i.video_url)).size,
+        accountCount: new Set(items.map((i: { account_id: string }) => i.account_id)).size,
+    }
+}
 
 // Types for request body
 interface CreateTaskRequest {
@@ -78,23 +135,18 @@ export async function GET(request: NextRequest) {
             .select(`
         *,
         items:publish_task_items(*)
-      `)
+      `, { count: 'exact' })
             .eq('user_id', user.id)
             .gte('created_at', startDate.toISOString())
             .order('created_at', { ascending: false })
-            .range(offset, offset + limit - 1)
 
         // Add end date filter for 'yesterday'
         if (endDate) {
             query = query.lt('created_at', endDate.toISOString())
         }
 
-        if (status) {
-            if (status === 'in_progress') {
-                query = query.in('status', ['pending', 'running', 'scheduled'])
-            } else {
-                query = query.eq('status', status)
-            }
+        if (!status) {
+            query = query.range(offset, offset + limit - 1)
         }
 
         const { data: tasks, error, count } = await query
@@ -105,18 +157,51 @@ export async function GET(request: NextRequest) {
         }
 
         // Transform tasks to include summary info
-        const transformedTasks = tasks?.map(task => ({
-            ...task,
-            video_count: new Set(task.items?.map((i: { video_url: string }) => i.video_url)).size,
-            account_count: new Set(task.items?.map((i: { account_id: string }) => i.account_id)).size,
-            total_items: task.items?.length || 0,
-            completed_items: task.items?.filter((i: { status: string }) => i.status === 'published').length || 0,
-            failed_items: task.items?.filter((i: { status: string }) => i.status === 'failed').length || 0
-        }))
+        const transformedTasks = tasks?.map(task => {
+            const summary = summarizeTaskItems(task)
+            const totalItems = task.items?.length || 0
+            const isMultiTask = summary.isMultiTask
+
+            return {
+                ...task,
+                name: task.name || task.task_name || '未命名任务组',
+                display_status: summary.displayStatus,
+                account_group_name: summary.accountGroupName,
+                video_count: summary.videoCount,
+                account_count: summary.accountCount,
+                total_items: totalItems,
+                published_count: isMultiTask ? summary.publishedCount : (task.published_count ?? summary.publishedCount),
+                pending_count: isMultiTask ? summary.scheduledCount : (task.pending_count ?? summary.scheduledCount),
+                failed_count: isMultiTask ? summary.failedCount : (task.failed_count ?? summary.failedCount),
+                active_count: summary.activeCount,
+                confirming_count: summary.confirmingCount,
+                review_count: summary.reviewCount,
+                cancelled_count: summary.cancelledCount,
+                next_scheduled_at: summary.nextScheduledAt,
+                last_scheduled_at: summary.lastScheduledAt,
+                completed_items: summary.publishedCount,
+                failed_items: summary.failedCount,
+            }
+        }) || []
+
+        const matchesStatus = (task: { status: string; display_status?: string | null }) => {
+            if (!status) return true
+            const effectiveStatus = task.display_status || task.status
+            if (status === 'in_progress') {
+                return ['pending', 'running', 'scheduled', 'confirming'].includes(effectiveStatus)
+            }
+            if (status === 'failed') {
+                return ['failed', 'partial_failed', 'needs_review'].includes(effectiveStatus)
+            }
+            return effectiveStatus === status
+        }
+
+        const filteredTasks = transformedTasks.filter(matchesStatus)
+        const pagedTasks = status ? filteredTasks.slice(offset, offset + limit) : filteredTasks
 
         return NextResponse.json({
-            tasks: transformedTasks,
-            total: count
+            tasks: pagedTasks,
+            total: status ? filteredTasks.length : count
         })
 
     } catch (error) {
@@ -218,7 +303,7 @@ export async function POST(request: NextRequest) {
             .from('publish_tasks')
             .insert({
                 user_id: user.id,
-                name: body.name || '未命名任务组',  // 任务组名称
+                task_name: body.name || '未命名任务组',  // 任务组名称
                 status: body.publish_mode === 'scheduled' ? 'scheduled' : 'pending',
                 scheduled_at: body.publish_mode === 'scheduled' ? body.scheduled_at : null,
                 title_template: body.caption,  // Database uses title_template, not caption_template

@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import Image from 'next/image'
-import { Clock, CheckCircle, XCircle, AlertTriangle, Trash2, Loader2, Play, Heart, MessageCircle, Share2 } from 'lucide-react'
+import { Clock, CheckCircle, XCircle, AlertTriangle, Trash2, Loader2, Play, Heart, MessageCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
@@ -18,8 +18,14 @@ export interface TaskItem {
     published_at: string | null
     tiktok_share_id: string | null
     tiktok_video_id?: string | null
+    tiktok_publish_id?: string | null
+    error_code?: string | null
     error_message: string | null
     cover_timestamp_ms?: number
+    plan_sequence?: number | null
+    plan_round?: number | null
+    plan_account_position?: number | null
+    source_video_name?: string | null
     // Video statistics from TikTok
     view_count?: number
     like_count?: number
@@ -41,20 +47,24 @@ interface TaskItemCardProps {
 
 const statusConfig: Record<string, { label: string; className: string; icon: any }> = {
     pending: { label: '待发布', className: 'text-zinc-400 border-zinc-500/30 bg-zinc-500/10', icon: Clock },
-    scheduled: { label: '定时中', className: 'text-blue-400 border-blue-500/30 bg-blue-500/10', icon: Clock },
-    processing: { label: '处理中', className: 'text-amber-400 border-amber-500/30 bg-amber-500/10', icon: Loader2 },
-    uploading: { label: '上传中', className: 'text-amber-400 border-amber-500/30 bg-amber-500/10', icon: Loader2 },
+    scheduled: { label: '待发', className: 'text-blue-400 border-blue-500/30 bg-blue-500/10', icon: Clock },
+    processing: { label: '执行中', className: 'text-amber-400 border-amber-500/30 bg-amber-500/10', icon: Loader2 },
+    uploading: { label: '结果确认中', className: 'text-violet-300 border-violet-400/30 bg-violet-400/10', icon: Loader2 },
     published: { label: '已发布', className: 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10', icon: CheckCircle },
     failed: { label: '失败', className: 'text-rose-400 border-rose-500/30 bg-rose-500/10', icon: XCircle },
+    review: { label: '需确认', className: 'text-orange-300 border-orange-400/30 bg-orange-400/10', icon: AlertTriangle },
     cancelled: { label: '已取消', className: 'text-zinc-500 border-zinc-500/30 bg-zinc-500/10', icon: XCircle },
 }
+const REVIEW_ERROR_CODE = 'WORKER_INTERRUPTED_NEEDS_REVIEW'
 
 export function TaskItemCard({ item, onDelete, onViewDetail }: TaskItemCardProps) {
     const [deleting, setDeleting] = useState(false)
-    const config = statusConfig[item.status] || statusConfig.pending
+    const isReview = item.status === 'failed' && item.error_code === REVIEW_ERROR_CODE
+    const config = isReview ? statusConfig.review : (statusConfig[item.status] || statusConfig.pending)
     const StatusIcon = config.icon
     const isProcessing = ['processing', 'uploading'].includes(item.status)
     const isPublished = item.status === 'published'
+    const displayTitle = item.title || '无标题'
 
     const formatDate = (dateStr: string | null) => {
         if (!dateStr) return '-'
@@ -91,6 +101,54 @@ export function TaskItemCard({ item, onDelete, onViewDetail }: TaskItemCardProps
 
     // 简单的策略：使用 Image 显示占位，或 Video 显示预览
     const hasVideo = !!item.video_url
+    const errorText = isReview
+        ? '系统无法确认 TikTok 是否已接收，请检查账号后处理'
+        : item.error_message
+    const errorTitle = [
+        item.error_code ? `代码：${item.error_code}` : null,
+        errorText,
+    ].filter(Boolean).join('\n')
+    let statusNote: JSX.Element | null = null
+    if (item.status === 'failed' && errorText) {
+        statusNote = (
+            <span
+                className="flex max-w-[220px] flex-col items-end gap-0.5 leading-tight"
+                title={errorTitle}
+            >
+                <span
+                    className={cn(
+                        'max-w-full truncate text-[10px]',
+                        isReview ? 'text-orange-300' : 'text-rose-500'
+                    )}
+                >
+                    {errorText}
+                </span>
+                {item.error_code && (
+                    <span
+                        className={cn(
+                            'max-w-full truncate text-[9px] font-mono',
+                            isReview ? 'text-orange-400/70' : 'text-rose-400/70'
+                        )}
+                    >
+                        {item.error_code}
+                    </span>
+                )}
+            </span>
+        )
+    } else if (item.status === 'uploading' && item.error_message) {
+        statusNote = (
+            <span className="flex max-w-[220px] flex-col items-end gap-0.5 leading-tight" title={errorTitle}>
+                <span className="max-w-full truncate text-[10px] text-violet-300">
+                    {item.error_message}
+                </span>
+                {item.error_code && (
+                    <span className="max-w-full truncate text-[9px] font-mono text-violet-300/70">
+                        {item.error_code}
+                    </span>
+                )}
+            </span>
+        )
+    }
 
     return (
         <div
@@ -132,13 +190,18 @@ export function TaskItemCard({ item, onDelete, onViewDetail }: TaskItemCardProps
                             {/* 标题 - 支持最多1行截断，Hover时Tooltip显示完整标题 */}
                             <h4
                                 className="text-sm font-medium text-zinc-200 line-clamp-1 group-hover:text-white transition-colors pr-2"
-                                title={item.title || '无标题'}
+                                title={displayTitle}
                             >
-                                {item.title || '无标题'}
+                                {displayTitle}
                             </h4>
+                            {item.source_video_name && (
+                                <div className="mt-0.5 truncate text-[10px] text-zinc-600" title={item.source_video_name}>
+                                    {item.source_video_name}
+                                </div>
+                            )}
 
                             {/* 账号 */}
-                            <div className="flex items-center gap-1.5 mt-1">
+                            <div className="flex items-center gap-1.5 mt-1 min-w-0">
                                 {item.tiktok_accounts?.avatar_url && (
                                     <Image
                                         src={item.tiktok_accounts.avatar_url}
@@ -152,6 +215,11 @@ export function TaskItemCard({ item, onDelete, onViewDetail }: TaskItemCardProps
                                 <span className="text-xs text-zinc-500 truncate">
                                     {item.tiktok_accounts?.display_name || '未知账号'}
                                 </span>
+                                {typeof item.plan_round === 'number' && (
+                                    <span className="shrink-0 text-[10px] text-zinc-600">
+                                        第 {item.plan_round + 1} 轮
+                                    </span>
+                                )}
                             </div>
                         </div>
 
@@ -202,11 +270,7 @@ export function TaskItemCard({ item, onDelete, onViewDetail }: TaskItemCardProps
                         {/* 操作区 (仅Hover显示或错误时显示) - 绝对定位到右下角或者保留在流中 */}
                         <div className="absolute bottom-3 right-3 flex items-center">
                             {/* 错误信息优先显示 */}
-                            {item.status === 'failed' && item.error_message ? (
-                                <span className="text-[10px] text-rose-500 truncate max-w-[120px]" title={item.error_message}>
-                                    {item.error_message}
-                                </span>
-                            ) : (
+                            {statusNote || (
                                 /* 删除按钮 */
                                 !isProcessing && (
                                     <Button

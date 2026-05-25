@@ -687,6 +687,10 @@ export interface Database {
           user_id: string;
           task_name: string | null;
           name: string | null;
+          workflow: string;
+          source_account_group_id: string | null;
+          plan_config: Json;
+          idempotency_key: string | null;
           publish_type: string;
           title_template: string | null;
           privacy_level: string;
@@ -717,6 +721,10 @@ export interface Database {
           user_id: string;
           task_name?: string | null;
           name?: string | null;
+          workflow?: string;
+          source_account_group_id?: string | null;
+          plan_config?: Json;
+          idempotency_key?: string | null;
           publish_type?: string;
           title_template?: string | null;
           privacy_level?: string;
@@ -735,6 +743,20 @@ export interface Database {
         Update: {
           task_name?: string | null;
           name?: string | null;
+          workflow?: string;
+          source_account_group_id?: string | null;
+          plan_config?: Json;
+          idempotency_key?: string | null;
+          scheduled_at?: string | null;
+          title_template?: string | null;
+          privacy_level?: string;
+          allow_comment?: boolean;
+          allow_duet?: boolean;
+          allow_stitch?: boolean;
+          brand_content_toggle?: boolean;
+          brand_organic_toggle?: boolean;
+          is_aigc?: boolean;
+          batch_interval_seconds?: number;
           status?: string;
           total_items?: number;
           success_count?: number;
@@ -780,11 +802,21 @@ export interface Database {
           created_at: string;
           updated_at: string;
           cover_timestamp_ms: number | null;
+          plan_sequence: number | null;
+          plan_round: number | null;
+          plan_account_position: number | null;
+          source_video_id: string | null;
+          source_video_name: string | null;
+          dedupe_key: string | null;
           view_count: number;
           like_count: number;
           comment_count: number;
           share_count: number;
           stats_updated_at: string | null;
+          processing_started_at: string | null;
+          publish_init_started_at: string | null;
+          last_status_check_at: string | null;
+          publish_attempt_count: number;
         };
         Insert: {
           id?: string;
@@ -802,21 +834,47 @@ export interface Database {
           error_message?: string | null;
           scheduled_at?: string | null;
           cover_timestamp_ms?: number | null;
+          plan_sequence?: number | null;
+          plan_round?: number | null;
+          plan_account_position?: number | null;
+          source_video_id?: string | null;
+          source_video_name?: string | null;
+          dedupe_key?: string | null;
+          processing_started_at?: string | null;
+          publish_init_started_at?: string | null;
+          last_status_check_at?: string | null;
+          publish_attempt_count?: number;
         };
         Update: {
+          account_id?: string;
+          video_url?: string;
+          video_source?: string;
+          source_asset_id?: string | null;
+          title?: string | null;
           status?: string;
           tiktok_publish_id?: string | null;
           tiktok_share_id?: string | null;
           tiktok_video_id?: string | null;
           error_code?: string | null;
           error_message?: string | null;
+          scheduled_at?: string | null;
           published_at?: string | null;
           cover_timestamp_ms?: number | null;
+          plan_sequence?: number | null;
+          plan_round?: number | null;
+          plan_account_position?: number | null;
+          source_video_id?: string | null;
+          source_video_name?: string | null;
+          dedupe_key?: string | null;
           view_count?: number;
           like_count?: number;
           comment_count?: number;
           share_count?: number;
           stats_updated_at?: string | null;
+          processing_started_at?: string | null;
+          publish_init_started_at?: string | null;
+          last_status_check_at?: string | null;
+          publish_attempt_count?: number;
         };
         Relationships: [
           {
@@ -1789,4 +1847,3 @@ export type UserDraftTask = Database["public"]["Views"]["user_draft_tasks"]["Row
 
 // 项目统计视图
 export type ProjectStats = Database["public"]["Views"]["project_stats"]["Row"];
-

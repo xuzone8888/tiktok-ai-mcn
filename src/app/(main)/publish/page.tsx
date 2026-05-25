@@ -53,6 +53,7 @@ import { format, addMinutes } from 'date-fns'
 import { zhCN } from 'date-fns/locale'
 import { useToast } from '@/hooks/use-toast'
 import { TaskManager } from '@/components/publish/TaskManager'
+import { MultiTaskPublisher } from '@/components/publish/multi-task/MultiTaskPublisher'
 import {
     Dialog,
     DialogContent,
@@ -136,7 +137,7 @@ interface FileUploadStatus {
     error?: string
 }
 
-type TabType = 'create' | 'tasks'
+type TabType = 'create' | 'multiTask' | 'tasks'
 type VideoSourceType = 'upload' | 'asset'  // Only support local upload and asset library
 
 export default function PublishPage() {
@@ -558,12 +559,12 @@ export default function PublishPage() {
         if (failed > 0) {
             toast({
                 variant: 'destructive',
-                title: '批量转存完成',
+                title: '多文件转存完成',
                 description: `成功 ${completed} 个，失败 ${failed} 个`,
             })
         } else {
             toast({
-                title: '✅ 批量转存完成',
+                title: '✅ 多文件转存完成',
                 description: `已添加 ${completed} 个视频到发布列表`,
             })
         }
@@ -1112,7 +1113,7 @@ export default function PublishPage() {
             return
         }
 
-        // 批量发布无间隔提示：3条以上视频 + 立即发布 + 间隔为0
+        // 多视频无间隔提示：3条以上视频 + 立即发布 + 间隔为0
         const actualInterval = intervalMode === 'custom' ? customInterval : parseInt(intervalMode)
         if (publishMode === 'now' && selectedVideos.length >= 3 && actualInterval === 0) {
             const confirmed = window.confirm(
@@ -1204,6 +1205,7 @@ export default function PublishPage() {
             <div className="flex gap-1 p-1.5 bg-black/40 rounded-xl border border-white/10 w-fit backdrop-blur-md">
                 {[
                     { id: 'create' as TabType, label: '创建发布', icon: Send },
+                    { id: 'multiTask' as TabType, label: '多任务发布', icon: ListFilter },
                     { id: 'tasks' as TabType, label: '任务管理', icon: ListFilter }
                 ].map(tab => (
                     <button
@@ -2182,7 +2184,7 @@ export default function PublishPage() {
                                         placeholder="例如：今日穿搭分享、产品推广第3期..."
                                         className="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500/50 transition-all text-sm"
                                     />
-                                    <p className="text-xs text-gray-500 mt-1">为本次发布任务起个名字，方便后续在"发布记录"中查找</p>
+                                    <p className="text-xs text-gray-500 mt-1">为本次发布任务起个名字，方便后续在&quot;发布记录&quot;中查找</p>
                                 </div>
                             </div>
                         </div >
@@ -2626,6 +2628,10 @@ export default function PublishPage() {
                 </div >
             )
             }
+
+            {activeTab === 'multiTask' && (
+                <MultiTaskPublisher onCreated={() => setActiveTab('tasks')} />
+            )}
 
             {/* Task Manager Tab */}
             {

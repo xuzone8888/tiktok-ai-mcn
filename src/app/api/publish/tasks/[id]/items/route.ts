@@ -8,6 +8,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 
+const REVIEW_ERROR_CODE = 'WORKER_INTERRUPTED_NEEDS_REVIEW'
+
 export async function GET(
     request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
@@ -54,17 +56,32 @@ export async function GET(
                 status,
                 published_at,
                 tiktok_share_id,
+                tiktok_publish_id,
+                tiktok_video_id,
+                error_code,
                 error_message,
                 cover_timestamp_ms,
+                plan_sequence,
+                plan_round,
+                plan_account_position,
+                source_video_name,
+                processing_started_at,
+                publish_init_started_at,
+                last_status_check_at,
                 tiktok_accounts!inner(id, display_name, avatar_url)
             `, { count: 'exact' })
             .eq('task_id', taskId)
             .order('scheduled_at', { ascending: true })
+            .order('plan_sequence', { ascending: true, nullsFirst: false })
 
         // 状态筛选
         if (statusFilter && statusFilter !== 'all') {
             if (statusFilter === 'pending') {
                 query = query.in('status', ['pending', 'scheduled'])
+            } else if (statusFilter === 'review') {
+                query = query.eq('status', 'failed').eq('error_code', REVIEW_ERROR_CODE)
+            } else if (statusFilter === 'failed') {
+                query = query.eq('status', 'failed').or(`error_code.is.null,error_code.neq.${REVIEW_ERROR_CODE}`)
             } else {
                 query = query.eq('status', statusFilter)
             }

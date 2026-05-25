@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { Settings, User, Shield, LogOut, UserCircle, Zap, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Settings, User, Shield, LogOut, UserCircle, Zap, Loader2 } from "lucide-react";
+import { useEffect, useState } from "react";
+
+import { LangToggle } from "@/components/ui/LangToggle";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -14,25 +15,24 @@ import {
   DropdownMenuTrigger,
   DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { cn } from "@/lib/utils";
+import { useLang } from "@/contexts/LangContext";
 import { type UserRole, isAdmin } from "@/lib/admin";
 import { createClient } from "@/lib/supabase/client";
-import { LangToggle } from "@/components/ui/LangToggle";
-import { useLang } from "@/contexts/LangContext";
+import { cn } from "@/lib/utils";
+
+const isLocalPreviewMode =
+  process.env.NEXT_PUBLIC_TIKTOK_GROUPS_DEMO === "true" ||
+  !process.env.NEXT_PUBLIC_SUPABASE_URL ||
+  !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+const LOCAL_PREVIEW_USER: CurrentUser = {
+  id: "local-demo-user",
+  email: "demo@local.preview",
+  name: "本地预览用户",
+  avatar_url: null,
+  role: "user",
+  credits: 1000,
+};
 
 // ============================================================================
 // 类型定义
@@ -66,6 +66,12 @@ export function Header() {
   // 获取用户信息的函数
   const fetchUser = async () => {
     try {
+      if (isLocalPreviewMode) {
+        setUser(LOCAL_PREVIEW_USER);
+        setLoading(false);
+        return;
+      }
+
       const supabase = createClient();
 
       // 获取当前登录用户
@@ -106,6 +112,15 @@ export function Header() {
   useEffect(() => {
     fetchUser();
 
+    if (isLocalPreviewMode) {
+      const handleCreditsUpdate = () => fetchUser();
+      window.addEventListener("credits-updated", handleCreditsUpdate);
+
+      return () => {
+        window.removeEventListener("credits-updated", handleCreditsUpdate);
+      };
+    }
+
     // 监听登录状态变化
     const supabase = createClient();
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
@@ -139,6 +154,11 @@ export function Header() {
 
   // 登出处理 - 调用真实的 Supabase signOut
   const handleLogout = async () => {
+    if (isLocalPreviewMode) {
+      setUser(LOCAL_PREVIEW_USER);
+      return;
+    }
+
     setLoggingOut(true);
     try {
       const supabase = createClient();

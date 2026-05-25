@@ -1,5 +1,5 @@
 /**
- * 批量停止待发布任务 API
+ * 停止待发布任务 API
  * 
  * POST /api/publish/tasks/[id]/cancel-pending
  * 
