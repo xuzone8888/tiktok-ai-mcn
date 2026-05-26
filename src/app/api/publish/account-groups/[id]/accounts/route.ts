@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
+import { findActiveMultiTaskGroupTask } from "@/lib/publish/multi-task-group-lock";
 import {
   MAX_ACCOUNTS_PER_GROUP,
   isUuid,
@@ -265,6 +266,14 @@ export async function POST(
       return NextResponse.json(
         { error: `每个分组最多 ${MAX_ACCOUNTS_PER_GROUP} 个账号` },
         { status: 400 }
+      );
+    }
+
+    const activeTask = await findActiveMultiTaskGroupTask(supabase, user.id, id);
+    if (activeTask) {
+      return NextResponse.json(
+        { error: "该账号组已有未完成任务，请等待完成后再调整账号。" },
+        { status: 409 }
       );
     }
 

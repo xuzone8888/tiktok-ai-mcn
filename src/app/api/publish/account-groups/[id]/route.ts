@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
+import { findActiveMultiTaskGroupTask } from "@/lib/publish/multi-task-group-lock";
 import { isUuid, mapAccountGroupError, validateGroupName } from "@/lib/tiktok/account-groups";
 import {
   deleteDemoAccountGroup,
@@ -106,6 +107,14 @@ export async function DELETE(
 
     if (userError || !user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const activeTask = await findActiveMultiTaskGroupTask(supabase, user.id, id);
+    if (activeTask) {
+      return NextResponse.json(
+        { error: "该账号组已有未完成任务，请等待完成后再删除分组。" },
+        { status: 409 }
+      );
     }
 
     const { data, error } = await supabase.rpc("delete_tiktok_account_group", {

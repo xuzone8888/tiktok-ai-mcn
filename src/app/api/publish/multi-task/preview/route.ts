@@ -5,6 +5,7 @@ import {
     resolveMultiTaskCapabilities,
     type MultiTaskCapabilityAccountInput,
 } from '@/lib/publish/multi-task-capabilities'
+import { findActiveMultiTaskGroupTask } from '@/lib/publish/multi-task-group-lock'
 import { parseMultiTaskPrivacyLevel } from '@/lib/publish/multi-task-policy'
 import { signMultiTaskPreviewToken } from '@/lib/publish/multi-task-preview-token'
 import {
@@ -84,6 +85,24 @@ export async function POST(request: NextRequest) {
 
         if (groupError || !group) {
             return NextResponse.json({ success: false, error: '账号分组不存在' }, { status: 404 })
+        }
+
+        const activeTask = await findActiveMultiTaskGroupTask(supabase, user.id, groupId)
+        if (activeTask) {
+            return NextResponse.json({
+                success: false,
+                error: '该账号组已有未完成任务，请等待完成或先停止待发后再创建。',
+                active_task: {
+                    id: activeTask.id,
+                    task_name: activeTask.task_name,
+                    status: activeTask.status,
+                    total_items: activeTask.total_items,
+                    published_count: activeTask.published_count,
+                    pending_count: activeTask.pending_count,
+                    failed_count: activeTask.failed_count,
+                    created_at: activeTask.created_at,
+                },
+            }, { status: 409 })
         }
 
         const { data: accountRows, error: accountsError } = await supabase
