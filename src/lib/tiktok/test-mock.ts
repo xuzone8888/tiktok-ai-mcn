@@ -37,10 +37,7 @@ export function isTikTokTestMockEnabled() {
 
 export function isTikTokMockCredential(value: string | undefined | null) {
     return !!value && (
-        value.startsWith('mock-access-')
-        || value.startsWith('seed-access-')
-        || value.startsWith('mock-refresh')
-        || value.startsWith('seed-refresh')
-        || value.startsWith('mock-publish-')
+        value.startsWith('mock-')
+        || value.startsWith('seed-')
     )
 }
