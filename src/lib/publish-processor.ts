@@ -288,11 +288,9 @@ async function recoverInterruptedMultiTaskItems(
             tiktok_publish_id,
             processing_started_at,
             publish_init_started_at,
-            last_status_check_at,
-            publish_tasks!inner(workflow)
+            last_status_check_at
         `)
         .in('status', ['processing', 'uploading'])
-        .eq('publish_tasks.workflow', 'multi_task')
         .order('updated_at', { ascending: true })
         .limit(RECOVERY_BATCH_LIMIT)
 
@@ -301,7 +299,23 @@ async function recoverInterruptedMultiTaskItems(
         return { recovered: 0, success: 0, failed: 0, confirming: 0 }
     }
 
-    const items = ((data || []) as unknown as ActiveRecoveryItem[]).filter((item) => {
+    const candidateItems = (data || []) as unknown as ActiveRecoveryItem[]
+    if (candidateItems.length === 0) return { recovered: 0, success: 0, failed: 0, confirming: 0 }
+
+    const candidateTaskIds = [...new Set(candidateItems.map(item => item.task_id))]
+    const { data: taskRows, error: taskError } = await supabase
+        .from('publish_tasks')
+        .select('id')
+        .in('id', candidateTaskIds)
+        .eq('workflow', 'multi_task')
+
+    if (taskError) {
+        console.error('[Publisher] Recovery task query failed:', taskError)
+        return { recovered: 0, success: 0, failed: 0, confirming: 0 }
+    }
+
+    const multiTaskIds = new Set((taskRows || []).map(task => task.id))
+    const items = candidateItems.filter(item => multiTaskIds.has(item.task_id)).filter((item) => {
         if (item.status === 'processing') {
             return !item.processing_started_at || item.processing_started_at <= staleCutoff
         }
@@ -313,6 +327,8 @@ async function recoverInterruptedMultiTaskItems(
         return false
     })
     if (items.length === 0) return { recovered: 0, success: 0, failed: 0, confirming: 0 }
+
+    console.log(`[Publisher] Recovering ${items.length} interrupted multi-task items`)
 
     const taskIds = new Set<string>()
     const accountIds = [...new Set(items.map(item => item.account_id))]
