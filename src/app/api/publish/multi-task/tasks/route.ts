@@ -284,7 +284,7 @@ export async function POST(request: NextRequest) {
             task_id: task.id,
             account_id: item.accountId,
             video_url: item.videoUrl,
-            video_source: item.videoSource,
+            video_source: item.videoSource === 'asset' ? 'assets' : item.videoSource,
             title: item.title,
             status: 'scheduled',
             scheduled_at: item.scheduledAt,
