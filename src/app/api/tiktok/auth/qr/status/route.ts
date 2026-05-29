@@ -13,6 +13,35 @@ import {
 
 export const dynamic = 'force-dynamic';
 
+async function exchangeQrCodeForToken(code: string, qrRedirectUri: string | null, diagnostic: unknown) {
+    const attempts = [
+        { label: 'qr_without_redirect_uri', redirectUri: null, omitRedirectUri: true },
+        ...(qrRedirectUri
+            ? [{ label: 'qr_returned_redirect_uri', redirectUri: qrRedirectUri, omitRedirectUri: false }]
+            : []),
+        { label: 'configured_redirect_uri', redirectUri: null, omitRedirectUri: false },
+    ];
+
+    let lastError: unknown = null;
+
+    for (const attempt of attempts) {
+        try {
+            return await exchangeCodeForToken(code, null, attempt.redirectUri, {
+                omitRedirectUri: attempt.omitRedirectUri,
+            });
+        } catch (error) {
+            lastError = error;
+            console.warn('[TikTok QR] Token exchange attempt failed', {
+                attempt: attempt.label,
+                error: error instanceof Error ? error.message : String(error),
+                diagnostic,
+            });
+        }
+    }
+
+    throw lastError instanceof Error ? lastError : new Error('TikTok QR token exchange failed');
+}
+
 export async function GET(request: NextRequest) {
     const state = request.nextUrl.searchParams.get('state');
     if (!state) {
@@ -116,8 +145,9 @@ export async function GET(request: NextRequest) {
         }
 
         const qrRedirectUri = extractRedirectUriFromQrStatus(status);
-        console.info('[TikTok QR] Confirmed authorization payload', summarizeQrAuthorizationStatus(status));
-        const tokenResponse = await exchangeCodeForToken(code, null, qrRedirectUri);
+        const qrDiagnostic = summarizeQrAuthorizationStatus(status);
+        console.warn('[TikTok QR] Confirmed authorization payload', qrDiagnostic);
+        const tokenResponse = await exchangeQrCodeForToken(code, qrRedirectUri, qrDiagnostic);
         const { userInfo } = await saveTikTokAccountFromToken(adminSupabase, user.id, tokenResponse);
 
         await adminSupabase

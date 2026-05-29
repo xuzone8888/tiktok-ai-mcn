@@ -81,7 +81,8 @@ export function buildAuthorizationUrl(userId: string): {
 export async function exchangeCodeForToken(
     code: string,
     codeVerifier?: string | null,
-    redirectUriOverride?: string | null
+    redirectUriOverride?: string | null,
+    options?: { omitRedirectUri?: boolean }
 ): Promise<TikTokTokenResponse> {
     const config = getTikTokOAuthConfig();
     const redirectUri = redirectUriOverride || config.redirectUri;
@@ -90,8 +91,11 @@ export async function exchangeCodeForToken(
         client_secret: config.clientSecret,
         code: code,
         grant_type: 'authorization_code',
-        redirect_uri: redirectUri,
     });
+
+    if (!options?.omitRedirectUri) {
+        body.set('redirect_uri', redirectUri);
+    }
 
     if (codeVerifier) {
         body.set('code_verifier', codeVerifier);
@@ -115,12 +119,14 @@ export async function exchangeCodeForToken(
 
     // Handle v2 API error format: { error: "error_code", error_description: "..." }
     if (typeof data.error === 'string') {
-        throw new Error(`TikTok OAuth error: ${data.error} - ${data.error_description || 'no description'}`);
+        const logId = data.log_id ? ` (log_id: ${data.log_id})` : '';
+        throw new Error(`TikTok OAuth error: ${data.error} - ${data.error_description || 'no description'}${logId}`);
     }
 
     // Handle legacy error format: { error: { code: "...", message: "..." } }
     if (data.error && data.error.code !== 'ok') {
-        throw new Error(`TikTok OAuth error: ${data.error.code} - ${data.error.message}`);
+        const logId = data.log_id ? ` (log_id: ${data.log_id})` : '';
+        throw new Error(`TikTok OAuth error: ${data.error.code} - ${data.error.message}${logId}`);
     }
 
     return data as TikTokTokenResponse;
