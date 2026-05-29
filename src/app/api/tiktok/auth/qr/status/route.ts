@@ -8,6 +8,7 @@ import {
     checkTikTokQrCode,
     extractAuthorizationCodeFromQrStatus,
     extractRedirectUriFromQrStatus,
+    summarizeQrAuthorizationStatus,
 } from '@/lib/tiktok/qr-oauth';
 
 export const dynamic = 'force-dynamic';
@@ -115,6 +116,7 @@ export async function GET(request: NextRequest) {
         }
 
         const qrRedirectUri = extractRedirectUriFromQrStatus(status);
+        console.info('[TikTok QR] Confirmed authorization payload', summarizeQrAuthorizationStatus(status));
         const tokenResponse = await exchangeCodeForToken(code, null, qrRedirectUri);
         const { userInfo } = await saveTikTokAccountFromToken(adminSupabase, user.id, tokenResponse);
 

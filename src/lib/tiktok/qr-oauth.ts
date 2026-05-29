@@ -132,13 +132,46 @@ export function extractRedirectUriFromQrStatus(status: TikTokQrCodeStatus) {
         return null;
     }
 
-    try {
-        const url = new URL(rawRedirectUri);
-        for (const param of ['code', 'state', 'error', 'error_description', 'log_id']) {
-            url.searchParams.delete(param);
-        }
-        return url.toString();
-    } catch {
+    if (!/^https?:\/\//i.test(rawRedirectUri)) {
         return null;
     }
+
+    // Preserve TikTok's exact redirect URI string. URL.toString() can normalize
+    // https://example.com?code=... into https://example.com/, and TikTok checks
+    // redirect_uri by exact match during token exchange.
+    const queryIndex = rawRedirectUri.indexOf('?');
+    const hashIndex = rawRedirectUri.indexOf('#');
+    const endIndex = [queryIndex, hashIndex].filter(index => index >= 0).sort((a, b) => a - b)[0];
+    return (endIndex === undefined ? rawRedirectUri : rawRedirectUri.slice(0, endIndex)) || null;
+}
+
+export function summarizeQrAuthorizationStatus(status: TikTokQrCodeStatus) {
+    const rawRedirectUri = status.redirect_uri || status.code || '';
+    const redirectUri = extractRedirectUriFromQrStatus(status);
+    let redirectHost: string | null = null;
+    let redirectPath: string | null = null;
+
+    if (redirectUri) {
+        try {
+            const url = new URL(redirectUri);
+            redirectHost = url.host;
+            redirectPath = url.pathname;
+        } catch {
+            redirectHost = null;
+            redirectPath = null;
+        }
+    }
+
+    return {
+        status: status.status,
+        hasCode: !!extractAuthorizationCodeFromQrStatus(status),
+        codeLooksLikeUrl: /^https?:\/\//i.test(status.code || ''),
+        hasRedirectUri: !!status.redirect_uri,
+        rawRedirectLooksLikeUrl: /^https?:\/\//i.test(rawRedirectUri),
+        redirectHost,
+        redirectPath,
+        redirectUriLength: redirectUri?.length || 0,
+        rawRedirectLength: rawRedirectUri.length,
+        logId: status.log_id || null,
+    };
 }
