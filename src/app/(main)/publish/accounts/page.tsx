@@ -97,6 +97,16 @@ type FilterOption = "all" | "active" | "expiring" | "expired" | "grouped" | "ung
 type ViewMode = "accounts" | "groups";
 type AccountStatusFilter = "all" | "active" | "expiring";
 type AccountSelectSortOption = "followers_desc" | "followers_asc" | "auth_time_desc" | "auth_time_asc";
+type QrBindingStatus = "idle" | "loading" | "ready" | "scanned" | "completed" | "expired" | "error";
+
+interface QrBindingState {
+  state: string;
+  qrImageDataUrl: string;
+  expiresAt: string;
+  pollIntervalMs: number;
+  status: QrBindingStatus;
+  message?: string;
+}
 
 const SORT_OPTIONS: { value: SortOption; label: string }[] = [
   { value: "followers_desc", label: "粉丝最多" },
@@ -197,6 +207,35 @@ function canJoinGroup(account: TikTokAccount) {
 async function readApiError(response: Response, fallback: string) {
   const data = await response.json().catch(() => null);
   return typeof data?.error === "string" ? data.error : fallback;
+}
+
+async function readBindingApiError(response: Response, fallback: string) {
+  const data = await response.json().catch(() => null);
+  const message = typeof data?.error === "string" ? data.error : fallback;
+  const retryAfterSeconds = Number(data?.retry_after_seconds || response.headers.get("Retry-After") || 0);
+
+  if (Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0) {
+    if (/等待|后再试/.test(message)) {
+      return message;
+    }
+
+    return `${message} 建议 ${retryAfterSeconds < 90 ? `${retryAfterSeconds} 秒` : `约 ${Math.ceil(retryAfterSeconds / 60)} 分钟`}后再试。`;
+  }
+
+  return message;
+}
+
+function getQrBindingTitle(status: QrBindingStatus) {
+  switch (status) {
+    case "scanned":
+      return "等待手机确认";
+    case "expired":
+      return "二维码已过期";
+    case "error":
+      return "二维码不可用";
+    default:
+      return "TikTok 扫码授权";
+  }
 }
 
 function matchesStatusFilter(account: TikTokAccount, filter: AccountStatusFilter) {
@@ -605,6 +644,7 @@ export default function TikTokAccountsPage() {
   const [groups, setGroups] = useState<AccountGroup[]>([]);
   const [loading, setLoading] = useState(true);
   const [connecting, setConnecting] = useState(false);
+  const [qrBinding, setQrBinding] = useState<QrBindingState | null>(null);
   const [refreshingId, setRefreshingId] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<SortOption>("followers_desc");
   const [filterBy, setFilterBy] = useState<FilterOption>("all");
@@ -712,6 +752,94 @@ export default function TikTokAccountsPage() {
   useEffect(() => {
     refreshData();
   }, [refreshData]);
+
+  useEffect(() => {
+    if (!qrBinding || (qrBinding.status !== "ready" && qrBinding.status !== "scanned")) {
+      return;
+    }
+
+    if (new Date(qrBinding.expiresAt).getTime() < Date.now()) {
+      setQrBinding((current) => current ? {
+        ...current,
+        status: "expired",
+        message: "二维码已过期，请重新生成。",
+      } : current);
+      return;
+    }
+
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const response = await fetch(`/api/tiktok/auth/qr/status?state=${encodeURIComponent(qrBinding.state)}`, {
+          cache: "no-store",
+        });
+
+        const data = await response.json().catch(() => null);
+        if (!response.ok) {
+          throw new Error(typeof data?.error === "string" ? data.error : "二维码状态检查失败");
+        }
+
+        if (cancelled) return;
+
+        if (data.status === "completed" || data.success) {
+          setQrBinding((current) => current ? {
+            ...current,
+            status: "completed",
+            message: "绑定成功，正在刷新账号列表。",
+          } : current);
+          toast({
+            title: "账号绑定成功",
+            description: data.name ? `已成功绑定 TikTok 账号: ${data.name}` : "TikTok 账号已绑定",
+          });
+          setShowBindingModal(false);
+          setQrBinding(null);
+          await refreshData({ silent: true });
+          return;
+        }
+
+        if (data.status === "scanned") {
+          setQrBinding((current) => current && current.status !== "scanned" ? {
+            ...current,
+            status: "scanned",
+            message: "已扫码，请在 TikTok APP 中确认授权。",
+          } : current);
+          return;
+        }
+
+        if (data.status === "expired") {
+          setQrBinding((current) => current && current.status !== "expired" ? {
+            ...current,
+            status: "expired",
+            message: "二维码已过期，请重新生成。",
+          } : current);
+          return;
+        }
+
+        if (data.status === "failed" || data.error) {
+          setQrBinding((current) => current ? {
+            ...current,
+            status: "error",
+            message: data.error || "二维码授权失败，请重试。",
+          } : current);
+        }
+      } catch (error) {
+        if (cancelled) return;
+        setQrBinding((current) => current ? {
+          ...current,
+          status: "error",
+          message: error instanceof Error ? error.message : "二维码状态检查失败",
+        } : current);
+      }
+    };
+
+    const timer = window.setInterval(poll, qrBinding.pollIntervalMs || 3000);
+    void poll();
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [qrBinding, refreshData, toast]);
 
   const ungroupedAccounts = useMemo(
     () => accounts.filter(canJoinGroup),
@@ -872,8 +1000,9 @@ export default function TikTokAccountsPage() {
   const selectedGroupExpiringCount = selectedGroup
     ? selectedGroup.accounts.filter(isAccountExpiringSoon).length
     : 0;
+  const bindingActionLocked = connecting || qrBinding?.status === "loading" || qrBinding?.status === "ready" || qrBinding?.status === "scanned";
 
-  const handleConnect = async () => {
+  const handleWebConnect = async () => {
     if (IS_LOCAL_PREVIEW_MODE) {
       setShowBindingModal(false);
       toast({
@@ -891,7 +1020,7 @@ export default function TikTokAccountsPage() {
       });
 
       if (!response.ok) {
-        throw new Error(await readApiError(response, "无法生成授权链接"));
+        throw new Error(await readBindingApiError(response, "无法生成授权链接"));
       }
 
       const data = await response.json();
@@ -922,8 +1051,84 @@ export default function TikTokAccountsPage() {
       toast({
         variant: "destructive",
         title: "连接失败",
-        description: "无法生成授权链接，请稍后重试",
+        description: error instanceof Error ? error.message : "无法生成授权链接，请稍后重试",
       });
+      setConnecting(false);
+    }
+  };
+
+  const handleQrConnect = async () => {
+    if (IS_LOCAL_PREVIEW_MODE) {
+      setShowBindingModal(false);
+      toast({
+        title: "本地预览模式",
+        description: "当前已内置测试账号，真实 TikTok 二维码授权需在测试或生产环境验证。",
+      });
+      return;
+    }
+
+    setConnecting(true);
+    setQrBinding({
+      state: "",
+      qrImageDataUrl: "",
+      expiresAt: new Date(Date.now() + 2 * 60 * 1000).toISOString(),
+      pollIntervalMs: 3000,
+      status: "loading",
+      message: "正在生成二维码...",
+    });
+
+    try {
+      const response = await fetch("/api/tiktok/auth/qr/start", {
+        method: "POST",
+      });
+
+      if (!response.ok) {
+        throw new Error(await readBindingApiError(response, "无法生成二维码"));
+      }
+
+      const data = await response.json();
+      if (data.demo) {
+        setShowBindingModal(false);
+        setQrBinding(null);
+        toast({
+          title: "本地预览模式",
+          description: data.message || "当前已内置测试账号，真实 TikTok 二维码授权需在测试或生产环境验证。",
+        });
+        return;
+      }
+
+      if (!data.state || !data.qrImageDataUrl) {
+        throw new Error("二维码生成失败，请稍后重试");
+      }
+
+      setQrBinding({
+        state: data.state,
+        qrImageDataUrl: data.qrImageDataUrl,
+        expiresAt: data.expiresAt,
+        pollIntervalMs: Number(data.pollIntervalMs || 3000),
+        status: "ready",
+        message: "请使用 TikTok APP 扫描二维码并确认授权。",
+      });
+    } catch (error) {
+      console.error("Error starting QR binding:", error);
+      setQrBinding((current) => current ? {
+        ...current,
+        status: "error",
+        message: error instanceof Error ? error.message : "无法生成二维码，请稍后重试",
+      } : {
+        state: "",
+        qrImageDataUrl: "",
+        expiresAt: new Date().toISOString(),
+        pollIntervalMs: 3000,
+        status: "error",
+        message: error instanceof Error ? error.message : "无法生成二维码，请稍后重试",
+      });
+      toast({
+        variant: "destructive",
+        title: "二维码生成失败",
+        description: error instanceof Error ? error.message : "无法生成二维码，请稍后重试",
+      });
+    } finally {
       setConnecting(false);
     }
   };
@@ -2061,7 +2266,15 @@ export default function TikTokAccountsPage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={showBindingModal} onOpenChange={setShowBindingModal}>
+      <Dialog
+        open={showBindingModal}
+        onOpenChange={(open) => {
+          setShowBindingModal(open);
+          if (!open) {
+            setQrBinding(null);
+          }
+        }}
+      >
         <DialogContent className="overflow-hidden border-white/[0.08] bg-neutral-950/95 p-0 shadow-[0_32px_64px_rgba(0,0,0,0.8)] backdrop-blur-2xl sm:max-w-[460px]">
           <div className="px-6 pb-4 pt-6">
             <DialogTitle className="flex items-center gap-3 text-[22px] font-bold tracking-tight text-white">
@@ -2074,12 +2287,44 @@ export default function TikTokAccountsPage() {
           </div>
 
           <div className="space-y-3 px-5 pb-5">
+            {qrBinding && (
+              <div className="rounded-xl border border-cyan-400/20 bg-cyan-400/[0.04] p-4 text-center">
+                {qrBinding.qrImageDataUrl && (
+                  <div className="mx-auto mb-3 flex h-[212px] w-[212px] items-center justify-center rounded-lg bg-white p-2">
+                    <img src={qrBinding.qrImageDataUrl} alt="TikTok QR authorization code" className="h-full w-full" />
+                  </div>
+                )}
+                {!qrBinding.qrImageDataUrl && qrBinding.status === "loading" && (
+                  <div className="mx-auto mb-3 flex h-[212px] w-[212px] items-center justify-center rounded-lg border border-white/[0.08] bg-white/[0.03]">
+                    <Loader2 className="h-6 w-6 animate-spin text-cyan-300" />
+                  </div>
+                )}
+                {!qrBinding.qrImageDataUrl && qrBinding.status !== "loading" && (
+                  <div className="mx-auto mb-3 flex h-[212px] w-[212px] items-center justify-center rounded-lg border border-amber-300/20 bg-amber-300/[0.04]">
+                    <AlertTriangle className="h-7 w-7 text-amber-300" />
+                  </div>
+                )}
+                <div className="text-sm font-semibold text-white">
+                  {getQrBindingTitle(qrBinding.status)}
+                </div>
+                <p className={cn(
+                  "mt-1 text-xs leading-relaxed",
+                  qrBinding.status === "error" || qrBinding.status === "expired" ? "text-amber-300" : "text-white/45"
+                )}>
+                  {qrBinding.message || "请使用 TikTok APP 扫描二维码。"}
+                </p>
+                {(qrBinding.status === "expired" || qrBinding.status === "error") && (
+                  <Button type="button" variant="ghost" className="mt-3 h-8 text-xs text-cyan-200 hover:bg-cyan-400/10 hover:text-cyan-100" onClick={handleQrConnect} disabled={connecting}>
+                    {connecting && <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />}
+                    重新生成
+                  </Button>
+                )}
+              </div>
+            )}
+
             <button
-              onClick={() => {
-                setShowBindingModal(false);
-                handleConnect();
-              }}
-              disabled={connecting}
+              onClick={handleQrConnect}
+              disabled={bindingActionLocked}
               className="group relative flex w-full items-start gap-4 overflow-hidden rounded-xl border border-cyan-500/25 bg-gradient-to-br from-cyan-500/[0.06] via-transparent to-pink-500/[0.04] p-4 text-left transition-all duration-300 hover:border-cyan-400/40 hover:from-cyan-500/[0.12] hover:to-pink-500/[0.08]"
               style={{ boxShadow: "0 0 1px rgba(0,242,234,0.3), inset 0 1px 0 rgba(255,255,255,0.04)" }}
             >
@@ -2111,9 +2356,9 @@ export default function TikTokAccountsPage() {
             <button
               onClick={() => {
                 setShowBindingModal(false);
-                handleConnect();
+                handleWebConnect();
               }}
-              disabled={connecting}
+              disabled={bindingActionLocked}
               className="group relative flex w-full items-start gap-4 rounded-xl border border-white/[0.06] bg-white/[0.02] p-4 text-left transition-all duration-300 hover:border-white/[0.12] hover:bg-white/[0.05]"
             >
               <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-white/[0.08] bg-gradient-to-br from-white/[0.06] via-white/[0.03] to-transparent transition-transform duration-300 group-hover:scale-105">

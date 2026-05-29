@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
+
 import { createClient } from '@/lib/supabase/server'
-import { getCreatorInfo } from '@/lib/tiktok/content-posting'
-import { refreshAccessToken } from '@/lib/tiktok/oauth'
+import { getCreatorInfo, type CreatorInfo } from '@/lib/tiktok/content-posting'
+import { getValidTikTokAccessToken } from '@/lib/tiktok/token-manager'
+import type { Json } from '@/types/database'
+
+const CREATOR_INFO_CACHE_MS = 10 * 60 * 1000
 
 /**
  * GET /api/publish/creator-info?account_id=xxx
@@ -35,7 +39,7 @@ export async function GET(request: NextRequest) {
         // 查询账号信息（验证归属并获取 token）
         const { data: account, error: accountError } = await supabase
             .from('tiktok_accounts')
-            .select('id, access_token, refresh_token, display_name, avatar_url')
+            .select('id, access_token, refresh_token, access_token_expires_at, display_name, avatar_url, creator_info_cache, creator_info_cached_at')
             .eq('id', accountId)
             .eq('user_id', user.id)
             .single()
@@ -44,51 +48,57 @@ export async function GET(request: NextRequest) {
             return NextResponse.json({ error: '账号不存在或无权访问' }, { status: 404 })
         }
 
-        // 刷新 access_token（token_expires_at 存的是 refresh_token 90天寿命，无法判断 access_token 是否有效）
+        const cachedAt = account.creator_info_cached_at ? new Date(account.creator_info_cached_at).getTime() : 0
+        if (
+            account.creator_info_cache
+            && cachedAt > Date.now() - CREATOR_INFO_CACHE_MS
+        ) {
+            return NextResponse.json({
+                success: true,
+                data: toCreatorInfoPayload(account.creator_info_cache as unknown as CreatorInfo),
+                cached: true,
+            })
+        }
+
         let accessToken = account.access_token
-        if (account.refresh_token) {
-            try {
-                const tokenResponse = await refreshAccessToken(account.refresh_token)
-                accessToken = tokenResponse.access_token
-                // 写回数据库
-                await supabase
-                    .from('tiktok_accounts')
-                    .update({
-                        access_token: tokenResponse.access_token,
-                        refresh_token: tokenResponse.refresh_token,
-                        updated_at: new Date().toISOString(),
-                    })
-                    .eq('id', accountId)
-            } catch (refreshError) {
-                console.error('[CreatorInfo] Token refresh failed:', refreshError)
-                return NextResponse.json({ error: '账号授权已过期，请重新授权', error_type: 'auth_expired' }, { status: 401 })
-            }
+        try {
+            accessToken = await getValidTikTokAccessToken(supabase, account)
+        } catch (refreshError) {
+            console.error('[CreatorInfo] Token refresh failed:', refreshError)
+            return NextResponse.json({ error: '账号授权已过期，请重新授权', error_type: 'auth_expired' }, { status: 401 })
         }
 
         // 调用 TikTok creator_info API
         const creatorInfo = await getCreatorInfo(accessToken)
+        await supabase
+            .from('tiktok_accounts')
+            .update({
+                creator_info_cache: creatorInfo as unknown as Json,
+                creator_info_cached_at: new Date().toISOString(),
+            })
+            .eq('id', accountId)
 
         return NextResponse.json({
             success: true,
-            data: {
-                // 创作者信息
-                avatar_url: creatorInfo.creator_avatar_url,
-                username: creatorInfo.creator_username,
-                nickname: creatorInfo.creator_nickname,
-                // 可用隐私级别（动态，不同账号可能不同）
-                privacy_level_options: creatorInfo.privacy_level_options,
-                // 互动设置（创作者账号级别的禁用状态）
-                comment_disabled: creatorInfo.comment_disabled,
-                duet_disabled: creatorInfo.duet_disabled,
-                stitch_disabled: creatorInfo.stitch_disabled,
-                // 视频限制
-                max_video_post_duration_sec: creatorInfo.max_video_post_duration_sec,
-            }
+            data: toCreatorInfoPayload(creatorInfo),
         })
 
     } catch (error) {
         console.error('[CreatorInfo] Error:', error)
         const message = error instanceof Error ? error.message : '获取创作者信息失败'
         return NextResponse.json({ error: message, error_type: 'api_error' }, { status: 500 })
+    }
+}
+
+function toCreatorInfoPayload(creatorInfo: CreatorInfo) {
+    return {
+        avatar_url: creatorInfo.creator_avatar_url,
+        username: creatorInfo.creator_username,
+        nickname: creatorInfo.creator_nickname,
+        privacy_level_options: creatorInfo.privacy_level_options,
+        comment_disabled: creatorInfo.comment_disabled,
+        duet_disabled: creatorInfo.duet_disabled,
+        stitch_disabled: creatorInfo.stitch_disabled,
+        max_video_post_duration_sec: creatorInfo.max_video_post_duration_sec,
     }
 }

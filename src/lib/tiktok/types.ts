@@ -134,7 +134,9 @@ export interface TikTokAccount {
     video_count: number;
     access_token: string;
     refresh_token: string;
+    access_token_expires_at?: Date | null;
     token_expires_at: Date;
+    refresh_token_expires_at?: Date | null;
     scopes: string[];
     account_type: 'normal' | 'shop_creator' | 'business';
     status: 'active' | 'expired' | 'revoked';

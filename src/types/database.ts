@@ -613,8 +613,11 @@ export interface Database {
           video_count: number;
           access_token: string;
           refresh_token: string;
+          access_token_expires_at: string | null;
           token_expires_at: string | null;
           refresh_token_expires_at: string | null;
+          creator_info_cache: Json | null;
+          creator_info_cached_at: string | null;
           scopes: Json;
           account_type: string;
           status: string;
@@ -636,8 +639,11 @@ export interface Database {
           video_count?: number;
           access_token: string;
           refresh_token: string;
+          access_token_expires_at?: string | null;
           token_expires_at?: string | null;
           refresh_token_expires_at?: string | null;
+          creator_info_cache?: Json | null;
+          creator_info_cached_at?: string | null;
           scopes?: Json;
           account_type?: string;
           status?: string;
@@ -655,8 +661,11 @@ export interface Database {
           video_count?: number;
           access_token?: string;
           refresh_token?: string;
+          access_token_expires_at?: string | null;
           token_expires_at?: string | null;
           refresh_token_expires_at?: string | null;
+          creator_info_cache?: Json | null;
+          creator_info_cached_at?: string | null;
           scopes?: Json;
           account_type?: string;
           status?: string;
@@ -1090,23 +1099,53 @@ export interface Database {
         Row: {
           id: string;
           state: string;
-          code_verifier: string;
+          code_verifier: string | null;
           user_id: string;
           expires_at: string;
+          flow_type: string;
+          status: string;
+          ip_hash: string | null;
+          user_agent_hash: string | null;
+          client_ticket: string | null;
+          qr_token: string | null;
+          last_checked_at: string | null;
+          completed_at: string | null;
+          error_code: string | null;
+          error_message: string | null;
           created_at: string;
         };
         Insert: {
           id?: string;
           state: string;
-          code_verifier: string;
+          code_verifier?: string | null;
           user_id: string;
           expires_at: string;
+          flow_type?: string;
+          status?: string;
+          ip_hash?: string | null;
+          user_agent_hash?: string | null;
+          client_ticket?: string | null;
+          qr_token?: string | null;
+          last_checked_at?: string | null;
+          completed_at?: string | null;
+          error_code?: string | null;
+          error_message?: string | null;
         };
         Update: {
           state?: string;
-          code_verifier?: string;
+          code_verifier?: string | null;
           user_id?: string;
           expires_at?: string;
+          flow_type?: string;
+          status?: string;
+          ip_hash?: string | null;
+          user_agent_hash?: string | null;
+          client_ticket?: string | null;
+          qr_token?: string | null;
+          last_checked_at?: string | null;
+          completed_at?: string | null;
+          error_code?: string | null;
+          error_message?: string | null;
         };
         Relationships: [
           {

@@ -1,13 +1,18 @@
 // TikTok OAuth Authorization URL Generator
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 
+import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
+import {
+    buildTikTokAuthCooldownResponse,
+    enforceTikTokAuthCooldown,
+} from '@/lib/tiktok/auth-diagnostics';
 import { isTikTokGroupsDemoMode } from '@/lib/tiktok/demo-account-groups';
 import { buildAuthorizationUrl } from '@/lib/tiktok/oauth';
 
 export const dynamic = 'force-dynamic';
 
-export async function POST() {
+export async function POST(request: NextRequest) {
     try {
         if (isTikTokGroupsDemoMode()) {
             return NextResponse.json({
@@ -23,25 +28,38 @@ export async function POST() {
 
         if (userError || !user) {
             return NextResponse.json(
-                { error: 'Unauthorized - Please login first' },
+                { error: '请先登录后再绑定 TikTok 账号' },
                 { status: 401 }
             );
         }
 
         // Generate OAuth URL with PKCE
         const { authUrl, state, codeVerifier } = buildAuthorizationUrl(user.id);
+        const adminSupabase = createAdminClient();
+        const cooldown = await enforceTikTokAuthCooldown(adminSupabase, user.id, request, 'web');
+        if (!cooldown.allowed) {
+            const payload = buildTikTokAuthCooldownResponse(cooldown);
+            return NextResponse.json(payload.body, {
+                status: 429,
+                headers: payload.headers,
+            });
+        }
 
         // Store the state and code verifier in a temporary session
         // Using Supabase to store the pending auth state
         const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes expiry
 
-        const { error: insertError } = await supabase
+        const { error: insertError } = await adminSupabase
             .from('tiktok_auth_states')
             .insert({
                 state,
                 code_verifier: codeVerifier,
                 user_id: user.id,
                 expires_at: expiresAt.toISOString(),
+                flow_type: 'web',
+                status: 'pending',
+                ip_hash: cooldown.diagnostics.ipHash,
+                user_agent_hash: cooldown.diagnostics.userAgentHash,
             });
 
         if (insertError) {

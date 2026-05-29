@@ -1,8 +1,9 @@
 // TikTok OAuth 2.0 Implementation
 
 import crypto from 'crypto';
-import { TikTokTokenResponse, TikTokRefreshTokenResponse, TikTokUserInfo, TikTokUserInfoResponse } from './types';
+
 import { isTikTokMockCredential, isTikTokTestMockEnabled } from './test-mock';
+import { TikTokTokenResponse, TikTokRefreshTokenResponse, TikTokUserInfo, TikTokUserInfoResponse } from './types';
 
 // TikTok API endpoints
 const TIKTOK_AUTH_URL = 'https://www.tiktok.com/v2/auth/authorize/';
@@ -79,9 +80,20 @@ export function buildAuthorizationUrl(userId: string): {
 // Exchange authorization code for access token
 export async function exchangeCodeForToken(
     code: string,
-    codeVerifier: string
+    codeVerifier?: string | null
 ): Promise<TikTokTokenResponse> {
     const config = getTikTokOAuthConfig();
+    const body = new URLSearchParams({
+        client_key: config.clientKey,
+        client_secret: config.clientSecret,
+        code: code,
+        grant_type: 'authorization_code',
+        redirect_uri: config.redirectUri,
+    });
+
+    if (codeVerifier) {
+        body.set('code_verifier', codeVerifier);
+    }
 
     const response = await fetch(TIKTOK_TOKEN_URL, {
         method: 'POST',
@@ -89,14 +101,7 @@ export async function exchangeCodeForToken(
             'Content-Type': 'application/x-www-form-urlencoded',
             'Cache-Control': 'no-cache',
         },
-        body: new URLSearchParams({
-            client_key: config.clientKey,
-            client_secret: config.clientSecret,
-            code: code,
-            grant_type: 'authorization_code',
-            redirect_uri: config.redirectUri,
-            code_verifier: codeVerifier,
-        }),
+        body,
     });
 
     if (!response.ok) {
@@ -105,9 +110,6 @@ export async function exchangeCodeForToken(
     }
 
     const data = await response.json();
-
-    // Debug: log full response for troubleshooting
-    console.log('[TikTok OAuth] Token exchange response:', JSON.stringify(data, null, 2));
 
     // Handle v2 API error format: { error: "error_code", error_description: "..." }
     if (typeof data.error === 'string') {

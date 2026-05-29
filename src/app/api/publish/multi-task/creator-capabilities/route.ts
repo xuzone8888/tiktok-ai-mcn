@@ -145,7 +145,7 @@ export async function POST(request: NextRequest) {
 
         const { data: accountRows, error: accountsError } = await supabase
             .from('tiktok_accounts')
-            .select('id, display_name, username, avatar_url, status, token_expires_at, access_token, refresh_token')
+            .select('id, display_name, username, avatar_url, status, token_expires_at, access_token_expires_at, access_token, refresh_token')
             .eq('user_id', user.id)
             .eq('group_id', groupId)
             .eq('account_type', 'normal')
@@ -168,6 +168,8 @@ export async function POST(request: NextRequest) {
                     .update({
                         access_token: token.access_token,
                         refresh_token: token.refresh_token,
+                        access_token_expires_at: new Date(Date.now() + token.expires_in * 1000).toISOString(),
+                        token_expires_at: new Date(Date.now() + token.refresh_expires_in * 1000).toISOString(),
                         updated_at: new Date().toISOString(),
                     })
                     .eq('id', accountId)

@@ -1,11 +1,9 @@
 // TikTok OAuth Callback Handler
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
-import {
-    exchangeCodeForToken,
-    getUserInfo,
-    calculateTokenExpiration
-} from '@/lib/tiktok/oauth';
+
+import { createAdminClient } from '@/lib/supabase/admin';
+import { saveTikTokAccountFromToken } from '@/lib/tiktok/account-binding';
+import { exchangeCodeForToken } from '@/lib/tiktok/oauth';
 
 export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams;
@@ -15,29 +13,17 @@ export async function GET(request: NextRequest) {
     const errorDescription = searchParams.get('error_description');
 
     // Base URL for redirects
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL;
-    if (!baseUrl) {
-        console.error('CRITICAL: NEXT_PUBLIC_APP_URL environment variable is not set');
-        throw new Error('NEXT_PUBLIC_APP_URL environment variable is required');
-    }
-
-    // Handle OAuth errors
-    if (error) {
-        console.error('TikTok OAuth error:', error, errorDescription);
-        return NextResponse.redirect(
-            `${baseUrl}/publish/accounts?error=${encodeURIComponent(errorDescription || error)}`
-        );
-    }
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin;
 
     // Validate required parameters
-    if (!code || !state) {
+    if ((!code && !error) || !state) {
         return NextResponse.redirect(
             `${baseUrl}/publish/accounts?error=${encodeURIComponent('Missing authorization code or state')}`
         );
     }
 
     try {
-        const supabase = await createClient();
+        const supabase = createAdminClient();
 
         // Retrieve and validate the auth state
         const { data: authState, error: stateError } = await supabase
@@ -52,88 +38,58 @@ export async function GET(request: NextRequest) {
             );
         }
 
+        // Handle OAuth errors after state is known so diagnostics are retained.
+        if (error) {
+            await supabase
+                .from('tiktok_auth_states')
+                .update({
+                    status: 'failed',
+                    error_code: error,
+                    error_message: errorDescription || error,
+                    code_verifier: null,
+                    completed_at: new Date().toISOString(),
+                })
+                .eq('state', state);
+
+            return NextResponse.redirect(
+                `${baseUrl}/publish/accounts?error=${encodeURIComponent(errorDescription || error)}`
+            );
+        }
+
         // Check if state is expired
         if (new Date(authState.expires_at) < new Date()) {
-            // Delete expired state
-            await supabase.from('tiktok_auth_states').delete().eq('state', state);
+            await supabase
+                .from('tiktok_auth_states')
+                .update({
+                    status: 'expired',
+                    error_code: 'expired',
+                    error_message: 'Authorization session expired.',
+                    code_verifier: null,
+                })
+                .eq('state', state);
+
             return NextResponse.redirect(
                 `${baseUrl}/publish/accounts?error=${encodeURIComponent('Authorization session expired. Please try again.')}`
             );
         }
 
+        if (!code) {
+            throw new Error('Missing authorization code.');
+        }
+
         // Exchange code for tokens
         const tokenResponse = await exchangeCodeForToken(code, authState.code_verifier);
 
-        // Get user info from TikTok
-        const userInfo = await getUserInfo(tokenResponse.access_token);
+        const { userInfo } = await saveTikTokAccountFromToken(supabase, authState.user_id, tokenResponse);
 
-        // Calculate token expiration
-        // Use refresh_expires_in (≈90 days) for display — this is the real auth lifespan
-        // expires_in is just the access_token TTL (≈24h) which auto-refreshes
-        const tokenExpiresAt = calculateTokenExpiration(tokenResponse.refresh_expires_in);
-
-        // Check if this TikTok account is already linked
-        const { data: existingAccount } = await supabase
-            .from('tiktok_accounts')
-            .select('id')
-            .eq('user_id', authState.user_id)
-            .eq('open_id', userInfo.open_id)
-            .single();
-
-        if (existingAccount) {
-            // Update existing account
-            const { error: updateError } = await supabase
-                .from('tiktok_accounts')
-                .update({
-                    display_name: userInfo.display_name,
-                    username: userInfo.username,  // Store actual @handle
-                    avatar_url: userInfo.avatar_url,
-                    follower_count: userInfo.follower_count || 0,
-                    following_count: userInfo.following_count || 0,
-                    likes_count: userInfo.likes_count || 0,
-                    video_count: userInfo.video_count || 0,
-                    access_token: tokenResponse.access_token,
-                    refresh_token: tokenResponse.refresh_token,
-                    token_expires_at: tokenExpiresAt.toISOString(),
-                    scopes: tokenResponse.scope.split(','),
-                    status: 'active',
-                    updated_at: new Date().toISOString(),
-                })
-                .eq('id', existingAccount.id);
-
-            if (updateError) {
-                throw new Error(`Failed to update account: ${updateError.message}`);
-            }
-        } else {
-            // Create new account
-            const { error: insertError } = await supabase
-                .from('tiktok_accounts')
-                .insert({
-                    user_id: authState.user_id,
-                    open_id: userInfo.open_id,
-                    union_id: userInfo.union_id,
-                    display_name: userInfo.display_name,
-                    username: userInfo.username,  // Store actual @handle
-                    avatar_url: userInfo.avatar_url,
-                    follower_count: userInfo.follower_count || 0,
-                    following_count: userInfo.following_count || 0,
-                    likes_count: userInfo.likes_count || 0,
-                    video_count: userInfo.video_count || 0,
-                    access_token: tokenResponse.access_token,
-                    refresh_token: tokenResponse.refresh_token,
-                    token_expires_at: tokenExpiresAt.toISOString(),
-                    scopes: tokenResponse.scope.split(','),
-                    account_type: 'normal',
-                    status: 'active',
-                });
-
-            if (insertError) {
-                throw new Error(`Failed to save account: ${insertError.message}`);
-            }
-        }
-
-        // Clean up the auth state
-        await supabase.from('tiktok_auth_states').delete().eq('state', state);
+        await supabase
+            .from('tiktok_auth_states')
+            .update({
+                status: 'completed',
+                code_verifier: null,
+                completed_at: new Date().toISOString(),
+            })
+            .eq('state', state);
 
         // Redirect to accounts page with success message
         return NextResponse.redirect(
@@ -141,6 +97,23 @@ export async function GET(request: NextRequest) {
         );
     } catch (err) {
         console.error('TikTok callback error:', err);
+        if (state) {
+            try {
+                await createAdminClient()
+                    .from('tiktok_auth_states')
+                    .update({
+                        status: 'failed',
+                        error_code: 'callback_failed',
+                        error_message: err instanceof Error ? err.message : 'Authorization failed',
+                        code_verifier: null,
+                        completed_at: new Date().toISOString(),
+                    })
+                    .eq('state', state);
+            } catch (updateError) {
+                console.warn('Failed to persist TikTok callback error:', updateError);
+            }
+        }
+
         return NextResponse.redirect(
             `${baseUrl}/publish/accounts?error=${encodeURIComponent(err instanceof Error ? err.message : 'Authorization failed')}`
         );

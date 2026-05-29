@@ -62,6 +62,7 @@ export async function POST(
         const userInfo = await getUserInfo(tokenResponse.access_token);
 
         // Use refresh_expires_in (≈90 days) — the real auth lifespan users see
+        const accessTokenExpiresAt = calculateTokenExpiration(tokenResponse.expires_in);
         const tokenExpiresAt = calculateTokenExpiration(tokenResponse.refresh_expires_in);
 
         // Update the account
@@ -70,7 +71,10 @@ export async function POST(
             .update({
                 access_token: tokenResponse.access_token,
                 refresh_token: tokenResponse.refresh_token,
+                access_token_expires_at: accessTokenExpiresAt.toISOString(),
                 token_expires_at: tokenExpiresAt.toISOString(),
+                creator_info_cache: null,
+                creator_info_cached_at: null,
                 scopes: tokenResponse.scope.split(','),
                 display_name: userInfo.display_name,
                 avatar_url: userInfo.avatar_url,
