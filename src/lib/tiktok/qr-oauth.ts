@@ -101,6 +101,16 @@ export async function checkTikTokQrCode(token: string): Promise<TikTokQrCodeStat
 
 export function extractAuthorizationCodeFromQrStatus(status: TikTokQrCodeStatus) {
     if (status.code) {
+        try {
+            const url = new URL(status.code);
+            const code = url.searchParams.get('code');
+            if (code) {
+                return code;
+            }
+        } catch {
+            // TikTok may return either a raw code or a callback URL in this field.
+        }
+
         return status.code;
     }
 
