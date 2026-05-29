@@ -80,15 +80,17 @@ export function buildAuthorizationUrl(userId: string): {
 // Exchange authorization code for access token
 export async function exchangeCodeForToken(
     code: string,
-    codeVerifier?: string | null
+    codeVerifier?: string | null,
+    redirectUriOverride?: string | null
 ): Promise<TikTokTokenResponse> {
     const config = getTikTokOAuthConfig();
+    const redirectUri = redirectUriOverride || config.redirectUri;
     const body = new URLSearchParams({
         client_key: config.clientKey,
         client_secret: config.clientSecret,
         code: code,
         grant_type: 'authorization_code',
-        redirect_uri: config.redirectUri,
+        redirect_uri: redirectUri,
     });
 
     if (codeVerifier) {

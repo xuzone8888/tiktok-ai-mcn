@@ -4,7 +4,11 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
 import { saveTikTokAccountFromToken } from '@/lib/tiktok/account-binding';
 import { exchangeCodeForToken } from '@/lib/tiktok/oauth';
-import { checkTikTokQrCode, extractAuthorizationCodeFromQrStatus } from '@/lib/tiktok/qr-oauth';
+import {
+    checkTikTokQrCode,
+    extractAuthorizationCodeFromQrStatus,
+    extractRedirectUriFromQrStatus,
+} from '@/lib/tiktok/qr-oauth';
 
 export const dynamic = 'force-dynamic';
 
@@ -110,7 +114,8 @@ export async function GET(request: NextRequest) {
             throw new Error('TikTok QR authorization did not return an authorization code.');
         }
 
-        const tokenResponse = await exchangeCodeForToken(code);
+        const qrRedirectUri = extractRedirectUriFromQrStatus(status);
+        const tokenResponse = await exchangeCodeForToken(code, null, qrRedirectUri);
         const { userInfo } = await saveTikTokAccountFromToken(adminSupabase, user.id, tokenResponse);
 
         await adminSupabase

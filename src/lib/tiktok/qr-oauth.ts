@@ -125,3 +125,20 @@ export function extractAuthorizationCodeFromQrStatus(status: TikTokQrCodeStatus)
         return null;
     }
 }
+
+export function extractRedirectUriFromQrStatus(status: TikTokQrCodeStatus) {
+    const rawRedirectUri = status.redirect_uri || status.code;
+    if (!rawRedirectUri) {
+        return null;
+    }
+
+    try {
+        const url = new URL(rawRedirectUri);
+        for (const param of ['code', 'state', 'error', 'error_description', 'log_id']) {
+            url.searchParams.delete(param);
+        }
+        return url.toString();
+    } catch {
+        return null;
+    }
+}
