@@ -112,10 +112,10 @@ function getNavGroups(lang: string): NavGroup[] {
       header: t ? "Image Creation" : "图片制作",
       items: [
         {
-          title: t ? "Quick Image" : "快速生图",
+          title: t ? "Single Image" : "单图生成",
           href: "/quick-gen",
           icon: Zap,
-          description: t ? "AI image generation" : "AI 快速生成图片",
+          description: t ? "Single image generation" : "AI 单图生成",
         },
         {
           title: t ? "Batch Images" : "多图生成",

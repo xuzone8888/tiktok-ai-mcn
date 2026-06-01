@@ -85,6 +85,7 @@ import {
   type OutputMode,
   type SourceType,
   type ProcessingType,
+  type ImageProcessAction,
   type VideoModel,
   type VideoAspectRatio,
   type ImageAspectRatio,
@@ -96,6 +97,7 @@ import {
   type NanoTier,
   VIDEO_MODEL_PRICING,
   IMAGE_MODEL_CONFIG,
+  GEMINI_ACTION_PRICING,
   IMAGE_ASPECT_OPTIONS,
   IMAGE_RESOLUTION_OPTIONS,
   calculateVideoCost,
@@ -142,6 +144,7 @@ export default function QuickGeneratorPage() {
   // ================================================================
   const [imageNanoTier, setImageNanoTier] = useState<NanoTier>("fast");  // @deprecated 保留兼容
   const [imageModel, setImageModel] = useState<ImageModel>("gemini-1k");  // 默认 1K 快速
+  const [imageAction, setImageAction] = useState<ImageProcessAction>("generate");
   const apiHealth = useApiHealth();
   const [imageAspectRatio, setImageAspectRatio] = useState<ImageAspectRatio>("auto");
   const [imageResolution, setImageResolution] = useState<ImageResolution>("1k");
@@ -257,6 +260,8 @@ export default function QuickGeneratorPage() {
     }
   }, [outputMode, generateVideoCost, generateImageCost]);
 
+  const isImageActionPhase2 = outputMode === "image" && imageAction !== "generate";
+
   // ================================================================
   // 状态派生
   // ================================================================
@@ -282,6 +287,9 @@ export default function QuickGeneratorPage() {
     // 图片模式：后台任务正在运行时禁用
     if (outputMode === "image" && isQuickGenImageRunning) return false;
 
+    // Phase 1 只做 UI/交互，处理类动作的真实调用交给 Phase 2
+    if (isImageActionPhase2) return false;
+
     // 积分检查 (加载中或积分不足时禁用)
     if (userCredits === null || userCredits < totalCost) return false;
 
@@ -296,7 +304,7 @@ export default function QuickGeneratorPage() {
       const hasImage = imageUploadedFiles.length > 0;
       return hasPrompt || hasImage;
     }
-  }, [canvasState, userCredits, totalCost, outputMode, prompt, hasBaseImage, imageUploadedFiles, isQuickGenRunning, isQuickGenImageRunning]);
+  }, [canvasState, userCredits, totalCost, outputMode, prompt, hasBaseImage, imageUploadedFiles, isImageActionPhase2, isQuickGenRunning, isQuickGenImageRunning]);
 
   // 获取已选模特信息 (从所有模特中查找)
   const selectedModel = useMemo(() => {
@@ -1289,7 +1297,7 @@ export default function QuickGeneratorPage() {
           <div>
             <h1 className="text-3xl font-bold tracking-tight flex items-center gap-3">
               <div className="h-8 w-1.5 rounded-full bg-gradient-to-b from-mermaid-lime to-mermaid-cyan shadow-[0_0_10px_rgba(0,242,234,0.5)]" />
-              <span className="text-white drop-shadow-lg">{t ? "Quick Gen" : "快速生图"}</span>
+              <span className="text-white drop-shadow-lg">{t ? "Single Image" : "单图生成"}</span>
             </h1>
           </div>
           <div className="flex items-center gap-2">
@@ -1586,11 +1594,33 @@ export default function QuickGeneratorPage() {
             <CardHeader className="pb-4 pt-3 px-4">
               <CardTitle className="text-sm flex items-center gap-2">
                 <Sparkles className="h-4 w-4 text-mermaid-pink" />
-                {t ? "Image Generation Settings" : "图片生成设置"}
+                {t ? "Single Image Settings" : "单图生成设置"}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-6 px-4 pb-4">
+              {/* 处理模式 */}
+              <div>
+                <Label className="text-xs text-muted-foreground mb-1.5 block">{t ? "Process Mode" : "处理模式"}</Label>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {(Object.entries(GEMINI_ACTION_PRICING) as [ImageProcessAction, typeof GEMINI_ACTION_PRICING[ImageProcessAction]][]).map(([key, action]) => (
+                    <Button
+                      key={key}
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setImageAction(key)}
+                      className={cn("h-9 text-xs px-2", imageAction === key ? "bg-mermaid-cyan/20 border-mermaid-cyan/50 text-mermaid-cyan" : "btn-subtle")}
+                    >
+                      {key === "generate" && <Wand2 className="h-3.5 w-3.5 mr-1" />}
+                      {key === "upscale" && <ZoomIn className="h-3.5 w-3.5 mr-1" />}
+                      {key === "nine_grid" && <Grid3X3 className="h-3.5 w-3.5 mr-1" />}
+                      {key === "generate" ? "AI生成" : action.label}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+
               {/* 引用角色 — 薄行按钮 */}
+              {imageAction === "generate" && (
               <div>
                 <Label className="text-xs text-muted-foreground mb-1.5 block flex items-center gap-1.5">
                   <User className="h-3.5 w-3.5 text-mermaid-pink" />
@@ -1636,13 +1666,18 @@ export default function QuickGeneratorPage() {
                   />
                 )}
               </div>
+              )}
 
               {/* 参考图片 — 完整 4 列 */}
               <div>
                 <Label className="text-xs text-muted-foreground mb-1.5 block flex items-center gap-1.5">
                   <FileImage className="h-3.5 w-3.5 text-purple-400" />
                   <span className="font-medium">{t ? "Reference Images" : "参考图片"}</span>
-                  <span className="text-muted-foreground ml-1">{t ? "(optional, up to 4)" : "(可选，最多4张)"}</span>
+                  <span className="text-muted-foreground ml-1">
+                    {imageAction === "generate"
+                      ? (t ? "(optional, up to 4)" : "(可选，最多4张)")
+                      : (t ? "(required, up to 4)" : "(必填，最多4张)")}
+                  </span>
                 </Label>
                 <div className="grid grid-cols-4 gap-2">
                   {imageUploadedFiles.map((file, index) => (
@@ -1705,6 +1740,7 @@ export default function QuickGeneratorPage() {
               </div>
 
               {/* 提示词 Prompt — autoFocus */}
+              {imageAction === "generate" ? (
               <div>
                 <Label className="text-xs text-muted-foreground mb-1.5 block flex items-center gap-1.5">
                   <Wand2 className="h-3.5 w-3.5 text-amber-400" />
@@ -1728,11 +1764,24 @@ export default function QuickGeneratorPage() {
                   </Button>
                 </div>
               </div>
+              ) : (
+              <div className="flex items-center gap-3 p-3 rounded-xl bg-[#0B0C10]/40 border border-white/10 border-l-4 border-l-mermaid-cyan/50">
+                <Sparkles className="h-5 w-5 text-mermaid-cyan" />
+                <div>
+                  <p className="text-sm font-semibold text-white">{t ? "Prompt not required" : "无需提示词模式"}</p>
+                  <p className="text-xs text-white/40 mt-0.5">
+                    {imageAction === "upscale"
+                      ? (t ? "Enhance sharpness and resolution while preserving the original composition." : "高清放大模式将自动增强分辨率和细节，保留原始构图。")
+                      : (t ? "Create a 3x3 multi-angle product grid from the reference image." : "九宫格模式将去除背景并生成多角度商品展示图。")}
+                  </p>
+                </div>
+              </div>
+              )}
 
               {/* 画质等级 — 横向 3 列 */}
               <div>
                 <Label className="text-xs text-muted-foreground mb-1.5 block">{t ? "Quality" : "画质等级"}</Label>
-                <div className="grid grid-cols-3 gap-1.5">
+                <div className="grid grid-cols-2 gap-1.5">
                   {(Object.entries(IMAGE_MODEL_CONFIG) as [ImageModel, typeof IMAGE_MODEL_CONFIG[ImageModel]][]).map(([key, config]) => {
                     const healthStatus = apiHealth.getModelStatus(key);
                     return (
@@ -1749,7 +1798,9 @@ export default function QuickGeneratorPage() {
                           )} />
                           {config.label}
                         </span>
-                        <span className="text-[10px] opacity-70">{config.credits} pts</span>
+                        <span className="text-[10px] opacity-70">
+                          {imageAction === "generate" ? `${config.credits} pts` : (t ? "Phase 2" : "Phase2")}
+                        </span>
                       </span>
                     </Button>
                     );
@@ -1788,8 +1839,10 @@ export default function QuickGeneratorPage() {
           <div className="flex items-center justify-between mb-2 text-sm">
             <span className="text-muted-foreground">{t ? "Est. cost:" : "预计消耗:"}</span>
             <div className="flex items-center gap-2">
-              <span className="font-bold text-amber-400">{totalCost} {t ? "pts" : "积分"}</span>
-              {(userCredits ?? 0) < totalCost && (
+              <span className="font-bold text-amber-400">
+                {isImageActionPhase2 ? (t ? "Phase 2" : "Phase2 接入") : `${totalCost} ${t ? "pts" : "积分"}`}
+              </span>
+              {!isImageActionPhase2 && (userCredits ?? 0) < totalCost && (
                 <span className="text-xs text-red-400">({t ? "Balance:" : "余额:"} {userCredits ?? 0})</span>
               )}
             </div>
@@ -1817,6 +1870,8 @@ export default function QuickGeneratorPage() {
             <span className="relative z-10 flex items-center justify-center gap-2">
               {canvasState === "generating" || (outputMode === "video" && isQuickGenRunning) || (outputMode === "image" && isQuickGenImageRunning) ? (
                 <><Loader2 className="h-6 w-6 mr-2 animate-spin" />{t ? "Generating... " : "生成中... "}{outputMode === "video" ? (quickGenActiveTask?.progress || generatingProgress) : (quickGenImageTask?.progress || generatingProgress)}%</>
+              ) : isImageActionPhase2 ? (
+                <><Play className="h-6 w-6 mr-2 fill-white/30" />{t ? "Phase 2 Integration Pending" : "Phase2 待接入"}</>
               ) : (
                 <><Play className={cn("h-6 w-6 mr-2", canGenerate ? "fill-black" : "fill-white/30")} />{t ? `Generate ${outputMode === "video" ? "Video" : "Image"}` : `生成 ${outputMode === "video" ? "视频" : "图片"}`}</>
               )}
@@ -1825,7 +1880,9 @@ export default function QuickGeneratorPage() {
           {/* 显示禁用原因 */}
           {!canGenerate && canvasState !== "generating" && !(outputMode === "video" && isQuickGenRunning) && !(outputMode === "image" && isQuickGenImageRunning) && (
             <p className="text-xs text-center mt-2">
-              {!userId ? (
+              {isImageActionPhase2 ? (
+                <span className="text-amber-400">{t ? "This option will be connected in Phase 2" : "该选项将在 Phase2 接入真实生成"}</span>
+              ) : !userId ? (
                 <a href="/auth/login" className="text-mermaid-cyan hover:underline">
                   🔐 请先登录以使用生成功能
                 </a>
@@ -2099,7 +2156,7 @@ export default function QuickGeneratorPage() {
               {outputMode === "image" && (
                 <div className="absolute top-3 left-3 flex gap-1.5">
                   <span className="bg-black/70 backdrop-blur-sm px-2.5 py-1 rounded-full text-xs font-bold text-mermaid-cyan border border-mermaid-cyan/30">
-                    {imageModel === "gemini-1k" ? "1K" : imageModel === "gemini-2k" ? "2K" : "4K"}
+                    {IMAGE_MODEL_CONFIG[imageModel]?.label || imageModel}
                   </span>
                   {imageAspectRatio && imageAspectRatio !== "auto" && (
                     <span className="bg-black/70 backdrop-blur-sm px-2.5 py-1 rounded-full text-xs font-medium text-white/70">

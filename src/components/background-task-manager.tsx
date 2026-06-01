@@ -1047,7 +1047,7 @@ function useQuickGenImageTaskExecutor() {
               creditsDeducted: true,
             });
             toast({
-              title: "🎉 快速图片生成完成",
+              title: "🎉 单图生成完成",
               description: (
                 <a href="/quick-gen" className="text-violet-400 hover:underline flex items-center gap-1">
                   点击查看结果 <ExternalLink className="h-3 w-3" />
@@ -1090,7 +1090,7 @@ function useQuickGenImageTaskExecutor() {
                 progress: 100, resultUrl: statusData.data.imageUrl, completedAt: new Date().toISOString()
               });
               toast({
-                title: "🎉 快速图片生成完成",
+                title: "🎉 单图生成完成",
                 description: (
                   <a href="/quick-gen" className="text-violet-400 hover:underline flex items-center gap-1">
                     点击查看结果 <ExternalLink className="h-3 w-3" />
@@ -1109,7 +1109,7 @@ function useQuickGenImageTaskExecutor() {
           errorMessage: error instanceof Error ? error.message : "执行失败",
           completedAt: new Date().toISOString()
         });
-        toast({ variant: "destructive", title: "❌ 快速图片生成失败", description: error instanceof Error ? error.message : "未知错误" });
+        toast({ variant: "destructive", title: "❌ 单图生成失败", description: error instanceof Error ? error.message : "未知错误" });
       } finally {
         isExecutingRef.current = false;
       }
@@ -1155,7 +1155,7 @@ function TaskStatusIndicator() {
 
   return (
     <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-3 animate-in slide-in-from-right-5 fade-in duration-300">
-      {/* 快速图片生成 */}
+      {/* 单图生成 */}
       {isQuickGenImageRunning && (
         <div
           onClick={() => router.push("/quick-gen")}
@@ -1167,7 +1167,7 @@ function TaskStatusIndicator() {
             <span className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 bg-violet-400 rounded-full" />
           </div>
           <div className="flex flex-col flex-1">
-            <span className="text-sm font-medium text-violet-100">快速图片生成中</span>
+            <span className="text-sm font-medium text-violet-100">单图生成中</span>
             <div className="flex items-center gap-2 mt-1">
               <div className="w-24 h-1.5 bg-violet-900/30 rounded-full overflow-hidden">
                 <div
@@ -1273,4 +1273,3 @@ export function BackgroundTaskManager() {
 
   return <TaskStatusIndicator />;
 }
-

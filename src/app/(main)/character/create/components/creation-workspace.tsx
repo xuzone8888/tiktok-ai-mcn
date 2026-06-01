@@ -585,7 +585,7 @@ export function CreationWorkspace() {
                     <p className="text-[11px] text-white/30">使用模型：VEO</p>
                   </div>
                 </div>
-                <p className="text-xs text-white/50 leading-relaxed mb-3">可用于快速生图、多图生成、VEO 视频生成</p>
+                <p className="text-xs text-white/50 leading-relaxed mb-3">可用于单图生成、多图生成、VEO 视频生成</p>
                 <div className="flex items-center justify-between text-[11px]">
                   <span className="text-white/30">⏱️ ~20秒</span>
                   <span className="text-cyan-400/70 font-medium">20 积分</span>

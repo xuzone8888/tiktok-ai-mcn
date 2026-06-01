@@ -1790,7 +1790,7 @@ export default function ImageBatchPage() {
                 <div className="space-y-2">
                   <Label className="text-[10px] uppercase tracking-wider text-white/30 font-bold flex items-center gap-2">
                     <Zap className="h-3 w-3" />
-                    模型引擎
+                    画质等级
                   </Label>
                   <div className="flex items-center p-1 rounded-full bg-[#050505]/60 border border-white/5">
                     {([
@@ -2102,7 +2102,7 @@ export default function ImageBatchPage() {
         }
         configPreview={
           [
-            { icon: <Film className="h-3.5 w-3.5" />, label: "模型", value: IMAGE_MODEL_CONFIG[globalSettings.model]?.label || globalSettings.model },
+            { icon: <Film className="h-3.5 w-3.5" />, label: "画质", value: IMAGE_MODEL_CONFIG[globalSettings.model]?.label || globalSettings.model },
             { icon: <Wand2 className="h-3.5 w-3.5" />, label: "处理", value: globalSettings.action === "upscale" ? "高清放大" : globalSettings.action === "generate" ? "AI生成" : "九宫格" },
             { icon: <Square className="h-3.5 w-3.5" />, label: "比例", value: globalSettings.aspectRatio || "自动" },
             { icon: <Monitor className="h-3.5 w-3.5" />, label: "分辨率", value: globalSettings.resolution?.toUpperCase() || "1K" },
@@ -2117,4 +2117,3 @@ export default function ImageBatchPage() {
     </TooltipProvider >
   );
 }
-
