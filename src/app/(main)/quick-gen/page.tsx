@@ -1370,8 +1370,8 @@ export default function QuickGeneratorPage() {
                   </div>
                 )}
 
-                {/* Source Type Tabs (只有上传了图片才显示) */}
-                {uploadedFile && (
+                {/* 旧视频前置增强入口：单图生成不展示，避免出现不可用的旧价格/动作面板 */}
+                {outputMode === "video" && uploadedFile && (
                   <>
                     <Tabs value={sourceType} onValueChange={(v) => {
                       setSourceType(v as SourceType);

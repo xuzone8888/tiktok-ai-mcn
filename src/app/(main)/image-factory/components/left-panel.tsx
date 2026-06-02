@@ -241,7 +241,7 @@ export function LeftPanel() {
 
           {/* 模型选择 - Neon Border Cards */}
           <div className="space-y-2">
-            <Label className="text-[10px] font-bold text-white/50 uppercase tracking-wider">模型引擎</Label>
+            <Label className="text-[10px] font-bold text-white/50 uppercase tracking-wider">画质等级</Label>
             <RadioGroup
               value={modelType}
               onValueChange={(v) => setModelType(v as typeof modelType)}
