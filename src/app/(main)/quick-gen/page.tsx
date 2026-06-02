@@ -97,6 +97,7 @@ import {
   type NanoTier,
   VIDEO_MODEL_PRICING,
   IMAGE_MODEL_CONFIG,
+  OPENAI_IMAGE_MODELS,
   GEMINI_ACTION_PRICING,
   IMAGE_ASPECT_OPTIONS,
   IMAGE_RESOLUTION_OPTIONS,
@@ -143,11 +144,21 @@ export default function QuickGeneratorPage() {
   // Image Mode: Settings
   // ================================================================
   const [imageNanoTier, setImageNanoTier] = useState<NanoTier>("fast");  // @deprecated 保留兼容
-  const [imageModel, setImageModel] = useState<ImageModel>("gemini-1k");  // 默认 1K 快速
+  const [imageModel, setImageModel] = useState<ImageModel>("gpt-image-2");
   const [imageAction, setImageAction] = useState<ImageProcessAction>("generate");
   const apiHealth = useApiHealth();
   const [imageAspectRatio, setImageAspectRatio] = useState<ImageAspectRatio>("auto");
   const [imageResolution, setImageResolution] = useState<ImageResolution>("1k");
+
+  const imageTaskResolution = useMemo<ImageResolution>(() => {
+    return "2k";
+  }, []);
+
+  useEffect(() => {
+    if (IMAGE_MODEL_CONFIG[imageModel]?.provider !== "openai") {
+      setImageModel("gpt-image-2");
+    }
+  }, [imageModel]);
 
   // Image Mode: 多图上传 (最多4张)
   const [imageUploadedFiles, setImageUploadedFiles] = useState<Array<{ url: string; name: string }>>([]);
@@ -793,7 +804,7 @@ export default function QuickGeneratorPage() {
   }, [uploadedFile]);
 
   // ================================================================
-  // Video Mode: Process Image (Nano Banana)
+  // Video Mode: Process Image (AI Enhance)
   // ================================================================
 
   const handleProcessImage = useCallback(async () => {
@@ -1224,14 +1235,13 @@ export default function QuickGeneratorPage() {
         }
 
         // 创建后台任务 - 由 BackgroundTaskManager 执行
-        // 新版：使用 imageModel (gemini-1k/2k/4k)
-
         createImageTask({
           prompt: finalPrompt,
           model: imageModel,
-          tier: imageModel.replace("gemini-", "") as "1k" | "2k" | "4k",
+          action: imageAction,
+          tier: imageTaskResolution,
           aspectRatio: imageAspectRatio,
-          resolution: imageModel.replace("gemini-", "") as "1k" | "2k" | "4k",
+          resolution: imageTaskResolution,
           sourceImageUrls,
           creditCost: totalCost,
         });
@@ -1377,19 +1387,19 @@ export default function QuickGeneratorPage() {
                         <TabsTrigger value="local_upload" className="text-xs">
                           <FileImage className="h-3.5 w-3.5 mr-1.5" /> Direct Use
                         </TabsTrigger>
-                        <TabsTrigger value="nano_banana" className="text-xs">
-                          <Sparkles className="h-3.5 w-3.5 mr-1.5" /> Nano Banana
+	                        <TabsTrigger value="nano_banana" className="text-xs">
+	                          <Sparkles className="h-3.5 w-3.5 mr-1.5" /> AI Enhance
                         </TabsTrigger>
                       </TabsList>
                     </Tabs>
 
-                    {/* Nano Banana Pro Settings - 图片增强只支持 Pro 版本 */}
+	                    {/* 图片增强配置 */}
                     {sourceType === "nano_banana" && (
                       <div className="space-y-3 p-3 rounded-lg panel-surface">
                         <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
                           <span className="flex items-center gap-1">
                             <Sparkles className="h-3 w-3 text-mermaid-pink" />
-                            NanoBanana Pro 图片增强
+	                            GPT Image 2 图片增强
                           </span>
                         </div>
                         <div className="flex gap-2">
@@ -1782,7 +1792,8 @@ export default function QuickGeneratorPage() {
               <div>
                 <Label className="text-xs text-muted-foreground mb-1.5 block">{t ? "Quality" : "画质等级"}</Label>
                 <div className="grid grid-cols-2 gap-1.5">
-                  {(Object.entries(IMAGE_MODEL_CONFIG) as [ImageModel, typeof IMAGE_MODEL_CONFIG[ImageModel]][]).map(([key, config]) => {
+                  {OPENAI_IMAGE_MODELS.map((key) => {
+                    const config = IMAGE_MODEL_CONFIG[key];
                     const healthStatus = apiHealth.getModelStatus(key);
                     return (
                     <Button key={key} variant="outline" size="sm" onClick={() => setImageModel(key)}

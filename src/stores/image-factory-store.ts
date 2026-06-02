@@ -132,7 +132,7 @@ type ImageFactoryStore = ImageFactoryState & ImageFactoryActions;
 const initialState: ImageFactoryState = {
   currentMode: "ecom_five_pack",
   
-  modelType: "nano-banana",
+  modelType: "gpt-image-2",
   language: "zh",
   ratio: "auto",
   resolution: "1k",
@@ -206,7 +206,7 @@ export const useImageFactoryStore = create<ImageFactoryStore>()(
       // 配置更新
       // ========================
       setModelType: (type) => set((state) => {
-        state.modelType = type;
+        state.modelType = isOpenAIImageModel(type) ? type : "gpt-image-2";
       }),
       
       setLanguage: (lang) => set((state) => {
@@ -499,7 +499,7 @@ export const useSteps = () => {
 // 积分计算
 // ============================================================================
 
-import { IMAGE_CREDITS } from "@/lib/credits";
+import { IMAGE_MODEL_CONFIG, isOpenAIImageModel } from "@/types/generation";
 
 /** 计算任务积分消耗 */
 export function calculateTaskCredits(
@@ -507,7 +507,10 @@ export function calculateTaskCredits(
   modelType: ImageModelType,
   imageCount: number
 ): number {
-  const unitCost = IMAGE_CREDITS[modelType];
+  const modelConfig = IMAGE_MODEL_CONFIG[modelType as keyof typeof IMAGE_MODEL_CONFIG];
+  const unitCost = modelConfig?.provider === "openai"
+    ? modelConfig.credits
+    : IMAGE_MODEL_CONFIG["gpt-image-2"].credits;
   
   if (mode === "ecom_five_pack") {
     // 电商五图套装固定生成5张
@@ -526,4 +529,3 @@ export const useTaskCredits = () => {
   
   return calculateTaskCredits(currentMode, modelType, uploadedImages.length);
 };
-

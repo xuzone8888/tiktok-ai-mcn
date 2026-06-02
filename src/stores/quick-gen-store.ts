@@ -8,6 +8,7 @@
 import { create } from "zustand";
 import { devtools, persist, createJSONStorage } from "zustand/middleware";
 import { immer } from "zustand/middleware/immer";
+import type { ImageModel } from "@/types/generation";
 
 // ============================================================================
 // 类型定义
@@ -45,7 +46,8 @@ export interface QuickGenVideoTask {
 export interface QuickGenImageTask {
   id: string;
   prompt: string;
-  model: "nano-banana" | "nano-banana-pro" | "gemini-1k" | "gemini-2k" | "gemini-4k";
+  model: ImageModel;
+  action?: "generate" | "upscale" | "nine_grid";
   tier: "fast" | "pro" | "1k" | "2k" | "4k";  // 新增分辨率 tier
   aspectRatio: string;
   resolution: "1k" | "2k" | "4k";
@@ -54,7 +56,7 @@ export interface QuickGenImageTask {
   // 任务状态
   status: QuickGenTaskStatus;
   progress: number;
-  taskId?: string; // NanoBanana API 任务 ID
+  taskId?: string; // 图片生成任务 ID
   resultUrl?: string;
   errorMessage?: string;
   
@@ -299,4 +301,3 @@ export const useQuickGenIsImageGenerating = () => useQuickGenStore((state) =>
 );
 export const useQuickGenProcessedGridImages = () => useQuickGenStore((state) => state.processedGridImages);
 export const useQuickGenSelectedGridIndex = () => useQuickGenStore((state) => state.selectedGridIndex);
-

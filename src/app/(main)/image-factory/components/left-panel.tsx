@@ -32,7 +32,6 @@ import { useImageFactoryStore, useTaskCredits, useCanStartTask } from "@/stores/
 import {
   ECOM_MODE_CONFIG,
   ASPECT_RATIO_OPTIONS,
-  RESOLUTION_OPTIONS,
   PRODUCT_CATEGORY_OPTIONS,
   SCENE_TYPE_OPTIONS,
   TRY_ON_PRODUCT_OPTIONS,
@@ -42,7 +41,6 @@ import {
   PERSONA_REGION_OPTIONS,
   type UploadedImage,
   type EcomAspectRatio,
-  type EcomResolution,
   type ProductCategory,
   type SceneType,
   type TryOnProductType,
@@ -51,6 +49,7 @@ import {
   type PersonaGender,
   type PersonaRegion,
 } from "@/types/ecom-image";
+import { IMAGE_MODEL_CONFIG, OPENAI_IMAGE_MODELS } from "@/types/generation";
 import { cn } from "@/lib/utils";
 
 export function LeftPanel() {
@@ -62,8 +61,6 @@ export function LeftPanel() {
     setLanguage,
     ratio,
     setRatio,
-    resolution,
-    setResolution,
     isOneClick,
     setIsOneClick,
     uploadedImages,
@@ -247,44 +244,32 @@ export function LeftPanel() {
             <Label className="text-[10px] font-bold text-white/50 uppercase tracking-wider">模型引擎</Label>
             <RadioGroup
               value={modelType}
-              onValueChange={(v) => setModelType(v as "nano-banana" | "nano-banana-pro")}
+              onValueChange={(v) => setModelType(v as typeof modelType)}
               className="grid grid-cols-2 gap-2"
             >
-              <Label
-                htmlFor="nano-banana"
-                className={cn(
-                  "relative flex flex-col gap-2 p-3 border rounded-xl cursor-pointer transition-all duration-300 overflow-hidden group",
-                  modelType === "nano-banana"
-                    ? "border-mermaid-cyan bg-mermaid-cyan/5 shadow-[0_0_20px_rgba(0,242,234,0.1)]"
-                    : "border-white/5 hover:border-white/10 bg-[#0B0C10]"
-                )}
-              >
-                <div className={cn("absolute inset-0 bg-gradient-to-br from-mermaid-cyan/10 to-transparent opacity-0 transition-opacity duration-300", modelType === "nano-banana" && "opacity-100")} />
-                <RadioGroupItem value="nano-banana" id="nano-banana" className="sr-only" />
-                <div className="relative z-10 flex items-center justify-between">
-                  <span className={cn("text-sm font-bold", modelType === "nano-banana" ? "text-white" : "text-white/60")}>Turbo</span>
-                  <Badge variant="outline" className="border-mermaid-cyan/20 text-mermaid-cyan bg-mermaid-cyan/10 text-[10px] px-1.5 py-0">极速</Badge>
-                </div>
-                <div className="relative z-10 text-xs text-white/30 font-mono">10 积分/张</div>
-              </Label>
-
-              <Label
-                htmlFor="nano-banana-pro"
-                className={cn(
-                  "relative flex flex-col gap-2 p-3 border rounded-xl cursor-pointer transition-all duration-300 overflow-hidden group",
-                  modelType === "nano-banana-pro"
-                    ? "border-mermaid-pink bg-mermaid-pink/5 shadow-[0_0_20px_rgba(236,72,153,0.1)]"
-                    : "border-white/5 hover:border-white/10 bg-[#0B0C10]"
-                )}
-              >
-                <div className={cn("absolute inset-0 bg-gradient-to-br from-mermaid-pink/10 to-transparent opacity-0 transition-opacity duration-300", modelType === "nano-banana-pro" && "opacity-100")} />
-                <RadioGroupItem value="nano-banana-pro" id="nano-banana-pro" className="sr-only" />
-                <div className="relative z-10 flex items-center justify-between">
-                  <span className={cn("text-sm font-bold", modelType === "nano-banana-pro" ? "text-white" : "text-white/60")}>Pro</span>
-                  <Badge variant="outline" className="border-mermaid-pink/20 text-mermaid-pink bg-mermaid-pink/10 text-[10px] px-1.5 py-0">高清</Badge>
-                </div>
-                <div className="relative z-10 text-xs text-white/30 font-mono">28 积分/张</div>
-              </Label>
+              {OPENAI_IMAGE_MODELS.map((key) => {
+                const config = IMAGE_MODEL_CONFIG[key];
+                return (
+                <Label
+                  key={key}
+                  htmlFor={key}
+                  className={cn(
+                    "relative flex flex-col gap-2 p-3 border rounded-xl cursor-pointer transition-all duration-300 overflow-hidden group",
+                    modelType === key
+                      ? "border-mermaid-pink bg-mermaid-pink/5 shadow-[0_0_20px_rgba(236,72,153,0.1)]"
+                      : "border-white/5 hover:border-white/10 bg-[#0B0C10]"
+                  )}
+                >
+                  <div className={cn("absolute inset-0 bg-gradient-to-br from-mermaid-pink/10 to-transparent opacity-0 transition-opacity duration-300", modelType === key && "opacity-100")} />
+                  <RadioGroupItem value={key} id={key} className="sr-only" />
+                  <div className="relative z-10 flex items-center justify-between">
+                    <span className={cn("text-sm font-bold", modelType === key ? "text-white" : "text-white/60")}>{config.label}</span>
+                    <Badge variant="outline" className="border-mermaid-pink/20 text-mermaid-pink bg-mermaid-pink/10 text-[10px] px-1.5 py-0">{config.provider}</Badge>
+                  </div>
+                  <div className="relative z-10 text-xs text-white/30 font-mono">{config.credits} 积分/张</div>
+                </Label>
+                );
+              })}
             </RadioGroup>
           </div>
 
@@ -318,23 +303,6 @@ export function LeftPanel() {
                 </SelectContent>
               </Select>
             </div>
-          </div>
-
-          {/* 输出分辨率 (仅 Pro) */}
-          <div className={cn("space-y-2 transition-all duration-300 overflow-hidden", modelType === "nano-banana-pro" ? "max-h-20 opacity-100" : "max-h-0 opacity-0")}>
-            <Label className="text-[10px] font-bold text-white/50 uppercase tracking-wider">输出分辨率</Label>
-            <Select value={resolution} onValueChange={(v) => setResolution(v as EcomResolution)}>
-              <SelectTrigger className="h-9 bg-[#050505] border-white/10 text-white focus:ring-mermaid-cyan/20 focus:border-mermaid-cyan/50 rounded-lg text-xs">
-                <SelectValue placeholder="Resolution" />
-              </SelectTrigger>
-              <SelectContent className="bg-[#16181D] border-white/10 text-white">
-                {RESOLUTION_OPTIONS.map((opt) => (
-                  <SelectItem key={opt.value} value={opt.value} className="focus:bg-white/10 focus:text-white cursor-pointer">
-                    {opt.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
           </div>
 
           <div className="h-px bg-white/5" />
@@ -397,10 +365,9 @@ export function LeftPanel() {
         <p className="text-[10px] text-white/30 text-right font-mono">
           {currentMode === "ecom_five_pack"
             ? "固定批量: 5 张图片"
-            : `${uploadedImages.length || 1} 张图片 × ${modelType === "nano-banana-pro" ? 28 : 10} 积分`}
+            : `${uploadedImages.length || 1} 张图片 × ${IMAGE_MODEL_CONFIG[modelType as keyof typeof IMAGE_MODEL_CONFIG]?.credits || 15} 积分`}
         </p>
       </div>
     </div>
   );
 }
-

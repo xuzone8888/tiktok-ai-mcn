@@ -1,54 +1,34 @@
 /**
- * 图片生成 API - NanoBanana / Gemini
+ * 图片生成 API - GPT Image 2 / 新图片模型
  * 
  * POST /api/generate/image - 提交图片生成任务
  * GET /api/generate/image?taskId=xxx&model=xxx - 查询任务状态
  */
 
 import { NextResponse } from "next/server";
-import {
-  submitNanoBanana,
-  queryNanoBananaResult,
-  upscaleImage,
-  generateNineGrid,
-  generateGeminiImage,
-  uploadBase64ImageToOSS,
-} from "@/lib/suchuang-api";
-import { submitGeminiImage } from "@/lib/gemini-image-api";
-import { IMAGE_MODEL_CONFIG, type ImageModel } from "@/types/generation";
+import { queryNanoBananaResult } from "@/lib/suchuang-api";
+import { submitOpenAIImage } from "@/lib/openai-image-api";
+import { IMAGE_MODEL_CONFIG, isOpenAIImageModel, type ImageModel } from "@/types/generation";
 import { getNewImageCost } from "@/lib/credits";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { createServerClient } from "@/lib/supabase/server";
 
 // 增加请求体大小限制以支持 base64 图片 (50MB)
 export const maxDuration = 120; // 2分钟超时
 export const dynamic = 'force-dynamic';
 
-// ============================================================================
-// 积分配置
-// 快速单个图片/批量生产图片扣分机制：
-// - Nano Banana Fast: 10 积分/次
-// - Nano Banana Pro: 28 积分/次
-// ============================================================================
+const VALID_IMAGE_MODES = new Set(["generate", "upscale", "nine_grid"]);
 
-// NanoBanana 积分配置
-const NANO_BANANA_CREDITS = {
-  "nano-banana": {
-    "fast": 10,   // Fast 模式 = 10积分
-    "pro": 10,    // 同样是 10积分（nano-banana 只有 fast 模式）
-  },
-  "nano-banana-pro": {
-    "1k": 28,     // Pro 模式 = 28积分
-    "2k": 28,     // Pro 模式 = 28积分
-    "4k": 28,     // Pro 模式 = 28积分
-  },
-};
+function getOpenAIEditPrompt(mode: string, prompt: string | undefined, resolution: string): string {
+  const userPrompt = prompt?.trim();
+  if (userPrompt) return userPrompt;
 
-// 图片增强积分配置
-const ENHANCEMENT_CREDITS = {
-  "upscale_2k": 10,   // Nano Banana 放大 = 10积分
-  "upscale_4k": 10,   // Nano Banana 放大 = 10积分
-  "nine_grid": 10,    // Nano Banana 九宫格 = 10积分
-};
+  if (mode === "upscale") {
+    return `Enhance this image using the reference image. Preserve the original subject, composition, colors, and identity. Improve sharpness, texture detail, lighting balance, and overall clarity for a ${resolution.toUpperCase()} quality output. Do not add text, watermark, or extra objects.`;
+  }
+
+  return "Using the reference image, create a clean 3x3 nine-grid multi-angle product showcase. Preserve the exact same product identity, colors, shape, materials, and details. Show varied useful angles and close-up detail views on a clean background. Do not add text or watermark.";
+}
 
 // ============================================================================
 // POST - 提交图片生成任务
@@ -56,19 +36,29 @@ const ENHANCEMENT_CREDITS = {
 
 export async function POST(request: Request) {
   try {
+    const authClient = await createServerClient();
+    const { data: { user }, error: authError } = await authClient.auth.getUser();
+
+    if (authError || !user) {
+      return NextResponse.json(
+        { success: false, error: "请先登录" },
+        { status: 401 }
+      );
+    }
+
+    const authUserId = user.id;
     const body = await request.json();
+    const hasLegacyModelField = Object.prototype.hasOwnProperty.call(body, "model");
 
     const {
       mode,           // "generate" | "upscale" | "nine_grid"
       prompt,
       sourceImageUrl,
       sourceImageUrls,          // 多张参考图 URL 数组
-      model = "nano-banana",        // "nano-banana" | "nano-banana-pro"
-      imageModel,                   // 新模型: "gemini-1k" | "gemini-2k" | "gemini-4k"
-      tier = "fast",                // "fast" | "pro" (for nano-banana)
+      model: requestedLegacyModel,
+      imageModel: requestedImageModel,
       aspectRatio = "auto",
-      resolution = "1k",            // "1k" | "2k" | "4k" (for nano-banana-pro)
-      userId,
+      resolution = "1k",
       source = "quick_gen",         // "quick_gen" | "batch_image"
       requestId,                    // 前端生成的 ID
     } = body;
@@ -79,10 +69,14 @@ export async function POST(request: Request) {
       : (sourceImageUrl ? [sourceImageUrl] : []);
     // 第一张图用于 DB 记录和 Pro 模式
     const primarySourceImageUrl = allSourceImageUrls[0] || null;
+    const modeValue = mode || "generate";
+    const imageModel = (requestedImageModel || "gpt-image-2") as ImageModel;
+    const imageConfig = imageModel ? IMAGE_MODEL_CONFIG[imageModel] : undefined;
 
     console.log("[Generate Image] Request received:", {
-      mode,
-      model,
+      mode: modeValue,
+      legacyModel: requestedLegacyModel,
+      imageModel,
       source,
       hasPrompt: !!prompt,
       promptLength: prompt?.length || 0,
@@ -92,40 +86,72 @@ export async function POST(request: Request) {
     });
 
     // ============================================
+    // 参数校验：必须先于扣费
+    // ============================================
+    if (!VALID_IMAGE_MODES.has(modeValue)) {
+      return NextResponse.json(
+        { success: false, error: "无效的图片生成模式" },
+        { status: 400 }
+      );
+    }
+
+    if (hasLegacyModelField) {
+      return NextResponse.json(
+        { success: false, error: "旧图片模型已停用，请使用 imageModel/gpt-image-2" },
+        { status: 400 }
+      );
+    }
+
+    if (imageModel && !imageConfig) {
+      return NextResponse.json(
+        { success: false, error: `未知图片模型: ${imageModel}` },
+        { status: 400 }
+      );
+    }
+
+    if (!isOpenAIImageModel(imageModel)) {
+      return NextResponse.json(
+        { success: false, error: "当前图片生成仅支持 GPT Image 2 / OpenAI 图片模型" },
+        { status: 400 }
+      );
+    }
+
+    if ((modeValue === "upscale" || modeValue === "nine_grid") && !primarySourceImageUrl) {
+      return NextResponse.json(
+        { success: false, error: modeValue === "upscale" ? "Source image URL is required for upscale" : "Source image URL is required for nine grid" },
+        { status: 400 }
+      );
+    }
+
+    if ((modeValue === "upscale" || modeValue === "nine_grid") && imageConfig?.provider !== "openai") {
+      return NextResponse.json(
+        { success: false, error: "Phase2 图片增强仅支持 GPT Image 2 / OpenAI edits，已阻断旧接口调用" },
+        { status: 400 }
+      );
+    }
+
+    if (modeValue === "generate" && allSourceImageUrls.length === 0 && (!prompt || prompt.trim().length < 2)) {
+      return NextResponse.json(
+        { success: false, error: "请输入至少 2 个字符的提示词" },
+        { status: 400 }
+      );
+    }
+
+    // ============================================
     // 计算积分消耗
     // ============================================
-    let creditCost = 0;
-
-    if (mode === "upscale") {
-      creditCost = resolution === "4k"
-        ? ENHANCEMENT_CREDITS.upscale_4k
-        : ENHANCEMENT_CREDITS.upscale_2k;
-    } else if (mode === "nine_grid") {
-      creditCost = ENHANCEMENT_CREDITS.nine_grid;
-    } else if (imageModel && IMAGE_MODEL_CONFIG[imageModel as ImageModel]) {
-      // 新模型：从配置表读取积分
-      creditCost = getNewImageCost(imageModel as ImageModel);
-    } else {
-      // 旧模型
-      if (model === "nano-banana-pro") {
-        creditCost = NANO_BANANA_CREDITS["nano-banana-pro"][resolution as "1k" | "2k" | "4k"] || 30;
-      } else {
-        creditCost = tier === "pro"
-          ? NANO_BANANA_CREDITS["nano-banana"].pro
-          : NANO_BANANA_CREDITS["nano-banana"].fast;
-      }
-    }
+    const creditCost = getNewImageCost(imageModel);
 
     // ============================================
     // 扣除积分
     // ============================================
-    if (userId) {
+    {
       const supabase = createAdminClient();
 
       const { data: profileData, error: profileError } = await supabase
         .from("profiles")
         .select("credits")
-        .eq("id", userId)
+        .eq("id", authUserId)
         .single();
 
       if (profileError || !profileData) {
@@ -156,7 +182,7 @@ export async function POST(request: Request) {
         const { data: latestProfile } = await supabase
           .from("profiles")
           .select("credits")
-          .eq("id", userId)
+          .eq("id", authUserId)
           .single();
 
         const latestCredits = (latestProfile as unknown as { credits: number })?.credits || 0;
@@ -168,14 +194,15 @@ export async function POST(request: Request) {
           );
         }
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { error: deductError } = await (supabase as any)
+        const { data: updatedProfile, error: deductError } = await supabase
           .from("profiles")
           .update({ credits: latestCredits - creditCost })
-          .eq("id", userId)
-          .eq("credits", latestCredits); // 乐观锁：只有余额未变时才更新
+          .eq("id", authUserId)
+          .eq("credits", latestCredits) // 乐观锁：只有余额未变时才更新
+          .select("credits")
+          .single();
 
-        if (!deductError) {
+        if (!deductError && updatedProfile) {
           deductSuccess = true;
         } else if (deductAttempts < maxAttempts) {
           console.log(`[Generate Image] Credits deduct retry ${deductAttempts}/${maxAttempts}`);
@@ -192,8 +219,8 @@ export async function POST(request: Request) {
       }
 
       console.log("[Generate Image] Credits deducted:", {
-        userId,
-        mode,
+        userId: authUserId,
+        mode: modeValue,
         cost: creditCost,
         before: currentCredits,
         after: currentCredits - creditCost,
@@ -203,249 +230,120 @@ export async function POST(request: Request) {
     // ============================================
     // 根据模式提交任务
     // ============================================
-    let result: { success: boolean; taskId?: string; error?: string };
+    let result: { success: boolean; error?: string } = { success: false, error: "图片生成失败" };
 
-    if (mode === "upscale") {
-      // 图片放大高清
-      if (!primarySourceImageUrl) {
-        return NextResponse.json(
-          { success: false, error: "Source image URL is required for upscale" },
-          { status: 400 }
-        );
-      }
-
-      console.log("[Generate Image] Upscaling image:", {
-        sourceImageUrl: primarySourceImageUrl!.substring(0, 50) + "...",
-        targetResolution: resolution,
+    if (modeValue === "upscale" || modeValue === "nine_grid") {
+      const config = imageConfig!;
+      console.log("[Generate Image] Running OpenAI edit mode:", {
+        mode: modeValue,
+        imageModel,
+        sourceImageCount: allSourceImageUrls.length,
       });
 
-      result = await upscaleImage(
-        primarySourceImageUrl!,
-        resolution as "2k" | "4k"
-      );
-
-    } else if (mode === "nine_grid") {
-      // 九宫格多角度
-      if (!primarySourceImageUrl) {
-        return NextResponse.json(
-          { success: false, error: "Source image URL is required for nine grid" },
-          { status: 400 }
-        );
-      }
-
-      console.log("[Generate Image] Generating nine grid:", {
-        sourceImageUrl: primarySourceImageUrl!.substring(0, 50) + "...",
-        productDescription: prompt,
+      const imageResult = await submitOpenAIImage({
+        model: config.apiModel,
+        prompt: getOpenAIEditPrompt(modeValue, prompt, resolution),
+        sourceImageUrls: allSourceImageUrls,
+        aspectRatio,
+        quality: "high",
       });
 
-      result = await generateNineGrid(primarySourceImageUrl!, prompt);
+      if (!imageResult.success || !imageResult.imageUrl) {
+        result = { success: false, error: imageResult.error || "图片编辑失败" };
+      } else {
+        const taskId = requestId || `openai-${modeValue}-${Date.now()}`;
+
+        try {
+          const supabase = createAdminClient();
+          await supabase.from("generations").insert({
+            user_id: authUserId,
+            task_id: taskId,
+            type: "image",
+            source: source,
+            prompt: getOpenAIEditPrompt(modeValue, prompt, resolution),
+            model: imageModel,
+            aspect_ratio: aspectRatio,
+            quality: config.resolution,
+            source_image_url: primarySourceImageUrl || null,
+            status: "completed",
+            result_url: imageResult.imageUrl,
+            image_url: imageResult.imageUrl,
+            credit_cost: creditCost,
+            created_at: new Date().toISOString(),
+            completed_at: new Date().toISOString(),
+          });
+        } catch (dbError) {
+          console.error("[Generate Image] DB insert error:", dbError);
+        }
+
+        return NextResponse.json({
+          success: true,
+          data: {
+            taskId,
+            status: "completed",
+            imageUrl: imageResult.imageUrl,
+            model: imageModel,
+            estimatedTime: config.estimatedTime,
+          },
+        });
+      }
 
     } else {
-      // 普通图片生成
-      // 如果有源图片，允许空 prompt 或短 prompt
-      // 如果没有源图片，至少需要 2 个字符的 prompt
-      if (allSourceImageUrls.length === 0 && (!prompt || prompt.trim().length < 2)) {
-        return NextResponse.json(
-          { success: false, error: "请输入至少 2 个字符的提示词" },
-          { status: 400 }
-        );
-      }
-
       console.log("[Generate Image] Generating image:", {
-        model,
-        prompt: prompt.substring(0, 50) + "...",
+        imageModel,
+        prompt: `${(prompt || "").substring(0, 50)}...`,
         hasSourceImage: allSourceImageUrls.length > 0,
         sourceImageCount: allSourceImageUrls.length,
         aspectRatio,
-        resolution: model === "nano-banana-pro" ? resolution : undefined,
       });
 
-      // ================================================================
-      // 新模型路由：imageModel 参数驱动
-      // ================================================================
-      if (imageModel && IMAGE_MODEL_CONFIG[imageModel as ImageModel]) {
-        console.log("[Generate Image] Using new Gemini model:", imageModel);
-        const geminiResult = await submitGeminiImage({
-          model: imageModel as ImageModel,
-          prompt: prompt || "",
-          sourceImageUrls: allSourceImageUrls.length > 0 ? allSourceImageUrls : undefined,
-          aspectRatio,
-        });
+      const config = imageConfig!;
+      console.log("[Generate Image] Using image model:", imageModel, config.provider);
+      const imageResult = await submitOpenAIImage({
+        model: config.apiModel,
+        prompt: prompt || "",
+        sourceImageUrls: allSourceImageUrls.length > 0 ? allSourceImageUrls : undefined,
+        aspectRatio,
+        quality: "high",
+      });
 
-        if (!geminiResult.success || !geminiResult.imageUrl) {
-          result = { success: false, error: geminiResult.error || "图片生成失败" };
-        } else {
-          const taskId = requestId || `gemini-${Date.now()}`;
-          const config = IMAGE_MODEL_CONFIG[imageModel as ImageModel];
-
-          if (userId) {
-            try {
-              const supabase = createAdminClient();
-              await supabase.from("generations").insert({
-                user_id: userId,
-                task_id: taskId,
-                type: "image",
-                source: source,
-                prompt: prompt || null,
-                model: imageModel,
-                aspect_ratio: aspectRatio,
-                quality: config.resolution,
-                source_image_url: primarySourceImageUrl || null,
-                status: "completed",
-                result_url: geminiResult.imageUrl,
-                image_url: geminiResult.imageUrl,
-                credit_cost: creditCost,
-                created_at: new Date().toISOString(),
-                completed_at: new Date().toISOString(),
-              });
-            } catch (dbError) {
-              console.error("[Generate Image] DB insert error:", dbError);
-            }
-          }
-
-          return NextResponse.json({
-            success: true,
-            data: {
-              taskId,
-              status: "completed",
-              imageUrl: geminiResult.imageUrl,
-              model: imageModel,
-              estimatedTime: config.estimatedTime,
-            },
-          });
-        }
-      }
-      // ================================================================
-      // 旧模型路由（@deprecated，迁移期间保留）
-      // ================================================================
-      // nano-banana (快速模式) 直接使用 Gemini 3 Pro Image API
-      // nano-banana-pro 继续使用原 NanoBanana API (支持 2K/4K)
-      // ================================================================
-      else if (model === "nano-banana") {
-        // 使用 Gemini API（同步返回，更快更便宜）
-        console.log("[Generate Image] Using Gemini 3 Pro Image API...");
-        const geminiResult = await generateGeminiImage({
-          prompt,
-          sourceImageUrls: allSourceImageUrls.length > 0 ? allSourceImageUrls : undefined,
-          aspectRatio,
-        });
-
-        if (geminiResult.processing) {
-          // 524 超时 - API 可能还在处理中，返回 processing 状态让前端轮询
-          const taskId = requestId || `gemini-${Date.now()}`;
-          console.log("[Generate Image] Gemini API 524 timeout, returning processing status for polling:", taskId);
-          return NextResponse.json({
-            success: true,
-            data: {
-              taskId,
-              status: "processing",
-              model: "gemini-3-pro-image",
-              estimatedTime: "处理中（可能需要2-4分钟）",
-            },
-          });
-        } else if (!geminiResult.success || (!geminiResult.imageBase64 && !geminiResult.imageUrl)) {
-          result = { success: false, error: geminiResult.error || "Gemini 图片生成失败" };
-        } else if (geminiResult.imageUrl) {
-          // 新 API 直接返回了图片 URL，无需上传到 OSS
-          const taskId = requestId || `gemini-${Date.now()}`;
-          const finalUrl = geminiResult.imageUrl;
-
-          if (userId) {
-            try {
-              const supabase = createAdminClient();
-              await supabase.from("generations").insert({
-                user_id: userId,
-                task_id: taskId,
-                type: "image",
-                source: source,
-                prompt: prompt || null,
-                model: "gemini-3-pro-image",
-                aspect_ratio: aspectRatio,
-                quality: "2k",
-                source_image_url: primarySourceImageUrl || null,
-                status: "completed",
-                result_url: finalUrl,
-                image_url: finalUrl,
-                credit_cost: creditCost,
-                created_at: new Date().toISOString(),
-                completed_at: new Date().toISOString(),
-              });
-            } catch (dbError) {
-              console.error("[Generate Image] DB insert error:", dbError);
-            }
-          }
-
-          return NextResponse.json({
-            success: true,
-            data: {
-              taskId,
-              status: "completed",
-              imageUrl: finalUrl,
-              model: "gemini-3-pro-image",
-              estimatedTime: "已完成",
-            },
-          });
-        } else {
-          // 将 Base64 上传到 OSS
-          const uploadResult = await uploadBase64ImageToOSS(
-            geminiResult.imageBase64!,
-            `gemini-${Date.now()}.jpg`
-          );
-
-          if (!uploadResult.success || !uploadResult.url) {
-            result = { success: false, error: uploadResult.error || "图片上传失败" };
-          } else {
-            // Gemini 是同步的，直接返回成功
-            // 优先使用前端传来的 requestId，确保前端始终知道 taskId
-            const taskId = requestId || `gemini-${Date.now()}`;
-
-            // 直接写入 generations 表（已完成状态）
-            if (userId) {
-              try {
-                const supabase = createAdminClient();
-                await supabase.from("generations").insert({
-                  user_id: userId,
-                  task_id: taskId,
-                  type: "image",
-                  source: source,
-                  prompt: prompt || null,
-                  model: "gemini-3-pro-image",
-                  aspect_ratio: aspectRatio,
-                  quality: "1k",
-                  source_image_url: primarySourceImageUrl || null,
-                  status: "completed",
-                  result_url: uploadResult.url,
-                  image_url: uploadResult.url,
-                  credit_cost: creditCost,
-                  created_at: new Date().toISOString(),
-                  completed_at: new Date().toISOString(),
-                });
-              } catch (dbError) {
-                console.error("[Generate Image] DB insert error:", dbError);
-              }
-            }
-
-            // 直接返回完成状态
-            return NextResponse.json({
-              success: true,
-              data: {
-                taskId,
-                status: "completed",
-                imageUrl: uploadResult.url,
-                model: "gemini-3-pro-image",
-                estimatedTime: "已完成",
-              },
-            });
-          }
-        }
+      if (!imageResult.success || !imageResult.imageUrl) {
+        result = { success: false, error: imageResult.error || "图片生成失败" };
       } else {
-        // nano-banana-pro 使用原 NanoBanana API
-        result = await submitNanoBanana({
-          model: model as "nano-banana" | "nano-banana-pro",
-          prompt,
-          img_url: primarySourceImageUrl || undefined,
-          aspectRatio: aspectRatio as "auto" | "1:1" | "16:9" | "9:16" | "4:3" | "3:4",
-          resolution: resolution as "1k" | "2k" | "4k",
+        const taskId = requestId || `openai-${Date.now()}`;
+
+        try {
+          const supabase = createAdminClient();
+          await supabase.from("generations").insert({
+            user_id: authUserId,
+            task_id: taskId,
+            type: "image",
+            source: source,
+            prompt: prompt || null,
+            model: imageModel,
+            aspect_ratio: aspectRatio,
+            quality: config.resolution,
+            source_image_url: primarySourceImageUrl || null,
+            status: "completed",
+            result_url: imageResult.imageUrl,
+            image_url: imageResult.imageUrl,
+            credit_cost: creditCost,
+            created_at: new Date().toISOString(),
+            completed_at: new Date().toISOString(),
+          });
+        } catch (dbError) {
+          console.error("[Generate Image] DB insert error:", dbError);
+        }
+
+        return NextResponse.json({
+          success: true,
+          data: {
+            taskId,
+            status: "completed",
+            imageUrl: imageResult.imageUrl,
+            model: imageModel,
+            estimatedTime: config.estimatedTime,
+          },
         });
       }
     }
@@ -454,28 +352,25 @@ export async function POST(request: Request) {
       console.error("[Generate Image] Submit failed:", result.error);
 
       // 退还积分
-      if (userId) {
-        try {
-          const supabase = createAdminClient();
-          const { data: refundProfile } = await supabase
+      try {
+        const supabase = createAdminClient();
+        const { data: refundProfile } = await supabase
+          .from("profiles")
+          .select("credits")
+          .eq("id", authUserId)
+          .single();
+
+        if (refundProfile) {
+          const refundCredits = (refundProfile as { credits: number }).credits;
+          await supabase
             .from("profiles")
-            .select("credits")
-            .eq("id", userId)
-            .single();
+            .update({ credits: refundCredits + creditCost })
+            .eq("id", authUserId);
 
-          if (refundProfile) {
-            const refundCredits = (refundProfile as { credits: number }).credits;
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            await (supabase as any)
-              .from("profiles")
-              .update({ credits: refundCredits + creditCost })
-              .eq("id", userId);
-
-            console.log("[Generate Image] Credits refunded:", creditCost);
-          }
-        } catch (refundError) {
-          console.error("[Generate Image] Failed to refund:", refundError);
+          console.log("[Generate Image] Credits refunded:", creditCost);
         }
+      } catch (refundError) {
+        console.error("[Generate Image] Failed to refund:", refundError);
       }
 
       return NextResponse.json(
@@ -483,46 +378,10 @@ export async function POST(request: Request) {
         { status: 500 }
       );
     }
-
-    console.log("[Generate Image] Task submitted:", {
-      taskId: result.taskId,
-      mode,
-      model,
-    });
-
-    // 写入 generations 表
-    if (userId && result.taskId) {
-      try {
-        const supabase = createAdminClient();
-        await supabase.from("generations").insert({
-          user_id: userId,
-          task_id: result.taskId,
-          type: "image",
-          source: source,
-          prompt: prompt || null,
-          model: model,
-          aspect_ratio: aspectRatio,
-          quality: resolution,
-          source_image_url: primarySourceImageUrl || null,
-          status: "processing",
-          credit_cost: creditCost,
-          created_at: new Date().toISOString(),
-        });
-        console.log("[Generate Image] Saved to generations table:", result.taskId);
-      } catch (dbError) {
-        console.error("[Generate Image] Failed to save to DB:", dbError);
-      }
-    }
-
-    return NextResponse.json({
-      success: true,
-      data: {
-        taskId: result.taskId,
-        status: "processing",
-        model: mode === "upscale" || mode === "nine_grid" ? "nano-banana-pro" : model,
-        estimatedTime: "30-60 seconds",
-      },
-    });
+    return NextResponse.json(
+      { success: false, error: result.error || "图片生成失败" },
+      { status: 500 }
+    );
   } catch (error) {
     console.error("[Generate Image] Error:", error);
     return NextResponse.json(
@@ -538,10 +397,20 @@ export async function POST(request: Request) {
 
 export async function GET(request: Request) {
   try {
+    const authClient = await createServerClient();
+    const { data: { user }, error: authError } = await authClient.auth.getUser();
+
+    if (authError || !user) {
+      return NextResponse.json(
+        { success: false, error: "请先登录" },
+        { status: 401 }
+      );
+    }
+
+    const authUserId = user.id;
     const { searchParams } = new URL(request.url);
     const taskId = searchParams.get("taskId");
     const model = searchParams.get("model") || "nano-banana";
-    const userId = searchParams.get("userId"); // 新增：支持按用户ID查询
 
     if (!taskId) {
       return NextResponse.json(
@@ -550,13 +419,13 @@ export async function GET(request: Request) {
       );
     }
 
-    console.log("[Generate Image] Querying task:", taskId, { model, userId });
+    console.log("[Generate Image] Querying task:", taskId, { model, userId: authUserId });
 
     // ================================================================
-    // Gemini 任务直接查询数据库
-    // Gemini API 是同步的，结果直接保存在 generations 表中
+    // 同步图片模型任务直接查询数据库
+    // GPT Image / Gemini API 是同步的，结果直接保存在 generations 表中
     // ================================================================
-    if (taskId.startsWith("gemini-")) {
+    if (taskId.startsWith("gemini-") || taskId.startsWith("openai-")) {
       const supabase = createAdminClient();
 
       // 首先尝试精确匹配 taskId
@@ -565,21 +434,22 @@ export async function GET(request: Request) {
         .from("generations")
         .select("*")
         .eq("task_id", taskId)
+        .eq("user_id", authUserId)
         .single();
 
-      // 如果精确匹配失败且有 userId，尝试查询该用户最近1分钟内的 Gemini 任务
+      // 如果精确匹配失败，尝试查询该用户最近1分钟内的同步图片任务
       // 这解决了 POST 响应解析失败但后端已成功的情况
-      if ((dbError || !genData) && userId) {
-        console.log("[Generate Image] Exact match failed, searching recent tasks for user:", userId);
+      if (dbError || !genData) {
+        console.log("[Generate Image] Exact match failed, searching recent tasks for user:", authUserId);
         const oneMinuteAgo = new Date(Date.now() - 60000).toISOString();
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data: recentData } = await (supabase as any)
           .from("generations")
           .select("*")
-          .eq("user_id", userId)
+          .eq("user_id", authUserId)
           .eq("source", "batch_image")
-          .like("task_id", "gemini-%")
+          .in("model", Object.keys(IMAGE_MODEL_CONFIG))
           .gte("created_at", oneMinuteAgo)
           .order("created_at", { ascending: false })
           .limit(1)
@@ -629,6 +499,21 @@ export async function GET(request: Request) {
     // ================================================================
     // NanoBanana 任务查询 API
     // ================================================================
+    const supabase = createAdminClient();
+    const { data: genData, error: genError } = await supabase
+      .from("generations")
+      .select("user_id, credit_cost, status")
+      .eq("task_id", taskId)
+      .eq("user_id", authUserId)
+      .single();
+
+    if (genError || !genData) {
+      return NextResponse.json(
+        { success: false, error: "任务不存在或无权访问" },
+        { status: 404 }
+      );
+    }
+
     const result = await queryNanoBananaResult(
       taskId,
       model as "nano-banana" | "nano-banana-pro"
@@ -646,15 +531,6 @@ export async function GET(request: Request) {
     // 更新 generations 表状态
     if (task.status === "completed" || task.status === "failed") {
       try {
-        const supabase = createAdminClient();
-
-        // 获取任务信息以便退款
-        const { data: genData } = await supabase
-          .from("generations")
-          .select("user_id, credit_cost, status")
-          .eq("task_id", taskId)
-          .single();
-
         // 如果任务失败且之前状态是 processing，则退还积分
         // 使用原子操作防止重复退款：先更新状态，只有成功更新的请求才能退款
         if (task.status === "failed" && genData && genData.status === "processing") {
@@ -663,6 +539,7 @@ export async function GET(request: Request) {
             .from("generations")
             .update({ status: "failed", error_message: task.errorMessage })
             .eq("task_id", taskId)
+            .eq("user_id", authUserId)
             .eq("status", "processing") // 乐观锁：只有 processing 状态才能更新
             .select()
             .single();
@@ -673,16 +550,15 @@ export async function GET(request: Request) {
             const creditCost = genData.credit_cost || 0;
 
             if (refundUserId && creditCost > 0) {
-              const { data: profileData } = await supabase
-                .from("profiles")
-                .select("credits")
-                .eq("id", refundUserId)
+                const { data: profileData } = await supabase
+                  .from("profiles")
+                  .select("credits")
+                  .eq("id", refundUserId)
                 .single();
 
               if (profileData) {
                 const currentCredits = (profileData as { credits: number }).credits;
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                await (supabase as any)
+                await supabase
                   .from("profiles")
                   .update({ credits: currentCredits + creditCost })
                   .eq("id", refundUserId);
@@ -720,6 +596,7 @@ export async function GET(request: Request) {
               completed_at: new Date().toISOString(),
             })
             .eq("task_id", taskId)
+            .eq("user_id", authUserId)
             .eq("status", "processing");
         }
         console.log("[Generate Image] Updated generations table:", taskId, task.status);
@@ -732,7 +609,7 @@ export async function GET(request: Request) {
     let displayErrorMessage = task.errorMessage;
     if (task.status === "failed") {
       if (task.errorMessage?.includes("google gemini timeout")) {
-        displayErrorMessage = "第三方 AI 服务暂时繁忙，积分已自动退还，请稍后重试或使用 Nano Banana Fast 模式";
+        displayErrorMessage = "第三方 AI 服务暂时繁忙，积分已自动退还，请稍后重试或使用 GPT Image 2";
       } else if (task.errorMessage?.includes("timeout")) {
         displayErrorMessage = "生成超时，积分已自动退还，请稍后重试";
       } else {
@@ -759,4 +636,3 @@ export async function GET(request: Request) {
     );
   }
 }
-

@@ -46,6 +46,7 @@ export type VideoModel =
 
 /** 图片模型选项 */
 export type ImageModel =
+  | "gpt-image-2"      // OpenAI GPT Image 2
   | "gemini-1k"        // 高瑞 flash (1K, 快速~10s)
   | "gemini-2k"        // xas231 portrait (2K, ~90s, 默认)
   | "gemini-4k";       // 高瑞 pro-preview (4K, ~25s)
@@ -429,12 +430,25 @@ export interface ImageModelConfig {
 /**
  * 图片模型配置表 (新版)
  *
- * 3 个模型:
+ * 4 个模型:
+ * - GPT Image 2 (OpenAI, 默认)
  * - 1K 快速 (高瑞 flash)
  * - 2K 高清 (xas231 portrait, 默认)
  * - 4K 超清 (高瑞 pro-preview)
  */
 export const IMAGE_MODEL_CONFIG: Record<ImageModel, ImageModelConfig> = {
+  "gpt-image-2": {
+    label: "GPT Image 2",
+    provider: "openai",
+    apiModel: "gpt-image-2",
+    hostname: "api.openai.com",
+    path: "/v1/images/generations",
+    resolution: "auto",
+    credits: 15,
+    estimatedTime: "~30秒",
+    stream: false,
+    authFormat: "bearer",
+  },
   "gemini-1k": {
     label: "1K 快速",
     provider: "gaorui",
@@ -485,7 +499,20 @@ export const IMAGE_MODEL_CONFIG: Record<ImageModel, ImageModelConfig> = {
 };
 
 /** 图片模型列表（用于 UI 渲染） */
-export const IMAGE_MODELS: ImageModel[] = ["gemini-1k", "gemini-2k", "gemini-4k"];
+export const IMAGE_MODELS: ImageModel[] = ["gpt-image-2", "gemini-1k", "gemini-2k", "gemini-4k"];
+
+/** Phase2 新建图片任务只允许 OpenAI provider，Gemini 配置仅保留历史兼容 */
+export const OPENAI_IMAGE_MODELS: ImageModel[] = IMAGE_MODELS.filter(
+  (model) => IMAGE_MODEL_CONFIG[model].provider === "openai"
+);
+
+export function isOpenAIImageModel(model: string | null | undefined): model is ImageModel {
+  return Boolean(
+    model &&
+    model in IMAGE_MODEL_CONFIG &&
+    IMAGE_MODEL_CONFIG[model as ImageModel].provider === "openai"
+  );
+}
 
 // ============================================================================
 // Sora2 角色创建 (辅助接口)
@@ -686,6 +713,7 @@ export const NANO_PRO_ASPECT_OPTIONS: AspectRatioOption[] = [
 
 /** Gemini 图片模型积分表 */
 export const GEMINI_IMAGE_PRICING: Record<ImageModel, number> = {
+  "gpt-image-2": 15,
   "gemini-1k": 5,
   "gemini-2k": 10,
   "gemini-4k": 15,
@@ -933,8 +961,6 @@ export interface TaskStatusResponse {
   };
   error?: string;
 }
-
-
 
 
 

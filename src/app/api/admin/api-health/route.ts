@@ -1,7 +1,7 @@
 /**
  * API 健康检查 — 后端核心
  * 
- * GET  → 返回 11 个 API 完整状态 + 历史（需 admin 权限）
+ * GET  → 返回 12 个 API 完整状态 + 历史（需 admin 权限）
  * POST → 触发检测（admin 或 cron secret）
  * 
  * 零费用验证方式：
@@ -16,7 +16,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/admin-auth";
 
 // ============================================================================
-// API 配置 — 11 个 API, 7 个域名
+// API 配置 — 12 个 API, 8 个域名
 // ============================================================================
 
 type ProviderStatus = "online" | "degraded" | "offline" | "unchecked";
@@ -79,7 +79,18 @@ const API_CONFIGS: ApiConfig[] = [
     price: "¥0.34",
     verifyMethod: "openai_models",
   },
-  // 🖼️ 图片 (3个)
+  // 🖼️ 图片 (4个)
+  {
+    id: "openai-gpt-image-2",
+    name: "OpenAI GPT Image 2",
+    category: "image",
+    provider: "openai",
+    domain: "api.openai.com",
+    envKeys: ["OPENAI_API_KEY"],
+    model: "gpt-image-2",
+    price: undefined,
+    verifyMethod: "openai_models",
+  },
   {
     id: "gaorui-gemini-1k",
     name: "高瑞 Gemini 1K",

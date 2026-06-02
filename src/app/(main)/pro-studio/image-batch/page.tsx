@@ -93,8 +93,9 @@ import {
   type ImageModel,
   GEMINI_ASPECT_OPTIONS,
   GEMINI_ACTION_PRICING,
-  GEMINI_IMAGE_PRICING,
   IMAGE_MODEL_CONFIG,
+  OPENAI_IMAGE_MODELS,
+  isOpenAIImageModel,
 } from "@/types/generation";
 import { useApiHealth } from "@/hooks/use-api-health";
 
@@ -321,8 +322,8 @@ function TaskCard({
 
         {/* 任务配置信息 - Neon Chips */}
         <div className="flex flex-wrap gap-1.5">
-          <Badge variant="outline" className={cn("text-[10px] h-5 px-1.5 border-white/5 bg-white/5 font-normal", task.config.model === 'gemini-4k' ? 'text-mermaid-pink' : task.config.model === 'gemini-2k' ? 'text-amber-400' : 'text-mermaid-cyan')}>
-            {task.config.model === "gemini-4k" ? "4K" : task.config.model === "gemini-2k" ? "2K" : "1K"}
+          <Badge variant="outline" className="text-[10px] h-5 px-1.5 border-white/5 bg-white/5 font-normal text-mermaid-pink">
+            {task.config.model in IMAGE_MODEL_CONFIG ? IMAGE_MODEL_CONFIG[task.config.model as ImageModel].label : task.config.model}
           </Badge>
           <Badge variant="outline" className="text-[10px] h-5 px-1.5 border-white/5 text-white/50 bg-white/5 font-normal">
             {getActionLabel()}
@@ -473,6 +474,12 @@ export default function ImageBatchPage() {
     resetScenarioData,
     createTasksFromScenario,
   } = useImageBatchStore();
+
+  useEffect(() => {
+    if (!isOpenAIImageModel(globalSettings.model)) {
+      updateGlobalSettings("model", "gpt-image-2");
+    }
+  }, [globalSettings.model, updateGlobalSettings]);
 
   // Local State
   const [userId, setUserId] = useState<string | null>(null);
@@ -742,7 +749,7 @@ export default function ImageBatchPage() {
 
         // 前端预先生成 requestId，后端用它作为 taskId
         // 这样即使响应超时/解析失败，我们也能用 requestId 查询
-        const requestId = `gemini-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+        const requestId = `openai-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
 
         let result;
         let needPolling = false;
@@ -759,7 +766,7 @@ export default function ImageBatchPage() {
             signal: controller.signal,
             body: JSON.stringify({
               mode: task.config.action,
-              imageModel: task.config.model,  // Gemini 路由参数
+              imageModel: task.config.model,
               sourceImageUrl: imageUrlForApi,
               sourceImageUrls: [globalSettings.characterRefUrl, imageUrlForApi].filter(Boolean),
               aspectRatio: task.config.aspectRatio,
@@ -976,11 +983,16 @@ export default function ImageBatchPage() {
 
   // 获取可用的 action 列表
   const getAvailableActions = () => {
+    const modelConfig = IMAGE_MODEL_CONFIG[globalSettings.model as ImageModel];
+    const credits = modelConfig?.provider === "openai"
+      ? modelConfig.credits
+      : IMAGE_MODEL_CONFIG["gpt-image-2"].credits;
+
     return Object.entries(GEMINI_ACTION_PRICING).map(([key, value]) => ({
       value: key as ImageProcessAction,
       label: value.label,
       description: value.description,
-      credits: GEMINI_IMAGE_PRICING[globalSettings.model] || 10,
+      credits,
     }));
   };
 
@@ -1793,11 +1805,9 @@ export default function ImageBatchPage() {
                     画质等级
                   </Label>
                   <div className="flex items-center p-1 rounded-full bg-[#050505]/60 border border-white/5">
-                    {([
-                      { model: "gemini-1k" as ImageModel, icon: <Zap className="h-3.5 w-3.5" />, color: "text-mermaid-cyan" },
-                      { model: "gemini-2k" as ImageModel, icon: <Sparkles className="h-3.5 w-3.5" />, color: "text-amber-400" },
-                      { model: "gemini-4k" as ImageModel, icon: <Monitor className="h-3.5 w-3.5" />, color: "text-mermaid-pink" },
-                    ] as const).map(({ model, icon, color }) => {
+                    {OPENAI_IMAGE_MODELS.map((model) => {
+                      const icon = <Sparkles className="h-3.5 w-3.5" />;
+                      const color = "text-mermaid-pink";
                       const healthStatus = apiHealth.getModelStatus(model);
                       return (
                       <button

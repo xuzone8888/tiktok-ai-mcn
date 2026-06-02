@@ -24,6 +24,7 @@ interface ApiHealthData {
 
 const MODEL_TO_PROVIDER: Record<string, string> = {
   // 图片模型
+  "gpt-image-2": "openai",
   "gemini-1k": "gaorui",
   "gemini-2k": "xas231",
   "gemini-4k": "gaorui",

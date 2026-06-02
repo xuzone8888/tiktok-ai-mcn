@@ -8,6 +8,7 @@
  * - VEO3 参考图版: 10 积分
  * - VEO3 快速版: 8 积分
  * - VEO3 4K超清: 10 积分
+ * - GPT Image 2: 15 积分（开发占位）
  * - Gemini 1K: 5 积分
  * - Gemini 2K: 10 积分
  * - Gemini 4K: 15 积分
@@ -64,11 +65,19 @@ export const IMAGE_CREDITS = {
 /** 电商图片工厂定价 */
 export const ECOM_IMAGE_CREDITS = {
   base: {
+    "gpt-image-2": 15,      // 开发占位，生产定价待确认
+    "gemini-1k": 5,
+    "gemini-2k": 10,
+    "gemini-4k": 15,
     "nano-banana": 10,      // 快速模式基础价
     "nano-banana-pro": 28,  // Pro模式基础价
   },
   // 五图套装固定5张
   ecom_five_pack: {
+    "gpt-image-2": 75,      // 开发占位，生产定价待确认
+    "gemini-1k": 25,
+    "gemini-2k": 50,
+    "gemini-4k": 75,
     "nano-banana": 50,      // 5 * 10
     "nano-banana-pro": 140, // 5 * 28
   },
@@ -113,16 +122,16 @@ export function getImageCost(model: ImageModelKey): number {
  */
 export function getEcomImageCost(
   mode: string,
-  modelType: "nano-banana" | "nano-banana-pro",
+  modelType: ImageModel | "nano-banana" | "nano-banana-pro",
   imageCount: number = 1
 ): number {
   // 五图套装固定价格
   if (mode === "ecom_five_pack") {
-    return ECOM_IMAGE_CREDITS.ecom_five_pack[modelType];
+    return ECOM_IMAGE_CREDITS.ecom_five_pack[modelType] || 75;
   }
   
   // 其他模式按图片数量计算
-  const basePrice = ECOM_IMAGE_CREDITS.base[modelType];
+  const basePrice = ECOM_IMAGE_CREDITS.base[modelType] || 15;
   return basePrice * imageCount;
 }
 
@@ -292,5 +301,4 @@ export async function getUserCredits(): Promise<{ credits: number; userId: strin
     return { credits: 0, userId: null };
   }
 }
-
 

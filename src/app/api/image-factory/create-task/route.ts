@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createServerClient } from "@/lib/supabase/server";
 import { getEcomImageCost } from "@/lib/credits";
+import { isOpenAIImageModel } from "@/types/generation";
 import type {
   EcomImageMode,
   ImageModelType,
@@ -51,7 +52,6 @@ export async function POST(request: NextRequest) {
       model_type,
       language = "zh",
       ratio = "auto",
-      resolution,
       input_image_urls,
       mode_config = {},
       is_one_click = true,
@@ -79,9 +79,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!model_type || !["nano-banana", "nano-banana-pro"].includes(model_type)) {
+    if (!isOpenAIImageModel(model_type)) {
       return NextResponse.json(
-        { success: false, error: "请选择有效的图片模型" },
+        { success: false, error: "旧图片模型已停用，请使用 GPT Image 2" },
         { status: 400 }
       );
     }
@@ -143,7 +143,7 @@ export async function POST(request: NextRequest) {
       model_type,
       language,
       ratio,
-      resolution: model_type === "nano-banana-pro" ? (resolution || "1k") : null,
+      resolution: null,
       input_image_urls,
       mode_config,
       prompts: {},
@@ -197,4 +197,3 @@ export async function POST(request: NextRequest) {
     );
   }
 }
-

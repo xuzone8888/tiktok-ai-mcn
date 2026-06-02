@@ -18,6 +18,7 @@ import { useImageBatchStore } from "@/stores/image-batch-store";
 import { useQuickGenStore } from "@/stores/quick-gen-store";
 import { useToast } from "@/hooks/use-toast";
 import { Video, Image as ImageIcon, Sparkles, Palette, ExternalLink } from "lucide-react";
+import { IMAGE_MODEL_CONFIG } from "@/types/generation";
 
 // ============================================================================
 // 视频任务执行器
@@ -619,13 +620,15 @@ function useImageTaskExecutor() {
       const apiSourceImageUrls: string[] = [];
       if (remoteImageUrl) apiSourceImageUrls.push(remoteImageUrl);
       if (task.config.characterRefUrl) apiSourceImageUrls.push(task.config.characterRefUrl);
+      const isConfiguredImageModel = task.config.model in IMAGE_MODEL_CONFIG;
 
       const response = await fetch("/api/generate/image", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           mode: task.config.action,  // "generate" | "upscale" | "nine_grid"
-          model: task.config.model,
+          model: isConfiguredImageModel ? undefined : task.config.model,
+          imageModel: isConfiguredImageModel ? task.config.model : undefined,
           sourceImageUrls: apiSourceImageUrls.length > 0 ? apiSourceImageUrls : undefined,
           aspectRatio: task.config.aspectRatio,
           resolution: task.config.resolution,
@@ -992,15 +995,15 @@ function useQuickGenImageTaskExecutor() {
           updateTaskStatus(activeTask.id, "generating", { progress: 10 });
 
           // 调用图片生成 API
-          // 检测是否为新 Gemini 模型，传 imageModel 参数给后端路由
-          const isGeminiModel = activeTask.model.startsWith("gemini-");
+          const imageAction = activeTask.action || "generate";
+          const isConfiguredImageModel = activeTask.model in IMAGE_MODEL_CONFIG;
           const response = await fetch("/api/generate/image", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              mode: "generate",
-              model: isGeminiModel ? undefined : activeTask.model,  // 旧模型用 model
-              imageModel: isGeminiModel ? activeTask.model : undefined,  // 新模型用 imageModel
+              mode: imageAction,
+              model: isConfiguredImageModel ? undefined : activeTask.model,
+              imageModel: isConfiguredImageModel ? activeTask.model : undefined,
               prompt: activeTask.prompt,
               sourceImageUrls: activeTask.sourceImageUrls.length > 0 ? activeTask.sourceImageUrls : undefined,
               tier: activeTask.tier,
@@ -1036,7 +1039,7 @@ function useQuickGenImageTaskExecutor() {
           }
           if (!result.success) throw new Error(result.error || "提交失败");
 
-          // 对于 Gemini (nano-banana Fast), POST 直接返回 completed + imageUrl
+          // 对于 GPT Image 2 / 新图片模型，POST 直接返回 completed + imageUrl
           // 不需要进入轮询循环
           if (result.data?.status === "completed" && result.data?.imageUrl) {
             updateTaskStatus(activeTask.id, "completed", {
