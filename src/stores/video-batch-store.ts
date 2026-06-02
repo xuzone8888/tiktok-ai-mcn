@@ -60,7 +60,7 @@ export interface VideoBatchActions {
   createTask: (images: TaskImageInfo[], groupName?: string) => string;
 
   /** 从提示词创建任务（纯提示词模式） */
-  createTaskFromPrompt: (prompt: string, referenceImageUrl?: string, count?: number, groupName?: string, options?: { firstFrameUrl?: string; lastFrameUrl?: string }) => string[];
+  createTaskFromPrompt: (prompt: string, referenceImageUrl?: string, count?: number, groupName?: string, options?: { firstFrameUrl?: string; lastFrameUrl?: string; referenceImageUrls?: string[] }) => string[];
 
   /** 批量创建空任务 */
   createEmptyTasks: (count: number) => string[];
@@ -316,6 +316,7 @@ export const useVideoBatchStore = create<VideoBatchState & VideoBatchActions>()(
               mode: "prompt_to_video" as VideoBatchTaskMode,
               customPrompt: prompt.trim(),
               referenceImageUrl: referenceImageUrl || undefined,
+              referenceImageUrls: options?.referenceImageUrls?.length ? options.referenceImageUrls.slice(0, 9) : undefined,
               groupName: groupName?.trim() || '默认', // 任务组名称（必填）
               aspectRatio: globalSettings.aspectRatio,
               modelType: globalSettings.modelType,
@@ -403,6 +404,12 @@ export const useVideoBatchStore = create<VideoBatchState & VideoBatchActions>()(
           const clonedTask: VideoBatchTask = {
             id: newId,
             images: clonedImages,
+            mode: sourceTask.mode,
+            customPrompt: sourceTask.customPrompt,
+            referenceImageUrl: sourceTask.referenceImageUrl,
+            referenceImageUrls: sourceTask.referenceImageUrls ? [...sourceTask.referenceImageUrls] : undefined,
+            firstFrameUrl: sourceTask.firstFrameUrl,
+            lastFrameUrl: sourceTask.lastFrameUrl,
             aspectRatio: sourceTask.aspectRatio,
             modelType: sourceTask.modelType,
             duration: sourceTask.duration,

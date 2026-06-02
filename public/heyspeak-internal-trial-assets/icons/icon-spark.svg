@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" role="img" aria-label="Spark">
+  <defs>
+    <linearGradient id="g" x1="10" y1="9" x2="38" y2="39" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F6A141"/>
+      <stop offset=".55" stop-color="#F06AA6"/>
+      <stop offset="1" stop-color="#8B5CF6"/>
+    </linearGradient>
+  </defs>
+  <rect x="5.5" y="7.5" width="37" height="33" rx="14" fill="#fff" fill-opacity=".72" stroke="#fff"/>
+  <path d="m24 10 3.5 10.5L38 24l-10.5 3.5L24 38l-3.5-10.5L10 24l10.5-3.5L24 10Z" fill="none" stroke="#28231F" stroke-width="2.4" stroke-linejoin="round"/>
+  <path d="M12.5 12.5 15 17M35.5 12.5 33 17" fill="none" stroke="url(#g)" stroke-width="2.6" stroke-linecap="round"/>
+</svg>

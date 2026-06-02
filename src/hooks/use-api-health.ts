@@ -35,6 +35,9 @@ const MODEL_TO_PROVIDER: Record<string, string> = {
   "veo3-fast": "gaorui",
   "veo3-std": "gaorui",
   "veo3-4k": "gaorui",
+  "happyhorse": "dashscope",
+  "happyhorse-5s": "dashscope",
+  "happyhorse-12s": "dashscope",
 };
 
 // ============================================================================

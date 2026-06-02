@@ -30,7 +30,7 @@ interface ApiConfig {
   envKeys: string[];       // env var names to check
   model?: string;          // API model name
   price?: string;          // unit price display
-  verifyMethod: "openai_models" | "elevenlabs_voices" | "suchuang_query" | "doubao_chat" | "tts_connect";
+  verifyMethod: "openai_models" | "elevenlabs_voices" | "suchuang_query" | "dashscope_task" | "doubao_chat" | "tts_connect";
 }
 
 const API_CONFIGS: ApiConfig[] = [
@@ -45,6 +45,17 @@ const API_CONFIGS: ApiConfig[] = [
     model: "sora2-new 10s/15s",
     price: "¥1.2",
     verifyMethod: "suchuang_query",
+  },
+  {
+    id: "dashscope-happyhorse",
+    name: "DashScope HappyHorse",
+    category: "video",
+    provider: "dashscope",
+    domain: "dashscope.aliyuncs.com",
+    envKeys: ["DASHSCOPE_API_KEY"],
+    model: "happyhorse-1.0-t2v",
+    price: "5s 720P",
+    verifyMethod: "dashscope_task",
   },
   {
     id: "gaorui-veo3-components",
@@ -265,6 +276,23 @@ async function verifyDomain(
           return { success: true, latencyMs };
         }
         return { success: false, latencyMs, error: `HTTP ${response.status}` };
+      }
+
+      case "dashscope_task": {
+        response = await fetch(
+          `https://${domain}/api/v1/tasks/health_check_test_${Date.now()}`,
+          {
+            method: "GET",
+            headers: { "Authorization": `Bearer ${apiKey}` },
+            signal: controller.signal,
+          }
+        );
+        clearTimeout(timeout);
+        const latencyMs = Date.now() - start;
+        if (response.status === 401 || response.status === 403) {
+          return { success: false, latencyMs, error: `HTTP ${response.status}` };
+        }
+        return { success: true, latencyMs };
       }
 
       case "doubao_chat": {

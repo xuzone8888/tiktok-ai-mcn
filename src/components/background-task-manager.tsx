@@ -13,7 +13,7 @@
 import { useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useVideoBatchStore } from "@/stores/video-batch-store";
-import type { PipelineStep } from "@/types/video-batch";
+import { getVideoBatchTotalPrice, type PipelineStep } from "@/types/video-batch";
 import { useImageBatchStore } from "@/stores/image-batch-store";
 import { useQuickGenStore } from "@/stores/quick-gen-store";
 import { useToast } from "@/hooks/use-toast";
@@ -86,6 +86,12 @@ function useVideoTaskExecutor() {
       // 【修复】优先使用任务创建时保存的模特ID，而不是当前全局设置
       const taskModelId = task.aiModelId || globalSettings.aiModelId;
       const taskUseAiModel = task.useAiModel ?? globalSettings.useAiModel;
+      const taskModelType = task.modelType || globalSettings.modelType;
+      const taskDuration = task.duration || globalSettings.duration;
+      const taskQuality = task.quality || globalSettings.quality;
+      const taskAspectRatio = task.aspectRatio || globalSettings.aspectRatio;
+      const taskCreditCost = getVideoBatchTotalPrice(taskModelType, taskDuration, taskQuality);
+      const isPromptMode = task.mode === "prompt_to_video";
 
       console.log("[VideoTaskExecutor] Task AI model config:", {
         taskId: task.id,
@@ -128,10 +134,10 @@ function useVideoTaskExecutor() {
       }
 
       // 上传图片
-      updateTaskStatus(taskId, "uploading", { currentStep: 1, progress: 10 });
-
       const uploadedUrls: string[] = [];
-      for (const img of task.images) {
+      if (!isPromptMode) {
+        updateTaskStatus(taskId, "uploading", { currentStep: 1, progress: 10 });
+        for (const img of task.images) {
         // 验证图片 URL 是否有效
         if (!img.url && !img.file) {
           console.warn("[VideoTaskExecutor] Skipping image with no URL or file:", img.id);
@@ -173,11 +179,18 @@ function useVideoTaskExecutor() {
         }
       }
 
-      if (uploadedUrls.length === 0) {
-        throw new Error("没有可用的图片，请重新上传");
+        if (uploadedUrls.length === 0) {
+          throw new Error("没有可用的图片，请重新上传");
+        }
       }
 
       // 转换图片为 Base64 - 对于 Supabase URL，直接使用 URL
+      const happyHorseImageUrls = isPromptMode
+        ? (task.referenceImageUrls?.length
+          ? task.referenceImageUrls
+          : (task.referenceImageUrl ? [task.referenceImageUrl] : []))
+        : uploadedUrls.slice(0, 9);
+
       const imageBase64List: string[] = [];
       for (const url of uploadedUrls) {
         // 对于 Supabase 公开 URL，直接使用，避免浏览器端转换问题
@@ -215,6 +228,15 @@ function useVideoTaskExecutor() {
       }
 
       // 生成脚本
+      let finalVideoPrompt = task.customPrompt?.trim() || "";
+
+      if (isPromptMode) {
+        updateTaskStatus(taskId, "generating_prompt", {
+          currentStep: 3,
+          progress: 75,
+          doubaoAiVideoPrompt: finalVideoPrompt,
+        });
+      } else {
       updateTaskStatus(taskId, "generating_script", { currentStep: 2, progress: 30 });
 
       const scriptRes = await fetch("/api/video-batch/generate-talking-script", {
@@ -294,7 +316,7 @@ function useVideoTaskExecutor() {
 
       // 最终提示词（包含 AI 模特触发词）
       // 【修复】使用任务中保存的设置，而不是当前全局设置
-      let finalVideoPrompt = promptResult.data.prompt;
+      finalVideoPrompt = promptResult.data.prompt;
       if (taskUseAiModel && globalSettings.aiModelTriggerWord && !finalVideoPrompt.includes(globalSettings.aiModelTriggerWord)) {
         finalVideoPrompt = `[AI MODEL: ${globalSettings.aiModelTriggerWord}]\n\n${finalVideoPrompt}`;
       }
@@ -306,23 +328,103 @@ function useVideoTaskExecutor() {
       });
 
       // 生成视频
+      }
       updateTaskStatus(taskId, "generating_video", { currentStep: 4, progress: 80 });
 
       const mainGridImageUrl = uploadedUrls[0];
 
       // 判断是否为 Seedance 模型
-      const isSeedanceBatch = globalSettings.modelType.startsWith("seedance");
+      const isSeedanceBatch = taskModelType.startsWith("seedance");
+      const isHappyHorseBatch = taskModelType === "happyhorse";
 
-      if (isSeedanceBatch) {
+      if (isHappyHorseBatch) {
+        console.log("[VideoTaskExecutor] Calling HappyHorse submit for batch task:", taskId);
+
+        const videoRes = await fetch("/api/video-batch/generate-happyhorse-video", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            aiVideoPrompt: finalVideoPrompt,
+            aspectRatio: taskAspectRatio,
+            durationSeconds: taskDuration,
+            imageUrls: happyHorseImageUrls,
+            taskId,
+            userId: userIdRef.current,
+            creditCost: taskCreditCost,
+            mode: isPromptMode ? "prompt_to_video" : "image_to_video",
+            groupName: task.groupName,
+          }),
+        });
+
+        if (!videoRes.ok) {
+          const contentType = videoRes.headers.get("content-type") || "";
+          if (contentType.includes("text/html")) {
+            throw new Error(`Video generation service is unavailable (${videoRes.status})`);
+          }
+        }
+
+        const videoText = await videoRes.text();
+        let videoResult;
+        try {
+          videoResult = JSON.parse(videoText);
+        } catch (e) {
+          console.error("[VideoTaskExecutor] Failed to parse HappyHorse response:", videoText, e);
+          throw new Error("视频生成服务响应格式错误");
+        }
+        if (!videoResult.success) {
+          throw new Error(videoResult.error || "视频生成失败");
+        }
+
+        const happyHorseTaskId = videoResult.data.happyHorseTaskId;
+
+        const maxHappyHorseAttempts = taskDuration === 12 ? 144 : 80;
+        for (let i = 0; i < maxHappyHorseAttempts; i++) {
+          await new Promise(r => setTimeout(r, 7500));
+          updateTaskStatus(taskId, "generating_video", { currentStep: 4, progress: Math.min(80 + Math.floor(i / 4), 98) });
+
+          const statusRes = await fetch(`/api/video-batch/happyhorse-status/${happyHorseTaskId}`);
+          const statusText = await statusRes.text();
+          let statusData;
+          try {
+            statusData = JSON.parse(statusText);
+          } catch {
+            continue;
+          }
+
+          if (statusData.success && statusData.data) {
+            if (statusData.data.status === "completed" && statusData.data.videoUrl) {
+              updateTaskStatus(taskId, "success", {
+                currentStep: 4 as PipelineStep,
+                progress: 100,
+                soraTaskId: happyHorseTaskId,
+                soraVideoUrl: statusData.data.videoUrl,
+              });
+              toast({
+                title: "视频生成完成",
+                description: (
+                  <a href="/pro-studio/video-batch" className="text-tiktok-cyan hover:underline flex items-center gap-1">
+                    批量视频任务已完成，点击查看 <ExternalLink className="h-3 w-3" />
+                  </a>
+                ),
+              });
+              return;
+            } else if (statusData.data.status === "failed") {
+              throw new Error(statusData.data.errorMessage || "视频生成失败");
+            }
+          }
+        }
+        throw new Error("HappyHorse 任务超时");
+
+      } else if (isSeedanceBatch) {
         // ========================================
         // Seedance 2.0 批量路由
         // ========================================
         console.log("[VideoTaskExecutor] Calling Seedance submit for batch task:", taskId);
 
         // Seedance 模型映射
-        const seedanceModel = globalSettings.duration === 5
-          ? (globalSettings.modelType === "seedance-pro" ? "seedance-5s-pro" : "seedance-5s")
-          : (globalSettings.modelType === "seedance-pro" ? "seedance-10s-pro" : "seedance-10s");
+        const seedanceModel = taskDuration === 5
+          ? (taskModelType === "seedance-pro" ? "seedance-5s-pro" : "seedance-5s")
+          : (taskModelType === "seedance-pro" ? "seedance-10s-pro" : "seedance-10s");
 
         const videoRes = await fetch("/api/seedance/submit", {
           method: "POST",
@@ -330,7 +432,7 @@ function useVideoTaskExecutor() {
           body: JSON.stringify({
             prompt: finalVideoPrompt,
             model: seedanceModel,
-            ratio: globalSettings.aspectRatio,
+            ratio: taskAspectRatio,
             imageUrl: mainGridImageUrl,
             userId: userIdRef.current,
           }),
@@ -363,7 +465,7 @@ function useVideoTaskExecutor() {
           await new Promise(r => setTimeout(r, 5000));
           updateTaskStatus(taskId, "generating_video", { currentStep: 4, progress: Math.min(80 + i, 98) });
 
-          const statusRes = await fetch(`/api/seedance/status?taskId=${seedanceTaskId}&model=${seedanceModel}&ratio=${globalSettings.aspectRatio}`);
+          const statusRes = await fetch(`/api/seedance/status?taskId=${seedanceTaskId}&model=${seedanceModel}&ratio=${taskAspectRatio}`);
           const statusText = await statusRes.text();
           let statusData;
           try {
@@ -409,12 +511,15 @@ function useVideoTaskExecutor() {
           body: JSON.stringify({
             aiVideoPrompt: finalVideoPrompt,
             mainGridImageUrl: mainGridImageUrl,
-            aspectRatio: globalSettings.aspectRatio,
-            durationSeconds: globalSettings.duration,
-            quality: globalSettings.quality,
-            modelType: globalSettings.modelType,
+            aspectRatio: taskAspectRatio,
+            durationSeconds: taskDuration,
+            quality: taskQuality,
+            modelType: taskModelType,
             taskId: taskId,
             userId: userIdRef.current,
+            creditCost: taskCreditCost,
+            mode: isPromptMode ? "prompt_to_video" : "image_to_video",
+            groupName: task.groupName,
           }),
         });
 
@@ -803,6 +908,7 @@ function useQuickGenTaskExecutor() {
 
           // 判断是否为 Seedance 模型
           const isSeedance = activeTask.model.startsWith("seedance-");
+          const isHappyHorse = activeTask.model.startsWith("happyhorse-");
 
           if (isSeedance) {
             // ========================================
@@ -832,6 +938,35 @@ function useQuickGenTaskExecutor() {
 
             updateTaskStatus(activeTask.id, "polling", {
               progress: 20, taskId: result.data.taskId, creditsDeducted: true
+            });
+          } else if (isHappyHorse) {
+            const response = await fetch("/api/video-batch/generate-happyhorse-video", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                aiVideoPrompt: activeTask.prompt,
+                aspectRatio: activeTask.aspectRatio,
+                durationSeconds: activeTask.duration,
+                imageUrls: activeTask.sourceImageUrl ? [activeTask.sourceImageUrl] : [],
+                taskId: activeTask.id,
+                userId: userIdRef.current,
+                creditCost: activeTask.creditCost,
+                mode: "prompt_to_video",
+              }),
+            });
+
+            const responseText = await response.text();
+            let result;
+            try {
+              result = JSON.parse(responseText);
+            } catch (e) {
+              console.error("[QuickGenTaskExecutor] Failed to parse HappyHorse response:", responseText, e);
+              throw new Error("视频生成服务响应格式错误");
+            }
+            if (!result.success) throw new Error(result.error || "提交失败");
+
+            updateTaskStatus(activeTask.id, "polling", {
+              progress: 20, taskId: result.data.happyHorseTaskId, creditsDeducted: true
             });
           } else {
             // ========================================
@@ -874,9 +1009,10 @@ function useQuickGenTaskExecutor() {
         if (!task || !task.taskId) return;
 
         const isSeedanceModel = task.model.startsWith("seedance-");
+        const isHappyHorseModel = task.model.startsWith("happyhorse-");
         const usePro = task.quality === "hd" || task.duration === 25;
-        const maxAttempts = isSeedanceModel ? 60 : (usePro ? 120 : 40);
-        const pollInterval = isSeedanceModel ? 5000 : 10000; // Seedance 轮询间隔更短
+        const maxAttempts = isHappyHorseModel ? (task.duration === 12 ? 144 : 80) : isSeedanceModel ? 60 : (usePro ? 120 : 40);
+        const pollInterval = isSeedanceModel ? 5000 : isHappyHorseModel ? 7500 : 10000; // Seedance 轮询间隔更短
 
         for (let i = 0; i < maxAttempts; i++) {
           await new Promise(r => setTimeout(r, pollInterval));
@@ -886,6 +1022,8 @@ function useQuickGenTaskExecutor() {
           if (isSeedanceModel) {
             // Seedance 状态查询
             statusRes = await fetch(`/api/seedance/status?taskId=${task.taskId}&model=${task.model}&ratio=${task.aspectRatio}`);
+          } else if (isHappyHorseModel) {
+            statusRes = await fetch(`/api/video-batch/happyhorse-status/${task.taskId}`);
           } else {
             // 原有 Sora2/VEO3 状态查询
             statusRes = await fetch(`/api/generate/video?taskId=${task.taskId}&usePro=${usePro}`);

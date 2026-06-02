@@ -40,7 +40,9 @@ export type VideoModel =
   | "seedance-5s"       // Seedance 2.0 5秒 高清1080P
   | "seedance-10s"      // Seedance 2.0 10秒 高清1080P
   | "seedance-5s-pro"   // Seedance 2.0 5秒 Pro 原生720P
-  | "seedance-10s-pro"  // Seedance 2.0 10秒 Pro 原生720P
+  | "seedance-10s-pro"  // Seedance 2.0 10s Pro
+  | "happyhorse-5s"     // DashScope HappyHorse 1.0 T2V 5s 720P
+  | "happyhorse-12s"    // DashScope HappyHorse 1.0 T2V 12s 720P
   // @deprecated — 旧模型，迁移期间保留
   | "sora2-10s" | "sora2-15s" | "sora2-pro-15s-hd" | "sora2-pro-25s";
 
@@ -139,7 +141,7 @@ export interface VideoGenerationConfig {
 /** 视频模型配置项 */
 export interface VideoModelConfig {
   label: string;           // UI 显示名
-  provider: "suchuang" | "gaorui" | "volcengine";
+  provider: "suchuang" | "gaorui" | "volcengine" | "dashscope";
   apiModel: string;        // 传给 API 的实际模型名
   endpoint: string;        // API 端点路径
   duration: number;        // 固定时长（秒）
@@ -297,6 +299,36 @@ export const VIDEO_MODEL_CONFIG: Record<string, VideoModelConfig> = {
     requestFormat: "messages",
     estimatedTime: "~3分钟",
   },
+  "happyhorse-5s": {
+    label: "HappyHorse 1.0 5s 720P",
+    provider: "dashscope",
+    apiModel: "happyhorse-1.0-t2v",
+    endpoint: "/api/video-batch/generate-happyhorse-video",
+    duration: 5,
+    credits: 450,
+    supportsRefImage: false,
+    maxImages: 0,
+    supportsCharacter: false,
+    quality: "standard",
+    responseMode: "async",
+    requestFormat: "prompt",
+    estimatedTime: "~2-4 minutes",
+  },
+  "happyhorse-12s": {
+    label: "HappyHorse 1.0 12s 720P",
+    provider: "dashscope",
+    apiModel: "happyhorse-1.0-t2v",
+    endpoint: "/api/video-batch/generate-happyhorse-video",
+    duration: 12,
+    credits: 1080,
+    supportsRefImage: false,
+    maxImages: 0,
+    supportsCharacter: false,
+    quality: "standard",
+    responseMode: "async",
+    requestFormat: "prompt",
+    estimatedTime: "~4-8 minutes",
+  },
 };
 
 /** 获取新视频模型列表（仅新模型，用于 UI 渲染） */
@@ -304,6 +336,7 @@ export const NEW_VIDEO_MODELS: VideoModel[] = [
   "sora2-new-10s", "sora2-new-15s",
   "veo3-components", "veo3-fast", "veo3-fast-4k",
   "seedance-5s", "seedance-10s", "seedance-5s-pro", "seedance-10s-pro",
+  "happyhorse-5s", "happyhorse-12s",
 ];
 
 // --- @deprecated 旧视频配置，迁移期间保留 ---
@@ -312,7 +345,7 @@ export interface VideoModelPricing {
   label: string;
   duration: string;
   credits: number;
-  apiDuration: 5 | 8 | 10 | 15 | 25;
+  apiDuration: 5 | 8 | 10 | 12 | 15 | 25;
   quality: "standard" | "hd";
   apiModel: string;
 }
@@ -383,6 +416,22 @@ export const VIDEO_MODEL_PRICING: Record<string, VideoModelPricing> = {
     apiDuration: 10,
     quality: "hd",
     apiModel: "seedance-10s-pro",
+  },
+  "happyhorse-5s": {
+    label: "HappyHorse 1.0 5s 720P",
+    duration: "5s",
+    credits: 450,
+    apiDuration: 5,
+    quality: "standard",
+    apiModel: "happyhorse-1.0-t2v",
+  },
+  "happyhorse-12s": {
+    label: "HappyHorse 1.0 12s 720P",
+    duration: "12s",
+    credits: 1080,
+    apiDuration: 12,
+    quality: "standard",
+    apiModel: "happyhorse-1.0-t2v",
   },
 };
 

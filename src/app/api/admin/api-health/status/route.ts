@@ -38,6 +38,7 @@ export async function GET() {
         gaorui: { status: "unchecked", rate: 0 },
         xas231: { status: "unchecked", rate: 0 },
         suchuang: { status: "unchecked", rate: 0 },
+        dashscope: { status: "unchecked", rate: 0 },
         deepseek: { status: "unchecked", rate: 0 },
         doubao: { status: "unchecked", rate: 0 },
         elevenlabs: { status: "unchecked", rate: 0 },

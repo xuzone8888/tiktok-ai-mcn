@@ -209,11 +209,19 @@ interface ImageUploaderProps {
   onImagesChange: (images: TaskImageInfo[]) => void;
   maxImages?: number;
   compact?: boolean;
+  variant?: "sora2-grid" | "reference";
 }
 
-function ImageUploader({ images, onImagesChange, maxImages = 4, compact = false }: ImageUploaderProps) {
+function ImageUploader({
+  images,
+  onImagesChange,
+  maxImages = 4,
+  compact = false,
+  variant = "sora2-grid",
+}: ImageUploaderProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
+  const isReferenceMode = variant === "reference";
 
   const handleFileSelect = useCallback(
     (files: FileList) => {
@@ -313,9 +321,14 @@ function ImageUploader({ images, onImagesChange, maxImages = 4, compact = false 
             )}
           >
             <img src={img.url} alt={img.name} className="w-full h-full object-cover" />
-            {index === 0 && (
+            {index === 0 && !isReferenceMode && (
               <div className="absolute bottom-0 left-0 right-0 bg-tiktok-cyan/90 text-[8px] text-center text-black font-bold py-0.5">
                 主图
+              </div>
+            )}
+            {isReferenceMode && (
+              <div className="absolute bottom-0 left-0 right-0 bg-black/70 text-[8px] text-center text-white font-medium py-0.5">
+                图 {index + 1}
               </div>
             )}
           </div>
@@ -331,13 +344,14 @@ function ImageUploader({ images, onImagesChange, maxImages = 4, compact = false 
 
   return (
     <div className="space-y-3">
-      {/* 提示信息 */}
-      <div className="flex items-center gap-2 p-2 rounded-lg bg-amber-500/10 border border-amber-500/30">
-        <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0" />
-        <p className="text-xs text-amber-400">
-          <strong>第一张图片必须是适配Sora2的九宫格图（纯白背景+3×3多角度）</strong>，其余最多3张为补充素材
-        </p>
-      </div>
+      {!isReferenceMode && (
+        <div className="flex items-center gap-2 p-2 rounded-lg bg-amber-500/10 border border-amber-500/30">
+          <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0" />
+          <p className="text-xs text-amber-400">
+            <strong>第一张图片必须是适配Sora2的九宫格图（纯白背景+3×3多角度）</strong>，其余最多3张为补充素材
+          </p>
+        </div>
+      )}
 
       {/* 图片列表 */}
       {images.length > 0 && (
@@ -347,7 +361,7 @@ function ImageUploader({ images, onImagesChange, maxImages = 4, compact = false 
               key={img.id}
               className={cn(
                 "group relative aspect-square rounded-xl overflow-hidden border-2 transition-all",
-                index === 0
+                index === 0 && !isReferenceMode
                   ? "border-tiktok-cyan ring-2 ring-tiktok-cyan/30"
                   : "border-border/50 hover:border-border"
               )}
@@ -355,10 +369,15 @@ function ImageUploader({ images, onImagesChange, maxImages = 4, compact = false 
               <img src={img.url} alt={img.name} className="w-full h-full object-cover" />
 
               {/* 主图标记 */}
-              {index === 0 && (
+              {index === 0 && !isReferenceMode && (
                 <div className="absolute top-0 left-0 right-0 bg-gradient-to-b from-tiktok-cyan to-tiktok-cyan/80 text-black text-xs font-bold text-center py-1 flex items-center justify-center gap-1">
                   <Grid3X3 className="h-3 w-3" />
                   九宫格主图
+                </div>
+              )}
+              {isReferenceMode && (
+                <div className="absolute top-0 left-0 right-0 bg-black/70 text-white text-xs font-medium text-center py-1">
+                  character{index + 1}
                 </div>
               )}
 
@@ -403,7 +422,7 @@ function ImageUploader({ images, onImagesChange, maxImages = 4, compact = false 
                     </Tooltip>
                   </TooltipProvider>
                 )}
-                {index > 0 && (
+                {index > 0 && !isReferenceMode && (
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger asChild>
@@ -468,7 +487,9 @@ function ImageUploader({ images, onImagesChange, maxImages = 4, compact = false 
             className="hidden"
           />
           <Upload className="h-12 w-12 text-muted-foreground/50 mb-4" />
-          <p className="text-lg font-medium text-muted-foreground mb-1">点击或拖拽上传图片</p>
+          <p className="text-lg font-medium text-muted-foreground mb-1">
+            {isReferenceMode ? "点击或拖拽上传参考图" : "点击或拖拽上传图片"}
+          </p>
           <p className="text-sm text-muted-foreground/70">支持 JPG、PNG、WebP，最多 {maxImages} 张</p>
         </label>
       )}
@@ -545,6 +566,8 @@ const VideoTaskCard = memo(function VideoTaskCard({
       return `${taskDuration}秒 1080P`;
     } else if (taskModelType === "seedance-pro") {
       return `${taskDuration}秒 Pro`;
+    } else if (taskModelType === "happyhorse") {
+      return `${taskDuration}s 720P`;
     } else if (taskModelType === "sora2") {
       return `${taskDuration}秒`;
     } else {
@@ -934,6 +957,8 @@ function VideoPlayerDialog({ task, open, onClose, onDownload }: VideoPlayerDialo
       return `${duration}秒 1080P`;
     } else if (modelType === "seedance-pro") {
       return `${duration}秒 Pro`;
+    } else if (modelType === "happyhorse") {
+      return `${duration}s 720P`;
     } else if (modelType === "sora2-pro") {
       if (quality === "hd") return `${duration}秒 高清`;
       return `${duration}秒 标清`;
@@ -1137,6 +1162,7 @@ export default function VideoBatchPage() {
   const [groupNameInput, setGroupNameInput] = useState(""); // 分组名称
   const [referenceImageFile, setReferenceImageFile] = useState<File | null>(null);
   const [referenceImageUrl, setReferenceImageUrl] = useState("");
+  const [happyHorseReferenceImages, setHappyHorseReferenceImages] = useState<TaskImageInfo[]>([]);
   // 首尾帧（veo3-fast / veo3-4k 自由创作模式用）
   const [firstFrameFile, setFirstFrameFile] = useState<File | null>(null);
   const [firstFrameUrl, setFirstFrameUrl] = useState("");
@@ -1210,8 +1236,19 @@ export default function VideoBatchPage() {
       }
 
       // 上传参考图（纯提示词模式）
+      const uploadedHappyHorseReferenceUrls: string[] = [];
+      if (createMode === "prompt" && globalSettings.modelType === "happyhorse") {
+        for (const img of happyHorseReferenceImages.slice(0, 9)) {
+          try {
+            uploadedHappyHorseReferenceUrls.push(await uploadImageToServer(img));
+          } catch (uploadErr) {
+            console.error("Upload HappyHorse reference image failed:", uploadErr);
+          }
+        }
+      }
+
       let savedReferenceImageUrl = "";
-      if (createMode === "prompt" && referenceImageFile) {
+      if (createMode === "prompt" && globalSettings.modelType !== "happyhorse" && referenceImageFile) {
         try {
           const formData = new FormData();
           formData.append('file', referenceImageFile);
@@ -1226,7 +1263,7 @@ export default function VideoBatchPage() {
         } catch (uploadErr) {
           console.error('Upload reference image failed:', uploadErr);
         }
-      } else if (createMode === "prompt" && referenceImageUrl && !referenceImageUrl.startsWith('blob:')) {
+      } else if (createMode === "prompt" && globalSettings.modelType !== "happyhorse" && referenceImageUrl && !referenceImageUrl.startsWith('blob:')) {
         // 已经是远程 URL
         savedReferenceImageUrl = referenceImageUrl;
       }
@@ -1249,6 +1286,7 @@ export default function VideoBatchPage() {
         groupNameTemplate: groupNameInput,
         templateImages: uploadedImages,
         referenceImageUrl: savedReferenceImageUrl, // 新增：参考图持久化 URL
+        referenceImageUrls: uploadedHappyHorseReferenceUrls,
         savedAt: new Date().toISOString(),
       };
 
@@ -1342,6 +1380,18 @@ export default function VideoBatchPage() {
       }
 
       // 恢复参考图（纯提示词模式）
+      if (config.referenceImageUrls && config.referenceImageUrls.length > 0) {
+        setHappyHorseReferenceImages(config.referenceImageUrls.slice(0, 9).map((url: string, index: number) => ({
+          id: `happyhorse-ref-${Date.now()}-${index}`,
+          url,
+          name: `Reference ${index + 1}`,
+          order: index,
+          isMainGrid: index === 0,
+        })));
+      } else {
+        setHappyHorseReferenceImages([]);
+      }
+
       if (config.referenceImageUrl) {
         setReferenceImageUrl(config.referenceImageUrl);
         setReferenceImageFile(null); // 远程图片没有 File 对象
@@ -1646,6 +1696,7 @@ C07: [story CTA, inspiring, <50 chars]`,
   const veo3CharacterRefUrl = globalSettings.characterRefUrl;
   const isVeo3Model = globalSettings.modelType === "veo3-fast" || globalSettings.modelType === "veo3-std" || globalSettings.modelType === "veo3-4k";
   const isGrokModel = globalSettings.modelType === "grok";
+  const isHappyHorseModel = globalSettings.modelType === "happyhorse";
   // VEO 和 Grok 都使用自建角色的参考图（reference_sheet_url）
   const useRefImageModel = isVeo3Model || isGrokModel;
   const apiHealth = useApiHealth();
@@ -1873,6 +1924,7 @@ C07: [story CTA, inspiring, <50 chars]`,
       try {
         let finalVideoPrompt = "";
         let mainGridImageUrl = "";
+        let happyHorseImageUrls: string[] = [];
 
         if (isPromptMode) {
           // ==================== 纯提示词模式 ====================
@@ -1882,6 +1934,9 @@ C07: [story CTA, inspiring, <50 chars]`,
           finalVideoPrompt = task.customPrompt || "";
           // 兼容: 首帧 URL 优先，回退到旧的 referenceImageUrl
           mainGridImageUrl = task.firstFrameUrl || task.referenceImageUrl || "";
+          happyHorseImageUrls = task.referenceImageUrls?.length
+            ? task.referenceImageUrls
+            : (mainGridImageUrl ? [mainGridImageUrl] : []);
 
           // 如果使用AI模特且有trigger word，添加到提示词中
           if (useAiModel && selectedModelTriggerWord) {
@@ -1918,6 +1973,7 @@ C07: [story CTA, inspiring, <50 chars]`,
             });
           }
           console.log("[Video Batch] Images uploaded:", uploadedUrls);
+          happyHorseImageUrls = uploadedUrls.slice(0, 9);
 
           // ==================== Step 1: 生成口播脚本 ====================
           updateTaskStatus(task.id, "generating_script", { currentStep: 1, progress: 20 });
@@ -2029,18 +2085,32 @@ C07: [story CTA, inspiring, <50 chars]`,
         const isVeo3Model = taskModelType === "veo3-fast" || taskModelType === "veo3-std" || taskModelType === "veo3-4k";
         const isGrokModel = taskModelType === "grok";
         const isSeedanceModel = taskModelType === "seedance" || taskModelType === "seedance-pro";
-        const apiEndpoint = isSeedanceModel
-          ? "/api/seedance/submit"
-          : isGrokModel
+        const isHappyHorseModel = taskModelType === "happyhorse";
+        const apiEndpoint = isHappyHorseModel
+          ? "/api/video-batch/generate-happyhorse-video"
+          : isSeedanceModel
+            ? "/api/seedance/submit"
+            : isGrokModel
             ? "/api/video-batch/generate-grok-video"
             : isVeo3Model
               ? "/api/video-batch/generate-veo-video"
               : "/api/video-batch/generate-sora-video";
 
-        console.log(`[Video Batch] Calling ${isSeedanceModel ? 'Seedance' : isGrokModel ? 'Grok' : isVeo3Model ? 'VEO3' : 'Sora2'} API with userId:`, currentUserId);
+        console.log(`[Video Batch] Calling ${isHappyHorseModel ? 'HappyHorse' : isSeedanceModel ? 'Seedance' : isGrokModel ? 'Grok' : isVeo3Model ? 'VEO3' : 'Sora2'} API with userId:`, currentUserId);
 
         // Seedance 模型使用不同的请求格式
-        const requestBody = isSeedanceModel ? {
+        const requestBody = isHappyHorseModel ? {
+          aiVideoPrompt: finalVideoPrompt,
+          aspectRatio: taskAspectRatio,
+          durationSeconds: taskDuration,
+          imageUrls: happyHorseImageUrls,
+          modelType: taskModelType,
+          taskId: task.id,
+          userId: currentUserId,
+          creditCost: taskCreditCost,
+          mode: isPromptMode ? "prompt_to_video" : "image_to_video",
+          groupName: task.groupName,
+        } : isSeedanceModel ? {
           prompt: finalVideoPrompt,
           model: taskModelType === "seedance-pro"
             ? (taskDuration === 5 ? "seedance-5s-pro" : "seedance-10s-pro")
@@ -2087,12 +2157,14 @@ C07: [story CTA, inspiring, <50 chars]`,
 
 
         // async 模式：获取任务 ID
-        const soraTaskId = isSeedanceModel
-          ? videoResult.data.taskId
+        const soraTaskId = isHappyHorseModel
+          ? videoResult.data.happyHorseTaskId
+          : isSeedanceModel
+            ? videoResult.data.taskId
           : isGrokModel
             ? videoResult.data.grokTaskId
             : isVeo3Model ? videoResult.data.veoTaskId : videoResult.data.soraTaskId;
-        console.log(`[Video Batch] ${isSeedanceModel ? 'Seedance' : isGrokModel ? 'Grok' : isVeo3Model ? 'VEO3' : 'Sora2'} task submitted (async):`, soraTaskId);
+        console.log(`[Video Batch] ${isHappyHorseModel ? 'HappyHorse' : isSeedanceModel ? 'Seedance' : isGrokModel ? 'Grok' : isVeo3Model ? 'VEO3' : 'Sora2'} task submitted (async):`, soraTaskId);
 
         // 更新状态为正在生成视频
         updateTaskStatus(task.id, "generating_video", {
@@ -2103,10 +2175,12 @@ C07: [story CTA, inspiring, <50 chars]`,
 
         // ==================== Step 3.5: 轮询视频任务状态 ====================
         const isPro = taskModelType === "sora2-pro" || taskQuality === "hd" || taskDuration === 25;
-        const maxPollTime = isSeedanceModel ? 5 * 60 * 1000 : (isVeo3Model || isGrokModel) ? 10 * 60 * 1000 : (isPro ? 35 * 60 * 1000 : 10 * 60 * 1000);
-        const statusApiPath = isSeedanceModel
-          ? `/api/seedance/status?taskId=${soraTaskId}&model=${requestBody.model || 'seedance-5s'}&ratio=${taskAspectRatio}`
-          : isGrokModel
+        const maxPollTime = isHappyHorseModel ? (taskDuration === 12 ? 18 : 10) * 60 * 1000 : isSeedanceModel ? 5 * 60 * 1000 : (isVeo3Model || isGrokModel) ? 10 * 60 * 1000 : (isPro ? 35 * 60 * 1000 : 10 * 60 * 1000);
+        const statusApiPath = isHappyHorseModel
+          ? `/api/video-batch/happyhorse-status/${soraTaskId}`
+          : isSeedanceModel
+            ? `/api/seedance/status?taskId=${soraTaskId}&model=${requestBody.model || 'seedance-5s'}&ratio=${taskAspectRatio}`
+            : isGrokModel
             ? `/api/video-batch/grok-status/${soraTaskId}`
             : isVeo3Model
               ? `/api/video-batch/veo-status/${soraTaskId}`
@@ -2931,6 +3005,19 @@ C07: [story CTA, inspiring, <50 chars]`,
                               </div>
                             </div>
                           </>
+                        ) : globalSettings.modelType === "happyhorse" ? (
+                          <div className="space-y-2">
+                            <Label className="text-xs text-white/60">HappyHorse 参考图 (最多 9 张)</Label>
+                            <div className="max-h-44 overflow-y-auto rounded-lg border border-white/10 bg-white/5 p-2">
+                              <ImageUploader
+                                images={happyHorseReferenceImages}
+                                onImagesChange={setHappyHorseReferenceImages}
+                                maxImages={9}
+                                variant="reference"
+                              />
+                            </div>
+                            <p className="text-[10px] text-white/35">有参考图时自动使用 R2V，可在提示词里写 character1、character2 指代图片。</p>
+                          </div>
                         ) : (
                           <>
                             <Label className="text-xs text-white/60">📷 参考图 (可选)</Label>
@@ -3038,9 +3125,10 @@ C07: [story CTA, inspiring, <50 chars]`,
                         📷 上传素材图片 <span className="text-xs text-white/40 ml-2">支持批量上传</span>
                       </Label>
                       <ImageUploader
-                        images={newTaskImages}
-                        onImagesChange={setNewTaskImages}
-                        maxImages={10}
+                        images={newTaskImages.slice(0, globalSettings.modelType === "happyhorse" ? 9 : 10)}
+                        onImagesChange={(images) => setNewTaskImages(images.slice(0, globalSettings.modelType === "happyhorse" ? 9 : 10))}
+                        maxImages={globalSettings.modelType === "happyhorse" ? 9 : 10}
+                        variant={globalSettings.modelType === "happyhorse" ? "reference" : "sora2-grid"}
                       />
                     </div>
 
@@ -3272,6 +3360,7 @@ C07: [story CTA, inspiring, <50 chars]`,
                         { id: "veo3-4k", name: "Veo3（4K）", sub: "首尾帧", dur: 8, qual: "hd" },
                         { id: "seedance", name: "Seedance 2.0", sub: "5/10秒 1080P", dur: 5, qual: "standard" },
                         { id: "seedance-pro", name: "Seedance Pro", sub: "5/10秒 720P", dur: 5, qual: "hd" },
+                        { id: "happyhorse", name: "HappyHorse", sub: "5/12s 720P", dur: 5, qual: "standard" },
                         { id: "sora2", name: "Sora2", sub: "停服中", dur: 15, qual: "standard" },
                         { id: "sora2-pro", name: "Sora Pro", sub: "停服中", dur: 15, qual: "hd" },
                       ].map((m) => {
@@ -3324,7 +3413,8 @@ C07: [story CTA, inspiring, <50 chars]`,
                   <div className="space-y-2">
                     <Label className="text-xs text-white/60">时长</Label>
                     <div className="flex gap-2">
-                      {(globalSettings.modelType === "grok" ? [10, 15] :
+                      {(globalSettings.modelType === "happyhorse" ? [5, 12] :
+                        globalSettings.modelType === "grok" ? [10, 15] :
                         globalSettings.modelType === "sora2" ? [10, 15] :
                         globalSettings.modelType === "sora2-pro" ? [15, 25] :
                         (globalSettings.modelType === "seedance" || globalSettings.modelType === "seedance-pro") ? [5, 10] :
@@ -3459,8 +3549,12 @@ C07: [story CTA, inspiring, <50 chars]`,
                     newTaskImages.forEach((img) => {
                       if (img.url.startsWith("blob:")) URL.revokeObjectURL(img.url);
                     });
+                    happyHorseReferenceImages.forEach((img) => {
+                      if (img.url.startsWith("blob:")) URL.revokeObjectURL(img.url);
+                    });
                     if (referenceImageUrl.startsWith("blob:")) URL.revokeObjectURL(referenceImageUrl);
                     setNewTaskImages([]);
+                    setHappyHorseReferenceImages([]);
                     setPromptInput("");
                     setGroupNameInput("");
                     setReferenceImageUrl("");
@@ -3505,6 +3599,7 @@ C07: [story CTA, inspiring, <50 chars]`,
                     const currentPrompt = promptInput;
                     const currentGroup = groupNameInput;
                     const currentImages = [...newTaskImages];
+                    const currentHappyHorseReferenceImages = [...happyHorseReferenceImages];
                     const currentRefFile = referenceImageFile;
                     const currentRefUrl = referenceImageUrl;
                     // 首尾帧快照
@@ -3525,9 +3620,20 @@ C07: [story CTA, inspiring, <50 chars]`,
                           let uploadedRefUrl = "";
                           let uploadedFirstFrameUrl = "";
                           let uploadedLastFrameUrl = "";
+                          const uploadedHappyHorseReferenceUrls: string[] = [];
+
+                          if (globalSettings.modelType === "happyhorse") {
+                            for (const img of currentHappyHorseReferenceImages.slice(0, 9)) {
+                              try {
+                                uploadedHappyHorseReferenceUrls.push(await uploadImageToServer(img));
+                              } catch (e) {
+                                console.error("Upload HappyHorse reference image failed:", e);
+                              }
+                            }
+                          }
 
                           // 上传参考图（非首尾帧模型用）
-                          if (currentRefFile) {
+                          if (globalSettings.modelType !== "happyhorse" && currentRefFile) {
                             try {
                               const formData = new FormData();
                               formData.append("file", currentRefFile);
@@ -3570,9 +3676,10 @@ C07: [story CTA, inspiring, <50 chars]`,
                             uploadedRefUrl || undefined,
                             currentCount,
                             currentGroup || undefined,
-                            (uploadedFirstFrameUrl || uploadedLastFrameUrl) ? {
+                            (uploadedFirstFrameUrl || uploadedLastFrameUrl || uploadedHappyHorseReferenceUrls.length) ? {
                               firstFrameUrl: uploadedFirstFrameUrl || undefined,
                               lastFrameUrl: uploadedLastFrameUrl || undefined,
+                              referenceImageUrls: uploadedHappyHorseReferenceUrls,
                             } : undefined
                           );
                           setPromptInput("");
@@ -3580,6 +3687,10 @@ C07: [story CTA, inspiring, <50 chars]`,
                           if (currentRefUrl.startsWith("blob:")) URL.revokeObjectURL(currentRefUrl);
                           setReferenceImageUrl("");
                           setReferenceImageFile(null);
+                          currentHappyHorseReferenceImages.forEach((img) => {
+                            if (img.url.startsWith("blob:")) URL.revokeObjectURL(img.url);
+                          });
+                          setHappyHorseReferenceImages([]);
                           // 清理首尾帧
                           if (currentFirstFrameUrl.startsWith("blob:")) URL.revokeObjectURL(currentFirstFrameUrl);
                           if (currentLastFrameUrl.startsWith("blob:")) URL.revokeObjectURL(currentLastFrameUrl);
@@ -3907,7 +4018,7 @@ C07: [story CTA, inspiring, <50 chars]`,
           defaultName={`${globalSettings.modelType}-${globalSettings.duration}s-${globalSettings.aspectRatio}`}
           isUploading={isUploadingTemplate}
           configPreview={[
-            { icon: <Film className="h-3.5 w-3.5" />, label: "模型", value: globalSettings.modelType === "grok" ? "Grok Imagine" : globalSettings.modelType === "sora2" ? "Sora 2.0" : globalSettings.modelType === "sora2-pro" ? "Sora 2.0 Pro" : globalSettings.modelType === "veo3-fast" ? "Veo3（快速）" : globalSettings.modelType === "veo3-std" ? "Veo3（标准）" : globalSettings.modelType === "veo3-4k" ? "Veo3（4K）" : globalSettings.modelType === "seedance" ? "Seedance 2.0" : globalSettings.modelType === "seedance-pro" ? "Seedance 2.0 Pro" : "Veo3（4K）" },
+            { icon: <Film className="h-3.5 w-3.5" />, label: "模型", value: globalSettings.modelType === "grok" ? "Grok Imagine" : globalSettings.modelType === "happyhorse" ? "HappyHorse 1.0" : globalSettings.modelType === "sora2" ? "Sora 2.0" : globalSettings.modelType === "sora2-pro" ? "Sora 2.0 Pro" : globalSettings.modelType === "veo3-fast" ? "Veo3（快速）" : globalSettings.modelType === "veo3-std" ? "Veo3（标准）" : globalSettings.modelType === "veo3-4k" ? "Veo3（4K）" : globalSettings.modelType === "seedance" ? "Seedance 2.0" : globalSettings.modelType === "seedance-pro" ? "Seedance 2.0 Pro" : "Veo3（4K）" },
             { icon: <Clock className="h-3.5 w-3.5" />, label: "时长", value: `${globalSettings.duration}秒` },
             { icon: <Monitor className="h-3.5 w-3.5" />, label: "比例", value: globalSettings.aspectRatio },
             { icon: <UserCircle className="h-3.5 w-3.5" />, label: "AI模特", value: useAiModel && selectedModelName ? selectedModelName : "未使用" },

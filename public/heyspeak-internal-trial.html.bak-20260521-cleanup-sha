@@ -1,0 +1,1415 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Heyspeak - 内部试用官网</title>
+    <meta
+      name="description"
+      content="Heyspeak 是桌面 AI 语音输入助手。自然说话，AI 帮你变成干净、专业、得体的文字。"
+    />
+    <style>      @font-face {
+        font-family: "MiSans";
+        src: url("./heyspeak-internal-trial-assets/fonts/MiSans-SiteSubset.woff2") format("woff2");
+        font-weight: 400 800;
+        font-style: normal;
+        font-display: swap;
+      }
+
+      @font-face {
+        font-family: "Inter Variable";
+        src: url("./heyspeak-internal-trial-assets/fonts/InterVariable.woff2") format("woff2");
+        font-weight: 100 900;
+        font-style: normal;
+        font-display: swap;
+      }
+
+      @font-face {
+        font-family: "Cascadia Code";
+        src: url("./heyspeak-internal-trial-assets/fonts/CascadiaCode.ttf") format("truetype");
+        font-weight: 400;
+        font-style: normal;
+        font-display: swap;
+      }
+
+      :root {
+        --font-zh: "MiSans", "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+        --font-en: "Inter Variable", "Inter", "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+        --font-mono: "Cascadia Code", "Geist Mono", "SFMono-Regular", Consolas, monospace;
+        --ink: #171717;
+        --ink-2: #2f3339;
+        --muted: #626976;
+        --line: rgba(18, 24, 32, 0.1);
+        --line-strong: rgba(18, 24, 32, 0.18);
+        --surface: #ffffff;
+        --wash: #f5f6f8;
+        --wash-2: #eef6f7;
+        --yellow: #ffad00;
+        --yellow-dark: #cc8500;
+        --cyan: #06a7c4;
+        --blue: #2e6eea;
+        --green: #14a56d;
+        --purple: #7d5cf2;
+        --danger: #d94b4b;
+        --shadow: 0 18px 45px rgba(19, 25, 32, 0.12);
+        --max: 1180px;
+        color-scheme: light;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        scroll-behavior: smooth;
+      }
+
+      body {
+        margin: 0;
+        color: var(--ink);
+        background: #fbfbfa;
+        font-family: var(--font-zh);
+        letter-spacing: 0;
+        -webkit-font-smoothing: antialiased;
+        text-rendering: optimizeLegibility;
+      }
+
+      img {
+        max-width: 100%;
+        display: block;
+      }
+
+      a {
+        color: inherit;
+        text-decoration: none;
+      }
+
+      button,
+      input,
+      textarea {
+        font: inherit;
+      }
+
+      .site-shell {
+        min-width: 320px;
+        overflow: hidden;
+      }
+
+      .site-header {
+        position: sticky;
+        top: 0;
+        z-index: 20;
+        border-bottom: 1px solid rgba(18, 24, 32, 0.08);
+        background: rgba(251, 251, 250, 0.88);
+        backdrop-filter: blur(18px);
+      }
+
+      .nav {
+        width: min(100% - 48px, var(--max));
+        height: 72px;
+        margin: 0 auto;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 24px;
+      }
+
+      .brand {
+        display: inline-flex;
+        align-items: center;
+        gap: 14px;
+        min-width: 0;
+      }
+
+      .brand img {
+        width: 168px;
+        height: 45px;
+        object-fit: contain;
+        object-position: left center;
+      }
+
+      .nav-links {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        color: var(--muted);
+        font-size: 14px;
+      }
+
+      .nav-links a {
+        padding: 10px 12px;
+        border-radius: 8px;
+      }
+
+      .nav-links a:hover {
+        color: var(--ink);
+        background: rgba(18, 24, 32, 0.05);
+      }
+
+      .nav-cta {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        min-height: 40px;
+        padding: 0 16px;
+        border: 1px solid rgba(255, 173, 0, 0.42);
+        border-radius: 8px;
+        background: #fff7e4;
+        color: #7a4a00;
+        font-weight: 600;
+      }
+
+      .hero {
+        position: relative;
+        min-height: calc(100svh - 126px);
+        display: grid;
+        align-items: center;
+        isolation: isolate;
+        border-bottom: 1px solid var(--line);
+        background: #f4ebdf;
+      }
+
+      .hero::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        z-index: -1;
+        background:
+          linear-gradient(90deg, rgba(251, 251, 250, 0.98) 0%, rgba(251, 251, 250, 0.9) 39%, rgba(251, 251, 250, 0.36) 62%, rgba(251, 251, 250, 0.08) 100%),
+          linear-gradient(180deg, rgba(251, 251, 250, 0.08) 0%, rgba(251, 251, 250, 0.42) 100%);
+      }
+
+      .hero-product {
+        position: absolute;
+        inset: 0;
+        z-index: -2;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        object-position: 58% center;
+      }
+
+      .hero-inner {
+        width: min(100% - 48px, var(--max));
+        margin: 0 auto;
+        padding: 58px 0 64px;
+      }
+
+      .hero-copy {
+        max-width: 720px;
+      }
+
+      .eyebrow {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        min-height: 32px;
+        padding: 0 12px;
+        border: 1px solid rgba(6, 167, 196, 0.22);
+        border-radius: 8px;
+        background: rgba(238, 246, 247, 0.9);
+        color: #0a6c7d;
+        font-family: var(--font-en), var(--font-zh);
+        font-size: 13px;
+        font-weight: 700;
+      }
+
+      .eyebrow .dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 999px;
+        background: var(--green);
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin: 0;
+      }
+
+      .hero h1 {
+        margin-top: 26px;
+        max-width: 760px;
+        font-size: 64px;
+        line-height: 1.02;
+        font-weight: 700;
+        letter-spacing: 0;
+      }
+
+      .hero h1 span {
+        color: var(--yellow-dark);
+      }
+
+      .hero h1 .accent-word {
+        white-space: nowrap;
+      }
+
+      .hero .subhead {
+        margin-top: 24px;
+        max-width: 610px;
+        color: var(--ink-2);
+        font-size: 20px;
+        line-height: 1.75;
+        font-weight: 400;
+      }
+
+      .hero-actions {
+        margin-top: 34px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+      }
+
+      .button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        min-height: 48px;
+        padding: 0 18px;
+        border-radius: 8px;
+        border: 1px solid var(--line-strong);
+        background: var(--surface);
+        color: var(--ink);
+        font-weight: 700;
+        box-shadow: 0 8px 18px rgba(18, 24, 32, 0.06);
+      }
+
+      .button.primary {
+        border-color: #171717;
+        background: #171717;
+        color: #fff;
+      }
+
+      .button.primary img {
+        filter: invert(1);
+      }
+
+      .button.soft {
+        border-color: rgba(6, 167, 196, 0.28);
+        color: #075f6d;
+        background: #eefbfc;
+      }
+
+      .button.muted {
+        border-color: rgba(18, 24, 32, 0.12);
+        color: #6f7580;
+        background: #f1f2f4;
+        box-shadow: none;
+        cursor: not-allowed;
+      }
+
+      .button.muted img {
+        opacity: 0.58;
+      }
+
+      .button img {
+        width: 20px;
+        height: 20px;
+      }
+
+      .hero-meta {
+        margin-top: 24px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+
+      .meta-pill {
+        display: inline-flex;
+        align-items: center;
+        min-height: 32px;
+        padding: 0 10px;
+        border-radius: 8px;
+        border: 1px solid rgba(18, 24, 32, 0.1);
+        background: rgba(255, 255, 255, 0.82);
+        color: var(--muted);
+        font-family: var(--font-en), var(--font-zh);
+        font-size: 13px;
+        font-weight: 600;
+      }
+
+      .hero-note {
+        margin-top: 18px;
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.7;
+      }
+
+      .section {
+        padding: 92px 0;
+        border-bottom: 1px solid var(--line);
+        background: #fbfbfa;
+        scroll-margin-top: 72px;
+      }
+
+      .section.alt {
+        background: #f3f6f6;
+      }
+
+      .section.dark {
+        color: var(--ink);
+        background:
+          radial-gradient(circle at 12% 22%, rgba(255, 203, 105, 0.34), transparent 34%),
+          radial-gradient(circle at 88% 8%, rgba(6, 167, 196, 0.14), transparent 28%),
+          linear-gradient(135deg, #fff8e8 0%, #f0b848 48%, #9b6112 100%);
+      }
+
+      .inner {
+        width: min(100% - 48px, var(--max));
+        margin: 0 auto;
+      }
+
+      .section-head {
+        display: grid;
+        grid-template-columns: minmax(0, 0.72fr) minmax(280px, 0.28fr);
+        gap: 34px;
+        align-items: end;
+        margin-bottom: 36px;
+      }
+
+      .kicker {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--yellow-dark);
+        font-family: var(--font-en), var(--font-zh);
+        font-size: 13px;
+        font-weight: 800;
+        text-transform: uppercase;
+      }
+
+      .section h2 {
+        margin-top: 12px;
+        max-width: 760px;
+        font-size: 38px;
+        line-height: 1.18;
+        font-weight: 700;
+        letter-spacing: 0;
+      }
+
+      .section-lead {
+        color: var(--muted);
+        font-size: 16px;
+        line-height: 1.8;
+      }
+
+      .feature-summary {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .feature-summary-item {
+        min-height: 138px;
+        padding: 20px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--surface);
+        box-shadow: 0 8px 18px rgba(18, 24, 32, 0.04);
+      }
+
+      .feature-summary-item strong {
+        display: block;
+        color: var(--ink);
+        font-size: 17px;
+        line-height: 1.35;
+      }
+
+      .feature-summary-item p {
+        margin-top: 10px;
+        color: var(--muted);
+        font-size: 14px;
+        line-height: 1.7;
+      }
+
+      .feature-showcase {
+        margin: 0 0 14px;
+        border: 1px solid rgba(18, 24, 32, 0.08);
+        border-radius: 8px;
+        background: #ffffff;
+        box-shadow: 0 18px 45px rgba(19, 25, 32, 0.1);
+        overflow: hidden;
+      }
+
+      .feature-showcase img {
+        width: 100%;
+        aspect-ratio: 16 / 9;
+        object-fit: cover;
+        object-position: center;
+      }
+
+      .demo-layout {
+        display: grid;
+        grid-template-columns: minmax(0, 0.44fr) minmax(0, 0.56fr);
+        gap: 28px;
+        align-items: stretch;
+      }
+
+      .demo-copy {
+        display: grid;
+        align-content: center;
+        gap: 18px;
+      }
+
+      .demo-copy h2 {
+        margin: 0;
+      }
+
+      .demo-list {
+        display: grid;
+        gap: 10px;
+        padding: 0;
+        margin: 8px 0 0;
+        list-style: none;
+      }
+
+      .demo-list li {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        color: var(--ink-2);
+        line-height: 1.65;
+      }
+
+      .demo-list li::before {
+        content: "";
+        width: 8px;
+        height: 8px;
+        margin-top: 9px;
+        border-radius: 999px;
+        background: var(--cyan);
+        flex: 0 0 auto;
+      }
+
+      .client-panel {
+        min-height: 520px;
+        padding: 16px;
+        border: 1px solid rgba(126, 83, 16, 0.16);
+        border-radius: 8px;
+        background:
+          linear-gradient(135deg, rgba(255, 252, 244, 0.96), rgba(255, 238, 196, 0.84)),
+          radial-gradient(circle at 82% 12%, rgba(255, 173, 0, 0.22), transparent 34%);
+        box-shadow: 0 24px 60px rgba(97, 55, 0, 0.13);
+      }
+
+      .client-topbar {
+        height: 42px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 8px;
+        color: #7a5b2d;
+        font-family: var(--font-en), var(--font-zh);
+        font-size: 13px;
+      }
+
+      .window-dots {
+        display: flex;
+        gap: 6px;
+      }
+
+      .window-dots span {
+        width: 10px;
+        height: 10px;
+        border-radius: 999px;
+        background: #d8b15f;
+      }
+
+      .window-dots span:nth-child(2) {
+        background: #f2c95f;
+      }
+
+      .window-dots span:nth-child(3) {
+        background: #61b58f;
+      }
+
+      .client-body {
+        display: grid;
+        grid-template-columns: 210px minmax(0, 1fr);
+        gap: 14px;
+        min-height: 448px;
+      }
+
+      .client-sidebar,
+      .client-main {
+        border: 1px solid rgba(126, 83, 16, 0.12);
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.72);
+      }
+
+      .client-sidebar {
+        padding: 14px;
+        display: grid;
+        align-content: start;
+        gap: 10px;
+      }
+
+      .client-logo {
+        width: 132px;
+        height: 35px;
+        object-fit: contain;
+        object-position: left center;
+        margin-bottom: 10px;
+        background: #fff;
+        border-radius: 6px;
+        box-shadow: 0 6px 18px rgba(97, 55, 0, 0.08);
+      }
+
+      .client-nav-item {
+        height: 38px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 0 10px;
+        border-radius: 8px;
+        color: #675740;
+        font-size: 13px;
+      }
+
+      .client-nav-item.active {
+        color: #5f3900;
+        background: rgba(255, 173, 0, 0.16);
+      }
+
+      .client-nav-item span {
+        width: 22px;
+        height: 22px;
+        display: grid;
+        place-items: center;
+        border-radius: 6px;
+        background: rgba(255, 173, 0, 0.12);
+        color: #b16d00;
+        font-family: var(--font-en);
+        font-weight: 800;
+      }
+
+      .client-main {
+        padding: 18px;
+        display: grid;
+        grid-template-rows: auto 1fr auto;
+        gap: 16px;
+      }
+
+      .mode-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .mode-chip {
+        display: inline-flex;
+        align-items: center;
+        min-height: 30px;
+        padding: 0 10px;
+        border-radius: 8px;
+        border: 1px solid rgba(126, 83, 16, 0.1);
+        background: rgba(255, 255, 255, 0.74);
+        color: #675740;
+        font-size: 13px;
+      }
+
+      .mode-chip.active {
+        border-color: rgba(255, 173, 0, 0.34);
+        background: #fff4d5;
+        color: #7a4a00;
+      }
+
+      .transcript {
+        display: grid;
+        gap: 12px;
+      }
+
+      .speech-card {
+        padding: 16px;
+        border: 1px solid rgba(126, 83, 16, 0.12);
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.72);
+      }
+
+      .speech-card .label {
+        color: #8a6a3d;
+        font-size: 12px;
+        margin-bottom: 8px;
+      }
+
+      .speech-card p {
+        color: #2f3339;
+        font-size: 15px;
+        line-height: 1.75;
+      }
+
+      .speech-card.output {
+        border-color: rgba(255, 173, 0, 0.34);
+        background: rgba(255, 246, 221, 0.88);
+      }
+
+      .client-footer {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      .wave {
+        display: flex;
+        align-items: end;
+        gap: 5px;
+        height: 38px;
+      }
+
+      .wave span {
+        width: 6px;
+        border-radius: 999px;
+        background: linear-gradient(180deg, #ffd06a, #08c0da);
+      }
+
+      .wave span:nth-child(1) { height: 14px; }
+      .wave span:nth-child(2) { height: 28px; }
+      .wave span:nth-child(3) { height: 22px; }
+      .wave span:nth-child(4) { height: 36px; }
+      .wave span:nth-child(5) { height: 18px; }
+      .wave span:nth-child(6) { height: 31px; }
+      .wave span:nth-child(7) { height: 16px; }
+
+      .status-pill {
+        min-height: 32px;
+        display: inline-flex;
+        align-items: center;
+        padding: 0 10px;
+        border-radius: 8px;
+        color: #0d7d54;
+        background: rgba(20, 165, 109, 0.12);
+        font-size: 13px;
+      }
+
+      .scenario-strip {
+        display: grid;
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+        gap: 10px;
+      }
+
+      .scenario {
+        min-height: 122px;
+        padding: 18px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fff;
+      }
+
+      .scenario strong {
+        display: block;
+        font-size: 17px;
+        line-height: 1.35;
+      }
+
+      .scenario span {
+        display: block;
+        margin-top: 10px;
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.65;
+      }
+
+      .speed-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        gap: 18px;
+      }
+
+      .speed-section {
+        position: relative;
+        overflow: hidden;
+      }
+
+      .speed-section::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        background:
+          linear-gradient(90deg, rgba(255, 255, 255, 0.58), rgba(255, 255, 255, 0.1) 48%, rgba(255, 255, 255, 0.34)),
+          repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.18) 0 1px, transparent 1px 56px);
+        mix-blend-mode: screen;
+        opacity: 0.62;
+      }
+
+      .speed-section .inner {
+        position: relative;
+        z-index: 1;
+      }
+
+      .speed-section .kicker {
+        color: #8b5200;
+      }
+
+      .speed-section .section-lead {
+        color: #5f4421;
+      }
+
+      .speed-card {
+        position: relative;
+        min-height: 258px;
+        padding: 26px;
+        border-radius: 8px;
+        border: 1px solid rgba(120, 72, 0, 0.16);
+        background: rgba(255, 252, 243, 0.78);
+        box-shadow: 0 24px 60px rgba(97, 55, 0, 0.16);
+        backdrop-filter: blur(18px);
+        overflow: hidden;
+      }
+
+      .speed-card::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        background: linear-gradient(135deg, rgba(255, 255, 255, 0.72), rgba(255, 209, 106, 0.14));
+      }
+
+      .speed-card > * {
+        position: relative;
+        z-index: 1;
+      }
+
+      .speed-card h3 {
+        color: #6b4a1d;
+        font-size: 15px;
+        font-weight: 700;
+      }
+
+      .speed-value {
+        margin-top: 12px;
+        color: #17130b;
+        font-family: var(--font-en), var(--font-zh);
+        font-size: 52px;
+        line-height: 1;
+        font-weight: 800;
+      }
+
+      .speed-value span {
+        font-family: var(--font-zh);
+        font-size: 16px;
+        color: #7b5b30;
+      }
+
+      .speed-bar {
+        height: 10px;
+        margin-top: 24px;
+        border-radius: 999px;
+        background: rgba(110, 84, 45, 0.14);
+        box-shadow: inset 0 1px 2px rgba(74, 45, 0, 0.14);
+        overflow: hidden;
+      }
+
+      .speed-card:first-child .speed-bar span {
+        width: 34%;
+        background: linear-gradient(90deg, #aeb4bd, #d6d9de);
+      }
+
+      .speed-card:last-child .speed-bar span {
+        width: 100%;
+        background: linear-gradient(90deg, #ffae00, #ffd56a 48%, #10b7c9);
+        box-shadow: 0 0 18px rgba(255, 174, 0, 0.34);
+      }
+
+      .speed-bar span {
+        display: block;
+        height: 100%;
+        border-radius: inherit;
+      }
+
+      .speed-note {
+        margin-top: 22px;
+        color: #604c31;
+        font-size: 14px;
+        line-height: 1.75;
+      }
+
+      .speed-scale {
+        display: flex;
+        justify-content: space-between;
+        margin-top: 8px;
+        color: #8b6c43;
+        font-family: var(--font-en), var(--font-zh);
+        font-size: 12px;
+        font-weight: 650;
+      }
+
+      .speed-badge {
+        position: absolute;
+        top: 22px;
+        right: 22px;
+        display: inline-flex;
+        align-items: center;
+        min-height: 30px;
+        padding: 0 10px;
+        border-radius: 8px;
+        border: 1px solid rgba(255, 173, 0, 0.28);
+        background: rgba(255, 248, 225, 0.8);
+        color: #8a5600;
+        font-family: var(--font-en), var(--font-zh);
+        font-size: 12px;
+        font-weight: 750;
+      }
+
+      .privacy-layout {
+        display: grid;
+        grid-template-columns: minmax(0, 0.58fr) minmax(0, 0.42fr);
+        gap: 24px;
+        align-items: start;
+      }
+
+      .privacy-points {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .privacy-point,
+      .state-panel {
+        padding: 20px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fff;
+      }
+
+      .privacy-point h3,
+      .state-panel h3 {
+        font-size: 18px;
+      }
+
+      .privacy-point p,
+      .state-panel p {
+        margin-top: 10px;
+        color: var(--muted);
+        font-size: 14px;
+        line-height: 1.7;
+      }
+
+      .state-panel {
+        background: #fff9ea;
+        border-color: rgba(255, 173, 0, 0.28);
+      }
+
+      .download-panel {
+        display: grid;
+        grid-template-columns: minmax(0, 0.55fr) minmax(0, 0.45fr);
+        gap: 24px;
+        align-items: center;
+      }
+
+      .download-actions {
+        display: grid;
+        gap: 10px;
+      }
+
+      .download-card {
+        min-height: 96px;
+        padding: 18px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fff;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 18px;
+      }
+
+      .download-card strong {
+        display: block;
+        font-size: 18px;
+      }
+
+      .download-card span {
+        display: block;
+        margin-top: 6px;
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.5;
+      }
+
+      .download-card img {
+        width: 28px;
+        height: 28px;
+      }
+
+      .download-card.muted {
+        background: #f7f7f8;
+      }
+
+      .todo {
+        display: inline-flex;
+        min-height: 28px;
+        align-items: center;
+        padding: 0 8px;
+        border-radius: 8px;
+        background: #fff1d3;
+        color: #8a5600;
+        font-size: 12px;
+        font-weight: 700;
+        white-space: nowrap;
+      }
+
+      .product-note {
+        margin-top: 10px;
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.6;
+      }
+
+      .footer {
+        padding: 30px 0;
+        background: #111318;
+        color: rgba(255, 255, 255, 0.68);
+      }
+
+      .footer .inner {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 20px;
+        font-size: 13px;
+      }
+
+      .footer strong {
+        color: #fff;
+      }
+
+      @media (max-width: 1020px) {
+        .nav {
+          width: min(100% - 32px, var(--max));
+        }
+
+        .nav-links a:not(.nav-cta) {
+          display: none;
+        }
+
+        .hero {
+          min-height: auto;
+        }
+
+        .hero::before {
+          background:
+            linear-gradient(180deg, rgba(251, 251, 250, 0.98) 0%, rgba(251, 251, 250, 0.92) 48%, rgba(251, 251, 250, 0.16) 100%);
+        }
+
+        .hero-product {
+          position: relative;
+          height: 390px;
+          order: 2;
+          object-position: 68% center;
+          border-top: 1px solid var(--line);
+        }
+
+        .hero-inner {
+          padding: 46px 0 36px;
+        }
+
+        .hero h1 {
+          font-size: 48px;
+        }
+
+        .section-head,
+        .demo-layout,
+        .privacy-layout,
+        .download-panel {
+          grid-template-columns: 1fr;
+        }
+
+        .feature-summary {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .feature-showcase {
+          margin-bottom: 18px;
+        }
+
+        .scenario-strip {
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+      }
+
+      @media (max-width: 720px) {
+        .nav {
+          height: 64px;
+          width: min(100% - 28px, var(--max));
+        }
+
+        .brand img {
+          width: 138px;
+          height: 36px;
+        }
+
+        .nav-cta {
+          min-height: 36px;
+          padding: 0 12px;
+          font-size: 13px;
+        }
+
+        .inner,
+        .hero-inner {
+          width: min(100% - 28px, var(--max));
+        }
+
+        .hero h1 {
+          font-size: 40px;
+          line-height: 1.08;
+        }
+
+        .hero .subhead {
+          font-size: 17px;
+          line-height: 1.7;
+        }
+
+        .hero-actions .button {
+          width: 100%;
+        }
+
+        .section {
+          padding: 64px 0;
+        }
+
+        .section h2 {
+          font-size: 27px;
+        }
+
+        .section-head {
+          margin-bottom: 26px;
+        }
+
+        .feature-summary,
+        .scenario-strip,
+        .speed-grid,
+        .privacy-points {
+          grid-template-columns: 1fr;
+        }
+
+        .feature-showcase {
+          box-shadow: 0 12px 28px rgba(19, 25, 32, 0.08);
+        }
+
+        .client-panel {
+          min-height: auto;
+          padding: 12px;
+        }
+
+        .client-body {
+          grid-template-columns: 1fr;
+          min-height: auto;
+        }
+
+        .client-sidebar {
+          display: none;
+        }
+
+        .client-main {
+          min-height: 430px;
+        }
+
+        .download-card {
+          align-items: flex-start;
+          flex-direction: column;
+        }
+
+        .footer .inner {
+          align-items: flex-start;
+          flex-direction: column;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="site-shell">
+      <header class="site-header">
+        <nav class="nav" aria-label="主导航">
+          <a class="brand" href="#top" aria-label="Heyspeak 首页">
+            <img src="./heyspeak-internal-trial-assets/heyspeak-logo-wide.png" alt="Heyspeak" />
+          </a>
+          <div class="nav-links">
+            <a class="nav-cta" href="#download">申请内部试用</a>
+          </div>
+        </nav>
+      </header>
+
+      <main id="top">
+        <section class="hero" aria-label="Heyspeak 内部试用首页">
+          <img class="hero-product" src="./heyspeak-internal-trial-assets/heyspeak-hero-device.png" alt="Heyspeak 语音输入硬件概念图" />
+          <div class="hero-inner">
+            <div class="hero-copy">
+              <span class="eyebrow"><span class="dot" aria-hidden="true"></span>Heyspeak 内部试用版</span>
+              <h1>别让键盘拖慢你的<span class="accent-word">想法</span></h1>
+              <p class="subhead">
+                自然说话，AI 帮你变成干净、专业、得体的文字。适合聊天回复、文档草稿、翻译和代码工具指令。
+              </p>
+              <div class="hero-actions">
+                <a class="button primary" href="#download">
+                  <img src="./heyspeak-internal-trial-assets/icons/icon-windows.svg" alt="" aria-hidden="true" />
+                  下载 Windows 版
+                </a>
+                <span class="button muted" aria-disabled="true">
+                  <img src="./heyspeak-internal-trial-assets/icons/icon-apple.svg" alt="" aria-hidden="true" />
+                  macOS 计划中
+                </span>
+                <a class="button" href="#demo">
+                  <img src="./heyspeak-internal-trial-assets/icons/icon-spark.svg" alt="" aria-hidden="true" />
+                  查看功能演示
+                </a>
+              </div>
+              <div class="hero-meta" aria-label="试用状态">
+                <span class="meta-pill">Windows 优先开放</span>
+                <span class="meta-pill">macOS 计划中</span>
+              </div>
+              <p class="hero-note">
+                内部试用网站先服务 Windows 客户端邀请下载；账号体系、云同步和多端同步仍不在当前版本范围内。
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <section id="features" class="section">
+          <div class="inner">
+            <div class="section-head">
+              <div>
+                <span class="kicker">Core capabilities</span>
+                <h2>内测版先覆盖这几类高频任务</h2>
+              </div>
+              <p class="section-lead">
+                第一阶段聚焦桌面输入、文本整理、翻译与代码审核；需要本地客户端，Windows 优先开放，macOS 仍在计划中。
+              </p>
+            </div>
+
+            <figure class="feature-showcase">
+              <img
+                src="./heyspeak-internal-trial-assets/heyspeak-feature-overview-2400.jpg"
+                alt="Heyspeak 功能总览：语音输入、长文本整理、翻译模式、代码审核、高级模型和隐私保护"
+                loading="lazy"
+              />
+            </figure>
+
+            <div class="feature-summary" aria-label="Heyspeak 内测版能力摘要">
+              <article class="feature-summary-item">
+                <strong>说完就能用</strong>
+                <p>短句直接进当前输入框，长段落整理成可发送、可粘贴、可继续编辑的文字。</p>
+              </article>
+              <article class="feature-summary-item">
+                <strong>按任务换格式</strong>
+                <p>同一句话可以转成回复、文档、翻译文本或代码审核要点，减少反复改写。</p>
+              </article>
+              <article class="feature-summary-item">
+                <strong>内测边界清楚</strong>
+                <p>Windows 优先开放，本地客户端运行；主界面不长期保留正文，macOS 仍在计划中。</p>
+              </article>
+            </div>
+          </div>
+        </section>
+
+        <section id="demo" class="section alt">
+          <div class="inner demo-layout">
+            <div class="demo-copy">
+              <div>
+                <span class="kicker">Product surface</span>
+                <h2>把说话变成当前任务需要的格式</h2>
+              </div>
+              <p class="section-lead">
+                语音不是单纯转文字。Heyspeak 会根据模式把内容变成聊天回复、文档草稿、搜索问题、翻译结果或代码审核指令。
+              </p>
+              <ul class="demo-list">
+                <li>聊天回复：更自然，不像模板话术。</li>
+                <li>文档写作：长段口述自动分层整理。</li>
+                <li>Codex / Cursor 指令：把模糊想法变成清晰任务。</li>
+                <li>搜索 / 问答 / 翻译：减少复制粘贴和窗口切换。</li>
+              </ul>
+            </div>
+
+            <div class="client-panel" aria-label="Heyspeak 客户端演示">
+              <div class="client-topbar">
+                <div class="window-dots" aria-hidden="true"><span></span><span></span><span></span></div>
+                <span>Heyspeak Desktop</span>
+              </div>
+              <div class="client-body">
+                <aside class="client-sidebar" aria-label="客户端导航示意">
+                  <img class="client-logo" src="./heyspeak-internal-trial-assets/heyspeak-logo-wide.png" alt="Heyspeak" />
+                  <div class="client-nav-item active"><span>H</span>首页</div>
+                  <div class="client-nav-item"><span>R</span>历史记录</div>
+                  <div class="client-nav-item"><span>C</span>代码审核</div>
+                  <div class="client-nav-item"><span>M</span>模型</div>
+                </aside>
+                <section class="client-main">
+                  <div class="mode-row">
+                    <span class="mode-chip active">文本整理</span>
+                    <span class="mode-chip">翻译</span>
+                    <span class="mode-chip">搜索</span>
+                    <span class="mode-chip">代码审核</span>
+                  </div>
+                  <div class="transcript">
+                    <article class="speech-card">
+                      <div class="label">口述输入</div>
+                      <p>呃，帮我把这个想法整理成给团队看的版本，重点是我们先做内部试用，不要像正式发布一样夸张。</p>
+                    </article>
+                    <article class="speech-card output">
+                      <div class="label">Heyspeak 整理后</div>
+                      <p>我们先上线内部试用版官网，目标是承接 Windows 客户端下载和试用申请。页面重点说明核心能力、使用场景、隐私边界和当前版本状态。</p>
+                    </article>
+                    <article class="speech-card">
+                      <div class="label">代码审核指令</div>
+                      <p style="font-family: var(--font-mono)">review current diff; focus on regression risk and missing tests</p>
+                    </article>
+                  </div>
+                  <div class="client-footer">
+                    <div class="wave" aria-hidden="true">
+                      <span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+                    </div>
+                    <span class="status-pill">正在听写 · 本地客户端</span>
+                  </div>
+                </section>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="section">
+          <div class="inner">
+            <div class="section-head">
+              <div>
+                <span class="kicker">Use cases</span>
+                <h2>先覆盖每天最重复的输入场景</h2>
+              </div>
+              <p class="section-lead">
+                内部试用阶段先聚焦高频桌面输入，让试用用户更快判断它是否适合自己的工作流。
+              </p>
+            </div>
+            <div class="scenario-strip">
+              <article class="scenario"><strong>聊天回复</strong><span>把口语整理成得体、自然的回复。</span></article>
+              <article class="scenario"><strong>文档写作</strong><span>长段口述变成标题、段落和要点。</span></article>
+              <article class="scenario"><strong>编程指令</strong><span>给 Codex / Cursor 更清晰的任务描述。</span></article>
+              <article class="scenario"><strong>搜索问答</strong><span>直接说问题，减少复制和切窗口。</span></article>
+              <article class="scenario"><strong>翻译</strong><span>中文到英文，或保留地域语气的表达转换。</span></article>
+              <article class="scenario"><strong>代码审核</strong><span>检查当前改动的风险、遗漏和边界。</span></article>
+            </div>
+          </div>
+        </section>
+
+        <section id="speed" class="section dark speed-section">
+          <div class="inner">
+            <div class="section-head">
+              <div>
+                <span class="kicker">Speed baseline</span>
+                <h2>语速比键盘更接近思考速度</h2>
+              </div>
+              <p class="section-lead">
+                速度表达沿用客户端首页的基准，但在官网上保持克制：实际节省时间取决于输入频率、内容类型和个人工作流。
+              </p>
+            </div>
+            <div class="speed-grid">
+              <article class="speed-card">
+                <span class="speed-badge">Baseline</span>
+                <h3>普通键盘</h3>
+                <div class="speed-value">60 <span>字/分钟</span></div>
+                <div class="speed-bar" aria-hidden="true"><span></span></div>
+                <div class="speed-scale" aria-hidden="true"><span>慢思考</span><span>精修输入</span></div>
+                <p class="speed-note">适合精修和短输入，但长段表达容易被手速打断。</p>
+              </article>
+              <article class="speed-card">
+                <span class="speed-badge">Voice + AI</span>
+                <h3>Heyspeak</h3>
+                <div class="speed-value">180+ <span>字/分钟</span></div>
+                <div class="speed-bar" aria-hidden="true"><span></span></div>
+                <div class="speed-scale" aria-hidden="true"><span>先说出来</span><span>整理成文</span></div>
+                <p class="speed-note">适合先把想法说出来，再由 AI 整理成能直接使用的文字。</p>
+              </article>
+            </div>
+          </div>
+        </section>
+
+        <section id="privacy" class="section alt">
+          <div class="inner privacy-layout">
+            <div>
+              <span class="kicker">Privacy and status</span>
+              <h2>内部试用版的隐私与状态说明</h2>
+              <p class="section-lead" style="margin-top: 18px">
+                让试用用户知道如何配置、哪些能力已经可用，以及哪些仍在计划中。
+              </p>
+            </div>
+            <div class="privacy-points">
+              <article class="privacy-point">
+                <h3>不长期保留正文</h3>
+                <p>主界面只保留必要状态和近期结果，历史记录优先保存字数、状态和时间等元数据。</p>
+              </article>
+              <article class="privacy-point">
+                <h3>凭据本地保存</h3>
+                <p>模型凭据等敏感信息走本地系统密钥环，不写进普通页面文案或日志。</p>
+              </article>
+              <article class="privacy-point">
+                <h3>需要本地客户端</h3>
+                <p>官网只负责介绍和分发，核心语音输入能力依赖桌面客户端运行。</p>
+              </article>
+              <article class="privacy-point">
+                <h3>模型路线可选</h3>
+                <p>可以使用默认路线，也给进阶用户预留高级模型配置。</p>
+              </article>
+              <article class="state-panel" style="grid-column: 1 / -1">
+                <h3>当前范围清楚</h3>
+                <p>页面只说明内部试用阶段已经可验证的能力；云同步、账号体系、多端同步和 macOS 下载仍不作为当前承诺。</p>
+              </article>
+            </div>
+          </div>
+        </section>
+
+        <section id="download" class="section">
+          <div class="inner download-panel">
+            <div>
+              <span class="kicker">Internal trial</span>
+              <h2>Heyspeak Windows 内测包已开放</h2>
+              <p class="section-lead" style="margin-top: 18px">
+                当前版本 v0.1.0-beta.1 面向 Windows x64 内部试用，优先验证语音输入、搜索、翻译、代码审核和日常设置体验。
+              </p>
+              <p class="product-note">
+                第一版内测暂未代码签名，Windows 可能出现安全确认提示；确认下载来源为 toryxai.com 后可继续安装。使用中遇到问题，请反馈至 xuzone888@outlook.com。
+              </p>
+            </div>
+
+            <div class="download-actions">
+              <a class="download-card" href="/heyspeak/releases/Heyspeak_0.1.0-beta.1_x64-setup.exe" aria-label="下载 Heyspeak Windows 内测版">
+                <div>
+                  <strong>Windows 版</strong>
+                  <span>v0.1.0-beta.1 · Windows x64 · 约 26.3 MB。</span>
+                </div>
+                <span class="todo">立即下载</span>
+              </a>
+              <a class="download-card" href="/heyspeak/releases/Heyspeak_0.1.0-beta.1_x64-setup.exe.sha256" aria-label="查看安装包 SHA256 校验值">
+                <div>
+                  <strong>SHA256 校验</strong>
+                  <span>6D767CDBA765EA0783219874673D503F529B17D262F0BB5811B6822E4B33C865</span>
+                </div>
+                <span class="todo">查看</span>
+              </a>
+              <a class="download-card" href="mailto:xuzone888@outlook.com?subject=Heyspeak%20%E5%86%85%E6%B5%8B%E5%8F%8D%E9%A6%88" aria-label="通过邮箱反馈 Heyspeak 内测问题">
+                <div>
+                  <strong>反馈与问题</strong>
+                  <span>请描述系统版本、触发步骤和看到的现象，方便我们快速定位。</span>
+                </div>
+                <span class="todo">发邮件</span>
+              </a>
+              <div class="download-card muted" aria-label="macOS 计划中">
+                <div>
+                  <strong>macOS 版</strong>
+                  <span>计划中，当前暂不提供下载。</span>
+                </div>
+                <span class="todo">计划中</span>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <footer class="footer">
+        <div class="inner">
+          <div><strong>Heyspeak</strong> · Voice-first writing assistant</div>
+          <div>© 2026 · 联系方式 / 备案信息待补充</div>
+        </div>
+      </footer>
+    </div>
+  </body>
+</html>

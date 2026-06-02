@@ -20,13 +20,13 @@ export type VideoBatchTaskStatus =
 export type VideoAspectRatio = "9:16" | "16:9";
 
 /** 视频时长 */
-export type VideoDuration = 5 | 8 | 10 | 15 | 25;
+export type VideoDuration = 5 | 8 | 10 | 12 | 15 | 25;
 
 /** 视频质量 */
 export type VideoQuality = "standard" | "hd";
 
 /** 视频模型类型 */
-export type VideoModelType = "sora2" | "sora2-pro" | "veo3-fast" | "veo3-std" | "veo3-4k" | "grok" | "seedance" | "seedance-pro";
+export type VideoModelType = "sora2" | "sora2-pro" | "veo3-fast" | "veo3-std" | "veo3-4k" | "grok" | "seedance" | "seedance-pro" | "happyhorse";
 
 /** 流水线步骤 */
 export type PipelineStep = 0 | 1 | 2 | 3 | 4;
@@ -53,7 +53,9 @@ export function getAvailableDurations(modelType: VideoModelType, quality: VideoQ
   } else if (modelType === "grok") {
     return [10, 15]; // Grok Imagine 支持 10/15 秒
   } else if (modelType === "seedance" || modelType === "seedance-pro") {
-    return [5, 10]; // Seedance 2.0 支持 5/10 秒
+    return [5, 10];
+  } else if (modelType === "happyhorse") {
+    return [5, 12];
   }
   return [15]; // 默认
 }
@@ -73,7 +75,9 @@ export function getAvailableQualities(modelType: VideoModelType): VideoQuality[]
   } else if (modelType === "seedance") {
     return ["standard"]; // 标准版 480p→1080p
   } else if (modelType === "seedance-pro") {
-    return ["hd"]; // Pro 原生 720p
+    return ["hd"];
+  } else if (modelType === "happyhorse") {
+    return ["standard"]; // Pro 原生 720p
   }
   return ["standard"];
 }
@@ -114,6 +118,7 @@ export interface VideoBatchTask {
   // 纯提示词模式的自定义提示词
   customPrompt?: string;      // 用户输入的提示词
   referenceImageUrl?: string; // 可选的参考图片
+  referenceImageUrls?: string[]; // HappyHorse R2V 参考图组
 
   // AI 模特配置（任务创建时保存, Sora2 用）
   useAiModel?: boolean;       // 是否使用 AI 模特
@@ -281,6 +286,8 @@ export const VIDEO_BATCH_PRICING = {
   // Seedance 2.0 Pro (720p原生)
   seedancePro_5s: 497,  // Seedance 2.0 5秒 Pro 原生720P (¥4.97)
   seedancePro_10s: 994, // Seedance 2.0 10秒 Pro 原生720P (¥9.94)
+  happyhorse_5s: 450,   // DashScope HappyHorse 1.0 T2V 5s 720P
+  happyhorse_12s: 1080, // DashScope HappyHorse 1.0 T2V 12s 720P
 };
 
 /** 获取视频生成总价 */
@@ -311,6 +318,10 @@ export function getVideoBatchTotalPrice(
   if (modelType === "seedance-pro") {
     if (duration === 5) return VIDEO_BATCH_PRICING.seedancePro_5s;
     return VIDEO_BATCH_PRICING.seedancePro_10s;
+  }
+  if (modelType === "happyhorse") {
+    if (duration === 12) return VIDEO_BATCH_PRICING.happyhorse_12s;
+    return VIDEO_BATCH_PRICING.happyhorse_5s;
   }
 
   return VIDEO_BATCH_PRICING.sora2_15s; // 默认
