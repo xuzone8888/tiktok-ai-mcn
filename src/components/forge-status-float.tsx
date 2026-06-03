@@ -8,15 +8,19 @@
  * 点击可跳回角色创建页面查看进度。
  */
 
-import { useCharacterStudioStore } from "@/stores/character-studio-store";
 import { usePathname, useRouter } from "next/navigation";
+
+import { useCharacterStudioStore } from "@/stores/character-studio-store";
 
 export function ForgeStatusFloat() {
   const generationStatus = useCharacterStudioStore((s) => s.generationStatus);
   const forgeMode = useCharacterStudioStore((s) => s.forgeMode);
   const errorMessage = useCharacterStudioStore((s) => s.errorMessage);
   const sora2VideoUrl = useCharacterStudioStore((s) => s.sora2VideoUrl);
+  const sora2VideoOssUrl = useCharacterStudioStore((s) => s.sora2VideoOssUrl);
   const heroImageUrl = useCharacterStudioStore((s) => s.heroImageUrl);
+  const referenceSheetUrl = useCharacterStudioStore((s) => s.referenceSheetUrl);
+  const referenceReady = useCharacterStudioStore((s) => s.referenceReady);
   const savedCharacterId = useCharacterStudioStore((s) => s.savedCharacterId);
 
   const pathname = usePathname();
@@ -25,10 +29,15 @@ export function ForgeStatusFloat() {
   // 只在不在角色创建页面时、且正在生成/已完成未保存时显示
   // 保存成功后（savedCharacterId 有值）自动隐藏
   const isOnCreatePage = pathname === "/character/create";
-  const isActive = !savedCharacterId && (
-    generationStatus === "polling" || generationStatus === "failed" || 
-    (generationStatus === "completed" && (heroImageUrl || sora2VideoUrl))
-  );
+  const hasCompletedUnsavedResult =
+    forgeMode === "sora2"
+      ? Boolean(sora2VideoUrl || sora2VideoOssUrl)
+      : Boolean(heroImageUrl && referenceSheetUrl && referenceReady);
+  const isActive =
+    !savedCharacterId &&
+    (generationStatus === "polling" ||
+      generationStatus === "failed" ||
+      (generationStatus === "completed" && hasCompletedUnsavedResult));
 
   if (isOnCreatePage || !isActive) return null;
 

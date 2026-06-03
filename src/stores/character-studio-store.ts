@@ -12,9 +12,10 @@
 import { create } from "zustand";
 import { devtools, persist, createJSONStorage } from "zustand/middleware";
 import { immer } from "zustand/middleware/immer";
-import type { CharacterDna } from "@/types/character";
-import { DEFAULT_DNA } from "@/types/character";
+
 import { dnaPromptDict } from "@/app/(main)/character/create/data/dna-options";
+import { DEFAULT_DNA } from "@/types/character";
+import type { CharacterDna } from "@/types/character";
 
 // ============================================================================
 // 类型定义
@@ -285,6 +286,8 @@ export const useCharacterStudioStore = create<
           set((state) => {
             state.generationStatus = "generating";
             state.currentStep = 2;
+            state.savedCharacterId = null;
+            state.isSaving = false;
             state.heroImageUrl = null;
             state.referenceSheetUrl = null;
             state.heroTaskId = null;
@@ -476,7 +479,7 @@ export const useCharacterStudioStore = create<
     {
       name: "character-studio-storage",
       storage: createJSONStorage(() => localStorage),
-      // 只持久化创作状态，不持久化 currentStep 和生成中间状态
+      // 持久化可恢复的创作/保存状态；不持久化 isSaving 这类瞬时 UI 状态
       partialize: (state) => ({
         creationMode: state.creationMode,
         dnaConfig: state.dnaConfig,
@@ -485,8 +488,16 @@ export const useCharacterStudioStore = create<
         forgeMode: state.forgeMode,
         currentStep: state.currentStep,
         generationStatus: state.generationStatus,
+        savedCharacterId: state.savedCharacterId,
+        characterName: state.characterName,
+        characterTags: state.characterTags,
         heroTaskId: state.heroTaskId,
         heroImageUrl: state.heroImageUrl,
+        heroReady: state.heroReady,
+        referenceTaskId: state.referenceTaskId,
+        referenceSheetUrl: state.referenceSheetUrl,
+        referenceReady: state.referenceReady,
+        refPrompt: state.refPrompt,
         sora2VideoUrl: state.sora2VideoUrl,
         sora2VideoOssUrl: state.sora2VideoOssUrl,
         sora2Pid: state.sora2Pid,
