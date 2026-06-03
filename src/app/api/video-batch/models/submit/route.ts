@@ -61,6 +61,71 @@ function normalizeImageUrls(body: SubmitRequestBody, modelType: VideoModelId): s
   return mergeCharacterReferenceImages(modelType, body.characterRefUrl, uploadedUrls);
 }
 
+function getMissingSchemaColumn(error: unknown): string | null {
+  const message = typeof (error as { message?: unknown })?.message === "string"
+    ? (error as { message: string }).message
+    : "";
+
+  return (
+    message.match(/Could not find the '([^']+)' column/)?.[1] ||
+    message.match(/column generations\.([a-zA-Z0-9_]+) does not exist/)?.[1] ||
+    null
+  );
+}
+
+function summarizeError(error: unknown): { message?: string; code?: string } {
+  return error && typeof error === "object"
+    ? {
+        message: typeof (error as { message?: unknown }).message === "string"
+          ? (error as { message: string }).message
+          : undefined,
+        code: typeof (error as { code?: unknown }).code === "string"
+          ? (error as { code: string }).code
+          : undefined,
+      }
+    : { message: String(error) };
+}
+
+async function insertGenerationWithSchemaFallback(
+  supabase: ReturnType<typeof createAdminClient>,
+  payload: Record<string, unknown>
+) {
+  let candidate = { ...payload };
+  let lastError: unknown = null;
+
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    const { error } = await supabase
+      .from("generations")
+      .insert(candidate as any);
+
+    if (!error) return { error: null };
+
+    lastError = error;
+    const missingColumn = getMissingSchemaColumn(error);
+    if (missingColumn && Object.prototype.hasOwnProperty.call(candidate, missingColumn)) {
+      const { [missingColumn]: _removed, ...nextCandidate } = candidate;
+      candidate = nextCandidate;
+      continue;
+    }
+
+    if (
+      error.code === "23514" &&
+      error.message?.includes("valid_source") &&
+      typeof candidate.source === "string"
+    ) {
+      candidate = {
+        ...candidate,
+        source: String(candidate.source).includes("prompt") ? "batch_video_prompt" : "batch_video",
+      };
+      continue;
+    }
+
+    break;
+  }
+
+  return { error: lastError };
+}
+
 export async function POST(request: NextRequest) {
   let upstreamTaskId: string | undefined;
   let resolvedModelType: VideoModelId | undefined;
@@ -166,15 +231,16 @@ export async function POST(request: NextRequest) {
     });
 
     const now = new Date().toISOString();
+    const generationSource = imageUrls.length > 0 ? "batch_video" : "batch_video_prompt";
     const generationInsert = {
       user_id: userId,
       task_id: upstreamTaskId,
       type: "video",
       generation_type: "video",
-      source: imageUrls.length > 0 ? `batch_video_${modelType}` : `batch_video_prompt_${modelType}`,
+      source: generationSource,
       prompt,
       model: submitResult.upstreamModel,
-      duration: String(durationSeconds),
+      duration: durationSeconds,
       aspect_ratio: aspectRatio,
       quality,
       source_image_url: imageUrls[0] || null,
@@ -203,16 +269,18 @@ export async function POST(request: NextRequest) {
       created_at: now,
     };
 
-    const { error: insertError } = await supabase
-      .from("generations")
-      .insert(generationInsert as any);
+    const { error: insertError } = await insertGenerationWithSchemaFallback(
+      supabase,
+      generationInsert
+    );
 
     if (insertError) {
+      const insertErrorSummary = summarizeError(insertError);
       console.error("[Video Models Submit] generations insert failed:", {
         modelType,
         taskId: upstreamTaskId,
-        message: insertError.message,
-        code: insertError.code,
+        message: insertErrorSummary.message,
+        code: insertErrorSummary.code,
       });
       await refundVideoCreditsDirect({
         supabase,

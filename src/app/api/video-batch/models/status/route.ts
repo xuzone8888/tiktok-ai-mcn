@@ -18,6 +18,48 @@ function asMetadata(value: unknown): Record<string, unknown> {
     : {};
 }
 
+function getMissingSchemaColumn(error: unknown): string | null {
+  const message = typeof (error as { message?: unknown })?.message === "string"
+    ? (error as { message: string }).message
+    : "";
+
+  return (
+    message.match(/Could not find the '([^']+)' column/)?.[1] ||
+    message.match(/column generations\.([a-zA-Z0-9_]+) does not exist/)?.[1] ||
+    null
+  );
+}
+
+async function updateGenerationByTaskIdWithSchemaFallback(
+  supabase: ReturnType<typeof createAdminClient>,
+  taskId: string,
+  payload: Record<string, unknown>
+) {
+  let candidate = { ...payload };
+  let lastError: unknown = null;
+
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    const { error } = await supabase
+      .from("generations")
+      .update(candidate as any)
+      .eq("task_id", taskId);
+
+    if (!error) return { error: null };
+
+    lastError = error;
+    const missingColumn = getMissingSchemaColumn(error);
+    if (missingColumn && Object.prototype.hasOwnProperty.call(candidate, missingColumn)) {
+      const { [missingColumn]: _removed, ...nextCandidate } = candidate;
+      candidate = nextCandidate;
+      continue;
+    }
+
+    break;
+  }
+
+  return { error: lastError };
+}
+
 async function getExistingGeneration(taskId: string) {
   const supabase = createAdminClient();
   const { data } = await supabase
@@ -107,9 +149,10 @@ async function persistCompletedVideo(params: {
 
   if (generation) {
     const previousMetadata = asMetadata(lockedGeneration?.metadata || generation.metadata);
-    await supabase
-      .from("generations")
-      .update({
+    await updateGenerationByTaskIdWithSchemaFallback(
+      supabase,
+      params.taskId,
+      {
         status: "completed",
         result_url: finalVideoUrl,
         video_url: finalVideoUrl,
@@ -124,8 +167,8 @@ async function persistCompletedVideo(params: {
             adapter: completionMetadata || {},
           },
         },
-      } as any)
-      .eq("task_id", params.taskId);
+      }
+    );
   }
 
   return finalVideoUrl;

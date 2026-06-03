@@ -13,6 +13,18 @@ interface GenerationForRefund {
   metadata?: unknown;
 }
 
+function getMissingSchemaColumn(error: unknown): string | null {
+  const message = typeof (error as { message?: unknown })?.message === "string"
+    ? (error as { message: string }).message
+    : "";
+
+  return (
+    message.match(/Could not find the '([^']+)' column/)?.[1] ||
+    message.match(/column generations\.([a-zA-Z0-9_]+) does not exist/)?.[1] ||
+    null
+  );
+}
+
 async function hasRefundTransaction(
   supabase: AdminSupabaseClient,
   taskId: string
@@ -77,6 +89,93 @@ async function insertCreditTransaction(
   throw lastError instanceof Error ? lastError : new Error("写入积分流水失败");
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function adjustProfileCredits(params: {
+  supabase: AdminSupabaseClient;
+  userId: string;
+  delta: number;
+  insufficientError?: string;
+}): Promise<{ before: number; after: number }> {
+  const { supabase, userId, delta, insufficientError } = params;
+
+  for (let attempt = 1; attempt <= 5; attempt += 1) {
+    const { data: profile, error: profileError } = await supabase
+      .from("profiles")
+      .select("credits")
+      .eq("id", userId)
+      .single();
+
+    if (profileError || !profile) {
+      throw new Error("用户未找到");
+    }
+
+    const before = profile.credits;
+    const after = before + delta;
+    if (after < 0) {
+      throw new Error(insufficientError || "积分不足");
+    }
+
+    const { data: updated, error: updateError } = await supabase
+      .from("profiles")
+      .update({ credits: after })
+      .eq("id", userId)
+      .eq("credits", before)
+      .select("credits")
+      .maybeSingle();
+
+    if (!updateError && updated) {
+      return { before, after };
+    }
+
+    await sleep(80 * attempt);
+  }
+
+  throw new Error("积分更新冲突，请重试");
+}
+
+async function updateGenerationForRefund(params: {
+  supabase: AdminSupabaseClient;
+  taskId: string;
+  payload: Record<string, unknown>;
+  select?: string;
+  onlyProcessing?: boolean;
+  onlyFailed?: boolean;
+}): Promise<{ data: unknown; error: unknown }> {
+  let candidate = { ...params.payload };
+  let lastError: unknown = null;
+
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    let query = params.supabase
+      .from("generations")
+      .update(candidate as any)
+      .eq("task_id", params.taskId);
+
+    if (params.onlyProcessing) query = query.in("status", ["processing"]);
+    if (params.onlyFailed) query = query.eq("status", "failed");
+
+    const result = params.select
+      ? await query.select(params.select).maybeSingle()
+      : await query;
+
+    if (!result.error) return { data: result.data, error: null };
+
+    lastError = result.error;
+    const missingColumn = getMissingSchemaColumn(result.error);
+    if (missingColumn && Object.prototype.hasOwnProperty.call(candidate, missingColumn)) {
+      const { [missingColumn]: _removed, ...nextCandidate } = candidate;
+      candidate = nextCandidate;
+      continue;
+    }
+
+    break;
+  }
+
+  return { data: null, error: lastError };
+}
+
 export async function checkVideoCredits(
   supabase: AdminSupabaseClient,
   userId: string,
@@ -112,19 +211,12 @@ export async function deductVideoCredits(params: {
   clientTaskId: string;
 }) {
   const { supabase, userId, taskId, modelType, creditCost, clientTaskId } = params;
-  const check = await checkVideoCredits(supabase, userId, creditCost);
-  if (!check.ok || check.currentCredits === undefined) {
-    throw new Error(check.error || "积分不足");
-  }
-
-  const before = check.currentCredits;
-  const after = before - creditCost;
-  const { error } = await supabase
-    .from("profiles")
-    .update({ credits: after })
-    .eq("id", userId);
-
-  if (error) throw new Error("扣除积分失败");
+  const { before, after } = await adjustProfileCredits({
+    supabase,
+    userId,
+    delta: -creditCost,
+    insufficientError: "积分不足",
+  });
 
   try {
     await insertCreditTransaction(supabase, {
@@ -141,10 +233,11 @@ export async function deductVideoCredits(params: {
       },
     });
   } catch (transactionError) {
-    await supabase
-      .from("profiles")
-      .update({ credits: before })
-      .eq("id", userId);
+    await adjustProfileCredits({
+      supabase,
+      userId,
+      delta: creditCost,
+    });
     throw transactionError;
   }
 
@@ -167,24 +260,14 @@ export async function refundVideoCreditsDirect(params: {
     return { refunded: false };
   }
 
-  const { data: profile, error: profileError } = await supabase
-    .from("profiles")
-    .select("credits")
-    .eq("id", userId)
-    .single();
-
-  if (profileError || !profile) {
-    return { refunded: false };
-  }
-
-  const before = profile.credits;
-  const after = before + amount;
-  const { error: creditError } = await supabase
-    .from("profiles")
-    .update({ credits: after })
-    .eq("id", userId);
-
-  if (creditError) {
+  let adjusted: { before: number; after: number };
+  try {
+    adjusted = await adjustProfileCredits({
+      supabase,
+      userId,
+      delta: amount,
+    });
+  } catch {
     return { refunded: false };
   }
 
@@ -193,8 +276,8 @@ export async function refundVideoCreditsDirect(params: {
       userId,
       type: "refund",
       amount,
-      balanceBefore: before,
-      balanceAfter: after,
+      balanceBefore: adjusted.before,
+      balanceAfter: adjusted.after,
       taskId,
       description: `素材生成视频 ${modelType} 失败退款 (${taskId})`,
       metadata: {
@@ -205,10 +288,11 @@ export async function refundVideoCreditsDirect(params: {
       },
     });
   } catch (transactionError) {
-    await supabase
-      .from("profiles")
-      .update({ credits: before })
-      .eq("id", userId);
+    await adjustProfileCredits({
+      supabase,
+      userId,
+      delta: -amount,
+    });
     throw transactionError;
   }
 
@@ -227,17 +311,17 @@ export async function refundVideoCreditsOnce(params: {
     return { refunded: false };
   }
 
-  const { data: updated, error: updateError } = await supabase
-    .from("generations")
-    .update({
+  const { data: updated, error: updateError } = await updateGenerationForRefund({
+    supabase,
+    taskId,
+    payload: {
       status: "failed",
       error_message: reason,
       credits_refunded: 0,
-    } as any)
-    .eq("task_id", taskId)
-    .in("status", ["processing"])
-    .select("user_id, credit_cost, metadata")
-    .maybeSingle();
+    },
+    onlyProcessing: true,
+    select: "user_id, credit_cost, metadata",
+  });
 
   if (updateError || !updated) {
     return { refunded: false };
@@ -249,30 +333,14 @@ export async function refundVideoCreditsOnce(params: {
     return { refunded: false };
   }
 
-  const { data: profile, error: profileError } = await supabase
-    .from("profiles")
-    .select("credits")
-    .eq("id", generation.user_id)
-    .single();
-
-  if (profileError || !profile) {
-    return { refunded: false };
-  }
-
-  const before = profile.credits;
-  const after = before + amount;
-  const { error: creditError } = await supabase
-    .from("profiles")
-    .update({ credits: after })
-    .eq("id", generation.user_id);
-
-  if (creditError) {
-    await supabase
-      .from("generations")
-      .update({ status: "processing", error_message: null } as any)
-      .eq("task_id", taskId)
-      .eq("status", "failed")
-      .eq("credits_refunded", 0);
+  let adjusted: { before: number; after: number };
+  try {
+    adjusted = await adjustProfileCredits({
+      supabase,
+      userId: generation.user_id,
+      delta: amount,
+    });
+  } catch {
     return { refunded: false };
   }
 
@@ -281,8 +349,8 @@ export async function refundVideoCreditsOnce(params: {
       userId: generation.user_id,
       type: "refund",
       amount,
-      balanceBefore: before,
-      balanceAfter: after,
+      balanceBefore: adjusted.before,
+      balanceAfter: adjusted.after,
       taskId,
       description: `素材生成视频 ${modelType} 失败退款 (${taskId})`,
       metadata: {
@@ -292,23 +360,25 @@ export async function refundVideoCreditsOnce(params: {
       },
     });
   } catch (transactionError) {
-    await supabase
-      .from("profiles")
-      .update({ credits: before })
-      .eq("id", generation.user_id);
-    await supabase
-      .from("generations")
-      .update({ status: "processing", error_message: null } as any)
-      .eq("task_id", taskId)
-      .eq("status", "failed")
-      .eq("credits_refunded", 0);
+    await adjustProfileCredits({
+      supabase,
+      userId: generation.user_id,
+      delta: -amount,
+    });
+    await updateGenerationForRefund({
+      supabase,
+      taskId,
+      payload: { status: "processing", error_message: null, credits_refunded: 0 },
+      onlyFailed: true,
+    });
     throw transactionError;
   }
 
-  await supabase
-    .from("generations")
-    .update({ credits_refunded: amount } as any)
-    .eq("task_id", taskId);
+  await updateGenerationForRefund({
+    supabase,
+    taskId,
+    payload: { credits_refunded: amount },
+  });
 
   return { refunded: true, amount };
 }
