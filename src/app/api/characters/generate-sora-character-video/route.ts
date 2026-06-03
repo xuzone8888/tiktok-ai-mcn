@@ -11,8 +11,15 @@
 import { NextResponse } from "next/server";
 import { submitSora2 } from "@/lib/suchuang-api";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
 
 const SORA2_CHARACTER_VIDEO_COST = 20; // 积分消耗（与标准视频一致）
+
+async function getCurrentUser() {
+  const authSupabase = await createClient();
+  const { data: { user } } = await authSupabase.auth.getUser();
+  return user;
+}
 
 export async function POST(request: Request) {
   try {
@@ -26,10 +33,18 @@ export async function POST(request: Request) {
       );
     }
 
-    if (!userId) {
+    const user = await getCurrentUser();
+    if (!user) {
       return NextResponse.json(
         { success: false, error: "请先登录" },
         { status: 401 }
+      );
+    }
+
+    if (userId && userId !== user.id) {
+      return NextResponse.json(
+        { success: false, error: "用户身份不匹配" },
+        { status: 403 }
       );
     }
 
@@ -38,7 +53,7 @@ export async function POST(request: Request) {
     const { data: profile, error: profileError } = await supabase
       .from("profiles")
       .select("credits")
-      .eq("id", userId)
+      .eq("id", user.id)
       .single();
 
     if (profileError || !profile) {
@@ -58,7 +73,7 @@ export async function POST(request: Request) {
     const { error: deductError } = await supabase
       .from("profiles")
       .update({ credits: profile.credits - SORA2_CHARACTER_VIDEO_COST })
-      .eq("id", userId);
+      .eq("id", user.id);
 
     if (deductError) {
       console.error("[Sora2-CharVideo] Failed to deduct credits:", deductError);
@@ -69,7 +84,7 @@ export async function POST(request: Request) {
     }
 
     console.log("[Sora2-CharVideo] Credits deducted:", {
-      userId,
+      userId: user.id,
       cost: SORA2_CHARACTER_VIDEO_COST,
       before: profile.credits,
       after: profile.credits - SORA2_CHARACTER_VIDEO_COST,
@@ -94,7 +109,7 @@ export async function POST(request: Request) {
         await supabase
           .from("profiles")
           .update({ credits: profile.credits })
-          .eq("id", userId);
+          .eq("id", user.id);
         console.log("[Sora2-CharVideo] Credits refunded due to submit failure");
       } catch (refundErr) {
         console.error("[Sora2-CharVideo] Failed to refund credits:", refundErr);

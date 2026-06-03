@@ -670,7 +670,7 @@ export default function TeamPage() {
 
   // Handle "Use in Studio"
   const handleUseInStudio = (id: string) => {
-    router.push(`/quick-gen?modelId=${id}`);
+    router.push(`/pro-studio/video-batch?characterId=${encodeURIComponent(id)}&modelType=veo`);
   };
 
   // Handle refresh
@@ -688,7 +688,9 @@ export default function TeamPage() {
       });
       const result = await response.json();
       if (result.success) {
-        toast({ title: "🔄 参考图正在重新生成" });
+        toast({
+          title: result.data?.status === "completed" ? "✅ 参考图已重新生成" : "🔄 参考图正在重新生成",
+        });
         fetchMyCharacters();
       } else {
         toast({ variant: "destructive", title: "重试失败", description: result.error });

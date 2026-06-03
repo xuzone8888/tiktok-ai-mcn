@@ -1194,7 +1194,7 @@ export default function ImageBatchPage() {
                         已上传 {uploadedImages.length} 张图片
                       </h3>
                       <p className="text-white/40 text-sm max-w-md text-center leading-relaxed mb-4">
-                        点击此处或 <span className="text-mermaid-cyan font-medium">"创建图片任务"</span> 按钮开始处理
+                        点击此处或 <span className="text-mermaid-cyan font-medium">&quot;创建图片任务&quot;</span> 按钮开始处理
                       </p>
                       <button
                         onClick={(e) => {
@@ -1217,7 +1217,7 @@ export default function ImageBatchPage() {
                       </div>
                       <h3 className="text-xl font-bold text-white mb-2 group-hover:text-mermaid-cyan transition-colors tracking-tight">暂无图片任务</h3>
                       <p className="text-sm text-white/40 group-hover:text-white/80 transition-colors">
-                        点击 <span className="text-mermaid-cyan font-medium">"创建图片任务"</span> 开始批量生产
+                        点击 <span className="text-mermaid-cyan font-medium">&quot;创建图片任务&quot;</span> 开始批量生产
                       </p>
                     </>
                   )}
@@ -2117,4 +2117,3 @@ export default function ImageBatchPage() {
     </TooltipProvider >
   );
 }
-

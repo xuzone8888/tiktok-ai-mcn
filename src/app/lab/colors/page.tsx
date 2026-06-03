@@ -96,7 +96,7 @@ export default function ColorLabPage() {
                                     <div>
                                         <h3 className="text-2xl font-bold text-white mb-1">Holographic Flow</h3>
                                         <p className="text-white/60 font-mono text-xs">
-                                            The "Bridge" Gradient: Energy (Lime) → Tech (Cyan) → Softness (Pink)
+                                            The &quot;Bridge&quot; Gradient: Energy (Lime) → Tech (Cyan) → Softness (Pink)
                                         </p>
                                     </div>
                                     <div className="text-right space-y-1 font-mono text-xs opacity-70">

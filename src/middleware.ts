@@ -44,6 +44,7 @@ export async function middleware(req: NextRequest) {
   });
 
   const { pathname } = req.nextUrl;
+  const redirectTarget = `${pathname}${req.nextUrl.search}`;
 
   // ============================================
   // 1. 静态资源和 API 路由，直接放行
@@ -134,7 +135,7 @@ export async function middleware(req: NextRequest) {
     if (error || !user) {
       console.log(`[Middleware] Unauthorized access to ${pathname}, redirecting to login`);
       const loginUrl = new URL("/auth/login", req.url);
-      loginUrl.searchParams.set("redirect", pathname);
+      loginUrl.searchParams.set("redirect", redirectTarget);
       return NextResponse.redirect(loginUrl);
     }
 
@@ -163,7 +164,7 @@ export async function middleware(req: NextRequest) {
     // Supabase 连接错误，重定向到登录页
     console.error(`[Middleware] Error checking auth:`, error);
     const loginUrl = new URL("/auth/login", req.url);
-    loginUrl.searchParams.set("redirect", pathname);
+    loginUrl.searchParams.set("redirect", redirectTarget);
     return NextResponse.redirect(loginUrl);
   }
 }

@@ -140,6 +140,11 @@ import { SaveTemplateDialog } from "@/components/studio/SaveTemplateDialog";
 import { TemplateManager, type Template } from "@/components/studio/TemplateManager";
 import { LayoutTemplate, Save } from "lucide-react";
 import { useApiHealth } from "@/hooks/use-api-health";
+import {
+  getCharacterReferenceMaxImages,
+  mergeCharacterReferenceImages,
+  supportsCharacterReferenceImage,
+} from "@/lib/video-models/character-reference";
 
 // ============================================================================
 // PipelineProgress 组件 - 流水线进度指示器
@@ -556,26 +561,20 @@ const VideoTaskCard = memo(function VideoTaskCard({
 
   // 获取显示标签
   const getModelLabel = () => {
-    if (taskModelType === "veo3-fast") {
-      return "8秒 快速";
-    } else if (taskModelType === "veo3-std") {
-      return "8秒 标准";
-    } else if (taskModelType === "veo3-4k") {
-      return "8秒 4K";
+    if (taskModelType === "veo") {
+      return "8秒 1080P";
+    } else if (taskModelType === "grok") {
+      return "10秒 720P";
+    } else if (taskModelType === "omni") {
+      return "10秒 720P";
     } else if (taskModelType === "seedance") {
-      return `${taskDuration}秒 1080P`;
-    } else if (taskModelType === "seedance-pro") {
-      return `${taskDuration}秒 Pro`;
+      return taskQuality === "hd" ? `${taskDuration}秒 Pro` : `${taskDuration}秒 1080P`;
     } else if (taskModelType === "happyhorse") {
       return `${taskDuration}s 720P`;
     } else if (taskModelType === "sora2") {
-      return `${taskDuration}秒`;
+      return "12秒";
     } else {
-      // sora2-pro
-      if (taskQuality === "hd") {
-        return `${taskDuration}秒 高清`;
-      }
-      return `${taskDuration}秒`;
+      return "12秒 Pro";
     }
   };
 
@@ -732,12 +731,17 @@ const VideoTaskCard = memo(function VideoTaskCard({
               Pro
             </Badge>
           )}
-          {(taskModelType === "veo3-fast" || taskModelType === "veo3-std" || taskModelType === "veo3-4k") && (
+          {taskModelType === "veo" && (
             <Badge variant="outline" className="text-[10px] h-5 px-1.5 bg-teal-500/10 border-teal-500/30 text-teal-400">
-              VEO3
+              VEO
             </Badge>
           )}
-          {(taskModelType === "seedance" || taskModelType === "seedance-pro") && (
+          {taskModelType === "omni" && (
+            <Badge variant="outline" className="text-[10px] h-5 px-1.5 bg-cyan-500/10 border-cyan-500/30 text-cyan-400">
+              Omni
+            </Badge>
+          )}
+          {taskModelType === "seedance" && (
             <Badge variant="outline" className="text-[10px] h-5 px-1.5 bg-orange-500/10 border-orange-500/30 text-orange-400">
               🔥 Seedance
             </Badge>
@@ -943,27 +947,24 @@ function VideoPlayerDialog({ task, open, onClose, onDownload }: VideoPlayerDialo
 
   // 获取视频时长和清晰度显示文字
   const getDurationLabel = () => {
-    const duration = task.duration || 15;
+    const duration = task.duration || 12;
     const quality = task.quality || "standard";
     const modelType = task.modelType || "sora2";
 
-    if (modelType === "veo3-fast") {
-      return "8秒 快速";
-    } else if (modelType === "veo3-std") {
-      return "8秒 标准";
-    } else if (modelType === "veo3-4k") {
-      return "8秒 4K";
+    if (modelType === "veo") {
+      return "8秒 1080P";
+    } else if (modelType === "grok") {
+      return "10秒 720P";
+    } else if (modelType === "omni") {
+      return "10秒 720P";
     } else if (modelType === "seedance") {
-      return `${duration}秒 1080P`;
-    } else if (modelType === "seedance-pro") {
-      return `${duration}秒 Pro`;
+      return quality === "hd" ? `${duration}秒 Pro` : `${duration}秒 1080P`;
     } else if (modelType === "happyhorse") {
       return `${duration}s 720P`;
     } else if (modelType === "sora2-pro") {
-      if (quality === "hd") return `${duration}秒 高清`;
-      return `${duration}秒 标清`;
+      return "12秒 Pro";
     }
-    return `${duration}秒`;
+    return "12秒";
   };
 
   const handleDownload = async () => {
@@ -1097,6 +1098,20 @@ function ScriptPreviewDialog({ task, open, onClose }: ScriptPreviewDialogProps) 
 // 主页面
 // ============================================================================
 
+const VIDEO_MODEL_DEFAULTS: Record<VideoModelType, { duration: VideoDuration; quality: VideoQuality }> = {
+  sora2: { duration: 12, quality: "standard" },
+  "sora2-pro": { duration: 12, quality: "hd" },
+  grok: { duration: 10, quality: "standard" },
+  veo: { duration: 8, quality: "standard" },
+  omni: { duration: 10, quality: "standard" },
+  seedance: { duration: 5, quality: "standard" },
+  happyhorse: { duration: 5, quality: "standard" },
+};
+
+function isVideoModelType(value: string | null): value is VideoModelType {
+  return !!value && value in VIDEO_MODEL_DEFAULTS;
+}
+
 export default function VideoBatchPage() {
   const { toast } = useToast();
 
@@ -1134,6 +1149,7 @@ export default function VideoBatchPage() {
   // Local State
   const [userId, setUserId] = useState<string | null>(null);
   const [userCredits, setUserCredits] = useState(0);
+  const initialCharacterAppliedRef = useRef(false);
   const [previewTask, setPreviewTask] = useState<VideoBatchTask | null>(null);
   const [playingVideoTask, setPlayingVideoTask] = useState<VideoBatchTask | null>(null);
   const [editingImages, setEditingImages] = useState<TaskImageInfo[]>([]);
@@ -1163,7 +1179,7 @@ export default function VideoBatchPage() {
   const [referenceImageFile, setReferenceImageFile] = useState<File | null>(null);
   const [referenceImageUrl, setReferenceImageUrl] = useState("");
   const [happyHorseReferenceImages, setHappyHorseReferenceImages] = useState<TaskImageInfo[]>([]);
-  // 首尾帧（veo3-fast / veo3-4k 自由创作模式用）
+  // 旧模板兼容字段；统一 VEO 现按可选参考图处理
   const [firstFrameFile, setFirstFrameFile] = useState<File | null>(null);
   const [firstFrameUrl, setFirstFrameUrl] = useState("");
   const [lastFrameFile, setLastFrameFile] = useState<File | null>(null);
@@ -1235,20 +1251,20 @@ export default function VideoBatchPage() {
         }
       }
 
-      // 上传参考图（纯提示词模式）
-      const uploadedHappyHorseReferenceUrls: string[] = [];
-      if (createMode === "prompt" && globalSettings.modelType === "happyhorse") {
-        for (const img of happyHorseReferenceImages.slice(0, 9)) {
+      // 上传参考图（纯提示词模式，多图模型共用）
+      const uploadedReferenceUrls: string[] = [];
+      if (createMode === "prompt" && useMultiReferenceUploader) {
+        for (const img of happyHorseReferenceImages.slice(0, promptReferenceLimit)) {
           try {
-            uploadedHappyHorseReferenceUrls.push(await uploadImageToServer(img));
+            uploadedReferenceUrls.push(await uploadImageToServer(img));
           } catch (uploadErr) {
-            console.error("Upload HappyHorse reference image failed:", uploadErr);
+            console.error("Upload reference image failed:", uploadErr);
           }
         }
       }
 
       let savedReferenceImageUrl = "";
-      if (createMode === "prompt" && globalSettings.modelType !== "happyhorse" && referenceImageFile) {
+      if (createMode === "prompt" && !useMultiReferenceUploader && referenceImageFile) {
         try {
           const formData = new FormData();
           formData.append('file', referenceImageFile);
@@ -1263,7 +1279,7 @@ export default function VideoBatchPage() {
         } catch (uploadErr) {
           console.error('Upload reference image failed:', uploadErr);
         }
-      } else if (createMode === "prompt" && globalSettings.modelType !== "happyhorse" && referenceImageUrl && !referenceImageUrl.startsWith('blob:')) {
+      } else if (createMode === "prompt" && !useMultiReferenceUploader && referenceImageUrl && !referenceImageUrl.startsWith('blob:')) {
         // 已经是远程 URL
         savedReferenceImageUrl = referenceImageUrl;
       }
@@ -1286,7 +1302,7 @@ export default function VideoBatchPage() {
         groupNameTemplate: groupNameInput,
         templateImages: uploadedImages,
         referenceImageUrl: savedReferenceImageUrl, // 新增：参考图持久化 URL
-        referenceImageUrls: uploadedHappyHorseReferenceUrls,
+        referenceImageUrls: uploadedReferenceUrls,
         savedAt: new Date().toISOString(),
       };
 
@@ -1684,22 +1700,29 @@ C07: [story CTA, inspiring, <50 chars]`,
   // localStorage 下载记录已移除（统一由 download-store 管理）
 
   // AI 模特设置函数
-  const setUseAiModel = (value: boolean) => updateGlobalSettings("useAiModel", value);
-  const setSelectedModelId = (value: string | null) => updateGlobalSettings("aiModelId", value);
-  const setSelectedModelName = (value: string | null) => updateGlobalSettings("aiModelName", value);
-  const setSelectedModelTriggerWord = (value: string | null) => updateGlobalSettings("aiModelTriggerWord", value);
-  const setSelectedModelCover = (value: string | null) => updateGlobalSettings("aiModelCover", value);
+  const setUseAiModel = useCallback((value: boolean) => updateGlobalSettings("useAiModel", value), [updateGlobalSettings]);
+  const setSelectedModelId = useCallback((value: string | null) => updateGlobalSettings("aiModelId", value), [updateGlobalSettings]);
+  const setSelectedModelName = useCallback((value: string | null) => updateGlobalSettings("aiModelName", value), [updateGlobalSettings]);
+  const setSelectedModelTriggerWord = useCallback((value: string | null) => updateGlobalSettings("aiModelTriggerWord", value), [updateGlobalSettings]);
+  const setSelectedModelCover = useCallback((value: string | null) => updateGlobalSettings("aiModelCover", value), [updateGlobalSettings]);
 
-  // Veo3 / Grok 自建角色设置函数
+  // 参考图角色设置函数
   const veo3CharacterId = globalSettings.characterId;
-  const veo3CharacterName = globalSettings.characterName;
   const veo3CharacterRefUrl = globalSettings.characterRefUrl;
-  const isVeo3Model = globalSettings.modelType === "veo3-fast" || globalSettings.modelType === "veo3-std" || globalSettings.modelType === "veo3-4k";
-  const isGrokModel = globalSettings.modelType === "grok";
-  const isHappyHorseModel = globalSettings.modelType === "happyhorse";
-  // VEO 和 Grok 都使用自建角色的参考图（reference_sheet_url）
-  const useRefImageModel = isVeo3Model || isGrokModel;
+  const promptReferenceLimit = getCharacterReferenceMaxImages(globalSettings.modelType);
+  const useRefImageModel = supportsCharacterReferenceImage(globalSettings.modelType);
+  const useMultiReferenceUploader = useRefImageModel;
+  const manualPromptReferenceLimit = Math.max(
+    0,
+    promptReferenceLimit - (useRefImageModel && veo3CharacterRefUrl ? 1 : 0)
+  );
   const apiHealth = useApiHealth();
+  const applyVideoModelDefaults = useCallback((modelType: VideoModelType) => {
+    const defaults = VIDEO_MODEL_DEFAULTS[modelType];
+    updateGlobalSettings("modelType", modelType);
+    updateGlobalSettings("duration", defaults.duration);
+    updateGlobalSettings("quality", defaults.quality);
+  }, [updateGlobalSettings]);
 
   // 统一角色选中回调
   const handleCharacterSelect = useCallback((character: CharacterOption | null) => {
@@ -1720,7 +1743,7 @@ C07: [story CTA, inspiring, <50 chars]`,
     }
 
     if (useRefImageModel) {
-      // Veo3 / Grok：存自建角色参考图
+      // VEO / Grok / Omni / HappyHorse：存自建角色参考图
       updateGlobalSettings("characterId", character.id);
       updateGlobalSettings("characterName", character.name);
       updateGlobalSettings("characterRefUrl", character.reference_sheet_url || null);
@@ -1733,6 +1756,114 @@ C07: [story CTA, inspiring, <50 chars]`,
       setSelectedModelCover(character.avatar_url);
     }
   }, [useRefImageModel, updateGlobalSettings, setUseAiModel, setSelectedModelId, setSelectedModelName, setSelectedModelTriggerWord, setSelectedModelCover]);
+
+  useEffect(() => {
+    if (initialCharacterAppliedRef.current || typeof window === "undefined") return;
+
+    const params = new URLSearchParams(window.location.search);
+    const characterId = params.get("characterId");
+    if (!characterId) return;
+
+    const requestedModel = params.get("modelType");
+    const preferredModelType = isVideoModelType(requestedModel) ? requestedModel : "veo";
+
+    let cancelled = false;
+    initialCharacterAppliedRef.current = true;
+
+    const applyReferenceCharacter = (character: {
+      id: string;
+      name: string;
+      avatar_url?: string | null;
+      description?: string | null;
+      reference_sheet_url?: string | null;
+      trigger_word?: string | null;
+    }) => {
+      const referenceUrl = character.reference_sheet_url || null;
+      const triggerWord = character.trigger_word || character.description || character.name;
+
+      if (referenceUrl) {
+        const targetModel = supportsCharacterReferenceImage(preferredModelType) ? preferredModelType : "veo";
+        applyVideoModelDefaults(targetModel);
+        setUseAiModel(false);
+        setSelectedModelId(null);
+        setSelectedModelName(null);
+        setSelectedModelTriggerWord(null);
+        setSelectedModelCover(null);
+        updateGlobalSettings("characterId", character.id);
+        updateGlobalSettings("characterName", character.name);
+        updateGlobalSettings("characterRefUrl", referenceUrl);
+        toast({
+          title: "已选择角色参考图",
+          description: `${character.name} 已带入素材生成视频`,
+        });
+        return;
+      }
+
+      applyVideoModelDefaults("sora2");
+      setUseAiModel(true);
+      setSelectedModelId(character.id);
+      setSelectedModelName(character.name);
+      setSelectedModelTriggerWord(triggerWord);
+      setSelectedModelCover(character.avatar_url || null);
+      updateGlobalSettings("characterId", null);
+      updateGlobalSettings("characterName", null);
+      updateGlobalSettings("characterRefUrl", null);
+      toast({
+        title: "已选择签约模特",
+        description: `${character.name} 已带入 Sora2 创作`,
+      });
+    };
+
+    const loadCharacter = async () => {
+      try {
+        const contractsRes = await fetch("/api/contracts?status=active");
+        const contractsResult = await contractsRes.json();
+        if (cancelled) return;
+        if (contractsResult.success && Array.isArray(contractsResult.data)) {
+          const contract = contractsResult.data.find((item: any) => item?.ai_models?.id === characterId);
+          if (contract?.ai_models) {
+            applyReferenceCharacter(contract.ai_models);
+            return;
+          }
+        }
+
+        if (!userId) {
+          initialCharacterAppliedRef.current = false;
+          return;
+        }
+
+        const ownRes = await fetch(`/api/characters?userId=${encodeURIComponent(userId)}`);
+        const ownResult = await ownRes.json();
+        if (cancelled) return;
+        if (ownResult.success && Array.isArray(ownResult.data)) {
+          const character = ownResult.data.find((item: any) => item?.id === characterId);
+          if (character) {
+            applyReferenceCharacter(character);
+          }
+        }
+      } catch (error) {
+        if (!cancelled) {
+          console.error("[Video Batch] Failed to apply character from URL:", error);
+        }
+      }
+    };
+
+    loadCharacter();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    applyVideoModelDefaults,
+    setSelectedModelCover,
+    setSelectedModelId,
+    setSelectedModelName,
+    setSelectedModelTriggerWord,
+    setUseAiModel,
+    toast,
+    updateGlobalSettings,
+    userId,
+  ]);
 
   // 任务处理锁，防止重复执行
   const processingTasksRef = useRef<Set<string>>(new Set());
@@ -1922,6 +2053,8 @@ C07: [story CTA, inspiring, <50 chars]`,
       processingTasksRef.current.add(task.id);
 
       try {
+        const taskUseAiModel = task.useAiModel ?? globalSettings.useAiModel;
+        const taskModelTriggerWord = task.aiModelTriggerWord || globalSettings.aiModelTriggerWord;
         let finalVideoPrompt = "";
         let mainGridImageUrl = "";
         let happyHorseImageUrls: string[] = [];
@@ -1939,16 +2072,16 @@ C07: [story CTA, inspiring, <50 chars]`,
             : (mainGridImageUrl ? [mainGridImageUrl] : []);
 
           // 如果使用AI模特且有trigger word，添加到提示词中
-          if (useAiModel && selectedModelTriggerWord) {
-            finalVideoPrompt = `[AI MODEL: ${selectedModelTriggerWord}]\n\n${finalVideoPrompt}`;
-            console.log("[Video Batch] Prompt mode - Added AI model trigger word:", selectedModelTriggerWord);
+          if (taskUseAiModel && taskModelTriggerWord) {
+            finalVideoPrompt = `[AI MODEL: ${taskModelTriggerWord}]\n\n${finalVideoPrompt}`;
+            console.log("[Video Batch] Prompt mode - Added AI model trigger word:", taskModelTriggerWord);
           }
 
           // 保存用户提示词到任务（不暴露 trigger_word）
           updateTaskStatus(task.id, "generating_video", {
             currentStep: 3,
             progress: 30,
-            doubaoTalkingScript: useAiModel && selectedModelTriggerWord
+            doubaoTalkingScript: taskUseAiModel && taskModelTriggerWord
               ? `【纯提示词模式 - 已启用AI模特】`
               : "【纯提示词模式 - 无口播脚本】",
             // 保存给用户看的提示词不包含 trigger_word
@@ -1956,8 +2089,8 @@ C07: [story CTA, inspiring, <50 chars]`,
           });
 
           console.log("[Video Batch] Prompt mode - using custom prompt directly", {
-            hasAiModel: useAiModel,
-            triggerWord: selectedModelTriggerWord,
+            hasAiModel: taskUseAiModel,
+            triggerWord: taskModelTriggerWord,
           });
         } else {
           // ==================== 图片到视频模式 ====================
@@ -2028,7 +2161,7 @@ C07: [story CTA, inspiring, <50 chars]`,
             body: JSON.stringify({
               talkingScript: scriptResult.data.script,
               taskId: task.id,
-              modelTriggerWord: useAiModel ? selectedModelTriggerWord : undefined,
+              modelTriggerWord: taskUseAiModel ? taskModelTriggerWord : undefined,
               customPrompts: savedCustomPrompts ? {
                 systemPrompt: savedCustomPrompts.aiVideoPromptSystem,
                 userPrompt: savedCustomPrompts.aiVideoPromptUser,
@@ -2067,8 +2200,8 @@ C07: [story CTA, inspiring, <50 chars]`,
         // ==================== Step 3: 生成 Sora 视频 ====================
 
         // 如果使用AI模特且有trigger word，确保它在最终提示词中
-        if (useAiModel && selectedModelTriggerWord && !finalVideoPrompt.includes(selectedModelTriggerWord)) {
-          finalVideoPrompt = `[AI MODEL: ${selectedModelTriggerWord}]\n\n${finalVideoPrompt}`;
+        if (taskUseAiModel && taskModelTriggerWord && !finalVideoPrompt.includes(taskModelTriggerWord)) {
+          finalVideoPrompt = `[AI MODEL: ${taskModelTriggerWord}]\n\n${finalVideoPrompt}`;
           console.log("[Video Batch] Added AI model trigger word to final prompt");
         }
 
@@ -2078,66 +2211,38 @@ C07: [story CTA, inspiring, <50 chars]`,
         const taskQuality = task.quality || globalSettings.quality;
         const taskModelType = task.modelType || globalSettings.modelType;
 
-        // 计算积分消耗
-        const taskCreditCost = getVideoBatchTotalPrice(taskModelType, taskDuration, taskQuality);
-
-        // 判断模型类型以选择 API 端点
-        const isVeo3Model = taskModelType === "veo3-fast" || taskModelType === "veo3-std" || taskModelType === "veo3-4k";
-        const isGrokModel = taskModelType === "grok";
-        const isSeedanceModel = taskModelType === "seedance" || taskModelType === "seedance-pro";
+        const isVeoModel = taskModelType === "veo";
+        const isSeedanceModel = taskModelType === "seedance";
         const isHappyHorseModel = taskModelType === "happyhorse";
-        const apiEndpoint = isHappyHorseModel
-          ? "/api/video-batch/generate-happyhorse-video"
-          : isSeedanceModel
-            ? "/api/seedance/submit"
-            : isGrokModel
-            ? "/api/video-batch/generate-grok-video"
-            : isVeo3Model
-              ? "/api/video-batch/generate-veo-video"
-              : "/api/video-batch/generate-sora-video";
 
-        console.log(`[Video Batch] Calling ${isHappyHorseModel ? 'HappyHorse' : isSeedanceModel ? 'Seedance' : isGrokModel ? 'Grok' : isVeo3Model ? 'VEO3' : 'Sora2'} API with userId:`, currentUserId);
+        const unifiedImageUrls = mergeCharacterReferenceImages(taskModelType, task.characterRefUrl || globalSettings.characterRefUrl, [
+          ...(isHappyHorseModel ? happyHorseImageUrls : []),
+          ...(mainGridImageUrl ? [mainGridImageUrl] : []),
+          ...(isVeoModel && task.firstFrameUrl ? [task.firstFrameUrl] : []),
+          ...(isVeoModel && task.lastFrameUrl ? [task.lastFrameUrl] : []),
+          ...(task.referenceImageUrls || []),
+        ]);
 
-        // Seedance 模型使用不同的请求格式
-        const requestBody = isHappyHorseModel ? {
-          aiVideoPrompt: finalVideoPrompt,
+        console.log("[Video Batch] Calling unified video model API:", {
+          modelType: taskModelType,
+          userId: currentUserId,
+          imageCount: unifiedImageUrls.length,
+        });
+
+        const requestBody = {
+          prompt: finalVideoPrompt,
+          imageUrls: unifiedImageUrls,
           aspectRatio: taskAspectRatio,
           durationSeconds: taskDuration,
-          imageUrls: happyHorseImageUrls,
+          quality: taskQuality,
           modelType: taskModelType,
-          taskId: task.id,
+          clientTaskId: task.id,
           userId: currentUserId,
-          creditCost: taskCreditCost,
           mode: isPromptMode ? "prompt_to_video" : "image_to_video",
           groupName: task.groupName,
-        } : isSeedanceModel ? {
-          prompt: finalVideoPrompt,
-          model: taskModelType === "seedance-pro"
-            ? (taskDuration === 5 ? "seedance-5s-pro" : "seedance-10s-pro")
-            : (taskDuration === 5 ? "seedance-5s" : "seedance-10s"),
-          ratio: taskAspectRatio,
-          imageUrl: mainGridImageUrl || undefined,
-          userId: currentUserId,
-        } : {
-          aiVideoPrompt: finalVideoPrompt,
-          mainGridImageUrl: mainGridImageUrl || undefined,
-          ...((isVeo3Model || isGrokModel) && (task.characterRefUrl || globalSettings.characterRefUrl) && {
-            characterRefUrl: task.characterRefUrl || globalSettings.characterRefUrl,
-          }),
-          ...(isVeo3Model && task.firstFrameUrl && {
-            firstFrameUrl: task.firstFrameUrl,
-            ...(task.lastFrameUrl && { lastFrameUrl: task.lastFrameUrl }),
-          }),
-          aspectRatio: taskAspectRatio,
-          durationSeconds: taskDuration,
-          modelType: taskModelType,
-          taskId: task.id,
-          userId: currentUserId,
-          creditCost: taskCreditCost,
-          mode: isPromptMode ? "prompt_to_video" : "image_to_video",
         };
 
-        const videoResponse = await fetch(apiEndpoint, {
+        const videoResponse = await fetch("/api/video-batch/models/submit", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(requestBody),
@@ -2157,14 +2262,11 @@ C07: [story CTA, inspiring, <50 chars]`,
 
 
         // async 模式：获取任务 ID
-        const soraTaskId = isHappyHorseModel
-          ? videoResult.data.happyHorseTaskId
-          : isSeedanceModel
-            ? videoResult.data.taskId
-          : isGrokModel
-            ? videoResult.data.grokTaskId
-            : isVeo3Model ? videoResult.data.veoTaskId : videoResult.data.soraTaskId;
-        console.log(`[Video Batch] ${isHappyHorseModel ? 'HappyHorse' : isSeedanceModel ? 'Seedance' : isGrokModel ? 'Grok' : isVeo3Model ? 'VEO3' : 'Sora2'} task submitted (async):`, soraTaskId);
+        const soraTaskId = videoResult.data.taskId;
+        console.log("[Video Batch] Unified video task submitted:", {
+          modelType: taskModelType,
+          taskId: soraTaskId,
+        });
 
         // 更新状态为正在生成视频
         updateTaskStatus(task.id, "generating_video", {
@@ -2174,17 +2276,13 @@ C07: [story CTA, inspiring, <50 chars]`,
         });
 
         // ==================== Step 3.5: 轮询视频任务状态 ====================
-        const isPro = taskModelType === "sora2-pro" || taskQuality === "hd" || taskDuration === 25;
-        const maxPollTime = isHappyHorseModel ? (taskDuration === 12 ? 18 : 10) * 60 * 1000 : isSeedanceModel ? 5 * 60 * 1000 : (isVeo3Model || isGrokModel) ? 10 * 60 * 1000 : (isPro ? 35 * 60 * 1000 : 10 * 60 * 1000);
-        const statusApiPath = isHappyHorseModel
-          ? `/api/video-batch/happyhorse-status/${soraTaskId}`
+        const isPro = taskModelType === "sora2-pro" || taskQuality === "hd";
+        const maxPollTime = isHappyHorseModel
+          ? (taskDuration === 12 ? 18 : 10) * 60 * 1000
           : isSeedanceModel
-            ? `/api/seedance/status?taskId=${soraTaskId}&model=${requestBody.model || 'seedance-5s'}&ratio=${taskAspectRatio}`
-            : isGrokModel
-            ? `/api/video-batch/grok-status/${soraTaskId}`
-            : isVeo3Model
-              ? `/api/video-batch/veo-status/${soraTaskId}`
-              : `/api/video-batch/sora-status/${soraTaskId}?isPro=${isPro}`;
+            ? 5 * 60 * 1000
+            : (taskModelType === "sora2-pro" ? 35 : 15) * 60 * 1000;
+        const statusApiPath = `/api/video-batch/models/status?modelType=${encodeURIComponent(taskModelType)}&taskId=${encodeURIComponent(soraTaskId)}&aspectRatio=${encodeURIComponent(taskAspectRatio)}&durationSeconds=${taskDuration}&quality=${encodeURIComponent(taskQuality)}`;
         const pollInterval = isSeedanceModel ? 5 * 1000 : 15 * 1000;
         const startTime = Date.now();
 
@@ -2324,7 +2422,7 @@ C07: [story CTA, inspiring, <50 chars]`,
         processingTasksRef.current.delete(task.id);
       }
     },
-    [updateTaskStatus, toast, useAiModel, selectedModelTriggerWord, promptInput, batchCreateCount, globalSettings.aiModelId, globalSettings.aiModelName, globalSettings.aiModelTriggerWord]
+    [updateTaskStatus, toast, globalSettings, userId]
   );
 
   // 编辑任务图片
@@ -2354,7 +2452,7 @@ C07: [story CTA, inspiring, <50 chars]`,
             <span className="text-white drop-shadow-lg">素材生成视频</span>
           </h1>
           <p className="mt-2 text-white/60">
-            一键生成多个视频，支持 Grok / VEO3 多模型流水线处理
+            一键生成多个视频，支持 Sora2 / Grok / VEO / Omni 多模型流水线处理
           </p>
         </div>
 
@@ -2630,7 +2728,7 @@ C07: [story CTA, inspiring, <50 chars]`,
                 </div>
                 <h3 className="text-xl font-bold text-white mb-2 group-hover:text-mermaid-cyan transition-colors tracking-tight">暂无视频任务</h3>
                 <p className="text-sm text-white/40 group-hover:text-white/80 transition-colors">
-                  点击 <span className="text-mermaid-cyan font-medium">"创建视频任务"</span> 开始批量生产
+                  点击 <span className="text-mermaid-cyan font-medium">&quot;创建视频任务&quot;</span> 开始批量生产
                 </p>
               </div>
             </div>
@@ -2945,78 +3043,22 @@ C07: [story CTA, inspiring, <50 chars]`,
                       />
                     </div>
 
-                    {/* 可选参考图 / 首尾帧 + 分组名 */}
+                    {/* 可选参考图 + 分组名 */}
                     <div className="grid grid-cols-2 gap-4 pt-2">
                       <div className="space-y-2">
-                        {/* VEO fast/4K: 首尾帧双图上传; 其他模型: 单张参考图 */}
-                        {(globalSettings.modelType === "veo3-fast" || globalSettings.modelType === "veo3-4k") ? (
-                          <>
-                            <Label className="text-xs text-white/60">🎬 首尾帧 (图生视频)</Label>
-                            <div className="grid grid-cols-2 gap-2">
-                              {/* 首帧 */}
-                              <div>
-                                <div
-                                  className="h-20 border border-dashed border-white/20 rounded-lg flex items-center justify-center bg-white/5 hover:bg-white/10 cursor-pointer transition-all"
-                                  onClick={() => document.getElementById('first-frame-upload')?.click()}
-                                >
-                                  {firstFrameUrl ? (
-                                    <div className="relative w-full h-full">
-                                      <img src={firstFrameUrl} alt="首帧" className="w-full h-full object-cover rounded-lg" />
-                                      <button
-                                        onClick={(e) => { e.stopPropagation(); setFirstFrameUrl(""); setFirstFrameFile(null); }}
-                                        className="absolute -top-1.5 -right-1.5 h-4 w-4 bg-red-500 rounded-full flex items-center justify-center"
-                                      >
-                                        <X className="h-2.5 w-2.5 text-white" />
-                                      </button>
-                                    </div>
-                                  ) : (
-                                    <span className="text-[10px] text-white/40">首帧</span>
-                                  )}
-                                </div>
-                                <input id="first-frame-upload" type="file" accept="image/*" className="hidden" onChange={(e) => {
-                                  const file = e.target.files?.[0];
-                                  if (file) { setFirstFrameFile(file); setFirstFrameUrl(URL.createObjectURL(file)); }
-                                }} />
-                              </div>
-                              {/* 尾帧 */}
-                              <div>
-                                <div
-                                  className="h-20 border border-dashed border-white/20 rounded-lg flex items-center justify-center bg-white/5 hover:bg-white/10 cursor-pointer transition-all"
-                                  onClick={() => document.getElementById('last-frame-upload')?.click()}
-                                >
-                                  {lastFrameUrl ? (
-                                    <div className="relative w-full h-full">
-                                      <img src={lastFrameUrl} alt="尾帧" className="w-full h-full object-cover rounded-lg" />
-                                      <button
-                                        onClick={(e) => { e.stopPropagation(); setLastFrameUrl(""); setLastFrameFile(null); }}
-                                        className="absolute -top-1.5 -right-1.5 h-4 w-4 bg-red-500 rounded-full flex items-center justify-center"
-                                      >
-                                        <X className="h-2.5 w-2.5 text-white" />
-                                      </button>
-                                    </div>
-                                  ) : (
-                                    <span className="text-[10px] text-white/40">尾帧 (选填)</span>
-                                  )}
-                                </div>
-                                <input id="last-frame-upload" type="file" accept="image/*" className="hidden" onChange={(e) => {
-                                  const file = e.target.files?.[0];
-                                  if (file) { setLastFrameFile(file); setLastFrameUrl(URL.createObjectURL(file)); }
-                                }} />
-                              </div>
-                            </div>
-                          </>
-                        ) : globalSettings.modelType === "happyhorse" ? (
+                        {useMultiReferenceUploader ? (
                           <div className="space-y-2">
-                            <Label className="text-xs text-white/60">HappyHorse 参考图 (最多 9 张)</Label>
+                            <Label className="text-xs text-white/60">
+                              参考图 (最多 {manualPromptReferenceLimit} 张{veo3CharacterRefUrl ? "，角色已占 1 张" : ""})
+                            </Label>
                             <div className="max-h-44 overflow-y-auto rounded-lg border border-white/10 bg-white/5 p-2">
                               <ImageUploader
                                 images={happyHorseReferenceImages}
                                 onImagesChange={setHappyHorseReferenceImages}
-                                maxImages={9}
+                                maxImages={manualPromptReferenceLimit}
                                 variant="reference"
                               />
                             </div>
-                            <p className="text-[10px] text-white/35">有参考图时自动使用 R2V，可在提示词里写 character1、character2 指代图片。</p>
                           </div>
                         ) : (
                           <>
@@ -3352,17 +3394,15 @@ C07: [story CTA, inspiring, <50 chars]`,
                   {/* 模型选择 */}
                   <div className="space-y-2">
                     <Label className="text-xs text-white/60">模型</Label>
-                    <div className="grid grid-cols-6 gap-1.5">
+                    <div className="grid grid-cols-4 gap-1.5">
                       {[
-                        { id: "grok", name: "Grok", sub: "10/15秒", dur: 10, qual: "standard" },
-                        { id: "veo3-fast", name: "Veo3（快速）", sub: "首尾帧", dur: 8, qual: "standard" },
-                        { id: "veo3-std", name: "Veo3（标准）", sub: "≤3张参考图", dur: 8, qual: "standard" },
-                        { id: "veo3-4k", name: "Veo3（4K）", sub: "首尾帧", dur: 8, qual: "hd" },
+                        { id: "sora2", name: "Sora2", sub: "12s 标准", dur: 12, qual: "standard" },
+                        { id: "sora2-pro", name: "Sora2 Pro", sub: "12s Pro", dur: 12, qual: "hd" },
+                        { id: "grok", name: "Grok", sub: "10s 720P", dur: 10, qual: "standard" },
+                        { id: "veo", name: "VEO", sub: "8s 1080P", dur: 8, qual: "standard" },
+                        { id: "omni", name: "Omni", sub: "10s 720P", dur: 10, qual: "standard" },
                         { id: "seedance", name: "Seedance 2.0", sub: "5/10秒 1080P", dur: 5, qual: "standard" },
-                        { id: "seedance-pro", name: "Seedance Pro", sub: "5/10秒 720P", dur: 5, qual: "hd" },
                         { id: "happyhorse", name: "HappyHorse", sub: "5/12s 720P", dur: 5, qual: "standard" },
-                        { id: "sora2", name: "Sora2", sub: "停服中", dur: 15, qual: "standard" },
-                        { id: "sora2-pro", name: "Sora Pro", sub: "停服中", dur: 15, qual: "hd" },
                       ].map((m) => {
                         const healthStatus = apiHealth.getModelStatus(m.id);
                         return (
@@ -3373,8 +3413,8 @@ C07: [story CTA, inspiring, <50 chars]`,
                             updateGlobalSettings("modelType", m.id as VideoModelType);
                             updateGlobalSettings("duration", m.dur as VideoDuration);
                             updateGlobalSettings("quality", m.qual as VideoQuality);
-                            const wasRefImageModel = prevModelType === "veo3-fast" || prevModelType === "veo3-std" || prevModelType === "veo3-4k" || prevModelType === "grok";
-                            const isRefImageNow = m.id === "veo3-fast" || m.id === "veo3-std" || m.id === "veo3-4k" || m.id === "grok";
+                            const wasRefImageModel = supportsCharacterReferenceImage(prevModelType);
+                            const isRefImageNow = supportsCharacterReferenceImage(m.id);
                             if (wasRefImageModel !== isRefImageNow) {
                               setUseAiModel(false);
                               setSelectedModelId(null);
@@ -3414,11 +3454,10 @@ C07: [story CTA, inspiring, <50 chars]`,
                     <Label className="text-xs text-white/60">时长</Label>
                     <div className="flex gap-2">
                       {(globalSettings.modelType === "happyhorse" ? [5, 12] :
-                        globalSettings.modelType === "grok" ? [10, 15] :
-                        globalSettings.modelType === "sora2" ? [10, 15] :
-                        globalSettings.modelType === "sora2-pro" ? [15, 25] :
-                        (globalSettings.modelType === "seedance" || globalSettings.modelType === "seedance-pro") ? [5, 10] :
-                        [8]).map((dur) => (
+                        globalSettings.modelType === "seedance" ? [5, 10] :
+                        globalSettings.modelType === "veo" ? [8] :
+                        globalSettings.modelType === "sora2" || globalSettings.modelType === "sora2-pro" ? [12] :
+                        [10]).map((dur) => (
                           <button
                             key={dur}
                             onClick={() => updateGlobalSettings("duration", dur as VideoDuration)}
@@ -3434,6 +3473,31 @@ C07: [story CTA, inspiring, <50 chars]`,
                         ))}
                     </div>
                   </div>
+
+                  {globalSettings.modelType === "seedance" && (
+                    <div className="space-y-2">
+                      <Label className="text-xs text-white/60">质量</Label>
+                      <div className="flex gap-2">
+                        {[
+                          { id: "standard", label: "1080P" },
+                          { id: "hd", label: "Pro 720P" },
+                        ].map((q) => (
+                          <button
+                            key={q.id}
+                            onClick={() => updateGlobalSettings("quality", q.id as VideoQuality)}
+                            className={cn(
+                              "px-3 py-1.5 rounded-lg text-xs font-medium transition-all",
+                              globalSettings.quality === q.id
+                                ? "bg-amber-500/20 text-amber-400 border border-amber-500/30"
+                                : "bg-white/5 text-white/50 border border-white/10 hover:bg-white/10 hover:text-white"
+                            )}
+                          >
+                            {q.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
                   {/* 比例选择 */}
                   <div className="space-y-2">
@@ -3464,15 +3528,15 @@ C07: [story CTA, inspiring, <50 chars]`,
                   {/* 引用角色 — 统一 UI，按模型切换数据源 */}
                   <div className="space-y-2">
                     <Label className="text-xs text-white/60">
-                      {useRefImageModel ? "引用角色（自建角色）" : "引用角色（签约模特）"}
+                      {useRefImageModel ? "引用角色（自建/签约）" : "引用角色（签约模特）"}
                     </Label>
                     <CharacterPicker
                       variant="compact"
-                      dataSource={useRefImageModel ? "user_created" : "hired"}
+                      dataSource={useRefImageModel ? "all" : "hired"}
                       forgeType={useRefImageModel ? "veo" : "sora2"}
                       selectedId={useRefImageModel ? veo3CharacterId : selectedModelId}
                       onSelect={handleCharacterSelect}
-                      title={useRefImageModel ? "选择自建角色" : "选择签约模特"}
+                      title={useRefImageModel ? "选择可引用角色" : "选择签约模特"}
                     />
                   </div>
 
@@ -3600,6 +3664,8 @@ C07: [story CTA, inspiring, <50 chars]`,
                     const currentGroup = groupNameInput;
                     const currentImages = [...newTaskImages];
                     const currentHappyHorseReferenceImages = [...happyHorseReferenceImages];
+                    const currentPromptReferenceLimit = manualPromptReferenceLimit;
+                    const currentUseMultiReferenceUploader = useMultiReferenceUploader;
                     const currentRefFile = referenceImageFile;
                     const currentRefUrl = referenceImageUrl;
                     // 首尾帧快照
@@ -3620,20 +3686,20 @@ C07: [story CTA, inspiring, <50 chars]`,
                           let uploadedRefUrl = "";
                           let uploadedFirstFrameUrl = "";
                           let uploadedLastFrameUrl = "";
-                          const uploadedHappyHorseReferenceUrls: string[] = [];
+                          const uploadedReferenceUrls: string[] = [];
 
-                          if (globalSettings.modelType === "happyhorse") {
-                            for (const img of currentHappyHorseReferenceImages.slice(0, 9)) {
+                          if (currentUseMultiReferenceUploader) {
+                            for (const img of currentHappyHorseReferenceImages.slice(0, currentPromptReferenceLimit)) {
                               try {
-                                uploadedHappyHorseReferenceUrls.push(await uploadImageToServer(img));
+                                uploadedReferenceUrls.push(await uploadImageToServer(img));
                               } catch (e) {
-                                console.error("Upload HappyHorse reference image failed:", e);
+                                console.error("Upload reference image failed:", e);
                               }
                             }
                           }
 
-                          // 上传参考图（非首尾帧模型用）
-                          if (globalSettings.modelType !== "happyhorse" && currentRefFile) {
+                          // 上传单张参考图
+                          if (!currentUseMultiReferenceUploader && currentRefFile) {
                             try {
                               const formData = new FormData();
                               formData.append("file", currentRefFile);
@@ -3643,6 +3709,8 @@ C07: [story CTA, inspiring, <50 chars]`,
                             } catch (e) {
                               console.error("Upload reference image failed:", e);
                             }
+                          } else if (!currentUseMultiReferenceUploader && currentRefUrl && !currentRefUrl.startsWith("blob:")) {
+                            uploadedRefUrl = currentRefUrl;
                           }
 
                           // 上传首帧
@@ -3676,10 +3744,10 @@ C07: [story CTA, inspiring, <50 chars]`,
                             uploadedRefUrl || undefined,
                             currentCount,
                             currentGroup || undefined,
-                            (uploadedFirstFrameUrl || uploadedLastFrameUrl || uploadedHappyHorseReferenceUrls.length) ? {
+                            (uploadedFirstFrameUrl || uploadedLastFrameUrl || uploadedReferenceUrls.length) ? {
                               firstFrameUrl: uploadedFirstFrameUrl || undefined,
                               lastFrameUrl: uploadedLastFrameUrl || undefined,
-                              referenceImageUrls: uploadedHappyHorseReferenceUrls,
+                              referenceImageUrls: uploadedReferenceUrls,
                             } : undefined
                           );
                           setPromptInput("");
@@ -4018,7 +4086,7 @@ C07: [story CTA, inspiring, <50 chars]`,
           defaultName={`${globalSettings.modelType}-${globalSettings.duration}s-${globalSettings.aspectRatio}`}
           isUploading={isUploadingTemplate}
           configPreview={[
-            { icon: <Film className="h-3.5 w-3.5" />, label: "模型", value: globalSettings.modelType === "grok" ? "Grok Imagine" : globalSettings.modelType === "happyhorse" ? "HappyHorse 1.0" : globalSettings.modelType === "sora2" ? "Sora 2.0" : globalSettings.modelType === "sora2-pro" ? "Sora 2.0 Pro" : globalSettings.modelType === "veo3-fast" ? "Veo3（快速）" : globalSettings.modelType === "veo3-std" ? "Veo3（标准）" : globalSettings.modelType === "veo3-4k" ? "Veo3（4K）" : globalSettings.modelType === "seedance" ? "Seedance 2.0" : globalSettings.modelType === "seedance-pro" ? "Seedance 2.0 Pro" : "Veo3（4K）" },
+            { icon: <Film className="h-3.5 w-3.5" />, label: "模型", value: globalSettings.modelType === "grok" ? "Grok" : globalSettings.modelType === "happyhorse" ? "HappyHorse 1.0" : globalSettings.modelType === "sora2" ? "Sora2" : globalSettings.modelType === "sora2-pro" ? "Sora2 Pro" : globalSettings.modelType === "veo" ? "VEO" : globalSettings.modelType === "omni" ? "Omni" : globalSettings.quality === "hd" ? "Seedance Pro" : "Seedance 2.0" },
             { icon: <Clock className="h-3.5 w-3.5" />, label: "时长", value: `${globalSettings.duration}秒` },
             { icon: <Monitor className="h-3.5 w-3.5" />, label: "比例", value: globalSettings.aspectRatio },
             { icon: <UserCircle className="h-3.5 w-3.5" />, label: "AI模特", value: useAiModel && selectedModelName ? selectedModelName : "未使用" },
@@ -4087,4 +4155,3 @@ C07: [story CTA, inspiring, <50 chars]`,
     </TooltipProvider >
   );
 }
-

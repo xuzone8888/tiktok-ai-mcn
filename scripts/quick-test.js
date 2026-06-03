@@ -1,8 +1,11 @@
 // 测试 sora2 15秒 Key
-const API_KEY = 'sk-uLcJdMGYTbm2XNDG4t6ANtjYGvQrocOyJagcdlFqCWkHnlOZ';
+const API_KEY = process.env.SORA2_API_KEY || process.env.VIDEO_PLATFORM_API_KEY || '';
 
 async function test() {
-    console.log('测试 Key:', API_KEY.substring(0, 12) + '...');
+    if (!API_KEY) {
+        throw new Error('Missing SORA2_API_KEY or VIDEO_PLATFORM_API_KEY');
+    }
+    console.log('测试 Key: 已从环境变量读取');
     console.log('');
 
     const body = {

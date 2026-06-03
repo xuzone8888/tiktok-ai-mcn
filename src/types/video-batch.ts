@@ -26,7 +26,7 @@ export type VideoDuration = 5 | 8 | 10 | 12 | 15 | 25;
 export type VideoQuality = "standard" | "hd";
 
 /** 视频模型类型 */
-export type VideoModelType = "sora2" | "sora2-pro" | "veo3-fast" | "veo3-std" | "veo3-4k" | "grok" | "seedance" | "seedance-pro" | "happyhorse";
+export type VideoModelType = "sora2" | "sora2-pro" | "grok" | "veo" | "omni" | "seedance" | "happyhorse";
 
 /** 流水线步骤 */
 export type PipelineStep = 0 | 1 | 2 | 3 | 4;
@@ -41,23 +41,20 @@ export interface VideoModelConfig {
 
 /** 获取可用的时长选项 */
 export function getAvailableDurations(modelType: VideoModelType, quality: VideoQuality): VideoDuration[] {
-  if (modelType === "sora2") {
-    return [10, 15];
-  } else if (modelType === "sora2-pro") {
-    if (quality === "hd") {
-      return [15]; // 高清只有 15 秒
-    }
-    return [25]; // Pro 标清只有 25 秒
-  } else if (modelType === "veo3-fast" || modelType === "veo3-std" || modelType === "veo3-4k") {
-    return [8]; // VEO3 全系固定 8 秒
+  if (modelType === "sora2" || modelType === "sora2-pro") {
+    return [12];
+  } else if (modelType === "veo") {
+    return [8];
   } else if (modelType === "grok") {
-    return [10, 15]; // Grok Imagine 支持 10/15 秒
-  } else if (modelType === "seedance" || modelType === "seedance-pro") {
+    return [10];
+  } else if (modelType === "omni") {
+    return [10];
+  } else if (modelType === "seedance") {
     return [5, 10];
   } else if (modelType === "happyhorse") {
     return [5, 12];
   }
-  return [15]; // 默认
+  return [12];
 }
 
 /** 获取可用的质量选项 */
@@ -65,19 +62,13 @@ export function getAvailableQualities(modelType: VideoModelType): VideoQuality[]
   if (modelType === "sora2") {
     return ["standard"];
   } else if (modelType === "sora2-pro") {
-    return ["standard", "hd"];
-  } else if (modelType === "veo3-fast" || modelType === "veo3-std") {
-    return ["standard"];
-  } else if (modelType === "veo3-4k") {
     return ["hd"];
-  } else if (modelType === "grok") {
+  } else if (modelType === "veo" || modelType === "grok" || modelType === "omni") {
     return ["standard"];
   } else if (modelType === "seedance") {
-    return ["standard"]; // 标准版 480p→1080p
-  } else if (modelType === "seedance-pro") {
-    return ["hd"];
+    return ["standard", "hd"];
   } else if (modelType === "happyhorse") {
-    return ["standard"]; // Pro 原生 720p
+    return ["standard"];
   }
   return ["standard"];
 }
@@ -124,9 +115,11 @@ export interface VideoBatchTask {
   useAiModel?: boolean;       // 是否使用 AI 模特
   aiModelId?: string;         // AI 模特 ID（不暴露给用户）
   aiModelName?: string;       // AI 模特显示名称（用户可见）
+  aiModelTriggerWord?: string;// AI 模特触发词（任务创建时冻结）
+  aiModelCover?: string | null;// AI 模特封面图URL（任务创建时冻结）
   // Veo3 自建角色配置（任务创建时保存）
   characterRefUrl?: string;   // 自建角色参考图 URL
-  // Veo3 首尾帧配置（veo3-fast / veo3-4k 用）
+  // VEO 首尾帧兼容字段（统一模型会作为可选参考图处理）
   firstFrameUrl?: string;     // 首帧图片 URL（已上传 OSS）
   lastFrameUrl?: string;      // 尾帧图片 URL（已上传 OSS，可选）
 
@@ -258,28 +251,18 @@ export interface GenerateSoraVideoResponse {
 // ============================================================================
 // 定价配置
 // 批量生产视频扣分机制：
-// - 标准款（10秒/15秒 横/竖屏）：20 积分/条
-// - PRO 款（25秒 横/竖屏）：350 积分/条
-// - PRO 高清款（15秒 横/竖屏）：350 积分/条
+// 占位价格必须与服务端 VideoModelRegistry 保持一致；服务端为可信来源。
 // ============================================================================
 
 /** 视频生成定价 */
 export const VIDEO_BATCH_PRICING = {
   doubaoScript: 0,      // 豆包生成脚本（包含在总价中）
   doubaoPrompt: 0,      // 豆包生成提示词（包含在总价中）
-  // Sora2 标清
-  sora2_10s: 20,        // 10秒 标清 = 20积分
-  sora2_15s: 20,        // 15秒 标清 = 20积分
-  // Sora2 Pro
-  sora2Pro_15s_hd: 350, // 15秒 高清 = 350积分
-  sora2Pro_25s: 350,    // 25秒 标清 = 350积分
-  // VEO3 (高瑞 gaorui, 固定 8 秒)
-  veo3_fast: 30,        // VEO3 快速版 = 30积分 (纯提示词)
-  veo3_std: 50,         // VEO3 标准版 = 50积分 (≤3张参考图)
-  veo3_4k: 80,          // VEO3 4K超清 = 80积分 (≤2张参考图)
-  // Grok Imagine (速创 wuyinkeji, 0.05元/秒)
-  grok_10s: 5,          // Grok 10秒 = 5积分 (0.50元)
-  grok_15s: 8,          // Grok 15秒 = 8积分 (0.75元)
+  sora2_12s: 20,
+  sora2Pro_12s: 350,
+  veo_8s: 50,
+  grok_10s: 5,
+  omni_10s: 50,
   // Seedance 2.0 标准版 (480p→1080p超分)
   seedance_5s: 233,     // Seedance 2.0 5秒 高清1080P (¥2.33)
   seedance_10s: 466,    // Seedance 2.0 10秒 高清1080P (¥4.66)
@@ -297,34 +280,32 @@ export function getVideoBatchTotalPrice(
   quality: VideoQuality
 ): number {
   if (modelType === "sora2") {
-    if (duration === 10) return VIDEO_BATCH_PRICING.sora2_10s;
-    if (duration === 15) return VIDEO_BATCH_PRICING.sora2_15s;
+    return VIDEO_BATCH_PRICING.sora2_12s;
   }
   if (modelType === "sora2-pro") {
-    if (quality === "hd" && duration === 15) return VIDEO_BATCH_PRICING.sora2Pro_15s_hd;
-    if (duration === 25) return VIDEO_BATCH_PRICING.sora2Pro_25s;
+    return VIDEO_BATCH_PRICING.sora2Pro_12s;
   }
-  if (modelType === "veo3-fast") return VIDEO_BATCH_PRICING.veo3_fast;
-  if (modelType === "veo3-std") return VIDEO_BATCH_PRICING.veo3_std;
-  if (modelType === "veo3-4k") return VIDEO_BATCH_PRICING.veo3_4k;
+  if (modelType === "veo") return VIDEO_BATCH_PRICING.veo_8s;
   if (modelType === "grok") {
-    if (duration === 10) return VIDEO_BATCH_PRICING.grok_10s;
-    return VIDEO_BATCH_PRICING.grok_15s;
+    return VIDEO_BATCH_PRICING.grok_10s;
+  }
+  if (modelType === "omni") {
+    return VIDEO_BATCH_PRICING.omni_10s;
   }
   if (modelType === "seedance") {
+    if (quality === "hd") {
+      if (duration === 5) return VIDEO_BATCH_PRICING.seedancePro_5s;
+      return VIDEO_BATCH_PRICING.seedancePro_10s;
+    }
     if (duration === 5) return VIDEO_BATCH_PRICING.seedance_5s;
     return VIDEO_BATCH_PRICING.seedance_10s;
-  }
-  if (modelType === "seedance-pro") {
-    if (duration === 5) return VIDEO_BATCH_PRICING.seedancePro_5s;
-    return VIDEO_BATCH_PRICING.seedancePro_10s;
   }
   if (modelType === "happyhorse") {
     if (duration === 12) return VIDEO_BATCH_PRICING.happyhorse_12s;
     return VIDEO_BATCH_PRICING.happyhorse_5s;
   }
 
-  return VIDEO_BATCH_PRICING.sora2_15s; // 默认
+  return VIDEO_BATCH_PRICING.sora2_12s;
 }
 
 // ============================================================================
@@ -356,4 +337,3 @@ export function getStepProgress(step: PipelineStep): number {
   };
   return progressMap[step];
 }
-

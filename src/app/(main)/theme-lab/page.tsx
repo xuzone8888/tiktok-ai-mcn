@@ -89,7 +89,7 @@ export default function ThemeLabPage() {
                         Titanium <span className="text-gray-500">Silver</span>
                     </h1>
                     <p className="text-xl text-gray-400 max-w-2xl font-light">
-                        专为高密度工作流打造的极致冷静配色。融合了 "Crystal" 的结构感与 "Obsidian" 的流体排版。
+                        专为高密度工作流打造的极致冷静配色。融合了 &quot;Crystal&quot; 的结构感与 &quot;Obsidian&quot; 的流体排版。
                     </p>
                 </div>
             </div>

@@ -133,10 +133,10 @@ export function ScheduledQueue() {
                 </p>
                 <div className="flex flex-col gap-2 items-center">
                     <p className="text-xs text-gray-600">
-                        💡 提示：创建发布任务时选择"定时发布"或设置发布间隔
+                        💡 提示：创建发布任务时选择&quot;定时发布&quot;或设置发布间隔
                     </p>
                     <p className="text-xs text-gray-600">
-                        📋 已完成的任务可在"发布记录"中查看
+                        📋 已完成的任务可在&quot;发布记录&quot;中查看
                     </p>
                 </div>
             </div>

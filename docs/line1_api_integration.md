@@ -9,7 +9,7 @@
 | 配置项 | 值 |
 |--------|-----|
 | **API 端点** | `https://api.scd666.com` |
-| **API Key** | `sk-SZPEdRnAdW3Dgu9DqTE4nNcqkv1fNG3oBULxxx` (软件授权1) |
+| **API Key** | 从本地环境变量 `SORA2_API_KEY` 读取，不写入文档或代码 |
 
 代码来源：`src/lib/suchuang-api.ts`
 ```js

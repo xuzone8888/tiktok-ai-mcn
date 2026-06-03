@@ -14,6 +14,7 @@
  */
 
 import https from 'https';
+import http from 'http';
 
 // ============================================================================
 // 配置
@@ -128,7 +129,7 @@ async function requestWithRetry(
  */
 async function downloadImage(url: string): Promise<Buffer> {
   return new Promise((resolve, reject) => {
-    const protocol = url.startsWith('https') ? https : require('http');
+    const protocol = url.startsWith('https') ? https : http;
     protocol.get(url, { family: 4, timeout: 30000 }, (res: any) => {
       if (res.statusCode === 301 || res.statusCode === 302) {
         // 跟随重定向

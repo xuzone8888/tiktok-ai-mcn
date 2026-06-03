@@ -263,14 +263,18 @@ export default function ModelsPage() {
       is_featured: selectedModel.is_featured,
       is_trending: selectedModel.is_trending,
       rating: selectedModel.rating,
-      price_daily: Math.round(selectedModel.base_price / 30),
-      price_weekly: Math.round(selectedModel.base_price / 4),
-      price_monthly: selectedModel.base_price,
-      price_yearly: selectedModel.base_price * 10,
+      price_daily: selectedModel.source === "user_created" ? selectedModel.publish_price : Math.round(selectedModel.base_price / 30),
+      price_weekly: selectedModel.source === "user_created" ? selectedModel.publish_price : Math.round(selectedModel.base_price / 4),
+      price_monthly: selectedModel.source === "user_created" ? selectedModel.publish_price : selectedModel.base_price,
+      price_yearly: selectedModel.source === "user_created" ? selectedModel.publish_price : selectedModel.base_price * 10,
       total_rentals: selectedModel.total_rentals,
       total_generations: selectedModel.total_generations,
       created_at: selectedModel.created_at,
       updated_at: selectedModel.created_at,
+      source: selectedModel.source,
+      publish_price: selectedModel.publish_price,
+      reference_sheet_url: selectedModel.reference_sheet_url,
+      reference_status: selectedModel.reference_status,
     }
     : null;
 

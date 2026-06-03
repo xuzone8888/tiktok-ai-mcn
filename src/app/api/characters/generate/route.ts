@@ -1,12 +1,11 @@
 /**
- * 角色图片生成 API — V5 Gemini 同步版
+ * 角色图片生成 API — GPTImage2 统一平台版
  *
  * POST /api/characters/generate
  *   type="hero"(默认): 生成 Hero Shot（扣 20 积分）
- *     → 使用 Gemini 4K 同步生成，结果直接上传 OSS，返回永久 imageUrl
- *     → 不再使用 nanoBanana-pro（openpt.wuyinkeji.com 临时 CDN 已废弃）
+ *     → 使用 GPTImage2 生成，结果转存 OSS，返回永久 imageUrl
  *   type="reference":  生成多角度参考图（不扣积分，用 heroImageUrl 做参考）
- *     → 使用 Gemini 2K，结果上传 OSS
+ *     → 使用 GPTImage2 + heroImageUrl 参考图，结果转存 OSS
  *
  * GET /api/characters/generate?taskId=xxx
  *   → 仅保留做历史 nanoBanana 任务兼容查询，新流程不再使用
@@ -16,12 +15,13 @@ import { NextResponse } from "next/server";
 import {
   queryNanoBananaResult,
 } from "@/lib/suchuang-api";
-import { submitGeminiImage } from "@/lib/gemini-image-api";
+import { generateGptImage2 } from "@/lib/video-models/platform-image-client";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
 import { callDoubaoAPI } from "@/lib/doubao-api-client";
 import type { GenerateCharacterRequest } from "@/types/character";
 
-export const maxDuration = 120; // Gemini 4K 最长约 25s，留足余量
+export const maxDuration = 420; // GPTImage2 为异步轮询，给真实接口留足余量
 export const dynamic = "force-dynamic";
 
 // ============================================================================
@@ -29,6 +29,12 @@ export const dynamic = "force-dynamic";
 // ============================================================================
 
 const HERO_GENERATE_CREDITS = 20; // Hero 阶段一次扣完（含多角度预扣）
+
+async function getCurrentUser() {
+  const authSupabase = await createClient();
+  const { data: { user } } = await authSupabase.auth.getUser();
+  return user;
+}
 
 // ============================================================================
 // 中文翻译
@@ -125,10 +131,18 @@ export async function POST(request: Request) {
       );
     }
 
-    if (!userId) {
+    const user = await getCurrentUser();
+    if (!user) {
       return NextResponse.json(
-        { success: false, error: "userId is required" },
-        { status: 400 }
+        { success: false, error: "请先登录" },
+        { status: 401 }
+      );
+    }
+
+    if (userId && userId !== user.id) {
+      return NextResponse.json(
+        { success: false, error: "用户身份不匹配" },
+        { status: 403 }
       );
     }
 
@@ -147,78 +161,31 @@ export async function POST(request: Request) {
       const englishPrompt = await translateIfChinese(prompt);
       const refPrompt = `${englishPrompt}.${MULTI_ANGLE_TEMPLATE}`;
 
-      console.log("[Character Generate] Submitting reference task (gemini-4k, gaorui native):", {
+      console.log("[Character Generate] Submitting reference task via GPTImage2:", {
         promptLength: refPrompt.length,
         heroImageUrl: heroImageUrl.substring(0, 60),
       });
 
-      // 使用 gemini-4k (高瑞原生格式) — 返回 base64 → 内部上传 OSS → 永久 URL
-      // 之前用 gemini-2k (xas231) 返回临时 URL，阿里云 ECS 下载该临时 URL 经常 ETIMEDOUT
-      const geminiResult = await submitGeminiImage({
-        model: "gemini-4k",
+      const referenceResult = await generateGptImage2({
         prompt: refPrompt,
         sourceImageUrls: [heroImageUrl],
         aspectRatio: "16:9",
+        purpose: "character-reference",
+        userId: user.id,
       });
 
-      if (!geminiResult.success || !geminiResult.imageUrl) {
+      if (!referenceResult.success || !referenceResult.imageUrl) {
         return NextResponse.json(
-          { success: false, error: geminiResult.error || "多角度参考图生成失败" },
+          { success: false, error: referenceResult.error || "多角度参考图生成失败" },
           { status: 500 }
         );
       }
 
-      console.log("[Character Generate] Reference image ready:", geminiResult.imageUrl.substring(0, 80));
-
-      // gemini-4k (gaorui native) 返回 base64 → submitGeminiImage 内部已上传 OSS → 永久 URL
-      // 检查是否已是永久 OSS URL，若是则直接使用，无需再次下载转存
-      let permanentUrl: string | null = null;
-      const isAlreadyPermanent = geminiResult.imageUrl.includes('aliyuncs.com') || geminiResult.imageUrl.includes('oss-cn-');
-
-      if (isAlreadyPermanent) {
-        permanentUrl = geminiResult.imageUrl;
-        console.log("[Character Generate] Reference already on OSS, skip re-upload");
-      } else {
-        // fallback: 如果返回的是临时 URL（例如 fallback 到 xas231），仍需下载转存
-        const maxOssRetries = 2;
-        for (let attempt = 1; attempt <= maxOssRetries; attempt++) {
-          try {
-            const { uploadImageBuffer, generateMediaPath } = await import('@/lib/oss');
-            const imgResponse = await fetch(geminiResult.imageUrl);
-            if (!imgResponse.ok) {
-              throw new Error(`Failed to download temp image: ${imgResponse.status}`);
-            }
-            const imgBuffer = Buffer.from(await imgResponse.arrayBuffer());
-            const contentType = imgResponse.headers.get('content-type') || 'image/jpeg';
-            const ext = contentType.split('/')[1] || 'jpg';
-            const objectPath = generateMediaPath(
-              'images',
-              'character-reference',
-              `ref-sheet-${Date.now()}.${ext}`
-            );
-            permanentUrl = await uploadImageBuffer(imgBuffer, objectPath, contentType);
-            console.log("[Character Generate] Reference uploaded to OSS:", permanentUrl.substring(0, 80));
-            break;
-          } catch (ossErr) {
-            console.error(`[Character Generate] OSS upload attempt ${attempt}/${maxOssRetries} failed:`, ossErr);
-            if (attempt < maxOssRetries) {
-              await new Promise(r => setTimeout(r, 1000 * attempt));
-            }
-          }
-        }
-      }
-
-      if (!permanentUrl) {
-        console.error("[Character Generate] OSS upload failed after all retries, refusing to store temp URL");
-        return NextResponse.json(
-          { success: false, error: "参考图持久化失败，请重试生成" },
-          { status: 500 }
-        );
-      }
+      console.log("[Character Generate] Reference image ready:", referenceResult.imageUrl.substring(0, 80));
 
       return NextResponse.json({
         success: true,
-        referenceImageUrl: permanentUrl,
+        referenceImageUrl: referenceResult.imageUrl,
       });
     }
 
@@ -230,7 +197,7 @@ export async function POST(request: Request) {
     const { data: profileData, error: profileError } = await supabase
       .from("profiles")
       .select("credits")
-      .eq("id", userId)
+      .eq("id", user.id)
       .single();
 
     if (profileError || !profileData) {
@@ -263,7 +230,7 @@ export async function POST(request: Request) {
       const { data: latestProfile } = await supabase
         .from("profiles")
         .select("credits")
-        .eq("id", userId)
+        .eq("id", user.id)
         .single();
 
       const latestCredits =
@@ -283,7 +250,7 @@ export async function POST(request: Request) {
       const { error: deductError } = await (supabase as any)
         .from("profiles")
         .update({ credits: latestCredits - HERO_GENERATE_CREDITS })
-        .eq("id", userId)
+        .eq("id", user.id)
         .eq("credits", latestCredits); // 乐观锁
 
       if (!deductError) {
@@ -310,8 +277,8 @@ export async function POST(request: Request) {
     const englishPrompt = await translateIfChinese(prompt);
     const heroPrompt = `${englishPrompt}.${HERO_SHOT_TEMPLATE}`;
 
-    console.log("[Character Generate] Generating Hero Shot via Gemini 4K:", {
-      userId,
+    console.log("[Character Generate] Generating Hero Shot via GPTImage2:", {
+      userId: user.id,
       cost: HERO_GENERATE_CREDITS,
       before: currentCredits,
       after: currentCredits - HERO_GENERATE_CREDITS,
@@ -320,14 +287,12 @@ export async function POST(request: Request) {
       hasSourceImage: !!sourceImageUrl,
     });
 
-    // V5: 使用 Gemini 4K（高瑞）同步生成 Hero Shot
-    // - 结果由 submitGeminiImage 自动上传 OSS → 返回永久 URL
-    // - 不再使用 nanoBanana-pro（openpt.wuyinkeji.com 临时 CDN）
-    const heroResult = await submitGeminiImage({
-      model: "gemini-4k",
+    const heroResult = await generateGptImage2({
       prompt: heroPrompt,
       sourceImageUrls: sourceImageUrl ? [sourceImageUrl] : undefined,
       aspectRatio: "3:4",
+      purpose: "character-hero",
+      userId: user.id,
     });
 
     if (!heroResult.success || !heroResult.imageUrl) {
@@ -337,7 +302,7 @@ export async function POST(request: Request) {
       await (supabase as any)
         .from("profiles")
         .update({ credits: currentCredits })
-        .eq("id", userId);
+        .eq("id", user.id);
 
       return NextResponse.json(
         {
@@ -382,6 +347,14 @@ export async function GET(request: Request) {
       );
     }
 
+    const user = await getCurrentUser();
+    if (!user) {
+      return NextResponse.json(
+        { success: false, error: "请先登录" },
+        { status: 401 }
+      );
+    }
+
     const result = await queryNanoBananaResult(taskId);
 
     if (!result.success) {
@@ -391,7 +364,7 @@ export async function GET(request: Request) {
       );
     }
 
-    // 注意：新流程（V5）Hero Shot 已改为同步 Gemini 生成，不再经过此 GET 轮询
+    // 注意：新流程 Hero Shot 已改为 GPTImage2 生成，不再经过此 GET 轮询
     // 此 GET handler 仅保留用于查询历史 nanoBanana 任务（兼容旧前端）
     return NextResponse.json({
       success: true,

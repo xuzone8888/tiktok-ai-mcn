@@ -29,7 +29,7 @@ export default function TitaniumSystem() {
                     </ReflectiveButton>
                 </div>
                 <p className="text-xl text-white/50 max-w-2xl">
-                    工业级精密感。点击右侧按钮启动 "Active Mode" 查看动态反馈。
+                    工业级精密感。点击右侧按钮启动 &quot;Active Mode&quot; 查看动态反馈。
                 </p>
             </div>
 

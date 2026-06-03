@@ -336,7 +336,8 @@ export async function getMarketplaceModels(options?: {
     const publicModels = (models || []).map((model: any) => {
       const publicModel = toPublicModel(model);
       const hiredCount = hiredCountMap[model.id] || 0;
-      const hasActiveContract = userContractsSet.has(model.id);
+      const hasActiveContract = userContractsSet.has(model.id)
+        || (currentUserId && model.source === "user_created" && model.owner_id === currentUserId);
       
       return {
         ...publicModel,

@@ -1,19 +1,54 @@
 /**
- * 角色活化视频 API — 使用 gaorui-veo-api.ts 直连高瑞 VEO3
+ * 角色活化视频 API
+ *
+ * 复用统一视频模型 submit/status 路由，固定走 VEO 参考图生成。
  */
 
 import { NextResponse } from "next/server";
-import { submitVeo3Video, queryVeoResult } from "@/lib/gaorui-veo-api";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
 
-export const maxDuration = 120;
+export const maxDuration = 180;
 export const dynamic = "force-dynamic";
 
-// ============================================================================
-// 积分配置
-// ============================================================================
+function getRouteUrl(request: Request, pathname: string): string {
+  return new URL(pathname, request.url).toString();
+}
 
-const ACTIVATE_CREDITS = 10; // 角色活化视频 = 10 积分/次
+function getForwardedHeaders(request: Request): HeadersInit {
+  const headers: HeadersInit = { "Content-Type": "application/json" };
+  const cookie = request.headers.get("cookie");
+  if (cookie) headers.Cookie = cookie;
+  return headers;
+}
+
+async function getCurrentUser() {
+  const authSupabase = await createClient();
+  const { data: { user } } = await authSupabase.auth.getUser();
+  return user;
+}
+
+async function assertOwnedUserCharacter(characterId: string, userId: string) {
+  const supabase = createAdminClient();
+  const { data: character, error } = await supabase
+    .from("ai_models")
+    .select("id, owner_id, source")
+    .eq("id", characterId)
+    .eq("source", "user_created")
+    .single();
+
+  if (error || !character || character.owner_id !== userId) {
+    return {
+      ok: false as const,
+      response: NextResponse.json(
+        { success: false, error: "角色不存在或无权操作" },
+        { status: 404 }
+      ),
+    };
+  }
+
+  return { ok: true as const, supabase };
+}
 
 // ============================================================================
 // POST — 提交角色活化视频任务
@@ -22,16 +57,14 @@ const ACTIVATE_CREDITS = 10; // 角色活化视频 = 10 积分/次
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { referenceImageUrl, heroImageUrl, prompt, userId, characterId } = body as {
+    const { referenceImageUrl, heroImageUrl, prompt, characterId } = body as {
       referenceImageUrl?: string;
       heroImageUrl?: string;
       prompt: string;
-      userId: string;
       characterId?: string;
     };
-    const imageUrl = referenceImageUrl || heroImageUrl; // 兼容旧前端
+    const imageUrl = referenceImageUrl || heroImageUrl;
 
-    // 参数校验
     if (!imageUrl) {
       return NextResponse.json(
         { success: false, error: "referenceImageUrl is required" },
@@ -46,147 +79,55 @@ export async function POST(request: Request) {
       );
     }
 
-    if (!userId) {
+    const user = await getCurrentUser();
+    if (!user) {
       return NextResponse.json(
-        { success: false, error: "userId is required" },
-        { status: 400 }
+        { success: false, error: "请先登录" },
+        { status: 401 }
       );
     }
 
-    // ============================================
-    // 积分检查与扣除（乐观锁）
-    // ============================================
-    const supabase = createAdminClient();
-
-    const { data: profileData, error: profileError } = await supabase
-      .from("profiles")
-      .select("credits")
-      .eq("id", userId)
-      .single();
-
-    if (profileError || !profileData) {
-      return NextResponse.json(
-        { success: false, error: "User not found" },
-        { status: 404 }
-      );
+    if (characterId) {
+      const ownership = await assertOwnedUserCharacter(characterId, user.id);
+      if (!ownership.ok) return ownership.response;
     }
 
-    const currentCredits = (profileData as { credits: number }).credits;
+    const submitRes = await fetch(getRouteUrl(request, "/api/video-batch/models/submit"), {
+      method: "POST",
+      headers: getForwardedHeaders(request),
+      body: JSON.stringify({
+        modelType: "veo",
+        prompt: prompt.trim(),
+        aspectRatio: "9:16",
+        characterRefUrl: imageUrl,
+        clientTaskId: `character-activate-${characterId || "preview"}-${Date.now()}`,
+        groupName: "角色活化",
+        userId: user.id,
+        durationSeconds: 8,
+        quality: "standard",
+        mode: "image_to_video",
+      }),
+    });
 
-    if (currentCredits < ACTIVATE_CREDITS) {
+    const submitResult = await submitRes.json();
+    if (!submitResult.success || !submitResult.data?.taskId) {
       return NextResponse.json(
         {
           success: false,
-          error: `积分不足！需要 ${ACTIVATE_CREDITS} 积分，当前余额 ${currentCredits}`,
+          error: submitResult.error || "视频生成提交失败",
         },
-        { status: 400 }
+        { status: submitRes.ok ? 500 : submitRes.status }
       );
     }
-
-    // 乐观锁扣费（带重试）
-    let deductSuccess = false;
-    let deductAttempts = 0;
-    const maxAttempts = 3;
-
-    while (!deductSuccess && deductAttempts < maxAttempts) {
-      deductAttempts++;
-
-      const { data: latestProfile } = await supabase
-        .from("profiles")
-        .select("credits")
-        .eq("id", userId)
-        .single();
-
-      const latestCredits =
-        (latestProfile as unknown as { credits: number })?.credits || 0;
-
-      if (latestCredits < ACTIVATE_CREDITS) {
-        return NextResponse.json(
-          {
-            success: false,
-            error: `积分不足！需要 ${ACTIVATE_CREDITS} 积分，当前余额 ${latestCredits}`,
-          },
-          { status: 400 }
-        );
-      }
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error: deductError } = await (supabase as any)
-        .from("profiles")
-        .update({ credits: latestCredits - ACTIVATE_CREDITS })
-        .eq("id", userId)
-        .eq("credits", latestCredits); // 乐观锁
-
-      if (!deductError) {
-        deductSuccess = true;
-      } else if (deductAttempts < maxAttempts) {
-        console.log(
-          `[Character Activate] Credits deduct retry ${deductAttempts}/${maxAttempts}`
-        );
-        await new Promise((r) => setTimeout(r, 100 * deductAttempts));
-      }
-    }
-
-    if (!deductSuccess) {
-      console.error(
-        "[Character Activate] Failed to deduct credits after retries"
-      );
-      return NextResponse.json(
-        { success: false, error: "扣费失败，请重试" },
-        { status: 500 }
-      );
-    }
-
-    console.log("[Character Activate] Credits deducted:", {
-      userId,
-      cost: ACTIVATE_CREDITS,
-      before: currentCredits,
-      after: currentCredits - ACTIVATE_CREDITS,
-    });
-
-    // ============================================
-    // 提交 Veo3 图生视频任务
-    // ============================================
-    console.log("[Character Activate] Submitting Veo3 task:", {
-      promptPreview: prompt.substring(0, 80),
-      imageUrl: imageUrl.substring(0, 60) + "...",
-      model: "veo_3_1-components",
-    });
-
-    const result = await submitVeo3Video({
-      prompt: prompt.trim(),
-      imageUrls: [imageUrl],
-      aspectRatio: "9:16",
-      model: "veo_3_1-components",
-    });
-
-    if (!result.success || !result.taskId) {
-      console.error("[Character Activate] Veo3 submit failed:", result.error);
-
-      // 生成失败，退还积分
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (supabase as any)
-        .from("profiles")
-        .update({ credits: currentCredits })
-        .eq("id", userId);
-
-      return NextResponse.json(
-        {
-          success: false,
-          error: result.error || "视频生成失败，积分已退还",
-        },
-        { status: 500 }
-      );
-    }
-
-    console.log("[Character Activate] Task submitted:", result.taskId);
 
     return NextResponse.json({
       success: true,
-      taskId: result.taskId,
+      taskId: submitResult.data.taskId,
+      modelType: "veo",
+      creditCost: submitResult.data.creditCost,
     });
   } catch (error) {
-    console.error("[Character Activate] Unexpected error:", error);
+    console.error("[Character Activate] Submit error:", error);
     return NextResponse.json(
       { success: false, error: "Internal server error" },
       { status: 500 }
@@ -211,72 +152,59 @@ export async function GET(request: Request) {
       );
     }
 
-    const result = await queryVeoResult(taskId);
-
-    if (!result.success) {
+    const user = await getCurrentUser();
+    if (!user) {
       return NextResponse.json(
-        { success: false, error: result.error || "查询失败" },
-        { status: 500 }
+        { success: false, error: "请先登录" },
+        { status: 401 }
       );
     }
 
-    // 映射字段以保持前端兼容 (videoUrl → resultUrl)
-    const task = result.task;
-    let finalVideoUrl = task?.videoUrl;
+    let ownedCharacter:
+      | Awaited<ReturnType<typeof assertOwnedUserCharacter>>
+      | null = null;
+    if (characterId) {
+      ownedCharacter = await assertOwnedUserCharacter(characterId, user.id);
+      if (!ownedCharacter.ok) return ownedCharacter.response;
+    }
 
-    // 视频完成 → 持久化到 OSS + PATCH DB
-    if (task?.status === "completed" && task.videoUrl && characterId) {
-      try {
-        // 先检查 DB 是否已有永久 URL（防止重复下载上传）
-        const supabase = createAdminClient();
-        const { data: existing } = await supabase
-          .from("ai_models")
-          .select("preview_video_url")
-          .eq("id", characterId)
-          .single();
+    const statusUrl = new URL(getRouteUrl(request, "/api/video-batch/models/status"));
+    statusUrl.searchParams.set("modelType", "veo");
+    statusUrl.searchParams.set("taskId", taskId);
+    statusUrl.searchParams.set("aspectRatio", "9:16");
+    statusUrl.searchParams.set("durationSeconds", "8");
+    statusUrl.searchParams.set("quality", "standard");
 
-        const alreadyPersisted = existing?.preview_video_url?.includes('media.toryxai.com') ?? false;
+    const statusRes = await fetch(statusUrl.toString(), {
+      cache: "no-store",
+      headers: getForwardedHeaders(request),
+    });
+    const statusResult = await statusRes.json();
 
-        if (!alreadyPersisted) {
-          const { uploadVideoBuffer, generateMediaPath } = await import('@/lib/oss');
-          const videoResponse = await fetch(task.videoUrl);
-          if (videoResponse.ok) {
-            const videoBuffer = Buffer.from(await videoResponse.arrayBuffer());
-            const objectPath = generateMediaPath(
-              'videos',
-              'character-activate',
-              `activate-${characterId}-${Date.now()}.mp4`
-            );
-            finalVideoUrl = await uploadVideoBuffer(videoBuffer, objectPath, 'video/mp4');
-            console.log("[Character Activate] Video uploaded to OSS:", finalVideoUrl.substring(0, 80));
+    if (!statusResult.success) {
+      return NextResponse.json(
+        { success: false, error: statusResult.error || "查询失败" },
+        { status: statusRes.ok ? 500 : statusRes.status }
+      );
+    }
 
-            // PATCH DB
-            await (supabase as ReturnType<typeof createAdminClient>)
-              .from("ai_models")
-              .update({ preview_video_url: finalVideoUrl })
-              .eq("id", characterId);
-            console.log("[Character Activate] DB patched with OSS URL for:", characterId);
-          }
-        } else {
-          finalVideoUrl = existing?.preview_video_url ?? undefined;
-          console.log("[Character Activate] Already persisted, using existing URL");
-        }
-      } catch (ossErr) {
-        console.error("[Character Activate] OSS upload failed, using temp URL:", ossErr);
-        // fallback: 继续使用临时 URL
-      }
+    const data = statusResult.data;
+    if (data?.status === "completed" && data.videoUrl && characterId) {
+      await ownedCharacter!.supabase
+        .from("ai_models")
+        .update({ preview_video_url: data.videoUrl })
+        .eq("id", characterId)
+        .eq("owner_id", user.id);
     }
 
     return NextResponse.json({
       success: true,
-      task: task ? {
-        taskId: task.taskId,
-        status: task.status,
-        resultUrl: finalVideoUrl,
-        errorMessage: task.errorMessage,
-        progress: task.progress,
-        createdAt: task.createdAt,
-        completedAt: task.completedAt,
+      task: data ? {
+        taskId: data.taskId,
+        status: data.status,
+        resultUrl: data.videoUrl,
+        errorMessage: data.errorMessage,
+        progress: data.progress,
       } : undefined,
     });
   } catch (error) {

@@ -245,7 +245,7 @@ export function TemplateManager({
                                 <div className="space-y-1">
                                     <h3 className="text-lg font-medium text-gray-300">暂无保存的方案</h3>
                                     <p className="text-sm text-gray-500 max-w-xs mx-auto">
-                                        在创建任务弹窗中点击"保存为方案"即可将配置保存于此
+                                        在创建任务弹窗中点击&quot;保存为方案&quot;即可将配置保存于此
                                     </p>
                                 </div>
                             </div>

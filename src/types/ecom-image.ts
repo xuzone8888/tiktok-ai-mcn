@@ -86,9 +86,7 @@ export interface EcomFivePackConfig {
 }
 
 /** 一键白底图配置 */
-export interface WhiteBackgroundConfig {
-  // 白底图使用固定模板，无需额外配置
-}
+export type WhiteBackgroundConfig = Record<string, never>;
 
 /** 一键场景图配置 */
 export interface SceneImageConfig {
@@ -451,4 +449,3 @@ export const RESOLUTION_OPTIONS: { value: EcomResolution; label: string }[] = [
   { value: '2k', label: '2K' },
   { value: '4k', label: '4K' },
 ];
-

@@ -103,7 +103,7 @@ EOF`;
             </div>
             <div className="flex-1 space-y-3">
               <p className="font-medium">打开「终端」，粘贴第一条命令，按回车</p>
-              <p className="text-sm text-muted-foreground">（在启动台搜索"终端"）</p>
+              <p className="text-sm text-muted-foreground">（在启动台搜索&quot;终端&quot;）</p>
               <div className="relative">
                 <pre className="bg-zinc-900 text-zinc-100 p-3 rounded-lg text-xs overflow-x-auto">
                   {macCommand1}
@@ -185,7 +185,7 @@ EOF`;
 
             <div>
               <p className="font-medium mb-2">步骤 2：创建 manifest.json</p>
-              <p className="text-sm text-muted-foreground mb-2">用记事本创建文件，复制以下内容，保存到文件夹（保存类型选"所有文件"）：</p>
+              <p className="text-sm text-muted-foreground mb-2">用记事本创建文件，复制以下内容，保存到文件夹（保存类型选&quot;所有文件&quot;）：</p>
               <div className="relative">
                 <pre className="bg-zinc-900 text-zinc-100 p-3 rounded-lg text-xs overflow-x-auto">
                   {winManifest}

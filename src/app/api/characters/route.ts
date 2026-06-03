@@ -8,9 +8,54 @@
 
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
 import type { CreateCharacterRequest } from "@/types/character";
+import type { Json } from "@/types/database";
 
 export const dynamic = "force-dynamic";
+
+const OPTIONAL_INSERT_COLUMNS = new Set([
+  "forge_type",
+  "trigger_word",
+  "reference_task_id",
+]);
+
+async function getCurrentUser() {
+  const authSupabase = await createClient();
+  const { data: { user } } = await authSupabase.auth.getUser();
+  return user;
+}
+
+async function requireMatchingUser(requestedUserId?: string | null) {
+  const user = await getCurrentUser();
+  if (!user) {
+    return {
+      ok: false as const,
+      response: NextResponse.json(
+        { success: false, error: "请先登录" },
+        { status: 401 }
+      ),
+    };
+  }
+
+  if (requestedUserId && requestedUserId !== user.id) {
+    return {
+      ok: false as const,
+      response: NextResponse.json(
+        { success: false, error: "用户身份不匹配" },
+        { status: 403 }
+      ),
+    };
+  }
+
+  return { ok: true as const, user };
+}
+
+function getMissingSchemaColumn(error: { message?: string } | null): string | null {
+  const message = error?.message || "";
+  const match = message.match(/Could not find the '([^']+)' column/i);
+  return match?.[1] || null;
+}
 
 // ============================================================================
 // GET — 获取用户自建角色列表
@@ -21,12 +66,8 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const userId = searchParams.get("userId");
 
-    if (!userId) {
-      return NextResponse.json(
-        { success: false, error: "userId is required" },
-        { status: 400 }
-      );
-    }
+    const auth = await requireMatchingUser(userId);
+    if (!auth.ok) return auth.response;
 
     const supabase = createAdminClient();
 
@@ -34,7 +75,7 @@ export async function GET(request: Request) {
       .from("ai_models")
       .select("*")
       .eq("source", "user_created")
-      .eq("owner_id", userId)
+      .eq("owner_id", auth.user.id)
       .order("created_at", { ascending: false });
 
     if (error) {
@@ -84,13 +125,12 @@ export async function POST(request: Request) {
       forge_type,
     } = body;
 
+    const referenceImages = Array.isArray(reference_images) ? reference_images : [];
+
+    const auth = await requireMatchingUser(userId);
+    if (!auth.ok) return auth.response;
+
     // 参数校验
-    if (!userId) {
-      return NextResponse.json(
-        { success: false, error: "userId is required" },
-        { status: 400 }
-      );
-    }
     if (!name || !name.trim()) {
       return NextResponse.json(
         { success: false, error: "角色名称不能为空" },
@@ -98,7 +138,7 @@ export async function POST(request: Request) {
       );
     }
     // Sora2 角色不需要参考图（使用视频截帧代替），VEO 角色必须有参考图
-    if (forge_type !== "sora2" && (!reference_images || reference_images.length === 0)) {
+    if (forge_type !== "sora2" && referenceImages.length === 0) {
       return NextResponse.json(
         { success: false, error: "至少需要一张参考图" },
         { status: 400 }
@@ -108,15 +148,15 @@ export async function POST(request: Request) {
     const supabase = createAdminClient();
 
     // 写入 ai_models 表
-    const insertData = {
+    const insertData: Record<string, unknown> = {
       name: name.trim(),
       description,
       // avatar_url = Hero Shot 4K（展示用）
-      avatar_url: avatar_url || reference_images[0],
-      reference_images: reference_images as unknown as import("@/types/database").Json,
+      avatar_url: avatar_url || referenceImages[0] || null,
+      reference_images: referenceImages as unknown as Json,
       preview_video_url: preview_video_url || null,
       character_type: character_type || "realistic",
-      dna_config: (dna_config || {}) as unknown as import("@/types/database").Json,
+      dna_config: (dna_config || {}) as unknown as Json,
       style_tags,
       gender: (gender || null) as "male" | "female" | "neutral" | null,
       age_range: age_range || null,
@@ -126,7 +166,7 @@ export async function POST(request: Request) {
       reference_task_id: reference_task_id || null,
       // 角色归属
       source: "user_created" as const,
-      owner_id: userId,
+      owner_id: auth.user.id,
       is_active: true,
       is_public: false,
       publish_price: 100,
@@ -143,22 +183,43 @@ export async function POST(request: Request) {
     };
 
     console.log("[Characters API] Creating character:", {
-      userId,
+      userId: auth.user.id,
       name: insertData.name,
       character_type: insertData.character_type,
-      imagesCount: reference_images.length,
+      imagesCount: referenceImages.length,
     });
 
-    const { data, error } = await supabase
-      .from("ai_models")
-      .insert(insertData)
-      .select("id")
-      .single();
+    let payload = { ...insertData };
+    let data: { id: string } | null = null;
+    let error: { message: string; code?: string } | null = null;
 
-    if (error) {
+    for (let attempt = 0; attempt <= OPTIONAL_INSERT_COLUMNS.size; attempt += 1) {
+      const result = await supabase
+        .from("ai_models")
+        .insert(payload as never)
+        .select("id")
+        .single();
+
+      data = result.data as { id: string } | null;
+      error = result.error ? { message: result.error.message, code: result.error.code } : null;
+
+      if (!error) break;
+
+      const missingColumn = getMissingSchemaColumn(error);
+      if (!missingColumn || !OPTIONAL_INSERT_COLUMNS.has(missingColumn) || !(missingColumn in payload)) {
+        break;
+      }
+
+      const nextPayload = { ...payload };
+      delete nextPayload[missingColumn];
+      payload = nextPayload;
+      console.warn("[Characters API] Optional ai_models column missing, retrying without it:", missingColumn);
+    }
+
+    if (error || !data) {
       console.error("[Characters API] POST insert error:", error);
       return NextResponse.json(
-        { success: false, error: error.message },
+        { success: false, error: error?.message || "角色创建失败" },
         { status: 500 }
       );
     }
@@ -184,16 +245,19 @@ export async function PATCH(request: Request) {
     const body = await request.json();
     const { characterId, userId, preview_video_url } = body as {
       characterId: string;
-      userId: string;
+      userId?: string;
       preview_video_url?: string;
     };
 
-    if (!characterId || !userId) {
+    if (!characterId) {
       return NextResponse.json(
-        { success: false, error: "characterId and userId are required" },
+        { success: false, error: "characterId is required" },
         { status: 400 }
       );
     }
+
+    const auth = await requireMatchingUser(userId);
+    if (!auth.ok) return auth.response;
 
     const supabase = createAdminClient();
 
@@ -215,7 +279,7 @@ export async function PATCH(request: Request) {
       .from("ai_models")
       .update(updateData)
       .eq("id", characterId)
-      .eq("owner_id", userId)
+      .eq("owner_id", auth.user.id)
       .eq("source", "user_created");
 
     if (error) {
@@ -248,12 +312,15 @@ export async function DELETE(request: Request) {
     const id = searchParams.get("id");
     const userId = searchParams.get("userId");
 
-    if (!id || !userId) {
+    if (!id) {
       return NextResponse.json(
-        { success: false, error: "id and userId are required" },
+        { success: false, error: "id is required" },
         { status: 400 }
       );
     }
+
+    const auth = await requireMatchingUser(userId);
+    if (!auth.ok) return auth.response;
 
     const supabase = createAdminClient();
 
@@ -262,7 +329,7 @@ export async function DELETE(request: Request) {
       .from("ai_models")
       .delete()
       .eq("id", id)
-      .eq("owner_id", userId)
+      .eq("owner_id", auth.user.id)
       .eq("source", "user_created");
 
     if (error) {

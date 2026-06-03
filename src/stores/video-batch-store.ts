@@ -22,6 +22,7 @@ import {
 
   getVideoBatchTotalPrice,
 } from "@/types/video-batch";
+import { getCharacterReferenceMaxImages } from "@/lib/video-models/character-reference";
 
 // ============================================================================
 // 状态类型
@@ -170,8 +171,7 @@ const generateImageId = () => `img-${Date.now()}-${Math.random().toString(36).su
 /** 计算单个任务的积分消耗（使用全局设置） */
 export const getVideoBatchTaskCost = (globalSettings?: VideoBatchGlobalSettings): number => {
   if (!globalSettings) {
-    // 默认使用 sora2 15秒标清
-    return getVideoBatchTotalPrice("sora2", 15, "standard");
+    return getVideoBatchTotalPrice("sora2", 12, "standard");
   }
   return getVideoBatchTotalPrice(
     globalSettings.modelType,
@@ -228,7 +228,7 @@ const initialState: VideoBatchState = {
   globalSettings: {
     aspectRatio: "9:16",
     modelType: "sora2",
-    duration: 15,
+    duration: 12,
     quality: "standard",
     language: "en",
     autoStart: false,
@@ -237,9 +237,9 @@ const initialState: VideoBatchState = {
     aiModelName: null,
     aiModelTriggerWord: null,
     aiModelCover: null,       // 修复：之前遗漏的字段
-    characterId: null,        // Veo3 自建角色 ID
-    characterName: null,      // Veo3 自建角色名称
-    characterRefUrl: null,    // Veo3 自建角色参考图 URL
+    characterId: null,        // 参考图角色 ID
+    characterName: null,      // 参考图角色名称
+    characterRefUrl: null,    // 参考图角色 URL
   },
   selectedTaskIds: {},
   editingTaskId: null,
@@ -280,7 +280,10 @@ export const useVideoBatchStore = create<VideoBatchState & VideoBatchActions>()(
             // AI 模特配置
             useAiModel: globalSettings.useAiModel,
             aiModelId: globalSettings.aiModelId || undefined,
-            // 自建角色参考图（VEO3/Grok 用）
+            aiModelName: globalSettings.aiModelName || undefined,
+            aiModelTriggerWord: globalSettings.aiModelTriggerWord || undefined,
+            aiModelCover: globalSettings.aiModelCover || undefined,
+            // 自建角色参考图（VEO/Grok/Omni/HappyHorse 用）
             characterRefUrl: globalSettings.characterRefUrl || undefined,
             groupName: groupName?.trim() || '默认', // 任务组名称
             doubaoTalkingScript: null,
@@ -316,7 +319,9 @@ export const useVideoBatchStore = create<VideoBatchState & VideoBatchActions>()(
               mode: "prompt_to_video" as VideoBatchTaskMode,
               customPrompt: prompt.trim(),
               referenceImageUrl: referenceImageUrl || undefined,
-              referenceImageUrls: options?.referenceImageUrls?.length ? options.referenceImageUrls.slice(0, 9) : undefined,
+              referenceImageUrls: options?.referenceImageUrls?.length
+                ? options.referenceImageUrls.slice(0, getCharacterReferenceMaxImages(globalSettings.modelType))
+                : undefined,
               groupName: groupName?.trim() || '默认', // 任务组名称（必填）
               aspectRatio: globalSettings.aspectRatio,
               modelType: globalSettings.modelType,
@@ -325,9 +330,12 @@ export const useVideoBatchStore = create<VideoBatchState & VideoBatchActions>()(
               // AI 模特配置
               useAiModel: globalSettings.useAiModel,
               aiModelId: globalSettings.aiModelId || undefined,
-              // 自建角色参考图（VEO3/Grok 用）
+              aiModelName: globalSettings.aiModelName || undefined,
+              aiModelTriggerWord: globalSettings.aiModelTriggerWord || undefined,
+              aiModelCover: globalSettings.aiModelCover || undefined,
+              // 自建角色参考图（VEO/Grok/Omni/HappyHorse 用）
               characterRefUrl: globalSettings.characterRefUrl || undefined,
-              // 首尾帧（veo3-fast / veo3-4k 用）
+              // 首尾帧兼容字段（统一 VEO 会作为可选参考图处理）
               firstFrameUrl: options?.firstFrameUrl || undefined,
               lastFrameUrl: options?.lastFrameUrl || undefined,
               doubaoTalkingScript: null,
@@ -365,6 +373,12 @@ export const useVideoBatchStore = create<VideoBatchState & VideoBatchActions>()(
               modelType: globalSettings.modelType,
               duration: globalSettings.duration,
               quality: globalSettings.quality,
+              useAiModel: globalSettings.useAiModel,
+              aiModelId: globalSettings.aiModelId || undefined,
+              aiModelName: globalSettings.aiModelName || undefined,
+              aiModelTriggerWord: globalSettings.aiModelTriggerWord || undefined,
+              aiModelCover: globalSettings.aiModelCover || undefined,
+              characterRefUrl: globalSettings.characterRefUrl || undefined,
               groupName: '默认', // 默认任务组
               doubaoTalkingScript: null,
               doubaoAiVideoPrompt: null,
@@ -414,6 +428,12 @@ export const useVideoBatchStore = create<VideoBatchState & VideoBatchActions>()(
             modelType: sourceTask.modelType,
             duration: sourceTask.duration,
             quality: sourceTask.quality,
+            useAiModel: sourceTask.useAiModel,
+            aiModelId: sourceTask.aiModelId,
+            aiModelName: sourceTask.aiModelName,
+            aiModelTriggerWord: sourceTask.aiModelTriggerWord,
+            aiModelCover: sourceTask.aiModelCover,
+            characterRefUrl: sourceTask.characterRefUrl,
             groupName: sourceTask.groupName || '默认', // 继承源任务的组名
             doubaoTalkingScript: null,  // 重置生成结果
             doubaoAiVideoPrompt: null,
@@ -462,6 +482,12 @@ export const useVideoBatchStore = create<VideoBatchState & VideoBatchActions>()(
               modelType: globalSettings.modelType,
               duration: globalSettings.duration,
               quality: globalSettings.quality,
+              useAiModel: globalSettings.useAiModel,
+              aiModelId: globalSettings.aiModelId || undefined,
+              aiModelName: globalSettings.aiModelName || undefined,
+              aiModelTriggerWord: globalSettings.aiModelTriggerWord || undefined,
+              aiModelCover: globalSettings.aiModelCover || undefined,
+              characterRefUrl: globalSettings.characterRefUrl || undefined,
               groupName: '默认', // 默认任务组
               doubaoTalkingScript: null,
               doubaoAiVideoPrompt: null,

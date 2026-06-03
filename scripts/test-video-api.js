@@ -3,8 +3,8 @@
  */
 const https = require('https');
 
-const SORA2_KEY = 'sk-SZPEdRnAdW3Dgu9DqTE4nNcqkv1fNG3oBULwmEhw6F329JLE';
-const WUYIN_KEY = '2W2tt3CnhHnWuT1nVmdgfrE9eJ';
+const SORA2_KEY = process.env.SORA2_API_KEY || process.env.VIDEO_PLATFORM_API_KEY || '';
+const WUYIN_KEY = process.env.WUYIN_API_KEY || '';
 
 async function testAPI(name, fn) {
     console.log(`\n[${name}] Testing...`);
@@ -18,6 +18,7 @@ async function testAPI(name, fn) {
 
 // Line1 (scd666) - 默认线路
 async function testLine1() {
+    if (!SORA2_KEY) throw new Error('Missing SORA2_API_KEY or VIDEO_PLATFORM_API_KEY');
     return new Promise((resolve, reject) => {
         const body = JSON.stringify({ prompt: 'A cute cat walking in garden', model: 'sora2-portrait' });
         const req = https.request({
@@ -52,6 +53,7 @@ async function testLine1() {
 
 // Line2 (wuyin) - 备用线路
 async function testLine2() {
+    if (!WUYIN_KEY) throw new Error('Missing WUYIN_API_KEY');
     return new Promise((resolve, reject) => {
         const url = new URL('https://api.wuyinkeji.com/api/sora2-new/submit');
         url.searchParams.set('key', WUYIN_KEY);

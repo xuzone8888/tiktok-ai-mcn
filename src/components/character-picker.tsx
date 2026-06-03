@@ -299,7 +299,7 @@ export function CharacterPicker({
     } finally {
       setLoading(false);
     }
-  }, [externalCharacters, dataSource]);
+  }, [externalCharacters, dataSource, forgeType]);
 
   useEffect(() => {
     fetchCharacters();

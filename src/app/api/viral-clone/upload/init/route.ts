@@ -6,11 +6,10 @@
  */
 
 import { NextResponse } from 'next/server';
+import OSS from 'ali-oss';
 import { createClient } from '@/lib/supabase/server';
 import { createVCAdminClient } from '@/lib/viral-clone/vc-supabase';
 import { generateMediaPath, getPublicUrl } from '@/lib/oss';
-
-const OSS = require('ali-oss');
 
 export async function POST(request: Request) {
   try {
@@ -77,11 +76,18 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: `创建任务失败: ${jobError.message}` }, { status: 500 });
     }
 
+    const accessKeyId = process.env.ALIYUN_OSS_ACCESS_KEY_ID;
+    const accessKeySecret = process.env.ALIYUN_OSS_ACCESS_KEY_SECRET;
+
+    if (!accessKeyId || !accessKeySecret) {
+      return NextResponse.json({ success: false, error: 'OSS 配置缺失' }, { status: 500 });
+    }
+
     // 生成签名 PUT URL
     const ossClient = new OSS({
       region: process.env.ALIYUN_OSS_REGION || 'oss-cn-beijing',
-      accessKeyId: process.env.ALIYUN_OSS_ACCESS_KEY_ID,
-      accessKeySecret: process.env.ALIYUN_OSS_ACCESS_KEY_SECRET,
+      accessKeyId,
+      accessKeySecret,
       bucket: process.env.ALIYUN_OSS_BUCKET || 'tokfactory-videos',
     });
 

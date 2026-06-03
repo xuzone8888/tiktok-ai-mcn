@@ -19,6 +19,11 @@ import type {
   StitchConfig,
   AspectRatio,
 } from '@/types/viral-clone';
+import fs from 'fs';
+import path from 'path';
+import os from 'os';
+import { exec } from 'child_process';
+import { promisify } from 'util';
 import { DEFAULT_STITCH_CONFIG, UPSCALE_CONFIG } from '@/types/viral-clone';
 import { uploadBuffer, generateMediaPath } from '@/lib/oss';
 import { upscaleVideo, getUpscaleTarget } from '@/lib/video-upscale';
@@ -33,6 +38,7 @@ const FFMPEG_WORKER_TOKEN = process.env.WORKER_AUTH_TOKEN || '';
 
 /** Stitch 超时（毫秒） */
 const STITCH_TIMEOUT_MS = 180000; // 3 分钟
+const execAsync = promisify(exec);
 
 // ============================================================================
 // 类型
@@ -321,12 +327,6 @@ async function localFallbackStitch(
   config: StitchConfig
 ): Promise<StitchResult> {
   const startTime = Date.now();
-  const fs = require('fs');
-  const path = require('path');
-  const os = require('os');
-  const { exec } = require('child_process');
-  const { promisify } = require('util');
-  const execAsync = promisify(exec);
 
   const tmpDir = os.tmpdir();
   const batchId = `vc-stitch-${Date.now()}`;

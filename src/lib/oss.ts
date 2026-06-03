@@ -290,8 +290,17 @@ export async function getVideoMetadata(objectPath: string): Promise<{
  * Validate URL is from our OSS
  */
 export function isOSSUrl(url: string): boolean {
-    return url.startsWith(`https://${CUSTOM_DOMAIN}/`) ||
-        url.includes('.aliyuncs.com/')
+    try {
+        const urlObj = new URL(url)
+        const endpointHost = new URL(ossConfig.endpoint).hostname
+        const bucketHost = `${ossConfig.bucket}.${endpointHost}`
+
+        return urlObj.hostname === CUSTOM_DOMAIN ||
+            urlObj.hostname === bucketHost ||
+            urlObj.hostname.startsWith(`${ossConfig.bucket}.oss-`)
+    } catch {
+        return false
+    }
 }
 
 /**

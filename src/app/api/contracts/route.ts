@@ -1,6 +1,34 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import type { Json } from "@/types/database";
+
+function buildContractTransactionMetadata(params: {
+  contractId: string;
+  modelId: string;
+  modelName?: string | null;
+  rentalPeriod: string;
+  isCommunityCharacter: boolean;
+}): Json {
+  return {
+    contract_id: params.contractId,
+    model_id: params.modelId,
+    model_name: params.modelName || null,
+    rental_period: params.rentalPeriod,
+    source: params.isCommunityCharacter ? "community_character" : "official_character",
+  };
+}
+
+async function refundBuyerCredits(params: {
+  supabase: ReturnType<typeof createAdminClient>;
+  userId: string;
+  credits: number;
+}) {
+  await params.supabase
+    .from("profiles")
+    .update({ credits: params.credits })
+    .eq("id", params.userId);
+}
 
 // GET: 获取用户合约
 export async function GET(request: NextRequest) {
@@ -18,8 +46,11 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // 从数据库获取用户的签约合约，关联模特信息
-    let query = supabase
+    const adminSupabase = createAdminClient();
+
+    // 从数据库获取用户的签约合约，关联模特信息。认证仍由用户 client 完成，
+    // 数据读取用 admin client 并显式限定 user_id，避免本地 RLS 策略递归。
+    let query = adminSupabase
       .from("contracts")
       .select(`
         *,
@@ -42,8 +73,10 @@ export async function GET(request: NextRequest) {
           total_generations,
           rating,
           source,
+          publish_price,
           reference_sheet_url,
           reference_status,
+          forge_type,
           created_at
         )
       `)
@@ -145,7 +178,7 @@ export async function POST(request: NextRequest) {
       .eq("user_id", user.id)
       .eq("model_id", model_id)
       .eq("status", "active")
-      .single();
+      .maybeSingle();
 
     // 如果是续约操作，允许在合约即将过期时续约
     if (action !== "renew" && existingContract) {
@@ -229,10 +262,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const buyerBalanceAfter = profile.credits - price;
+
     // 扣除聊用者积分
     const { error: deductError } = await adminSupabase
       .from("profiles")
-      .update({ credits: profile.credits - price })
+      .update({ credits: buyerBalanceAfter })
       .eq("id", user.id);
 
     if (deductError) {
@@ -240,29 +275,6 @@ export async function POST(request: NextRequest) {
         { success: false, error: "扣除积分失败" },
         { status: 500 }
       );
-    }
-
-    // 社区角色积分分成：100% 归创作者
-    if (isCommunityCharacter && creatorId && creatorId !== user.id) {
-      const { data: creatorProfile } = await adminSupabase
-        .from("profiles")
-        .select("credits")
-        .eq("id", creatorId)
-        .single();
-
-      if (creatorProfile) {
-        const { error: revenueError } = await adminSupabase
-          .from("profiles")
-          .update({ credits: creatorProfile.credits + price })
-          .eq("id", creatorId);
-
-        if (revenueError) {
-          console.error("[Contracts API] Revenue transfer failed:", revenueError);
-          // 不中断流程，合约已建立，收益转账可后续补充
-        } else {
-          console.log(`[Contracts API] Revenue transferred: ${price} credits to creator ${creatorId}`);
-        }
-      }
     }
 
     // 计算结束日期
@@ -318,12 +330,93 @@ export async function POST(request: NextRequest) {
 
       console.log("[Contracts API] Contract renewed:", existingContract.id);
 
+      const transactionMetadata = buildContractTransactionMetadata({
+        contractId: existingContract.id,
+        modelId: model_id,
+        modelName: model.name,
+        rentalPeriod: rental_period,
+        isCommunityCharacter,
+      });
+
+      const { error: buyerTxError } = await adminSupabase
+        .from("credit_transactions")
+        .insert({
+          user_id: user.id,
+          type: "consume",
+          amount: -price,
+          balance_before: profile.credits,
+          balance_after: buyerBalanceAfter,
+          reference_type: "contract",
+          reference_id: existingContract.id,
+          description: `续约角色 ${model.name} (${rental_period})`,
+          metadata: transactionMetadata,
+        });
+
+      if (buyerTxError) {
+        console.error("[Contracts API] Failed to log POST renew buyer transaction:", buyerTxError);
+        await adminSupabase
+          .from("contracts")
+          .update({
+            end_date: existingContract.end_date,
+            credits_paid: existingContract.credits_paid,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", existingContract.id);
+        await refundBuyerCredits({
+          supabase: adminSupabase,
+          userId: user.id,
+          credits: profile.credits,
+        });
+        return NextResponse.json(
+          { success: false, error: "积分流水写入失败，已回滚续约" },
+          { status: 500 }
+        );
+      }
+
+      if (isCommunityCharacter && creatorId && creatorId !== user.id) {
+        const { data: creatorProfile } = await adminSupabase
+          .from("profiles")
+          .select("credits")
+          .eq("id", creatorId)
+          .single();
+
+        if (creatorProfile) {
+          const creatorBalanceAfter = creatorProfile.credits + price;
+          const { error: revenueError } = await adminSupabase
+            .from("profiles")
+            .update({ credits: creatorBalanceAfter })
+            .eq("id", creatorId);
+
+          if (revenueError) {
+            console.error("[Contracts API] POST renew revenue transfer failed:", revenueError);
+          } else {
+            const { error: creatorTxError } = await adminSupabase
+              .from("credit_transactions")
+              .insert({
+                user_id: creatorId,
+                type: "bonus",
+                amount: price,
+                balance_before: creatorProfile.credits,
+                balance_after: creatorBalanceAfter,
+                reference_type: "contract",
+                reference_id: existingContract.id,
+                description: `角色 ${model.name} 续约收益`,
+                metadata: transactionMetadata,
+              });
+
+            if (creatorTxError) {
+              console.error("[Contracts API] Failed to log POST renew creator transaction:", creatorTxError);
+            }
+          }
+        }
+      }
+
       return NextResponse.json({
         success: true,
         message: "续约成功",
         contract_id: existingContract.id,
         new_end_date: endDate.toISOString(),
-        new_balance: profile.credits - price,
+        new_balance: buyerBalanceAfter,
       });
     }
 
@@ -375,6 +468,84 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const transactionMetadata = buildContractTransactionMetadata({
+      contractId: newContract.id,
+      modelId: model_id,
+      modelName: model.name,
+      rentalPeriod: rental_period,
+      isCommunityCharacter,
+    });
+
+    const { error: buyerTxError } = await adminSupabase
+      .from("credit_transactions")
+      .insert({
+        user_id: user.id,
+        type: "consume",
+        amount: -price,
+        balance_before: profile.credits,
+        balance_after: buyerBalanceAfter,
+        reference_type: "contract",
+        reference_id: newContract.id,
+        description: `签约角色 ${model.name} (${rental_period})`,
+        metadata: transactionMetadata,
+      });
+
+    if (buyerTxError) {
+      console.error("[Contracts API] Failed to log buyer transaction:", buyerTxError);
+      await adminSupabase
+        .from("contracts")
+        .delete()
+        .eq("id", newContract.id);
+      await refundBuyerCredits({
+        supabase: adminSupabase,
+        userId: user.id,
+        credits: profile.credits,
+      });
+      return NextResponse.json(
+        { success: false, error: "积分流水写入失败，已回滚签约" },
+        { status: 500 }
+      );
+    }
+
+    // 社区角色积分分成：合约创建成功后，100% 归创作者。
+    if (isCommunityCharacter && creatorId && creatorId !== user.id) {
+      const { data: creatorProfile } = await adminSupabase
+        .from("profiles")
+        .select("credits")
+        .eq("id", creatorId)
+        .single();
+
+      if (creatorProfile) {
+        const creatorBalanceAfter = creatorProfile.credits + price;
+        const { error: revenueError } = await adminSupabase
+          .from("profiles")
+          .update({ credits: creatorBalanceAfter })
+          .eq("id", creatorId);
+
+        if (revenueError) {
+          console.error("[Contracts API] Revenue transfer failed:", revenueError);
+        } else {
+          const { error: creatorTxError } = await adminSupabase
+            .from("credit_transactions")
+            .insert({
+              user_id: creatorId,
+              type: "bonus",
+              amount: price,
+              balance_before: creatorProfile.credits,
+              balance_after: creatorBalanceAfter,
+              reference_type: "contract",
+              reference_id: newContract.id,
+              description: `角色 ${model.name} 被签约收益`,
+              metadata: transactionMetadata,
+            });
+
+          if (creatorTxError) {
+            console.error("[Contracts API] Failed to log creator transaction:", creatorTxError);
+          }
+        }
+      }
+    }
+
     // 更新模特的总签约数
     await adminSupabase
       .from("ai_models")
@@ -388,7 +559,7 @@ export async function POST(request: NextRequest) {
       success: true,
       message: "签约成功",
       contract: newContract,
-      new_balance: profile.credits - price,
+      new_balance: buyerBalanceAfter,
     });
   } catch (error) {
     console.error("[Contracts API] Error creating contract:", error);
@@ -450,14 +621,17 @@ export async function PUT(request: NextRequest) {
       );
     }
 
-    // 计算价格
+    const isCommunityCharacter = model.source === "user_created";
+    const creatorId = model.owner_id;
+
+    // 计算价格：社区角色续约仍使用发布价，官方角色按周期价。
     const prices: Record<string, number> = {
       daily: model.price_daily || 10,
       weekly: model.price_weekly || 50,
       monthly: model.price_monthly || 150,
       yearly: model.price_yearly || 1200,
     };
-    const price = prices[rental_period];
+    const price = isCommunityCharacter ? (model.publish_price || 100) : prices[rental_period];
 
     if (!price) {
       return NextResponse.json(
@@ -490,10 +664,12 @@ export async function PUT(request: NextRequest) {
       );
     }
 
+    const buyerBalanceAfter = profile.credits - price;
+
     // 扣除积分
     const { error: deductError } = await adminSupabase
       .from("profiles")
-      .update({ credits: profile.credits - price })
+      .update({ credits: buyerBalanceAfter })
       .eq("id", user.id);
 
     if (deductError) {
@@ -548,11 +724,93 @@ export async function PUT(request: NextRequest) {
 
     console.log("[Contracts API] Contract renewed:", contract_id);
 
+    const transactionMetadata = buildContractTransactionMetadata({
+      contractId: contract_id,
+      modelId: model.id,
+      modelName: model.name,
+      rentalPeriod: rental_period,
+      isCommunityCharacter,
+    });
+
+    const { error: buyerTxError } = await adminSupabase
+      .from("credit_transactions")
+      .insert({
+        user_id: user.id,
+        type: "consume",
+        amount: -price,
+        balance_before: profile.credits,
+        balance_after: buyerBalanceAfter,
+        reference_type: "contract",
+        reference_id: contract_id,
+        description: `续约角色 ${model.name} (${rental_period})`,
+        metadata: transactionMetadata,
+      });
+
+    if (buyerTxError) {
+      console.error("[Contracts API] Failed to log renew buyer transaction:", buyerTxError);
+      await adminSupabase
+        .from("contracts")
+        .update({
+          end_date: contract.end_date,
+          status: contract.status,
+          credits_paid: contract.credits_paid,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", contract_id);
+      await refundBuyerCredits({
+        supabase: adminSupabase,
+        userId: user.id,
+        credits: profile.credits,
+      });
+      return NextResponse.json(
+        { success: false, error: "积分流水写入失败，已回滚续约" },
+        { status: 500 }
+      );
+    }
+
+    if (isCommunityCharacter && creatorId && creatorId !== user.id) {
+      const { data: creatorProfile } = await adminSupabase
+        .from("profiles")
+        .select("credits")
+        .eq("id", creatorId)
+        .single();
+
+      if (creatorProfile) {
+        const creatorBalanceAfter = creatorProfile.credits + price;
+        const { error: revenueError } = await adminSupabase
+          .from("profiles")
+          .update({ credits: creatorBalanceAfter })
+          .eq("id", creatorId);
+
+        if (revenueError) {
+          console.error("[Contracts API] Renew revenue transfer failed:", revenueError);
+        } else {
+          const { error: creatorTxError } = await adminSupabase
+            .from("credit_transactions")
+            .insert({
+              user_id: creatorId,
+              type: "bonus",
+              amount: price,
+              balance_before: creatorProfile.credits,
+              balance_after: creatorBalanceAfter,
+              reference_type: "contract",
+              reference_id: contract_id,
+              description: `角色 ${model.name} 续约收益`,
+              metadata: transactionMetadata,
+            });
+
+          if (creatorTxError) {
+            console.error("[Contracts API] Failed to log renew creator transaction:", creatorTxError);
+          }
+        }
+      }
+    }
+
     return NextResponse.json({
       success: true,
       message: "续约成功",
       new_end_date: newEndDate.toISOString(),
-      new_balance: profile.credits - price,
+      new_balance: buyerBalanceAfter,
     });
   } catch (error) {
     console.error("[Contracts API] Error renewing contract:", error);

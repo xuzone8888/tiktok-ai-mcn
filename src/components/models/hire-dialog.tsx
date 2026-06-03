@@ -21,7 +21,6 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { hireModel } from "@/lib/actions/contracts";
 import type { AIModel, RentalPeriod } from "@/types/model";
 import { useLang } from "@/contexts/LangContext";
 
@@ -59,7 +58,14 @@ export function HireDialog({
 
   if (!model) return null;
 
-  const priceMap: Record<RentalPeriod, number> = {
+  const isCommunityCharacter = model.source === "user_created";
+  const communityPrice = model.publish_price ?? model.price_monthly;
+  const priceMap: Record<RentalPeriod, number> = isCommunityCharacter ? {
+    daily: communityPrice,
+    weekly: communityPrice,
+    monthly: communityPrice,
+    yearly: communityPrice,
+  } : {
     daily: model.price_daily,
     weekly: model.price_weekly,
     monthly: model.price_monthly,
@@ -84,20 +90,23 @@ export function HireDialog({
     setErrorMessage("");
 
     try {
-      // 调用 Server Action
-      const response = await hireModel({
-        modelId: model.id,
-        userId: userId,
-        rentalPeriod: selectedPeriod,
+      const res = await fetch("/api/contracts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model_id: model.id,
+          rental_period: selectedPeriod,
+        }),
       });
+      const response = await res.json();
 
-      if (response.success && response.data) {
+      if (response.success) {
         setResult("success");
-        setNewBalance(response.data.newBalance);
+        setNewBalance(response.new_balance);
 
         // 通知父组件
         if (onHireSuccess) {
-          onHireSuccess(model.id, response.data.newBalance);
+          onHireSuccess(model.id, response.new_balance);
         }
 
         // 2秒后关闭
@@ -106,10 +115,10 @@ export function HireDialog({
         }, 2000);
       } else {
         // 处理特定错误类型
-        if (response.errorCode === "ALREADY_HIRED") {
+        if (response.errorCode === "ALREADY_HIRED" || /已有有效合约|已在您的团队/.test(response.error || "")) {
           setResult("already_hired");
           setErrorMessage(response.error || (t ? "Character already in your team" : "该模特已在您的团队中"));
-        } else if (response.errorCode === "INSUFFICIENT_BALANCE") {
+        } else if (response.errorCode === "INSUFFICIENT_BALANCE" || /积分不足|余额不足/.test(response.error || "")) {
           setResult("error");
           setErrorMessage(response.error || (t ? "Insufficient credits" : "余额不足"));
         } else {
@@ -281,7 +290,7 @@ export function HireDialog({
                         !isAffordable && "opacity-50 cursor-not-allowed grayscale"
                       )}
                     >
-                      {option.discount && (
+                      {option.discount && !isCommunityCharacter && (
                         <span className={cn(
                           "absolute -top-2 right-2 px-2 py-0.5 text-xs font-bold rounded-full shadow-lg",
                           option.period === "monthly"

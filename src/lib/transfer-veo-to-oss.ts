@@ -17,6 +17,14 @@ import http from 'http';
 import { uploadVideoBuffer, getPublicUrl, isOSSUrl } from '@/lib/oss';
 
 const CUSTOM_DOMAIN = process.env.ALIYUN_OSS_CUSTOM_DOMAIN || 'media.toryxai.com';
+const OSS_BUCKET = process.env.ALIYUN_OSS_BUCKET || 'tokfactory-videos';
+const OSS_ENDPOINT_HOST = (() => {
+  try {
+    return new URL(process.env.ALIYUN_OSS_ENDPOINT || 'https://oss-cn-beijing.aliyuncs.com').hostname;
+  } catch {
+    return 'oss-cn-beijing.aliyuncs.com';
+  }
+})();
 
 /**
  * 从 URL 下载视频到 Buffer（强制 IPv4，带超时）
@@ -149,7 +157,11 @@ export async function transferVeoVideoToOSS(
 export function isOSSPermanentUrl(url: string): boolean {
   try {
     const urlObj = new URL(url);
-    return urlObj.hostname === CUSTOM_DOMAIN || urlObj.hostname.endsWith('.aliyuncs.com');
+    return (
+      urlObj.hostname === CUSTOM_DOMAIN ||
+      urlObj.hostname === `${OSS_BUCKET}.${OSS_ENDPOINT_HOST}` ||
+      urlObj.hostname.startsWith(`${OSS_BUCKET}.oss-`)
+    );
   } catch {
     return false;
   }
