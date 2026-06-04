@@ -6,6 +6,7 @@
  */
 
 import { generateMediaPath, uploadImageBuffer } from "@/lib/oss";
+import sharp from "sharp";
 
 export interface OpenAIImageParams {
   model?: string;
@@ -26,6 +27,18 @@ const OPENAI_BASE_URL = (process.env.OPENAI_BASE_URL || "https://api.openai.com/
 const DEFAULT_OPENAI_IMAGE_MODEL = process.env.OPENAI_IMAGE_MODEL || "gpt-image-2";
 const MAX_REFERENCE_IMAGES = 16;
 const MAX_REFERENCE_IMAGE_BYTES = 50 * 1024 * 1024;
+const NORMALIZED_REFERENCE_SIZE = 1024;
+const DEFAULT_OPENAI_IMAGE_OSS_PREFIX = "openai-gen";
+
+function getOpenAIImageOssPrefix(): string {
+  const rawPrefix = process.env.OPENAI_IMAGE_OSS_PREFIX || DEFAULT_OPENAI_IMAGE_OSS_PREFIX;
+  const safeSegments = rawPrefix
+    .split("/")
+    .map(segment => segment.trim().replace(/[^a-zA-Z0-9._-]/g, "-"))
+    .filter(Boolean);
+
+  return safeSegments.length > 0 ? safeSegments.join("/") : DEFAULT_OPENAI_IMAGE_OSS_PREFIX;
+}
 
 function getOpenAIImageSize(aspectRatio?: string): "1024x1024" | "1536x1024" | "1024x1536" | "auto" {
   switch (aspectRatio) {
@@ -46,19 +59,50 @@ function getOpenAIImageSize(aspectRatio?: string): "1024x1024" | "1536x1024" | "
   }
 }
 
-function getFileExtension(contentType: string): string {
-  if (contentType.includes("png")) return "png";
-  if (contentType.includes("webp")) return "webp";
-  if (contentType.includes("jpeg") || contentType.includes("jpg")) return "jpg";
-  return "png";
-}
-
 function getErrorMessage(payload: unknown, fallback: string): string {
   if (payload && typeof payload === "object" && "error" in payload) {
     const error = (payload as { error?: { message?: string } }).error;
     if (error?.message) return error.message;
   }
   return fallback;
+}
+
+function detectImageType(buffer: Buffer): "png" | "jpeg" | "webp" | "gif" | null {
+  if (
+    buffer.length >= 8 &&
+    buffer[0] === 0x89 &&
+    buffer[1] === 0x50 &&
+    buffer[2] === 0x4e &&
+    buffer[3] === 0x47 &&
+    buffer[4] === 0x0d &&
+    buffer[5] === 0x0a &&
+    buffer[6] === 0x1a &&
+    buffer[7] === 0x0a
+  ) {
+    return "png";
+  }
+
+  if (buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) {
+    return "jpeg";
+  }
+
+  if (
+    buffer.length >= 12 &&
+    buffer.subarray(0, 4).toString("ascii") === "RIFF" &&
+    buffer.subarray(8, 12).toString("ascii") === "WEBP"
+  ) {
+    return "webp";
+  }
+
+  if (
+    buffer.length >= 6 &&
+    (buffer.subarray(0, 6).toString("ascii") === "GIF87a" ||
+      buffer.subarray(0, 6).toString("ascii") === "GIF89a")
+  ) {
+    return "gif";
+  }
+
+  return null;
 }
 
 async function downloadImageAsBlob(url: string, index: number): Promise<{ blob: Blob; filename: string }> {
@@ -72,13 +116,26 @@ async function downloadImageAsBlob(url: string, index: number): Promise<{ blob: 
     throw new Error(`参考图超过 50MB 限制: ${url.substring(0, 80)}`);
   }
 
-  const contentType = response.headers.get("content-type") || "image/png";
-  const safeContentType = contentType.startsWith("image/") ? contentType : "image/png";
-  const extension = getFileExtension(safeContentType);
+  const buffer = Buffer.from(arrayBuffer);
+  const contentType = response.headers.get("content-type") || "";
+  const detectedType = detectImageType(buffer);
+  if (!contentType.toLowerCase().startsWith("image/") && !detectedType) {
+    throw new Error(`参考图不是有效图片: ${url.substring(0, 80)}`);
+  }
+
+  const normalizedBuffer = await sharp(buffer)
+    .rotate()
+    .resize(NORMALIZED_REFERENCE_SIZE, NORMALIZED_REFERENCE_SIZE, {
+      fit: "contain",
+      background: { r: 255, g: 255, b: 255, alpha: 1 },
+      withoutEnlargement: false,
+    })
+    .png()
+    .toBuffer();
 
   return {
-    blob: new Blob([arrayBuffer], { type: safeContentType }),
-    filename: `reference-${index + 1}.${extension}`,
+    blob: new Blob([new Uint8Array(normalizedBuffer)], { type: "image/png" }),
+    filename: `reference-${index + 1}.png`,
   };
 }
 
@@ -86,7 +143,7 @@ async function uploadOpenAIBase64Image(base64: string, model: string): Promise<s
   const buffer = Buffer.from(base64, "base64");
   const objectPath = generateMediaPath(
     "images",
-    "openai-gen",
+    getOpenAIImageOssPrefix(),
     `${model}-${Date.now()}.png`
   );
 

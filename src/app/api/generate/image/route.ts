@@ -30,6 +30,181 @@ function getOpenAIEditPrompt(mode: string, prompt: string | undefined, resolutio
   return "Using the reference image, create a clean 3x3 nine-grid multi-angle product showcase. Preserve the exact same product identity, colors, shape, materials, and details. Show varied useful angles and close-up detail views on a clean background. Do not add text or watermark.";
 }
 
+function getUuidReferenceId(value: string): string | null {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
+    ? value
+    : null;
+}
+
+interface ImageCreditChargeResult {
+  success: boolean;
+  amount: number;
+  balanceBefore?: number;
+  balanceAfter?: number;
+  error?: string;
+  status?: number;
+}
+
+interface ImageCreditRefundResult {
+  success: boolean;
+  balanceBefore?: number;
+  balanceAfter?: number;
+  error?: string;
+}
+
+async function rollbackImageCreditCharge(
+  adminClient: ReturnType<typeof createAdminClient>,
+  userId: string,
+  balanceBefore: number,
+  balanceAfter: number
+): Promise<boolean> {
+  const { data: rollbackProfile, error: rollbackError } = await adminClient
+    .from("profiles")
+    .update({ credits: balanceBefore })
+    .eq("id", userId)
+    .eq("credits", balanceAfter)
+    .select("credits")
+    .single();
+
+  if (rollbackError || !rollbackProfile) {
+    console.error("[Generate Image] Failed to rollback credit charge:", rollbackError);
+    return false;
+  }
+
+  return true;
+}
+
+async function chargeImageCreditsBeforeGeneration(
+  adminClient: ReturnType<typeof createAdminClient>,
+  userId: string,
+  taskId: string,
+  creditCost: number
+): Promise<ImageCreditChargeResult> {
+  const maxAttempts = 3;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const { data: profile, error: profileError } = await adminClient
+      .from("profiles")
+      .select("credits")
+      .eq("id", userId)
+      .single();
+
+    if (profileError || !profile) {
+      return { success: false, amount: creditCost, error: "User not found", status: 404 };
+    }
+
+    const balanceBefore = (profile as { credits: number }).credits;
+    if (balanceBefore < creditCost) {
+      return {
+        success: false,
+        amount: creditCost,
+        balanceBefore,
+        error: `积分不足！需要 ${creditCost} 积分，当前余额 ${balanceBefore}`,
+        status: 400,
+      };
+    }
+
+    const balanceAfter = balanceBefore - creditCost;
+    const { data: updatedProfile, error: deductError } = await adminClient
+      .from("profiles")
+      .update({ credits: balanceAfter })
+      .eq("id", userId)
+      .eq("credits", balanceBefore)
+      .select("credits")
+      .single();
+
+    if (deductError || !updatedProfile) {
+      if (attempt < maxAttempts) {
+        console.log(`[Generate Image] Credits deduct retry ${attempt}/${maxAttempts}`);
+        await new Promise(r => setTimeout(r, 100 * attempt));
+        continue;
+      }
+
+      console.error("[Generate Image] Failed to deduct credits:", deductError);
+      return { success: false, amount: creditCost, error: "扣费失败，请重试", status: 409 };
+    }
+
+    const { error: transactionError } = await adminClient.from("credit_transactions").insert({
+      user_id: userId,
+      amount: -creditCost,
+      type: "consume",
+      description: `图片生成 - GPT Image 2 (${taskId})`,
+      reference_type: "quick_gen_image",
+      reference_id: getUuidReferenceId(taskId),
+      balance_before: balanceBefore,
+      balance_after: balanceAfter,
+    });
+
+    if (transactionError) {
+      console.error("[Generate Image] Failed to record credit transaction:", transactionError);
+      await rollbackImageCreditCharge(adminClient, userId, balanceBefore, balanceAfter);
+      return {
+        success: false,
+        amount: creditCost,
+        balanceBefore,
+        balanceAfter,
+        error: "扣费流水记录失败，请重试",
+        status: 500,
+      };
+    }
+
+    return { success: true, amount: creditCost, balanceBefore, balanceAfter };
+  }
+
+  return { success: false, amount: creditCost, error: "扣费失败，请重试", status: 409 };
+}
+
+async function refundImageCreditsAfterGenerationFailure(
+  adminClient: ReturnType<typeof createAdminClient>,
+  userId: string,
+  taskId: string,
+  creditCost: number
+): Promise<ImageCreditRefundResult> {
+  const { data: profile, error: profileError } = await adminClient
+    .from("profiles")
+    .select("credits")
+    .eq("id", userId)
+    .single();
+
+  if (profileError || !profile) {
+    console.error("[Generate Image] Failed to load profile for refund:", profileError);
+    return { success: false, error: "退款失败：用户不存在" };
+  }
+
+  const balanceBefore = (profile as { credits: number }).credits;
+  const balanceAfter = balanceBefore + creditCost;
+  const { data: updatedProfile, error: refundError } = await adminClient
+    .from("profiles")
+    .update({ credits: balanceAfter })
+    .eq("id", userId)
+    .eq("credits", balanceBefore)
+    .select("credits")
+    .single();
+
+  if (refundError || !updatedProfile) {
+    console.error("[Generate Image] Failed to refund credits:", refundError);
+    return { success: false, balanceBefore, balanceAfter, error: "退款失败，请联系客服处理" };
+  }
+
+  const { error: transactionError } = await adminClient.from("credit_transactions").insert({
+    user_id: userId,
+    amount: creditCost,
+    type: "refund",
+    description: `图片生成失败自动退款 - GPT Image 2 (${taskId})`,
+    reference_type: "quick_gen_image",
+    reference_id: getUuidReferenceId(taskId),
+    balance_before: balanceBefore,
+    balance_after: balanceAfter,
+  });
+
+  if (transactionError) {
+    console.error("[Generate Image] Failed to record refund transaction:", transactionError);
+    return { success: false, balanceBefore, balanceAfter, error: "退款流水记录失败，请联系客服处理" };
+  }
+
+  return { success: true, balanceBefore, balanceAfter };
+}
+
 // ============================================================================
 // POST - 提交图片生成任务
 // ============================================================================
@@ -141,91 +316,35 @@ export async function POST(request: Request) {
     // 计算积分消耗
     // ============================================
     const creditCost = getNewImageCost(imageModel);
+    const taskId = requestId || (modeValue === "upscale" || modeValue === "nine_grid"
+      ? `openai-${modeValue}-${Date.now()}`
+      : `openai-${Date.now()}`);
 
     // ============================================
-    // 扣除积分
+    // 扣除积分并记录流水
     // ============================================
-    {
-      const supabase = createAdminClient();
+    const supabase = createAdminClient();
+    const chargeResult = await chargeImageCreditsBeforeGeneration(
+      supabase,
+      authUserId,
+      taskId,
+      creditCost
+    );
 
-      const { data: profileData, error: profileError } = await supabase
-        .from("profiles")
-        .select("credits")
-        .eq("id", authUserId)
-        .single();
-
-      if (profileError || !profileData) {
-        return NextResponse.json(
-          { success: false, error: "User not found" },
-          { status: 404 }
-        );
-      }
-
-      const currentCredits = (profileData as { credits: number }).credits;
-
-      if (currentCredits < creditCost) {
-        return NextResponse.json(
-          { success: false, error: `积分不足！需要 ${creditCost} 积分，当前余额 ${currentCredits}` },
-          { status: 400 }
-        );
-      }
-
-      // 尝试扣费（带重试机制，处理并发冲突）
-      let deductSuccess = false;
-      let deductAttempts = 0;
-      const maxAttempts = 3;
-
-      while (!deductSuccess && deductAttempts < maxAttempts) {
-        deductAttempts++;
-
-        // 重新获取最新余额
-        const { data: latestProfile } = await supabase
-          .from("profiles")
-          .select("credits")
-          .eq("id", authUserId)
-          .single();
-
-        const latestCredits = (latestProfile as unknown as { credits: number })?.credits || 0;
-
-        if (latestCredits < creditCost) {
-          return NextResponse.json(
-            { success: false, error: `积分不足！需要 ${creditCost} 积分，当前余额 ${latestCredits}` },
-            { status: 400 }
-          );
-        }
-
-        const { data: updatedProfile, error: deductError } = await supabase
-          .from("profiles")
-          .update({ credits: latestCredits - creditCost })
-          .eq("id", authUserId)
-          .eq("credits", latestCredits) // 乐观锁：只有余额未变时才更新
-          .select("credits")
-          .single();
-
-        if (!deductError && updatedProfile) {
-          deductSuccess = true;
-        } else if (deductAttempts < maxAttempts) {
-          console.log(`[Generate Image] Credits deduct retry ${deductAttempts}/${maxAttempts}`);
-          await new Promise(r => setTimeout(r, 100 * deductAttempts)); // 指数退避
-        }
-      }
-
-      if (!deductSuccess) {
-        console.error("[Generate Image] Failed to deduct credits after retries");
-        return NextResponse.json(
-          { success: false, error: "扣费失败，请重试" },
-          { status: 500 }
-        );
-      }
-
-      console.log("[Generate Image] Credits deducted:", {
-        userId: authUserId,
-        mode: modeValue,
-        cost: creditCost,
-        before: currentCredits,
-        after: currentCredits - creditCost,
-      });
+    if (!chargeResult.success) {
+      return NextResponse.json(
+        { success: false, error: chargeResult.error || "扣费失败，请重试" },
+        { status: chargeResult.status || 500 }
+      );
     }
+
+    console.log("[Generate Image] Credits deducted:", {
+      userId: authUserId,
+      mode: modeValue,
+      cost: creditCost,
+      before: chargeResult.balanceBefore,
+      after: chargeResult.balanceAfter,
+    });
 
     // ============================================
     // 根据模式提交任务
@@ -251,19 +370,18 @@ export async function POST(request: Request) {
       if (!imageResult.success || !imageResult.imageUrl) {
         result = { success: false, error: imageResult.error || "图片编辑失败" };
       } else {
-        const taskId = requestId || `openai-${modeValue}-${Date.now()}`;
-
         try {
-          const supabase = createAdminClient();
           await supabase.from("generations").insert({
             user_id: authUserId,
             task_id: taskId,
             type: "image",
+            generation_type: "image",
             source: source,
             prompt: getOpenAIEditPrompt(modeValue, prompt, resolution),
             model: imageModel,
             aspect_ratio: aspectRatio,
             quality: config.resolution,
+            resolution: config.resolution,
             source_image_url: primarySourceImageUrl || null,
             status: "completed",
             result_url: imageResult.imageUrl,
@@ -310,19 +428,18 @@ export async function POST(request: Request) {
       if (!imageResult.success || !imageResult.imageUrl) {
         result = { success: false, error: imageResult.error || "图片生成失败" };
       } else {
-        const taskId = requestId || `openai-${Date.now()}`;
-
         try {
-          const supabase = createAdminClient();
           await supabase.from("generations").insert({
             user_id: authUserId,
             task_id: taskId,
             type: "image",
+            generation_type: "image",
             source: source,
             prompt: prompt || null,
             model: imageModel,
             aspect_ratio: aspectRatio,
             quality: config.resolution,
+            resolution: config.resolution,
             source_image_url: primarySourceImageUrl || null,
             status: "completed",
             result_url: imageResult.imageUrl,
@@ -351,27 +468,18 @@ export async function POST(request: Request) {
     if (!result.success) {
       console.error("[Generate Image] Submit failed:", result.error);
 
-      // 退还积分
-      try {
-        const supabase = createAdminClient();
-        const { data: refundProfile } = await supabase
-          .from("profiles")
-          .select("credits")
-          .eq("id", authUserId)
-          .single();
-
-        if (refundProfile) {
-          const refundCredits = (refundProfile as { credits: number }).credits;
-          await supabase
-            .from("profiles")
-            .update({ credits: refundCredits + creditCost })
-            .eq("id", authUserId);
-
-          console.log("[Generate Image] Credits refunded:", creditCost);
-        }
-      } catch (refundError) {
-        console.error("[Generate Image] Failed to refund:", refundError);
-      }
+      const refundResult = await refundImageCreditsAfterGenerationFailure(
+        supabase,
+        authUserId,
+        taskId,
+        creditCost
+      );
+      console.log("[Generate Image] Credits refund result:", {
+        refunded: refundResult.success,
+        amount: creditCost,
+        before: refundResult.balanceBefore,
+        after: refundResult.balanceAfter,
+      });
 
       return NextResponse.json(
         { success: false, error: result.error },
