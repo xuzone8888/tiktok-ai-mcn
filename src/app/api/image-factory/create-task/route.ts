@@ -8,7 +8,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createServerClient } from "@/lib/supabase/server";
 import { getEcomImageCost } from "@/lib/credits";
-import { isOpenAIImageModel } from "@/types/generation";
+import {
+  DEFAULT_IMAGE_MODEL,
+  DEFAULT_IMAGE_RESOLUTION,
+  isImageResolution,
+} from "@/types/generation";
 import type {
   EcomImageMode,
   ImageModelType,
@@ -32,6 +36,11 @@ interface CreateTaskRequest {
   is_one_click?: boolean;
 }
 
+function parseEcomResolution(value: unknown): EcomResolution | null {
+  const normalized = typeof value === "string" ? value.toLowerCase() : value;
+  return isImageResolution(normalized) ? normalized : null;
+}
+
 export async function POST(request: NextRequest) {
   try {
     // 1. 验证用户身份
@@ -52,10 +61,14 @@ export async function POST(request: NextRequest) {
       model_type,
       language = "zh",
       ratio = "auto",
+      resolution,
       input_image_urls,
       mode_config = {},
       is_one_click = true,
     } = body;
+    const requestedModelType = typeof model_type === "string" ? model_type : undefined;
+    const taskResolution = parseEcomResolution(resolution ?? DEFAULT_IMAGE_RESOLUTION);
+    const taskModelType = DEFAULT_IMAGE_MODEL as ImageModelType;
 
     // 3. 参数验证
     if (!mode) {
@@ -79,9 +92,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!isOpenAIImageModel(model_type)) {
+    if (!taskResolution) {
       return NextResponse.json(
-        { success: false, error: "旧图片模型已停用，请使用 GPT Image 2" },
+        { success: false, error: "无效的图片画质档位，请使用 1k / 2k / 4k" },
+        { status: 400 }
+      );
+    }
+
+    if (requestedModelType && requestedModelType !== DEFAULT_IMAGE_MODEL) {
+      return NextResponse.json(
+        { success: false, error: "图片模型固定为 GPT Image 2，请通过 resolution 选择 1K/2K/4K" },
         { status: 400 }
       );
     }
@@ -106,7 +126,7 @@ export async function POST(request: NextRequest) {
 
     // 4. 计算积分消耗
     const imageCount = mode === "ecom_five_pack" ? 5 : input_image_urls.length;
-    const creditsCost = getEcomImageCost(mode, model_type, imageCount);
+    const creditsCost = getEcomImageCost(mode, taskModelType, imageCount, taskResolution);
 
     // 5. 检查用户积分
     const adminClient = createAdminClient();
@@ -140,10 +160,10 @@ export async function POST(request: NextRequest) {
     const taskData = {
       user_id: user.id,
       mode,
-      model_type,
+      model_type: taskModelType,
       language,
       ratio,
-      resolution: null,
+      resolution: taskResolution,
       input_image_urls,
       mode_config,
       prompts: {},
@@ -175,7 +195,8 @@ export async function POST(request: NextRequest) {
     console.log("[Create Task] Task created:", {
       taskId: task.id,
       mode,
-      model_type,
+      model_type: taskModelType,
+      resolution: taskResolution,
       imageCount: input_image_urls.length,
       creditsCost,
     });

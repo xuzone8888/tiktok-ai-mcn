@@ -6,6 +6,7 @@
  */
 
 import { generateMediaPath, uploadImageBuffer } from "@/lib/oss";
+import { DEFAULT_IMAGE_RESOLUTION, type ImageResolution } from "@/types/generation";
 import sharp from "sharp";
 
 export interface OpenAIImageParams {
@@ -13,6 +14,7 @@ export interface OpenAIImageParams {
   prompt: string;
   sourceImageUrls?: string[];
   aspectRatio?: string;
+  resolution?: ImageResolution;
   quality?: "low" | "medium" | "high" | "auto";
 }
 
@@ -40,23 +42,45 @@ function getOpenAIImageOssPrefix(): string {
   return safeSegments.length > 0 ? safeSegments.join("/") : DEFAULT_OPENAI_IMAGE_OSS_PREFIX;
 }
 
-function getOpenAIImageSize(aspectRatio?: string): "1024x1024" | "1536x1024" | "1024x1536" | "auto" {
-  switch (aspectRatio) {
-    case "1:1":
-      return "1024x1024";
-    case "16:9":
-    case "4:3":
-    case "3:2":
-    case "21:9":
-      return "1536x1024";
-    case "9:16":
-    case "3:4":
-    case "2:3":
-    case "4:5":
-      return "1024x1536";
-    default:
-      return "auto";
-  }
+function getOpenAIImageSize(
+  aspectRatio?: string,
+  resolution: ImageResolution = DEFAULT_IMAGE_RESOLUTION
+): string {
+  const longEdgeByResolution: Record<ImageResolution, number> = {
+    "1k": 1024,
+    "2k": 2048,
+    "4k": 3840,
+  };
+  const maxPixelsByResolution: Record<ImageResolution, number> = {
+    "1k": 1024 * 1024,
+    "2k": 2048 * 2048,
+    "4k": 3840 * 2160,
+  };
+  const aspectRatios: Record<string, [number, number]> = {
+    "auto": [1, 1],
+    "1:1": [1, 1],
+    "16:9": [16, 9],
+    "9:16": [9, 16],
+    "4:3": [4, 3],
+    "3:4": [3, 4],
+    "3:2": [3, 2],
+    "2:3": [2, 3],
+    "5:4": [5, 4],
+    "4:5": [4, 5],
+    "21:9": [21, 9],
+  };
+
+  const [ratioWidth, ratioHeight] = aspectRatios[aspectRatio || "auto"] || aspectRatios.auto;
+  const longEdge = longEdgeByResolution[resolution];
+  const maxPixels = maxPixelsByResolution[resolution];
+  const longEdgeScale = longEdge / Math.max(ratioWidth, ratioHeight);
+  const pixelScale = Math.sqrt(maxPixels / (ratioWidth * ratioHeight));
+  const scale = Math.min(longEdgeScale, pixelScale);
+  const alignDownToEight = (value: number) => Math.max(8, Math.floor(value / 8) * 8);
+  const width = alignDownToEight(ratioWidth * scale);
+  const height = alignDownToEight(ratioHeight * scale);
+
+  return `${width}x${height}`;
 }
 
 function getErrorMessage(payload: unknown, fallback: string): string {
@@ -161,7 +185,7 @@ async function submitOpenAIImageGeneration(params: OpenAIImageParams, model: str
       model,
       prompt: params.prompt,
       n: 1,
-      size: getOpenAIImageSize(params.aspectRatio),
+      size: getOpenAIImageSize(params.aspectRatio, params.resolution),
       quality: params.quality || "high",
       output_format: "png",
     }),
@@ -173,7 +197,7 @@ async function submitOpenAIImageEdit(params: OpenAIImageParams, model: string): 
   form.append("model", model);
   form.append("prompt", params.prompt);
   form.append("n", "1");
-  form.append("size", getOpenAIImageSize(params.aspectRatio));
+  form.append("size", getOpenAIImageSize(params.aspectRatio, params.resolution));
   form.append("quality", params.quality || "high");
   form.append("output_format", "png");
 

@@ -175,16 +175,18 @@ export interface SubmitImageResult {
  */
 export async function submitImageGeneration(params: SubmitImageParams): Promise<SubmitImageResult> {
   try {
-    const { tier, ...rest } = params;
-    const model = tier === "pro" ? "nano-banana-pro" : "nano-banana";
+    const { sourceImageUrl, ...rest } = params;
+    const sourceImageUrls = Array.isArray(sourceImageUrl) ? sourceImageUrl : undefined;
+    const singleSourceImageUrl = Array.isArray(sourceImageUrl) ? undefined : sourceImageUrl;
 
     const response = await fetch("/api/generate/image", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         ...rest,
-        model,
-        tier,
+        imageModel: "gpt-image-2",
+        sourceImageUrl: singleSourceImageUrl,
+        sourceImageUrls,
       }),
     });
 
@@ -431,8 +433,6 @@ export async function uploadBlobToStorage(
     };
   }
 }
-
-
 
 
 

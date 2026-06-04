@@ -7,13 +7,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createServerClient } from "@/lib/supabase/server";
+import { getEcomImageCost } from "@/lib/credits";
 import { submitOpenAIImage } from "@/lib/openai-image-api";
-import { IMAGE_MODEL_CONFIG, isOpenAIImageModel, type ImageModel } from "@/types/generation";
+import {
+  DEFAULT_IMAGE_MODEL,
+  DEFAULT_IMAGE_RESOLUTION,
+  IMAGE_MODEL_CONFIG,
+  isImageResolution,
+  type ImageModel,
+} from "@/types/generation";
 import type {
   EcomImageMode,
   ImageModelType,
   OutputItem,
-  EcomAspectRatio
+  EcomAspectRatio,
+  EcomResolution,
 } from "@/types/ecom-image";
 import { FIVE_PACK_TYPES } from "@/types/ecom-image";
 
@@ -22,6 +30,11 @@ export const maxDuration = 180;
 
 const ECOM_IMAGE_CONCURRENCY = 2;
 const GENERATABLE_ECOM_STATUSES = new Set(["created", "generating_prompts", "failed"]);
+
+function parseEcomResolution(value: unknown): EcomResolution | null {
+  const normalized = typeof value === "string" ? value.toLowerCase() : value;
+  return isImageResolution(normalized) ? normalized : null;
+}
 
 interface GenerateImagesRequest {
   task_id: string;
@@ -90,12 +103,37 @@ export async function POST(request: NextRequest) {
 
     // 6. 准备生成参数
     const mode = task.mode as EcomImageMode;
-    const modelType = task.model_type as ImageModelType;
+    const requestedModelType = task.model_type as ImageModelType;
+    const resolution = parseEcomResolution(task.resolution ?? DEFAULT_IMAGE_RESOLUTION);
+    const modelType = DEFAULT_IMAGE_MODEL as ImageModelType;
     const inputImages = (task.input_image_urls as string[]) || [];
     const ratio = task.ratio as EcomAspectRatio;
+    const imageCount = mode === "ecom_five_pack" ? 5 : inputImages.length;
+    const resolvedCreditsCost = resolution
+      ? getEcomImageCost(mode, modelType, imageCount, resolution)
+      : 0;
 
-    if (!isOpenAIImageModel(modelType)) {
-      const errorMessage = "当前图片工厂仅支持 GPT Image 2 / OpenAI 图片模型";
+    if (!resolution) {
+      const errorMessage = "无效的图片画质档位，请使用 1k / 2k / 4k";
+      await adminClient
+        .from("ecom_image_tasks")
+        .update({
+          status: "failed",
+          completed_at: new Date().toISOString(),
+          error_message: errorMessage,
+        })
+        .eq("id", task_id)
+        .eq("user_id", user.id)
+        .eq("status", task.status);
+
+      return NextResponse.json(
+        { success: false, error: errorMessage },
+        { status: 400 }
+      );
+    }
+
+    if (requestedModelType && requestedModelType !== DEFAULT_IMAGE_MODEL) {
+      const errorMessage = "图片模型固定为 GPT Image 2，请通过 resolution 选择 1K/2K/4K";
       await adminClient
         .from("ecom_image_tasks")
         .update({
@@ -124,7 +162,9 @@ export async function POST(request: NextRequest) {
       taskId: task_id,
       mode,
       modelType,
+      resolution,
       imageCount: inputImages.length,
+      creditsCost: resolvedCreditsCost,
       promptCount: Object.keys(prompts).length,
     });
 
@@ -133,6 +173,7 @@ export async function POST(request: NextRequest) {
       .update({
         status: "generating_images",
         current_step: 3,
+        credits_cost: resolvedCreditsCost,
         error_message: null,
       })
       .eq("id", task_id)
@@ -168,7 +209,7 @@ export async function POST(request: NextRequest) {
       user.id,
       task_id,
       mode,
-      Number(task.credits_cost || 0),
+      resolvedCreditsCost,
       Boolean(task.credits_charged)
     );
 
@@ -204,6 +245,7 @@ export async function POST(request: NextRequest) {
             prompt,
             sourceImageUrl: inputImages[0], // 使用第一张图作为参考
             aspectRatio: ratio === "auto" ? "1:1" : ratio,
+            resolution,
           });
 
           return {
@@ -225,6 +267,7 @@ export async function POST(request: NextRequest) {
             prompt,
             sourceImageUrl: inputImage,
             aspectRatio: ratio === "auto" ? undefined : ratio,
+            resolution,
           });
 
           return {
@@ -532,6 +575,7 @@ async function submitEcomImage(params: {
   prompt: string;
   sourceImageUrl?: string;
   aspectRatio?: EcomAspectRatio;
+  resolution: EcomResolution;
 }): Promise<{
   success: boolean;
   status: "processing" | "completed";
@@ -539,7 +583,8 @@ async function submitEcomImage(params: {
   imageUrl?: string;
   error?: string;
 }> {
-  if (!isOpenAIImageModel(params.modelType)) {
+  const config = IMAGE_MODEL_CONFIG[params.modelType as ImageModel];
+  if (config?.provider !== "openai") {
     return {
       success: false,
       status: "completed",
@@ -547,13 +592,13 @@ async function submitEcomImage(params: {
     };
   }
 
-  const config = IMAGE_MODEL_CONFIG[params.modelType as ImageModel];
   const sourceImageUrls = params.sourceImageUrl ? [params.sourceImageUrl] : undefined;
   const result = await submitOpenAIImage({
     model: config.apiModel,
     prompt: params.prompt,
     sourceImageUrls,
     aspectRatio: params.aspectRatio,
+    resolution: params.resolution,
     quality: "high",
   });
 

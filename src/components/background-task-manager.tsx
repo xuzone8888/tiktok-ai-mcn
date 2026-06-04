@@ -18,7 +18,6 @@ import { useImageBatchStore } from "@/stores/image-batch-store";
 import { useQuickGenStore } from "@/stores/quick-gen-store";
 import { useToast } from "@/hooks/use-toast";
 import { Video, Image as ImageIcon, Sparkles, Palette, ExternalLink } from "lucide-react";
-import { IMAGE_MODEL_CONFIG } from "@/types/generation";
 
 // ============================================================================
 // 视频任务执行器
@@ -620,15 +619,13 @@ function useImageTaskExecutor() {
       const apiSourceImageUrls: string[] = [];
       if (remoteImageUrl) apiSourceImageUrls.push(remoteImageUrl);
       if (task.config.characterRefUrl) apiSourceImageUrls.push(task.config.characterRefUrl);
-      const isConfiguredImageModel = task.config.model in IMAGE_MODEL_CONFIG;
 
       const response = await fetch("/api/generate/image", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           mode: task.config.action,  // "generate" | "upscale" | "nine_grid"
-          model: isConfiguredImageModel ? undefined : task.config.model,
-          imageModel: isConfiguredImageModel ? task.config.model : undefined,
+          imageModel: "gpt-image-2",
           sourceImageUrls: apiSourceImageUrls.length > 0 ? apiSourceImageUrls : undefined,
           aspectRatio: task.config.aspectRatio,
           resolution: task.config.resolution,
@@ -996,14 +993,12 @@ function useQuickGenImageTaskExecutor() {
 
           // 调用图片生成 API
           const imageAction = activeTask.action || "generate";
-          const isConfiguredImageModel = activeTask.model in IMAGE_MODEL_CONFIG;
           const response = await fetch("/api/generate/image", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               mode: imageAction,
-              model: isConfiguredImageModel ? undefined : activeTask.model,
-              imageModel: isConfiguredImageModel ? activeTask.model : undefined,
+              imageModel: "gpt-image-2",
               prompt: activeTask.prompt,
               sourceImageUrls: activeTask.sourceImageUrls.length > 0 ? activeTask.sourceImageUrls : undefined,
               tier: activeTask.tier,

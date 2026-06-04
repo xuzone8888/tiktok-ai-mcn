@@ -20,7 +20,16 @@
  * - nano-banana-pro: 28 积分
  */
 
-import { VIDEO_MODEL_CONFIG, IMAGE_MODEL_CONFIG, type VideoModel, type ImageModel } from '@/types/generation';
+import {
+  VIDEO_MODEL_CONFIG,
+  DEFAULT_IMAGE_RESOLUTION,
+  IMAGE_RESOLUTION_CREDITS,
+  getImageResolutionCost,
+  getResolutionFromImageModel,
+  type VideoModel,
+  type ImageModel,
+  type ImageResolution,
+} from '@/types/generation';
 
 // ============================================================================
 // 新模型积分配置（从配置表读取）
@@ -32,8 +41,11 @@ export function getNewVideoCost(model: VideoModel): number {
 }
 
 /** 获取新图片模型积分 */
-export function getNewImageCost(model: ImageModel): number {
-  return IMAGE_MODEL_CONFIG[model]?.credits || 10;
+export function getNewImageCost(
+  model: ImageModel,
+  resolution: ImageResolution = DEFAULT_IMAGE_RESOLUTION
+): number {
+  return getImageResolutionCost(getResolutionFromImageModel(model) || resolution);
 }
 
 // ============================================================================
@@ -65,19 +77,19 @@ export const IMAGE_CREDITS = {
 /** 电商图片工厂定价 */
 export const ECOM_IMAGE_CREDITS = {
   base: {
-    "gpt-image-2": 15,      // 开发占位，生产定价待确认
-    "gemini-1k": 5,
-    "gemini-2k": 10,
-    "gemini-4k": 15,
+    "gpt-image-2": IMAGE_RESOLUTION_CREDITS[DEFAULT_IMAGE_RESOLUTION],
+    "gemini-1k": IMAGE_RESOLUTION_CREDITS["1k"],
+    "gemini-2k": IMAGE_RESOLUTION_CREDITS["2k"],
+    "gemini-4k": IMAGE_RESOLUTION_CREDITS["4k"],
     "nano-banana": 10,      // 快速模式基础价
     "nano-banana-pro": 28,  // Pro模式基础价
   },
   // 五图套装固定5张
   ecom_five_pack: {
-    "gpt-image-2": 75,      // 开发占位，生产定价待确认
-    "gemini-1k": 25,
-    "gemini-2k": 50,
-    "gemini-4k": 75,
+    "gpt-image-2": IMAGE_RESOLUTION_CREDITS[DEFAULT_IMAGE_RESOLUTION] * 5,
+    "gemini-1k": IMAGE_RESOLUTION_CREDITS["1k"] * 5,
+    "gemini-2k": IMAGE_RESOLUTION_CREDITS["2k"] * 5,
+    "gemini-4k": IMAGE_RESOLUTION_CREDITS["4k"] * 5,
     "nano-banana": 50,      // 5 * 10
     "nano-banana-pro": 140, // 5 * 28
   },
@@ -123,16 +135,19 @@ export function getImageCost(model: ImageModelKey): number {
 export function getEcomImageCost(
   mode: string,
   modelType: ImageModel | "nano-banana" | "nano-banana-pro",
-  imageCount: number = 1
+  imageCount: number = 1,
+  resolution: ImageResolution = DEFAULT_IMAGE_RESOLUTION
 ): number {
-  // 五图套装固定价格
-  if (mode === "ecom_five_pack") {
-    return ECOM_IMAGE_CREDITS.ecom_five_pack[modelType] || 75;
+  if (modelType === "nano-banana" || modelType === "nano-banana-pro") {
+    if (mode === "ecom_five_pack") {
+      return ECOM_IMAGE_CREDITS.ecom_five_pack[modelType] || 50;
+    }
+    return (ECOM_IMAGE_CREDITS.base[modelType] || 10) * imageCount;
   }
-  
-  // 其他模式按图片数量计算
-  const basePrice = ECOM_IMAGE_CREDITS.base[modelType] || 15;
-  return basePrice * imageCount;
+
+  const unitCost = getNewImageCost(modelType, resolution);
+  const resolvedImageCount = mode === "ecom_five_pack" ? 5 : imageCount;
+  return unitCost * resolvedImageCount;
 }
 
 /**
@@ -301,4 +316,3 @@ export async function getUserCredits(): Promise<{ credits: number; userId: strin
     return { credits: 0, userId: null };
   }
 }
-

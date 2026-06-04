@@ -71,6 +71,7 @@ export function CenterPanel() {
     setError,
     isOneClick,
     modelType,
+    resolution,
     language,
     ratio,
     resetTask,
@@ -146,6 +147,7 @@ export function CenterPanel() {
         body: JSON.stringify({
           mode: currentMode,
           model_type: modelType,
+          resolution,
           language,
           ratio,
           input_image_urls: imageUrls,

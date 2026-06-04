@@ -8,7 +8,14 @@
 import { NextResponse } from "next/server";
 import { queryNanoBananaResult } from "@/lib/suchuang-api";
 import { submitOpenAIImage } from "@/lib/openai-image-api";
-import { IMAGE_MODEL_CONFIG, isOpenAIImageModel, type ImageModel } from "@/types/generation";
+import {
+  DEFAULT_IMAGE_MODEL,
+  DEFAULT_IMAGE_RESOLUTION,
+  IMAGE_MODEL_CONFIG,
+  isImageResolution,
+  type ImageModel,
+  type ImageResolution,
+} from "@/types/generation";
 import { getNewImageCost } from "@/lib/credits";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createServerClient } from "@/lib/supabase/server";
@@ -18,6 +25,11 @@ export const maxDuration = 120; // 2分钟超时
 export const dynamic = 'force-dynamic';
 
 const VALID_IMAGE_MODES = new Set(["generate", "upscale", "nine_grid"]);
+
+function parseImageResolution(value: unknown): ImageResolution | null {
+  const normalized = typeof value === "string" ? value.toLowerCase() : value;
+  return isImageResolution(normalized) ? normalized : null;
+}
 
 function getOpenAIEditPrompt(mode: string, prompt: string | undefined, resolution: string): string {
   const userPrompt = prompt?.trim();
@@ -233,7 +245,8 @@ export async function POST(request: Request) {
       model: requestedLegacyModel,
       imageModel: requestedImageModel,
       aspectRatio = "auto",
-      resolution = "1k",
+      resolution: requestedResolution,
+      qualityLevel,
       source = "quick_gen",         // "quick_gen" | "batch_image"
       requestId,                    // 前端生成的 ID
     } = body;
@@ -245,19 +258,43 @@ export async function POST(request: Request) {
     // 第一张图用于 DB 记录和 Pro 模式
     const primarySourceImageUrl = allSourceImageUrls[0] || null;
     const modeValue = mode || "generate";
-    const imageModel = (requestedImageModel || "gpt-image-2") as ImageModel;
-    const imageConfig = imageModel ? IMAGE_MODEL_CONFIG[imageModel] : undefined;
+    const requestedImageModelValue = typeof requestedImageModel === "string" ? requestedImageModel : undefined;
+    const imageResolution = parseImageResolution(
+      qualityLevel
+        ?? requestedResolution
+        ?? DEFAULT_IMAGE_RESOLUTION
+    );
+    const imageModel: ImageModel = DEFAULT_IMAGE_MODEL;
+    const imageConfig = IMAGE_MODEL_CONFIG[imageModel];
+    const useSingleReferenceFor4kNineGrid =
+      modeValue === "nine_grid" &&
+      imageResolution === "4k" &&
+      allSourceImageUrls.length > 1;
+    const submittedSourceImageUrls = useSingleReferenceFor4kNineGrid
+      ? allSourceImageUrls.slice(0, 1)
+      : allSourceImageUrls;
+    const referenceSubmissionInfo = {
+      referenceCountReceived: allSourceImageUrls.length,
+      referenceCountUsed: submittedSourceImageUrls.length,
+      reason: useSingleReferenceFor4kNineGrid
+        ? "4k_nine_grid_single_reference_stability"
+        : null,
+    };
 
     console.log("[Generate Image] Request received:", {
       mode: modeValue,
       legacyModel: requestedLegacyModel,
       imageModel,
+      requestedImageModel: requestedImageModelValue,
+      resolution: imageResolution,
       source,
       hasPrompt: !!prompt,
       promptLength: prompt?.length || 0,
       promptPreview: prompt?.substring(0, 100) || "(empty)",
       hasSourceImage: allSourceImageUrls.length > 0,
       sourceImageCount: allSourceImageUrls.length,
+      referenceCountUsed: submittedSourceImageUrls.length,
+      referenceReductionReason: referenceSubmissionInfo.reason,
     });
 
     // ============================================
@@ -277,16 +314,19 @@ export async function POST(request: Request) {
       );
     }
 
-    if (imageModel && !imageConfig) {
+    if (!imageResolution) {
       return NextResponse.json(
-        { success: false, error: `未知图片模型: ${imageModel}` },
+        { success: false, error: "无效的图片画质档位，请使用 1k / 2k / 4k" },
         { status: 400 }
       );
     }
 
-    if (!isOpenAIImageModel(imageModel)) {
+    if (
+      requestedImageModelValue &&
+      requestedImageModelValue !== DEFAULT_IMAGE_MODEL
+    ) {
       return NextResponse.json(
-        { success: false, error: "当前图片生成仅支持 GPT Image 2 / OpenAI 图片模型" },
+        { success: false, error: "当前图片生成模型固定为 gpt-image-2，请使用 resolution/qualityLevel 选择 1K/2K/4K" },
         { status: 400 }
       );
     }
@@ -294,13 +334,6 @@ export async function POST(request: Request) {
     if ((modeValue === "upscale" || modeValue === "nine_grid") && !primarySourceImageUrl) {
       return NextResponse.json(
         { success: false, error: modeValue === "upscale" ? "Source image URL is required for upscale" : "Source image URL is required for nine grid" },
-        { status: 400 }
-      );
-    }
-
-    if ((modeValue === "upscale" || modeValue === "nine_grid") && imageConfig?.provider !== "openai") {
-      return NextResponse.json(
-        { success: false, error: "Phase2 图片增强仅支持 GPT Image 2 / OpenAI edits，已阻断旧接口调用" },
         { status: 400 }
       );
     }
@@ -315,7 +348,7 @@ export async function POST(request: Request) {
     // ============================================
     // 计算积分消耗
     // ============================================
-    const creditCost = getNewImageCost(imageModel);
+    const creditCost = getNewImageCost(imageModel, imageResolution);
     const taskId = requestId || (modeValue === "upscale" || modeValue === "nine_grid"
       ? `openai-${modeValue}-${Date.now()}`
       : `openai-${Date.now()}`);
@@ -356,14 +389,19 @@ export async function POST(request: Request) {
       console.log("[Generate Image] Running OpenAI edit mode:", {
         mode: modeValue,
         imageModel,
-        sourceImageCount: allSourceImageUrls.length,
+        resolution: imageResolution,
+        sourceImageCount: submittedSourceImageUrls.length,
+        referenceCountReceived: referenceSubmissionInfo.referenceCountReceived,
+        referenceCountUsed: referenceSubmissionInfo.referenceCountUsed,
+        referenceReductionReason: referenceSubmissionInfo.reason,
       });
 
       const imageResult = await submitOpenAIImage({
         model: config.apiModel,
-        prompt: getOpenAIEditPrompt(modeValue, prompt, resolution),
-        sourceImageUrls: allSourceImageUrls,
+        prompt: getOpenAIEditPrompt(modeValue, prompt, imageResolution),
+        sourceImageUrls: submittedSourceImageUrls,
         aspectRatio,
+        resolution: imageResolution,
         quality: "high",
       });
 
@@ -377,11 +415,11 @@ export async function POST(request: Request) {
             type: "image",
             generation_type: "image",
             source: source,
-            prompt: getOpenAIEditPrompt(modeValue, prompt, resolution),
+            prompt: getOpenAIEditPrompt(modeValue, prompt, imageResolution),
             model: imageModel,
             aspect_ratio: aspectRatio,
-            quality: config.resolution,
-            resolution: config.resolution,
+            quality: imageResolution,
+            resolution: imageResolution,
             source_image_url: primarySourceImageUrl || null,
             status: "completed",
             result_url: imageResult.imageUrl,
@@ -401,6 +439,10 @@ export async function POST(request: Request) {
             status: "completed",
             imageUrl: imageResult.imageUrl,
             model: imageModel,
+            resolution: imageResolution,
+            referenceCountReceived: referenceSubmissionInfo.referenceCountReceived,
+            referenceCountUsed: referenceSubmissionInfo.referenceCountUsed,
+            referenceReductionReason: referenceSubmissionInfo.reason,
             estimatedTime: config.estimatedTime,
           },
         });
@@ -409,6 +451,7 @@ export async function POST(request: Request) {
     } else {
       console.log("[Generate Image] Generating image:", {
         imageModel,
+        resolution: imageResolution,
         prompt: `${(prompt || "").substring(0, 50)}...`,
         hasSourceImage: allSourceImageUrls.length > 0,
         sourceImageCount: allSourceImageUrls.length,
@@ -422,6 +465,7 @@ export async function POST(request: Request) {
         prompt: prompt || "",
         sourceImageUrls: allSourceImageUrls.length > 0 ? allSourceImageUrls : undefined,
         aspectRatio,
+        resolution: imageResolution,
         quality: "high",
       });
 
@@ -438,8 +482,8 @@ export async function POST(request: Request) {
             prompt: prompt || null,
             model: imageModel,
             aspect_ratio: aspectRatio,
-            quality: config.resolution,
-            resolution: config.resolution,
+            quality: imageResolution,
+            resolution: imageResolution,
             source_image_url: primarySourceImageUrl || null,
             status: "completed",
             result_url: imageResult.imageUrl,
@@ -459,6 +503,7 @@ export async function POST(request: Request) {
             status: "completed",
             imageUrl: imageResult.imageUrl,
             model: imageModel,
+            resolution: imageResolution,
             estimatedTime: config.estimatedTime,
           },
         });

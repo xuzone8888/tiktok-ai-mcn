@@ -499,18 +499,16 @@ export const useSteps = () => {
 // 积分计算
 // ============================================================================
 
-import { IMAGE_MODEL_CONFIG, isOpenAIImageModel } from "@/types/generation";
+import { getImageResolutionCost, isOpenAIImageModel } from "@/types/generation";
 
 /** 计算任务积分消耗 */
 export function calculateTaskCredits(
   mode: EcomImageMode,
-  modelType: ImageModelType,
-  imageCount: number
+  _modelType: ImageModelType,
+  imageCount: number,
+  resolution: EcomResolution = "1k"
 ): number {
-  const modelConfig = IMAGE_MODEL_CONFIG[modelType as keyof typeof IMAGE_MODEL_CONFIG];
-  const unitCost = modelConfig?.provider === "openai"
-    ? modelConfig.credits
-    : IMAGE_MODEL_CONFIG["gpt-image-2"].credits;
+  const unitCost = getImageResolutionCost(resolution);
   
   if (mode === "ecom_five_pack") {
     // 电商五图套装固定生成5张
@@ -526,6 +524,7 @@ export const useTaskCredits = () => {
   const currentMode = useImageFactoryStore((state) => state.currentMode);
   const modelType = useImageFactoryStore((state) => state.modelType);
   const uploadedImages = useImageFactoryStore((state) => state.uploadedImages);
+  const resolution = useImageFactoryStore((state) => state.resolution);
   
-  return calculateTaskCredits(currentMode, modelType, uploadedImages.length);
+  return calculateTaskCredits(currentMode, modelType, uploadedImages.length, resolution);
 };

@@ -19,7 +19,7 @@ import {
   type ImageModel,
   type ImageBatchTask,
   type ImageBatchTaskConfig,
-  IMAGE_MODEL_CONFIG,
+  getImageResolutionCost,
   isOpenAIImageModel,
   GEMINI_ACTION_PRICING,
 } from "@/types/generation";
@@ -231,12 +231,7 @@ const generateId = () => `img-${Date.now()}-${Math.random().toString(36).substr(
  * 计算单个任务的积分消耗
  */
 export const getImageTaskCost = (config: ImageBatchTaskConfig): number => {
-  const { model } = config;
-  const modelConfig = IMAGE_MODEL_CONFIG[model as ImageModel];
-  if (modelConfig?.provider === "openai") {
-    return modelConfig.credits;
-  }
-  return IMAGE_MODEL_CONFIG["gpt-image-2"].credits;
+  return getImageResolutionCost(config.resolution);
 };
 
 /**

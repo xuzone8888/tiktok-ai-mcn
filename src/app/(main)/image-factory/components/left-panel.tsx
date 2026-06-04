@@ -16,7 +16,6 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Switch } from "@/components/ui/switch";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
@@ -26,12 +25,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { useImageFactoryStore, useTaskCredits, useCanStartTask } from "@/stores/image-factory-store";
+import { useImageFactoryStore } from "@/stores/image-factory-store";
 import {
   ECOM_MODE_CONFIG,
   ASPECT_RATIO_OPTIONS,
+  RESOLUTION_OPTIONS,
   PRODUCT_CATEGORY_OPTIONS,
   SCENE_TYPE_OPTIONS,
   TRY_ON_PRODUCT_OPTIONS,
@@ -41,6 +40,7 @@ import {
   PERSONA_REGION_OPTIONS,
   type UploadedImage,
   type EcomAspectRatio,
+  type EcomResolution,
   type ProductCategory,
   type SceneType,
   type TryOnProductType,
@@ -49,14 +49,25 @@ import {
   type PersonaGender,
   type PersonaRegion,
 } from "@/types/ecom-image";
-import { IMAGE_MODEL_CONFIG, OPENAI_IMAGE_MODELS } from "@/types/generation";
 import { cn } from "@/lib/utils";
+
+const QUALITY_CREDITS: Record<EcomResolution, number> = {
+  "1k": 5,
+  "2k": 10,
+  "4k": 15,
+};
+
+const QUALITY_OPTIONS = RESOLUTION_OPTIONS.map((option) => ({
+  value: option.value,
+  label: option.value.toUpperCase(),
+  credits: QUALITY_CREDITS[option.value],
+}));
 
 export function LeftPanel() {
   const {
     currentMode,
-    modelType,
-    setModelType,
+    resolution,
+    setResolution,
     language,
     setLanguage,
     ratio,
@@ -78,9 +89,10 @@ export function LeftPanel() {
     updateBuyerShowConfig,
   } = useImageFactoryStore();
 
-  const taskCredits = useTaskCredits();
-  const canStartTask = useCanStartTask();
   const modeConfig = ECOM_MODE_CONFIG[currentMode];
+  const selectedQuality = QUALITY_OPTIONS.find((option) => option.value === resolution) || QUALITY_OPTIONS[0];
+  const estimatedImageCount = currentMode === "ecom_five_pack" ? 5 : uploadedImages.length || 1;
+  const displayTaskCredits = selectedQuality.credits * estimatedImageCount;
 
   // 图片上传处理
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
@@ -239,38 +251,28 @@ export function LeftPanel() {
 
           <div className="h-px bg-white/5" />
 
-          {/* 模型选择 - Neon Border Cards */}
+          {/* 画质等级 - Neon Border Cards */}
           <div className="space-y-2">
             <Label className="text-[10px] font-bold text-white/50 uppercase tracking-wider">画质等级</Label>
-            <RadioGroup
-              value={modelType}
-              onValueChange={(v) => setModelType(v as typeof modelType)}
-              className="grid grid-cols-2 gap-2"
-            >
-              {OPENAI_IMAGE_MODELS.map((key) => {
-                const config = IMAGE_MODEL_CONFIG[key];
-                return (
-                <Label
-                  key={key}
-                  htmlFor={key}
+            <div className="grid grid-cols-3 gap-2">
+              {QUALITY_OPTIONS.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => setResolution(option.value)}
                   className={cn(
-                    "relative flex flex-col gap-2 p-3 border rounded-xl cursor-pointer transition-all duration-300 overflow-hidden group",
-                    modelType === key
+                    "relative flex flex-col items-start gap-1 p-3 border rounded-xl cursor-pointer transition-all duration-300 overflow-hidden group text-left",
+                    resolution === option.value
                       ? "border-mermaid-pink bg-mermaid-pink/5 shadow-[0_0_20px_rgba(236,72,153,0.1)]"
                       : "border-white/5 hover:border-white/10 bg-[#0B0C10]"
                   )}
                 >
-                  <div className={cn("absolute inset-0 bg-gradient-to-br from-mermaid-pink/10 to-transparent opacity-0 transition-opacity duration-300", modelType === key && "opacity-100")} />
-                  <RadioGroupItem value={key} id={key} className="sr-only" />
-                  <div className="relative z-10 flex items-center justify-between">
-                    <span className={cn("text-sm font-bold", modelType === key ? "text-white" : "text-white/60")}>{config.label}</span>
-                    <Badge variant="outline" className="border-mermaid-pink/20 text-mermaid-pink bg-mermaid-pink/10 text-[10px] px-1.5 py-0">{config.provider}</Badge>
-                  </div>
-                  <div className="relative z-10 text-xs text-white/30 font-mono">{config.credits} 积分/张</div>
-                </Label>
-                );
-              })}
-            </RadioGroup>
+                  <div className={cn("absolute inset-0 bg-gradient-to-br from-mermaid-pink/10 to-transparent opacity-0 transition-opacity duration-300", resolution === option.value && "opacity-100")} />
+                  <span className={cn("relative z-10 text-sm font-bold", resolution === option.value ? "text-white" : "text-white/60")}>{option.label}</span>
+                  <span className="relative z-10 text-xs text-white/30 font-mono">{option.credits} 积分/张</span>
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* 图片比例 & 语言 - Obsidian Inputs */}
@@ -360,12 +362,12 @@ export function LeftPanel() {
       <div className="p-3 border-t border-white/5 bg-[#0B0C10]/50 backdrop-blur-md">
         <div className="flex items-center justify-between mb-1">
           <span className="text-[10px] font-bold text-white/40 uppercase tracking-wider">预估消耗</span>
-          <span className="font-mono font-bold text-mermaid-cyan text-base">{taskCredits} 积分</span>
+          <span className="font-mono font-bold text-mermaid-cyan text-base">{displayTaskCredits} 积分</span>
         </div>
         <p className="text-[10px] text-white/30 text-right font-mono">
           {currentMode === "ecom_five_pack"
-            ? "固定批量: 5 张图片"
-            : `${uploadedImages.length || 1} 张图片 × ${IMAGE_MODEL_CONFIG[modelType as keyof typeof IMAGE_MODEL_CONFIG]?.credits || 15} 积分`}
+            ? `固定批量: 5 张图片 × ${selectedQuality.credits} 积分`
+            : `${uploadedImages.length || 1} 张图片 × ${selectedQuality.credits} 积分`}
         </p>
       </div>
     </div>

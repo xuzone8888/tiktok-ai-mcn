@@ -96,8 +96,6 @@ import {
   type DisplayModel,
   type NanoTier,
   VIDEO_MODEL_PRICING,
-  IMAGE_MODEL_CONFIG,
-  OPENAI_IMAGE_MODELS,
   GEMINI_ACTION_PRICING,
   IMAGE_ASPECT_OPTIONS,
   IMAGE_RESOLUTION_OPTIONS,
@@ -106,10 +104,18 @@ import {
   calculateEnhancementCost,
 } from "@/types/generation";
 import { CharacterPicker } from "@/components/character-picker";
-import { useApiHealth } from "@/hooks/use-api-health";
 
 // 本地类型 (仅用于此页面)
 type BatchCount = 1 | 2;
+
+const IMAGE_QUALITY_OPTIONS: Array<{ value: ImageResolution; label: string; credits: number }> = [
+  { value: "1k", label: "1K", credits: 5 },
+  { value: "2k", label: "2K", credits: 10 },
+  { value: "4k", label: "4K", credits: 15 },
+];
+
+const getImageQualityOption = (resolution: ImageResolution) =>
+  IMAGE_QUALITY_OPTIONS.find((option) => option.value === resolution) || IMAGE_QUALITY_OPTIONS[0];
 
 // ============================================================================
 // Quick Generator 页面
@@ -144,21 +150,11 @@ export default function QuickGeneratorPage() {
   // Image Mode: Settings
   // ================================================================
   const [imageNanoTier, setImageNanoTier] = useState<NanoTier>("fast");  // @deprecated 保留兼容
-  const [imageModel, setImageModel] = useState<ImageModel>("gpt-image-2");
+  const imageModel: ImageModel = "gpt-image-2";
   const [imageAction, setImageAction] = useState<ImageProcessAction>("generate");
-  const apiHealth = useApiHealth();
   const [imageAspectRatio, setImageAspectRatio] = useState<ImageAspectRatio>("auto");
   const [imageResolution, setImageResolution] = useState<ImageResolution>("1k");
-
-  const imageTaskResolution = useMemo<ImageResolution>(() => {
-    return "2k";
-  }, []);
-
-  useEffect(() => {
-    if (IMAGE_MODEL_CONFIG[imageModel]?.provider !== "openai") {
-      setImageModel("gpt-image-2");
-    }
-  }, [imageModel]);
+  const selectedImageQuality = getImageQualityOption(imageResolution);
 
   // Image Mode: 多图上传 (最多4张)
   const [imageUploadedFiles, setImageUploadedFiles] = useState<Array<{ url: string; name: string }>>([]);
@@ -259,8 +255,8 @@ export default function QuickGeneratorPage() {
 
   // Image Mode: Generate Image Cost (基于新模型)
   const generateImageCost = useMemo(() => {
-    return calculateImageCost(imageModel);
-  }, [imageModel]);
+    return calculateImageCost(imageModel, imageResolution);
+  }, [imageModel, imageResolution]);
 
   // 当前总费用
   const totalCost = useMemo(() => {
@@ -758,7 +754,7 @@ export default function QuickGeneratorPage() {
     }
     setIsEnhancingPrompt(true);
     await new Promise((r) => setTimeout(r, 1500));
-    const enhanced = `${prompt}\n\n[AI Enhanced] Cinematic lighting, professional composition, viral TikTok style.`;
+    const enhanced = `${prompt}\n\n[Enhanced] Cinematic lighting, professional composition, viral TikTok style.`;
     setPrompt(enhanced);
     setIsEnhancingPrompt(false);
     toast({ title: t ? "✨ Prompt enhanced" : "✨ Prompt 已优化" });
@@ -804,7 +800,7 @@ export default function QuickGeneratorPage() {
   }, [uploadedFile]);
 
   // ================================================================
-  // Video Mode: Process Image (AI Enhance)
+  // Video Mode: Process Image
   // ================================================================
 
   const handleProcessImage = useCallback(async () => {
@@ -1239,9 +1235,9 @@ export default function QuickGeneratorPage() {
           prompt: finalPrompt,
           model: imageModel,
           action: imageAction,
-          tier: imageTaskResolution,
+          tier: imageResolution,
           aspectRatio: imageAspectRatio,
-          resolution: imageTaskResolution,
+          resolution: imageResolution,
           sourceImageUrls,
           creditCost: totalCost,
         });
@@ -1388,7 +1384,7 @@ export default function QuickGeneratorPage() {
                           <FileImage className="h-3.5 w-3.5 mr-1.5" /> Direct Use
                         </TabsTrigger>
 	                        <TabsTrigger value="nano_banana" className="text-xs">
-	                          <Sparkles className="h-3.5 w-3.5 mr-1.5" /> AI Enhance
+	                          <Sparkles className="h-3.5 w-3.5 mr-1.5" /> {t ? "Image Tools" : "图片处理"}
                         </TabsTrigger>
                       </TabsList>
                     </Tabs>
@@ -1398,18 +1394,18 @@ export default function QuickGeneratorPage() {
                       <div className="space-y-3 p-3 rounded-lg panel-surface">
                         <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
                           <span className="flex items-center gap-1">
-                            <Sparkles className="h-3 w-3 text-mermaid-pink" />
-	                            GPT Image 2 图片增强
+	                            <Sparkles className="h-3 w-3 text-mermaid-pink" />
+	                            {t ? "Image processing" : "图片处理"}
                           </span>
                         </div>
                         <div className="flex gap-2">
                           <Button variant="outline" size="sm" onClick={() => setProcessingType("upscale")}
                             className={cn("flex-1 h-8 gap-1", processingType === "upscale" ? "bg-mermaid-cyan/20 border-mermaid-cyan/50 text-mermaid-cyan" : "btn-subtle")}>
-                            <ZoomIn className="h-3.5 w-3.5" /> {t ? "HD Upscale (40 pts)" : "高清放大 (40 pts)"}
+                            <ZoomIn className="h-3.5 w-3.5" /> {t ? "Upscale" : "放大"}
                           </Button>
                           <Button variant="outline" size="sm" onClick={() => setProcessingType("9grid")}
                             className={cn("flex-1 h-8 gap-1", processingType === "9grid" ? "bg-mermaid-pink/20 border-mermaid-pink/50 text-mermaid-pink" : "btn-subtle")}>
-                            <Grid3X3 className="h-3.5 w-3.5" /> {t ? "9-Grid (60 pts)" : "九宫格 (60 pts)"}
+                            <Grid3X3 className="h-3.5 w-3.5" /> {t ? "Grid" : "网格"}
                           </Button>
                         </div>
                         {processingType === "9grid" && (
@@ -1425,7 +1421,7 @@ export default function QuickGeneratorPage() {
                         )}
                         <Button onClick={handleProcessImage} disabled={!canProcessImage}
                           className={cn("w-full h-9 font-semibold", canProcessImage ? "bg-gradient-to-r from-tiktok-cyan to-blue-500 text-black" : "bg-white/10 text-muted-foreground")}>
-                          <Sparkles className="h-4 w-4 mr-2" />{t ? `Start (${processImageCost} pts)` : `开始处理 (${processImageCost} pts)`}
+                          <Sparkles className="h-4 w-4 mr-2" />{t ? "Start" : "开始处理"}
                         </Button>
                       </div>
                     )}
@@ -1791,31 +1787,28 @@ export default function QuickGeneratorPage() {
               {/* 画质等级 — 横向 3 列 */}
               <div>
                 <Label className="text-xs text-muted-foreground mb-1.5 block">{t ? "Quality" : "画质等级"}</Label>
-                <div className="grid grid-cols-2 gap-1.5">
-                  {OPENAI_IMAGE_MODELS.map((key) => {
-                    const config = IMAGE_MODEL_CONFIG[key];
-                    const healthStatus = apiHealth.getModelStatus(key);
-                    return (
-                    <Button key={key} variant="outline" size="sm" onClick={() => setImageModel(key)}
-                      className={cn("h-8 text-xs px-2", imageModel === key ? "bg-mermaid-pink/20 border-mermaid-pink/50 text-mermaid-pink" : "btn-subtle",
-                        healthStatus === "offline" && "opacity-50"
-                      )}>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {IMAGE_QUALITY_OPTIONS.map((option) => (
+                    <Button
+                      key={option.value}
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setImageResolution(option.value)}
+                      className={cn(
+                        "h-9 text-xs px-2",
+                        imageResolution === option.value
+                          ? "bg-mermaid-pink/20 border-mermaid-pink/50 text-mermaid-pink"
+                          : "btn-subtle"
+                      )}
+                    >
                       <span className="flex flex-col items-center leading-tight">
-                        <span className="font-medium flex items-center gap-1">
-                          <span className={cn("h-1.5 w-1.5 rounded-full flex-shrink-0",
-                            healthStatus === "online" ? "bg-emerald-400" :
-                            healthStatus === "degraded" ? "bg-amber-400" :
-                            healthStatus === "offline" ? "bg-red-400" : "bg-white/20"
-                          )} />
-                          {config.label}
-                        </span>
+                        <span className="font-semibold">{option.label}</span>
                         <span className="text-[10px] opacity-70">
-                          {imageAction === "generate" ? `${config.credits} pts` : (t ? "Phase 2" : "Phase2")}
+                          {option.credits} {t ? "pts" : "积分"}
                         </span>
                       </span>
                     </Button>
-                    );
-                  })}
+                  ))}
                 </div>
               </div>
 
@@ -2167,7 +2160,7 @@ export default function QuickGeneratorPage() {
               {outputMode === "image" && (
                 <div className="absolute top-3 left-3 flex gap-1.5">
                   <span className="bg-black/70 backdrop-blur-sm px-2.5 py-1 rounded-full text-xs font-bold text-mermaid-cyan border border-mermaid-cyan/30">
-                    {IMAGE_MODEL_CONFIG[imageModel]?.label || imageModel}
+                    {selectedImageQuality.label}
                   </span>
                   {imageAspectRatio && imageAspectRatio !== "auto" && (
                     <span className="bg-black/70 backdrop-blur-sm px-2.5 py-1 rounded-full text-xs font-medium text-white/70">
