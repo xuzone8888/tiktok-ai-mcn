@@ -18,6 +18,7 @@ import { getNewImageCost } from "@/lib/credits";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createServerClient } from "@/lib/supabase/server";
 import { getImageQueueMetadata } from "@/lib/image-prompt-complexity";
+import { validateImageReferenceUrls } from "@/lib/image-reference-url";
 
 // 增加请求体大小限制以支持 base64 图片 (50MB)
 export const maxDuration = 60;
@@ -292,9 +293,17 @@ export async function POST(request: Request) {
     } = body;
 
     // 合并多图来源：优先 sourceImageUrls，兼容旧的单张 sourceImageUrl
-    const allSourceImageUrls: string[] = sourceImageUrls?.length
+    const normalizedSourceImageUrls = Array.isArray(sourceImageUrls)
       ? sourceImageUrls
-      : (sourceImageUrl ? [sourceImageUrl] : []);
+        .filter((url): url is string => typeof url === "string" && url.trim().length > 0)
+        .map(url => url.trim())
+      : [];
+    const normalizedSourceImageUrl = typeof sourceImageUrl === "string" && sourceImageUrl.trim()
+      ? sourceImageUrl.trim()
+      : null;
+    const allSourceImageUrls: string[] = normalizedSourceImageUrls.length
+      ? normalizedSourceImageUrls
+      : (normalizedSourceImageUrl ? [normalizedSourceImageUrl] : []);
     // 第一张图用于 DB 记录和 Pro 模式
     const primarySourceImageUrl = allSourceImageUrls[0] || null;
     const modeValue = mode || "generate";
@@ -380,6 +389,18 @@ export async function POST(request: Request) {
     if (modeValue === "generate" && allSourceImageUrls.length === 0 && (!prompt || prompt.trim().length < 2)) {
       return NextResponse.json(
         { success: false, error: "请输入至少 2 个字符的提示词" },
+        { status: 400 }
+      );
+    }
+
+    try {
+      validateImageReferenceUrls(allSourceImageUrls);
+    } catch (error) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: error instanceof Error ? error.message : "参考图 URL 不允许访问",
+        },
         { status: 400 }
       );
     }

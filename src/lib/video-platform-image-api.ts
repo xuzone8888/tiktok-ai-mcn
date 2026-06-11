@@ -13,6 +13,12 @@
 
 import { generateMediaPath, uploadImageBuffer } from "@/lib/oss";
 import {
+  fetchImageReferenceUrl,
+  ImageReferenceUrlError,
+  MAX_REFERENCE_IMAGE_BYTES,
+  validateImageReferenceUrl,
+} from "@/lib/image-reference-url";
+import {
   DEFAULT_IMAGE_RESOLUTION,
   type ImageAspectRatio,
   type ImageResolution,
@@ -61,7 +67,6 @@ const DEFAULT_VIDEO_PLATFORM_IMAGE_OUTPUT_COMPRESSION = 92;
 const DEFAULT_VIDEO_PLATFORM_IMAGE_OSS_PREFIX = "video-platform-image";
 const DEFAULT_VIDEO_PLATFORM_IMAGE_REQUEST_TIMEOUT_MS = 300_000;
 const MAX_GENERATED_IMAGE_BYTES = 80 * 1024 * 1024;
-const MAX_REFERENCE_IMAGE_BYTES = 80 * 1024 * 1024;
 
 class VideoPlatformReferenceImageError extends Error {
   statusCode?: number;
@@ -182,14 +187,35 @@ export function getVideoPlatformImageSize(
   resolution: ImageResolution = DEFAULT_IMAGE_RESOLUTION,
   aspectRatio: ImageAspectRatio | string = "auto"
 ): string | null {
-  if (resolution === "1k") return "1024x1024";
-  if (resolution === "2k") return "2048x1360";
-  if (resolution === "4k") {
-    if (aspectRatio === "9:16") return "2160x3840";
-    if (aspectRatio === "1:1") return "2048x2048";
-    return "3840x2160";
-  }
-  return null;
+  const normalizedAspectRatio = aspectRatio === "auto" ? "auto" : String(aspectRatio);
+  const sizeMap: Record<ImageResolution, Record<string, string>> = {
+    "1k": {
+      auto: "1024x1024",
+      "1:1": "1024x1024",
+      "16:9": "1344x768",
+      "9:16": "768x1344",
+      "4:3": "1152x864",
+      "3:4": "864x1152",
+    },
+    "2k": {
+      auto: "2048x1360",
+      "1:1": "2048x2048",
+      "16:9": "2048x1152",
+      "9:16": "1152x2048",
+      "4:3": "2048x1536",
+      "3:4": "1536x2048",
+    },
+    "4k": {
+      auto: "3840x2160",
+      "1:1": "2048x2048",
+      "16:9": "3840x2160",
+      "9:16": "2160x3840",
+      "4:3": "3072x2304",
+      "3:4": "2304x3072",
+    },
+  };
+
+  return sizeMap[resolution]?.[normalizedAspectRatio] || sizeMap[resolution]?.auto || null;
 }
 
 function getNestedValue(data: unknown, path: Array<string | number>): unknown {
@@ -451,7 +477,9 @@ async function downloadGeneratedImage(url: string): Promise<{ buffer: Buffer; co
 }
 
 async function downloadReferenceImage(url: string): Promise<{ buffer: Buffer; contentType: string; ext: string }> {
-  const response = await fetch(url);
+  const response = await fetchImageReferenceUrl(url, {
+    maxBytes: MAX_REFERENCE_IMAGE_BYTES,
+  });
   if (!response.ok) {
     throw new VideoPlatformReferenceImageError(`参考图下载失败 (${response.status})`, response.status);
   }
@@ -602,6 +630,7 @@ export async function submitVideoPlatformImage(
   try {
     const { baseUrl, apiKey, model } = getRequestConfig();
     const prompt = params.prompt.trim();
+    const validatedUrls = urls.map(url => validateImageReferenceUrl(url).toString());
     const formatOptions = getVideoPlatformFormatOptions();
     const requestBodyKeys = ["model", "prompt", "size", ...Object.keys(formatOptions.requestFields)];
 
@@ -624,7 +653,7 @@ export async function submitVideoPlatformImage(
 
     let response: Response;
     if (hasReferenceImage) {
-      const referenceImage = await downloadReferenceImage(urls[0]);
+      const referenceImage = await downloadReferenceImage(validatedUrls[0]);
       const formData = new FormData();
       formData.append("model", model);
       formData.append("prompt", prompt);
@@ -736,7 +765,9 @@ export async function submitVideoPlatformImage(
   } catch (error) {
     console.error("[Video Platform Image] Submit error:", error);
     const errorMessage = error instanceof Error ? error.message : "视频平台图片服务请求失败";
-    const statusCode = error instanceof VideoPlatformReferenceImageError ? error.statusCode : undefined;
+    const statusCode = error instanceof VideoPlatformReferenceImageError || error instanceof ImageReferenceUrlError
+      ? error.statusCode
+      : undefined;
     return {
       success: false,
       status: "failed",
