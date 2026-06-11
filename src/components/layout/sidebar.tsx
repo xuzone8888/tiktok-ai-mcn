@@ -32,6 +32,7 @@ import {
 } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { useLang } from "@/contexts/LangContext";
+import { isImageFactoryUiEnabled } from "@/lib/feature-flags";
 
 // ============================================================================
 // Types
@@ -123,12 +124,14 @@ function getNavGroups(lang: string): NavGroup[] {
           icon: Images,
           description: t ? "Generate multiple images" : "多张图片同时生成",
         },
-        {
-          title: t ? "Product Photo" : "商图精修",
-          href: "/image-factory",
-          icon: Camera,
-          description: t ? "E-commerce photo retouching" : "电商商品图精修",
-        },
+        ...(isImageFactoryUiEnabled()
+          ? [{
+            title: t ? "Product Photo" : "商图精修",
+            href: "/image-factory",
+            icon: Camera,
+            description: t ? "E-commerce photo retouching" : "电商商品图精修",
+          }]
+          : []),
       ],
     },
     // --- Video Creation ---

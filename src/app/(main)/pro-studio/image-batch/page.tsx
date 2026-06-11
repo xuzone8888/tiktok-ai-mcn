@@ -144,7 +144,9 @@ const AspectRatioIcons: Record<string, React.ReactNode> = {
   "3:4": <LayoutGrid className="h-4 w-4" />,
 };
 
-const IMAGE_QUALITY_OPTIONS: Array<{ value: ImageResolution; label: string; credits: number }> = [
+const IMAGE_BATCH_SUBMIT_CONCURRENCY = 5;
+
+const IMAGE_QUALITY_OPTIONS: Array<{ value: ImageResolution; label: string; credits: number; disabled?: boolean }> = [
   { value: "1k", label: "1K", credits: 5 },
   { value: "2k", label: "2K", credits: 10 },
   { value: "4k", label: "4K", credits: 15 },
@@ -592,7 +594,9 @@ export default function ImageBatchPage() {
         if (gs.model) updateGlobalSettings('model', gs.model);
         if (gs.action) updateGlobalSettings('action', gs.action);
         if (gs.aspectRatio) updateGlobalSettings('aspectRatio', gs.aspectRatio);
-        if (gs.resolution) updateGlobalSettings('resolution', gs.resolution);
+        if (gs.resolution) {
+          updateGlobalSettings('resolution', gs.resolution);
+        }
         if (gs.prompt) updateGlobalSettings('prompt', gs.prompt);
       }
 
@@ -860,12 +864,9 @@ export default function ImageBatchPage() {
           progress: 30,
         });
 
-        // 轮询任务状态
-        // 增加轮询时间：API 可能需要 200-300 秒才响应
-        // 原来：60 次 × 3 秒 = 180 秒，不够
-        // 现在：120 次 × 3 秒 = 360 秒（6 分钟），足够处理慢响应
+        // 轮询任务状态。前端主动等待最多 5 分钟，超时后后台 worker 继续推进。
         let pollCount = 0;
-        const maxPolls = needPolling ? 60 : 120;  // 增加轮询次数
+        const maxPolls = needPolling ? 60 : 100;
         const pollInterval = needPolling ? 3000 : 3000;
         const taskIdToTrack = task.id; // 保存任务ID用于状态检查
 
@@ -918,9 +919,13 @@ export default function ImageBatchPage() {
 
             if (pollCount >= maxPolls) {
               clearInterval(pollTimer);
-              updateTaskStatus(task.id, "failed", {
-                error: "处理超时",
-                completedAt: new Date().toISOString(),
+              updateTaskStatus(task.id, "processing", {
+                progress: 95,
+                error: "任务仍在后台生成，可稍后刷新查看",
+              });
+              toast({
+                title: "后台生成中",
+                description: `${task.config.sourceImageName || "图片"} 仍在后台生成，可稍后刷新查看`,
               });
             }
           } catch (pollError) {
@@ -943,15 +948,21 @@ export default function ImageBatchPage() {
   const handleStartAll = useCallback(async () => {
     const pendingTasks = tasks.filter((t) => t.status === "pending");
     if (pendingTasks.length === 0) return;
+    const runnableTasks = pendingTasks;
+    if (runnableTasks.length === 0) return;
 
-    toast({ title: `🚀 开始处理 ${pendingTasks.length} 个任务` });
+    toast({ title: `🚀 开始处理 ${runnableTasks.length} 个任务` });
 
-    // 串行执行以避免并发限制
-    for (const task of pendingTasks) {
-      await handleProcessSingleTask(task);
-      // 间隔 800ms
-      await new Promise((resolve) => setTimeout(resolve, 800));
-    }
+    let nextTaskIndex = 0;
+    const workerCount = Math.min(IMAGE_BATCH_SUBMIT_CONCURRENCY, runnableTasks.length);
+
+    await Promise.all(Array.from({ length: workerCount }, async () => {
+      while (nextTaskIndex < runnableTasks.length) {
+        const taskIndex = nextTaskIndex;
+        nextTaskIndex += 1;
+        await handleProcessSingleTask(runnableTasks[taskIndex]);
+      }
+    }));
   }, [tasks, handleProcessSingleTask, toast]);
 
   // 重置失败的任务并立即重新启动
@@ -1701,7 +1712,6 @@ export default function ImageBatchPage() {
                       toast({ variant: "destructive", title: "请先上传Excel文件" });
                       return;
                     }
-
                     const ids = createTasksFromScenario();
                     const taskCount = ids.length;
                     toast({ title: `🚀 已创建 ${taskCount} 个任务，正在启动处理...` });
@@ -1804,7 +1814,10 @@ export default function ImageBatchPage() {
                     {IMAGE_QUALITY_OPTIONS.map((option) => (
                       <button
                         key={option.value}
-                        onClick={() => updateGlobalSettings("resolution", option.value)}
+                        type="button"
+                        onClick={() => {
+                          updateGlobalSettings("resolution", option.value);
+                        }}
                         className={cn(
                           "px-4 py-2 rounded-full text-xs font-bold transition-all flex items-center gap-2",
                           globalSettings.resolution === option.value
@@ -2046,7 +2059,6 @@ export default function ImageBatchPage() {
                       toast({ variant: "destructive", title: "请上传图片或输入提示词" });
                       return;
                     }
-
                     // 创建任务
                     const ids = createTasksFromScenario();
                     if (ids.length === 0) {

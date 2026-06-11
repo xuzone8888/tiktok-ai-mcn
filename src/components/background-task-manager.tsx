@@ -650,7 +650,7 @@ function useImageTaskExecutor() {
 
         updateTaskResult(taskId, { apiTaskId });
 
-        // 轮询等待结果
+        // 前端主动等待最多 5 分钟；超时后后台 worker 继续推进
         const maxAttempts = 60;
         let attempts = 0;
 
@@ -681,7 +681,11 @@ function useImageTaskExecutor() {
           }
         }
 
-        throw new Error("任务超时");
+        updateTaskResult(taskId, {
+          status: "processing",
+          error: "任务仍在后台生成，可稍后刷新查看",
+        });
+        return;
       } else {
         throw new Error(result.error || "提交任务失败");
       }
@@ -1066,7 +1070,7 @@ function useQuickGenImageTaskExecutor() {
         const task = state.activeImageTask;
         if (!task || !task.taskId) return;
 
-        const maxAttempts = 60;
+        const maxAttempts = 100; // 100 * 3s = 5 分钟
 
         for (let i = 0; i < maxAttempts; i++) {
           await new Promise(r => setTimeout(r, 3000));
@@ -1101,7 +1105,15 @@ function useQuickGenImageTaskExecutor() {
             }
           }
         }
-        throw new Error("任务超时");
+        updateTaskStatus(task.id, "polling", {
+          progress: 95,
+          errorMessage: "任务仍在后台生成，可稍后刷新查看",
+        });
+        toast({
+          title: "后台生成中",
+          description: "任务仍在后台生成，可稍后刷新查看",
+        });
+        return;
       } catch (error) {
         updateTaskStatus(activeTask.id, "failed", {
           errorMessage: error instanceof Error ? error.message : "执行失败",

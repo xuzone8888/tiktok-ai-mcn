@@ -6,8 +6,6 @@
  */
 
 import { NextResponse } from "next/server";
-import { queryNanoBananaResult } from "@/lib/suchuang-api";
-import { submitOpenAIImage } from "@/lib/openai-image-api";
 import {
   DEFAULT_IMAGE_MODEL,
   DEFAULT_IMAGE_RESOLUTION,
@@ -19,12 +17,14 @@ import {
 import { getNewImageCost } from "@/lib/credits";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createServerClient } from "@/lib/supabase/server";
+import { getImageQueueMetadata } from "@/lib/image-prompt-complexity";
 
 // 增加请求体大小限制以支持 base64 图片 (50MB)
-export const maxDuration = 120; // 2分钟超时
+export const maxDuration = 60;
 export const dynamic = 'force-dynamic';
 
 const VALID_IMAGE_MODES = new Set(["generate", "upscale", "nine_grid"]);
+const OPENAI_IMAGE_MAX_ATTEMPTS = 6;
 
 function parseImageResolution(value: unknown): ImageResolution | null {
   const normalized = typeof value === "string" ? value.toLowerCase() : value;
@@ -42,12 +42,6 @@ function getOpenAIEditPrompt(mode: string, prompt: string | undefined, resolutio
   return "Using the reference image, create a clean 3x3 nine-grid multi-angle product showcase. Preserve the exact same product identity, colors, shape, materials, and details. Show varied useful angles and close-up detail views on a clean background. Do not add text or watermark.";
 }
 
-function getUuidReferenceId(value: string): string | null {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
-    ? value
-    : null;
-}
-
 interface ImageCreditChargeResult {
   success: boolean;
   amount: number;
@@ -55,6 +49,10 @@ interface ImageCreditChargeResult {
   balanceAfter?: number;
   error?: string;
   status?: number;
+  manualReviewRequired?: boolean;
+  transactionMissing?: boolean;
+  balanceMaybeDeducted?: boolean;
+  uncertainAmount?: number;
 }
 
 interface ImageCreditRefundResult {
@@ -90,6 +88,7 @@ async function chargeImageCreditsBeforeGeneration(
   adminClient: ReturnType<typeof createAdminClient>,
   userId: string,
   taskId: string,
+  generationId: string,
   creditCost: number
 ): Promise<ImageCreditChargeResult> {
   const maxAttempts = 3;
@@ -142,21 +141,27 @@ async function chargeImageCreditsBeforeGeneration(
       type: "consume",
       description: `图片生成 - GPT Image 2 (${taskId})`,
       reference_type: "quick_gen_image",
-      reference_id: getUuidReferenceId(taskId),
+      reference_id: generationId,
       balance_before: balanceBefore,
       balance_after: balanceAfter,
     });
 
     if (transactionError) {
       console.error("[Generate Image] Failed to record credit transaction:", transactionError);
-      await rollbackImageCreditCharge(adminClient, userId, balanceBefore, balanceAfter);
+      const rollbackSucceeded = await rollbackImageCreditCharge(adminClient, userId, balanceBefore, balanceAfter);
       return {
         success: false,
         amount: creditCost,
         balanceBefore,
         balanceAfter,
-        error: "扣费流水记录失败，请重试",
+        error: rollbackSucceeded
+          ? "扣费流水记录失败，请重试"
+          : "扣费流水记录失败，余额状态需人工核查",
         status: 500,
+        manualReviewRequired: !rollbackSucceeded,
+        transactionMissing: true,
+        balanceMaybeDeducted: !rollbackSucceeded,
+        uncertainAmount: !rollbackSucceeded ? creditCost : 0,
       };
     }
 
@@ -170,6 +175,7 @@ async function refundImageCreditsAfterGenerationFailure(
   adminClient: ReturnType<typeof createAdminClient>,
   userId: string,
   taskId: string,
+  generationId: string,
   creditCost: number
 ): Promise<ImageCreditRefundResult> {
   const { data: profile, error: profileError } = await adminClient
@@ -204,7 +210,7 @@ async function refundImageCreditsAfterGenerationFailure(
     type: "refund",
     description: `图片生成失败自动退款 - GPT Image 2 (${taskId})`,
     reference_type: "quick_gen_image",
-    reference_id: getUuidReferenceId(taskId),
+    reference_id: generationId,
     balance_before: balanceBefore,
     balance_after: balanceAfter,
   });
@@ -215,6 +221,40 @@ async function refundImageCreditsAfterGenerationFailure(
   }
 
   return { success: true, balanceBefore, balanceAfter };
+}
+
+function getImageTaskMetadata(metadata: unknown): Record<string, unknown> {
+  if (metadata && typeof metadata === "object" && !Array.isArray(metadata)) {
+    return { ...(metadata as Record<string, unknown>) };
+  }
+
+  return {};
+}
+
+function getImageTaskAttempts(metadata: Record<string, unknown>): Array<Record<string, unknown>> {
+  return Array.isArray(metadata.attempts)
+    ? (metadata.attempts as Array<Record<string, unknown>>)
+    : [];
+}
+
+function getImageTaskMaxAttempts(metadata: Record<string, unknown>): number {
+  const maxAttempts = Number(metadata.maxAttempts || OPENAI_IMAGE_MAX_ATTEMPTS);
+  return Number.isFinite(maxAttempts) && maxAttempts > 0
+    ? Math.min(maxAttempts, OPENAI_IMAGE_MAX_ATTEMPTS)
+    : OPENAI_IMAGE_MAX_ATTEMPTS;
+}
+
+function isOpenAIImageGenerationRecord(record: Record<string, unknown>): boolean {
+  const metadata = getImageTaskMetadata(record.metadata);
+  return record.model === DEFAULT_IMAGE_MODEL ||
+    metadata.provider === "openai" ||
+    metadata.provider === "video_platform_image";
+}
+
+function mapOpenAIImageClientStatus(status: string): "processing" | "completed" | "failed" {
+  if (status === "completed") return "completed";
+  if (status === "failed") return "failed";
+  return "processing";
 }
 
 // ============================================================================
@@ -290,7 +330,6 @@ export async function POST(request: Request) {
       source,
       hasPrompt: !!prompt,
       promptLength: prompt?.length || 0,
-      promptPreview: prompt?.substring(0, 100) || "(empty)",
       hasSourceImage: allSourceImageUrls.length > 0,
       sourceImageCount: allSourceImageUrls.length,
       referenceCountUsed: submittedSourceImageUrls.length,
@@ -352,19 +391,126 @@ export async function POST(request: Request) {
     const taskId = requestId || (modeValue === "upscale" || modeValue === "nine_grid"
       ? `openai-${modeValue}-${Date.now()}`
       : `openai-${Date.now()}`);
+    const generationId = crypto.randomUUID();
+
+    // ============================================
+    // 创建本地任务占位：consume 成功前保持 pending，不进入 worker
+    // ============================================
+    const supabase = createAdminClient();
+    const config = imageConfig!;
+    const promptForGeneration = modeValue === "upscale" || modeValue === "nine_grid"
+      ? getOpenAIEditPrompt(modeValue, prompt, imageResolution)
+      : (prompt || "");
+    const sourceImageUrlsForGeneration = modeValue === "upscale" || modeValue === "nine_grid"
+      ? submittedSourceImageUrls
+      : allSourceImageUrls;
+    const createdAt = new Date().toISOString();
+    const queueMetadata = getImageQueueMetadata(promptForGeneration, sourceImageUrlsForGeneration, imageResolution);
+    const baseTaskMetadata = {
+      provider: "video_platform_image",
+      taskEngine: "video_platform_image_worker",
+      mode: modeValue,
+      imageModel,
+      apiModel: config.apiModel,
+      source,
+      prompt: promptForGeneration,
+      promptLength: promptForGeneration.length,
+      aspectRatio,
+      resolution: imageResolution,
+      sourceImageUrls: sourceImageUrlsForGeneration,
+      allSourceImageUrls,
+      primarySourceImageUrl,
+      referenceCountReceived: referenceSubmissionInfo.referenceCountReceived,
+      referenceCountUsed: referenceSubmissionInfo.referenceCountUsed,
+      referenceReductionReason: referenceSubmissionInfo.reason,
+      attempts: [],
+      maxAttempts: OPENAI_IMAGE_MAX_ATTEMPTS,
+      nextAttemptAt: createdAt,
+      complexityProfile: queueMetadata.complexityProfile,
+      queueLane: queueMetadata.queueLane,
+      maxWaitMs: queueMetadata.maxWaitMs,
+      generationId,
+      charge: {
+        status: "pending",
+        amount: creditCost,
+      },
+    };
+
+    const { data: insertedGeneration, error: insertError } = await supabase
+      .from("generations")
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .insert({
+        id: generationId,
+        user_id: authUserId,
+        task_id: taskId,
+        type: "image",
+        generation_type: "image",
+        source,
+        prompt: promptForGeneration || null,
+        model: imageModel,
+        aspect_ratio: aspectRatio,
+        quality: imageResolution,
+        resolution: imageResolution,
+        source_image_url: primarySourceImageUrl || null,
+        status: "pending",
+        result_url: null,
+        image_url: null,
+        credit_cost: creditCost,
+        created_at: createdAt,
+        metadata: baseTaskMetadata as any,
+      } as any)
+      .select("id, task_id, status")
+      .single();
+
+    if (insertError || !insertedGeneration) {
+      console.error("[Generate Image] Failed to create local task before charge:", insertError);
+      return NextResponse.json(
+        { success: false, error: "任务创建失败，请重试" },
+        { status: 500 }
+      );
+    }
 
     // ============================================
     // 扣除积分并记录流水
     // ============================================
-    const supabase = createAdminClient();
     const chargeResult = await chargeImageCreditsBeforeGeneration(
       supabase,
       authUserId,
       taskId,
+      generationId,
       creditCost
     );
 
     if (!chargeResult.success) {
+      const chargeManualReviewMetadata = chargeResult.manualReviewRequired
+        ? {
+            charge_manual_review_required: true,
+            charge_transaction_missing: !!chargeResult.transactionMissing,
+            charge_balance_maybe_deducted: !!chargeResult.balanceMaybeDeducted,
+            charge_uncertain_amount: chargeResult.uncertainAmount || creditCost,
+            charge_manual_review_at: new Date().toISOString(),
+            last_charge_error: chargeResult.error || "扣费流水写入失败且余额回滚失败，需人工对账",
+          }
+        : {};
+
+      await supabase
+        .from("generations")
+        .update({
+          status: "failed",
+          metadata: {
+            ...baseTaskMetadata,
+            ...chargeManualReviewMetadata,
+            charge: {
+              status: "failed",
+              amount: creditCost,
+              error: chargeResult.error || "扣费失败",
+              manualReviewRequired: !!chargeResult.manualReviewRequired,
+            },
+          } as any,
+        })
+        .eq("id", generationId)
+        .eq("status", "pending");
+
       return NextResponse.json(
         { success: false, error: chargeResult.error || "扣费失败，请重试" },
         { status: chargeResult.status || 500 }
@@ -380,161 +526,89 @@ export async function POST(request: Request) {
     });
 
     // ============================================
-    // 根据模式提交任务
+    // 激活本地任务：POST 不再同步等待上游完成
     // ============================================
-    let result: { success: boolean; error?: string } = { success: false, error: "图片生成失败" };
+    const taskMetadata = {
+      ...baseTaskMetadata,
+      charge: {
+        status: "charged",
+        amount: creditCost,
+        balanceBefore: chargeResult.balanceBefore,
+        balanceAfter: chargeResult.balanceAfter,
+      },
+    };
 
-    if (modeValue === "upscale" || modeValue === "nine_grid") {
-      const config = imageConfig!;
-      console.log("[Generate Image] Running OpenAI edit mode:", {
-        mode: modeValue,
-        imageModel,
-        resolution: imageResolution,
-        sourceImageCount: submittedSourceImageUrls.length,
-        referenceCountReceived: referenceSubmissionInfo.referenceCountReceived,
-        referenceCountUsed: referenceSubmissionInfo.referenceCountUsed,
-        referenceReductionReason: referenceSubmissionInfo.reason,
-      });
+    const { data: activatedGeneration, error: activateError } = await supabase
+      .from("generations")
+      .update({
+        status: "processing",
+        metadata: taskMetadata as any,
+      })
+      .eq("id", generationId)
+      .eq("status", "pending")
+      .select("id, task_id, status")
+      .single();
 
-      const imageResult = await submitOpenAIImage({
-        model: config.apiModel,
-        prompt: getOpenAIEditPrompt(modeValue, prompt, imageResolution),
-        sourceImageUrls: submittedSourceImageUrls,
-        aspectRatio,
-        resolution: imageResolution,
-        quality: "high",
-      });
-
-      if (!imageResult.success || !imageResult.imageUrl) {
-        result = { success: false, error: imageResult.error || "图片编辑失败" };
-      } else {
-        try {
-          await supabase.from("generations").insert({
-            user_id: authUserId,
-            task_id: taskId,
-            type: "image",
-            generation_type: "image",
-            source: source,
-            prompt: getOpenAIEditPrompt(modeValue, prompt, imageResolution),
-            model: imageModel,
-            aspect_ratio: aspectRatio,
-            quality: imageResolution,
-            resolution: imageResolution,
-            source_image_url: primarySourceImageUrl || null,
-            status: "completed",
-            result_url: imageResult.imageUrl,
-            image_url: imageResult.imageUrl,
-            credit_cost: creditCost,
-            created_at: new Date().toISOString(),
-            completed_at: new Date().toISOString(),
-          });
-        } catch (dbError) {
-          console.error("[Generate Image] DB insert error:", dbError);
-        }
-
-        return NextResponse.json({
-          success: true,
-          data: {
-            taskId,
-            status: "completed",
-            imageUrl: imageResult.imageUrl,
-            model: imageModel,
-            resolution: imageResolution,
-            referenceCountReceived: referenceSubmissionInfo.referenceCountReceived,
-            referenceCountUsed: referenceSubmissionInfo.referenceCountUsed,
-            referenceReductionReason: referenceSubmissionInfo.reason,
-            estimatedTime: config.estimatedTime,
-          },
-        });
-      }
-
-    } else {
-      console.log("[Generate Image] Generating image:", {
-        imageModel,
-        resolution: imageResolution,
-        prompt: `${(prompt || "").substring(0, 50)}...`,
-        hasSourceImage: allSourceImageUrls.length > 0,
-        sourceImageCount: allSourceImageUrls.length,
-        aspectRatio,
-      });
-
-      const config = imageConfig!;
-      console.log("[Generate Image] Using image model:", imageModel, config.provider);
-      const imageResult = await submitOpenAIImage({
-        model: config.apiModel,
-        prompt: prompt || "",
-        sourceImageUrls: allSourceImageUrls.length > 0 ? allSourceImageUrls : undefined,
-        aspectRatio,
-        resolution: imageResolution,
-        quality: "high",
-      });
-
-      if (!imageResult.success || !imageResult.imageUrl) {
-        result = { success: false, error: imageResult.error || "图片生成失败" };
-      } else {
-        try {
-          await supabase.from("generations").insert({
-            user_id: authUserId,
-            task_id: taskId,
-            type: "image",
-            generation_type: "image",
-            source: source,
-            prompt: prompt || null,
-            model: imageModel,
-            aspect_ratio: aspectRatio,
-            quality: imageResolution,
-            resolution: imageResolution,
-            source_image_url: primarySourceImageUrl || null,
-            status: "completed",
-            result_url: imageResult.imageUrl,
-            image_url: imageResult.imageUrl,
-            credit_cost: creditCost,
-            created_at: new Date().toISOString(),
-            completed_at: new Date().toISOString(),
-          });
-        } catch (dbError) {
-          console.error("[Generate Image] DB insert error:", dbError);
-        }
-
-        return NextResponse.json({
-          success: true,
-          data: {
-            taskId,
-            status: "completed",
-            imageUrl: imageResult.imageUrl,
-            model: imageModel,
-            resolution: imageResolution,
-            estimatedTime: config.estimatedTime,
-          },
-        });
-      }
-    }
-
-    if (!result.success) {
-      console.error("[Generate Image] Submit failed:", result.error);
-
+    if (activateError || !activatedGeneration) {
+      console.error("[Generate Image] Failed to activate processing task:", activateError);
       const refundResult = await refundImageCreditsAfterGenerationFailure(
         supabase,
         authUserId,
         taskId,
+        generationId,
         creditCost
       );
-      console.log("[Generate Image] Credits refund result:", {
-        refunded: refundResult.success,
-        amount: creditCost,
-        before: refundResult.balanceBefore,
-        after: refundResult.balanceAfter,
-      });
+      await supabase
+        .from("generations")
+        .update({
+          status: "failed",
+          metadata: {
+            ...taskMetadata,
+            activationError: activateError?.message || "任务入队失败",
+            refundAfterActivationFailure: refundResult,
+          } as any,
+        })
+        .eq("id", generationId);
 
       return NextResponse.json(
-        { success: false, error: result.error },
+        {
+          success: false,
+          error: refundResult.success
+            ? "任务创建失败，积分已退还"
+            : "任务创建失败，退款失败请联系客服处理",
+        },
         { status: 500 }
       );
     }
-    return NextResponse.json(
-      { success: false, error: result.error || "图片生成失败" },
-      { status: 500 }
-    );
+
+    console.log("[Generate Image] Processing task created:", {
+      taskId,
+      mode: modeValue,
+      imageModel,
+      resolution: imageResolution,
+      maxAttempts: OPENAI_IMAGE_MAX_ATTEMPTS,
+    });
+
+    return NextResponse.json({
+      success: true,
+      data: {
+        taskId,
+        status: "processing",
+        imageUrl: null,
+        model: imageModel,
+        resolution: imageResolution,
+        attempts: 0,
+        maxAttempts: OPENAI_IMAGE_MAX_ATTEMPTS,
+        nextAttemptAt: createdAt,
+        complexityProfile: queueMetadata.complexityProfile,
+        queueLane: queueMetadata.queueLane,
+        maxWaitMs: queueMetadata.maxWaitMs,
+        referenceCountReceived: referenceSubmissionInfo.referenceCountReceived,
+        referenceCountUsed: referenceSubmissionInfo.referenceCountUsed,
+        referenceReductionReason: referenceSubmissionInfo.reason,
+        estimatedTime: config.estimatedTime,
+      },
+    });
   } catch (error) {
     console.error("[Generate Image] Error:", error);
     return NextResponse.json(
@@ -563,7 +637,6 @@ export async function GET(request: Request) {
     const authUserId = user.id;
     const { searchParams } = new URL(request.url);
     const taskId = searchParams.get("taskId");
-    const model = searchParams.get("model") || "nano-banana";
 
     if (!taskId) {
       return NextResponse.json(
@@ -572,213 +645,85 @@ export async function GET(request: Request) {
       );
     }
 
-    console.log("[Generate Image] Querying task:", taskId, { model, userId: authUserId });
-
-    // ================================================================
-    // 同步图片模型任务直接查询数据库
-    // GPT Image / Gemini API 是同步的，结果直接保存在 generations 表中
-    // ================================================================
-    if (taskId.startsWith("gemini-") || taskId.startsWith("openai-")) {
-      const supabase = createAdminClient();
-
-      // 首先尝试精确匹配 taskId
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      let { data: genData, error: dbError } = await (supabase as any)
-        .from("generations")
-        .select("*")
-        .eq("task_id", taskId)
-        .eq("user_id", authUserId)
-        .single();
-
-      // 如果精确匹配失败，尝试查询该用户最近1分钟内的同步图片任务
-      // 这解决了 POST 响应解析失败但后端已成功的情况
-      if (dbError || !genData) {
-        console.log("[Generate Image] Exact match failed, searching recent tasks for user:", authUserId);
-        const oneMinuteAgo = new Date(Date.now() - 60000).toISOString();
-
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data: recentData } = await (supabase as any)
-          .from("generations")
-          .select("*")
-          .eq("user_id", authUserId)
-          .eq("source", "batch_image")
-          .in("model", Object.keys(IMAGE_MODEL_CONFIG))
-          .gte("created_at", oneMinuteAgo)
-          .order("created_at", { ascending: false })
-          .limit(1)
-          .single();
-
-        if (recentData) {
-          console.log("[Generate Image] Found recent Gemini task:", recentData.task_id);
-          genData = recentData;
-          dbError = null;
-        }
-      }
-
-      if (dbError || !genData) {
-        console.log("[Generate Image] Gemini task not found in DB:", taskId);
-        return NextResponse.json({
-          success: true,
-          data: {
-            taskId,
-            status: "processing",
-            imageUrl: null,
-            errorMessage: null,
-          },
-        });
-      }
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const record = genData as any;
-      console.log("[Generate Image] Gemini task found in DB:", {
-        taskId: record.task_id,
-        status: record.status,
-        hasImage: !!record.image_url,
-      });
-
-      return NextResponse.json({
-        success: true,
-        data: {
-          taskId: record.task_id,
-          status: record.status,
-          imageUrl: record.image_url || record.result_url,
-          errorMessage: record.error_message,
-          createdAt: record.created_at,
-          updatedAt: record.completed_at,
-        },
-      });
-    }
-
-    // ================================================================
-    // NanoBanana 任务查询 API
-    // ================================================================
+    console.log("[Generate Image] Querying task:", taskId, { userId: authUserId });
     const supabase = createAdminClient();
-    const { data: genData, error: genError } = await supabase
+
+    // ================================================================
+    // GPT Image 2 本地任务查询：GET 只读，不推进 attempt、不调用上游、不退款
+    // ================================================================
+    const { data: generationRecord, error: generationError } = await supabase
       .from("generations")
-      .select("user_id, credit_cost, status")
+      .select("*")
       .eq("task_id", taskId)
       .eq("user_id", authUserId)
-      .single();
+      .maybeSingle();
 
-    if (genError || !genData) {
+    if (generationError || !generationRecord) {
       return NextResponse.json(
         { success: false, error: "任务不存在或无权访问" },
         { status: 404 }
       );
     }
 
-    const result = await queryNanoBananaResult(
-      taskId,
-      model as "nano-banana" | "nano-banana-pro"
-    );
+    const record = generationRecord as Record<string, unknown>;
+    const metadata = getImageTaskMetadata(record.metadata);
+    const attempts = getImageTaskAttempts(metadata);
+    const lastAttempt = attempts[attempts.length - 1] || {};
+    const clientStatus = mapOpenAIImageClientStatus(String(record.status || "processing"));
+    const progress = clientStatus === "completed"
+      ? 100
+      : clientStatus === "failed"
+        ? 100
+        : Math.min(95, 20 + attempts.length * 12);
 
-    if (!result.success) {
-      return NextResponse.json(
-        { success: false, error: result.error },
-        { status: 500 }
-      );
-    }
+    if (isOpenAIImageGenerationRecord(record)) {
+      const attempts = getImageTaskAttempts(metadata);
 
-    const task = result.task!;
-
-    // 更新 generations 表状态
-    if (task.status === "completed" || task.status === "failed") {
-      try {
-        // 如果任务失败且之前状态是 processing，则退还积分
-        // 使用原子操作防止重复退款：先更新状态，只有成功更新的请求才能退款
-        if (task.status === "failed" && genData && genData.status === "processing") {
-          // 先尝试原子更新状态（乐观锁）- 只有 processing 状态才能更新为 failed
-          const { data: updateResult, error: statusUpdateError } = await supabase
-            .from("generations")
-            .update({ status: "failed", error_message: task.errorMessage })
-            .eq("task_id", taskId)
-            .eq("user_id", authUserId)
-            .eq("status", "processing") // 乐观锁：只有 processing 状态才能更新
-            .select()
-            .single();
-
-          // 只有成功更新状态的请求才执行退款（防止并发重复退款）
-          if (updateResult && !statusUpdateError) {
-            const refundUserId = genData.user_id;
-            const creditCost = genData.credit_cost || 0;
-
-            if (refundUserId && creditCost > 0) {
-                const { data: profileData } = await supabase
-                  .from("profiles")
-                  .select("credits")
-                  .eq("id", refundUserId)
-                .single();
-
-              if (profileData) {
-                const currentCredits = (profileData as { credits: number }).credits;
-                await supabase
-                  .from("profiles")
-                  .update({ credits: currentCredits + creditCost })
-                  .eq("id", refundUserId);
-
-                // 记录退款交易
-                await supabase.from("credit_transactions").insert({
-                  user_id: refundUserId,
-                  amount: creditCost,
-                  type: "refund",
-                  description: `图片生成失败自动退款 (${taskId})`,
-                  balance_before: currentCredits,
-                  balance_after: currentCredits + creditCost,
-                });
-
-                console.log("[Generate Image] Credits refunded on task failure:", {
-                  taskId,
-                  userId: refundUserId,
-                  refunded: creditCost,
-                  newBalance: currentCredits + creditCost,
-                });
-              }
-            }
-          } else {
-            // 状态更新失败说明其他请求已经处理了，跳过退款
-            console.log("[Generate Image] Skipping refund - already processed by another request:", taskId);
-          }
-        } else if (task.status === "completed" && genData && genData.status === "processing") {
-          // 任务成功完成，更新状态
-          await supabase
-            .from("generations")
-            .update({
-              status: "completed",
-              result_url: task.resultUrl || null,
-              image_url: task.resultUrl || null,
-              completed_at: new Date().toISOString(),
-            })
-            .eq("task_id", taskId)
-            .eq("user_id", authUserId)
-            .eq("status", "processing");
-        }
-        console.log("[Generate Image] Updated generations table:", taskId, task.status);
-      } catch (dbError) {
-        console.error("[Generate Image] Failed to update DB:", dbError);
-      }
-    }
-
-    // 生成更友好的错误信息返回给前端
-    let displayErrorMessage = task.errorMessage;
-    if (task.status === "failed") {
-      if (task.errorMessage?.includes("google gemini timeout")) {
-        displayErrorMessage = "第三方 AI 服务暂时繁忙，积分已自动退还，请稍后重试或使用 GPT Image 2";
-      } else if (task.errorMessage?.includes("timeout")) {
-        displayErrorMessage = "生成超时，积分已自动退还，请稍后重试";
-      } else {
-        displayErrorMessage = task.errorMessage || "生成失败，积分已自动退还";
-      }
+      return NextResponse.json({
+        success: true,
+        data: {
+          taskId: record.task_id,
+          status: clientStatus,
+          progress,
+          imageUrl: record.image_url || record.result_url || null,
+          errorMessage: record.error_message || null,
+          createdAt: record.created_at,
+          updatedAt: record.completed_at,
+          model: record.model || DEFAULT_IMAGE_MODEL,
+          resolution: metadata.resolution || record.quality || DEFAULT_IMAGE_RESOLUTION,
+          attempts: attempts.length,
+          maxAttempts: getImageTaskMaxAttempts(metadata),
+          nextAttemptAt: metadata.nextAttemptAt || null,
+          complexityProfile: metadata.complexityProfile || null,
+          queueLane: metadata.queueLane || "standard",
+          maxWaitMs: metadata.maxWaitMs || null,
+          requestedSize: lastAttempt.requestedSize,
+          upstreamSize: lastAttempt.upstreamSize,
+          upstreamQuality: lastAttempt.upstreamQuality,
+          outputFormat: lastAttempt.outputFormat,
+          fallbackMode: lastAttempt.fallbackMode || "none",
+          fallbackAttempt: lastAttempt.fallbackAttempt || 0,
+          upstreamCallCount: lastAttempt.upstreamCallCount || 0,
+          referenceCountReceived: metadata.referenceCountReceived,
+          referenceCountUsed: metadata.referenceCountUsed,
+          referenceReductionReason: metadata.referenceReductionReason || null,
+        },
+      });
     }
 
     return NextResponse.json({
       success: true,
       data: {
-        taskId: task.taskId,
-        status: task.status,
-        imageUrl: task.resultUrl,
-        errorMessage: displayErrorMessage,
-        createdAt: task.createdAt,
-        updatedAt: task.updatedAt,
+        taskId: record.task_id || taskId,
+        status: clientStatus,
+        progress,
+        imageUrl: record.image_url || record.result_url || null,
+        errorMessage: record.error_message || null,
+        createdAt: record.created_at,
+        updatedAt: record.completed_at,
+        attempts: attempts.length,
+        maxAttempts: getImageTaskMaxAttempts(metadata),
+        nextAttemptAt: metadata.nextAttemptAt || null,
       },
     });
   } catch (error) {

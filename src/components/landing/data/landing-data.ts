@@ -300,7 +300,6 @@ export const footerLinks = {
     product: [
         { label: "角色市场", href: "/models" },
         { label: "单图生成", href: "/quick-gen" },
-        { label: "商图精修", href: "/image-factory" },
         { label: "素材生成视频", href: "/pro-studio/video-batch" },
     ],
     support: [
@@ -451,7 +450,6 @@ export const footerLinksEn = {
     product: [
         { label: "Character Market",  href: "/models" },
         { label: "Single Image Gen",  href: "/quick-gen" },
-        { label: "Product Image Pro", href: "/image-factory" },
         { label: "Video Batch Gen",   href: "/pro-studio/video-batch" },
     ],
     support: [
@@ -482,4 +480,3 @@ export const complianceCardsEn: ComplianceCard[] = [
     { icon: Settings,    title: "User Control",     desc: "Every setting is your choice — no hidden defaults or pre-checks",        status: "ready" },
     { icon: Scan,        title: "Pre-Publish Check", desc: "One-click compliance scan before publishing to meet platform standards",        status: "coming" },
 ];
-

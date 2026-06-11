@@ -897,9 +897,14 @@ export default function QuickGeneratorPage() {
 
       setProcessingProgress(20);
 
-      // 轮询单个任务直到完成
-      const pollSingleTask = async (task: { taskId: string; model: string; index: number }): Promise<string | null> => {
-        const maxPolls = 60; // 60 * 3s = 180 秒
+      type PollImageResult =
+        | { status: "completed"; imageUrl: string }
+        | { status: "failed" }
+        | { status: "background" };
+
+      // 轮询单个任务直到完成；超过前端等待上限后交给后台 worker 继续推进
+      const pollSingleTask = async (task: { taskId: string; model: string; index: number }): Promise<PollImageResult> => {
+        const maxPolls = 100; // 100 * 3s = 5 分钟
         const pollIntervalMs = 3000;
 
         for (let pollCount = 0; pollCount < maxPolls; pollCount++) {
@@ -919,18 +924,18 @@ export default function QuickGeneratorPage() {
 
             if (taskData.status === "completed" && taskData.imageUrl) {
               console.log(`[Quick Gen] Task ${task.index} completed with URL:`, taskData.imageUrl);
-              return taskData.imageUrl;
+              return { status: "completed", imageUrl: taskData.imageUrl };
             } else if (taskData.status === "failed") {
               console.error(`[Quick Gen] Task ${task.index} failed:`, taskData.errorMessage);
-              return null;
+              return { status: "failed" };
             }
           } catch (pollError) {
             console.error(`[Quick Gen] Task ${task.index} polling error:`, pollError);
           }
         }
 
-        console.error(`[Quick Gen] Task ${task.index} timed out`);
-        return null;
+        console.warn(`[Quick Gen] Task ${task.index} is still processing in background`);
+        return { status: "background" };
       };
 
       // 并行轮询所有任务
@@ -947,16 +952,20 @@ export default function QuickGeneratorPage() {
 
       // 收集成功的图片
       const successfulImages: string[] = [];
+      let backgroundCount = 0;
       results.forEach((result, index) => {
-        if (result.status === "fulfilled" && result.value) {
-          successfulImages.push(result.value);
+        if (result.status === "fulfilled" && result.value.status === "completed") {
+          successfulImages.push(result.value.imageUrl);
           console.log(`[Quick Gen] Task ${index} result: success`);
+        } else if (result.status === "fulfilled" && result.value.status === "background") {
+          backgroundCount++;
+          console.log(`[Quick Gen] Task ${index} result: still processing in background`);
         } else {
-          console.log(`[Quick Gen] Task ${index} result: failed or null`);
+          console.log(`[Quick Gen] Task ${index} result: failed`);
         }
       });
 
-      console.log(`[Quick Gen] All tasks completed. Success: ${successfulImages.length}/${tasksToGenerate}`);
+      console.log(`[Quick Gen] Polling finished. Success: ${successfulImages.length}/${tasksToGenerate}, background: ${backgroundCount}`);
 
       if (successfulImages.length > 0) {
         setProcessingProgress(100);
@@ -980,9 +989,19 @@ export default function QuickGeneratorPage() {
             : `🎨 已生成 ${successfulImages.length} 张九宫格图片，点击选择使用` });
         }
       } else {
-        setError("所有任务都失败或超时了");
-        setCanvasState("failed");
-        toast({ variant: "destructive", title: t ? "Processing failed" : "处理失败", description: t ? "Image generation failed, please retry" : "图片生成失败，请稍后重试" });
+        if (backgroundCount > 0) {
+          setProcessingProgress(95);
+          setError(t ? "Task is still generating in the background. Refresh later to check it." : "任务仍在后台生成，可稍后刷新查看");
+          setCanvasState("processing");
+          toast({
+            title: t ? "Still generating" : "后台生成中",
+            description: t ? "The task is still running in the background." : "任务仍在后台生成，可稍后刷新查看",
+          });
+        } else {
+          setError("图片生成失败");
+          setCanvasState("failed");
+          toast({ variant: "destructive", title: t ? "Processing failed" : "处理失败", description: t ? "Image generation failed, please retry" : "图片生成失败，请稍后重试" });
+        }
       }
 
     } catch (error: unknown) {
@@ -1068,7 +1087,6 @@ export default function QuickGeneratorPage() {
 
   const handleGenerate = useCallback(async () => {
     if (!canGenerate) return;
-
     setCanvasState("generating");
     setGeneratingProgress(0);
     setError(null);
@@ -1793,7 +1811,9 @@ export default function QuickGeneratorPage() {
                       key={option.value}
                       variant="outline"
                       size="sm"
-                      onClick={() => setImageResolution(option.value)}
+                      onClick={() => {
+                        setImageResolution(option.value);
+                      }}
                       className={cn(
                         "h-9 text-xs px-2",
                         imageResolution === option.value
