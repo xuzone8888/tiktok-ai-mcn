@@ -98,7 +98,7 @@ function getSourceFilters(lang: string) {
   const t = lang === "en";
   return [
     { value: "all",          label: t ? "All Sources"   : "全部来源" },
-    { value: "quick_gen",    label: t ? "Quick Gen"     : "快速生成" },
+    { value: "quick_gen",    label: t ? "Single Image"  : "单图生成" },
     { value: "batch_video",  label: t ? "Batch Video"   : "批量视频" },
     { value: "batch_image",  label: t ? "Batch Image"   : "批量图片" },
     { value: "link_video",   label: t ? "Link to Video" : "链接秒变" },
@@ -170,7 +170,7 @@ function getExpiryStatus(expiresAt: string, lang: string): { text: string; isExp
 function getSourceLabel(source: string, lang: string): string {
   const t = lang === "en";
   switch (source) {
-    case "quick_gen":              return t ? "Quick Gen"      : "快速生成";
+    case "quick_gen":              return t ? "Single Image"   : "单图生成";
     case "batch_video":            return t ? "Batch Video"    : "批量视频";
     case "batch_video_prompt":     return t ? "Sora T2V"       : "Sora文生视频";
     case "batch_video_veo3":       return t ? "VEO3 Video"     : "VEO3视频";
@@ -850,7 +850,7 @@ export default function TaskLogPage() {
             <History className="h-16 w-16 text-muted-foreground/50 mb-4" />
             <h3 className="text-lg font-medium mb-2">{t ? "No records yet" : "暂无任务记录"}</h3>
             <p className="text-muted-foreground text-center max-w-md">
-              {t ? "Your generated content will appear here after using Quick Gen or Batch Production." : "开始使用快速生成或批量生产功能后，您的生成记录将显示在这里"}
+              {t ? "Your generated content will appear here after using Single Image or Batch Production." : "开始使用单图生成或批量生产功能后，您的生成记录将显示在这里"}
             </p>
           </CardContent>
         </Card>

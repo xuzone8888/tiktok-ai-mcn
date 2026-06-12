@@ -19,7 +19,8 @@ import {
   type ImageModel,
   type ImageBatchTask,
   type ImageBatchTaskConfig,
-  GEMINI_IMAGE_PRICING,
+  getImageResolutionCost,
+  isOpenAIImageModel,
   GEMINI_ACTION_PRICING,
 } from "@/types/generation";
 
@@ -230,13 +231,7 @@ const generateId = () => `img-${Date.now()}-${Math.random().toString(36).substr(
  * 计算单个任务的积分消耗
  */
 export const getImageTaskCost = (config: ImageBatchTaskConfig): number => {
-  const { model } = config;
-  // Gemini 模型：直接从统一积分表读取
-  if (model in GEMINI_IMAGE_PRICING) {
-    return GEMINI_IMAGE_PRICING[model as ImageModel] || 10;
-  }
-  // 兼容旧任务（localStorage 中可能有旧的 nano-banana 任务）
-  return model === "nano-banana" ? 10 : 28;
+  return getImageResolutionCost(config.resolution);
 };
 
 /**
@@ -261,7 +256,7 @@ const initialState: ImageBatchState = {
   tasks: [],
   jobStatus: "idle",
   globalSettings: {
-    model: "gemini-1k",
+    model: "gpt-image-2",
     action: "generate",  // 默认使用 AI 生成
     aspectRatio: "auto",
     resolution: "1k",
@@ -585,11 +580,10 @@ export const useImageBatchStore = create<ImageBatchState & ImageBatchActions>()(
 
         updateGlobalSettings: (key, value) => {
           set((state) => {
-            (state.globalSettings as Record<string, unknown>)[key] = value;
-
-            // 如果切换模型，需要校验 action
-            // Gemini 模型无需校验 action 限制
-            // (旧 nano-banana-pro && upscale 校验已移除)
+            const nextValue = key === "model" && !isOpenAIImageModel(value as string)
+              ? "gpt-image-2"
+              : value;
+            (state.globalSettings as Record<string, unknown>)[key] = nextValue;
           });
         },
 
@@ -901,4 +895,3 @@ export const useImageBatchScenarioTaskCount = () => {
       return 0;
   }
 };
-

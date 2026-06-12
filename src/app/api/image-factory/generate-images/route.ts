@@ -1,28 +1,52 @@
 /**
  * POST /api/image-factory/generate-images
  * 
- * 为电商图片任务生成图片（调用 Nano Banana API）
+ * 为电商图片任务生成图片
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createServerClient } from "@/lib/supabase/server";
-import { submitNanoBanana } from "@/lib/suchuang-api";
+import { getEcomImageCost } from "@/lib/credits";
+import { submitOpenAIImage } from "@/lib/openai-image-api";
+import {
+  DEFAULT_IMAGE_MODEL,
+  DEFAULT_IMAGE_RESOLUTION,
+  IMAGE_MODEL_CONFIG,
+  isImageResolution,
+  type ImageModel,
+} from "@/types/generation";
 import type {
   EcomImageMode,
   ImageModelType,
   OutputItem,
   EcomAspectRatio,
-  EcomResolution
+  EcomResolution,
 } from "@/types/ecom-image";
 import { FIVE_PACK_TYPES } from "@/types/ecom-image";
 
 // Vercel 函数配置
-export const maxDuration = 60;
+export const maxDuration = 180;
+
+const ECOM_IMAGE_CONCURRENCY = 2;
+const GENERATABLE_ECOM_STATUSES = new Set(["created", "generating_prompts", "failed"]);
+
+function parseEcomResolution(value: unknown): EcomResolution | null {
+  const normalized = typeof value === "string" ? value.toLowerCase() : value;
+  return isImageResolution(normalized) ? normalized : null;
+}
 
 interface GenerateImagesRequest {
   task_id: string;
   prompts?: Record<string, string>; // 用户修改后的提示词（可选）
+}
+
+interface CreditChargeResult {
+  success: boolean;
+  chargedNow: boolean;
+  amount: number;
+  error?: string;
+  status?: number;
 }
 
 export async function POST(request: NextRequest) {
@@ -66,7 +90,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 4. 检查任务状态
-    if (!["created", "generating_prompts", "generating_images", "failed"].includes(task.status)) {
+    if (!GENERATABLE_ECOM_STATUSES.has(task.status)) {
       return NextResponse.json(
         { success: false, error: "任务状态不正确，无法生成图片" },
         { status: 400 }
@@ -77,7 +101,95 @@ export async function POST(request: NextRequest) {
     const taskPrompts = task.prompts as { original?: Record<string, string>; modified?: Record<string, string> } || {};
     const prompts = userPrompts || taskPrompts.modified || taskPrompts.original || {};
 
-    // 如果用户提供了修改后的提示词，更新到任务中
+    // 6. 准备生成参数
+    const mode = task.mode as EcomImageMode;
+    const requestedModelType = task.model_type as ImageModelType;
+    const resolution = parseEcomResolution(task.resolution ?? DEFAULT_IMAGE_RESOLUTION);
+    const modelType = DEFAULT_IMAGE_MODEL as ImageModelType;
+    const inputImages = (task.input_image_urls as string[]) || [];
+    const ratio = task.ratio as EcomAspectRatio;
+    const imageCount = mode === "ecom_five_pack" ? 5 : inputImages.length;
+    const resolvedCreditsCost = resolution
+      ? getEcomImageCost(mode, modelType, imageCount, resolution)
+      : 0;
+
+    if (!resolution) {
+      const errorMessage = "无效的图片画质档位，请使用 1k / 2k / 4k";
+      await adminClient
+        .from("ecom_image_tasks")
+        .update({
+          status: "failed",
+          completed_at: new Date().toISOString(),
+          error_message: errorMessage,
+        })
+        .eq("id", task_id)
+        .eq("user_id", user.id)
+        .eq("status", task.status);
+
+      return NextResponse.json(
+        { success: false, error: errorMessage },
+        { status: 400 }
+      );
+    }
+
+    if (requestedModelType && requestedModelType !== DEFAULT_IMAGE_MODEL) {
+      const errorMessage = "图片模型固定为 GPT Image 2，请通过 resolution 选择 1K/2K/4K";
+      await adminClient
+        .from("ecom_image_tasks")
+        .update({
+          status: "failed",
+          completed_at: new Date().toISOString(),
+          error_message: errorMessage,
+        })
+        .eq("id", task_id)
+        .eq("user_id", user.id)
+        .eq("status", task.status);
+
+      return NextResponse.json(
+        { success: false, error: errorMessage },
+        { status: 400 }
+      );
+    }
+
+    if (inputImages.length === 0) {
+      return NextResponse.json(
+        { success: false, error: "请先上传参考图" },
+        { status: 400 }
+      );
+    }
+
+    console.log("[Generate Images] Starting generation:", {
+      taskId: task_id,
+      mode,
+      modelType,
+      resolution,
+      imageCount: inputImages.length,
+      creditsCost: resolvedCreditsCost,
+      promptCount: Object.keys(prompts).length,
+    });
+
+    const { data: lockedTask, error: lockError } = await adminClient
+      .from("ecom_image_tasks")
+      .update({
+        status: "generating_images",
+        current_step: 3,
+        credits_cost: resolvedCreditsCost,
+        error_message: null,
+      })
+      .eq("id", task_id)
+      .eq("user_id", user.id)
+      .eq("status", task.status)
+      .select("id, status")
+      .single();
+
+    if (lockError || !lockedTask) {
+      return NextResponse.json(
+        { success: false, error: "任务已开始生成，请勿重复提交" },
+        { status: 409 }
+      );
+    }
+
+    // 如果用户提供了修改后的提示词，仅生成锁持有者可以写入
     if (userPrompts && Object.keys(userPrompts).length > 0) {
       await adminClient
         .from("ecom_image_tasks")
@@ -87,151 +199,156 @@ export async function POST(request: NextRequest) {
             modified: userPrompts,
           },
         })
-        .eq("id", task_id);
+        .eq("id", task_id)
+        .eq("user_id", user.id)
+        .eq("status", "generating_images");
     }
 
-    // 6. 更新任务状态为"生成图片中"
-    await adminClient
-      .from("ecom_image_tasks")
-      .update({
-        status: "generating_images",
-        current_step: 3,
-        error_message: null,
-      })
-      .eq("id", task_id);
-
-    // 7. 准备生成参数
-    const mode = task.mode as EcomImageMode;
-    const modelType = task.model_type as ImageModelType;
-    const inputImages = task.input_image_urls as string[];
-    const ratio = task.ratio as EcomAspectRatio;
-    const resolution = task.resolution as EcomResolution | null;
-
-    // 8. 根据模式生成输出项
-    const outputItems: OutputItem[] = [];
-    const nanoTaskIds: string[] = [];
-
-    console.log("[Generate Images] Starting generation:", {
-      taskId: task_id,
+    const chargeResult = await chargeEcomCreditsBeforeGeneration(
+      adminClient,
+      user.id,
+      task_id,
       mode,
-      modelType,
-      imageCount: inputImages.length,
-      promptCount: Object.keys(prompts).length,
-    });
+      resolvedCreditsCost,
+      Boolean(task.credits_charged)
+    );
 
-    if (mode === "ecom_five_pack") {
-      // 电商五图套装：生成 5 张图
-      const fivePackTypes: Array<keyof typeof FIVE_PACK_TYPES> = ["main", "scene", "detail", "selling", "compare"];
+    if (!chargeResult.success) {
+      await adminClient
+        .from("ecom_image_tasks")
+        .update({
+          status: "failed",
+          completed_at: new Date().toISOString(),
+          error_message: chargeResult.error || "扣费失败，请重试",
+        })
+        .eq("id", task_id)
+        .eq("user_id", user.id)
+        .eq("status", "generating_images");
 
-      for (const type of fivePackTypes) {
-        const prompt = prompts[type] || `Generate a ${type} image for e-commerce`;
-        const typeConfig = FIVE_PACK_TYPES[type];
-
-        // 提交 Nano Banana 任务
-        const result = await submitNanoBanana({
-          model: modelType,
-          prompt,
-          img_url: inputImages[0], // 使用第一张图作为参考
-          aspectRatio: ratio === "auto" ? "1:1" : ratio,
-          resolution: modelType === "nano-banana-pro" ? (resolution || "1k") : undefined,
-        });
-
-        const outputItem: OutputItem = {
-          type,
-          label: typeConfig.label,
-          status: result.success ? "processing" : "failed",
-          task_id: result.taskId,
-          error: result.error,
-          input_image_url: inputImages[0],
-        };
-
-        outputItems.push(outputItem);
-        if (result.taskId) {
-          nanoTaskIds.push(result.taskId);
-        }
-      }
-    } else {
-      // 其他模式：每张输入图生成一张输出图
-      for (let i = 0; i < inputImages.length; i++) {
-        const inputImage = inputImages[i];
-        const promptKey = mode === "white_background" ? "white_bg" : Object.keys(prompts)[0] || "default";
-        const prompt = prompts[promptKey] || getDefaultPrompt(mode);
-
-        // 提交 Nano Banana 任务
-        const result = await submitNanoBanana({
-          model: modelType,
-          prompt,
-          img_url: inputImage,
-          aspectRatio: ratio === "auto" ? undefined : ratio,
-          resolution: modelType === "nano-banana-pro" ? (resolution || "1k") : undefined,
-        });
-
-        const outputItem: OutputItem = {
-          type: mode === "white_background" ? "white_bg" : mode,
-          label: getModeLabel(mode, i + 1),
-          status: result.success ? "processing" : "failed",
-          task_id: result.taskId,
-          error: result.error,
-          input_image_url: inputImage,
-        };
-
-        outputItems.push(outputItem);
-        if (result.taskId) {
-          nanoTaskIds.push(result.taskId);
-        }
-      }
+      return NextResponse.json(
+        { success: false, error: chargeResult.error || "扣费失败，请重试" },
+        { status: chargeResult.status || 500 }
+      );
     }
 
-    // 9. 扣除积分
-    if (!task.credits_charged && nanoTaskIds.length > 0) {
-      // 获取当前积分
-      const { data: profile } = await adminClient
-        .from("profiles")
-        .select("credits")
-        .eq("id", user.id)
-        .single();
+    // 8. 根据模式生成输出项。五图套装使用受控并发，避免串行卡住 60 秒窗口。
+    let outputItems: OutputItem[];
+    try {
+      if (mode === "ecom_five_pack") {
+        const fivePackTypes: Array<keyof typeof FIVE_PACK_TYPES> = ["main", "scene", "detail", "selling", "compare"];
 
-      if (profile && profile.credits >= task.credits_cost) {
-        const newBalance = profile.credits - task.credits_cost;
-
-        // 扣除积分
-        const { error: deductError } = await adminClient
-          .from("profiles")
-          .update({ credits: newBalance })
-          .eq("id", user.id);
-
-        if (!deductError) {
-          // 记录交易
-          await adminClient.from("credit_transactions").insert({
-            user_id: user.id,
-            amount: -task.credits_cost,
-            type: "consume",
-            description: `电商图片工厂 - ${getModeDisplayName(mode)}`,
-            reference_type: "ecom_image_task",
-            reference_id: task_id,
-            balance_before: profile.credits,
-            balance_after: newBalance,
+        outputItems = await runWithConcurrency(fivePackTypes, ECOM_IMAGE_CONCURRENCY, async (type): Promise<OutputItem> => {
+          const prompt = prompts[type] || `Generate a ${type} image for e-commerce`;
+          const typeConfig = FIVE_PACK_TYPES[type];
+          const result = await submitEcomImage({
+            modelType,
+            prompt,
+            sourceImageUrl: inputImages[0], // 使用第一张图作为参考
+            aspectRatio: ratio === "auto" ? "1:1" : ratio,
+            resolution,
           });
 
-          // 更新任务
-          await adminClient
-            .from("ecom_image_tasks")
-            .update({
-              credits_charged: true,
-              credits_charged_at: new Date().toISOString(),
-            })
-            .eq("id", task_id);
-        } else {
-          console.error("[Generate Images] Failed to deduct credits:", deductError);
-        }
+          return {
+            type,
+            label: typeConfig.label,
+            status: result.success ? result.status : "failed",
+            task_id: result.taskId,
+            url: result.imageUrl,
+            error: result.error,
+            input_image_url: inputImages[0],
+          };
+        });
+      } else {
+        outputItems = await runWithConcurrency(inputImages, ECOM_IMAGE_CONCURRENCY, async (inputImage, index): Promise<OutputItem> => {
+          const promptKey = mode === "white_background" ? "white_bg" : Object.keys(prompts)[0] || "default";
+          const prompt = prompts[promptKey] || getDefaultPrompt(mode);
+          const result = await submitEcomImage({
+            modelType,
+            prompt,
+            sourceImageUrl: inputImage,
+            aspectRatio: ratio === "auto" ? undefined : ratio,
+            resolution,
+          });
+
+          return {
+            type: mode === "white_background" ? "white_bg" : mode,
+            label: getModeLabel(mode, index + 1),
+            status: result.success ? result.status : "failed",
+            task_id: result.taskId,
+            url: result.imageUrl,
+            error: result.error,
+            input_image_url: inputImage,
+          };
+        });
       }
+    } catch (generationError) {
+      console.error("[Generate Images] Generation threw:", generationError);
+      if (chargeResult.chargedNow) {
+        await refundEcomCreditsAfterGenerationFailure(
+          adminClient,
+          user.id,
+          task_id,
+          chargeResult.amount,
+          `电商图片生成异常自动退款 (${task_id})`
+        );
+      }
+
+      await adminClient
+        .from("ecom_image_tasks")
+        .update({
+          status: "failed",
+          completed_at: new Date().toISOString(),
+          error_message: generationError instanceof Error ? generationError.message : "图片生成失败",
+        })
+        .eq("id", task_id)
+        .eq("user_id", user.id)
+        .eq("status", "generating_images");
+
+      return NextResponse.json(
+        { success: false, error: chargeResult.chargedNow ? "图片生成失败，积分已退还" : "图片生成失败" },
+        { status: 500 }
+      );
     }
 
-    // 10. 更新任务输出项
-    const successCount = outputItems.filter(item => item.status === "processing").length;
-    const failedCount = outputItems.filter(item => item.status === "failed").length;
+    const nanoTaskIds = outputItems
+      .map(item => item.task_id)
+      .filter((taskId): taskId is string => Boolean(taskId));
+    const completedImageUrls = outputItems
+      .map(item => item.url)
+      .filter((url): url is string => Boolean(url));
 
-    const newStatus = failedCount === outputItems.length ? "failed" : "generating_images";
+    // 9. 更新任务输出项
+    const successCount = outputItems.filter(item => item.status === "processing" || item.status === "completed").length;
+    const failedCount = outputItems.filter(item => item.status === "failed").length;
+    const processingCount = outputItems.filter(item => item.status === "processing").length;
+
+    if (failedCount === outputItems.length && chargeResult.chargedNow) {
+      await refundEcomCreditsAfterGenerationFailure(
+        adminClient,
+        user.id,
+        task_id,
+        chargeResult.amount,
+        `电商图片生成失败自动退款 (${task_id})`
+      );
+    } else if (processingCount === 0 && failedCount > 0 && outputItems.length > 0 && chargeResult.chargedNow) {
+      const partialRefundAmount = Math.round(chargeResult.amount * failedCount / outputItems.length);
+      await refundEcomCreditsAfterGenerationFailure(
+        adminClient,
+        user.id,
+        task_id,
+        partialRefundAmount,
+        `电商图片部分失败按比例退款 (${failedCount}/${outputItems.length}, ${task_id})`,
+        false
+      );
+    }
+
+    const newStatus = failedCount === outputItems.length
+      ? "failed"
+      : processingCount > 0
+        ? "generating_images"
+        : failedCount > 0
+          ? "partial_success"
+          : "success";
 
     await adminClient
       .from("ecom_image_tasks")
@@ -239,17 +356,21 @@ export async function POST(request: NextRequest) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         output_items: outputItems as any,
         status: newStatus,
+        completed_at: processingCount === 0 ? new Date().toISOString() : null,
         error_message: failedCount > 0
           ? `${failedCount}/${outputItems.length} 张图片生成失败`
           : null,
       })
-      .eq("id", task_id);
+      .eq("id", task_id)
+      .eq("user_id", user.id)
+      .eq("status", "generating_images");
 
     console.log("[Generate Images] Tasks submitted:", {
       taskId: task_id,
       successCount,
       failedCount,
       nanoTaskIds,
+      completedImageUrls,
     });
 
     return NextResponse.json({
@@ -266,6 +387,227 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
+}
+
+async function runWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  mapper: (item: T, index: number) => Promise<R>
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let nextIndex = 0;
+  const workerCount = Math.min(limit, items.length);
+
+  await Promise.all(Array.from({ length: workerCount }, async () => {
+    while (true) {
+      const currentIndex = nextIndex;
+      nextIndex += 1;
+
+      if (currentIndex >= items.length) return;
+      results[currentIndex] = await mapper(items[currentIndex], currentIndex);
+    }
+  }));
+
+  return results;
+}
+
+async function chargeEcomCreditsBeforeGeneration(
+  adminClient: ReturnType<typeof createAdminClient>,
+  userId: string,
+  taskId: string,
+  mode: EcomImageMode,
+  creditCost: number,
+  alreadyCharged: boolean
+): Promise<CreditChargeResult> {
+  if (alreadyCharged || creditCost <= 0) {
+    return { success: true, chargedNow: false, amount: creditCost };
+  }
+
+  const { data: profile, error: profileError } = await adminClient
+    .from("profiles")
+    .select("credits")
+    .eq("id", userId)
+    .single();
+
+  if (profileError || !profile) {
+    return { success: false, chargedNow: false, amount: creditCost, error: "用户不存在", status: 404 };
+  }
+
+  const currentCredits = (profile as { credits: number }).credits;
+  if (currentCredits < creditCost) {
+    return {
+      success: false,
+      chargedNow: false,
+      amount: creditCost,
+      error: `积分不足！需要 ${creditCost} 积分，当前余额 ${currentCredits}`,
+      status: 400,
+    };
+  }
+
+  const newBalance = currentCredits - creditCost;
+  const { data: updatedProfile, error: deductError } = await adminClient
+    .from("profiles")
+    .update({ credits: newBalance })
+    .eq("id", userId)
+    .eq("credits", currentCredits)
+    .select("credits")
+    .single();
+
+  if (deductError || !updatedProfile) {
+    console.error("[Generate Images] Failed to deduct credits:", deductError);
+    return { success: false, chargedNow: false, amount: creditCost, error: "扣费失败，请重试", status: 409 };
+  }
+
+  const transactionError = await adminClient.from("credit_transactions").insert({
+    user_id: userId,
+    amount: -creditCost,
+    type: "consume",
+    description: `电商图片工厂 - ${getModeDisplayName(mode)}`,
+    reference_type: "ecom_image_task",
+    reference_id: taskId,
+    balance_before: currentCredits,
+    balance_after: newBalance,
+  });
+
+  if (transactionError.error) {
+    console.error("[Generate Images] Failed to record credit transaction:", transactionError.error);
+  }
+
+  const { data: chargedTask, error: taskUpdateError } = await adminClient
+    .from("ecom_image_tasks")
+    .update({
+      credits_charged: true,
+      credits_charged_at: new Date().toISOString(),
+    })
+    .eq("id", taskId)
+    .eq("user_id", userId)
+    .eq("credits_charged", false)
+    .select("id")
+    .single();
+
+  if (taskUpdateError || !chargedTask) {
+    console.error("[Generate Images] Failed to mark task credits charged:", taskUpdateError);
+    await refundEcomCreditsAfterGenerationFailure(
+      adminClient,
+      userId,
+      taskId,
+      creditCost,
+      `电商图片扣费标记失败自动退款 (${taskId})`,
+      false
+    );
+    return { success: false, chargedNow: false, amount: creditCost, error: "扣费状态更新失败，请重试", status: 409 };
+  }
+
+  return { success: true, chargedNow: true, amount: creditCost };
+}
+
+async function refundEcomCreditsAfterGenerationFailure(
+  adminClient: ReturnType<typeof createAdminClient>,
+  userId: string,
+  taskId: string,
+  amount: number,
+  description: string,
+  resetChargeState = true
+): Promise<boolean> {
+  if (amount <= 0) return true;
+
+  const { data: profile } = await adminClient
+    .from("profiles")
+    .select("credits")
+    .eq("id", userId)
+    .single();
+
+  if (!profile) return false;
+
+  const currentCredits = (profile as { credits: number }).credits;
+  const newBalance = currentCredits + amount;
+  const { data: updatedProfile, error: refundError } = await adminClient
+    .from("profiles")
+    .update({ credits: newBalance })
+    .eq("id", userId)
+    .eq("credits", currentCredits)
+    .select("credits")
+    .single();
+
+  if (refundError || !updatedProfile) {
+    console.error("[Generate Images] Failed to refund credits:", refundError);
+    return false;
+  }
+
+  const transactionError = await adminClient.from("credit_transactions").insert({
+    user_id: userId,
+    amount,
+    type: "refund",
+    description,
+    reference_type: "ecom_image_task",
+    reference_id: taskId,
+    balance_before: currentCredits,
+    balance_after: newBalance,
+  });
+
+  if (transactionError.error) {
+    console.error("[Generate Images] Failed to record refund transaction:", transactionError.error);
+  }
+
+  if (resetChargeState) {
+    await adminClient
+      .from("ecom_image_tasks")
+      .update({
+        credits_charged: false,
+        credits_charged_at: null,
+      })
+      .eq("id", taskId)
+      .eq("user_id", userId);
+  }
+
+  console.log("[Generate Images] Credits refunded:", {
+    taskId,
+    userId,
+    amount,
+    resetChargeState,
+  });
+
+  return true;
+}
+
+async function submitEcomImage(params: {
+  modelType: ImageModelType;
+  prompt: string;
+  sourceImageUrl?: string;
+  aspectRatio?: EcomAspectRatio;
+  resolution: EcomResolution;
+}): Promise<{
+  success: boolean;
+  status: "processing" | "completed";
+  taskId?: string;
+  imageUrl?: string;
+  error?: string;
+}> {
+  const config = IMAGE_MODEL_CONFIG[params.modelType as ImageModel];
+  if (config?.provider !== "openai") {
+    return {
+      success: false,
+      status: "completed",
+      error: "当前图片工厂仅支持 GPT Image 2 / OpenAI 图片模型",
+    };
+  }
+
+  const sourceImageUrls = params.sourceImageUrl ? [params.sourceImageUrl] : undefined;
+  const result = await submitOpenAIImage({
+    model: config.apiModel,
+    prompt: params.prompt,
+    sourceImageUrls,
+    aspectRatio: params.aspectRatio,
+    resolution: params.resolution,
+    quality: "high",
+  });
+
+  return {
+    success: result.success,
+    status: "completed",
+    imageUrl: result.imageUrl,
+    error: result.error,
+  };
 }
 
 // 获取默认提示词 - 所有提示词都强调保持原产品不变
@@ -319,4 +661,3 @@ function getModeDisplayName(mode: EcomImageMode): string {
       return "图片生成";
   }
 }
-

@@ -104,12 +104,28 @@ export interface CreateCharacterRequest {
   forge_type?: "veo" | "sora2";
 }
 
+export interface CharacterBoardCropBox {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
+export interface CharacterBoardCropMeta {
+  sourceWidth: number;
+  sourceHeight: number;
+  splitX: number;
+  seam: number;
+  left: CharacterBoardCropBox;
+  right: CharacterBoardCropBox;
+}
+
 /** 生成角色图片请求体 */
 export interface GenerateCharacterRequest {
   prompt: string;
   sourceImageUrl?: string;
   userId: string;
-  type?: "hero" | "reference";
+  type?: "board" | "hero" | "reference";
   heroImageUrl?: string;
 }
 

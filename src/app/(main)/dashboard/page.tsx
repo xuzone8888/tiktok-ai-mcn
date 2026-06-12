@@ -426,8 +426,8 @@ export default function DashboardPage() {
           <CardContent className="grid gap-3">
             {[
               {
-                title: t ? "Quick Video" : "快速生成视频",
-                desc: t ? "Quick Studio" : "即时造片台",
+                title: t ? "Single Image" : "单图生成",
+                desc: t ? "Single Image Studio" : "单图生成台",
                 href: "/quick-gen",
                 color: "cyan",
               },

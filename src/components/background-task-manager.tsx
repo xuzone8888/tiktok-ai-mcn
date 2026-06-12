@@ -595,7 +595,7 @@ function useImageTaskExecutor() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           mode: task.config.action,  // "generate" | "upscale" | "nine_grid"
-          model: task.config.model,
+          imageModel: "gpt-image-2",
           sourceImageUrls: apiSourceImageUrls.length > 0 ? apiSourceImageUrls : undefined,
           aspectRatio: task.config.aspectRatio,
           resolution: task.config.resolution,
@@ -620,7 +620,7 @@ function useImageTaskExecutor() {
 
         updateTaskResult(taskId, { apiTaskId });
 
-        // 轮询等待结果
+        // 前端主动等待最多 5 分钟；超时后后台 worker 继续推进
         const maxAttempts = 60;
         let attempts = 0;
 
@@ -651,7 +651,11 @@ function useImageTaskExecutor() {
           }
         }
 
-        throw new Error("任务超时");
+        updateTaskResult(taskId, {
+          status: "processing",
+          error: "任务仍在后台生成，可稍后刷新查看",
+        });
+        return;
       } else {
         throw new Error(result.error || "提交任务失败");
       }
@@ -942,15 +946,13 @@ function useQuickGenImageTaskExecutor() {
           updateTaskStatus(activeTask.id, "generating", { progress: 10 });
 
           // 调用图片生成 API
-          // 检测是否为新 Gemini 模型，传 imageModel 参数给后端路由
-          const isGeminiModel = activeTask.model.startsWith("gemini-");
+          const imageAction = activeTask.action || "generate";
           const response = await fetch("/api/generate/image", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              mode: "generate",
-              model: isGeminiModel ? undefined : activeTask.model,  // 旧模型用 model
-              imageModel: isGeminiModel ? activeTask.model : undefined,  // 新模型用 imageModel
+              mode: imageAction,
+              imageModel: "gpt-image-2",
               prompt: activeTask.prompt,
               sourceImageUrls: activeTask.sourceImageUrls.length > 0 ? activeTask.sourceImageUrls : undefined,
               tier: activeTask.tier,
@@ -986,7 +988,7 @@ function useQuickGenImageTaskExecutor() {
           }
           if (!result.success) throw new Error(result.error || "提交失败");
 
-          // 对于 Gemini (nano-banana Fast), POST 直接返回 completed + imageUrl
+          // 对于 GPT Image 2 / 新图片模型，POST 直接返回 completed + imageUrl
           // 不需要进入轮询循环
           if (result.data?.status === "completed" && result.data?.imageUrl) {
             updateTaskStatus(activeTask.id, "completed", {
@@ -997,7 +999,7 @@ function useQuickGenImageTaskExecutor() {
               creditsDeducted: true,
             });
             toast({
-              title: "🎉 快速图片生成完成",
+              title: "🎉 单图生成完成",
               description: (
                 <a href="/quick-gen" className="text-violet-400 hover:underline flex items-center gap-1">
                   点击查看结果 <ExternalLink className="h-3 w-3" />
@@ -1018,7 +1020,7 @@ function useQuickGenImageTaskExecutor() {
         const task = state.activeImageTask;
         if (!task || !task.taskId) return;
 
-        const maxAttempts = 60;
+        const maxAttempts = 100; // 100 * 3s = 5 分钟
 
         for (let i = 0; i < maxAttempts; i++) {
           await new Promise(r => setTimeout(r, 3000));
@@ -1040,7 +1042,7 @@ function useQuickGenImageTaskExecutor() {
                 progress: 100, resultUrl: statusData.data.imageUrl, completedAt: new Date().toISOString()
               });
               toast({
-                title: "🎉 快速图片生成完成",
+                title: "🎉 单图生成完成",
                 description: (
                   <a href="/quick-gen" className="text-violet-400 hover:underline flex items-center gap-1">
                     点击查看结果 <ExternalLink className="h-3 w-3" />
@@ -1053,13 +1055,21 @@ function useQuickGenImageTaskExecutor() {
             }
           }
         }
-        throw new Error("任务超时");
+        updateTaskStatus(task.id, "polling", {
+          progress: 95,
+          errorMessage: "任务仍在后台生成，可稍后刷新查看",
+        });
+        toast({
+          title: "后台生成中",
+          description: "任务仍在后台生成，可稍后刷新查看",
+        });
+        return;
       } catch (error) {
         updateTaskStatus(activeTask.id, "failed", {
           errorMessage: error instanceof Error ? error.message : "执行失败",
           completedAt: new Date().toISOString()
         });
-        toast({ variant: "destructive", title: "❌ 快速图片生成失败", description: error instanceof Error ? error.message : "未知错误" });
+        toast({ variant: "destructive", title: "❌ 单图生成失败", description: error instanceof Error ? error.message : "未知错误" });
       } finally {
         isExecutingRef.current = false;
       }
@@ -1105,7 +1115,7 @@ function TaskStatusIndicator() {
 
   return (
     <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-3 animate-in slide-in-from-right-5 fade-in duration-300">
-      {/* 快速图片生成 */}
+      {/* 单图生成 */}
       {isQuickGenImageRunning && (
         <div
           onClick={() => router.push("/quick-gen")}
@@ -1117,7 +1127,7 @@ function TaskStatusIndicator() {
             <span className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 bg-violet-400 rounded-full" />
           </div>
           <div className="flex flex-col flex-1">
-            <span className="text-sm font-medium text-violet-100">快速图片生成中</span>
+            <span className="text-sm font-medium text-violet-100">单图生成中</span>
             <div className="flex items-center gap-2 mt-1">
               <div className="w-24 h-1.5 bg-violet-900/30 rounded-full overflow-hidden">
                 <div
