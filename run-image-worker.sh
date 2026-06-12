@@ -7,11 +7,10 @@ LOG_FILE="${LOG_FILE:-/var/log/image-generation-worker.log}"
 LOCK_FILE="${LOCK_FILE:-/tmp/tiktok-image-generation-worker.lock}"
 WORKER_URL="${WORKER_URL:-http://127.0.0.1:3000/api/cron/process-image-generation?maxRuntimeMs=220000&maxGenerationItems=3&maxEcomItems=0}"
 
-if [ -f "$ENV_FILE" ]; then
-  set -a
-  # shellcheck disable=SC1090
-  . "$ENV_FILE"
-  set +a
+if [ -z "${CRON_SECRET:-}" ] && [ -f "$ENV_FILE" ]; then
+  CRON_SECRET_LINE="$(grep -m1 '^CRON_SECRET=' "$ENV_FILE" || true)"
+  CRON_SECRET="${CRON_SECRET_LINE#CRON_SECRET=}"
+  CRON_SECRET="${CRON_SECRET%$'\r'}"
 fi
 
 if [ -z "${CRON_SECRET:-}" ]; then
