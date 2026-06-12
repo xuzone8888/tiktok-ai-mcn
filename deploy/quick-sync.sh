@@ -37,8 +37,8 @@ expect "# "
 send "echo '📍 当前分支:' && git branch --show-current\r"
 expect "# "
 
-# 拉取最新代码
-send "echo '📥 拉取最新代码...' && git pull origin main\r"
+# 对齐最新代码
+send "echo '📥 对齐 GitHub main...' && git fetch origin main && git reset --hard origin/main\r"
 expect "# "
 
 # 安装依赖

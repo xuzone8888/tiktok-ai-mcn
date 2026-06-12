@@ -1,11 +1,37 @@
 import { NextResponse } from "next/server";
+import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import type { Database } from "@/types/database";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+async function getBearerUser(request: Request) {
+  const authHeader = request.headers.get("authorization");
+  if (!authHeader?.startsWith("Bearer ")) return null;
+
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!supabaseUrl || !anonKey) return null;
+
+  const tokenSupabase = createSupabaseClient<Database>(supabaseUrl, anonKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+    global: {
+      headers: {
+        Authorization: authHeader,
+      },
+    },
+  });
+
+  const { data: { user } } = await tokenSupabase.auth.getUser();
+  return user;
+}
+
+export async function GET(request: Request) {
   try {
     if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
       return NextResponse.json({
@@ -18,7 +44,8 @@ export async function GET() {
     const supabase = await createClient();
     
     // 获取当前登录用户
-    const { data: { user } } = await supabase.auth.getUser();
+    const { data: { user: cookieUser } } = await supabase.auth.getUser();
+    const user = cookieUser || await getBearerUser(request);
     
     if (!user) {
       // 未登录时返回默认值

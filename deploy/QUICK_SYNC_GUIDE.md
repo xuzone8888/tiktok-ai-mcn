@@ -30,7 +30,7 @@ bash deploy/quick-sync.sh
 
 脚本会自动执行以下步骤：
 1. 连接到服务器
-2. 拉取最新代码 (`git pull`)
+2. 对齐最新代码 (`git fetch` + `git reset --hard origin/main`)
 3. 安装依赖 (`npm install`)
 4. 构建项目 (`npm run build`)
 5. 重启应用 (`pm2 restart`)
@@ -43,7 +43,8 @@ ssh root@123.56.75.68
 
 # 2. 输入密码后，执行以下命令
 cd /var/www/tiktok-ai-mcn
-git pull origin main
+git fetch origin main
+git reset --hard origin/main
 npm install
 npm run build
 pm2 restart tiktok-ai-mcn

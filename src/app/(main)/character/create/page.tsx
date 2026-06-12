@@ -5,7 +5,7 @@
  * V3: 从左右分栏改为 4 个全屏步骤
  *   Step 1 — 角色设定（配置 DNA + 提示词）
  *   Step 2 — 生成中（全屏等待动效）
- *   Step 3 — 角色就位（Hero Shot 冲击 + 多角度 + 保存）
+ *   Step 3 — 角色就位（完整设定板 + 保存）
  *   Step 4 — 活化角色视频（Veo3 图生视频）
  */
 
@@ -36,16 +36,21 @@ export default function CharacterCreatePage() {
 
   // 获取用户 ID 和积分
   useEffect(() => {
-    fetch("/api/user/credits")
-      .then((res) => res.json())
-      .then((data) => {
+    const loadUserInfo = async () => {
+      try {
+        const response = await fetch("/api/user/credits", {
+          cache: "no-store",
+        });
+        const data = await response.json();
         if (data.userId) {
           setUserInfo(data.userId, data.credits ?? 0);
         }
-      })
-      .catch((err) => {
+      } catch (err) {
         console.error("[CharacterStudio] Failed to fetch user info:", err);
-      });
+      }
+    };
+
+    loadUserInfo();
   }, [setUserInfo]);
 
   // Step 2 收起时是否应该显示 Step 1
@@ -99,11 +104,11 @@ export default function CharacterCreatePage() {
           min-height: 100%;
         }
 
-        /* 全屏步骤：fixed 全屏遮罩，覆盖 sidebar + header */
+        /* 全屏步骤：覆盖右侧工作区，保留左侧导航可见 */
         .fullscreen-step {
           position: fixed;
           top: 0;
-          left: 0;
+          left: 260px;
           right: 0;
           bottom: 0;
           z-index: 50;

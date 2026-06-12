@@ -152,6 +152,14 @@ export function CreationWorkspace() {
 
   const optionGroups = getDnaOptionGroups(store.dnaConfig.species);
 
+  useEffect(() => {
+    if (store.creationMode !== "dna" || store.prompt.trim()) return;
+    const prompt = store.buildPromptFromDna();
+    if (prompt) {
+      store.setPrompt(prompt);
+    }
+  }, [store]);
+
   const handleMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     if (!workspaceRef.current) return;
     const rect = workspaceRef.current.getBoundingClientRect();
@@ -282,7 +290,9 @@ export function CreationWorkspace() {
       let userId = store.userId;
       if (!userId) {
         try {
-          const creditsRes = await fetch("/api/user/credits");
+          const creditsRes = await fetch("/api/user/credits", {
+            cache: "no-store",
+          });
           const creditsData = await creditsRes.json();
           if (creditsData.userId) {
             userId = creditsData.userId;
@@ -296,12 +306,12 @@ export function CreationWorkspace() {
       }
 
       if (mode === "veo") {
-        // 写真角色：Gemini 4K 同步生成 Hero Shot（V5）
+        // 写真角色：一次生成完整 2K 角色设定板
         const response = await fetch("/api/characters/generate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            type: "hero",
+            type: "board",
             prompt: store.prompt,
             sourceImageUrl: store.referenceImageUrl || undefined,
             userId,
@@ -312,13 +322,12 @@ export function CreationWorkspace() {
           store.setGenerationFailed(data.error || "生成失败");
           return;
         }
-        // V5: 直接拿到永久图片 URL，无需 taskId 轮询
-        if (data.heroImageUrl) {
+        const boardUrl = data.characterBoardUrl || data.referenceSheetUrl || data.heroImageUrl;
+        if (boardUrl) {
           if (data.refPrompt) store.setRefPrompt(data.refPrompt);
-          store.setHeroResult(data.heroImageUrl);
-          // hero 完成后，casting-preview 里的 autoSubmitReference 会被 heroReady 触发
+          store.setCharacterBoardResult(boardUrl, data.cropMeta || null, data.boardPrompt || data.refPrompt || store.prompt);
         } else {
-          store.setGenerationFailed("Hero Shot 生成失败，未返回图片");
+          store.setGenerationFailed("角色设定板生成失败，未返回图片");
         }
       } else {
         // 影视角色：调 Sora2 生成角色视频

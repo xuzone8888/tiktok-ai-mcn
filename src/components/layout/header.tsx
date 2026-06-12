@@ -38,7 +38,7 @@ const LOCAL_PREVIEW_USER: CurrentUser = {
 // 类型定义
 // ============================================================================
 
-interface CurrentUser {
+export interface HeaderUser {
   id: string;
   email: string;
   name: string;
@@ -47,19 +47,61 @@ interface CurrentUser {
   credits: number;
 }
 
+type CurrentUser = HeaderUser;
+
+type ProfileData = {
+  name?: string | null;
+  avatar_url?: string | null;
+  role?: string | null;
+  credits?: number | null;
+};
+
+type CreditsResponse = {
+  credits?: unknown;
+  userId?: string | null;
+  user_id?: string | null;
+};
+
 // ============================================================================
 // Header Component
 // ============================================================================
 
 
 
-export function Header() {
+export function Header({ initialUser = null }: { initialUser?: HeaderUser | null }) {
   const router = useRouter();
   const { lang } = useLang();
-  const [user, setUser] = useState<CurrentUser | null>(null);
+  const [user, setUser] = useState<CurrentUser | null>(initialUser);
   const [loading, setLoading] = useState(true);
   const [loggingOut, setLoggingOut] = useState(false);
 
+  const fetchServerCredits = async () => {
+    try {
+      const creditsResponse = await fetch("/api/user/credits", {
+        cache: "no-store",
+      });
+      if (!creditsResponse.ok) return null;
+
+      const creditsData = (await creditsResponse.json()) as CreditsResponse;
+      const responseUserId = creditsData.userId || creditsData.user_id;
+      if (!responseUserId) return null;
+
+      return typeof creditsData.credits === "number" ? creditsData.credits : null;
+    } catch {
+      return null;
+    }
+  };
+
+  const refreshServerCredits = async () => {
+    const serverCredits = await fetchServerCredits();
+    if (typeof serverCredits === "number") {
+      setUser((current) =>
+        current
+          ? { ...current, credits: Math.max(current.credits, serverCredits) }
+          : current
+      );
+    }
+  };
 
 
 
@@ -90,16 +132,29 @@ export function Header() {
         .eq("id", authUser.id)
         .single();
 
-      const profileData = profile as { name?: string; avatar_url?: string; role?: string; credits?: number } | null;
-
-      setUser({
+      const profileData = profile as ProfileData | null;
+      const profileCredits =
+        typeof profileData?.credits === "number" ? profileData.credits : null;
+      setUser((current) => ({
         id: authUser.id,
         email: authUser.email || "",
         name: profileData?.name || authUser.email?.split("@")[0] || "User",
         avatar_url: profileData?.avatar_url || null,
         role: (profileData?.role as UserRole) || "user",
-        credits: profileData?.credits ?? 0,
-      });
+        credits: Math.max(
+          profileCredits ?? 0,
+          current?.id === authUser.id ? current.credits : 0
+        ),
+      }));
+
+      const serverCredits = await fetchServerCredits();
+      if (typeof serverCredits === "number") {
+        setUser((current) =>
+          current?.id === authUser.id
+            ? { ...current, credits: Math.max(current.credits, serverCredits) }
+            : current
+        );
+      }
     } catch (error) {
       console.error("[Header] Failed to fetch user:", error);
       setUser(null);
@@ -110,10 +165,21 @@ export function Header() {
 
   // 获取当前用户 - 从 Supabase Auth 和 profiles 表
   useEffect(() => {
-    fetchUser();
+    if (initialUser) {
+      setLoading(false);
+      refreshServerCredits();
+    } else {
+      fetchUser();
+    }
 
     if (isLocalPreviewMode) {
-      const handleCreditsUpdate = () => fetchUser();
+      const handleCreditsUpdate = () => {
+        if (initialUser) {
+          refreshServerCredits();
+        } else {
+          fetchUser();
+        }
+      };
       window.addEventListener("credits-updated", handleCreditsUpdate);
 
       return () => {
@@ -135,14 +201,21 @@ export function Header() {
 
     // 监听积分更新事件 (从 Quick Generator 等页面触发)
     const handleCreditsUpdate = () => {
-      console.log("[Header] Credits update event received, refreshing...");
-      fetchUser();
+      if (initialUser) {
+        refreshServerCredits();
+      } else {
+        fetchUser();
+      }
     };
     window.addEventListener("credits-updated", handleCreditsUpdate);
 
     // 定时刷新积分（每30秒）
     const intervalId = setInterval(() => {
-      fetchUser();
+      if (initialUser) {
+        refreshServerCredits();
+      } else {
+        fetchUser();
+      }
     }, 30000);
 
     return () => {
