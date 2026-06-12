@@ -51,10 +51,11 @@ if [ ! -f ".env.local" ]; then
     fi
 fi
 
-# 拉取最新代码
+# 对齐最新代码
 echo ""
-echo "📥 拉取最新代码..."
-git pull origin main || echo "⚠️  Git pull 失败，继续使用当前代码"
+echo "📥 对齐 GitHub main..."
+git fetch origin main
+git reset --hard origin/main
 
 # 安装依赖
 echo ""
@@ -104,7 +105,6 @@ echo "  pm2 status          - 查看应用状态"
 echo "  pm2 logs            - 查看日志"
 echo "  pm2 restart tiktok-ai-mcn - 重启应用"
 echo "  pm2 stop tiktok-ai-mcn     - 停止应用"
-
 
 
 

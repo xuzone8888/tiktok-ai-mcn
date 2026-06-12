@@ -59,7 +59,8 @@ bash deploy/quick-sync.sh
 ```bash
 ssh root@123.56.75.68
 cd /var/www/tiktok-ai-mcn
-git pull origin main
+git fetch origin main
+git reset --hard origin/main
 npm ci && npm run build
 pm2 restart tiktok-ai-mcn
 ```
@@ -113,7 +114,6 @@ ssh root@123.56.75.68 "sudo systemctl reload nginx"
 - 快速同步指南: `deploy/QUICK_SYNC_GUIDE.md`
 - 完整部署指南: `ALIYUN_DEPLOYMENT_GUIDE.md`
 - 环境变量配置: `deploy/ENV_VALUES_FOR_SERVER.md`
-
 
 
 
