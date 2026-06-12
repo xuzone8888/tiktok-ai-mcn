@@ -63,6 +63,37 @@ interface ImageCreditRefundResult {
   error?: string;
 }
 
+async function insertImageCreditTransaction(
+  adminClient: ReturnType<typeof createAdminClient>,
+  payload: {
+    user_id: string;
+    amount: number;
+    type: "usage" | "consume" | "refund";
+    description: string;
+    reference_type: string;
+    reference_id: string;
+    balance_before: number;
+    balance_after: number;
+  }
+) {
+  const candidateTypes = payload.type === "consume" || payload.type === "usage"
+    ? ["usage", "consume"]
+    : ["refund"];
+  let lastError: unknown;
+
+  for (const type of candidateTypes) {
+    const { error } = await adminClient.from("credit_transactions").insert({
+      ...payload,
+      type,
+    } as any);
+
+    if (!error) return null;
+    lastError = error;
+  }
+
+  return lastError;
+}
+
 async function rollbackImageCreditCharge(
   adminClient: ReturnType<typeof createAdminClient>,
   userId: string,
@@ -136,10 +167,10 @@ async function chargeImageCreditsBeforeGeneration(
       return { success: false, amount: creditCost, error: "扣费失败，请重试", status: 409 };
     }
 
-    const { error: transactionError } = await adminClient.from("credit_transactions").insert({
+    const transactionError = await insertImageCreditTransaction(adminClient, {
       user_id: userId,
       amount: -creditCost,
-      type: "consume",
+      type: "usage",
       description: `图片生成 - GPT Image 2 (${taskId})`,
       reference_type: "quick_gen_image",
       reference_id: generationId,
@@ -205,7 +236,7 @@ async function refundImageCreditsAfterGenerationFailure(
     return { success: false, balanceBefore, balanceAfter, error: "退款失败，请联系客服处理" };
   }
 
-  const { error: transactionError } = await adminClient.from("credit_transactions").insert({
+  const transactionError = await insertImageCreditTransaction(adminClient, {
     user_id: userId,
     amount: creditCost,
     type: "refund",
