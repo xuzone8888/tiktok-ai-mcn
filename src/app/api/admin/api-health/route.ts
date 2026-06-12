@@ -1,7 +1,7 @@
 /**
  * API 健康检查 — 后端核心
  * 
- * GET  → 返回 11 个 API 完整状态 + 历史（需 admin 权限）
+ * GET  → 返回 12 个 API 完整状态 + 历史（需 admin 权限）
  * POST → 触发检测（admin 或 cron secret）
  * 
  * 零费用验证方式：
@@ -16,7 +16,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/admin-auth";
 
 // ============================================================================
-// API 配置 — 11 个 API, 7 个域名
+// API 配置 — 12 个 API, 8 个域名
 // ============================================================================
 
 type ProviderStatus = "online" | "degraded" | "offline" | "unchecked";
@@ -30,7 +30,7 @@ interface ApiConfig {
   envKeys: string[];       // env var names to check
   model?: string;          // API model name
   price?: string;          // unit price display
-  verifyMethod: "openai_models" | "elevenlabs_voices" | "suchuang_query" | "dashscope_task" | "doubao_chat" | "tts_connect";
+  verifyMethod: "openai_models" | "elevenlabs_voices" | "suchuang_query" | "dashscope_task" | "doubao_chat" | "tts_connect" | "video_platform_image_config";
 }
 
 const API_CONFIGS: ApiConfig[] = [
@@ -90,7 +90,18 @@ const API_CONFIGS: ApiConfig[] = [
     price: "¥0.34",
     verifyMethod: "openai_models",
   },
-  // 🖼️ 图片 (3个)
+  // 🖼️ 图片 (4个)
+  {
+    id: "openai-gpt-image-2",
+    name: "Video Platform GPT Image 2",
+    category: "image",
+    provider: "video-platform",
+    domain: "api.aixoras.com",
+    envKeys: ["VIDEO_PLATFORM_IMAGE_BASE_URL", "VIDEO_PLATFORM_IMAGE_API_KEY"],
+    model: "gpt-image-2",
+    price: undefined,
+    verifyMethod: "video_platform_image_config",
+  },
   {
     id: "gaorui-gemini-1k",
     name: "高瑞 Gemini 1K",
@@ -211,6 +222,25 @@ async function verifyDomain(
   const apiKey = process.env[envKey] || "";
   
   try {
+    if (method === "video_platform_image_config") {
+      const baseUrl = process.env.VIDEO_PLATFORM_IMAGE_BASE_URL || "";
+      const imageApiKey = process.env.VIDEO_PLATFORM_IMAGE_API_KEY || "";
+      if (!baseUrl || !imageApiKey) {
+        return { success: false, latencyMs: 0, error: "Video Platform 图片配置未完整" };
+      }
+
+      try {
+        const parsed = new URL(baseUrl);
+        if (parsed.protocol !== "https:") {
+          return { success: false, latencyMs: 0, error: "VIDEO_PLATFORM_IMAGE_BASE_URL 必须是 HTTPS" };
+        }
+      } catch {
+        return { success: false, latencyMs: 0, error: "VIDEO_PLATFORM_IMAGE_BASE_URL 无效" };
+      }
+
+      return { success: true, latencyMs: Date.now() - start };
+    }
+
     // 先检查 Key 是否配置
     if (!apiKey) {
       return { success: false, latencyMs: 0, error: "API Key 未配置" };

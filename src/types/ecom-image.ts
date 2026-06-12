@@ -4,6 +4,8 @@
  * 用于 /image-factory 模块的所有类型
  */
 
+import type { ImageModel } from "@/types/generation";
+
 // ============================================================================
 // 枚举类型
 // ============================================================================
@@ -25,8 +27,8 @@ export type EcomTaskStatus =
   | 'partial_success'    // 部分成功（五图套装可能有部分失败）
   | 'failed';            // 失败
 
-/** @deprecated 使用 generation.ts 中的 ImageModel 替代 */
-export type ImageModelType = 'nano-banana' | 'nano-banana-pro';
+/** 图片生成模型 */
+export type ImageModelType = ImageModel | 'nano-banana' | 'nano-banana-pro';
 
 /** 语言 */
 export type EcomLanguage = 'zh' | 'en';

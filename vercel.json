@@ -6,6 +6,12 @@
       "maxDuration": 300
     }
   },
+  "crons": [
+    {
+      "path": "/api/cron/process-image-generation",
+      "schedule": "*/2 * * * *"
+    }
+  ],
   "headers": [
     {
       "source": "/(.*)",
@@ -26,4 +32,3 @@
     }
   ]
 }
-

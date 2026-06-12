@@ -71,7 +71,6 @@ import {
   FileSpreadsheet,
   PackageOpen,
   Wifi,
-  Film,
   FolderDown,
   ArrowLeft,
   Info,
@@ -90,13 +89,11 @@ import { SpeedTestDialog } from "@/components/speed-test-dialog";
 // Types
 import {
   type ImageProcessAction,
-  type ImageModel,
+  type ImageResolution,
   GEMINI_ASPECT_OPTIONS,
   GEMINI_ACTION_PRICING,
-  GEMINI_IMAGE_PRICING,
-  IMAGE_MODEL_CONFIG,
+  isOpenAIImageModel,
 } from "@/types/generation";
-import { useApiHealth } from "@/hooks/use-api-health";
 
 // Download Store
 import { useDownloadStore } from "@/stores/download-store";
@@ -147,6 +144,17 @@ const AspectRatioIcons: Record<string, React.ReactNode> = {
   "3:4": <LayoutGrid className="h-4 w-4" />,
 };
 
+const IMAGE_BATCH_SUBMIT_CONCURRENCY = 5;
+
+const IMAGE_QUALITY_OPTIONS: Array<{ value: ImageResolution; label: string; credits: number; disabled?: boolean }> = [
+  { value: "1k", label: "1K", credits: 5 },
+  { value: "2k", label: "2K", credits: 10 },
+  { value: "4k", label: "4K", credits: 15 },
+];
+
+const getImageQualityOption = (resolution?: ImageResolution) =>
+  IMAGE_QUALITY_OPTIONS.find((option) => option.value === resolution) || IMAGE_QUALITY_OPTIONS[0];
+
 // ============================================================================
 // TaskCard 组件
 // ============================================================================
@@ -168,7 +176,7 @@ function TaskCard({
   onStartSingle,
   onPreview,
 }: TaskCardProps) {
-  const cost = getImageTaskCost(task.config);
+  const qualityOption = getImageQualityOption(task.config.resolution);
 
   const getStatusBadge = () => {
     switch (task.status) {
@@ -321,8 +329,8 @@ function TaskCard({
 
         {/* 任务配置信息 - Neon Chips */}
         <div className="flex flex-wrap gap-1.5">
-          <Badge variant="outline" className={cn("text-[10px] h-5 px-1.5 border-white/5 bg-white/5 font-normal", task.config.model === 'gemini-4k' ? 'text-mermaid-pink' : task.config.model === 'gemini-2k' ? 'text-amber-400' : 'text-mermaid-cyan')}>
-            {task.config.model === "gemini-4k" ? "4K" : task.config.model === "gemini-2k" ? "2K" : "1K"}
+          <Badge variant="outline" className="text-[10px] h-5 px-1.5 border-white/5 bg-white/5 font-normal text-mermaid-pink">
+            {qualityOption.label} · {qualityOption.credits} 积分
           </Badge>
           <Badge variant="outline" className="text-[10px] h-5 px-1.5 border-white/5 text-white/50 bg-white/5 font-normal">
             {getActionLabel()}
@@ -336,7 +344,7 @@ function TaskCard({
         <div className="flex items-center justify-between pt-3 border-t border-white/5">
           <span className="text-[10px] font-mono text-white/30 flex items-center gap-1.5">
             <Zap className="h-3 w-3 text-mermaid-cyan/60" />
-            <span className="text-white/60 font-bold">{cost}</span> PTS
+            <span className="text-white/60 font-bold">{qualityOption.credits}</span> PTS
           </span>
           <div className="flex items-center -mr-2">
             {/* 单独开始/重试按钮 */}
@@ -474,11 +482,17 @@ export default function ImageBatchPage() {
     createTasksFromScenario,
   } = useImageBatchStore();
 
+  useEffect(() => {
+    if (!isOpenAIImageModel(globalSettings.model)) {
+      updateGlobalSettings("model", "gpt-image-2");
+    }
+  }, [globalSettings.model, updateGlobalSettings]);
+
   // Local State
   const [userId, setUserId] = useState<string | null>(null);
   const [userCredits, setUserCredits] = useState(0);
-  const apiHealth = useApiHealth();
   const [previewTask, setPreviewTask] = useState<ImageBatchTask | null>(null);
+  const selectedQuality = getImageQualityOption(globalSettings.resolution);
 
   // 启动任务弹窗状态
   const [showStartDialog, setShowStartDialog] = useState(false);
@@ -580,7 +594,9 @@ export default function ImageBatchPage() {
         if (gs.model) updateGlobalSettings('model', gs.model);
         if (gs.action) updateGlobalSettings('action', gs.action);
         if (gs.aspectRatio) updateGlobalSettings('aspectRatio', gs.aspectRatio);
-        if (gs.resolution) updateGlobalSettings('resolution', gs.resolution);
+        if (gs.resolution) {
+          updateGlobalSettings('resolution', gs.resolution);
+        }
         if (gs.prompt) updateGlobalSettings('prompt', gs.prompt);
       }
 
@@ -742,7 +758,7 @@ export default function ImageBatchPage() {
 
         // 前端预先生成 requestId，后端用它作为 taskId
         // 这样即使响应超时/解析失败，我们也能用 requestId 查询
-        const requestId = `gemini-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+        const requestId = `openai-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
 
         let result;
         let needPolling = false;
@@ -759,7 +775,7 @@ export default function ImageBatchPage() {
             signal: controller.signal,
             body: JSON.stringify({
               mode: task.config.action,
-              imageModel: task.config.model,  // Gemini 路由参数
+              imageModel: "gpt-image-2",
               sourceImageUrl: imageUrlForApi,
               sourceImageUrls: [globalSettings.characterRefUrl, imageUrlForApi].filter(Boolean),
               aspectRatio: task.config.aspectRatio,
@@ -827,7 +843,7 @@ export default function ImageBatchPage() {
         const taskModel = result.data.model;
 
         // ================================================================
-        // 重要：Gemini API (nano-banana) 是同步返回的，直接检查状态
+        // 重要：同步返回的图片接口直接检查状态
         // 如果 API 已经返回 completed，无需轮询
         // ================================================================
         if (result.data.status === "completed" && result.data.imageUrl) {
@@ -848,12 +864,9 @@ export default function ImageBatchPage() {
           progress: 30,
         });
 
-        // 轮询任务状态
-        // 增加轮询时间：API 可能需要 200-300 秒才响应
-        // 原来：60 次 × 3 秒 = 180 秒，不够
-        // 现在：120 次 × 3 秒 = 360 秒（6 分钟），足够处理慢响应
+        // 轮询任务状态。前端主动等待最多 5 分钟，超时后后台 worker 继续推进。
         let pollCount = 0;
-        const maxPolls = needPolling ? 60 : 120;  // 增加轮询次数
+        const maxPolls = needPolling ? 60 : 100;
         const pollInterval = needPolling ? 3000 : 3000;
         const taskIdToTrack = task.id; // 保存任务ID用于状态检查
 
@@ -906,9 +919,13 @@ export default function ImageBatchPage() {
 
             if (pollCount >= maxPolls) {
               clearInterval(pollTimer);
-              updateTaskStatus(task.id, "failed", {
-                error: "处理超时",
-                completedAt: new Date().toISOString(),
+              updateTaskStatus(task.id, "processing", {
+                progress: 95,
+                error: "任务仍在后台生成，可稍后刷新查看",
+              });
+              toast({
+                title: "后台生成中",
+                description: `${task.config.sourceImageName || "图片"} 仍在后台生成，可稍后刷新查看`,
               });
             }
           } catch (pollError) {
@@ -931,15 +948,21 @@ export default function ImageBatchPage() {
   const handleStartAll = useCallback(async () => {
     const pendingTasks = tasks.filter((t) => t.status === "pending");
     if (pendingTasks.length === 0) return;
+    const runnableTasks = pendingTasks;
+    if (runnableTasks.length === 0) return;
 
-    toast({ title: `🚀 开始处理 ${pendingTasks.length} 个任务` });
+    toast({ title: `🚀 开始处理 ${runnableTasks.length} 个任务` });
 
-    // 串行执行以避免并发限制
-    for (const task of pendingTasks) {
-      await handleProcessSingleTask(task);
-      // 间隔 800ms
-      await new Promise((resolve) => setTimeout(resolve, 800));
-    }
+    let nextTaskIndex = 0;
+    const workerCount = Math.min(IMAGE_BATCH_SUBMIT_CONCURRENCY, runnableTasks.length);
+
+    await Promise.all(Array.from({ length: workerCount }, async () => {
+      while (nextTaskIndex < runnableTasks.length) {
+        const taskIndex = nextTaskIndex;
+        nextTaskIndex += 1;
+        await handleProcessSingleTask(runnableTasks[taskIndex]);
+      }
+    }));
   }, [tasks, handleProcessSingleTask, toast]);
 
   // 重置失败的任务并立即重新启动
@@ -976,11 +999,13 @@ export default function ImageBatchPage() {
 
   // 获取可用的 action 列表
   const getAvailableActions = () => {
+    const credits = selectedQuality.credits;
+
     return Object.entries(GEMINI_ACTION_PRICING).map(([key, value]) => ({
       value: key as ImageProcessAction,
       label: value.label,
       description: value.description,
-      credits: GEMINI_IMAGE_PRICING[globalSettings.model] || 10,
+      credits,
     }));
   };
 
@@ -1575,8 +1600,8 @@ export default function ImageBatchPage() {
               <div className="p-5 rounded-2xl bg-black/20 border border-white/5 space-y-5">
                 <div className="flex flex-wrap items-center gap-3">
                   <div className="px-3 py-1.5 rounded-full bg-purple-500/10 text-purple-400 border border-purple-500/20 text-xs font-medium flex items-center gap-2">
-                    <Film className="h-3.5 w-3.5" />
-                    {IMAGE_MODEL_CONFIG[globalSettings.model]?.label || globalSettings.model}
+                    <Monitor className="h-3.5 w-3.5" />
+                    {selectedQuality.label} · {selectedQuality.credits} 积分
                   </div>
                   <div className="px-3 py-1.5 rounded-full bg-mermaid-cyan/10 text-mermaid-cyan border border-mermaid-cyan/20 text-xs font-medium flex items-center gap-2">
                     <Wand2 className="h-3.5 w-3.5" />
@@ -1588,13 +1613,7 @@ export default function ImageBatchPage() {
                   </div>
                   <div className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs font-bold font-mono">
                     <Zap className="h-3.5 w-3.5" />
-                    {getImageTaskCost({
-                      ...globalSettings,
-                      sourceImageUrl: "",
-                      sourceImageName: "",
-                      action: globalSettings.action,
-                      prompt: "",
-                    }) * scenarioTaskCount} PTS
+                    {selectedQuality.credits * scenarioTaskCount} PTS
                   </div>
                 </div>
 
@@ -1693,7 +1712,6 @@ export default function ImageBatchPage() {
                       toast({ variant: "destructive", title: "请先上传Excel文件" });
                       return;
                     }
-
                     const ids = createTasksFromScenario();
                     const taskCount = ids.length;
                     toast({ title: `🚀 已创建 ${taskCount} 个任务，正在启动处理...` });
@@ -1786,41 +1804,32 @@ export default function ImageBatchPage() {
             <div className="flex-1 overflow-y-auto p-6 space-y-6">
               {/* 第一行：主要配置 */}
               <div className="flex flex-wrap items-center gap-6">
-                {/* 模型选择 */}
+                {/* 画质等级 */}
                 <div className="space-y-2">
                   <Label className="text-[10px] uppercase tracking-wider text-white/30 font-bold flex items-center gap-2">
                     <Zap className="h-3 w-3" />
-                    模型引擎
+                    画质等级
                   </Label>
                   <div className="flex items-center p-1 rounded-full bg-[#050505]/60 border border-white/5">
-                    {([
-                      { model: "gemini-1k" as ImageModel, icon: <Zap className="h-3.5 w-3.5" />, color: "text-mermaid-cyan" },
-                      { model: "gemini-2k" as ImageModel, icon: <Sparkles className="h-3.5 w-3.5" />, color: "text-amber-400" },
-                      { model: "gemini-4k" as ImageModel, icon: <Monitor className="h-3.5 w-3.5" />, color: "text-mermaid-pink" },
-                    ] as const).map(({ model, icon, color }) => {
-                      const healthStatus = apiHealth.getModelStatus(model);
-                      return (
+                    {IMAGE_QUALITY_OPTIONS.map((option) => (
                       <button
-                        key={model}
-                        onClick={() => updateGlobalSettings("model", model)}
+                        key={option.value}
+                        type="button"
+                        onClick={() => {
+                          updateGlobalSettings("resolution", option.value);
+                        }}
                         className={cn(
                           "px-4 py-2 rounded-full text-xs font-bold transition-all flex items-center gap-2",
-                          globalSettings.model === model
+                          globalSettings.resolution === option.value
                             ? "bg-white/10 text-white border border-white/10"
-                            : "text-white/40 hover:text-white hover:bg-white/5",
-                          healthStatus === "offline" && "opacity-50"
+                            : "text-white/40 hover:text-white hover:bg-white/5"
                         )}
                       >
-                        <span className={cn("h-1.5 w-1.5 rounded-full flex-shrink-0",
-                          healthStatus === "online" ? "bg-emerald-400" :
-                          healthStatus === "degraded" ? "bg-amber-400" :
-                          healthStatus === "offline" ? "bg-red-400" : "bg-white/20"
-                        )} />
-                        <span className={cn(globalSettings.model === model ? color : "text-white/40")}>{icon}</span>
-                        {IMAGE_MODEL_CONFIG[model]?.label}
+                        <Sparkles className={cn("h-3.5 w-3.5", globalSettings.resolution === option.value ? "text-mermaid-pink" : "text-white/40")} />
+                        <span>{option.label}</span>
+                        <span className="text-[10px] opacity-60 font-mono">{option.credits}积分</span>
                       </button>
-                      );
-                    })}
+                    ))}
                   </div>
                 </div>
 
@@ -1848,7 +1857,6 @@ export default function ImageBatchPage() {
                         {action.value === "upscale" && <ZoomIn className="h-3.5 w-3.5" />}
                         {action.value === "nine_grid" && <Grid3X3 className="h-3.5 w-3.5" />}
                         {action.label}
-                        <span className="text-[10px] opacity-60 font-mono">{action.credits}pts</span>
                       </button>
                     ))}
                   </div>
@@ -2051,7 +2059,6 @@ export default function ImageBatchPage() {
                       toast({ variant: "destructive", title: "请上传图片或输入提示词" });
                       return;
                     }
-
                     // 创建任务
                     const ids = createTasksFromScenario();
                     if (ids.length === 0) {
@@ -2098,14 +2105,13 @@ export default function ImageBatchPage() {
         open={showSaveTemplate}
         onOpenChange={setShowSaveTemplate}
         onSave={handleSaveTemplate}
-        defaultName={`${globalSettings.model}-${globalSettings.action}-${globalSettings.aspectRatio}`
+        defaultName={`${globalSettings.resolution}-${globalSettings.action}-${globalSettings.aspectRatio}`
         }
         configPreview={
           [
-            { icon: <Film className="h-3.5 w-3.5" />, label: "模型", value: IMAGE_MODEL_CONFIG[globalSettings.model]?.label || globalSettings.model },
+            { icon: <Monitor className="h-3.5 w-3.5" />, label: "画质", value: `${selectedQuality.label} · ${selectedQuality.credits} 积分` },
             { icon: <Wand2 className="h-3.5 w-3.5" />, label: "处理", value: globalSettings.action === "upscale" ? "高清放大" : globalSettings.action === "generate" ? "AI生成" : "九宫格" },
             { icon: <Square className="h-3.5 w-3.5" />, label: "比例", value: globalSettings.aspectRatio || "自动" },
-            { icon: <Monitor className="h-3.5 w-3.5" />, label: "分辨率", value: globalSettings.resolution?.toUpperCase() || "1K" },
           ]}
       />
       <TemplateManager

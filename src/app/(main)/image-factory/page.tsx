@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { useImageFactoryStore } from "@/stores/image-factory-store";
 import { ECOM_MODE_CONFIG, type EcomImageMode } from "@/types/ecom-image";
+import { IMAGE_FACTORY_UPGRADING_MESSAGE, isImageFactoryUiEnabled } from "@/lib/feature-flags";
 
 // 组件导入
 import { LeftPanel } from "./components/left-panel";
@@ -58,6 +59,20 @@ export default function ImageFactoryPage() {
           <Sparkles className="h-5 w-5 text-primary animate-spin" />
           <span className="text-muted-foreground">加载中...</span>
         </div>
+      </div>
+    );
+  }
+
+  if (!isImageFactoryUiEnabled()) {
+    return (
+      <div className="flex h-[calc(100vh-4rem)] items-center justify-center px-6">
+        <Card className="max-w-md border-white/10 bg-[#0B0C10]/80 p-8 text-center text-white shadow-2xl">
+          <Sparkles className="mx-auto mb-4 h-8 w-8 text-mermaid-cyan" />
+          <h1 className="text-2xl font-bold">商图精修正在升级中</h1>
+          <p className="mt-3 text-sm text-white/60">
+            {IMAGE_FACTORY_UPGRADING_MESSAGE}，本次先开放单图生成和多图生成。
+          </p>
+        </Card>
       </div>
     );
   }
@@ -129,4 +144,3 @@ export default function ImageFactoryPage() {
     </div>
   );
 }
-

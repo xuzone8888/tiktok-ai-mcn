@@ -48,6 +48,7 @@ export type VideoModel =
 
 /** 图片模型选项 */
 export type ImageModel =
+  | "gpt-image-2"      // OpenAI GPT Image 2
   | "gemini-1k"        // 高瑞 flash (1K, 快速~10s)
   | "gemini-2k"        // xas231 portrait (2K, ~90s, 默认)
   | "gemini-4k";       // 高瑞 pro-preview (4K, ~25s)
@@ -60,6 +61,42 @@ export type ImageAspectRatio = "auto" | "1:1" | "16:9" | "9:16" | "4:3" | "3:4" 
 
 /** 图片分辨率 */
 export type ImageResolution = "1k" | "2k" | "4k";
+
+export const DEFAULT_IMAGE_MODEL: ImageModel = "gpt-image-2";
+export const DEFAULT_IMAGE_RESOLUTION: ImageResolution = "1k";
+
+export const IMAGE_RESOLUTION_CREDITS: Record<ImageResolution, number> = {
+  "1k": 5,
+  "2k": 10,
+  "4k": 15,
+};
+
+const LEGACY_IMAGE_MODEL_RESOLUTION: Partial<Record<ImageModel, ImageResolution>> = {
+  "gemini-1k": "1k",
+  "gemini-2k": "2k",
+  "gemini-4k": "4k",
+};
+
+export function isImageResolution(value: unknown): value is ImageResolution {
+  return value === "1k" || value === "2k" || value === "4k";
+}
+
+export function normalizeImageResolution(
+  value: unknown,
+  fallback: ImageResolution = DEFAULT_IMAGE_RESOLUTION
+): ImageResolution {
+  const normalized = typeof value === "string" ? value.toLowerCase() : value;
+  return isImageResolution(normalized) ? normalized : fallback;
+}
+
+export function getResolutionFromImageModel(model: string | null | undefined): ImageResolution | null {
+  if (!model) return null;
+  return LEGACY_IMAGE_MODEL_RESOLUTION[model as ImageModel] || null;
+}
+
+export function getImageResolutionCost(resolution: ImageResolution = DEFAULT_IMAGE_RESOLUTION): number {
+  return IMAGE_RESOLUTION_CREDITS[resolution];
+}
 
 /** 图片处理动作 */
 export type ImageProcessAction = "generate" | "upscale" | "nine_grid";
@@ -478,12 +515,25 @@ export interface ImageModelConfig {
 /**
  * 图片模型配置表 (新版)
  *
- * 3 个模型:
+ * 4 个模型:
+ * - GPT Image 2 (OpenAI, 默认)
  * - 1K 快速 (高瑞 flash)
  * - 2K 高清 (xas231 portrait, 默认)
  * - 4K 超清 (高瑞 pro-preview)
  */
 export const IMAGE_MODEL_CONFIG: Record<ImageModel, ImageModelConfig> = {
+  "gpt-image-2": {
+    label: "GPT Image 2",
+    provider: "openai",
+    apiModel: "gpt-image-2",
+    hostname: "api.openai.com",
+    path: "/v1/images/generations",
+    resolution: "1K/2K/4K",
+    credits: IMAGE_RESOLUTION_CREDITS[DEFAULT_IMAGE_RESOLUTION],
+    estimatedTime: "~30秒",
+    stream: false,
+    authFormat: "bearer",
+  },
   "gemini-1k": {
     label: "1K 快速",
     provider: "gaorui",
@@ -534,7 +584,20 @@ export const IMAGE_MODEL_CONFIG: Record<ImageModel, ImageModelConfig> = {
 };
 
 /** 图片模型列表（用于 UI 渲染） */
-export const IMAGE_MODELS: ImageModel[] = ["gemini-1k", "gemini-2k", "gemini-4k"];
+export const IMAGE_MODELS: ImageModel[] = ["gpt-image-2", "gemini-1k", "gemini-2k", "gemini-4k"];
+
+/** Phase2 新建图片任务只允许 OpenAI provider，Gemini 配置仅保留历史兼容 */
+export const OPENAI_IMAGE_MODELS: ImageModel[] = IMAGE_MODELS.filter(
+  (model) => IMAGE_MODEL_CONFIG[model].provider === "openai"
+);
+
+export function isOpenAIImageModel(model: string | null | undefined): model is ImageModel {
+  return Boolean(
+    model &&
+    model in IMAGE_MODEL_CONFIG &&
+    IMAGE_MODEL_CONFIG[model as ImageModel].provider === "openai"
+  );
+}
 
 // ============================================================================
 // Sora2 角色创建 (辅助接口)
@@ -735,6 +798,7 @@ export const NANO_PRO_ASPECT_OPTIONS: AspectRatioOption[] = [
 
 /** Gemini 图片模型积分表 */
 export const GEMINI_IMAGE_PRICING: Record<ImageModel, number> = {
+  "gpt-image-2": IMAGE_RESOLUTION_CREDITS[DEFAULT_IMAGE_RESOLUTION],
   "gemini-1k": 5,
   "gemini-2k": 10,
   "gemini-4k": 15,
@@ -787,7 +851,7 @@ export interface ResolutionOption {
 }
 
 export const IMAGE_RESOLUTION_OPTIONS: ResolutionOption[] = [
-  { value: "1k", label: "1K (Default)" },
+  { value: "1k", label: "1K" },
   { value: "2k", label: "2K" },
   { value: "4k", label: "4K" },
 ];
@@ -807,7 +871,7 @@ export function calculateVideoCost(model: VideoModel): number {
  * 计算图片生成费用
  * 
  * 支持两种调用方式：
- * - 新版：calculateImageCost("gemini-1k") → 从 IMAGE_MODEL_CONFIG 读取
+ * - 新版：calculateImageCost("gpt-image-2", "2k") → 按分辨率档位读取
  * - 旧版：calculateImageCost("fast", "1k", false) → 从 NANO_PRICING 读取（@deprecated）
  */
 export function calculateImageCost(
@@ -815,9 +879,11 @@ export function calculateImageCost(
   resolution: ImageResolution = "1k",
   isPro: boolean = false
 ): number {
-  // 新版：直接传 ImageModel
+  // 新版：模型固定 GPT Image 2，按画质档位计费。兼容旧 gemini-* 作为档位别名。
   if (modelOrTier in IMAGE_MODEL_CONFIG) {
-    return IMAGE_MODEL_CONFIG[modelOrTier as ImageModel].credits;
+    return getImageResolutionCost(
+      getResolutionFromImageModel(modelOrTier as ImageModel) || resolution
+    );
   }
   // 旧版：NanoTier 兼容（批量页面仍在用）
   const tier = modelOrTier as NanoTier;
@@ -831,21 +897,11 @@ export function calculateImageCost(
  * 计算图片增强费用
  */
 export function calculateEnhancementCost(
-  type: ProcessingType, 
+  _type: ProcessingType,
   resolution: ImageResolution = "2k",
   batchCount: number = 1
 ): number {
-  let baseCost: number;
-  
-  if (type === "upscale") {
-    baseCost = resolution === "4k" 
-      ? IMAGE_ENHANCEMENT_PRICING.upscale_4k 
-      : IMAGE_ENHANCEMENT_PRICING.upscale_2k;
-  } else {
-    baseCost = IMAGE_ENHANCEMENT_PRICING.nine_grid;
-  }
-  
-  return baseCost * batchCount;
+  return getImageResolutionCost(resolution) * batchCount;
 }
 
 /**
@@ -982,8 +1038,3 @@ export interface TaskStatusResponse {
   };
   error?: string;
 }
-
-
-
-
-

@@ -10,6 +10,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
+import { IMAGE_FACTORY_UPGRADING_MESSAGE, isImageFactoryEnabled } from "@/lib/feature-flags";
 
 // 公开路由（不需要登录）
 const PUBLIC_ROUTES = [
@@ -45,6 +46,13 @@ export async function middleware(req: NextRequest) {
 
   const { pathname } = req.nextUrl;
   const redirectTarget = `${pathname}${req.nextUrl.search}`;
+
+  if (pathname.startsWith("/api/image-factory") && !isImageFactoryEnabled()) {
+    return NextResponse.json(
+      { success: false, error: IMAGE_FACTORY_UPGRADING_MESSAGE },
+      { status: 503 }
+    );
+  }
 
   // ============================================
   // 1. 静态资源和 API 路由，直接放行

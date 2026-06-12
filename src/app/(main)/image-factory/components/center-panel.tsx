@@ -71,9 +71,9 @@ export function CenterPanel() {
     setError,
     isOneClick,
     modelType,
+    resolution,
     language,
     ratio,
-    resolution,
     resetTask,
   } = useImageFactoryStore();
 
@@ -147,9 +147,9 @@ export function CenterPanel() {
         body: JSON.stringify({
           mode: currentMode,
           model_type: modelType,
+          resolution,
           language,
           ratio,
-          resolution: modelType === "nano-banana-pro" ? resolution : undefined,
           input_image_urls: imageUrls,
           mode_config: modeSpecificConfig,
           is_one_click: isOneClick,
@@ -560,4 +560,3 @@ export function CenterPanel() {
     </div>
   );
 }
-

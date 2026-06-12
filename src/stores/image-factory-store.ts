@@ -132,7 +132,7 @@ type ImageFactoryStore = ImageFactoryState & ImageFactoryActions;
 const initialState: ImageFactoryState = {
   currentMode: "ecom_five_pack",
   
-  modelType: "nano-banana",
+  modelType: "gpt-image-2",
   language: "zh",
   ratio: "auto",
   resolution: "1k",
@@ -206,7 +206,7 @@ export const useImageFactoryStore = create<ImageFactoryStore>()(
       // 配置更新
       // ========================
       setModelType: (type) => set((state) => {
-        state.modelType = type;
+        state.modelType = isOpenAIImageModel(type) ? type : "gpt-image-2";
       }),
       
       setLanguage: (lang) => set((state) => {
@@ -499,15 +499,16 @@ export const useSteps = () => {
 // 积分计算
 // ============================================================================
 
-import { IMAGE_CREDITS } from "@/lib/credits";
+import { getImageResolutionCost, isOpenAIImageModel } from "@/types/generation";
 
 /** 计算任务积分消耗 */
 export function calculateTaskCredits(
   mode: EcomImageMode,
-  modelType: ImageModelType,
-  imageCount: number
+  _modelType: ImageModelType,
+  imageCount: number,
+  resolution: EcomResolution = "1k"
 ): number {
-  const unitCost = IMAGE_CREDITS[modelType];
+  const unitCost = getImageResolutionCost(resolution);
   
   if (mode === "ecom_five_pack") {
     // 电商五图套装固定生成5张
@@ -523,7 +524,7 @@ export const useTaskCredits = () => {
   const currentMode = useImageFactoryStore((state) => state.currentMode);
   const modelType = useImageFactoryStore((state) => state.modelType);
   const uploadedImages = useImageFactoryStore((state) => state.uploadedImages);
+  const resolution = useImageFactoryStore((state) => state.resolution);
   
-  return calculateTaskCredits(currentMode, modelType, uploadedImages.length);
+  return calculateTaskCredits(currentMode, modelType, uploadedImages.length, resolution);
 };
-
