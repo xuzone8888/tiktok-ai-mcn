@@ -145,6 +145,8 @@ const AspectRatioIcons: Record<string, React.ReactNode> = {
 };
 
 const IMAGE_BATCH_SUBMIT_CONCURRENCY = 5;
+const IMAGE_BATCH_RECONCILE_INTERVAL_MS = 15000;
+const IMAGE_BATCH_BACKGROUND_MESSAGE = "任务仍在后台生成，可稍后刷新查看";
 
 const IMAGE_QUALITY_OPTIONS: Array<{ value: ImageResolution; label: string; credits: number; disabled?: boolean }> = [
   { value: "1k", label: "1K", credits: 5 },
@@ -493,6 +495,7 @@ export default function ImageBatchPage() {
   const [userCredits, setUserCredits] = useState(0);
   const [previewTask, setPreviewTask] = useState<ImageBatchTask | null>(null);
   const selectedQuality = getImageQualityOption(globalSettings.resolution);
+  const reconcileInFlightRef = useRef<Set<string>>(new Set());
 
   // 启动任务弹窗状态
   const [showStartDialog, setShowStartDialog] = useState(false);
@@ -647,6 +650,82 @@ export default function ImageBatchPage() {
       })
       .catch(console.error);
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const reconcileInFlight = reconcileInFlightRef.current;
+
+    const reconcileSubmittedTasks = async () => {
+      const submittedTasks = useImageBatchStore.getState().tasks.filter((task) => {
+        if (!task.apiTaskId || task.resultUrl) return false;
+        if (task.status === "pending") return true;
+        if (task.status !== "processing") return false;
+        return task.error === IMAGE_BATCH_BACKGROUND_MESSAGE || (task.progress ?? 0) >= 95;
+      });
+
+      await Promise.allSettled(submittedTasks.map(async (task) => {
+        const apiTaskId = task.apiTaskId;
+        if (!apiTaskId || reconcileInFlight.has(apiTaskId)) return;
+
+        reconcileInFlight.add(apiTaskId);
+        try {
+          const statusResponse = await fetch(
+            `/api/generate/image?taskId=${encodeURIComponent(apiTaskId)}&model=${encodeURIComponent(task.config.model)}`
+          );
+          if (!statusResponse.ok) {
+            console.warn("[Image Batch] Failed to reconcile submitted task:", apiTaskId, statusResponse.status);
+            return;
+          }
+
+          const statusResult = await statusResponse.json();
+          if (cancelled || !statusResult.success) return;
+
+          const taskData = statusResult.data || {};
+          const currentTask = useImageBatchStore.getState().tasks.find((item) => item.id === task.id);
+          if (!currentTask || currentTask.status === "completed" || currentTask.status === "failed") return;
+
+          const completedAt = typeof taskData.updatedAt === "string" ? taskData.updatedAt : new Date().toISOString();
+          if (taskData.status === "completed" && taskData.imageUrl) {
+            updateTaskStatus(task.id, "completed", {
+              resultUrl: taskData.imageUrl,
+              progress: 100,
+              error: undefined,
+              completedAt,
+            });
+            return;
+          }
+
+          if (taskData.status === "failed") {
+            updateTaskStatus(task.id, "failed", {
+              error: taskData.errorMessage || "处理失败",
+              progress: 100,
+              completedAt,
+            });
+            return;
+          }
+
+          const nextProgress = Math.max(currentTask.progress ?? 30, taskData.progress ?? 30);
+          updateTaskStatus(task.id, "processing", {
+            progress: Math.min(95, nextProgress),
+            error: IMAGE_BATCH_BACKGROUND_MESSAGE,
+          });
+        } catch (error) {
+          console.error("[Image Batch] Reconcile submitted task error:", error);
+        } finally {
+          reconcileInFlight.delete(apiTaskId);
+        }
+      }));
+    };
+
+    void reconcileSubmittedTasks();
+    const intervalId = window.setInterval(reconcileSubmittedTasks, IMAGE_BATCH_RECONCILE_INTERVAL_MS);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+      reconcileInFlight.clear();
+    };
+  }, [updateTaskStatus]);
 
   // 批量上传 - 只添加到 uploadedImages，任务创建由 createTasksFromScenario 处理
   const handleBatchUpload = useCallback(
@@ -921,7 +1000,7 @@ export default function ImageBatchPage() {
               clearInterval(pollTimer);
               updateTaskStatus(task.id, "processing", {
                 progress: 95,
-                error: "任务仍在后台生成，可稍后刷新查看",
+                error: IMAGE_BATCH_BACKGROUND_MESSAGE,
               });
               toast({
                 title: "后台生成中",

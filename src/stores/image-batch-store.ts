@@ -32,6 +32,8 @@ export type ImageBatchTaskStatus = "pending" | "processing" | "completed" | "fai
 export type ImageBatchJobStatus = "idle" | "running" | "paused" | "completed" | "cancelled";
 export type ImageModelType = ImageModel;
 
+const BACKGROUND_IMAGE_TASK_MESSAGE = "任务仍在后台生成，可稍后刷新查看";
+
 /** 批量场景类型 */
 export type BatchScenario = "prompt" | "image" | "excel";
 
@@ -830,15 +832,25 @@ export const useImageBatchStore = create<ImageBatchState & ImageBatchActions>()(
         }),
         onRehydrateStorage: () => (state) => {
           if (state) {
-            // 将中断的 processing 任务重置为 pending
-            state.tasks = state.tasks.map(task =>
-              task.status === "processing"
-                ? { ...task, status: "pending" as const, progress: undefined, startedAt: undefined }
-                : task
-            );
+            state.tasks = state.tasks.map(task => {
+              if (task.status !== "processing") {
+                return task;
+              }
+
+              if (task.apiTaskId) {
+                return {
+                  ...task,
+                  progress: Math.max(task.progress ?? 0, 95),
+                  error: task.error || BACKGROUND_IMAGE_TASK_MESSAGE,
+                };
+              }
+
+              return { ...task, status: "pending" as const, progress: undefined, startedAt: undefined };
+            });
             console.log("[ImageBatchStore] Rehydrated from localStorage:", {
               taskCount: state.tasks.length,
               pending: state.tasks.filter(t => t.status === "pending").length,
+              processing: state.tasks.filter(t => t.status === "processing").length,
               completed: state.tasks.filter(t => t.status === "completed").length,
             });
           }
