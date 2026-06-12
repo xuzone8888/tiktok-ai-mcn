@@ -1,0 +1,469 @@
+.characterBoardSuccess {
+  position: relative;
+  min-height: 100dvh;
+  width: 100%;
+  overflow: hidden;
+  background: #050506;
+  color: #f7f8fb;
+}
+
+.gridBg {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+  background-size: 40px 40px;
+  opacity: 0.72;
+}
+
+.ambient {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 44% 8%, rgba(31, 80, 67, 0.42), transparent 34%),
+    radial-gradient(circle at 74% 52%, rgba(153, 255, 68, 0.07), transparent 26%),
+    linear-gradient(180deg, rgba(0, 0, 0, 0.04), rgba(0, 0, 0, 0.42));
+  pointer-events: none;
+}
+
+.backButton {
+  position: absolute;
+  top: 24px;
+  left: 32px;
+  z-index: 4;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 38px;
+  padding: 0 16px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.44);
+  color: rgba(255, 255, 255, 0.68);
+  font-size: 13px;
+  cursor: pointer;
+  transition: 180ms ease;
+}
+
+.backButton:hover {
+  border-color: rgba(255, 255, 255, 0.2);
+  color: #fff;
+  transform: translateX(-2px);
+}
+
+.header {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: flex-start;
+  gap: 18px;
+  width: calc(100% - 64px);
+  max-width: 1500px;
+  margin: 108px auto 18px;
+}
+
+.regenerateIconButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 38px;
+  height: 38px;
+  margin-left: auto;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.34);
+  color: rgba(255, 255, 255, 0.68);
+  cursor: pointer;
+  transition: 160ms ease;
+}
+
+.regenerateIconButton:hover {
+  border-color: rgba(32, 244, 231, 0.42);
+  background: rgba(32, 244, 231, 0.1);
+  color: #fff;
+  transform: rotate(-12deg);
+}
+
+.titleMark {
+  width: 8px;
+  height: 46px;
+  margin-top: 3px;
+  border-radius: 99px;
+  background: #20f4e7;
+  box-shadow: 0 0 22px rgba(32, 244, 231, 0.45);
+}
+
+.header h1 {
+  margin: 0;
+  font-size: 36px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: 0;
+}
+
+.header p {
+  margin: 8px 0 0;
+  color: rgba(255, 255, 255, 0.52);
+  font-size: 16px;
+}
+
+.stage {
+  --stage-h: clamp(380px, calc((100vw - 780px) / 1.92), 650px);
+
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  gap: clamp(36px, 4vw, 72px);
+  width: calc(100% - 64px);
+  max-width: 1500px;
+  margin: 0 auto;
+}
+
+.boardCard {
+  position: relative;
+  height: var(--stage-h);
+  flex: 0 0 auto;
+  overflow: hidden;
+  padding: 8px;
+  border: 1.5px solid rgba(32, 244, 231, 0.58);
+  border-radius: 22px;
+  background: #101217;
+  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.44);
+  cursor: zoom-in;
+}
+
+.fullBoardCard {
+  border-color: rgba(32, 244, 231, 0.58);
+}
+
+.fullBoardFrame {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  border-radius: 16px;
+  background: #08090c;
+}
+
+.fullBoardFrame img {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  object-fit: contain;
+}
+
+.savePanel {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  width: 302px;
+  height: var(--stage-h);
+  padding: 34px 30px 36px;
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  border-radius: 22px;
+  background: rgba(20, 19, 27, 0.94);
+  box-shadow:
+    0 24px 48px rgba(0, 0, 0, 0.44),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.03);
+}
+
+.savePanel h2 {
+  margin: 0 0 30px;
+  font-size: 22px;
+  font-weight: 750;
+  letter-spacing: 0;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 42px;
+}
+
+.promptField {
+  margin-bottom: 0;
+}
+
+.field > span {
+  color: rgba(255, 255, 255, 0.48);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.field input {
+  height: 44px;
+  padding: 0 16px;
+  border: 1px solid rgba(126, 137, 156, 0.46);
+  border-radius: 12px;
+  background: rgba(2, 3, 6, 0.92);
+  color: #fff;
+  font-size: 16px;
+  font-weight: 700;
+  outline: none;
+  transition: 160ms ease;
+}
+
+.field input:focus {
+  border-color: rgba(32, 244, 231, 0.62);
+  box-shadow: 0 0 0 3px rgba(32, 244, 231, 0.12);
+}
+
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tag {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.055);
+  color: rgba(255, 255, 255, 0.74);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.promptViewButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 42px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  background: rgba(45, 50, 62, 0.8);
+  color: rgba(255, 255, 255, 0.86);
+  font-size: 14px;
+  font-weight: 650;
+  cursor: pointer;
+  transition: 160ms ease;
+}
+
+.promptViewButton:hover {
+  border-color: rgba(255, 255, 255, 0.22);
+  background: rgba(55, 62, 76, 0.92);
+}
+
+.saveSpacer {
+  flex: 1;
+}
+
+.saveButton,
+.savedLink {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 54px;
+  gap: 9px;
+  width: 100%;
+  height: 54px;
+  min-height: 54px;
+  border: 0;
+  border-radius: 3px;
+  background: linear-gradient(90deg, #c7ff28, #54f6d1 52%, #ff5ea8);
+  color: #151515;
+  font-size: 18px;
+  font-weight: 800;
+  text-decoration: none;
+  cursor: pointer;
+  transition: 160ms ease;
+}
+
+.saveButton:hover:not(:disabled),
+.savedLink:hover {
+  box-shadow: 0 14px 30px rgba(84, 246, 209, 0.16);
+  transform: translateY(-1px);
+}
+
+.saveButton:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
+}
+
+.savedLink {
+  border: 1px solid rgba(32, 244, 231, 0.26);
+  background: linear-gradient(90deg, rgba(32, 244, 231, 0.24), rgba(199, 255, 40, 0.18));
+  color: #dffefb;
+}
+
+.modal {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 36px;
+  overflow: auto;
+  background: rgba(0, 0, 0, 0.78);
+  backdrop-filter: blur(14px);
+}
+
+.modal img {
+  width: auto;
+  max-width: min(1925px, 94vw);
+  max-height: 94vh;
+  height: auto;
+  border-radius: 18px;
+  object-fit: contain;
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.72);
+}
+
+.modalClose,
+.promptModalClose {
+  position: fixed;
+  top: 28px;
+  right: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.48);
+  color: #fff;
+  cursor: pointer;
+}
+
+.promptModal {
+  position: relative;
+  width: min(760px, 92vw);
+  padding: 32px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 24px;
+  background: #12141a;
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.72);
+}
+
+.promptModalClose {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+}
+
+.promptModal h3 {
+  margin: 0 0 18px;
+  font-size: 22px;
+  font-weight: 760;
+}
+
+.promptModal textarea {
+  width: 100%;
+  height: 320px;
+  padding: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 16px;
+  background: rgba(0, 0, 0, 0.3);
+  color: rgba(255, 255, 255, 0.84);
+  font-size: 14px;
+  line-height: 1.8;
+  resize: none;
+  outline: none;
+}
+
+@media (max-width: 1280px) {
+  .stage {
+    --stage-h: clamp(320px, calc((100vw - 540px) / 1.92), 560px);
+
+    gap: 22px;
+  }
+
+  .savePanel {
+    width: 268px;
+    padding: 22px;
+  }
+
+  .savePanel h2 {
+    margin-bottom: 18px;
+    font-size: 20px;
+  }
+
+  .field {
+    gap: 8px;
+    margin-bottom: 14px;
+  }
+
+  .promptField {
+    margin-bottom: 0;
+  }
+
+  .tag {
+    height: 22px;
+    padding: 0 10px;
+  }
+
+  .promptViewButton {
+    height: 38px;
+  }
+
+  .saveButton,
+  .savedLink {
+    flex-basis: 48px;
+    height: 48px;
+    min-height: 48px;
+    font-size: 16px;
+  }
+}
+
+@media (max-width: 1500px) {
+  .modal img {
+    max-width: min(1843px, 90vw);
+    max-height: 90vh;
+  }
+}
+
+@media (max-width: 1024px) {
+  .characterBoardSuccess {
+    overflow-y: auto;
+    padding: 88px 20px 40px;
+  }
+
+  .header,
+  .stage {
+    width: 100%;
+    margin-right: 0;
+    margin-left: 0;
+  }
+
+  .header {
+    margin-top: 0;
+  }
+
+  .stage {
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .boardCard,
+  .savePanel {
+    width: min(100%, 560px);
+    height: auto;
+  }
+
+  .modal {
+    align-items: flex-start;
+    justify-content: flex-start;
+    padding: 72px 24px 36px;
+  }
+
+  .modal img {
+    width: auto;
+    max-width: 90vw;
+    max-height: calc(100vh - 108px);
+  }
+
+  .savePanel {
+    min-height: 420px;
+  }
+}

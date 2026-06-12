@@ -3,8 +3,8 @@
  *
  * V3 变更:
  * - 新增 currentStep (1-4) 控制全屏步骤切换
- * - 单图 → 双图（heroImageUrl + referenceSheetUrl）
- * - 单 taskId → 双 taskId（heroTaskId + referenceTaskId）
+ * - 写真角色：完整设定板（characterBoardUrl + cropMeta）
+ * - 兼容旧字段（heroImageUrl + referenceSheetUrl）
  * - 新增 Step 4 活化视频状态
  * - GenerationStatus 由 currentStep + 子状态替代
  */
@@ -15,7 +15,7 @@ import { immer } from "zustand/middleware/immer";
 
 import { dnaPromptDict } from "@/app/(main)/character/create/data/dna-options";
 import { DEFAULT_DNA } from "@/types/character";
-import type { CharacterDna } from "@/types/character";
+import type { CharacterBoardCropMeta, CharacterDna } from "@/types/character";
 
 // ============================================================================
 // 类型定义
@@ -48,7 +48,12 @@ export interface CharacterStudioState {
   generationStatus: GenerationStatus;
   errorMessage: string | null;
 
-  // V3: 双图双任务
+  // 写真角色完整设定板
+  characterBoardUrl: string | null;
+  characterBoardCrop: CharacterBoardCropMeta | null;
+  characterBoardPrompt: string | null;
+
+  // V3: 兼容旧双图双任务字段
   heroImageUrl: string | null;
   referenceSheetUrl: string | null;
   heroTaskId: string | null;
@@ -104,6 +109,7 @@ export interface CharacterStudioActions {
   startGeneration: () => void;
   setTaskIds: (heroId: string | null, refId: string | null) => void;
   setHeroResult: (imageUrl: string) => void;
+  setCharacterBoardResult: (imageUrl: string, crop: CharacterBoardCropMeta | null, prompt?: string | null) => void;
   setReferenceResult: (imageUrl: string) => void;
   setReferenceTaskId: (id: string) => void;
   setGenerationFailed: (error: string) => void;
@@ -142,14 +148,20 @@ export interface CharacterStudioActions {
 // 初始状态
 // ============================================================================
 
+const DEFAULT_DNA_PROMPT =
+  "A photorealistic human of a female. Cinematic studio lighting, high quality, 8K.";
+
 const initialState: CharacterStudioState = {
   currentStep: 1,
   creationMode: "dna",
   dnaConfig: { ...DEFAULT_DNA },
-  prompt: "",
+  prompt: DEFAULT_DNA_PROMPT,
   referenceImageUrl: null,
   generationStatus: "idle",
   errorMessage: null,
+  characterBoardUrl: null,
+  characterBoardCrop: null,
+  characterBoardPrompt: null,
   heroImageUrl: null,
   referenceSheetUrl: null,
   heroTaskId: null,
@@ -220,7 +232,7 @@ export const useCharacterStudioStore = create<
 
           // 1.0 空值早期返回保护
           const hasAnySelection = [
-            dna.baseDna, dna.ageGroup, dna.bodyType,
+            dna.species, dna.gender, dna.baseDna, dna.ageGroup, dna.bodyType,
             dna.hairStyle, dna.hairColor, dna.outfit,
           ].some((v) => v && dict[v]);
           if (!hasAnySelection) return "";
@@ -288,6 +300,9 @@ export const useCharacterStudioStore = create<
             state.currentStep = 2;
             state.savedCharacterId = null;
             state.isSaving = false;
+            state.characterBoardUrl = null;
+            state.characterBoardCrop = null;
+            state.characterBoardPrompt = null;
             state.heroImageUrl = null;
             state.referenceSheetUrl = null;
             state.heroTaskId = null;
@@ -319,6 +334,23 @@ export const useCharacterStudioStore = create<
             state.heroImageUrl = imageUrl;
             state.heroReady = true;
             // Hero 完成即跳 Step 3
+            if (state.currentStep === 2) {
+              state.currentStep = 3;
+              state.generationStatus = "completed";
+            }
+          });
+        },
+
+        setCharacterBoardResult: (imageUrl, crop, prompt) => {
+          set((state) => {
+            state.characterBoardUrl = imageUrl;
+            state.characterBoardCrop = crop;
+            state.characterBoardPrompt = prompt || state.characterBoardPrompt || state.refPrompt || state.prompt;
+            state.heroImageUrl = imageUrl;
+            state.referenceSheetUrl = imageUrl;
+            state.heroReady = true;
+            state.referenceReady = true;
+            state.referenceTaskId = null;
             if (state.currentStep === 2) {
               state.currentStep = 3;
               state.generationStatus = "completed";
@@ -479,6 +511,19 @@ export const useCharacterStudioStore = create<
     {
       name: "character-studio-storage",
       storage: createJSONStorage(() => localStorage),
+      merge: (persisted, current) => {
+        const persistedState = persisted as Partial<CharacterStudioState> | undefined;
+        const merged = {
+          ...current,
+          ...persistedState,
+        } as CharacterStudioState & CharacterStudioActions;
+
+        if (merged.creationMode === "dna" && !merged.prompt.trim()) {
+          merged.prompt = DEFAULT_DNA_PROMPT;
+        }
+
+        return merged;
+      },
       // 持久化可恢复的创作/保存状态；不持久化 isSaving 这类瞬时 UI 状态
       partialize: (state) => ({
         creationMode: state.creationMode,
@@ -492,6 +537,9 @@ export const useCharacterStudioStore = create<
         characterName: state.characterName,
         characterTags: state.characterTags,
         heroTaskId: state.heroTaskId,
+        characterBoardUrl: state.characterBoardUrl,
+        characterBoardCrop: state.characterBoardCrop,
+        characterBoardPrompt: state.characterBoardPrompt,
         heroImageUrl: state.heroImageUrl,
         heroReady: state.heroReady,
         referenceTaskId: state.referenceTaskId,

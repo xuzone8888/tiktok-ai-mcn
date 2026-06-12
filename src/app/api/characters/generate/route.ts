@@ -2,24 +2,21 @@
  * 角色图片生成 API — GPTImage2 统一平台版
  *
  * POST /api/characters/generate
- *   type="hero"(默认): 生成 Hero Shot（扣 20 积分）
- *     → 使用 GPTImage2 生成，结果转存 OSS，返回永久 imageUrl
- *   type="reference":  生成多角度参考图（不扣积分，用 heroImageUrl 做参考）
- *     → 使用 GPTImage2 + heroImageUrl 参考图，结果转存 OSS
+ *   type="board"(默认): 一次生成完整 2K 角色设定板（扣 20 积分）
+ *     → 左侧主角展示 + 右侧多角度参考，结果转存 OSS，返回永久 imageUrl
  *
  * GET /api/characters/generate?taskId=xxx
  *   → 仅保留做历史 nanoBanana 任务兼容查询，新流程不再使用
  */
 
 import { NextResponse } from "next/server";
-import {
-  queryNanoBananaResult,
-} from "@/lib/suchuang-api";
-import { generateGptImage2 } from "@/lib/video-models/platform-image-client";
+
+import { callDoubaoAPI } from "@/lib/doubao-api-client";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
-import { callDoubaoAPI } from "@/lib/doubao-api-client";
-import type { GenerateCharacterRequest } from "@/types/character";
+import { queryNanoBananaResult } from "@/lib/suchuang-api";
+import { generateGptImage2 } from "@/lib/video-models/platform-image-client";
+import type { CharacterBoardCropMeta, GenerateCharacterRequest } from "@/types/character";
 
 export const maxDuration = 420; // GPTImage2 为异步轮询，给真实接口留足余量
 export const dynamic = "force-dynamic";
@@ -28,7 +25,10 @@ export const dynamic = "force-dynamic";
 // 积分配置
 // ============================================================================
 
-const HERO_GENERATE_CREDITS = 20; // Hero 阶段一次扣完（含多角度预扣）
+const BOARD_GENERATE_CREDITS = 20;
+const BOARD_IMAGE_SIZE = "2048x1360";
+const BOARD_SPLIT_RATIO = 949 / 2048;
+const BOARD_CROP_GUTTER_RATIO = 48 / 2048;
 
 async function getCurrentUser() {
   const authSupabase = await createClient();
@@ -75,54 +75,49 @@ async function translateIfChinese(prompt: string): Promise<string> {
 // Prompt 模板
 // ============================================================================
 
-/** Hero Shot: 电影级单人立绘 (Pro 4K, 3:4) */
-const HERO_SHOT_TEMPLATE = `
+const CHARACTER_BOARD_TEMPLATE = `Create a premium 2K AI character reference board for a video creation product: one consistent character, left side large full-body hero portrait, right side complete multi-angle reference sheet with front view, side view, back view, and close-up head portraits, clear vertical split into two aligned panels for UI cropping, realistic studio lighting, no text, no watermark.
+Character concept: {{CHARACTER_CONCEPT}}.`;
 
-Create a single stunning character portrait in 3:4 vertical composition.
-This should be a cinematic hero shot with dramatic lighting, 
-showing the character from mid-thigh up in a confident, dynamic pose.
+function parseSize(size: string): { width: number; height: number } {
+  const match = size.match(/^(\d+)x(\d+)$/);
+  if (!match) return { width: 2048, height: 1360 };
+  return { width: Number(match[1]), height: Number(match[2]) };
+}
 
-Requirements:
-- Professional studio quality, ultra detailed
-- Dramatic cinematic lighting with rim light
-- Character fills 70-80% of the frame
-- Slight dynamic angle (not straight-on)
-- Rich background atmosphere matching the character's theme
-- 4K resolution, sharp focus on face and upper body
-- Magazine cover quality composition`;
+function buildBoardCropMeta(size: string): CharacterBoardCropMeta {
+  const { width, height } = parseSize(size);
+  const splitX = Math.round(width * BOARD_SPLIT_RATIO);
+  const seam = Math.max(24, Math.round(width * BOARD_CROP_GUTTER_RATIO));
 
-/** 多角度参考图: 基于参考图的转面图 (标准, 16:9) */
-const MULTI_ANGLE_TEMPLATE = `
-
-Based on the reference image provided, generate a multi-angle turnaround of this EXACT same character from 7 different camera angles in a clean grid layout on a pure white background.
-
-CRITICAL STYLE RULE: You MUST preserve the EXACT same rendering style as the reference image. If the reference is photorealistic, the output must be photorealistic. If the reference is anime/cartoon/illustration, the output must match that exact same art style. Do NOT change or deviate from the reference image's visual style under any circumstances.
-
-The character's face, body proportions, clothing, colors, textures, accessories, and overall appearance MUST exactly match the reference image.
-
-Row 1 (full body, natural standing pose, 4 panels):
-front view | left 3/4 profile | right 3/4 profile | back view
-
-Row 2 (close-up headshot, 3 panels centered):
-front face | left profile face | right profile face
-
-Critical requirements:
-- Rendering style must be IDENTICAL to the reference image (do not change art style)
-- Character must look like the SAME person/character in every panel
-- Maintain exact same color palette, proportions, and level of detail
-- Consistent lighting across all views
-- Clean separation between panels
-- High quality, detailed rendering, sharp focus`;
+  return {
+    sourceWidth: width,
+    sourceHeight: height,
+    splitX,
+    seam,
+    left: {
+      left: 0,
+      top: 0,
+      width: Math.max(1, splitX - Math.ceil(seam / 2)),
+      height,
+    },
+    right: {
+      left: Math.min(width - 1, splitX + Math.floor(seam / 2)),
+      top: 0,
+      width: Math.max(1, width - splitX - Math.floor(seam / 2)),
+      height,
+    },
+  };
+}
 
 
 // ============================================================================
-// POST — Hero / Reference 分派
+// POST — 完整角色设定板
 // ============================================================================
 
 export async function POST(request: Request) {
   try {
     const body: GenerateCharacterRequest = await request.json();
-    const { prompt, sourceImageUrl, userId, type = "hero", heroImageUrl } = body;
+    const { prompt, sourceImageUrl, userId, type = "board" } = body;
 
     if (!prompt || !prompt.trim()) {
       return NextResponse.json(
@@ -146,51 +141,16 @@ export async function POST(request: Request) {
       );
     }
 
-    // ============================================
-    // type = "reference" — 多角度参考图（不扣积分）
-    // ============================================
+    // 旧的 hero/reference 两段式不再作为创建角色入口使用。
     if (type === "reference") {
-      if (!heroImageUrl) {
-        return NextResponse.json(
-          { success: false, error: "heroImageUrl is required for reference type" },
-          { status: 400 }
-        );
-      }
-
-      // 翻译 prompt（可能已经是英文）
-      const englishPrompt = await translateIfChinese(prompt);
-      const refPrompt = `${englishPrompt}.${MULTI_ANGLE_TEMPLATE}`;
-
-      console.log("[Character Generate] Submitting reference task via GPTImage2:", {
-        promptLength: refPrompt.length,
-        heroImageUrl: heroImageUrl.substring(0, 60),
-      });
-
-      const referenceResult = await generateGptImage2({
-        prompt: refPrompt,
-        sourceImageUrls: [heroImageUrl],
-        aspectRatio: "16:9",
-        purpose: "character-reference",
-        userId: user.id,
-      });
-
-      if (!referenceResult.success || !referenceResult.imageUrl) {
-        return NextResponse.json(
-          { success: false, error: referenceResult.error || "多角度参考图生成失败" },
-          { status: 500 }
-        );
-      }
-
-      console.log("[Character Generate] Reference image ready:", referenceResult.imageUrl.substring(0, 80));
-
-      return NextResponse.json({
-        success: true,
-        referenceImageUrl: referenceResult.imageUrl,
-      });
+      return NextResponse.json(
+        { success: false, error: "多角度参考图已合并到完整设定板生成流程，请重新创建角色" },
+        { status: 410 }
+      );
     }
 
     // ============================================
-    // type = "hero"（默认）— Hero Shot + 积分扣除
+    // type = "board"/"hero"（兼容旧 hero 入参）— 完整设定板 + 积分扣除
     // ============================================
     const supabase = createAdminClient();
 
@@ -209,11 +169,11 @@ export async function POST(request: Request) {
 
     const currentCredits = (profileData as { credits: number }).credits;
 
-    if (currentCredits < HERO_GENERATE_CREDITS) {
+    if (currentCredits < BOARD_GENERATE_CREDITS) {
       return NextResponse.json(
         {
           success: false,
-          error: `积分不足！需要 ${HERO_GENERATE_CREDITS} 积分，当前余额 ${currentCredits}`,
+          error: `积分不足！需要 ${BOARD_GENERATE_CREDITS} 积分，当前余额 ${currentCredits}`,
         },
         { status: 400 }
       );
@@ -222,6 +182,7 @@ export async function POST(request: Request) {
     // 乐观锁扣费（带重试）
     let deductSuccess = false;
     let deductAttempts = 0;
+    let deductedFromCredits = currentCredits;
     const maxAttempts = 3;
 
     while (!deductSuccess && deductAttempts < maxAttempts) {
@@ -236,11 +197,11 @@ export async function POST(request: Request) {
       const latestCredits =
         (latestProfile as unknown as { credits: number })?.credits || 0;
 
-      if (latestCredits < HERO_GENERATE_CREDITS) {
+      if (latestCredits < BOARD_GENERATE_CREDITS) {
         return NextResponse.json(
           {
             success: false,
-            error: `积分不足！需要 ${HERO_GENERATE_CREDITS} 积分，当前余额 ${latestCredits}`,
+            error: `积分不足！需要 ${BOARD_GENERATE_CREDITS} 积分，当前余额 ${latestCredits}`,
           },
           { status: 400 }
         );
@@ -249,11 +210,12 @@ export async function POST(request: Request) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error: deductError } = await (supabase as any)
         .from("profiles")
-        .update({ credits: latestCredits - HERO_GENERATE_CREDITS })
+        .update({ credits: latestCredits - BOARD_GENERATE_CREDITS })
         .eq("id", user.id)
         .eq("credits", latestCredits); // 乐观锁
 
       if (!deductError) {
+        deductedFromCredits = latestCredits;
         deductSuccess = true;
       } else if (deductAttempts < maxAttempts) {
         console.log(
@@ -275,52 +237,73 @@ export async function POST(request: Request) {
 
     // 翻译中文 prompt
     const englishPrompt = await translateIfChinese(prompt);
-    const heroPrompt = `${englishPrompt}.${HERO_SHOT_TEMPLATE}`;
+    const boardPrompt = CHARACTER_BOARD_TEMPLATE.replace("{{CHARACTER_CONCEPT}}", englishPrompt);
 
-    console.log("[Character Generate] Generating Hero Shot via GPTImage2:", {
+    console.log("[Character Generate] Generating character board via GPTImage2:", {
       userId: user.id,
-      cost: HERO_GENERATE_CREDITS,
-      before: currentCredits,
-      after: currentCredits - HERO_GENERATE_CREDITS,
-      promptLength: heroPrompt.length,
+      cost: BOARD_GENERATE_CREDITS,
+      before: deductedFromCredits,
+      after: deductedFromCredits - BOARD_GENERATE_CREDITS,
+      promptLength: boardPrompt.length,
       promptPreview: englishPrompt.substring(0, 80),
       hasSourceImage: !!sourceImageUrl,
     });
 
-    const heroResult = await generateGptImage2({
-      prompt: heroPrompt,
+    const boardResult = await generateGptImage2({
+      prompt: boardPrompt,
       sourceImageUrls: sourceImageUrl ? [sourceImageUrl] : undefined,
-      aspectRatio: "3:4",
-      purpose: "character-hero",
+      size: BOARD_IMAGE_SIZE,
+      aspectRatio: "16:9",
+      quality: "high",
+      outputFormat: "jpeg",
+      outputCompression: 92,
+      purpose: "character-reference",
       userId: user.id,
+      maxPollMs: 360_000,
     });
 
-    if (!heroResult.success || !heroResult.imageUrl) {
-      // Hero 失败 → 全额退 20
-      console.error("[Character Generate] Hero failed, refunding", HERO_GENERATE_CREDITS);
+    if (!boardResult.success || !boardResult.imageUrl) {
+      console.error("[Character Generate] Character board failed, refunding", BOARD_GENERATE_CREDITS);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (supabase as any)
+      const { data: latestProfile } = await (supabase as any)
         .from("profiles")
-        .update({ credits: currentCredits })
-        .eq("id", user.id);
+        .select("credits")
+        .eq("id", user.id)
+        .single();
+
+      const latestCredits = (latestProfile as { credits?: number } | null)?.credits;
+      if (typeof latestCredits === "number") {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (supabase as any)
+          .from("profiles")
+          .update({ credits: latestCredits + BOARD_GENERATE_CREDITS })
+          .eq("id", user.id);
+      }
 
       return NextResponse.json(
         {
           success: false,
-          error: `Hero Shot 生成失败，积分已退还。${heroResult.error || ""}`,
+          error: `角色设定板生成失败，积分已退还。${boardResult.error || ""}`,
         },
         { status: 500 }
       );
     }
 
-    console.log("[Character Generate] Hero Shot ready (OSS):", heroResult.imageUrl.substring(0, 80));
+    const usedSize = boardResult.usedSize || BOARD_IMAGE_SIZE;
+    const cropMeta = buildBoardCropMeta(usedSize);
 
-    // 同步返回图片 URL（永久 OSS URL）+ 英文 prompt（给前端触发多角度生成）
-    // heroTaskId 不再存在，前端收到 heroImageUrl 直接展示，无需轮询
+    console.log("[Character Generate] Character board ready (OSS):", boardResult.imageUrl.substring(0, 80));
+
     return NextResponse.json({
       success: true,
-      heroImageUrl: heroResult.imageUrl,  // 永久 OSS URL
+      characterBoardUrl: boardResult.imageUrl,
+      referenceImageUrl: boardResult.imageUrl,
+      referenceSheetUrl: boardResult.imageUrl,
+      heroImageUrl: boardResult.imageUrl,
       refPrompt: englishPrompt,
+      boardPrompt,
+      cropMeta,
+      usedSize,
     });
   } catch (error) {
     console.error("[Character Generate] Unexpected error:", error);
@@ -332,7 +315,7 @@ export async function POST(request: Request) {
 }
 
 // ============================================================================
-// GET — 查询生成任务状态（通用轮询，Hero 和多角度共用）
+// GET — 查询历史生成任务状态
 // ============================================================================
 
 export async function GET(request: Request) {
@@ -364,7 +347,7 @@ export async function GET(request: Request) {
       );
     }
 
-    // 注意：新流程 Hero Shot 已改为 GPTImage2 生成，不再经过此 GET 轮询
+    // 注意：新流程完整设定板已改为 GPTImage2 同步/服务端轮询生成，不再经过此 GET 轮询
     // 此 GET handler 仅保留用于查询历史 nanoBanana 任务（兼容旧前端）
     return NextResponse.json({
       success: true,

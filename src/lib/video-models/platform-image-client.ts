@@ -1,9 +1,12 @@
 import { generateMediaPath, uploadImageBuffer, type StorageFolder } from "@/lib/oss";
 import { isOSSPermanentUrl } from "@/lib/transfer-veo-to-oss";
-import { buildPlatformUrl, getPlatformAuthHeaders, platformRequest } from "./platform-client";
+
+import { getPlatformApiKey, getPlatformBaseUrl } from "./platform-client";
 
 type PlatformImageStatus = "processing" | "completed" | "failed";
 type PlatformImagePurpose = "character-hero" | "character-reference" | "generic";
+type PlatformImageQuality = "low" | "medium" | "high" | "auto" | "standard" | "hd";
+type PlatformImageOutputFormat = "png" | "jpeg" | "webp";
 
 interface PlatformImageTask {
   taskId?: string;
@@ -21,14 +24,24 @@ interface SubmitPlatformImageGenerationInput {
   size: string;
   urls?: string[];
   responseFormat?: "url" | "b64_json";
+  quality?: PlatformImageQuality;
+  outputFormat?: PlatformImageOutputFormat;
+  outputCompression?: number;
+  async?: boolean;
+  timeoutMs?: number;
 }
 
 interface GenerateGptImage2Input {
   prompt: string;
   sourceImageUrls?: string[];
+  size?: string;
   aspectRatio?: "3:4" | "4:3" | "16:9" | "9:16" | "1:1";
+  quality?: PlatformImageQuality;
+  outputFormat?: PlatformImageOutputFormat;
+  outputCompression?: number;
   purpose?: PlatformImagePurpose;
   userId?: string;
+  async?: boolean;
   maxPollMs?: number;
   pollIntervalMs?: number;
 }
@@ -46,6 +59,32 @@ function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>
     : {};
+}
+
+function getImagePlatformBaseUrl(): string {
+  return (
+    process.env.VIDEO_PLATFORM_IMAGE_BASE_URL ||
+    process.env.IMAGE_PLATFORM_BASE_URL ||
+    getPlatformBaseUrl()
+  ).replace(/\/+$/, "");
+}
+
+function getImagePlatformApiKey(): string {
+  return (
+    process.env.VIDEO_PLATFORM_IMAGE_API_KEY ||
+    process.env.IMAGE_PLATFORM_API_KEY ||
+    getPlatformApiKey()
+  );
+}
+
+function getImagePlatformAuthHeaders(): Record<string, string> {
+  const key = getImagePlatformApiKey();
+  return key ? { Authorization: `Bearer ${key}` } : {};
+}
+
+function buildImagePlatformUrl(path: string): string {
+  if (path.startsWith("http://") || path.startsWith("https://")) return path;
+  return `${getImagePlatformBaseUrl()}${path.startsWith("/") ? path : `/${path}`}`;
 }
 
 function pickString(...values: unknown[]): string | undefined {
@@ -224,6 +263,12 @@ function getImageExtension(contentType: string): string {
   return "jpg";
 }
 
+function getOutputContentType(outputFormat?: PlatformImageOutputFormat): string {
+  if (outputFormat === "png") return "image/png";
+  if (outputFormat === "webp") return "image/webp";
+  return "image/jpeg";
+}
+
 function getPurposeFolder(purpose: PlatformImagePurpose): { folder: StorageFolder; prefix: string } {
   if (purpose === "character-reference") {
     return { folder: "images", prefix: "character-reference" };
@@ -289,6 +334,7 @@ async function persistImageResult(params: {
   imageBase64?: string;
   purpose: PlatformImagePurpose;
   userId?: string;
+  outputFormat?: PlatformImageOutputFormat;
 }): Promise<string> {
   if (params.imageUrl && isOSSPermanentUrl(params.imageUrl)) {
     return params.imageUrl;
@@ -298,10 +344,16 @@ async function persistImageResult(params: {
   const userFolder = params.userId || prefix;
 
   if (params.imageBase64) {
+    const dataUrlMatch = params.imageBase64.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,/);
+    const contentType = dataUrlMatch?.[1] || getOutputContentType(params.outputFormat);
     const cleanBase64 = params.imageBase64.replace(/^data:image\/[a-zA-Z0-9.+-]+;base64,/, "");
     const buffer = Buffer.from(cleanBase64, "base64");
-    const objectPath = generateMediaPath(folder, userFolder, `${prefix}-${Date.now()}.png`);
-    return uploadImageBuffer(buffer, objectPath, "image/png");
+    const objectPath = generateMediaPath(
+      folder,
+      userFolder,
+      `${prefix}-${Date.now()}.${getImageExtension(contentType)}`
+    );
+    return uploadImageBuffer(buffer, objectPath, contentType);
   }
 
   if (params.imageUrl) {
@@ -315,8 +367,8 @@ async function persistImageResult(params: {
   }
 
   if (params.taskId) {
-    const contentUrl = buildPlatformUrl(`/v1/images/${encodeURIComponent(params.taskId)}/content`);
-    const { buffer, contentType } = await fetchImageBuffer(contentUrl, getPlatformAuthHeaders());
+    const contentUrl = buildImagePlatformUrl(`/v1/images/${encodeURIComponent(params.taskId)}/content`);
+    const { buffer, contentType } = await fetchImageBuffer(contentUrl, getImagePlatformAuthHeaders());
     const objectPath = generateMediaPath(
       folder,
       userFolder,
@@ -328,15 +380,68 @@ async function persistImageResult(params: {
   throw new Error("图片任务未返回可持久化结果");
 }
 
+async function platformImageRequest(options: {
+  path: string;
+  body?: Record<string, unknown>;
+  method?: "GET" | "POST";
+  timeoutMs?: number;
+}): Promise<unknown> {
+  const key = getImagePlatformApiKey();
+  if (!key) throw new Error("VIDEO_PLATFORM_IMAGE_API_KEY or VIDEO_PLATFORM_API_KEY is not configured");
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), options.timeoutMs || 180_000);
+
+  try {
+    const response = await fetch(buildImagePlatformUrl(options.path), {
+      method: options.method || (options.body ? "POST" : "GET"),
+      cache: "no-store",
+      headers: {
+        ...getImagePlatformAuthHeaders(),
+        Accept: "application/json",
+        ...(options.body ? { "Content-Type": "application/json" } : {}),
+      },
+      body: options.body ? JSON.stringify(options.body) : undefined,
+      signal: controller.signal,
+    });
+
+    const text = await response.text();
+    let data: unknown = {};
+    if (text.trim()) {
+      try {
+        data = JSON.parse(text);
+      } catch {
+        if (!response.ok) throw new Error(`图片平台响应非 JSON (HTTP ${response.status})`);
+        data = { raw: text };
+      }
+    }
+
+    if (!response.ok) {
+      const record = asRecord(data);
+      const error = asRecord(record.error);
+      const message = pickString(error.message, record.message, record.msg, record.detail);
+      throw new Error(message || `图片平台请求失败 (HTTP ${response.status})`);
+    }
+
+    return data;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 export async function submitPlatformImageGeneration(
   input: SubmitPlatformImageGenerationInput
 ): Promise<PlatformImageTask> {
   const body: Record<string, unknown> = {
     model: input.model,
     prompt: input.prompt,
-    response_format: input.responseFormat || "url",
     size: input.size,
   };
+
+  if (input.responseFormat) body.response_format = input.responseFormat;
+  if (input.quality) body.quality = input.quality;
+  if (input.outputFormat) body.output_format = input.outputFormat;
+  if (input.outputCompression !== undefined) body.output_compression = input.outputCompression;
 
   const urls = (input.urls || [])
     .map((url) => url.trim())
@@ -344,11 +449,11 @@ export async function submitPlatformImageGeneration(
 
   if (urls.length > 0) body.urls = urls;
 
-  const data = await platformRequest({
-    path: "/v1/images/generations?async=true",
+  const data = await platformImageRequest({
+    path: input.async ? "/v1/images/generations?async=true" : "/v1/images/generations",
     method: "POST",
     body,
-    timeoutMs: 120_000,
+    timeoutMs: input.timeoutMs || 180_000,
   });
 
   const task = normalizePlatformImageTask(data);
@@ -368,7 +473,7 @@ export async function getPlatformImageTaskStatus(taskId: string): Promise<Platfo
   for (const path of paths) {
     for (let attempt = 1; attempt <= 3; attempt += 1) {
       try {
-        const data = await platformRequest({ path, method: "GET", timeoutMs: 45_000 });
+        const data = await platformImageRequest({ path, method: "GET", timeoutMs: 45_000 });
         const task = normalizePlatformImageTask(data, taskId);
         if (task.taskId || task.imageUrl || task.imageBase64) return task;
       } catch (error) {
@@ -412,7 +517,10 @@ export async function generateGptImage2(
   input: GenerateGptImage2Input
 ): Promise<GenerateGptImage2Result> {
   const model = process.env.VIDEO_PLATFORM_IMAGE_MODEL || "gpt-image-2";
-  const sizes = getCandidateSizes(input.aspectRatio || "1:1");
+  const fallbackSizes = getCandidateSizes(input.aspectRatio || "1:1");
+  const sizes = input.size
+    ? [input.size, ...fallbackSizes.filter((size) => size !== input.size)]
+    : fallbackSizes;
   let lastError: Error | null = null;
 
   for (const size of sizes) {
@@ -422,6 +530,11 @@ export async function generateGptImage2(
         prompt: input.prompt,
         urls: input.sourceImageUrls,
         size,
+        quality: input.quality,
+        outputFormat: input.outputFormat,
+        outputCompression: input.outputCompression,
+        async: input.async,
+        timeoutMs: input.async ? 120_000 : Math.min(input.maxPollMs || 240_000, 300_000),
       });
 
       const completed = submitted.status === "completed" && (submitted.imageUrl || submitted.imageBase64)
@@ -440,6 +553,7 @@ export async function generateGptImage2(
         imageBase64: completed.imageBase64,
         purpose: input.purpose || "generic",
         userId: input.userId,
+        outputFormat: input.outputFormat,
       });
 
       return {

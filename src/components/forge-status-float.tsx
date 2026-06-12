@@ -19,6 +19,7 @@ export function ForgeStatusFloat() {
   const sora2VideoUrl = useCharacterStudioStore((s) => s.sora2VideoUrl);
   const sora2VideoOssUrl = useCharacterStudioStore((s) => s.sora2VideoOssUrl);
   const heroImageUrl = useCharacterStudioStore((s) => s.heroImageUrl);
+  const characterBoardUrl = useCharacterStudioStore((s) => s.characterBoardUrl);
   const referenceSheetUrl = useCharacterStudioStore((s) => s.referenceSheetUrl);
   const referenceReady = useCharacterStudioStore((s) => s.referenceReady);
   const savedCharacterId = useCharacterStudioStore((s) => s.savedCharacterId);
@@ -32,7 +33,7 @@ export function ForgeStatusFloat() {
   const hasCompletedUnsavedResult =
     forgeMode === "sora2"
       ? Boolean(sora2VideoUrl || sora2VideoOssUrl)
-      : Boolean(heroImageUrl && referenceSheetUrl && referenceReady);
+      : Boolean(characterBoardUrl || (heroImageUrl && referenceSheetUrl && referenceReady));
   const isActive =
     !savedCharacterId &&
     (generationStatus === "polling" ||

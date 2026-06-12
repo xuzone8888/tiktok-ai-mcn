@@ -9,7 +9,8 @@
 
 "use client";
 
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect } from "react";
+
 import {
   useCharacterStudioStore,
   useCharacterGenerationStatus,
@@ -17,17 +18,16 @@ import {
   useCharacterIsGenerating,
 } from "@/stores/character-studio-store";
 
+import { CharacterBoardSuccess } from "./character-board-success";
+
 export function CastingPreview() {
   const store = useCharacterStudioStore();
   const generationStatus = useCharacterGenerationStatus();
   const generatedImageUrl = useCharacterHeroImage();
   const isGenerating = useCharacterIsGenerating();
 
-  const [showFullImage, setShowFullImage] = useState(false);
   const [tagInput, setTagInput] = useState("");
   const [showSavePanel, setShowSavePanel] = useState(false);
-  const [showRefBanner, setShowRefBanner] = useState(false);
-  const [refBannerClosing, setRefBannerClosing] = useState(false);
   const [sora2Confirming, setSora2Confirming] = useState(false);
   const [sora2ConfirmStep, setSora2ConfirmStep] = useState(""); // "" | "oss" | "pid" | "done" | "error"
   const [sora2PidError, setSora2PidError] = useState(""); // PID 提取失败时的错误信息
@@ -103,9 +103,7 @@ export function CastingPreview() {
 
         // 成功出图
         if (task.status === "completed" && task.resultUrl) {
-          store.setHeroResult(task.resultUrl);
-          // 自动触发多角度生成（静默，不影响主流程）
-          autoSubmitReference(task.resultUrl, store.refPrompt || store.prompt);
+          store.setCharacterBoardResult(task.resultUrl, null, store.refPrompt || store.prompt);
           return; // 结束轮询
         }
 
@@ -206,110 +204,16 @@ export function CastingPreview() {
   }, [generationStatus, store.heroTaskId, store.forgeMode, store]);
   // ===================================
 
-  // ====== 多角度自动提交 ======
-  const autoSubmitReference = async (heroUrl: string, prompt: string) => {
-    try {
-      const res = await fetch("/api/characters/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          prompt,
-          userId: store.userId,
-          type: "reference",
-          heroImageUrl: heroUrl,
-        }),
-      });
-      const data = await res.json();
-      // gemini-2k 同步返回图片 URL
-      if (data.success && data.referenceImageUrl) {
-        store.setReferenceResult(data.referenceImageUrl);
-        console.log("[AutoRef] ✅ Reference ready (sync):", data.referenceImageUrl.substring(0, 60));
-      } else if (data.success && data.referenceTaskId) {
-        // 兼容旧异步模式
-        store.setReferenceTaskId(data.referenceTaskId);
-      } else {
-        console.error("[AutoRef] Failed:", data.error);
-      }
-    } catch (err) {
-      console.error("[AutoRef] 静默失败:", err);
-    }
-  };
-
-  // ====== V5: heroReady 后自动触发多角度生成（Gemini 同步流程）======
-  // 注意：必须放在 autoSubmitReference 声明之后
-  const hasAutoSubmittedRef = useRef(false);
-  useEffect(() => {
-    if (
-      store.heroReady &&
-      store.heroImageUrl &&
-      store.forgeMode !== "sora2" &&
-      !store.referenceReady &&
-      !store.referenceTaskId &&
-      !hasAutoSubmittedRef.current
-    ) {
-      hasAutoSubmittedRef.current = true;
-      autoSubmitReference(store.heroImageUrl, store.refPrompt || store.prompt);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [store.heroReady, store.heroImageUrl, store.forgeMode, store.referenceReady, store.referenceTaskId]);
-  // ====================================
-
-  // ====== 多角度轮询 ======
-  useEffect(() => {
-    if (!store.referenceTaskId || store.referenceReady) return;
-    let active = true;
-    let count = 0;
-    const MAX_POLLS = 200; // 最长等待 ~10 分钟 (200 * 3s)
-    const poll = async () => {
-      try {
-        const res = await fetch(`/api/characters/generate?taskId=${store.referenceTaskId}`);
-        const data = await res.json();
-        console.log(`[RefPoll] #${count} status:`, data.task?.status);
-        if (data.success && data.task?.status === "completed" && data.task.resultUrl) {
-          store.setReferenceResult(data.task.resultUrl);
-          console.log("[RefPoll] ✅ Reference ready!");
-          return;
-        }
-        if (data.task?.status === "failed") {
-          console.error("[RefPoll] ❌ Task failed");
-          alert("多角度参考图生成失败，请重新铸造角色");
-          return;
-        }
-        if (++count >= MAX_POLLS) {
-          console.warn("[RefPoll] ⏰ Timeout after", MAX_POLLS, "polls");
-          alert("多角度参考图生成超时（>10分钟），请重新铸造角色");
-          return;
-        }
-      } catch (err) {
-        console.warn("[RefPoll] Network error, retrying...", err);
-      }
-      if (active) setTimeout(poll, 3000);
-    };
-    poll();
-    return () => { active = false; };
-  }, [store.referenceTaskId, store.referenceReady, store]);
-  // ===================================
-
-  // ====== 多角度就绪自动弹出横幅 ======
-  useEffect(() => {
-    if (store.referenceReady && store.referenceSheetUrl && showSavePanel) {
-      const timer = setTimeout(() => setShowRefBanner(true), 800);
-      return () => clearTimeout(timer);
-    }
-  }, [store.referenceReady, store.referenceSheetUrl, showSavePanel]);
-  // ====================================
   // ====== 保存角色（通用内部函数）======
   const doSaveCharacter = async (): Promise<string | null> => {
+    const boardUrl = store.characterBoardUrl || store.referenceSheetUrl || generatedImageUrl;
+
     if (!store.characterName.trim()) {
       alert("请先输入角色名称");
       return null;
     }
-    if (!generatedImageUrl) {
-      alert("角色图片尚未生成完成");
-      return null;
-    }
-    if (!store.referenceReady || !store.referenceSheetUrl) {
-      alert("多角度参考图尚未就绪，请稍候");
+    if (!boardUrl) {
+      alert("角色设定板尚未生成完成");
       return null;
     }
     if (!store.userId) {
@@ -324,14 +228,21 @@ export function CastingPreview() {
         userId: store.userId,
         name: store.characterName.trim(),
         description: store.prompt,
-        avatar_url: store.heroImageUrl || generatedImageUrl,
-        reference_images: [store.heroImageUrl || generatedImageUrl],
-        reference_sheet_url: store.referenceSheetUrl || null,
+        avatar_url: boardUrl,
+        reference_images: [boardUrl],
+        reference_sheet_url: boardUrl,
         reference_status: "completed",
-        reference_task_id: store.referenceTaskId || null,
+        reference_task_id: null,
         preview_video_url: null,
         character_type: store.dnaConfig.species,
-        dna_config: store.dnaConfig,
+        dna_config: {
+          ...store.dnaConfig,
+          characterBoard: {
+            url: boardUrl,
+            crop: store.characterBoardCrop,
+            prompt: store.characterBoardPrompt || store.refPrompt || store.prompt,
+          },
+        },
         style_tags: store.characterTags,
         gender: store.dnaConfig.gender,
         age_range: store.dnaConfig.ageGroup || null,
@@ -346,7 +257,6 @@ export function CastingPreview() {
     }
 
     store.setSavedCharacterId(data.data.id);
-    console.log("[Save] ✅ Character saved, ID:", data.data.id);
     return data.data.id;
   };
 
@@ -409,9 +319,7 @@ export function CastingPreview() {
       const characterId = store.forgeMode === "sora2"
         ? await doSaveSora2Character()
         : await doSaveCharacter();
-      if (characterId) {
-        alert("✅ 角色已保存！前往「我的角色」可活化角色生成视频。");
-      }
+      if (!characterId) return;
     } catch (error) {
       console.error("[SaveOnly] Error:", error);
       alert("保存失败，请重试");
@@ -532,101 +440,22 @@ export function CastingPreview() {
         </div>
       )}
 
-      {/* 状态 3：生成完毕 — VEO 写真角色卡片展示 (Hero Reveal Card) */}
-      {generationStatus === "completed" && store.forgeMode !== "sora2" && generatedImageUrl && !showSavePanel && (
-        <>
-          {/* 返回/重新配置 */}
-          <button
-            className="btn-back-floating"
-            onClick={() => store.setCurrentStep(1)}
-            type="button"
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/></svg>
-            重新配置
-          </button>
-
-          {/* 居中卡片展示区 */}
-          <div className="hero-card-stage">
-            {/* 模糊背景层：角色图片放大铺底 */}
-            <div className="hero-blur-bg">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={generatedImageUrl} alt="" className="hero-blur-img" />
-            </div>
-            {/* 出场冲击波 */}
-            <div className="hero-shockwave" />
-            {/* 角色卡片 */}
-            <div className="hero-card">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={generatedImageUrl}
-                className="hero-card-img"
-                alt="Hero Character"
-              />
-            </div>
-
-            {/* 底部操作按钮 */}
-            <div className="hero-card-actions">
-              <button
-                className="hero-btn hero-btn--primary"
-                onClick={() => setShowSavePanel(true)}
-                type="button"
-              >
-                ✦ 保存角色
-              </button>
-            </div>
-          </div>
-
-          {/* 多角度参考图弹窗 */}
-          {store.showRefModal && (
-            <div className="ref-modal-overlay" onClick={() => store.setShowRefModal(false)}>
-              <div className="ref-modal" onClick={(e) => e.stopPropagation()}>
-                <button className="ref-modal-close" onClick={() => store.setShowRefModal(false)} type="button">✕</button>
-                <h3 className="ref-modal-title">🎭 多角度参考图生成</h3>
-                <p className="ref-modal-desc">基于当前角色 Hero Shot，生成 7 个角度的标准参考图（正面、侧面、背面等），可用于后续视频制作中的角色一致性。</p>
-                
-                {store.referenceSheetUrl ? (
-                  <div className="ref-result">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={store.referenceSheetUrl} alt="Multi-angle Reference" className="ref-result-img" />
-                    <p className="ref-result-hint">✅ 多角度参考图已生成</p>
-                  </div>
-                ) : store.referenceTaskId ? (
-                  <div className="ref-loading">
-                    <div className="ref-spinner" />
-                    <p>多角度图片生成中，请稍候...</p>
-                  </div>
-                ) : (
-                  <button
-                    className="ref-generate-btn"
-                    onClick={async () => {
-                      try {
-                        const res = await fetch("/api/characters/generate", {
-                          method: "POST",
-                          headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({
-                            prompt: store.refPrompt || store.prompt,
-                            userId: store.userId,
-                            type: "reference",
-                            heroImageUrl: generatedImageUrl,
-                          }),
-                        });
-                        const data = await res.json();
-                        if (data.success && data.referenceTaskId) {
-                          store.setTaskIds(store.heroTaskId, data.referenceTaskId);
-                        }
-                      } catch (err) {
-                        console.error("[RefGen] Error:", err);
-                      }
-                    }}
-                    type="button"
-                  >
-                    ✨ 开始生成多角度参考图
-                  </button>
-                )}
-              </div>
-            </div>
-          )}
-        </>
+      {/* 状态 3：生成完毕 — 写真角色完整设定板 */}
+      {generationStatus === "completed" && store.forgeMode !== "sora2" && (store.characterBoardUrl || store.referenceSheetUrl || generatedImageUrl) && (
+        <CharacterBoardSuccess
+          boardUrl={store.characterBoardUrl || store.referenceSheetUrl || generatedImageUrl || ""}
+          cropMeta={store.characterBoardCrop}
+          dnaConfig={store.dnaConfig}
+          prompt={store.prompt}
+          boardPrompt={store.characterBoardPrompt}
+          characterName={store.characterName}
+          isSaving={store.isSaving}
+          savedCharacterId={store.savedCharacterId}
+          onNameChange={store.setCharacterName}
+          onSave={handleSaveOnly}
+          onBack={() => store.setCurrentStep(1)}
+          onRegenerate={() => store.setCurrentStep(1)}
+        />
       )}
 
       {/* 状态 3-Sora2：影视角色视频预览 + 确认 */}
@@ -819,9 +648,8 @@ export function CastingPreview() {
         </>
       )}
 
-      {/* 状态 4：保存/激活面板 (Abyssal Void Console) */}
-      {/* 状态 4：保存/激活面板 — 影视/写真模式要求 generatedImageUrl，Sora2 模式要求 sora2Pid */}
-      {((generationStatus === "completed" && (generatedImageUrl || store.sora2VideoUrl)) || (store.forgeMode === "sora2" && store.sora2Pid)) && showSavePanel && (
+      {/* Sora2 保存面板：写真角色已改为完整设定板页面内保存 */}
+      {store.forgeMode === "sora2" && ((generationStatus === "completed" && store.sora2VideoUrl) || store.sora2Pid) && showSavePanel && (
         <>
           {/* 返回英雄出场页 */}
           <button
@@ -840,59 +668,13 @@ export function CastingPreview() {
               src={
                 store.forgeMode === "sora2"
                   ? (store.heroImageUrl || "/sora2-hero-bg.png")  // Sora2 模式：用参考图或占位背景
-                  : (generatedImageUrl || "/sora2-hero-bg.png")   // 影视/写真模式：用生成图
+                  : (generatedImageUrl || "/sora2-hero-bg.png")
               }
               className="hero-bg-image"
               alt="Hero Background"
             />
             <div className="hero-vignette"></div>
           </div>
-
-          {/* ===== 多角度参考图横幅弹窗（仅 idle 阶段显示） ===== */}
-          {showRefBanner && store.referenceSheetUrl && (
-            <div
-              className={`ref-banner ${refBannerClosing ? 'ref-banner--closing' : ''}`}
-              onAnimationEnd={() => {
-                if (refBannerClosing) {
-                  setShowRefBanner(false);
-                  setRefBannerClosing(false);
-                }
-              }}
-            >
-              <div className="ref-banner__header">
-                <span className="ref-banner__title">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                    strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-                    style={{ marginRight: '6px' }}>
-                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-                    <circle cx="8.5" cy="8.5" r="1.5"/>
-                    <polyline points="21 15 16 10 5 21"/>
-                  </svg>
-                  多角度参考图已就绪
-                </span>
-                <button
-                  className="ref-banner__close"
-                  onClick={() => setRefBannerClosing(true)}
-                  type="button"
-                >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                    strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <line x1="18" y1="6" x2="6" y2="18"/>
-                    <line x1="6" y1="6" x2="18" y2="18"/>
-                  </svg>
-                </button>
-              </div>
-              <div className="ref-banner__gallery">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={store.referenceSheetUrl} alt="" className="ref-banner__bg" />
-                <div className="ref-banner__bg-overlay" />
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={store.referenceSheetUrl} alt="Multi-angle Reference Sheet" className="ref-banner__img" />
-              </div>
-            </div>
-          )}
-
-
 
           {/* 悬浮主操作面板 (Abyssal Void Console) */}
           <div className="air-glass-console">
@@ -973,21 +755,19 @@ export function CastingPreview() {
                 <button 
                   className="btn-save"
                   onClick={handleSaveOnly}
-                  disabled={!store.characterName.trim() || (store.forgeMode !== "sora2" && !generatedImageUrl) || (store.forgeMode !== "sora2" && !store.referenceReady) || (store.forgeMode === "sora2" && !store.sora2Pid) || store.isSaving}
+                  disabled={!store.characterName.trim() || !store.sora2Pid || store.isSaving}
                   type="button"
                 >
                   {store.isSaving ? (
                     <><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '8px', animation: 'spin 2s linear infinite' }}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> 保存中...</>
-                  ) : store.referenceReady ? (
+                  ) : store.sora2Pid ? (
                     <><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '8px' }}><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg> 保存角色</>
                   ) : (
-                    <><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '8px', animation: 'spin 2s linear infinite' }}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> 多角度参考图生成中...</>
+                    <><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '8px', animation: 'spin 2s linear infinite' }}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> 角色编码确认中...</>
                   )}
                 </button>
                 <div className="helper-text">
-                  {generatedImageUrl && !store.referenceReady
-                    ? "参考图就绪后即可保存角色"
-                    : "保存后可在「我的角色」中活化角色生成视频"}
+                  保存后可在「我的角色」中继续使用角色
                 </div>
               </>
             )}
@@ -2113,230 +1893,8 @@ export function CastingPreview() {
           100% { left: 200%; opacity: 0; }
         }
 
-        /* ===== 多角度参考图弹窗 ===== */
-
-        .ref-modal-overlay {
-          position: fixed;
-          inset: 0;
-          z-index: 100;
-          background: rgba(0, 0, 0, 0.7);
-          backdrop-filter: blur(8px);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          animation: fadeIn 0.25s ease-out;
-        }
-
-        @keyframes fadeIn {
-          0% { opacity: 0; }
-          100% { opacity: 1; }
-        }
-
-        .ref-modal {
-          position: relative;
-          width: 520px;
-          max-width: 90vw;
-          max-height: 85vh;
-          overflow-y: auto;
-          padding: 2rem;
-          background: rgba(20, 20, 28, 0.95);
-          backdrop-filter: blur(40px);
-          border-radius: 1.25rem;
-          border: 1px solid rgba(255, 255, 255, 0.06);
-          box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6);
-        }
-
-        .ref-modal-close {
-          position: absolute;
-          top: 1rem;
-          right: 1rem;
-          width: 32px;
-          height: 32px;
-          border-radius: 50%;
-          border: 1px solid rgba(255, 255, 255, 0.1);
-          background: rgba(255, 255, 255, 0.05);
-          color: rgba(255, 255, 255, 0.5);
-          cursor: pointer;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-size: 0.85rem;
-          transition: all 0.2s;
-        }
-        .ref-modal-close:hover {
-          background: rgba(255, 255, 255, 0.1);
-          color: #fff;
-        }
-
-        .ref-modal-title {
-          font-size: 1.1rem;
-          font-weight: 600;
-          color: #fff;
-          margin-bottom: 0.75rem;
-        }
-
-        .ref-modal-desc {
-          font-size: 0.8rem;
-          color: rgba(255, 255, 255, 0.45);
-          line-height: 1.5;
-          margin-bottom: 1.5rem;
-        }
-
-        .ref-generate-btn {
-          width: 100%;
-          padding: 0.85rem;
-          border-radius: 0.75rem;
-          border: none;
-          background: linear-gradient(135deg, rgba(0, 242, 234, 0.15), rgba(79, 70, 229, 0.15));
-          border: 1px solid rgba(0, 242, 234, 0.2);
-          color: #00F2EA;
-          font-size: 0.9rem;
-          font-weight: 500;
-          cursor: pointer;
-          transition: all 0.25s;
-        }
-        .ref-generate-btn:hover {
-          background: linear-gradient(135deg, rgba(0, 242, 234, 0.25), rgba(79, 70, 229, 0.25));
-          transform: translateY(-1px);
-        }
-
-        .ref-result { text-align: center; }
-        .ref-result-img {
-          width: 100%;
-          border-radius: 0.75rem;
-          margin-bottom: 0.75rem;
-        }
-        .ref-result-hint {
-          font-size: 0.8rem;
-          color: #00F2EA;
-        }
-
-        .ref-loading {
-          text-align: center;
-          padding: 2rem;
-          color: rgba(255, 255, 255, 0.5);
-          font-size: 0.85rem;
-        }
-
-        .ref-spinner {
-          width: 32px;
-          height: 32px;
-          border: 2px solid rgba(255, 255, 255, 0.1);
-          border-top-color: #00F2EA;
-          border-radius: 50%;
-          margin: 0 auto 1rem;
-          animation: spin 0.8s linear infinite;
-        }
-
         @keyframes spin {
           to { transform: rotate(360deg); }
-        }
-
-        /* ===== 多角度横幅弹窗 ===== */
-        .ref-banner {
-          position: absolute;
-          top: 18%;
-          bottom: 18%;
-          left: 5%;
-          right: 38%;
-          z-index: 5;
-          background: rgba(10, 10, 15, 0.6);
-          backdrop-filter: blur(40px);
-          -webkit-backdrop-filter: blur(40px);
-          border-radius: 1.5rem;
-          border: 1px solid rgba(255, 255, 255, 0.1);
-          padding: 1rem;
-          box-shadow: 0 20px 50px -10px rgba(0,0,0,0.6),
-                      0 0 20px -5px rgba(0,242,234,0.1),
-                      inset 0 1px 0 0 rgba(255,255,255,0.08);
-          animation: refBannerSlideIn 0.6s cubic-bezier(0.22, 1, 0.36, 1) forwards;
-          overflow: hidden;
-          display: flex;
-          flex-direction: column;
-        }
-        .ref-banner--closing {
-          animation: refBannerSlideOut 0.4s cubic-bezier(0.4, 0, 1, 1) forwards !important;
-        }
-        .ref-banner__header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          margin-bottom: 0.75rem;
-          flex-shrink: 0;
-        }
-        .ref-banner__title {
-          font-size: 0.8rem;
-          font-weight: 600;
-          color: rgba(255,255,255,0.8);
-          display: flex;
-          align-items: center;
-        }
-        .ref-banner__close {
-          background: rgba(255,255,255,0.06);
-          border: 1px solid rgba(255,255,255,0.1);
-          border-radius: 0.5rem;
-          padding: 4px;
-          color: rgba(255,255,255,0.5);
-          cursor: pointer;
-          transition: all 0.2s;
-          display: flex;
-          align-items: center;
-        }
-        .ref-banner__close:hover {
-          background: rgba(255,255,255,0.12);
-          color: white;
-        }
-        .ref-banner__gallery {
-          flex: 1;
-          min-height: 0;
-          position: relative;
-          border-radius: 0.75rem;
-          overflow: hidden;
-        }
-        .ref-banner__bg {
-          position: absolute;
-          inset: -20px;
-          width: calc(100% + 40px);
-          height: calc(100% + 40px);
-          object-fit: cover;
-          filter: blur(25px) brightness(0.4);
-          z-index: 0;
-        }
-        .ref-banner__bg-overlay {
-          position: absolute;
-          inset: 0;
-          background: rgba(10, 10, 15, 0.3);
-          z-index: 1;
-        }
-        .ref-banner__img {
-          position: relative;
-          width: 100%;
-          height: 100%;
-          object-fit: contain;
-          z-index: 2;
-        }
-        .ref-icon-btn {
-          background: rgba(255,255,255,0.06);
-          border: 1px solid rgba(255,255,255,0.1);
-          border-radius: 4px;
-          padding: 3px 6px;
-          color: rgba(255,255,255,0.5);
-          cursor: pointer;
-          transition: all 0.2s;
-          display: flex;
-          align-items: center;
-        }
-        .ref-icon-btn:hover {
-          background: rgba(255,255,255,0.12);
-          color: white;
-        }
-        @keyframes refBannerSlideIn {
-          0% { transform: translateY(20px); opacity: 0; }
-          100% { transform: translateY(0); opacity: 1; }
-        }
-        @keyframes refBannerSlideOut {
-          0% { transform: translateY(0); opacity: 1; }
-          100% { transform: translateY(20px); opacity: 0; }
         }
 
         /* ===== 视频播放器容器 ===== */
