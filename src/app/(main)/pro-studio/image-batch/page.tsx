@@ -121,6 +121,11 @@ import {
 } from "@/types/generation";
 
 import { CharacterPicker } from "@/components/character-picker";
+import {
+  buildCharacterConsistencyPrompt,
+  createCharacterAssetSnapshotFromSelection,
+  getCharacterAssetReferenceUrls,
+} from "@/lib/character-assets";
 
 // Templates
 import { SaveTemplateDialog } from "@/components/studio/SaveTemplateDialog";
@@ -842,6 +847,24 @@ export default function ImageBatchPage() {
         let result;
         let needPolling = false;
         let fetchError: Error | null = null;
+        const taskCharacterAsset = task.config.characterAsset || globalSettings.characterAsset;
+        const characterReferenceImages = task.config.characterReferenceImages?.length
+          ? task.config.characterReferenceImages
+          : taskCharacterAsset
+            ? getCharacterAssetReferenceUrls(taskCharacterAsset)
+            : task.config.characterRefUrl
+              ? [task.config.characterRefUrl]
+              : globalSettings.characterRefUrl
+                ? [globalSettings.characterRefUrl]
+                : [];
+        const sourceImageUrls = [
+          ...characterReferenceImages,
+          imageUrlForApi,
+        ].filter((url): url is string => typeof url === "string" && url.length > 0);
+        const basePrompt = task.config.prompt || "";
+        const promptForApi = taskCharacterAsset && !basePrompt.includes("Use the same character identity")
+          ? buildCharacterConsistencyPrompt(taskCharacterAsset, basePrompt)
+          : basePrompt;
 
         // 调用 API（可能会超时）- 使用 5 分钟超时
         console.log("[Image Batch] Calling generate/image with requestId:", requestId);
@@ -856,15 +879,17 @@ export default function ImageBatchPage() {
               mode: task.config.action,
               imageModel: "gpt-image-2",
               sourceImageUrl: imageUrlForApi,
-              sourceImageUrls: [globalSettings.characterRefUrl, imageUrlForApi].filter(Boolean),
+              sourceImageUrls,
               aspectRatio: task.config.aspectRatio,
               resolution: task.config.resolution,
-              prompt: globalSettings.characterRefUrl && globalSettings.characterDescription
-                ? `Featuring ${globalSettings.characterDescription}, ${task.config.prompt}`
-                : task.config.prompt,
+              prompt: promptForApi,
               userId: currentUserId,
               source: "batch_image",
               requestId,
+              characterId: task.config.characterId,
+              characterName: task.config.characterName,
+              characterReferenceImages,
+              characterAsset: taskCharacterAsset,
             }),
           });
           clearTimeout(timeoutId);
@@ -1980,19 +2005,25 @@ export default function ImageBatchPage() {
                     variant="compact"
                     selectedId={globalSettings.characterId || null}
                     onSelect={(character) => {
-                      if (!character) {
-                        updateGlobalSettings('characterId', undefined);
-                        updateGlobalSettings('characterName', undefined);
-                        updateGlobalSettings('characterRefUrl', undefined);
-                        updateGlobalSettings('characterDescription', undefined);
-                        return;
-                      }
-                      updateGlobalSettings('characterId', character.id);
-                      updateGlobalSettings('characterName', character.name);
-                      updateGlobalSettings('characterRefUrl', character.reference_sheet_url || '');
-                      updateGlobalSettings('characterDescription', character.description || '');
-                    }}
-                  />
+	                      if (!character) {
+	                        updateGlobalSettings('characterId', undefined);
+	                        updateGlobalSettings('characterName', undefined);
+	                        updateGlobalSettings('characterRefUrl', undefined);
+	                        updateGlobalSettings('characterDescription', undefined);
+	                        updateGlobalSettings('characterReferenceImages', undefined);
+	                        updateGlobalSettings('characterAsset', undefined);
+	                        return;
+	                      }
+	                      const asset = character.characterAsset || createCharacterAssetSnapshotFromSelection(character);
+	                      const referenceUrls = getCharacterAssetReferenceUrls(asset);
+	                      updateGlobalSettings('characterId', character.id);
+	                      updateGlobalSettings('characterName', character.name);
+	                      updateGlobalSettings('characterRefUrl', referenceUrls[0] || '');
+	                      updateGlobalSettings('characterDescription', character.description || '');
+	                      updateGlobalSettings('characterReferenceImages', referenceUrls);
+	                      updateGlobalSettings('characterAsset', asset);
+	                    }}
+	                  />
                 </div>
               )}
 

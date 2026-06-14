@@ -13,6 +13,12 @@ interface GenerationForRefund {
   metadata?: unknown;
 }
 
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+}
+
 function getMissingSchemaColumn(error: unknown): string | null {
   const message = typeof (error as { message?: unknown })?.message === "string"
     ? (error as { message: string }).message
@@ -377,7 +383,20 @@ export async function refundVideoCreditsOnce(params: {
   await updateGenerationForRefund({
     supabase,
     taskId,
-    payload: { credits_refunded: amount },
+    payload: {
+      credits_refunded: amount,
+      metadata: {
+        ...asRecord(generation.metadata),
+        billing: {
+          ...asRecord(asRecord(generation.metadata).billing),
+          charged: true,
+          refunded: true,
+          refund_amount: amount,
+          refund_reason: reason,
+          refunded_at: new Date().toISOString(),
+        },
+      } as Json,
+    },
   });
 
   return { refunded: true, amount };

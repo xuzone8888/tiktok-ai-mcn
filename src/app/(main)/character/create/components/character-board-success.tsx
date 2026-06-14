@@ -20,6 +20,8 @@ interface CharacterBoardSuccessProps {
   onSave: () => void;
   onBack: () => void;
   onRegenerate: () => void;
+  onDiscard: () => void;
+  onViewMyRoles: () => void;
 }
 
 const DEFAULT_CROP: CharacterBoardCropMeta = {
@@ -65,6 +67,8 @@ export function CharacterBoardSuccess({
   onSave,
   onBack,
   onRegenerate,
+  onDiscard,
+  onViewMyRoles,
 }: CharacterBoardSuccessProps) {
   const [showFullBoard, setShowFullBoard] = useState(false);
   const [showPrompt, setShowPrompt] = useState(false);
@@ -87,6 +91,15 @@ export function CharacterBoardSuccess({
       <button className={styles.backButton} onClick={onBack} type="button">
         <ArrowLeft className="h-4 w-4" />
         重新配置
+      </button>
+
+      <button
+        className={styles.exitButton}
+        onClick={savedCharacterId ? onViewMyRoles : onDiscard}
+        type="button"
+      >
+        <X className="h-4 w-4" />
+        {savedCharacterId ? "关闭" : "放弃"}
       </button>
 
       <header className={styles.header}>
@@ -154,15 +167,21 @@ export function CharacterBoardSuccess({
           <div className={styles.saveSpacer} />
 
           {savedCharacterId ? (
-            <a className={styles.savedLink} href="/team">
+            <button className={styles.savedLink} onClick={onViewMyRoles} type="button">
               <CheckCircle2 className="h-5 w-5" />
-              角色已保存
-            </a>
-          ) : (
-            <button className={styles.saveButton} onClick={onSave} disabled={!canSave} type="button">
-              <Save className="h-5 w-5" />
-              {isSaving ? "保存中..." : "保存为角色"}
+              查看我的角色
             </button>
+          ) : (
+            <>
+              <button className={styles.saveButton} onClick={onSave} disabled={!canSave} type="button">
+                <Save className="h-5 w-5" />
+                {isSaving ? "保存中..." : "保存为角色"}
+              </button>
+              <button className={styles.discardButton} onClick={onDiscard} disabled={isSaving} type="button">
+                <X className="h-4 w-4" />
+                放弃并退出
+              </button>
+            </>
           )}
         </aside>
       </main>

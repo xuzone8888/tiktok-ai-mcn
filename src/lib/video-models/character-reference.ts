@@ -13,8 +13,8 @@ const CHARACTER_REFERENCE_MATRIX: Partial<Record<VideoModelId, CharacterReferenc
   grok: { mode: "reference_image", maxImages: 4 },
   omni: { mode: "reference_image", maxImages: 7 },
   happyhorse: { mode: "reference_image", maxImages: 9 },
-  sora2: { mode: "trigger_word", maxImages: 1 },
-  "sora2-pro": { mode: "trigger_word", maxImages: 1 },
+  sora2: { mode: "reference_image", maxImages: 1 },
+  "sora2-pro": { mode: "reference_image", maxImages: 1 },
   seedance: { mode: "none", maxImages: 1 },
 };
 

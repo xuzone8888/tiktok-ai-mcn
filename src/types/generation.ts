@@ -658,6 +658,11 @@ export interface ImageBatchTaskConfig {
   resolution: ImageResolution;
   prompt: string;
   characterRefUrl?: string; // 引用角色的多角度参考图 URL
+  characterId?: string;
+  characterName?: string;
+  characterDescription?: string;
+  characterReferenceImages?: string[];
+  characterAsset?: import("@/lib/character-assets").CharacterAssetSnapshot;
 }
 
 /** 图片批量任务状态 */

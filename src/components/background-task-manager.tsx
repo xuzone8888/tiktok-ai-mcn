@@ -585,10 +585,16 @@ function useImageTaskExecutor() {
       }
 
       // 调用 API - 使用正确的参数格式
-      // 构建 sourceImageUrls 数组：用户上传图 + 角色参考图
-      const apiSourceImageUrls: string[] = [];
-      if (remoteImageUrl) apiSourceImageUrls.push(remoteImageUrl);
-      if (task.config.characterRefUrl) apiSourceImageUrls.push(task.config.characterRefUrl);
+      // 角色参考图放在前面，保证平台只取首图时也能稳定引用角色。
+      const characterReferenceImages = task.config.characterReferenceImages?.length
+        ? task.config.characterReferenceImages
+        : task.config.characterRefUrl
+          ? [task.config.characterRefUrl]
+          : [];
+      const apiSourceImageUrls = [
+        ...characterReferenceImages,
+        remoteImageUrl,
+      ].filter((url): url is string => typeof url === "string" && url.length > 0);
 
       const response = await fetch("/api/generate/image", {
         method: "POST",
@@ -602,6 +608,10 @@ function useImageTaskExecutor() {
           prompt: task.config.action === "generate" ? (task.config.prompt || "High quality product photo") : undefined,
           userId: userIdRef.current, // 传递用户 ID 以写入任务日志
           source: "batch_image", // 标记来源
+          characterId: task.config.characterId,
+          characterName: task.config.characterName,
+          characterReferenceImages,
+          characterAsset: task.config.characterAsset,
         }),
       });
 
@@ -959,6 +969,16 @@ function useQuickGenImageTaskExecutor() {
               aspectRatio: activeTask.aspectRatio,
               resolution: activeTask.resolution,
               userId: userIdRef.current, // 传递用户 ID 以写入任务日志
+              characterId: activeTask.characterAsset?.id,
+              characterName: activeTask.characterAsset?.name,
+              characterReferenceImages: activeTask.characterAsset
+                ? [
+                  activeTask.characterAsset.reference_sheet_url,
+                  ...activeTask.characterAsset.reference_images,
+                  activeTask.characterAsset.avatar_url,
+                ].filter(Boolean)
+                : undefined,
+              characterAsset: activeTask.characterAsset,
             }),
           });
 

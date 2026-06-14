@@ -5,6 +5,13 @@
  * 自建角色没有 trigger_word，使用 description + reference_sheet_url 替代
  */
 
+import {
+  getCharacterAssetReferenceUrls,
+  getPrimaryCharacterReferenceUrl,
+  getSafeCharacterDescription,
+  type CharacterAssetSnapshot,
+} from "@/lib/character-assets";
+
 export interface CharacterInput {
   id: string;
   name: string;
@@ -14,6 +21,8 @@ export interface CharacterInput {
   reference_status?: string;
   source?: string;
   avatar_url?: string | null;
+  reference_images?: string[];
+  characterAsset?: CharacterAssetSnapshot;
 }
 
 interface AdaptedConfig {
@@ -24,20 +33,39 @@ interface AdaptedConfig {
   characterName: string;
 }
 
+function getReferenceUrls(character: CharacterInput): string[] {
+  if (character.characterAsset) return getCharacterAssetReferenceUrls(character.characterAsset);
+  return [
+    character.reference_sheet_url,
+    ...(character.reference_images || []),
+    character.avatar_url,
+  ].filter((url, index, urls): url is string =>
+    typeof url === "string" &&
+    url.length > 0 &&
+    urls.indexOf(url) === index
+  );
+}
+
+function getPromptInjection(character: CharacterInput): string {
+  if (character.trigger_word) return character.trigger_word;
+  if (character.characterAsset) return getSafeCharacterDescription(character.characterAsset);
+  return character.description || character.name;
+}
+
 /**
  * 适配 Sora2（文生视频）
  * Sora2 使用 prompt 描述角色外观
  * 官方角色用 trigger_word，自建角色用 description
  */
 export function adaptForSora2(character: CharacterInput): AdaptedConfig {
-  const promptInjection = character.trigger_word || character.description || character.name;
+  const promptInjection = getPromptInjection(character);
 
   return {
     promptInjection,
     characterId: character.id,
     characterName: character.name,
     // Sora2 如果有参考图，也可以作为 sourceImage
-    sourceImageUrl: character.reference_sheet_url || undefined,
+    sourceImageUrl: getPrimaryCharacterReferenceUrl(character.characterAsset) || character.reference_sheet_url || undefined,
   };
 }
 
@@ -46,12 +74,8 @@ export function adaptForSora2(character: CharacterInput): AdaptedConfig {
  * Veo3 支持 imageUrls 作为角色参考
  */
 export function adaptForVeo3(character: CharacterInput): AdaptedConfig {
-  const promptInjection = character.trigger_word || character.description || character.name;
-  const imageUrls: string[] = [];
-
-  if (character.reference_sheet_url) {
-    imageUrls.push(character.reference_sheet_url);
-  }
+  const promptInjection = getPromptInjection(character);
+  const imageUrls = getReferenceUrls(character);
 
   return {
     promptInjection,
@@ -66,11 +90,11 @@ export function adaptForVeo3(character: CharacterInput): AdaptedConfig {
  * NanoBanana 使用 sourceImageUrl 作为角色参考图
  */
 export function adaptForNanoBanana(character: CharacterInput): AdaptedConfig {
-  const promptInjection = character.trigger_word || character.description || character.name;
+  const promptInjection = getPromptInjection(character);
 
   return {
     promptInjection,
-    sourceImageUrl: character.reference_sheet_url || character.avatar_url || undefined,
+    sourceImageUrl: getReferenceUrls(character)[0] || undefined,
     characterId: character.id,
     characterName: character.name,
   };
@@ -81,7 +105,7 @@ export function adaptForNanoBanana(character: CharacterInput): AdaptedConfig {
  * Seedance 使用 prompt 注入角色外观描述
  */
 export function adaptForSeedance(character: CharacterInput): AdaptedConfig {
-  const promptInjection = character.trigger_word || character.description || character.name;
+  const promptInjection = getPromptInjection(character);
 
   return {
     promptInjection,
@@ -120,7 +144,7 @@ export function adaptCharacter(
  * 兜底逻辑：trigger_word → description → name
  */
 export function getCharacterPrompt(character: CharacterInput): string {
-  return character.trigger_word || character.description || character.name;
+  return getPromptInjection(character);
 }
 
 /**

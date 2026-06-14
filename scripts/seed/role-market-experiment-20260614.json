@@ -1,0 +1,117 @@
+{
+  "batchId": "role-market-experiment-20260614",
+  "boardSize": "2048x1360",
+  "publishPrice": 100,
+  "roles": [
+    {
+      "seedKey": "urban-editor-linlan",
+      "name": "林岚",
+      "category": "现代都市",
+      "tags": ["都市白领", "通勤", "轻熟"],
+      "characterType": "photorealistic",
+      "gender": "female",
+      "ageRange": "25-32",
+      "description": "冷静干练的都市内容策划，适合职场、生活方式和城市短剧场景。",
+      "prompt": "A photorealistic modern Chinese woman in her late twenties, calm confident expression, shoulder length dark hair, elegant commuter outfit with a crisp ivory blouse, tailored charcoal trousers, minimal jewelry, slim balanced figure, refined urban content strategist. Premium studio fashion photography, realistic skin texture, soft cinematic lighting, neutral seamless background, full body identity suitable for consistent short video character creation."
+    },
+    {
+      "seedKey": "urban-night-director-hanmo",
+      "name": "韩墨",
+      "category": "现代都市",
+      "tags": ["夜景", "导演感", "现代"],
+      "characterType": "photorealistic",
+      "gender": "male",
+      "ageRange": "28-35",
+      "description": "沉稳的城市夜景导演型角色，适合探店、剧情和纪实感画面。",
+      "prompt": "A photorealistic modern East Asian man in his early thirties, thoughtful cinematic gaze, short textured black hair, light stubble, wearing a matte black field jacket over a dark tee and relaxed trousers, creative urban film director personality. Premium studio portrait lighting with subtle night city mood, realistic proportions, clear full body identity, natural pose, consistent face and outfit language for multi-scene image and video generation."
+    },
+    {
+      "seedKey": "xianxia-sword-yunli",
+      "name": "云璃",
+      "category": "古风玄幻",
+      "tags": ["仙侠", "白衣", "剑修"],
+      "characterType": "fantasy",
+      "gender": "female",
+      "ageRange": "20-28",
+      "description": "白衣剑修少女，适合古风玄幻、仙门、武侠和仙侠短剧。",
+      "prompt": "A premium ancient Chinese xianxia swordswoman, young woman with serene determined eyes, long black hair half tied with silver hairpin, flowing white and pale cyan hanfu with subtle embroidered cloud patterns, slender sword at her side, elegant immortal sect aura. High quality fantasy character design with realistic fabric detail, graceful full body silhouette, clean studio background, consistent identity across front, side, back, and close-up views."
+    },
+    {
+      "seedKey": "xuanhuan-scholar-shenyan",
+      "name": "沈砚",
+      "category": "古风玄幻",
+      "tags": ["玄幻", "书生", "术士"],
+      "characterType": "fantasy",
+      "gender": "male",
+      "ageRange": "24-34",
+      "description": "温雅但有力量感的古风术士，适合玄幻、权谋和修行场景。",
+      "prompt": "A refined ancient Chinese fantasy scholar mage, man in his late twenties with calm intelligent eyes, long dark hair tied with a jade crown, layered ink blue and moon white hanfu robes, subtle talisman belt, elegant scholar-warlock aura. Premium xuanhuan character reference design, realistic robe folds, restrained magical ornament details, full body identity and close-up face consistency, clean neutral studio lighting, no text."
+    },
+    {
+      "seedKey": "anime-cafe-harena",
+      "name": "晴奈",
+      "category": "漫剧动画",
+      "tags": ["漫剧", "元气", "咖啡店"],
+      "characterType": "anime",
+      "gender": "female",
+      "ageRange": "18-24",
+      "description": "元气漫剧女主，适合轻喜剧、校园、咖啡店和日常剧情。",
+      "prompt": "An original anime comic heroine, cheerful young woman with bright expressive eyes, warm chestnut bob hair with a small ribbon, wearing a stylish cream cafe apron over a soft green cardigan and pleated skirt, lively friendly personality. High quality 2D anime production art, clean linework, polished color, same character identity across full body front, side, back and face close-ups, reference sheet for animation and comic short drama, no text."
+    },
+    {
+      "seedKey": "anime-action-luran",
+      "name": "陆燃",
+      "category": "漫剧动画",
+      "tags": ["热血", "少年", "动作"],
+      "characterType": "anime",
+      "gender": "male",
+      "ageRange": "18-25",
+      "description": "热血漫剧少年角色，适合冒险、运动、动作和青春剧情。",
+      "prompt": "An original anime action hero boy, late teen with sharp energetic eyes, tousled black hair with a subtle red streak, wearing a cropped navy bomber jacket, white shirt, fingerless gloves, slim athletic build, confident dynamic personality. Premium 2D anime character reference board, crisp silhouette, strong readable outfit, consistent face and hair from multiple angles, front side back full body and head close-ups, clean background, no text."
+    },
+    {
+      "seedKey": "scifi-pilot-xinglan",
+      "name": "星澜",
+      "category": "奇幻科幻",
+      "tags": ["赛博", "飞行员", "未来"],
+      "characterType": "sci-fi",
+      "gender": "female",
+      "ageRange": "24-32",
+      "description": "未来飞行员角色，适合赛博城市、星际任务和科幻剧情。",
+      "prompt": "A premium science fiction female pilot, East Asian woman in her late twenties, focused intelligent gaze, short asymmetrical black hair, wearing a sleek graphite flight suit with teal luminous seams, compact utility harness, subtle futuristic headset, athletic balanced proportions. Cinematic high quality character reference, realistic materials, clean studio lighting with faint sci-fi ambience, consistent full body and close-up identity for image and video generation."
+    },
+    {
+      "seedKey": "fantasy-engineer-noahchen",
+      "name": "诺亚辰",
+      "category": "奇幻科幻",
+      "tags": ["机械", "探索者", "奇幻科幻"],
+      "characterType": "sci-fi",
+      "gender": "male",
+      "ageRange": "26-36",
+      "description": "机械探索者角色，适合未来废土、奇幻科技和冒险叙事。",
+      "prompt": "A high-end fantasy science fiction engineer explorer, man in his early thirties with warm determined eyes, bronze skin tone, short wavy dark hair, wearing a sand colored tech cloak over a fitted utility suit, small mechanical shoulder device, engraved brass and carbon details, practical adventure silhouette. Premium character reference sheet style, cinematic realism, front side back full body and close-up views, consistent face and outfit, no text."
+    },
+    {
+      "seedKey": "mascot-mianhua-pudding",
+      "name": "棉花布丁",
+      "category": "萌宠/IP",
+      "tags": ["萌宠", "吉祥物", "毛绒"],
+      "characterType": "mascot",
+      "gender": "neutral",
+      "ageRange": "all-ages",
+      "description": "软萌毛绒猫咪吉祥物，适合品牌 IP、带货贴纸和轻剧情互动。",
+      "prompt": "An original cute plush mascot character, small fluffy cream white cat with rounded ears, tiny caramel pudding hat, teal scarf, expressive big eyes, soft toy-like proportions, warm friendly brand IP personality. Premium mascot reference board, clean high quality 3D-toy illustration style, full body front side back views and expressive head close-ups, consistent shape, color palette, and accessories, simple studio background, no text, no watermark."
+    },
+    {
+      "seedKey": "mascot-berry-dragonlet",
+      "name": "莓果龙仔",
+      "category": "萌宠/IP",
+      "tags": ["原创IP", "小龙", "可爱"],
+      "characterType": "mascot",
+      "gender": "neutral",
+      "ageRange": "all-ages",
+      "description": "莓果色小龙原创 IP，适合儿童向、品牌活动和表情包式内容。",
+      "prompt": "An original adorable berry colored dragonlet mascot, tiny chubby dragon with raspberry red and lavender scales, soft cream belly, small rounded horns, little wings, bright curious eyes, wearing a tiny explorer pouch. Premium cute IP character reference board, polished toy-like 3D illustration, full body front side back views plus close-up faces, consistent proportions and color accents, clean studio background, no text, no watermark."
+    }
+  ]
+}

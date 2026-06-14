@@ -10,7 +10,11 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+
+export const dynamic = "force-dynamic";
 
 // ============================================================================
 // 类型定义
@@ -25,6 +29,12 @@ interface PublicModel {
   category: string;
   gender: "male" | "female" | "neutral" | null;
   price_monthly: number;
+  publish_price: number;
+  source: "official" | "user_created";
+  reference_sheet_url: string | null;
+  reference_images: string[];
+  preview_video_url: string | null;
+  reference_status: string;
   rating: number;
   is_featured: boolean;
   is_trending: boolean;
@@ -48,6 +58,26 @@ const SENSITIVE_FIELDS = [
   "updated_at",
 ] as const;
 
+const SAFE_MODEL_FIELDS = `
+  id,
+  name,
+  avatar_url,
+  sample_videos,
+  style_tags,
+  category,
+  gender,
+  price_monthly,
+  publish_price,
+  source,
+  reference_images,
+  reference_sheet_url,
+  preview_video_url,
+  reference_status,
+  rating,
+  is_featured,
+  is_trending
+`;
+
 // ============================================================================
 // 辅助函数
 // ============================================================================
@@ -56,15 +86,24 @@ const SENSITIVE_FIELDS = [
  * 将原始模特数据转换为安全的公开格式
  */
 function toPublicModel(model: Record<string, unknown>): PublicModel {
+  const sampleVideos = Array.isArray(model.sample_videos) ? model.sample_videos : [];
+  const tags = Array.isArray(model.style_tags) ? model.style_tags : [];
+  const referenceImages = Array.isArray(model.reference_images) ? model.reference_images : [];
   return {
     id: model.id as string,
     name: model.name as string,
     avatar_url: model.avatar_url as string | null,
-    demo_video_url: (model.sample_videos as string[] | undefined)?.[0] || null,
-    tags: (model.style_tags as string[]) || [],
+    demo_video_url: (sampleVideos[0] as string | undefined) || (model.preview_video_url as string | null) || null,
+    tags: tags as string[],
     category: model.category as string,
     gender: model.gender as "male" | "female" | "neutral" | null,
     price_monthly: model.price_monthly as number,
+    publish_price: (model.publish_price as number | null) || 100,
+    source: model.source === "user_created" ? "user_created" : "official",
+    reference_sheet_url: model.reference_sheet_url as string | null,
+    reference_images: referenceImages as string[],
+    preview_video_url: model.preview_video_url as string | null,
+    reference_status: (model.reference_status as string | null) || "none",
     rating: model.rating as number,
     is_featured: model.is_featured as boolean,
     is_trending: model.is_trending as boolean,
@@ -85,15 +124,33 @@ export async function GET(request: NextRequest) {
     const trending = searchParams.get("trending") === "true";
     const search = searchParams.get("search");
     const limit = parseInt(searchParams.get("limit") || "50");
-    const userId = searchParams.get("user_id");
+    const requestedUserId = searchParams.get("user_id");
 
-    const supabase = await createClient();
+    const authSupabase = await createClient();
+    const { data: { user } } = await authSupabase.auth.getUser();
+    const supabase = createAdminClient();
+    const userId = user?.id || null;
+
+    if (requestedUserId && requestedUserId !== userId) {
+      console.warn("[Models Public API] Ignoring mismatched user_id query parameter");
+    }
+
+    const visibilityFilters = [
+      "source.eq.official",
+      "and(source.eq.user_created,is_public.eq.true)",
+    ];
+    if (user?.id) {
+      visibilityFilters.push(`and(source.eq.user_created,owner_id.eq.${user.id})`);
+    }
 
     // 1. 构建查询 - 仅查询 active 状态的模特
     let query = supabase
       .from("ai_models")
-      .select("*")
-      .eq("is_active", true);
+      .select(SAFE_MODEL_FIELDS)
+      .eq("is_active", true)
+      .not("reference_sheet_url", "is", null)
+      .eq("reference_status", "completed")
+      .or(visibilityFilters.join(","));
 
     // 2. 按条件筛选
     if (category && category !== "all") {

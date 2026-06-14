@@ -97,7 +97,7 @@ export function Header({ initialUser = null }: { initialUser?: HeaderUser | null
     if (typeof serverCredits === "number") {
       setUser((current) =>
         current
-          ? { ...current, credits: Math.max(current.credits, serverCredits) }
+          ? { ...current, credits: serverCredits }
           : current
       );
     }
@@ -141,17 +141,14 @@ export function Header({ initialUser = null }: { initialUser?: HeaderUser | null
         name: profileData?.name || authUser.email?.split("@")[0] || "User",
         avatar_url: profileData?.avatar_url || null,
         role: (profileData?.role as UserRole) || "user",
-        credits: Math.max(
-          profileCredits ?? 0,
-          current?.id === authUser.id ? current.credits : 0
-        ),
+        credits: profileCredits ?? (current?.id === authUser.id ? current.credits : 0),
       }));
 
       const serverCredits = await fetchServerCredits();
       if (typeof serverCredits === "number") {
         setUser((current) =>
           current?.id === authUser.id
-            ? { ...current, credits: Math.max(current.credits, serverCredits) }
+            ? { ...current, credits: serverCredits }
             : current
         );
       }

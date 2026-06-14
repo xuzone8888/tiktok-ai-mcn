@@ -29,6 +29,14 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { isCharacterReady, type CharacterInput } from "@/lib/character-adapter";
+import {
+  classifyCharacterAsset,
+  createCharacterAssetSnapshotFromSelection,
+  normalizeCharacterAssetImages,
+  normalizeCharacterTags,
+  type CharacterAssetOwnership,
+  type CharacterAssetSnapshot,
+} from "@/lib/character-assets";
 
 // ============================================================================
 // Types
@@ -43,12 +51,57 @@ export interface CharacterOption {
   tags: string[];
   source: "official" | "user_created";
   reference_sheet_url?: string | null;
+  reference_images?: string[];
+  preview_video_url?: string | null;
   reference_status?: string;
   trigger_word?: string | null;
   forge_type?: string | null;
+  publish_price?: number | null;
+  ownership?: CharacterAssetOwnership;
+  characterAsset?: CharacterAssetSnapshot;
   is_hired?: boolean;
   days_remaining?: number;
   contract_status?: string;
+}
+
+function withCharacterAsset(option: Omit<CharacterOption, "characterAsset">): CharacterOption {
+  const tags = normalizeCharacterTags(option.tags);
+  const referenceImages = normalizeCharacterAssetImages(option.reference_images || []);
+  const normalized = {
+    ...option,
+    category: option.category || classifyCharacterAsset({
+      tags,
+      description: option.description,
+    }),
+    tags,
+    reference_images: referenceImages,
+    ownership: option.ownership || (option.source === "user_created" ? "owned" : "licensed"),
+  };
+
+  return {
+    ...normalized,
+    characterAsset: createCharacterAssetSnapshotFromSelection({
+      id: normalized.id,
+      name: normalized.name,
+      description: normalized.description,
+      avatar_url: normalized.avatar_url,
+      reference_sheet_url: normalized.reference_sheet_url,
+      reference_images: normalized.reference_images,
+      preview_video_url: normalized.preview_video_url,
+      category: normalized.category,
+      tags: normalized.tags,
+      source: normalized.source,
+      ownership: normalized.ownership,
+      publish_price: normalized.publish_price ?? 100,
+      reference_status: normalized.reference_status,
+      trigger_word: normalized.trigger_word,
+      forge_type: normalized.forge_type,
+    }),
+  };
+}
+
+function ensureCharacterAsset(option: CharacterOption): CharacterOption {
+  return option.characterAsset ? option : withCharacterAsset(option);
 }
 
 interface CharacterPickerProps {
@@ -96,7 +149,7 @@ const CharacterCard = memo(function CharacterCard({
     name: character.name,
     description: character.description,
     trigger_word: character.trigger_word,
-    reference_sheet_url: character.reference_sheet_url,
+    reference_sheet_url: character.reference_sheet_url || character.characterAsset?.reference_sheet_url || character.reference_images?.[0],
     reference_status: character.reference_status,
     source: character.source,
   };
@@ -141,7 +194,7 @@ const CharacterCard = memo(function CharacterCard({
           {statusIcon}
           {character.source === "user_created" && (
             <Badge variant="secondary" className="text-[10px] px-1.5 py-0 bg-blue-500/20 text-blue-300 border-0">
-              自建
+              {character.ownership === "owned" ? "自建" : "已授权"}
             </Badge>
           )}
           {character.forge_type === "sora2" && (
@@ -197,7 +250,7 @@ export function CharacterPicker({
   // Fetch characters if not provided externally
   const fetchCharacters = useCallback(async () => {
     if (externalCharacters) {
-      setCharacters(externalCharacters);
+      setCharacters(externalCharacters.map(ensureCharacterAsset));
       return;
     }
 
@@ -217,21 +270,26 @@ export function CharacterPicker({
             const now = new Date();
             const daysRemaining = Math.max(0, Math.ceil((endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
 
-            return {
+            return withCharacterAsset({
               id: model.id,
               name: model.name,
               avatar_url: model.avatar_url,
               description: model.description,
               category: model.category || "general",
-              tags: Array.isArray(model.style_tags) ? model.style_tags : [],
-              source: model.source || "official",
+              tags: normalizeCharacterTags(model.style_tags),
+              source: model.source === "user_created" ? "user_created" : "official",
               reference_sheet_url: model.reference_sheet_url,
+              reference_images: normalizeCharacterAssetImages(model.reference_images),
+              preview_video_url: model.preview_video_url || null,
               reference_status: model.reference_status || "none",
               trigger_word: model.trigger_word,
+              forge_type: model.forge_type || null,
+              publish_price: model.publish_price ?? 100,
+              ownership: "licensed",
               is_hired: true,
               days_remaining: daysRemaining,
               contract_status: contract.status,
-            } as CharacterOption;
+            });
           }).filter(Boolean);
         }
       }
@@ -250,18 +308,22 @@ export function CharacterPicker({
           const charRes = await fetch("/api/characters?userId=" + userId);
           const charResult = await charRes.json();
           if (charResult.success && charResult.data) {
-            ownChars = charResult.data.map((ch: any) => ({
+            ownChars = charResult.data.map((ch: any) => withCharacterAsset({
               id: ch.id,
               name: ch.name,
               avatar_url: ch.avatar_url,
               description: ch.description,
-              category: ch.character_type || "general",
-              tags: Array.isArray(ch.style_tags) ? ch.style_tags : [],
+              category: ch.category || ch.character_type || "general",
+              tags: normalizeCharacterTags(ch.style_tags),
               source: "user_created" as const,
               reference_sheet_url: ch.reference_sheet_url,
+              reference_images: normalizeCharacterAssetImages(ch.reference_images),
+              preview_video_url: ch.preview_video_url || null,
               reference_status: ch.reference_status || "none",
               trigger_word: ch.trigger_word || null,
               forge_type: ch.forge_type || null,
+              publish_price: ch.publish_price ?? 100,
+              ownership: "owned",
               is_hired: false,
               contract_status: "permanent",
             }));
@@ -287,7 +349,8 @@ export function CharacterPicker({
             return c.forge_type === "sora2" || (c.trigger_word && c.trigger_word.startsWith("@"));
           }
           if (forgeType === "veo") {
-            return c.forge_type === "veo" || (!c.trigger_word?.startsWith("@") && c.reference_sheet_url);
+            return c.forge_type === "veo"
+              || Boolean(c.reference_sheet_url || c.characterAsset?.reference_sheet_url || c.reference_images?.length);
           }
           return true;
         });
@@ -308,7 +371,7 @@ export function CharacterPicker({
   // Update when external characters change
   useEffect(() => {
     if (externalCharacters) {
-      setCharacters(externalCharacters);
+      setCharacters(externalCharacters.map(ensureCharacterAsset));
     }
   }, [externalCharacters]);
 

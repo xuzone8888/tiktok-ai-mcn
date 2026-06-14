@@ -9,6 +9,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { classifyCharacterAsset, normalizeCharacterAssetImages } from "@/lib/character-assets";
 import type { CreateCharacterRequest } from "@/types/character";
 import type { Json } from "@/types/database";
 
@@ -125,7 +126,14 @@ export async function POST(request: Request) {
       forge_type,
     } = body;
 
-    const referenceImages = Array.isArray(reference_images) ? reference_images : [];
+    const referenceImages = normalizeCharacterAssetImages(reference_images);
+    const marketCategory = classifyCharacterAsset({
+      category: character_type,
+      character_type,
+      tags: style_tags,
+      description,
+      dna_config,
+    });
 
     const auth = await requireMatchingUser(userId);
     if (!auth.ok) return auth.response;
@@ -175,8 +183,7 @@ export async function POST(request: Request) {
       price_weekly: 0,
       price_monthly: 0,
       price_yearly: 0,
-      // 默认分类
-      category: character_type === "animal" ? "动物角色" : "自建角色",
+      category: marketCategory,
       // V5: Sora2 影视角色
       trigger_word: trigger_word || null,
       forge_type: forge_type || "veo",

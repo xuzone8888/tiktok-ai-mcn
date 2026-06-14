@@ -19,6 +19,10 @@ interface SubmitRequestBody {
   referenceImageUrls?: string[];
   mainGridImageUrl?: string;
   characterRefUrl?: string;
+  characterReferenceImages?: string[];
+  characterId?: string;
+  characterName?: string;
+  characterAsset?: unknown;
   firstFrameUrl?: string;
   lastFrameUrl?: string;
   clientTaskId?: string;
@@ -45,10 +49,57 @@ function normalizeModelType(raw: string | undefined, quality?: VideoQuality): {
   return { modelType: null, quality };
 }
 
-function normalizeImageUrls(body: SubmitRequestBody, modelType: VideoModelId): string[] {
+function normalizeStringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string" && item.trim().length > 0).map((item) => item.trim())
+    : [];
+}
+
+function sanitizeCharacterAsset(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const record = value as Record<string, unknown>;
+  if (typeof record.id !== "string" || typeof record.name !== "string") return null;
+
+  return {
+    id: record.id,
+    name: record.name,
+    description: typeof record.description === "string" ? record.description : null,
+    avatar_url: typeof record.avatar_url === "string" ? record.avatar_url : null,
+    reference_sheet_url: typeof record.reference_sheet_url === "string" ? record.reference_sheet_url : null,
+    reference_images: normalizeStringArray(record.reference_images),
+    preview_video_url: typeof record.preview_video_url === "string" ? record.preview_video_url : null,
+    category: typeof record.category === "string" ? record.category : null,
+    tags: normalizeStringArray(record.tags),
+    source: record.source === "user_created" ? "user_created" : "official",
+    ownership: typeof record.ownership === "string" ? record.ownership : null,
+    publish_price: typeof record.publish_price === "number" ? record.publish_price : null,
+    reference_status: typeof record.reference_status === "string" ? record.reference_status : null,
+  };
+}
+
+function getCharacterReferenceImages(
+  explicitReferenceImages: string[],
+  characterAsset: Record<string, unknown> | null
+): string[] {
+  if (explicitReferenceImages.length > 0) return explicitReferenceImages;
+  if (!characterAsset) return [];
+
+  return normalizeStringArray([
+    characterAsset.reference_sheet_url,
+    ...normalizeStringArray(characterAsset.reference_images),
+    characterAsset.avatar_url,
+  ]);
+}
+
+function normalizeImageUrls(
+  body: SubmitRequestBody,
+  modelType: VideoModelId,
+  characterReferenceImages: string[]
+): string[] {
   const uploadedUrls = [
-    ...(Array.isArray(body.imageUrls) ? body.imageUrls : []),
-    ...(Array.isArray(body.referenceImageUrls) ? body.referenceImageUrls : []),
+    ...characterReferenceImages.slice(1),
+    ...normalizeStringArray(body.imageUrls),
+    ...normalizeStringArray(body.referenceImageUrls),
   ];
 
   if (modelType === "veo" && body.firstFrameUrl) {
@@ -58,7 +109,7 @@ function normalizeImageUrls(body: SubmitRequestBody, modelType: VideoModelId): s
 
   if (body.mainGridImageUrl) uploadedUrls.push(body.mainGridImageUrl);
 
-  return mergeCharacterReferenceImages(modelType, body.characterRefUrl, uploadedUrls);
+  return mergeCharacterReferenceImages(modelType, body.characterRefUrl || characterReferenceImages[0], uploadedUrls);
 }
 
 function getMissingSchemaColumn(error: unknown): string | null {
@@ -168,6 +219,11 @@ export async function POST(request: NextRequest) {
     const userId = user.id;
     const quality = normalized.quality || body.quality || "standard";
     const durationSeconds = body.durationSeconds || model.durationSeconds;
+    const sanitizedCharacterAsset = sanitizeCharacterAsset(body.characterAsset);
+    const characterReferenceImages = getCharacterReferenceImages(
+      normalizeStringArray(body.characterReferenceImages),
+      sanitizedCharacterAsset
+    );
 
     if (!prompt) {
       return NextResponse.json(
@@ -183,7 +239,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const imageUrls = normalizeImageUrls(body, modelType);
+    const imageUrls = normalizeImageUrls(body, modelType, characterReferenceImages);
     if (!model.supportsNoImage && imageUrls.length === 0) {
       return NextResponse.json(
         { success: false, error: `${model.label} 需要至少 1 张图片` },
@@ -259,6 +315,10 @@ export async function POST(request: NextRequest) {
         client_task_id: clientTaskId,
         reference_image_urls: imageUrls,
         reference_image_count: imageUrls.length,
+        character_id: body.characterId || sanitizedCharacterAsset?.id || null,
+        character_name: body.characterName || sanitizedCharacterAsset?.name || null,
+        character_reference_images: characterReferenceImages,
+        character_asset: sanitizedCharacterAsset,
         billing: {
           charged: true,
           refunded: false,

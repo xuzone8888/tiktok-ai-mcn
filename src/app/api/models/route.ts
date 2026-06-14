@@ -6,10 +6,40 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+
+export const dynamic = "force-dynamic";
 
 // 需要从响应中剔除的敏感字段
 const SENSITIVE_FIELDS = ["trigger_word", "metadata"] as const;
+const SAFE_MODEL_FIELDS = `
+  id,
+  name,
+  description,
+  avatar_url,
+  sample_videos,
+  style_tags,
+  category,
+  gender,
+  price_monthly,
+  rating,
+  total_rentals,
+  total_generations,
+  is_featured,
+  is_trending,
+  created_at,
+  source,
+  owner_id,
+  is_public,
+  publish_price,
+  character_type,
+  reference_images,
+  reference_sheet_url,
+  preview_video_url,
+  reference_status
+`;
 
 /**
  * 剔除敏感字段，返回安全的模特数据
@@ -29,14 +59,26 @@ export async function GET(request: NextRequest) {
   const trending = searchParams.get("trending");
 
   try {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const authSupabase = await createClient();
+    const { data: { user } } = await authSupabase.auth.getUser();
+    const supabase = createAdminClient();
 
     // 构建查询
+    const visibilityFilters = [
+      "source.eq.official",
+      "and(source.eq.user_created,is_public.eq.true)",
+    ];
+    if (user?.id) {
+      visibilityFilters.push(`and(source.eq.user_created,owner_id.eq.${user.id})`);
+    }
+
     let query = supabase
       .from("ai_models")
-      .select("*")
-      .eq("is_active", true);
+      .select(SAFE_MODEL_FIELDS)
+      .eq("is_active", true)
+      .not("reference_sheet_url", "is", null)
+      .eq("reference_status", "completed")
+      .or(visibilityFilters.join(","));
 
     // 筛选条件
     if (category && category !== "all") {

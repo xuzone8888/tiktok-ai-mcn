@@ -23,6 +23,7 @@ import {
   getVideoBatchTotalPrice,
 } from "@/types/video-batch";
 import { getCharacterReferenceMaxImages } from "@/lib/video-models/character-reference";
+import { getCharacterAssetReferenceUrls } from "@/lib/character-assets";
 
 // ============================================================================
 // 状态类型
@@ -240,6 +241,8 @@ const initialState: VideoBatchState = {
     characterId: null,        // 参考图角色 ID
     characterName: null,      // 参考图角色名称
     characterRefUrl: null,    // 参考图角色 URL
+    characterReferenceImages: undefined,
+    characterAsset: null,
   },
   selectedTaskIds: {},
   editingTaskId: null,
@@ -261,6 +264,9 @@ export const useVideoBatchStore = create<VideoBatchState & VideoBatchActions>()(
         createTask: (images, groupName) => {
           const id = generateId();
           const { globalSettings } = get();
+          const characterReferenceImages = globalSettings.characterAsset
+            ? getCharacterAssetReferenceUrls(globalSettings.characterAsset).slice(0, getCharacterReferenceMaxImages(globalSettings.modelType))
+            : globalSettings.characterReferenceImages;
 
           // 确保第一张图片标记为主九宫格图
           const processedImages = images.map((img, index) => ({
@@ -284,7 +290,11 @@ export const useVideoBatchStore = create<VideoBatchState & VideoBatchActions>()(
             aiModelTriggerWord: globalSettings.aiModelTriggerWord || undefined,
             aiModelCover: globalSettings.aiModelCover || undefined,
             // 自建角色参考图（VEO/Grok/Omni/HappyHorse 用）
+            characterId: globalSettings.characterId || undefined,
+            characterName: globalSettings.characterName || undefined,
             characterRefUrl: globalSettings.characterRefUrl || undefined,
+            characterReferenceImages,
+            characterAsset: globalSettings.characterAsset || undefined,
             groupName: groupName?.trim() || '默认', // 任务组名称
             doubaoTalkingScript: null,
             doubaoAiVideoPrompt: null,
@@ -308,6 +318,9 @@ export const useVideoBatchStore = create<VideoBatchState & VideoBatchActions>()(
         createTaskFromPrompt: (prompt, referenceImageUrl, count = 1, groupName, options) => {
           const { globalSettings } = get();
           const newIds: string[] = [];
+          const characterReferenceImages = globalSettings.characterAsset
+            ? getCharacterAssetReferenceUrls(globalSettings.characterAsset).slice(0, getCharacterReferenceMaxImages(globalSettings.modelType))
+            : globalSettings.characterReferenceImages;
 
           const newTasks: VideoBatchTask[] = Array.from({ length: count }, () => {
             const id = generateId();
@@ -334,7 +347,11 @@ export const useVideoBatchStore = create<VideoBatchState & VideoBatchActions>()(
               aiModelTriggerWord: globalSettings.aiModelTriggerWord || undefined,
               aiModelCover: globalSettings.aiModelCover || undefined,
               // 自建角色参考图（VEO/Grok/Omni/HappyHorse 用）
+              characterId: globalSettings.characterId || undefined,
+              characterName: globalSettings.characterName || undefined,
               characterRefUrl: globalSettings.characterRefUrl || undefined,
+              characterReferenceImages,
+              characterAsset: globalSettings.characterAsset || undefined,
               // 首尾帧兼容字段（统一 VEO 会作为可选参考图处理）
               firstFrameUrl: options?.firstFrameUrl || undefined,
               lastFrameUrl: options?.lastFrameUrl || undefined,
@@ -361,6 +378,9 @@ export const useVideoBatchStore = create<VideoBatchState & VideoBatchActions>()(
         createEmptyTasks: (count) => {
           const ids: string[] = [];
           const { globalSettings } = get();
+          const characterReferenceImages = globalSettings.characterAsset
+            ? getCharacterAssetReferenceUrls(globalSettings.characterAsset).slice(0, getCharacterReferenceMaxImages(globalSettings.modelType))
+            : globalSettings.characterReferenceImages;
 
           const newTasks: VideoBatchTask[] = Array.from({ length: count }, () => {
             const id = generateId();
@@ -378,7 +398,11 @@ export const useVideoBatchStore = create<VideoBatchState & VideoBatchActions>()(
               aiModelName: globalSettings.aiModelName || undefined,
               aiModelTriggerWord: globalSettings.aiModelTriggerWord || undefined,
               aiModelCover: globalSettings.aiModelCover || undefined,
+              characterId: globalSettings.characterId || undefined,
+              characterName: globalSettings.characterName || undefined,
               characterRefUrl: globalSettings.characterRefUrl || undefined,
+              characterReferenceImages,
+              characterAsset: globalSettings.characterAsset || undefined,
               groupName: '默认', // 默认任务组
               doubaoTalkingScript: null,
               doubaoAiVideoPrompt: null,
@@ -401,7 +425,7 @@ export const useVideoBatchStore = create<VideoBatchState & VideoBatchActions>()(
         },
 
         cloneTask: (taskId) => {
-          const { tasks, globalSettings } = get();
+          const { tasks } = get();
           const sourceTask = tasks.find((t) => t.id === taskId);
 
           if (!sourceTask) return null;
@@ -433,7 +457,11 @@ export const useVideoBatchStore = create<VideoBatchState & VideoBatchActions>()(
             aiModelName: sourceTask.aiModelName,
             aiModelTriggerWord: sourceTask.aiModelTriggerWord,
             aiModelCover: sourceTask.aiModelCover,
+            characterId: sourceTask.characterId,
+            characterName: sourceTask.characterName,
             characterRefUrl: sourceTask.characterRefUrl,
+            characterReferenceImages: sourceTask.characterReferenceImages ? [...sourceTask.characterReferenceImages] : undefined,
+            characterAsset: sourceTask.characterAsset,
             groupName: sourceTask.groupName || '默认', // 继承源任务的组名
             doubaoTalkingScript: null,  // 重置生成结果
             doubaoAiVideoPrompt: null,
@@ -463,6 +491,9 @@ export const useVideoBatchStore = create<VideoBatchState & VideoBatchActions>()(
         createTasksFromImageGroups: (imageGroups) => {
           const ids: string[] = [];
           const { globalSettings } = get();
+          const characterReferenceImages = globalSettings.characterAsset
+            ? getCharacterAssetReferenceUrls(globalSettings.characterAsset).slice(0, getCharacterReferenceMaxImages(globalSettings.modelType))
+            : globalSettings.characterReferenceImages;
 
           const newTasks: VideoBatchTask[] = imageGroups.map((images) => {
             const id = generateId();
@@ -487,7 +518,11 @@ export const useVideoBatchStore = create<VideoBatchState & VideoBatchActions>()(
               aiModelName: globalSettings.aiModelName || undefined,
               aiModelTriggerWord: globalSettings.aiModelTriggerWord || undefined,
               aiModelCover: globalSettings.aiModelCover || undefined,
+              characterId: globalSettings.characterId || undefined,
+              characterName: globalSettings.characterName || undefined,
               characterRefUrl: globalSettings.characterRefUrl || undefined,
+              characterReferenceImages,
+              characterAsset: globalSettings.characterAsset || undefined,
               groupName: '默认', // 默认任务组
               doubaoTalkingScript: null,
               doubaoAiVideoPrompt: null,

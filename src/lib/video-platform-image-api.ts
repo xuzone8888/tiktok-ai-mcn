@@ -23,6 +23,7 @@ import {
   type ImageAspectRatio,
   type ImageResolution,
 } from "@/types/generation";
+import { getPlatformApiKey, getPlatformBaseUrl } from "@/lib/video-models/platform-client";
 
 export interface VideoPlatformImageParams {
   prompt: string;
@@ -79,7 +80,11 @@ class VideoPlatformReferenceImageError extends Error {
 }
 
 function getVideoPlatformBaseUrl(): string {
-  return (process.env.VIDEO_PLATFORM_IMAGE_BASE_URL || "").replace(/\/+$/, "");
+  return (
+    process.env.VIDEO_PLATFORM_IMAGE_BASE_URL ||
+    process.env.IMAGE_PLATFORM_BASE_URL ||
+    getPlatformBaseUrl()
+  ).replace(/\/+$/, "");
 }
 
 function getVideoPlatformApiUrl(pathname: string): string {
@@ -91,7 +96,11 @@ function getVideoPlatformApiUrl(pathname: string): string {
 }
 
 function getVideoPlatformApiKey(): string {
-  return process.env.VIDEO_PLATFORM_IMAGE_API_KEY || "";
+  return (
+    process.env.VIDEO_PLATFORM_IMAGE_API_KEY ||
+    process.env.IMAGE_PLATFORM_API_KEY ||
+    getPlatformApiKey()
+  );
 }
 
 function getVideoPlatformModel(): string {
@@ -600,11 +609,16 @@ export async function submitVideoPlatformImage(
   const aspectRatio = params.aspectRatio || "auto";
   const urls = (params.sourceImageUrls || []).filter(Boolean);
   const hasReferenceImage = urls.length > 0;
+  const multiReferenceEnabled = process.env.VIDEO_PLATFORM_IMAGE_MULTI_REFERENCE === "true";
   const endpoint: VideoPlatformImageResult["endpoint"] = hasReferenceImage
     ? "/v1/images/edits"
     : "/v1/images/generations";
-  const referenceCountUsed = hasReferenceImage ? 1 : 0;
-  const referenceReductionReason = urls.length > 1 ? "aixoras_edits_single_image_field" : null;
+  const referenceCountUsed = hasReferenceImage
+    ? (multiReferenceEnabled ? Math.min(urls.length, 4) : 1)
+    : 0;
+  const referenceReductionReason = urls.length > referenceCountUsed
+    ? (multiReferenceEnabled ? "aixoras_edits_multi_reference_limit" : "aixoras_edits_single_image_field")
+    : null;
   const baseMetadata = getBaseResultMetadata(
     resolution,
     aspectRatio,
@@ -653,7 +667,8 @@ export async function submitVideoPlatformImage(
 
     let response: Response;
     if (hasReferenceImage) {
-      const referenceImage = await downloadReferenceImage(validatedUrls[0]);
+      const referenceUrlsForSubmit = validatedUrls.slice(0, referenceCountUsed);
+      const referenceImages = await Promise.all(referenceUrlsForSubmit.map(downloadReferenceImage));
       const formData = new FormData();
       formData.append("model", model);
       formData.append("prompt", prompt);
@@ -661,11 +676,13 @@ export async function submitVideoPlatformImage(
       for (const [key, value] of Object.entries(formatOptions.requestFields)) {
         formData.append(key, String(value));
       }
-      formData.append(
-        "image",
-        new Blob([new Uint8Array(referenceImage.buffer)], { type: referenceImage.contentType }),
-        `reference.${referenceImage.ext}`
-      );
+      referenceImages.forEach((referenceImage, index) => {
+        formData.append(
+          multiReferenceEnabled && referenceImages.length > 1 ? "image[]" : "image",
+          new Blob([new Uint8Array(referenceImage.buffer)], { type: referenceImage.contentType }),
+          `reference-${index + 1}.${referenceImage.ext}`
+        );
+      });
 
       response = await fetchVideoPlatformImage(getVideoPlatformApiUrl("/images/edits"), {
         method: "POST",
