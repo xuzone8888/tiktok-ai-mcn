@@ -37,6 +37,8 @@ const PROTECTED_ROUTES = [
   "/admin",
 ];
 
+const AUTH_ENTRY_ROUTES = ["/", "/auth/login", "/auth/register"];
+
 export async function middleware(req: NextRequest) {
   let res = NextResponse.next({
     request: {
@@ -71,9 +73,11 @@ export async function middleware(req: NextRequest) {
   const isProtectedRoute = PROTECTED_ROUTES.some(route =>
     pathname === route || pathname.startsWith(route + "/")
   );
+  const shouldRedirectAuthenticatedEntry = AUTH_ENTRY_ROUTES.includes(pathname);
+  const shouldCheckAuth = isProtectedRoute || shouldRedirectAuthenticatedEntry;
 
-  // 如果不是受保护路由，直接放行
-  if (!isProtectedRoute) {
+  // 如果不需要登录态判断，直接放行
+  if (!shouldCheckAuth) {
     return res;
   }
 
@@ -137,6 +141,10 @@ export async function middleware(req: NextRequest) {
     // 获取当前用户
     const { data: { user }, error } = await supabase.auth.getUser();
 
+    if (!user && !isProtectedRoute) {
+      return res;
+    }
+
     // ============================================
     // 4. 未登录用户重定向到登录页
     // ============================================
@@ -145,6 +153,10 @@ export async function middleware(req: NextRequest) {
       const loginUrl = new URL("/auth/login", req.url);
       loginUrl.searchParams.set("redirect", redirectTarget);
       return NextResponse.redirect(loginUrl);
+    }
+
+    if (shouldRedirectAuthenticatedEntry) {
+      return NextResponse.redirect(new URL("/models", req.url));
     }
 
     // ============================================
@@ -169,6 +181,10 @@ export async function middleware(req: NextRequest) {
 
     return res;
   } catch (error) {
+    if (!isProtectedRoute) {
+      return res;
+    }
+
     // Supabase 连接错误，重定向到登录页
     console.error(`[Middleware] Error checking auth:`, error);
     const loginUrl = new URL("/auth/login", req.url);
