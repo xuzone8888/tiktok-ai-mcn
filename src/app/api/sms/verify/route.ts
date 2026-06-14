@@ -112,7 +112,7 @@ export async function POST(request: NextRequest) {
             type: 'magiclink',
             email: fakeEmail,
             options: {
-                redirectTo: '/dashboard',
+                redirectTo: '/models',
             }
         });
 
