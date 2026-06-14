@@ -50,6 +50,7 @@ export interface CharacterStudioState {
 
   // 写真角色完整设定板
   characterBoardUrl: string | null;
+  characterAvatarUrl: string | null;
   characterBoardCrop: CharacterBoardCropMeta | null;
   characterBoardPrompt: string | null;
 
@@ -109,7 +110,12 @@ export interface CharacterStudioActions {
   startGeneration: () => void;
   setTaskIds: (heroId: string | null, refId: string | null) => void;
   setHeroResult: (imageUrl: string) => void;
-  setCharacterBoardResult: (imageUrl: string, crop: CharacterBoardCropMeta | null, prompt?: string | null) => void;
+  setCharacterBoardResult: (
+    imageUrl: string,
+    crop: CharacterBoardCropMeta | null,
+    prompt?: string | null,
+    avatarUrl?: string | null
+  ) => void;
   setReferenceResult: (imageUrl: string) => void;
   setReferenceTaskId: (id: string) => void;
   setGenerationFailed: (error: string) => void;
@@ -153,13 +159,14 @@ const DEFAULT_DNA_PROMPT =
 
 const initialState: CharacterStudioState = {
   currentStep: 1,
-  creationMode: "dna",
+  creationMode: "freeform",
   dnaConfig: { ...DEFAULT_DNA },
-  prompt: DEFAULT_DNA_PROMPT,
+  prompt: "",
   referenceImageUrl: null,
   generationStatus: "idle",
   errorMessage: null,
   characterBoardUrl: null,
+  characterAvatarUrl: null,
   characterBoardCrop: null,
   characterBoardPrompt: null,
   heroImageUrl: null,
@@ -204,6 +211,12 @@ export const useCharacterStudioStore = create<
         setCreationMode: (mode) => {
           set((state) => {
             state.creationMode = mode;
+            if (mode === "freeform" && state.prompt === DEFAULT_DNA_PROMPT) {
+              state.prompt = "";
+            }
+            if (mode === "dna" && !state.prompt.trim()) {
+              state.prompt = DEFAULT_DNA_PROMPT;
+            }
           });
         },
 
@@ -301,6 +314,7 @@ export const useCharacterStudioStore = create<
             state.savedCharacterId = null;
             state.isSaving = false;
             state.characterBoardUrl = null;
+            state.characterAvatarUrl = null;
             state.characterBoardCrop = null;
             state.characterBoardPrompt = null;
             state.heroImageUrl = null;
@@ -341,12 +355,13 @@ export const useCharacterStudioStore = create<
           });
         },
 
-        setCharacterBoardResult: (imageUrl, crop, prompt) => {
+        setCharacterBoardResult: (imageUrl, crop, prompt, avatarUrl) => {
           set((state) => {
             state.characterBoardUrl = imageUrl;
+            state.characterAvatarUrl = avatarUrl || state.characterAvatarUrl || null;
             state.characterBoardCrop = crop;
             state.characterBoardPrompt = prompt || state.characterBoardPrompt || state.refPrompt || state.prompt;
-            state.heroImageUrl = imageUrl;
+            state.heroImageUrl = avatarUrl || imageUrl;
             state.referenceSheetUrl = imageUrl;
             state.heroReady = true;
             state.referenceReady = true;
@@ -510,6 +525,26 @@ export const useCharacterStudioStore = create<
     ),
     {
       name: "character-studio-storage",
+      version: 2,
+      migrate: (persisted, version) => {
+        const state = persisted as Partial<CharacterStudioState> | undefined;
+        if (!state) return state;
+
+        if (
+          version < 2 &&
+          state.currentStep === 1 &&
+          state.creationMode === "dna" &&
+          (!state.prompt || state.prompt === DEFAULT_DNA_PROMPT)
+        ) {
+          return {
+            ...state,
+            creationMode: "freeform",
+            prompt: "",
+          };
+        }
+
+        return state;
+      },
       storage: createJSONStorage(() => localStorage),
       merge: (persisted, current) => {
         const persistedState = persisted as Partial<CharacterStudioState> | undefined;
@@ -538,6 +573,7 @@ export const useCharacterStudioStore = create<
         characterTags: state.characterTags,
         heroTaskId: state.heroTaskId,
         characterBoardUrl: state.characterBoardUrl,
+        characterAvatarUrl: state.characterAvatarUrl,
         characterBoardCrop: state.characterBoardCrop,
         characterBoardPrompt: state.characterBoardPrompt,
         heroImageUrl: state.heroImageUrl,

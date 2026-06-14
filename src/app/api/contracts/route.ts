@@ -74,9 +74,13 @@ export async function GET(request: NextRequest) {
           rating,
           source,
           publish_price,
+          owner_id,
+          is_public,
+          character_type,
+          reference_images,
           reference_sheet_url,
+          preview_video_url,
           reference_status,
-          forge_type,
           created_at
         )
       `)
@@ -103,8 +107,6 @@ export async function GET(request: NextRequest) {
         { status: 500 }
       );
     }
-
-    console.log("[Contracts API] Loaded contracts from database:", contracts?.length || 0);
 
     return NextResponse.json({
       success: true,
@@ -186,28 +188,6 @@ export async function POST(request: NextRequest) {
       if (endDate > new Date()) {
         return NextResponse.json(
           { success: false, error: "已有有效合约，请在合约即将过期时续约" },
-          { status: 400 }
-        );
-      }
-    }
-
-    // 【独占签约检查】仅官方角色需要独占检查，社区角色允许多人聘用
-    if (!isCommunityCharacter && (!existingContract || new Date(existingContract.end_date) <= new Date())) {
-      const { data: otherContracts } = await adminSupabase
-        .from("contracts")
-        .select("id, user_id, end_date")
-        .eq("model_id", model_id)
-        .eq("status", "active")
-        .neq("user_id", user.id)
-        .gt("end_date", new Date().toISOString())
-        .limit(1);
-
-      if (otherContracts && otherContracts.length > 0) {
-        return NextResponse.json(
-          {
-            success: false,
-            error: "该角色已被其他用户签约，暂时无法聘用。请等待当前签约到期后再试。"
-          },
           { status: 400 }
         );
       }
@@ -328,8 +308,6 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      console.log("[Contracts API] Contract renewed:", existingContract.id);
-
       const transactionMetadata = buildContractTransactionMetadata({
         contractId: existingContract.id,
         modelId: model_id,
@@ -433,7 +411,7 @@ export async function POST(request: NextRequest) {
     if (expireError) {
       console.warn("[Contracts API] Failed to expire old contracts:", expireError);
     } else if (expiredCount && expiredCount > 0) {
-      console.log("[Contracts API] Expired", expiredCount, "old contracts for model:", model_id);
+      console.log("[Contracts API] Expired old contracts:", expiredCount);
     }
 
     // 创建新合约
@@ -551,8 +529,6 @@ export async function POST(request: NextRequest) {
       .from("ai_models")
       .update({ total_rentals: (model.total_rentals || 0) + 1 })
       .eq("id", model_id);
-
-    console.log("[Contracts API] Contract created:", newContract.id);
 
     // 触发积分刷新
     return NextResponse.json({
@@ -721,8 +697,6 @@ export async function PUT(request: NextRequest) {
         { status: 500 }
       );
     }
-
-    console.log("[Contracts API] Contract renewed:", contract_id);
 
     const transactionMetadata = buildContractTransactionMetadata({
       contractId: contract_id,

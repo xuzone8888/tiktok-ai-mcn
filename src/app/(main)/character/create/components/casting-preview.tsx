@@ -9,6 +9,8 @@
 
 "use client";
 
+import { Images, ListChecks, Minimize2, ScanLine, Sparkles } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useState, useCallback, useEffect } from "react";
 
 import {
@@ -20,7 +22,19 @@ import {
 
 import { CharacterBoardSuccess } from "./character-board-success";
 
+const GENERATION_LOG_MESSAGES = [
+  "[INPUT] 解析角色描述与参考图...",
+  "[IMAGE] 构建竖封面构图...",
+  "[SHEET] 合成多角度角色设定板...",
+  "[FACE] 校准面部一致性...",
+  "[STYLE] 统一服装、发型与色彩...",
+  "[QUALITY] 检查边缘与主体完整度...",
+  "[ASSET] 整理可引用角色资产...",
+  "[READY] 等待模型返回最终结果...",
+];
+
 export function CastingPreview() {
+  const router = useRouter();
   const store = useCharacterStudioStore();
   const generationStatus = useCharacterGenerationStatus();
   const generatedImageUrl = useCharacterHeroImage();
@@ -39,18 +53,7 @@ export function CastingPreview() {
   const [fakeProgress, setFakeProgress] = useState(() =>
     generationStatus === "polling" ? 60 : 0
   );
-  const [terminalLog, setTerminalLog] = useState("[SYS] 初始化引擎组件...");
-  
-  const LOG_MESSAGES = [
-    "[SYS] 初始化引擎组件...",
-    "[MOD] 挂载高分辨率纹理...",
-    "[MOD] 注入风格特征基因...",
-    "[AI] 运算神经网络拓扑...",
-    "[SYS] 打包骨骼绑定数据...",
-    "[AI] 渲染物理光影贴图...",
-    "[MOD] 校验顶点色彩偏差...",
-    "[SYS] 同步终端缓存数据..."
-  ];
+  const [terminalLog, setTerminalLog] = useState(GENERATION_LOG_MESSAGES[0]);
 
   // 当进入 generating 状态时，启动进度与日志轮询
   useEffect(() => {
@@ -66,8 +69,8 @@ export function CastingPreview() {
       
       let logIndex = 0;
       const logTimer = setInterval(() => {
-        logIndex = (logIndex + 1) % LOG_MESSAGES.length;
-        setTerminalLog(LOG_MESSAGES[logIndex]);
+        logIndex = (logIndex + 1) % GENERATION_LOG_MESSAGES.length;
+        setTerminalLog(GENERATION_LOG_MESSAGES[logIndex]);
       }, 1000);
 
       return () => {
@@ -207,6 +210,10 @@ export function CastingPreview() {
   // ====== 保存角色（通用内部函数）======
   const doSaveCharacter = async (): Promise<string | null> => {
     const boardUrl = store.characterBoardUrl || store.referenceSheetUrl || generatedImageUrl;
+    const avatarUrl = store.characterAvatarUrl || generatedImageUrl || boardUrl;
+    const referenceImages = [boardUrl, avatarUrl, store.referenceImageUrl].filter(
+      (url): url is string => typeof url === "string" && url.length > 0
+    );
 
     if (!store.characterName.trim()) {
       alert("请先输入角色名称");
@@ -228,8 +235,8 @@ export function CastingPreview() {
         userId: store.userId,
         name: store.characterName.trim(),
         description: store.prompt,
-        avatar_url: boardUrl,
-        reference_images: [boardUrl],
+        avatar_url: avatarUrl,
+        reference_images: referenceImages,
         reference_sheet_url: boardUrl,
         reference_status: "completed",
         reference_task_id: null,
@@ -242,6 +249,7 @@ export function CastingPreview() {
             crop: store.characterBoardCrop,
             prompt: store.characterBoardPrompt || store.refPrompt || store.prompt,
           },
+          sourceReferenceImageUrl: store.referenceImageUrl,
         },
         style_tags: store.characterTags,
         gender: store.dnaConfig.gender,
@@ -320,6 +328,8 @@ export function CastingPreview() {
         ? await doSaveSora2Character()
         : await doSaveCharacter();
       if (!characterId) return;
+      store.reset();
+      router.push("/models?tab=my");
     } catch (error) {
       console.error("[SaveOnly] Error:", error);
       alert("保存失败，请重试");
@@ -327,7 +337,17 @@ export function CastingPreview() {
       store.setIsSaving(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [store, generatedImageUrl]);
+  }, [store, generatedImageUrl, router]);
+
+  const handleDiscardAndExit = useCallback(() => {
+    store.reset();
+    router.push("/models");
+  }, [router, store]);
+
+  const handleViewMyRoles = useCallback(() => {
+    store.reset();
+    router.push("/models?tab=my");
+  }, [router, store]);
 
   // 添加标签
   const handleAddTag = () => {
@@ -343,6 +363,19 @@ export function CastingPreview() {
     store.setCharacterTags(store.characterTags.filter((t) => t !== tag));
   };
 
+  const progressValue = Math.min(99, Math.max(6, fakeProgress));
+  const isVideoForge = store.forgeMode === "sora2";
+  const generationTitle = isVideoForge ? "正在生成角色视频预览" : "正在生成完整角色资产";
+  const generationDescription = isVideoForge
+    ? "模型正在把角色描述转换成可预览的视频资产。完成后可继续保存和进入角色市场。"
+    : "模型正在同时产出竖封面、完整多角度设定板和可引用参考图，完成后你可以决定是否保存。";
+  const pipelineSteps = [
+    { label: "解析角色", detail: "提示词与参考图校准", threshold: 8 },
+    { label: "生成封面", detail: "竖向展示图构图", threshold: 28 },
+    { label: isVideoForge ? "生成视频" : "合成设定板", detail: isVideoForge ? "视频角色一致性" : "多角度一致性", threshold: 54 },
+    { label: "质量检查", detail: "主体完整度与可引用资产", threshold: 78 },
+  ];
+
   return (
     <div className="casting-preview">
       {/* 状态 1：空态 */}
@@ -352,66 +385,85 @@ export function CastingPreview() {
           <div className="idle-icon">
             <div className="dna-helix">🧬</div>
           </div>
-          <p className="idle-text">等待注入角色 DNA...</p>
-          <p className="idle-hint">在左侧选择特征或输入描述，然后点击生成</p>
+          <p className="idle-text">等待创建角色资产...</p>
+          <p className="idle-hint">输入描述、上传参考图或选择 DNA 预设，然后点击生成</p>
         </div>
       )}
 
-      {/* 状态 2：生成中 (The Precision Ring Pro) */}
+      {/* 状态 2：生成中 */}
       {isGenerating && (
         <div className="preview-generating">
           <div className="gen-grid-bg" />
-          <div className="gen-grid-fade" />
-
-          {/* 居中主控环 */}
-          <div className="loader-container">
-            <div className="gen-outer-ring" />
-            <div className="gen-inner-ring" />
-            <div className="gen-data-core">
-              <span className="gen-percentage tabular-nums">{fakeProgress}%</span>
-              <span className="gen-eta tabular-nums">ETA 00:14s</span>
-            </div>
-          </div>
-
-          {/* 状态徽章与终端流 */}
-          <div className="status-terminal-area">
-            <div className="gen-status-badge">
-              <div className="status-dot" />
-              <span className="status-text text-white">
-                {generationStatus === "polling" 
-                  ? "AI 正在构建角色模型..."
-                  : "启动模型计算引擎..."}
-              </span>
-            </div>
-            
-            <div className="gen-terminal-stream text-xs text-white/30 truncate text-center h-4 flex items-center justify-center font-mono">
-              <span key={terminalLog} className="animate-pulse">{terminalLog}</span>
-            </div>
-          </div>
-
-          {/* Sora2 收起按钮 */}
-          {store.forgeMode === "sora2" && (
-            <div style={{ position: "absolute", top: 24, right: 24, zIndex: 10 }}>
+          <div className="gen-shell">
+            <div className="gen-topbar">
+              <div>
+                <div className="gen-kicker">
+                  <Sparkles size={16} />
+                  角色资产流水线
+                </div>
+                <h1>{generationTitle}</h1>
+                <p>{generationDescription}</p>
+              </div>
               <button
                 type="button"
                 onClick={() => store.setIsMinimized(true)}
-                style={{
-                  padding: "8px 16px",
-                  borderRadius: 20,
-                  background: "rgba(255,255,255,0.08)",
-                  border: "1px solid rgba(255,255,255,0.15)",
-                  color: "rgba(255,255,255,0.7)",
-                  fontSize: 13,
-                  fontWeight: 500,
-                  cursor: "pointer",
-                  backdropFilter: "blur(10px)",
-                  transition: "all 0.2s",
-                }}
+                className="gen-minimize-button"
               >
-                ⬇️ 收起
+                <Minimize2 size={15} />
+                收起到后台
               </button>
             </div>
-          )}
+
+            <div className="gen-workbench">
+              <section className="gen-status-card">
+                <div className="gen-status-head">
+                  <span className="gen-live-pill">
+                    <span className="status-dot" />
+                    {generationStatus === "polling" ? "模型处理中" : "任务启动中"}
+                  </span>
+                  <span className="gen-percent tabular-nums">{progressValue}%</span>
+                </div>
+                <div className="gen-progress-track" aria-hidden="true">
+                  <span style={{ width: `${progressValue}%` }} />
+                </div>
+                <div className="gen-terminal-stream">
+                  <ScanLine size={15} />
+                  <span key={terminalLog}>{terminalLog}</span>
+                </div>
+              </section>
+
+              <section className="gen-preview-card" aria-label="角色资产生成预览">
+                <div className="gen-preview-cover">
+                  <Images size={22} />
+                  <span>竖封面</span>
+                </div>
+                <div className="gen-preview-sheet">
+                  {Array.from({ length: 6 }).map((_, index) => (
+                    <span key={index} />
+                  ))}
+                </div>
+                <div className="gen-preview-caption">
+                  <ListChecks size={15} />
+                  生成完成后进入保存确认
+                </div>
+              </section>
+            </div>
+
+            <div className="gen-step-list">
+              {pipelineSteps.map((step) => {
+                const isActive = progressValue >= step.threshold;
+                return (
+                  <div key={step.label} className={isActive ? "gen-step gen-step-active" : "gen-step"}>
+                    <span className="gen-step-dot" />
+                    <div>
+                      <strong>{step.label}</strong>
+                      <small>{step.detail}</small>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         </div>
       )}
 
@@ -455,6 +507,8 @@ export function CastingPreview() {
           onSave={handleSaveOnly}
           onBack={() => store.setCurrentStep(1)}
           onRegenerate={() => store.setCurrentStep(1)}
+          onDiscard={handleDiscardAndExit}
+          onViewMyRoles={handleViewMyRoles}
         />
       )}
 
@@ -746,7 +800,7 @@ export function CastingPreview() {
                   角色已保存
                 </div>
                 <div className="helper-text" style={{ marginBottom: '0.5rem' }}>
-                  <a href="/team" style={{ color: 'rgba(0, 242, 234, 0.8)', textDecoration: 'none', fontSize: '0.75rem' }}>查看我的角色 →</a>
+                  <a href="/models?tab=my" style={{ color: 'rgba(0, 242, 234, 0.8)', textDecoration: 'none', fontSize: '0.75rem' }}>查看角色资产中心 →</a>
                 </div>
               </>
             ) : (
@@ -767,7 +821,7 @@ export function CastingPreview() {
                   )}
                 </button>
                 <div className="helper-text">
-                  保存后可在「我的角色」中继续使用角色
+                  保存后可在「角色市场」的我的角色中继续使用
                 </div>
               </>
             )}
@@ -831,18 +885,20 @@ export function CastingPreview() {
           color: rgba(255, 255, 255, 0.2);
         }
 
-        /* ===== Generating State (The Precision Ring Pro) ===== */
+        /* ===== Generating State ===== */
         .preview-generating {
           position: fixed;
           inset: 0;
-          text-align: center;
           display: flex;
-          flex-direction: column;
           align-items: center;
           justify-content: center;
           overflow: hidden;
-          background: #050508;
+          background:
+            linear-gradient(135deg, rgba(0, 242, 234, 0.08), transparent 28%),
+            linear-gradient(315deg, rgba(236, 72, 153, 0.08), transparent 32%),
+            #05070b;
           z-index: 1;
+          padding: clamp(1.25rem, 3vw, 3rem);
         }
 
         .gen-grid-bg {
@@ -853,7 +909,7 @@ export function CastingPreview() {
             linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
           background-size: 40px 40px;
           animation: panGrid 60s linear infinite;
-          opacity: 0.5;
+          opacity: 0.38;
         }
         
         @keyframes panGrid {
@@ -861,96 +917,130 @@ export function CastingPreview() {
           100% { transform: translateY(-400px); }
         }
 
-        .gen-grid-fade {
+        .gen-shell {
+          position: relative;
+          width: min(1080px, 100%);
+          border: 1px solid rgba(255,255,255,0.12);
+          border-radius: 32px;
+          background: rgba(10, 13, 20, 0.84);
+          box-shadow: 0 28px 90px rgba(0,0,0,0.48), inset 0 1px 0 rgba(255,255,255,0.08);
+          backdrop-filter: blur(28px);
+          padding: clamp(1.25rem, 3vw, 2rem);
+          z-index: 10;
+          overflow: hidden;
+        }
+
+        .gen-shell::before {
+          content: "";
           position: absolute;
           inset: 0;
-          background: radial-gradient(circle at center, transparent 30%, #050508 80%);
+          background: linear-gradient(90deg, rgba(255,255,255,0.08), transparent 28%, transparent 72%, rgba(255,255,255,0.05));
           pointer-events: none;
         }
 
-        .loader-container {
+        .gen-topbar {
           position: relative;
-          width: 220px;
-          height: 220px;
           display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 1.5rem;
+          margin-bottom: 1.25rem;
+        }
+
+        .gen-kicker {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.45rem;
+          color: #5ffff7;
+          font-size: 0.78rem;
+          font-weight: 800;
+          letter-spacing: 0.12em;
+          text-transform: uppercase;
+          margin-bottom: 0.7rem;
+        }
+
+        .gen-topbar h1 {
+          color: white;
+          font-size: clamp(1.8rem, 4vw, 3.35rem);
+          line-height: 1.05;
+          font-weight: 850;
+          margin: 0;
+        }
+
+        .gen-topbar p {
+          max-width: 620px;
+          color: rgba(255,255,255,0.52);
+          font-size: 0.96rem;
+          line-height: 1.7;
+          margin: 0.85rem 0 0;
+        }
+
+        .gen-minimize-button {
+          display: inline-flex;
           align-items: center;
           justify-content: center;
-          margin-bottom: 2.5rem;
-          z-index: 10;
-        }
-
-        .gen-outer-ring {
-          position: absolute;
-          inset: 0;
-          border-radius: 50%;
-          background: conic-gradient(from 0deg, #00F2EA, #CCFF00, #EC4899, #00F2EA);
-          -webkit-mask: radial-gradient(transparent 65%, black 66%);
-          mask: radial-gradient(transparent 65%, black 66%);
-          animation: spinFast 3s linear infinite;
-          box-shadow: 0 0 30px rgba(0,242,234,0.2);
-        }
-
-        @keyframes spinFast {
-          0% { transform: rotate(0deg); }
-          100% { transform: rotate(360deg); }
-        }
-
-        .gen-inner-ring {
-          position: absolute;
-          width: 85%;
-          height: 85%;
-          border-radius: 50%;
-          border: 1px dashed rgba(255, 255, 255, 0.15);
-          animation: spinReverse 20s linear infinite reverse;
-        }
-
-        @keyframes spinReverse {
-          0% { transform: rotate(0deg); }
-          100% { transform: rotate(360deg); }
-        }
-
-        .gen-data-core {
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-          z-index: 5;
-        }
-
-        .gen-percentage {
-          font-size: 3rem;
+          gap: 0.45rem;
+          min-width: 118px;
+          height: 40px;
+          padding: 0 16px;
+          border: 1px solid rgba(255,255,255,0.16);
+          border-radius: 999px;
+          background: rgba(255,255,255,0.08);
+          color: rgba(255,255,255,0.78);
+          font-size: 13px;
           font-weight: 700;
-          background: linear-gradient(135deg, #ffffff 0%, #a1a1aa 100%);
-          -webkit-background-clip: text;
-          -webkit-text-fill-color: transparent;
-          line-height: 1;
-          margin-bottom: 0.2rem;
-        }
-
-        .gen-eta {
-          font-size: 0.75rem;
-          color: rgba(255,255,255,0.4);
-          letter-spacing: 0.05em;
-        }
-
-        .status-terminal-area {
-          position: relative;
-          z-index: 10;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          gap: 1rem;
-        }
-
-        .gen-status-badge {
-          display: flex;
-          align-items: center;
-          gap: 0.75rem;
-          padding: 0.5rem 1.25rem;
-          background: rgba(255, 255, 255, 0.03);
-          border: 1px solid rgba(255, 255, 255, 0.08);
-          border-radius: 2rem;
+          cursor: pointer;
           backdrop-filter: blur(10px);
+          transition: all 0.2s;
+        }
+
+        .gen-minimize-button:hover {
+          border-color: rgba(0, 242, 234, 0.32);
+          background: rgba(0, 242, 234, 0.12);
+          color: #fff;
+          transform: translateY(-1px);
+        }
+
+        .gen-workbench {
+          position: relative;
+          display: grid;
+          grid-template-columns: minmax(0, 1.1fr) minmax(320px, 0.9fr);
+          gap: 1rem;
+          margin-top: 1.6rem;
+        }
+
+        .gen-status-card,
+        .gen-preview-card,
+        .gen-step {
+          border: 1px solid rgba(255,255,255,0.1);
+          background: rgba(255,255,255,0.045);
+          box-shadow: inset 0 1px 0 rgba(255,255,255,0.06);
+        }
+
+        .gen-status-card {
+          border-radius: 24px;
+          padding: 1.25rem;
+        }
+
+        .gen-status-head {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 1rem;
+          margin-bottom: 1rem;
+        }
+
+        .gen-live-pill {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.55rem;
+          padding: 0.45rem 0.75rem;
+          border-radius: 999px;
+          color: rgba(255,255,255,0.78);
+          background: rgba(0,0,0,0.25);
+          border: 1px solid rgba(255,255,255,0.08);
+          font-size: 0.8rem;
+          font-weight: 700;
         }
 
         .status-dot {
@@ -967,10 +1057,241 @@ export function CastingPreview() {
           50% { opacity: 0.4; transform: scale(0.8); }
         }
 
-        .status-text {
-          font-size: 0.85rem;
-          font-weight: 500;
-          letter-spacing: 0.02em;
+        .gen-percent {
+          color: white;
+          font-size: clamp(2rem, 6vw, 4.4rem);
+          font-weight: 850;
+          letter-spacing: 0;
+          line-height: 0.9;
+        }
+
+        .gen-progress-track {
+          height: 14px;
+          border-radius: 999px;
+          overflow: hidden;
+          border: 1px solid rgba(255,255,255,0.08);
+          background: rgba(255,255,255,0.06);
+        }
+
+        .gen-progress-track span {
+          display: block;
+          height: 100%;
+          min-width: 24px;
+          border-radius: inherit;
+          background: linear-gradient(90deg, #00F2EA, #CCFF00, #EC4899);
+          box-shadow: 0 0 28px rgba(0,242,234,0.22);
+          transition: width 0.45s ease;
+        }
+
+        .gen-terminal-stream {
+          min-height: 46px;
+          margin-top: 1rem;
+          display: flex;
+          align-items: center;
+          gap: 0.6rem;
+          padding: 0.8rem 0.9rem;
+          border-radius: 16px;
+          color: rgba(255,255,255,0.52);
+          background: rgba(0,0,0,0.24);
+          border: 1px solid rgba(255,255,255,0.07);
+          font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+          font-size: 0.78rem;
+        }
+
+        .gen-terminal-stream span {
+          animation: fadeLog 0.45s ease both;
+        }
+
+        @keyframes fadeLog {
+          0% { opacity: 0; transform: translateY(4px); }
+          100% { opacity: 1; transform: translateY(0); }
+        }
+
+        .gen-preview-card {
+          border-radius: 24px;
+          padding: 1rem;
+          display: grid;
+          grid-template-columns: 0.8fr 1fr;
+          gap: 0.8rem;
+          align-items: stretch;
+        }
+
+        .gen-preview-cover,
+        .gen-preview-sheet {
+          min-height: 220px;
+          border-radius: 18px;
+          overflow: hidden;
+          border: 1px solid rgba(255,255,255,0.08);
+          background: linear-gradient(135deg, rgba(255,255,255,0.14), rgba(255,255,255,0.035));
+          position: relative;
+        }
+
+        .gen-preview-cover {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          gap: 0.55rem;
+          color: rgba(255,255,255,0.48);
+          font-size: 0.82rem;
+          font-weight: 700;
+        }
+
+        .gen-preview-cover::before {
+          content: "";
+          width: 42%;
+          max-width: 78px;
+          aspect-ratio: 1;
+          border-radius: 999px;
+          background: rgba(255,255,255,0.12);
+          box-shadow: 0 68px 0 28px rgba(255,255,255,0.08);
+          animation: breathePreview 2.4s ease-in-out infinite;
+        }
+
+        @keyframes breathePreview {
+          0%, 100% { opacity: 0.65; transform: translateY(0); }
+          50% { opacity: 1; transform: translateY(-4px); }
+        }
+
+        .gen-preview-sheet {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          grid-template-rows: 1.2fr 0.8fr;
+          gap: 0.5rem;
+          padding: 0.65rem;
+        }
+
+        .gen-preview-sheet span {
+          border-radius: 12px;
+          background: linear-gradient(135deg, rgba(255,255,255,0.16), rgba(255,255,255,0.045));
+          animation: skeletonSweep 1.8s ease-in-out infinite;
+        }
+
+        .gen-preview-sheet span:nth-child(1) {
+          grid-column: span 2;
+        }
+
+        .gen-preview-sheet span:nth-child(2) {
+          animation-delay: 0.12s;
+        }
+
+        .gen-preview-sheet span:nth-child(3) {
+          animation-delay: 0.24s;
+        }
+
+        .gen-preview-sheet span:nth-child(4) {
+          animation-delay: 0.36s;
+        }
+
+        .gen-preview-sheet span:nth-child(5) {
+          animation-delay: 0.48s;
+        }
+
+        .gen-preview-sheet span:nth-child(6) {
+          animation-delay: 0.6s;
+        }
+
+        @keyframes skeletonSweep {
+          0%, 100% { opacity: 0.42; }
+          50% { opacity: 0.86; }
+        }
+
+        .gen-preview-caption {
+          grid-column: 1 / -1;
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          color: rgba(255,255,255,0.5);
+          font-size: 0.8rem;
+          font-weight: 650;
+          padding: 0 0.2rem;
+        }
+
+        .gen-step-list {
+          position: relative;
+          display: grid;
+          grid-template-columns: repeat(4, 1fr);
+          gap: 0.75rem;
+          margin-top: 0.9rem;
+        }
+
+        .gen-step {
+          min-height: 82px;
+          border-radius: 18px;
+          padding: 0.9rem;
+          display: flex;
+          align-items: flex-start;
+          gap: 0.75rem;
+          opacity: 0.58;
+          transition: all 0.3s ease;
+        }
+
+        .gen-step-active {
+          opacity: 1;
+          border-color: rgba(95,255,247,0.22);
+          background: rgba(0,242,234,0.065);
+        }
+
+        .gen-step-dot {
+          width: 10px;
+          height: 10px;
+          border-radius: 999px;
+          background: rgba(255,255,255,0.26);
+          margin-top: 0.35rem;
+          flex: none;
+        }
+
+        .gen-step-active .gen-step-dot {
+          background: #5ffff7;
+          box-shadow: 0 0 16px rgba(95,255,247,0.55);
+        }
+
+        .gen-step strong {
+          display: block;
+          color: white;
+          font-size: 0.9rem;
+          margin-bottom: 0.28rem;
+        }
+
+        .gen-step small {
+          display: block;
+          color: rgba(255,255,255,0.44);
+          font-size: 0.74rem;
+          line-height: 1.45;
+        }
+
+        @media (max-width: 1024px) {
+          .preview-generating {
+            align-items: flex-start;
+            overflow-y: auto;
+          }
+
+          .gen-topbar,
+          .gen-workbench {
+            grid-template-columns: 1fr;
+          }
+
+          .gen-topbar {
+            flex-direction: column;
+          }
+
+          .gen-step-list {
+            grid-template-columns: repeat(2, 1fr);
+          }
+        }
+
+        @media (max-width: 640px) {
+          .gen-shell {
+            border-radius: 24px;
+          }
+
+          .gen-preview-card {
+            grid-template-columns: 1fr;
+          }
+
+          .gen-step-list {
+            grid-template-columns: 1fr;
+          }
         }
 
         /* ===== Failed State ===== */

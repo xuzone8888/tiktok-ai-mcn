@@ -9,6 +9,7 @@ import { create } from "zustand";
 import { devtools, persist, createJSONStorage } from "zustand/middleware";
 import { immer } from "zustand/middleware/immer";
 import type { ImageModel } from "@/types/generation";
+import type { CharacterAssetSnapshot } from "@/lib/character-assets";
 
 // ============================================================================
 // 类型定义
@@ -26,6 +27,7 @@ export interface QuickGenVideoTask {
   duration: number;
   sourceImageUrl?: string;
   modelId?: string; // AI 模特 ID
+  characterAsset?: CharacterAssetSnapshot;
   
   // 任务状态
   status: QuickGenTaskStatus;
@@ -52,6 +54,7 @@ export interface QuickGenImageTask {
   aspectRatio: string;
   resolution: "1k" | "2k" | "4k";
   sourceImageUrls: string[];
+  characterAsset?: CharacterAssetSnapshot;
   
   // 任务状态
   status: QuickGenTaskStatus;

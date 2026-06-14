@@ -145,6 +145,11 @@ import {
   mergeCharacterReferenceImages,
   supportsCharacterReferenceImage,
 } from "@/lib/video-models/character-reference";
+import {
+  createCharacterAssetSnapshotFromSelection,
+  getCharacterAssetReferenceUrls,
+  getSafeCharacterDescription,
+} from "@/lib/character-assets";
 
 // ============================================================================
 // PipelineProgress 组件 - 流水线进度指示器
@@ -1150,6 +1155,7 @@ export default function VideoBatchPage() {
   const [userId, setUserId] = useState<string | null>(null);
   const [userCredits, setUserCredits] = useState(0);
   const initialCharacterAppliedRef = useRef(false);
+  const initialCharacterLoadingRef = useRef(false);
   const [previewTask, setPreviewTask] = useState<VideoBatchTask | null>(null);
   const [playingVideoTask, setPlayingVideoTask] = useState<VideoBatchTask | null>(null);
   const [editingImages, setEditingImages] = useState<TaskImageInfo[]>([]);
@@ -1728,71 +1734,114 @@ C07: [story CTA, inspiring, <50 chars]`,
   const handleCharacterSelect = useCallback((character: CharacterOption | null) => {
     if (!character) {
       // 清除选择
-      if (useRefImageModel) {
-        updateGlobalSettings("characterId", null);
-        updateGlobalSettings("characterName", null);
-        updateGlobalSettings("characterRefUrl", null);
-      } else {
-        setUseAiModel(false);
-        setSelectedModelId(null);
-        setSelectedModelName(null);
-        setSelectedModelTriggerWord(null);
-        setSelectedModelCover(null);
-      }
-      return;
-    }
+	      if (useRefImageModel) {
+	        updateGlobalSettings("characterId", null);
+	        updateGlobalSettings("characterName", null);
+	        updateGlobalSettings("characterRefUrl", null);
+	        updateGlobalSettings("characterReferenceImages", undefined);
+	        updateGlobalSettings("characterAsset", null);
+	      } else {
+	        setUseAiModel(false);
+	        setSelectedModelId(null);
+	        setSelectedModelName(null);
+	        setSelectedModelTriggerWord(null);
+	        setSelectedModelCover(null);
+	        updateGlobalSettings("characterAsset", null);
+	      }
+	      return;
+	    }
 
-    if (useRefImageModel) {
-      // VEO / Grok / Omni / HappyHorse：存自建角色参考图
-      updateGlobalSettings("characterId", character.id);
-      updateGlobalSettings("characterName", character.name);
-      updateGlobalSettings("characterRefUrl", character.reference_sheet_url || null);
-    } else {
-      // Sora2：存签约模特 trigger_word
-      setUseAiModel(true);
-      setSelectedModelId(character.id);
-      setSelectedModelName(character.name);
-      setSelectedModelTriggerWord(character.trigger_word || character.description || character.name);
-      setSelectedModelCover(character.avatar_url);
-    }
-  }, [useRefImageModel, updateGlobalSettings, setUseAiModel, setSelectedModelId, setSelectedModelName, setSelectedModelTriggerWord, setSelectedModelCover]);
+	    const asset = character.characterAsset || createCharacterAssetSnapshotFromSelection(character);
+	    const referenceUrls = getCharacterAssetReferenceUrls(asset).slice(0, promptReferenceLimit);
 
-  useEffect(() => {
-    if (initialCharacterAppliedRef.current || typeof window === "undefined") return;
+	    if (useRefImageModel) {
+	      // VEO / Grok / Omni / HappyHorse：存自建角色参考图
+	      updateGlobalSettings("characterId", character.id);
+	      updateGlobalSettings("characterName", character.name);
+	      updateGlobalSettings("characterRefUrl", referenceUrls[0] || null);
+	      updateGlobalSettings("characterReferenceImages", referenceUrls);
+	      updateGlobalSettings("characterAsset", asset);
+	    } else {
+	      // Sora2：存签约模特 trigger_word
+	      setUseAiModel(true);
+	      setSelectedModelId(character.id);
+	      setSelectedModelName(character.name);
+	      setSelectedModelTriggerWord(character.trigger_word || getSafeCharacterDescription(asset));
+	      setSelectedModelCover(character.avatar_url);
+	      updateGlobalSettings("characterAsset", asset);
+	    }
+	  }, [useRefImageModel, updateGlobalSettings, setUseAiModel, setSelectedModelId, setSelectedModelName, setSelectedModelTriggerWord, setSelectedModelCover, promptReferenceLimit]);
 
-    const params = new URLSearchParams(window.location.search);
-    const characterId = params.get("characterId");
-    if (!characterId) return;
+	  useEffect(() => {
+    if (
+      initialCharacterAppliedRef.current
+      || initialCharacterLoadingRef.current
+      || typeof window === "undefined"
+    ) return;
+
+	    const params = new URLSearchParams(window.location.search);
+	    const characterId = params.get("characterId");
+	    if (!characterId) return;
 
     const requestedModel = params.get("modelType");
     const preferredModelType = isVideoModelType(requestedModel) ? requestedModel : "veo";
 
-    let cancelled = false;
-    initialCharacterAppliedRef.current = true;
+	    let cancelled = false;
+    initialCharacterLoadingRef.current = true;
 
-    const applyReferenceCharacter = (character: {
-      id: string;
-      name: string;
-      avatar_url?: string | null;
-      description?: string | null;
-      reference_sheet_url?: string | null;
-      trigger_word?: string | null;
-    }) => {
-      const referenceUrl = character.reference_sheet_url || null;
-      const triggerWord = character.trigger_word || character.description || character.name;
+	    const applyReferenceCharacter = (character: {
+		      id: string;
+		      name: string;
+	      avatar_url?: string | null;
+	      description?: string | null;
+	      reference_sheet_url?: string | null;
+	      reference_images?: string[];
+	      preview_video_url?: string | null;
+	      category?: string | null;
+	      style_tags?: string[];
+	      source?: "official" | "user_created" | string | null;
+	      publish_price?: number | null;
+	      reference_status?: string | null;
+		      forge_type?: string | null;
+		      trigger_word?: string | null;
+		    }, ownership: "owned" | "licensed") => {
+      if (cancelled) return;
+	      const asset = createCharacterAssetSnapshotFromSelection({
+	        id: character.id,
+	        name: character.name,
+	        description: character.description,
+	        avatar_url: character.avatar_url || null,
+	        reference_sheet_url: character.reference_sheet_url || null,
+	        reference_images: character.reference_images || [],
+	        preview_video_url: character.preview_video_url || null,
+	        category: character.category || undefined,
+	        tags: character.style_tags || [],
+	        source: character.source === "user_created" ? "user_created" : "official",
+		        ownership,
+	        publish_price: character.publish_price ?? 100,
+	        reference_status: character.reference_status || "none",
+	        trigger_word: character.trigger_word || null,
+	        forge_type: character.forge_type || null,
+	      });
+	      const targetRefModel = supportsCharacterReferenceImage(preferredModelType) ? preferredModelType : "veo";
+	      const referenceUrls = getCharacterAssetReferenceUrls(asset).slice(0, getCharacterReferenceMaxImages(targetRefModel));
+	      const referenceUrl = referenceUrls[0] || null;
+	      const triggerWord = character.trigger_word || getSafeCharacterDescription(asset);
 
       if (referenceUrl) {
-        const targetModel = supportsCharacterReferenceImage(preferredModelType) ? preferredModelType : "veo";
-        applyVideoModelDefaults(targetModel);
+		        applyVideoModelDefaults(targetRefModel);
         setUseAiModel(false);
         setSelectedModelId(null);
         setSelectedModelName(null);
         setSelectedModelTriggerWord(null);
         setSelectedModelCover(null);
-        updateGlobalSettings("characterId", character.id);
-        updateGlobalSettings("characterName", character.name);
-        updateGlobalSettings("characterRefUrl", referenceUrl);
-        toast({
+	        updateGlobalSettings("characterId", character.id);
+	        updateGlobalSettings("characterName", character.name);
+	        updateGlobalSettings("characterRefUrl", referenceUrl);
+		        updateGlobalSettings("characterReferenceImages", referenceUrls);
+		        updateGlobalSettings("characterAsset", asset);
+        initialCharacterAppliedRef.current = true;
+		        toast({
           title: "已选择角色参考图",
           description: `${character.name} 已带入素材生成视频`,
         });
@@ -1804,11 +1853,14 @@ C07: [story CTA, inspiring, <50 chars]`,
       setSelectedModelId(character.id);
       setSelectedModelName(character.name);
       setSelectedModelTriggerWord(triggerWord);
-      setSelectedModelCover(character.avatar_url || null);
-      updateGlobalSettings("characterId", null);
-      updateGlobalSettings("characterName", null);
-      updateGlobalSettings("characterRefUrl", null);
-      toast({
+	      setSelectedModelCover(character.avatar_url || null);
+	      updateGlobalSettings("characterId", null);
+	      updateGlobalSettings("characterName", null);
+	      updateGlobalSettings("characterRefUrl", null);
+		      updateGlobalSettings("characterReferenceImages", undefined);
+		      updateGlobalSettings("characterAsset", asset);
+      initialCharacterAppliedRef.current = true;
+	      toast({
         title: "已选择签约模特",
         description: `${character.name} 已带入 Sora2 创作`,
       });
@@ -1821,38 +1873,42 @@ C07: [story CTA, inspiring, <50 chars]`,
         if (cancelled) return;
         if (contractsResult.success && Array.isArray(contractsResult.data)) {
           const contract = contractsResult.data.find((item: any) => item?.ai_models?.id === characterId);
-          if (contract?.ai_models) {
-            applyReferenceCharacter(contract.ai_models);
-            return;
-          }
+	          if (contract?.ai_models) {
+	            applyReferenceCharacter(contract.ai_models, "licensed");
+	            return;
+	          }
         }
 
-        if (!userId) {
-          initialCharacterAppliedRef.current = false;
-          return;
-        }
+	        if (!userId) {
+	          return;
+	        }
 
         const ownRes = await fetch(`/api/characters?userId=${encodeURIComponent(userId)}`);
         const ownResult = await ownRes.json();
         if (cancelled) return;
         if (ownResult.success && Array.isArray(ownResult.data)) {
           const character = ownResult.data.find((item: any) => item?.id === characterId);
-          if (character) {
-            applyReferenceCharacter(character);
-          }
+	          if (character) {
+	            applyReferenceCharacter(character, "owned");
+	          }
         }
-      } catch (error) {
+	    } catch (error) {
+	        if (!cancelled) {
+	          console.error("[Video Batch] Failed to apply character from URL:", error);
+	        }
+      } finally {
         if (!cancelled) {
-          console.error("[Video Batch] Failed to apply character from URL:", error);
+          initialCharacterLoadingRef.current = false;
         }
-      }
-    };
+	      }
+	    };
 
     loadCharacter();
 
-    return () => {
-      cancelled = true;
-    };
+	    return () => {
+	      cancelled = true;
+      initialCharacterLoadingRef.current = false;
+	    };
   }, [
     applyVideoModelDefaults,
     setSelectedModelCover,
@@ -2214,8 +2270,20 @@ C07: [story CTA, inspiring, <50 chars]`,
         const isVeoModel = taskModelType === "veo";
         const isSeedanceModel = taskModelType === "seedance";
         const isHappyHorseModel = taskModelType === "happyhorse";
+        const taskCharacterAsset = task.characterAsset || globalSettings.characterAsset || null;
+        const taskCharacterReferenceImages = task.characterReferenceImages?.length
+          ? task.characterReferenceImages
+          : globalSettings.characterReferenceImages?.length
+            ? globalSettings.characterReferenceImages
+            : taskCharacterAsset
+              ? getCharacterAssetReferenceUrls(taskCharacterAsset).slice(0, getCharacterReferenceMaxImages(taskModelType))
+              : [];
+        const taskCharacterRefUrl = taskCharacterReferenceImages[0]
+          || task.characterRefUrl
+          || globalSettings.characterRefUrl;
 
-        const unifiedImageUrls = mergeCharacterReferenceImages(taskModelType, task.characterRefUrl || globalSettings.characterRefUrl, [
+        const unifiedImageUrls = mergeCharacterReferenceImages(taskModelType, taskCharacterRefUrl, [
+          ...taskCharacterReferenceImages.slice(1),
           ...(isHappyHorseModel ? happyHorseImageUrls : []),
           ...(mainGridImageUrl ? [mainGridImageUrl] : []),
           ...(isVeoModel && task.firstFrameUrl ? [task.firstFrameUrl] : []),
@@ -2240,6 +2308,10 @@ C07: [story CTA, inspiring, <50 chars]`,
           userId: currentUserId,
           mode: isPromptMode ? "prompt_to_video" : "image_to_video",
           groupName: task.groupName,
+          characterId: task.characterId || taskCharacterAsset?.id,
+          characterName: task.characterName || taskCharacterAsset?.name,
+          characterReferenceImages: taskCharacterReferenceImages,
+          characterAsset: taskCharacterAsset,
         };
 
         const videoResponse = await fetch("/api/video-batch/models/submit", {
@@ -2635,7 +2707,22 @@ C07: [story CTA, inspiring, <50 chars]`,
               {activeGroupStats.pending > 0 && (
                 <button
                   onClick={async () => {
-                    if (!userId) {
+                    let currentUserId = userId;
+                    if (!currentUserId) {
+                      try {
+                        const creditsRes = await fetch("/api/user/credits", { cache: "no-store" });
+                        const creditsData = await creditsRes.json();
+                        if (creditsData.userId) {
+                          currentUserId = creditsData.userId;
+                          setUserId(creditsData.userId);
+                          if (creditsData.credits !== undefined) setUserCredits(creditsData.credits);
+                        }
+                      } catch (error) {
+                        console.error("[Video Batch] Failed to restore user before batch start:", error);
+                      }
+                    }
+
+                    if (!currentUserId) {
                       toast({ variant: "destructive", title: "请先登录" });
                       return;
                     }
@@ -3421,10 +3508,12 @@ C07: [story CTA, inspiring, <50 chars]`,
                               setSelectedModelName(null);
                               setSelectedModelTriggerWord(null);
                               setSelectedModelCover(null);
-                              updateGlobalSettings("characterId", null);
-                              updateGlobalSettings("characterName", null);
-                              updateGlobalSettings("characterRefUrl", null);
-                            }
+	                              updateGlobalSettings("characterId", null);
+	                              updateGlobalSettings("characterName", null);
+	                              updateGlobalSettings("characterRefUrl", null);
+                              updateGlobalSettings("characterReferenceImages", undefined);
+                              updateGlobalSettings("characterAsset", null);
+	                            }
                           }}
                           className={cn(
                             "px-2 py-2 rounded-lg text-xs font-medium transition-all flex flex-col items-center gap-0.5",

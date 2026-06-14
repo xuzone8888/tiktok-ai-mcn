@@ -9,8 +9,16 @@
 
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
+import {
+  classifyCharacterAsset,
+  normalizeCharacterAssetImages,
+  normalizeCharacterTags,
+  toCharacterAssetSnapshot,
+  type CharacterAssetOwnership,
+  type CharacterAssetSnapshot,
+} from "@/lib/character-assets";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
 
 // ============================================================================
 // 类型定义 - 安全的公开模特数据
@@ -44,7 +52,15 @@ export interface PublicModel {
   source: "official" | "user_created";
   publish_price: number;             // 社区角色聘用价格（积分）
   reference_sheet_url: string | null;
+  reference_images: string[];
+  preview_video_url: string | null;
   reference_status: string;          // none | pending | completed | failed
+  owner_id: string | null;
+  is_public: boolean;
+  ownership: CharacterAssetOwnership;
+  is_owned?: boolean;
+  has_active_contract?: boolean;
+  characterAsset: CharacterAssetSnapshot;
 }
 
 /**
@@ -110,7 +126,11 @@ const SAFE_MODEL_FIELDS = `
   owner_id,
   is_public,
   publish_price,
+  character_type,
+  dna_config,
+  reference_images,
   reference_sheet_url,
+  preview_video_url,
   reference_status
 `;
 
@@ -154,20 +174,36 @@ function getStoragePublicUrl(path: string | null, bucket: string): string | null
  * 
  * ⚠️ 此函数确保敏感字段被剔除
  */
-function toPublicModel(model: any): PublicModel {
-  // 处理 style_tags - 可能是 JSON 字符串或数组
-  let tags: string[] = [];
-  if (model.style_tags) {
-    if (typeof model.style_tags === "string") {
-      try {
-        tags = JSON.parse(model.style_tags);
-      } catch {
-        tags = [model.style_tags];
-      }
-    } else if (Array.isArray(model.style_tags)) {
-      tags = model.style_tags;
+function toPublicModel(
+  model: any,
+  options: {
+    currentUserId?: string | null;
+    hasActiveContract?: boolean;
+  } = {}
+): PublicModel {
+  const tags = normalizeCharacterTags(model.style_tags);
+  const referenceImages = normalizeCharacterAssetImages(model.reference_images);
+  const category = classifyCharacterAsset({
+    category: model.category,
+    character_type: model.character_type,
+    tags,
+    description: model.description,
+    dna_config: model.dna_config,
+  });
+  const avatarUrl = getStoragePublicUrl(model.avatar_url, "model-avatars");
+  const characterAsset = toCharacterAssetSnapshot(
+    {
+      ...model,
+      avatar_url: avatarUrl,
+      category,
+      tags,
+      reference_images: referenceImages,
+    },
+    {
+      currentUserId: options.currentUserId || null,
+      hasActiveContract: options.hasActiveContract,
     }
-  }
+  );
 
   // 处理 sample_videos - 可能是 JSON 字符串或数组
   let sampleVideos: string[] = [];
@@ -188,12 +224,12 @@ function toPublicModel(model: any): PublicModel {
     id: model.id,
     name: model.name,
     description: model.description || null,
-    avatar_url: getStoragePublicUrl(model.avatar_url, "model-avatars"),
-    demo_video_url: sampleVideos[0] 
+    avatar_url: avatarUrl,
+    demo_video_url: sampleVideos[0]
       ? getStoragePublicUrl(sampleVideos[0], "model-demos")
-      : null,
-    tags: tags,
-    category: model.category || "general",
+      : model.preview_video_url || null,
+    tags,
+    category,
     gender: model.gender || null,
     base_price: model.price_monthly || 0,
     price_monthly: model.price_monthly || 0,
@@ -204,10 +240,18 @@ function toPublicModel(model: any): PublicModel {
     is_trending: model.is_trending || false,
     created_at: model.created_at,
     // Phase 2 角色系统字段
-    source: model.source || "official",
+    source: model.source === "user_created" ? "user_created" : "official",
     publish_price: model.publish_price || 100,
     reference_sheet_url: model.reference_sheet_url || null,
+    reference_images: referenceImages,
+    preview_video_url: model.preview_video_url || null,
     reference_status: model.reference_status || "none",
+    owner_id: model.owner_id || null,
+    is_public: !!model.is_public,
+    ownership: characterAsset.ownership,
+    is_owned: characterAsset.ownership === "owned",
+    has_active_contract: !!options.hasActiveContract || characterAsset.ownership === "owned",
+    characterAsset,
   };
 
   // 双重保护：确保敏感字段不存在
@@ -245,6 +289,7 @@ function getDaysRemaining(endDate: string): number {
  */
 export async function getMarketplaceModels(options?: {
   category?: string;
+  mine?: boolean;
   featured?: boolean;
   trending?: boolean;
   limit?: number;
@@ -253,38 +298,91 @@ export async function getMarketplaceModels(options?: {
 }): Promise<ModelsListResponse> {
   try {
     const supabase = await createClient();
-    const { category, featured, trending, limit = 50, offset = 0, search } = options || {};
+    const {
+      category,
+      mine: requestedMine,
+      featured,
+      trending,
+      limit = 50,
+      offset = 0,
+      search,
+    } = options || {};
+    const mine = requestedMine || category === "我的角色";
+    const dbCategory = category && !["all", "全部", "我的角色"].includes(category)
+      ? category
+      : null;
 
     // 0. 获取当前用户
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    const { data: { user } } = await supabase.auth.getUser();
     const currentUserId = user?.id;
-    
-    console.log("[Models Action] Current user check:", {
-      hasUser: !!user,
-      userId: currentUserId || "anonymous",
-      userError: userError?.message || null,
-    });
+
+    const adminSupabase = createAdminClient();
+
+    if (mine && !currentUserId) {
+      return {
+        success: true,
+        data: { models: [], total: 0 },
+      };
+    }
+
+    const currentUserContractModelIds = new Set<string>();
+    if (mine && currentUserId) {
+      const { data: userContracts, error: userContractsError } = await adminSupabase
+        .from("contracts")
+        .select("model_id")
+        .eq("user_id", currentUserId)
+        .eq("status", "active")
+        .gt("end_date", new Date().toISOString());
+
+      if (userContractsError) {
+        console.error("[Models Action] User contracts query error:", userContractsError);
+        throw userContractsError;
+      }
+
+      (userContracts || []).forEach((contract: any) => {
+        if (contract.model_id) currentUserContractModelIds.add(contract.model_id);
+      });
+    }
 
     // 1. 构建查询 - 只选择安全字段
-    // 广场只显示：官方角色 + 已公开的社区角色
-    let query = supabase
+    // 广场只显示：官方角色 + 已公开的社区角色；我的角色显示自建 + 已授权资产。
+    let query = adminSupabase
       .from("ai_models")
       .select(SAFE_MODEL_FIELDS, { count: "exact" })
       .eq("is_active", true)
-      .or("source.eq.official,and(source.eq.user_created,is_public.eq.true)")
+      .not("reference_sheet_url", "is", null)
+      .eq("reference_status", "completed")
       .order("created_at", { ascending: false });
 
-    // 2. 应用筛选条件
-    if (category && category !== "all") {
-      query = query.ilike("category", category);
+    if (mine) {
+      const contractIds = Array.from(currentUserContractModelIds);
+      query = contractIds.length
+        ? query.or(`and(source.eq.user_created,owner_id.eq.${currentUserId}),id.in.(${contractIds.join(",")})`)
+        : query
+          .eq("source", "user_created")
+          .eq("owner_id", currentUserId as string);
+    } else {
+      const visibilityFilters = [
+        "source.eq.official",
+        "and(source.eq.user_created,is_public.eq.true)",
+      ];
+      if (currentUserId) {
+        visibilityFilters.push(`and(source.eq.user_created,owner_id.eq.${currentUserId})`);
+      }
+      query = query.or(visibilityFilters.join(","));
     }
 
+    // 2. 应用筛选条件
     if (featured) {
       query = query.eq("is_featured", true);
     }
 
     if (trending) {
       query = query.eq("is_trending", true);
+    }
+
+    if (dbCategory) {
+      query = query.ilike("category", dbCategory);
     }
 
     if (search && search.trim().length >= 2) {
@@ -296,7 +394,7 @@ export async function getMarketplaceModels(options?: {
     query = query.range(offset, offset + limit - 1);
 
     // 4. 执行查询
-    const { data: models, error, count } = await query;
+    const { data: models, error } = await query;
 
     if (error) {
       console.error("[Models Action] Database error:", error);
@@ -305,55 +403,55 @@ export async function getMarketplaceModels(options?: {
 
     // 5. 查询每个模特的有效签约数量 (所有用户)
     // 使用 admin 客户端绕过 RLS，确保能查询所有用户的合约
-    const adminSupabase = createAdminClient();
     const modelIds = (models || []).map((m: any) => m.id);
-    const { data: allContracts, error: contractsError } = await adminSupabase
-      .from("contracts")
-      .select("model_id, user_id")
-      .in("model_id", modelIds)
-      .eq("status", "active")
-      .gt("end_date", new Date().toISOString());
-    
-    console.log("[Models Action] Contracts query result:", {
-      contractsCount: allContracts?.length || 0,
-      contractsError: contractsError?.message || null,
-      allContracts: allContracts?.map(c => ({ model: c.model_id, user: c.user_id })),
-    });
-    
+    const { data: allContracts } = modelIds.length
+      ? await adminSupabase
+        .from("contracts")
+        .select("model_id, user_id")
+        .in("model_id", modelIds)
+        .eq("status", "active")
+        .gt("end_date", new Date().toISOString())
+      : { data: [] };
+
     // 统计每个模特的签约数量和当前用户是否已签约
     const hiredCountMap: Record<string, number> = {};
     const userContractsSet = new Set<string>(); // 当前用户签约的模特ID
-    
+
     (allContracts || []).forEach((c: any) => {
       hiredCountMap[c.model_id] = (hiredCountMap[c.model_id] || 0) + 1;
       if (currentUserId && c.user_id === currentUserId) {
         userContractsSet.add(c.model_id);
-        console.log("[Models Action] User has contract for model:", c.model_id);
       }
     });
 
     // 6. 转换为安全的公开格式，并添加签约状态
     const publicModels = (models || []).map((model: any) => {
-      const publicModel = toPublicModel(model);
       const hiredCount = hiredCountMap[model.id] || 0;
-      const hasActiveContract = userContractsSet.has(model.id)
-        || (currentUserId && model.source === "user_created" && model.owner_id === currentUserId);
-      
+      const hasActiveContract = Boolean(
+        userContractsSet.has(model.id)
+        || (currentUserId && model.source === "user_created" && model.owner_id === currentUserId)
+      );
+      const publicModel = toPublicModel(model, {
+        currentUserId,
+        hasActiveContract: !!hasActiveContract,
+      });
+
       return {
         ...publicModel,
         has_active_contract: hasActiveContract,
-        is_hired_by_others: !hasActiveContract && hiredCount > 0,
+        is_hired_by_others: false,
         hired_count: hiredCount,
       };
+    }).filter((model) => {
+      if (!category || category === "all" || category === "全部" || category === "我的角色") return true;
+      return model.category === category;
     });
-
-    console.log(`[Models Action] Fetched ${publicModels.length} marketplace models (user: ${currentUserId || 'anonymous'})`);
 
     return {
       success: true,
       data: {
         models: publicModels,
-        total: count || publicModels.length,
+        total: publicModels.length,
       },
     };
   } catch (error) {
@@ -408,7 +506,9 @@ export async function getUserHiredModels(
       const { data: models, error: modelsError } = await supabase
         .from("ai_models")
         .select(SAFE_MODEL_FIELDS)
-        .in("id", modelIds);
+        .in("id", modelIds)
+        .not("reference_sheet_url", "is", null)
+        .eq("reference_status", "completed");
 
       if (modelsError) {
         console.error("[Models Action] Models query error:", modelsError);
@@ -422,7 +522,10 @@ export async function getUserHiredModels(
         .filter((contract: any) => modelsMap.has(contract.model_id))
         .map((contract: any) => {
           const model = modelsMap.get(contract.model_id);
-          const publicModel = toPublicModel(model);
+          const publicModel = toPublicModel(model, {
+            currentUserId: userId,
+            hasActiveContract: true,
+          });
 
           return {
             ...publicModel,
@@ -441,6 +544,8 @@ export async function getUserHiredModels(
       .select(SAFE_MODEL_FIELDS)
       .eq("source", "user_created")
       .eq("owner_id", userId)
+      .not("reference_sheet_url", "is", null)
+      .eq("reference_status", "completed")
       .order("created_at", { ascending: false });
 
     if (ownError) {
@@ -450,7 +555,10 @@ export async function getUserHiredModels(
 
     // 自建角色转为 HiredModel 格式（永久有效）
     const ownModels: HiredModel[] = (ownCharacters || []).map((ch: any) => {
-      const publicModel = toPublicModel(ch);
+      const publicModel = toPublicModel(ch, {
+        currentUserId: userId,
+        hasActiveContract: true,
+      });
       return {
         ...publicModel,
         contract_id: `own_${ch.id}`,
@@ -462,8 +570,6 @@ export async function getUserHiredModels(
 
     // 5. 合并：自建角色在前 + 签约角色在后
     const allModels = [...ownModels, ...hiredModels];
-
-    console.log(`[Models Action] Fetched ${hiredModels.length} hired + ${ownModels.length} own characters for user ${userId}`);
 
     return {
       success: true,
@@ -505,6 +611,8 @@ export async function getPublicModelById(
       .select(SAFE_MODEL_FIELDS)
       .eq("id", modelId)
       .eq("is_active", true)
+      .not("reference_sheet_url", "is", null)
+      .eq("reference_status", "completed")
       .or("source.eq.official,and(source.eq.user_created,is_public.eq.true)")
       .single();
 
@@ -563,6 +671,8 @@ export async function searchModels(
       .from("ai_models")
       .select(SAFE_MODEL_FIELDS)
       .eq("is_active", true)
+      .not("reference_sheet_url", "is", null)
+      .eq("reference_status", "completed")
       .or("source.eq.official,and(source.eq.user_created,is_public.eq.true)")
       .or(`name.ilike.${searchTerm},category.ilike.${searchTerm}`)
       .order("rating", { ascending: false })
@@ -573,7 +683,7 @@ export async function searchModels(
     }
 
     // 转换为安全的公开格式
-    const publicModels = (models || []).map(toPublicModel);
+    const publicModels = (models || []).map((model: any) => toPublicModel(model));
 
     return {
       success: true,

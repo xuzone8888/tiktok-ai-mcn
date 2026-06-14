@@ -6,9 +6,23 @@
  */
 
 import { NextResponse } from "next/server";
+
 import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
+
+async function requireMatchingUser(userId: string) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    return NextResponse.json({ success: false, error: "请先登录" }, { status: 401 });
+  }
+  if (user.id !== userId) {
+    return NextResponse.json({ success: false, error: "用户身份不匹配" }, { status: 403 });
+  }
+  return null;
+}
 
 // POST: 发布到广场
 export async function POST(request: Request) {
@@ -23,6 +37,9 @@ export async function POST(request: Request) {
       );
     }
 
+    const authError = await requireMatchingUser(userId);
+    if (authError) return authError;
+
     const publishPrice = Math.max(0, Math.round(price || 100));
 
     const supabase = createAdminClient();
@@ -30,7 +47,7 @@ export async function POST(request: Request) {
     // 1. 校验角色归属
     const { data: character, error: fetchError } = await supabase
       .from("ai_models")
-      .select("id, name, source, owner_id, is_public, reference_status, publish_price")
+      .select("id, name, source, owner_id, is_public, reference_sheet_url, reference_status, publish_price")
       .eq("id", characterId)
       .single();
 
@@ -42,10 +59,10 @@ export async function POST(request: Request) {
       );
     }
 
-    // 2. 检查参考图状态 — 只有 completed 或 none 可以发布
-    if (character.reference_status === "pending") {
+    // 2. 检查参考图状态 — 市场角色必须具备完整设定板，避免旧模特或半成品进入角色资产中心
+    if (!character.reference_sheet_url || character.reference_status !== "completed") {
       return NextResponse.json(
-        { success: false, error: "参考图正在生成中，请等待完成后再发布" },
+        { success: false, error: "角色设定板尚未完成，暂不能发布到市场" },
         { status: 400 }
       );
     }
@@ -107,6 +124,9 @@ export async function DELETE(request: Request) {
         { status: 400 }
       );
     }
+
+    const authError = await requireMatchingUser(userId);
+    if (authError) return authError;
 
     const supabase = createAdminClient();
 

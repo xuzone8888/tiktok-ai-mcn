@@ -10,8 +10,10 @@
  */
 
 import { NextResponse } from "next/server";
+import sharp from "sharp";
 
 import { callDoubaoAPI } from "@/lib/doubao-api-client";
+import { generateMediaPath, uploadImageBuffer } from "@/lib/oss";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { queryNanoBananaResult } from "@/lib/suchuang-api";
@@ -107,6 +109,50 @@ function buildBoardCropMeta(size: string): CharacterBoardCropMeta {
       height,
     },
   };
+}
+
+async function fetchBoardImageBuffer(url: string): Promise<Buffer> {
+  const response = await fetch(url, { cache: "no-store" });
+  if (!response.ok) {
+    throw new Error(`角色设定板下载失败: HTTP ${response.status}`);
+  }
+
+  const arrayBuffer = await response.arrayBuffer();
+  return Buffer.from(new Uint8Array(arrayBuffer));
+}
+
+async function cropAndPersistAvatar(params: {
+  boardUrl: string;
+  cropMeta: CharacterBoardCropMeta;
+  userId: string;
+}): Promise<string> {
+  const boardBuffer = await fetchBoardImageBuffer(params.boardUrl);
+  const image = sharp(boardBuffer);
+  const metadata = await image.metadata();
+
+  const actualWidth = metadata.width || params.cropMeta.sourceWidth;
+  const actualHeight = metadata.height || params.cropMeta.sourceHeight;
+  const scaleX = actualWidth / params.cropMeta.sourceWidth;
+  const scaleY = actualHeight / params.cropMeta.sourceHeight;
+
+  const crop = params.cropMeta.left;
+  const left = Math.max(0, Math.round(crop.left * scaleX));
+  const top = Math.max(0, Math.round(crop.top * scaleY));
+  const width = Math.max(1, Math.min(actualWidth - left, Math.round(crop.width * scaleX)));
+  const height = Math.max(1, Math.min(actualHeight - top, Math.round(crop.height * scaleY)));
+
+  const avatarBuffer = await image
+    .extract({ left, top, width, height })
+    .jpeg({ quality: 92, mozjpeg: true })
+    .toBuffer();
+
+  const objectPath = generateMediaPath(
+    "images",
+    params.userId,
+    `character-avatar-${Date.now()}.jpg`
+  );
+
+  return uploadImageBuffer(avatarBuffer, objectPath, "image/jpeg");
 }
 
 
@@ -259,6 +305,7 @@ export async function POST(request: Request) {
       outputCompression: 92,
       purpose: "character-reference",
       userId: user.id,
+      allowSizeFallback: false,
       maxPollMs: 360_000,
     });
 
@@ -291,15 +338,21 @@ export async function POST(request: Request) {
 
     const usedSize = boardResult.usedSize || BOARD_IMAGE_SIZE;
     const cropMeta = buildBoardCropMeta(usedSize);
+    const avatarUrl = await cropAndPersistAvatar({
+      boardUrl: boardResult.imageUrl,
+      cropMeta,
+      userId: user.id,
+    });
 
     console.log("[Character Generate] Character board ready (OSS):", boardResult.imageUrl.substring(0, 80));
 
     return NextResponse.json({
       success: true,
       characterBoardUrl: boardResult.imageUrl,
+      avatarUrl,
       referenceImageUrl: boardResult.imageUrl,
       referenceSheetUrl: boardResult.imageUrl,
-      heroImageUrl: boardResult.imageUrl,
+      heroImageUrl: avatarUrl,
       refPrompt: englishPrompt,
       boardPrompt,
       cropMeta,

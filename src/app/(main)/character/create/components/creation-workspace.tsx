@@ -325,7 +325,12 @@ export function CreationWorkspace() {
         const boardUrl = data.characterBoardUrl || data.referenceSheetUrl || data.heroImageUrl;
         if (boardUrl) {
           if (data.refPrompt) store.setRefPrompt(data.refPrompt);
-          store.setCharacterBoardResult(boardUrl, data.cropMeta || null, data.boardPrompt || data.refPrompt || store.prompt);
+          store.setCharacterBoardResult(
+            boardUrl,
+            data.cropMeta || null,
+            data.boardPrompt || data.refPrompt || store.prompt,
+            data.avatarUrl || null
+          );
         } else {
           store.setGenerationFailed("角色设定板生成失败，未返回图片");
         }
@@ -377,22 +382,22 @@ export function CreationWorkspace() {
             <h1 className="text-3xl lg:text-5xl font-extrabold text-white drop-shadow-lg tracking-tight">创建角色</h1>
           </div>
           <p className="text-lg lg:text-xl font-bold text-white/50 mt-1">Character Forge</p>
-          <p className="mt-2 text-white/50 text-xs lg:text-sm flex items-center gap-1.5"><Dna className="w-3.5 h-3.5" /> 注入 DNA 特征，铸造专属数字角色</p>
+          <p className="mt-2 text-white/50 text-xs lg:text-sm flex items-center gap-1.5"><Keyboard className="w-3.5 h-3.5" /> 用文字描述和参考图创建角色资产，DNA Forge 可作为预设辅助</p>
         </div>
         
         {/* iOS 原生级 Tab 滑块 (提至 Header) */}
         <div className="flex bg-white/10 p-1.5 rounded-full border border-white/20 shadow-[inset_0_1px_4px_rgba(0,0,0,0.4)] backdrop-blur-[40px] w-full sm:w-fit shrink-0 relative overflow-hidden">
           <button 
             type="button"
-            onClick={() => store.setCreationMode("dna")}
-            className={`flex-1 sm:px-8 py-2.5 rounded-full text-sm font-bold tracking-tight-ios transition-all duration-300 flex items-center justify-center gap-2 ${store.creationMode === 'dna' ? 'bg-gradient-to-b from-white to-white/90 shadow-[0_4px_15px_rgba(255,255,255,0.2),inset_0_-2px_5px_rgba(0,0,0,0.05)] border border-white/80 text-black' : 'text-white/70 hover:text-white border border-transparent'}`}>
-             <Dna className="w-4 h-4" /> DNA Forge
+            onClick={() => store.setCreationMode("freeform")}
+            className={`flex-1 sm:px-8 py-2.5 rounded-full text-sm font-bold tracking-tight-ios transition-all duration-300 flex items-center justify-center gap-2 ${store.creationMode === 'freeform' ? 'bg-gradient-to-b from-white to-white/90 shadow-[0_4px_15px_rgba(255,255,255,0.2),inset_0_-2px_5px_rgba(0,0,0,0.05)] border border-white/80 text-black' : 'text-white/70 hover:text-white border border-transparent'}`}>
+             <Keyboard className="w-4 h-4" /> 自定义创建
           </button>
           <button 
             type="button"
-            onClick={() => store.setCreationMode("freeform")}
-            className={`flex-1 sm:px-8 py-2.5 rounded-full text-sm font-bold tracking-tight-ios transition-all duration-300 flex items-center justify-center gap-2 ${store.creationMode === 'freeform' ? 'bg-gradient-to-b from-white to-white/90 shadow-[0_4px_15px_rgba(255,255,255,0.2),inset_0_-2px_5px_rgba(0,0,0,0.05)] border border-white/80 text-black' : 'text-white/70 hover:text-white border border-transparent'}`}>
-             <Keyboard className="w-4 h-4" /> Freeform
+            onClick={() => store.setCreationMode("dna")}
+            className={`flex-1 sm:px-8 py-2.5 rounded-full text-sm font-bold tracking-tight-ios transition-all duration-300 flex items-center justify-center gap-2 ${store.creationMode === 'dna' ? 'bg-gradient-to-b from-white to-white/90 shadow-[0_4px_15px_rgba(255,255,255,0.2),inset_0_-2px_5px_rgba(0,0,0,0.05)] border border-white/80 text-black' : 'text-white/70 hover:text-white border border-transparent'}`}>
+             <Dna className="w-4 h-4" /> DNA Forge
           </button>
         </div>
       </div>

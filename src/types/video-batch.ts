@@ -2,6 +2,8 @@
  * Video Batch Types - 批量视频生产单元类型定义
  */
 
+import type { CharacterAssetSnapshot } from "@/lib/character-assets";
+
 // ============================================================================
 // 基础类型
 // ============================================================================
@@ -118,7 +120,11 @@ export interface VideoBatchTask {
   aiModelTriggerWord?: string;// AI 模特触发词（任务创建时冻结）
   aiModelCover?: string | null;// AI 模特封面图URL（任务创建时冻结）
   // Veo3 自建角色配置（任务创建时保存）
+  characterId?: string;
+  characterName?: string;
   characterRefUrl?: string;   // 自建角色参考图 URL
+  characterReferenceImages?: string[];
+  characterAsset?: CharacterAssetSnapshot;
   // VEO 首尾帧兼容字段（统一模型会作为可选参考图处理）
   firstFrameUrl?: string;     // 首帧图片 URL（已上传 OSS）
   lastFrameUrl?: string;      // 尾帧图片 URL（已上传 OSS，可选）
@@ -169,6 +175,8 @@ export interface VideoBatchGlobalSettings {
   characterId: string | null;        // 自建角色 ID
   characterName: string | null;      // 自建角色名称
   characterRefUrl: string | null;    // 自建角色参考图 URL
+  characterReferenceImages?: string[];
+  characterAsset?: CharacterAssetSnapshot | null;
   // API 线路已移除 (2026-03-20), Sora 固定走 line3
 }
 

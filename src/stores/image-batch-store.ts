@@ -23,6 +23,12 @@ import {
   isOpenAIImageModel,
   GEMINI_ACTION_PRICING,
 } from "@/types/generation";
+import {
+  buildCharacterConsistencyPrompt,
+  getCharacterAssetReferenceUrls,
+  getSafeCharacterDescription,
+  type CharacterAssetSnapshot,
+} from "@/lib/character-assets";
 
 // ============================================================================
 // 类型定义
@@ -60,7 +66,9 @@ export interface ImageBatchGlobalSettings {
   characterId?: string;
   characterName?: string;
   characterRefUrl?: string;      // reference_sheet_url
+  characterReferenceImages?: string[];
   characterDescription?: string;
+  characterAsset?: CharacterAssetSnapshot;
 }
 
 export interface ImageBatchState {
@@ -266,7 +274,9 @@ const initialState: ImageBatchState = {
     characterId: undefined,
     characterName: undefined,
     characterRefUrl: undefined,
+    characterReferenceImages: undefined,
     characterDescription: undefined,
+    characterAsset: undefined,
   },
   selectedTaskIds: {},
   maxConcurrent: 3,
@@ -298,6 +308,18 @@ export const useImageBatchStore = create<ImageBatchState & ImageBatchActions>()(
           const prompt = globalSettings.action === "generate"
             ? (globalSettings.prompt?.trim() || getActionPromptHint(globalSettings.model, globalSettings.action))
             : "";
+          const characterAsset = globalSettings.characterAsset;
+          const characterReferenceImages = characterAsset
+            ? getCharacterAssetReferenceUrls(characterAsset)
+            : (globalSettings.characterRefUrl ? [globalSettings.characterRefUrl] : undefined);
+          const characterDescription = characterAsset
+            ? getSafeCharacterDescription(characterAsset)
+            : globalSettings.characterDescription;
+          const finalPrompt = characterAsset && prompt
+            ? buildCharacterConsistencyPrompt(characterAsset, prompt)
+            : (characterDescription && globalSettings.characterRefUrl && prompt
+              ? `Featuring ${characterDescription}, ${prompt}`
+              : prompt);
 
           const newTasks: ImageBatchTask[] = files
             .filter((f) => f.type.startsWith("image/"))
@@ -318,7 +340,13 @@ export const useImageBatchStore = create<ImageBatchState & ImageBatchActions>()(
                   action: globalSettings.action,
                   aspectRatio: globalSettings.aspectRatio,
                   resolution: globalSettings.resolution,
-                  prompt,
+                  prompt: finalPrompt,
+                  characterId: globalSettings.characterId,
+                  characterName: globalSettings.characterName,
+                  characterDescription,
+                  characterRefUrl: globalSettings.characterRefUrl,
+                  characterReferenceImages,
+                  characterAsset,
                 },
                 createdAt: new Date().toISOString(),
               };
@@ -348,6 +376,19 @@ export const useImageBatchStore = create<ImageBatchState & ImageBatchActions>()(
 
           // 纯提示词模式只能用于 AI 生成
           const action: ImageProcessAction = "generate";
+          const basePrompt = prompt.trim();
+          const characterAsset = globalSettings.characterAsset;
+          const characterReferenceImages = characterAsset
+            ? getCharacterAssetReferenceUrls(characterAsset)
+            : (globalSettings.characterRefUrl ? [globalSettings.characterRefUrl] : undefined);
+          const characterDescription = characterAsset
+            ? getSafeCharacterDescription(characterAsset)
+            : globalSettings.characterDescription;
+          const finalPrompt = characterAsset && basePrompt
+            ? buildCharacterConsistencyPrompt(characterAsset, basePrompt)
+            : (characterDescription && globalSettings.characterRefUrl && basePrompt
+              ? `Featuring ${characterDescription}, ${basePrompt}`
+              : basePrompt);
 
           const newTasks: ImageBatchTask[] = Array.from({ length: count }, (_, i) => {
             const id = generateId();
@@ -361,13 +402,19 @@ export const useImageBatchStore = create<ImageBatchState & ImageBatchActions>()(
                 sourceImageUrl: "", // 纯提示词模式无源图片
                 sourceImageName: `提示词任务 ${tasks.length + i + 1}`,
                 model: globalSettings.model,
-                action,
-                aspectRatio: globalSettings.aspectRatio,
-                resolution: globalSettings.resolution,
-                prompt: prompt.trim(),
-              },
-              createdAt: new Date().toISOString(),
-            };
+                  action,
+                  aspectRatio: globalSettings.aspectRatio,
+                  resolution: globalSettings.resolution,
+                  prompt: finalPrompt,
+                  characterId: globalSettings.characterId,
+                  characterName: globalSettings.characterName,
+                  characterDescription,
+                  characterRefUrl: globalSettings.characterRefUrl,
+                  characterReferenceImages,
+                  characterAsset,
+                },
+                createdAt: new Date().toISOString(),
+              };
           });
 
           set((state) => {
@@ -591,13 +638,24 @@ export const useImageBatchStore = create<ImageBatchState & ImageBatchActions>()(
 
         applyGlobalSettingsToAllPending: () => {
           const { globalSettings } = get();
+          const characterReferenceImages = globalSettings.characterAsset
+            ? getCharacterAssetReferenceUrls(globalSettings.characterAsset)
+            : (globalSettings.characterRefUrl ? [globalSettings.characterRefUrl] : undefined);
+          const characterDescription = globalSettings.characterAsset
+            ? getSafeCharacterDescription(globalSettings.characterAsset)
+            : globalSettings.characterDescription;
           set((state) => {
             state.tasks.forEach((t) => {
               if (t.status === "pending") {
                 // 只有 AI 生成模式才使用提示词
-                const prompt = globalSettings.action === "generate"
+                const basePrompt = globalSettings.action === "generate"
                   ? (globalSettings.prompt?.trim() || getActionPromptHint(globalSettings.model, globalSettings.action))
                   : "";
+                const prompt = globalSettings.characterAsset && basePrompt
+                  ? buildCharacterConsistencyPrompt(globalSettings.characterAsset, basePrompt)
+                  : (characterDescription && globalSettings.characterRefUrl && basePrompt
+                    ? `Featuring ${characterDescription}, ${basePrompt}`
+                    : basePrompt);
                 t.config = {
                   ...t.config,
                   model: globalSettings.model,
@@ -605,6 +663,12 @@ export const useImageBatchStore = create<ImageBatchState & ImageBatchActions>()(
                   aspectRatio: globalSettings.aspectRatio,
                   resolution: globalSettings.resolution,
                   prompt,
+                  characterId: globalSettings.characterId,
+                  characterName: globalSettings.characterName,
+                  characterDescription,
+                  characterRefUrl: globalSettings.characterRefUrl,
+                  characterReferenceImages,
+                  characterAsset: globalSettings.characterAsset,
                 };
               }
             });
@@ -613,14 +677,25 @@ export const useImageBatchStore = create<ImageBatchState & ImageBatchActions>()(
 
         applyGlobalSettingsToSelected: () => {
           const { globalSettings, selectedTaskIds } = get();
+          const characterReferenceImages = globalSettings.characterAsset
+            ? getCharacterAssetReferenceUrls(globalSettings.characterAsset)
+            : (globalSettings.characterRefUrl ? [globalSettings.characterRefUrl] : undefined);
+          const characterDescription = globalSettings.characterAsset
+            ? getSafeCharacterDescription(globalSettings.characterAsset)
+            : globalSettings.characterDescription;
           set((state) => {
             state.tasks.forEach((t) => {
               // 应用到选中的 pending 或 failed 任务
               if (selectedTaskIds[t.id] && (t.status === "pending" || t.status === "failed")) {
                 // 只有 AI 生成模式才使用提示词
-                const prompt = globalSettings.action === "generate"
+                const basePrompt = globalSettings.action === "generate"
                   ? (globalSettings.prompt?.trim() || getActionPromptHint(globalSettings.model, globalSettings.action))
                   : "";
+                const prompt = globalSettings.characterAsset && basePrompt
+                  ? buildCharacterConsistencyPrompt(globalSettings.characterAsset, basePrompt)
+                  : (characterDescription && globalSettings.characterRefUrl && basePrompt
+                    ? `Featuring ${characterDescription}, ${basePrompt}`
+                    : basePrompt);
                 t.config = {
                   ...t.config,
                   model: globalSettings.model,
@@ -628,6 +703,12 @@ export const useImageBatchStore = create<ImageBatchState & ImageBatchActions>()(
                   aspectRatio: globalSettings.aspectRatio,
                   resolution: globalSettings.resolution,
                   prompt,
+                  characterId: globalSettings.characterId,
+                  characterName: globalSettings.characterName,
+                  characterDescription,
+                  characterRefUrl: globalSettings.characterRefUrl,
+                  characterReferenceImages,
+                  characterAsset: globalSettings.characterAsset,
                 };
                 // 如果是 failed 任务，重置为 pending
                 if (t.status === "failed") {
@@ -738,11 +819,18 @@ export const useImageBatchStore = create<ImageBatchState & ImageBatchActions>()(
             const id = generateId();
             newIds.push(id);
 
-            // 如果有角色引用且有 description，注入到 prompt
-            let finalPrompt = prompt;
-            if (globalSettings.characterDescription && globalSettings.characterRefUrl) {
-              finalPrompt = `Featuring ${globalSettings.characterDescription}, ${prompt}`;
-            }
+            const characterAsset = globalSettings.characterAsset;
+            const characterReferenceImages = characterAsset
+              ? getCharacterAssetReferenceUrls(characterAsset)
+              : (globalSettings.characterRefUrl ? [globalSettings.characterRefUrl] : undefined);
+            const characterDescription = characterAsset
+              ? getSafeCharacterDescription(characterAsset)
+              : globalSettings.characterDescription;
+            const finalPrompt = characterAsset
+              ? buildCharacterConsistencyPrompt(characterAsset, prompt)
+              : (characterDescription && globalSettings.characterRefUrl
+                ? `Featuring ${characterDescription}, ${prompt}`
+                : prompt);
 
             return {
               id,
@@ -756,7 +844,12 @@ export const useImageBatchStore = create<ImageBatchState & ImageBatchActions>()(
                 aspectRatio: globalSettings.aspectRatio,
                 resolution: globalSettings.resolution,
                 prompt: finalPrompt,  // 始终传递提示词，图生图也需要
+                characterId: globalSettings.characterId,
+                characterName: globalSettings.characterName,
+                characterDescription,
                 characterRefUrl: globalSettings.characterRefUrl || undefined,
+                characterReferenceImages,
+                characterAsset,
               },
               createdAt: new Date().toISOString(),
             };

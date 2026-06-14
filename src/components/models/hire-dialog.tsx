@@ -145,7 +145,7 @@ export function HireDialog({
   };
 
   const handleGoToTeam = () => {
-    window.location.href = "/team";
+    window.location.href = "/models?tab=my";
   };
 
   return (
@@ -154,10 +154,10 @@ export function HireDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-white">
             <Sparkles className="h-5 w-5 text-mermaid-cyan drop-shadow-[0_0_5px_rgba(0,242,234,0.5)]" />
-            Hire {model.name}
+            授权引用 {model.name}
           </DialogTitle>
           <DialogDescription>
-            Select a rental period and confirm payment
+            确认积分价格后即可在创作中引用该角色
           </DialogDescription>
         </DialogHeader>
 

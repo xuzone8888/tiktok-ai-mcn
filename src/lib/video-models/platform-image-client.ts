@@ -42,6 +42,7 @@ interface GenerateGptImage2Input {
   purpose?: PlatformImagePurpose;
   userId?: string;
   async?: boolean;
+  allowSizeFallback?: boolean;
   maxPollMs?: number;
   pollIntervalMs?: number;
 }
@@ -518,9 +519,11 @@ export async function generateGptImage2(
 ): Promise<GenerateGptImage2Result> {
   const model = process.env.VIDEO_PLATFORM_IMAGE_MODEL || "gpt-image-2";
   const fallbackSizes = getCandidateSizes(input.aspectRatio || "1:1");
-  const sizes = input.size
-    ? [input.size, ...fallbackSizes.filter((size) => size !== input.size)]
-    : fallbackSizes;
+  const sizes = input.allowSizeFallback === false && input.size
+    ? [input.size]
+    : input.size
+      ? [input.size, ...fallbackSizes.filter((size) => size !== input.size)]
+      : fallbackSizes;
   let lastError: Error | null = null;
 
   for (const size of sizes) {

@@ -52,6 +52,31 @@
   transform: translateX(-2px);
 }
 
+.exitButton {
+  position: absolute;
+  top: 24px;
+  right: 32px;
+  z-index: 4;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 38px;
+  padding: 0 16px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.44);
+  color: rgba(255, 255, 255, 0.68);
+  font-size: 13px;
+  cursor: pointer;
+  transition: 180ms ease;
+}
+
+.exitButton:hover {
+  border-color: rgba(255, 255, 255, 0.2);
+  color: #fff;
+  transform: translateY(-1px);
+}
+
 .header {
   position: relative;
   z-index: 2;
@@ -278,7 +303,8 @@
 }
 
 .saveButton:hover:not(:disabled),
-.savedLink:hover {
+.savedLink:hover,
+.discardButton:hover:not(:disabled) {
   box-shadow: 0 14px 30px rgba(84, 246, 209, 0.16);
   transform: translateY(-1px);
 }
@@ -294,6 +320,33 @@
   border: 1px solid rgba(32, 244, 231, 0.26);
   background: linear-gradient(90deg, rgba(32, 244, 231, 0.24), rgba(199, 255, 40, 0.18));
   color: #dffefb;
+}
+
+.discardButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 42px;
+  gap: 8px;
+  width: 100%;
+  height: 42px;
+  min-height: 42px;
+  margin-top: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.045);
+  color: rgba(255, 255, 255, 0.68);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: 160ms ease;
+}
+
+.discardButton:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
 }
 
 .modal {
@@ -427,6 +480,14 @@
   .characterBoardSuccess {
     overflow-y: auto;
     padding: 88px 20px 40px;
+  }
+
+  .backButton {
+    left: 20px;
+  }
+
+  .exitButton {
+    right: 20px;
   }
 
   .header,

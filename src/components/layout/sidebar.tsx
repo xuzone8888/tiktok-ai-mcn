@@ -88,12 +88,6 @@ function getNavGroups(lang: string): NavGroup[] {
           icon: Users,
           description: t ? "Browse all AI characters" : "浏览全部 AI 角色",
         },
-        {
-          title: t ? "My Characters" : "我的角色",
-          href: "/team",
-          icon: UserCheck,
-          description: t ? "Contracted & custom" : "已签约与自建的角色",
-        },
       ],
     },
     // --- Creative Studio ---

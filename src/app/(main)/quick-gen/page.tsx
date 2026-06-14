@@ -104,6 +104,12 @@ import {
   calculateEnhancementCost,
 } from "@/types/generation";
 import { CharacterPicker } from "@/components/character-picker";
+import {
+  buildCharacterConsistencyPrompt,
+  createCharacterAssetSnapshotFromSelection,
+  getCharacterAssetReferenceUrls,
+  type CharacterAssetSnapshot,
+} from "@/lib/character-assets";
 
 // 本地类型 (仅用于此页面)
 type BatchCount = 1 | 2;
@@ -163,9 +169,12 @@ export default function QuickGeneratorPage() {
   const [imageCharacterId, setImageCharacterId] = useState<string | null>(null);
   const [imageCharacterData, setImageCharacterData] = useState<{
     name: string;
-    refUrl: string;       // reference_sheet_url
+    refUrl: string;
+    refUrls: string[];
     description?: string;
+    asset: CharacterAssetSnapshot;
   } | null>(null);
+  const initialImageCharacterAppliedRef = useRef(false);
 
   // ================================================================
   // Video Mode: Step 2 - Content Configuration
@@ -210,6 +219,7 @@ export default function QuickGeneratorPage() {
   const quickGenImageTask = useQuickGenActiveImageTask();
   const isQuickGenImageRunning = useQuickGenIsImageGenerating();
   const createImageTask = useQuickGenStore((state) => state.createImageTask);
+  const updateImageTaskStatus = useQuickGenStore((state) => state.updateImageTaskStatus);
   const clearActiveImageTask = useQuickGenStore((state) => state.clearActiveImageTask);
 
   // 九宫格处理结果（从 store 恢复）
@@ -489,9 +499,80 @@ export default function QuickGeneratorPage() {
       .finally(() => setIsLoadingCredits(false));
 
     return () => controller.abort();
-  }, []);
+	  }, []);
 
-  // 监听后台视频任务状态变化
+	  useEffect(() => {
+	    if (initialImageCharacterAppliedRef.current || typeof window === "undefined") return;
+
+	    const params = new URLSearchParams(window.location.search);
+	    const characterId = params.get("characterId");
+	    if (!characterId) return;
+
+	    let cancelled = false;
+
+	    const applyCharacter = (raw: any, ownership: "owned" | "licensed") => {
+	      const asset = createCharacterAssetSnapshotFromSelection({
+	        id: raw.id,
+	        name: raw.name,
+	        description: raw.description || null,
+	        avatar_url: raw.avatar_url || null,
+	        reference_sheet_url: raw.reference_sheet_url || null,
+	        reference_images: Array.isArray(raw.reference_images) ? raw.reference_images : [],
+	        preview_video_url: raw.preview_video_url || null,
+	        category: raw.category || raw.character_type || "现代都市",
+	        tags: Array.isArray(raw.style_tags) ? raw.style_tags : Array.isArray(raw.tags) ? raw.tags : [],
+	        source: raw.source === "user_created" || ownership === "owned" ? "user_created" : "official",
+	        ownership,
+	        publish_price: raw.publish_price ?? 100,
+	        reference_status: raw.reference_status || "none",
+	        trigger_word: raw.trigger_word || null,
+	        forge_type: raw.forge_type || null,
+	      });
+	      const refUrls = getCharacterAssetReferenceUrls(asset);
+	      setImageCharacterId(asset.id);
+	      setImageCharacterData({
+	        name: asset.name,
+	        refUrl: refUrls[0] || asset.avatar_url || "",
+	        refUrls,
+	        description: asset.description || undefined,
+	        asset,
+	      });
+	      initialImageCharacterAppliedRef.current = true;
+	    };
+
+	    const loadCharacter = async () => {
+	      try {
+	        const contractsRes = await fetch("/api/contracts?status=active");
+	        const contractsResult = await contractsRes.json();
+	        if (cancelled) return;
+	        if (contractsResult.success && Array.isArray(contractsResult.data)) {
+	          const contract = contractsResult.data.find((item: any) => item?.ai_models?.id === characterId);
+	          if (contract?.ai_models) {
+	            applyCharacter(contract.ai_models, "licensed");
+	            return;
+	          }
+	        }
+
+	        if (!userId) return;
+	        const ownRes = await fetch(`/api/characters?userId=${encodeURIComponent(userId)}`);
+	        const ownResult = await ownRes.json();
+	        if (cancelled) return;
+	        if (ownResult.success && Array.isArray(ownResult.data)) {
+	          const character = ownResult.data.find((item: any) => item?.id === characterId);
+	          if (character) applyCharacter(character, "owned");
+	        }
+	      } catch (error) {
+	        if (!cancelled) console.error("[Quick Gen] Failed to preload character:", error);
+	      }
+	    };
+
+	    loadCharacter();
+	    return () => {
+	      cancelled = true;
+	    };
+	  }, [userId]);
+
+	  // 监听后台视频任务状态变化
   // 注意：只在视频模式下更新画布状态，让用户可以自由切换模式
   useEffect(() => {
     if (!quickGenActiveTask) return;
@@ -602,6 +683,69 @@ export default function QuickGeneratorPage() {
       clearActiveImageTask();
     }
   }, [quickGenImageTask, clearActiveImageTask, outputMode, saveHistoryToServer]);
+
+  useEffect(() => {
+    if (!quickGenImageTask?.taskId) return;
+    if (quickGenImageTask.status !== "generating" && quickGenImageTask.status !== "polling") return;
+
+    let cancelled = false;
+    const localTaskId = quickGenImageTask.id;
+    const apiTaskId = quickGenImageTask.taskId;
+    const taskModel = quickGenImageTask.model;
+
+    const syncImageTaskStatus = async () => {
+      try {
+        const response = await fetch(
+          `/api/generate/image?taskId=${encodeURIComponent(apiTaskId)}&model=${encodeURIComponent(taskModel)}`
+        );
+        const result = await response.json();
+        if (cancelled || !result.success || !result.data) return;
+
+        const taskData = result.data;
+        if (taskData.status === "completed" && taskData.imageUrl) {
+          updateImageTaskStatus(localTaskId, "completed", {
+            progress: 100,
+            resultUrl: taskData.imageUrl,
+            completedAt: taskData.updatedAt || new Date().toISOString(),
+            creditsDeducted: true,
+          });
+          return;
+        }
+
+        if (taskData.status === "failed") {
+          updateImageTaskStatus(localTaskId, "failed", {
+            progress: 100,
+            errorMessage: taskData.errorMessage || "图片生成失败",
+            completedAt: taskData.updatedAt || new Date().toISOString(),
+          });
+          return;
+        }
+
+        if (typeof taskData.progress === "number") {
+          updateImageTaskStatus(localTaskId, "polling", {
+            progress: Math.max(quickGenImageTask.progress || 0, taskData.progress),
+          });
+        }
+      } catch (statusError) {
+        console.warn("[QuickGen] Failed to refresh background image task:", statusError);
+      }
+    };
+
+    void syncImageTaskStatus();
+    const intervalId = window.setInterval(syncImageTaskStatus, 15_000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [
+    quickGenImageTask?.id,
+    quickGenImageTask?.taskId,
+    quickGenImageTask?.status,
+    quickGenImageTask?.model,
+    quickGenImageTask?.progress,
+    updateImageTaskStatus,
+  ]);
 
   // 页面加载时，恢复最近完成的任务结果
   const recentTasks = useQuickGenStore((state) => state.recentTasks);
@@ -1206,7 +1350,7 @@ export default function QuickGeneratorPage() {
       // ============================================
       try {
         // 准备参考图片 URL 数组 (最多4张)
-        const sourceImageUrls: string[] = [];
+        const uploadedSourceImageUrls: string[] = [];
 
         // 上传所有参考图片
         for (const file of imageUploadedFiles) {
@@ -1226,26 +1370,28 @@ export default function QuickGeneratorPage() {
               const uploadResult = await uploadResponse.json();
 
               if (uploadResult.success && uploadResult.data?.url) {
-                sourceImageUrls.push(uploadResult.data.url);
+                uploadedSourceImageUrls.push(uploadResult.data.url);
               }
             } catch (uploadError) {
               console.error("[Quick Gen] Image upload error:", uploadError);
             }
           } else if (file.url.startsWith("http")) {
-            sourceImageUrls.push(file.url);
+            uploadedSourceImageUrls.push(file.url);
           }
         }
 
-        // 如果选了角色且有参考图，加入到 sourceImageUrls
-        if (imageCharacterData?.refUrl) {
-          sourceImageUrls.push(imageCharacterData.refUrl);
-          console.log("[Quick Gen] Character reference image added:", imageCharacterData.refUrl.substring(0, 60));
-        }
+        const characterAsset = imageCharacterData?.asset || null;
+        const characterReferenceUrls = getCharacterAssetReferenceUrls(characterAsset).slice(0, 4);
+        const sourceImageUrls = [
+          ...characterReferenceUrls,
+          ...uploadedSourceImageUrls,
+        ].slice(0, 4);
 
         // 构建最终 prompt：注入角色描述
         let finalPrompt = prompt.trim() || "高质量产品照片，专业灯光，干净背景";
-        if (imageCharacterData?.description && imageCharacterData?.refUrl) {
-          finalPrompt = `Featuring ${imageCharacterData.description}, ${finalPrompt}`;
+        if (characterReferenceUrls.length > 0) {
+          finalPrompt = buildCharacterConsistencyPrompt(characterAsset, finalPrompt);
+          console.log("[Quick Gen] Character asset references added:", characterReferenceUrls.length);
         }
 
         // 创建后台任务 - 由 BackgroundTaskManager 执行
@@ -1257,6 +1403,7 @@ export default function QuickGeneratorPage() {
           aspectRatio: imageAspectRatio,
           resolution: imageResolution,
           sourceImageUrls,
+          characterAsset: characterAsset || undefined,
           creditCost: totalCost,
         });
 
@@ -1282,7 +1429,7 @@ export default function QuickGeneratorPage() {
         });
       }
     }
-  }, [canGenerate, outputMode, prompt, hasBaseImage, selectedImage, uploadedFile, videoModel, videoAspectRatio, useAiModel, aiCastMode, selectedModelId, imageNanoTier, imageAspectRatio, imageResolution, totalCost, autoDownload, toast, createVideoTask, createImageTask, imageUploadedFiles]);
+  }, [canGenerate, outputMode, prompt, hasBaseImage, selectedImage, uploadedFile, videoModel, videoAspectRatio, useAiModel, aiCastMode, selectedModelId, imageNanoTier, imageAspectRatio, imageResolution, totalCost, autoDownload, toast, createVideoTask, createImageTask, imageUploadedFiles, imageCharacterData]);
 
   // ================================================================
   // 渲染
@@ -1680,12 +1827,16 @@ export default function QuickGeneratorPage() {
                         setImageCharacterData(null);
                         return;
                       }
-                      setImageCharacterId(character.id);
-                      setImageCharacterData({
-                        name: character.name,
-                        refUrl: character.reference_sheet_url || "",
-                        description: character.description || undefined,
-                      });
+	                      setImageCharacterId(character.id);
+	                      const asset = character.characterAsset || createCharacterAssetSnapshotFromSelection(character);
+	                      const refUrls = getCharacterAssetReferenceUrls(asset);
+	                      setImageCharacterData({
+	                        name: character.name,
+	                        refUrl: refUrls[0] || character.avatar_url || "",
+	                        refUrls,
+	                        description: character.description || undefined,
+	                        asset,
+	                      });
                     }}
                   />
                 )}
