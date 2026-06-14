@@ -21,6 +21,7 @@ import {
   CreditCard,
   LayoutTemplate,
   ShoppingBag,
+  Youtube,
 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -168,6 +169,20 @@ function getNavGroups(lang: string): NavGroup[] {
           href: "/publish",
           icon: Send,
           description: t ? "Publish to TikTok" : "发布视频到 TikTok",
+          beta: true,
+        },
+        {
+          title: t ? "YouTube Accounts" : "YouTube 账号绑定",
+          href: "/youtube-publish/accounts",
+          icon: Youtube,
+          description: t ? "Connect YouTube channels" : "绑定 YouTube 发布频道",
+          beta: true,
+        },
+        {
+          title: t ? "YouTube Publish" : "YouTube 视频发布",
+          href: "/youtube-publish",
+          icon: Youtube,
+          description: t ? "Publish to YouTube" : "发布视频到 YouTube",
           beta: true,
         },
       ],
