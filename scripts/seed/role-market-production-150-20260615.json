@@ -1,0 +1,2257 @@
+{
+  "batchId": "role-market-production-150-20260615",
+  "boardSize": "2048x1360",
+  "publishPrice": 100,
+  "roles": [
+    {
+      "seedKey": "urban-001-city-lifestyle-vlogger",
+      "name": "宁夏",
+      "category": "现代都市",
+      "tags": [
+        "都市白领",
+        "通勤",
+        "生活方式"
+      ],
+      "characterType": "photorealistic",
+      "gender": "female",
+      "ageRange": "24-30",
+      "description": "宁夏是现代都市方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：都市白领、通勤、生活方式。",
+      "prompt": "photorealistic premium contemporary portrait: an original adult female character named 宁夏, age range 24-30, city lifestyle vlogger, clean confident face, natural skin texture, expressive eyes, wearing ivory shirt, tailored dark trousers, leather loafers, neutral studio background with a faint city light mood. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "urban-002-independent-fashion-editor",
+      "name": "陆青",
+      "category": "现代都市",
+      "tags": [
+        "街拍",
+        "时尚",
+        "现代"
+      ],
+      "characterType": "photorealistic",
+      "gender": "male",
+      "ageRange": "26-34",
+      "description": "陆青是现代都市方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：街拍、时尚、现代。",
+      "prompt": "photorealistic premium contemporary portrait: an original adult male character named 陆青, age range 26-34, independent fashion editor, short neat hair, calm direct gaze, refined posture, wearing matte black trench coat, charcoal inner layer, slim boots, subtle concrete studio set, cinematic side lighting. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "urban-003-tech-product-reviewer",
+      "name": "许然",
+      "category": "现代都市",
+      "tags": [
+        "科技感",
+        "评测",
+        "都市"
+      ],
+      "characterType": "photorealistic",
+      "gender": "female",
+      "ageRange": "25-32",
+      "description": "许然是现代都市方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：科技感、评测、都市。",
+      "prompt": "photorealistic premium contemporary portrait: an original adult female character named 许然, age range 25-32, tech product reviewer, soft shoulder length hair, relaxed smile, balanced figure, wearing cream knit top, high waist denim, simple canvas bag, warm editorial studio, clean floor shadow. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "urban-004-coffee-shop-founder",
+      "name": "沈知予",
+      "category": "现代都市",
+      "tags": [
+        "咖啡店",
+        "创业者",
+        "温暖"
+      ],
+      "characterType": "photorealistic",
+      "gender": "female",
+      "ageRange": "27-35",
+      "description": "沈知予是现代都市方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：咖啡店、创业者、温暖。",
+      "prompt": "photorealistic premium contemporary portrait: an original adult female character named 沈知予, age range 27-35, coffee shop founder, sharp jawline, warm eyes, effortless street style, wearing navy blazer, relaxed white tee, cropped trousers, minimal apartment studio with soft window light. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "urban-005-documentary-photographer",
+      "name": "程墨",
+      "category": "现代都市",
+      "tags": [
+        "夜景",
+        "导演感",
+        "短剧"
+      ],
+      "characterType": "photorealistic",
+      "gender": "male",
+      "ageRange": "24-30",
+      "description": "程墨是现代都市方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：夜景、导演感、短剧。",
+      "prompt": "photorealistic premium contemporary portrait: an original adult male character named 程墨, age range 24-30, documentary photographer, minimal makeup, elegant mature presence, poised hands, wearing soft grey hoodie layered with a technical vest, clean sneakers, modern loft backdrop, premium lifestyle photography. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "urban-006-creative-agency-producer",
+      "name": "林悦",
+      "category": "现代都市",
+      "tags": [
+        "都市白领",
+        "通勤",
+        "生活方式"
+      ],
+      "characterType": "photorealistic",
+      "gender": "female",
+      "ageRange": "26-34",
+      "description": "林悦是现代都市方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：都市白领、通勤、生活方式。",
+      "prompt": "photorealistic premium contemporary portrait: an original adult female character named 林悦, age range 26-34, creative agency producer, clean confident face, natural skin texture, expressive eyes, wearing matte black trench coat, charcoal inner layer, slim boots, neutral studio background with a faint city light mood. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "urban-007-fitness-content-coach",
+      "name": "周序",
+      "category": "现代都市",
+      "tags": [
+        "街拍",
+        "时尚",
+        "现代"
+      ],
+      "characterType": "photorealistic",
+      "gender": "male",
+      "ageRange": "25-32",
+      "description": "周序是现代都市方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：街拍、时尚、现代。",
+      "prompt": "photorealistic premium contemporary portrait: an original adult male character named 周序, age range 25-32, fitness content coach, short neat hair, calm direct gaze, refined posture, wearing cream knit top, high waist denim, simple canvas bag, subtle concrete studio set, cinematic side lighting. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "urban-008-night-market-food-creator",
+      "name": "顾安",
+      "category": "现代都市",
+      "tags": [
+        "科技感",
+        "评测",
+        "都市"
+      ],
+      "characterType": "photorealistic",
+      "gender": "male",
+      "ageRange": "27-35",
+      "description": "顾安是现代都市方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：科技感、评测、都市。",
+      "prompt": "photorealistic premium contemporary portrait: an original adult male character named 顾安, age range 27-35, night market food creator, soft shoulder length hair, relaxed smile, balanced figure, wearing navy blazer, relaxed white tee, cropped trousers, warm editorial studio, clean floor shadow. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "urban-009-jazz-bar-singer",
+      "name": "叶晴",
+      "category": "现代都市",
+      "tags": [
+        "咖啡店",
+        "创业者",
+        "温暖"
+      ],
+      "characterType": "photorealistic",
+      "gender": "female",
+      "ageRange": "24-30",
+      "description": "叶晴是现代都市方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：咖啡店、创业者、温暖。",
+      "prompt": "photorealistic premium contemporary portrait: an original adult female character named 叶晴, age range 24-30, jazz bar singer, sharp jawline, warm eyes, effortless street style, wearing soft grey hoodie layered with a technical vest, clean sneakers, minimal apartment studio with soft window light. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "urban-010-urban-travel-host",
+      "name": "宋辰",
+      "category": "现代都市",
+      "tags": [
+        "夜景",
+        "导演感",
+        "短剧"
+      ],
+      "characterType": "photorealistic",
+      "gender": "male",
+      "ageRange": "26-34",
+      "description": "宋辰是现代都市方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：夜景、导演感、短剧。",
+      "prompt": "photorealistic premium contemporary portrait: an original adult male character named 宋辰, age range 26-34, urban travel host, minimal makeup, elegant mature presence, poised hands, wearing ivory shirt, tailored dark trousers, leather loafers, modern loft backdrop, premium lifestyle photography. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "urban-011-city-lifestyle-vlogger",
+      "name": "方梨",
+      "category": "现代都市",
+      "tags": [
+        "都市白领",
+        "通勤",
+        "生活方式"
+      ],
+      "characterType": "photorealistic",
+      "gender": "female",
+      "ageRange": "25-32",
+      "description": "方梨是现代都市方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：都市白领、通勤、生活方式。",
+      "prompt": "photorealistic premium contemporary portrait: an original adult female character named 方梨, age range 25-32, city lifestyle vlogger, clean confident face, natural skin texture, expressive eyes, wearing cream knit top, high waist denim, simple canvas bag, neutral studio background with a faint city light mood. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "urban-012-independent-fashion-editor",
+      "name": "何川",
+      "category": "现代都市",
+      "tags": [
+        "街拍",
+        "时尚",
+        "现代"
+      ],
+      "characterType": "photorealistic",
+      "gender": "male",
+      "ageRange": "27-35",
+      "description": "何川是现代都市方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：街拍、时尚、现代。",
+      "prompt": "photorealistic premium contemporary portrait: an original adult male character named 何川, age range 27-35, independent fashion editor, short neat hair, calm direct gaze, refined posture, wearing navy blazer, relaxed white tee, cropped trousers, subtle concrete studio set, cinematic side lighting. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "urban-013-tech-product-reviewer",
+      "name": "苏望",
+      "category": "现代都市",
+      "tags": [
+        "科技感",
+        "评测",
+        "都市"
+      ],
+      "characterType": "photorealistic",
+      "gender": "male",
+      "ageRange": "24-30",
+      "description": "苏望是现代都市方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：科技感、评测、都市。",
+      "prompt": "photorealistic premium contemporary portrait: an original adult male character named 苏望, age range 24-30, tech product reviewer, soft shoulder length hair, relaxed smile, balanced figure, wearing soft grey hoodie layered with a technical vest, clean sneakers, warm editorial studio, clean floor shadow. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "urban-014-coffee-shop-founder",
+      "name": "唐可",
+      "category": "现代都市",
+      "tags": [
+        "咖啡店",
+        "创业者",
+        "温暖"
+      ],
+      "characterType": "photorealistic",
+      "gender": "female",
+      "ageRange": "26-34",
+      "description": "唐可是现代都市方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：咖啡店、创业者、温暖。",
+      "prompt": "photorealistic premium contemporary portrait: an original adult female character named 唐可, age range 26-34, coffee shop founder, sharp jawline, warm eyes, effortless street style, wearing ivory shirt, tailored dark trousers, leather loafers, minimal apartment studio with soft window light. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "urban-015-documentary-photographer",
+      "name": "许鸢",
+      "category": "现代都市",
+      "tags": [
+        "夜景",
+        "导演感",
+        "短剧"
+      ],
+      "characterType": "photorealistic",
+      "gender": "female",
+      "ageRange": "25-32",
+      "description": "许鸢是现代都市方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：夜景、导演感、短剧。",
+      "prompt": "photorealistic premium contemporary portrait: an original adult female character named 许鸢, age range 25-32, documentary photographer, minimal makeup, elegant mature presence, poised hands, wearing matte black trench coat, charcoal inner layer, slim boots, modern loft backdrop, premium lifestyle photography. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "urban-016-creative-agency-producer",
+      "name": "韩序",
+      "category": "现代都市",
+      "tags": [
+        "都市白领",
+        "通勤",
+        "生活方式"
+      ],
+      "characterType": "photorealistic",
+      "gender": "male",
+      "ageRange": "27-35",
+      "description": "韩序是现代都市方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：都市白领、通勤、生活方式。",
+      "prompt": "photorealistic premium contemporary portrait: an original adult male character named 韩序, age range 27-35, creative agency producer, clean confident face, natural skin texture, expressive eyes, wearing navy blazer, relaxed white tee, cropped trousers, neutral studio background with a faint city light mood. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "urban-017-fitness-content-coach",
+      "name": "白栀",
+      "category": "现代都市",
+      "tags": [
+        "街拍",
+        "时尚",
+        "现代"
+      ],
+      "characterType": "photorealistic",
+      "gender": "female",
+      "ageRange": "24-30",
+      "description": "白栀是现代都市方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：街拍、时尚、现代。",
+      "prompt": "photorealistic premium contemporary portrait: an original adult female character named 白栀, age range 24-30, fitness content coach, short neat hair, calm direct gaze, refined posture, wearing soft grey hoodie layered with a technical vest, clean sneakers, subtle concrete studio set, cinematic side lighting. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "urban-018-night-market-food-creator",
+      "name": "纪南",
+      "category": "现代都市",
+      "tags": [
+        "科技感",
+        "评测",
+        "都市"
+      ],
+      "characterType": "photorealistic",
+      "gender": "female",
+      "ageRange": "26-34",
+      "description": "纪南是现代都市方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：科技感、评测、都市。",
+      "prompt": "photorealistic premium contemporary portrait: an original adult female character named 纪南, age range 26-34, night market food creator, soft shoulder length hair, relaxed smile, balanced figure, wearing ivory shirt, tailored dark trousers, leather loafers, warm editorial studio, clean floor shadow. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "urban-019-jazz-bar-singer",
+      "name": "岑光",
+      "category": "现代都市",
+      "tags": [
+        "咖啡店",
+        "创业者",
+        "温暖"
+      ],
+      "characterType": "photorealistic",
+      "gender": "male",
+      "ageRange": "25-32",
+      "description": "岑光是现代都市方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：咖啡店、创业者、温暖。",
+      "prompt": "photorealistic premium contemporary portrait: an original adult male character named 岑光, age range 25-32, jazz bar singer, sharp jawline, warm eyes, effortless street style, wearing matte black trench coat, charcoal inner layer, slim boots, minimal apartment studio with soft window light. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "urban-020-urban-travel-host",
+      "name": "梁澈",
+      "category": "现代都市",
+      "tags": [
+        "夜景",
+        "导演感",
+        "短剧"
+      ],
+      "characterType": "photorealistic",
+      "gender": "male",
+      "ageRange": "27-35",
+      "description": "梁澈是现代都市方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：夜景、导演感、短剧。",
+      "prompt": "photorealistic premium contemporary portrait: an original adult male character named 梁澈, age range 27-35, urban travel host, minimal makeup, elegant mature presence, poised hands, wearing cream knit top, high waist denim, simple canvas bag, modern loft backdrop, premium lifestyle photography. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "urban-021-city-lifestyle-vlogger",
+      "name": "乔安",
+      "category": "现代都市",
+      "tags": [
+        "都市白领",
+        "通勤",
+        "生活方式"
+      ],
+      "characterType": "photorealistic",
+      "gender": "female",
+      "ageRange": "24-30",
+      "description": "乔安是现代都市方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：都市白领、通勤、生活方式。",
+      "prompt": "photorealistic premium contemporary portrait: an original adult female character named 乔安, age range 24-30, city lifestyle vlogger, clean confident face, natural skin texture, expressive eyes, wearing soft grey hoodie layered with a technical vest, clean sneakers, neutral studio background with a faint city light mood. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "urban-022-independent-fashion-editor",
+      "name": "黎川",
+      "category": "现代都市",
+      "tags": [
+        "街拍",
+        "时尚",
+        "现代"
+      ],
+      "characterType": "photorealistic",
+      "gender": "male",
+      "ageRange": "26-34",
+      "description": "黎川是现代都市方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：街拍、时尚、现代。",
+      "prompt": "photorealistic premium contemporary portrait: an original adult male character named 黎川, age range 26-34, independent fashion editor, short neat hair, calm direct gaze, refined posture, wearing ivory shirt, tailored dark trousers, leather loafers, subtle concrete studio set, cinematic side lighting. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "urban-023-tech-product-reviewer",
+      "name": "温禾",
+      "category": "现代都市",
+      "tags": [
+        "科技感",
+        "评测",
+        "都市"
+      ],
+      "characterType": "photorealistic",
+      "gender": "female",
+      "ageRange": "25-32",
+      "description": "温禾是现代都市方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：科技感、评测、都市。",
+      "prompt": "photorealistic premium contemporary portrait: an original adult female character named 温禾, age range 25-32, tech product reviewer, soft shoulder length hair, relaxed smile, balanced figure, wearing matte black trench coat, charcoal inner layer, slim boots, warm editorial studio, clean floor shadow. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "urban-024-coffee-shop-founder",
+      "name": "秦朗",
+      "category": "现代都市",
+      "tags": [
+        "咖啡店",
+        "创业者",
+        "温暖"
+      ],
+      "characterType": "photorealistic",
+      "gender": "male",
+      "ageRange": "27-35",
+      "description": "秦朗是现代都市方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：咖啡店、创业者、温暖。",
+      "prompt": "photorealistic premium contemporary portrait: an original adult male character named 秦朗, age range 27-35, coffee shop founder, sharp jawline, warm eyes, effortless street style, wearing cream knit top, high waist denim, simple canvas bag, minimal apartment studio with soft window light. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "urban-025-documentary-photographer",
+      "name": "夏予",
+      "category": "现代都市",
+      "tags": [
+        "夜景",
+        "导演感",
+        "短剧"
+      ],
+      "characterType": "photorealistic",
+      "gender": "female",
+      "ageRange": "24-30",
+      "description": "夏予是现代都市方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：夜景、导演感、短剧。",
+      "prompt": "photorealistic premium contemporary portrait: an original adult female character named 夏予, age range 24-30, documentary photographer, minimal makeup, elegant mature presence, poised hands, wearing navy blazer, relaxed white tee, cropped trousers, modern loft backdrop, premium lifestyle photography. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "urban-026-creative-agency-producer",
+      "name": "顾南枝",
+      "category": "现代都市",
+      "tags": [
+        "都市白领",
+        "通勤",
+        "生活方式"
+      ],
+      "characterType": "photorealistic",
+      "gender": "female",
+      "ageRange": "26-34",
+      "description": "顾南枝是现代都市方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：都市白领、通勤、生活方式。",
+      "prompt": "photorealistic premium contemporary portrait: an original adult female character named 顾南枝, age range 26-34, creative agency producer, clean confident face, natural skin texture, expressive eyes, wearing ivory shirt, tailored dark trousers, leather loafers, neutral studio background with a faint city light mood. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "urban-027-fitness-content-coach",
+      "name": "江屿",
+      "category": "现代都市",
+      "tags": [
+        "街拍",
+        "时尚",
+        "现代"
+      ],
+      "characterType": "photorealistic",
+      "gender": "male",
+      "ageRange": "25-32",
+      "description": "江屿是现代都市方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：街拍、时尚、现代。",
+      "prompt": "photorealistic premium contemporary portrait: an original adult male character named 江屿, age range 25-32, fitness content coach, short neat hair, calm direct gaze, refined posture, wearing matte black trench coat, charcoal inner layer, slim boots, subtle concrete studio set, cinematic side lighting. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "urban-028-night-market-food-creator",
+      "name": "陆微",
+      "category": "现代都市",
+      "tags": [
+        "科技感",
+        "评测",
+        "都市"
+      ],
+      "characterType": "photorealistic",
+      "gender": "female",
+      "ageRange": "27-35",
+      "description": "陆微是现代都市方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：科技感、评测、都市。",
+      "prompt": "photorealistic premium contemporary portrait: an original adult female character named 陆微, age range 27-35, night market food creator, soft shoulder length hair, relaxed smile, balanced figure, wearing cream knit top, high waist denim, simple canvas bag, warm editorial studio, clean floor shadow. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "urban-029-jazz-bar-singer",
+      "name": "尹珂",
+      "category": "现代都市",
+      "tags": [
+        "咖啡店",
+        "创业者",
+        "温暖"
+      ],
+      "characterType": "photorealistic",
+      "gender": "female",
+      "ageRange": "24-30",
+      "description": "尹珂是现代都市方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：咖啡店、创业者、温暖。",
+      "prompt": "photorealistic premium contemporary portrait: an original adult female character named 尹珂, age range 24-30, jazz bar singer, sharp jawline, warm eyes, effortless street style, wearing navy blazer, relaxed white tee, cropped trousers, minimal apartment studio with soft window light. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "urban-030-urban-travel-host",
+      "name": "陈星野",
+      "category": "现代都市",
+      "tags": [
+        "夜景",
+        "导演感",
+        "短剧"
+      ],
+      "characterType": "photorealistic",
+      "gender": "male",
+      "ageRange": "26-34",
+      "description": "陈星野是现代都市方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：夜景、导演感、短剧。",
+      "prompt": "photorealistic premium contemporary portrait: an original adult male character named 陈星野, age range 26-34, urban travel host, minimal makeup, elegant mature presence, poised hands, wearing soft grey hoodie layered with a technical vest, clean sneakers, modern loft backdrop, premium lifestyle photography. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "xuanhuan-001-sword-cultivator",
+      "name": "云祈",
+      "category": "古风玄幻",
+      "tags": [
+        "仙侠",
+        "白衣",
+        "剑修"
+      ],
+      "characterType": "cinematic",
+      "gender": "female",
+      "ageRange": "22-30",
+      "description": "云祈是古风玄幻方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：仙侠、白衣、剑修。",
+      "prompt": "cinematic xianxia fantasy character design: an original adult female character named 云祈, age range 22-30, sword cultivator, long dark hair tied with a jade clasp, clear composed eyes, wearing layered white and pale blue hanfu, embroidered sash, light fabric, misty mountain studio backdrop with soft rim light. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "xuanhuan-002-wandering-talisman-scholar",
+      "name": "沈砚秋",
+      "category": "古风玄幻",
+      "tags": [
+        "玄幻",
+        "术士",
+        "古风"
+      ],
+      "characterType": "cinematic",
+      "gender": "male",
+      "ageRange": "25-38",
+      "description": "沈砚秋是古风玄幻方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：玄幻、术士、古风。",
+      "prompt": "cinematic xianxia fantasy character design: an original adult male character named 沈砚秋, age range 25-38, wandering talisman scholar, silver-streaked hair, calm weathered expression, noble posture, wearing ink black robe with bronze talisman ornaments, ancient bamboo forest atmosphere, clean full-body lighting. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "xuanhuan-003-mountain-healer",
+      "name": "洛白",
+      "category": "古风玄幻",
+      "tags": [
+        "医师",
+        "温柔",
+        "山林"
+      ],
+      "characterType": "cinematic",
+      "gender": "male",
+      "ageRange": "28-45",
+      "description": "洛白是古风玄幻方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：医师、温柔、山林。",
+      "prompt": "cinematic xianxia fantasy character design: an original adult male character named 洛白, age range 28-45, mountain healer, soft face, focused eyes, flowing sleeves, wearing mist green healer robe, woven belt, simple jade pendant, moonlit palace corridor mood, no text or symbols. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "xuanhuan-004-ancient-court-strategist",
+      "name": "青棠",
+      "category": "古风玄幻",
+      "tags": [
+        "权谋",
+        "宫廷",
+        "沉稳"
+      ],
+      "characterType": "cinematic",
+      "gender": "female",
+      "ageRange": "24-34",
+      "description": "青棠是古风玄幻方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：权谋、宫廷、沉稳。",
+      "prompt": "cinematic xianxia fantasy character design: an original adult female character named 青棠, age range 24-34, ancient court strategist, sharp brows, quiet authority, graceful stance, wearing deep crimson court robe with subtle gold thread, quiet river fog background with cinematic fantasy lighting. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "xuanhuan-005-spirit-beast-envoy",
+      "name": "玄照",
+      "category": "古风玄幻",
+      "tags": [
+        "异兽",
+        "使者",
+        "奇遇"
+      ],
+      "characterType": "cinematic",
+      "gender": "male",
+      "ageRange": "22-30",
+      "description": "玄照是古风玄幻方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：异兽、使者、奇遇。",
+      "prompt": "cinematic xianxia fantasy character design: an original adult male character named 玄照, age range 22-30, spirit beast envoy, serene smile, porcelain skin, elegant hand gesture, wearing sand colored traveling cloak over ancient linen garments, warm temple courtyard light, premium character concept art. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "xuanhuan-006-white-robed-immortal",
+      "name": "柳听雪",
+      "category": "古风玄幻",
+      "tags": [
+        "仙侠",
+        "白衣",
+        "剑修"
+      ],
+      "characterType": "cinematic",
+      "gender": "female",
+      "ageRange": "25-38",
+      "description": "柳听雪是古风玄幻方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：仙侠、白衣、剑修。",
+      "prompt": "cinematic xianxia fantasy character design: an original adult female character named 柳听雪, age range 25-38, white-robed immortal, long dark hair tied with a jade clasp, clear composed eyes, wearing ink black robe with bronze talisman ornaments, misty mountain studio backdrop with soft rim light. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "xuanhuan-007-desert-caravan-mystic",
+      "name": "谢无尘",
+      "category": "古风玄幻",
+      "tags": [
+        "玄幻",
+        "术士",
+        "古风"
+      ],
+      "characterType": "cinematic",
+      "gender": "male",
+      "ageRange": "28-45",
+      "description": "谢无尘是古风玄幻方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：玄幻、术士、古风。",
+      "prompt": "cinematic xianxia fantasy character design: an original adult male character named 谢无尘, age range 28-45, desert caravan mystic, silver-streaked hair, calm weathered expression, noble posture, wearing mist green healer robe, woven belt, simple jade pendant, ancient bamboo forest atmosphere, clean full-body lighting. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "xuanhuan-008-rain-pavilion-assassin",
+      "name": "苏照夜",
+      "category": "古风玄幻",
+      "tags": [
+        "医师",
+        "温柔",
+        "山林"
+      ],
+      "characterType": "cinematic",
+      "gender": "female",
+      "ageRange": "24-34",
+      "description": "苏照夜是古风玄幻方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：医师、温柔、山林。",
+      "prompt": "cinematic xianxia fantasy character design: an original adult female character named 苏照夜, age range 24-34, rain pavilion assassin, soft face, focused eyes, flowing sleeves, wearing deep crimson court robe with subtle gold thread, moonlit palace corridor mood, no text or symbols. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "xuanhuan-009-bamboo-forest-monk",
+      "name": "白若衡",
+      "category": "古风玄幻",
+      "tags": [
+        "权谋",
+        "宫廷",
+        "沉稳"
+      ],
+      "characterType": "cinematic",
+      "gender": "male",
+      "ageRange": "22-30",
+      "description": "白若衡是古风玄幻方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：权谋、宫廷、沉稳。",
+      "prompt": "cinematic xianxia fantasy character design: an original adult male character named 白若衡, age range 22-30, bamboo forest monk, sharp brows, quiet authority, graceful stance, wearing sand colored traveling cloak over ancient linen garments, quiet river fog background with cinematic fantasy lighting. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "xuanhuan-010-moonlit-river-exorcist",
+      "name": "温照",
+      "category": "古风玄幻",
+      "tags": [
+        "异兽",
+        "使者",
+        "奇遇"
+      ],
+      "characterType": "cinematic",
+      "gender": "male",
+      "ageRange": "25-38",
+      "description": "温照是古风玄幻方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：异兽、使者、奇遇。",
+      "prompt": "cinematic xianxia fantasy character design: an original adult male character named 温照, age range 25-38, moonlit river exorcist, serene smile, porcelain skin, elegant hand gesture, wearing layered white and pale blue hanfu, embroidered sash, light fabric, warm temple courtyard light, premium character concept art. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "xuanhuan-011-sword-cultivator",
+      "name": "闻溪",
+      "category": "古风玄幻",
+      "tags": [
+        "仙侠",
+        "白衣",
+        "剑修"
+      ],
+      "characterType": "cinematic",
+      "gender": "female",
+      "ageRange": "28-45",
+      "description": "闻溪是古风玄幻方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：仙侠、白衣、剑修。",
+      "prompt": "cinematic xianxia fantasy character design: an original adult female character named 闻溪, age range 28-45, sword cultivator, long dark hair tied with a jade clasp, clear composed eyes, wearing mist green healer robe, woven belt, simple jade pendant, misty mountain studio backdrop with soft rim light. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "xuanhuan-012-wandering-talisman-scholar",
+      "name": "顾青崖",
+      "category": "古风玄幻",
+      "tags": [
+        "玄幻",
+        "术士",
+        "古风"
+      ],
+      "characterType": "cinematic",
+      "gender": "male",
+      "ageRange": "24-34",
+      "description": "顾青崖是古风玄幻方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：玄幻、术士、古风。",
+      "prompt": "cinematic xianxia fantasy character design: an original adult male character named 顾青崖, age range 24-34, wandering talisman scholar, silver-streaked hair, calm weathered expression, noble posture, wearing deep crimson court robe with subtle gold thread, ancient bamboo forest atmosphere, clean full-body lighting. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "xuanhuan-013-mountain-healer",
+      "name": "凌霜",
+      "category": "古风玄幻",
+      "tags": [
+        "医师",
+        "温柔",
+        "山林"
+      ],
+      "characterType": "cinematic",
+      "gender": "female",
+      "ageRange": "22-30",
+      "description": "凌霜是古风玄幻方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：医师、温柔、山林。",
+      "prompt": "cinematic xianxia fantasy character design: an original adult female character named 凌霜, age range 22-30, mountain healer, soft face, focused eyes, flowing sleeves, wearing sand colored traveling cloak over ancient linen garments, moonlit palace corridor mood, no text or symbols. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "xuanhuan-014-ancient-court-strategist",
+      "name": "萧既明",
+      "category": "古风玄幻",
+      "tags": [
+        "权谋",
+        "宫廷",
+        "沉稳"
+      ],
+      "characterType": "cinematic",
+      "gender": "male",
+      "ageRange": "25-38",
+      "description": "萧既明是古风玄幻方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：权谋、宫廷、沉稳。",
+      "prompt": "cinematic xianxia fantasy character design: an original adult male character named 萧既明, age range 25-38, ancient court strategist, sharp brows, quiet authority, graceful stance, wearing layered white and pale blue hanfu, embroidered sash, light fabric, quiet river fog background with cinematic fantasy lighting. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "xuanhuan-015-spirit-beast-envoy",
+      "name": "云蘅",
+      "category": "古风玄幻",
+      "tags": [
+        "异兽",
+        "使者",
+        "奇遇"
+      ],
+      "characterType": "cinematic",
+      "gender": "female",
+      "ageRange": "28-45",
+      "description": "云蘅是古风玄幻方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：异兽、使者、奇遇。",
+      "prompt": "cinematic xianxia fantasy character design: an original adult female character named 云蘅, age range 28-45, spirit beast envoy, serene smile, porcelain skin, elegant hand gesture, wearing ink black robe with bronze talisman ornaments, warm temple courtyard light, premium character concept art. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "xuanhuan-016-white-robed-immortal",
+      "name": "陆观澜",
+      "category": "古风玄幻",
+      "tags": [
+        "仙侠",
+        "白衣",
+        "剑修"
+      ],
+      "characterType": "cinematic",
+      "gender": "male",
+      "ageRange": "24-34",
+      "description": "陆观澜是古风玄幻方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：仙侠、白衣、剑修。",
+      "prompt": "cinematic xianxia fantasy character design: an original adult male character named 陆观澜, age range 24-34, white-robed immortal, long dark hair tied with a jade clasp, clear composed eyes, wearing deep crimson court robe with subtle gold thread, misty mountain studio backdrop with soft rim light. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "xuanhuan-017-desert-caravan-mystic",
+      "name": "楚夜白",
+      "category": "古风玄幻",
+      "tags": [
+        "玄幻",
+        "术士",
+        "古风"
+      ],
+      "characterType": "cinematic",
+      "gender": "male",
+      "ageRange": "22-30",
+      "description": "楚夜白是古风玄幻方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：玄幻、术士、古风。",
+      "prompt": "cinematic xianxia fantasy character design: an original adult male character named 楚夜白, age range 22-30, desert caravan mystic, silver-streaked hair, calm weathered expression, noble posture, wearing sand colored traveling cloak over ancient linen garments, ancient bamboo forest atmosphere, clean full-body lighting. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "xuanhuan-018-rain-pavilion-assassin",
+      "name": "秦疏影",
+      "category": "古风玄幻",
+      "tags": [
+        "医师",
+        "温柔",
+        "山林"
+      ],
+      "characterType": "cinematic",
+      "gender": "female",
+      "ageRange": "25-38",
+      "description": "秦疏影是古风玄幻方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：医师、温柔、山林。",
+      "prompt": "cinematic xianxia fantasy character design: an original adult female character named 秦疏影, age range 25-38, rain pavilion assassin, soft face, focused eyes, flowing sleeves, wearing layered white and pale blue hanfu, embroidered sash, light fabric, moonlit palace corridor mood, no text or symbols. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "xuanhuan-019-bamboo-forest-monk",
+      "name": "谢知微",
+      "category": "古风玄幻",
+      "tags": [
+        "权谋",
+        "宫廷",
+        "沉稳"
+      ],
+      "characterType": "cinematic",
+      "gender": "female",
+      "ageRange": "28-45",
+      "description": "谢知微是古风玄幻方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：权谋、宫廷、沉稳。",
+      "prompt": "cinematic xianxia fantasy character design: an original adult female character named 谢知微, age range 28-45, bamboo forest monk, sharp brows, quiet authority, graceful stance, wearing ink black robe with bronze talisman ornaments, quiet river fog background with cinematic fantasy lighting. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "xuanhuan-020-moonlit-river-exorcist",
+      "name": "姜云舟",
+      "category": "古风玄幻",
+      "tags": [
+        "异兽",
+        "使者",
+        "奇遇"
+      ],
+      "characterType": "cinematic",
+      "gender": "male",
+      "ageRange": "24-34",
+      "description": "姜云舟是古风玄幻方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：异兽、使者、奇遇。",
+      "prompt": "cinematic xianxia fantasy character design: an original adult male character named 姜云舟, age range 24-34, moonlit river exorcist, serene smile, porcelain skin, elegant hand gesture, wearing mist green healer robe, woven belt, simple jade pendant, warm temple courtyard light, premium character concept art. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "xuanhuan-021-sword-cultivator",
+      "name": "穆长风",
+      "category": "古风玄幻",
+      "tags": [
+        "仙侠",
+        "白衣",
+        "剑修"
+      ],
+      "characterType": "cinematic",
+      "gender": "male",
+      "ageRange": "22-30",
+      "description": "穆长风是古风玄幻方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：仙侠、白衣、剑修。",
+      "prompt": "cinematic xianxia fantasy character design: an original adult male character named 穆长风, age range 22-30, sword cultivator, long dark hair tied with a jade clasp, clear composed eyes, wearing sand colored traveling cloak over ancient linen garments, misty mountain studio backdrop with soft rim light. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "xuanhuan-022-wandering-talisman-scholar",
+      "name": "宁扶摇",
+      "category": "古风玄幻",
+      "tags": [
+        "玄幻",
+        "术士",
+        "古风"
+      ],
+      "characterType": "cinematic",
+      "gender": "female",
+      "ageRange": "25-38",
+      "description": "宁扶摇是古风玄幻方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：玄幻、术士、古风。",
+      "prompt": "cinematic xianxia fantasy character design: an original adult female character named 宁扶摇, age range 25-38, wandering talisman scholar, silver-streaked hair, calm weathered expression, noble posture, wearing layered white and pale blue hanfu, embroidered sash, light fabric, ancient bamboo forest atmosphere, clean full-body lighting. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "xuanhuan-023-mountain-healer",
+      "name": "宋清辞",
+      "category": "古风玄幻",
+      "tags": [
+        "医师",
+        "温柔",
+        "山林"
+      ],
+      "characterType": "cinematic",
+      "gender": "female",
+      "ageRange": "28-45",
+      "description": "宋清辞是古风玄幻方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：医师、温柔、山林。",
+      "prompt": "cinematic xianxia fantasy character design: an original adult female character named 宋清辞, age range 28-45, mountain healer, soft face, focused eyes, flowing sleeves, wearing ink black robe with bronze talisman ornaments, moonlit palace corridor mood, no text or symbols. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "xuanhuan-024-ancient-court-strategist",
+      "name": "花辞树",
+      "category": "古风玄幻",
+      "tags": [
+        "权谋",
+        "宫廷",
+        "沉稳"
+      ],
+      "characterType": "cinematic",
+      "gender": "female",
+      "ageRange": "24-34",
+      "description": "花辞树是古风玄幻方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：权谋、宫廷、沉稳。",
+      "prompt": "cinematic xianxia fantasy character design: an original adult female character named 花辞树, age range 24-34, ancient court strategist, sharp brows, quiet authority, graceful stance, wearing mist green healer robe, woven belt, simple jade pendant, quiet river fog background with cinematic fantasy lighting. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "xuanhuan-025-spirit-beast-envoy",
+      "name": "叶长宁",
+      "category": "古风玄幻",
+      "tags": [
+        "异兽",
+        "使者",
+        "奇遇"
+      ],
+      "characterType": "cinematic",
+      "gender": "female",
+      "ageRange": "22-30",
+      "description": "叶长宁是古风玄幻方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：异兽、使者、奇遇。",
+      "prompt": "cinematic xianxia fantasy character design: an original adult female character named 叶长宁, age range 22-30, spirit beast envoy, serene smile, porcelain skin, elegant hand gesture, wearing deep crimson court robe with subtle gold thread, warm temple courtyard light, premium character concept art. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "xuanhuan-026-white-robed-immortal",
+      "name": "许灵均",
+      "category": "古风玄幻",
+      "tags": [
+        "仙侠",
+        "白衣",
+        "剑修"
+      ],
+      "characterType": "cinematic",
+      "gender": "male",
+      "ageRange": "25-38",
+      "description": "许灵均是古风玄幻方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：仙侠、白衣、剑修。",
+      "prompt": "cinematic xianxia fantasy character design: an original adult male character named 许灵均, age range 25-38, white-robed immortal, long dark hair tied with a jade clasp, clear composed eyes, wearing layered white and pale blue hanfu, embroidered sash, light fabric, misty mountain studio backdrop with soft rim light. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "xuanhuan-027-desert-caravan-mystic",
+      "name": "孟听澜",
+      "category": "古风玄幻",
+      "tags": [
+        "玄幻",
+        "术士",
+        "古风"
+      ],
+      "characterType": "cinematic",
+      "gender": "female",
+      "ageRange": "28-45",
+      "description": "孟听澜是古风玄幻方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：玄幻、术士、古风。",
+      "prompt": "cinematic xianxia fantasy character design: an original adult female character named 孟听澜, age range 28-45, desert caravan mystic, silver-streaked hair, calm weathered expression, noble posture, wearing ink black robe with bronze talisman ornaments, ancient bamboo forest atmosphere, clean full-body lighting. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "xuanhuan-028-rain-pavilion-assassin",
+      "name": "沈不疑",
+      "category": "古风玄幻",
+      "tags": [
+        "医师",
+        "温柔",
+        "山林"
+      ],
+      "characterType": "cinematic",
+      "gender": "male",
+      "ageRange": "24-34",
+      "description": "沈不疑是古风玄幻方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：医师、温柔、山林。",
+      "prompt": "cinematic xianxia fantasy character design: an original adult male character named 沈不疑, age range 24-34, rain pavilion assassin, soft face, focused eyes, flowing sleeves, wearing mist green healer robe, woven belt, simple jade pendant, moonlit palace corridor mood, no text or symbols. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "xuanhuan-029-bamboo-forest-monk",
+      "name": "阿照",
+      "category": "古风玄幻",
+      "tags": [
+        "权谋",
+        "宫廷",
+        "沉稳"
+      ],
+      "characterType": "cinematic",
+      "gender": "female",
+      "ageRange": "22-30",
+      "description": "阿照是古风玄幻方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：权谋、宫廷、沉稳。",
+      "prompt": "cinematic xianxia fantasy character design: an original adult female character named 阿照, age range 22-30, bamboo forest monk, sharp brows, quiet authority, graceful stance, wearing deep crimson court robe with subtle gold thread, quiet river fog background with cinematic fantasy lighting. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "xuanhuan-030-moonlit-river-exorcist",
+      "name": "南烛",
+      "category": "古风玄幻",
+      "tags": [
+        "异兽",
+        "使者",
+        "奇遇"
+      ],
+      "characterType": "cinematic",
+      "gender": "male",
+      "ageRange": "25-38",
+      "description": "南烛是古风玄幻方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：异兽、使者、奇遇。",
+      "prompt": "cinematic xianxia fantasy character design: an original adult male character named 南烛, age range 25-38, moonlit river exorcist, serene smile, porcelain skin, elegant hand gesture, wearing sand colored traveling cloak over ancient linen garments, warm temple courtyard light, premium character concept art. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "anime-001-slice-of-life-heroine",
+      "name": "晴奈",
+      "category": "漫剧动画",
+      "tags": [
+        "漫剧",
+        "元气",
+        "日常"
+      ],
+      "characterType": "anime",
+      "gender": "female",
+      "ageRange": "20-26",
+      "description": "晴奈是漫剧动画方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：漫剧、元气、日常。",
+      "prompt": "high-end anime manhua character sheet: an original adult female character named 晴奈, age range 20-26, slice-of-life heroine, large expressive eyes, clean linework, lively smile, wearing modern casual cardigan, pleated skirt, small backpack, bright studio backdrop with warm animated lighting. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "anime-002-action-comic-protagonist",
+      "name": "陆燃",
+      "category": "漫剧动画",
+      "tags": [
+        "热血",
+        "少年",
+        "动作"
+      ],
+      "characterType": "anime",
+      "gender": "male",
+      "ageRange": "21-28",
+      "description": "陆燃是漫剧动画方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：热血、少年、动作。",
+      "prompt": "high-end anime manhua character sheet: an original adult male character named 陆燃, age range 21-28, action comic protagonist, messy dark hair, confident grin, dynamic stance, wearing black cropped jacket, white tee, slim pants, fingerless gloves, clean comic-style white stage, full-body turntable layout. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "anime-003-music-club-creator",
+      "name": "夏桃",
+      "category": "漫剧动画",
+      "tags": [
+        "偶像",
+        "音乐",
+        "青春"
+      ],
+      "characterType": "anime",
+      "gender": "female",
+      "ageRange": "22-30",
+      "description": "夏桃是漫剧动画方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：偶像、音乐、青春。",
+      "prompt": "high-end anime manhua character sheet: an original adult female character named 夏桃, age range 22-30, music club creator, soft twin-tail hairstyle, bright warm expression, wearing pastel hoodie, denim shorts, bright sneakers, sunlit cafe interior mood rendered as a controlled character sheet. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "anime-004-detective-short-drama-lead",
+      "name": "北辰",
+      "category": "漫剧动画",
+      "tags": [
+        "侦探",
+        "短剧",
+        "悬疑"
+      ],
+      "characterType": "anime",
+      "gender": "male",
+      "ageRange": "19-25",
+      "description": "北辰是漫剧动画方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：侦探、短剧、悬疑。",
+      "prompt": "high-end anime manhua character sheet: an original adult male character named 北辰, age range 19-25, detective short-drama lead, cool gaze, layered hair, athletic posture, wearing cream apron over green dress, cafe styling, night city anime lighting with clear silhouette. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "anime-005-bakery-assistant",
+      "name": "七月",
+      "category": "漫剧动画",
+      "tags": [
+        "咖啡店",
+        "治愈",
+        "动画"
+      ],
+      "characterType": "anime",
+      "gender": "female",
+      "ageRange": "20-26",
+      "description": "七月是漫剧动画方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：咖啡店、治愈、动画。",
+      "prompt": "high-end anime manhua character sheet: an original adult female character named 七月, age range 20-26, bakery assistant, short bob hair, curious eyes, gentle pose, wearing loose shirt, tie, urban comic accessories, soft pastel room background, premium animation design. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "anime-006-cyber-street-racer",
+      "name": "星野",
+      "category": "漫剧动画",
+      "tags": [
+        "漫剧",
+        "元气",
+        "日常"
+      ],
+      "characterType": "anime",
+      "gender": "male",
+      "ageRange": "21-28",
+      "description": "星野是漫剧动画方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：漫剧、元气、日常。",
+      "prompt": "high-end anime manhua character sheet: an original adult male character named 星野, age range 21-28, cyber street racer, large expressive eyes, clean linework, lively smile, wearing black cropped jacket, white tee, slim pants, fingerless gloves, bright studio backdrop with warm animated lighting. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "anime-007-idol-trainee",
+      "name": "小澈",
+      "category": "漫剧动画",
+      "tags": [
+        "热血",
+        "少年",
+        "动作"
+      ],
+      "characterType": "anime",
+      "gender": "male",
+      "ageRange": "22-30",
+      "description": "小澈是漫剧动画方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：热血、少年、动作。",
+      "prompt": "high-end anime manhua character sheet: an original adult male character named 小澈, age range 22-30, idol trainee, messy dark hair, confident grin, dynamic stance, wearing pastel hoodie, denim shorts, bright sneakers, clean comic-style white stage, full-body turntable layout. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "anime-008-fantasy-academy-mentor",
+      "name": "南栀",
+      "category": "漫剧动画",
+      "tags": [
+        "偶像",
+        "音乐",
+        "青春"
+      ],
+      "characterType": "anime",
+      "gender": "female",
+      "ageRange": "19-25",
+      "description": "南栀是漫剧动画方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：偶像、音乐、青春。",
+      "prompt": "high-end anime manhua character sheet: an original adult female character named 南栀, age range 19-25, fantasy academy mentor, soft twin-tail hairstyle, bright warm expression, wearing cream apron over green dress, cafe styling, sunlit cafe interior mood rendered as a controlled character sheet. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "anime-009-comedy-office-intern",
+      "name": "千寻",
+      "category": "漫剧动画",
+      "tags": [
+        "侦探",
+        "短剧",
+        "悬疑"
+      ],
+      "characterType": "anime",
+      "gender": "female",
+      "ageRange": "20-26",
+      "description": "千寻是漫剧动画方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：侦探、短剧、悬疑。",
+      "prompt": "high-end anime manhua character sheet: an original adult female character named 千寻, age range 20-26, comedy office intern, cool gaze, layered hair, athletic posture, wearing loose shirt, tie, urban comic accessories, night city anime lighting with clear silhouette. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "anime-010-urban-manga-reporter",
+      "name": "岚一",
+      "category": "漫剧动画",
+      "tags": [
+        "咖啡店",
+        "治愈",
+        "动画"
+      ],
+      "characterType": "anime",
+      "gender": "male",
+      "ageRange": "21-28",
+      "description": "岚一是漫剧动画方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：咖啡店、治愈、动画。",
+      "prompt": "high-end anime manhua character sheet: an original adult male character named 岚一, age range 21-28, urban manga reporter, short bob hair, curious eyes, gentle pose, wearing modern casual cardigan, pleated skirt, small backpack, soft pastel room background, premium animation design. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "anime-011-slice-of-life-heroine",
+      "name": "米娅",
+      "category": "漫剧动画",
+      "tags": [
+        "漫剧",
+        "元气",
+        "日常"
+      ],
+      "characterType": "anime",
+      "gender": "female",
+      "ageRange": "22-30",
+      "description": "米娅是漫剧动画方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：漫剧、元气、日常。",
+      "prompt": "high-end anime manhua character sheet: an original adult female character named 米娅, age range 22-30, slice-of-life heroine, large expressive eyes, clean linework, lively smile, wearing pastel hoodie, denim shorts, bright sneakers, bright studio backdrop with warm animated lighting. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "anime-012-action-comic-protagonist",
+      "name": "阿洛",
+      "category": "漫剧动画",
+      "tags": [
+        "热血",
+        "少年",
+        "动作"
+      ],
+      "characterType": "anime",
+      "gender": "male",
+      "ageRange": "19-25",
+      "description": "阿洛是漫剧动画方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：热血、少年、动作。",
+      "prompt": "high-end anime manhua character sheet: an original adult male character named 阿洛, age range 19-25, action comic protagonist, messy dark hair, confident grin, dynamic stance, wearing cream apron over green dress, cafe styling, clean comic-style white stage, full-body turntable layout. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "anime-013-music-club-creator",
+      "name": "若叶",
+      "category": "漫剧动画",
+      "tags": [
+        "偶像",
+        "音乐",
+        "青春"
+      ],
+      "characterType": "anime",
+      "gender": "female",
+      "ageRange": "20-26",
+      "description": "若叶是漫剧动画方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：偶像、音乐、青春。",
+      "prompt": "high-end anime manhua character sheet: an original adult female character named 若叶, age range 20-26, music club creator, soft twin-tail hairstyle, bright warm expression, wearing loose shirt, tie, urban comic accessories, sunlit cafe interior mood rendered as a controlled character sheet. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "anime-014-detective-short-drama-lead",
+      "name": "川音",
+      "category": "漫剧动画",
+      "tags": [
+        "侦探",
+        "短剧",
+        "悬疑"
+      ],
+      "characterType": "anime",
+      "gender": "female",
+      "ageRange": "21-28",
+      "description": "川音是漫剧动画方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：侦探、短剧、悬疑。",
+      "prompt": "high-end anime manhua character sheet: an original adult female character named 川音, age range 21-28, detective short-drama lead, cool gaze, layered hair, athletic posture, wearing modern casual cardigan, pleated skirt, small backpack, night city anime lighting with clear silhouette. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "anime-015-bakery-assistant",
+      "name": "小满",
+      "category": "漫剧动画",
+      "tags": [
+        "咖啡店",
+        "治愈",
+        "动画"
+      ],
+      "characterType": "anime",
+      "gender": "female",
+      "ageRange": "22-30",
+      "description": "小满是漫剧动画方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：咖啡店、治愈、动画。",
+      "prompt": "high-end anime manhua character sheet: an original adult female character named 小满, age range 22-30, bakery assistant, short bob hair, curious eyes, gentle pose, wearing black cropped jacket, white tee, slim pants, fingerless gloves, soft pastel room background, premium animation design. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "anime-016-cyber-street-racer",
+      "name": "阿景",
+      "category": "漫剧动画",
+      "tags": [
+        "漫剧",
+        "元气",
+        "日常"
+      ],
+      "characterType": "anime",
+      "gender": "male",
+      "ageRange": "19-25",
+      "description": "阿景是漫剧动画方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：漫剧、元气、日常。",
+      "prompt": "high-end anime manhua character sheet: an original adult male character named 阿景, age range 19-25, cyber street racer, large expressive eyes, clean linework, lively smile, wearing cream apron over green dress, cafe styling, bright studio backdrop with warm animated lighting. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "anime-017-idol-trainee",
+      "name": "铃夏",
+      "category": "漫剧动画",
+      "tags": [
+        "热血",
+        "少年",
+        "动作"
+      ],
+      "characterType": "anime",
+      "gender": "female",
+      "ageRange": "20-26",
+      "description": "铃夏是漫剧动画方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：热血、少年、动作。",
+      "prompt": "high-end anime manhua character sheet: an original adult female character named 铃夏, age range 20-26, idol trainee, messy dark hair, confident grin, dynamic stance, wearing loose shirt, tie, urban comic accessories, clean comic-style white stage, full-body turntable layout. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "anime-018-fantasy-academy-mentor",
+      "name": "青羽",
+      "category": "漫剧动画",
+      "tags": [
+        "偶像",
+        "音乐",
+        "青春"
+      ],
+      "characterType": "anime",
+      "gender": "male",
+      "ageRange": "21-28",
+      "description": "青羽是漫剧动画方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：偶像、音乐、青春。",
+      "prompt": "high-end anime manhua character sheet: an original adult male character named 青羽, age range 21-28, fantasy academy mentor, soft twin-tail hairstyle, bright warm expression, wearing modern casual cardigan, pleated skirt, small backpack, sunlit cafe interior mood rendered as a controlled character sheet. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "anime-019-comedy-office-intern",
+      "name": "白鸟",
+      "category": "漫剧动画",
+      "tags": [
+        "侦探",
+        "短剧",
+        "悬疑"
+      ],
+      "characterType": "anime",
+      "gender": "female",
+      "ageRange": "22-30",
+      "description": "白鸟是漫剧动画方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：侦探、短剧、悬疑。",
+      "prompt": "high-end anime manhua character sheet: an original adult female character named 白鸟, age range 22-30, comedy office intern, cool gaze, layered hair, athletic posture, wearing black cropped jacket, white tee, slim pants, fingerless gloves, night city anime lighting with clear silhouette. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "anime-020-urban-manga-reporter",
+      "name": "光希",
+      "category": "漫剧动画",
+      "tags": [
+        "咖啡店",
+        "治愈",
+        "动画"
+      ],
+      "characterType": "anime",
+      "gender": "male",
+      "ageRange": "19-25",
+      "description": "光希是漫剧动画方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：咖啡店、治愈、动画。",
+      "prompt": "high-end anime manhua character sheet: an original adult male character named 光希, age range 19-25, urban manga reporter, short bob hair, curious eyes, gentle pose, wearing pastel hoodie, denim shorts, bright sneakers, soft pastel room background, premium animation design. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "anime-021-slice-of-life-heroine",
+      "name": "泉奈",
+      "category": "漫剧动画",
+      "tags": [
+        "漫剧",
+        "元气",
+        "日常"
+      ],
+      "characterType": "anime",
+      "gender": "female",
+      "ageRange": "20-26",
+      "description": "泉奈是漫剧动画方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：漫剧、元气、日常。",
+      "prompt": "high-end anime manhua character sheet: an original adult female character named 泉奈, age range 20-26, slice-of-life heroine, large expressive eyes, clean linework, lively smile, wearing loose shirt, tie, urban comic accessories, bright studio backdrop with warm animated lighting. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "anime-022-action-comic-protagonist",
+      "name": "悠真",
+      "category": "漫剧动画",
+      "tags": [
+        "热血",
+        "少年",
+        "动作"
+      ],
+      "characterType": "anime",
+      "gender": "male",
+      "ageRange": "21-28",
+      "description": "悠真是漫剧动画方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：热血、少年、动作。",
+      "prompt": "high-end anime manhua character sheet: an original adult male character named 悠真, age range 21-28, action comic protagonist, messy dark hair, confident grin, dynamic stance, wearing modern casual cardigan, pleated skirt, small backpack, clean comic-style white stage, full-body turntable layout. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "anime-023-music-club-creator",
+      "name": "小椿",
+      "category": "漫剧动画",
+      "tags": [
+        "偶像",
+        "音乐",
+        "青春"
+      ],
+      "characterType": "anime",
+      "gender": "female",
+      "ageRange": "22-30",
+      "description": "小椿是漫剧动画方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：偶像、音乐、青春。",
+      "prompt": "high-end anime manhua character sheet: an original adult female character named 小椿, age range 22-30, music club creator, soft twin-tail hairstyle, bright warm expression, wearing black cropped jacket, white tee, slim pants, fingerless gloves, sunlit cafe interior mood rendered as a controlled character sheet. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "anime-024-detective-short-drama-lead",
+      "name": "绪风",
+      "category": "漫剧动画",
+      "tags": [
+        "侦探",
+        "短剧",
+        "悬疑"
+      ],
+      "characterType": "anime",
+      "gender": "male",
+      "ageRange": "19-25",
+      "description": "绪风是漫剧动画方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：侦探、短剧、悬疑。",
+      "prompt": "high-end anime manhua character sheet: an original adult male character named 绪风, age range 19-25, detective short-drama lead, cool gaze, layered hair, athletic posture, wearing pastel hoodie, denim shorts, bright sneakers, night city anime lighting with clear silhouette. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "anime-025-bakery-assistant",
+      "name": "柚里",
+      "category": "漫剧动画",
+      "tags": [
+        "咖啡店",
+        "治愈",
+        "动画"
+      ],
+      "characterType": "anime",
+      "gender": "female",
+      "ageRange": "20-26",
+      "description": "柚里是漫剧动画方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：咖啡店、治愈、动画。",
+      "prompt": "high-end anime manhua character sheet: an original adult female character named 柚里, age range 20-26, bakery assistant, short bob hair, curious eyes, gentle pose, wearing cream apron over green dress, cafe styling, soft pastel room background, premium animation design. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "anime-026-cyber-street-racer",
+      "name": "澪",
+      "category": "漫剧动画",
+      "tags": [
+        "漫剧",
+        "元气",
+        "日常"
+      ],
+      "characterType": "anime",
+      "gender": "female",
+      "ageRange": "21-28",
+      "description": "澪是漫剧动画方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：漫剧、元气、日常。",
+      "prompt": "high-end anime manhua character sheet: an original adult female character named 澪, age range 21-28, cyber street racer, large expressive eyes, clean linework, lively smile, wearing modern casual cardigan, pleated skirt, small backpack, bright studio backdrop with warm animated lighting. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "anime-027-idol-trainee",
+      "name": "渡",
+      "category": "漫剧动画",
+      "tags": [
+        "热血",
+        "少年",
+        "动作"
+      ],
+      "characterType": "anime",
+      "gender": "male",
+      "ageRange": "22-30",
+      "description": "渡是漫剧动画方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：热血、少年、动作。",
+      "prompt": "high-end anime manhua character sheet: an original adult male character named 渡, age range 22-30, idol trainee, messy dark hair, confident grin, dynamic stance, wearing black cropped jacket, white tee, slim pants, fingerless gloves, clean comic-style white stage, full-body turntable layout. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "anime-028-fantasy-academy-mentor",
+      "name": "千夏",
+      "category": "漫剧动画",
+      "tags": [
+        "偶像",
+        "音乐",
+        "青春"
+      ],
+      "characterType": "anime",
+      "gender": "female",
+      "ageRange": "19-25",
+      "description": "千夏是漫剧动画方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：偶像、音乐、青春。",
+      "prompt": "high-end anime manhua character sheet: an original adult female character named 千夏, age range 19-25, fantasy academy mentor, soft twin-tail hairstyle, bright warm expression, wearing pastel hoodie, denim shorts, bright sneakers, sunlit cafe interior mood rendered as a controlled character sheet. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "anime-029-comedy-office-intern",
+      "name": "遥",
+      "category": "漫剧动画",
+      "tags": [
+        "侦探",
+        "短剧",
+        "悬疑"
+      ],
+      "characterType": "anime",
+      "gender": "male",
+      "ageRange": "20-26",
+      "description": "遥是漫剧动画方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：侦探、短剧、悬疑。",
+      "prompt": "high-end anime manhua character sheet: an original adult male character named 遥, age range 20-26, comedy office intern, cool gaze, layered hair, athletic posture, wearing cream apron over green dress, cafe styling, night city anime lighting with clear silhouette. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "anime-030-urban-manga-reporter",
+      "name": "森川",
+      "category": "漫剧动画",
+      "tags": [
+        "咖啡店",
+        "治愈",
+        "动画"
+      ],
+      "characterType": "anime",
+      "gender": "male",
+      "ageRange": "21-28",
+      "description": "森川是漫剧动画方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：咖啡店、治愈、动画。",
+      "prompt": "high-end anime manhua character sheet: an original adult male character named 森川, age range 21-28, urban manga reporter, short bob hair, curious eyes, gentle pose, wearing loose shirt, tie, urban comic accessories, soft pastel room background, premium animation design. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "scifi-001-starship-pilot",
+      "name": "星澜",
+      "category": "奇幻科幻",
+      "tags": [
+        "赛博",
+        "飞行员",
+        "未来"
+      ],
+      "characterType": "cinematic",
+      "gender": "female",
+      "ageRange": "24-34",
+      "description": "星澜是奇幻科幻方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：赛博、飞行员、未来。",
+      "prompt": "cinematic fantasy science fiction concept character: an original adult female character named 星澜, age range 24-34, starship pilot, focused eyes, sleek black hair, confident futuristic stance, wearing black flight suit with teal light accents and utility belt, dark spaceship hangar with controlled cinematic rim light. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "scifi-002-desert-exoplanet-ranger",
+      "name": "诺亚辰",
+      "category": "奇幻科幻",
+      "tags": [
+        "探索者",
+        "荒漠",
+        "科幻"
+      ],
+      "characterType": "cinematic",
+      "gender": "male",
+      "ageRange": "28-42",
+      "description": "诺亚辰是奇幻科幻方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：探索者、荒漠、科幻。",
+      "prompt": "cinematic fantasy science fiction concept character: an original adult male character named 诺亚辰, age range 28-42, desert exoplanet ranger, weathered face, practical survival posture, rugged charisma, wearing sand-toned armored coat, scarf, worn boots, alien desert horizon studio backdrop, realistic dust glow. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "scifi-003-mecha-field-engineer",
+      "name": "银岚",
+      "category": "奇幻科幻",
+      "tags": [
+        "机械",
+        "工程师",
+        "装备"
+      ],
+      "characterType": "cinematic",
+      "gender": "female",
+      "ageRange": "22-32",
+      "description": "银岚是奇幻科幻方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：机械、工程师、装备。",
+      "prompt": "cinematic fantasy science fiction concept character: an original adult female character named 银岚, age range 22-32, mecha field engineer, silver short hair, precise expression, technical gloves, wearing white and graphite tech jacket, modular tool harness, clean high-tech lab environment, premium concept art lighting. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "scifi-004-orbital-medic",
+      "name": "凯洛",
+      "category": "奇幻科幻",
+      "tags": [
+        "医疗",
+        "太空",
+        "冷静"
+      ],
+      "characterType": "cinematic",
+      "gender": "male",
+      "ageRange": "30-48",
+      "description": "凯洛是奇幻科幻方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：医疗、太空、冷静。",
+      "prompt": "cinematic fantasy science fiction concept character: an original adult male character named 凯洛, age range 30-48, orbital medic, calm doctor-like presence, luminous visor detail, wearing midnight bodysuit with soft blue glowing seams, rainy neon city background, strong silhouette. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "scifi-005-cybernetic-diplomat",
+      "name": "岑星",
+      "category": "奇幻科幻",
+      "tags": [
+        "赏金猎人",
+        "霓虹",
+        "动作"
+      ],
+      "characterType": "cinematic",
+      "gender": "female",
+      "ageRange": "24-34",
+      "description": "岑星是奇幻科幻方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：赏金猎人、霓虹、动作。",
+      "prompt": "cinematic fantasy science fiction concept character: an original adult female character named 岑星, age range 24-34, cybernetic diplomat, elegant face, subtle cybernetic ear implant, poised hands, wearing long asymmetric coat over reinforced tactical layers, crystal reactor chamber mood, no logos or text. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "scifi-006-time-archive-keeper",
+      "name": "洛塔",
+      "category": "奇幻科幻",
+      "tags": [
+        "赛博",
+        "飞行员",
+        "未来"
+      ],
+      "characterType": "cinematic",
+      "gender": "male",
+      "ageRange": "28-42",
+      "description": "洛塔是奇幻科幻方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：赛博、飞行员、未来。",
+      "prompt": "cinematic fantasy science fiction concept character: an original adult male character named 洛塔, age range 28-42, time archive keeper, focused eyes, sleek black hair, confident futuristic stance, wearing sand-toned armored coat, scarf, worn boots, dark spaceship hangar with controlled cinematic rim light. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "scifi-007-neon-bounty-hunter",
+      "name": "伊芙",
+      "category": "奇幻科幻",
+      "tags": [
+        "探索者",
+        "荒漠",
+        "科幻"
+      ],
+      "characterType": "cinematic",
+      "gender": "female",
+      "ageRange": "22-32",
+      "description": "伊芙是奇幻科幻方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：探索者、荒漠、科幻。",
+      "prompt": "cinematic fantasy science fiction concept character: an original adult female character named 伊芙, age range 22-32, neon bounty hunter, weathered face, practical survival posture, rugged charisma, wearing white and graphite tech jacket, modular tool harness, alien desert horizon studio backdrop, realistic dust glow. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "scifi-008-alien-ecology-researcher",
+      "name": "阿湛",
+      "category": "奇幻科幻",
+      "tags": [
+        "机械",
+        "工程师",
+        "装备"
+      ],
+      "characterType": "cinematic",
+      "gender": "male",
+      "ageRange": "30-48",
+      "description": "阿湛是奇幻科幻方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：机械、工程师、装备。",
+      "prompt": "cinematic fantasy science fiction concept character: an original adult male character named 阿湛, age range 30-48, alien ecology researcher, silver short hair, precise expression, technical gloves, wearing midnight bodysuit with soft blue glowing seams, clean high-tech lab environment, premium concept art lighting. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "scifi-009-crystal-reactor-mage",
+      "name": "赫然",
+      "category": "奇幻科幻",
+      "tags": [
+        "医疗",
+        "太空",
+        "冷静"
+      ],
+      "characterType": "cinematic",
+      "gender": "male",
+      "ageRange": "24-34",
+      "description": "赫然是奇幻科幻方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：医疗、太空、冷静。",
+      "prompt": "cinematic fantasy science fiction concept character: an original adult male character named 赫然, age range 24-34, crystal reactor mage, calm doctor-like presence, luminous visor detail, wearing long asymmetric coat over reinforced tactical layers, rainy neon city background, strong silhouette. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "scifi-010-deep-space-courier",
+      "name": "赛琳",
+      "category": "奇幻科幻",
+      "tags": [
+        "赏金猎人",
+        "霓虹",
+        "动作"
+      ],
+      "characterType": "cinematic",
+      "gender": "female",
+      "ageRange": "28-42",
+      "description": "赛琳是奇幻科幻方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：赏金猎人、霓虹、动作。",
+      "prompt": "cinematic fantasy science fiction concept character: an original adult female character named 赛琳, age range 28-42, deep-space courier, elegant face, subtle cybernetic ear implant, poised hands, wearing black flight suit with teal light accents and utility belt, crystal reactor chamber mood, no logos or text. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "scifi-011-starship-pilot",
+      "name": "奥弥",
+      "category": "奇幻科幻",
+      "tags": [
+        "赛博",
+        "飞行员",
+        "未来"
+      ],
+      "characterType": "cinematic",
+      "gender": "male",
+      "ageRange": "22-32",
+      "description": "奥弥是奇幻科幻方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：赛博、飞行员、未来。",
+      "prompt": "cinematic fantasy science fiction concept character: an original adult male character named 奥弥, age range 22-32, starship pilot, focused eyes, sleek black hair, confident futuristic stance, wearing white and graphite tech jacket, modular tool harness, dark spaceship hangar with controlled cinematic rim light. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "scifi-012-desert-exoplanet-ranger",
+      "name": "黎烁",
+      "category": "奇幻科幻",
+      "tags": [
+        "探索者",
+        "荒漠",
+        "科幻"
+      ],
+      "characterType": "cinematic",
+      "gender": "male",
+      "ageRange": "30-48",
+      "description": "黎烁是奇幻科幻方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：探索者、荒漠、科幻。",
+      "prompt": "cinematic fantasy science fiction concept character: an original adult male character named 黎烁, age range 30-48, desert exoplanet ranger, weathered face, practical survival posture, rugged charisma, wearing midnight bodysuit with soft blue glowing seams, alien desert horizon studio backdrop, realistic dust glow. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "scifi-013-mecha-field-engineer",
+      "name": "月港",
+      "category": "奇幻科幻",
+      "tags": [
+        "机械",
+        "工程师",
+        "装备"
+      ],
+      "characterType": "cinematic",
+      "gender": "female",
+      "ageRange": "24-34",
+      "description": "月港是奇幻科幻方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：机械、工程师、装备。",
+      "prompt": "cinematic fantasy science fiction concept character: an original adult female character named 月港, age range 24-34, mecha field engineer, silver short hair, precise expression, technical gloves, wearing long asymmetric coat over reinforced tactical layers, clean high-tech lab environment, premium concept art lighting. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "scifi-014-orbital-medic",
+      "name": "索恩",
+      "category": "奇幻科幻",
+      "tags": [
+        "医疗",
+        "太空",
+        "冷静"
+      ],
+      "characterType": "cinematic",
+      "gender": "male",
+      "ageRange": "28-42",
+      "description": "索恩是奇幻科幻方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：医疗、太空、冷静。",
+      "prompt": "cinematic fantasy science fiction concept character: an original adult male character named 索恩, age range 28-42, orbital medic, calm doctor-like presence, luminous visor detail, wearing black flight suit with teal light accents and utility belt, rainy neon city background, strong silhouette. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "scifi-015-cybernetic-diplomat",
+      "name": "青曜",
+      "category": "奇幻科幻",
+      "tags": [
+        "赏金猎人",
+        "霓虹",
+        "动作"
+      ],
+      "characterType": "cinematic",
+      "gender": "female",
+      "ageRange": "22-32",
+      "description": "青曜是奇幻科幻方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：赏金猎人、霓虹、动作。",
+      "prompt": "cinematic fantasy science fiction concept character: an original adult female character named 青曜, age range 22-32, cybernetic diplomat, elegant face, subtle cybernetic ear implant, poised hands, wearing sand-toned armored coat, scarf, worn boots, crystal reactor chamber mood, no logos or text. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "scifi-016-time-archive-keeper",
+      "name": "奈尔",
+      "category": "奇幻科幻",
+      "tags": [
+        "赛博",
+        "飞行员",
+        "未来"
+      ],
+      "characterType": "cinematic",
+      "gender": "male",
+      "ageRange": "30-48",
+      "description": "奈尔是奇幻科幻方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：赛博、飞行员、未来。",
+      "prompt": "cinematic fantasy science fiction concept character: an original adult male character named 奈尔, age range 30-48, time archive keeper, focused eyes, sleek black hair, confident futuristic stance, wearing midnight bodysuit with soft blue glowing seams, dark spaceship hangar with controlled cinematic rim light. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "scifi-017-neon-bounty-hunter",
+      "name": "澄空",
+      "category": "奇幻科幻",
+      "tags": [
+        "探索者",
+        "荒漠",
+        "科幻"
+      ],
+      "characterType": "cinematic",
+      "gender": "female",
+      "ageRange": "24-34",
+      "description": "澄空是奇幻科幻方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：探索者、荒漠、科幻。",
+      "prompt": "cinematic fantasy science fiction concept character: an original adult female character named 澄空, age range 24-34, neon bounty hunter, weathered face, practical survival posture, rugged charisma, wearing long asymmetric coat over reinforced tactical layers, alien desert horizon studio backdrop, realistic dust glow. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "scifi-018-alien-ecology-researcher",
+      "name": "维安",
+      "category": "奇幻科幻",
+      "tags": [
+        "机械",
+        "工程师",
+        "装备"
+      ],
+      "characterType": "cinematic",
+      "gender": "female",
+      "ageRange": "28-42",
+      "description": "维安是奇幻科幻方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：机械、工程师、装备。",
+      "prompt": "cinematic fantasy science fiction concept character: an original adult female character named 维安, age range 28-42, alien ecology researcher, silver short hair, precise expression, technical gloves, wearing black flight suit with teal light accents and utility belt, clean high-tech lab environment, premium concept art lighting. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "scifi-019-crystal-reactor-mage",
+      "name": "陆弦",
+      "category": "奇幻科幻",
+      "tags": [
+        "医疗",
+        "太空",
+        "冷静"
+      ],
+      "characterType": "cinematic",
+      "gender": "male",
+      "ageRange": "22-32",
+      "description": "陆弦是奇幻科幻方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：医疗、太空、冷静。",
+      "prompt": "cinematic fantasy science fiction concept character: an original adult male character named 陆弦, age range 22-32, crystal reactor mage, calm doctor-like presence, luminous visor detail, wearing sand-toned armored coat, scarf, worn boots, rainy neon city background, strong silhouette. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "scifi-020-deep-space-courier",
+      "name": "海拉",
+      "category": "奇幻科幻",
+      "tags": [
+        "赏金猎人",
+        "霓虹",
+        "动作"
+      ],
+      "characterType": "cinematic",
+      "gender": "female",
+      "ageRange": "30-48",
+      "description": "海拉是奇幻科幻方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：赏金猎人、霓虹、动作。",
+      "prompt": "cinematic fantasy science fiction concept character: an original adult female character named 海拉, age range 30-48, deep-space courier, elegant face, subtle cybernetic ear implant, poised hands, wearing white and graphite tech jacket, modular tool harness, crystal reactor chamber mood, no logos or text. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "scifi-021-starship-pilot",
+      "name": "星弛",
+      "category": "奇幻科幻",
+      "tags": [
+        "赛博",
+        "飞行员",
+        "未来"
+      ],
+      "characterType": "cinematic",
+      "gender": "male",
+      "ageRange": "24-34",
+      "description": "星弛是奇幻科幻方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：赛博、飞行员、未来。",
+      "prompt": "cinematic fantasy science fiction concept character: an original adult male character named 星弛, age range 24-34, starship pilot, focused eyes, sleek black hair, confident futuristic stance, wearing long asymmetric coat over reinforced tactical layers, dark spaceship hangar with controlled cinematic rim light. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "scifi-022-desert-exoplanet-ranger",
+      "name": "岚舟",
+      "category": "奇幻科幻",
+      "tags": [
+        "探索者",
+        "荒漠",
+        "科幻"
+      ],
+      "characterType": "cinematic",
+      "gender": "female",
+      "ageRange": "28-42",
+      "description": "岚舟是奇幻科幻方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：探索者、荒漠、科幻。",
+      "prompt": "cinematic fantasy science fiction concept character: an original adult female character named 岚舟, age range 28-42, desert exoplanet ranger, weathered face, practical survival posture, rugged charisma, wearing black flight suit with teal light accents and utility belt, alien desert horizon studio backdrop, realistic dust glow. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "scifi-023-mecha-field-engineer",
+      "name": "雾河",
+      "category": "奇幻科幻",
+      "tags": [
+        "机械",
+        "工程师",
+        "装备"
+      ],
+      "characterType": "cinematic",
+      "gender": "male",
+      "ageRange": "22-32",
+      "description": "雾河是奇幻科幻方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：机械、工程师、装备。",
+      "prompt": "cinematic fantasy science fiction concept character: an original adult male character named 雾河, age range 22-32, mecha field engineer, silver short hair, precise expression, technical gloves, wearing sand-toned armored coat, scarf, worn boots, clean high-tech lab environment, premium concept art lighting. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "scifi-024-orbital-medic",
+      "name": "珀西",
+      "category": "奇幻科幻",
+      "tags": [
+        "医疗",
+        "太空",
+        "冷静"
+      ],
+      "characterType": "cinematic",
+      "gender": "male",
+      "ageRange": "30-48",
+      "description": "珀西是奇幻科幻方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：医疗、太空、冷静。",
+      "prompt": "cinematic fantasy science fiction concept character: an original adult male character named 珀西, age range 30-48, orbital medic, calm doctor-like presence, luminous visor detail, wearing white and graphite tech jacket, modular tool harness, rainy neon city background, strong silhouette. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "scifi-025-cybernetic-diplomat",
+      "name": "铠南",
+      "category": "奇幻科幻",
+      "tags": [
+        "赏金猎人",
+        "霓虹",
+        "动作"
+      ],
+      "characterType": "cinematic",
+      "gender": "male",
+      "ageRange": "24-34",
+      "description": "铠南是奇幻科幻方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：赏金猎人、霓虹、动作。",
+      "prompt": "cinematic fantasy science fiction concept character: an original adult male character named 铠南, age range 24-34, cybernetic diplomat, elegant face, subtle cybernetic ear implant, poised hands, wearing midnight bodysuit with soft blue glowing seams, crystal reactor chamber mood, no logos or text. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "scifi-026-time-archive-keeper",
+      "name": "艾琳",
+      "category": "奇幻科幻",
+      "tags": [
+        "赛博",
+        "飞行员",
+        "未来"
+      ],
+      "characterType": "cinematic",
+      "gender": "female",
+      "ageRange": "28-42",
+      "description": "艾琳是奇幻科幻方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：赛博、飞行员、未来。",
+      "prompt": "cinematic fantasy science fiction concept character: an original adult female character named 艾琳, age range 28-42, time archive keeper, focused eyes, sleek black hair, confident futuristic stance, wearing black flight suit with teal light accents and utility belt, dark spaceship hangar with controlled cinematic rim light. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "scifi-027-neon-bounty-hunter",
+      "name": "玄翼",
+      "category": "奇幻科幻",
+      "tags": [
+        "探索者",
+        "荒漠",
+        "科幻"
+      ],
+      "characterType": "cinematic",
+      "gender": "male",
+      "ageRange": "22-32",
+      "description": "玄翼是奇幻科幻方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：探索者、荒漠、科幻。",
+      "prompt": "cinematic fantasy science fiction concept character: an original adult male character named 玄翼, age range 22-32, neon bounty hunter, weathered face, practical survival posture, rugged charisma, wearing sand-toned armored coat, scarf, worn boots, alien desert horizon studio backdrop, realistic dust glow. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "scifi-028-alien-ecology-researcher",
+      "name": "烁光",
+      "category": "奇幻科幻",
+      "tags": [
+        "机械",
+        "工程师",
+        "装备"
+      ],
+      "characterType": "cinematic",
+      "gender": "female",
+      "ageRange": "30-48",
+      "description": "烁光是奇幻科幻方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：机械、工程师、装备。",
+      "prompt": "cinematic fantasy science fiction concept character: an original adult female character named 烁光, age range 30-48, alien ecology researcher, silver short hair, precise expression, technical gloves, wearing white and graphite tech jacket, modular tool harness, clean high-tech lab environment, premium concept art lighting. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "scifi-029-crystal-reactor-mage",
+      "name": "塔林",
+      "category": "奇幻科幻",
+      "tags": [
+        "医疗",
+        "太空",
+        "冷静"
+      ],
+      "characterType": "cinematic",
+      "gender": "male",
+      "ageRange": "24-34",
+      "description": "塔林是奇幻科幻方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：医疗、太空、冷静。",
+      "prompt": "cinematic fantasy science fiction concept character: an original adult male character named 塔林, age range 24-34, crystal reactor mage, calm doctor-like presence, luminous visor detail, wearing midnight bodysuit with soft blue glowing seams, rainy neon city background, strong silhouette. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "scifi-030-deep-space-courier",
+      "name": "弥生",
+      "category": "奇幻科幻",
+      "tags": [
+        "赏金猎人",
+        "霓虹",
+        "动作"
+      ],
+      "characterType": "cinematic",
+      "gender": "female",
+      "ageRange": "28-42",
+      "description": "弥生是奇幻科幻方向的原创角色，适合单图、多图和视频中保持一致形象的短内容创作。标签：赏金猎人、霓虹、动作。",
+      "prompt": "cinematic fantasy science fiction concept character: an original adult female character named 弥生, age range 28-42, deep-space courier, elegant face, subtle cybernetic ear implant, poised hands, wearing long asymmetric coat over reinforced tactical layers, crystal reactor chamber mood, no logos or text. Full-body identity, consistent facial features, natural hands, clear costume details, high quality production design, suitable for repeated image and video character reference."
+    },
+    {
+      "seedKey": "mascot-001-brand-mascot",
+      "name": "莓果龙仔",
+      "category": "萌宠/IP",
+      "tags": [
+        "原创IP",
+        "可爱",
+        "吉祥物"
+      ],
+      "characterType": "mascot",
+      "gender": "neutral",
+      "ageRange": "IP",
+      "description": "莓果龙仔是原创萌宠/IP角色，适合品牌吉祥物、轻剧情、商品短片和互动内容。",
+      "prompt": "original cute mascot IP character design: 莓果龙仔, a fully original non-human cute mascot, brand mascot, round eyes, soft plush surface, tiny expressive paws, wearing mini satchel and tiny scarf, bright toy photography studio, soft shadow, clean background. Full-body character identity, charming expressive design, tactile material detail, clean readable silhouette, premium commercial IP design, suitable for consistent image and video generation."
+    },
+    {
+      "seedKey": "mascot-002-storybook-companion",
+      "name": "棉花布丁",
+      "category": "萌宠/IP",
+      "tags": [
+        "萌宠",
+        "毛绒",
+        "治愈"
+      ],
+      "characterType": "mascot",
+      "gender": "neutral",
+      "ageRange": "IP",
+      "description": "棉花布丁是原创萌宠/IP角色，适合品牌吉祥物、轻剧情、商品短片和互动内容。",
+      "prompt": "original cute mascot IP character design: 棉花布丁, a fully original non-human cute mascot, storybook companion, glossy eyes, chubby cheeks, friendly smile, wearing small chef hat and pastel apron, pastel product design stage, premium plush texture. Full-body character identity, charming expressive design, tactile material detail, clean readable silhouette, premium commercial IP design, suitable for consistent image and video generation."
+    },
+    {
+      "seedKey": "mascot-003-toy-collectible-hero",
+      "name": "泡泡鹿",
+      "category": "萌宠/IP",
+      "tags": [
+        "小龙",
+        "奇幻",
+        "玩具"
+      ],
+      "characterType": "mascot",
+      "gender": "neutral",
+      "ageRange": "IP",
+      "description": "泡泡鹿是原创萌宠/IP角色，适合品牌吉祥物、轻剧情、商品短片和互动内容。",
+      "prompt": "original cute mascot IP character design: 泡泡鹿, a fully original non-human cute mascot, toy collectible hero, small wings, gentle horns, rounded silhouette, wearing star-shaped collar and little boots, warm tabletop studio with gentle rim light. Full-body character identity, charming expressive design, tactile material detail, clean readable silhouette, premium commercial IP design, suitable for consistent image and video generation."
+    },
+    {
+      "seedKey": "mascot-004-cute-streaming-avatar",
+      "name": "奶霜企鹅",
+      "category": "萌宠/IP",
+      "tags": [
+        "品牌形象",
+        "圆润",
+        "亲和"
+      ],
+      "characterType": "mascot",
+      "gender": "neutral",
+      "ageRange": "IP",
+      "description": "奶霜企鹅是原创萌宠/IP角色，适合品牌吉祥物、轻剧情、商品短片和互动内容。",
+      "prompt": "original cute mascot IP character design: 奶霜企鹅, a fully original non-human cute mascot, cute streaming avatar, fluffy tail, oversized head, charming tiny bag, wearing tiny explorer cape and button pouch, minimal fantasy nursery-style background without text. Full-body character identity, charming expressive design, tactile material detail, clean readable silhouette, premium commercial IP design, suitable for consistent image and video generation."
+    },
+    {
+      "seedKey": "mascot-005-children-safe-fantasy-creature",
+      "name": "柚子团",
+      "category": "萌宠/IP",
+      "tags": [
+        "童话",
+        "伙伴",
+        "软萌"
+      ],
+      "characterType": "mascot",
+      "gender": "neutral",
+      "ageRange": "IP",
+      "description": "柚子团是原创萌宠/IP角色，适合品牌吉祥物、轻剧情、商品短片和互动内容。",
+      "prompt": "original cute mascot IP character design: 柚子团, a fully original non-human cute mascot, children-safe fantasy creature, squishy body, simple readable face, collectible proportions, wearing soft knitted scarf and simple charm, clean collectible figure display lighting. Full-body character identity, charming expressive design, tactile material detail, clean readable silhouette, premium commercial IP design, suitable for consistent image and video generation."
+    },
+    {
+      "seedKey": "mascot-006-snack-shop-mascot",
+      "name": "星糖狐",
+      "category": "萌宠/IP",
+      "tags": [
+        "原创IP",
+        "可爱",
+        "吉祥物"
+      ],
+      "characterType": "mascot",
+      "gender": "neutral",
+      "ageRange": "IP",
+      "description": "星糖狐是原创萌宠/IP角色，适合品牌吉祥物、轻剧情、商品短片和互动内容。",
+      "prompt": "original cute mascot IP character design: 星糖狐, a fully original non-human cute mascot, snack shop mascot, round eyes, soft plush surface, tiny expressive paws, wearing small chef hat and pastel apron, bright toy photography studio, soft shadow, clean background. Full-body character identity, charming expressive design, tactile material detail, clean readable silhouette, premium commercial IP design, suitable for consistent image and video generation."
+    },
+    {
+      "seedKey": "mascot-007-adventure-game-sidekick",
+      "name": "栗子熊",
+      "category": "萌宠/IP",
+      "tags": [
+        "萌宠",
+        "毛绒",
+        "治愈"
+      ],
+      "characterType": "mascot",
+      "gender": "neutral",
+      "ageRange": "IP",
+      "description": "栗子熊是原创萌宠/IP角色，适合品牌吉祥物、轻剧情、商品短片和互动内容。",
+      "prompt": "original cute mascot IP character design: 栗子熊, a fully original non-human cute mascot, adventure game sidekick, glossy eyes, chubby cheeks, friendly smile, wearing star-shaped collar and little boots, pastel product design stage, premium plush texture. Full-body character identity, charming expressive design, tactile material detail, clean readable silhouette, premium commercial IP design, suitable for consistent image and video generation."
+    },
+    {
+      "seedKey": "mascot-008-cozy-room-companion",
+      "name": "云朵猫",
+      "category": "萌宠/IP",
+      "tags": [
+        "小龙",
+        "奇幻",
+        "玩具"
+      ],
+      "characterType": "mascot",
+      "gender": "neutral",
+      "ageRange": "IP",
+      "description": "云朵猫是原创萌宠/IP角色，适合品牌吉祥物、轻剧情、商品短片和互动内容。",
+      "prompt": "original cute mascot IP character design: 云朵猫, a fully original non-human cute mascot, cozy room companion, small wings, gentle horns, rounded silhouette, wearing tiny explorer cape and button pouch, warm tabletop studio with gentle rim light. Full-body character identity, charming expressive design, tactile material detail, clean readable silhouette, premium commercial IP design, suitable for consistent image and video generation."
+    },
+    {
+      "seedKey": "mascot-009-holiday-campaign-mascot",
+      "name": "薄荷小鲸",
+      "category": "萌宠/IP",
+      "tags": [
+        "品牌形象",
+        "圆润",
+        "亲和"
+      ],
+      "characterType": "mascot",
+      "gender": "neutral",
+      "ageRange": "IP",
+      "description": "薄荷小鲸是原创萌宠/IP角色，适合品牌吉祥物、轻剧情、商品短片和互动内容。",
+      "prompt": "original cute mascot IP character design: 薄荷小鲸, a fully original non-human cute mascot, holiday campaign mascot, fluffy tail, oversized head, charming tiny bag, wearing soft knitted scarf and simple charm, minimal fantasy nursery-style background without text. Full-body character identity, charming expressive design, tactile material detail, clean readable silhouette, premium commercial IP design, suitable for consistent image and video generation."
+    },
+    {
+      "seedKey": "mascot-010-soft-plush-character",
+      "name": "芝士团长",
+      "category": "萌宠/IP",
+      "tags": [
+        "童话",
+        "伙伴",
+        "软萌"
+      ],
+      "characterType": "mascot",
+      "gender": "neutral",
+      "ageRange": "IP",
+      "description": "芝士团长是原创萌宠/IP角色，适合品牌吉祥物、轻剧情、商品短片和互动内容。",
+      "prompt": "original cute mascot IP character design: 芝士团长, a fully original non-human cute mascot, soft plush character, squishy body, simple readable face, collectible proportions, wearing mini satchel and tiny scarf, clean collectible figure display lighting. Full-body character identity, charming expressive design, tactile material detail, clean readable silhouette, premium commercial IP design, suitable for consistent image and video generation."
+    },
+    {
+      "seedKey": "mascot-011-brand-mascot",
+      "name": "桃桃兔",
+      "category": "萌宠/IP",
+      "tags": [
+        "原创IP",
+        "可爱",
+        "吉祥物"
+      ],
+      "characterType": "mascot",
+      "gender": "neutral",
+      "ageRange": "IP",
+      "description": "桃桃兔是原创萌宠/IP角色，适合品牌吉祥物、轻剧情、商品短片和互动内容。",
+      "prompt": "original cute mascot IP character design: 桃桃兔, a fully original non-human cute mascot, brand mascot, round eyes, soft plush surface, tiny expressive paws, wearing star-shaped collar and little boots, bright toy photography studio, soft shadow, clean background. Full-body character identity, charming expressive design, tactile material detail, clean readable silhouette, premium commercial IP design, suitable for consistent image and video generation."
+    },
+    {
+      "seedKey": "mascot-012-storybook-companion",
+      "name": "蓝莓咕咕",
+      "category": "萌宠/IP",
+      "tags": [
+        "萌宠",
+        "毛绒",
+        "治愈"
+      ],
+      "characterType": "mascot",
+      "gender": "neutral",
+      "ageRange": "IP",
+      "description": "蓝莓咕咕是原创萌宠/IP角色，适合品牌吉祥物、轻剧情、商品短片和互动内容。",
+      "prompt": "original cute mascot IP character design: 蓝莓咕咕, a fully original non-human cute mascot, storybook companion, glossy eyes, chubby cheeks, friendly smile, wearing tiny explorer cape and button pouch, pastel product design stage, premium plush texture. Full-body character identity, charming expressive design, tactile material detail, clean readable silhouette, premium commercial IP design, suitable for consistent image and video generation."
+    },
+    {
+      "seedKey": "mascot-013-toy-collectible-hero",
+      "name": "糯米羊",
+      "category": "萌宠/IP",
+      "tags": [
+        "小龙",
+        "奇幻",
+        "玩具"
+      ],
+      "characterType": "mascot",
+      "gender": "neutral",
+      "ageRange": "IP",
+      "description": "糯米羊是原创萌宠/IP角色，适合品牌吉祥物、轻剧情、商品短片和互动内容。",
+      "prompt": "original cute mascot IP character design: 糯米羊, a fully original non-human cute mascot, toy collectible hero, small wings, gentle horns, rounded silhouette, wearing soft knitted scarf and simple charm, warm tabletop studio with gentle rim light. Full-body character identity, charming expressive design, tactile material detail, clean readable silhouette, premium commercial IP design, suitable for consistent image and video generation."
+    },
+    {
+      "seedKey": "mascot-014-cute-streaming-avatar",
+      "name": "花卷犬",
+      "category": "萌宠/IP",
+      "tags": [
+        "品牌形象",
+        "圆润",
+        "亲和"
+      ],
+      "characterType": "mascot",
+      "gender": "neutral",
+      "ageRange": "IP",
+      "description": "花卷犬是原创萌宠/IP角色，适合品牌吉祥物、轻剧情、商品短片和互动内容。",
+      "prompt": "original cute mascot IP character design: 花卷犬, a fully original non-human cute mascot, cute streaming avatar, fluffy tail, oversized head, charming tiny bag, wearing mini satchel and tiny scarf, minimal fantasy nursery-style background without text. Full-body character identity, charming expressive design, tactile material detail, clean readable silhouette, premium commercial IP design, suitable for consistent image and video generation."
+    },
+    {
+      "seedKey": "mascot-015-children-safe-fantasy-creature",
+      "name": "焦糖鸭",
+      "category": "萌宠/IP",
+      "tags": [
+        "童话",
+        "伙伴",
+        "软萌"
+      ],
+      "characterType": "mascot",
+      "gender": "neutral",
+      "ageRange": "IP",
+      "description": "焦糖鸭是原创萌宠/IP角色，适合品牌吉祥物、轻剧情、商品短片和互动内容。",
+      "prompt": "original cute mascot IP character design: 焦糖鸭, a fully original non-human cute mascot, children-safe fantasy creature, squishy body, simple readable face, collectible proportions, wearing small chef hat and pastel apron, clean collectible figure display lighting. Full-body character identity, charming expressive design, tactile material detail, clean readable silhouette, premium commercial IP design, suitable for consistent image and video generation."
+    },
+    {
+      "seedKey": "mascot-016-snack-shop-mascot",
+      "name": "月亮刺猬",
+      "category": "萌宠/IP",
+      "tags": [
+        "原创IP",
+        "可爱",
+        "吉祥物"
+      ],
+      "characterType": "mascot",
+      "gender": "neutral",
+      "ageRange": "IP",
+      "description": "月亮刺猬是原创萌宠/IP角色，适合品牌吉祥物、轻剧情、商品短片和互动内容。",
+      "prompt": "original cute mascot IP character design: 月亮刺猬, a fully original non-human cute mascot, snack shop mascot, round eyes, soft plush surface, tiny expressive paws, wearing tiny explorer cape and button pouch, bright toy photography studio, soft shadow, clean background. Full-body character identity, charming expressive design, tactile material detail, clean readable silhouette, premium commercial IP design, suitable for consistent image and video generation."
+    },
+    {
+      "seedKey": "mascot-017-adventure-game-sidekick",
+      "name": "雪糕熊猫",
+      "category": "萌宠/IP",
+      "tags": [
+        "萌宠",
+        "毛绒",
+        "治愈"
+      ],
+      "characterType": "mascot",
+      "gender": "neutral",
+      "ageRange": "IP",
+      "description": "雪糕熊猫是原创萌宠/IP角色，适合品牌吉祥物、轻剧情、商品短片和互动内容。",
+      "prompt": "original cute mascot IP character design: 雪糕熊猫, a fully original non-human cute mascot, adventure game sidekick, glossy eyes, chubby cheeks, friendly smile, wearing soft knitted scarf and simple charm, pastel product design stage, premium plush texture. Full-body character identity, charming expressive design, tactile material detail, clean readable silhouette, premium commercial IP design, suitable for consistent image and video generation."
+    },
+    {
+      "seedKey": "mascot-018-cozy-room-companion",
+      "name": "小橘灯",
+      "category": "萌宠/IP",
+      "tags": [
+        "小龙",
+        "奇幻",
+        "玩具"
+      ],
+      "characterType": "mascot",
+      "gender": "neutral",
+      "ageRange": "IP",
+      "description": "小橘灯是原创萌宠/IP角色，适合品牌吉祥物、轻剧情、商品短片和互动内容。",
+      "prompt": "original cute mascot IP character design: 小橘灯, a fully original non-human cute mascot, cozy room companion, small wings, gentle horns, rounded silhouette, wearing mini satchel and tiny scarf, warm tabletop studio with gentle rim light. Full-body character identity, charming expressive design, tactile material detail, clean readable silhouette, premium commercial IP design, suitable for consistent image and video generation."
+    },
+    {
+      "seedKey": "mascot-019-holiday-campaign-mascot",
+      "name": "海盐水母",
+      "category": "萌宠/IP",
+      "tags": [
+        "品牌形象",
+        "圆润",
+        "亲和"
+      ],
+      "characterType": "mascot",
+      "gender": "neutral",
+      "ageRange": "IP",
+      "description": "海盐水母是原创萌宠/IP角色，适合品牌吉祥物、轻剧情、商品短片和互动内容。",
+      "prompt": "original cute mascot IP character design: 海盐水母, a fully original non-human cute mascot, holiday campaign mascot, fluffy tail, oversized head, charming tiny bag, wearing small chef hat and pastel apron, minimal fantasy nursery-style background without text. Full-body character identity, charming expressive design, tactile material detail, clean readable silhouette, premium commercial IP design, suitable for consistent image and video generation."
+    },
+    {
+      "seedKey": "mascot-020-soft-plush-character",
+      "name": "杏仁松鼠",
+      "category": "萌宠/IP",
+      "tags": [
+        "童话",
+        "伙伴",
+        "软萌"
+      ],
+      "characterType": "mascot",
+      "gender": "neutral",
+      "ageRange": "IP",
+      "description": "杏仁松鼠是原创萌宠/IP角色，适合品牌吉祥物、轻剧情、商品短片和互动内容。",
+      "prompt": "original cute mascot IP character design: 杏仁松鼠, a fully original non-human cute mascot, soft plush character, squishy body, simple readable face, collectible proportions, wearing star-shaped collar and little boots, clean collectible figure display lighting. Full-body character identity, charming expressive design, tactile material detail, clean readable silhouette, premium commercial IP design, suitable for consistent image and video generation."
+    },
+    {
+      "seedKey": "mascot-021-brand-mascot",
+      "name": "蜜瓜恐龙",
+      "category": "萌宠/IP",
+      "tags": [
+        "原创IP",
+        "可爱",
+        "吉祥物"
+      ],
+      "characterType": "mascot",
+      "gender": "neutral",
+      "ageRange": "IP",
+      "description": "蜜瓜恐龙是原创萌宠/IP角色，适合品牌吉祥物、轻剧情、商品短片和互动内容。",
+      "prompt": "original cute mascot IP character design: 蜜瓜恐龙, a fully original non-human cute mascot, brand mascot, round eyes, soft plush surface, tiny expressive paws, wearing soft knitted scarf and simple charm, bright toy photography studio, soft shadow, clean background. Full-body character identity, charming expressive design, tactile material detail, clean readable silhouette, premium commercial IP design, suitable for consistent image and video generation."
+    },
+    {
+      "seedKey": "mascot-022-storybook-companion",
+      "name": "豆乳小虎",
+      "category": "萌宠/IP",
+      "tags": [
+        "萌宠",
+        "毛绒",
+        "治愈"
+      ],
+      "characterType": "mascot",
+      "gender": "neutral",
+      "ageRange": "IP",
+      "description": "豆乳小虎是原创萌宠/IP角色，适合品牌吉祥物、轻剧情、商品短片和互动内容。",
+      "prompt": "original cute mascot IP character design: 豆乳小虎, a fully original non-human cute mascot, storybook companion, glossy eyes, chubby cheeks, friendly smile, wearing mini satchel and tiny scarf, pastel product design stage, premium plush texture. Full-body character identity, charming expressive design, tactile material detail, clean readable silhouette, premium commercial IP design, suitable for consistent image and video generation."
+    },
+    {
+      "seedKey": "mascot-023-toy-collectible-hero",
+      "name": "晴天蘑菇",
+      "category": "萌宠/IP",
+      "tags": [
+        "小龙",
+        "奇幻",
+        "玩具"
+      ],
+      "characterType": "mascot",
+      "gender": "neutral",
+      "ageRange": "IP",
+      "description": "晴天蘑菇是原创萌宠/IP角色，适合品牌吉祥物、轻剧情、商品短片和互动内容。",
+      "prompt": "original cute mascot IP character design: 晴天蘑菇, a fully original non-human cute mascot, toy collectible hero, small wings, gentle horns, rounded silhouette, wearing small chef hat and pastel apron, warm tabletop studio with gentle rim light. Full-body character identity, charming expressive design, tactile material detail, clean readable silhouette, premium commercial IP design, suitable for consistent image and video generation."
+    },
+    {
+      "seedKey": "mascot-024-cute-streaming-avatar",
+      "name": "可可飞鼠",
+      "category": "萌宠/IP",
+      "tags": [
+        "品牌形象",
+        "圆润",
+        "亲和"
+      ],
+      "characterType": "mascot",
+      "gender": "neutral",
+      "ageRange": "IP",
+      "description": "可可飞鼠是原创萌宠/IP角色，适合品牌吉祥物、轻剧情、商品短片和互动内容。",
+      "prompt": "original cute mascot IP character design: 可可飞鼠, a fully original non-human cute mascot, cute streaming avatar, fluffy tail, oversized head, charming tiny bag, wearing star-shaped collar and little boots, minimal fantasy nursery-style background without text. Full-body character identity, charming expressive design, tactile material detail, clean readable silhouette, premium commercial IP design, suitable for consistent image and video generation."
+    },
+    {
+      "seedKey": "mascot-025-children-safe-fantasy-creature",
+      "name": "软糖章鱼",
+      "category": "萌宠/IP",
+      "tags": [
+        "童话",
+        "伙伴",
+        "软萌"
+      ],
+      "characterType": "mascot",
+      "gender": "neutral",
+      "ageRange": "IP",
+      "description": "软糖章鱼是原创萌宠/IP角色，适合品牌吉祥物、轻剧情、商品短片和互动内容。",
+      "prompt": "original cute mascot IP character design: 软糖章鱼, a fully original non-human cute mascot, children-safe fantasy creature, squishy body, simple readable face, collectible proportions, wearing tiny explorer cape and button pouch, clean collectible figure display lighting. Full-body character identity, charming expressive design, tactile material detail, clean readable silhouette, premium commercial IP design, suitable for consistent image and video generation."
+    },
+    {
+      "seedKey": "mascot-026-snack-shop-mascot",
+      "name": "奶盖小狮",
+      "category": "萌宠/IP",
+      "tags": [
+        "原创IP",
+        "可爱",
+        "吉祥物"
+      ],
+      "characterType": "mascot",
+      "gender": "neutral",
+      "ageRange": "IP",
+      "description": "奶盖小狮是原创萌宠/IP角色，适合品牌吉祥物、轻剧情、商品短片和互动内容。",
+      "prompt": "original cute mascot IP character design: 奶盖小狮, a fully original non-human cute mascot, snack shop mascot, round eyes, soft plush surface, tiny expressive paws, wearing mini satchel and tiny scarf, bright toy photography studio, soft shadow, clean background. Full-body character identity, charming expressive design, tactile material detail, clean readable silhouette, premium commercial IP design, suitable for consistent image and video generation."
+    },
+    {
+      "seedKey": "mascot-027-adventure-game-sidekick",
+      "name": "葡萄星球",
+      "category": "萌宠/IP",
+      "tags": [
+        "萌宠",
+        "毛绒",
+        "治愈"
+      ],
+      "characterType": "mascot",
+      "gender": "neutral",
+      "ageRange": "IP",
+      "description": "葡萄星球是原创萌宠/IP角色，适合品牌吉祥物、轻剧情、商品短片和互动内容。",
+      "prompt": "original cute mascot IP character design: 葡萄星球, a fully original non-human cute mascot, adventure game sidekick, glossy eyes, chubby cheeks, friendly smile, wearing small chef hat and pastel apron, pastel product design stage, premium plush texture. Full-body character identity, charming expressive design, tactile material detail, clean readable silhouette, premium commercial IP design, suitable for consistent image and video generation."
+    },
+    {
+      "seedKey": "mascot-028-cozy-room-companion",
+      "name": "布丁小象",
+      "category": "萌宠/IP",
+      "tags": [
+        "小龙",
+        "奇幻",
+        "玩具"
+      ],
+      "characterType": "mascot",
+      "gender": "neutral",
+      "ageRange": "IP",
+      "description": "布丁小象是原创萌宠/IP角色，适合品牌吉祥物、轻剧情、商品短片和互动内容。",
+      "prompt": "original cute mascot IP character design: 布丁小象, a fully original non-human cute mascot, cozy room companion, small wings, gentle horns, rounded silhouette, wearing star-shaped collar and little boots, warm tabletop studio with gentle rim light. Full-body character identity, charming expressive design, tactile material detail, clean readable silhouette, premium commercial IP design, suitable for consistent image and video generation."
+    },
+    {
+      "seedKey": "mascot-029-holiday-campaign-mascot",
+      "name": "樱桃小豹",
+      "category": "萌宠/IP",
+      "tags": [
+        "品牌形象",
+        "圆润",
+        "亲和"
+      ],
+      "characterType": "mascot",
+      "gender": "neutral",
+      "ageRange": "IP",
+      "description": "樱桃小豹是原创萌宠/IP角色，适合品牌吉祥物、轻剧情、商品短片和互动内容。",
+      "prompt": "original cute mascot IP character design: 樱桃小豹, a fully original non-human cute mascot, holiday campaign mascot, fluffy tail, oversized head, charming tiny bag, wearing tiny explorer cape and button pouch, minimal fantasy nursery-style background without text. Full-body character identity, charming expressive design, tactile material detail, clean readable silhouette, premium commercial IP design, suitable for consistent image and video generation."
+    },
+    {
+      "seedKey": "mascot-030-soft-plush-character",
+      "name": "铃铛云雀",
+      "category": "萌宠/IP",
+      "tags": [
+        "童话",
+        "伙伴",
+        "软萌"
+      ],
+      "characterType": "mascot",
+      "gender": "neutral",
+      "ageRange": "IP",
+      "description": "铃铛云雀是原创萌宠/IP角色，适合品牌吉祥物、轻剧情、商品短片和互动内容。",
+      "prompt": "original cute mascot IP character design: 铃铛云雀, a fully original non-human cute mascot, soft plush character, squishy body, simple readable face, collectible proportions, wearing soft knitted scarf and simple charm, clean collectible figure display lighting. Full-body character identity, charming expressive design, tactile material detail, clean readable silhouette, premium commercial IP design, suitable for consistent image and video generation."
+    }
+  ]
+}

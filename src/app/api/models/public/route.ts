@@ -11,6 +11,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 
+import { ROLE_ASSET_CATEGORIES } from "@/lib/character-assets";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
@@ -78,6 +79,69 @@ const SAFE_MODEL_FIELDS = `
   is_trending
 `;
 
+const MARKETPLACE_SHUFFLE_FETCH_LIMIT = 1000;
+const MARKETPLACE_CATEGORY_ORDER = ROLE_ASSET_CATEGORIES.filter(
+  (category) => category !== "全部" && category !== "我的角色"
+);
+
+function hashMarketplaceString(value: string): number {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+function getMarketplaceShuffleScore(seed: string, ...parts: string[]) {
+  return hashMarketplaceString([seed, ...parts].join(":"));
+}
+
+function getBalancedMarketplaceOrder<T extends { id: string; category?: string | null }>(
+  models: T[],
+  seed: string
+): T[] {
+  const groups = new Map<string, T[]>();
+
+  for (const model of models) {
+    const category = model.category || "其他";
+    const existing = groups.get(category) || [];
+    existing.push(model);
+    groups.set(category, existing);
+  }
+
+  for (const [category, group] of groups) {
+    group.sort((left, right) =>
+      getMarketplaceShuffleScore(seed, category, left.id) -
+      getMarketplaceShuffleScore(seed, category, right.id)
+    );
+  }
+
+  const categoryOrder = [
+    ...MARKETPLACE_CATEGORY_ORDER.filter((category) => groups.has(category)),
+    ...Array.from(groups.keys()).filter((category) => !MARKETPLACE_CATEGORY_ORDER.includes(category as typeof MARKETPLACE_CATEGORY_ORDER[number])),
+  ].sort((left, right) =>
+    getMarketplaceShuffleScore(seed, "category", left) -
+    getMarketplaceShuffleScore(seed, "category", right)
+  );
+
+  const ordered: T[] = [];
+  let hasItems = true;
+  while (hasItems) {
+    hasItems = false;
+    for (const category of categoryOrder) {
+      const group = groups.get(category);
+      const item = group?.shift();
+      if (item) {
+        ordered.push(item);
+        hasItems = true;
+      }
+    }
+  }
+
+  return ordered;
+}
+
 // ============================================================================
 // 辅助函数
 // ============================================================================
@@ -123,7 +187,10 @@ export async function GET(request: NextRequest) {
     const featured = searchParams.get("featured") === "true";
     const trending = searchParams.get("trending") === "true";
     const search = searchParams.get("search");
-    const limit = parseInt(searchParams.get("limit") || "50");
+    const requestedLimit = parseInt(searchParams.get("limit") || "50");
+    const limit = Number.isFinite(requestedLimit) ? requestedLimit : 50;
+    const offset = Math.max(parseInt(searchParams.get("offset") || "0"), 0);
+    const shuffleSeed = searchParams.get("shuffle_seed") || "default";
     const requestedUserId = searchParams.get("user_id");
 
     const authSupabase = await createClient();
@@ -143,17 +210,22 @@ export async function GET(request: NextRequest) {
       visibilityFilters.push(`and(source.eq.user_created,owner_id.eq.${user.id})`);
     }
 
+    const normalizedSearch = search?.trim() || "";
+    const hasSearch = normalizedSearch.length >= 2;
+    const isAllCategory = !category || category === "all" || category === "全部";
+    const shouldShuffleAll = isAllCategory && !featured && !trending && !hasSearch;
+
     // 1. 构建查询 - 仅查询 active 状态的模特
     let query = supabase
       .from("ai_models")
-      .select(SAFE_MODEL_FIELDS)
+      .select(SAFE_MODEL_FIELDS, { count: "exact" })
       .eq("is_active", true)
       .not("reference_sheet_url", "is", null)
       .eq("reference_status", "completed")
       .or(visibilityFilters.join(","));
 
     // 2. 按条件筛选
-    if (category && category !== "all") {
+    if (category && category !== "all" && category !== "全部") {
       query = query.ilike("category", category);
     }
 
@@ -166,17 +238,24 @@ export async function GET(request: NextRequest) {
     }
 
     // 3. 搜索过滤
-    if (search && search.trim().length >= 2) {
-      const searchTerm = `%${search.toLowerCase().trim()}%`;
+    if (hasSearch) {
+      const searchTerm = `%${normalizedSearch.toLowerCase()}%`;
       query = query.or(`name.ilike.${searchTerm},category.ilike.${searchTerm}`);
     }
 
-    // 4. 限制数量
+    // 4. 分页
+    const safeLimit = limit > 0 ? Math.min(limit, 100) : 0;
     if (limit > 0) {
-      query = query.limit(Math.min(limit, 100));
+      query = shouldShuffleAll
+        ? query.range(0, MARKETPLACE_SHUFFLE_FETCH_LIMIT - 1)
+        : query
+          .order("created_at", { ascending: false })
+          .range(offset, offset + safeLimit - 1);
+    } else {
+      query = query.order("created_at", { ascending: false });
     }
 
-    const { data: models, error } = await query;
+    const { data: models, error, count } = await query;
 
     if (error) {
       console.error("[API] Database error:", error);
@@ -204,7 +283,12 @@ export async function GET(request: NextRequest) {
     }
 
     // 5. 转换为安全的公开格式
-    const publicModels = (models || []).map((model) => {
+    const pageModels = shouldShuffleAll && limit > 0
+      ? getBalancedMarketplaceOrder((models || []) as Array<{ id: string; category?: string | null }>, shuffleSeed)
+        .slice(offset, offset + safeLimit)
+      : (models || []);
+
+    const publicModels = pageModels.map((model) => {
       const safe = toPublicModel(model);
 
       // 如果提供了 userId，添加合约状态
@@ -231,12 +315,17 @@ export async function GET(request: NextRequest) {
       return safe;
     });
 
+    const total = count ?? sanitizedModels.length;
+
     // 7. 返回结果
     return NextResponse.json({
       success: true,
       data: {
         models: sanitizedModels,
-        total: sanitizedModels.length,
+        total,
+        limit: safeLimit,
+        offset,
+        hasMore: safeLimit > 0 && offset + sanitizedModels.length < total,
       },
     });
   } catch (error) {

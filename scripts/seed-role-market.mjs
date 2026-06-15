@@ -14,11 +14,14 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const DEFAULT_ENV_PATH = "/Volumes/Fuweibuzheng/Tiktokplfb/.env.local";
-const MANIFEST_PATH = path.join(__dirname, "seed", "role-market-experiment-20260614.json");
+const DEFAULT_MANIFEST_PATH = path.join(__dirname, "seed", "role-market-experiment-20260614.json");
 const BOARD_IMAGE_SIZE = "2048x1360";
 const BOARD_SPLIT_RATIO = 949 / 2048;
 const BOARD_CROP_GUTTER_RATIO = 48 / 2048;
-const IMAGE_GENERATION_ATTEMPTS = 2;
+const BOARD_COVER_ASPECT_RATIO = 2 / 3;
+const COVER_SAFE_LEFT_PANEL_RATIO = 0.36;
+const COVER_CROP_VERSION = "v4";
+const IMAGE_GENERATION_ATTEMPTS = 3;
 const UNAVAILABLE_DB_COLUMNS = new Set();
 
 const CHARACTER_BOARD_TEMPLATE = `Create a premium 2K AI character reference board for a video creation product: one consistent character, left side large full-body hero portrait, right side complete multi-angle reference sheet with front view, side view, back view, and close-up head portraits, clear vertical split into two aligned panels for UI cropping, realistic studio lighting, no text, no watermark.
@@ -103,6 +106,17 @@ function pickNumber(...values) {
   return undefined;
 }
 
+function isImagePayloadString(value) {
+  return (
+    typeof value === "string"
+    && (
+      value.startsWith("http://")
+      || value.startsWith("https://")
+      || value.startsWith("data:image/")
+    )
+  );
+}
+
 function normalizeImageStatus(value, hasImage) {
   const status = String(value || "").toLowerCase();
   if (["completed", "success", "succeeded", "done", "finish", "finished"].includes(status)) return "completed";
@@ -114,7 +128,7 @@ function extractFromArray(value, extractor) {
   if (!Array.isArray(value)) return undefined;
 
   for (const item of value) {
-    if (typeof item === "string" && item.startsWith("http")) return item;
+    if (isImagePayloadString(item)) return item;
     const extracted = extractor(asRecord(item));
     if (extracted) return extracted;
   }
@@ -450,14 +464,23 @@ function buildBoardCropMeta(size) {
   const { width, height } = parseSize(size);
   const splitX = Math.round(width * BOARD_SPLIT_RATIO);
   const seam = Math.max(24, Math.round(width * BOARD_CROP_GUTTER_RATIO));
+  const maxLeftPanelWidth = Math.max(
+    1,
+    Math.min(
+      Math.round(width * COVER_SAFE_LEFT_PANEL_RATIO),
+      splitX - seam * 3
+    )
+  );
+  const targetCoverWidth = Math.round(height * BOARD_COVER_ASPECT_RATIO);
 
   return {
     sourceWidth: width,
     sourceHeight: height,
+    targetWidth: targetCoverWidth,
     left: {
       left: 0,
       top: 0,
-      width: Math.max(1, splitX - Math.ceil(seam / 2)),
+      width: Math.max(1, Math.min(maxLeftPanelWidth, targetCoverWidth)),
       height,
     },
   };
@@ -475,9 +498,32 @@ async function cropAvatar(boardBuffer, cropMeta) {
   const top = Math.max(0, Math.round(crop.top * scaleY));
   const width = Math.max(1, Math.min(actualWidth - left, Math.round(crop.width * scaleX)));
   const height = Math.max(1, Math.min(actualHeight - top, Math.round(crop.height * scaleY)));
+  const targetWidth = Math.max(width, Math.round((cropMeta.targetWidth || width) * scaleX));
 
-  return image
+  const foreground = await image
     .extract({ left, top, width, height })
+    .jpeg({ quality: 94, mozjpeg: true })
+    .toBuffer();
+
+  if (targetWidth <= width) {
+    return sharp(foreground)
+      .jpeg({ quality: 92, mozjpeg: true })
+      .toBuffer();
+  }
+
+  const background = await sharp(foreground)
+    .resize({ width: targetWidth, height, fit: "cover", position: "center" })
+    .blur(18)
+    .modulate({ brightness: 0.88, saturation: 0.92 })
+    .jpeg({ quality: 88, mozjpeg: true })
+    .toBuffer();
+
+  return sharp(background)
+    .composite([{
+      input: foreground,
+      top: 0,
+      left: Math.max(0, Math.round((targetWidth - width) / 2)),
+    }])
     .jpeg({ quality: 92, mozjpeg: true })
     .toBuffer();
 }
@@ -528,7 +574,7 @@ async function uploadCharacterImages({ ossClient, batchId, spec, generatedImage,
   const hash = crypto.createHash("sha1").update(boardBuffer).digest("hex").slice(0, 12);
   const prefix = `images/market-seed/${batchId}/${spec.seedKey}`;
   const boardPath = `${prefix}/reference-sheet-${hash}.jpg`;
-  const avatarPath = `${prefix}/cover-${hash}.jpg`;
+  const avatarPath = `${prefix}/cover-${COVER_CROP_VERSION}-${hash}.jpg`;
 
   const boardUrl = await uploadImage(ossClient, boardPath, boardBuffer, "image/jpeg");
   const avatarUrl = await uploadImage(ossClient, avatarPath, avatarBuffer, "image/jpeg");
@@ -656,6 +702,7 @@ function buildAiModelRecord({ manifest, spec, boardPrompt, urls, taskId }) {
       image_model: process.env.VIDEO_PLATFORM_IMAGE_MODEL || "gpt-image-2",
       image_size: manifest.boardSize || BOARD_IMAGE_SIZE,
       image_hash: urls.imageHash || null,
+      cover_crop_version: COVER_CROP_VERSION,
       task_id: taskId || null,
       storage_prefix: urls.storagePrefix || null,
       category: spec.category,
@@ -683,7 +730,7 @@ function buildAiModelRecord({ manifest, spec, boardPrompt, urls, taskId }) {
   };
 }
 
-async function seedOneRole({ manifest, spec, supabase, ossClient, index, total, regenerate }) {
+async function seedOneRole({ manifest, spec, supabase, ossClient, index, total, regenerate, recropCovers }) {
   const boardPrompt = buildBoardPrompt(spec);
   const existing = await findExistingRole(supabase, manifest.batchId, spec.seedKey);
   let urls = null;
@@ -692,7 +739,18 @@ async function seedOneRole({ manifest, spec, supabase, ossClient, index, total, 
 
   console.log(`[seed] ${index + 1}/${total} ${spec.category} - ${spec.name}`);
 
-  if (existing?.avatar_url && existing?.reference_sheet_url && !regenerate) {
+  if (existing?.reference_sheet_url && recropCovers && !regenerate) {
+    const boardImage = await fetchImageBuffer(existing.reference_sheet_url);
+    urls = await uploadCharacterImages({
+      ossClient,
+      batchId: manifest.batchId,
+      spec,
+      generatedImage: boardImage,
+      size: manifest.boardSize || BOARD_IMAGE_SIZE,
+    });
+    taskId = asRecord(existing.metadata).task_id || null;
+    console.log(`[seed] ${spec.seedKey}: recropped cover from existing sheet`);
+  } else if (existing?.avatar_url && existing?.reference_sheet_url && !regenerate) {
     urls = {
       avatarUrl: existing.avatar_url,
       boardUrl: existing.reference_sheet_url,
@@ -762,11 +820,13 @@ async function runWithConcurrency(items, concurrency, worker) {
 }
 
 async function readManifest() {
-  const raw = await fs.readFile(MANIFEST_PATH, "utf8");
+  const manifestPath = path.resolve(process.cwd(), getArg("manifest", DEFAULT_MANIFEST_PATH));
+  const raw = await fs.readFile(manifestPath, "utf8");
   const manifest = JSON.parse(raw);
   if (!manifest.batchId || !Array.isArray(manifest.roles)) {
     throw new Error("Seed manifest is invalid");
   }
+  manifest.__manifestPath = manifestPath;
   return manifest;
 }
 
@@ -803,11 +863,13 @@ async function main() {
   const roles = selectRoles(manifest);
   const dryRun = hasFlag("dry-run");
   const regenerate = hasFlag("regenerate");
+  const recropCovers = hasFlag("recrop-covers");
   const concurrency = safeInteger(getArg("concurrency", "1"), 1);
 
   if (roles.length === 0) throw new Error("No roles selected");
 
   console.log(`[seed] batch: ${manifest.batchId}`);
+  console.log(`[seed] manifest: ${manifest.__manifestPath}`);
   console.log(`[seed] selected roles: ${roles.length}`);
 
   if (dryRun) {
@@ -842,6 +904,7 @@ async function main() {
       index,
       total: roles.length,
       regenerate,
+      recropCovers,
     })
   );
 

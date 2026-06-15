@@ -10,6 +10,7 @@
 "use server";
 
 import {
+  ROLE_ASSET_CATEGORIES,
   classifyCharacterAsset,
   normalizeCharacterAssetImages,
   normalizeCharacterTags,
@@ -81,6 +82,9 @@ export interface ModelsListResponse {
   data?: {
     models: PublicModel[];
     total: number;
+    limit?: number;
+    offset?: number;
+    hasMore?: boolean;
   };
   error?: string;
 }
@@ -133,6 +137,69 @@ const SAFE_MODEL_FIELDS = `
   preview_video_url,
   reference_status
 `;
+
+const MARKETPLACE_SHUFFLE_FETCH_LIMIT = 1000;
+const MARKETPLACE_CATEGORY_ORDER = ROLE_ASSET_CATEGORIES.filter(
+  (category) => category !== "全部" && category !== "我的角色"
+);
+
+function hashMarketplaceString(value: string): number {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+function getMarketplaceShuffleScore(seed: string, ...parts: string[]) {
+  return hashMarketplaceString([seed, ...parts].join(":"));
+}
+
+function getBalancedMarketplaceOrder<T extends { id: string; category?: string | null }>(
+  models: T[],
+  seed: string
+): T[] {
+  const groups = new Map<string, T[]>();
+
+  for (const model of models) {
+    const category = model.category || "其他";
+    const existing = groups.get(category) || [];
+    existing.push(model);
+    groups.set(category, existing);
+  }
+
+  for (const [category, group] of groups) {
+    group.sort((left, right) =>
+      getMarketplaceShuffleScore(seed, category, left.id) -
+      getMarketplaceShuffleScore(seed, category, right.id)
+    );
+  }
+
+  const categoryOrder = [
+    ...MARKETPLACE_CATEGORY_ORDER.filter((category) => groups.has(category)),
+    ...Array.from(groups.keys()).filter((category) => !MARKETPLACE_CATEGORY_ORDER.includes(category as typeof MARKETPLACE_CATEGORY_ORDER[number])),
+  ].sort((left, right) =>
+    getMarketplaceShuffleScore(seed, "category", left) -
+    getMarketplaceShuffleScore(seed, "category", right)
+  );
+
+  const ordered: T[] = [];
+  let hasItems = true;
+  while (hasItems) {
+    hasItems = false;
+    for (const category of categoryOrder) {
+      const group = groups.get(category);
+      const item = group?.shift();
+      if (item) {
+        ordered.push(item);
+        hasItems = true;
+      }
+    }
+  }
+
+  return ordered;
+}
 
 /**
  * 敏感字段黑名单 (双重保护)
@@ -295,6 +362,7 @@ export async function getMarketplaceModels(options?: {
   limit?: number;
   offset?: number;
   search?: string;
+  shuffleSeed?: string;
 }): Promise<ModelsListResponse> {
   try {
     const supabase = await createClient();
@@ -306,6 +374,7 @@ export async function getMarketplaceModels(options?: {
       limit = 50,
       offset = 0,
       search,
+      shuffleSeed = "default",
     } = options || {};
     const mine = requestedMine || category === "我的角色";
     const dbCategory = category && !["all", "全部", "我的角色"].includes(category)
@@ -344,6 +413,15 @@ export async function getMarketplaceModels(options?: {
       });
     }
 
+    const normalizedSearch = search?.trim() || "";
+    const hasSearch = normalizedSearch.length >= 2;
+    const shouldShuffleAll =
+      !mine &&
+      !dbCategory &&
+      !featured &&
+      !trending &&
+      !hasSearch;
+
     // 1. 构建查询 - 只选择安全字段
     // 广场只显示：官方角色 + 已公开的社区角色；我的角色显示自建 + 已授权资产。
     let query = adminSupabase
@@ -351,8 +429,7 @@ export async function getMarketplaceModels(options?: {
       .select(SAFE_MODEL_FIELDS, { count: "exact" })
       .eq("is_active", true)
       .not("reference_sheet_url", "is", null)
-      .eq("reference_status", "completed")
-      .order("created_at", { ascending: false });
+      .eq("reference_status", "completed");
 
     if (mine) {
       const contractIds = Array.from(currentUserContractModelIds);
@@ -385,16 +462,20 @@ export async function getMarketplaceModels(options?: {
       query = query.ilike("category", dbCategory);
     }
 
-    if (search && search.trim().length >= 2) {
-      const searchTerm = `%${search.trim()}%`;
+    if (hasSearch) {
+      const searchTerm = `%${normalizedSearch}%`;
       query = query.or(`name.ilike.${searchTerm},category.ilike.${searchTerm}`);
     }
 
     // 3. 分页
-    query = query.range(offset, offset + limit - 1);
+    query = shouldShuffleAll
+      ? query.range(0, MARKETPLACE_SHUFFLE_FETCH_LIMIT - 1)
+      : query
+        .order("created_at", { ascending: false })
+        .range(offset, offset + limit - 1);
 
     // 4. 执行查询
-    const { data: models, error } = await query;
+    const { data: models, error, count } = await query;
 
     if (error) {
       console.error("[Models Action] Database error:", error);
@@ -403,7 +484,12 @@ export async function getMarketplaceModels(options?: {
 
     // 5. 查询每个模特的有效签约数量 (所有用户)
     // 使用 admin 客户端绕过 RLS，确保能查询所有用户的合约
-    const modelIds = (models || []).map((m: any) => m.id);
+    const pageModels = shouldShuffleAll
+      ? getBalancedMarketplaceOrder((models || []) as Array<{ id: string; category?: string | null }>, shuffleSeed)
+        .slice(offset, offset + limit)
+      : (models || []);
+
+    const modelIds = pageModels.map((m: any) => m.id);
     const { data: allContracts } = modelIds.length
       ? await adminSupabase
         .from("contracts")
@@ -425,7 +511,7 @@ export async function getMarketplaceModels(options?: {
     });
 
     // 6. 转换为安全的公开格式，并添加签约状态
-    const publicModels = (models || []).map((model: any) => {
+    const publicModels = pageModels.map((model: any) => {
       const hiredCount = hiredCountMap[model.id] || 0;
       const hasActiveContract = Boolean(
         userContractsSet.has(model.id)
@@ -447,11 +533,17 @@ export async function getMarketplaceModels(options?: {
       return model.category === category;
     });
 
+    const total = count ?? publicModels.length;
+    const hasMore = offset + publicModels.length < total;
+
     return {
       success: true,
       data: {
         models: publicModels,
-        total: publicModels.length,
+        total,
+        limit,
+        offset,
+        hasMore,
       },
     };
   } catch (error) {

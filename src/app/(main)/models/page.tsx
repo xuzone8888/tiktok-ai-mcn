@@ -64,10 +64,14 @@ const CATEGORY_LABELS = ROLE_ASSET_CATEGORIES;
 const PREVIEW_MIN_ZOOM = 1;
 const PREVIEW_MAX_ZOOM = 4;
 const PREVIEW_ZOOM_STEP = 0.25;
-const MARKETPLACE_PAGE_SIZE = 24;
+const MARKETPLACE_PAGE_SIZE = 60;
 const DETAIL_ASSET_LOAD_DELAY_MS = 0;
 const MARKETPLACE_PRIORITY_IMAGE_COUNT = 5;
 const preloadImageUrls = new Set<string>();
+
+function createMarketplaceShuffleSeed() {
+  return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
 
 function clampPreviewZoom(value: number) {
   return Math.min(PREVIEW_MAX_ZOOM, Math.max(PREVIEW_MIN_ZOOM, value));
@@ -474,7 +478,7 @@ function CharacterImagePreviewDialog({
 
   const handleWheel = useCallback((event: ReactWheelEvent<HTMLDivElement>) => {
     event.preventDefault();
-    const zoomFactor = event.deltaY > 0 ? 1.12 : 0.88;
+    const zoomFactor = event.deltaY < 0 ? 1.12 : 0.88;
     applyZoom(zoom * zoomFactor, { x: event.clientX, y: event.clientY });
   }, [applyZoom, zoom]);
 
@@ -956,6 +960,8 @@ export default function ModelsPage() {
   const t = lang === "en";
 
   const fetchSeqRef = useRef(0);
+  const shuffleSeedRef = useRef(createMarketplaceShuffleSeed());
+  const loadMoreSentinelRef = useRef<HTMLDivElement | null>(null);
   const [models, setModels] = useState<ModelWithContract[]>([]);
   const [loading, setLoading] = useState(true);
   const [userCredits, setUserCredits] = useState(0);
@@ -969,6 +975,7 @@ export default function ModelsPage() {
   const [publishing, setPublishing] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMoreModels, setHasMoreModels] = useState(false);
+  const [totalModels, setTotalModels] = useState(0);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -1018,15 +1025,18 @@ export default function ModelsPage() {
         search: searchQuery.trim().length >= 2 ? searchQuery.trim() : undefined,
         limit: MARKETPLACE_PAGE_SIZE,
         offset: 0,
+        shuffleSeed: shuffleSeedRef.current,
       });
 
       if (fetchSeqRef.current !== requestSeq) return;
 
       if (result.success && result.data) {
         setModels(result.data.models);
-        setHasMoreModels(result.data.models.length === MARKETPLACE_PAGE_SIZE);
+        setTotalModels(result.data.total ?? result.data.models.length);
+        setHasMoreModels(result.data.hasMore ?? result.data.models.length === MARKETPLACE_PAGE_SIZE);
       } else {
         setModels([]);
+        setTotalModels(0);
         setHasMoreModels(false);
         toast({
           variant: "destructive",
@@ -1037,6 +1047,7 @@ export default function ModelsPage() {
     } catch (error) {
       console.error("[Models Page] Error:", error);
       setModels([]);
+      setTotalModels(0);
       setHasMoreModels(false);
       toast({
         variant: "destructive",
@@ -1060,6 +1071,7 @@ export default function ModelsPage() {
         search: searchQuery.trim().length >= 2 ? searchQuery.trim() : undefined,
         limit: MARKETPLACE_PAGE_SIZE,
         offset: models.length,
+        shuffleSeed: shuffleSeedRef.current,
       });
 
       if (result.success && result.data) {
@@ -1068,7 +1080,8 @@ export default function ModelsPage() {
           const nextModels = result.data?.models.filter((model) => !seen.has(model.id)) || [];
           return [...prev, ...nextModels];
         });
-        setHasMoreModels(result.data.models.length === MARKETPLACE_PAGE_SIZE);
+        setTotalModels(result.data.total ?? models.length + result.data.models.length);
+        setHasMoreModels(result.data.hasMore ?? result.data.models.length === MARKETPLACE_PAGE_SIZE);
       } else {
         toast({
           variant: "destructive",
@@ -1094,6 +1107,23 @@ export default function ModelsPage() {
     fetchUserInfo();
   }, [fetchModels, fetchUserInfo, routeReady]);
 
+  useEffect(() => {
+    if (!routeReady || loading || loadingMore || !hasMoreModels) return;
+    const sentinel = loadMoreSentinelRef.current;
+    if (!sentinel || typeof window === "undefined" || !("IntersectionObserver" in window)) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry?.isIntersecting) return;
+        void loadMoreModels();
+      },
+      { rootMargin: "720px 0px" }
+    );
+
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [hasMoreModels, loadMoreModels, loading, loadingMore, routeReady]);
+
   const filteredModels = useMemo(() => {
     if (searchQuery.trim().length < 2) return models;
     const query = searchQuery.trim().toLowerCase();
@@ -1105,6 +1135,8 @@ export default function ModelsPage() {
   }, [models, searchQuery]);
 
   const hasFilters = selectedCategory !== "全部" || searchQuery.trim().length > 0;
+  const totalModelCount = Math.max(totalModels, filteredModels.length);
+  const modelCountLabel = `${totalModelCount}`;
   const selectedModelSampleImages = useMemo(() => {
     if (!selectedModel) return [];
     if (selectedModel.reference_images.length > 0) return selectedModel.reference_images;
@@ -1239,23 +1271,13 @@ export default function ModelsPage() {
           ))}
         </div>
         {hasMoreModels && (
-          <div className="flex justify-center pt-2">
-            <Button
-              type="button"
-              variant="outline"
-              disabled={loadingMore}
-              className="border-white/10 bg-white/5 text-white hover:bg-white/10"
-              onClick={loadMoreModels}
-            >
-              {loadingMore ? (
-                <>
-                  <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-                  加载中
-                </>
-              ) : (
-                "加载更多角色"
-              )}
-            </Button>
+          <div ref={loadMoreSentinelRef} className="flex h-16 items-center justify-center">
+            {loadingMore && (
+              <div className="flex items-center gap-2 text-sm text-white/55">
+                <RefreshCw className="h-4 w-4 animate-spin" />
+                加载中
+              </div>
+            )}
           </div>
         )}
       </>
@@ -1305,7 +1327,12 @@ export default function ModelsPage() {
                   ? "border-mermaid-cyan/50 bg-mermaid-cyan/15 text-mermaid-cyan"
                   : "border-white/10 bg-white/5 text-white/60 hover:bg-white/10 hover:text-white"
               )}
-              onClick={() => setSelectedCategory(category)}
+              onClick={() => {
+                if (category === "全部") {
+                  shuffleSeedRef.current = createMarketplaceShuffleSeed();
+                }
+                setSelectedCategory(category);
+              }}
             >
               {category}
             </Button>
@@ -1314,7 +1341,7 @@ export default function ModelsPage() {
       </div>
 
       <div className="flex flex-wrap items-center gap-4 rounded-lg border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-white/55">
-        <span><strong className="text-white">{filteredModels.length}</strong> 个角色资产</span>
+        <span><strong className="text-white">{modelCountLabel}</strong> 个角色资产</span>
         <span><strong className="text-white">{filteredModels.filter((model) => model.ownership === "owned").length}</strong> 个自建角色</span>
         <span><strong className="text-white">{filteredModels.filter((model) => model.has_active_contract).length}</strong> 个已授权</span>
       </div>
