@@ -30,7 +30,7 @@ async function main() {
             },
             source_info: {
                 source: 'PULL_FROM_URL',
-                video_url: 'https://tokfactory-videos.oss-accelerate.aliyuncs.com/videos/4d4a5690-51d0-45c4-9275-22637c028995/1774354052722-hplb17-_0ad31ae5ccfc31e19978b3df3062e9a2_63dbeafd-5684-451e-824b-a11a99376c86.mp4',
+                video_url: 'https://example.com/sample-video.mp4',
             },
         }),
     });

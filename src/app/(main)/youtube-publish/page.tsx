@@ -9,15 +9,20 @@ import {
   Clock,
   ExternalLink,
   FileVideo,
+  Hash,
   History,
+  Layers3,
   ListFilter,
   Loader2,
   Play,
+  Plus,
   RefreshCw,
   Send,
   Settings,
+  Sparkles,
   Trash2,
   Upload,
+  Users,
   X,
   Youtube,
 } from "lucide-react"
@@ -25,10 +30,21 @@ import { useRouter } from "next/navigation"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 import { Button } from "@/components/ui/button"
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { useToast } from "@/hooks/use-toast"
 import { cn } from "@/lib/utils"
+import {
+  getUtf8ByteLength,
+  getYouTubeCharacterLength,
+  truncateYouTubeTextByCharacters,
+  truncateYouTubeTextByUtf8Bytes,
+  validateYouTubeDescription,
+  validateYouTubeTitle,
+  YOUTUBE_DESCRIPTION_MAX_BYTES,
+  YOUTUBE_TITLE_MAX_CHARACTERS,
+} from "@/lib/youtube/metadata-rules"
 import {
   YOUTUBE_MAX_FILE_SIZE,
   YOUTUBE_VIDEO_FORMATS,
@@ -38,15 +54,19 @@ import {
   type YouTubeIntervalMode,
   type YouTubePublishMode,
   type YouTubePublishTask,
+  type YouTubePublishTaskItem,
   type YouTubePrivacyStatus,
   type YouTubeSelectedVideo,
 } from "@/types/youtube-publish"
 
 type TabType = "create" | "tasks"
 type VideoSourceType = "upload" | "asset"
+type AccountSelectionMode = "accounts" | "groups"
+type MetadataContentMode = "same" | "different"
+type MetadataAssistantTarget = { scope: "global" } | { scope: "video"; videoId: string }
 
 const PRIVACY_OPTIONS: Array<{ value: YouTubePrivacyStatus; label: string; desc: string }> = [
-  { value: "private", label: "私密", desc: "仅频道后台可见" },
+  { value: "private", label: "私密", desc: "仅自己可见" },
   { value: "unlisted", label: "不公开", desc: "有链接的人可看" },
   { value: "public", label: "公开", desc: "所有人可见" },
 ]
@@ -74,12 +94,23 @@ function formatNumber(value: number) {
   return String(value)
 }
 
-function parseTags(value: string) {
-  return value
-    .split(/[\s,，#]+/)
-    .map((tag) => tag.trim())
-    .filter(Boolean)
-    .slice(0, 30)
+function isYouTubeAcceptedVideoFile(file: File) {
+  if (file.type.startsWith("video/") || file.type === "application/octet-stream") return true
+  return /\.(mp4|webm|mov|m4v|avi|mpeg|mpg|3gp|3gpp|mkv)$/i.test(file.name)
+}
+
+function formatFileSize(bytes: number) {
+  const gb = bytes / (1024 * 1024 * 1024)
+  if (gb >= 1) return `${Number.isInteger(gb) ? gb.toFixed(0) : gb.toFixed(1)}GB`
+  return `${Math.ceil(bytes / (1024 * 1024))}MB`
+}
+
+function getVideoDefaultTitle(video: Pick<YouTubeSelectedVideo, "name">, index: number) {
+  return video.name.replace(/\.[^.]+$/, "").trim() || video.name || `视频 ${index + 1}`
+}
+
+function getAssistantTargetKey(target: MetadataAssistantTarget) {
+  return target.scope === "global" ? "global" : target.videoId
 }
 
 function getIntervalMinutes(mode: YouTubeIntervalMode, customInterval: number) {
@@ -90,12 +121,16 @@ function statusLabel(status: string) {
   switch (status) {
     case "completed":
       return "已完成"
+    case "published":
+      return "已发布"
     case "partial_failed":
       return "部分失败"
     case "failed":
       return "失败"
     case "scheduled":
       return "已定时"
+    case "uploading":
+      return "上传中"
     case "processing":
       return "发布中"
     case "cancelled":
@@ -112,13 +147,49 @@ function statusClass(status: string) {
   return "bg-amber-500/10 text-amber-300 border-amber-400/20"
 }
 
+function formatScheduledTime(value: string | null) {
+  if (!value) return null
+  const scheduledAt = new Date(value)
+  if (Number.isNaN(scheduledAt.getTime())) return null
+  return format(scheduledAt, "MM-dd HH:mm")
+}
+
 async function readApiError(response: Response, fallback: string) {
   const data = await response.json().catch(() => null)
   return typeof data?.error === "string" ? data.error : fallback
 }
 
+async function postJsonWithTimeout(url: string, body: unknown, timeoutMs = 60000) {
+  const controller = new AbortController()
+  const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs)
+
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    })
+    const data = await response.json().catch(() => null)
+    return { response, data }
+  } finally {
+    window.clearTimeout(timeoutId)
+  }
+}
+
+function getAssistantErrorMessage(error: unknown) {
+  if (error instanceof Error && error.name === "AbortError") {
+    return "生成超时，请稍后重试"
+  }
+  return error instanceof Error ? error.message : "请稍后再试"
+}
+
 function isStorageNotConfiguredError(message: string) {
   return /Storage service not configured|存储服务未配置/i.test(message)
+}
+
+function isAccountReady(account: YouTubeAccount) {
+  return account.status === "active"
 }
 
 async function requestYouTubeUploadCredentials(file: File) {
@@ -190,9 +261,11 @@ async function generateVideoThumbnail(videoFile: File): Promise<string> {
     }
 
     video.onseeked = () => {
+      const maxWidth = 320
+      const scale = video.videoWidth > 0 ? Math.min(1, maxWidth / video.videoWidth) : 1
       const canvas = document.createElement("canvas")
-      canvas.width = video.videoWidth
-      canvas.height = video.videoHeight
+      canvas.width = Math.max(1, Math.round(video.videoWidth * scale))
+      canvas.height = Math.max(1, Math.round(video.videoHeight * scale))
       const context = canvas.getContext("2d")
       if (!context) {
         URL.revokeObjectURL(video.src)
@@ -200,7 +273,7 @@ async function generateVideoThumbnail(videoFile: File): Promise<string> {
         return
       }
       context.drawImage(video, 0, 0, canvas.width, canvas.height)
-      const thumbnail = canvas.toDataURL("image/jpeg", 0.72)
+      const thumbnail = canvas.toDataURL("image/jpeg", 0.68)
       URL.revokeObjectURL(video.src)
       resolve(thumbnail)
     }
@@ -212,6 +285,53 @@ async function generateVideoThumbnail(videoFile: File): Promise<string> {
 
     video.src = URL.createObjectURL(videoFile)
   })
+}
+
+function getYouTubeVideoThumbnail(videoId: string | null) {
+  return videoId ? `https://img.youtube.com/vi/${videoId}/mqdefault.jpg` : null
+}
+
+function YouTubeTaskItemPreview({ item }: { item: YouTubePublishTaskItem }) {
+  const [previewIndex, setPreviewIndex] = useState(0)
+  const previewSources = [
+    item.thumbnail_url ? { type: "image" as const, src: item.thumbnail_url } : null,
+    item.video_url ? { type: "video" as const, src: `${item.video_url}#t=0.1` } : null,
+    getYouTubeVideoThumbnail(item.youtube_video_id)
+      ? { type: "image" as const, src: getYouTubeVideoThumbnail(item.youtube_video_id)! }
+      : null,
+  ].filter(Boolean) as Array<{ type: "image" | "video"; src: string }>
+  const currentPreview = previewSources[previewIndex]
+  const showNextPreview = () => setPreviewIndex((index) => Math.min(index + 1, previewSources.length))
+
+  useEffect(() => {
+    setPreviewIndex(0)
+  }, [item.id, item.thumbnail_url, item.video_url, item.youtube_video_id])
+
+  return (
+    <div className="relative h-14 w-24 shrink-0 overflow-hidden rounded-md border border-white/10 bg-black/40">
+      {currentPreview?.type === "image" ? (
+        <img
+          src={currentPreview.src}
+          alt={item.title || item.source_video_name || "YouTube 视频预览"}
+          className="h-full w-full object-cover"
+          onError={showNextPreview}
+        />
+      ) : currentPreview?.type === "video" ? (
+        <video
+          src={currentPreview.src}
+          className="h-full w-full object-cover"
+          muted
+          playsInline
+          preload="metadata"
+          onError={showNextPreview}
+        />
+      ) : (
+        <div className="flex h-full w-full items-center justify-center text-white/35">
+          <FileVideo className="h-5 w-5" />
+        </div>
+      )}
+    </div>
+  )
 }
 
 function YouTubeTaskManager() {
@@ -281,7 +401,7 @@ function YouTubeTaskManager() {
               onClick={() => setActiveStatus(value)}
               className={cn(
                 "rounded-md px-3 py-2 text-sm transition-colors",
-                activeStatus === value ? "bg-white/12 text-white" : "text-white/50 hover:bg-white/6 hover:text-white"
+                activeStatus === value ? "bg-white/[0.12] text-white" : "text-white/50 hover:bg-white/[0.06] hover:text-white"
               )}
             >
               {label}
@@ -338,7 +458,7 @@ function YouTubeTaskManager() {
                   <div className="mt-1 font-semibold">{task.video_count || 0}</div>
                 </div>
                 <div className="rounded-md bg-black/25 p-3">
-                  <div className="text-white/35">频道</div>
+                  <div className="text-white/35">账号</div>
                   <div className="mt-1 font-semibold">{task.account_count || 0}</div>
                 </div>
                 <div className="rounded-md bg-black/25 p-3">
@@ -352,21 +472,34 @@ function YouTubeTaskManager() {
               </div>
 
               {task.items && task.items.length > 0 && (
-                <div className="mt-4 max-h-52 space-y-2 overflow-y-auto pr-1">
-                  {task.items.slice(0, 8).map((item) => (
-                    <div key={item.id} className="flex items-center justify-between gap-3 rounded-md border border-white/8 bg-black/20 px-3 py-2 text-sm">
-                      <div className="min-w-0">
-                        <div className="truncate text-white/80">{item.title}</div>
-                        <div className="text-xs text-white/35">{statusLabel(item.status)}</div>
-                        {item.error_message && <div className="mt-1 text-xs text-red-300">{item.error_message}</div>}
+                <div className="mt-4 max-h-72 space-y-2 overflow-y-auto pr-1">
+                  {task.items.slice(0, 8).map((item) => {
+                    const scheduledTime = formatScheduledTime(item.scheduled_at)
+
+                    return (
+                      <div key={item.id} className="flex items-center justify-between gap-3 rounded-md border border-white/[0.08] bg-black/20 p-2 text-sm">
+                        <div className="flex min-w-0 flex-1 items-center gap-3">
+                          <YouTubeTaskItemPreview item={item} />
+                          <div className="min-w-0 flex-1">
+                            <div className="truncate text-white/80">{item.title || item.source_video_name || "未命名视频"}</div>
+                            {item.source_video_name && item.source_video_name !== item.title && (
+                              <div className="mt-0.5 truncate text-xs text-white/35">{item.source_video_name}</div>
+                            )}
+                            <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-white/35">
+                              <span>{statusLabel(item.status)}</span>
+                              {scheduledTime && <span>发布时间 {scheduledTime}</span>}
+                            </div>
+                            {item.error_message && <div className="mt-1 line-clamp-2 text-xs text-red-300">{item.error_message}</div>}
+                          </div>
+                        </div>
+                        {item.youtube_watch_url && (
+                          <a href={item.youtube_watch_url} target="_blank" className="shrink-0 text-cyan-300 hover:text-cyan-200">
+                            <ExternalLink className="h-4 w-4" />
+                          </a>
+                        )}
                       </div>
-                      {item.youtube_watch_url && (
-                        <a href={item.youtube_watch_url} target="_blank" className="shrink-0 text-cyan-300 hover:text-cyan-200">
-                          <ExternalLink className="h-4 w-4" />
-                        </a>
-                      )}
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               )}
 
@@ -394,6 +527,7 @@ export default function YouTubePublishPage() {
   const [accounts, setAccounts] = useState<YouTubeAccount[]>([])
   const [loadingAccounts, setLoadingAccounts] = useState(true)
   const [selectedAccounts, setSelectedAccounts] = useState<string[]>([])
+  const [accountSelectionMode, setAccountSelectionMode] = useState<AccountSelectionMode>("accounts")
   const [selectedVideos, setSelectedVideos] = useState<YouTubeSelectedVideo[]>([])
   const [uploadingFiles, setUploadingFiles] = useState<YouTubeFileUploadStatus[]>([])
   const [uploadError, setUploadError] = useState<string | null>(null)
@@ -410,9 +544,17 @@ export default function YouTubePublishPage() {
   })
 
   const [taskName, setTaskName] = useState("")
+  const [metadataMode, setMetadataMode] = useState<MetadataContentMode>("same")
   const [title, setTitle] = useState("")
   const [description, setDescription] = useState("")
-  const [tagsInput, setTagsInput] = useState("")
+  const [showTitleAssistant, setShowTitleAssistant] = useState(false)
+  const [titleAssistantTarget, setTitleAssistantTarget] = useState<MetadataAssistantTarget>({ scope: "global" })
+  const [titlePrompt, setTitlePrompt] = useState("")
+  const [generatingTitleTargets, setGeneratingTitleTargets] = useState<Set<string>>(new Set())
+  const [showDescriptionAssistant, setShowDescriptionAssistant] = useState(false)
+  const [descriptionAssistantTarget, setDescriptionAssistantTarget] = useState<MetadataAssistantTarget>({ scope: "global" })
+  const [descriptionPrompt, setDescriptionPrompt] = useState("")
+  const [generatingDescriptionTargets, setGeneratingDescriptionTargets] = useState<Set<string>>(new Set())
   const [privacyStatus, setPrivacyStatus] = useState<YouTubePrivacyStatus>("private")
   const [madeForKids, setMadeForKids] = useState(false)
   const [containsSyntheticMedia, setContainsSyntheticMedia] = useState(true)
@@ -420,7 +562,7 @@ export default function YouTubePublishPage() {
   const [publishMode, setPublishMode] = useState<YouTubePublishMode>("now")
   const [scheduledDate, setScheduledDate] = useState("")
   const [scheduledTime, setScheduledTime] = useState("")
-  const [intervalMode, setIntervalMode] = useState<YouTubeIntervalMode>("5")
+  const [intervalMode, setIntervalMode] = useState<YouTubeIntervalMode>("0")
   const [customInterval, setCustomInterval] = useState(5)
   const [publishing, setPublishing] = useState(false)
   const [publishError, setPublishError] = useState<string | null>(null)
@@ -447,12 +589,59 @@ export default function YouTubePublishPage() {
     fetchAccounts()
   }, [fetchAccounts])
 
+  const readyAccounts = useMemo(() => accounts.filter(isAccountReady), [accounts])
+  const accountGroups = useMemo(() => {
+    if (readyAccounts.length === 0) return []
+
+    return [
+      {
+        id: "all-ready",
+        name: "全部可发布账号",
+        accountIds: readyAccounts.map((account) => account.id),
+        accounts: readyAccounts,
+      },
+    ]
+  }, [readyAccounts])
+  const selectedGroupId = useMemo(() => {
+    const selectedSet = new Set(selectedAccounts)
+    return accountGroups.find((group) =>
+      group.accountIds.length === selectedAccounts.length &&
+      group.accountIds.every((accountId) => selectedSet.has(accountId))
+    )?.id || null
+  }, [accountGroups, selectedAccounts])
   const totalTasks = selectedVideos.length * selectedAccounts.length
-  const tags = useMemo(() => parseTags(tagsInput), [tagsInput])
+  const titleCharacterCount = getYouTubeCharacterLength(title)
+  const descriptionByteCount = getUtf8ByteLength(description)
+  const aiGeneratingCount = generatingTitleTargets.size + generatingDescriptionTargets.size
+  const metadataErrors = useMemo(() => {
+    const errors: string[] = []
+    if (selectedVideos.length === 0) return errors
+
+    if (metadataMode === "same") {
+      const titleError = validateYouTubeTitle(title, "视频标题")
+      const descriptionError = validateYouTubeDescription(description, "视频描述")
+      if (titleError) errors.push(titleError)
+      if (descriptionError) errors.push(descriptionError)
+      return errors
+    }
+
+    selectedVideos.forEach((video, index) => {
+      const itemTitle = (video.title ?? getVideoDefaultTitle(video, index)).trim()
+      const itemDescription = video.description ?? ""
+      const titleError = validateYouTubeTitle(itemTitle, `视频 ${index + 1} 标题`)
+      const descriptionError = validateYouTubeDescription(itemDescription, `视频 ${index + 1} 描述`)
+      if (titleError) errors.push(titleError)
+      if (descriptionError) errors.push(descriptionError)
+    })
+
+    return errors
+  }, [description, metadataMode, selectedVideos, title])
   const canPublish =
     selectedVideos.length > 0 &&
     selectedAccounts.length > 0 &&
     !publishing &&
+    aiGeneratingCount === 0 &&
+    metadataErrors.length === 0 &&
     (publishMode === "now" || Boolean(scheduledDate && scheduledTime))
 
   const updateUploadStatus = (fileId: string, updates: Partial<YouTubeFileUploadStatus>) => {
@@ -506,13 +695,12 @@ export default function YouTubePublishPage() {
     const validFiles: Array<{ file: File; id: string }> = []
 
     for (const file of Array.from(files)) {
-      const ext = `.${file.name.split(".").pop()?.toLowerCase()}`
-      if (!YOUTUBE_VIDEO_FORMATS.includes(ext)) {
-        setUploadError(`不支持的格式: ${ext}。支持: ${YOUTUBE_VIDEO_FORMATS.join(", ")}`)
+      if (!isYouTubeAcceptedVideoFile(file)) {
+        setUploadError("不支持的视频格式。YouTube 上传要求 video/* 或 application/octet-stream")
         continue
       }
       if (file.size > YOUTUBE_MAX_FILE_SIZE) {
-        setUploadError(`文件过大: ${(file.size / (1024 * 1024 * 1024)).toFixed(2)}GB。最大: 4GB`)
+        setUploadError(`文件过大: ${(file.size / (1024 * 1024 * 1024)).toFixed(2)}GB。最大: ${formatFileSize(YOUTUBE_MAX_FILE_SIZE)}`)
         continue
       }
       validFiles.push({
@@ -729,7 +917,166 @@ export default function YouTubePublishPage() {
     setSelectedVideos((prev) => prev.filter((video) => video.id !== videoId))
   }
 
+  const openTitleAssistant = (target: MetadataAssistantTarget = { scope: "global" }) => {
+    setTitleAssistantTarget(target)
+    setTitlePrompt("")
+    setShowTitleAssistant(true)
+  }
+
+  const openDescriptionAssistant = (target: MetadataAssistantTarget = { scope: "global" }) => {
+    setDescriptionAssistantTarget(target)
+    setDescriptionPrompt("")
+    setShowDescriptionAssistant(true)
+  }
+
+  const setTitleTargetGenerating = (targetKey: string, active: boolean) => {
+    setGeneratingTitleTargets((prev) => {
+      const next = new Set(prev)
+      if (active) next.add(targetKey)
+      else next.delete(targetKey)
+      return next
+    })
+  }
+
+  const setDescriptionTargetGenerating = (targetKey: string, active: boolean) => {
+    setGeneratingDescriptionTargets((prev) => {
+      const next = new Set(prev)
+      if (active) next.add(targetKey)
+      else next.delete(targetKey)
+      return next
+    })
+  }
+
+  const generateTitle = async (target: MetadataAssistantTarget, prompt: string) => {
+    const targetKey = getAssistantTargetKey(target)
+    setTitleTargetGenerating(targetKey, true)
+    try {
+      const targetVideo = target.scope === "video"
+        ? selectedVideos.find((video) => video.id === target.videoId)
+        : null
+      if (target.scope === "video" && !targetVideo) {
+        throw new Error("视频已不存在，请重新选择")
+      }
+      const isBatchDifferent = metadataMode === "different" && target.scope === "global"
+      const { response, data } = await postJsonWithTimeout("/api/youtube/publish/generate-titles", {
+        description: prompt ||
+          targetVideo?.description ||
+          targetVideo?.title ||
+          targetVideo?.name ||
+          description ||
+          selectedVideos[0]?.name ||
+          taskName ||
+          "YouTube 视频",
+        videoNames: targetVideo ? [targetVideo.name] : selectedVideos.map((video) => video.name),
+        count: isBatchDifferent ? Math.max(selectedVideos.length, 1) : 1,
+        language: "zh",
+      })
+      if (!response.ok || !data?.success) throw new Error(data?.error || "生成失败")
+
+      const generatedTitles = (data.titles || [])
+        .map((item: { title?: string; combined?: string }) => item.title || item.combined || "")
+        .filter(Boolean)
+
+      if (generatedTitles.length > 0) {
+        if (targetVideo) {
+          updateVideo(targetVideo.id, {
+            title: truncateYouTubeTextByCharacters(generatedTitles[0], YOUTUBE_TITLE_MAX_CHARACTERS),
+          })
+        } else if (isBatchDifferent && selectedVideos.length > 0) {
+          setSelectedVideos((prev) => prev.map((video, index) => ({
+            ...video,
+            title: truncateYouTubeTextByCharacters(
+              generatedTitles[index] || generatedTitles[0] || video.title || getVideoDefaultTitle(video, index),
+              YOUTUBE_TITLE_MAX_CHARACTERS
+            ),
+          })))
+        } else {
+          setTitle(truncateYouTubeTextByCharacters(generatedTitles[0], YOUTUBE_TITLE_MAX_CHARACTERS))
+        }
+      }
+    } catch (error) {
+      toast({
+        title: "AI 写标题失败",
+        description: getAssistantErrorMessage(error),
+        variant: "destructive",
+      })
+    } finally {
+      setTitleTargetGenerating(targetKey, false)
+    }
+  }
+
+  const startTitleGeneration = () => {
+    const target = titleAssistantTarget
+    const prompt = titlePrompt
+    const targetKey = getAssistantTargetKey(target)
+    if (generatingTitleTargets.has(targetKey)) return
+
+    setShowTitleAssistant(false)
+    setTitlePrompt("")
+    setTitleAssistantTarget({ scope: "global" })
+    void generateTitle(target, prompt)
+  }
+
+  const generateDescription = async (target: MetadataAssistantTarget, prompt: string) => {
+    const targetKey = getAssistantTargetKey(target)
+    setDescriptionTargetGenerating(targetKey, true)
+    try {
+      const targetVideo = target.scope === "video"
+        ? selectedVideos.find((video) => video.id === target.videoId)
+        : null
+      if (target.scope === "video" && !targetVideo) {
+        throw new Error("视频已不存在，请重新选择")
+      }
+      const targetVideoIndex = targetVideo ? selectedVideos.findIndex((video) => video.id === targetVideo.id) : -1
+      const { response, data } = await postJsonWithTimeout("/api/youtube/publish/generate-description", {
+        prompt,
+        title: targetVideo
+          ? (targetVideo.title || getVideoDefaultTitle(targetVideo, targetVideoIndex >= 0 ? targetVideoIndex : 0))
+          : title,
+        description: targetVideo ? (targetVideo.description || "") : description,
+        taskName,
+        videoNames: targetVideo ? [targetVideo.name] : selectedVideos.map((video) => video.name),
+        tags: [],
+      })
+      if (!response.ok || !data?.success) throw new Error(data?.error || "生成失败")
+
+      if (typeof data.description === "string" && data.description.trim()) {
+        const nextDescription = truncateYouTubeTextByUtf8Bytes(data.description, YOUTUBE_DESCRIPTION_MAX_BYTES)
+        if (targetVideo) {
+          updateVideo(targetVideo.id, { description: nextDescription })
+        } else {
+          setDescription(nextDescription)
+        }
+      }
+    } catch (error) {
+      toast({
+        title: "AI 写描述失败",
+        description: getAssistantErrorMessage(error),
+        variant: "destructive",
+      })
+    } finally {
+      setDescriptionTargetGenerating(targetKey, false)
+    }
+  }
+
+  const startDescriptionGeneration = () => {
+    const target = descriptionAssistantTarget
+    const prompt = descriptionPrompt
+    const targetKey = getAssistantTargetKey(target)
+    if (generatingDescriptionTargets.has(targetKey)) return
+
+    setShowDescriptionAssistant(false)
+    setDescriptionPrompt("")
+    setDescriptionAssistantTarget({ scope: "global" })
+    void generateDescription(target, prompt)
+  }
+
   const createPublishTask = async () => {
+    if (metadataErrors.length > 0) {
+      setPublishError(metadataErrors[0])
+      return
+    }
+
     if (!canPublish) {
       setPublishError("请完成视频、账号和发布时间设置")
       return
@@ -742,16 +1089,34 @@ export default function YouTubePublishPage() {
     setPublishing(true)
     setPublishError(null)
     try {
+      const videosForTask = selectedVideos.map((video, index) => {
+        if (metadataMode === "same") {
+          return {
+            ...video,
+            title: undefined,
+            description: undefined,
+          }
+        }
+
+        return {
+          ...video,
+          title: (video.title ?? getVideoDefaultTitle(video, index)).trim(),
+          description: video.description ?? "",
+        }
+      })
+      const taskTitle = metadataMode === "same" ? title.trim() : ""
+      const taskDescription = metadataMode === "same" ? description : ""
+
       const response = await fetch("/api/youtube/publish/tasks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: taskName,
-          videos: selectedVideos,
+          videos: videosForTask,
           account_ids: selectedAccounts,
-          title,
-          description,
-          tags,
+          title: taskTitle,
+          description: taskDescription,
+          tags: [],
           privacy_status: privacyStatus,
           category_id: "22",
           made_for_kids: madeForKids,
@@ -773,9 +1138,9 @@ export default function YouTubePublishPage() {
       setSelectedVideos([])
       setSelectedAccounts([])
       setTaskName("")
+      setMetadataMode("same")
       setTitle("")
       setDescription("")
-      setTagsInput("")
       setActiveTab("tasks")
     } catch (error) {
       const message = error instanceof Error ? error.message : "创建 YouTube 发布任务失败"
@@ -785,6 +1150,27 @@ export default function YouTubePublishPage() {
       setPublishing(false)
     }
   }
+
+  const titleAssistantVideoIndex = titleAssistantTarget.scope === "video"
+    ? selectedVideos.findIndex((video) => video.id === titleAssistantTarget.videoId)
+    : -1
+  const descriptionAssistantVideoIndex = descriptionAssistantTarget.scope === "video"
+    ? selectedVideos.findIndex((video) => video.id === descriptionAssistantTarget.videoId)
+    : -1
+  const titleAssistantVideoNumber = titleAssistantVideoIndex >= 0 ? titleAssistantVideoIndex + 1 : 1
+  const descriptionAssistantVideoNumber = descriptionAssistantVideoIndex >= 0 ? descriptionAssistantVideoIndex + 1 : 1
+  const titleAssistantTitle = titleAssistantTarget.scope === "video"
+    ? `AI 写视频 ${titleAssistantVideoNumber} 标题`
+    : metadataMode === "different"
+      ? "AI 批量写标题"
+      : "AI 写标题"
+  const descriptionAssistantTitle = descriptionAssistantTarget.scope === "video"
+    ? `AI 写视频 ${descriptionAssistantVideoNumber} 描述`
+    : "AI 写描述"
+  const titleDialogGenerating = generatingTitleTargets.has(getAssistantTargetKey(titleAssistantTarget))
+  const descriptionDialogGenerating = generatingDescriptionTargets.has(getAssistantTargetKey(descriptionAssistantTarget))
+  const globalTitleGenerating = generatingTitleTargets.has("global")
+  const globalDescriptionGenerating = generatingDescriptionTargets.has("global")
 
   return (
     <div className="min-h-full text-white">
@@ -990,6 +1376,12 @@ export default function YouTubePublishPage() {
                   </div>
                 )}
 
+                {selectedVideos.length > 0 && (
+                  <p className="mb-4 text-sm text-gray-400">
+                    已选择 <span className="font-semibold text-cyan-400">{selectedVideos.length}</span> 个视频
+                  </p>
+                )}
+
                 <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
                   {selectedVideos.map((video) => (
                     <div
@@ -1064,50 +1456,45 @@ export default function YouTubePublishPage() {
                   </button>
                 </div>
 
-                {selectedVideos.length > 0 && (
-                  <>
-                    <p className="mt-4 text-sm text-gray-400">
-                      已选择 <span className="font-semibold text-cyan-400">{selectedVideos.length}</span> 个视频
-                    </p>
-                    <div className="mt-5 grid gap-3">
-                      {selectedVideos.map((video, index) => (
-                        <div key={`${video.id}-metadata`} className="grid gap-3 rounded-xl border border-white/10 bg-black/20 p-4 md:grid-cols-[180px_minmax(0,1fr)]">
-                          <div className="min-w-0">
-                            <div className="text-sm font-medium text-white">视频 {index + 1}</div>
-                            <div className="mt-1 truncate text-xs text-white/45">{video.name}</div>
-                          </div>
-                          <div className="grid gap-3 md:grid-cols-2">
-                            <Input
-                              value={video.title || ""}
-                              maxLength={100}
-                              onChange={(event) => updateVideo(video.id, { title: event.target.value })}
-                              placeholder="单独标题，留空则使用全局标题"
-                              className="border-white/10 bg-black/30 text-white"
-                            />
-                            <Textarea
-                              value={video.description || ""}
-                              maxLength={5000}
-                              onChange={(event) => updateVideo(video.id, { description: event.target.value })}
-                              placeholder="单独描述，留空则使用全局描述"
-                              className="min-h-10 border-white/10 bg-black/30 text-white md:min-h-10"
-                            />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </>
-                )}
               </section>
 
               <section className="rounded-2xl border border-white/10 bg-white/5 p-6">
                 <div className="mb-4 flex items-center justify-between gap-3">
                   <h2 className="flex items-center gap-2 text-lg font-semibold">
                     <span className="flex h-6 w-6 items-center justify-center rounded-full bg-cyan-500/20 text-sm text-cyan-400">2</span>
-                    选择发布账号
+                    选择发布账号/账号组
                   </h2>
-                  <Button variant="titanium-outline" size="sm" onClick={() => router.push("/youtube-publish/accounts")}>
-                    账号管理
-                  </Button>
+                  <div className="flex items-center gap-3">
+                    <div className="flex rounded-lg border border-white/10 bg-black/30 p-1">
+                      {[
+                        { value: "accounts" as AccountSelectionMode, label: "账号", icon: Users },
+                        { value: "groups" as AccountSelectionMode, label: "账号组", icon: Layers3 },
+                      ].map(({ value, label, icon: Icon }) => (
+                        <button
+                          key={value}
+                          type="button"
+                          onClick={() => setAccountSelectionMode(value)}
+                          className={cn(
+                            "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors",
+                            accountSelectionMode === value ? "bg-white/[0.12] text-white" : "text-white/45 hover:text-white/75"
+                          )}
+                        >
+                          <Icon className="h-3.5 w-3.5" />
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => router.push("/youtube-publish/accounts")}
+                      className="group relative flex items-center gap-1.5 overflow-hidden rounded-lg bg-gradient-to-r from-[#CCFF00] via-[#00F2EA] to-[#EC4899] px-4 py-2 text-sm font-bold text-black transition-all duration-500 hover:scale-[1.02] hover:shadow-[0_0_20px_rgba(0,242,234,0.4)]"
+                    >
+                      <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-white/40 via-white/15 to-transparent" />
+                      <div className="pointer-events-none absolute left-0 right-0 top-[10%] h-[35%] rounded-lg bg-gradient-to-b from-white/25 to-transparent" />
+                      <Plus className="relative z-10 h-3.5 w-3.5" />
+                      <span className="relative z-10">去绑定</span>
+                    </button>
+                  </div>
                 </div>
 
                 {loadingAccounts ? (
@@ -1117,22 +1504,84 @@ export default function YouTubePublishPage() {
                 ) : accounts.length === 0 ? (
                   <div className="rounded-lg border border-dashed border-white/15 bg-black/20 p-8 text-center">
                     <Youtube className="mx-auto mb-3 h-10 w-10 text-cyan-300/70" />
-                    <div className="text-white/70">暂无可用 YouTube 频道</div>
+                    <div className="text-white/70">暂无可用 YouTube 账号</div>
                     <Button variant="mermaid" className="mt-5" onClick={() => router.push("/youtube-publish/accounts")}>
                       绑定 YouTube 账号
                     </Button>
                   </div>
+                ) : accountSelectionMode === "groups" ? (
+                  accountGroups.length === 0 ? (
+                    <div className="rounded-lg border border-dashed border-white/15 bg-black/20 p-8 text-center">
+                      <Layers3 className="mx-auto mb-3 h-10 w-10 text-white/30" />
+                      <div className="text-white/70">暂无可用于发布的账号组</div>
+                      <p className="mx-auto mt-2 max-w-md text-sm text-white/40">
+                        请先在账号绑定页完成授权刷新。可发布账号会自动进入默认账号组。
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                      {accountGroups.map((group) => {
+                        const selected = selectedGroupId === group.id
+                        return (
+                          <button
+                            key={group.id}
+                            type="button"
+                            onClick={() => setSelectedAccounts(group.accountIds)}
+                            className={cn(
+                              "relative overflow-hidden rounded-xl border p-5 text-left transition-all duration-300",
+                              selected
+                                ? "border-cyan-400/50 bg-cyan-500/10 shadow-[0_0_20px_rgba(6,182,212,0.15)]"
+                                : "border-white/10 bg-black/20 hover:border-white/20 hover:bg-white/[0.04]"
+                            )}
+                          >
+                            <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-[#CCFF00]/0 via-[#00F2EA]/35 to-[#EC4899]/0" />
+                            <div className="flex items-start justify-between gap-3">
+                              <div>
+                                <div className="font-semibold text-white">{group.name}</div>
+                                <div className="mt-1 text-xs text-white/40">{group.accounts.length} 个账号</div>
+                              </div>
+                              {selected && (
+                                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-cyan-400 text-black">
+                                  <Check className="h-3 w-3" />
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="mt-5 grid grid-cols-8 gap-2">
+                              {group.accounts.slice(0, 8).map((account) => (
+                                <div key={account.id} className="flex aspect-square items-center justify-center overflow-hidden rounded-full border border-white/10 bg-white/5">
+                                  {account.thumbnail_url ? (
+                                    <img src={account.thumbnail_url} alt={account.channel_title} className="h-full w-full object-cover" />
+                                  ) : (
+                                    <span className="text-[10px] font-bold text-white/75">{account.channel_title.charAt(0).toUpperCase()}</span>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+
+                            <div className="mt-5 flex flex-wrap items-center gap-2 text-xs">
+                              <span className="rounded-md bg-emerald-500/10 px-2 py-1 text-emerald-300">已授权 {group.accounts.length}</span>
+                              <span className="rounded-md bg-white/[0.06] px-2 py-1 text-white/45">将创建 {selectedVideos.length * group.accounts.length} 个发布任务</span>
+                            </div>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )
                 ) : (
                   <div className="grid gap-3 md:grid-cols-2">
                     {accounts.map((account) => {
                       const selected = selectedAccounts.includes(account.id)
+                      const authorized = isAccountReady(account)
                       return (
                         <button
                           key={account.id}
-                          onClick={() => toggleAccount(account.id)}
+                          onClick={() => authorized && toggleAccount(account.id)}
+                          disabled={!authorized}
                           className={cn(
                             "flex items-center gap-3 rounded-lg border p-4 text-left transition-colors",
-                            selected ? "border-cyan-400/50 bg-cyan-500/10" : "border-white/10 bg-black/20 hover:border-white/20"
+                            selected ? "border-cyan-400/50 bg-cyan-500/10" : "border-white/10 bg-black/20 hover:border-white/20",
+                            !authorized && "cursor-not-allowed opacity-50"
                           )}
                         >
                           {account.thumbnail_url ? (
@@ -1146,6 +1595,11 @@ export default function YouTubePublishPage() {
                             <div className="truncate font-medium">{account.channel_title}</div>
                             <div className="mt-1 text-xs text-white/40">{formatNumber(account.subscriber_count)} 订阅 · {formatNumber(account.video_count)} 视频</div>
                           </div>
+                          {!authorized && (
+                            <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] text-amber-300">
+                              需授权
+                            </span>
+                          )}
                           {selected && (
                             <span className="flex h-5 w-5 items-center justify-center rounded-full bg-cyan-400 text-black">
                               <Check className="h-3 w-3" />
@@ -1159,28 +1613,280 @@ export default function YouTubePublishPage() {
               </section>
 
               <section className="rounded-2xl border border-white/10 bg-white/5 p-6">
+                <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                  <h2 className="flex items-center gap-2 text-lg font-semibold">
+                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-cyan-500/20 text-sm text-cyan-400">3</span>
+                    视频标题与描述
+                  </h2>
+                  <div className="flex w-fit rounded-lg border border-white/10 bg-black/30 p-1">
+                    {[
+                      { value: "same" as MetadataContentMode, label: "相同内容" },
+                      { value: "different" as MetadataContentMode, label: "不同内容" },
+                    ].map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => setMetadataMode(option.value)}
+                        className={cn(
+                          "rounded-md px-3 py-1.5 text-xs font-semibold transition-colors",
+                          metadataMode === option.value ? "bg-white/[0.12] text-white" : "text-white/45 hover:text-white/75"
+                        )}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {selectedVideos.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-white/10 py-10 text-center text-white/45">
+                    上传视频后填写标题和描述
+                  </div>
+                ) : metadataMode === "same" ? (
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="space-y-2 md:col-span-2">
+                      <label className="text-sm text-white/60">视频标题</label>
+                      <div className="group relative">
+                        <textarea
+                          value={title}
+                          onChange={(event) => setTitle(truncateYouTubeTextByCharacters(event.target.value, YOUTUBE_TITLE_MAX_CHARACTERS))}
+                          placeholder="输入视频标题..."
+                          rows={5}
+                          maxLength={YOUTUBE_TITLE_MAX_CHARACTERS}
+                          className="w-full resize-none rounded-xl border border-white/10 bg-white/5 px-4 pb-14 pt-4 text-white placeholder-gray-500 transition-all focus:border-cyan-500/50 focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
+                        />
+                        <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between">
+                          <div className={cn("font-mono text-xs", titleCharacterCount > YOUTUBE_TITLE_MAX_CHARACTERS * 0.9 ? "text-amber-400" : "text-gray-600")}>
+                            {titleCharacterCount}/{YOUTUBE_TITLE_MAX_CHARACTERS} 字符
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {globalTitleGenerating && (
+                              <span className="flex items-center gap-1 rounded-full bg-pink-500/10 px-2 py-1 text-xs text-pink-200">
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                生成中
+                              </span>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => openTitleAssistant({ scope: "global" })}
+                              disabled={globalTitleGenerating}
+                              className={cn(
+                                "flex items-center gap-1.5 rounded-lg border border-pink-500/20 bg-gradient-to-r from-purple-500/20 to-pink-500/20 px-3 py-1.5 text-xs font-medium text-pink-300 shadow-lg shadow-pink-500/5 transition-all hover:border-pink-500/40 hover:from-purple-500/30 hover:to-pink-500/30",
+                                globalTitleGenerating && "cursor-not-allowed opacity-60"
+                              )}
+                            >
+                              <Sparkles className="h-3.5 w-3.5" />
+                              AI 写标题
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2 md:col-span-2">
+                      <label className="text-sm text-white/60">视频描述</label>
+                      <div className="group relative">
+                        <textarea
+                          value={description}
+                          onChange={(event) => setDescription(truncateYouTubeTextByUtf8Bytes(event.target.value, YOUTUBE_DESCRIPTION_MAX_BYTES))}
+                          placeholder="输入视频描述..."
+                          rows={5}
+                          className="w-full resize-none rounded-xl border border-white/10 bg-white/5 px-4 pb-14 pt-4 text-white placeholder-gray-500 transition-all focus:border-cyan-500/50 focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
+                        />
+                        <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between">
+                          <div className={cn("font-mono text-xs", descriptionByteCount > YOUTUBE_DESCRIPTION_MAX_BYTES * 0.9 ? "text-amber-400" : "text-gray-600")}>
+                            {descriptionByteCount}/{YOUTUBE_DESCRIPTION_MAX_BYTES} bytes
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {globalDescriptionGenerating && (
+                              <span className="flex items-center gap-1 rounded-full bg-pink-500/10 px-2 py-1 text-xs text-pink-200">
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                生成中
+                              </span>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => setDescription((current) => truncateYouTubeTextByUtf8Bytes(`${current} #`, YOUTUBE_DESCRIPTION_MAX_BYTES))}
+                              className="flex items-center gap-1.5 rounded-lg border border-transparent bg-white/5 px-2.5 py-1.5 text-xs font-medium text-gray-400 transition-colors hover:border-white/10 hover:bg-white/10 hover:text-white"
+                            >
+                              <Hash className="h-3.5 w-3.5" />
+                              话题
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => openDescriptionAssistant({ scope: "global" })}
+                              disabled={globalDescriptionGenerating}
+                              className={cn(
+                                "flex items-center gap-1.5 rounded-lg border border-pink-500/20 bg-gradient-to-r from-purple-500/20 to-pink-500/20 px-3 py-1.5 text-xs font-medium text-pink-300 shadow-lg shadow-pink-500/5 transition-all hover:border-pink-500/40 hover:from-purple-500/30 hover:to-pink-500/30",
+                                globalDescriptionGenerating && "cursor-not-allowed opacity-60"
+                              )}
+                            >
+                              <Sparkles className="h-3.5 w-3.5" />
+                              AI 写描述
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="flex flex-wrap justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedVideos((prev) => prev.map((video, index) => ({
+                          ...video,
+                          title: truncateYouTubeTextByCharacters(getVideoDefaultTitle(video, index), YOUTUBE_TITLE_MAX_CHARACTERS),
+                        })))}
+                        className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-medium text-white/65 transition-colors hover:bg-white/10 hover:text-white"
+                      >
+                        按文件名填标题
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => openTitleAssistant({ scope: "global" })}
+                        disabled={globalTitleGenerating}
+                        className={cn(
+                          "flex items-center gap-1.5 rounded-lg border border-pink-500/20 bg-gradient-to-r from-purple-500/20 to-pink-500/20 px-3 py-2 text-xs font-medium text-pink-300 shadow-lg shadow-pink-500/5 transition-all hover:border-pink-500/40 hover:from-purple-500/30 hover:to-pink-500/30",
+                          globalTitleGenerating && "cursor-not-allowed opacity-60"
+                        )}
+                      >
+                        {globalTitleGenerating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+                        {globalTitleGenerating ? "批量生成中" : "AI 批量写标题"}
+                      </button>
+                    </div>
+                    {selectedVideos.map((video, index) => {
+                      const itemTitle = video.title ?? getVideoDefaultTitle(video, index)
+                      const itemDescription = video.description ?? ""
+                      const itemTitleCount = getYouTubeCharacterLength(itemTitle)
+                      const itemDescriptionBytes = getUtf8ByteLength(itemDescription)
+                      const itemTitleGenerating = generatingTitleTargets.has(video.id) || globalTitleGenerating
+                      const itemDescriptionGenerating = generatingDescriptionTargets.has(video.id)
+
+                      return (
+                        <div key={`${video.id}-metadata`} className="grid gap-4 rounded-xl border border-white/10 bg-black/20 p-4 lg:grid-cols-[180px_minmax(0,1fr)]">
+                          <div className="min-w-0">
+                            <div className="relative mb-3 aspect-video overflow-hidden rounded-lg border border-white/10 bg-white/5">
+                              {video.thumbnail ? (
+                                <img src={video.thumbnail} alt={video.name} className="absolute inset-0 h-full w-full object-cover" />
+                              ) : video.localUrl || video.url ? (
+                                <video src={video.localUrl || video.url} className="absolute inset-0 h-full w-full object-cover" muted playsInline preload="metadata" />
+                              ) : (
+                                <div className="absolute inset-0 flex items-center justify-center text-white/35">
+                                  <FileVideo className="h-6 w-6" />
+                                </div>
+                              )}
+                            </div>
+                            <div className="text-sm font-medium text-white">视频 {index + 1}</div>
+                            <div className="mt-1 truncate text-xs text-white/45">{video.name}</div>
+                          </div>
+
+                          <div className="grid min-w-0 gap-3">
+                            <div className="space-y-2">
+                              <div className="flex items-center justify-between gap-3">
+                                <div className="flex items-center gap-2">
+                                  <label className="text-sm text-white/60">视频标题</label>
+                                  {itemTitleGenerating && (
+                                    <span className="flex items-center gap-1 rounded-full bg-pink-500/10 px-2 py-1 text-xs text-pink-200">
+                                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                      生成中
+                                    </span>
+                                  )}
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => openTitleAssistant({ scope: "video", videoId: video.id })}
+                                  disabled={itemTitleGenerating}
+                                  className={cn(
+                                    "flex items-center gap-1.5 rounded-lg border border-pink-500/20 bg-gradient-to-r from-purple-500/20 to-pink-500/20 px-2.5 py-1.5 text-xs font-medium text-pink-300 transition-all hover:border-pink-500/40 hover:from-purple-500/30 hover:to-pink-500/30",
+                                    itemTitleGenerating && "cursor-not-allowed opacity-60"
+                                  )}
+                                >
+                                  <Sparkles className="h-3.5 w-3.5" />
+                                  AI 写标题
+                                </button>
+                              </div>
+                              <Input
+                                value={itemTitle}
+                                maxLength={YOUTUBE_TITLE_MAX_CHARACTERS}
+                                onChange={(event) => updateVideo(video.id, { title: truncateYouTubeTextByCharacters(event.target.value, YOUTUBE_TITLE_MAX_CHARACTERS) })}
+                                placeholder="输入视频标题..."
+                                className="border-white/10 bg-black/30 text-white"
+                              />
+                              <div className={cn("text-right font-mono text-xs", itemTitleCount > YOUTUBE_TITLE_MAX_CHARACTERS * 0.9 ? "text-amber-400" : "text-white/35")}>
+                                {itemTitleCount}/{YOUTUBE_TITLE_MAX_CHARACTERS} 字符
+                              </div>
+                            </div>
+
+                            <div className="space-y-2">
+                              <div className="flex items-center justify-between gap-3">
+                                <div className="flex items-center gap-2">
+                                  <label className="text-sm text-white/60">视频描述</label>
+                                  {itemDescriptionGenerating && (
+                                    <span className="flex items-center gap-1 rounded-full bg-pink-500/10 px-2 py-1 text-xs text-pink-200">
+                                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                      生成中
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => updateVideo(video.id, { description: truncateYouTubeTextByUtf8Bytes(`${itemDescription} #`, YOUTUBE_DESCRIPTION_MAX_BYTES) })}
+                                    className="flex items-center gap-1.5 rounded-lg border border-transparent bg-white/5 px-2.5 py-1.5 text-xs font-medium text-gray-400 transition-colors hover:border-white/10 hover:bg-white/10 hover:text-white"
+                                  >
+                                    <Hash className="h-3.5 w-3.5" />
+                                    话题
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => openDescriptionAssistant({ scope: "video", videoId: video.id })}
+                                    disabled={itemDescriptionGenerating}
+                                    className={cn(
+                                      "flex items-center gap-1.5 rounded-lg border border-pink-500/20 bg-gradient-to-r from-purple-500/20 to-pink-500/20 px-2.5 py-1.5 text-xs font-medium text-pink-300 transition-all hover:border-pink-500/40 hover:from-purple-500/30 hover:to-pink-500/30",
+                                      itemDescriptionGenerating && "cursor-not-allowed opacity-60"
+                                    )}
+                                  >
+                                    <Sparkles className="h-3.5 w-3.5" />
+                                    AI 写描述
+                                  </button>
+                                </div>
+                              </div>
+                              <Textarea
+                                value={itemDescription}
+                                onChange={(event) => updateVideo(video.id, { description: truncateYouTubeTextByUtf8Bytes(event.target.value, YOUTUBE_DESCRIPTION_MAX_BYTES) })}
+                                placeholder="输入视频描述..."
+                                className="min-h-28 border-white/10 bg-black/30 text-white"
+                              />
+                              <div className={cn("text-right font-mono text-xs", itemDescriptionBytes > YOUTUBE_DESCRIPTION_MAX_BYTES * 0.9 ? "text-amber-400" : "text-white/35")}>
+                                {itemDescriptionBytes}/{YOUTUBE_DESCRIPTION_MAX_BYTES} bytes
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+
+                {selectedVideos.length > 0 && metadataErrors.length > 0 && (
+                  <div className="mt-5 flex items-center gap-2 text-xs text-red-300">
+                    <AlertCircle className="h-3.5 w-3.5" />
+                    {metadataErrors[0]}
+                  </div>
+                )}
+              </section>
+
+              <section className="rounded-2xl border border-white/10 bg-white/5 p-6">
                 <h2 className="mb-5 flex items-center gap-2 text-lg font-semibold">
-                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-cyan-500/20 text-sm text-cyan-400">3</span>
+                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-cyan-500/20 text-sm text-cyan-400">4</span>
                   发布设置
                 </h2>
 
                 <div className="grid gap-4 md:grid-cols-2">
-                  <div className="space-y-2">
+                  <div className="space-y-2 md:col-span-2">
                     <label className="text-sm text-white/60">任务组名称</label>
                     <Input value={taskName} onChange={(event) => setTaskName(event.target.value)} placeholder="YouTube 发布任务组" className="border-white/10 bg-black/30 text-white" />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm text-white/60">全局标题</label>
-                    <Input value={title} onChange={(event) => setTitle(event.target.value)} maxLength={100} placeholder="支持 {n}、{date}" className="border-white/10 bg-black/30 text-white" />
-                  </div>
-                  <div className="space-y-2 md:col-span-2">
-                    <label className="text-sm text-white/60">全局描述</label>
-                    <Textarea value={description} onChange={(event) => setDescription(event.target.value)} maxLength={5000} placeholder="YouTube 视频描述，支持 {n}、{date}" className="min-h-28 border-white/10 bg-black/30 text-white" />
-                  </div>
-                  <div className="space-y-2 md:col-span-2">
-                    <label className="text-sm text-white/60">标签</label>
-                    <Input value={tagsInput} onChange={(event) => setTagsInput(event.target.value)} placeholder="用逗号、空格或 # 分隔标签" className="border-white/10 bg-black/30 text-white" />
-                    {tags.length > 0 && <div className="text-xs text-white/35">已识别 {tags.length} 个标签</div>}
                   </div>
                 </div>
 
@@ -1348,10 +2054,10 @@ export default function YouTubePublishPage() {
                 </div>
 
                 <div className="grid grid-cols-[1fr_auto] items-center gap-2 lg:flex lg:pr-1.5">
-                  {publishError && (
+                  {(publishError || metadataErrors[0]) && (
                     <p className="col-span-2 flex items-center gap-1 text-xs text-red-400 lg:col-span-1 lg:mr-2">
                       <AlertCircle className="h-3.5 w-3.5" />
-                      <span className="hidden sm:inline">{publishError}</span>
+                      <span className="hidden sm:inline">{publishError || metadataErrors[0]}</span>
                     </p>
                   )}
 
@@ -1389,13 +2095,77 @@ export default function YouTubePublishPage() {
                 </div>
               </div>
 
-              <div className="mt-3 rounded-xl border border-amber-400/15 bg-amber-400/8 p-3 text-xs leading-5 text-amber-100/70">
+              <div className="mt-3 rounded-xl border border-amber-400/[0.15] bg-amber-400/[0.08] p-3 text-xs leading-5 text-amber-100/70">
                 YouTube 新 API 项目在审核前上传的视频可能被限制为私密状态。公开发布前需要完成 YouTube API 合规审核。
               </div>
             </div>
           </div>
         )}
       </div>
+
+      <Dialog
+        open={showTitleAssistant}
+        onOpenChange={(open) => {
+          setShowTitleAssistant(open)
+          if (!open) {
+            setTitlePrompt("")
+            setTitleAssistantTarget({ scope: "global" })
+          }
+        }}
+      >
+        <DialogContent className="border-white/10 bg-zinc-950 text-white">
+          <DialogHeader>
+            <DialogTitle>{titleAssistantTitle}</DialogTitle>
+          </DialogHeader>
+          <Textarea
+            value={titlePrompt}
+            onChange={(event) => setTitlePrompt(event.target.value)}
+            placeholder={titleAssistantTarget.scope === "video" ? "可填写这条视频的风格、关键词或禁用词" : "可填写风格、关键词或禁用词"}
+            className="min-h-32 border-white/10 bg-white/[0.04] text-white"
+          />
+          <DialogFooter>
+            <Button variant="titanium-outline" onClick={() => setShowTitleAssistant(false)}>
+              取消
+            </Button>
+            <Button variant="mermaid" onClick={startTitleGeneration} disabled={titleDialogGenerating}>
+              {titleDialogGenerating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+              {titleDialogGenerating ? "生成中" : "生成"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={showDescriptionAssistant}
+        onOpenChange={(open) => {
+          setShowDescriptionAssistant(open)
+          if (!open) {
+            setDescriptionPrompt("")
+            setDescriptionAssistantTarget({ scope: "global" })
+          }
+        }}
+      >
+        <DialogContent className="border-white/10 bg-zinc-950 text-white">
+          <DialogHeader>
+            <DialogTitle>{descriptionAssistantTitle}</DialogTitle>
+          </DialogHeader>
+          <Textarea
+            value={descriptionPrompt}
+            onChange={(event) => setDescriptionPrompt(event.target.value)}
+            placeholder={descriptionAssistantTarget.scope === "video" ? "可填写这条视频的描述风格、关键词、话题或禁用词" : "可填写描述风格、关键词、话题或禁用词"}
+            className="min-h-32 border-white/10 bg-white/[0.04] text-white"
+          />
+          <DialogFooter>
+            <Button variant="titanium-outline" onClick={() => setShowDescriptionAssistant(false)}>
+              取消
+            </Button>
+            <Button variant="mermaid" onClick={startDescriptionGeneration} disabled={descriptionDialogGenerating}>
+              {descriptionDialogGenerating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+              {descriptionDialogGenerating ? "生成中" : "生成"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {showAssetModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
@@ -1437,7 +2207,7 @@ export default function YouTubePublishPage() {
                   <Loader2 className="h-7 w-7 animate-spin text-cyan-300" />
                 </div>
               ) : assets.length === 0 ? (
-                <div className="flex min-h-64 flex-col items-center justify-center rounded-lg border border-dashed border-white/12 bg-black/20 text-center">
+                <div className="flex min-h-64 flex-col items-center justify-center rounded-lg border border-dashed border-white/[0.12] bg-black/20 text-center">
                   <FileVideo className="mb-3 h-12 w-12 text-white/25" />
                   <div className="font-medium text-white/70">暂无可选视频</div>
                   <div className="mt-1 text-sm text-white/35">视频制作区完成的视频会出现在这里</div>

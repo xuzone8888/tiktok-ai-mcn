@@ -23,8 +23,8 @@ async function exportUserImages() {
     console.log(`\n🔍 正在查询用户 ${USERNAME} 的图片数据...\n`);
 
     // 用户 Irene888 的 ID (从管理后台获取)
-    const userId = '0007d8c3-2a4c-43cf-8fdd-21432c89a1c9';
-    const userEmail = '18271850054@139.com';
+    const userId = '00000000-0000-0000-0000-000000000000';
+    const userEmail = 'user.com';
 
     console.log(`✅ 用户: ${USERNAME} (${userEmail})`);
     console.log(`   用户 ID: ${userId}\n`);

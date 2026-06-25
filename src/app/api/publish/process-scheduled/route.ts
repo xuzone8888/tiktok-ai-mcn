@@ -9,7 +9,10 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
+import { processFacebookPublishQueue } from '@/lib/facebook/processor'
+import { processInstagramPublishQueue } from '@/lib/instagram/processor'
 import { processPublishQueue } from '@/lib/publish-processor'
+import { processYouTubePublishQueue } from '@/lib/youtube/processor'
 
 // 配置
 const CRON_SECRET = process.env.CRON_SECRET || ''
@@ -24,27 +27,54 @@ export async function GET(request: NextRequest) {
 
     try {
         // 1. 验证 cron secret（生产环境必须）
+        const authHeader = request.headers.get('authorization')
         const cronSecret = request.headers.get('x-cron-secret')
-        if (process.env.NODE_ENV === 'production' && CRON_SECRET && cronSecret !== CRON_SECRET) {
+        const isAuthorized = authHeader === `Bearer ${CRON_SECRET}` || cronSecret === CRON_SECRET
+        if (process.env.NODE_ENV === 'production' && CRON_SECRET && !isAuthorized) {
             console.log('[Scheduler] Unauthorized request')
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
         }
 
         console.log('[Scheduler] Starting scheduled task processing')
 
-        // 2. 使用共用模块处理定时任务
-        const result = await processPublishQueue({
-            mode: 'scheduled',
-            maxItems: 50
-        })
+        // 2. 处理所有平台的到期定时任务
+        const [legacyResult, youtubeResult, facebookResult, instagramResult] = await Promise.all([
+            processPublishQueue({
+                mode: 'scheduled',
+                maxItems: 50
+            }),
+            processYouTubePublishQueue({
+                mode: 'scheduled',
+                maxItems: 50
+            }),
+            processFacebookPublishQueue({
+                mode: 'scheduled',
+                maxItems: 50
+            }),
+            processInstagramPublishQueue({
+                mode: 'scheduled',
+                maxItems: 50
+            }),
+        ])
+
+        const processed =
+            legacyResult.success + legacyResult.failed + (legacyResult.confirming || 0) +
+            youtubeResult.success + youtubeResult.failed +
+            facebookResult.success + facebookResult.failed +
+            instagramResult.success + instagramResult.failed + instagramResult.deferred
 
         const duration = Date.now() - startTime
-        console.log('[Scheduler] Completed in', duration, 'ms. Success:', result.success, 'Failed:', result.failed)
+        console.log('[Scheduler] Completed in', duration, 'ms. Processed:', processed)
 
         return NextResponse.json({
             success: true,
-            processed: result.success + result.failed + (result.confirming || 0),
-            results: result,
+            processed,
+            results: {
+                legacy: legacyResult,
+                youtube: youtubeResult,
+                facebook: facebookResult,
+                instagram: instagramResult,
+            },
             duration_ms: duration
         })
 

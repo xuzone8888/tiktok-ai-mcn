@@ -4,8 +4,8 @@
 
 1. **NEXT_PUBLIC_APP_URL**: `https://www.toryxai.com`
 2. **NEXT_PUBLIC_SUPABASE_URL**: `https://hfabrifuvujpdzarlbky.supabase.co`
-3. **NEXT_PUBLIC_SUPABASE_ANON_KEY**: `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhmYWJyaWZ1dnVqcGR6YXJsYmt5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ0Njc5OTIsImV4cCI6MjA4MDA0Mzk5Mn0.EonhiMYT1AgVgqNvyHER7NBKkN629tAFatOhnnqJdIo`
-4. **SORA2_API_KEY**: `sk-SZPEdRnAdW3Dgu9DqTE4nNcqkv1fNG3oBULwmEhw6F329JLE`
+3. **NEXT_PUBLIC_SUPABASE_ANON_KEY**: `your-supabase-anon-key`
+4. **SORA2_API_KEY**: `your-sora2-api-key`
 
 ## ⚠️ 需要手动获取的值
 
@@ -32,12 +32,12 @@ nano /var/www/tiktok-ai-mcn/.env.local
 然后复制以下内容并填入缺失的值：
 
 ```bash
-NEXT_PUBLIC_SUPABASE_URL=https://hfabrifuvujpdzarlbky.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhmYWJyaWZ1dnVqcGR6YXJsYmt5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ0Njc5OTIsImV4cCI6MjA4MDA0Mzk5Mn0.EonhiMYT1AgVgqNvyHER7NBKkN629tAFatOhnnqJdIo
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
 SUPABASE_SERVICE_ROLE_KEY=从Vercel获取
 DOUBAO_API_KEY=从Vercel获取
 DOUBAO_ENDPOINT_ID=从Vercel获取
-SORA2_API_KEY=sk-SZPEdRnAdW3Dgu9DqTE4nNcqkv1fNG3oBULwmEhw6F329JLE
+SORA2_API_KEY=your-sora2-api-key
 SUCHUANG_API_KEY=从Vercel获取
 NEXT_PUBLIC_APP_URL=http://123.56.75.68:3000
 ADMIN_EMAIL=admin@example.com

@@ -114,7 +114,7 @@ GET https://api.scd666.com/v1/videos/{task_id}
 Request:
   URL: https://api.scd666.com/v1/videos
   Method: POST
-  Headers: Authorization: Bearer sk-SZPEd...9JLE
+  Headers: Authorization: Bearer your-api-key
   Body: {"prompt":"A simple test video...","model":"sora2-portrait-15s"}
 
 Result:

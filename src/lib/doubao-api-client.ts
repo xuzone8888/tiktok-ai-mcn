@@ -8,9 +8,9 @@
 // 配置
 // ============================================================================
 
-const DOUBAO_API_KEY = process.env.DOUBAO_API_KEY || "";
+const DOUBAO_API_KEY = process.env.DOUBAO_API_KEY || process.env.ARK_API_KEY || "";
 const DOUBAO_API_ENDPOINT = process.env.DOUBAO_API_ENDPOINT || "https://ark.cn-beijing.volces.com/api/v3/chat/completions";
-const DOUBAO_ENDPOINT_ID = process.env.DOUBAO_ENDPOINT_ID || "";
+const DOUBAO_ENDPOINT_ID = process.env.DOUBAO_ENDPOINT_ID || process.env.ARK_DOUBAO_ENDPOINT_ID || "";
 
 // ============================================================================
 // 类型定义
@@ -90,11 +90,11 @@ export async function callDoubaoAPI(
     const maxRetries = options?.maxRetries ?? 3;
 
     if (!apiKey) {
-        return { success: false, error: "豆包 API 密钥未配置" };
+        return { success: false, error: "豆包 API 密钥未配置，请设置 DOUBAO_API_KEY 或 ARK_API_KEY" };
     }
 
     if (!endpointId) {
-        return { success: false, error: "豆包 Endpoint ID 未配置" };
+        return { success: false, error: "豆包 Endpoint ID 未配置，请设置 DOUBAO_ENDPOINT_ID 或 ARK_DOUBAO_ENDPOINT_ID" };
     }
 
     await waitForRateLimit();

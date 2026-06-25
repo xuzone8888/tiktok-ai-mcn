@@ -1,0 +1,412 @@
+import crypto from 'crypto'
+
+const FACEBOOK_API_VERSION = process.env.FACEBOOK_API_VERSION || 'v20.0'
+const FACEBOOK_AUTH_URL = `https://www.facebook.com/${FACEBOOK_API_VERSION}/dialog/oauth`
+const FACEBOOK_GRAPH_URL = `https://graph.facebook.com/${FACEBOOK_API_VERSION}`
+
+export interface FacebookOAuthConfig {
+  clientId: string
+  clientSecret: string
+  redirectUri: string
+  scopes: string[]
+  pageLoginConfigId: string | null
+}
+
+export interface FacebookTokenResponse {
+  access_token: string
+  expires_in?: number
+  scope?: string
+  token_type?: string
+}
+
+export interface FacebookPageInfo {
+  pageId: string
+  name: string
+  category: string | null
+  thumbnailUrl: string | null
+  followerCount: number
+  fanCount: number
+  link: string | null
+  tasks: string[]
+  accessToken: string
+}
+
+export interface FacebookPageTokenResponse {
+  access_token: string
+  expires_in?: number
+  user_access_token: string
+  page: FacebookPageInfo
+}
+
+export interface FacebookTokenDebugInfo {
+  appId: string | null
+  isValid: boolean | null
+  scopes: string[]
+  granularScopes: Array<{
+    scope: string
+    targetIds: string[]
+  }>
+}
+
+export interface FacebookPermissionInfo {
+  permission: string
+  status: string
+}
+
+const FACEBOOK_PAGE_PUBLISH_TASKS = new Set(['CREATE_CONTENT'])
+const FACEBOOK_ACCOUNT_EDGE_FIELDS = 'id,name,access_token,category,followers_count,fan_count,link,tasks,picture{url}'
+const FACEBOOK_DIRECT_PAGE_FIELDS = 'id,name,access_token,category,followers_count,fan_count,link,picture{url}'
+const FACEBOOK_DIRECT_PAGE_MINIMAL_FIELDS = 'id,name,access_token,category,fan_count,link,picture{url}'
+export const FACEBOOK_PAGE_SCOPES = [
+  'pages_show_list',
+  'pages_manage_metadata',
+  'pages_read_engagement',
+  'pages_manage_posts',
+]
+export function hasFacebookPagePublishPermission(tasks: string[] | null | undefined): boolean {
+  return Array.isArray(tasks) && tasks.some((task) => FACEBOOK_PAGE_PUBLISH_TASKS.has(task))
+}
+
+export function getFacebookPagePublishPermissionError(pageName?: string): string {
+  return `${pageName ? `Facebook Page「${pageName}」` : '当前 Facebook Page'}没有发布内容权限。请确认该 Facebook 账号拥有 Page 完整控制权限，并重新授权时勾选允许访问对应 Page。`
+}
+
+export function getFacebookOAuthConfig(): FacebookOAuthConfig {
+  const clientId = process.env.FACEBOOK_CLIENT_ID
+  const clientSecret = process.env.FACEBOOK_CLIENT_SECRET
+  const redirectUri = process.env.FACEBOOK_REDIRECT_URI
+  const pageLoginConfigId = process.env.FACEBOOK_PAGE_LOGIN_CONFIG_ID || null
+
+  if (!clientId || !clientSecret || !redirectUri) {
+    throw new Error('Facebook OAuth configuration is incomplete. Please set FACEBOOK_CLIENT_ID, FACEBOOK_CLIENT_SECRET, and FACEBOOK_REDIRECT_URI.')
+  }
+
+  return {
+    clientId,
+    clientSecret,
+    redirectUri,
+    scopes: FACEBOOK_PAGE_SCOPES,
+    pageLoginConfigId,
+  }
+}
+
+export function generateFacebookPKCE(): { codeVerifier: string; codeChallenge: string } {
+  const codeVerifier = crypto.randomBytes(32).toString('base64url')
+  const codeChallenge = crypto.createHash('sha256').update(codeVerifier).digest('base64url')
+  return { codeVerifier, codeChallenge }
+}
+
+export function generateFacebookState(userId: string): string {
+  return `${crypto.randomBytes(16).toString('hex')}_${userId}`
+}
+
+export function buildFacebookAuthorizationUrl(userId: string): {
+  authUrl: string
+  state: string
+  codeVerifier: string
+} {
+  const config = getFacebookOAuthConfig()
+  const { codeVerifier, codeChallenge } = generateFacebookPKCE()
+  const state = generateFacebookState(userId)
+
+  const params = new URLSearchParams({
+    client_id: config.clientId,
+    redirect_uri: config.redirectUri,
+    response_type: 'code',
+    state,
+    auth_type: 'rerequest',
+    code_challenge: codeChallenge,
+    code_challenge_method: 'S256',
+  })
+
+  if (config.pageLoginConfigId) {
+    params.set('config_id', config.pageLoginConfigId)
+  } else {
+    params.set('scope', config.scopes.join(','))
+  }
+
+  return {
+    authUrl: `${FACEBOOK_AUTH_URL}?${params.toString()}`,
+    state,
+    codeVerifier,
+  }
+}
+
+async function readFacebookApiError(response: Response): Promise<string> {
+  const data = await response.json().catch(() => null) as any
+  return data?.error?.message || data?.error_description || data?.error || response.statusText
+}
+
+export async function exchangeFacebookCodeForToken(code: string, codeVerifier?: string | null): Promise<FacebookTokenResponse> {
+  const config = getFacebookOAuthConfig()
+  const params = new URLSearchParams({
+    client_id: config.clientId,
+    client_secret: config.clientSecret,
+    code,
+    redirect_uri: config.redirectUri,
+  })
+
+  if (codeVerifier) {
+    params.set('code_verifier', codeVerifier)
+  }
+
+  const response = await fetch(`${FACEBOOK_GRAPH_URL}/oauth/access_token?${params.toString()}`)
+  if (!response.ok) {
+    throw new Error(`Facebook OAuth token exchange failed: ${await readFacebookApiError(response)}`)
+  }
+
+  const data = await response.json().catch(() => null) as Record<string, unknown> | null
+  if (!data || typeof data.access_token !== 'string') {
+    throw new Error('Facebook OAuth token exchange returned an invalid response.')
+  }
+
+  return data as unknown as FacebookTokenResponse
+}
+
+export async function exchangeForLongLivedUserToken(accessToken: string): Promise<FacebookTokenResponse> {
+  const config = getFacebookOAuthConfig()
+  const params = new URLSearchParams({
+    grant_type: 'fb_exchange_token',
+    client_id: config.clientId,
+    client_secret: config.clientSecret,
+    fb_exchange_token: accessToken,
+  })
+
+  const response = await fetch(`${FACEBOOK_GRAPH_URL}/oauth/access_token?${params.toString()}`)
+  if (!response.ok) {
+    throw new Error(`Facebook long-lived token exchange failed: ${await readFacebookApiError(response)}`)
+  }
+
+  const data = await response.json().catch(() => null) as Record<string, unknown> | null
+  if (!data || typeof data.access_token !== 'string') {
+    throw new Error('Facebook long-lived token exchange returned an invalid response.')
+  }
+
+  return data as unknown as FacebookTokenResponse
+}
+
+export async function revokeFacebookToken(token: string): Promise<void> {
+  const params = new URLSearchParams({ access_token: token })
+  const response = await fetch(`${FACEBOOK_GRAPH_URL}/me/permissions?${params.toString()}`, {
+    method: 'DELETE',
+  })
+
+  if (!response.ok) {
+    const message = await readFacebookApiError(response)
+    throw new Error(`Failed to revoke Facebook token: ${message}`)
+  }
+}
+
+export async function getFacebookGrantedPermissions(userAccessToken: string): Promise<FacebookPermissionInfo[]> {
+  const params = new URLSearchParams({ access_token: userAccessToken })
+  const response = await fetch(`${FACEBOOK_GRAPH_URL}/me/permissions?${params.toString()}`)
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch Facebook permissions: ${await readFacebookApiError(response)}`)
+  }
+
+  const data = await response.json().catch(() => null) as any
+  const permissions = Array.isArray(data?.data) ? data.data : []
+
+  return permissions
+    .filter((entry: any) => typeof entry?.permission === 'string')
+    .map((entry: any) => ({
+      permission: entry.permission,
+      status: typeof entry.status === 'string' ? entry.status : 'unknown',
+    }))
+}
+
+export async function debugFacebookUserToken(userAccessToken: string): Promise<FacebookTokenDebugInfo> {
+  const config = getFacebookOAuthConfig()
+  const appAccessToken = `${config.clientId}|${config.clientSecret}`
+  const params = new URLSearchParams({
+    input_token: userAccessToken,
+    access_token: appAccessToken,
+  })
+
+  const response = await fetch(`${FACEBOOK_GRAPH_URL}/debug_token?${params.toString()}`)
+  if (!response.ok) {
+    throw new Error(`Failed to debug Facebook token: ${await readFacebookApiError(response)}`)
+  }
+
+  const data = await response.json().catch(() => null) as any
+  const tokenData = data?.data || {}
+  const scopes = Array.isArray(tokenData.scopes) ? tokenData.scopes.map(String) : []
+  const granularScopes = Array.isArray(tokenData.granular_scopes)
+    ? tokenData.granular_scopes
+      .filter((entry: any) => typeof entry?.scope === 'string')
+      .map((entry: any) => ({
+        scope: entry.scope,
+        targetIds: Array.isArray(entry.target_ids) ? entry.target_ids.map(String) : [],
+      }))
+    : []
+
+  return {
+    appId: typeof tokenData.app_id === 'string' ? tokenData.app_id : null,
+    isValid: typeof tokenData.is_valid === 'boolean' ? tokenData.is_valid : null,
+    scopes,
+    granularScopes,
+  }
+}
+
+function mapFacebookPage(page: any, fallbackTasks: string[] = []): FacebookPageInfo {
+  return {
+    pageId: page.id,
+    name: page.name,
+    category: page.category || null,
+    thumbnailUrl: page.picture?.data?.url || null,
+    followerCount: Number(page.followers_count || page.fan_count || 0),
+    fanCount: Number(page.fan_count || 0),
+    link: page.link || `https://www.facebook.com/${page.id}`,
+    tasks: Array.isArray(page.tasks) ? page.tasks.map(String) : fallbackTasks,
+    accessToken: page.access_token,
+  }
+}
+
+function getDebugPageTargets(debugInfo: FacebookTokenDebugInfo): Map<string, Set<string>> {
+  const targets = new Map<string, Set<string>>()
+
+  for (const scopeName of FACEBOOK_PAGE_SCOPES) {
+    const granularScope = debugInfo.granularScopes.find((entry) => entry.scope === scopeName)
+    for (const targetId of granularScope?.targetIds || []) {
+      if (!targets.has(targetId)) {
+        targets.set(targetId, new Set())
+      }
+      targets.get(targetId)?.add(scopeName)
+    }
+  }
+
+  return targets
+}
+
+async function getFacebookPageById(userAccessToken: string, pageId: string, fields: string, mode: string): Promise<any | null> {
+  const params = new URLSearchParams({
+    fields,
+    access_token: userAccessToken,
+  })
+
+  const response = await fetch(`${FACEBOOK_GRAPH_URL}/${encodeURIComponent(pageId)}?${params.toString()}`)
+  if (!response.ok) {
+    console.warn('Facebook direct Page fallback failed:', {
+      pageId,
+      mode,
+      error: await readFacebookApiError(response),
+    })
+    return null
+  }
+
+  const page = await response.json().catch(() => null) as any
+  return page?.id && page?.name && page?.access_token ? page : null
+}
+
+async function getFacebookPageByIdWithFallback(userAccessToken: string, pageId: string): Promise<any | null> {
+  const page = await getFacebookPageById(userAccessToken, pageId, FACEBOOK_DIRECT_PAGE_FIELDS, 'direct_page')
+  if (page) return page
+
+  return getFacebookPageById(userAccessToken, pageId, FACEBOOK_DIRECT_PAGE_MINIMAL_FIELDS, 'direct_page_minimal')
+}
+
+async function getFacebookPagesFromDebugTargets(userAccessToken: string): Promise<any[]> {
+  const debugInfo = await debugFacebookUserToken(userAccessToken).catch(() => null)
+  if (!debugInfo) return []
+
+  const pageTargets = getDebugPageTargets(debugInfo)
+  if (pageTargets.size === 0) return []
+
+  const pages = await Promise.all([...pageTargets.entries()].map(async ([pageId, scopes]) => {
+    const page = await getFacebookPageByIdWithFallback(userAccessToken, pageId)
+    if (!page) return null
+
+    return {
+      ...page,
+      tasks: scopes.has('pages_manage_posts') ? ['CREATE_CONTENT'] : [],
+    }
+  }))
+
+  return pages.filter(Boolean)
+}
+
+function hasFacebookPageAccessToken(page: any): boolean {
+  return Boolean(page?.id && page?.name && page?.access_token)
+}
+
+export async function getMyFacebookPages(userAccessToken: string): Promise<FacebookPageInfo[]> {
+  const params = new URLSearchParams({
+    fields: FACEBOOK_ACCOUNT_EDGE_FIELDS,
+    access_token: userAccessToken,
+    limit: '100',
+  })
+
+  const response = await fetch(`${FACEBOOK_GRAPH_URL}/me/accounts?${params.toString()}`)
+  if (!response.ok) {
+    throw new Error(`Failed to fetch Facebook Pages: ${await readFacebookApiError(response)}`)
+  }
+
+  const data = await response.json().catch(() => null) as any
+  let pages = Array.isArray(data?.data) ? data.data : []
+
+  if (pages.length === 0) {
+    pages = await getFacebookPagesFromDebugTargets(userAccessToken)
+  }
+
+  return pages
+    .filter(hasFacebookPageAccessToken)
+    .map(mapFacebookPage)
+}
+
+export async function getFacebookPageInfo(pageId: string, pageAccessToken: string): Promise<Omit<FacebookPageInfo, 'accessToken'>> {
+  const params = new URLSearchParams({
+    fields: 'id,name,category,followers_count,fan_count,link,tasks,picture{url}',
+    access_token: pageAccessToken,
+  })
+
+  const response = await fetch(`${FACEBOOK_GRAPH_URL}/${encodeURIComponent(pageId)}?${params.toString()}`)
+  if (!response.ok) {
+    throw new Error(`Failed to fetch Facebook Page: ${await readFacebookApiError(response)}`)
+  }
+
+  const page = await response.json().catch(() => null) as any
+  if (!page?.id || !page?.name) {
+    throw new Error('No Facebook Page found for this access token.')
+  }
+
+  return {
+    pageId: page.id,
+    name: page.name,
+    category: page.category || null,
+    thumbnailUrl: page.picture?.data?.url || null,
+    followerCount: Number(page.followers_count || page.fan_count || 0),
+    fanCount: Number(page.fan_count || 0),
+    link: page.link || `https://www.facebook.com/${page.id}`,
+    tasks: Array.isArray(page.tasks) ? page.tasks.map(String) : [],
+  }
+}
+
+export async function refreshFacebookPageAccessToken(userAccessToken: string, pageId: string): Promise<FacebookPageTokenResponse> {
+  const longLived = await exchangeForLongLivedUserToken(userAccessToken)
+  const pages = await getMyFacebookPages(longLived.access_token)
+  const page = pages.find((candidate) => candidate.pageId === pageId)
+
+  if (!page) {
+    throw new Error('Facebook Page is no longer available for this authorization.')
+  }
+  if (!hasFacebookPagePublishPermission(page.tasks)) {
+    throw new Error(getFacebookPagePublishPermissionError(page.name))
+  }
+
+  return {
+    access_token: page.accessToken,
+    expires_in: longLived.expires_in,
+    user_access_token: longLived.access_token,
+    page,
+  }
+}
+
+export function calculateFacebookTokenExpiration(expiresIn?: number): Date | null {
+  if (!expiresIn) return null
+  return new Date(Date.now() + expiresIn * 1000)
+}
+
+export function scopesToArray(scope: string | undefined): string[] {
+  return scope ? scope.split(/[,\s]+/).filter(Boolean) : getFacebookOAuthConfig().scopes
+}

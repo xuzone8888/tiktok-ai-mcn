@@ -5,11 +5,13 @@ import path from 'path'
 
 import { NextRequest, NextResponse } from 'next/server'
 
+import { YOUTUBE_OFFICIAL_MAX_FILE_SIZE_BYTES } from '@/lib/youtube/metadata-rules'
+
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 const UPLOAD_DIR = path.join('/private/tmp', 'stargaze-youtube-uploads')
-const MAX_FILE_SIZE = 4 * 1024 * 1024 * 1024
+const MAX_FILE_SIZE = YOUTUBE_OFFICIAL_MAX_FILE_SIZE_BYTES
 
 interface RouteContext {
   params: {
@@ -74,7 +76,7 @@ async function writeRequestBody(request: NextRequest, filePath: string) {
       if (totalBytes > MAX_FILE_SIZE) {
         writer.destroy()
         await unlink(filePath).catch(() => undefined)
-        throw new Error('视频超过 4GB')
+        throw new Error('视频超过 256GB')
       }
 
       await new Promise<void>((resolve, reject) => {

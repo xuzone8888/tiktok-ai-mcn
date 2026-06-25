@@ -20,7 +20,9 @@ async function handleProcessRequest(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
+  const taskId = request.nextUrl.searchParams.get('taskId') || undefined
   const result = await processYouTubePublishQueue({
+    taskId,
     mode: 'scheduled',
     maxItems: 20,
   })

@@ -64,6 +64,23 @@ function parseTags(tags: unknown): string[] {
   return []
 }
 
+function isLocalVideoUrl(videoUrl: string) {
+  try {
+    const url = new URL(videoUrl)
+    return ['localhost', '127.0.0.1', '::1'].includes(url.hostname)
+  } catch {
+    return false
+  }
+}
+
+function isRemoteRuntime() {
+  return process.env.NODE_ENV === 'production' || Boolean(process.env.VERCEL || process.env.VERCEL_ENV)
+}
+
+function shouldSkipForCurrentRuntime(item: YouTubePublishItem) {
+  return isRemoteRuntime() && isLocalVideoUrl(item.video_url)
+}
+
 export async function processYouTubePublishQueue(options: YouTubeProcessOptions): Promise<YouTubeProcessResult> {
   const startTime = Date.now()
   const supabase = createAdminClient() as any
@@ -82,9 +99,17 @@ export async function processYouTubePublishQueue(options: YouTubeProcessOptions)
       return result
     }
 
-    const lockedIds = await lockItems(supabase, items.map((item) => item.id))
-    const lockedItems = items.filter((item) => lockedIds.has(item.id))
-    result.skipped = items.length - lockedItems.length
+    const runnableItems = items.filter((item) => !shouldSkipForCurrentRuntime(item))
+    result.skipped += items.length - runnableItems.length
+
+    if (runnableItems.length === 0) {
+      result.duration_ms = Date.now() - startTime
+      return result
+    }
+
+    const lockedIds = await lockItems(supabase, runnableItems.map((item) => item.id))
+    const lockedItems = runnableItems.filter((item) => lockedIds.has(item.id))
+    result.skipped += runnableItems.length - lockedItems.length
 
     if (lockedItems.length === 0) {
       result.duration_ms = Date.now() - startTime
@@ -315,24 +340,29 @@ async function publishItem(
         youtube_watch_url: upload.watchUrl,
         error_code: null,
         error_message: null,
+        publish_attempt_count: upload.attempts,
         published_at: publishedAt,
         updated_at: publishedAt,
       })
       .eq('id', item.id)
   } catch (error) {
     const message = getErrorMessage(error, 'YouTube 发布失败')
-    await markItemFailed(supabase, item.id, message, 'YOUTUBE_UPLOAD_FAILED')
+    const attempts = typeof (error as { attempts?: unknown })?.attempts === 'number'
+      ? Math.max(1, Math.floor((error as { attempts: number }).attempts))
+      : undefined
+    await markItemFailed(supabase, item.id, message, 'YOUTUBE_UPLOAD_FAILED', attempts)
     throw error
   }
 }
 
-async function markItemFailed(supabase: any, itemId: string, message: string, code: string) {
+async function markItemFailed(supabase: any, itemId: string, message: string, code: string, attempts?: number) {
   await supabase
     .from('youtube_publish_task_items')
     .update({
       status: 'failed',
       error_code: code,
       error_message: message,
+      ...(attempts ? { publish_attempt_count: attempts } : {}),
       updated_at: new Date().toISOString(),
     })
     .eq('id', itemId)

@@ -1,6 +1,6 @@
 ## profiles
-  id: string (uuid) = "0007d8c3-2a4c-43cf-8fdd-21432c89a1c9"
-  email: string = "18271850054@139.com"
+  id: string (uuid) = "00000000-0000-0000-0000-000000000000"
+  email: string = "user.com"
   name: string = "Irene888"
   avatar_url: nullable = null
   role: string = "user"
@@ -17,10 +17,7 @@
   id: string (uuid) = "46b8ee95-5f0f-48e8-81b2-a71ee48d9425"
   name: string = "lunana"
   description: string = "lunana"
-  avatar_url: string = "https://hfabrifuvujpdzarlbky.supabase.co/storage/v1/object/public/model-avatars
-  sample_images: Json[] (array) = ["https://hfabrifuvujpdzarlbky.supabase.co/storage/v1/object/public/model-avatar
-  sample_videos: Json[] (array) = ["https://hfabrifuvujpdzarlbky.supabase.co/storage/v1/object/public/model-demos/
-  category: string = "Fashion"
+  avatar_url: string = "https://example.com/sample-storage  sample_images: Json[] (array) = ["https://example.com/sample-storage  sample_videos: Json[] (array) = ["https://example.com/sample-storage  category: string = "Fashion"
   style_tags: Json[] (array) = []
   gender: string = "female"
   age_range: string = "20-25"
@@ -67,12 +64,9 @@
   duration: nullable = null
   aspect_ratio: string = "auto"
   quality: string = "1k"
-  source_image_url: string = "https://hfabrifuvujpdzarlbky.supabase.co/storage/v1/object/public/uploads/quick
-  status: string = "completed"
-  result_url: string = "https://openpt1.oss-cn-shanghai.aliyuncs.com/2bd6330deea54bd2a0c6482eee01b7cc.j
-  video_url: nullable = null
-  image_url: string = "https://openpt1.oss-cn-shanghai.aliyuncs.com/2bd6330deea54bd2a0c6482eee01b7cc.j
-  thumbnail_url: nullable = null
+  source_image_url: string = "https://example.com/sample-storage  status: string = "completed"
+  result_url: string = "https://example.com/sample-output  video_url: nullable = null
+  image_url: string = "https://example.com/sample-output  thumbnail_url: nullable = null
   error_message: nullable = null
   credit_cost: number = 10
   use_pro: boolean = false
@@ -188,12 +182,9 @@
   ai_model_id: nullable = null
   manual_product_info: Json (object) = {"price":"54","title":"Sweet Furniture Dresser TV Stand, Entertainment Center wi
   video_config: Json (object) = {"duration":15,"language":"en","video_style":"selfie_talking","aspect_ratio":"9:
-  selected_main_image_url: string = "https://p16-oec-general-useast5.ttcdn-us.com/tos-useast5-i-omjb5zjo8w-tx/4cdeea
-  selected_image_urls: Json[] (array) = ["https://p16-oec-general-useast5.ttcdn-us.com/tos-useast5-i-omjb5zjo8w-tx/4cdee
-  script_text: string = "C01: (2s) [Visual: Close-up selfie shot, bright lighting]\n[Action: Creator lea
+  selected_main_image_url: string = "https://example.com/sample-input  selected_image_urls: Json[] (array) = ["https://example.com/sample-input  script_text: string = "C01: (2s) [Visual: Close-up selfie shot, bright lighting]\n[Action: Creator lea
   script_versions: Json[] (array) = [{"content":"C01: (2s) [Visual: Close-up selfie shot, bright lighting]\n[Action:
-  grid_image_url: string = "https://openpt1.oss-cn-shanghai.aliyuncs.com/4d5a69df7ca0421e940c22969a18c47a.p
-  final_video_url: nullable = null
+  grid_image_url: string = "https://example.com/sample-output  final_video_url: nullable = null
   thumbnail_url: nullable = null
   grid_task_id: string = "1296102"
   video_task_id: string = "video_62bc83dc-5c9d-42ec-b08e-da78f11b5a69"
@@ -219,8 +210,7 @@
   id: string (uuid) = "f53eedf2-e33d-4374-9e62-a6c08ec75891"
   user_id: string (uuid) = "4d4a5690-51d0-45c4-9275-22637c028995"
   mode: string = "image"
-  input_images: Json[] (array) = ["https://hfabrifuvujpdzarlbky.supabase.co/storage/v1/object/public/uploads/quic
-  prompt: string = "放大高清"
+  input_images: Json[] (array) = ["https://example.com/sample-storage  prompt: string = "放大高清"
   image_model: string = "nano-banana"
   image_quality_tier: string = "fast"
   image_aspect_ratio: string = "auto"
@@ -229,8 +219,7 @@
   video_aspect_ratio: nullable = null
   video_use_ai_model: boolean = false
   video_ai_model_id: nullable = null
-  output_url: string = "https://openpt1.oss-cn-shanghai.aliyuncs.com/d9bf3322a8f2451a9171d9e474190a8b.p
-  thumbnail_url: nullable = null
+  output_url: string = "https://example.com/sample-output  thumbnail_url: nullable = null
   status: string = "completed"
   credits_cost: number = 10
   created_at: string (datetime) = "2025-12-10T04:56:12.145247+00:00"
