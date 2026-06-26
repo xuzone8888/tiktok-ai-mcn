@@ -9,13 +9,16 @@ function getInstagramWebhookVerifyToken() {
 }
 
 function getMetaAppSecret() {
-  // 与 getInstagramOAuthConfig 的密钥解析顺序一致，否则原生 Instagram 登录部署会因密钥取空而 401 掉所有 webhook。
-  return (
-    process.env.INSTAGRAM_NATIVE_CLIENT_SECRET ||
-    process.env.INSTAGRAM_CLIENT_SECRET ||
-    process.env.FACEBOOK_CLIENT_SECRET ||
-    ''
-  )
+  // 与 getInstagramOAuthConfig 的密钥解析完全一致（按 authMode 分支），否则可能取到与签名所用 App 不符的密钥而 401。
+  if (process.env.INSTAGRAM_AUTH_MODE === 'instagram') {
+    return (
+      process.env.INSTAGRAM_NATIVE_CLIENT_SECRET ||
+      process.env.INSTAGRAM_CLIENT_SECRET ||
+      process.env.FACEBOOK_CLIENT_SECRET ||
+      ''
+    )
+  }
+  return process.env.INSTAGRAM_CLIENT_SECRET || process.env.FACEBOOK_CLIENT_SECRET || ''
 }
 
 // 校验 Meta 的 X-Hub-Signature-256（对原始请求体做 HMAC-SHA256，密钥为 App Secret）。

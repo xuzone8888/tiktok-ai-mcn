@@ -300,7 +300,10 @@ export async function exchangeForLongLivedUserToken(accessToken: string): Promis
 
   const response = await fetch(`${META_GRAPH_URL}/oauth/access_token?${params.toString()}`)
   if (!response.ok) {
-    throw new Error(`Instagram long-lived token exchange failed: ${await readInstagramApiError(response)}`)
+    // 默认 facebook(fb_exchange_token) 分支：同样附带 httpStatus，使处理器能据此区分令牌失效(400/401)与瞬时故障。
+    const error = new Error(`Instagram long-lived token exchange failed: ${await readInstagramApiError(response)}`) as Error & { httpStatus?: number }
+    error.httpStatus = response.status
+    throw error
   }
 
   const data = await response.json().catch(() => null) as Record<string, unknown> | null

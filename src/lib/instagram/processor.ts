@@ -11,8 +11,6 @@ const MAX_ITEMS_PER_RUN = 20
 const TOKEN_REFRESH_BUFFER_MS = 5 * 60 * 1000
 const CONTAINER_REPOLL_DELAY_MS = 60 * 1000
 const MAX_CONTAINER_POLL_ATTEMPTS = 6
-// 认领后超过该时长仍停留在 uploading 的项视为卡死（进程崩溃/函数超时），重置回 pending 重试。
-const STALE_ITEM_THRESHOLD_MS = 15 * 60 * 1000
 
 interface InstagramPublishTaskSettings {
   privacy_status: 'private' | 'public'
@@ -79,7 +77,10 @@ export async function processInstagramPublishQueue(options: InstagramProcessOpti
   }
 
   try {
-    await recoverStaleItems(supabase)
+    // 注意：IG 不做 'uploading' 项的自动卡死恢复。IG 是两步发布(创建容器→media_publish)，容器 id 在库函数内部产生、
+    // 'uploading' 阶段未持久化，无法安全区分"创建容器前崩溃(可重传)"与"media_publish 后崩溃(重传=重复公开帖)"，
+    // 故宁可让极少数 'uploading' 卡死项停住(与 baseline 一致、安全)也不冒重复发帖风险。
+    // 'processing'(已持久化容器 id)卡死项由 lockItems 的原子 CAS 重轮询恢复。
     const items = await queryPendingItems(supabase, options)
     if (items.length === 0) {
       result.duration_ms = Date.now() - startTime
@@ -123,22 +124,6 @@ export async function processInstagramPublishQueue(options: InstagramProcessOpti
     result.errors.push(getErrorMessage(error, 'Instagram 发布队列处理失败'))
     result.duration_ms = Date.now() - startTime
     return result
-  }
-}
-
-async function recoverStaleItems(supabase: any) {
-  // 仅恢复卡死在 'uploading' 且尚无容器(instagram_video_id IS NULL)的项——即在创建容器前就崩溃、重传绝对安全的项。
-  // 已有容器 id 的 uploading 项可能 media_publish 已成功，盲目重发会造成重复公开发帖，故不自动恢复；
-  // 'processing' 容器重轮询由 lockItems 的原子 CAS 处理。
-  const staleBefore = new Date(Date.now() - STALE_ITEM_THRESHOLD_MS).toISOString()
-  const { error } = await supabase
-    .from('instagram_publish_task_items')
-    .update({ status: 'pending', processing_started_at: null, updated_at: new Date().toISOString() })
-    .eq('status', 'uploading')
-    .is('instagram_video_id', null)
-    .lt('processing_started_at', staleBefore)
-  if (error) {
-    console.warn('恢复 Instagram 卡死发布项失败:', error.message)
   }
 }
 
