@@ -221,7 +221,10 @@ export async function GET(request: NextRequest) {
         .from('instagram_account_tokens')
         .upsert({
           account_id: savedAccount.id,
-          access_token: longLivedToken.access_token,
+          // 发布 token：facebook 模式必须是 Page access token（graph.facebook.com/{ig_id}/media 要求），
+          // instagram 原生模式下 pageAccessToken 即用户 token。两种模式都用 pageAccessToken 才正确。
+          access_token: account.pageAccessToken,
+          // 刷新凭据：保留长效用户 token，供后续重新派生 Page token。
           refresh_token: longLivedToken.access_token,
           access_token_expires_at: expiresAt,
           updated_at: now,

@@ -587,8 +587,10 @@ export async function refreshInstagramAccountAccessToken(userAccessToken: string
   }
 
   return {
-    access_token: refreshed.access_token,
+    // 发布 token = 重新派生的 Page token（facebook 模式）；原生模式下 pageAccessToken 即刷新后的用户 token。
+    access_token: account.pageAccessToken,
     expires_in: refreshed.expires_in,
+    // 刷新凭据 = 新的长效用户 token，供下次刷新。
     user_access_token: refreshed.access_token,
     account,
   }

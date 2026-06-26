@@ -4,6 +4,8 @@ import { uploadYouTubeVideoFromUrl } from '@/lib/youtube/publish'
 
 const MAX_ITEMS_PER_RUN = 20
 const TOKEN_REFRESH_BUFFER_MS = 5 * 60 * 1000
+// 认领后超过该时长仍停留在 processing/uploading 的项视为卡死（进程崩溃/函数超时），重置回 pending 重试。
+const STALE_ITEM_THRESHOLD_MS = 15 * 60 * 1000
 
 interface YouTubePublishTaskSettings {
   privacy_status: 'private' | 'unlisted' | 'public'
@@ -93,16 +95,32 @@ export async function processYouTubePublishQueue(options: YouTubeProcessOptions)
   }
 
   try {
+    await recoverStaleItems(supabase)
     const items = await queryPendingItems(supabase, options)
     if (items.length === 0) {
       result.duration_ms = Date.now() - startTime
       return result
     }
 
+    // 本地测试视频地址在远程/生产运行时无法被 YouTube 拉取。必须把它们标记为失败使其离开 pending，
+    // 否则会永远停留在 scheduled_at 升序队列头部，反复占用本轮窗口并最终阻塞后面的正常任务（队列静默停发）。
+    const skippedForRuntime = items.filter((item) => shouldSkipForCurrentRuntime(item))
+    for (const item of skippedForRuntime) {
+      await markItemFailed(
+        supabase,
+        item.id,
+        '本地测试视频地址无法在生产环境发布，请重新上传到可公开访问的地址后再发布',
+        'LOCAL_URL_UNREACHABLE'
+      )
+      result.failed++
+    }
+
     const runnableItems = items.filter((item) => !shouldSkipForCurrentRuntime(item))
-    result.skipped += items.length - runnableItems.length
 
     if (runnableItems.length === 0) {
+      for (const taskId of [...new Set(skippedForRuntime.map((item) => item.task_id))]) {
+        await updateTaskFinalStatus(supabase, taskId)
+      }
       result.duration_ms = Date.now() - startTime
       return result
     }
@@ -130,7 +148,7 @@ export async function processYouTubePublishQueue(options: YouTubeProcessOptions)
       }
     }
 
-    for (const taskId of [...new Set(lockedItems.map((item) => item.task_id))]) {
+    for (const taskId of [...new Set([...lockedItems, ...skippedForRuntime].map((item) => item.task_id))]) {
       await updateTaskFinalStatus(supabase, taskId)
     }
 
@@ -140,6 +158,20 @@ export async function processYouTubePublishQueue(options: YouTubeProcessOptions)
     result.errors.push(getErrorMessage(error, 'YouTube 发布队列处理失败'))
     result.duration_ms = Date.now() - startTime
     return result
+  }
+}
+
+async function recoverStaleItems(supabase: any) {
+  // 把卡死在 processing/uploading 的项重置回 pending，使后续 cron 能重新认领（仿 TikTok 参考的 stale 恢复）。
+  // 配合 publishItem 的 youtube_video_id 幂等保护，避免对已上传成功但终态写库失败的项重复上传。
+  const staleBefore = new Date(Date.now() - STALE_ITEM_THRESHOLD_MS).toISOString()
+  const { error } = await supabase
+    .from('youtube_publish_task_items')
+    .update({ status: 'pending', processing_started_at: null, updated_at: new Date().toISOString() })
+    .in('status', ['processing', 'uploading'])
+    .lt('processing_started_at', staleBefore)
+  if (error) {
+    console.warn('恢复 YouTube 卡死发布项失败:', error.message)
   }
 }
 
@@ -307,6 +339,18 @@ async function publishItem(
     throw new Error('视频 URL 无效')
   }
 
+  // 幂等保护：若该项已记录 youtube_video_id，说明上一轮已成功上传、仅终态写库失败而卡住。
+  // 被卡死恢复重置回 pending 后，这里直接补记为 published，避免重复上传同一视频到 YouTube。
+  const existingVideoId = await getExistingYouTubeVideoId(supabase, item.id)
+  if (existingVideoId) {
+    const ts = new Date().toISOString()
+    await supabase
+      .from('youtube_publish_task_items')
+      .update({ status: 'published', published_at: ts, error_code: null, error_message: null, updated_at: ts })
+      .eq('id', item.id)
+    return
+  }
+
   const now = new Date().toISOString()
   await supabase
     .from('youtube_publish_task_items')
@@ -353,6 +397,15 @@ async function publishItem(
     await markItemFailed(supabase, item.id, message, 'YOUTUBE_UPLOAD_FAILED', attempts)
     throw error
   }
+}
+
+async function getExistingYouTubeVideoId(supabase: any, itemId: string): Promise<string | null> {
+  const { data } = await supabase
+    .from('youtube_publish_task_items')
+    .select('youtube_video_id')
+    .eq('id', itemId)
+    .single()
+  return data?.youtube_video_id || null
 }
 
 async function markItemFailed(supabase: any, itemId: string, message: string, code: string, attempts?: number) {

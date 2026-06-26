@@ -11,6 +11,8 @@ const MAX_ITEMS_PER_RUN = 20
 const TOKEN_REFRESH_BUFFER_MS = 5 * 60 * 1000
 const CONTAINER_REPOLL_DELAY_MS = 60 * 1000
 const MAX_CONTAINER_POLL_ATTEMPTS = 6
+// 认领后超过该时长仍停留在 uploading 的项视为卡死（进程崩溃/函数超时），重置回 pending 重试。
+const STALE_ITEM_THRESHOLD_MS = 15 * 60 * 1000
 
 interface InstagramPublishTaskSettings {
   privacy_status: 'private' | 'public'
@@ -77,6 +79,7 @@ export async function processInstagramPublishQueue(options: InstagramProcessOpti
   }
 
   try {
+    await recoverStaleItems(supabase)
     const items = await queryPendingItems(supabase, options)
     if (items.length === 0) {
       result.duration_ms = Date.now() - startTime
@@ -120,6 +123,20 @@ export async function processInstagramPublishQueue(options: InstagramProcessOpti
     result.errors.push(getErrorMessage(error, 'Instagram 发布队列处理失败'))
     result.duration_ms = Date.now() - startTime
     return result
+  }
+}
+
+async function recoverStaleItems(supabase: any) {
+  // 仅恢复卡死在 'uploading' 的项（进程在创建容器/上传途中崩溃，queryPendingItems 不会再选中 uploading）。
+  // 'processing' 容器重轮询由 lockItems 的原子 CAS 处理，这里不干预，避免打断正常的容器轮询。
+  const staleBefore = new Date(Date.now() - STALE_ITEM_THRESHOLD_MS).toISOString()
+  const { error } = await supabase
+    .from('instagram_publish_task_items')
+    .update({ status: 'pending', processing_started_at: null, updated_at: new Date().toISOString() })
+    .eq('status', 'uploading')
+    .lt('processing_started_at', staleBefore)
+  if (error) {
+    console.warn('恢复 Instagram 卡死发布项失败:', error.message)
   }
 }
 
@@ -171,6 +188,11 @@ async function lockItems(supabase: any, itemIds: string[]): Promise<Set<string>>
   if (itemIds.length === 0) return new Set()
 
   const now = new Date().toISOString()
+  // 原子认领（compare-and-swap）：只认领 pending，或 processing 且已过重轮询窗口（陈旧）的项。
+  // 把陈旧判定放进 UPDATE 的 WHERE（而非仅在读取侧 queryPendingItems 过滤），
+  // 这样两个并发 run 中先提交者把 updated_at 刷成 now，后者的 WHERE 重新求值即失败，
+  // 无法重复认领同一容器 → 杜绝同一视频被 media_publish 两次的重复公开发帖。
+  const repollBefore = new Date(Date.now() - CONTAINER_REPOLL_DELAY_MS).toISOString()
   const { data, error } = await supabase
     .from('instagram_publish_task_items')
     .update({
@@ -179,7 +201,7 @@ async function lockItems(supabase: any, itemIds: string[]): Promise<Set<string>>
       updated_at: now,
     })
     .in('id', itemIds)
-    .in('status', ['pending', 'processing'])
+    .or(`status.eq.pending,and(status.eq.processing,updated_at.lte.${repollBefore})`)
     .select('id')
 
   if (error) {
@@ -242,7 +264,18 @@ async function getValidAccessToken(supabase: any, account: InstagramAccountToken
     return account.access_token
   }
 
-  const refreshed = await refreshInstagramAccountAccessToken(account.refresh_token, account.instagram_account_id)
+  let refreshed
+  try {
+    refreshed = await refreshInstagramAccountAccessToken(account.refresh_token, account.instagram_account_id)
+  } catch (error) {
+    // 长效用户令牌约 60 天硬过期且无法自动续期。刷新失败时把账号标记为 expired，
+    // 停止每轮重复抛错，并让账号页提示用户重新连接，而非静默永久失败。
+    await supabase
+      .from('instagram_accounts')
+      .update({ status: 'expired', updated_at: new Date().toISOString() })
+      .eq('id', account.account_id)
+    throw new Error(`Instagram 授权已过期，请重新连接账号: ${getErrorMessage(error, '令牌刷新失败')}`)
+  }
   const expiresAt = refreshed.expires_in ? new Date(Date.now() + refreshed.expires_in * 1000).toISOString() : null
   const now = new Date().toISOString()
 
