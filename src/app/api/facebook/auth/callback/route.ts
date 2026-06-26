@@ -25,6 +25,12 @@ function getRequestOrigin(request: NextRequest) {
   return `${protocol.split(',')[0].trim()}://${host.split(',')[0].trim()}`
 }
 
+function getAppRedirectOrigin(request: NextRequest) {
+  // 跳转目标钉死可信的服务端配置（NEXT_PUBLIC_APP_URL），避免用 Host/X-Forwarded-Host 头拼跳转
+  // 造成 host 头注入 / 开放重定向（与 Instagram 回调、TikTok 参考实现保持一致）。
+  return process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, '') || getRequestOrigin(request)
+}
+
 function redirectToAccounts(origin: string, params: Record<string, string>) {
   const searchParams = new URLSearchParams(params)
   const redirectUrl = new URL('/facebook-publish/accounts', origin)
@@ -80,7 +86,7 @@ export async function GET(request: NextRequest) {
   const state = searchParams.get('state')
   const error = searchParams.get('error')
   const errorDescription = searchParams.get('error_description')
-  const redirectOrigin = getRequestOrigin(request)
+  const redirectOrigin = getAppRedirectOrigin(request)
 
   if ((!code && !error) || !state) {
     return redirectToAccounts(redirectOrigin, { error: '缺少 Facebook 授权参数' })

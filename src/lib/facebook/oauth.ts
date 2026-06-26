@@ -137,6 +137,14 @@ async function readFacebookApiError(response: Response): Promise<string> {
   return data?.error?.message || data?.error_description || data?.error || response.statusText
 }
 
+// appsecret_proof = HMAC-SHA256(access_token, app secret)。
+// Meta 应用开启「Require proof of app secret」后，所有携带用户/页面令牌的 Graph 调用都必须带上，
+// 否则返回 OAuthException 导致绑定/刷新/发布全部失败；同时降低令牌泄露后被直接重放的风险。
+// 仅用于携带用户/页面令牌的调用；使用 app access token 的 debug_token 不需要。
+export function getFacebookAppSecretProof(accessToken: string): string {
+  return crypto.createHmac('sha256', getFacebookOAuthConfig().clientSecret).update(accessToken).digest('hex')
+}
+
 export async function exchangeFacebookCodeForToken(code: string, codeVerifier?: string | null): Promise<FacebookTokenResponse> {
   const config = getFacebookOAuthConfig()
   const params = new URLSearchParams({
@@ -186,7 +194,10 @@ export async function exchangeForLongLivedUserToken(accessToken: string): Promis
 }
 
 export async function revokeFacebookToken(token: string): Promise<void> {
-  const params = new URLSearchParams({ access_token: token })
+  const params = new URLSearchParams({
+    access_token: token,
+    appsecret_proof: getFacebookAppSecretProof(token),
+  })
   const response = await fetch(`${FACEBOOK_GRAPH_URL}/me/permissions?${params.toString()}`, {
     method: 'DELETE',
   })
@@ -198,7 +209,10 @@ export async function revokeFacebookToken(token: string): Promise<void> {
 }
 
 export async function getFacebookGrantedPermissions(userAccessToken: string): Promise<FacebookPermissionInfo[]> {
-  const params = new URLSearchParams({ access_token: userAccessToken })
+  const params = new URLSearchParams({
+    access_token: userAccessToken,
+    appsecret_proof: getFacebookAppSecretProof(userAccessToken),
+  })
   const response = await fetch(`${FACEBOOK_GRAPH_URL}/me/permissions?${params.toString()}`)
 
   if (!response.ok) {
@@ -283,6 +297,7 @@ async function getFacebookPageById(userAccessToken: string, pageId: string, fiel
   const params = new URLSearchParams({
     fields,
     access_token: userAccessToken,
+    appsecret_proof: getFacebookAppSecretProof(userAccessToken),
   })
 
   const response = await fetch(`${FACEBOOK_GRAPH_URL}/${encodeURIComponent(pageId)}?${params.toString()}`)
@@ -334,6 +349,7 @@ export async function getMyFacebookPages(userAccessToken: string): Promise<Faceb
   const params = new URLSearchParams({
     fields: FACEBOOK_ACCOUNT_EDGE_FIELDS,
     access_token: userAccessToken,
+    appsecret_proof: getFacebookAppSecretProof(userAccessToken),
     limit: '100',
   })
 
@@ -358,6 +374,7 @@ export async function getFacebookPageInfo(pageId: string, pageAccessToken: strin
   const params = new URLSearchParams({
     fields: 'id,name,category,followers_count,fan_count,link,tasks,picture{url}',
     access_token: pageAccessToken,
+    appsecret_proof: getFacebookAppSecretProof(pageAccessToken),
   })
 
   const response = await fetch(`${FACEBOOK_GRAPH_URL}/${encodeURIComponent(pageId)}?${params.toString()}`)

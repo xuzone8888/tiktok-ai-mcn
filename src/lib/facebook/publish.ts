@@ -1,3 +1,6 @@
+import { getFacebookAppSecretProof } from '@/lib/facebook/oauth'
+import { isPrivateOrLoopbackHostname } from '@/lib/publish/url-safety'
+
 export interface UploadFacebookVideoOptions {
   pageId: string
   title: string
@@ -43,7 +46,10 @@ function formatMegabytes(bytes: number) {
 function isAllowedVideoUrl(videoUrl: string): boolean {
   try {
     const url = new URL(videoUrl)
-    if (url.protocol === 'https:') return true
+    if (url.protocol === 'https:') {
+      // 收紧 SSRF：放行公网 https，但拒绝指向私网/环回/链路本地（含云元数据 169.254.169.254）的地址。
+      return !isPrivateOrLoopbackHostname(url.hostname)
+    }
     if (url.protocol !== 'http:') return false
 
     const isLocalHost = ['127.0.0.1', 'localhost', '::1'].includes(url.hostname)
@@ -111,6 +117,7 @@ export async function uploadFacebookVideoFromUrl(
   const videoBlob = await fetchVideoBlob(videoUrl)
   const formData = new FormData()
   formData.set('access_token', accessToken)
+  formData.set('appsecret_proof', getFacebookAppSecretProof(accessToken))
   formData.set('source', videoBlob, 'video.mp4')
   formData.set('title', trimText(options.title || 'Untitled video', 255))
   formData.set('description', trimText(options.description || '', 63206))
