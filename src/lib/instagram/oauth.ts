@@ -277,7 +277,10 @@ export async function exchangeForLongLivedUserToken(accessToken: string): Promis
 
     const response = await fetch(`${INSTAGRAM_GRAPH_ROOT_URL}/access_token?${params.toString()}`)
     if (!response.ok) {
-      throw new Error(`Instagram long-lived token exchange failed: ${await readInstagramApiError(response)}`)
+      // 附带 HTTP 状态码：上层据此区分令牌失效(400/401)与瞬时故障(5xx/429/网络)，仅前者标记账号 expired。
+      const error = new Error(`Instagram long-lived token exchange failed: ${await readInstagramApiError(response)}`) as Error & { httpStatus?: number }
+      error.httpStatus = response.status
+      throw error
     }
 
     const data = await response.json().catch(() => null) as Record<string, unknown> | null
@@ -316,7 +319,9 @@ async function refreshLongLivedInstagramToken(accessToken: string): Promise<Inst
 
   const response = await fetch(`${INSTAGRAM_GRAPH_ROOT_URL}/refresh_access_token?${params.toString()}`)
   if (!response.ok) {
-    throw new Error(`Instagram token refresh failed: ${await readInstagramApiError(response)}`)
+    const error = new Error(`Instagram token refresh failed: ${await readInstagramApiError(response)}`) as Error & { httpStatus?: number }
+    error.httpStatus = response.status
+    throw error
   }
 
   const data = await response.json().catch(() => null) as Record<string, unknown> | null

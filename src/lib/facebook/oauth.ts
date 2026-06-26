@@ -182,7 +182,10 @@ export async function exchangeForLongLivedUserToken(accessToken: string): Promis
 
   const response = await fetch(`${FACEBOOK_GRAPH_URL}/oauth/access_token?${params.toString()}`)
   if (!response.ok) {
-    throw new Error(`Facebook long-lived token exchange failed: ${await readFacebookApiError(response)}`)
+    // 附带 HTTP 状态码：上层据此区分"令牌确实失效(400/401)"与"瞬时故障(5xx/429/网络)"，仅前者才标记账号 expired。
+    const error = new Error(`Facebook long-lived token exchange failed: ${await readFacebookApiError(response)}`) as Error & { httpStatus?: number }
+    error.httpStatus = response.status
+    throw error
   }
 
   const data = await response.json().catch(() => null) as Record<string, unknown> | null

@@ -375,16 +375,25 @@ async function publishItem(
       notifySubscribers: taskSettings.notify_subscribers,
     })
 
+    // 先单独持久化 video_id（状态仍 uploading）。这样即使在终态写库前崩溃/超时，卡死恢复后 publishItem 的幂等守卫
+    // 能读到 youtube_video_id 而补记为已发布，不会重复上传同一视频到 YouTube。
+    await supabase
+      .from('youtube_publish_task_items')
+      .update({
+        youtube_video_id: upload.videoId,
+        youtube_watch_url: upload.watchUrl,
+        publish_attempt_count: upload.attempts,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', item.id)
+
     const publishedAt = new Date().toISOString()
     await supabase
       .from('youtube_publish_task_items')
       .update({
         status: 'published',
-        youtube_video_id: upload.videoId,
-        youtube_watch_url: upload.watchUrl,
         error_code: null,
         error_message: null,
-        publish_attempt_count: upload.attempts,
         published_at: publishedAt,
         updated_at: publishedAt,
       })

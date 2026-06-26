@@ -240,13 +240,17 @@ async function getValidAccessToken(supabase: any, account: FacebookAccountToken)
   try {
     refreshed = await refreshFacebookPageAccessToken(account.refresh_token, account.page_id)
   } catch (error) {
-    // Facebook 长效用户令牌约 60 天硬过期且无法自动续期。刷新失败时把账号标记为 expired，
-    // 停止每轮重复抛同一错误，并让账号页提示用户重新连接（reconnect required），而非静默永久失败。
-    await supabase
-      .from('facebook_accounts')
-      .update({ status: 'expired', updated_at: new Date().toISOString() })
-      .eq('id', account.account_id)
-    throw new Error(`Facebook 授权已过期，请重新连接账号: ${getErrorMessage(error, '令牌刷新失败')}`)
+    // Facebook 长效用户令牌约 60 天硬过期且无法自动续期。仅当令牌端点明确返回失效(HTTP 400/401)时才把账号标记为
+    // expired 并提示重连；5xx/429/网络等瞬时错误直接抛出交下轮 cron 重试，避免误禁用本来有效的账号。
+    const httpStatus = (error as { httpStatus?: number })?.httpStatus
+    if (httpStatus === 400 || httpStatus === 401) {
+      await supabase
+        .from('facebook_accounts')
+        .update({ status: 'expired', updated_at: new Date().toISOString() })
+        .eq('id', account.account_id)
+      throw new Error(`Facebook 授权已过期，请重新连接账号: ${getErrorMessage(error, '令牌刷新失败')}`)
+    }
+    throw error
   }
   const expiresAt = refreshed.expires_in ? new Date(Date.now() + refreshed.expires_in * 1000).toISOString() : null
   const now = new Date().toISOString()
@@ -359,18 +363,27 @@ async function publishItem(
       contentCategory: platformPayload.content_category,
     })
 
+    // 先单独持久化 video_id（状态仍 uploading）。这样即使在终态写库前崩溃/超时，卡死恢复后 publishItem 的幂等守卫
+    // 能读到 facebook_video_id 而补记为已发布，不会重复上传导致同一视频被二次公开发布。
+    await supabase
+      .from('facebook_publish_task_items')
+      .update({
+        facebook_video_id: upload.videoId,
+        facebook_watch_url: upload.watchUrl,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', item.id)
+
     const publishedAt = new Date().toISOString()
     await supabase
       .from('facebook_publish_task_items')
       .update({
-      status: upload.published ? 'published' : 'draft_created',
-      facebook_video_id: upload.videoId,
-      facebook_watch_url: upload.watchUrl,
-      error_code: null,
-      error_message: null,
-      published_at: upload.published ? publishedAt : null,
-      updated_at: publishedAt,
-    })
+        status: upload.published ? 'published' : 'draft_created',
+        error_code: null,
+        error_message: null,
+        published_at: upload.published ? publishedAt : null,
+        updated_at: publishedAt,
+      })
       .eq('id', item.id)
   } catch (error) {
     const message = getErrorMessage(error, 'Facebook 发布失败')

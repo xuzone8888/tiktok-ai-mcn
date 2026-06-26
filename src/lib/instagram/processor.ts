@@ -127,13 +127,15 @@ export async function processInstagramPublishQueue(options: InstagramProcessOpti
 }
 
 async function recoverStaleItems(supabase: any) {
-  // 仅恢复卡死在 'uploading' 的项（进程在创建容器/上传途中崩溃，queryPendingItems 不会再选中 uploading）。
-  // 'processing' 容器重轮询由 lockItems 的原子 CAS 处理，这里不干预，避免打断正常的容器轮询。
+  // 仅恢复卡死在 'uploading' 且尚无容器(instagram_video_id IS NULL)的项——即在创建容器前就崩溃、重传绝对安全的项。
+  // 已有容器 id 的 uploading 项可能 media_publish 已成功，盲目重发会造成重复公开发帖，故不自动恢复；
+  // 'processing' 容器重轮询由 lockItems 的原子 CAS 处理。
   const staleBefore = new Date(Date.now() - STALE_ITEM_THRESHOLD_MS).toISOString()
   const { error } = await supabase
     .from('instagram_publish_task_items')
     .update({ status: 'pending', processing_started_at: null, updated_at: new Date().toISOString() })
     .eq('status', 'uploading')
+    .is('instagram_video_id', null)
     .lt('processing_started_at', staleBefore)
   if (error) {
     console.warn('恢复 Instagram 卡死发布项失败:', error.message)
@@ -268,13 +270,17 @@ async function getValidAccessToken(supabase: any, account: InstagramAccountToken
   try {
     refreshed = await refreshInstagramAccountAccessToken(account.refresh_token, account.instagram_account_id)
   } catch (error) {
-    // 长效用户令牌约 60 天硬过期且无法自动续期。刷新失败时把账号标记为 expired，
-    // 停止每轮重复抛错，并让账号页提示用户重新连接，而非静默永久失败。
-    await supabase
-      .from('instagram_accounts')
-      .update({ status: 'expired', updated_at: new Date().toISOString() })
-      .eq('id', account.account_id)
-    throw new Error(`Instagram 授权已过期，请重新连接账号: ${getErrorMessage(error, '令牌刷新失败')}`)
+    // 长效用户令牌约 60 天硬过期且无法自动续期。仅当令牌端点明确返回失效(HTTP 400/401)时才标记 expired 并提示重连；
+    // 5xx/429/网络等瞬时错误直接抛出交下轮 cron 重试，避免误禁用本来有效的账号。
+    const httpStatus = (error as { httpStatus?: number })?.httpStatus
+    if (httpStatus === 400 || httpStatus === 401) {
+      await supabase
+        .from('instagram_accounts')
+        .update({ status: 'expired', updated_at: new Date().toISOString() })
+        .eq('id', account.account_id)
+      throw new Error(`Instagram 授权已过期，请重新连接账号: ${getErrorMessage(error, '令牌刷新失败')}`)
+    }
+    throw error
   }
   const expiresAt = refreshed.expires_in ? new Date(Date.now() + refreshed.expires_in * 1000).toISOString() : null
   const now = new Date().toISOString()

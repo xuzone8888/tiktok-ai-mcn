@@ -39,8 +39,16 @@ export function isPrivateOrLoopbackHostname(hostname: string): boolean {
     if (host === '::1' || host === '::') return true
     if (host.startsWith('fe80:')) return true                 // 链路本地
     if (host.startsWith('fc') || host.startsWith('fd')) return true // 唯一本地 fc00::/7
-    const mapped = host.match(/^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/)
-    if (mapped) return isPrivateIPv4(mapped[1])
+    // IPv4-mapped IPv6：WHATWG URL 会把 [::ffff:127.0.0.1] 规范化成十六进制 ::ffff:7f00:1，
+    // 必须按十六进制还原成 IPv4 再判定，否则环回/私网/云元数据(169.254.169.254)会绕过。
+    const hexMapped = host.match(/^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/)
+    if (hexMapped) {
+      const high = parseInt(hexMapped[1], 16)
+      const low = parseInt(hexMapped[2], 16)
+      return isPrivateIPv4(`${high >> 8}.${high & 255}.${low >> 8}.${low & 255}`)
+    }
+    const dotMapped = host.match(/^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/)
+    if (dotMapped) return isPrivateIPv4(dotMapped[1])
     return false
   }
 
