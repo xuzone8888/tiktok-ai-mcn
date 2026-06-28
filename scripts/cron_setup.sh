@@ -14,9 +14,8 @@
 set -e
 
 # 配置项
-APP_URL="${APP_URL:-http://127.0.0.1:3000}"
-CRON_SECRET="${CRON_SECRET:-your-secret-key-here}"
-LOG_FILE="/var/log/tiktok-publisher.log"
+APP_DIR="${APP_DIR:-/var/www/tiktok-ai-mcn}"
+LOG_FILE="/var/log/publish-scheduler.log"
 
 echo "================================================"
 echo "📦 TikTok AI MCN - Cron Job 配置向导"
@@ -35,12 +34,15 @@ chmod 644 "$LOG_FILE"
 echo "✅ 日志文件已创建: $LOG_FILE"
 
 # 生成 Cron 任务内容
-CRON_CMD="* * * * * curl -s -H \"x-cron-secret: $CRON_SECRET\" \"$APP_URL/api/publish/process-scheduled\" >> $LOG_FILE 2>&1"
+CRON_CMD="* * * * * $APP_DIR/run-scheduler.sh"
 
 # 检查是否已存在
 if crontab -l 2>/dev/null | grep -q "process-scheduled"; then
     echo "⚠️  检测到已存在的定时任务，正在更新..."
-    (crontab -l 2>/dev/null | grep -v "process-scheduled"; echo "$CRON_CMD") | crontab -
+    (crontab -l 2>/dev/null | grep -v "process-scheduled" | grep -v "$APP_DIR/run-scheduler.sh"; echo "$CRON_CMD") | crontab -
+elif crontab -l 2>/dev/null | grep -q "$APP_DIR/run-scheduler.sh"; then
+    echo "⚠️  检测到已存在的脚本定时任务，正在更新..."
+    (crontab -l 2>/dev/null | grep -v "$APP_DIR/run-scheduler.sh"; echo "$CRON_CMD") | crontab -
 else
     echo "📝 添加新的定时任务..."
     (crontab -l 2>/dev/null; echo "$CRON_CMD") | crontab -

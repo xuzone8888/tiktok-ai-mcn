@@ -8,6 +8,13 @@
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database";
 
+const noStoreFetch: typeof fetch = (input, init) => {
+  return fetch(input, {
+    ...init,
+    cache: "no-store",
+  });
+};
+
 /**
  * 创建管理员 Supabase 客户端
  * 
@@ -28,6 +35,9 @@ export function createAdminClient() {
     auth: {
       autoRefreshToken: false,
       persistSession: false,
+    },
+    global: {
+      fetch: noStoreFetch,
     },
   });
 }
