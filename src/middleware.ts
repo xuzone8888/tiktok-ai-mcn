@@ -34,6 +34,9 @@ const PROTECTED_ROUTES = [
   "/quick-gen",
   "/pro-studio",
   "/image-factory",
+  "/youtube-publish",
+  "/facebook-publish",
+  "/instagram-publish",
   "/admin",
 ];
 

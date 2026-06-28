@@ -13,7 +13,7 @@ async function exportImages() {
     console.log('\n🔍 正在查询 Irene888 用户 17:30 之后的图片数据...\n');
 
     // Irene888 用户 ID
-    const userId = '0007d8c3-2a4c-43cf-8fdd-21432c89a1c9';
+    const userId = '00000000-0000-0000-0000-000000000000';
 
     // 今天 17:30 的时间戳 (北京时间 UTC+8)
     const today = new Date();

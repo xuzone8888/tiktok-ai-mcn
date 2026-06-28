@@ -22,6 +22,8 @@ import {
   LayoutTemplate,
   ShoppingBag,
   Youtube,
+  Share2,
+  Instagram,
 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -34,6 +36,8 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { useLang } from "@/contexts/LangContext";
 import { isImageFactoryUiEnabled } from "@/lib/feature-flags";
+
+const CURRENT_YEAR = new Date().getFullYear();
 
 // ============================================================================
 // Types
@@ -183,6 +187,34 @@ function getNavGroups(lang: string): NavGroup[] {
           href: "/youtube-publish",
           icon: Youtube,
           description: t ? "Publish to YouTube" : "发布视频到 YouTube",
+          beta: true,
+        },
+        {
+          title: t ? "Facebook Accounts" : "Facebook 账号绑定",
+          href: "/facebook-publish/accounts",
+          icon: Share2,
+          description: t ? "Connect Facebook Pages" : "绑定 Facebook Page",
+          beta: true,
+        },
+        {
+          title: t ? "Facebook Publish" : "Facebook 视频发布",
+          href: "/facebook-publish",
+          icon: Share2,
+          description: t ? "Publish to Facebook" : "发布视频到 Facebook",
+          beta: true,
+        },
+        {
+          title: t ? "Instagram Accounts" : "Instagram 账号绑定",
+          href: "/instagram-publish/accounts",
+          icon: Instagram,
+          description: t ? "Connect Instagram accounts" : "绑定 Instagram 账号",
+          beta: true,
+        },
+        {
+          title: t ? "Instagram Publish" : "Instagram 视频发布",
+          href: "/instagram-publish",
+          icon: Instagram,
+          description: t ? "Publish to Instagram" : "发布视频到 Instagram",
           beta: true,
         },
       ],
@@ -433,7 +465,7 @@ export function Sidebar() {
         )}>
           {!collapsed ? (
             <div className="flex items-center justify-between text-[10px] text-white/30">
-              <span>© {new Date().getFullYear()} Star Gaze · Wuhan Guanxing Cultural Media Co., Ltd.</span>
+              <span>© {CURRENT_YEAR} Star Gaze · Wuhan Guanxing Cultural Media Co., Ltd.</span>
               <span>v1.0</span>
             </div>
           ) : (

@@ -7,7 +7,7 @@ set -e
 # 配置
 SERVER_IP="123.56.75.68"
 SERVER_USER="root"
-SERVER_PASSWORD="Xu456123"
+SERVER_PASSWORD="your-server-password"
 APP_DIR="/var/www/tiktok-ai-mcn"
 
 echo "🚀 开始同步代码到阿里云服务器..."

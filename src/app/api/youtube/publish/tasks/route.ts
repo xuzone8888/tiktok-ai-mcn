@@ -2,11 +2,18 @@ import { NextRequest, NextResponse } from 'next/server'
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
+import {
+  validateYouTubeDescription,
+  validateYouTubeTags,
+  validateYouTubeTitle,
+} from '@/lib/youtube/metadata-rules'
 import { processYouTubePublishQueue } from '@/lib/youtube/processor'
 
 export const dynamic = 'force-dynamic'
 
 type YouTubePrivacyStatus = 'private' | 'unlisted' | 'public'
+const LOCAL_SCHEDULE_PROCESS_GRACE_MS = 1000
+const LOCAL_SCHEDULE_MAX_DELAY_MS = 24 * 60 * 60 * 1000
 
 interface CreateYouTubeTaskRequest {
   name: string
@@ -14,6 +21,7 @@ interface CreateYouTubeTaskRequest {
     id: string
     type: 'asset' | 'upload' | 'url'
     name: string
+    thumbnail?: string
     url?: string
     title?: string
     description?: string
@@ -96,6 +104,23 @@ function normalizeTags(tags: string[] | undefined) {
     .slice(0, 30)
 }
 
+function getVideoBaseName(video: { name?: string }) {
+  return (video.name || '').replace(/\.[^.]+$/, '').trim() || video.name || 'Untitled video'
+}
+
+function normalizeThumbnailUrl(thumbnail: string | undefined) {
+  if (!thumbnail) return null
+  const value = thumbnail.trim()
+  if (!value) return null
+  if (value.startsWith('data:image/')) return value.length <= 600_000 ? value : null
+  try {
+    const url = new URL(value)
+    return ['https:', 'http:'].includes(url.protocol) ? value : null
+  } catch {
+    return null
+  }
+}
+
 function isAllowedVideoUrl(videoUrl: string | undefined) {
   if (!videoUrl) return false
 
@@ -105,9 +130,13 @@ function isAllowedVideoUrl(videoUrl: string | undefined) {
     if (url.protocol !== 'http:') return false
 
     const isLocalHost = ['127.0.0.1', 'localhost', '::1'].includes(url.hostname)
+    const isSignedLocalUpload =
+      url.pathname.startsWith('/api/youtube/upload/local-video/') ||
+      (url.pathname === '/api/youtube/upload/local-video' && url.searchParams.has('key'))
+
     return (
       isLocalHost &&
-      url.pathname.startsWith('/api/youtube/upload/local-video/') &&
+      isSignedLocalUpload &&
       url.searchParams.has('expires') &&
       url.searchParams.has('token')
     )
@@ -144,6 +173,49 @@ function parseBatchInterval(value: number) {
   }
 
   return minutes
+}
+
+function isLocalTestVideoUrl(videoUrl: string | null | undefined) {
+  if (!videoUrl) return false
+
+  try {
+    const url = new URL(videoUrl)
+    return url.protocol === 'http:' && ['localhost', '127.0.0.1', '::1'].includes(url.hostname)
+  } catch {
+    return false
+  }
+}
+
+function shouldScheduleLocalProcessing(items: Array<{ video_url?: string | null }>) {
+  return process.env.NODE_ENV !== 'production' && items.some((item) => isLocalTestVideoUrl(item.video_url))
+}
+
+function scheduleLocalYouTubeProcessing(taskId: string, items: Array<{ scheduled_at: string }>) {
+  const dueTimes = Array.from(new Set(
+    items
+      .map((item) => new Date(item.scheduled_at).getTime())
+      .filter((time) => Number.isFinite(time))
+  )).sort((a, b) => a - b)
+
+  for (const dueTime of dueTimes) {
+    const delayMs = Math.max(0, dueTime - Date.now() + LOCAL_SCHEDULE_PROCESS_GRACE_MS)
+    if (delayMs > LOCAL_SCHEDULE_MAX_DELAY_MS) {
+      console.info('Skip local YouTube schedule timer beyond 24h window:', { taskId, dueTime: new Date(dueTime).toISOString() })
+      continue
+    }
+
+    const timer = setTimeout(() => {
+      processYouTubePublishQueue({
+        taskId,
+        mode: 'scheduled',
+        maxItems: 20,
+      }).catch((error) => {
+        console.error('Local scheduled YouTube publish processing failed:', error)
+      })
+    }, delayMs) as ReturnType<typeof setTimeout> & { unref?: () => void }
+
+    timer.unref?.()
+  }
 }
 
 export async function GET(request: NextRequest) {
@@ -200,7 +272,7 @@ export async function GET(request: NextRequest) {
     const filtered = status
       ? transformed.filter((task: any) => {
         if (status === 'in_progress') return ['pending', 'scheduled', 'processing'].includes(task.status)
-        if (status === 'failed') return ['failed', 'partial_failed'].includes(task.status)
+        if (status === 'failed') return ['failed', 'partial_failed'].includes(task.status) || Number(task.failed_count || 0) > 0
         return task.status === status
       })
       : transformed
@@ -241,22 +313,27 @@ export async function POST(request: NextRequest) {
     if (!body.privacy_status || !['private', 'unlisted', 'public'].includes(body.privacy_status)) {
       return NextResponse.json({ error: '请选择 YouTube 可见范围' }, { status: 400 })
     }
-    if (body.title && body.title.length > 100) {
-      return NextResponse.json({ error: 'YouTube 标题不能超过 100 个字符' }, { status: 400 })
-    }
-    if (body.description && body.description.length > 5000) {
-      return NextResponse.json({ error: 'YouTube 描述不能超过 5000 个字符' }, { status: 400 })
+
+    const tags = normalizeTags(body.tags)
+    const tagsError = validateYouTubeTags(tags)
+    if (tagsError) {
+      return NextResponse.json({ error: tagsError }, { status: 400 })
     }
 
-    for (const video of body.videos) {
+    for (let index = 0; index < body.videos.length; index++) {
+      const video = body.videos[index]
       if (!isAllowedVideoUrl(video.url)) {
         return NextResponse.json({ error: `视频"${video.name}"缺少有效视频地址` }, { status: 400 })
       }
-      if (video.title && video.title.length > 100) {
-        return NextResponse.json({ error: `视频"${video.name}"的标题不能超过 100 个字符` }, { status: 400 })
+      const finalTitle = video.title?.trim() || replaceTemplate(body.title?.trim() || getVideoBaseName(video), index)
+      const finalDescription = video.description?.trim() || replaceTemplate(body.description || '', index)
+      const titleError = validateYouTubeTitle(finalTitle, `视频"${video.name}"标题`)
+      const descriptionError = validateYouTubeDescription(finalDescription, `视频"${video.name}"描述`)
+      if (titleError) {
+        return NextResponse.json({ error: titleError }, { status: 400 })
       }
-      if (video.description && video.description.length > 5000) {
-        return NextResponse.json({ error: `视频"${video.name}"的描述不能超过 5000 个字符` }, { status: 400 })
+      if (descriptionError) {
+        return NextResponse.json({ error: descriptionError }, { status: 400 })
       }
     }
 
@@ -306,7 +383,6 @@ export async function POST(request: NextRequest) {
     }
 
     const totalItems = body.videos.length * uniqueAccountIds.length
-    const tags = normalizeTags(body.tags)
 
     const { data: task, error: taskError } = await (supabase as any)
       .from('youtube_publish_tasks')
@@ -346,7 +422,8 @@ export async function POST(request: NextRequest) {
           video_source: video.type === 'asset' ? 'assets' : video.type,
           source_video_id: video.id,
           source_video_name: video.name,
-          title: video.title?.trim() || replaceTemplate(body.title || video.name || 'Untitled video', itemIndex),
+          thumbnail_url: normalizeThumbnailUrl(video.thumbnail),
+          title: video.title?.trim() || replaceTemplate(body.title?.trim() || getVideoBaseName(video), itemIndex).trim(),
           description: video.description?.trim() || replaceTemplate(body.description || '', itemIndex),
           status: body.publish_mode === 'scheduled' ? 'pending' : 'pending',
           scheduled_at: scheduledAt.toISOString(),
@@ -355,9 +432,21 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const { error: itemsError } = await (supabase as any)
+    let { error: itemsError } = await (supabase as any)
       .from('youtube_publish_task_items')
       .insert(items)
+
+    if (itemsError && /thumbnail_url/i.test(itemsError.message || '')) {
+      const fallbackItems = items.map((item) => {
+        const fallbackItem = { ...item }
+        delete (fallbackItem as Partial<typeof fallbackItem>).thumbnail_url
+        return fallbackItem
+      })
+      const fallbackResult = await (supabase as any)
+        .from('youtube_publish_task_items')
+        .insert(fallbackItems)
+      itemsError = fallbackResult.error
+    }
 
     if (itemsError) {
       await (supabase as any).from('youtube_publish_tasks').delete().eq('id', task.id)
@@ -368,6 +457,8 @@ export async function POST(request: NextRequest) {
       processYouTubePublishQueue({ taskId: task.id, mode: 'immediate' }).catch((error) => {
         console.error('Background YouTube publish processing failed:', error)
       })
+    } else if (shouldScheduleLocalProcessing(items)) {
+      scheduleLocalYouTubeProcessing(task.id, items)
     }
 
     return NextResponse.json({

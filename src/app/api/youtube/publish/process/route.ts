@@ -8,7 +8,8 @@ export const maxDuration = 300
 
 function isAuthorized(request: NextRequest) {
   const cronSecret = process.env.CRON_SECRET
-  if (!cronSecret) return process.env.NODE_ENV !== 'production'
+  // fail-closed：未配置 CRON_SECRET 一律拒绝（含非生产环境），避免任何环境下被未授权触发真实发布。
+  if (!cronSecret) return false
 
   const authHeader = request.headers.get('authorization')
   const cronHeader = request.headers.get('x-cron-secret')
@@ -20,7 +21,9 @@ async function handleProcessRequest(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
+  const taskId = request.nextUrl.searchParams.get('taskId') || undefined
   const result = await processYouTubePublishQueue({
+    taskId,
     mode: 'scheduled',
     maxItems: 20,
   })

@@ -5,7 +5,7 @@
 set timeout 600
 set server_ip "123.56.75.68"
 set server_user "root"
-set server_password "Xu456123"
+set server_password "your-server-password"
 
 # 颜色输出（在expect中需要特殊处理）
 puts "\033\[34m========================================\033\[0m"
@@ -51,13 +51,13 @@ mkdir -p \$APP_DIR && cd \$APP_DIR && \
 if [ -d \".git\" ]; then git pull origin main || true; else git clone \$GIT_REPO .; fi && \
 echo \"[7/9] 配置环境变量...\" && \
 cat > .env.local << \\\"ENVEOF\\\" && \
-NEXT_PUBLIC_SUPABASE_URL=https://hfabrifuvujpdzarlbky.supabase.co && \
-NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhmYWJyaWZ1dnVqcGR6YXJsYmt5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ0Njc5OTIsImV4cCI6MjA4MDA0Mzk5Mn0.EonhiMYT1AgVgqNvyHER7NBKkN629tAFatOhnnqJdIo && \
-SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhmYWJyaWZ1dnVqcGR6YXJsYmt5Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NDQ2Nzk5MiwiZXhwIjoyMDgwMDQzOTkyfQ.CuMexYcJZA_xTvTUwBz2uA2nBhGOx7j_6BKurQyA2JQ && \
-DOUBAO_API_KEY=1450acdb-9797-4f2c-8767-681df026a6e3 && \
-DOUBAO_ENDPOINT_ID=ep-20251202180845-62hxd && \
-SORA2_API_KEY=sk-SZPEdRnAdW3Dgu9DqTE4nNcqkv1fNG3oBULwmEhw6F329JLE && \
-SUCHUANG_API_KEY=2W2tt3CnhHnWuT1nVmdgfrE9eJ && \
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co && \
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key && \
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key && \
+DOUBAO_API_KEY=your-doubao-api-key && \
+DOUBAO_ENDPOINT_ID=your-doubao-endpoint-id && \
+SORA2_API_KEY=your-sora2-api-key && \
+SUCHUANG_API_KEY=your-suchuang-api-key && \
 NEXT_PUBLIC_APP_URL=http://123.56.75.68:3000 && \
 ADMIN_EMAIL=admin@example.com && \
 ENVEOF && \

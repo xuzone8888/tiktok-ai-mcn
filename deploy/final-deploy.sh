@@ -7,7 +7,7 @@ set -e
 # 配置
 SERVER_IP="123.56.75.68"
 SERVER_USER="root"
-SERVER_PASSWORD="Xu456123"
+SERVER_PASSWORD="your-server-password"
 
 # 颜色输出
 RED='\033[0;31m'

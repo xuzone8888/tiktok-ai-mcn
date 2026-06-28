@@ -1,6 +1,6 @@
 /**
  * 导出指定用户的视频下载链接
- * 用户: 18271850054@139.com
+ * 用户: 通过 EXPORT_USER_EMAIL / EXPORT_USER_ID 指定
  * 时间范围: 昨天下午13点 到 现在
  */
 
@@ -11,13 +11,20 @@ const os = require('os');
 
 // Supabase 配置
 const SUPABASE_URL = 'https://hfabrifuvujpdzarlbky.supabase.co';
-const SUPABASE_SERVICE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhmYWJyaWZ1dnVqcGR6YXJsYmt5Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NDQ2Nzk5MiwiZXhwIjoyMDgwMDQzOTkyfQ.CuMexYcJZA_xTvTUwBz2uA2nBhGOx7j_6BKurQyA2JQ';
+const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY;
+const TARGET_USER_EMAIL = process.env.EXPORT_USER_EMAIL || 'target-user@example.com';
+const TARGET_USER_ID = process.env.EXPORT_USER_ID;
+
+if (!SUPABASE_SERVICE_KEY || !TARGET_USER_ID) {
+    console.error('Required: SUPABASE_SERVICE_ROLE_KEY or SUPABASE_SERVICE_KEY, plus EXPORT_USER_ID');
+    process.exit(1);
+}
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 
 async function main() {
-    const userEmail = '18271850054@139.com';
-    const userId = '0007d8c3-2a4c-43cf-8fdd-21432c89a1c9'; // 已知的用户 ID
+    const userEmail = TARGET_USER_EMAIL;
+    const userId = TARGET_USER_ID;
 
     // 昨天下午 13:00 (北京时间 = UTC+8)
     // 北京时间昨天 13:00 = UTC 昨天 05:00
@@ -32,7 +39,7 @@ async function main() {
     console.log(`查询用户: ${userEmail}`);
     console.log(`用户 ID: ${userId}`);
     console.log(`时间范围: ${startTime} 到 ${endTime}`);
-    console.log(`(北京时间: 2026-02-04 13:00 到 现在)\n`);
+    console.log('(北京时间: 昨天 13:00 到现在)\n');
 
     // 查询 generations 表中该用户的视频 - 获取所有字段
     const { data: generations, error: genError } = await supabase
@@ -137,7 +144,8 @@ async function main() {
     // 写入桌面 TXT 文件
     const desktopPath = path.join(os.homedir(), 'Desktop');
     const timestamp = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-    const outputFile = path.join(desktopPath, `视频下载链接_18271850054_${timestamp}.txt`);
+    const safeUserLabel = userEmail.replace(/[^a-zA-Z0-9_-]/g, '_');
+    const outputFile = path.join(desktopPath, `视频下载链接_${safeUserLabel}_${timestamp}.txt`);
 
     const content = [
         `用户: ${userEmail}`,

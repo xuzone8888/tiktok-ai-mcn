@@ -1,5 +1,5 @@
-export const YOUTUBE_VIDEO_FORMATS = ['.mp4', '.webm', '.mov']
-export const YOUTUBE_MAX_FILE_SIZE = 4 * 1024 * 1024 * 1024
+export const YOUTUBE_VIDEO_FORMATS = ['video/*', '.mp4', '.webm', '.mov', '.m4v', '.avi', '.mpeg', '.mpg', '.3gp', '.3gpp', '.mkv']
+export const YOUTUBE_MAX_FILE_SIZE = 256 * 1024 * 1024 * 1024
 
 export type YouTubePrivacyStatus = 'private' | 'unlisted' | 'public'
 export type YouTubePublishMode = 'now' | 'scheduled'
@@ -75,6 +75,8 @@ export interface YouTubePublishTaskItem {
   account_id: string
   video_url: string
   video_source: string
+  source_video_name?: string | null
+  thumbnail_url: string | null
   title: string
   description: string | null
   youtube_video_id: string | null

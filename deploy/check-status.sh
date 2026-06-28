@@ -5,7 +5,7 @@
 set timeout 30
 set server_ip "123.56.75.68"
 set server_user "root"
-set server_password "Xu456123"
+set server_password "your-server-password"
 
 spawn ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ${server_user}@${server_ip}
 

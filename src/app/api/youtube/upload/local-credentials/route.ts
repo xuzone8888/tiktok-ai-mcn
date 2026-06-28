@@ -8,11 +8,6 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 const EXPIRES_SECONDS = 24 * 60 * 60
-const ALLOWED_MIME_BY_EXTENSION: Record<string, string[]> = {
-  mp4: ['video/mp4'],
-  webm: ['video/webm'],
-  mov: ['video/quicktime', 'video/mp4'],
-}
 
 function getRequestOrigin(request: NextRequest) {
   const host = request.headers.get('host') || request.nextUrl.host
@@ -47,19 +42,16 @@ function signUpload(id: string, expiresAt: number) {
     .digest('base64url')
 }
 
-function getExtension(filename: string) {
-  return filename.split('.').pop()?.toLowerCase() || 'mp4'
+function isYouTubeAcceptedUploadMime(contentType: string) {
+  return contentType.startsWith('video/') || contentType === 'application/octet-stream'
 }
 
-function safeFileName(filename: string) {
-  const ext = getExtension(filename)
-  const base = filename
+function safeUploadId(filename: string) {
+  return filename
     .replace(/\.[^.]+$/, '')
     .replace(/[^a-zA-Z0-9._-]+/g, '_')
     .slice(0, 48)
     .replace(/^_+|_+$/g, '') || 'video'
-
-  return `${base}.${ext}`
 }
 
 export async function POST(request: NextRequest) {
@@ -80,14 +72,12 @@ export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => ({}))
   const filename = typeof body.filename === 'string' ? body.filename : ''
   const contentType = typeof body.contentType === 'string' ? body.contentType : 'video/mp4'
-  const ext = getExtension(filename)
-  const allowedTypes = ALLOWED_MIME_BY_EXTENSION[ext]
 
-  if (!filename || !allowedTypes || !allowedTypes.includes(contentType)) {
+  if (!filename || !isYouTubeAcceptedUploadMime(contentType)) {
     return NextResponse.json({ success: false, error: '不支持的视频格式' }, { status: 400 })
   }
 
-  const id = `${crypto.randomUUID()}-${safeFileName(filename)}`
+  const id = `${crypto.randomUUID()}-${safeUploadId(filename)}`
   const expiresAt = Math.floor(Date.now() / 1000) + EXPIRES_SECONDS
   let token: string
   try {
@@ -98,7 +88,8 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     )
   }
-  const url = new URL(`/api/youtube/upload/local-video/${encodeURIComponent(id)}`, origin)
+  const url = new URL('/api/youtube/upload/local-video', origin)
+  url.searchParams.set('key', id)
   url.searchParams.set('expires', String(expiresAt))
   url.searchParams.set('token', token)
 

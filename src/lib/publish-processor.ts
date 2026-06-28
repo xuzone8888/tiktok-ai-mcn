@@ -19,7 +19,7 @@ import { getValidTikTokAccessToken } from '@/lib/tiktok/token-manager'
 // ============================================================================
 
 const MAX_ITEMS_PER_RUN = 50   // 每次最多处理任务项数
-const PUBLISH_TIMEOUT_MS = 300000  // 单个发布超时 5 分钟（TikTok 需从 URL 下载视频）
+const PUBLISH_TIMEOUT_MS = 240000  // 单个发布确认最多等待 4 分钟，后续 cron 继续确认结果
 const POLL_INTERVAL_MS = 8000  // 轮询间隔 8 秒（避免触发限频）
 const RECOVERY_STALE_MS = 15 * 60 * 1000
 const STATUS_CHECK_STALE_MS = 5 * 60 * 1000
@@ -103,6 +103,32 @@ interface ActiveRecoveryItem {
     last_status_check_at: string | null
 }
 
+interface RecoveryDebug {
+    candidate_count: number
+    multi_task_count: number
+    due_count: number
+    status_cutoff_ms: number
+    stale_cutoff_ms: number
+    sample: Array<{
+        id: string
+        task_id: string
+        status: string
+        has_publish_id: boolean
+        last_status_check_at: string | null
+        processing_started_at: string | null
+        is_multi_task: boolean
+        is_due: boolean
+    }>
+}
+
+interface RecoveryResult {
+    recovered: number
+    success: number
+    failed: number
+    confirming: number
+    debug?: RecoveryDebug
+}
+
 type PublishOutcome = 'success' | 'failed' | 'confirming'
 
 const ERROR_CODES = {
@@ -125,6 +151,7 @@ export interface ProcessResult {
     skipped: number
     errors: string[]
     duration_ms: number
+    recovery_debug?: RecoveryDebug
 }
 
 /** 处理选项 */
@@ -135,6 +162,8 @@ export interface ProcessOptions {
     maxItems?: number
     /** 处理模式 */
     mode: 'immediate' | 'scheduled'
+    /** 手动排查回查队列时返回候选明细 */
+    debugRecovery?: boolean
 }
 
 // ============================================================================
@@ -163,11 +192,12 @@ export async function processPublishQueue(options: ProcessOptions): Promise<Proc
 
     try {
         if (options.mode === 'scheduled') {
-            const recovery = await recoverInterruptedMultiTaskItems(supabase)
+            const recovery = await recoverInterruptedMultiTaskItems(supabase, options.debugRecovery)
             result.recovered = recovery.recovered
             result.success += recovery.success
             result.failed += recovery.failed
             result.confirming = (result.confirming || 0) + recovery.confirming
+            if (recovery.debug) result.recovery_debug = recovery.debug
         }
 
         // 1. 查询待处理任务项
@@ -272,11 +302,12 @@ export async function processPublishQueue(options: ProcessOptions): Promise<Proc
 // ============================================================================
 
 async function recoverInterruptedMultiTaskItems(
-    supabase: ReturnType<typeof createAdminClient>
-): Promise<{ recovered: number; success: number; failed: number; confirming: number }> {
+    supabase: ReturnType<typeof createAdminClient>,
+    debug = false
+): Promise<RecoveryResult> {
     const now = Date.now()
-    const staleCutoff = new Date(now - RECOVERY_STALE_MS).toISOString()
-    const statusCutoff = new Date(now - STATUS_CHECK_STALE_MS).toISOString()
+    const staleCutoffMs = now - RECOVERY_STALE_MS
+    const statusCutoffMs = now - STATUS_CHECK_STALE_MS
 
     const { data, error } = await supabase
         .from('publish_task_items')
@@ -301,7 +332,9 @@ async function recoverInterruptedMultiTaskItems(
     }
 
     const candidateItems = (data || []) as unknown as ActiveRecoveryItem[]
-    if (candidateItems.length === 0) return { recovered: 0, success: 0, failed: 0, confirming: 0 }
+    if (candidateItems.length === 0) {
+        return buildRecoveryResult(0, 0, 0, 0, debug, candidateItems, new Set(), [], staleCutoffMs, statusCutoffMs)
+    }
 
     const candidateTaskIds = [...new Set(candidateItems.map(item => item.task_id))]
     const { data: taskRows, error: taskError } = await supabase
@@ -316,18 +349,13 @@ async function recoverInterruptedMultiTaskItems(
     }
 
     const multiTaskIds = new Set((taskRows || []).map(task => task.id))
-    const items = candidateItems.filter(item => multiTaskIds.has(item.task_id)).filter((item) => {
-        if (item.status === 'processing') {
-            return !item.processing_started_at || item.processing_started_at <= staleCutoff
-        }
-
-        if (item.status === 'uploading') {
-            return !item.last_status_check_at || item.last_status_check_at <= statusCutoff
-        }
-
-        return false
-    })
-    if (items.length === 0) return { recovered: 0, success: 0, failed: 0, confirming: 0 }
+    const dueItems = candidateItems.filter(item => multiTaskIds.has(item.task_id)).filter((item) =>
+        isRecoveryItemDue(item, staleCutoffMs, statusCutoffMs)
+    )
+    const items = dueItems
+    if (items.length === 0) {
+        return buildRecoveryResult(0, 0, 0, 0, debug, candidateItems, multiTaskIds, dueItems, staleCutoffMs, statusCutoffMs)
+    }
 
     console.log(`[Publisher] Recovering ${items.length} interrupted multi-task items`)
 
@@ -476,7 +504,76 @@ async function recoverInterruptedMultiTaskItems(
         await updateTaskFinalStatus(supabase, taskId)
     }
 
-    return { recovered, success, failed, confirming }
+    return buildRecoveryResult(
+        recovered,
+        success,
+        failed,
+        confirming,
+        debug,
+        candidateItems,
+        multiTaskIds,
+        dueItems,
+        staleCutoffMs,
+        statusCutoffMs
+    )
+}
+
+function isRecoveryItemDue(item: ActiveRecoveryItem, staleCutoffMs: number, statusCutoffMs: number): boolean {
+    if (item.status === 'processing') {
+        return isTimestampDue(item.processing_started_at, staleCutoffMs)
+    }
+
+    if (item.status === 'uploading') {
+        return isTimestampDue(item.last_status_check_at, statusCutoffMs)
+    }
+
+    return false
+}
+
+function isTimestampDue(value: string | null | undefined, cutoffMs: number): boolean {
+    if (!value) return true
+
+    const timestampMs = new Date(value).getTime()
+    if (!Number.isFinite(timestampMs)) return true
+
+    return timestampMs <= cutoffMs
+}
+
+function buildRecoveryResult(
+    recovered: number,
+    success: number,
+    failed: number,
+    confirming: number,
+    debug: boolean,
+    candidateItems: ActiveRecoveryItem[],
+    multiTaskIds: Set<string>,
+    dueItems: ActiveRecoveryItem[],
+    staleCutoffMs: number,
+    statusCutoffMs: number
+): RecoveryResult {
+    const result: RecoveryResult = { recovered, success, failed, confirming }
+    if (!debug) return result
+
+    const dueIds = new Set(dueItems.map(item => item.id))
+    result.debug = {
+        candidate_count: candidateItems.length,
+        multi_task_count: candidateItems.filter(item => multiTaskIds.has(item.task_id)).length,
+        due_count: dueItems.length,
+        stale_cutoff_ms: staleCutoffMs,
+        status_cutoff_ms: statusCutoffMs,
+        sample: candidateItems.slice(0, 10).map(item => ({
+            id: item.id,
+            task_id: item.task_id,
+            status: item.status,
+            has_publish_id: Boolean(item.tiktok_publish_id),
+            last_status_check_at: item.last_status_check_at,
+            processing_started_at: item.processing_started_at,
+            is_multi_task: multiTaskIds.has(item.task_id),
+            is_due: dueIds.has(item.id),
+        })),
+    }
+
+    return result
 }
 
 /**
@@ -525,7 +622,7 @@ async function queryPendingItems(
 
     if (error) {
         console.error('[Publisher] Query error:', error)
-        return []
+        throw new Error(`查询 TikTok 发布任务失败: ${error.message}`)
     }
 
     return (data || []) as unknown as PublishItem[]
@@ -545,6 +642,9 @@ async function getAccounts(
 
     if (error || !data) {
         console.error('[Publisher] Failed to get accounts:', error)
+        if (error) {
+            throw new Error(`获取 TikTok 账号失败: ${error.message}`)
+        }
         return new Map()
     }
 
@@ -587,7 +687,7 @@ async function lockItems(
 
     if (existingError) {
         console.error('[Publisher] Failed to read items before lock:', existingError)
-        return new Set()
+        throw new Error(`锁定 TikTok 发布任务前读取失败: ${existingError.message}`)
     }
 
     const lockedIds = new Set<string>()

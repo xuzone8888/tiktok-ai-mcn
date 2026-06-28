@@ -1,5 +1,5 @@
 /**
- * 提取 irene 用户 (18271850054@139.com) 的视频下载链接
+ * 提取 irene 用户 (user.com) 的视频下载链接
  * 时间范围: 2026-02-03 20:00 北京时间之后
  */
 
@@ -16,7 +16,7 @@ async function extractVideos() {
     console.log('=== 提取 irene 用户视频 URL ===\n');
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
-    const targetEmail = '18271850054@139.com';
+    const targetEmail = 'user.com';
 
     // 1. 查找用户
     console.log(`1. 查找用户: ${targetEmail}`);
@@ -108,7 +108,7 @@ async function extractVideos() {
     // 6. 保存到桌面
     const desktopPath = path.join(require('os').homedir(), 'Desktop', 'irene_videos.txt');
     const content = [
-        '# irene 用户 (18271850054@139.com) 视频下载链接',
+        '# irene 用户 (user.com) 视频下载链接',
         '# 时间范围: 2026-02-03 20:00 北京时间 - 现在',
         `# 总计: ${urls.length} 个视频`,
         `# 生成时间: ${new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}`,
