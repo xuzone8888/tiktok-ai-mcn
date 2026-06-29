@@ -179,8 +179,16 @@ async function lockItems(supabase: any, itemIds: string[]): Promise<Set<string>>
   // 把陈旧判定放进 UPDATE 的 WHERE（而非仅在读取侧 queryPendingItems 过滤），
   // 这样两个并发 run 中先提交者把 updated_at 刷成 now，后者的 WHERE 重新求值即失败，
   // 无法重复认领同一容器 → 杜绝同一视频被 media_publish 两次的重复公开发帖。
+  //
+  // 注意：PostgREST 在「UPDATE + .or() + RETURNING」组合下、当有行命中时会误报
+  // `column instagram_publish_task_items.status does not exist`（逻辑算子用于 mutation
+  // 的已知缺陷，空匹配时不报、命中时才暴露）。因此这里拆成两条等价的单条件 UPDATE：
+  // 先认领 pending，再认领陈旧 processing。两条都把判定放进 WHERE，仍是行级 CAS，
+  // 并发安全性与原子性不变（与 Facebook lockItems 的 .eq 写法一致）。
   const repollBefore = new Date(Date.now() - CONTAINER_REPOLL_DELAY_MS).toISOString()
-  const { data, error } = await supabase
+  const locked = new Set<string>()
+
+  const { data: pendingLocked, error: pendingError } = await supabase
     .from('instagram_publish_task_items')
     .update({
       status: 'processing',
@@ -188,14 +196,35 @@ async function lockItems(supabase: any, itemIds: string[]): Promise<Set<string>>
       updated_at: now,
     })
     .in('id', itemIds)
-    .or(`status.eq.pending,and(status.eq.processing,updated_at.lte.${repollBefore})`)
+    .eq('status', 'pending')
     .select('id')
 
-  if (error) {
-    throw new Error(`锁定 Instagram 发布任务失败: ${error.message}`)
+  if (pendingError) {
+    throw new Error(`锁定 Instagram 发布任务失败: ${pendingError.message}`)
+  }
+  ;(pendingLocked || []).forEach((row: { id: string }) => locked.add(row.id))
+
+  const remaining = itemIds.filter((id) => !locked.has(id))
+  if (remaining.length > 0) {
+    const { data: staleLocked, error: staleError } = await supabase
+      .from('instagram_publish_task_items')
+      .update({
+        status: 'processing',
+        processing_started_at: now,
+        updated_at: now,
+      })
+      .in('id', remaining)
+      .eq('status', 'processing')
+      .lte('updated_at', repollBefore)
+      .select('id')
+
+    if (staleError) {
+      throw new Error(`锁定 Instagram 发布任务失败: ${staleError.message}`)
+    }
+    ;(staleLocked || []).forEach((row: { id: string }) => locked.add(row.id))
   }
 
-  return new Set((data || []).map((row: { id: string }) => row.id))
+  return locked
 }
 
 async function updateTasksToProcessing(supabase: any, taskIds: string[]) {
