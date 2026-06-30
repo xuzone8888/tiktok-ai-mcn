@@ -9,10 +9,10 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { processFacebookPublishQueue } from '@/lib/facebook/processor'
-import { processInstagramPublishQueue } from '@/lib/instagram/processor'
+import { processFacebookPublishQueue, type FacebookProcessResult } from '@/lib/facebook/processor'
+import { processInstagramPublishQueue, type InstagramProcessResult } from '@/lib/instagram/processor'
 import { processPublishQueue } from '@/lib/publish-processor'
-import { processYouTubePublishQueue } from '@/lib/youtube/processor'
+import { processYouTubePublishQueue, type YouTubeProcessResult } from '@/lib/youtube/processor'
 
 // 配置
 const CRON_SECRET = process.env.CRON_SECRET || ''
@@ -37,6 +37,18 @@ export async function GET(request: NextRequest) {
 
         console.log('[Scheduler] Starting scheduled task processing')
 
+        // 跨境出口隔离开关：CN 主站够不到 Meta/Google，设 PUBLISH_SKIP_OVERSEAS=1 后本 omnibus
+        // 只跑 TikTok（legacy），不再触碰 YouTube/Facebook/Instagram——否则三家会在 CN 当场出站失败、
+        // 被 markItemFailed 写成终态 failed，而它们的 queryPending 永不再查 failed（=永久丢任务）。
+        // 海外发布 worker 走各平台 per-platform /process，不经本 omnibus，不受此开关影响。
+        const skipOverseas = process.env.PUBLISH_SKIP_OVERSEAS === '1' || process.env.PUBLISH_SKIP_OVERSEAS === 'true'
+        if (skipOverseas) {
+            console.log('[Scheduler] PUBLISH_SKIP_OVERSEAS enabled — TikTok only; skipping YouTube/Facebook/Instagram')
+        }
+        const emptyYouTube: YouTubeProcessResult = { success: 0, failed: 0, skipped: 0, errors: [], duration_ms: 0 }
+        const emptyFacebook: FacebookProcessResult = { success: 0, failed: 0, skipped: 0, errors: [], duration_ms: 0 }
+        const emptyInstagram: InstagramProcessResult = { success: 0, failed: 0, deferred: 0, skipped: 0, errors: [], duration_ms: 0 }
+
         // 2. 处理所有平台的到期定时任务
         //    legacy = TikTok（publish-processor，含本次合并进来的调度恢复修复 + debugRecovery 诊断开关）
         const [legacyResult, youtubeResult, facebookResult, instagramResult] = await Promise.all([
@@ -45,15 +57,15 @@ export async function GET(request: NextRequest) {
                 maxItems: 50,
                 debugRecovery: request.nextUrl.searchParams.get('debugRecovery') === '1'
             }),
-            processYouTubePublishQueue({
+            skipOverseas ? Promise.resolve(emptyYouTube) : processYouTubePublishQueue({
                 mode: 'scheduled',
                 maxItems: 50
             }),
-            processFacebookPublishQueue({
+            skipOverseas ? Promise.resolve(emptyFacebook) : processFacebookPublishQueue({
                 mode: 'scheduled',
                 maxItems: 50
             }),
-            processInstagramPublishQueue({
+            skipOverseas ? Promise.resolve(emptyInstagram) : processInstagramPublishQueue({
                 mode: 'scheduled',
                 maxItems: 50
             }),

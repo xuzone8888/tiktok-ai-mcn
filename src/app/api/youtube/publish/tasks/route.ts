@@ -190,6 +190,15 @@ function shouldScheduleLocalProcessing(items: Array<{ video_url?: string | null 
   return process.env.NODE_ENV !== 'production' && items.some((item) => isLocalTestVideoUrl(item.video_url))
 }
 
+// 与 Instagram/Facebook 对齐：基于请求 host 判定是否本地开发。生产（含 CN 主站、美国 worker）一律 false，
+// 使 now 模式不在建任务时内联出站（CN 够不到 Google 会烧 failed），改由 cron 处理
+// （CN omnibus 仅 TikTok / 美国 worker per-platform /process）。
+function isLocalRequest(request: NextRequest) {
+  const host = request.headers.get('host') || request.nextUrl.host
+  const hostname = host.split(':')[0]
+  return process.env.NODE_ENV !== 'production' || ['localhost', '127.0.0.1', '::1'].includes(hostname)
+}
+
 function scheduleLocalYouTubeProcessing(taskId: string, items: Array<{ scheduled_at: string }>) {
   const dueTimes = Array.from(new Set(
     items
@@ -454,9 +463,12 @@ export async function POST(request: NextRequest) {
     }
 
     if (body.publish_mode === 'now') {
-      processYouTubePublishQueue({ taskId: task.id, mode: 'immediate' }).catch((error) => {
-        console.error('Background YouTube publish processing failed:', error)
-      })
+      // 仅本地开发内联即时发布；生产不内联出站（CN 够不到 Google→会烧 failed），交给 cron 处理。
+      if (isLocalRequest(request)) {
+        processYouTubePublishQueue({ taskId: task.id, mode: 'immediate' }).catch((error) => {
+          console.error('Background YouTube publish processing failed:', error)
+        })
+      }
     } else if (shouldScheduleLocalProcessing(items)) {
       scheduleLocalYouTubeProcessing(task.id, items)
     }
