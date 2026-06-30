@@ -1,0 +1,46 @@
+# StarGaze 跨境发布 worker —— 独立 compose project，与现有 newapi / newapi_bjx_overlay /
+# okspeak-intl / nginx-proxy-manager 容器隔离并存。只新增、不改任何现有容器。
+#
+# 机密只经 env_file（worker.env，chmod 600，已 gitignore），绝不进 git/镜像层。
+# build args 仅 3 个非机密 NEXT_PUBLIC_*，从 shell 注入（见下）。
+#
+# 部署（美国机，feature 分支已 checkout 的目录内）：
+#   set -a; . ./worker.env; set +a      # 把 worker.env 载入 shell，供 build args 插值
+#   docker compose -p stargaze-worker -f docker-compose.worker.yml up -d --build
+# 停止 / 回滚：
+#   docker compose -p stargaze-worker -f docker-compose.worker.yml down
+# 验证未碰现有容器：
+#   docker ps   # newapi / newapi_bjx_overlay / okspeak-intl / nginx-proxy-manager 应全未变动
+services:
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:?set via worker.env}
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY:?set via worker.env}
+        NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:?set via worker.env}
+    image: stargaze-publish-worker:latest
+    container_name: stargaze-worker
+    restart: unless-stopped
+    env_file:
+      - ./worker.env
+    environment:
+      NODE_ENV: production
+      PORT: "3100"
+    ports:
+      # 仅 loopback，不公网暴露（v1 无 IG re-host → 无需 NPM / 子域名 / 证书）。
+      # cron sidecar（Phase 5）经内网 / 127.0.0.1 打 /process，密钥不出栈。
+      - "127.0.0.1:3100:3100"
+    # 资源上限：保护同机的 newapi 中转站，防 worker crash-loop 饿到邻居（FB 真实内容 <10MB，4g 充裕）。
+    mem_limit: 4g
+    memswap_limit: 4g
+    cpus: 2.0
+    healthcheck:
+      # 任意 HTTP 响应=应用存活（无密钥打 /process 实际回 401，三家均 fail-closed）。
+      # node:slim 无 curl/wget，用 node 内置 http 探活。
+      test: ["CMD", "node", "-e", "require('http').get('http://127.0.0.1:3100/api/instagram/publish/process',r=>process.exit(0)).on('error',()=>process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s

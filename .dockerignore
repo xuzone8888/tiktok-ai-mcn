@@ -1,0 +1,39 @@
+# 本仓库为 public，镜像层可被 docker history / 解包读出 —— 机密绝不进 build context。
+# 机密只经运行期 env_file（worker.env）注入，绝不写进镜像层。
+
+# 机密 / 本地环境
+.env
+.env.*
+*.env
+*.pem
+*.key
+
+# VCS / CI
+.git
+.gitignore
+.github
+
+# 依赖与构建产物（镜像内 npm ci + next build 重新生成）
+node_modules
+.next
+out
+dist
+build
+
+# 日志 / 临时 / 编辑器 / 系统
+*.log
+npm-debug.log*
+.cache
+.vscode
+.idea
+.DS_Store
+Thumbs.db
+coverage
+tmp
+scratchpad
+
+# Docker 自身工件（无需进 context）
+Dockerfile*
+.dockerignore
+docker-compose*.yml
+compose*.yml
