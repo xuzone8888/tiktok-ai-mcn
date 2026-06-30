@@ -1,11 +1,11 @@
 # StarGaze 跨境发布 worker —— 独立 compose project，与现有 newapi / newapi_bjx_overlay /
 # okspeak-intl / nginx-proxy-manager 容器隔离并存。只新增、不改任何现有容器。
 #
-# 机密只经 env_file（worker.env，chmod 600，已 gitignore），绝不进 git/镜像层。
-# build args 仅 3 个非机密 NEXT_PUBLIC_*，从 shell 注入（见下）。
+# 机密只经 worker.env（chmod 600，已 gitignore），绝不进 git/镜像层：
+#  - 构建期：作为 BuildKit secret 挂成 .env.production.local（见 Dockerfile，不入镜像层）；
+#  - 运行期：作为 env_file 注入容器环境。
 #
-# 部署（美国机，feature 分支已 checkout 的目录内）：
-#   set -a; . ./worker.env; set +a      # 把 worker.env 载入 shell，供 build args 插值
+# 部署（美国机，feature 分支已 checkout 的目录内，worker.env 已就位）：
 #   docker compose -p stargaze-worker -f docker-compose.worker.yml up -d --build
 # 停止 / 回滚：
 #   docker compose -p stargaze-worker -f docker-compose.worker.yml down
@@ -16,15 +16,13 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-      args:
-        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:?set via worker.env}
-        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY:?set via worker.env}
-        NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:?set via worker.env}
+      secrets:
+        - workerenv          # 构建期挂成 .env.production.local（见 Dockerfile）
     image: stargaze-publish-worker:latest
     container_name: stargaze-worker
     restart: unless-stopped
     env_file:
-      - ./worker.env
+      - ./worker.env          # 运行期机密注入
     environment:
       NODE_ENV: production
       PORT: "3100"
@@ -44,3 +42,6 @@ services:
       timeout: 10s
       retries: 3
       start_period: 60s
+secrets:
+  workerenv:
+    file: ./worker.env
