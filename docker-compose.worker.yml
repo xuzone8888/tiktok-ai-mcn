@@ -42,6 +42,32 @@ services:
       timeout: 10s
       retries: 3
       start_period: 60s
+
+  # cron sidecar（Phase 5）：每 60s 顺序打三家 /process（顺序执行=单飞，杜绝并发 /process 叠加双发窗口）。
+  # 经 compose 内网 worker:3100 调用、密钥不出本栈。**默认不启动**（profiles: activation）——
+  # 仅 Phase 7 切换时 `docker compose -p stargaze-worker -f docker-compose.worker.yml --profile activation up -d`
+  # 才拉起；那一刻起 worker 开始真实处理 pending 项（=开始真发布）。
+  cron:
+    image: curlimages/curl:latest
+    container_name: stargaze-worker-cron
+    restart: unless-stopped
+    depends_on:
+      - worker
+    env_file:
+      - ./worker.env            # 提供 CRON_SECRET（密钥仅在本 compose 网络内）
+    profiles:
+      - activation
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        echo "[cron] sidecar started; tick=60s (sequential = single-flight)";
+        while true; do
+          for p in instagram facebook youtube; do
+            curl -fsS -m 290 -H "Authorization: Bearer $$CRON_SECRET" "http://worker:3100/api/$$p/publish/process" >/dev/null 2>&1 || echo "[cron] $$p tick failed";
+          done;
+          sleep 60;
+        done
+
 secrets:
   workerenv:
     file: ./worker.env
