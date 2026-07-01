@@ -1,5 +1,7 @@
 import crypto from 'crypto'
 
+import { callBroker, isBrokerEnabled } from '@/lib/oauth-broker/client'
+
 const GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth'
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token'
 const GOOGLE_REVOKE_URL = 'https://oauth2.googleapis.com/revoke'
@@ -97,6 +99,7 @@ export function buildYouTubeAuthorizationUrl(userId: string): {
 }
 
 export async function exchangeYouTubeCodeForToken(code: string, codeVerifier?: string | null): Promise<YouTubeTokenResponse> {
+  if (isBrokerEnabled()) return callBroker<YouTubeTokenResponse>('youtube', 'exchangeYouTubeCodeForToken', { code, codeVerifier })
   const config = getYouTubeOAuthConfig()
   const body = new URLSearchParams({
     client_id: config.clientId,
@@ -134,6 +137,7 @@ export async function exchangeYouTubeCodeForToken(code: string, codeVerifier?: s
 }
 
 export async function refreshYouTubeAccessToken(refreshToken: string): Promise<YouTubeRefreshTokenResponse> {
+  if (isBrokerEnabled()) return callBroker<YouTubeRefreshTokenResponse>('youtube', 'refreshYouTubeAccessToken', { refreshToken })
   const config = getYouTubeOAuthConfig()
   const response = await fetch(GOOGLE_TOKEN_URL, {
     method: 'POST',
@@ -164,6 +168,7 @@ export async function refreshYouTubeAccessToken(refreshToken: string): Promise<Y
 }
 
 export async function revokeYouTubeToken(token: string): Promise<void> {
+  if (isBrokerEnabled()) { await callBroker<void>('youtube', 'revokeYouTubeToken', { token }); return }
   const response = await fetch(`${GOOGLE_REVOKE_URL}?token=${encodeURIComponent(token)}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -176,6 +181,7 @@ export async function revokeYouTubeToken(token: string): Promise<void> {
 }
 
 export async function getMyYouTubeChannel(accessToken: string): Promise<YouTubeChannelInfo> {
+  if (isBrokerEnabled()) return callBroker<YouTubeChannelInfo>('youtube', 'getMyYouTubeChannel', { accessToken })
   const params = new URLSearchParams({
     part: 'snippet,statistics,status',
     mine: 'true',

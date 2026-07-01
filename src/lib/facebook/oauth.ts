@@ -1,5 +1,7 @@
 import crypto from 'crypto'
 
+import { callBroker, isBrokerEnabled } from '@/lib/oauth-broker/client'
+
 const FACEBOOK_API_VERSION = process.env.FACEBOOK_API_VERSION || 'v20.0'
 const FACEBOOK_AUTH_URL = `https://www.facebook.com/${FACEBOOK_API_VERSION}/dialog/oauth`
 const FACEBOOK_GRAPH_URL = `https://graph.facebook.com/${FACEBOOK_API_VERSION}`
@@ -146,6 +148,7 @@ export function getFacebookAppSecretProof(accessToken: string): string {
 }
 
 export async function exchangeFacebookCodeForToken(code: string, codeVerifier?: string | null): Promise<FacebookTokenResponse> {
+  if (isBrokerEnabled()) return callBroker<FacebookTokenResponse>('facebook', 'exchangeFacebookCodeForToken', { code, codeVerifier })
   const config = getFacebookOAuthConfig()
   const params = new URLSearchParams({
     client_id: config.clientId,
@@ -172,6 +175,7 @@ export async function exchangeFacebookCodeForToken(code: string, codeVerifier?: 
 }
 
 export async function exchangeForLongLivedUserToken(accessToken: string): Promise<FacebookTokenResponse> {
+  if (isBrokerEnabled()) return callBroker<FacebookTokenResponse>('facebook', 'exchangeForLongLivedUserToken', { accessToken })
   const config = getFacebookOAuthConfig()
   const params = new URLSearchParams({
     grant_type: 'fb_exchange_token',
@@ -197,6 +201,7 @@ export async function exchangeForLongLivedUserToken(accessToken: string): Promis
 }
 
 export async function revokeFacebookToken(token: string): Promise<void> {
+  if (isBrokerEnabled()) { await callBroker<void>('facebook', 'revokeFacebookToken', { token }); return }
   const params = new URLSearchParams({
     access_token: token,
     appsecret_proof: getFacebookAppSecretProof(token),
@@ -212,6 +217,7 @@ export async function revokeFacebookToken(token: string): Promise<void> {
 }
 
 export async function getFacebookGrantedPermissions(userAccessToken: string): Promise<FacebookPermissionInfo[]> {
+  if (isBrokerEnabled()) return callBroker<FacebookPermissionInfo[]>('facebook', 'getFacebookGrantedPermissions', { userAccessToken })
   const params = new URLSearchParams({
     access_token: userAccessToken,
     appsecret_proof: getFacebookAppSecretProof(userAccessToken),
@@ -234,6 +240,7 @@ export async function getFacebookGrantedPermissions(userAccessToken: string): Pr
 }
 
 export async function debugFacebookUserToken(userAccessToken: string): Promise<FacebookTokenDebugInfo> {
+  if (isBrokerEnabled()) return callBroker<FacebookTokenDebugInfo>('facebook', 'debugFacebookUserToken', { userAccessToken })
   const config = getFacebookOAuthConfig()
   const appAccessToken = `${config.clientId}|${config.clientSecret}`
   const params = new URLSearchParams({
@@ -349,6 +356,7 @@ function hasFacebookPageAccessToken(page: any): boolean {
 }
 
 export async function getMyFacebookPages(userAccessToken: string): Promise<FacebookPageInfo[]> {
+  if (isBrokerEnabled()) return callBroker<FacebookPageInfo[]>('facebook', 'getMyFacebookPages', { userAccessToken })
   const params = new URLSearchParams({
     fields: FACEBOOK_ACCOUNT_EDGE_FIELDS,
     access_token: userAccessToken,
@@ -374,6 +382,7 @@ export async function getMyFacebookPages(userAccessToken: string): Promise<Faceb
 }
 
 export async function getFacebookPageInfo(pageId: string, pageAccessToken: string): Promise<Omit<FacebookPageInfo, 'accessToken'>> {
+  if (isBrokerEnabled()) return callBroker<Omit<FacebookPageInfo, 'accessToken'>>('facebook', 'getFacebookPageInfo', { pageId, pageAccessToken })
   const params = new URLSearchParams({
     fields: 'id,name,category,followers_count,fan_count,link,tasks,picture{url}',
     access_token: pageAccessToken,
@@ -403,6 +412,7 @@ export async function getFacebookPageInfo(pageId: string, pageAccessToken: strin
 }
 
 export async function refreshFacebookPageAccessToken(userAccessToken: string, pageId: string): Promise<FacebookPageTokenResponse> {
+  if (isBrokerEnabled()) return callBroker<FacebookPageTokenResponse>('facebook', 'refreshFacebookPageAccessToken', { userAccessToken, pageId })
   const longLived = await exchangeForLongLivedUserToken(userAccessToken)
   const pages = await getMyFacebookPages(longLived.access_token)
   const page = pages.find((candidate) => candidate.pageId === pageId)
