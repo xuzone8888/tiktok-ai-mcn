@@ -43,7 +43,9 @@ services:
       retries: 3
       start_period: 60s
 
-  # cron sidecar（Phase 5）：每 60s 顺序打三家 /process（顺序执行=单飞，杜绝并发 /process 叠加双发窗口）。
+  # cron sidecar（Phase 5）：每 20s 顺序打三家 /process（顺序执行=单飞，杜绝并发 /process 叠加双发窗口）。
+  # tick 从 60s 降到 20s 缩短 pending 项拾取延迟；IG 的 in-request 短轮询可能让单次迭代（尤其 IG 那腿）
+  # 占用到 ~75s，届时下一轮自然顺延，sleep 20 只决定空闲时的拾取节奏。
   # 经 compose 内网 worker:3100 调用、密钥不出本栈。**默认不启动**（profiles: activation）——
   # 仅 Phase 7 切换时 `docker compose -p stargaze-worker -f docker-compose.worker.yml --profile activation up -d`
   # 才拉起；那一刻起 worker 开始真实处理 pending 项（=开始真发布）。
@@ -60,12 +62,12 @@ services:
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |
-        echo "[cron] sidecar started; tick=60s (sequential = single-flight)";
+        echo "[cron] sidecar started; tick=20s (sequential = single-flight)";
         while true; do
           for p in instagram facebook youtube; do
             curl -fsS -m 290 -H "Authorization: Bearer $$CRON_SECRET" "http://worker:3100/api/$$p/publish/process" >/dev/null 2>&1 || echo "[cron] $$p tick failed";
           done;
-          sleep 60;
+          sleep 20;
         done
 
 secrets:

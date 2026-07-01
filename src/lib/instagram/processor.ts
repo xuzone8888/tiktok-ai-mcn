@@ -9,8 +9,18 @@ import { buildPlatformPublishPayload } from '@/lib/publish/platform-adapters'
 
 const MAX_ITEMS_PER_RUN = 20
 const TOKEN_REFRESH_BUFFER_MS = 5 * 60 * 1000
-const CONTAINER_REPOLL_DELAY_MS = 60 * 1000
+// 容器建好后 defer 兜底路径的重轮询间隔。in-request 短轮询（见下）已让绝大多数在首个 /process 内发完，
+// 此闸只影响转码超过 in-request 上限的极慢项；从 60s 降到 15s 让这类慢项的兜底重查更快。
+const CONTAINER_REPOLL_DELAY_MS = 15 * 1000
 const MAX_CONTAINER_POLL_ATTEMPTS = 6
+// in-request 自适应短轮询：建完容器后在同一个 /process 请求内每 5s 查一次容器状态，
+// Meta 转码一完成即发布，省掉「defer→等 60s 闸→等下个 cron」的整轮来回（IG 慢的主因）。
+// 单项上限 75s（覆盖绝大多数 Reels 转码）；超过则 defer 走上面的兜底路径。
+const CONTAINER_INLINE_POLL_INTERVAL_MS = 5 * 1000
+const CONTAINER_INLINE_MAX_WAIT_MS = 75 * 1000
+// 整轮 in-request 轮询总预算，防一次 run 里多个项各等 75s 撑爆 maxDuration=300 / cron -m 290。
+// 预算耗尽后剩余项退化为「查一次即 defer」，由下个 cron 处理。留足余量（200s < 290/300）。
+const RUN_INLINE_POLL_BUDGET_MS = 200 * 1000
 
 interface InstagramPublishTaskSettings {
   privacy_status: 'private' | 'public'
@@ -102,7 +112,14 @@ export async function processInstagramPublishQueue(options: InstagramProcessOpti
 
     for (const item of lockedItems) {
       try {
-        const outcome = await publishItem(supabase, item, accounts)
+        // 每项 in-request 轮询预算 = min(单项上限, 整轮剩余预算)；预算用尽则退化为「查一次即 defer」。
+        const remainingRunMs = RUN_INLINE_POLL_BUDGET_MS - (Date.now() - startTime)
+        const inlineWaitMs = Math.max(0, Math.min(CONTAINER_INLINE_MAX_WAIT_MS, remainingRunMs))
+        const inlineMaxStatusChecks = Math.max(1, Math.floor(inlineWaitMs / CONTAINER_INLINE_POLL_INTERVAL_MS) + 1)
+        const outcome = await publishItem(supabase, item, accounts, {
+          pollIntervalMs: CONTAINER_INLINE_POLL_INTERVAL_MS,
+          maxStatusChecks: inlineMaxStatusChecks,
+        })
         if (outcome === 'deferred') {
           result.deferred++
         } else {
@@ -341,7 +358,8 @@ async function getValidAccessToken(supabase: any, account: InstagramAccountToken
 async function publishItem(
   supabase: any,
   item: InstagramPublishItem,
-  accounts: Map<string, InstagramAccountToken>
+  accounts: Map<string, InstagramAccountToken>,
+  inlinePoll: { pollIntervalMs: number; maxStatusChecks: number }
 ): Promise<'published' | 'deferred'> {
   const account = accounts.get(item.account_id)
   if (!account) {
@@ -393,8 +411,8 @@ async function publishItem(
         accountId: account.instagram_account_id,
         creationId: existingContainerId,
         deferOnContainerProcessing: true,
-        pollIntervalMs: 1000,
-        maxStatusChecks: 1,
+        pollIntervalMs: inlinePoll.pollIntervalMs,
+        maxStatusChecks: inlinePoll.maxStatusChecks,
       })
       : await uploadInstagramVideoFromUrl(accessToken, item.video_url, {
         accountId: account.instagram_account_id,
@@ -403,8 +421,8 @@ async function publishItem(
         caption: platformPayload.caption,
         published: taskSettings.privacy_status === 'public',
         deferOnContainerProcessing: true,
-        pollIntervalMs: 1000,
-        maxStatusChecks: 1,
+        pollIntervalMs: inlinePoll.pollIntervalMs,
+        maxStatusChecks: inlinePoll.maxStatusChecks,
       })
 
     const publishedAt = new Date().toISOString()
