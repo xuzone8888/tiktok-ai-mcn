@@ -17,8 +17,10 @@
 # 校验未碰现有容器：
 #   docker ps   # newapi / newapi_bjx_overlay / okspeak-intl / nginx-proxy-manager / stargaze-worker 应全未变动
 #
-# 源 IP 钉死：Caddy 发布的 host 端口必须在 **DOCKER-USER nftables 链或云安全组** 只放行 CN 真实出口 IP
-#（ufw INPUT 管不到 Docker 发布端口）。Phase 1 部署后落实，绝不放宽成网段。
+# 源 IP 钉死：Caddy 用 host 网络做主机级监听 → ufw（default-deny incoming）只放行 CN 出口 IP：
+#   ufw allow from 123.56.75.68 to any port 18443 proto tcp
+# 刻意不用 Docker 发布端口对外——docker-proxy 会在主机层 0.0.0.0 直接 accept、绕过 DOCKER-USER。
+# Phase 1 落实，绝不放宽成网段。broker 只发布到 127.0.0.1（外部到不了），供同机 Caddy 反代。
 services:
   broker:
     build:
@@ -34,8 +36,9 @@ services:
     environment:
       NODE_ENV: production
       PORT: "3100"
-    expose:
-      - "3100"               # 仅 compose 内网，不 publish 到 host
+    ports:
+      # 仅 localhost 发布给同机 Caddy(host 网络)反代；外部经公网到不了。
+      - "127.0.0.1:${BROKER_LOCAL_PORT:-3101}:3100"
     networks:
       - broker_net
     mem_limit: 2g
@@ -57,19 +60,17 @@ services:
     restart: unless-stopped
     depends_on:
       - broker
+    # host 网络：Caddy 作为主机级监听器，源 IP 限制交给 ufw（default-deny incoming，只放行 CN）。
+    # 避开 Docker 发布端口被 docker-proxy 绕过 DOCKER-USER 的坑。
+    network_mode: host
     environment:
-      # CN 连接用的地址（决定 TLS 证书 SAN）：IP 152.53.194.157 或自有内网主机名。
-      BROKER_PUBLIC_ADDR: "${BROKER_PUBLIC_ADDR}"
+      BROKER_PUBLIC_ADDR: "${BROKER_PUBLIC_ADDR}"           # 决定 TLS 证书 SAN + 监听地址
       BROKER_TLS_PORT: "${BROKER_TLS_PORT:-18443}"
-    ports:
-      # 发布到 host；源 IP 钉死在 DOCKER-USER/云安全组（见文件头）。
-      - "${BROKER_HOST_PORT:-18443}:${BROKER_TLS_PORT:-18443}"
+      BROKER_UPSTREAM: "${BROKER_UPSTREAM:-127.0.0.1:3101}" # 反代到 broker 的 localhost 发布端口
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - broker_caddy_data:/data
       - broker_caddy_config:/config
-    networks:
-      - broker_net
 
 networks:
   broker_net:

@@ -1,22 +1,25 @@
 # StarGaze OAuth Broker —— TLS 终止（tls internal）+ 只放行 /api/oauth-broker/call。
-# transport 细节走 env：BROKER_PUBLIC_ADDR（证书 SAN / CN 连接地址）、BROKER_TLS_PORT（监听端口）。
+# Caddy 以 host 网络运行（主机级监听，源 IP 限制交给 ufw）。transport 细节走 env：
+#   BROKER_PUBLIC_ADDR（证书 SAN / CN 连接地址 / 监听地址）、BROKER_TLS_PORT（监听端口）、
+#   BROKER_UPSTREAM（反代目标 = broker 的 localhost 发布端口，如 127.0.0.1:3101）。
 {
+	admin off
 	# 不做 HTTP→HTTPS 跳转、不申请公网证书。
 	auto_https disable_redirects
+	# 只跑 h1/h2（TCP）；关掉 HTTP/3，避免多开一个 UDP 监听面。
+	servers {
+		protocols h1 h2
+	}
 }
 
 https://{$BROKER_PUBLIC_ADDR}:{$BROKER_TLS_PORT} {
-	# 监听所有容器接口（公网地址不在容器本地接口上，需显式 bind 0.0.0.0），
-	# 但证书 SAN/匹配仍按 BROKER_PUBLIC_ADDR。
-	bind 0.0.0.0
-
-	# 自建本地 CA 签发内部证书；CN 端经 NODE_EXTRA_CA_CERTS 信任其根。
+	# 自建本地 CA 签发内部证书（SAN=BROKER_PUBLIC_ADDR）；CN 端经 NODE_EXTRA_CA_CERTS 信任其根。
 	tls internal
 
-	# 仅放行 broker 调用端点，反代到 compose 内网的 broker:3100。
+	# 仅放行 broker 调用端点，反代到 broker 的 localhost 发布端口。
 	@brokercall path /api/oauth-broker/call
 	handle @brokercall {
-		reverse_proxy broker:3100
+		reverse_proxy {$BROKER_UPSTREAM}
 	}
 
 	# 其余一切路径一律 404，不暴露 Next 应用其余路由面。
