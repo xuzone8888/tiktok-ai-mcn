@@ -1,5 +1,7 @@
 import crypto from 'crypto'
 
+import { callBroker, isBrokerEnabled } from '@/lib/oauth-broker/client'
+
 const INSTAGRAM_API_VERSION = process.env.INSTAGRAM_API_VERSION || process.env.FACEBOOK_API_VERSION || 'v20.0'
 const META_AUTH_URL = `https://www.facebook.com/${INSTAGRAM_API_VERSION}/dialog/oauth`
 const META_GRAPH_URL = `https://graph.facebook.com/${INSTAGRAM_API_VERSION}`
@@ -213,6 +215,7 @@ async function readInstagramApiError(response: Response): Promise<string> {
 }
 
 export async function exchangeInstagramCodeForToken(code: string, codeVerifier?: string | null): Promise<InstagramTokenResponse> {
+  if (isBrokerEnabled()) return callBroker<InstagramTokenResponse>('instagram', 'exchangeInstagramCodeForToken', { code, codeVerifier })
   const config = getInstagramOAuthConfig()
 
   if (config.authMode === 'instagram') {
@@ -266,6 +269,7 @@ export async function exchangeInstagramCodeForToken(code: string, codeVerifier?:
 }
 
 export async function exchangeForLongLivedUserToken(accessToken: string): Promise<InstagramTokenResponse> {
+  if (isBrokerEnabled()) return callBroker<InstagramTokenResponse>('instagram', 'exchangeForLongLivedUserToken', { accessToken })
   const config = getInstagramOAuthConfig()
 
   if (config.authMode === 'instagram') {
@@ -336,6 +340,7 @@ async function refreshLongLivedInstagramToken(accessToken: string): Promise<Inst
 }
 
 export async function revokeInstagramToken(token: string): Promise<void> {
+  if (isBrokerEnabled()) { await callBroker<void>('instagram', 'revokeInstagramToken', { token }); return }
   const params = new URLSearchParams({ access_token: token })
   const response = await fetch(`${META_GRAPH_URL}/me/permissions?${params.toString()}`, {
     method: 'DELETE',
@@ -348,6 +353,7 @@ export async function revokeInstagramToken(token: string): Promise<void> {
 }
 
 export async function getInstagramGrantedPermissions(userAccessToken: string): Promise<InstagramPermissionInfo[]> {
+  if (isBrokerEnabled()) return callBroker<InstagramPermissionInfo[]>('instagram', 'getInstagramGrantedPermissions', { userAccessToken })
   if (getInstagramOAuthConfig().authMode === 'instagram') {
     return getInstagramOAuthConfig().scopes.map((permission) => ({
       permission,
@@ -374,6 +380,7 @@ export async function getInstagramGrantedPermissions(userAccessToken: string): P
 }
 
 export async function debugInstagramUserToken(userAccessToken: string): Promise<InstagramTokenDebugInfo> {
+  if (isBrokerEnabled()) return callBroker<InstagramTokenDebugInfo>('instagram', 'debugInstagramUserToken', { userAccessToken })
   const config = getInstagramOAuthConfig()
   if (config.authMode === 'instagram') {
     return {
@@ -539,6 +546,7 @@ async function getInstagramPagesFromDebugTargets(userAccessToken: string): Promi
 }
 
 export async function discoverMyInstagramAccounts(userAccessToken: string): Promise<InstagramAccountDiscoveryResult> {
+  if (isBrokerEnabled()) return callBroker<InstagramAccountDiscoveryResult>('instagram', 'discoverMyInstagramAccounts', { userAccessToken })
   if (getInstagramOAuthConfig().authMode === 'instagram') {
     const params = new URLSearchParams({
       fields: INSTAGRAM_NATIVE_ACCOUNT_FIELDS,
@@ -584,6 +592,7 @@ export async function discoverMyInstagramAccounts(userAccessToken: string): Prom
 }
 
 export async function refreshInstagramAccountAccessToken(userAccessToken: string, accountId: string): Promise<InstagramAccountTokenResponse> {
+  if (isBrokerEnabled()) return callBroker<InstagramAccountTokenResponse>('instagram', 'refreshInstagramAccountAccessToken', { userAccessToken, accountId })
   const refreshed = getInstagramOAuthConfig().authMode === 'instagram'
     ? await refreshLongLivedInstagramToken(userAccessToken)
     : await exchangeForLongLivedUserToken(userAccessToken)
