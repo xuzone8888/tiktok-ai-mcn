@@ -67,6 +67,7 @@ services:
       BROKER_PUBLIC_ADDR: "${BROKER_PUBLIC_ADDR}"           # 决定 TLS 证书 SAN + 监听地址
       BROKER_TLS_PORT: "${BROKER_TLS_PORT:-18443}"
       BROKER_UPSTREAM: "${BROKER_UPSTREAM:-127.0.0.1:3101}" # 反代到 broker 的 localhost 发布端口
+      BROKER_ALLOW_IP: "${BROKER_ALLOW_IP}"                 # L7 源 IP 主闸：只放行的源 IP（=CN 出口）
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - broker_caddy_data:/data
