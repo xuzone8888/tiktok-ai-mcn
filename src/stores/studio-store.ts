@@ -64,6 +64,8 @@ export interface StudioState {
   batches: StudioBatch[];
   /** 右栏抽屉当前查看的 Job(不持久化) */
   activeJob: { batchId: string; taskId: string } | null;
+  /** 右栏蓝图编辑器当前批次(S2.2;与 activeJob 互斥,不持久化) */
+  activeBlueprintBatchId: string | null;
 }
 
 export interface StudioActions {
@@ -78,6 +80,7 @@ export interface StudioActions {
     libraryStatus: NonNullable<StudioJobRef["libraryStatus"]>
   ) => void;
   setActiveJob: (job: StudioState["activeJob"]) => void;
+  setActiveBlueprintBatch: (batchId: string | null) => void;
 }
 
 // ============================================================================
@@ -90,6 +93,7 @@ const MAX_BATCHES = 50;
 const initialState: StudioState = {
   batches: [],
   activeJob: null,
+  activeBlueprintBatchId: null,
 };
 
 export const useStudioStore = create<StudioState & StudioActions>()(
@@ -113,6 +117,7 @@ export const useStudioStore = create<StudioState & StudioActions>()(
             const idx = state.batches.findIndex((b) => b.id === batchId);
             if (idx !== -1) state.batches.splice(idx, 1);
             if (state.activeJob?.batchId === batchId) state.activeJob = null;
+            if (state.activeBlueprintBatchId === batchId) state.activeBlueprintBatchId = null;
           });
         },
 
@@ -139,6 +144,14 @@ export const useStudioStore = create<StudioState & StudioActions>()(
         setActiveJob: (job) => {
           set((state) => {
             state.activeJob = job;
+            if (job) state.activeBlueprintBatchId = null; // 右栏互斥
+          });
+        },
+
+        setActiveBlueprintBatch: (batchId) => {
+          set((state) => {
+            state.activeBlueprintBatchId = batchId;
+            if (batchId) state.activeJob = null; // 右栏互斥
           });
         },
       })),

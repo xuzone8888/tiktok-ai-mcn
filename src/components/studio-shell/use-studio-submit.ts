@@ -335,6 +335,66 @@ export function useStudioSubmit() {
     [addBatch]
   );
 
+  /**
+   * 从(编辑后的)蓝图再出一批(S2.2):渲染参数沿用原批次 spec 快照,
+   * 标题+勾选卖点重建文案关键词,产出新 Batch(同 blueprintId,新 batchId)。
+   * 台词行不进幻灯片腿(口播由服务端按关键词 diverse 生成),将用于 AI 生成腿。
+   */
+  const rerunBlueprint = useCallback(
+    (
+      batch: StudioBatch,
+      card: ProductCard,
+      blueprintId: string,
+      count: number
+    ): SubmitResult => {
+      const baseSpec = batch.spec as unknown as SlideshowJobSpec;
+      if (baseSpec?.kind !== "slideshow") {
+        return { ok: false, error: "该批次不支持从蓝图重跑" };
+      }
+      const selected = card.selling_points.filter((p) => p.selected);
+      if (selected.length === 0) return { ok: false, error: "至少勾选一个卖点" };
+      const clamped = Math.max(1, Math.min(100, Math.floor(count) || 1));
+      const imageUrls = card.images.length >= 2 ? card.images : baseSpec.imageUrls;
+      if (!imageUrls || imageUrls.length < 2) {
+        return { ok: false, error: "轮播成片至少需要 2 张图" };
+      }
+
+      const keywords = [card.title, ...selected.map((p) => p.text)].join(";");
+      const batchId = crypto.randomUUID();
+      const now = new Date();
+      const spec: SlideshowJobSpec = {
+        ...baseSpec,
+        prompt: keywords,
+        imageUrls,
+        count: clamped,
+        batchId,
+        groupName: studioGroupName(now),
+        blueprintId,
+      };
+      const tasks = toSlideshowTasks(spec);
+      useSlideshowStore.getState().addTasks(tasks);
+
+      addBatch({
+        id: batchId,
+        createdAt: now.toISOString(),
+        title: card.title,
+        summary: {
+          mode: "product",
+          modelLabel: batch.summary.modelLabel ?? "商品成片",
+          aspectRatio: spec.aspectRatio,
+          count: clamped,
+          attachmentCount: imageUrls.length,
+          estimatedCredits: slideshowCreditsPerVideo(imageUrls.length) * clamped,
+        },
+        spec: spec as unknown as Record<string, unknown>,
+        jobRefs: tasks.map((t) => ({ kind: "slideshow" as const, taskId: t.id })),
+        blueprintId,
+      });
+      return { ok: true, batchId };
+    },
+    [addBatch]
+  );
+
   /** 单条重试:按批次 spec 重建 1 个任务,替换失败的 jobRef(旧任务留在宿主 store) */
   const retryJob = useCallback(
     (batch: StudioBatch, failedTaskId: string): SubmitResult => {
@@ -406,5 +466,5 @@ export function useStudioSubmit() {
     [markJobsLibrary]
   );
 
-  return { submit, retryJob, markLibrary };
+  return { submit, retryJob, markLibrary, rerunBlueprint };
 }

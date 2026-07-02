@@ -9,7 +9,7 @@
  */
 
 import { useMemo, useState } from "react";
-import { ChevronDown, ChevronUp, Clock, RotateCcw, Trash2, Archive, Loader2 } from "lucide-react";
+import { ChevronDown, ChevronUp, Clock, FileText, RotateCcw, Trash2, Archive, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
@@ -32,6 +32,8 @@ interface BatchCardProps {
   onRetryFailed: (batch: StudioBatch, views: StudioJobView[]) => void;
   onMarkLibrary: (batch: StudioBatch, views: StudioJobView[]) => Promise<void>;
   onRemove: (batchId: string) => void;
+  /** 蓝图编辑入口(S2.2;batch.blueprintId 存在时显示) */
+  onOpenBlueprint?: (batch: StudioBatch) => void;
 }
 
 function Chip({ children }: { children: React.ReactNode }) {
@@ -50,6 +52,7 @@ export function BatchCard({
   onRetryFailed,
   onMarkLibrary,
   onRemove,
+  onOpenBlueprint,
 }: BatchCardProps) {
   const views = useMemo(() => buildBatchJobViews(batch, maps), [batch, maps]);
   const stats = useMemo(() => computeBatchStats(views), [views]);
@@ -101,6 +104,17 @@ export function BatchCard({
             {batch.summary.characterName && <Chip>@{batch.summary.characterName}</Chip>}
             {typeof batch.summary.estimatedCredits === "number" && (
               <Chip>≈{batch.summary.estimatedCredits} 积分</Chip>
+            )}
+            {batch.blueprintId && onOpenBlueprint && (
+              <button
+                type="button"
+                onClick={() => onOpenBlueprint(batch)}
+                className="flex items-center gap-1 rounded-md border border-amber-400/30 bg-amber-500/10 px-2 py-0.5 text-[11px] text-amber-300 transition-colors hover:bg-amber-500/20"
+                title="打开蓝图:改卖点/台词,再出一批"
+              >
+                <FileText className="h-3 w-3" />
+                蓝图
+              </button>
             )}
             <span className="flex items-center gap-1 text-[11px] text-zinc-500">
               <Clock className="h-3 w-3" />

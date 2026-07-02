@@ -17,6 +17,7 @@ import { buildBatchJobViews, useHostTaskMaps, type StudioJobView } from "@/lib/s
 import { Omnibox, type StudioAttachment } from "@/components/studio-shell/omnibox";
 import { BatchCard } from "@/components/studio-shell/batch-card";
 import { JobDrawer } from "@/components/studio-shell/job-drawer";
+import { BlueprintDrawer } from "@/components/studio-shell/blueprint-drawer";
 import {
   useStudioSubmit,
   type StudioDraft,
@@ -30,6 +31,8 @@ export default function StudioPage() {
   const batches = useStudioStore((state) => state.batches);
   const activeJob = useStudioStore((state) => state.activeJob);
   const setActiveJob = useStudioStore((state) => state.setActiveJob);
+  const activeBlueprintBatchId = useStudioStore((state) => state.activeBlueprintBatchId);
+  const setActiveBlueprintBatch = useStudioStore((state) => state.setActiveBlueprintBatch);
   const removeBatch = useStudioStore((state) => state.removeBatch);
   const { submit, retryJob, markLibrary } = useStudioSubmit();
 
@@ -221,6 +224,11 @@ export default function StudioPage() {
     return buildBatchJobViews(activeBatch, maps).find((v) => v.taskId === activeJob?.taskId);
   }, [activeBatch, maps, activeJob]);
 
+  const blueprintBatch = useMemo(
+    () => batches.find((b) => b.id === activeBlueprintBatchId && b.blueprintId),
+    [batches, activeBlueprintBatchId]
+  );
+
   return (
     <div
       {...getRootProps()}
@@ -257,6 +265,9 @@ export default function StudioPage() {
                   onRetryFailed={handleRetryFailed}
                   onMarkLibrary={handleMarkLibrary}
                   onRemove={removeBatch}
+                  onOpenBlueprint={(b) =>
+                    setActiveBlueprintBatch(activeBlueprintBatchId === b.id ? null : b.id)
+                  }
                 />
               ))}
             </div>
@@ -275,6 +286,15 @@ export default function StudioPage() {
           />
         </div>
       </div>
+
+      {/* 右栏蓝图编辑器(与 Job 抽屉互斥,store 层保证) */}
+      {blueprintBatch && (
+        <BlueprintDrawer
+          key={blueprintBatch.id}
+          batch={blueprintBatch}
+          onClose={() => setActiveBlueprintBatch(null)}
+        />
+      )}
 
       {/* 右栏抽屉 */}
       {activeBatch && activeView && (
