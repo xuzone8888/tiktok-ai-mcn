@@ -14,6 +14,7 @@ import {
     getPresetMusicList,
 } from '@/lib/ffmpeg-slideshow';
 import { uploadBuffer } from '@/lib/oss';
+import { adjustProfileCredits, insertCreditTransaction } from '@/lib/video-models/credits';
 import { generateCaptions, generateTextOverlays, CaptionStyle, CaptionMode } from '@/lib/deepseek-api';
 import { textToSpeechWithTimestamps, WordTimestamp } from '@/lib/elevenlabs-api';
 import { doubaoTextToSpeechWithTimestamps } from '@/lib/doubao-tts-api';
@@ -824,17 +825,35 @@ export async function POST(req: NextRequest) {
         }
         console.log(`[Slideshow API] 🧹 Cleaned ${tempDirsToClean.size} temp image dirs`);
 
-        // 扣除积分（原子操作）
+        // 扣除积分——直连扣费(乐观锁+流水,与统一视频网关同一原语)。
+        // 旧实现调 rpc('deduct_credits') 且不查错误,而该 RPC 从未在任何迁移中
+        // 定义过(生产 404),幻灯片渲染自上线起从未实际扣费(S2 脚本验收发现)。
         const actualCredits = successCount * creditsPerVideo;
         if (actualCredits > 0) {
             const adminSupabase = createAdminClient();
-            await adminSupabase.rpc('deduct_credits' as never, {
-                p_user_id: user.id,
-                p_amount: actualCredits,
-                p_description: `视频生成 - ${successCount}个视频`,
-                p_reference_type: 'slideshow_batch',
-                p_reference_id: crypto.randomUUID(),
-            } as never);
+            try {
+                const { before, after } = await adjustProfileCredits({
+                    supabase: adminSupabase,
+                    userId: user.id,
+                    delta: -actualCredits,
+                });
+                await insertCreditTransaction(adminSupabase, {
+                    userId: user.id,
+                    type: 'consume',
+                    amount: -actualCredits,
+                    balanceBefore: before,
+                    balanceAfter: after,
+                    taskId: clientTaskIds?.[0] ?? `slideshow-${Date.now()}`,
+                    description: `幻灯片成片 - ${successCount}个视频`,
+                    metadata: { reference_type: 'slideshow_batch', video_count: successCount },
+                });
+            } catch (chargeError) {
+                // 成片已交付,扣费失败必须响亮记录供人工对账(绝不再静默)
+                console.error(
+                    `[Slideshow API] ❌ 扣费失败需人工对账 user=${user.id} amount=${actualCredits}:`,
+                    chargeError
+                );
+            }
         }
 
         // Studio 批次:成片写 generations(入库/跨会话可见的前提;S1.2)

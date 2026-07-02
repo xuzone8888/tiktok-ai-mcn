@@ -46,7 +46,7 @@ async function hasRefundTransaction(
   return Boolean(data);
 }
 
-async function insertCreditTransaction(
+export async function insertCreditTransaction(
   supabase: AdminSupabaseClient,
   params: {
     userId: string;
@@ -99,7 +99,7 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function adjustProfileCredits(params: {
+export async function adjustProfileCredits(params: {
   supabase: AdminSupabaseClient;
   userId: string;
   delta: number;

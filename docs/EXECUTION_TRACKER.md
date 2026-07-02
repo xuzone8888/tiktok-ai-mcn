@@ -62,6 +62,15 @@
   - 3 新实锤已修:①stitch 落库失败不再静默吞——降级链(完整行→去 spec→去 batch_id/group_name)+仍失败返 500(客户端标失败,重试经 task_id 幂等,不重复扣费);②执行器 phase1 任务消失(MAX_TASKS 裁剪/删除)立即中止,不再为幽灵任务提交扣费;ai-gen store 裁剪只裁终态;③两执行器(ai-gen/slideshow)锁内 rehydrate 后按 id 差集补回本页内存独有任务(修 last-writer-wins 丢新提交)
   - 4 低危顺手修:积分不足止损不误标带锚镜(置回 generating 续轮询)、PATCH scenes idx 去重校验、stitch 行补 group_name(任务中心分组对齐)、迁移头强制「代码先下线再执行 SQL」顺序
   - 3 低危记录不修:任务中心 ai_gen 一 job 记 N+1 条 completed(scene 行+成片行并存,钱账无恙,S3 任务中心改版时统一处理);提交请求在途时刷新有秒级双扣窗口(服务端 clientTaskId 无幂等去重,与既有 BTM 视频执行器同构,S3 网关加幂等键时一并修);上游永久 processing 时每次重试烧满轮询预算(UX,S3 加跨重试退避)
+- **S2.7 脚本化验收(2026-07-02,dev server:3100 + 临时测试账号 300 积分 + 真实生产库;三轮共 34 项,代码路径全绿)**:
+  - 免费层全 PASS:未登录 401 闸(5 路由)、/link-video 与 /api/link-video/* 死链 404、/studio 登录态 200、SSRF 闸(127.0.0.1/云元数据/非法 URL 400)、频控 429(>5/分)、缓存 fromCache
+  - 链接腿真实解析 PASS:allbirds.com(Shopify)→ og_meta 通道出商品卡(标题「世界上最舒适的鞋子」+5 卖点;注:该站 og:image 被 filterValidImages 滤空→图 0,豆包视觉跳过走 meta 文本通道,属预期降级)
+  - 蓝图 CRUD 全 PASS:POST(slideshow/ai_gen 双 renderMode)、GET、PATCH(卖点勾选+台词行内编辑回读一致)、三重校验(idx 重复/status 非法/零勾选 400)、不存在 404、assembly 拒绝
+  - 幻灯片端到端 PASS:本地 ffmpeg 渲染(kenburns)→ OSS → generations 落库(source/batch_id)→ 入库 library_status=ready
+  - **stitch 全链 PASS(第三轮用真实幻灯片 OSS 视频喂,绕开视频上游)**:单镜直通+10 项落库字段全对(source=studio/spec.render_mode=ai_gen/spec.blueprint_id/batch/group/三 url 一致/credit_cost=0)+零新增扣费+幂等 fromCache 无重复行+入库
+  - **顺带发现并修复真实老 bug(丢钱,S1.2 埋):幻灯片扣费走 `rpc('deduct_credits')` 但该 RPC 在生产库不存在(401 hellobabygo... 不,是 supabase rpc 404),幻灯片自上线从未扣过费**。改直连扣费(adjustProfileCredits+insertCreditTransaction,与视频网关同原语,扣费失败响亮记录不再静默);复验 PASS:余额 295→294 + usage-1 流水
+  - **视频上游 401(环境,非代码)**:grok/sora2 提交都因上游 `api.hellobabygo.com/v1/videos` 返回 401「无效的令牌」失败——dev 本机出口 IP 或该环境 key 未授权;视频网关是既有代码,生产环境有效(S1 视频腿已生产验收)。图片生成上游超时→退款链路正常(余额 294→299 验证退款回补)
+  - 结论:S2 代码路径脚本可达部分全绿;人工验收只需覆盖 UI 手感层(拖拽/chip 交互/抽屉动效/@角色浮层)与需真实视频上游的 AI 生成腿多镜拼接(生产环境)。测试账号 s2-acceptance-bot@test.dev 数据已清、账号空壳残留可手删
 - **下一步:S1+S2 人工验收 → S3**:①dev server 真实登录态走查:S1 四路径 + 贴海外链接(Shopify 站最稳)→蓝图→改卖点→3 变体 + AI 生成腿一条(需 MAC_WORKER_URL 隧道通,留意 worker /api/stitch 无生产先例)+ /link-video 死链确认;②用户经 dashboard 执行 20260702_drop_link_video.sql(含退款清扫+归档,先看 NOTICE 输出);③S3 = 拼装腿+爆款拆解(20 条基准门槛)+批量矩阵+存为配方(BLUEPRINT §七,收钱线在 S2 后)
 - **分支**:`claude/practical-curie-42f4b1`(worktree:E:\StarGaze\.claude\worktrees\practical-curie-42f4b1)
 - **待用户/环境**:S0.1 生产执行——**exec_sql RPC 在生产库不存在**(老 runner 从没跑成过),执行通道=用户登录 Supabase dashboard SQL editor,我经浏览器贴 SQL 执行(源 IP 预检已通过:生产 source 取值 8 种全部被「基础枚举+batch_video% 通配」覆盖)。届时连同 20260702_drop_viral_clone.sql 一起执行。
