@@ -78,7 +78,12 @@
   - **worker 多镜拼接未端到端验**:Mac worker 离线(探测 /api/probe 与根路径均 curl 000)+ 双镜里一镜遇上游偶发 HTTP/2 错误(curl 92,非代码)。但两端各自已验:src 侧 callWorkerStitch+落库/幂等/入库(S2.7 第三轮用真实 OSS 视频验)、worker 端 /api/stitch(S0.4 本机 ffmpeg 8.0 实测混合分辨率+无音轨补齐);契约层对齐(videos/aspectRatio/loudnorm/transition/503 重试),仅缺"在线 worker"这一外部依赖的接缝,留生产或 worker 上线后补
   - **结论:S2 全部代码路径脚本可达部分已全绿**(链接腿/蓝图 CRUD/幻灯片/图片/视频单镜 AI 生成腿/stitch 落库/频控/SSRF/死链);唯一未覆盖=在线 worker 多镜拼接(外部机器状态)+ UI 手感层(人工)
 - **S2.9 人工验收通过 + UI 打磨(2026-07-03,1432f40)**:用户本地(dev:3100)人工走查**整体满意**;两点意见已落地——omnibox 操作台放大(760→980px,输入框 2→3 行)、链接解析取消按钮放大为文字按钮+Esc 取消、批次流版面放宽(max-w-5xl→7xl,全屏方向)。**S1+S2 人工验收完成**;方向备忘:后续布局往全屏排布走(S3 任务中心/rail 时统一设计)
-- **下一步(验收已过,进入部署):**①用户确认后合并 main+push(webhook 自动部署阿里云);②线上确认 /link-video 404、/studio 正常、多镜 AI 生成拼接跑一条(worker 生产常开,补上本地没验到的最后接缝);③dashboard 执行 20260702_drop_link_video.sql(必须在②之后);④S3
+- **S2.10 生产部署完成(2026-07-03,经用户授权)**:
+  - **发现自动部署链早已失效**:服务器停在 81d60f4、落后 origin/main 20+ commit(不止 S2,含更早的 worker cron/publish 改动)。双重根因:①GitHub↔服务器 webhook secret 不齐,签名间歇 401(投递记录时好时坏);②唯一一次真触发的部署 `npm run build` 被 OOM SIGKILL(3.4G 小机未限 heap)
+  - **手动部署上线**:ff-only 快进 81d60f4→a761c88(+8635/-13914)→ `NODE_OPTIONS=--max-old-space-size=2048` 限内存 build 成功(证明 OOM 修法有效)→ pm2 restart。线上验证:/ 200、/studio 200、/link-video 404、/api/link-video/* 404
+  - **自动链修复(10a0804 + secret 轮换)**:webhook 部署命令加固(ff-only 拉取+npm install+限内存 build,进 git);经用户授权轮换 webhook secret——openssl 随机值同步写 GitHub hook 与服务器 pm2 env(stdin 传输不落终端,pm2 save 持久化,两端 sha256 前缀比对一致 ecc165f9);ping 事件验签通过(200,Skip deploy)
+  - 插曲:推 10a0804 时旧 webhook 碰巧验签通过用旧命令拉起过一次部署,已自行了结(应用被多重启一次,无害,无残留进程)
+- **下一步:**①(本 commit push 即实弹验证自动部署链:新 secret+加固命令应自动完成拉取+build+重启)②用户线上跑一条多镜 AI 生成(生产 worker,补本地没验到的 stitch 多镜接缝);③dashboard 执行 20260702_drop_link_video.sql(线上已无 link-video 代码,顺序已满足);④S3 = 拼装腿+爆款拆解(20 条基准)+批量矩阵+存为配方(BLUEPRINT §七)
 - ~~**下一步:S1+S2 人工验收 → S3**~~(已完成,见上):①dev server 真实登录态走查:S1 四路径 + 贴海外链接(Shopify 站最稳)→蓝图→改卖点→3 变体 + AI 生成腿一条(需 MAC_WORKER_URL 隧道通,留意 worker /api/stitch 无生产先例)+ /link-video 死链确认;②用户经 dashboard 执行 20260702_drop_link_video.sql(含退款清扫+归档,先看 NOTICE 输出);③S3 = 拼装腿+爆款拆解(20 条基准门槛)+批量矩阵+存为配方(BLUEPRINT §七,收钱线在 S2 后)
 - **分支**:`claude/practical-curie-42f4b1`(worktree:E:\StarGaze\.claude\worktrees\practical-curie-42f4b1)
 - **待用户/环境**:S0.1 生产执行——**exec_sql RPC 在生产库不存在**(老 runner 从没跑成过),执行通道=用户登录 Supabase dashboard SQL editor,我经浏览器贴 SQL 执行(源 IP 预检已通过:生产 source 取值 8 种全部被「基础枚举+batch_video% 通配」覆盖)。届时连同 20260702_drop_viral_clone.sql 一起执行。
