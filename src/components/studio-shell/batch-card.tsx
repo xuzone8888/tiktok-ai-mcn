@@ -90,7 +90,9 @@ export function BatchCard({
                   ? "图片"
                   : batch.summary.mode === "slideshow"
                     ? "幻灯片"
-                    : batch.summary.mode}
+                    : batch.summary.mode === "product"
+                      ? "商品成片"
+                      : batch.summary.mode}
             </Chip>
             {batch.summary.modelLabel && <Chip>{batch.summary.modelLabel}</Chip>}
             {batch.summary.aspectRatio && <Chip>{batch.summary.aspectRatio === "auto" ? "自动比例" : batch.summary.aspectRatio}</Chip>}

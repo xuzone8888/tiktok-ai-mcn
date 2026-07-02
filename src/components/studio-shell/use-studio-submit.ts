@@ -25,12 +25,13 @@ import type { StudioJobView } from "@/lib/studio/batch-view";
 import { getVideoBatchTotalPrice, type VideoAspectRatio, type VideoDuration, type VideoModelType, type VideoQuality } from "@/types/video-batch";
 import { getNewImageCost } from "@/lib/credits";
 import type { CharacterAssetSnapshot } from "@/lib/character-assets";
+import type { ProductCard } from "@/lib/studio/product-vision";
 
 // ============================================================================
 // Draft 类型(omnibox 唯一真值:模式切换器 + 参数 chips + 附件 + @角色)
 // ============================================================================
 
-export type StudioMode = "image" | "video" | "slideshow";
+export type StudioMode = "image" | "video" | "slideshow" | "product";
 
 export interface VideoParams {
   modelType: VideoModelType;
@@ -61,7 +62,10 @@ export interface StudioDraft {
   character?: CharacterAssetSnapshot;
   video: VideoParams;
   image: ImageParams;
+  /** 商品成片模式复用幻灯片渲染参数 */
   slideshow: SlideshowParams;
+  /** 商品成片模式:分析完成的商品卡(勾选态在卡内) */
+  productCard?: ProductCard | null;
   count: number;
 }
 
@@ -93,7 +97,7 @@ export function estimateCredits(draft: StudioDraft): number {
       ) * draft.count
     );
   }
-  if (draft.mode === "slideshow") {
+  if (draft.mode === "slideshow" || draft.mode === "product") {
     return slideshowCreditsPerVideo(draft.attachmentUrls.length) * draft.count;
   }
   return getNewImageCost("gpt-image-2", draft.image.resolution) * draft.count;
@@ -104,9 +108,22 @@ export function validateDraft(draft: StudioDraft): string | null {
     if (!draft.text.trim() && draft.attachmentUrls.length === 0) {
       return "视频任务需要提示词或至少一张素材图";
     }
-  } else if (draft.mode === "slideshow") {
+  } else if (draft.mode === "slideshow" || draft.mode === "product") {
     if (draft.attachmentUrls.length < 2) return "轮播成片至少需要 2 张图";
-    if (draft.attachmentUrls.length > 15) return "轮播成片最多 15 张图";
+    // product 上限 9:与视觉分析管线(analyze-product slice 9)对齐,
+    // 否则蓝图/商品卡只覆盖前 9 张而成片用了全部图,素材账对不上
+    const maxImages = draft.mode === "product" ? 9 : 15;
+    if (draft.attachmentUrls.length > maxImages) {
+      return draft.mode === "product"
+        ? "商品成片最多 9 张图(视觉分析上限)"
+        : "轮播成片最多 15 张图";
+    }
+    if (draft.mode === "product") {
+      if (!draft.productCard) return "等待商品卡分析完成";
+      if (!draft.productCard.selling_points.some((p) => p.selected)) {
+        return "至少勾选一个卖点";
+      }
+    }
   } else {
     if (!draft.text.trim()) return "图片任务需要提示词";
   }
@@ -115,10 +132,12 @@ export function validateDraft(draft: StudioDraft): string | null {
 }
 
 function batchTitle(draft: StudioDraft): string {
+  if (draft.mode === "product" && draft.productCard) return draft.productCard.title;
   const text = draft.text.trim();
   if (text) return text.length > 60 ? `${text.slice(0, 60)}…` : text;
   if (draft.mode === "video") return "图生视频批次";
   if (draft.mode === "slideshow") return "轮播成片批次";
+  if (draft.mode === "product") return "商品成片批次";
   return "图片批次";
 }
 
@@ -146,7 +165,7 @@ export function useStudioSubmit() {
   const markJobsLibrary = useStudioStore((state) => state.markJobsLibrary);
 
   const submit = useCallback(
-    (draft: StudioDraft): SubmitResult => {
+    async (draft: StudioDraft): Promise<SubmitResult> => {
       const invalid = validateDraft(draft);
       if (invalid) return { ok: false, error: invalid };
 
@@ -155,8 +174,58 @@ export function useStudioSubmit() {
       const groupName = studioGroupName(now);
       let jobRefs: StudioJobRef[];
       let spec: Record<string, unknown>;
+      let blueprintId: string | undefined;
 
-      if (draft.mode === "video") {
+      if (draft.mode === "product") {
+        // 商品图腿:商品卡 → 蓝图落库 → 复用幻灯片渲染腿出 N 条
+        const card = draft.productCard!;
+        try {
+          const res = await fetch("/api/studio/blueprints", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              product: card,
+              globals: {
+                aspect: draft.slideshow.aspectRatio,
+                duration_per_image_ms: Math.round(draft.slideshow.durationPerImage * 1000),
+                bgm_style: draft.slideshow.bgmEnabled ? "random" : "none",
+              },
+              renderMode: "slideshow",
+            }),
+          });
+          const result = await res.json();
+          if (!result.success) {
+            return { ok: false, error: result.error || "蓝图保存失败" };
+          }
+          blueprintId = result.data?.blueprintId;
+        } catch {
+          return { ok: false, error: "蓝图保存失败,请重试" };
+        }
+
+        // 变体在脚本层做:标题+勾选卖点作为文案关键词,服务端 diverse 模式
+        // 每条成片生成不同角度口播;图序差异由适配器洗牌提供(素材级)
+        const selectedPoints = card.selling_points.filter((p) => p.selected);
+        const keywords = [card.title, ...selectedPoints.map((p) => p.text)].join(";");
+        const slideshowSpec: SlideshowJobSpec = {
+          kind: "slideshow",
+          prompt: keywords,
+          imageUrls: draft.attachmentUrls,
+          aspectRatio: draft.slideshow.aspectRatio,
+          durationPerImage: draft.slideshow.durationPerImage,
+          transition: draft.slideshow.transition,
+          kenburns: draft.slideshow.kenburns,
+          voiceEnabled: draft.slideshow.voiceEnabled,
+          bgmEnabled: draft.slideshow.bgmEnabled,
+          count: draft.count,
+          batchId,
+          groupName,
+          blueprintId,
+        };
+        const tasks = toSlideshowTasks(slideshowSpec);
+        useSlideshowStore.getState().addTasks(tasks);
+        jobRefs = tasks.map((t) => ({ kind: "slideshow" as const, taskId: t.id }));
+        spec = slideshowSpec as unknown as Record<string, unknown>;
+      } else if (draft.mode === "video") {
         const videoSpec: VideoJobSpec = {
           kind: "video",
           prompt: draft.text.trim(),
@@ -228,11 +297,13 @@ export function useStudioSubmit() {
               ? VIDEO_MODEL_LABELS[draft.video.modelType]
               : draft.mode === "slideshow"
                 ? `幻灯片${draft.slideshow.kenburns ? "·运镜" : ""}`
-                : "GPT Image 2",
+                : draft.mode === "product"
+                  ? `商品成片${draft.slideshow.kenburns ? "·运镜" : ""}`
+                  : "GPT Image 2",
           aspectRatio:
             draft.mode === "video"
               ? draft.video.aspectRatio
-              : draft.mode === "slideshow"
+              : draft.mode === "slideshow" || draft.mode === "product"
                 ? draft.slideshow.aspectRatio
                 : draft.image.aspectRatio,
           durationSeconds: draft.mode === "video" ? draft.video.durationSeconds : undefined,
@@ -244,6 +315,7 @@ export function useStudioSubmit() {
         },
         spec,
         jobRefs,
+        blueprintId,
         character: draft.character
           ? {
               id: draft.character.id,

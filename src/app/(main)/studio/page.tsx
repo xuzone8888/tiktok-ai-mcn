@@ -139,8 +139,8 @@ export default function StudioPage() {
 
   // ==================== 提交 / 重试 / 入库 ====================
   const handleSubmit = useCallback(
-    (draft: StudioDraft): boolean => {
-      const result = submit(draft);
+    async (draft: StudioDraft): Promise<boolean> => {
+      const result = await submit(draft);
       if (!result.ok) {
         toast({ title: "提交失败", description: result.error, variant: "destructive" });
         return false;

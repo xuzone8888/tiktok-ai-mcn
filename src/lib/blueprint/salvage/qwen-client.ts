@@ -424,6 +424,8 @@ async function callQwen(
           'Authorization': `Bearer ${DASHSCOPE_API_KEY}`,
         },
         body: JSON.stringify(requestBody),
+        // 单次尝试 60s 上限:挂起连接不允许吃光调用方的时间预算(重试由外层循环负责)
+        signal: AbortSignal.timeout(60_000),
       });
 
       if (!response.ok) {

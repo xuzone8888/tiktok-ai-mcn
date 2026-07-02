@@ -40,7 +40,15 @@
   - generate-slideshow 路由:接 kenburns/clientTaskIds/batchId + maxDuration=300;成功后按 successIndices 对齐写 generations(source='slideshow',task_id=客户端任务 id,batch_id 透传,prompt=生成文案)——幻灯片首次可入库/进任务中心;insert 失败不阻断响应(已渲染已扣费)
   - kenburns 三层接线完成:route→SlideshowOptions→callMacWorker body + 本地 spawn --kenburns(S0.4 的 worker/python 能力至此全通)
   - **重要修复(审查发现,波及 S1.1)**:zustand 同步 storage 的水合在 create() 内同步执行,onRehydrateStorage 里引用 store 常量会 TDZ ReferenceError——slideshow 与 quick-gen 两个 store 的复水归一化均已包 setTimeout(0) 延迟
-- **下一步:S1.3 商品图腿**(拖图→商品卡→蓝图→轮播成片):①src/lib/studio/product-vision.ts(豆包视觉管线抄 doubao-api.ts generateTalkingScript 的 imageUrlToBase64+image_url content 组装,prompt 回收 link-parser.ts aiEnhanceProductInfo 的 JSON 协议扩成 blueprints.product 形状;DOUBAO_ENDPOINT_ID 需 vision 接入点,不通则退 salvage qwen-client.analyzeImage/DASHSCOPE_API_KEY);②POST /api/studio/analyze-product(鉴权照 link-video/parse);③POST /api/studio/blueprints(cookie client 直写,RLS own 策略已就位;source_type='product_images',product=商品卡,scenes 由 DeepSeek 从卖点生成,render_mode='slideshow');④omnibox「商品成片」模式:拖图即触发分析→商品卡 chip(解析中→完成,点开勾卖点)→发送→建蓝图→复用 S1.2 幻灯片腿出 N 条。之后 S1.4 @角色(character-picker inline 包 popover 壳,onSelect 出 CharacterAssetSnapshot 进 JobSpec)
+- **S1.3 商品图腿 + S1.4 @角色已完成(2026-07-02,tsc+build 过,经 2 路对抗审查 7 项修复)——S1 Studio MVP 代码侧收官**:
+  - S1.3 链路:omnibox「商品成片」模式,拖 2-9 张图→附件传完自动调 /api/studio/analyze-product(仅预填,永不代提交)→商品卡 chip(解析中/失败可重试/完成态点开勾卖点+受众)→发送=POST /api/studio/blueprints 建蓝图(scenes 骨架 beat: hook→point→cta,render_mode='slideshow',status='ready')→标题+勾选卖点作文案关键词,复用 S1.2 幻灯片腿出 N 条(变体=脚本层 diverse 文案×素材层图序洗牌)。batch.blueprintId 已挂
+  - 新文件:src/lib/studio/product-vision.ts(豆包视觉主通道+qwen 兜底;normalizeCard 消毒器导出供落库路由复用;70s/35s 双通道时间预算)、/api/studio/analyze-product(maxDuration=120)、/api/studio/blueprints(cookie client+untyped 绕 database.ts;renderMode 白名单只放 slideshow;product/globals 元素级消毒;卖点勾选服务端复核)
+  - doubao-api.ts:导出 callDoubaoAPI/imageUrlToBase64(+可选 AbortSignal),callDoubaoAPI fetch 加 60s 单次超时;salvage qwen-client fetch 同加 60s(挂起连接不再吃光预算)
+  - S1.4:CharacterPicker inline 包浮层挂 omnibox 上方(@ 键/AtSign 按钮唤起,Esc 关),仅 image/video 模式可用;选中出紫色 @chip,characterAsset 进 draft.character→既有 JobSpec 角色链路(S1 前置修复已保证 BTM 透传四字段);character-picker.tsx inline 分支 title="" 不再渲染孤标题行(其他调用点不受影响)
+  - 审查修复:分析竞态(指纹仅成功后写入+cleanup 复位 spinner)、失败重试按钮(analyzeNonce)、product 图数上限 9(与分析管线对齐)、blueprints 消毒/白名单(TypeError→500 消除)
+  - **备忘**:rights_ack 商品图腿默认 true(自传自有素材;门B 上传爆款才强制勾选——审查确认符合裁决);analyze-product 无频控(与 link-video/parse 同水位,S2 若滥用加限流);blueprints 表未进 database.ts 生成类型,后续重新生成 types 时可去掉 untyped client
+- **S1 验收状态**:四条路径(文字→图/视频、拖图+文字→图生视频、幻灯片、商品成片)+@角色全部代码就绪;「传图 5 分钟出轮播成片」「提交→Batch→入库全链路」待 dev server 人工走查(需真实登录态+豆包 vision 接入点/DASHSCOPE key 环境);积分对账一致依赖服务端既有扣退,Studio 未新增扣费路径
+- **下一步:S1 人工验收 + S2**(BLUEPRINT §七):dev server 起 /studio 走查四路径与入库;之后 S2 = 链接腿(parse_reference job,海外站)+ 蓝图编辑器首版(卖点勾选+台词行内编辑)+ AI 生成腿(逐镜合成,回收 salvage prompt-compiler)+ 删 link-video(prompt 骨架转种子配方)
 - **分支**:`claude/practical-curie-42f4b1`(worktree:E:\StarGaze\.claude\worktrees\practical-curie-42f4b1)
 - **待用户/环境**:S0.1 生产执行——**exec_sql RPC 在生产库不存在**(老 runner 从没跑成过),执行通道=用户登录 Supabase dashboard SQL editor,我经浏览器贴 SQL 执行(源 IP 预检已通过:生产 source 取值 8 种全部被「基础枚举+batch_video% 通配」覆盖)。届时连同 20260702_drop_viral_clone.sql 一起执行。
 - **提交节奏(用户指示)**:大步伐——里程碑级 commit(①文档+tag 已交;②S0.1-S0.3 数据层+拆除;③S0.4-S0.7)

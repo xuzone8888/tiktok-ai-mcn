@@ -8,8 +8,20 @@
  * 大批量/高积分强制二次确认(红队裁决)。
  */
 
-import { useMemo, useRef, useState } from "react";
-import { ImagePlus, Loader2, Minus, Plus, Send, X, Zap, AtSign } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  AtSign,
+  ChevronDown,
+  ChevronUp,
+  ImagePlus,
+  Loader2,
+  Minus,
+  Package,
+  Plus,
+  Send,
+  X,
+  Zap,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -47,6 +59,9 @@ import {
   type StudioMode,
   type VideoParams,
 } from "./use-studio-submit";
+import type { ProductCard } from "@/lib/studio/product-vision";
+import { CharacterPicker, type CharacterOption } from "@/components/character-picker";
+import type { CharacterAssetSnapshot } from "@/lib/character-assets";
 
 // ============================================================================
 // 附件类型(上传由页面层负责,omnibox 只展示与移除)
@@ -65,13 +80,14 @@ interface OmniboxProps {
   onAddFiles: (files: File[]) => void;
   onRemoveAttachment: (id: string) => void;
   credits: number | null;
-  onSubmit: (draft: StudioDraft) => boolean; // 返回是否提交成功(成功则清空输入)
+  onSubmit: (draft: StudioDraft) => Promise<boolean>; // 返回是否提交成功(成功则清空输入)
 }
 
 const MODES: { key: StudioMode; label: string }[] = [
   { key: "image", label: "图片" },
   { key: "video", label: "视频" },
   { key: "slideshow", label: "幻灯片" },
+  { key: "product", label: "商品成片" },
 ];
 
 const IMAGE_ASPECT_OPTIONS = ["auto", "1:1", "9:16", "16:9", "3:4", "4:3"];
@@ -144,7 +160,28 @@ export function Omnibox({
     bgmEnabled: true,
   });
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // ==================== @角色(S1.4:image/video 模式可用) ====================
+  const [character, setCharacter] = useState<CharacterAssetSnapshot | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const characterApplicable = mode === "image" || mode === "video";
+
+  const handleCharacterSelect = (option: CharacterOption | null) => {
+    setCharacter(option?.characterAsset ?? null);
+    setPickerOpen(false);
+  };
+
+  // ==================== 商品成片:自动分析商品卡 ====================
+  const [productCard, setProductCard] = useState<ProductCard | null>(null);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [analyzeError, setAnalyzeError] = useState<string | null>(null);
+  const [cardPanelOpen, setCardPanelOpen] = useState(false);
+  // 已成功分析的图片集合指纹,避免重复分析(仅成功后写入)
+  const analyzedKeyRef = useRef<string>("");
+  // 失败重试信号:effect 依赖之一,点重试即重跑分析
+  const [analyzeNonce, setAnalyzeNonce] = useState(0);
 
   const uploading = attachments.some((a) => a.status === "uploading");
   // 失败附件阻断发送:否则实际提交内容与用户所见不符(失败图被静默剔除)
@@ -154,17 +191,84 @@ export function Omnibox({
     [attachments]
   );
 
+  // 商品成片:附件全部上传完成后自动触发分析(仅预填商品卡,永不代提交——红队裁决)
+  useEffect(() => {
+    if (mode !== "product") return;
+    if (uploading || attachmentUrls.length < 2) return;
+    const key = [...attachmentUrls].sort().join("|");
+    // 指纹仅在成功后写入:被取消/失败的请求下一次符合条件的渲染会自然重发
+    if (key === analyzedKeyRef.current) return;
+
+    let cancelled = false;
+    setAnalyzing(true);
+    setAnalyzeError(null);
+    setProductCard(null);
+    fetch("/api/studio/analyze-product", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ imageUrls: attachmentUrls }),
+    })
+      .then((res) => res.json())
+      .then((result) => {
+        if (cancelled) return;
+        if (result.success && result.data?.card) {
+          analyzedKeyRef.current = key;
+          setProductCard(result.data.card);
+        } else {
+          setAnalyzeError(result.error || "商品图分析失败");
+        }
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setAnalyzeError("商品图分析失败,请重试");
+      })
+      .finally(() => {
+        if (!cancelled) setAnalyzing(false);
+      });
+    return () => {
+      cancelled = true;
+      // 被取消的请求到不了上面的 finally,这里兜底复位 spinner
+      setAnalyzing(false);
+    };
+  }, [mode, uploading, attachmentUrls, analyzeNonce]);
+
+  const toggleSellingPoint = (id: string) => {
+    setProductCard((card) =>
+      card
+        ? {
+            ...card,
+            selling_points: card.selling_points.map((p) =>
+              p.id === id ? { ...p, selected: !p.selected } : p
+            ),
+          }
+        : card
+    );
+  };
+
   const draft: StudioDraft = useMemo(
     () => ({
       mode,
       text,
       attachmentUrls,
+      character: characterApplicable && character ? character : undefined,
       video: videoParams,
       image: imageParams,
       slideshow: slideshowParams,
+      productCard: mode === "product" ? productCard : undefined,
       count,
     }),
-    [mode, text, attachmentUrls, videoParams, imageParams, slideshowParams, count]
+    [
+      mode,
+      text,
+      attachmentUrls,
+      characterApplicable,
+      character,
+      videoParams,
+      imageParams,
+      slideshowParams,
+      productCard,
+      count,
+    ]
   );
 
   const estimated = useMemo(() => estimateCredits(draft), [draft]);
@@ -184,28 +288,60 @@ export function Omnibox({
     });
   };
 
-  const doSubmit = () => {
-    const ok = onSubmit(draft);
-    if (ok) {
-      setText("");
-      setCount(1);
+  const doSubmit = async () => {
+    setSubmitting(true);
+    try {
+      const ok = await onSubmit(draft);
+      if (ok) {
+        setText("");
+        setCount(1);
+        setProductCard(null);
+        setCardPanelOpen(false);
+        analyzedKeyRef.current = "";
+      }
+    } finally {
+      setSubmitting(false);
     }
   };
 
   const handleSend = () => {
-    if (sendDisabled) return;
+    if (sendDisabled || submitting) return;
     if (count > CONFIRM_COUNT_THRESHOLD || estimated > CONFIRM_CREDITS_THRESHOLD) {
       setConfirmOpen(true);
       return;
     }
-    doSubmit();
+    void doSubmit();
   };
 
   const durations = getAvailableDurations(videoParams.modelType, videoParams.quality);
   const qualities = getAvailableQualities(videoParams.modelType);
 
   return (
-    <div className="pointer-events-auto mx-auto w-full max-w-[760px] rounded-2xl border border-white/10 bg-zinc-900/90 shadow-2xl shadow-black/40 backdrop-blur-xl">
+    <div className="pointer-events-auto relative mx-auto w-full max-w-[760px] rounded-2xl border border-white/10 bg-zinc-900/90 shadow-2xl shadow-black/40 backdrop-blur-xl">
+      {/* @角色选择面板(悬浮于 omnibox 上方) */}
+      {pickerOpen && characterApplicable && (
+        <div className="absolute inset-x-0 bottom-full mb-2 rounded-2xl border border-white/10 bg-zinc-900/95 p-3 shadow-2xl shadow-black/50 backdrop-blur-xl">
+          <div className="mb-1 flex items-center justify-between">
+            <span className="text-xs font-medium text-zinc-400">@角色 · 一致性引用</span>
+            <button
+              type="button"
+              onClick={() => setPickerOpen(false)}
+              className="rounded p-1 text-zinc-500 hover:text-zinc-200"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+          <CharacterPicker
+            variant="inline"
+            dataSource="all"
+            selectedId={character?.id ?? null}
+            onSelect={handleCharacterSelect}
+            maxHeight="280px"
+            title=""
+          />
+        </div>
+      )}
+
       {/* 附件 chips */}
       {attachments.length > 0 && (
         <div className="flex flex-wrap gap-2 border-b border-white/5 px-4 pt-3 pb-2">
@@ -245,6 +381,81 @@ export function Omnibox({
         </div>
       )}
 
+      {/* 商品成片:商品卡 chip(解析中→完成态,点开勾卖点) */}
+      {mode === "product" && (analyzing || productCard || analyzeError) && (
+        <div className="border-b border-white/5 px-4 py-2">
+          {analyzing ? (
+            <div className="flex items-center gap-2 text-xs text-sky-300">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              正在分析商品图,提炼卖点…
+            </div>
+          ) : analyzeError ? (
+            <div className="flex items-center gap-2 text-xs text-red-400">
+              <Package className="h-3.5 w-3.5" />
+              {analyzeError}
+              <button
+                type="button"
+                onClick={() => {
+                  setAnalyzeError(null);
+                  setAnalyzeNonce((n) => n + 1);
+                }}
+                className="ml-1 rounded border border-red-400/40 px-2 py-0.5 text-red-300 hover:bg-red-500/10"
+              >
+                重试
+              </button>
+            </div>
+          ) : productCard ? (
+            <div>
+              <button
+                type="button"
+                onClick={() => setCardPanelOpen((v) => !v)}
+                className="flex w-full items-center gap-2 rounded-lg border border-amber-400/25 bg-amber-500/10 px-2.5 py-1.5 text-left text-xs text-amber-200 transition-colors hover:bg-amber-500/15"
+              >
+                <Package className="h-3.5 w-3.5 shrink-0" />
+                <span className="min-w-0 flex-1 truncate font-medium">{productCard.title}</span>
+                <span className="shrink-0 text-amber-400/70">
+                  卖点 {productCard.selling_points.filter((p) => p.selected).length}/
+                  {productCard.selling_points.length}
+                </span>
+                {cardPanelOpen ? (
+                  <ChevronUp className="h-3.5 w-3.5 shrink-0" />
+                ) : (
+                  <ChevronDown className="h-3.5 w-3.5 shrink-0" />
+                )}
+              </button>
+              {cardPanelOpen && (
+                <div className="mt-2 space-y-1.5 rounded-lg border border-white/10 bg-black/30 p-2.5">
+                  {productCard.selling_points.map((p) => (
+                    <label
+                      key={p.id}
+                      className="flex cursor-pointer items-start gap-2 text-xs text-zinc-300"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={p.selected}
+                        onChange={() => toggleSellingPoint(p.id)}
+                        className="mt-0.5 accent-amber-400"
+                      />
+                      <span className="min-w-0 flex-1">
+                        {p.text}
+                        {p.evidence && (
+                          <span className="ml-1 text-zinc-600">({p.evidence})</span>
+                        )}
+                      </span>
+                    </label>
+                  ))}
+                  {productCard.audience.length > 0 && (
+                    <p className="pt-1 text-[11px] text-zinc-500">
+                      目标人群:{productCard.audience.join("、")}
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          ) : null}
+        </div>
+      )}
+
       {/* 参数 chips 行 */}
       <div className="flex flex-wrap items-center gap-2 px-4 pt-3">
         {/* 模式切换器(唯一真值) */}
@@ -265,6 +476,30 @@ export function Omnibox({
             </button>
           ))}
         </div>
+
+        {/* @角色 chip */}
+        {characterApplicable && character && (
+          <span className="flex items-center gap-1.5 rounded-lg border border-violet-400/30 bg-violet-500/15 px-2 py-1 text-xs text-violet-200">
+            {character.avatar_url ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={character.avatar_url}
+                alt=""
+                className="h-4 w-4 rounded-full object-cover"
+              />
+            ) : (
+              <AtSign className="h-3 w-3" />
+            )}
+            @{character.name}
+            <button
+              type="button"
+              onClick={() => setCharacter(null)}
+              className="text-violet-300/70 hover:text-white"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </span>
+        )}
 
         {mode === "video" ? (
           <>
@@ -334,7 +569,7 @@ export function Omnibox({
               </Select>
             )}
           </>
-        ) : mode === "slideshow" ? (
+        ) : mode === "slideshow" || mode === "product" ? (
           <>
             <Select
               value={slideshowParams.aspectRatio}
@@ -466,9 +701,17 @@ export function Omnibox({
         </button>
         <button
           type="button"
-          disabled
-          className="shrink-0 cursor-not-allowed rounded-lg border border-white/10 bg-black/30 p-2 text-zinc-600"
-          title="@角色(S1.4 开放)"
+          disabled={!characterApplicable}
+          onClick={() => setPickerOpen((v) => !v)}
+          className={cn(
+            "shrink-0 rounded-lg border border-white/10 bg-black/30 p-2 transition-colors",
+            characterApplicable
+              ? character
+                ? "text-violet-300"
+                : "text-zinc-400 hover:text-white"
+              : "cursor-not-allowed text-zinc-700"
+          )}
+          title={characterApplicable ? "@角色(一致性引用)" : "@角色仅图片/视频模式可用"}
         >
           <AtSign className="h-4 w-4" />
         </button>
@@ -498,6 +741,14 @@ export function Omnibox({
             ) {
               e.preventDefault();
               handleSend();
+              return;
+            }
+            // 输入 @ 唤起角色选择器(仅唤起,不吞字符;Esc 关闭)
+            if (e.key === "@" && characterApplicable && !e.nativeEvent.isComposing) {
+              setPickerOpen(true);
+            }
+            if (e.key === "Escape" && pickerOpen) {
+              setPickerOpen(false);
             }
           }}
           placeholder={
@@ -505,7 +756,9 @@ export function Omnibox({
               ? "描述你要的视频,或拖入素材图(拖图+文字=图生视频)…"
               : mode === "slideshow"
                 ? "拖入 2-15 张图;这里写文案主题(可选,AI 生成口播文案与配音)…"
-                : "描述你要的图片,可拖入参考图…"
+                : mode === "product"
+                  ? "拖入 2-9 张商品图,自动提炼商品卡;发送=按勾选卖点批量出轮播成片"
+                  : "描述你要的图片,可拖入参考图…"
           }
           rows={2}
           className="max-h-40 min-h-[52px] flex-1 resize-none bg-transparent text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none"
@@ -528,11 +781,15 @@ export function Omnibox({
           <Button
             size="sm"
             variant="mermaid"
-            disabled={sendDisabled}
+            disabled={sendDisabled || submitting}
             onClick={handleSend}
             className="h-8 gap-1.5 px-4"
           >
-            {uploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+            {uploading || submitting ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Send className="h-3.5 w-3.5" />
+            )}
             发送
           </Button>
         </div>
@@ -544,7 +801,12 @@ export function Omnibox({
           <AlertDialogHeader>
             <AlertDialogTitle>确认批量提交</AlertDialogTitle>
             <AlertDialogDescription>
-              将提交 {count} 个{mode === "video" ? "视频" : mode === "slideshow" ? "轮播成片" : "图片"}
+              将提交 {count} 个
+              {mode === "video"
+                ? "视频"
+                : mode === "slideshow" || mode === "product"
+                  ? "轮播成片"
+                  : "图片"}
               任务,预估消耗{" "}
               <span className="font-semibold text-amber-500 tabular-nums">{estimated}</span> 积分
               {credits !== null && <>(当前余额 {credits})</>}。积分按任务在服务端逐条扣除,失败自动退款。
@@ -555,7 +817,7 @@ export function Omnibox({
             <AlertDialogAction
               onClick={() => {
                 setConfirmOpen(false);
-                doSubmit();
+                void doSubmit();
               }}
             >
               确认提交
