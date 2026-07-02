@@ -432,55 +432,61 @@ export const useQuickGenStore = create<QuickGenState & QuickGenActions>()(
       },
       onRehydrateStorage: () => (state) => {
         if (state) {
-          // 防御：极端情况下（storage 被手工改动）保证数组字段存在
-          if (!Array.isArray(state.videoTasks) || !Array.isArray(state.imageTasks)) {
-            useQuickGenStore.setState({
-              videoTasks: Array.isArray(state.videoTasks)
-                ? state.videoTasks
-                : state.activeVideoTask
-                  ? [state.activeVideoTask]
-                  : [],
-              imageTasks: Array.isArray(state.imageTasks)
-                ? state.imageTasks
-                : state.activeImageTask
-                  ? [state.activeImageTask]
-                  : [],
-            });
-          }
+          // 注意:同步 storage 的水合在 create() 初始化器内同步执行,此处
+          // useQuickGenStore 常量仍处于 TDZ——任何 getState/setState 都必须
+          // 延迟到模块求值完成后(setTimeout 0)再执行。
+          setTimeout(() => {
+            // 防御：极端情况下（storage 被手工改动）保证数组字段存在
+            const snapshot = useQuickGenStore.getState();
+            if (!Array.isArray(snapshot.videoTasks) || !Array.isArray(snapshot.imageTasks)) {
+              useQuickGenStore.setState({
+                videoTasks: Array.isArray(snapshot.videoTasks)
+                  ? snapshot.videoTasks
+                  : snapshot.activeVideoTask
+                    ? [snapshot.activeVideoTask]
+                    : [],
+                imageTasks: Array.isArray(snapshot.imageTasks)
+                  ? snapshot.imageTasks
+                  : snapshot.activeImageTask
+                    ? [snapshot.activeImageTask]
+                    : [],
+              });
+            }
 
-          // 孤儿归一化:刷新打断的在途任务(uploading/generating,或 polling 但
-          // 没拿到 taskId)执行链路已丢失,BTM 只拉起 idle|polling(带 taskId 的
-          // polling 会被正常续轮询)——这些任务若不处理会永久悬在运行态。
-          // 置 failed 而非 idle:服务端可能已扣积分并在推进,盲目重发会双扣费;
-          // failed 后用户可走 Studio/页面的重试入口显式重发。
-          const isOrphan = (t: { status: QuickGenTaskStatus; taskId?: string }) =>
-            t.status === "uploading" ||
-            t.status === "generating" ||
-            (t.status === "polling" && !t.taskId);
-          const failOrphan = <T extends QuickGenVideoTask | QuickGenImageTask>(t: T): T =>
-            isOrphan(t)
-              ? {
-                  ...t,
-                  status: "failed" as const,
-                  errorMessage: "页面刷新中断,请重试",
-                  completedAt: new Date().toISOString(),
-                }
-              : t;
+            // 孤儿归一化:刷新打断的在途任务(uploading/generating,或 polling 但
+            // 没拿到 taskId)执行链路已丢失,BTM 只拉起 idle|polling(带 taskId 的
+            // polling 会被正常续轮询)——这些任务若不处理会永久悬在运行态。
+            // 置 failed 而非 idle:服务端可能已扣积分并在推进,盲目重发会双扣费;
+            // failed 后用户可走 Studio/页面的重试入口显式重发。
+            const isOrphan = (t: { status: QuickGenTaskStatus; taskId?: string }) =>
+              t.status === "uploading" ||
+              t.status === "generating" ||
+              (t.status === "polling" && !t.taskId);
+            const failOrphan = <T extends QuickGenVideoTask | QuickGenImageTask>(t: T): T =>
+              isOrphan(t)
+                ? {
+                    ...t,
+                    status: "failed" as const,
+                    errorMessage: "页面刷新中断,请重试",
+                    completedAt: new Date().toISOString(),
+                  }
+                : t;
 
-          const current = useQuickGenStore.getState();
-          const hasOrphan =
-            current.videoTasks.some(isOrphan) ||
-            current.imageTasks.some(isOrphan) ||
-            (current.activeVideoTask ? isOrphan(current.activeVideoTask) : false) ||
-            (current.activeImageTask ? isOrphan(current.activeImageTask) : false);
-          if (hasOrphan) {
-            useQuickGenStore.setState({
-              videoTasks: current.videoTasks.map(failOrphan),
-              imageTasks: current.imageTasks.map(failOrphan),
-              activeVideoTask: current.activeVideoTask ? failOrphan(current.activeVideoTask) : null,
-              activeImageTask: current.activeImageTask ? failOrphan(current.activeImageTask) : null,
-            });
-          }
+            const current = useQuickGenStore.getState();
+            const hasOrphan =
+              current.videoTasks.some(isOrphan) ||
+              current.imageTasks.some(isOrphan) ||
+              (current.activeVideoTask ? isOrphan(current.activeVideoTask) : false) ||
+              (current.activeImageTask ? isOrphan(current.activeImageTask) : false);
+            if (hasOrphan) {
+              useQuickGenStore.setState({
+                videoTasks: current.videoTasks.map(failOrphan),
+                imageTasks: current.imageTasks.map(failOrphan),
+                activeVideoTask: current.activeVideoTask ? failOrphan(current.activeVideoTask) : null,
+                activeImageTask: current.activeImageTask ? failOrphan(current.activeImageTask) : null,
+              });
+            }
+          }, 0);
 
           const runningVideo = (state.videoTasks ?? []).filter((t) => isRunningStatus(t.status));
           const runningImage = (state.imageTasks ?? []).filter((t) => isRunningStatus(t.status));

@@ -11,12 +11,15 @@
 import { useCallback } from "react";
 import {
   toQuickGenImageTasks,
+  toSlideshowTasks,
   toVideoBatchTasks,
   type ImageJobSpec,
+  type SlideshowJobSpec,
   type VideoJobSpec,
 } from "@/lib/studio/job-spec";
 import { useVideoBatchStore } from "@/stores/video-batch-store";
 import { useQuickGenStore } from "@/stores/quick-gen-store";
+import { useSlideshowStore } from "@/stores/slideshow-store";
 import { useStudioStore, type StudioBatch, type StudioJobRef } from "@/stores/studio-store";
 import type { StudioJobView } from "@/lib/studio/batch-view";
 import { getVideoBatchTotalPrice, type VideoAspectRatio, type VideoDuration, type VideoModelType, type VideoQuality } from "@/types/video-batch";
@@ -27,7 +30,7 @@ import type { CharacterAssetSnapshot } from "@/lib/character-assets";
 // Draft 类型(omnibox 唯一真值:模式切换器 + 参数 chips + 附件 + @角色)
 // ============================================================================
 
-export type StudioMode = "image" | "video";
+export type StudioMode = "image" | "video" | "slideshow";
 
 export interface VideoParams {
   modelType: VideoModelType;
@@ -41,6 +44,15 @@ export interface ImageParams {
   resolution: "1k" | "2k" | "4k";
 }
 
+export interface SlideshowParams {
+  aspectRatio: "9:16" | "16:9";
+  durationPerImage: number;
+  transition: string;
+  kenburns: boolean;
+  voiceEnabled: boolean;
+  bgmEnabled: boolean;
+}
+
 export interface StudioDraft {
   mode: StudioMode;
   text: string;
@@ -49,6 +61,7 @@ export interface StudioDraft {
   character?: CharacterAssetSnapshot;
   video: VideoParams;
   image: ImageParams;
+  slideshow: SlideshowParams;
   count: number;
 }
 
@@ -62,6 +75,13 @@ export const VIDEO_MODEL_LABELS: Record<VideoModelType, string> = {
   omni: "Omni",
 };
 
+/** 幻灯片单条成本(镜像服务端 calculateCredits:≤5图=1分,≤10图=2分,否则3分) */
+function slideshowCreditsPerVideo(imageCount: number): number {
+  if (imageCount <= 5) return 1;
+  if (imageCount <= 10) return 2;
+  return 3;
+}
+
 /** 预估积分(展示用;权威扣退在服务端网关) */
 export function estimateCredits(draft: StudioDraft): number {
   if (draft.mode === "video") {
@@ -73,6 +93,9 @@ export function estimateCredits(draft: StudioDraft): number {
       ) * draft.count
     );
   }
+  if (draft.mode === "slideshow") {
+    return slideshowCreditsPerVideo(draft.attachmentUrls.length) * draft.count;
+  }
   return getNewImageCost("gpt-image-2", draft.image.resolution) * draft.count;
 }
 
@@ -81,6 +104,9 @@ export function validateDraft(draft: StudioDraft): string | null {
     if (!draft.text.trim() && draft.attachmentUrls.length === 0) {
       return "视频任务需要提示词或至少一张素材图";
     }
+  } else if (draft.mode === "slideshow") {
+    if (draft.attachmentUrls.length < 2) return "轮播成片至少需要 2 张图";
+    if (draft.attachmentUrls.length > 15) return "轮播成片最多 15 张图";
   } else {
     if (!draft.text.trim()) return "图片任务需要提示词";
   }
@@ -91,7 +117,9 @@ export function validateDraft(draft: StudioDraft): string | null {
 function batchTitle(draft: StudioDraft): string {
   const text = draft.text.trim();
   if (text) return text.length > 60 ? `${text.slice(0, 60)}…` : text;
-  return draft.mode === "video" ? "图生视频批次" : "图片批次";
+  if (draft.mode === "video") return "图生视频批次";
+  if (draft.mode === "slideshow") return "轮播成片批次";
+  return "图片批次";
 }
 
 function studioGroupName(now: Date): string {
@@ -148,6 +176,26 @@ export function useStudioSubmit() {
         useVideoBatchStore.getState().startBatch();
         jobRefs = tasks.map((t) => ({ kind: "video" as const, taskId: t.id }));
         spec = videoSpec as unknown as Record<string, unknown>;
+      } else if (draft.mode === "slideshow") {
+        const slideshowSpec: SlideshowJobSpec = {
+          kind: "slideshow",
+          prompt: draft.text.trim(),
+          imageUrls: draft.attachmentUrls,
+          aspectRatio: draft.slideshow.aspectRatio,
+          durationPerImage: draft.slideshow.durationPerImage,
+          transition: draft.slideshow.transition,
+          kenburns: draft.slideshow.kenburns,
+          voiceEnabled: draft.slideshow.voiceEnabled,
+          bgmEnabled: draft.slideshow.bgmEnabled,
+          count: draft.count,
+          batchId,
+          groupName,
+        };
+        const tasks = toSlideshowTasks(slideshowSpec);
+        // BTM 幻灯片执行器扫描带 renderRequest 的 pending 任务,写入即自动拉起
+        useSlideshowStore.getState().addTasks(tasks);
+        jobRefs = tasks.map((t) => ({ kind: "slideshow" as const, taskId: t.id }));
+        spec = slideshowSpec as unknown as Record<string, unknown>;
       } else {
         const perTaskCost = getNewImageCost("gpt-image-2", draft.image.resolution);
         const imageSpec: ImageJobSpec = {
@@ -176,8 +224,17 @@ export function useStudioSubmit() {
         summary: {
           mode: draft.mode,
           modelLabel:
-            draft.mode === "video" ? VIDEO_MODEL_LABELS[draft.video.modelType] : "GPT Image 2",
-          aspectRatio: draft.mode === "video" ? draft.video.aspectRatio : draft.image.aspectRatio,
+            draft.mode === "video"
+              ? VIDEO_MODEL_LABELS[draft.video.modelType]
+              : draft.mode === "slideshow"
+                ? `幻灯片${draft.slideshow.kenburns ? "·运镜" : ""}`
+                : "GPT Image 2",
+          aspectRatio:
+            draft.mode === "video"
+              ? draft.video.aspectRatio
+              : draft.mode === "slideshow"
+                ? draft.slideshow.aspectRatio
+                : draft.image.aspectRatio,
           durationSeconds: draft.mode === "video" ? draft.video.durationSeconds : undefined,
           resolution: draft.mode === "image" ? draft.image.resolution : undefined,
           count: draft.count,
@@ -222,8 +279,12 @@ export function useStudioSubmit() {
         replaceJobRef(batch.id, failedTaskId, { kind, taskId: task.id });
         return { ok: true, batchId: batch.id };
       }
-      // slideshow 重试在 S1.2 接入
-      return { ok: false, error: "该任务类型暂不支持重试" };
+      // slideshow:按批次 spec 重建(重新洗牌图序,变体差异保持)
+      const spec = { ...(batch.spec as unknown as SlideshowJobSpec), count: 1 };
+      const [task] = toSlideshowTasks(spec);
+      useSlideshowStore.getState().addTasks([task]);
+      replaceJobRef(batch.id, failedTaskId, { kind, taskId: task.id });
+      return { ok: true, batchId: batch.id };
     },
     [replaceJobRef]
   );

@@ -27,6 +27,7 @@ import type {
   VideoQuality,
 } from "@/types/video-batch";
 import type { QuickGenImageTask } from "@/stores/quick-gen-store";
+import type { SlideshowTask } from "@/stores/slideshow-store";
 
 // ============================================================================
 // 规格类型
@@ -76,17 +77,44 @@ export interface ImageJobSpec extends JobSpecBase {
   creditCost?: number;
 }
 
-export type JobSpec = VideoJobSpec | ImageJobSpec;
+export interface SlideshowJobSpec extends JobSpecBase {
+  kind: "slideshow";
+  /** 轮播素材图(OSS URL,调用方校验 ≥2 张) */
+  imageUrls: string[];
+  aspectRatio: "9:16" | "16:9";
+  /** 每张图停留秒数 */
+  durationPerImage: number;
+  /** xfade 转场效果名("none"=硬切) */
+  transition: string;
+  /** ken-burns 运镜(S0.4 已在 worker/python 就位) */
+  kenburns?: boolean;
+  /** AI 配音(智能选声;需 prompt 非空作文案主题) */
+  voiceEnabled?: boolean;
+  /** 预设库随机 BGM */
+  bgmEnabled?: boolean;
+}
+
+export type JobSpec = VideoJobSpec | ImageJobSpec | SlideshowJobSpec;
 
 // ============================================================================
 // 工具
 // ============================================================================
 
-/** 任务 id 生成,沿用现有惯例:video=vbt-*(video-batch store),image=qg-*(quick-gen) */
+/** 任务 id 生成,沿用现有惯例:video=vbt-*(video-batch store),image=qg-*(quick-gen),slideshow=ss-* */
 export function createJobId(kind: JobSpec["kind"]): string {
   const rand = Math.random().toString(36).slice(2, 11);
-  const prefix = kind === "video" ? "vbt" : "qg";
+  const prefix = kind === "video" ? "vbt" : kind === "image" ? "qg" : "ss";
   return `${prefix}-${Date.now()}-${rand}`;
+}
+
+/** Fisher-Yates 洗牌(幻灯片素材级去同质化:每个变体独立图序) */
+function shuffled<T>(arr: T[]): T[] {
+  const copy = [...arr];
+  for (let i = copy.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  return copy;
 }
 
 function clampCount(count: number | undefined): number {
@@ -195,6 +223,64 @@ export function toQuickGenImageTask(spec: ImageJobSpec, opts: AdapterOptions = {
   };
 }
 
+/** SlideshowJobSpec → SlideshowTask(写入 slideshow store,BTM 幻灯片执行器自动拉起) */
+export function toSlideshowTask(spec: SlideshowJobSpec, opts: AdapterOptions = {}): SlideshowTask {
+  const id = opts.id ?? createJobId("slideshow");
+  const now = opts.now ?? new Date().toISOString();
+  // 素材级去同质化(BLUEPRINT §四):每个变体独立洗牌图序
+  const images = shuffled(spec.imageUrls);
+  const text = spec.prompt.trim();
+  const language = /[一-鿿]/.test(text) ? "zh" : "en";
+  const bgmEnabled = spec.bgmEnabled ?? false;
+  const voiceEnabled = !!(text && spec.voiceEnabled);
+
+  // POST /api/video-batch/generate-slideshow 的完整请求体快照,
+  // imagesPerVideo=全部图片 → 一次调用产出一条成片
+  const renderRequest: Record<string, unknown> = {
+    mode: "random",
+    images,
+    imagesPerVideo: images.length,
+    aspectRatio: spec.aspectRatio,
+    durationPerImage: spec.durationPerImage,
+    transition: spec.transition,
+    kenburns: spec.kenburns ?? false,
+    bgm: { enabled: bgmEnabled, mode: bgmEnabled ? "random" : "none" },
+    ...(text
+      ? {
+          aiCaption: {
+            enabled: true,
+            mode: "diverse",
+            keywords: text,
+            style: "lively",
+            language,
+          },
+        }
+      : {}),
+    ...(voiceEnabled ? { voice: { enabled: true, voiceId: "random", voiceName: "智能选声" } } : {}),
+    clientTaskIds: [id],
+    ...(spec.batchId ? { batchId: spec.batchId } : {}),
+  };
+
+  return {
+    id,
+    groupName: spec.groupName ?? "Studio",
+    mode: "random",
+    status: "pending",
+    progress: 0,
+    imageCount: images.length,
+    duration: spec.durationPerImage,
+    transition: spec.transition,
+    aspectRatio: spec.aspectRatio,
+    hasVoice: voiceEnabled,
+    hasBgm: bgmEnabled,
+    hasSubtitle: !!text,
+    batchId: spec.batchId,
+    renderRequest,
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
 // ============================================================================
 // 批量展开(数量 stepper)
 // ============================================================================
@@ -207,4 +293,9 @@ export function toVideoBatchTasks(spec: VideoJobSpec, opts: Omit<AdapterOptions,
 /** 按 spec.count 展开为 N 个 QuickGenImageTask */
 export function toQuickGenImageTasks(spec: ImageJobSpec, opts: Omit<AdapterOptions, "id"> = {}): QuickGenImageTask[] {
   return Array.from({ length: clampCount(spec.count) }, () => toQuickGenImageTask(spec, opts));
+}
+
+/** 按 spec.count 展开为 N 个 SlideshowTask(每个变体独立洗牌图序) */
+export function toSlideshowTasks(spec: SlideshowJobSpec, opts: Omit<AdapterOptions, "id"> = {}): SlideshowTask[] {
+  return Array.from({ length: clampCount(spec.count) }, () => toSlideshowTask(spec, opts));
 }

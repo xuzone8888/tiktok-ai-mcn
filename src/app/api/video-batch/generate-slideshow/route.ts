@@ -25,6 +25,10 @@ import path from 'path';
 import os from 'os';
 import { spawn, execSync } from 'child_process';
 
+// 同步渲染长请求:下载图片+AI 文案+TTS+ffmpeg 合成,给足预算
+export const maxDuration = 300;
+export const dynamic = 'force-dynamic';
+
 // 请求类型 - 与前端 CreateSlideshowModal 配置对齐
 interface SlideshowRequest {
     mode: 'random' | 'position';
@@ -40,6 +44,13 @@ interface SlideshowRequest {
     aspectRatio: '9:16' | '16:9';
     durationPerImage?: number;
     transition: string;
+    // ken-burns 运镜(S1.2:worker/python 侧 S0.4 已支持,这里接线透传)
+    kenburns?: boolean;
+
+    // Studio 批次(S1.2):提供时按索引与视频一一对应,成片写 generations
+    // (task_id=clientTaskIds[i],batch_id=batchId),供入库/跨会话任务中心使用
+    clientTaskIds?: string[];
+    batchId?: string;
 
     // 新增：BGM 配置
     bgm?: {
@@ -230,11 +241,19 @@ export async function POST(req: NextRequest) {
             aspectRatio = '9:16',
             durationPerImage = 2,
             transition = 'fade',
+            kenburns = false,
             bgm,
             voice,
             aiCaption,
             subtitle,
+            clientTaskIds,
+            batchId,
         } = body;
+        const normalizedBatchId =
+            typeof batchId === 'string' &&
+            /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(batchId.trim())
+                ? batchId.trim()
+                : null;
 
         log('📋 REQUEST BODY', {
             mode,
@@ -700,6 +719,7 @@ export async function POST(req: NextRequest) {
                 aspectRatio,
                 durationPerImage,
                 transition,
+                kenburns,
             },
             musicPool,
             subtitleConfigs, // 传递字幕配置数组，每个视频使用对应的配置
@@ -756,6 +776,8 @@ export async function POST(req: NextRequest) {
 
         // 上传成功的视频到 OSS
         const videos: { url: string; cost: number }[] = [];
+        // 成功视频对应的原始 results 索引(与 clientTaskIds/generatedCaptions 对账)
+        const successIndices: number[] = [];
         let successCount = 0;
 
         for (let i = 0; i < results.length; i++) {
@@ -766,6 +788,7 @@ export async function POST(req: NextRequest) {
             if (result.success && result.videoUrl) {
                 console.log(`[Slideshow API] Video ${i + 1}: Worker URL = ${result.videoUrl}`);
                 videos.push({ url: result.videoUrl, cost: creditsPerVideo });
+                successIndices.push(i);
                 successCount++;
             } else if (result.success && result.videoPath) {
                 try {
@@ -776,6 +799,7 @@ export async function POST(req: NextRequest) {
                     const videoUrl = await uploadBuffer(videoBuffer, ossKey, 'video/mp4');
                     console.log(`[Slideshow API] Video ${i + 1} uploaded: ${videoUrl}`);
                     videos.push({ url: videoUrl, cost: creditsPerVideo });
+                    successIndices.push(i);
                     successCount++;
                     // 删除本地临时文件
                     await fs.unlink(result.videoPath).catch(() => { });
@@ -811,6 +835,53 @@ export async function POST(req: NextRequest) {
                 p_reference_type: 'slideshow_batch',
                 p_reference_id: crypto.randomUUID(),
             } as never);
+        }
+
+        // Studio 批次:成片写 generations(入库/跨会话可见的前提;S1.2)
+        // 旧 image-slideshow 页不传 clientTaskIds,保持原「只活在 localStorage」语义
+        if (clientTaskIds && clientTaskIds.length > 0 && videos.length > 0) {
+            const nowIso = new Date().toISOString();
+            const rows = videos
+                .map((v, k) => {
+                    const originalIndex = successIndices[k];
+                    const clientTaskId = clientTaskIds[originalIndex];
+                    if (!clientTaskId) return null;
+                    return {
+                        user_id: user.id,
+                        task_id: clientTaskId,
+                        ...(normalizedBatchId ? { batch_id: normalizedBatchId } : {}),
+                        type: 'video',
+                        generation_type: 'video',
+                        source: 'slideshow',
+                        prompt: generatedCaptions[originalIndex] || aiCaption?.keywords || null,
+                        model: 'slideshow',
+                        duration: Math.round(
+                            (imageGroups[originalIndex]?.length ?? 0) * durationPerImage
+                        ),
+                        aspect_ratio: aspectRatio,
+                        status: 'completed',
+                        progress: 100,
+                        result_url: v.url,
+                        video_url: v.url,
+                        output_url: v.url,
+                        credit_cost: creditsPerVideo,
+                        credits_used: creditsPerVideo,
+                        completed_at: nowIso,
+                        created_at: nowIso,
+                    };
+                })
+                .filter((row): row is NonNullable<typeof row> => row !== null);
+
+            if (rows.length > 0) {
+                const adminSupabase = createAdminClient();
+                const { error: genInsertError } = await adminSupabase
+                    .from('generations')
+                    .insert(rows as never);
+                if (genInsertError) {
+                    // 不阻断响应:视频已渲染并扣费,落库失败只影响入库/任务中心
+                    console.error('[Slideshow API] generations insert failed:', genInsertError.message);
+                }
+            }
         }
 
         return NextResponse.json({

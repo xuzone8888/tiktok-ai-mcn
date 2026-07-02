@@ -83,7 +83,15 @@ export function BatchCard({
             {batch.title}
           </p>
           <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-            <Chip>{batch.summary.mode === "video" ? "视频" : batch.summary.mode === "image" ? "图片" : batch.summary.mode}</Chip>
+            <Chip>
+              {batch.summary.mode === "video"
+                ? "视频"
+                : batch.summary.mode === "image"
+                  ? "图片"
+                  : batch.summary.mode === "slideshow"
+                    ? "幻灯片"
+                    : batch.summary.mode}
+            </Chip>
             {batch.summary.modelLabel && <Chip>{batch.summary.modelLabel}</Chip>}
             {batch.summary.aspectRatio && <Chip>{batch.summary.aspectRatio === "auto" ? "自动比例" : batch.summary.aspectRatio}</Chip>}
             {batch.summary.durationSeconds && <Chip>{batch.summary.durationSeconds}s</Chip>}

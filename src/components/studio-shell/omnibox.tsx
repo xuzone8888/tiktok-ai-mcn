@@ -42,6 +42,7 @@ import {
   validateDraft,
   VIDEO_MODEL_LABELS,
   type ImageParams,
+  type SlideshowParams,
   type StudioDraft,
   type StudioMode,
   type VideoParams,
@@ -70,10 +71,45 @@ interface OmniboxProps {
 const MODES: { key: StudioMode; label: string }[] = [
   { key: "image", label: "图片" },
   { key: "video", label: "视频" },
+  { key: "slideshow", label: "幻灯片" },
 ];
 
 const IMAGE_ASPECT_OPTIONS = ["auto", "1:1", "9:16", "16:9", "3:4", "4:3"];
 const VIDEO_MODEL_OPTIONS = Object.keys(VIDEO_MODEL_LABELS) as VideoModelType[];
+
+const SLIDESHOW_TRANSITIONS: { value: string; label: string }[] = [
+  { value: "fade", label: "淡入淡出" },
+  { value: "slideleft", label: "左滑" },
+  { value: "wipeleft", label: "擦除" },
+  { value: "circleopen", label: "圆形展开" },
+  { value: "none", label: "硬切" },
+];
+
+/** 幻灯片模式的开关 chip */
+function ToggleChip({
+  active,
+  label,
+  onClick,
+}: {
+  active: boolean;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "rounded-lg border px-2.5 py-1 text-xs font-medium transition-colors",
+        active
+          ? "border-sky-400/50 bg-sky-500/15 text-sky-300"
+          : "border-white/10 bg-black/30 text-zinc-500 hover:text-zinc-300"
+      )}
+    >
+      {label}
+    </button>
+  );
+}
 
 /** 强制二次确认阈值(红队裁决:大批量/高积分误判会摧毁信任) */
 const CONFIRM_COUNT_THRESHOLD = 10;
@@ -99,6 +135,14 @@ export function Omnibox({
     aspectRatio: "auto",
     resolution: "1k",
   });
+  const [slideshowParams, setSlideshowParams] = useState<SlideshowParams>({
+    aspectRatio: "9:16",
+    durationPerImage: 2,
+    transition: "fade",
+    kenburns: true,
+    voiceEnabled: true,
+    bgmEnabled: true,
+  });
   const [confirmOpen, setConfirmOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -117,9 +161,10 @@ export function Omnibox({
       attachmentUrls,
       video: videoParams,
       image: imageParams,
+      slideshow: slideshowParams,
       count,
     }),
-    [mode, text, attachmentUrls, videoParams, imageParams, count]
+    [mode, text, attachmentUrls, videoParams, imageParams, slideshowParams, count]
   );
 
   const estimated = useMemo(() => estimateCredits(draft), [draft]);
@@ -289,6 +334,71 @@ export function Omnibox({
               </Select>
             )}
           </>
+        ) : mode === "slideshow" ? (
+          <>
+            <Select
+              value={slideshowParams.aspectRatio}
+              onValueChange={(v) =>
+                setSlideshowParams((p) => ({ ...p, aspectRatio: v as SlideshowParams["aspectRatio"] }))
+              }
+            >
+              <SelectTrigger className="h-7 w-auto gap-1 border-white/10 bg-black/30 px-2.5 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {(["9:16", "16:9"] as const).map((r) => (
+                  <SelectItem key={r} value={r} className="text-xs">{r}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select
+              value={String(slideshowParams.durationPerImage)}
+              onValueChange={(v) =>
+                setSlideshowParams((p) => ({ ...p, durationPerImage: Number(v) }))
+              }
+            >
+              <SelectTrigger className="h-7 w-auto gap-1 border-white/10 bg-black/30 px-2.5 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {[2, 2.5, 3, 4].map((d) => (
+                  <SelectItem key={d} value={String(d)} className="text-xs">
+                    {d}s/图
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select
+              value={slideshowParams.transition}
+              onValueChange={(v) => setSlideshowParams((p) => ({ ...p, transition: v }))}
+            >
+              <SelectTrigger className="h-7 w-auto gap-1 border-white/10 bg-black/30 px-2.5 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {SLIDESHOW_TRANSITIONS.map((t) => (
+                  <SelectItem key={t.value} value={t.value} className="text-xs">
+                    {t.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <ToggleChip
+              active={slideshowParams.kenburns}
+              label="运镜"
+              onClick={() => setSlideshowParams((p) => ({ ...p, kenburns: !p.kenburns }))}
+            />
+            <ToggleChip
+              active={slideshowParams.voiceEnabled}
+              label="配音"
+              onClick={() => setSlideshowParams((p) => ({ ...p, voiceEnabled: !p.voiceEnabled }))}
+            />
+            <ToggleChip
+              active={slideshowParams.bgmEnabled}
+              label="BGM"
+              onClick={() => setSlideshowParams((p) => ({ ...p, bgmEnabled: !p.bgmEnabled }))}
+            />
+          </>
         ) : (
           <>
             <Select
@@ -393,7 +503,9 @@ export function Omnibox({
           placeholder={
             mode === "video"
               ? "描述你要的视频,或拖入素材图(拖图+文字=图生视频)…"
-              : "描述你要的图片,可拖入参考图…"
+              : mode === "slideshow"
+                ? "拖入 2-15 张图;这里写文案主题(可选,AI 生成口播文案与配音)…"
+                : "描述你要的图片,可拖入参考图…"
           }
           rows={2}
           className="max-h-40 min-h-[52px] flex-1 resize-none bg-transparent text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none"
@@ -432,7 +544,8 @@ export function Omnibox({
           <AlertDialogHeader>
             <AlertDialogTitle>确认批量提交</AlertDialogTitle>
             <AlertDialogDescription>
-              将提交 {count} 个{mode === "video" ? "视频" : "图片"}任务,预估消耗{" "}
+              将提交 {count} 个{mode === "video" ? "视频" : mode === "slideshow" ? "轮播成片" : "图片"}
+              任务,预估消耗{" "}
               <span className="font-semibold text-amber-500 tabular-nums">{estimated}</span> 积分
               {credits !== null && <>(当前余额 {credits})</>}。积分按任务在服务端逐条扣除,失败自动退款。
             </AlertDialogDescription>

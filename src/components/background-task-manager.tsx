@@ -16,6 +16,7 @@ import { useVideoBatchStore } from "@/stores/video-batch-store";
 import { type PipelineStep, type VideoBatchTask } from "@/types/video-batch";
 import { useImageBatchStore } from "@/stores/image-batch-store";
 import { useQuickGenStore } from "@/stores/quick-gen-store";
+import { useSlideshowStore } from "@/stores/slideshow-store";
 import { useToast } from "@/hooks/use-toast";
 import { getCharacterReferenceMaxImages, mergeCharacterReferenceImages } from "@/lib/video-models/character-reference";
 import { getCharacterAssetReferenceUrls } from "@/lib/character-assets";
@@ -1180,6 +1181,129 @@ function useQuickGenImageTaskExecutor() {
 }
 
 // ============================================================================
+// Studio 幻灯片渲染执行器(S1.2)
+// ============================================================================
+
+/**
+ * 只执行带 renderRequest 的任务(Studio 提交腿产物);
+ * 旧 image-slideshow 页任务无此字段,保持页面自驱语义不受影响。
+ * 串行执行:每次调用 = 一条成片,服务端同步渲染(worker 优先,失败回退本地)。
+ */
+function useSlideshowTaskExecutor() {
+  const { toast } = useToast();
+  const slideshowTasks = useSlideshowStore((state) => state.tasks);
+  const updateTaskStatus = useSlideshowStore((state) => state.updateTaskStatus);
+
+  const isExecutingRef = useRef(false);
+  const executedTasksRef = useRef<Set<string>>(new Set());
+  const [rescanTick, forceRescan] = useReducer((x: number) => x + 1, 0);
+
+  const executeSlideshowTask = useCallback(async (taskId: string) => {
+    const task = useSlideshowStore.getState().tasks.find(t => t.id === taskId);
+    if (!task || task.status !== "pending" || !task.renderRequest) return;
+
+    try {
+      updateTaskStatus(taskId, "generating", { stage: "composing", progress: 15 });
+
+      const res = await fetch("/api/video-batch/generate-slideshow", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(task.renderRequest),
+        // 略大于服务端 maxDuration=300s:挂起请求会饿死整条串行队列
+        signal: AbortSignal.timeout(330_000),
+      });
+      const text = await res.text();
+      let result;
+      try {
+        result = JSON.parse(text);
+      } catch {
+        throw new Error(`幻灯片服务响应格式错误 (HTTP ${res.status})`);
+      }
+      if (!res.ok || !result.success) {
+        throw new Error(result.error || `幻灯片合成失败 (HTTP ${res.status})`);
+      }
+
+      const url: string | undefined = result.videos?.[0]?.url;
+      if (!url) throw new Error("合成完成但未返回视频地址");
+
+      updateTaskStatus(taskId, "completed", { progress: 100, outputUrl: url, videoCount: 1 });
+      // 服务端已按实际成功数扣分,通知余额胶囊刷新
+      window.dispatchEvent(new CustomEvent("credits-updated"));
+      toast({
+        title: "🎬 幻灯片成片完成",
+        description: (
+          <a href="/studio" className="text-tiktok-cyan hover:underline flex items-center gap-1">
+            点击查看成片 <ExternalLink className="h-3 w-3" />
+          </a>
+        ),
+      });
+    } catch (error) {
+      console.error("[SlideshowTaskExecutor] Error:", error);
+      const isTimeout = error instanceof DOMException && error.name === "TimeoutError";
+      updateTaskStatus(taskId, "failed", {
+        errorMessage: isTimeout
+          ? "渲染超时,请重试(若已扣费,成片可在生成记录查看)"
+          : error instanceof Error
+            ? error.message
+            : "幻灯片合成失败",
+      });
+    }
+  }, [updateTaskStatus, toast]);
+
+  useEffect(() => {
+    if (isExecutingRef.current) return;
+
+    const isRunnable = (t: { id: string; status: string; renderRequest?: Record<string, unknown> }) =>
+      t.status === "pending" && !!t.renderRequest && !executedTasksRef.current.has(t.id);
+
+    if (!slideshowTasks.some(isRunnable)) return;
+
+    const executeNext = async () => {
+      isExecutingRef.current = true;
+      try {
+        const runLoop = async () => {
+          // 串行 + 每轮重扫:执行期间新提交的幻灯片批次也会被捞起
+          for (;;) {
+            const next = useSlideshowStore.getState().tasks.find(isRunnable);
+            if (!next) break;
+            executedTasksRef.current.add(next.id);
+            await executeSlideshowTask(next.id);
+          }
+        };
+
+        // 跨标签页单飞:persist 的 pending 任务会被每个标签各自水合,
+        // 无锁时两个标签会对同一任务双重渲染+双重扣费
+        if (typeof navigator !== "undefined" && navigator.locks) {
+          await navigator.locks.request("stargaze-slideshow-executor", async () => {
+            // 拿到锁后重新水合:吸收其他标签页已写回的终态,避免重复执行
+            await useSlideshowStore.persist.rehydrate();
+            await runLoop();
+          });
+        } else {
+          await runLoop();
+        }
+      } finally {
+        isExecutingRef.current = false;
+      }
+      forceRescan();
+    };
+
+    executeNext();
+  }, [slideshowTasks, executeSlideshowTask, rescanTick]);
+
+  // 任务离开队列或已失败(等待显式重试)时清理去重集合:
+  // failed→pending 的重试要能被重新拉起;去重只防同状态重复执行
+  useEffect(() => {
+    const liveIds = new Set(
+      slideshowTasks.filter(t => t.status !== "failed").map(t => t.id)
+    );
+    for (const id of Array.from(executedTasksRef.current)) {
+      if (!liveIds.has(id)) executedTasksRef.current.delete(id);
+    }
+  }, [slideshowTasks]);
+}
+
+// ============================================================================
 // 任务状态指示器组件 - 右下角悬浮通知
 // ============================================================================
 
@@ -1335,6 +1459,9 @@ export function BackgroundTaskManager() {
 
   // 启动 Quick Gen 图片任务执行器
   useQuickGenImageTaskExecutor();
+
+  // 启动 Studio 幻灯片渲染执行器(S1.2)
+  useSlideshowTaskExecutor();
 
   return <TaskStatusIndicator />;
 }
