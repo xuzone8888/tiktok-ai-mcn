@@ -12,12 +12,67 @@
 --   历史交易行保留;删表后 reference_id 悬空无害(审计报表已知悉)
 --
 -- 执行方式:生产库经 Supabase dashboard SQL editor 人工执行(生产红线:
--- 本机不直连生产执行)。执行前可自查残留:
---   SELECT count(*) FROM link_video_jobs;      -- 历史作业数(删前留档可选)
---   SELECT count(*) FROM product_link_cache;   -- 旧解析缓存(已被 reference_cache 取代)
+-- 本机不直连生产执行)。
 -- ============================================================================
 
--- 顺序:先 jobs(其 product_link_id FK 指向 cache)后 cache
+-- ============================================================================
+-- 1) 在途扣款清扫(对抗审查确认项:旧退款唯一路径在已删除的轮询路由里,
+--    删表前不清扫,已扣未退且未交付的积分将永久丢失且无台账可事后定位)
+--    口径:credits_used > 已退 且 final_video_url 为空 = 扣了钱没交付成片。
+--    轮询路由已删,这些作业的成片永远无法交付,直接退款不会造成双重给付。
+-- ============================================================================
+DO $$
+DECLARE
+    r RECORD;
+    v_balance INTEGER;
+    v_refunded_count INTEGER := 0;
+    v_refunded_total INTEGER := 0;
+BEGIN
+    FOR r IN
+        SELECT id, user_id, credits_used - COALESCE(credits_refunded, 0) AS refund_amount
+        FROM public.link_video_jobs
+        WHERE credits_used > COALESCE(credits_refunded, 0)
+          AND final_video_url IS NULL
+    LOOP
+        UPDATE public.profiles
+        SET credits = credits + r.refund_amount
+        WHERE id = r.user_id
+        RETURNING credits INTO v_balance;
+
+        IF FOUND THEN
+            INSERT INTO public.credit_transactions (
+                user_id, type, amount, balance_before, balance_after,
+                reference_type, reference_id, description
+            ) VALUES (
+                r.user_id, 'refund', r.refund_amount,
+                v_balance - r.refund_amount, v_balance,
+                'link_video_job', r.id,
+                '链接秒变模块下线清扫:未交付作业退款'
+            );
+            UPDATE public.link_video_jobs
+            SET credits_refunded = COALESCE(credits_refunded, 0) + r.refund_amount
+            WHERE id = r.id;
+            v_refunded_count := v_refunded_count + 1;
+            v_refunded_total := v_refunded_total + r.refund_amount;
+        END IF;
+    END LOOP;
+    RAISE NOTICE '在途扣款清扫完成:% 个作业,共退 % 积分', v_refunded_count, v_refunded_total;
+END $$;
+
+-- ============================================================================
+-- 2) 台账归档(必做,非可选):清扫后整表留档,审计可溯。
+--    归档表无 RLS 策略(仅 service role 可读),确认无用后可另行 DROP。
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS public.link_video_jobs_archive AS
+    SELECT * FROM public.link_video_jobs;
+CREATE TABLE IF NOT EXISTS public.product_link_cache_archive AS
+    SELECT * FROM public.product_link_cache;
+ALTER TABLE public.link_video_jobs_archive ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.product_link_cache_archive ENABLE ROW LEVEL SECURITY;
+
+-- ============================================================================
+-- 3) 删表(顺序:先 jobs——其 product_link_id FK 指向 cache——后 cache)
+-- ============================================================================
 DROP TABLE IF EXISTS public.link_video_jobs;
 DROP TABLE IF EXISTS public.product_link_cache;
 

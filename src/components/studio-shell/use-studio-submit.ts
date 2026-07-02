@@ -88,7 +88,7 @@ export const VIDEO_MODEL_LABELS: Record<VideoModelType, string> = {
 };
 
 /** 幻灯片单条成本(镜像服务端 calculateCredits:≤5图=1分,≤10图=2分,否则3分) */
-function slideshowCreditsPerVideo(imageCount: number): number {
+export function slideshowCreditsPerVideo(imageCount: number): number {
   if (imageCount <= 5) return 1;
   if (imageCount <= 10) return 2;
   return 3;
@@ -206,7 +206,9 @@ export function useStudioSubmit() {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              product: card,
+              // 素材集以实际附件为准:链接解析卡的 images 可能为空(转存全败)
+              // 或与用户增删后的附件不一致,蓝图 scenes 必须覆盖真实成片素材
+              product: { ...card, images: draft.attachmentUrls },
               globals:
                 renderMode === "ai_gen"
                   ? {

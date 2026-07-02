@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import {
   generateUrlHash,
   parseReference,
+  readBodyWithCap,
   safeFetch,
   validateExternalUrl,
   type ReferenceRaw,
@@ -38,6 +39,39 @@ const MAX_IMAGE_BYTES = 15 * 1024 * 1024;
 /** 转存图片上限:轮播成片素材上限 9,取前 6 控制耗时(每图并行) */
 const MAX_TRANSFER_IMAGES = 6;
 
+// ---------------------------------------------------------------------------
+// 每用户频控(对抗审查确认项:无频控时单账号可放大 OSS 存储/视觉 LLM/外抓成本;
+// 缓存键是全 URL hash,追加任意 query 即强制 miss,缓存兜不住)。
+// 进程内滑动窗口:部署形态为单容器长驻 node server.js,单进程计数即有效;
+// 多实例横扩时各实例独立计数,上限放大 N 倍仍是硬闸。
+// ---------------------------------------------------------------------------
+const RATE_WINDOW_MS = 60_000;
+const RATE_MAX_PER_WINDOW = 5;
+const RATE_DAY_MS = 24 * 60 * 60 * 1000;
+const RATE_MAX_PER_DAY = 100;
+const MAX_INFLIGHT_PER_USER = 2;
+
+const requestLog = new Map<string, number[]>();
+const inflightByUser = new Map<string, number>();
+
+function checkRateLimit(userId: string): string | null {
+  const now = Date.now();
+  const log = (requestLog.get(userId) ?? []).filter((t) => now - t < RATE_DAY_MS);
+  if (log.length >= RATE_MAX_PER_DAY) return "今日链接解析次数已达上限";
+  if (log.filter((t) => now - t < RATE_WINDOW_MS).length >= RATE_MAX_PER_WINDOW) {
+    return "解析太频繁,请稍候再试";
+  }
+  log.push(now);
+  requestLog.set(userId, log);
+  // 防 Map 无界增长:超 5000 用户时清掉一天内无活动的键
+  if (requestLog.size > 5000) {
+    for (const [key, times] of requestLog) {
+      if (times.every((t) => now - t >= RATE_DAY_MS)) requestLog.delete(key);
+    }
+  }
+  return null;
+}
+
 async function transferImageToOss(rawUrl: string, userId: string): Promise<string | null> {
   try {
     const res = await safeFetch(rawUrl, {
@@ -47,8 +81,9 @@ async function transferImageToOss(rawUrl: string, userId: string): Promise<strin
     if (!res.ok) return null;
     const contentType = res.headers.get("content-type") ?? "";
     if (!contentType.startsWith("image/")) return null;
-    const buf = await res.arrayBuffer();
-    if (buf.byteLength < 100 || buf.byteLength > MAX_IMAGE_BYTES) return null;
+    // 流式上限:绝不先全量入内存再判大小(OOM 面,对抗审查确认项)
+    const buf = await readBodyWithCap(res, MAX_IMAGE_BYTES);
+    if (buf.byteLength < 100) return null;
 
     const ext = contentType.includes("png")
       ? "png"
@@ -94,6 +129,7 @@ function buildMetaContext(raw: ReferenceRaw): string {
 }
 
 export async function POST(request: NextRequest) {
+  let inflightUserId: string | null = null;
   try {
     const supabase = await createClient();
     const {
@@ -102,6 +138,20 @@ export async function POST(request: NextRequest) {
     if (!user) {
       return NextResponse.json({ success: false, error: "请先登录" }, { status: 401 });
     }
+
+    const rateError = checkRateLimit(user.id);
+    if (rateError) {
+      return NextResponse.json({ success: false, error: rateError }, { status: 429 });
+    }
+    const inflight = inflightByUser.get(user.id) ?? 0;
+    if (inflight >= MAX_INFLIGHT_PER_USER) {
+      return NextResponse.json(
+        { success: false, error: "已有解析进行中,请稍候再贴" },
+        { status: 429 }
+      );
+    }
+    inflightByUser.set(user.id, inflight + 1);
+    inflightUserId = user.id;
 
     const body = await request.json();
     const url = typeof body?.url === "string" ? body.url.trim().slice(0, 2000) : "";
@@ -199,5 +249,11 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error("[Studio ParseReference] error:", error);
     return NextResponse.json({ success: false, error: "链接解析失败" }, { status: 500 });
+  } finally {
+    if (inflightUserId) {
+      const current = inflightByUser.get(inflightUserId) ?? 1;
+      if (current <= 1) inflightByUser.delete(inflightUserId);
+      else inflightByUser.set(inflightUserId, current - 1);
+    }
   }
 }

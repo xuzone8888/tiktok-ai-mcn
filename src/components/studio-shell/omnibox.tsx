@@ -82,6 +82,8 @@ interface OmniboxProps {
   onRemoveAttachment: (id: string) => void;
   /** 链接腿(S2.1):解析出的 OSS 商品图直接注入附件链路(status=done) */
   onAddRemoteImages?: (urls: string[]) => void;
+  /** 链接腿:按 URL 批量移除附件(换链接/清卡时收走上一链接注入的图,防混料) */
+  onRemoveAttachmentsByUrl?: (urls: string[]) => void;
   credits: number | null;
   onSubmit: (draft: StudioDraft) => Promise<boolean>; // 返回是否提交成功(成功则清空输入)
 }
@@ -145,6 +147,7 @@ export function Omnibox({
   onAddFiles,
   onRemoveAttachment,
   onAddRemoteImages,
+  onRemoveAttachmentsByUrl,
   credits,
   onSubmit,
 }: OmniboxProps) {
@@ -210,6 +213,15 @@ export function Omnibox({
   const [linkHint, setLinkHint] = useState<string | null>(null);
   // 解析请求代际:旧响应回来时若代际不符则丢弃(用户连续贴两个链接)
   const linkNonceRef = useRef(0);
+  // 当前链接注入的附件 URL(换链接/清卡时按此收走,防两商品素材混料)
+  const linkInjectedUrlsRef = useRef<string[]>([]);
+
+  const removeInjectedAttachments = () => {
+    if (linkInjectedUrlsRef.current.length > 0) {
+      onRemoveAttachmentsByUrl?.(linkInjectedUrlsRef.current);
+      linkInjectedUrlsRef.current = [];
+    }
+  };
 
   const startLinkParse = (url: string) => {
     const nonce = ++linkNonceRef.current;
@@ -230,7 +242,12 @@ export function Omnibox({
           setProductCard(card);
           setCardPanelOpen(true);
           setAnalyzeError(null);
-          if (card.images.length > 0) onAddRemoteImages?.(card.images);
+          // 先收走上一链接注入的图,再注入本链接的(防两商品混进同一批素材)
+          removeInjectedAttachments();
+          if (card.images.length > 0) {
+            linkInjectedUrlsRef.current = card.images;
+            onAddRemoteImages?.(card.images);
+          }
         } else {
           setLinkChip({ url, status: "failed", error: result?.error || "链接解析失败" });
         }
@@ -244,6 +261,7 @@ export function Omnibox({
   const clearLinkCard = () => {
     linkNonceRef.current++;
     setLinkChip(null);
+    removeInjectedAttachments();
     if (cardSource === "link") {
       setProductCard(null);
       setCardSource(null);
@@ -381,6 +399,7 @@ export function Omnibox({
         setLinkChip(null);
         setLinkHint(null);
         linkNonceRef.current++;
+        linkInjectedUrlsRef.current = []; // 附件已由页面层清空,指针同步复位
       }
     } finally {
       setSubmitting(false);

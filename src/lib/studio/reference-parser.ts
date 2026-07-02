@@ -161,6 +161,44 @@ export async function safeFetch(
   throw new Error("重定向次数过多");
 }
 
+/**
+ * 带上限的响应体读取:Content-Length 预检快速拒绝(不可信,仅提前止损)+
+ * 流式累计超限即 cancel。绝不先 arrayBuffer 全量入内存再判大小——
+ * 攻击者自控页返回超大 body 会把进程推向 OOM(对抗审查确认项)。
+ */
+export async function readBodyWithCap(res: Response, maxBytes: number): Promise<ArrayBuffer> {
+  const declared = Number(res.headers.get("content-length") ?? "");
+  if (Number.isFinite(declared) && declared > maxBytes) {
+    await res.body?.cancel().catch(() => {});
+    throw new Error("响应体过大");
+  }
+  const reader = res.body?.getReader();
+  if (!reader) {
+    const buf = await res.arrayBuffer();
+    if (buf.byteLength > maxBytes) throw new Error("响应体过大");
+    return buf;
+  }
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > maxBytes) {
+      await reader.cancel().catch(() => {});
+      throw new Error("响应体过大");
+    }
+    chunks.push(value);
+  }
+  const out = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    out.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return out.buffer;
+}
+
 // ============================================================================
 // 文本/图片工具(摘自 link-parser.ts)
 // ============================================================================
@@ -213,7 +251,8 @@ async function parseShopifyJson(rawUrl: string): Promise<ReferenceRaw | null> {
     const contentType = res.headers.get("content-type") ?? "";
     if (!contentType.includes("json")) return null;
 
-    const body = (await res.json()) as {
+    const jsonBuf = await readBodyWithCap(res, 2 * 1024 * 1024);
+    const body = JSON.parse(new TextDecoder("utf-8").decode(jsonBuf)) as {
       product?: {
         title?: string;
         body_html?: string;
@@ -254,10 +293,7 @@ async function parseOgMeta(rawUrl: string, platform: ReferencePlatform): Promise
   if (!res.ok) {
     throw new Error(`目标页面返回 HTTP ${res.status}`);
   }
-  const buf = await res.arrayBuffer();
-  if (buf.byteLength > MAX_HTML_BYTES) {
-    throw new Error("页面过大,无法解析");
-  }
+  const buf = await readBodyWithCap(res, MAX_HTML_BYTES);
   const html = new TextDecoder("utf-8", { fatal: false }).decode(buf);
 
   let title = "";

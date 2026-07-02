@@ -160,7 +160,9 @@ export const useAiGenStore = create<AiGenState & AiGenActions>()(
             task.scenes.forEach((scene) => {
               if (scene.status === "failed") {
                 scene.status = "pending";
-                scene.upstreamTaskId = null; // 失败镜重提交(上游已退款)
+                // 锚点保留:超时失败的镜重试时只续轮询(上游可能已成,重提交
+                // 会双扣费);上游明确失败(已退款)的镜其锚点已被执行器清空,
+                // 此处自然走重提交。
                 scene.errorMessage = null;
               }
             });

@@ -10,14 +10,25 @@
  * 幻灯片腿口播由服务端按 标题+勾选卖点 diverse 生成;台词行用于 AI 生成腿逐镜。
  */
 
-import { useCallback, useEffect, useState } from "react";
-import { FileText, Loader2, Minus, Plus, RotateCcw, Save, Sparkles, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { FileText, Loader2, Minus, Plus, RotateCcw, Save, Sparkles, X, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import type { StudioBatch } from "@/stores/studio-store";
 import type { ProductCard } from "@/lib/studio/product-vision";
-import type { AiGenSceneSpec } from "@/lib/studio/job-spec";
-import { useStudioSubmit } from "./use-studio-submit";
+import type { AiGenJobSpec, AiGenSceneSpec } from "@/lib/studio/job-spec";
+import { getVideoBatchTotalPrice } from "@/types/video-batch";
+import { slideshowCreditsPerVideo, useStudioSubmit } from "./use-studio-submit";
 
 interface BlueprintScene {
   idx: number;
@@ -70,6 +81,28 @@ export function BlueprintDrawer({ batch, onClose }: BlueprintDrawerProps) {
   const [saving, setSaving] = useState(false);
   const [rerunCount, setRerunCount] = useState(3);
   const [reloadNonce, setReloadNonce] = useState(0);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+
+  // 重跑估价镜像 omnibox estimateCredits(权威扣退在服务端):
+  // ai_gen=逐镜计价×镜数×条数;slideshow=图数分级×条数
+  const estimatedCredits = useMemo(() => {
+    const baseSpec = batch.spec as unknown as { kind?: string };
+    if (baseSpec?.kind === "ai_gen") {
+      const aiSpec = batch.spec as unknown as AiGenJobSpec;
+      const sceneCount = scenes.length || aiSpec.scenes?.length || 1;
+      return (
+        getVideoBatchTotalPrice(
+          aiSpec.modelType,
+          aiSpec.durationSeconds,
+          aiSpec.quality ?? "standard"
+        ) *
+        sceneCount *
+        rerunCount
+      );
+    }
+    const imageCount = card?.images.length || scenes.length || 2;
+    return slideshowCreditsPerVideo(imageCount) * rerunCount;
+  }, [batch.spec, scenes, card, rerunCount]);
 
   useEffect(() => {
     let cancelled = false;
@@ -173,6 +206,15 @@ export function BlueprintDrawer({ batch, onClose }: BlueprintDrawerProps) {
       setSaving(false);
     }
   }, [card, scenes, blueprintId, toast]);
+
+  // 与 omnibox 同阈值:大批量/高积分强制二次确认(红队裁决,重跑路径不豁免)
+  const requestRerun = () => {
+    if (rerunCount > 10 || estimatedCredits > 1000) {
+      setConfirmOpen(true);
+      return;
+    }
+    void handleRerun();
+  };
 
   const handleRerun = async () => {
     if (!card) return;
@@ -392,17 +434,48 @@ export function BlueprintDrawer({ batch, onClose }: BlueprintDrawerProps) {
               size="sm"
               disabled={saving}
               className="flex-1 gap-1.5"
-              onClick={() => void handleRerun()}
+              onClick={requestRerun}
             >
               <Sparkles className="h-3.5 w-3.5" />
               {dirty ? `保存并出 ${rerunCount} 条` : `再出 ${rerunCount} 条`}
             </Button>
           </div>
+          <p className="flex items-center gap-1 text-[11px] tabular-nums text-zinc-500">
+            <Zap className="h-3 w-3" />
+            预估 ≈ {estimatedCredits} 积分(按任务在服务端逐条扣除,失败自动退款)
+          </p>
           <p className="text-[10px] leading-relaxed text-zinc-600">
             编辑只影响新批次;已提交批次按其提交时快照渲染。
           </p>
         </div>
       )}
+
+      {/* 大批量/高积分二次确认(与 omnibox 同阈值) */}
+      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>确认按蓝图批量出片</AlertDialogTitle>
+            <AlertDialogDescription>
+              将按当前蓝图提交 {rerunCount} 条成片任务,预估消耗{" "}
+              <span className="font-semibold text-amber-500 tabular-nums">
+                {estimatedCredits}
+              </span>{" "}
+              积分。积分按任务在服务端逐条扣除,失败自动退款。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>再想想</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setConfirmOpen(false);
+                void handleRerun();
+              }}
+            >
+              确认提交
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </aside>
   );
 }

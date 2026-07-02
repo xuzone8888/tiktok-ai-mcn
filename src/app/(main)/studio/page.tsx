@@ -150,6 +150,12 @@ export default function StudioPage() {
     });
   }, []);
 
+  // 链接腿:换链接/清卡时按 URL 收走上一链接注入的图(防两商品素材混料)
+  const removeAttachmentsByUrl = useCallback((urls: string[]) => {
+    const targets = new Set(urls);
+    setAttachments((prev) => prev.filter((a) => !(a.url && targets.has(a.url))));
+  }, []);
+
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop: addFiles,
     accept: { "image/*": [".png", ".jpg", ".jpeg", ".webp", ".gif"] },
@@ -281,6 +287,7 @@ export default function StudioPage() {
             onAddFiles={addFiles}
             onRemoveAttachment={removeAttachment}
             onAddRemoteImages={addRemoteImages}
+            onRemoveAttachmentsByUrl={removeAttachmentsByUrl}
             credits={credits}
             onSubmit={handleSubmit}
           />

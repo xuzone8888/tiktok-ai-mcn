@@ -1336,53 +1336,73 @@ function useAiGenTaskExecutor() {
     try {
       updateTask(taskId, { status: "generating", progress: 3 });
 
-      // ---------- 阶段一:逐镜提交(带锚点的 scene 跳过,只续轮询) ----------
+      // ---------- 阶段一:逐镜提交(带锚点的 scene 只续轮询,绝不重提交) ----------
       for (const scene of task.scenes) {
-        if (scene.status === "completed" || scene.upstreamTaskId) continue;
-
-        const submitRes = await fetch("/api/video-batch/models/submit", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            modelType,
-            prompt: scene.prompt,
-            aspectRatio,
-            durationSeconds,
-            quality,
-            imageUrls: scene.imageUrl ? [scene.imageUrl] : [],
-            mode: scene.imageUrl ? "image_to_video" : "prompt_to_video",
-            clientTaskId: scene.clientTaskId,
-            groupName,
-          }),
-          signal: AbortSignal.timeout(120_000),
-        });
-        const submitText = await submitRes.text();
-        let submitData;
-        try {
-          submitData = JSON.parse(submitText);
-        } catch {
-          submitData = null;
+        // 每镜取最新快照:重试/复水后的状态以 store 为准,不吃循环外的旧闭包
+        const fresh = getTask()?.scenes.find(s => s.idx === scene.idx) ?? scene;
+        if (fresh.status === "completed" || fresh.status === "failed") continue;
+        if (fresh.upstreamTaskId) {
+          // 复水恢复/超时重试:锚点在手说明上游已受理已扣费——置回 generating
+          // 进入阶段二续轮询(否则轮询过滤器认不出 pending 态,缺片直进 stitch)
+          if (fresh.status !== "generating") {
+            updateScene(taskId, fresh.idx, { status: "generating" });
+          }
+          continue;
         }
 
-        if (submitRes.ok && submitData?.success && submitData.data?.taskId) {
-          // 上游任务号拿到即持久化:刷新后按锚点续轮询,绝不重提交(防双扣费)
-          updateScene(taskId, scene.idx, {
-            status: "generating",
-            upstreamTaskId: submitData.data.taskId,
+        try {
+          const submitRes = await fetch("/api/video-batch/models/submit", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              modelType,
+              prompt: fresh.prompt,
+              aspectRatio,
+              durationSeconds,
+              quality,
+              imageUrls: fresh.imageUrl ? [fresh.imageUrl] : [],
+              mode: fresh.imageUrl ? "image_to_video" : "prompt_to_video",
+              clientTaskId: fresh.clientTaskId,
+              groupName,
+            }),
+            signal: AbortSignal.timeout(120_000),
           });
-          window.dispatchEvent(new CustomEvent("credits-updated"));
-        } else {
-          const message: string = submitData?.error || `提交失败 (HTTP ${submitRes.status})`;
-          updateScene(taskId, scene.idx, { status: "failed", errorMessage: message });
-          // 积分不足时后续镜必然同败,直接止损
-          if (/积分|credits|insufficient/i.test(message)) {
-            getTask()?.scenes.forEach(s => {
-              if (s.status === "pending") {
-                updateScene(taskId, s.idx, { status: "failed", errorMessage: "积分不足,未提交" });
-              }
-            });
-            break;
+          const submitText = await submitRes.text();
+          let submitData;
+          try {
+            submitData = JSON.parse(submitText);
+          } catch {
+            submitData = null;
           }
+
+          if (submitRes.ok && submitData?.success && submitData.data?.taskId) {
+            // 上游任务号拿到即持久化:刷新后按锚点续轮询,绝不重提交(防双扣费)
+            updateScene(taskId, fresh.idx, {
+              status: "generating",
+              upstreamTaskId: submitData.data.taskId,
+            });
+            window.dispatchEvent(new CustomEvent("credits-updated"));
+          } else {
+            const message: string = submitData?.error || `提交失败 (HTTP ${submitRes.status})`;
+            updateScene(taskId, fresh.idx, { status: "failed", errorMessage: message });
+            // 积分不足时后续镜必然同败,直接止损
+            if (/积分|credits|insufficient/i.test(message)) {
+              getTask()?.scenes.forEach(s => {
+                if (s.status === "pending") {
+                  updateScene(taskId, s.idx, { status: "failed", errorMessage: "积分不足,未提交" });
+                }
+              });
+              break;
+            }
+          }
+        } catch (submitError) {
+          // 提交网络错误/超时只失败该镜,不落进外层 catch 误标「拼接超时」;
+          // 服务端可能已受理并扣费(无锚点无从对账),提示用户核对生成记录
+          console.error("[AiGenTaskExecutor] scene submit error:", submitError);
+          updateScene(taskId, fresh.idx, {
+            status: "failed",
+            errorMessage: "提交超时或网络错误(若已扣费,该镜片段会出现在生成记录)",
+          });
         }
       }
 
@@ -1427,10 +1447,12 @@ function useAiGenTaskExecutor() {
                   videoUrl: statusData.data.videoUrl,
                 });
               } else if (statusData.data.status === "failed") {
-                // 服务端已幂等退款
+                // 服务端已幂等退款;清锚点=重试时重提交(重新扣费,与退款对账)。
+                // 超时失败(下方 sweep)保留锚点=重试只续轮询,防上游实际已成的双扣费
                 updateScene(taskId, scene.idx, {
                   status: "failed",
                   errorMessage: statusData.data.errorMessage || "该镜生成失败",
+                  upstreamTaskId: null,
                 });
               }
             }
@@ -1452,11 +1474,15 @@ function useAiGenTaskExecutor() {
 
       const finalSnapshot = getTask();
       if (!finalSnapshot) return;
-      const failedScenes = finalSnapshot.scenes.filter(s => s.status === "failed");
-      if (failedScenes.length > 0) {
+      // 防缺片直进 stitch:任何非 completed / 无成片 URL 的镜都算未完成
+      const incomplete = finalSnapshot.scenes.filter(
+        s => s.status !== "completed" || !s.videoUrl
+      );
+      if (incomplete.length > 0) {
+        const firstError = incomplete.find(s => s.errorMessage)?.errorMessage ?? "";
         updateTask(taskId, {
           status: "failed",
-          errorMessage: `${failedScenes.length}/${totalScenes} 镜失败:${failedScenes[0].errorMessage ?? ""}(重试只补失败镜)`,
+          errorMessage: `${incomplete.length}/${totalScenes} 镜未完成:${firstError}(重试只补未完成镜)`,
         });
         return;
       }
