@@ -77,7 +77,9 @@
   - **grok 单镜 AI 生成腿真实全链 PASS(关键)**:submit→轮询→真实 OSS 成片→stitch 直通→落库(source=studio/spec.render_mode=ai_gen/batch_id/credit_cost=0);积分对账 grok=5、stitch=0;双镜里失败镜自动退款验证正常(300→285 净扣 15=图片5+单镜5+双镜成功镜5)
   - **worker 多镜拼接未端到端验**:Mac worker 离线(探测 /api/probe 与根路径均 curl 000)+ 双镜里一镜遇上游偶发 HTTP/2 错误(curl 92,非代码)。但两端各自已验:src 侧 callWorkerStitch+落库/幂等/入库(S2.7 第三轮用真实 OSS 视频验)、worker 端 /api/stitch(S0.4 本机 ffmpeg 8.0 实测混合分辨率+无音轨补齐);契约层对齐(videos/aspectRatio/loudnorm/transition/503 重试),仅缺"在线 worker"这一外部依赖的接缝,留生产或 worker 上线后补
   - **结论:S2 全部代码路径脚本可达部分已全绿**(链接腿/蓝图 CRUD/幻灯片/图片/视频单镜 AI 生成腿/stitch 落库/频控/SSRF/死链);唯一未覆盖=在线 worker 多镜拼接(外部机器状态)+ UI 手感层(人工)
-- **下一步:S1+S2 人工验收 → S3**:①dev server 真实登录态走查:S1 四路径 + 贴海外链接(Shopify 站最稳)→蓝图→改卖点→3 变体 + AI 生成腿一条(需 MAC_WORKER_URL 隧道通,留意 worker /api/stitch 无生产先例)+ /link-video 死链确认;②用户经 dashboard 执行 20260702_drop_link_video.sql(含退款清扫+归档,先看 NOTICE 输出);③S3 = 拼装腿+爆款拆解(20 条基准门槛)+批量矩阵+存为配方(BLUEPRINT §七,收钱线在 S2 后)
+- **S2.9 人工验收通过 + UI 打磨(2026-07-03,1432f40)**:用户本地(dev:3100)人工走查**整体满意**;两点意见已落地——omnibox 操作台放大(760→980px,输入框 2→3 行)、链接解析取消按钮放大为文字按钮+Esc 取消、批次流版面放宽(max-w-5xl→7xl,全屏方向)。**S1+S2 人工验收完成**;方向备忘:后续布局往全屏排布走(S3 任务中心/rail 时统一设计)
+- **下一步(验收已过,进入部署):**①用户确认后合并 main+push(webhook 自动部署阿里云);②线上确认 /link-video 404、/studio 正常、多镜 AI 生成拼接跑一条(worker 生产常开,补上本地没验到的最后接缝);③dashboard 执行 20260702_drop_link_video.sql(必须在②之后);④S3
+- ~~**下一步:S1+S2 人工验收 → S3**~~(已完成,见上):①dev server 真实登录态走查:S1 四路径 + 贴海外链接(Shopify 站最稳)→蓝图→改卖点→3 变体 + AI 生成腿一条(需 MAC_WORKER_URL 隧道通,留意 worker /api/stitch 无生产先例)+ /link-video 死链确认;②用户经 dashboard 执行 20260702_drop_link_video.sql(含退款清扫+归档,先看 NOTICE 输出);③S3 = 拼装腿+爆款拆解(20 条基准门槛)+批量矩阵+存为配方(BLUEPRINT §七,收钱线在 S2 后)
 - **分支**:`claude/practical-curie-42f4b1`(worktree:E:\StarGaze\.claude\worktrees\practical-curie-42f4b1)
 - **待用户/环境**:S0.1 生产执行——**exec_sql RPC 在生产库不存在**(老 runner 从没跑成过),执行通道=用户登录 Supabase dashboard SQL editor,我经浏览器贴 SQL 执行(源 IP 预检已通过:生产 source 取值 8 种全部被「基础枚举+batch_video% 通配」覆盖)。届时连同 20260702_drop_viral_clone.sql 一起执行。
 - **提交节奏(用户指示)**:大步伐——里程碑级 commit(①文档+tag 已交;②S0.1-S0.3 数据层+拆除;③S0.4-S0.7)
