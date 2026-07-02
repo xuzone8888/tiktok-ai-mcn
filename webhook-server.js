@@ -75,10 +75,20 @@ const server = http.createServer((req, res) => {
       res.end('Deploying...');
 
       deploying = true;
+      // ff-only: server checkout must never diverge from origin/main (a plain
+      // pull could create a surprise merge commit on the server).
+      // npm install: the old command skipped it, so any dependency change
+      // bricked the deploy at build time.
+      // --max-old-space-size=2048: this 3.4G host OOM-killed an uncapped
+      // `next build` (SIGKILL in webhook-error.log); cap the heap so the
+      // build spills to swap instead of dying.
       const cmd =
         'cd ' + REPO_PATH +
-        ' && git pull origin ' + DEPLOY_BRANCH +
-        ' && npm run build && pm2 restart tiktok-ai-mcn';
+        ' && git fetch origin ' + DEPLOY_BRANCH +
+        ' && git merge --ff-only origin/' + DEPLOY_BRANCH +
+        ' && npm install --no-audit --no-fund' +
+        ' && NODE_OPTIONS=--max-old-space-size=2048 npm run build' +
+        ' && pm2 restart tiktok-ai-mcn';
       exec(cmd, { maxBuffer: 10 * 1024 * 1024 }, (error, stdout, stderr) => {
         deploying = false;
         if (error) {
