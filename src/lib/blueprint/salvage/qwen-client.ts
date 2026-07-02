@@ -57,6 +57,8 @@ export interface QwenCallOptions {
   maxRetries?: number;
   /** 是否多模态模型 */
   multimodal?: boolean;
+  /** 单次尝试超时毫秒(默认 60s;长视频深拆需要更长——S3.2) */
+  timeoutMs?: number;
 }
 
 /** 调用结果 */
@@ -424,8 +426,9 @@ async function callQwen(
           'Authorization': `Bearer ${DASHSCOPE_API_KEY}`,
         },
         body: JSON.stringify(requestBody),
-        // 单次尝试 60s 上限:挂起连接不允许吃光调用方的时间预算(重试由外层循环负责)
-        signal: AbortSignal.timeout(60_000),
+        // 单次尝试超时上限:挂起连接不允许吃光调用方的时间预算(重试由外层循环负责);
+        // 默认 60s,长视频深拆(下载+抽帧+8192 token 输出)可经 timeoutMs 放宽
+        signal: AbortSignal.timeout(options.timeoutMs ?? 60_000),
       });
 
       if (!response.ok) {
