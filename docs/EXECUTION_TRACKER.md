@@ -25,7 +25,15 @@
   - BTM video-batch 执行器提交路径(background-task-manager.tsx)补传 characterId/characterName/characterReferenceImages/characterAsset 四字段,角色推导逻辑与页面内联路径对齐(task → globalSettings → asset 快照按模型上限推导),参考图并入 mergeCharacterReferenceImages
   - BTM quick-gen 视频执行器提交路径顺手补传 characterId/characterName/characterAsset(网关侧自会推导参考图并合并 imageUrls,见 models/submit/route.ts:222-242)
   - quick-gen store 终态不可降级守卫:updateTaskStatus/updateImageTaskStatus 中,任务已 completed/failed 后到达的异状态更新一律忽略(轮询迟到写入防卡回);重复终态写入只合并字段不重复追加 recentTasks
-- **下一步:S1 Studio MVP**(BLUEPRINT §七):omnibox+批次流+幻灯片渲染腿首发+商品图腿+@角色(character-picker inline)。S0.6 残留「画布回跳」由 /studio 新画布消解,不再修旧页
+- **S1.1 /studio 骨架已完成(2026-07-02,tsc+build 过,经 17 项对抗审查修复)**:
+  - /studio 实装:omnibox(图片/视频模式切换器唯一真值+参数 chips+数量 stepper 1-100+积分预估+大批量>10条/高积分>1000 二次确认)、垂直批次流(Batch 卡:参数快照 chips+进度统计+重试失败/批量入库;Job 网格 ≤8 展开 >8 折叠)、Job 抽屉(重试/入库/下载/以此为参考推回输入框)、整页拖拽上传蒙层
+  - 新文件:stores/studio-store.ts(唯一新增 store:批次元数据+jobRefs,persist 上限 50 批)、lib/studio/batch-view.ts(useHostTaskMaps 页面级单次订阅 + buildBatchJobViews 纯函数聚合)、components/studio-shell/*(omnibox/batch-card/job-cell/job-drawer/status-badge/use-studio-submit;**注意 components/studio/ 被旧工作台组件占用,故用 studio-shell**)、api/studio/library(入库:按 generations.task_id 批量 update library_status,限 status=completed)
+  - store 加法:video-batch `addTasks`、quick-gen `addImageTasks`(接收适配器构造的完整任务);JobSpec/VideoBatchTask/QuickGenImageTask 加 batchId;网关 models/submit + generate/image 接 batchId 落 generations.batch_id(UUID 校验,非法忽略)
+  - **BTM 视频执行器改造(审查修复核心)**:①只执行带 batchId 的 Studio 任务——旧 video-batch 页 pending 草稿绝不拉起(startBatch 是全局开关,旧页任务无 batchId 天然隔离);②jobStatus=paused 且有 Studio pending 时自动置 running(persist 落盘 paused 无人恢复的死锁);③上游任务号拿到即持久化 soraTaskId+刷新后 pending 且带 soraTaskId 的任务直接续轮询(防双扣费);④执行循环 while 重扫 getState()+finally 复位+forceRescan 自唤醒(修执行中新批次永久卡排队);⑤customPrompt 短路:图生视频带用户文字时跳过豆包管线(适配器 spec.prompt 非空即写 customPrompt)
+  - quick-gen store 修复:复水孤儿归一化(uploading/generating/无 taskId 的 polling→failed「页面刷新中断」,防双扣;带 taskId 的 polling 由 BTM 续轮询)、prune 分池(旧页任务 20/Studio 任务 500,防上一批结果被清成 missing)
+  - 图片 task_id 对账:BTM 图片提交传 requestId=本地任务 id(qg-*),服务端兜底 id 加随机后缀(防同毫秒撞车);generations.task_id 与本地任务一一对应,入库匹配可靠
+  - 偏差记录(有意为之):左栏 Project/Session rail 不做(S2 任务中心);URL 解析层/配方 chip 不做(S2);generations.spec 列落库留 S2(重跑快照已在 studio-store 客户端持久化);>8 折叠展开未虚拟化(S1 规模够用);@角色按钮占位禁用(S1.4 开放)
+- **下一步:S1.2 幻灯片渲染腿**:omnibox 加「幻灯片」模式(拖图+文案→N 条轮播成片);SlideshowTask 扩 renderRequest 快照字段 + BTM 第 5 执行器(裁决:BTM 是唯一执行宿主,页面直调会因导航丢结果);kenburns 三层接线(generate-slideshow route→ffmpeg-slideshow.ts callMacWorker/本地 spawn→worker,S0.4 已在 worker/python 就位但 Next.js 侧未接);generate-slideshow 补写 generations(source='slideshow' 已在 valid_source 枚举,task_id=客户端任务 id,batch_id 透传)——否则幻灯片无法入库。之后 S1.3 商品图腿(product-vision lib 豆包视觉/qwen 兜底+analyze API+blueprints 落库+商品卡 chip)、S1.4 @角色(character-picker inline 包 popover 壳)
 - **分支**:`claude/practical-curie-42f4b1`(worktree:E:\StarGaze\.claude\worktrees\practical-curie-42f4b1)
 - **待用户/环境**:S0.1 生产执行——**exec_sql RPC 在生产库不存在**(老 runner 从没跑成过),执行通道=用户登录 Supabase dashboard SQL editor,我经浏览器贴 SQL 执行(源 IP 预检已通过:生产 source 取值 8 种全部被「基础枚举+batch_video% 通配」覆盖)。届时连同 20260702_drop_viral_clone.sql 一起执行。
 - **提交节奏(用户指示)**:大步伐——里程碑级 commit(①文档+tag 已交;②S0.1-S0.3 数据层+拆除;③S0.4-S0.7)

@@ -61,6 +61,9 @@ export interface VideoBatchActions {
   /** 创建新任务 */
   createTask: (images: TaskImageInfo[], groupName?: string) => string;
 
+  /** 批量写入已构造好的任务（Studio JobSpec 适配器产物,不经 globalSettings 组装;需另调 startBatch 让 BTM 开跑） */
+  addTasks: (tasks: VideoBatchTask[]) => void;
+
   /** 从提示词创建任务（纯提示词模式） */
   createTaskFromPrompt: (prompt: string, referenceImageUrl?: string, count?: number, groupName?: string, options?: { firstFrameUrl?: string; lastFrameUrl?: string; referenceImageUrls?: string[] }) => string[];
 
@@ -313,6 +316,13 @@ export const useVideoBatchStore = create<VideoBatchState & VideoBatchActions>()(
           });
 
           return id;
+        },
+
+        addTasks: (tasks) => {
+          if (tasks.length === 0) return;
+          set((state) => {
+            state.tasks.push(...tasks);
+          });
         },
 
         createTaskFromPrompt: (prompt, referenceImageUrl, count = 1, groupName, options) => {

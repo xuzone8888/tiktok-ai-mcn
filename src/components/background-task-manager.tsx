@@ -10,10 +10,10 @@
  * 4. 页面切换不影响任务执行
  */
 
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef, useCallback, useReducer } from "react";
 import { useRouter } from "next/navigation";
 import { useVideoBatchStore } from "@/stores/video-batch-store";
-import { type PipelineStep } from "@/types/video-batch";
+import { type PipelineStep, type VideoBatchTask } from "@/types/video-batch";
 import { useImageBatchStore } from "@/stores/image-batch-store";
 import { useQuickGenStore } from "@/stores/quick-gen-store";
 import { useToast } from "@/hooks/use-toast";
@@ -36,6 +36,8 @@ function useVideoTaskExecutor() {
   const isExecutingRef = useRef(false);
   const executedTasksRef = useRef<Set<string>>(new Set());
   const userIdRef = useRef<string | null>(null);
+  // 执行循环收尾后的自唤醒信号(见执行 effect 尾注)
+  const [rescanTick, forceRescan] = useReducer((x: number) => x + 1, 0);
 
   // 获取用户 ID
   useEffect(() => {
@@ -60,7 +62,8 @@ function useVideoTaskExecutor() {
 
   // 执行单个视频任务
   const executeVideoTask = useCallback(async (taskId: string) => {
-    const task = tasks.find(t => t.id === taskId);
+    // 从 store 取最新快照(执行循环会跨渲染重扫,不能依赖闭包里的旧 tasks)
+    const task = useVideoBatchStore.getState().tasks.find(t => t.id === taskId);
     if (!task || task.status !== "pending") return;
 
     try {
@@ -94,6 +97,65 @@ function useVideoTaskExecutor() {
       const taskQuality = task.quality || globalSettings.quality;
       const taskAspectRatio = task.aspectRatio || globalSettings.aspectRatio;
       const isPromptMode = task.mode === "prompt_to_video";
+
+      // 轮询上游直到终态(正常提交与刷新恢复两条路径共用)
+      const pollVideoUntilDone = async (upstreamTaskId: string) => {
+        const isSeedanceBatch = taskModelType === "seedance";
+        const maxAttempts = taskModelType === "happyhorse"
+          ? (taskDuration === 12 ? 144 : 80)
+          : isSeedanceBatch
+            ? 60
+            : taskModelType === "sora2-pro"
+              ? 140
+              : 90;
+        const pollInterval = isSeedanceBatch ? 5000 : taskModelType === "happyhorse" ? 7500 : 10000;
+
+        for (let i = 0; i < maxAttempts; i++) {
+          await new Promise(r => setTimeout(r, pollInterval));
+          updateTaskStatus(taskId, "generating_video", { currentStep: 4, progress: Math.min(80 + Math.floor(i / 2), 98) });
+
+          const statusRes = await fetch(`/api/video-batch/models/status?modelType=${encodeURIComponent(taskModelType)}&taskId=${encodeURIComponent(upstreamTaskId)}&aspectRatio=${encodeURIComponent(taskAspectRatio)}&durationSeconds=${taskDuration}&quality=${encodeURIComponent(taskQuality)}`);
+          const statusText = await statusRes.text();
+          let statusData;
+          try {
+            statusData = JSON.parse(statusText);
+          } catch {
+            continue;
+          }
+
+          if (statusData.success && statusData.data) {
+            if (statusData.data.status === "completed" && statusData.data.videoUrl) {
+              updateTaskStatus(taskId, "success", {
+                currentStep: 4 as PipelineStep,
+                progress: 100,
+                soraTaskId: upstreamTaskId,
+                soraVideoUrl: statusData.data.videoUrl,
+              });
+              toast({
+                title: "视频生成完成",
+                description: (
+                  <a href="/studio" className="text-tiktok-cyan hover:underline flex items-center gap-1">
+                    Studio 视频任务已完成，点击查看 <ExternalLink className="h-3 w-3" />
+                  </a>
+                ),
+              });
+              return;
+            }
+            if (statusData.data.status === "failed") {
+              throw new Error(statusData.data.errorMessage || "视频生成失败");
+            }
+          }
+        }
+
+        throw new Error("视频生成任务超时");
+      };
+
+      // 刷新恢复:上游任务号已持久化的任务直接续轮询,绝不重复提交(防双扣费)
+      if (task.soraTaskId) {
+        updateTaskStatus(taskId, "generating_video", { currentStep: 4, progress: 80 });
+        await pollVideoUntilDone(task.soraTaskId);
+        return;
+      }
 
       console.log("[VideoTaskExecutor] Task AI model config:", {
         taskId: task.id,
@@ -233,7 +295,10 @@ function useVideoTaskExecutor() {
       // 生成脚本
       let finalVideoPrompt = task.customPrompt?.trim() || "";
 
-      if (isPromptMode) {
+      // prompt 模式,或图生视频任务自带用户提示词(Studio omnibox「拖图+文字」路径):
+      // 跳过豆包脚本/提示词管线,直接以 customPrompt 为最终提示词。
+      // 旧 video-batch 页面的图片任务从不设置 customPrompt,不受影响。
+      if (isPromptMode || finalVideoPrompt) {
         updateTaskStatus(taskId, "generating_prompt", {
           currentStep: 3,
           progress: 75,
@@ -370,6 +435,7 @@ function useVideoTaskExecutor() {
           userId: userIdRef.current,
           mode: isPromptMode ? "prompt_to_video" : "image_to_video",
           groupName: task.groupName,
+          batchId: task.batchId,
           characterId: task.characterId || taskCharacterAsset?.id,
           characterName: task.characterName || taskCharacterAsset?.name,
           characterReferenceImages: taskCharacterReferenceImages,
@@ -397,54 +463,9 @@ function useVideoTaskExecutor() {
       }
 
       const upstreamTaskId = videoResult.data.taskId;
-      const isSeedanceBatch = taskModelType === "seedance";
-      const maxAttempts = taskModelType === "happyhorse"
-        ? (taskDuration === 12 ? 144 : 80)
-        : isSeedanceBatch
-          ? 60
-          : taskModelType === "sora2-pro"
-            ? 140
-            : 90;
-      const pollInterval = isSeedanceBatch ? 5000 : taskModelType === "happyhorse" ? 7500 : 10000;
-
-      for (let i = 0; i < maxAttempts; i++) {
-        await new Promise(r => setTimeout(r, pollInterval));
-        updateTaskStatus(taskId, "generating_video", { currentStep: 4, progress: Math.min(80 + Math.floor(i / 2), 98) });
-
-        const statusRes = await fetch(`/api/video-batch/models/status?modelType=${encodeURIComponent(taskModelType)}&taskId=${encodeURIComponent(upstreamTaskId)}&aspectRatio=${encodeURIComponent(taskAspectRatio)}&durationSeconds=${taskDuration}&quality=${encodeURIComponent(taskQuality)}`);
-        const statusText = await statusRes.text();
-        let statusData;
-        try {
-          statusData = JSON.parse(statusText);
-        } catch {
-          continue;
-        }
-
-        if (statusData.success && statusData.data) {
-          if (statusData.data.status === "completed" && statusData.data.videoUrl) {
-            updateTaskStatus(taskId, "success", {
-              currentStep: 4 as PipelineStep,
-              progress: 100,
-              soraTaskId: upstreamTaskId,
-              soraVideoUrl: statusData.data.videoUrl,
-            });
-            toast({
-              title: "视频生成完成",
-              description: (
-                <a href="/pro-studio/video-batch" className="text-tiktok-cyan hover:underline flex items-center gap-1">
-                  批量视频任务已完成，点击查看 <ExternalLink className="h-3 w-3" />
-                </a>
-              ),
-            });
-            return;
-          }
-          if (statusData.data.status === "failed") {
-            throw new Error(statusData.data.errorMessage || "视频生成失败");
-          }
-        }
-      }
-
-      throw new Error("视频生成任务超时");
+      // 上游任务号立即持久化(刷新恢复锚点:重启后续轮询而非重复提交)
+      updateTaskStatus(taskId, "generating_video", { currentStep: 4, progress: 80, soraTaskId: upstreamTaskId });
+      await pollVideoUntilDone(upstreamTaskId);
 
     } catch (error) {
       console.error("[VideoTask] Error:", error);
@@ -454,32 +475,45 @@ function useVideoTaskExecutor() {
         errorMessage: error instanceof Error ? error.message : "任务执行失败",
       });
     }
-  }, [tasks, globalSettings, updateTaskStatus, toast]);
+  }, [globalSettings, updateTaskStatus, toast]);
 
   // 监听并执行任务
+  //
+  // 执行范围裁决(S1):本执行器只执行 Studio 批次任务(带 batchId)。
+  // video-batch 旧页在页面内联执行自己的任务,其暂存的 pending 草稿
+  // 绝不能被这里拉起(会误提交扣积分、污染草稿)。
   useEffect(() => {
+    // 刷新恢复:persist 把 running 落盘为 paused 且全站无 resume 控件——
+    // 只要还有待执行的 Studio 任务就自动续跑
+    if (
+      jobStatus === "paused" &&
+      tasks.some(t => t.status === "pending" && !!t.batchId)
+    ) {
+      setJobStatus("running");
+      return;
+    }
     if (jobStatus !== "running" || isExecutingRef.current) return;
 
-    const pendingTasks = tasks.filter(
-      t => t.status === "pending" && !executedTasksRef.current.has(t.id)
-    );
+    const isStudioPending = (t: VideoBatchTask) =>
+      t.status === "pending" && !!t.batchId && !executedTasksRef.current.has(t.id);
 
-    if (pendingTasks.length === 0) {
-      // 检查是否所有任务都完成
-      const hasRunningTasks = tasks.some(
+    if (!tasks.some(isStudioPending)) {
+      // 完成判定只看 Studio 任务子集(旧页残留任务不参与)
+      const studioTasks = tasks.filter(t => !!t.batchId);
+      const hasRunningTasks = studioTasks.some(
         t => t.status !== "pending" && t.status !== "success" && t.status !== "failed"
       );
-      if (!hasRunningTasks && tasks.length > 0) {
+      if (!hasRunningTasks && studioTasks.length > 0) {
         setJobStatus("completed");
 
-        const successCount = tasks.filter(t => t.status === "success").length;
-        const failedCount = tasks.filter(t => t.status === "failed").length;
+        const successCount = studioTasks.filter(t => t.status === "success").length;
+        const failedCount = studioTasks.filter(t => t.status === "failed").length;
 
         if (successCount > 0 || failedCount > 0) {
           toast({
             title: "📹 批量视频任务完成",
             description: (
-              <a href="/pro-studio/video-batch" className="text-tiktok-cyan hover:underline flex items-center gap-1">
+              <a href="/studio" className="text-tiktok-cyan hover:underline flex items-center gap-1">
                 成功: {successCount}, 失败: {failedCount} - 点击查看 <ExternalLink className="h-3 w-3" />
               </a>
             ),
@@ -489,25 +523,30 @@ function useVideoTaskExecutor() {
       return;
     }
 
-    // 顺序执行任务
+    // 顺序执行:每轮从 store 重扫(执行期间新提交的批次也会被捞起)
     const executeNext = async () => {
       isExecutingRef.current = true;
+      try {
+        for (;;) {
+          const next = useVideoBatchStore.getState().tasks.find(isStudioPending);
+          if (!next) break;
+          executedTasksRef.current.add(next.id);
 
-      for (const task of pendingTasks) {
-        if (executedTasksRef.current.has(task.id)) continue;
-        executedTasksRef.current.add(task.id);
+          await executeVideoTask(next.id);
 
-        await executeVideoTask(task.id);
-
-        // 任务间延迟
-        await new Promise(resolve => setTimeout(resolve, 2000));
+          // 任务间延迟
+          await new Promise(resolve => setTimeout(resolve, 2000));
+        }
+      } finally {
+        isExecutingRef.current = false;
       }
-
-      isExecutingRef.current = false;
+      // 收尾自唤醒:复位 isExecutingRef 后不会再有渲染,必须主动触发
+      // effect 重跑,才能进入完成判定或捞起收尾窗口内新入队的任务
+      forceRescan();
     };
 
     executeNext();
-  }, [jobStatus, tasks, executeVideoTask, setJobStatus, toast]);
+  }, [jobStatus, tasks, executeVideoTask, setJobStatus, toast, rescanTick]);
 
   // 重置执行状态
   useEffect(() => {
@@ -990,6 +1029,10 @@ function useQuickGenImageTaskExecutor() {
               aspectRatio: activeTask.aspectRatio,
               resolution: activeTask.resolution,
               userId: userIdRef.current, // 传递用户 ID 以写入任务日志
+              batchId: activeTask.batchId,
+              // 以本地任务 id 作服务端 task_id:防并发提交撞 openai-${Date.now()},
+              // 同时让 generations.task_id 可与本地任务对账(入库匹配)
+              requestId: activeTask.id,
               characterId: activeTask.characterAsset?.id,
               characterName: activeTask.characterAsset?.name,
               characterReferenceImages: activeTask.characterAsset

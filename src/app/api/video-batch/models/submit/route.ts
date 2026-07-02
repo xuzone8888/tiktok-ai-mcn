@@ -32,6 +32,14 @@ interface SubmitRequestBody {
   durationSeconds?: number;
   quality?: VideoQuality;
   mode?: "image_to_video" | "prompt_to_video";
+  /** Studio 批次 ID(UUID,落 generations.batch_id;非法格式忽略) */
+  batchId?: string;
+}
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function normalizeBatchId(value: unknown): string | null {
+  return typeof value === "string" && UUID_PATTERN.test(value.trim()) ? value.trim() : null;
 }
 
 function normalizeModelType(raw: string | undefined, quality?: VideoQuality): {
@@ -288,9 +296,11 @@ export async function POST(request: NextRequest) {
 
     const now = new Date().toISOString();
     const generationSource = imageUrls.length > 0 ? "batch_video" : "batch_video_prompt";
+    const batchId = normalizeBatchId(body.batchId);
     const generationInsert = {
       user_id: userId,
       task_id: upstreamTaskId,
+      ...(batchId ? { batch_id: batchId } : {}),
       type: "video",
       generation_type: "video",
       source: generationSource,

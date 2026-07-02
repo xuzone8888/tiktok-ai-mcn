@@ -105,6 +105,9 @@ export interface VideoBatchTask {
   // 任务组名称（必填，用于Tab切换和批量管理）
   groupName: string;
 
+  // Studio 批次 ID（S1：随提交透传，落 generations.batch_id）
+  batchId?: string;
+
   // 任务模式
   mode?: VideoBatchTaskMode;  // 默认 "image_to_video"
 

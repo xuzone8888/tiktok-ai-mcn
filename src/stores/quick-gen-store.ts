@@ -60,6 +60,8 @@ export interface QuickGenImageTask {
   resolution: "1k" | "2k" | "4k";
   sourceImageUrls: string[];
   characterAsset?: CharacterAssetSnapshot;
+  /** Studio 批次 ID（S1：随提交透传，落 generations.batch_id） */
+  batchId?: string;
 
   // 任务状态
   status: QuickGenTaskStatus;
@@ -102,6 +104,9 @@ export interface QuickGenActions {
 
   // 创建图片任务
   createImageTask: (task: Omit<QuickGenImageTask, "id" | "status" | "progress" | "createdAt" | "creditsDeducted">) => string;
+
+  // 批量写入已构造好的图片任务（Studio JobSpec 适配器产物,id/status 由适配器给定,BTM 自动拉起 idle 任务）
+  addImageTasks: (tasks: QuickGenImageTask[]) => void;
 
   // 更新视频任务状态
   updateTaskStatus: (
@@ -151,6 +156,13 @@ const isRunningStatus = (status: QuickGenTaskStatus) =>
 /** 队列上限：超出时只清理最早的终态任务，绝不丢弃进行中的任务 */
 const MAX_TRACKED_TASKS = 20;
 
+/**
+ * Studio 批次任务(带 batchId)单独设更大的上限：
+ * studio-store 持久化 50 个批次(每批最多 100 条),20 的旧上限会在下一次提交时
+ * 把上一批结果 prune 成「记录已清理」,断掉入库/重试。
+ */
+const MAX_STUDIO_TASKS = 500;
+
 type QuickGenTaskUpdate = Partial<
   Pick<QuickGenVideoTask, "progress" | "taskId" | "resultUrl" | "errorMessage" | "completedAt" | "creditsDeducted">
 >;
@@ -169,12 +181,20 @@ function applyTaskUpdate(
   if (extra?.creditsDeducted !== undefined) task.creditsDeducted = extra.creditsDeducted;
 }
 
-function pruneFinishedTasks<T extends { status: QuickGenTaskStatus }>(tasks: T[]) {
-  while (tasks.length > MAX_TRACKED_TASKS) {
-    const idx = tasks.findIndex((t) => isTerminalStatus(t.status));
-    if (idx === -1) break; // 全部在进行中，不丢任务
-    tasks.splice(idx, 1);
-  }
+function pruneFinishedTasks<T extends { status: QuickGenTaskStatus; batchId?: string }>(tasks: T[]) {
+  // 分池裁剪:普通任务(旧 quick-gen 页)与 Studio 批次任务(带 batchId)各自计数,
+  // 都只清最早的终态任务,绝不丢进行中的
+  const pruneUntil = (cap: number, belongs: (t: T) => boolean) => {
+    let count = tasks.reduce((n, t) => (belongs(t) ? n + 1 : n), 0);
+    while (count > cap) {
+      const idx = tasks.findIndex((t) => belongs(t) && isTerminalStatus(t.status));
+      if (idx === -1) break; // 全部在进行中，不丢任务
+      tasks.splice(idx, 1);
+      count -= 1;
+    }
+  };
+  pruneUntil(MAX_TRACKED_TASKS, (t) => !t.batchId);
+  pruneUntil(MAX_STUDIO_TASKS, (t) => !!t.batchId);
 }
 
 // ============================================================================
@@ -237,6 +257,16 @@ export const useQuickGenStore = create<QuickGenState & QuickGenActions>()(
           });
 
           return id;
+        },
+
+        addImageTasks: (tasks) => {
+          if (tasks.length === 0) return;
+          set((state) => {
+            state.imageTasks.push(...tasks);
+            pruneFinishedTasks(state.imageTasks);
+            // 兼容镜像指向最新任务（与 createImageTask 语义一致）
+            state.activeImageTask = { ...tasks[tasks.length - 1] };
+          });
         },
 
         updateTaskStatus: (taskId, status, extra) => {
@@ -415,6 +445,40 @@ export const useQuickGenStore = create<QuickGenState & QuickGenActions>()(
                 : state.activeImageTask
                   ? [state.activeImageTask]
                   : [],
+            });
+          }
+
+          // 孤儿归一化:刷新打断的在途任务(uploading/generating,或 polling 但
+          // 没拿到 taskId)执行链路已丢失,BTM 只拉起 idle|polling(带 taskId 的
+          // polling 会被正常续轮询)——这些任务若不处理会永久悬在运行态。
+          // 置 failed 而非 idle:服务端可能已扣积分并在推进,盲目重发会双扣费;
+          // failed 后用户可走 Studio/页面的重试入口显式重发。
+          const isOrphan = (t: { status: QuickGenTaskStatus; taskId?: string }) =>
+            t.status === "uploading" ||
+            t.status === "generating" ||
+            (t.status === "polling" && !t.taskId);
+          const failOrphan = <T extends QuickGenVideoTask | QuickGenImageTask>(t: T): T =>
+            isOrphan(t)
+              ? {
+                  ...t,
+                  status: "failed" as const,
+                  errorMessage: "页面刷新中断,请重试",
+                  completedAt: new Date().toISOString(),
+                }
+              : t;
+
+          const current = useQuickGenStore.getState();
+          const hasOrphan =
+            current.videoTasks.some(isOrphan) ||
+            current.imageTasks.some(isOrphan) ||
+            (current.activeVideoTask ? isOrphan(current.activeVideoTask) : false) ||
+            (current.activeImageTask ? isOrphan(current.activeImageTask) : false);
+          if (hasOrphan) {
+            useQuickGenStore.setState({
+              videoTasks: current.videoTasks.map(failOrphan),
+              imageTasks: current.imageTasks.map(failOrphan),
+              activeVideoTask: current.activeVideoTask ? failOrphan(current.activeVideoTask) : null,
+              activeImageTask: current.activeImageTask ? failOrphan(current.activeImageTask) : null,
             });
           }
 

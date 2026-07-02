@@ -70,6 +70,13 @@ function getNavGroups(lang: string): NavGroup[] {
       header: null,
       items: [
         {
+          title: "Studio",
+          href: "/studio",
+          icon: Sparkles,
+          description: t ? "Unified creation workspace" : "统一创作工作台",
+          beta: true,
+        },
+        {
           title: t ? "Dashboard" : "数据总览",
           href: "/dashboard",
           icon: LayoutDashboard,

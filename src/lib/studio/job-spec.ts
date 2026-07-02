@@ -41,6 +41,8 @@ interface JobSpecBase {
   groupName?: string;
   /** 数量 stepper:一次提交展开为 N 个任务(1-100,展开用 toXxxTasks) */
   count?: number;
+  /** Studio 批次 ID(S1:随任务透传到提交体,服务端落 generations.batch_id) */
+  batchId?: string;
   /** 蓝图管线预留(S2+):spec 快照随 generations.spec 落库时携带 */
   blueprintId?: string;
 }
@@ -126,9 +128,12 @@ export function toVideoBatchTask(spec: VideoJobSpec, opts: AdapterOptions = {}):
     images,
     aspectRatio: spec.aspectRatio,
     groupName: spec.groupName ?? "默认",
+    batchId: spec.batchId,
     mode,
-    // prompt 模式下 BTM 以 customPrompt 为脚本源;image 模式脚本由流水线从图生成
-    customPrompt: mode === "prompt_to_video" ? spec.prompt : undefined,
+    // 用户文字只要非空就随任务携带:prompt 模式它是脚本源;image 模式它触发
+    // BTM 的短路分支(跳过豆包看图管线,直接以用户文字为最终提示词)。
+    // 纯拖图无文字时保持 undefined,走既有豆包看图生成脚本管线。
+    customPrompt: spec.prompt.trim() ? spec.prompt.trim() : undefined,
     referenceImageUrl: spec.referenceImageUrls?.[0],
     referenceImageUrls: spec.referenceImageUrls,
 
@@ -178,6 +183,7 @@ export function toQuickGenImageTask(spec: ImageJobSpec, opts: AdapterOptions = {
     resolution,
     sourceImageUrls: spec.sourceImageUrls ?? [],
     characterAsset: spec.character,
+    batchId: spec.batchId,
 
     status: "idle", // S0.6 生命周期:idle=已创建待执行,BTM 执行器自动拉起
     progress: 0,
