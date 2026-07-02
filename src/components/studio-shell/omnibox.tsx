@@ -186,9 +186,11 @@ export function Omnibox({
     setPickerOpen(false);
   };
 
-  // ==================== 商品成片:渲染腿(S2.3) ====================
-  // 幻灯片(默认,分级积分)| AI 逐镜生成(video 参数计价,每图一镜→stitch)
-  const [productRenderMode, setProductRenderMode] = useState<"slideshow" | "ai_gen">("slideshow");
+  // ==================== 商品成片:渲染腿(S2.3/S3.1) ====================
+  // 幻灯片(默认,分级积分)| AI 逐镜生成(video 参数计价)| 拼装口播(1分/镜)
+  const [productRenderMode, setProductRenderMode] = useState<
+    "slideshow" | "ai_gen" | "assembly"
+  >("slideshow");
 
   // ==================== 商品成片:自动分析商品卡 ====================
   const [productCard, setProductCard] = useState<ProductCard | null>(null);
@@ -690,6 +692,7 @@ export function Omnibox({
             {(
               [
                 { key: "slideshow", label: "幻灯片" },
+                { key: "assembly", label: "拼装口播" },
                 { key: "ai_gen", label: "AI 生成" },
               ] as const
             ).map((leg) => (
@@ -777,6 +780,47 @@ export function Omnibox({
                 </SelectContent>
               </Select>
             )}
+          </>
+        ) : mode === "product" && productRenderMode === "assembly" ? (
+          <>
+            <Select
+              value={slideshowParams.aspectRatio}
+              onValueChange={(v) =>
+                setSlideshowParams((p) => ({ ...p, aspectRatio: v as SlideshowParams["aspectRatio"] }))
+              }
+            >
+              <SelectTrigger className="h-7 w-auto gap-1 border-white/10 bg-black/30 px-2.5 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {(["9:16", "16:9"] as const).map((r) => (
+                  <SelectItem key={r} value={r} className="text-xs">{r}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select
+              value={String(slideshowParams.durationPerImage)}
+              onValueChange={(v) =>
+                setSlideshowParams((p) => ({ ...p, durationPerImage: Number(v) }))
+              }
+            >
+              <SelectTrigger className="h-7 w-auto gap-1 border-white/10 bg-black/30 px-2.5 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {[2, 2.5, 3, 4].map((d) => (
+                  <SelectItem key={d} value={String(d)} className="text-xs">
+                    {d}s/镜起
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <ToggleChip
+              active={slideshowParams.kenburns}
+              label="运镜"
+              onClick={() => setSlideshowParams((p) => ({ ...p, kenburns: !p.kenburns }))}
+            />
+            <span className="text-[11px] text-zinc-600">逐镜口播+字幕(镜长随台词自动延长)</span>
           </>
         ) : mode === "slideshow" || (mode === "product" && productRenderMode === "slideshow") ? (
           <>
@@ -1030,9 +1074,11 @@ export function Omnibox({
                 ? "视频"
                 : mode === "product" && productRenderMode === "ai_gen"
                   ? "AI 逐镜成片(每图一镜逐镜计价)"
-                  : mode === "slideshow" || mode === "product"
-                    ? "轮播成片"
-                    : "图片"}
+                  : mode === "product" && productRenderMode === "assembly"
+                    ? "拼装口播成片(每图一镜,1 积分/镜)"
+                    : mode === "slideshow" || mode === "product"
+                      ? "轮播成片"
+                      : "图片"}
               任务,预估消耗{" "}
               <span className="font-semibold text-amber-500 tabular-nums">{estimated}</span> 积分
               {credits !== null && <>(当前余额 {credits})</>}。积分按任务在服务端逐条扣除,失败自动退款。

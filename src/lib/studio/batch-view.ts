@@ -11,6 +11,7 @@ import { useVideoBatchStore } from "@/stores/video-batch-store";
 import { useQuickGenStore, type QuickGenImageTask } from "@/stores/quick-gen-store";
 import { useSlideshowStore, type SlideshowTask } from "@/stores/slideshow-store";
 import { useAiGenStore, type AiGenTask } from "@/stores/ai-gen-store";
+import { useAssemblyStore, type AssemblyTask } from "@/stores/assembly-store";
 import { getStatusLabel, type VideoBatchTask } from "@/types/video-batch";
 import type { StudioBatch, StudioJobRef } from "@/stores/studio-store";
 
@@ -187,6 +188,45 @@ function fromAiGenTask(ref: StudioJobRef, task: AiGenTask): StudioJobView {
   };
 }
 
+const ASSEMBLY_STATUS_LABELS: Record<AssemblyTask["status"], string> = {
+  pending: "排队中",
+  generating: "逐镜渲染中",
+  stitching: "拼接中",
+  completed: "已完成",
+  failed: "失败",
+};
+
+function fromAssemblyTask(ref: StudioJobRef, task: AssemblyTask): StudioJobView {
+  const status: StudioJobStatus =
+    task.status === "pending"
+      ? "queued"
+      : task.status === "completed"
+        ? "success"
+        : task.status === "failed"
+          ? "failed"
+          : "running";
+  const doneScenes = task.scenes.filter((s) => s.status === "completed").length;
+  return {
+    ref,
+    kind: "assembly",
+    taskId: task.id,
+    status,
+    statusLabel:
+      task.status === "generating"
+        ? `逐镜渲染 ${doneScenes}/${task.scenes.length}`
+        : ASSEMBLY_STATUS_LABELS[task.status],
+    progress: task.progress,
+    resultType: "video",
+    resultUrl: task.stitchedUrl ?? undefined,
+    coverUrl: task.scenes[0]?.imageUrl,
+    errorMessage: task.errorMessage ?? undefined,
+    // stitch 落库 generations.task_id = job id
+    generationTaskId: task.status === "completed" ? task.id : undefined,
+    libraryStatus: ref.libraryStatus,
+    prompt: task.title,
+  };
+}
+
 function missingView(ref: StudioJobRef): StudioJobView {
   return {
     ref,
@@ -209,6 +249,7 @@ export interface HostTaskMaps {
   imageById: Map<string, QuickGenImageTask>;
   slideshowById: Map<string, SlideshowTask>;
   aiGenById: Map<string, AiGenTask>;
+  assemblyById: Map<string, AssemblyTask>;
 }
 
 /**
@@ -220,6 +261,7 @@ export function useHostTaskMaps(): HostTaskMaps {
   const imageTasks = useQuickGenStore((state) => state.imageTasks);
   const slideshowTasks = useSlideshowStore((state) => state.tasks);
   const aiGenTasks = useAiGenStore((state) => state.tasks);
+  const assemblyTasks = useAssemblyStore((state) => state.tasks);
 
   return useMemo(
     () => ({
@@ -227,8 +269,9 @@ export function useHostTaskMaps(): HostTaskMaps {
       imageById: new Map(imageTasks.map((t) => [t.id, t])),
       slideshowById: new Map(slideshowTasks.map((t) => [t.id, t])),
       aiGenById: new Map(aiGenTasks.map((t) => [t.id, t])),
+      assemblyById: new Map(assemblyTasks.map((t) => [t.id, t])),
     }),
-    [videoTasks, imageTasks, slideshowTasks, aiGenTasks]
+    [videoTasks, imageTasks, slideshowTasks, aiGenTasks, assemblyTasks]
   );
 }
 
@@ -246,6 +289,10 @@ export function buildBatchJobViews(batch: StudioBatch, maps: HostTaskMaps): Stud
     if (ref.kind === "ai_gen") {
       const task = maps.aiGenById.get(ref.taskId);
       return task ? fromAiGenTask(ref, task) : missingView(ref);
+    }
+    if (ref.kind === "assembly") {
+      const task = maps.assemblyById.get(ref.taskId);
+      return task ? fromAssemblyTask(ref, task) : missingView(ref);
     }
     const task = maps.slideshowById.get(ref.taskId);
     return task ? fromSlideshowTask(ref, task) : missingView(ref);

@@ -66,12 +66,12 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
 
-    // renderMode 白名单:slideshow(S1.3)+ ai_gen(S2.3);assembly 属 S3 拼装腿
+    // renderMode 白名单:slideshow(S1.3)+ ai_gen(S2.3)+ assembly(S3.1 拼装口播腿)
     const renderMode =
       body?.renderMode === undefined || body.renderMode === "slideshow"
         ? "slideshow"
-        : body.renderMode === "ai_gen"
-          ? "ai_gen"
+        : body.renderMode === "ai_gen" || body.renderMode === "assembly"
+          ? (body.renderMode as "ai_gen" | "assembly")
           : null;
     if (!renderMode) {
       return NextResponse.json({ success: false, error: "renderMode 非法" }, { status: 400 });

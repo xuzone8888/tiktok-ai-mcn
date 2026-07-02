@@ -11,11 +11,13 @@
 import { useCallback } from "react";
 import {
   toAiGenTasks,
+  toAssemblyTasks,
   toQuickGenImageTasks,
   toSlideshowTasks,
   toVideoBatchTasks,
   type AiGenJobSpec,
   type AiGenSceneSpec,
+  type AssemblyJobSpec,
   type ImageJobSpec,
   type SlideshowJobSpec,
   type VideoJobSpec,
@@ -24,6 +26,7 @@ import { useVideoBatchStore } from "@/stores/video-batch-store";
 import { useQuickGenStore } from "@/stores/quick-gen-store";
 import { useSlideshowStore } from "@/stores/slideshow-store";
 import { useAiGenStore } from "@/stores/ai-gen-store";
+import { useAssemblyStore } from "@/stores/assembly-store";
 import { useStudioStore, type StudioBatch, type StudioJobRef } from "@/stores/studio-store";
 import type { StudioJobView } from "@/lib/studio/batch-view";
 import { getVideoBatchTotalPrice, type VideoAspectRatio, type VideoDuration, type VideoModelType, type VideoQuality } from "@/types/video-batch";
@@ -72,8 +75,8 @@ export interface StudioDraft {
   productCard?: ProductCard | null;
   /** 链接腿(S2.1):商品卡来自链接解析时的来源 URL(蓝图 source_ref 溯源) */
   linkUrl?: string;
-  /** 商品成片渲染腿(S2.3):幻灯片(默认,≈分级积分)或 AI 逐镜生成(video 参数计价) */
-  productRenderMode?: "slideshow" | "ai_gen";
+  /** 商品成片渲染腿:幻灯片(默认,分级积分)| AI 逐镜生成(video 计价)| 拼装口播(1分/镜,S3.1) */
+  productRenderMode?: "slideshow" | "ai_gen" | "assembly";
   count: number;
 }
 
@@ -92,6 +95,11 @@ export function slideshowCreditsPerVideo(imageCount: number): number {
   if (imageCount <= 5) return 1;
   if (imageCount <= 10) return 2;
   return 3;
+}
+
+/** 拼装口播单条成本(镜像服务端 assembly/scene:1 积分/镜,拼接零新增) */
+export function assemblyCreditsPerVideo(sceneCount: number): number {
+  return Math.max(sceneCount, 1);
 }
 
 /** 预估积分(展示用;权威扣退在服务端网关) */
@@ -116,6 +124,10 @@ export function estimateCredits(draft: StudioDraft): number {
       Math.max(draft.attachmentUrls.length, 1) *
       draft.count
     );
+  }
+  if (draft.mode === "product" && draft.productRenderMode === "assembly") {
+    // 拼装口播腿:每图一镜,1 积分/镜(TTS+渲染;拼接不新增扣费)
+    return assemblyCreditsPerVideo(draft.attachmentUrls.length) * draft.count;
   }
   if (draft.mode === "slideshow" || draft.mode === "product") {
     return slideshowCreditsPerVideo(draft.attachmentUrls.length) * draft.count;
@@ -197,9 +209,12 @@ export function useStudioSubmit() {
       let blueprintId: string | undefined;
 
       if (draft.mode === "product") {
-        // 商品图/链接腿:商品卡 → 蓝图落库 → 渲染腿出 N 条(幻灯片 | AI 逐镜生成)
+        // 商品图/链接腿:商品卡 → 蓝图落库 → 渲染腿出 N 条(幻灯片|AI 逐镜|拼装口播)
         const card = draft.productCard!;
-        const renderMode = draft.productRenderMode === "ai_gen" ? "ai_gen" : "slideshow";
+        const renderMode =
+          draft.productRenderMode === "ai_gen" || draft.productRenderMode === "assembly"
+            ? draft.productRenderMode
+            : "slideshow";
         let blueprintScenes: AiGenSceneSpec[] = [];
         try {
           const res = await fetch("/api/studio/blueprints", {
@@ -215,11 +230,18 @@ export function useStudioSubmit() {
                       aspect: draft.video.aspectRatio,
                       duration_per_image_ms: draft.video.durationSeconds * 1000,
                     }
-                  : {
-                      aspect: draft.slideshow.aspectRatio,
-                      duration_per_image_ms: Math.round(draft.slideshow.durationPerImage * 1000),
-                      bgm_style: draft.slideshow.bgmEnabled ? "random" : "none",
-                    },
+                  : renderMode === "assembly"
+                    ? {
+                        aspect: draft.slideshow.aspectRatio,
+                        duration_per_image_ms: Math.round(
+                          draft.slideshow.durationPerImage * 1000
+                        ),
+                      }
+                    : {
+                        aspect: draft.slideshow.aspectRatio,
+                        duration_per_image_ms: Math.round(draft.slideshow.durationPerImage * 1000),
+                        bgm_style: draft.slideshow.bgmEnabled ? "random" : "none",
+                      },
               renderMode,
               ...(draft.linkUrl
                 ? { sourceType: "product_link", sourceUrl: draft.linkUrl }
@@ -246,7 +268,35 @@ export function useStudioSubmit() {
           return { ok: false, error: "蓝图保存失败,请重试" };
         }
 
-        if (renderMode === "ai_gen") {
+        if (renderMode === "assembly") {
+          // 拼装口播腿(S3.1):蓝图 scenes 逐镜 TTS+字幕出段 → stitch
+          if (blueprintScenes.length === 0) {
+            return { ok: false, error: "蓝图分镜为空,无法拼装出片" };
+          }
+          const assemblyScenes = blueprintScenes
+            .filter((s) => !!s.imageUrl)
+            .map((s) => ({ idx: s.idx, line: s.line, imageUrl: s.imageUrl! }));
+          if (assemblyScenes.length === 0) {
+            return { ok: false, error: "蓝图分镜缺少素材图,无法拼装出片" };
+          }
+          const assemblySpec: AssemblyJobSpec = {
+            kind: "assembly",
+            prompt: draft.text.trim(),
+            aspectRatio: draft.slideshow.aspectRatio,
+            durationPerImage: draft.slideshow.durationPerImage,
+            kenburns: draft.slideshow.kenburns,
+            scenes: assemblyScenes,
+            productTitle: card.title,
+            count: draft.count,
+            batchId,
+            groupName,
+            blueprintId,
+          };
+          const tasks = toAssemblyTasks(assemblySpec);
+          useAssemblyStore.getState().addTasks(tasks);
+          jobRefs = tasks.map((t) => ({ kind: "assembly" as const, taskId: t.id }));
+          spec = assemblySpec as unknown as Record<string, unknown>;
+        } else if (renderMode === "ai_gen") {
           // AI 生成腿(S2.3):蓝图 scenes 逐镜编译 prompt → 统一网关 → stitch
           if (blueprintScenes.length === 0) {
             return { ok: false, error: "蓝图分镜为空,无法逐镜生成" };
@@ -370,7 +420,9 @@ export function useStudioSubmit() {
                 : draft.mode === "product"
                   ? draft.productRenderMode === "ai_gen"
                     ? `AI 生成·${VIDEO_MODEL_LABELS[draft.video.modelType]}`
-                    : `商品成片${draft.slideshow.kenburns ? "·运镜" : ""}`
+                    : draft.productRenderMode === "assembly"
+                      ? `拼装口播${draft.slideshow.kenburns ? "·运镜" : ""}`
+                      : `商品成片${draft.slideshow.kenburns ? "·运镜" : ""}`
                   : "GPT Image 2",
           aspectRatio:
             draft.mode === "video"
@@ -423,7 +475,55 @@ export function useStudioSubmit() {
       /** 编辑后的分镜(AI 生成腿重跑时台词改动经此生效;幻灯片腿忽略) */
       editedScenes?: AiGenSceneSpec[]
     ): SubmitResult => {
-      const baseSpec = batch.spec as unknown as SlideshowJobSpec | AiGenJobSpec;
+      const baseSpec = batch.spec as unknown as SlideshowJobSpec | AiGenJobSpec | AssemblyJobSpec;
+
+      if (baseSpec?.kind === "assembly") {
+        // 拼装口播腿重跑:台词/卖点编辑经蓝图 scenes 生效,新批次独立随机音色
+        const sceneList =
+          editedScenes && editedScenes.length > 0
+            ? editedScenes
+                .filter((s) => !!(s.imageUrl ?? (s.visual.startsWith("http") ? s.visual : "")))
+                .map((s) => ({
+                  idx: s.idx,
+                  line: s.line,
+                  imageUrl: (s.imageUrl ?? s.visual)!,
+                }))
+            : baseSpec.scenes;
+        if (!sceneList || sceneList.length === 0) {
+          return { ok: false, error: "蓝图分镜为空,无法拼装出片" };
+        }
+        const clamped = Math.max(1, Math.min(100, Math.floor(count) || 1));
+        const batchId = crypto.randomUUID();
+        const now = new Date();
+        const assemblySpec: AssemblyJobSpec = {
+          ...baseSpec,
+          scenes: sceneList,
+          productTitle: card.title,
+          count: clamped,
+          batchId,
+          groupName: studioGroupName(now),
+          blueprintId,
+        };
+        const tasks = toAssemblyTasks(assemblySpec);
+        useAssemblyStore.getState().addTasks(tasks);
+        addBatch({
+          id: batchId,
+          createdAt: now.toISOString(),
+          title: card.title,
+          summary: {
+            mode: "product",
+            modelLabel: `拼装口播${assemblySpec.kenburns ? "·运镜" : ""}`,
+            aspectRatio: assemblySpec.aspectRatio,
+            count: clamped,
+            attachmentCount: sceneList.length,
+            estimatedCredits: assemblyCreditsPerVideo(sceneList.length) * clamped,
+          },
+          spec: assemblySpec as unknown as Record<string, unknown>,
+          jobRefs: tasks.map((t) => ({ kind: "assembly" as const, taskId: t.id })),
+          blueprintId,
+        });
+        return { ok: true, batchId };
+      }
 
       if (baseSpec?.kind === "ai_gen") {
         // AI 生成腿重跑:台词编辑重新逐镜编译(scene 结构贯穿到生成端)
@@ -544,6 +644,11 @@ export function useStudioSubmit() {
       if (kind === "ai_gen") {
         // 逐镜任务原地重试:只复位失败镜(成功镜已扣费,不重生成),jobRef 不变
         useAiGenStore.getState().retryTask(failedTaskId);
+        return { ok: true, batchId: batch.id };
+      }
+      if (kind === "assembly") {
+        // 拼装任务原地重试:只补失败镜(服务端内容寻址幂等,已渲染镜零扣费)
+        useAssemblyStore.getState().retryTask(failedTaskId);
         return { ok: true, batchId: batch.id };
       }
       // slideshow:按批次 spec 重建(重新洗牌图序,变体差异保持)

@@ -18,6 +18,7 @@ import { useImageBatchStore } from "@/stores/image-batch-store";
 import { useQuickGenStore } from "@/stores/quick-gen-store";
 import { useSlideshowStore } from "@/stores/slideshow-store";
 import { useAiGenStore, type AiGenTask } from "@/stores/ai-gen-store";
+import { useAssemblyStore, type AssemblyTask } from "@/stores/assembly-store";
 import { useToast } from "@/hooks/use-toast";
 import { getCharacterReferenceMaxImages, mergeCharacterReferenceImages } from "@/lib/video-models/character-reference";
 import { getCharacterAssetReferenceUrls } from "@/lib/character-assets";
@@ -1630,6 +1631,270 @@ function useAiGenTaskExecutor() {
 }
 
 // ============================================================================
+// Studio 拼装口播腿执行器(S3.1)
+// ============================================================================
+
+/**
+ * 一个 job = N 个 scene 逐镜走 /api/studio/assembly/scene(TTS+单镜渲染,
+ * 同步长请求)→ 全部完成后复用 ai-gen stitch 成一条成片。
+ * 与 ai-gen 执行器同构:串行跑 job、navigator.locks 跨标签单飞、
+ * 失败镜留待显式重试;差异是 scene 无上游轮询——服务端按内容寻址幂等,
+ * 复水后 pending 重放安全(已渲染镜命中缓存零扣费)。
+ */
+function useAssemblyTaskExecutor() {
+  const { toast } = useToast();
+  const assemblyTasks = useAssemblyStore((state) => state.tasks);
+  const updateTask = useAssemblyStore((state) => state.updateTask);
+  const updateScene = useAssemblyStore((state) => state.updateScene);
+
+  const isExecutingRef = useRef(false);
+  const executedTasksRef = useRef<Set<string>>(new Set());
+  const [rescanTick, forceRescan] = useReducer((x: number) => x + 1, 0);
+
+  const executeAssemblyTask = useCallback(async (taskId: string) => {
+    const getTask = (): AssemblyTask | undefined =>
+      useAssemblyStore.getState().tasks.find(t => t.id === taskId);
+    const task = getTask();
+    if (!task || task.status !== "pending") return;
+
+    const { aspectRatio, durationPerImage, kenburns, voiceId } = task;
+    const totalScenes = task.scenes.length;
+
+    try {
+      updateTask(taskId, { status: "generating", progress: 3 });
+
+      // ---------- 阶段一:逐镜渲染(同步长请求,串行防挤爆服务端并发闸) ----------
+      for (const scene of task.scenes) {
+        // 每镜取最新快照:任务从 store 消失(裁剪/删除)立即中止,不再为
+        // 幽灵任务扣费(同 ai-gen 执行器守卫)
+        const snap = getTask();
+        if (!snap) return;
+        const fresh = snap.scenes.find(s => s.idx === scene.idx);
+        if (!fresh) continue;
+        if (fresh.status === "completed" || fresh.status === "failed") continue;
+
+        updateScene(taskId, fresh.idx, { status: "generating" });
+        try {
+          const res = await fetch("/api/studio/assembly/scene", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              jobId: taskId,
+              sceneIdx: fresh.idx,
+              line: fresh.line,
+              imageUrl: fresh.imageUrl,
+              aspectRatio,
+              durationSec: durationPerImage,
+              kenburns,
+              voiceId,
+            }),
+            // 略大于服务端 maxDuration=300s(挂起请求会饿死串行队列)
+            signal: AbortSignal.timeout(310_000),
+          });
+          const text = await res.text();
+          let data;
+          try {
+            data = JSON.parse(text);
+          } catch {
+            data = null;
+          }
+
+          if (res.ok && data?.success && data.data?.videoUrl) {
+            updateScene(taskId, fresh.idx, {
+              status: "completed",
+              videoUrl: data.data.videoUrl,
+            });
+            if (!data.data.fromCache) {
+              window.dispatchEvent(new CustomEvent("credits-updated"));
+            }
+          } else {
+            const message: string = data?.error || `渲染失败 (HTTP ${res.status})`;
+            updateScene(taskId, fresh.idx, { status: "failed", errorMessage: message });
+            // 积分不足后续镜必然同败,直接止损(渲染前扣费,失败镜未扣费)
+            if (/积分|credits|insufficient/i.test(message)) {
+              getTask()?.scenes.forEach(s => {
+                if (s.status === "pending" || s.status === "generating") {
+                  updateScene(taskId, s.idx, { status: "failed", errorMessage: "积分不足,未渲染" });
+                }
+              });
+              break;
+            }
+          }
+        } catch (sceneError) {
+          // 网络错误/超时只失败该镜:服务端幂等,重试免费补渲
+          console.error("[AssemblyTaskExecutor] scene render error:", sceneError);
+          const isTimeout =
+            sceneError instanceof DOMException && sceneError.name === "TimeoutError";
+          updateScene(taskId, fresh.idx, {
+            status: "failed",
+            errorMessage: isTimeout
+              ? "该镜渲染超时,重试免费补渲"
+              : "渲染请求未送达(网络异常),重试免费补渲",
+          });
+        }
+
+        const done = getTask()?.scenes.filter(s => s.status === "completed").length ?? 0;
+        updateTask(taskId, { progress: Math.min(5 + Math.round((done / totalScenes) * 75), 80) });
+      }
+
+      const finalSnapshot = getTask();
+      if (!finalSnapshot) return;
+      // 防缺片直进 stitch(同 ai-gen 守卫)
+      const incomplete = finalSnapshot.scenes.filter(
+        s => s.status !== "completed" || !s.videoUrl
+      );
+      if (incomplete.length > 0) {
+        const firstError = incomplete.find(s => s.errorMessage)?.errorMessage ?? "";
+        updateTask(taskId, {
+          status: "failed",
+          errorMessage: `${incomplete.length}/${totalScenes} 镜未完成:${firstError}(重试只补未完成镜)`,
+        });
+        return;
+      }
+
+      // ---------- 阶段二:stitch 拼接落库(复用 ai-gen 双通道,零新增扣费) ----------
+      updateTask(taskId, { status: "stitching", progress: 85 });
+      const orderedUrls = [...finalSnapshot.scenes]
+        .sort((a, b) => a.idx - b.idx)
+        .map(s => s.videoUrl!)
+        .filter(Boolean);
+      let stitchRes: Response;
+      try {
+        stitchRes = await fetch("/api/studio/ai-gen/stitch", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            jobId: taskId,
+            videoUrls: orderedUrls,
+            aspectRatio,
+            batchId: finalSnapshot.batchId,
+            blueprintId: finalSnapshot.blueprintId,
+            title: finalSnapshot.title,
+            groupName: finalSnapshot.groupName,
+            sceneTaskIds: finalSnapshot.scenes.map(s => s.clientTaskId),
+          }),
+          signal: AbortSignal.timeout(330_000),
+        });
+      } catch (fetchError) {
+        if (fetchError instanceof DOMException && fetchError.name === "TimeoutError") {
+          throw fetchError;
+        }
+        throw new Error("拼接请求未送达(网络异常),请重试(各镜成片已保留,重试不重新渲染)");
+      }
+      const stitchText = await stitchRes.text();
+      let stitchData;
+      try {
+        stitchData = JSON.parse(stitchText);
+      } catch {
+        throw new Error(`拼接服务响应格式错误 (HTTP ${stitchRes.status})`);
+      }
+      if (!stitchRes.ok || !stitchData.success || !stitchData.data?.videoUrl) {
+        throw new Error(stitchData.error || `拼接失败 (HTTP ${stitchRes.status})`);
+      }
+
+      updateTask(taskId, {
+        status: "completed",
+        progress: 100,
+        stitchedUrl: stitchData.data.videoUrl,
+      });
+      toast({
+        title: "🎬 拼装口播成片完成",
+        description: (
+          <a href="/studio" className="text-tiktok-cyan hover:underline flex items-center gap-1">
+            逐镜口播 + 拼接完成,点击查看 <ExternalLink className="h-3 w-3" />
+          </a>
+        ),
+      });
+    } catch (error) {
+      console.error("[AssemblyTaskExecutor] Error:", error);
+      const isTimeout = error instanceof DOMException && error.name === "TimeoutError";
+      updateTask(taskId, {
+        status: "failed",
+        errorMessage: isTimeout
+          ? "拼接超时,请重试(各镜成片已保留,重试不重新渲染)"
+          : error instanceof Error
+            ? error.message
+            : "拼装口播成片失败",
+      });
+    }
+  }, [updateTask, updateScene, toast]);
+
+  useEffect(() => {
+    if (isExecutingRef.current) return;
+
+    const isRunnable = (t: AssemblyTask) =>
+      t.status === "pending" && !executedTasksRef.current.has(t.id);
+
+    if (!assemblyTasks.some(isRunnable)) return;
+
+    const executeNext = async () => {
+      isExecutingRef.current = true;
+      try {
+        const runLoop = async () => {
+          for (;;) {
+            const next = useAssemblyStore.getState().tasks.find(isRunnable);
+            if (!next) break;
+            executedTasksRef.current.add(next.id);
+            await executeAssemblyTask(next.id);
+          }
+        };
+
+        // 跨标签页单飞(同 ai-gen):双标签对同一 job 并发渲染虽有服务端
+        // 在途单飞兜底,但仍会双倍占用并发闸与请求预算
+        if (typeof navigator !== "undefined" && navigator.locks) {
+          await navigator.locks.request("stargaze-assembly-executor", async () => {
+            // 等锁期间本页新提交的 job 可能被他页进度写冲掉,按 id 差集补回;
+            // 等锁期间本页的状态级变更(如 retryTask 的 failed→pending)也会被
+            // 他页整表覆盖吞掉——按 updatedAt 取新恢复(审查实锤,ai-gen/
+            // slideshow 执行器同款窗口记录在案,S3 收官统一清扫)
+            const memoryTasks = useAssemblyStore.getState().tasks;
+            await useAssemblyStore.persist.rehydrate();
+            const storedById = new Map(
+              useAssemblyStore.getState().tasks.map(t => [t.id, t])
+            );
+            const missing = memoryTasks.filter(t => !storedById.has(t.id));
+            if (missing.length > 0) useAssemblyStore.getState().addTasks(missing);
+            const newer = memoryTasks.filter(t => {
+              const stored = storedById.get(t.id);
+              return (
+                stored &&
+                new Date(t.updatedAt).getTime() > new Date(stored.updatedAt).getTime()
+              );
+            });
+            if (newer.length > 0) {
+              const newerById = new Map(newer.map(t => [t.id, t]));
+              useAssemblyStore.setState({
+                tasks: useAssemblyStore
+                  .getState()
+                  .tasks.map(t => newerById.get(t.id) ?? t),
+              });
+            }
+            await runLoop();
+          });
+        } else {
+          await runLoop();
+        }
+      } finally {
+        isExecutingRef.current = false;
+      }
+      forceRescan();
+    };
+
+    executeNext();
+  }, [assemblyTasks, executeAssemblyTask, rescanTick]);
+
+  // failed 任务从去重集合放行:retryTask(failed→pending)要能被重新拉起
+  useEffect(() => {
+    const liveIds = new Set(
+      assemblyTasks.filter(t => t.status !== "failed").map(t => t.id)
+    );
+    for (const id of Array.from(executedTasksRef.current)) {
+      if (!liveIds.has(id)) executedTasksRef.current.delete(id);
+    }
+  }, [assemblyTasks]);
+}
+
+// ============================================================================
 // 任务状态指示器组件 - 右下角悬浮通知
 // ============================================================================
 
@@ -1791,6 +2056,9 @@ export function BackgroundTaskManager() {
 
   // 启动 Studio AI 生成腿执行器(S2.3)
   useAiGenTaskExecutor();
+
+  // 启动 Studio 拼装口播腿执行器(S3.1)
+  useAssemblyTaskExecutor();
 
   return <TaskStatusIndicator />;
 }

@@ -26,9 +26,13 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import type { StudioBatch } from "@/stores/studio-store";
 import type { ProductCard } from "@/lib/studio/product-vision";
-import type { AiGenJobSpec, AiGenSceneSpec } from "@/lib/studio/job-spec";
+import type { AiGenJobSpec, AiGenSceneSpec, AssemblyJobSpec } from "@/lib/studio/job-spec";
 import { getVideoBatchTotalPrice } from "@/types/video-batch";
-import { slideshowCreditsPerVideo, useStudioSubmit } from "./use-studio-submit";
+import {
+  assemblyCreditsPerVideo,
+  slideshowCreditsPerVideo,
+  useStudioSubmit,
+} from "./use-studio-submit";
 
 interface BlueprintScene {
   idx: number;
@@ -84,9 +88,14 @@ export function BlueprintDrawer({ batch, onClose }: BlueprintDrawerProps) {
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   // 重跑估价镜像 omnibox estimateCredits(权威扣退在服务端):
-  // ai_gen=逐镜计价×镜数×条数;slideshow=图数分级×条数
+  // ai_gen=逐镜计价×镜数×条数;assembly=1分/镜×镜数×条数;slideshow=图数分级×条数
   const estimatedCredits = useMemo(() => {
     const baseSpec = batch.spec as unknown as { kind?: string };
+    if (baseSpec?.kind === "assembly") {
+      const asmSpec = batch.spec as unknown as AssemblyJobSpec;
+      const sceneCount = scenes.length || asmSpec.scenes?.length || 1;
+      return assemblyCreditsPerVideo(sceneCount) * rerunCount;
+    }
     if (baseSpec?.kind === "ai_gen") {
       const aiSpec = batch.spec as unknown as AiGenJobSpec;
       const sceneCount = scenes.length || aiSpec.scenes?.length || 1;
@@ -309,7 +318,14 @@ export function BlueprintDrawer({ batch, onClose }: BlueprintDrawerProps) {
             {/* 卖点勾选 + 行内编辑 */}
             <div>
               <p className="mb-1.5 text-[11px] font-medium text-zinc-500">
-                卖点(勾选进入成片文案,可改写)
+                卖点(勾选进入成片文案,可改写
+                {(() => {
+                  const kind = (batch.spec as { kind?: string })?.kind;
+                  return kind === "ai_gen" || kind === "assembly"
+                    ? ";逐镜腿口播以下方分镜台词为准"
+                    : "";
+                })()}
+                )
               </p>
               <div className="space-y-1.5">
                 {card.selling_points.map((p) => (
@@ -343,7 +359,7 @@ export function BlueprintDrawer({ batch, onClose }: BlueprintDrawerProps) {
             {scenes.length > 0 && (
               <div>
                 <p className="mb-1.5 text-[11px] font-medium text-zinc-500">
-                  分镜台词(行内编辑;幻灯片口播由 AI 按卖点生成,台词用于 AI 生成腿逐镜)
+                  分镜台词(行内编辑;幻灯片口播由 AI 按卖点生成,AI 生成/拼装口播腿逐镜以此为口播本体)
                 </p>
                 <div className="space-y-2">
                   {scenes.map((scene) => (

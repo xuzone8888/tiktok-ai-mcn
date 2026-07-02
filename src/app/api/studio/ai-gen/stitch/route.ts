@@ -150,9 +150,12 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
     const jobId = typeof body?.jobId === "string" ? body.jobId : "";
-    if (!/^ag-[\w-]{5,80}$/.test(jobId)) {
+    // ag-*=AI 生成腿(S2.3);asm-*=拼装口播腿(S3.1,scene 段由 assembly/scene
+    // 端点渲染扣费,拼接同样零新增扣费)
+    if (!/^(ag|asm)-[\w-]{5,80}$/.test(jobId)) {
       return NextResponse.json({ success: false, error: "jobId 非法" }, { status: 400 });
     }
+    const renderMode = jobId.startsWith("asm-") ? "assembly" : "ai_gen";
     const videoUrls: string[] = Array.isArray(body?.videoUrls)
       ? body.videoUrls.filter((u: unknown): u is string => typeof u === "string")
       : [];
@@ -228,7 +231,12 @@ export async function POST(request: NextRequest) {
           generation_type: "video",
           source: "studio",
           prompt: title,
-          model: modelType ? `ai_gen:${modelType}` : "ai_gen",
+          model:
+            renderMode === "assembly"
+              ? "assembly"
+              : modelType
+                ? `ai_gen:${modelType}`
+                : "ai_gen",
           ...(stitched.durationSec ? { duration: Math.round(stitched.durationSec) } : {}),
           aspect_ratio: aspectRatio,
           status: "completed",
@@ -246,7 +254,7 @@ export async function POST(request: NextRequest) {
           ...(groupName ? { group_name: groupName } : {}),
         };
         const spec = {
-          render_mode: "ai_gen",
+          render_mode: renderMode,
           ...(blueprintId ? { blueprint_id: blueprintId } : {}),
           scene_task_ids: sceneTaskIds,
           segment_count: videoUrls.length,

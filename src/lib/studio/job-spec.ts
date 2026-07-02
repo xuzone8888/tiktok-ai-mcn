@@ -29,7 +29,9 @@ import type {
 import type { QuickGenImageTask } from "@/stores/quick-gen-store";
 import type { SlideshowTask } from "@/stores/slideshow-store";
 import type { AiGenSceneTask, AiGenTask } from "@/stores/ai-gen-store";
+import type { AssemblySceneTask, AssemblyTask } from "@/stores/assembly-store";
 import { compileScenePrompt, type AiGenSceneInput } from "@/lib/studio/ai-gen-prompts";
+import { PRESET_VOICES } from "@/lib/voice-data";
 
 // ============================================================================
 // 规格类型
@@ -114,17 +116,52 @@ export interface AiGenJobSpec extends JobSpecBase {
   productTitle: string;
 }
 
-export type JobSpec = VideoJobSpec | ImageJobSpec | SlideshowJobSpec | AiGenJobSpec;
+export interface AssemblySceneSpec {
+  idx: number;
+  /** 台词(TTS 口播;空行由适配器按语言补默认 CTA) */
+  line: string;
+  /** 该镜素材图(蓝图 slot.asset_ref,自有 OSS URL) */
+  imageUrl: string;
+}
+
+export interface AssemblyJobSpec extends JobSpecBase {
+  kind: "assembly";
+  aspectRatio: "9:16" | "16:9";
+  /** 每镜基准秒数(TTS 超长时服务端自动延长该镜) */
+  durationPerImage: number;
+  kenburns: boolean;
+  /** 蓝图 scenes(每镜 素材图+台词 → TTS+字幕出段 → stitch) */
+  scenes: AssemblySceneSpec[];
+  /** 商品标题(卡片回显 + stitch 落库 prompt) */
+  productTitle: string;
+  /** 指定音色 id;缺省/'random' 由适配器按台词语言从预设池随机(每变体独立) */
+  voiceId?: string;
+}
+
+export type JobSpec =
+  | VideoJobSpec
+  | ImageJobSpec
+  | SlideshowJobSpec
+  | AiGenJobSpec
+  | AssemblyJobSpec;
 
 // ============================================================================
 // 工具
 // ============================================================================
 
-/** 任务 id 生成,沿用现有惯例:video=vbt-*,image=qg-*,slideshow=ss-*,ai_gen=ag-* */
+/** 任务 id 生成,沿用现有惯例:video=vbt-*,image=qg-*,slideshow=ss-*,ai_gen=ag-*,assembly=asm-* */
 export function createJobId(kind: JobSpec["kind"]): string {
   const rand = Math.random().toString(36).slice(2, 11);
   const prefix =
-    kind === "video" ? "vbt" : kind === "image" ? "qg" : kind === "ai_gen" ? "ag" : "ss";
+    kind === "video"
+      ? "vbt"
+      : kind === "image"
+        ? "qg"
+        : kind === "ai_gen"
+          ? "ag"
+          : kind === "assembly"
+            ? "asm"
+            : "ss";
   return `${prefix}-${Date.now()}-${rand}`;
 }
 
@@ -340,6 +377,87 @@ export function toAiGenTask(spec: AiGenJobSpec, opts: AdapterOptions = {}): AiGe
   };
 }
 
+/** 台词语言检测(与幻灯片腿同款启发式) */
+function detectLanguage(text: string): "zh" | "en" {
+  return /[一-鿿]/.test(text) ? "zh" : "en";
+}
+
+/** 空 CTA 行的默认口播(蓝图 cta 镜留空时补齐;可在抽屉行内改) */
+const DEFAULT_CTA_LINE: Record<"zh" | "en", string> = {
+  zh: "心动不如行动,点击下方链接马上入手!",
+  en: "Don't wait - tap the link below and get yours today!",
+};
+
+/**
+ * emoji 过滤(镜像 assembly/scene 服务端消毒口径):纯 emoji 台词若放行,
+ * 服务端 strip 后判空返 400,该镜会永久失败且重试无修复路径(审查实锤)
+ */
+function stripEmojiLike(text: string): string {
+  let result = "";
+  for (const char of text) {
+    const code = char.codePointAt(0) || 0;
+    const isEmoji =
+      (code >= 0x1f300 && code <= 0x1faff) ||
+      (code >= 0x2600 && code <= 0x27bf) ||
+      (code >= 0x1f1e0 && code <= 0x1f1ff);
+    if (!isEmoji) result += char;
+  }
+  return result.replace(/\s+/g, " ").trim();
+}
+
+/** AssemblyJobSpec → AssemblyTask(写入 assembly store,BTM 拼装执行器自动拉起) */
+export function toAssemblyTask(spec: AssemblyJobSpec, opts: AdapterOptions = {}): AssemblyTask {
+  const id = opts.id ?? createJobId("assembly");
+  const now = opts.now ?? new Date().toISOString();
+  const language = detectLanguage(spec.scenes.map((s) => s.line).join(""));
+
+  // 音色:显式指定沿用;random/缺省从语言匹配池随机(每变体独立=声线维度去同质化)。
+  // 服务端按 PRESET_VOICES 白名单校验,此处选定即持久化,刷新恢复后声线一致
+  let voiceId = spec.voiceId && spec.voiceId !== "random" ? spec.voiceId : "";
+  if (!voiceId) {
+    const pool = PRESET_VOICES.filter((v) => v.lang === language);
+    const candidates = pool.length > 0 ? pool : PRESET_VOICES;
+    voiceId = candidates[Math.floor(Math.random() * candidates.length)].id;
+  }
+
+  const fallbackLine = stripEmojiLike(spec.productTitle) || DEFAULT_CTA_LINE[language];
+  const scenes: AssemblySceneTask[] = [...spec.scenes]
+    .sort((a, b) => a.idx - b.idx)
+    .map((scene) => {
+      // 原始留空(cta 镜)→ 默认 CTA;非空但消毒后为空(纯 emoji)→ 商品标题兜底
+      const raw = scene.line.trim();
+      const sanitized = stripEmojiLike(raw);
+      const line = raw ? sanitized || fallbackLine : DEFAULT_CTA_LINE[language];
+      return {
+        idx: scene.idx,
+        line,
+        imageUrl: scene.imageUrl,
+        clientTaskId: `${id}-s${scene.idx}`,
+        videoUrl: null,
+        status: "pending" as const,
+      };
+    });
+
+  return {
+    id,
+    groupName: spec.groupName ?? "Studio",
+    batchId: spec.batchId,
+    blueprintId: spec.blueprintId,
+    title: spec.productTitle,
+    aspectRatio: spec.aspectRatio,
+    durationPerImage: spec.durationPerImage,
+    kenburns: spec.kenburns,
+    voiceId,
+    scenes,
+    stitchedUrl: null,
+    status: "pending",
+    progress: 0,
+    errorMessage: null,
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
 // ============================================================================
 // 批量展开(数量 stepper)
 // ============================================================================
@@ -362,4 +480,26 @@ export function toSlideshowTasks(spec: SlideshowJobSpec, opts: Omit<AdapterOptio
 /** 按 spec.count 展开为 N 个 AiGenTask(变体差异靠生成端随机性;脚本层变体 S3 配方库) */
 export function toAiGenTasks(spec: AiGenJobSpec, opts: Omit<AdapterOptions, "id"> = {}): AiGenTask[] {
   return Array.from({ length: clampCount(spec.count) }, () => toAiGenTask(spec, opts));
+}
+
+/**
+ * 按 spec.count 展开为 N 个 AssemblyTask。
+ * 音色是拼装腿变体间唯一差异轴(画面/台词/转场确定性),有放回随机会撞声线
+ * 产出实质重复成片(审查实锤)——按语言池洗牌后无放回轮转分配。
+ */
+export function toAssemblyTasks(
+  spec: AssemblyJobSpec,
+  opts: Omit<AdapterOptions, "id"> = {}
+): AssemblyTask[] {
+  const n = clampCount(spec.count);
+  if (spec.voiceId && spec.voiceId !== "random") {
+    // 用户显式指定音色:全部变体沿用
+    return Array.from({ length: n }, () => toAssemblyTask(spec, opts));
+  }
+  const language = detectLanguage(spec.scenes.map((s) => s.line).join(""));
+  const pool = PRESET_VOICES.filter((v) => v.lang === language);
+  const voiceIds = shuffled((pool.length > 0 ? pool : PRESET_VOICES).map((v) => v.id));
+  return Array.from({ length: n }, (_, i) =>
+    toAssemblyTask({ ...spec, voiceId: voiceIds[i % voiceIds.length] }, opts)
+  );
 }

@@ -97,7 +97,14 @@
   - S3.3 门B UI(feature flag 后置,基准达标才开):omnibox 拆解模式(mp4 预签名直传+强制权利勾选)+结构报告视图+换商品重生成(商品卡+LLM 逐镜重写保结构→三腿任选出片)
   - S3.4 hooks 生成源+批量矩阵:hook 候选生成(修 S2.2 遗留 hooks 恒空)+drawer 多选+PATCH 白名单;矩阵展开层(use-studio-submit 层:hooks×音色×比例,变体参数落 generations.spec.variant)
   - S3.5 存为配方:recipes 表迁移(RLS 照抄 blueprints 四条 own)+脱敏 diff 确认(红队:LLM 脱敏必经人工 diff)+配方库+实例化(配方+商品卡→新蓝图);种子=salvage/seed-recipes 3 条内置
-- **下一步:**执行 S3.1(拼装腿)。待用户手动:①(可选)线上对原失败批次点「重试失败 1 条」体感确认;②Supabase dashboard 执行 20260702_drop_link_video.sql;③**为 S3.2 基准备 20 条真实爆款 mp4**
+- **S3.1 拼装口播腿完成(2026-07-03,tsc+build 过,对抗审查 12 实锤闭环,本地实弹验证 PASS)**:
+  - 链路:omnibox 商品模式第三腿「拼装口播」→ 蓝图 renderMode='assembly' → assembly-store(asm-*)→ BTM 第 7 执行器逐镜 POST /api/studio/assembly/scene(TTS 豆包/11labs 按音色前缀分流 → 无声单镜渲染:worker 优先/本地 python 回退,transition=none+kenburns+ASS 字幕 → **配音统一服务端 ffmpeg adelay=1000 合入**(与 python 字幕 VOICE_DELAY=1s 对齐)→ 上传内容寻址 OSS 路径)→ 复用 ai-gen stitch(asm- 前缀→spec.render_mode='assembly'/model='assembly',拼接零扣费)
+  - 计费:1 积分/镜,**先渲后扣**(审查裁决,镜像幻灯片腿:失败/超时/进程崩溃一律零扣费,无退款路径;扣费失败响亮记录不拒付)。幂等=内容寻址 OSS head(新 oss.fileExistsStrict:非 404 异常上抛,绝不把存储抖动当 miss 重跑收费活)+在途单飞 Map+并发闸 3(一切收费动作前 fail-fast 429)+航班 280s 总预算(低于客户端 310s,僵尸不占闸)
+  - 变体:音色=唯一差异轴,按台词语言池洗牌**无放回**轮转(修有放回撞声线出重复成片);空 CTA 行补默认口播;纯 emoji 台词适配器消毒兜底(商品标题→默认 CTA,修服务端 400 永败)
+  - 对抗审查(5 维度找+每条 3 反驳者,44 agent,12 实锤全闭环):2 high(先扣后渲+进程重启=积分丢且重试双扣→改先渲后扣;worker 通道配音无 adelay 音画字幕错位 1s 且被幂等缓存固化→配音收敛服务端)+4 medium(退款子路径账实分离→退款路径整体删除;fileExists 裸 catch 瞬时故障双扣→strict 变体;无端到端超时僵尸占闸全端点 429→280s 预算;音色有放回碰撞→无放回)+6 low(止损正则误杀积分冲突文案→先渲后扣消解;跨标签重试被锁后 rehydrate 吞→按 updatedAt 取新合并;durationSec 30s 上限被 python 推翻元数据失真→去上限回真值;失败路径 output 产物泄漏→orphanFiles finally 回收+merge clearTimeout;纯 emoji 台词;抽屉卖点/台词说明对逐镜腿误导→文案按腿修正)
+  - **本地实弹验证 PASS**(.temp/s31-verify.mjs,dev:3100+真实生产库,测试行已清):单镜 13.1s/7.2s 出段(本地 python 通道,含 aac 音轨,5.93s=TTS4.3s+1.6s 缓冲精确对上)→ 幂等重放 0.9s fromCache 零扣费 → 余额恰 -2+usage 流水 task_id 对齐 → stitch 7.0s 出 11.87s 成片(含音轨)→ 落库 1 行全字段对(completed/source=studio/model=assembly/spec.render_mode=assembly/segment_count=2/credit_cost=0)
+  - 记录在案:ai-gen/slideshow 执行器存在同款「跨标签重试被 rehydrate 吞」窗口(S3 收官统一清扫);卖点勾选变更不重建逐镜台词(与 ai_gen 既有语义一致,S3.4 时统一);字幕烧录视觉效果待人工验收目检;worker merge-audio 无音轨 fallback 缺 adelay 的缺陷因配音不再交 worker 而不可达(worker 代码未动)
+- **下一步:**执行 S3.2(门B 拆解管线服务端+基准 harness)。待用户手动:①(可选)线上对原失败批次点「重试失败 1 条」体感确认;②Supabase dashboard 执行 20260702_drop_link_video.sql;③**为 S3.2 基准备 20 条真实爆款 mp4(本地文件夹或已传 OSS 均可)**
 - ~~**下一步:S1+S2 人工验收 → S3**~~(已完成,见上):①dev server 真实登录态走查:S1 四路径 + 贴海外链接(Shopify 站最稳)→蓝图→改卖点→3 变体 + AI 生成腿一条(需 MAC_WORKER_URL 隧道通,留意 worker /api/stitch 无生产先例)+ /link-video 死链确认;②用户经 dashboard 执行 20260702_drop_link_video.sql(含退款清扫+归档,先看 NOTICE 输出);③S3 = 拼装腿+爆款拆解(20 条基准门槛)+批量矩阵+存为配方(BLUEPRINT §七,收钱线在 S2 后)
 - **分支**:`claude/zealous-leavitt-65253a`(worktree:E:\StarGaze\.claude\worktrees\zealous-leavitt-65253a,自 877dc61 续;S2 及以前在 practical-curie-42f4b1)。S3 期间只本地 commit,push main=自动生产部署,须等人工验收后由用户裁决
 - **待用户/环境**:S0.1 生产执行——**exec_sql RPC 在生产库不存在**(老 runner 从没跑成过),执行通道=用户登录 Supabase dashboard SQL editor,我经浏览器贴 SQL 执行(源 IP 预检已通过:生产 source 取值 8 种全部被「基础枚举+batch_video% 通配」覆盖)。届时连同 20260702_drop_viral_clone.sql 一起执行。
