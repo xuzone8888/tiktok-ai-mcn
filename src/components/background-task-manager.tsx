@@ -17,7 +17,8 @@ import { type PipelineStep } from "@/types/video-batch";
 import { useImageBatchStore } from "@/stores/image-batch-store";
 import { useQuickGenStore } from "@/stores/quick-gen-store";
 import { useToast } from "@/hooks/use-toast";
-import { mergeCharacterReferenceImages } from "@/lib/video-models/character-reference";
+import { getCharacterReferenceMaxImages, mergeCharacterReferenceImages } from "@/lib/video-models/character-reference";
+import { getCharacterAssetReferenceUrls } from "@/lib/character-assets";
 import { Video, Image as ImageIcon, Sparkles, Palette, ExternalLink } from "lucide-react";
 
 // ============================================================================
@@ -335,7 +336,22 @@ function useVideoTaskExecutor() {
 
       const mainGridImageUrl = uploadedUrls[0];
 
-      const unifiedImageUrls = mergeCharacterReferenceImages(taskModelType, task.characterRefUrl, [
+      // 角色字段推导与页面内联路径（video-batch/page.tsx）保持一致：
+      // 任务自带 → 全局设置回退 → 从 characterAsset 快照按模型上限推导
+      const taskCharacterAsset = task.characterAsset || globalSettings.characterAsset || null;
+      const taskCharacterReferenceImages = task.characterReferenceImages?.length
+        ? task.characterReferenceImages
+        : globalSettings.characterReferenceImages?.length
+          ? globalSettings.characterReferenceImages
+          : taskCharacterAsset
+            ? getCharacterAssetReferenceUrls(taskCharacterAsset).slice(0, getCharacterReferenceMaxImages(taskModelType))
+            : [];
+      const taskCharacterRefUrl = taskCharacterReferenceImages[0]
+        || task.characterRefUrl
+        || globalSettings.characterRefUrl;
+
+      const unifiedImageUrls = mergeCharacterReferenceImages(taskModelType, taskCharacterRefUrl, [
+        ...taskCharacterReferenceImages.slice(1),
         ...(happyHorseImageUrls || []),
         ...(mainGridImageUrl ? [mainGridImageUrl] : []),
       ]);
@@ -354,6 +370,10 @@ function useVideoTaskExecutor() {
           userId: userIdRef.current,
           mode: isPromptMode ? "prompt_to_video" : "image_to_video",
           groupName: task.groupName,
+          characterId: task.characterId || taskCharacterAsset?.id,
+          characterName: task.characterName || taskCharacterAsset?.name,
+          characterReferenceImages: taskCharacterReferenceImages,
+          characterAsset: taskCharacterAsset,
         }),
       });
 
@@ -803,6 +823,10 @@ function useQuickGenTaskExecutor() {
               clientTaskId: activeTask.id,
               userId: userIdRef.current,
               mode: activeTask.sourceImageUrl ? "image_to_video" : "prompt_to_video",
+              // 角色元数据随任务上送；参考图推导与合并由网关完成
+              characterId: activeTask.characterAsset?.id,
+              characterName: activeTask.characterAsset?.name,
+              characterAsset: activeTask.characterAsset,
             }),
           });
 

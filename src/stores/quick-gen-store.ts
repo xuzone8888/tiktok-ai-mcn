@@ -242,18 +242,27 @@ export const useQuickGenStore = create<QuickGenState & QuickGenActions>()(
         updateTaskStatus: (taskId, status, extra) => {
           set((state) => {
             const task = state.videoTasks.find((t) => t.id === taskId);
+            const mirrorMatches = state.activeVideoTask?.id === taskId;
+            const current = task ?? (mirrorMatches ? state.activeVideoTask : null);
+
+            // 终态不可降级守卫：completed/failed 后到达的异状态更新一律忽略
+            // （多任务并发下，轮询链路的迟到写入会把已完成任务拖回进行中）
+            const wasTerminal = current ? isTerminalStatus(current.status) : false;
+            if (current && wasTerminal && current.status !== status) {
+              return;
+            }
+
             if (task) {
               applyTaskUpdate(task, status, extra);
             }
 
             // 同步兼容镜像（若指向该任务）
-            const mirrorMatches = state.activeVideoTask?.id === taskId;
             if (mirrorMatches && state.activeVideoTask) {
               applyTaskUpdate(state.activeVideoTask, status, extra);
             }
 
-            // 如果任务完成或失败，追加到历史记录
-            if (status === "completed" || status === "failed") {
+            // 首次到达终态时追加历史记录（重复终态写入只合并字段，不重复追加）
+            if (!wasTerminal && (status === "completed" || status === "failed")) {
               const source = task ?? (mirrorMatches ? state.activeVideoTask : null);
               if (source) {
                 state.recentTasks.unshift({ ...source });
@@ -268,18 +277,26 @@ export const useQuickGenStore = create<QuickGenState & QuickGenActions>()(
         updateImageTaskStatus: (taskId, status, extra) => {
           set((state) => {
             const task = state.imageTasks.find((t) => t.id === taskId);
+            const mirrorMatches = state.activeImageTask?.id === taskId;
+            const current = task ?? (mirrorMatches ? state.activeImageTask : null);
+
+            // 终态不可降级守卫：completed/failed 后到达的异状态更新一律忽略
+            const wasTerminal = current ? isTerminalStatus(current.status) : false;
+            if (current && wasTerminal && current.status !== status) {
+              return;
+            }
+
             if (task) {
               applyTaskUpdate(task, status, extra);
             }
 
             // 同步兼容镜像（若指向该任务）
-            const mirrorMatches = state.activeImageTask?.id === taskId;
             if (mirrorMatches && state.activeImageTask) {
               applyTaskUpdate(state.activeImageTask, status, extra);
             }
 
-            // 如果任务完成或失败，追加到历史记录
-            if (status === "completed" || status === "failed") {
+            // 首次到达终态时追加历史记录（重复终态写入只合并字段，不重复追加）
+            if (!wasTerminal && (status === "completed" || status === "failed")) {
               const source = task ?? (mirrorMatches ? state.activeImageTask : null);
               if (source) {
                 state.recentTasks.unshift({ ...source });

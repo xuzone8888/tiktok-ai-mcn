@@ -21,7 +21,11 @@
 - **S0 全部完成(2026-07-02,含生产环境)**:
   - 生产库迁移已执行并校验(经 Supabase dashboard SQL editor):blueprints/reference_cache 建表 ✅、generations 三新列 ✅(gen_new_cols=3)、viral_clone 五表已 DROP ✅(残留=0)、valid_source 通配约束已重建 ✅
   - TikTok 开发者后台核验(app 7629290381422856212「Star Gaze」):**Live in production(2026-05-12 起),Content Posting API Direct Post = Approved**,scopes = user.info.basic/user.info.stats/video.publish/video.upload。**photo post 结论:无需新申请**——photo 走 content/init 端点,用同一 video.publish/video.upload scope + 同一 Direct Post 审批,S4 只需补实现代码。备忘:pull_by_url 需要域名验证(门户有 Verify 入口未完成),push_by_file 不受影响;后续加新 scope 走「Create Revision」
-- **下一步:S1 Studio MVP**(BLUEPRINT §七):omnibox+批次流+幻灯片渲染腿首发+商品图腿+@角色。开工第一件事:修 BTM 视频提交路径补传角色四字段(S0.7 侦查结论);S0.6 残留项(终态不可降级守卫、画布回跳)一并处理
+- **S1 前置修复已完成(2026-07-02)**:
+  - BTM video-batch 执行器提交路径(background-task-manager.tsx)补传 characterId/characterName/characterReferenceImages/characterAsset 四字段,角色推导逻辑与页面内联路径对齐(task → globalSettings → asset 快照按模型上限推导),参考图并入 mergeCharacterReferenceImages
+  - BTM quick-gen 视频执行器提交路径顺手补传 characterId/characterName/characterAsset(网关侧自会推导参考图并合并 imageUrls,见 models/submit/route.ts:222-242)
+  - quick-gen store 终态不可降级守卫:updateTaskStatus/updateImageTaskStatus 中,任务已 completed/failed 后到达的异状态更新一律忽略(轮询迟到写入防卡回);重复终态写入只合并字段不重复追加 recentTasks
+- **下一步:S1 Studio MVP**(BLUEPRINT §七):omnibox+批次流+幻灯片渲染腿首发+商品图腿+@角色(character-picker inline)。S0.6 残留「画布回跳」由 /studio 新画布消解,不再修旧页
 - **分支**:`claude/practical-curie-42f4b1`(worktree:E:\StarGaze\.claude\worktrees\practical-curie-42f4b1)
 - **待用户/环境**:S0.1 生产执行——**exec_sql RPC 在生产库不存在**(老 runner 从没跑成过),执行通道=用户登录 Supabase dashboard SQL editor,我经浏览器贴 SQL 执行(源 IP 预检已通过:生产 source 取值 8 种全部被「基础枚举+batch_video% 通配」覆盖)。届时连同 20260702_drop_viral_clone.sql 一起执行。
 - **提交节奏(用户指示)**:大步伐——里程碑级 commit(①文档+tag 已交;②S0.1-S0.3 数据层+拆除;③S0.4-S0.7)
