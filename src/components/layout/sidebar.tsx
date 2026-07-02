@@ -13,7 +13,6 @@ import {
   Sparkles,
   Lock,
   Zap,
-  Link2,
   Images,
   Camera,
   Send,
@@ -149,12 +148,6 @@ function getNavGroups(lang: string): NavGroup[] {
           href: "/pro-studio/video-batch",
           icon: Clapperboard,
           description: t ? "Generate multiple videos" : "多个视频同时生成",
-        },
-        {
-          title: t ? "Link to Video" : "链接生成视频",
-          href: "/link-video",
-          icon: Link2,
-          description: t ? "Generate video from URL" : "通过链接一键生成视频",
         },
         {
           title: t ? "Image to Video" : "图片生成视频",
