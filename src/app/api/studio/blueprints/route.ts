@@ -9,7 +9,8 @@ export const dynamic = "force-dynamic";
  * 蓝图落库(S1.3,商品图腿:商品卡 → Blueprint)
  *
  * POST {
- *   sourceType: 'product_images',
+ *   sourceType?: 'product_images' | 'product_link'(缺省 product_images;S2.1 链接腿),
+ *   sourceUrl?: string(sourceType='product_link' 时必填,记进 source_ref.url),
  *   product: ProductCard(勾选态已定),
  *   globals?: { aspect?, total_sec?, bgm_style?, voice_id?, cta_text? },
  *   renderMode?: 'slideshow',
@@ -70,6 +71,21 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: "renderMode 非法" }, { status: 400 });
     }
 
+    // sourceType 白名单(S2.1 链接腿加 product_link;reference_video 属门B,S3)
+    const sourceType = body?.sourceType === "product_link" ? "product_link" : "product_images";
+    let sourceUrl: string | undefined;
+    if (sourceType === "product_link") {
+      const rawUrl: string =
+        typeof body?.sourceUrl === "string" ? body.sourceUrl.trim().slice(0, 2000) : "";
+      if (!/^https?:\/\//.test(rawUrl)) {
+        return NextResponse.json(
+          { success: false, error: "链接来源蓝图缺少 sourceUrl" },
+          { status: 400 }
+        );
+      }
+      sourceUrl = rawUrl;
+    }
+
     // 元素级消毒后重建商品卡再落库(normalizeCard:逐项类型校验/截断/滤 null),
     // 不把客户端原对象直插 JSONB 列
     const rawProduct = body?.product as Record<string, unknown> | undefined;
@@ -111,8 +127,10 @@ export async function POST(request: NextRequest) {
       .from("blueprints")
       .insert({
         user_id: user.id,
-        source_type: "product_images",
-        source_ref: { asset_urls: product.images },
+        source_type: sourceType,
+        source_ref: sourceUrl
+          ? { url: sourceUrl, asset_urls: product.images }
+          : { asset_urls: product.images },
         rights_ack: body?.rightsAck !== false, // 商品图腿=用户自传自有素材,默认确认
         product,
         hooks: [],

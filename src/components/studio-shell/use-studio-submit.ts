@@ -66,6 +66,8 @@ export interface StudioDraft {
   slideshow: SlideshowParams;
   /** 商品成片模式:分析完成的商品卡(勾选态在卡内) */
   productCard?: ProductCard | null;
+  /** 链接腿(S2.1):商品卡来自链接解析时的来源 URL(蓝图 source_ref 溯源) */
+  linkUrl?: string;
   count: number;
 }
 
@@ -191,6 +193,9 @@ export function useStudioSubmit() {
                 bgm_style: draft.slideshow.bgmEnabled ? "random" : "none",
               },
               renderMode: "slideshow",
+              ...(draft.linkUrl
+                ? { sourceType: "product_link", sourceUrl: draft.linkUrl }
+                : {}),
             }),
           });
           const result = await res.json();

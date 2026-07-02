@@ -14,6 +14,7 @@ import {
   ChevronDown,
   ChevronUp,
   ImagePlus,
+  Link2,
   Loader2,
   Minus,
   Package,
@@ -79,6 +80,8 @@ interface OmniboxProps {
   attachments: StudioAttachment[];
   onAddFiles: (files: File[]) => void;
   onRemoveAttachment: (id: string) => void;
+  /** 链接腿(S2.1):解析出的 OSS 商品图直接注入附件链路(status=done) */
+  onAddRemoteImages?: (urls: string[]) => void;
   credits: number | null;
   onSubmit: (draft: StudioDraft) => Promise<boolean>; // 返回是否提交成功(成功则清空输入)
 }
@@ -131,10 +134,17 @@ function ToggleChip({
 const CONFIRM_COUNT_THRESHOLD = 10;
 const CONFIRM_CREDITS_THRESHOLD = 1000;
 
+/** 从贴入文本提取第一个 http(s) URL(服务端镜像在 reference-parser.extractFirstUrl) */
+function detectPastedUrl(text: string): string | null {
+  const match = text.match(/https?:\/\/[^\s"'<>)\]]+/i);
+  return match ? match[0] : null;
+}
+
 export function Omnibox({
   attachments,
   onAddFiles,
   onRemoveAttachment,
+  onAddRemoteImages,
   credits,
   onSubmit,
 }: OmniboxProps) {
@@ -182,6 +192,60 @@ export function Omnibox({
   const analyzedKeyRef = useRef<string>("");
   // 失败重试信号:effect 依赖之一,点重试即重跑分析
   const [analyzeNonce, setAnalyzeNonce] = useState(0);
+  // 商品卡来源:'images'=拖图视觉分析 / 'link'=链接解析(S2.1)。
+  // link 来源的卡不被图片分析 effect 覆盖(注入附件会改变图片指纹)
+  const [cardSource, setCardSource] = useState<"images" | "link" | null>(null);
+
+  // ==================== 商品成片:贴链接解析(S2.1 链接腿) ====================
+  const [linkChip, setLinkChip] = useState<{
+    url: string;
+    status: "parsing" | "done" | "failed";
+    error?: string;
+  } | null>(null);
+  // 非商品模式贴入链接时的切换建议(自动意图判定永不代切换/代提交——红队裁决)
+  const [linkHint, setLinkHint] = useState<string | null>(null);
+  // 解析请求代际:旧响应回来时若代际不符则丢弃(用户连续贴两个链接)
+  const linkNonceRef = useRef(0);
+
+  const startLinkParse = (url: string) => {
+    const nonce = ++linkNonceRef.current;
+    setLinkChip({ url, status: "parsing" });
+    setLinkHint(null);
+    fetch("/api/studio/parse-reference", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url }),
+    })
+      .then((res) => res.json())
+      .then((result) => {
+        if (nonce !== linkNonceRef.current) return;
+        const card: ProductCard | undefined = result?.data?.card;
+        if (result?.success && card) {
+          setLinkChip({ url, status: "done" });
+          setCardSource("link");
+          setProductCard(card);
+          setCardPanelOpen(true);
+          setAnalyzeError(null);
+          if (card.images.length > 0) onAddRemoteImages?.(card.images);
+        } else {
+          setLinkChip({ url, status: "failed", error: result?.error || "链接解析失败" });
+        }
+      })
+      .catch(() => {
+        if (nonce !== linkNonceRef.current) return;
+        setLinkChip({ url, status: "failed", error: "链接解析失败,请重试" });
+      });
+  };
+
+  const clearLinkCard = () => {
+    linkNonceRef.current++;
+    setLinkChip(null);
+    if (cardSource === "link") {
+      setProductCard(null);
+      setCardSource(null);
+      setCardPanelOpen(false);
+    }
+  };
 
   const uploading = attachments.some((a) => a.status === "uploading");
   // 失败附件阻断发送:否则实际提交内容与用户所见不符(失败图被静默剔除)
@@ -194,6 +258,8 @@ export function Omnibox({
   // 商品成片:附件全部上传完成后自动触发分析(仅预填商品卡,永不代提交——红队裁决)
   useEffect(() => {
     if (mode !== "product") return;
+    // 链接解析出的卡是权威(含页面标题/价格),注入附件改变指纹时不得被视觉分析覆盖
+    if (cardSource === "link") return;
     if (uploading || attachmentUrls.length < 2) return;
     const key = [...attachmentUrls].sort().join("|");
     // 指纹仅在成功后写入:被取消/失败的请求下一次符合条件的渲染会自然重发
@@ -214,6 +280,7 @@ export function Omnibox({
         if (result.success && result.data?.card) {
           analyzedKeyRef.current = key;
           setProductCard(result.data.card);
+          setCardSource("images");
         } else {
           setAnalyzeError(result.error || "商品图分析失败");
         }
@@ -230,7 +297,7 @@ export function Omnibox({
       // 被取消的请求到不了上面的 finally,这里兜底复位 spinner
       setAnalyzing(false);
     };
-  }, [mode, uploading, attachmentUrls, analyzeNonce]);
+  }, [mode, uploading, attachmentUrls, analyzeNonce, cardSource]);
 
   const toggleSellingPoint = (id: string) => {
     setProductCard((card) =>
@@ -255,6 +322,10 @@ export function Omnibox({
       image: imageParams,
       slideshow: slideshowParams,
       productCard: mode === "product" ? productCard : undefined,
+      linkUrl:
+        mode === "product" && cardSource === "link" && linkChip?.status === "done"
+          ? linkChip.url
+          : undefined,
       count,
     }),
     [
@@ -267,6 +338,8 @@ export function Omnibox({
       imageParams,
       slideshowParams,
       productCard,
+      cardSource,
+      linkChip,
       count,
     ]
   );
@@ -298,6 +371,10 @@ export function Omnibox({
         setProductCard(null);
         setCardPanelOpen(false);
         analyzedKeyRef.current = "";
+        setCardSource(null);
+        setLinkChip(null);
+        setLinkHint(null);
+        linkNonceRef.current++;
       }
     } finally {
       setSubmitting(false);
@@ -381,9 +458,78 @@ export function Omnibox({
         </div>
       )}
 
-      {/* 商品成片:商品卡 chip(解析中→完成态,点开勾卖点) */}
-      {mode === "product" && (analyzing || productCard || analyzeError) && (
-        <div className="border-b border-white/5 px-4 py-2">
+      {/* 非商品模式贴入链接:切换建议 chip(不代切换,不代提交) */}
+      {mode !== "product" && linkHint && (
+        <div className="flex items-center gap-2 border-b border-white/5 px-4 py-2 text-xs text-zinc-400">
+          <Link2 className="h-3.5 w-3.5 shrink-0 text-amber-300" />
+          <span className="min-w-0 flex-1 truncate">检测到商品链接,切到商品成片可自动解析卖点</span>
+          <button
+            type="button"
+            onClick={() => {
+              setMode("product");
+              startLinkParse(linkHint);
+            }}
+            className="shrink-0 rounded border border-amber-400/40 px-2 py-0.5 text-amber-300 hover:bg-amber-500/10"
+          >
+            切换并解析
+          </button>
+          <button
+            type="button"
+            onClick={() => setLinkHint(null)}
+            className="shrink-0 text-zinc-600 hover:text-zinc-300"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
+
+      {/* 商品成片:链接 chip + 商品卡 chip(解析中→完成态,点开勾卖点) */}
+      {mode === "product" && (analyzing || productCard || analyzeError || linkChip) && (
+        <div className="space-y-2 border-b border-white/5 px-4 py-2">
+          {linkChip && (
+            <div className="flex items-center gap-2 text-xs">
+              <Link2 className="h-3.5 w-3.5 shrink-0 text-sky-300" />
+              {linkChip.status === "parsing" ? (
+                <span className="flex min-w-0 flex-1 items-center gap-2 text-sky-300">
+                  <span className="truncate">{linkChip.url}</span>
+                  <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
+                  <span className="shrink-0">抓取商品页并提炼卖点…</span>
+                </span>
+              ) : linkChip.status === "failed" ? (
+                <>
+                  <span className="min-w-0 flex-1 truncate text-red-400">
+                    {linkChip.error}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => startLinkParse(linkChip.url)}
+                    className="shrink-0 rounded border border-red-400/40 px-2 py-0.5 text-red-300 hover:bg-red-500/10"
+                  >
+                    重试
+                  </button>
+                </>
+              ) : (
+                <span className="min-w-0 flex-1 truncate text-zinc-400">
+                  {(() => {
+                    try {
+                      return new URL(linkChip.url).hostname;
+                    } catch {
+                      return linkChip.url;
+                    }
+                  })()}
+                  <span className="ml-1 text-zinc-600">已解析</span>
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={clearLinkCard}
+                className="shrink-0 text-zinc-600 hover:text-zinc-300"
+                title="移除链接与商品卡"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
           {analyzing ? (
             <div className="flex items-center gap-2 text-xs text-sky-300">
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -730,6 +876,21 @@ export function Omnibox({
         <textarea
           value={text}
           onChange={(e) => setText(e.target.value)}
+          onPaste={(e) => {
+            const pasted = e.clipboardData.getData("text");
+            const url = detectPastedUrl(pasted);
+            if (!url) return;
+            if (mode === "product") {
+              // 链接不进输入框(变链接 chip);URL 之外的文字保留为文案主题
+              e.preventDefault();
+              const rest = pasted.replace(url, "").trim();
+              if (rest) setText((prev) => (prev ? `${prev} ${rest}` : rest));
+              startLinkParse(url);
+            } else {
+              // 其他模式只给切换建议,不代切换(模式切换器是唯一真值)
+              setLinkHint(url);
+            }
+          }}
           onKeyDown={(e) => {
             // keyCode 229 守卫:Safari 在 compositionend 后才派发确认候选词的
             // Enter keydown,此时 isComposing 已为 false,仅靠它会误触发提交
@@ -757,7 +918,7 @@ export function Omnibox({
               : mode === "slideshow"
                 ? "拖入 2-15 张图;这里写文案主题(可选,AI 生成口播文案与配音)…"
                 : mode === "product"
-                  ? "拖入 2-9 张商品图,自动提炼商品卡;发送=按勾选卖点批量出轮播成片"
+                  ? "拖入 2-9 张商品图,或粘贴 Amazon/Shopify/TikTok Shop 商品链接;发送=按勾选卖点批量出成片"
                   : "描述你要的图片,可拖入参考图…"
           }
           rows={2}

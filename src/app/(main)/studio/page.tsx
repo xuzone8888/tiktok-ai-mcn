@@ -130,6 +130,23 @@ export default function StudioPage() {
     ]);
   }, []);
 
+  // 链接腿(S2.1):解析出的 OSS 商品图批量注入附件(已托管,免上传;去重防重复解析注入)
+  const addRemoteImages = useCallback((urls: string[]) => {
+    setAttachments((prev) => {
+      const existing = new Set(prev.map((a) => a.url).filter(Boolean));
+      const fresh = urls.filter((u) => !existing.has(u));
+      return [
+        ...prev,
+        ...fresh.map((url) => ({
+          id: nextAttachmentId(),
+          previewUrl: url,
+          status: "done" as const,
+          url,
+        })),
+      ];
+    });
+  }, []);
+
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop: addFiles,
     accept: { "image/*": [".png", ".jpg", ".jpeg", ".webp", ".gif"] },
@@ -252,6 +269,7 @@ export default function StudioPage() {
             attachments={attachments}
             onAddFiles={addFiles}
             onRemoveAttachment={removeAttachment}
+            onAddRemoteImages={addRemoteImages}
             credits={credits}
             onSubmit={handleSubmit}
           />

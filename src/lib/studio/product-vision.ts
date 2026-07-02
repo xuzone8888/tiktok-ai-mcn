@@ -59,6 +59,15 @@ const USER_PROMPT = `仔细观察这些商品图片,输出商品卡 JSON:
 要求:selling_points 给 4-6 条,按带货说服力排序;audience 给 2-4 个;
 如果图片里有价格信息,额外加 "price" 字段(字符串)。只返回 JSON。`;
 
+/** 链接腿(S2.1):抓到的商品页 meta 文本拼进视觉 prompt,图文互补出卡 */
+function promptWithContext(context: string | undefined): string {
+  if (!context?.trim()) return USER_PROMPT;
+  return `商品页面已抓到以下信息(标题/卖点以它为准,图片作补充验证):
+${context.trim().slice(0, 1500)}
+
+${USER_PROMPT}`;
+}
+
 // ============================================================================
 // 解析与归一化
 // ============================================================================
@@ -146,7 +155,7 @@ function withBudget<T>(promise: Promise<T>, ms: number): Promise<T | null> {
 }
 
 /** 豆包视觉通道(主):多图一次调用 */
-async function analyzeWithDoubao(imageUrls: string[]): Promise<ProductCard | null> {
+async function analyzeWithDoubao(imageUrls: string[], context?: string): Promise<ProductCard | null> {
   // 未配置豆包直接让位给 qwen,不浪费预算
   if (!process.env.DOUBAO_API_KEY || !process.env.DOUBAO_ENDPOINT_ID) return null;
 
@@ -164,7 +173,7 @@ async function analyzeWithDoubao(imageUrls: string[]): Promise<ProductCard | nul
     )
     .map((url) => ({ type: "image_url" as const, image_url: { url, detail: "auto" as const } }));
   if (parts.length === 0) return null;
-  parts.push({ type: "text", text: USER_PROMPT });
+  parts.push({ type: "text", text: promptWithContext(context) });
 
   const result = await callDoubaoAPI(
     [
@@ -178,8 +187,8 @@ async function analyzeWithDoubao(imageUrls: string[]): Promise<ProductCard | nul
 }
 
 /** Qwen 兜底通道:analyzeImage 单图接口,只喂首图(通常是主图) */
-async function analyzeWithQwen(imageUrls: string[]): Promise<ProductCard | null> {
-  const result = await analyzeImage(imageUrls[0], SYSTEM_PROMPT, USER_PROMPT, {
+async function analyzeWithQwen(imageUrls: string[], context?: string): Promise<ProductCard | null> {
+  const result = await analyzeImage(imageUrls[0], SYSTEM_PROMPT, promptWithContext(context), {
     maxTokens: 1000,
     temperature: 0.4,
   });
@@ -188,25 +197,69 @@ async function analyzeWithQwen(imageUrls: string[]): Promise<ProductCard | null>
 }
 
 /**
+ * 纯文本通道(链接腿兜底):图片全部转存失败/防盗链时,
+ * 仅凭抓到的商品页 meta 文本出卡。豆包接入点接受纯文本消息(vision 模型向下兼容)。
+ */
+export async function buildCardFromMeta(
+  context: string,
+  images: string[]
+): Promise<ProductCard | null> {
+  if (!process.env.DOUBAO_API_KEY || !process.env.DOUBAO_ENDPOINT_ID) return null;
+  if (!context.trim()) return null;
+
+  const result = await callDoubaoAPI(
+    [
+      { role: "system", content: SYSTEM_PROMPT },
+      {
+        role: "user",
+        content: `根据以下商品页面信息(无图),输出商品卡 JSON:
+${context.trim().slice(0, 2000)}
+
+${USER_PROMPT.replace("仔细观察这些商品图片,输出商品卡 JSON:", "")}`,
+      },
+    ],
+    { maxTokens: 1000, temperature: 0.4, maxRetries: 1 }
+  );
+  if (!result.success || !result.content) return null;
+  return normalizeCard(extractJson(result.content), images);
+}
+
+export interface AnalyzeProductOptions {
+  /** 链接腿:商品页 meta 文本(标题/描述/价格),注入视觉 prompt 图文互补 */
+  context?: string;
+  /** 通道时间预算覆盖(缺省 豆包 70s / qwen 35s,合计留在路由 maxDuration 内) */
+  doubaoBudgetMs?: number;
+  qwenBudgetMs?: number;
+}
+
+/**
  * 商品图 → 商品卡。豆包视觉优先,失败(未配 vision 接入点/超时)退 Qwen。
  * 两通道都失败时返回 error,由调用方决定是否降级为手填。
  */
-export async function analyzeProductImages(imageUrls: string[]): Promise<AnalyzeProductResult> {
+export async function analyzeProductImages(
+  imageUrls: string[],
+  options: AnalyzeProductOptions = {}
+): Promise<AnalyzeProductResult> {
   const urls = imageUrls.filter((u) => typeof u === "string" && u.startsWith("http")).slice(0, 9);
   if (urls.length === 0) {
     return { success: false, error: "没有可分析的图片" };
   }
 
-  // 时间预算:豆包 70s、qwen 35s,合计留在 analyze-product 路由 maxDuration=120 之内
   try {
-    const doubaoCard = await withBudget(analyzeWithDoubao(urls), 70_000);
+    const doubaoCard = await withBudget(
+      analyzeWithDoubao(urls, options.context),
+      options.doubaoBudgetMs ?? 70_000
+    );
     if (doubaoCard) return { success: true, card: doubaoCard, provider: "doubao" };
   } catch (error) {
     console.error("[ProductVision] doubao channel failed:", error);
   }
 
   try {
-    const qwenCard = await withBudget(analyzeWithQwen(urls), 35_000);
+    const qwenCard = await withBudget(
+      analyzeWithQwen(urls, options.context),
+      options.qwenBudgetMs ?? 35_000
+    );
     if (qwenCard) return { success: true, card: qwenCard, provider: "qwen" };
   } catch (error) {
     console.error("[ProductVision] qwen channel failed:", error);
