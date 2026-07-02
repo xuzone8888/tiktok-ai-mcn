@@ -113,7 +113,19 @@ export const useAiGenStore = create<AiGenState & AiGenActions>()(
           set((state) => {
             state.tasks.push(...newTasks);
             if (state.tasks.length > MAX_TASKS) {
-              state.tasks.splice(0, state.tasks.length - MAX_TASKS);
+              // 只裁终态旧任务:裁掉执行中/排队中的 job 会让已扣费的镜变孤儿
+              // (执行器的任务消失守卫是兜底,这里从源头不裁非终态;
+              // 非终态任务挤爆上限时宁可暂时超额)
+              let excess = state.tasks.length - MAX_TASKS;
+              const keep: AiGenTask[] = [];
+              for (const t of state.tasks) {
+                if (excess > 0 && (t.status === "completed" || t.status === "failed")) {
+                  excess--;
+                  continue;
+                }
+                keep.push(t);
+              }
+              state.tasks = keep;
             }
           });
         },

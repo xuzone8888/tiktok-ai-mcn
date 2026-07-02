@@ -33,11 +33,16 @@ const MAX_SCENES = 30;
 function sanitizeScenes(raw: unknown): SanitizedScene[] | null {
   if (!Array.isArray(raw) || raw.length === 0 || raw.length > MAX_SCENES) return null;
   const scenes: SanitizedScene[] = [];
+  const seenIdx = new Set<number>();
   for (const item of raw) {
     if (!item || typeof item !== "object") return null;
     const rec = item as Record<string, unknown>;
     const idx = typeof rec.idx === "number" && Number.isInteger(rec.idx) ? rec.idx : null;
     if (idx === null || idx < 0 || idx >= MAX_SCENES) return null;
+    // idx 是下游唯一键(clientTaskId=`${jobId}-s${idx}`、updateScene 按 idx 寻址),
+    // 重复 idx 会让重复镜永不提交、job 无限重试无解
+    if (seenIdx.has(idx)) return null;
+    seenIdx.add(idx);
     const beat = typeof rec.beat === "string" && SCENE_BEATS.has(rec.beat) ? rec.beat : null;
     if (!beat) return null;
     const slotRec =

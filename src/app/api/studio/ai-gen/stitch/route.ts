@@ -96,6 +96,7 @@ export async function POST(request: NextRequest) {
     const blueprintId = typeof body?.blueprintId === "string" ? body.blueprintId.slice(0, 64) : null;
     const title = typeof body?.title === "string" ? body.title.slice(0, 300) : null;
     const modelType = typeof body?.modelType === "string" ? body.modelType.slice(0, 40) : null;
+    const groupName = typeof body?.groupName === "string" ? body.groupName.slice(0, 100) : null;
     const sceneTaskIds: string[] = Array.isArray(body?.sceneTaskIds)
       ? body.sceneTaskIds
           .filter((s: unknown): s is string => typeof s === "string")
@@ -127,12 +128,15 @@ export async function POST(request: NextRequest) {
       stitched = await callWorkerStitch(videoUrls, aspectRatio);
     }
 
-    // 落库:generations.spec 首个写入端(再跑一批/任务中心溯源)
+    // 落库:generations.spec 首个写入端(再跑一批/任务中心溯源)。
+    // 漂移降级链(对齐 models/submit 的 insertGenerationWithSchemaFallback 思路):
+    // 完整行 → 去 spec → 去 batch_id/group_name。仍失败则返回 500——
+    // 静默吞掉会让任务置 completed 后永无补录路径,成片 URL 只剩 localStorage
+    // 一份(复审确认项);500 后客户端标失败,重试经 task_id 幂等安全。
     const nowIso = new Date().toISOString();
-    const { error: insertError } = await admin.from("generations").insert({
+    const baseRow: Record<string, unknown> = {
       user_id: user.id,
       task_id: jobId,
-      ...(batchId ? { batch_id: batchId } : {}),
       type: "video",
       generation_type: "video",
       source: "studio",
@@ -147,19 +151,41 @@ export async function POST(request: NextRequest) {
       output_url: stitched.videoUrl,
       credit_cost: 0, // scene 逐镜已扣,拼接零新增
       credits_used: 0,
-      spec: {
-        render_mode: "ai_gen",
-        ...(blueprintId ? { blueprint_id: blueprintId } : {}),
-        scene_task_ids: sceneTaskIds,
-        segment_count: videoUrls.length,
-        model_type: modelType,
-      },
       completed_at: nowIso,
       created_at: nowIso,
-    } as never);
-    if (insertError) {
-      // 不阻断响应:成片已产出(各 scene 已扣费),落库失败只影响入库/任务中心
-      console.error("[Studio AiGen Stitch] generations insert failed:", insertError.message);
+    };
+    const extras: Record<string, unknown> = {
+      ...(batchId ? { batch_id: batchId } : {}),
+      ...(groupName ? { group_name: groupName } : {}),
+    };
+    const spec = {
+      render_mode: "ai_gen",
+      ...(blueprintId ? { blueprint_id: blueprintId } : {}),
+      scene_task_ids: sceneTaskIds,
+      segment_count: videoUrls.length,
+      model_type: modelType,
+    };
+    const attempts: Record<string, unknown>[] = [
+      { ...baseRow, ...extras, spec },
+      { ...baseRow, ...extras },
+      baseRow,
+    ];
+    let inserted = false;
+    let lastInsertError: { message: string } | null = null;
+    for (const row of attempts) {
+      const { error: insertError } = await admin.from("generations").insert(row as never);
+      if (!insertError) {
+        inserted = true;
+        break;
+      }
+      lastInsertError = insertError;
+    }
+    if (!inserted) {
+      console.error("[Studio AiGen Stitch] generations insert failed:", lastInsertError?.message);
+      return NextResponse.json(
+        { success: false, error: "成片已生成但任务记录保存失败,请重试(重试不重复扣费)" },
+        { status: 500 }
+      );
     }
 
     return NextResponse.json({

@@ -1276,8 +1276,14 @@ function useSlideshowTaskExecutor() {
         // 无锁时两个标签会对同一任务双重渲染+双重扣费
         if (typeof navigator !== "undefined" && navigator.locks) {
           await navigator.locks.request("stargaze-slideshow-executor", async () => {
-            // 拿到锁后重新水合:吸收其他标签页已写回的终态,避免重复执行
+            // 拿到锁后重新水合:吸收其他标签页已写回的终态,避免重复执行。
+            // 水合是 storage 整表覆盖(last-writer-wins):等锁期间本页新提交的
+            // 任务可能已被他页进度写从 storage 冲掉,须按 id 差集补回(复审确认项)
+            const memoryTasks = useSlideshowStore.getState().tasks;
             await useSlideshowStore.persist.rehydrate();
+            const storedIds = new Set(useSlideshowStore.getState().tasks.map(t => t.id));
+            const missing = memoryTasks.filter(t => !storedIds.has(t.id));
+            if (missing.length > 0) useSlideshowStore.getState().addTasks(missing);
             await runLoop();
           });
         } else {
@@ -1338,8 +1344,13 @@ function useAiGenTaskExecutor() {
 
       // ---------- 阶段一:逐镜提交(带锚点的 scene 只续轮询,绝不重提交) ----------
       for (const scene of task.scenes) {
-        // 每镜取最新快照:重试/复水后的状态以 store 为准,不吃循环外的旧闭包
-        const fresh = getTask()?.scenes.find(s => s.idx === scene.idx) ?? scene;
+        // 每镜取最新快照:重试/复水后的状态以 store 为准,不吃循环外的旧闭包。
+        // 任务已从 store 消失(MAX_TASKS 裁剪/删除)必须立即中止——继续提交会
+        // 扣费但锚点无处持久化、无人轮询,纯白扣钱(复审确认项)
+        const snap = getTask();
+        if (!snap) return;
+        const fresh = snap.scenes.find(s => s.idx === scene.idx);
+        if (!fresh) continue;
         if (fresh.status === "completed" || fresh.status === "failed") continue;
         if (fresh.upstreamTaskId) {
           // 复水恢复/超时重试:锚点在手说明上游已受理已扣费——置回 generating
@@ -1385,10 +1396,15 @@ function useAiGenTaskExecutor() {
           } else {
             const message: string = submitData?.error || `提交失败 (HTTP ${submitRes.status})`;
             updateScene(taskId, fresh.idx, { status: "failed", errorMessage: message });
-            // 积分不足时后续镜必然同败,直接止损
+            // 积分不足时后续镜必然同败,直接止损;但带锚点的 pending 镜
+            // (重试场景:已提交已扣费)不能误标「未提交」——置回 generating
+            // 交阶段二续轮询取回成片
             if (/积分|credits|insufficient/i.test(message)) {
               getTask()?.scenes.forEach(s => {
-                if (s.status === "pending") {
+                if (s.status !== "pending") return;
+                if (s.upstreamTaskId) {
+                  updateScene(taskId, s.idx, { status: "generating" });
+                } else {
                   updateScene(taskId, s.idx, { status: "failed", errorMessage: "积分不足,未提交" });
                 }
               });
@@ -1504,6 +1520,7 @@ function useAiGenTaskExecutor() {
           blueprintId: finalSnapshot.blueprintId,
           title: finalSnapshot.title,
           modelType,
+          groupName: finalSnapshot.groupName,
           sceneTaskIds: finalSnapshot.scenes.map(s => s.upstreamTaskId ?? s.clientTaskId),
         }),
         // 略大于服务端 maxDuration=300s(挂起请求会饿死串行队列,同 S1.2)
@@ -1571,7 +1588,13 @@ function useAiGenTaskExecutor() {
         // 无锁时两个标签会对同一 job 双重提交+双重扣费
         if (typeof navigator !== "undefined" && navigator.locks) {
           await navigator.locks.request("stargaze-aigen-executor", async () => {
+            // 水合是 storage 整表覆盖(last-writer-wins):等锁期间本页新提交的
+            // job 可能已被他页进度写从 storage 冲掉,须按 id 差集补回(复审确认项)
+            const memoryTasks = useAiGenStore.getState().tasks;
             await useAiGenStore.persist.rehydrate();
+            const storedIds = new Set(useAiGenStore.getState().tasks.map(t => t.id));
+            const missing = memoryTasks.filter(t => !storedIds.has(t.id));
+            if (missing.length > 0) useAiGenStore.getState().addTasks(missing);
             await runLoop();
           });
         } else {
