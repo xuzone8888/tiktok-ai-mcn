@@ -8,7 +8,7 @@
  * 审计约束: 生成结果必须先转存自有 OSS
  */
 
-import type { ProviderAlias, ViralCloneAsset } from '@/types/viral-clone';
+import type { ProviderAlias, ViralCloneAsset } from '../types';
 import { getProviderConfig, getActualModelName } from './provider-registry';
 import { uploadBuffer, generateMediaPath, getPublicUrl } from '@/lib/oss';
 

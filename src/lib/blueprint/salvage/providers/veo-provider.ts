@@ -13,7 +13,7 @@
 import type {
   ProviderAlias,
   ViralCloneAsset,
-} from '@/types/viral-clone';
+} from '../types';
 import { getProviderConfig, getActualModelName } from './provider-registry';
 import {
   submitVeoComponents,

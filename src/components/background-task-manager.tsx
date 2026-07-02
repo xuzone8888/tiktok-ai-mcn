@@ -741,11 +741,12 @@ function useImageTaskExecutor() {
 
 function useQuickGenTaskExecutor() {
   const { toast } = useToast();
-  const activeTask = useQuickGenStore((state) => state.activeVideoTask);
+  // S0.6：从"监听单槽"改为"遍历多任务队列"，支持并发多任务
+  const videoTasks = useQuickGenStore((state) => state.videoTasks);
   const updateTaskStatus = useQuickGenStore((state) => state.updateTaskStatus);
 
-  const isExecutingRef = useRef(false);
-  const executedTaskIdRef = useRef<string | null>(null);
+  // 去重集合：每个任务只启动一次执行链（复用 image-batch 执行器的并发控制模式）
+  const executedTasksRef = useRef<Set<string>>(new Set());
   const userIdRef = useRef<string | null>(null);
 
   // 获取用户 ID
@@ -768,17 +769,10 @@ function useQuickGenTaskExecutor() {
       .catch(console.error);
   }, []);
 
-  useEffect(() => {
-    if (!activeTask) return;
-    if (isExecutingRef.current) return;
-    if (executedTaskIdRef.current === activeTask.id) return;
-
-    const needsExecution = activeTask.status === "idle" || activeTask.status === "polling";
-    if (!needsExecution) return;
-
-    const executeTask = async () => {
-      isExecutingRef.current = true;
-      executedTaskIdRef.current = activeTask.id;
+  // 执行单个 Quick Gen 视频任务（提交 + 轮询）
+  const executeTask = useCallback(async (taskIdToRun: string) => {
+      const activeTask = useQuickGenStore.getState().videoTasks.find(t => t.id === taskIdToRun);
+      if (!activeTask) return;
 
       try {
         if (activeTask.status === "idle") {
@@ -829,9 +823,8 @@ function useQuickGenTaskExecutor() {
           });
         }
 
-        // 轮询查询结果
-        const state = useQuickGenStore.getState();
-        const task = state.activeVideoTask;
+        // 轮询查询结果（重新从队列取最新快照，拿到提交后写回的 taskId）
+        const task = useQuickGenStore.getState().videoTasks.find(t => t.id === taskIdToRun);
         if (!task || !task.taskId) return;
 
         const taskModelName = task.model || "";
@@ -885,25 +878,35 @@ function useQuickGenTaskExecutor() {
         }
         throw new Error("任务超时");
       } catch (error) {
-        updateTaskStatus(activeTask.id, "failed", {
+        updateTaskStatus(taskIdToRun, "failed", {
           errorMessage: error instanceof Error ? error.message : "执行失败",
           completedAt: new Date().toISOString()
         });
         toast({ variant: "destructive", title: "❌ 快速视频生成失败", description: error instanceof Error ? error.message : "未知错误" });
-      } finally {
-        isExecutingRef.current = false;
       }
-    };
+  }, [updateTaskStatus, toast]);
 
-    executeTask();
-  }, [activeTask, updateTaskStatus, toast]);
-
+  // 监听队列：把所有待执行（idle）/ 待恢复轮询（polling）且未启动过的任务并发拉起
   useEffect(() => {
-    if (!activeTask || ["completed", "failed"].includes(activeTask.status)) {
-      executedTaskIdRef.current = null;
-      isExecutingRef.current = false;
+    const pendingTasks = videoTasks.filter(
+      t => (t.status === "idle" || t.status === "polling") && !executedTasksRef.current.has(t.id)
+    );
+    if (pendingTasks.length === 0) return;
+
+    for (const task of pendingTasks) {
+      executedTasksRef.current.add(task.id);
+      void executeTask(task.id);
     }
-  }, [activeTask]);
+  }, [videoTasks, executeTask]);
+
+  // 清理：任务离开队列（被页面消费/清除）后释放去重记录
+  useEffect(() => {
+    if (executedTasksRef.current.size === 0) return;
+    const liveIds = new Set(videoTasks.map(t => t.id));
+    for (const id of Array.from(executedTasksRef.current)) {
+      if (!liveIds.has(id)) executedTasksRef.current.delete(id);
+    }
+  }, [videoTasks]);
 }
 
 // ============================================================================
@@ -912,11 +915,12 @@ function useQuickGenTaskExecutor() {
 
 function useQuickGenImageTaskExecutor() {
   const { toast } = useToast();
-  const activeTask = useQuickGenStore((state) => state.activeImageTask);
+  // S0.6：从"监听单槽"改为"遍历多任务队列"，支持并发多任务
+  const imageTasks = useQuickGenStore((state) => state.imageTasks);
   const updateTaskStatus = useQuickGenStore((state) => state.updateImageTaskStatus);
 
-  const isExecutingRef = useRef(false);
-  const executedTaskIdRef = useRef<string | null>(null);
+  // 去重集合：每个任务只启动一次执行链（复用 image-batch 执行器的并发控制模式）
+  const executedTasksRef = useRef<Set<string>>(new Set());
   const userIdRef = useRef<string | null>(null);
 
   // 获取用户 ID
@@ -939,17 +943,10 @@ function useQuickGenImageTaskExecutor() {
       .catch(console.error);
   }, []);
 
-  useEffect(() => {
-    if (!activeTask) return;
-    if (isExecutingRef.current) return;
-    if (executedTaskIdRef.current === activeTask.id) return;
-
-    const needsExecution = activeTask.status === "idle" || activeTask.status === "polling";
-    if (!needsExecution) return;
-
-    const executeTask = async () => {
-      isExecutingRef.current = true;
-      executedTaskIdRef.current = activeTask.id;
+  // 执行单个 Quick Gen 图片任务（提交 + 轮询）
+  const executeTask = useCallback(async (taskIdToRun: string) => {
+      const activeTask = useQuickGenStore.getState().imageTasks.find(t => t.id === taskIdToRun);
+      if (!activeTask) return;
 
       try {
         if (activeTask.status === "idle") {
@@ -1035,9 +1032,8 @@ function useQuickGenImageTaskExecutor() {
           });
         }
 
-        // 轮询查询结果
-        const state = useQuickGenStore.getState();
-        const task = state.activeImageTask;
+        // 轮询查询结果（重新从队列取最新快照，拿到提交后写回的 taskId）
+        const task = useQuickGenStore.getState().imageTasks.find(t => t.id === taskIdToRun);
         if (!task || !task.taskId) return;
 
         const maxAttempts = 100; // 100 * 3s = 5 分钟
@@ -1085,25 +1081,35 @@ function useQuickGenImageTaskExecutor() {
         });
         return;
       } catch (error) {
-        updateTaskStatus(activeTask.id, "failed", {
+        updateTaskStatus(taskIdToRun, "failed", {
           errorMessage: error instanceof Error ? error.message : "执行失败",
           completedAt: new Date().toISOString()
         });
         toast({ variant: "destructive", title: "❌ 单图生成失败", description: error instanceof Error ? error.message : "未知错误" });
-      } finally {
-        isExecutingRef.current = false;
       }
-    };
+  }, [updateTaskStatus, toast]);
 
-    executeTask();
-  }, [activeTask, updateTaskStatus, toast]);
-
+  // 监听队列：把所有待执行（idle）/ 待恢复轮询（polling）且未启动过的任务并发拉起
   useEffect(() => {
-    if (!activeTask || ["completed", "failed"].includes(activeTask.status)) {
-      executedTaskIdRef.current = null;
-      isExecutingRef.current = false;
+    const pendingTasks = imageTasks.filter(
+      t => (t.status === "idle" || t.status === "polling") && !executedTasksRef.current.has(t.id)
+    );
+    if (pendingTasks.length === 0) return;
+
+    for (const task of pendingTasks) {
+      executedTasksRef.current.add(task.id);
+      void executeTask(task.id);
     }
-  }, [activeTask]);
+  }, [imageTasks, executeTask]);
+
+  // 清理：任务离开队列（被页面消费/清除）后释放去重记录
+  useEffect(() => {
+    if (executedTasksRef.current.size === 0) return;
+    const liveIds = new Set(imageTasks.map(t => t.id));
+    for (const id of Array.from(executedTasksRef.current)) {
+      if (!liveIds.has(id)) executedTasksRef.current.delete(id);
+    }
+  }, [imageTasks]);
 }
 
 // ============================================================================
@@ -1116,8 +1122,9 @@ function TaskStatusIndicator() {
   const videoJobStatus = useVideoBatchStore((state) => state.jobStatus);
   const imageTasks = useImageBatchStore((state) => state.tasks);
   const imageJobStatus = useImageBatchStore((state) => state.jobStatus);
-  const quickGenTask = useQuickGenStore((state) => state.activeVideoTask);
-  const quickGenImageTask = useQuickGenStore((state) => state.activeImageTask);
+  // S0.6：从多任务队列统计运行中的 Quick Gen 任务（而非单槽镜像）
+  const quickGenVideoTasks = useQuickGenStore((state) => state.videoTasks);
+  const quickGenImageTasks = useQuickGenStore((state) => state.imageTasks);
 
   const runningVideoTasks = videoTasks.filter(
     t => t.status !== "pending" && t.status !== "success" && t.status !== "failed"
@@ -1125,8 +1132,15 @@ function TaskStatusIndicator() {
 
   const runningImageTasks = imageTasks.filter(t => t.status === "processing").length;
 
-  const isQuickGenRunning = quickGenTask && !["completed", "failed", "idle"].includes(quickGenTask.status);
-  const isQuickGenImageRunning = quickGenImageTask && !["completed", "failed", "idle"].includes(quickGenImageTask.status);
+  const runningQuickGenVideos = quickGenVideoTasks.filter(t => !["completed", "failed", "idle"].includes(t.status));
+  const runningQuickGenImages = quickGenImageTasks.filter(t => !["completed", "failed", "idle"].includes(t.status));
+
+  const isQuickGenRunning = runningQuickGenVideos.length > 0;
+  const isQuickGenImageRunning = runningQuickGenImages.length > 0;
+
+  // 进度条展示最新一个运行中的任务
+  const quickGenTask = runningQuickGenVideos[runningQuickGenVideos.length - 1];
+  const quickGenImageTask = runningQuickGenImages[runningQuickGenImages.length - 1];
 
   const hasRunningTasks = videoJobStatus === "running" || imageJobStatus === "running" ||
     runningVideoTasks > 0 || runningImageTasks > 0 || isQuickGenRunning || isQuickGenImageRunning;
@@ -1147,7 +1161,9 @@ function TaskStatusIndicator() {
             <span className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 bg-violet-400 rounded-full" />
           </div>
           <div className="flex flex-col flex-1">
-            <span className="text-sm font-medium text-violet-100">单图生成中</span>
+            <span className="text-sm font-medium text-violet-100">
+              单图生成中{runningQuickGenImages.length > 1 ? ` · ${runningQuickGenImages.length} 个任务` : ""}
+            </span>
             <div className="flex items-center gap-2 mt-1">
               <div className="w-24 h-1.5 bg-violet-900/30 rounded-full overflow-hidden">
                 <div
@@ -1174,7 +1190,9 @@ function TaskStatusIndicator() {
             <span className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 bg-amber-400 rounded-full" />
           </div>
           <div className="flex flex-col flex-1">
-            <span className="text-sm font-medium text-amber-100">快速视频生成中</span>
+            <span className="text-sm font-medium text-amber-100">
+              快速视频生成中{runningQuickGenVideos.length > 1 ? ` · ${runningQuickGenVideos.length} 个任务` : ""}
+            </span>
             <div className="flex items-center gap-2 mt-1">
               <div className="w-24 h-1.5 bg-amber-900/30 rounded-full overflow-hidden">
                 <div

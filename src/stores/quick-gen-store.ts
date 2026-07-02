@@ -1,8 +1,13 @@
 /**
  * Quick Generator Store - 快速生成任务状态管理
- * 
+ *
  * 用于管理 Quick Generator 中的视频和图片生成任务
  * 支持后台执行和页面切换时任务不中断
+ *
+ * S0.6：单任务槽 → 多任务队列
+ * - videoTasks / imageTasks 为任务事实来源（source of truth），支持并发多任务
+ * - activeVideoTask / activeImageTask 保留为"兼容镜像"，指向当前关注的任务
+ *   （默认为最新创建的任务），旧页面无需改动即可继续工作
  */
 
 import { create } from "zustand";
@@ -28,18 +33,18 @@ export interface QuickGenVideoTask {
   sourceImageUrl?: string;
   modelId?: string; // AI 模特 ID
   characterAsset?: CharacterAssetSnapshot;
-  
+
   // 任务状态
   status: QuickGenTaskStatus;
   progress: number;
   taskId?: string; // Sora API 任务 ID
   resultUrl?: string;
   errorMessage?: string;
-  
+
   // 时间戳
   createdAt: string;
   completedAt?: string;
-  
+
   // 积分
   creditCost: number;
   creditsDeducted: boolean;
@@ -55,33 +60,37 @@ export interface QuickGenImageTask {
   resolution: "1k" | "2k" | "4k";
   sourceImageUrls: string[];
   characterAsset?: CharacterAssetSnapshot;
-  
+
   // 任务状态
   status: QuickGenTaskStatus;
   progress: number;
   taskId?: string; // 图片生成任务 ID
   resultUrl?: string;
   errorMessage?: string;
-  
+
   // 时间戳
   createdAt: string;
   completedAt?: string;
-  
+
   // 积分
   creditCost: number;
   creditsDeducted: boolean;
 }
 
 export interface QuickGenState {
-  // 当前活动的视频任务
+  // 多任务队列（S0.6 新增）：所有已创建、进行中或待页面消费的任务
+  videoTasks: QuickGenVideoTask[];
+  imageTasks: QuickGenImageTask[];
+
+  // 兼容镜像：当前关注的视频任务（默认为最新创建的任务，随任务更新同步）
   activeVideoTask: QuickGenVideoTask | null;
-  
-  // 当前活动的图片任务
+
+  // 兼容镜像：当前关注的图片任务
   activeImageTask: QuickGenImageTask | null;
-  
+
   // 历史任务（最近10个）
   recentTasks: (QuickGenVideoTask | QuickGenImageTask)[];
-  
+
   // 九宫格处理结果（用于页面返回时恢复）
   processedGridImages: string[];
   selectedGridIndex: number;
@@ -90,31 +99,31 @@ export interface QuickGenState {
 export interface QuickGenActions {
   // 创建视频任务
   createVideoTask: (task: Omit<QuickGenVideoTask, "id" | "status" | "progress" | "createdAt" | "creditsDeducted">) => string;
-  
+
   // 创建图片任务
   createImageTask: (task: Omit<QuickGenImageTask, "id" | "status" | "progress" | "createdAt" | "creditsDeducted">) => string;
-  
+
   // 更新视频任务状态
   updateTaskStatus: (
     taskId: string,
     status: QuickGenTaskStatus,
     extra?: Partial<Pick<QuickGenVideoTask, "progress" | "taskId" | "resultUrl" | "errorMessage" | "completedAt" | "creditsDeducted">>
   ) => void;
-  
+
   // 更新图片任务状态
   updateImageTaskStatus: (
     taskId: string,
     status: QuickGenTaskStatus,
     extra?: Partial<Pick<QuickGenImageTask, "progress" | "taskId" | "resultUrl" | "errorMessage" | "completedAt" | "creditsDeducted">>
   ) => void;
-  
-  // 清除当前任务
+
+  // 清除当前任务（终态任务出队，镜像重指向队列中最新的剩余任务）
   clearActiveTask: () => void;
   clearActiveImageTask: () => void;
-  
+
   // 清除历史
   clearHistory: () => void;
-  
+
   // 九宫格处理结果
   setProcessedGridImages: (images: string[]) => void;
   setSelectedGridIndex: (index: number) => void;
@@ -122,12 +131,59 @@ export interface QuickGenActions {
 }
 
 // ============================================================================
-// Store 实现
+// 内部工具
 // ============================================================================
 
 const generateId = () => `qg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
+/** 终态：任务已结束，可以被清理 */
+const isTerminalStatus = (status: QuickGenTaskStatus) =>
+  status === "completed" || status === "failed";
+
+/** 可清除状态：与旧版 clearActiveTask 的守卫语义一致（进行中不可清除） */
+const isClearableStatus = (status: QuickGenTaskStatus) =>
+  status === "completed" || status === "failed" || status === "idle";
+
+/** 运行中：进入执行链路且未到终态 */
+const isRunningStatus = (status: QuickGenTaskStatus) =>
+  !["completed", "failed", "idle"].includes(status);
+
+/** 队列上限：超出时只清理最早的终态任务，绝不丢弃进行中的任务 */
+const MAX_TRACKED_TASKS = 20;
+
+type QuickGenTaskUpdate = Partial<
+  Pick<QuickGenVideoTask, "progress" | "taskId" | "resultUrl" | "errorMessage" | "completedAt" | "creditsDeducted">
+>;
+
+function applyTaskUpdate(
+  task: QuickGenVideoTask | QuickGenImageTask,
+  status: QuickGenTaskStatus,
+  extra?: QuickGenTaskUpdate
+) {
+  task.status = status;
+  if (extra?.progress !== undefined) task.progress = extra.progress;
+  if (extra?.taskId !== undefined) task.taskId = extra.taskId;
+  if (extra?.resultUrl !== undefined) task.resultUrl = extra.resultUrl;
+  if (extra?.errorMessage !== undefined) task.errorMessage = extra.errorMessage;
+  if (extra?.completedAt !== undefined) task.completedAt = extra.completedAt;
+  if (extra?.creditsDeducted !== undefined) task.creditsDeducted = extra.creditsDeducted;
+}
+
+function pruneFinishedTasks<T extends { status: QuickGenTaskStatus }>(tasks: T[]) {
+  while (tasks.length > MAX_TRACKED_TASKS) {
+    const idx = tasks.findIndex((t) => isTerminalStatus(t.status));
+    if (idx === -1) break; // 全部在进行中，不丢任务
+    tasks.splice(idx, 1);
+  }
+}
+
+// ============================================================================
+// Store 实现
+// ============================================================================
+
 const initialState: QuickGenState = {
+  videoTasks: [],
+  imageTasks: [],
   activeVideoTask: null,
   activeImageTask: null,
   recentTasks: [],
@@ -153,7 +209,10 @@ export const useQuickGenStore = create<QuickGenState & QuickGenActions>()(
           };
 
           set((state) => {
-            state.activeVideoTask = task;
+            state.videoTasks.push(task);
+            pruneFinishedTasks(state.videoTasks);
+            // 兼容镜像指向最新任务
+            state.activeVideoTask = { ...task };
           });
 
           return id;
@@ -171,7 +230,10 @@ export const useQuickGenStore = create<QuickGenState & QuickGenActions>()(
           };
 
           set((state) => {
-            state.activeImageTask = task;
+            state.imageTasks.push(task);
+            pruneFinishedTasks(state.imageTasks);
+            // 兼容镜像指向最新任务
+            state.activeImageTask = { ...task };
           });
 
           return id;
@@ -179,18 +241,22 @@ export const useQuickGenStore = create<QuickGenState & QuickGenActions>()(
 
         updateTaskStatus: (taskId, status, extra) => {
           set((state) => {
-            if (state.activeVideoTask?.id === taskId) {
-              state.activeVideoTask.status = status;
-              if (extra?.progress !== undefined) state.activeVideoTask.progress = extra.progress;
-              if (extra?.taskId !== undefined) state.activeVideoTask.taskId = extra.taskId;
-              if (extra?.resultUrl !== undefined) state.activeVideoTask.resultUrl = extra.resultUrl;
-              if (extra?.errorMessage !== undefined) state.activeVideoTask.errorMessage = extra.errorMessage;
-              if (extra?.completedAt !== undefined) state.activeVideoTask.completedAt = extra.completedAt;
-              if (extra?.creditsDeducted !== undefined) state.activeVideoTask.creditsDeducted = extra.creditsDeducted;
+            const task = state.videoTasks.find((t) => t.id === taskId);
+            if (task) {
+              applyTaskUpdate(task, status, extra);
+            }
 
-              // 如果任务完成或失败，移到历史记录
-              if (status === "completed" || status === "failed") {
-                state.recentTasks.unshift({ ...state.activeVideoTask });
+            // 同步兼容镜像（若指向该任务）
+            const mirrorMatches = state.activeVideoTask?.id === taskId;
+            if (mirrorMatches && state.activeVideoTask) {
+              applyTaskUpdate(state.activeVideoTask, status, extra);
+            }
+
+            // 如果任务完成或失败，追加到历史记录
+            if (status === "completed" || status === "failed") {
+              const source = task ?? (mirrorMatches ? state.activeVideoTask : null);
+              if (source) {
+                state.recentTasks.unshift({ ...source });
                 if (state.recentTasks.length > 10) {
                   state.recentTasks = state.recentTasks.slice(0, 10);
                 }
@@ -201,18 +267,22 @@ export const useQuickGenStore = create<QuickGenState & QuickGenActions>()(
 
         updateImageTaskStatus: (taskId, status, extra) => {
           set((state) => {
-            if (state.activeImageTask?.id === taskId) {
-              state.activeImageTask.status = status;
-              if (extra?.progress !== undefined) state.activeImageTask.progress = extra.progress;
-              if (extra?.taskId !== undefined) state.activeImageTask.taskId = extra.taskId;
-              if (extra?.resultUrl !== undefined) state.activeImageTask.resultUrl = extra.resultUrl;
-              if (extra?.errorMessage !== undefined) state.activeImageTask.errorMessage = extra.errorMessage;
-              if (extra?.completedAt !== undefined) state.activeImageTask.completedAt = extra.completedAt;
-              if (extra?.creditsDeducted !== undefined) state.activeImageTask.creditsDeducted = extra.creditsDeducted;
+            const task = state.imageTasks.find((t) => t.id === taskId);
+            if (task) {
+              applyTaskUpdate(task, status, extra);
+            }
 
-              // 如果任务完成或失败，移到历史记录
-              if (status === "completed" || status === "failed") {
-                state.recentTasks.unshift({ ...state.activeImageTask });
+            // 同步兼容镜像（若指向该任务）
+            const mirrorMatches = state.activeImageTask?.id === taskId;
+            if (mirrorMatches && state.activeImageTask) {
+              applyTaskUpdate(state.activeImageTask, status, extra);
+            }
+
+            // 如果任务完成或失败，追加到历史记录
+            if (status === "completed" || status === "failed") {
+              const source = task ?? (mirrorMatches ? state.activeImageTask : null);
+              if (source) {
+                state.recentTasks.unshift({ ...source });
                 if (state.recentTasks.length > 10) {
                   state.recentTasks = state.recentTasks.slice(0, 10);
                 }
@@ -223,21 +293,35 @@ export const useQuickGenStore = create<QuickGenState & QuickGenActions>()(
 
         clearActiveTask: () => {
           set((state) => {
-            if (state.activeVideoTask && 
-                !["completed", "failed", "idle"].includes(state.activeVideoTask.status)) {
+            const active = state.activeVideoTask;
+            // 与旧行为一致：进行中的任务不允许清除
+            if (active && !isClearableStatus(active.status)) {
               return;
             }
-            state.activeVideoTask = null;
+            if (active) {
+              const idx = state.videoTasks.findIndex((t) => t.id === active.id);
+              if (idx !== -1) state.videoTasks.splice(idx, 1);
+            }
+            // 镜像重指向：让旧页面逐个消费队列中剩余任务（含已完成待展示的）
+            const next = state.videoTasks[state.videoTasks.length - 1];
+            state.activeVideoTask = next ? { ...next } : null;
           });
         },
 
         clearActiveImageTask: () => {
           set((state) => {
-            if (state.activeImageTask && 
-                !["completed", "failed", "idle"].includes(state.activeImageTask.status)) {
+            const active = state.activeImageTask;
+            // 与旧行为一致：进行中的任务不允许清除
+            if (active && !isClearableStatus(active.status)) {
               return;
             }
-            state.activeImageTask = null;
+            if (active) {
+              const idx = state.imageTasks.findIndex((t) => t.id === active.id);
+              if (idx !== -1) state.imageTasks.splice(idx, 1);
+            }
+            // 镜像重指向：让旧页面逐个消费队列中剩余任务（含已完成待展示的）
+            const next = state.imageTasks[state.imageTasks.length - 1];
+            state.activeImageTask = next ? { ...next } : null;
           });
         },
 
@@ -270,16 +354,60 @@ export const useQuickGenStore = create<QuickGenState & QuickGenActions>()(
     ),
     {
       name: "quick-gen-storage",
+      // v1（S0.6）：单任务槽 → 多任务队列
+      version: 1,
       storage: createJSONStorage(() => localStorage),
+      migrate: (persistedState, version) => {
+        const state = (persistedState ?? {}) as Partial<QuickGenState>;
+
+        if (version < 1) {
+          // 旧形状（v0）：只有 activeVideoTask / activeImageTask 单槽。
+          // 平滑迁移：把单槽任务装进多任务队列，镜像字段原样保留。
+          const videoTasks = Array.isArray(state.videoTasks)
+            ? state.videoTasks
+            : state.activeVideoTask
+              ? [state.activeVideoTask]
+              : [];
+          const imageTasks = Array.isArray(state.imageTasks)
+            ? state.imageTasks
+            : state.activeImageTask
+              ? [state.activeImageTask]
+              : [];
+
+          return {
+            ...state,
+            videoTasks,
+            imageTasks,
+          } as QuickGenState & QuickGenActions;
+        }
+
+        return state as QuickGenState & QuickGenActions;
+      },
       onRehydrateStorage: () => (state) => {
         if (state) {
-          if (state.activeVideoTask && 
-              !["completed", "failed", "idle"].includes(state.activeVideoTask.status)) {
-            console.log("[QuickGenStore] Rehydrated with active video task:", state.activeVideoTask.id);
+          // 防御：极端情况下（storage 被手工改动）保证数组字段存在
+          if (!Array.isArray(state.videoTasks) || !Array.isArray(state.imageTasks)) {
+            useQuickGenStore.setState({
+              videoTasks: Array.isArray(state.videoTasks)
+                ? state.videoTasks
+                : state.activeVideoTask
+                  ? [state.activeVideoTask]
+                  : [],
+              imageTasks: Array.isArray(state.imageTasks)
+                ? state.imageTasks
+                : state.activeImageTask
+                  ? [state.activeImageTask]
+                  : [],
+            });
           }
-          if (state.activeImageTask && 
-              !["completed", "failed", "idle"].includes(state.activeImageTask.status)) {
-            console.log("[QuickGenStore] Rehydrated with active image task:", state.activeImageTask.id);
+
+          const runningVideo = (state.videoTasks ?? []).filter((t) => isRunningStatus(t.status));
+          const runningImage = (state.imageTasks ?? []).filter((t) => isRunningStatus(t.status));
+          if (runningVideo.length > 0) {
+            console.log("[QuickGenStore] Rehydrated with active video tasks:", runningVideo.map((t) => t.id));
+          }
+          if (runningImage.length > 0) {
+            console.log("[QuickGenStore] Rehydrated with active image tasks:", runningImage.map((t) => t.id));
           }
         }
       },
@@ -293,14 +421,16 @@ export const useQuickGenStore = create<QuickGenState & QuickGenActions>()(
 
 export const useQuickGenActiveTask = () => useQuickGenStore((state) => state.activeVideoTask);
 export const useQuickGenActiveImageTask = () => useQuickGenStore((state) => state.activeImageTask);
+export const useQuickGenVideoTasks = () => useQuickGenStore((state) => state.videoTasks);
+export const useQuickGenImageTasks = () => useQuickGenStore((state) => state.imageTasks);
 export const useQuickGenRecentTasks = () => useQuickGenStore((state) => state.recentTasks);
-export const useQuickGenIsGenerating = () => useQuickGenStore((state) => 
-  state.activeVideoTask !== null && 
-  !["completed", "failed", "idle"].includes(state.activeVideoTask.status)
+export const useQuickGenIsGenerating = () => useQuickGenStore((state) =>
+  state.videoTasks.some((t) => isRunningStatus(t.status)) ||
+  (state.activeVideoTask !== null && isRunningStatus(state.activeVideoTask.status))
 );
-export const useQuickGenIsImageGenerating = () => useQuickGenStore((state) => 
-  state.activeImageTask !== null && 
-  !["completed", "failed", "idle"].includes(state.activeImageTask.status)
+export const useQuickGenIsImageGenerating = () => useQuickGenStore((state) =>
+  state.imageTasks.some((t) => isRunningStatus(t.status)) ||
+  (state.activeImageTask !== null && isRunningStatus(state.activeImageTask.status))
 );
 export const useQuickGenProcessedGridImages = () => useQuickGenStore((state) => state.processedGridImages);
 export const useQuickGenSelectedGridIndex = () => useQuickGenStore((state) => state.selectedGridIndex);

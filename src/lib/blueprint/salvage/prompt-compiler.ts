@@ -16,7 +16,7 @@ import type {
   StyleBible,
   SegmentRole,
   AspectRatio,
-} from '@/types/viral-clone';
+} from './types';
 
 // ============================================================================
 // Prompt 模板

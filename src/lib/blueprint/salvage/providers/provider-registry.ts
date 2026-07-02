@@ -7,7 +7,7 @@
  * 开工前必须: 发测试请求确认聚合商当前可用的 model 名。
  */
 
-import type { ProviderAlias, ProviderCapability, ProviderRegistry } from '@/types/viral-clone';
+import type { ProviderAlias, ProviderCapability, ProviderRegistry } from '../types';
 
 // ============================================================================
 // Provider 注册表（可配置，不写死）

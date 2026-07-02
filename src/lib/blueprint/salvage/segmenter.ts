@@ -9,8 +9,8 @@
  * - 每段必须有明确 spoken_text
  */
 
-import type { SegmentPlan, SegmentRole, SegmentBlueprintV2, AnalysisArtifactV2 } from '@/types/viral-clone';
-import { SEGMENTATION_RULES } from '@/types/viral-clone';
+import type { SegmentPlan, SegmentRole, SegmentBlueprintV2, AnalysisArtifactV2 } from './types';
+import { SEGMENTATION_RULES } from './types';
 
 // ============================================================================
 // 配置
