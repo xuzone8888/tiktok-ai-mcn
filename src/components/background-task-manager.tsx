@@ -1509,23 +1509,32 @@ function useAiGenTaskExecutor() {
         .sort((a, b) => a.idx - b.idx)
         .map(s => s.videoUrl!)
         .filter(Boolean);
-      const stitchRes = await fetch("/api/studio/ai-gen/stitch", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          jobId: taskId,
-          videoUrls: orderedUrls,
-          aspectRatio,
-          batchId: finalSnapshot.batchId,
-          blueprintId: finalSnapshot.blueprintId,
-          title: finalSnapshot.title,
-          modelType,
-          groupName: finalSnapshot.groupName,
-          sceneTaskIds: finalSnapshot.scenes.map(s => s.upstreamTaskId ?? s.clientTaskId),
-        }),
-        // 略大于服务端 maxDuration=300s(挂起请求会饿死串行队列,同 S1.2)
-        signal: AbortSignal.timeout(330_000),
-      });
+      let stitchRes: Response;
+      try {
+        stitchRes = await fetch("/api/studio/ai-gen/stitch", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            jobId: taskId,
+            videoUrls: orderedUrls,
+            aspectRatio,
+            batchId: finalSnapshot.batchId,
+            blueprintId: finalSnapshot.blueprintId,
+            title: finalSnapshot.title,
+            modelType,
+            groupName: finalSnapshot.groupName,
+            sceneTaskIds: finalSnapshot.scenes.map(s => s.upstreamTaskId ?? s.clientTaskId),
+          }),
+          // 略大于服务端 maxDuration=300s(挂起请求会饿死串行队列,同 S1.2)
+          signal: AbortSignal.timeout(330_000),
+        });
+      } catch (fetchError) {
+        // 超时走外层既有文案;其余网络层错误(Failed to fetch 等)不裸透传
+        if (fetchError instanceof DOMException && fetchError.name === "TimeoutError") {
+          throw fetchError;
+        }
+        throw new Error("拼接请求未送达(网络异常),请重试(各镜成片已保留,重试不重新生成)");
+      }
       const stitchText = await stitchRes.text();
       let stitchData;
       try {
