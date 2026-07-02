@@ -10,6 +10,7 @@ import { useMemo } from "react";
 import { useVideoBatchStore } from "@/stores/video-batch-store";
 import { useQuickGenStore, type QuickGenImageTask } from "@/stores/quick-gen-store";
 import { useSlideshowStore, type SlideshowTask } from "@/stores/slideshow-store";
+import { useAiGenStore, type AiGenTask } from "@/stores/ai-gen-store";
 import { getStatusLabel, type VideoBatchTask } from "@/types/video-batch";
 import type { StudioBatch, StudioJobRef } from "@/stores/studio-store";
 
@@ -147,6 +148,45 @@ function fromSlideshowTask(ref: StudioJobRef, task: SlideshowTask): StudioJobVie
   };
 }
 
+const AI_GEN_STATUS_LABELS: Record<AiGenTask["status"], string> = {
+  pending: "排队中",
+  generating: "逐镜生成中",
+  stitching: "拼接中",
+  completed: "已完成",
+  failed: "失败",
+};
+
+function fromAiGenTask(ref: StudioJobRef, task: AiGenTask): StudioJobView {
+  const status: StudioJobStatus =
+    task.status === "pending"
+      ? "queued"
+      : task.status === "completed"
+        ? "success"
+        : task.status === "failed"
+          ? "failed"
+          : "running";
+  const doneScenes = task.scenes.filter((s) => s.status === "completed").length;
+  return {
+    ref,
+    kind: "ai_gen",
+    taskId: task.id,
+    status,
+    statusLabel:
+      task.status === "generating"
+        ? `逐镜生成 ${doneScenes}/${task.scenes.length}`
+        : AI_GEN_STATUS_LABELS[task.status],
+    progress: task.progress,
+    resultType: "video",
+    resultUrl: task.stitchedUrl ?? undefined,
+    coverUrl: task.scenes[0]?.imageUrl,
+    errorMessage: task.errorMessage ?? undefined,
+    // stitch 落库 generations.task_id = job id
+    generationTaskId: task.status === "completed" ? task.id : undefined,
+    libraryStatus: ref.libraryStatus,
+    prompt: task.title,
+  };
+}
+
 function missingView(ref: StudioJobRef): StudioJobView {
   return {
     ref,
@@ -168,24 +208,27 @@ export interface HostTaskMaps {
   videoById: Map<string, VideoBatchTask>;
   imageById: Map<string, QuickGenImageTask>;
   slideshowById: Map<string, SlideshowTask>;
+  aiGenById: Map<string, AiGenTask>;
 }
 
 /**
- * 三个宿主 store 的任务索引(页面级调用一次,经 props 下发给各批次卡)。
+ * 宿主 store 的任务索引(页面级调用一次,经 props 下发给各批次卡)。
  * BTM 高频写回进度时只重建这一组 Map,而不是每张卡各建一组。
  */
 export function useHostTaskMaps(): HostTaskMaps {
   const videoTasks = useVideoBatchStore((state) => state.tasks);
   const imageTasks = useQuickGenStore((state) => state.imageTasks);
   const slideshowTasks = useSlideshowStore((state) => state.tasks);
+  const aiGenTasks = useAiGenStore((state) => state.tasks);
 
   return useMemo(
     () => ({
       videoById: new Map(videoTasks.map((t) => [t.id, t])),
       imageById: new Map(imageTasks.map((t) => [t.id, t])),
       slideshowById: new Map(slideshowTasks.map((t) => [t.id, t])),
+      aiGenById: new Map(aiGenTasks.map((t) => [t.id, t])),
     }),
-    [videoTasks, imageTasks, slideshowTasks]
+    [videoTasks, imageTasks, slideshowTasks, aiGenTasks]
   );
 }
 
@@ -199,6 +242,10 @@ export function buildBatchJobViews(batch: StudioBatch, maps: HostTaskMaps): Stud
     if (ref.kind === "image") {
       const task = maps.imageById.get(ref.taskId);
       return task ? fromImageTask(ref, task) : missingView(ref);
+    }
+    if (ref.kind === "ai_gen") {
+      const task = maps.aiGenById.get(ref.taskId);
+      return task ? fromAiGenTask(ref, task) : missingView(ref);
     }
     const task = maps.slideshowById.get(ref.taskId);
     return task ? fromSlideshowTask(ref, task) : missingView(ref);

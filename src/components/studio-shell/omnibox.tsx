@@ -183,6 +183,10 @@ export function Omnibox({
     setPickerOpen(false);
   };
 
+  // ==================== 商品成片:渲染腿(S2.3) ====================
+  // 幻灯片(默认,分级积分)| AI 逐镜生成(video 参数计价,每图一镜→stitch)
+  const [productRenderMode, setProductRenderMode] = useState<"slideshow" | "ai_gen">("slideshow");
+
   // ==================== 商品成片:自动分析商品卡 ====================
   const [productCard, setProductCard] = useState<ProductCard | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
@@ -326,6 +330,7 @@ export function Omnibox({
         mode === "product" && cardSource === "link" && linkChip?.status === "done"
           ? linkChip.url
           : undefined,
+      productRenderMode: mode === "product" ? productRenderMode : undefined,
       count,
     }),
     [
@@ -340,6 +345,7 @@ export function Omnibox({
       productCard,
       cardSource,
       linkChip,
+      productRenderMode,
       count,
     ]
   );
@@ -647,7 +653,33 @@ export function Omnibox({
           </span>
         )}
 
-        {mode === "video" ? (
+        {/* 商品成片:渲染腿切换(幻灯片=分级积分;AI 生成=逐镜 video 计价) */}
+        {mode === "product" && (
+          <div className="flex items-center rounded-lg border border-white/10 bg-black/30 p-0.5">
+            {(
+              [
+                { key: "slideshow", label: "幻灯片" },
+                { key: "ai_gen", label: "AI 生成" },
+              ] as const
+            ).map((leg) => (
+              <button
+                key={leg.key}
+                type="button"
+                onClick={() => setProductRenderMode(leg.key)}
+                className={cn(
+                  "rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
+                  productRenderMode === leg.key
+                    ? "bg-amber-500/20 text-amber-300"
+                    : "text-zinc-500 hover:text-zinc-300"
+                )}
+              >
+                {leg.label}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {mode === "video" || (mode === "product" && productRenderMode === "ai_gen") ? (
           <>
             <Select value={videoParams.modelType} onValueChange={(v) => changeVideoModel(v as VideoModelType)}>
               <SelectTrigger className="h-7 w-auto gap-1 border-white/10 bg-black/30 px-2.5 text-xs">
@@ -715,7 +747,7 @@ export function Omnibox({
               </Select>
             )}
           </>
-        ) : mode === "slideshow" || mode === "product" ? (
+        ) : mode === "slideshow" || (mode === "product" && productRenderMode === "slideshow") ? (
           <>
             <Select
               value={slideshowParams.aspectRatio}
@@ -965,9 +997,11 @@ export function Omnibox({
               将提交 {count} 个
               {mode === "video"
                 ? "视频"
-                : mode === "slideshow" || mode === "product"
-                  ? "轮播成片"
-                  : "图片"}
+                : mode === "product" && productRenderMode === "ai_gen"
+                  ? "AI 逐镜成片(每图一镜逐镜计价)"
+                  : mode === "slideshow" || mode === "product"
+                    ? "轮播成片"
+                    : "图片"}
               任务,预估消耗{" "}
               <span className="font-semibold text-amber-500 tabular-nums">{estimated}</span> 积分
               {credits !== null && <>(当前余额 {credits})</>}。积分按任务在服务端逐条扣除,失败自动退款。

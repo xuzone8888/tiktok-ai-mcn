@@ -10,9 +10,12 @@
 
 import { useCallback } from "react";
 import {
+  toAiGenTasks,
   toQuickGenImageTasks,
   toSlideshowTasks,
   toVideoBatchTasks,
+  type AiGenJobSpec,
+  type AiGenSceneSpec,
   type ImageJobSpec,
   type SlideshowJobSpec,
   type VideoJobSpec,
@@ -20,6 +23,7 @@ import {
 import { useVideoBatchStore } from "@/stores/video-batch-store";
 import { useQuickGenStore } from "@/stores/quick-gen-store";
 import { useSlideshowStore } from "@/stores/slideshow-store";
+import { useAiGenStore } from "@/stores/ai-gen-store";
 import { useStudioStore, type StudioBatch, type StudioJobRef } from "@/stores/studio-store";
 import type { StudioJobView } from "@/lib/studio/batch-view";
 import { getVideoBatchTotalPrice, type VideoAspectRatio, type VideoDuration, type VideoModelType, type VideoQuality } from "@/types/video-batch";
@@ -68,6 +72,8 @@ export interface StudioDraft {
   productCard?: ProductCard | null;
   /** 链接腿(S2.1):商品卡来自链接解析时的来源 URL(蓝图 source_ref 溯源) */
   linkUrl?: string;
+  /** 商品成片渲染腿(S2.3):幻灯片(默认,≈分级积分)或 AI 逐镜生成(video 参数计价) */
+  productRenderMode?: "slideshow" | "ai_gen";
   count: number;
 }
 
@@ -97,6 +103,18 @@ export function estimateCredits(draft: StudioDraft): number {
         draft.video.durationSeconds,
         draft.video.quality
       ) * draft.count
+    );
+  }
+  if (draft.mode === "product" && draft.productRenderMode === "ai_gen") {
+    // AI 生成腿:每图一镜逐镜计价(拼接不新增扣费)
+    return (
+      getVideoBatchTotalPrice(
+        draft.video.modelType,
+        draft.video.durationSeconds,
+        draft.video.quality
+      ) *
+      Math.max(draft.attachmentUrls.length, 1) *
+      draft.count
     );
   }
   if (draft.mode === "slideshow" || draft.mode === "product") {
@@ -179,20 +197,28 @@ export function useStudioSubmit() {
       let blueprintId: string | undefined;
 
       if (draft.mode === "product") {
-        // 商品图腿:商品卡 → 蓝图落库 → 复用幻灯片渲染腿出 N 条
+        // 商品图/链接腿:商品卡 → 蓝图落库 → 渲染腿出 N 条(幻灯片 | AI 逐镜生成)
         const card = draft.productCard!;
+        const renderMode = draft.productRenderMode === "ai_gen" ? "ai_gen" : "slideshow";
+        let blueprintScenes: AiGenSceneSpec[] = [];
         try {
           const res = await fetch("/api/studio/blueprints", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               product: card,
-              globals: {
-                aspect: draft.slideshow.aspectRatio,
-                duration_per_image_ms: Math.round(draft.slideshow.durationPerImage * 1000),
-                bgm_style: draft.slideshow.bgmEnabled ? "random" : "none",
-              },
-              renderMode: "slideshow",
+              globals:
+                renderMode === "ai_gen"
+                  ? {
+                      aspect: draft.video.aspectRatio,
+                      duration_per_image_ms: draft.video.durationSeconds * 1000,
+                    }
+                  : {
+                      aspect: draft.slideshow.aspectRatio,
+                      duration_per_image_ms: Math.round(draft.slideshow.durationPerImage * 1000),
+                      bgm_style: draft.slideshow.bgmEnabled ? "random" : "none",
+                    },
+              renderMode,
               ...(draft.linkUrl
                 ? { sourceType: "product_link", sourceUrl: draft.linkUrl }
                 : {}),
@@ -203,33 +229,70 @@ export function useStudioSubmit() {
             return { ok: false, error: result.error || "蓝图保存失败" };
           }
           blueprintId = result.data?.blueprintId;
+          blueprintScenes = Array.isArray(result.data?.scenes)
+            ? (result.data.scenes as Array<Record<string, unknown>>).map((s) => ({
+                idx: s.idx as number,
+                line: (s.line as string) ?? "",
+                visual: (s.visual as string) ?? "",
+                beat: s.beat as AiGenSceneSpec["beat"],
+                imageUrl:
+                  ((s.slot as { asset_ref?: string } | undefined)?.asset_ref as string) ??
+                  undefined,
+              }))
+            : [];
         } catch {
           return { ok: false, error: "蓝图保存失败,请重试" };
         }
 
-        // 变体在脚本层做:标题+勾选卖点作为文案关键词,服务端 diverse 模式
-        // 每条成片生成不同角度口播;图序差异由适配器洗牌提供(素材级)
-        const selectedPoints = card.selling_points.filter((p) => p.selected);
-        const keywords = [card.title, ...selectedPoints.map((p) => p.text)].join(";");
-        const slideshowSpec: SlideshowJobSpec = {
-          kind: "slideshow",
-          prompt: keywords,
-          imageUrls: draft.attachmentUrls,
-          aspectRatio: draft.slideshow.aspectRatio,
-          durationPerImage: draft.slideshow.durationPerImage,
-          transition: draft.slideshow.transition,
-          kenburns: draft.slideshow.kenburns,
-          voiceEnabled: draft.slideshow.voiceEnabled,
-          bgmEnabled: draft.slideshow.bgmEnabled,
-          count: draft.count,
-          batchId,
-          groupName,
-          blueprintId,
-        };
-        const tasks = toSlideshowTasks(slideshowSpec);
-        useSlideshowStore.getState().addTasks(tasks);
-        jobRefs = tasks.map((t) => ({ kind: "slideshow" as const, taskId: t.id }));
-        spec = slideshowSpec as unknown as Record<string, unknown>;
+        if (renderMode === "ai_gen") {
+          // AI 生成腿(S2.3):蓝图 scenes 逐镜编译 prompt → 统一网关 → stitch
+          if (blueprintScenes.length === 0) {
+            return { ok: false, error: "蓝图分镜为空,无法逐镜生成" };
+          }
+          const aspectRatio = draft.video.aspectRatio === "16:9" ? "16:9" : "9:16";
+          const aiGenSpec: AiGenJobSpec = {
+            kind: "ai_gen",
+            prompt: draft.text.trim(),
+            modelType: draft.video.modelType,
+            aspectRatio,
+            durationSeconds: draft.video.durationSeconds,
+            quality: draft.video.quality,
+            scenes: blueprintScenes,
+            productTitle: card.title,
+            count: draft.count,
+            batchId,
+            groupName,
+            blueprintId,
+          };
+          const tasks = toAiGenTasks(aiGenSpec);
+          useAiGenStore.getState().addTasks(tasks);
+          jobRefs = tasks.map((t) => ({ kind: "ai_gen" as const, taskId: t.id }));
+          spec = aiGenSpec as unknown as Record<string, unknown>;
+        } else {
+          // 变体在脚本层做:标题+勾选卖点作为文案关键词,服务端 diverse 模式
+          // 每条成片生成不同角度口播;图序差异由适配器洗牌提供(素材级)
+          const selectedPoints = card.selling_points.filter((p) => p.selected);
+          const keywords = [card.title, ...selectedPoints.map((p) => p.text)].join(";");
+          const slideshowSpec: SlideshowJobSpec = {
+            kind: "slideshow",
+            prompt: keywords,
+            imageUrls: draft.attachmentUrls,
+            aspectRatio: draft.slideshow.aspectRatio,
+            durationPerImage: draft.slideshow.durationPerImage,
+            transition: draft.slideshow.transition,
+            kenburns: draft.slideshow.kenburns,
+            voiceEnabled: draft.slideshow.voiceEnabled,
+            bgmEnabled: draft.slideshow.bgmEnabled,
+            count: draft.count,
+            batchId,
+            groupName,
+            blueprintId,
+          };
+          const tasks = toSlideshowTasks(slideshowSpec);
+          useSlideshowStore.getState().addTasks(tasks);
+          jobRefs = tasks.map((t) => ({ kind: "slideshow" as const, taskId: t.id }));
+          spec = slideshowSpec as unknown as Record<string, unknown>;
+        }
       } else if (draft.mode === "video") {
         const videoSpec: VideoJobSpec = {
           kind: "video",
@@ -303,15 +366,24 @@ export function useStudioSubmit() {
               : draft.mode === "slideshow"
                 ? `幻灯片${draft.slideshow.kenburns ? "·运镜" : ""}`
                 : draft.mode === "product"
-                  ? `商品成片${draft.slideshow.kenburns ? "·运镜" : ""}`
+                  ? draft.productRenderMode === "ai_gen"
+                    ? `AI 生成·${VIDEO_MODEL_LABELS[draft.video.modelType]}`
+                    : `商品成片${draft.slideshow.kenburns ? "·运镜" : ""}`
                   : "GPT Image 2",
           aspectRatio:
             draft.mode === "video"
               ? draft.video.aspectRatio
-              : draft.mode === "slideshow" || draft.mode === "product"
-                ? draft.slideshow.aspectRatio
-                : draft.image.aspectRatio,
-          durationSeconds: draft.mode === "video" ? draft.video.durationSeconds : undefined,
+              : draft.mode === "product" && draft.productRenderMode === "ai_gen"
+                ? draft.video.aspectRatio
+                : draft.mode === "slideshow" || draft.mode === "product"
+                  ? draft.slideshow.aspectRatio
+                  : draft.image.aspectRatio,
+          durationSeconds:
+            draft.mode === "video"
+              ? draft.video.durationSeconds
+              : draft.mode === "product" && draft.productRenderMode === "ai_gen"
+                ? draft.video.durationSeconds
+                : undefined,
           resolution: draft.mode === "image" ? draft.image.resolution : undefined,
           count: draft.count,
           characterName: draft.character?.name,
@@ -345,9 +417,60 @@ export function useStudioSubmit() {
       batch: StudioBatch,
       card: ProductCard,
       blueprintId: string,
-      count: number
+      count: number,
+      /** 编辑后的分镜(AI 生成腿重跑时台词改动经此生效;幻灯片腿忽略) */
+      editedScenes?: AiGenSceneSpec[]
     ): SubmitResult => {
-      const baseSpec = batch.spec as unknown as SlideshowJobSpec;
+      const baseSpec = batch.spec as unknown as SlideshowJobSpec | AiGenJobSpec;
+
+      if (baseSpec?.kind === "ai_gen") {
+        // AI 生成腿重跑:台词编辑重新逐镜编译(scene 结构贯穿到生成端)
+        const sceneList =
+          editedScenes && editedScenes.length > 0 ? editedScenes : baseSpec.scenes;
+        if (!sceneList || sceneList.length === 0) {
+          return { ok: false, error: "蓝图分镜为空,无法逐镜生成" };
+        }
+        const clamped = Math.max(1, Math.min(100, Math.floor(count) || 1));
+        const batchId = crypto.randomUUID();
+        const now = new Date();
+        const aiGenSpec: AiGenJobSpec = {
+          ...baseSpec,
+          scenes: sceneList,
+          productTitle: card.title,
+          count: clamped,
+          batchId,
+          groupName: studioGroupName(now),
+          blueprintId,
+        };
+        const tasks = toAiGenTasks(aiGenSpec);
+        useAiGenStore.getState().addTasks(tasks);
+        addBatch({
+          id: batchId,
+          createdAt: now.toISOString(),
+          title: card.title,
+          summary: {
+            mode: "product",
+            modelLabel: `AI 生成·${VIDEO_MODEL_LABELS[aiGenSpec.modelType]}`,
+            aspectRatio: aiGenSpec.aspectRatio,
+            durationSeconds: aiGenSpec.durationSeconds,
+            count: clamped,
+            attachmentCount: sceneList.length,
+            estimatedCredits:
+              getVideoBatchTotalPrice(
+                aiGenSpec.modelType,
+                aiGenSpec.durationSeconds,
+                aiGenSpec.quality ?? "standard"
+              ) *
+              sceneList.length *
+              clamped,
+          },
+          spec: aiGenSpec as unknown as Record<string, unknown>,
+          jobRefs: tasks.map((t) => ({ kind: "ai_gen" as const, taskId: t.id })),
+          blueprintId,
+        });
+        return { ok: true, batchId };
+      }
+
       if (baseSpec?.kind !== "slideshow") {
         return { ok: false, error: "该批次不支持从蓝图重跑" };
       }
@@ -414,6 +537,11 @@ export function useStudioSubmit() {
         const [task] = toQuickGenImageTasks(spec);
         useQuickGenStore.getState().addImageTasks([task]);
         replaceJobRef(batch.id, failedTaskId, { kind, taskId: task.id });
+        return { ok: true, batchId: batch.id };
+      }
+      if (kind === "ai_gen") {
+        // 逐镜任务原地重试:只复位失败镜(成功镜已扣费,不重生成),jobRef 不变
+        useAiGenStore.getState().retryTask(failedTaskId);
         return { ok: true, batchId: batch.id };
       }
       // slideshow:按批次 spec 重建(重新洗牌图序,变体差异保持)

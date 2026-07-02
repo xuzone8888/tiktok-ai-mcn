@@ -66,8 +66,14 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
 
-    // renderMode 白名单:首版只放行 slideshow(scenes 形状按幻灯片腿生成)
-    if (body?.renderMode !== undefined && body.renderMode !== "slideshow") {
+    // renderMode 白名单:slideshow(S1.3)+ ai_gen(S2.3);assembly 属 S3 拼装腿
+    const renderMode =
+      body?.renderMode === undefined || body.renderMode === "slideshow"
+        ? "slideshow"
+        : body.renderMode === "ai_gen"
+          ? "ai_gen"
+          : null;
+    if (!renderMode) {
       return NextResponse.json({ success: false, error: "renderMode 非法" }, { status: 400 });
     }
 
@@ -136,7 +142,7 @@ export async function POST(request: NextRequest) {
         hooks: [],
         scenes,
         globals,
-        render_mode: "slideshow",
+        render_mode: renderMode,
         status: "ready",
       } as never)
       .select("id")

@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import type { StudioBatch } from "@/stores/studio-store";
 import type { ProductCard } from "@/lib/studio/product-vision";
+import type { AiGenSceneSpec } from "@/lib/studio/job-spec";
 import { useStudioSubmit } from "./use-studio-submit";
 
 interface BlueprintScene {
@@ -179,7 +180,15 @@ export function BlueprintDrawer({ batch, onClose }: BlueprintDrawerProps) {
       const saved = await save();
       if (!saved) return;
     }
-    const result = rerunBlueprint(batch, card, blueprintId, rerunCount);
+    // AI 生成腿重跑取编辑后的分镜(台词改动经重编译生效);幻灯片腿忽略该参数
+    const editedScenes: AiGenSceneSpec[] = scenes.map((s) => ({
+      idx: s.idx,
+      line: s.line,
+      visual: s.visual,
+      beat: s.beat === "demo" ? "demo" : s.beat,
+      imageUrl: s.slot?.asset_ref?.startsWith("http") ? s.slot.asset_ref : undefined,
+    }));
+    const result = rerunBlueprint(batch, card, blueprintId, rerunCount, editedScenes);
     if (result.ok) {
       toast({ title: `已按蓝图排队 ${rerunCount} 条成片` });
       onClose();

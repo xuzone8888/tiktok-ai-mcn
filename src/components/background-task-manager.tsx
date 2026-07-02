@@ -17,6 +17,7 @@ import { type PipelineStep, type VideoBatchTask } from "@/types/video-batch";
 import { useImageBatchStore } from "@/stores/image-batch-store";
 import { useQuickGenStore } from "@/stores/quick-gen-store";
 import { useSlideshowStore } from "@/stores/slideshow-store";
+import { useAiGenStore, type AiGenTask } from "@/stores/ai-gen-store";
 import { useToast } from "@/hooks/use-toast";
 import { getCharacterReferenceMaxImages, mergeCharacterReferenceImages } from "@/lib/video-models/character-reference";
 import { getCharacterAssetReferenceUrls } from "@/lib/character-assets";
@@ -1304,6 +1305,273 @@ function useSlideshowTaskExecutor() {
 }
 
 // ============================================================================
+// Studio AI 生成腿执行器(S2.3)
+// ============================================================================
+
+/**
+ * 一个 job = N 个 scene 逐镜走统一视频网关 → 全部完成后 stitch 成一条成片。
+ * 只执行 ai-gen store 的任务(独立 store,零交叉污染);串行跑 job,
+ * job 内 scene 先全量提交(拿上游任务号即持久化为恢复锚点,防双扣费),
+ * 再统一轮询;失败镜留待显式重试(retryTask 只复位失败镜,成功镜不重生成)。
+ */
+function useAiGenTaskExecutor() {
+  const { toast } = useToast();
+  const aiGenTasks = useAiGenStore((state) => state.tasks);
+  const updateTask = useAiGenStore((state) => state.updateTask);
+  const updateScene = useAiGenStore((state) => state.updateScene);
+
+  const isExecutingRef = useRef(false);
+  const executedTasksRef = useRef<Set<string>>(new Set());
+  const [rescanTick, forceRescan] = useReducer((x: number) => x + 1, 0);
+
+  const executeAiGenTask = useCallback(async (taskId: string) => {
+    const getTask = (): AiGenTask | undefined =>
+      useAiGenStore.getState().tasks.find(t => t.id === taskId);
+    const task = getTask();
+    if (!task || task.status !== "pending") return;
+
+    const { modelType, aspectRatio, durationSeconds, quality, groupName } = task;
+    const totalScenes = task.scenes.length;
+
+    try {
+      updateTask(taskId, { status: "generating", progress: 3 });
+
+      // ---------- 阶段一:逐镜提交(带锚点的 scene 跳过,只续轮询) ----------
+      for (const scene of task.scenes) {
+        if (scene.status === "completed" || scene.upstreamTaskId) continue;
+
+        const submitRes = await fetch("/api/video-batch/models/submit", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            modelType,
+            prompt: scene.prompt,
+            aspectRatio,
+            durationSeconds,
+            quality,
+            imageUrls: scene.imageUrl ? [scene.imageUrl] : [],
+            mode: scene.imageUrl ? "image_to_video" : "prompt_to_video",
+            clientTaskId: scene.clientTaskId,
+            groupName,
+          }),
+          signal: AbortSignal.timeout(120_000),
+        });
+        const submitText = await submitRes.text();
+        let submitData;
+        try {
+          submitData = JSON.parse(submitText);
+        } catch {
+          submitData = null;
+        }
+
+        if (submitRes.ok && submitData?.success && submitData.data?.taskId) {
+          // 上游任务号拿到即持久化:刷新后按锚点续轮询,绝不重提交(防双扣费)
+          updateScene(taskId, scene.idx, {
+            status: "generating",
+            upstreamTaskId: submitData.data.taskId,
+          });
+          window.dispatchEvent(new CustomEvent("credits-updated"));
+        } else {
+          const message: string = submitData?.error || `提交失败 (HTTP ${submitRes.status})`;
+          updateScene(taskId, scene.idx, { status: "failed", errorMessage: message });
+          // 积分不足时后续镜必然同败,直接止损
+          if (/积分|credits|insufficient/i.test(message)) {
+            getTask()?.scenes.forEach(s => {
+              if (s.status === "pending") {
+                updateScene(taskId, s.idx, { status: "failed", errorMessage: "积分不足,未提交" });
+              }
+            });
+            break;
+          }
+        }
+      }
+
+      // ---------- 阶段二:统一轮询直到全部终态 ----------
+      const isSeedance = modelType === "seedance";
+      const isHappyHorse = modelType === "happyhorse";
+      const pollInterval = isSeedance ? 5000 : isHappyHorse ? 7500 : 10000;
+      const maxAttempts = isHappyHorse
+        ? (durationSeconds === 12 ? 144 : 80)
+        : isSeedance
+          ? 60
+          : modelType === "sora2-pro"
+            ? 140
+            : 90;
+
+      for (let i = 0; i < maxAttempts; i++) {
+        const snapshot = getTask();
+        if (!snapshot) return;
+        const active = snapshot.scenes.filter(
+          s => s.status === "generating" && s.upstreamTaskId
+        );
+        if (active.length === 0) break;
+
+        await new Promise(r => setTimeout(r, pollInterval));
+
+        for (const scene of active) {
+          try {
+            const statusRes = await fetch(
+              `/api/video-batch/models/status?modelType=${encodeURIComponent(modelType)}&taskId=${encodeURIComponent(scene.upstreamTaskId!)}&aspectRatio=${encodeURIComponent(aspectRatio)}&durationSeconds=${durationSeconds}&quality=${encodeURIComponent(quality)}`
+            );
+            const statusText = await statusRes.text();
+            let statusData;
+            try {
+              statusData = JSON.parse(statusText);
+            } catch {
+              continue;
+            }
+            if (statusData.success && statusData.data) {
+              if (statusData.data.status === "completed" && statusData.data.videoUrl) {
+                updateScene(taskId, scene.idx, {
+                  status: "completed",
+                  videoUrl: statusData.data.videoUrl,
+                });
+              } else if (statusData.data.status === "failed") {
+                // 服务端已幂等退款
+                updateScene(taskId, scene.idx, {
+                  status: "failed",
+                  errorMessage: statusData.data.errorMessage || "该镜生成失败",
+                });
+              }
+            }
+          } catch {
+            // 单次查询失败不致命,下一轮继续
+          }
+        }
+
+        const done = getTask()?.scenes.filter(s => s.status === "completed").length ?? 0;
+        updateTask(taskId, { progress: Math.min(5 + Math.round((done / totalScenes) * 75), 80) });
+      }
+
+      // 轮询预算耗尽仍在途的镜 → 超时失败
+      getTask()?.scenes.forEach(s => {
+        if (s.status === "generating") {
+          updateScene(taskId, s.idx, { status: "failed", errorMessage: "该镜生成超时" });
+        }
+      });
+
+      const finalSnapshot = getTask();
+      if (!finalSnapshot) return;
+      const failedScenes = finalSnapshot.scenes.filter(s => s.status === "failed");
+      if (failedScenes.length > 0) {
+        updateTask(taskId, {
+          status: "failed",
+          errorMessage: `${failedScenes.length}/${totalScenes} 镜失败:${failedScenes[0].errorMessage ?? ""}(重试只补失败镜)`,
+        });
+        return;
+      }
+
+      // ---------- 阶段三:stitch 拼接落库 ----------
+      updateTask(taskId, { status: "stitching", progress: 85 });
+      const orderedUrls = [...finalSnapshot.scenes]
+        .sort((a, b) => a.idx - b.idx)
+        .map(s => s.videoUrl!)
+        .filter(Boolean);
+      const stitchRes = await fetch("/api/studio/ai-gen/stitch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          jobId: taskId,
+          videoUrls: orderedUrls,
+          aspectRatio,
+          batchId: finalSnapshot.batchId,
+          blueprintId: finalSnapshot.blueprintId,
+          title: finalSnapshot.title,
+          modelType,
+          sceneTaskIds: finalSnapshot.scenes.map(s => s.upstreamTaskId ?? s.clientTaskId),
+        }),
+        // 略大于服务端 maxDuration=300s(挂起请求会饿死串行队列,同 S1.2)
+        signal: AbortSignal.timeout(330_000),
+      });
+      const stitchText = await stitchRes.text();
+      let stitchData;
+      try {
+        stitchData = JSON.parse(stitchText);
+      } catch {
+        throw new Error(`拼接服务响应格式错误 (HTTP ${stitchRes.status})`);
+      }
+      if (!stitchRes.ok || !stitchData.success || !stitchData.data?.videoUrl) {
+        throw new Error(stitchData.error || `拼接失败 (HTTP ${stitchRes.status})`);
+      }
+
+      updateTask(taskId, {
+        status: "completed",
+        progress: 100,
+        stitchedUrl: stitchData.data.videoUrl,
+      });
+      toast({
+        title: "🎬 AI 生成成片完成",
+        description: (
+          <a href="/studio" className="text-tiktok-cyan hover:underline flex items-center gap-1">
+            逐镜生成 + 拼接完成,点击查看 <ExternalLink className="h-3 w-3" />
+          </a>
+        ),
+      });
+    } catch (error) {
+      console.error("[AiGenTaskExecutor] Error:", error);
+      const isTimeout = error instanceof DOMException && error.name === "TimeoutError";
+      updateTask(taskId, {
+        status: "failed",
+        errorMessage: isTimeout
+          ? "拼接超时,请重试(各镜成片已保留,重试不重新生成)"
+          : error instanceof Error
+            ? error.message
+            : "AI 生成成片失败",
+      });
+    }
+  }, [updateTask, updateScene, toast]);
+
+  useEffect(() => {
+    if (isExecutingRef.current) return;
+
+    const isRunnable = (t: AiGenTask) =>
+      t.status === "pending" && !executedTasksRef.current.has(t.id);
+
+    if (!aiGenTasks.some(isRunnable)) return;
+
+    const executeNext = async () => {
+      isExecutingRef.current = true;
+      try {
+        const runLoop = async () => {
+          for (;;) {
+            const next = useAiGenStore.getState().tasks.find(isRunnable);
+            if (!next) break;
+            executedTasksRef.current.add(next.id);
+            await executeAiGenTask(next.id);
+          }
+        };
+
+        // 跨标签页单飞:persist 的 pending 任务会被每个标签各自水合,
+        // 无锁时两个标签会对同一 job 双重提交+双重扣费
+        if (typeof navigator !== "undefined" && navigator.locks) {
+          await navigator.locks.request("stargaze-aigen-executor", async () => {
+            await useAiGenStore.persist.rehydrate();
+            await runLoop();
+          });
+        } else {
+          await runLoop();
+        }
+      } finally {
+        isExecutingRef.current = false;
+      }
+      forceRescan();
+    };
+
+    executeNext();
+  }, [aiGenTasks, executeAiGenTask, rescanTick]);
+
+  // failed 任务从去重集合放行:retryTask(failed→pending)要能被重新拉起
+  useEffect(() => {
+    const liveIds = new Set(
+      aiGenTasks.filter(t => t.status !== "failed").map(t => t.id)
+    );
+    for (const id of Array.from(executedTasksRef.current)) {
+      if (!liveIds.has(id)) executedTasksRef.current.delete(id);
+    }
+  }, [aiGenTasks]);
+}
+
+// ============================================================================
 // 任务状态指示器组件 - 右下角悬浮通知
 // ============================================================================
 
@@ -1462,6 +1730,9 @@ export function BackgroundTaskManager() {
 
   // 启动 Studio 幻灯片渲染执行器(S1.2)
   useSlideshowTaskExecutor();
+
+  // 启动 Studio AI 生成腿执行器(S2.3)
+  useAiGenTaskExecutor();
 
   return <TaskStatusIndicator />;
 }

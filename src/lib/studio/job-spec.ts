@@ -28,6 +28,8 @@ import type {
 } from "@/types/video-batch";
 import type { QuickGenImageTask } from "@/stores/quick-gen-store";
 import type { SlideshowTask } from "@/stores/slideshow-store";
+import type { AiGenSceneTask, AiGenTask } from "@/stores/ai-gen-store";
+import { compileScenePrompt, type AiGenSceneInput } from "@/lib/studio/ai-gen-prompts";
 
 // ============================================================================
 // 规格类型
@@ -94,16 +96,35 @@ export interface SlideshowJobSpec extends JobSpecBase {
   bgmEnabled?: boolean;
 }
 
-export type JobSpec = VideoJobSpec | ImageJobSpec | SlideshowJobSpec;
+export interface AiGenSceneSpec extends AiGenSceneInput {
+  /** 该镜素材图(蓝图 slot.asset_ref;image_to_video 输入) */
+  imageUrl?: string;
+}
+
+export interface AiGenJobSpec extends JobSpecBase {
+  kind: "ai_gen";
+  /** 逐镜走统一视频网关的模型/规格(全镜一致,MVP) */
+  modelType: VideoModelType;
+  aspectRatio: Extract<VideoAspectRatio, "9:16" | "16:9">;
+  durationSeconds: VideoDuration;
+  quality?: VideoQuality;
+  /** 蓝图 scenes(台词/beat 已定;prompt 在适配器逐镜编译) */
+  scenes: AiGenSceneSpec[];
+  /** 商品标题(StyleBible.product + 卡片回显) */
+  productTitle: string;
+}
+
+export type JobSpec = VideoJobSpec | ImageJobSpec | SlideshowJobSpec | AiGenJobSpec;
 
 // ============================================================================
 // 工具
 // ============================================================================
 
-/** 任务 id 生成,沿用现有惯例:video=vbt-*(video-batch store),image=qg-*(quick-gen),slideshow=ss-* */
+/** 任务 id 生成,沿用现有惯例:video=vbt-*,image=qg-*,slideshow=ss-*,ai_gen=ag-* */
 export function createJobId(kind: JobSpec["kind"]): string {
   const rand = Math.random().toString(36).slice(2, 11);
-  const prefix = kind === "video" ? "vbt" : kind === "image" ? "qg" : "ss";
+  const prefix =
+    kind === "video" ? "vbt" : kind === "image" ? "qg" : kind === "ai_gen" ? "ag" : "ss";
   return `${prefix}-${Date.now()}-${rand}`;
 }
 
@@ -281,6 +302,44 @@ export function toSlideshowTask(spec: SlideshowJobSpec, opts: AdapterOptions = {
   };
 }
 
+/** AiGenJobSpec → AiGenTask(写入 ai-gen store,BTM AI 生成执行器自动拉起) */
+export function toAiGenTask(spec: AiGenJobSpec, opts: AdapterOptions = {}): AiGenTask {
+  const id = opts.id ?? createJobId("ai_gen");
+  const now = opts.now ?? new Date().toISOString();
+  const scenes: AiGenSceneTask[] = [...spec.scenes]
+    .sort((a, b) => a.idx - b.idx)
+    .map((scene) => ({
+      idx: scene.idx,
+      // 逐镜编译(scene 结构贯穿到生成端,BLUEPRINT §四渲染腿②)
+      prompt: compileScenePrompt(scene, spec.productTitle, spec.aspectRatio, spec.durationSeconds),
+      imageUrl:
+        scene.imageUrl ?? (scene.visual.startsWith("http") ? scene.visual : undefined),
+      clientTaskId: `${id}-s${scene.idx}`,
+      upstreamTaskId: null,
+      videoUrl: null,
+      status: "pending",
+    }));
+
+  return {
+    id,
+    groupName: spec.groupName ?? "Studio",
+    batchId: spec.batchId,
+    blueprintId: spec.blueprintId,
+    title: spec.productTitle,
+    modelType: spec.modelType,
+    aspectRatio: spec.aspectRatio,
+    durationSeconds: spec.durationSeconds,
+    quality: spec.quality ?? "standard",
+    scenes,
+    stitchedUrl: null,
+    status: "pending",
+    progress: 0,
+    errorMessage: null,
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
 // ============================================================================
 // 批量展开(数量 stepper)
 // ============================================================================
@@ -298,4 +357,9 @@ export function toQuickGenImageTasks(spec: ImageJobSpec, opts: Omit<AdapterOptio
 /** 按 spec.count 展开为 N 个 SlideshowTask(每个变体独立洗牌图序) */
 export function toSlideshowTasks(spec: SlideshowJobSpec, opts: Omit<AdapterOptions, "id"> = {}): SlideshowTask[] {
   return Array.from({ length: clampCount(spec.count) }, () => toSlideshowTask(spec, opts));
+}
+
+/** 按 spec.count 展开为 N 个 AiGenTask(变体差异靠生成端随机性;脚本层变体 S3 配方库) */
+export function toAiGenTasks(spec: AiGenJobSpec, opts: Omit<AdapterOptions, "id"> = {}): AiGenTask[] {
+  return Array.from({ length: clampCount(spec.count) }, () => toAiGenTask(spec, opts));
 }
