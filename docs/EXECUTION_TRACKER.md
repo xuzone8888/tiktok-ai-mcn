@@ -18,8 +18,10 @@
   - S0.5 layout 全屏豁免:MainContentFrame 客户端组件(FULLSCREEN_ROUTES=['/studio']),普通路由 DOM 与原实现一致;/studio 占位页已建;tsc 通过(页面级目测回归留待 S1 起 dev server 时抽查)
   - S0.6 quick-gen store 多任务化:videoTasks/imageTasks 数组为事实源 + activeXxxTask 兼容镜像(页面零改动);BTM 两个 quick-gen 执行器改数组遍历+Set 去重;persist v1 迁移。残留:多任务下页面画布可能"回跳"(S1 消解)、建议 updateXxxTaskStatus 加"终态不可降级"守卫(S1)
   - S0.7 JobSpec:src/lib/studio/job-spec.ts(VideoJobSpec/ImageJobSpec + toVideoBatchTask/toQuickGenImageTask + count 展开);适配器补全 BTM 路径缺失的四个角色字段
-- **S0 代码侧全部完成**(tsc 0 错误 + next build 通过)。剩余:S0.1/S0.3 两个迁移在生产 Supabase dashboard 执行(用户登录后我经浏览器执行);TikTok photo post 门户核验(不阻塞)
-- **下一步**:S1 Studio MVP(见 BLUEPRINT §七):omnibox+批次流+幻灯片腿首发+商品图腿;先修 BTM 视频提交路径补传角色四字段
+- **S0 全部完成(2026-07-02,含生产环境)**:
+  - 生产库迁移已执行并校验(经 Supabase dashboard SQL editor):blueprints/reference_cache 建表 ✅、generations 三新列 ✅(gen_new_cols=3)、viral_clone 五表已 DROP ✅(残留=0)、valid_source 通配约束已重建 ✅
+  - TikTok 开发者后台核验(app 7629290381422856212「Star Gaze」):**Live in production(2026-05-12 起),Content Posting API Direct Post = Approved**,scopes = user.info.basic/user.info.stats/video.publish/video.upload。**photo post 结论:无需新申请**——photo 走 content/init 端点,用同一 video.publish/video.upload scope + 同一 Direct Post 审批,S4 只需补实现代码。备忘:pull_by_url 需要域名验证(门户有 Verify 入口未完成),push_by_file 不受影响;后续加新 scope 走「Create Revision」
+- **下一步:S1 Studio MVP**(BLUEPRINT §七):omnibox+批次流+幻灯片渲染腿首发+商品图腿+@角色。开工第一件事:修 BTM 视频提交路径补传角色四字段(S0.7 侦查结论);S0.6 残留项(终态不可降级守卫、画布回跳)一并处理
 - **分支**:`claude/practical-curie-42f4b1`(worktree:E:\StarGaze\.claude\worktrees\practical-curie-42f4b1)
 - **待用户/环境**:S0.1 生产执行——**exec_sql RPC 在生产库不存在**(老 runner 从没跑成过),执行通道=用户登录 Supabase dashboard SQL editor,我经浏览器贴 SQL 执行(源 IP 预检已通过:生产 source 取值 8 种全部被「基础枚举+batch_video% 通配」覆盖)。届时连同 20260702_drop_viral_clone.sql 一起执行。
 - **提交节奏(用户指示)**:大步伐——里程碑级 commit(①文档+tag 已交;②S0.1-S0.3 数据层+拆除;③S0.4-S0.7)
