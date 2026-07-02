@@ -71,6 +71,12 @@
   - **顺带发现并修复真实老 bug(丢钱,S1.2 埋):幻灯片扣费走 `rpc('deduct_credits')` 但该 RPC 在生产库不存在(401 hellobabygo... 不,是 supabase rpc 404),幻灯片自上线从未扣过费**。改直连扣费(adjustProfileCredits+insertCreditTransaction,与视频网关同原语,扣费失败响亮记录不再静默);复验 PASS:余额 295→294 + usage-1 流水
   - **视频上游 401(环境,非代码)**:grok/sora2 提交都因上游 `api.hellobabygo.com/v1/videos` 返回 401「无效的令牌」失败——dev 本机出口 IP 或该环境 key 未授权;视频网关是既有代码,生产环境有效(S1 视频腿已生产验收)。图片生成上游超时→退款链路正常(余额 294→299 验证退款回补)
   - 结论:S2 代码路径脚本可达部分全绿;人工验收只需覆盖 UI 手感层(拖拽/chip 交互/抽屉动效/@角色浮层)与需真实视频上游的 AI 生成腿多镜拼接(生产环境)。测试账号 s2-acceptance-bot@test.dev 数据已清、账号空壳残留可手删
+- **S2.8 补 key 后复验(2026-07-02→07-03,用户授权 SSH 生产服务器取 key)**:
+  - 从生产 `/var/www/tiktok-ai-mcn/.env.local` 拉 14 个本机缺失 key 到本机 .env.local(git-ignored,验收后可删):`VIDEO_PLATFORM_API_KEY`/`VIDEO_PLATFORM_BASE_URL`(视频统一网关,本机原缺→fallback 到无效 SORA2_API_KEY 导致 hellobabygo 401)、`MAC_WORKER_URL`/`MAC_WORKER_TOKEN`、`VIDEO_PLATFORM_IMAGE_*` 一整套(图片上游,本机原缺致图片超时)
+  - **图片生成 PASS**:补 VIDEO_PLATFORM_IMAGE_* 后 gpt-image-2 正常出图(扣 5),原超时是缺 image key
+  - **grok 单镜 AI 生成腿真实全链 PASS(关键)**:submit→轮询→真实 OSS 成片→stitch 直通→落库(source=studio/spec.render_mode=ai_gen/batch_id/credit_cost=0);积分对账 grok=5、stitch=0;双镜里失败镜自动退款验证正常(300→285 净扣 15=图片5+单镜5+双镜成功镜5)
+  - **worker 多镜拼接未端到端验**:Mac worker 离线(探测 /api/probe 与根路径均 curl 000)+ 双镜里一镜遇上游偶发 HTTP/2 错误(curl 92,非代码)。但两端各自已验:src 侧 callWorkerStitch+落库/幂等/入库(S2.7 第三轮用真实 OSS 视频验)、worker 端 /api/stitch(S0.4 本机 ffmpeg 8.0 实测混合分辨率+无音轨补齐);契约层对齐(videos/aspectRatio/loudnorm/transition/503 重试),仅缺"在线 worker"这一外部依赖的接缝,留生产或 worker 上线后补
+  - **结论:S2 全部代码路径脚本可达部分已全绿**(链接腿/蓝图 CRUD/幻灯片/图片/视频单镜 AI 生成腿/stitch 落库/频控/SSRF/死链);唯一未覆盖=在线 worker 多镜拼接(外部机器状态)+ UI 手感层(人工)
 - **下一步:S1+S2 人工验收 → S3**:①dev server 真实登录态走查:S1 四路径 + 贴海外链接(Shopify 站最稳)→蓝图→改卖点→3 变体 + AI 生成腿一条(需 MAC_WORKER_URL 隧道通,留意 worker /api/stitch 无生产先例)+ /link-video 死链确认;②用户经 dashboard 执行 20260702_drop_link_video.sql(含退款清扫+归档,先看 NOTICE 输出);③S3 = 拼装腿+爆款拆解(20 条基准门槛)+批量矩阵+存为配方(BLUEPRINT §七,收钱线在 S2 后)
 - **分支**:`claude/practical-curie-42f4b1`(worktree:E:\StarGaze\.claude\worktrees\practical-curie-42f4b1)
 - **待用户/环境**:S0.1 生产执行——**exec_sql RPC 在生产库不存在**(老 runner 从没跑成过),执行通道=用户登录 Supabase dashboard SQL editor,我经浏览器贴 SQL 执行(源 IP 预检已通过:生产 source 取值 8 种全部被「基础枚举+batch_video% 通配」覆盖)。届时连同 20260702_drop_viral_clone.sql 一起执行。

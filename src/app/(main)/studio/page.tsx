@@ -244,7 +244,7 @@ export default function StudioPage() {
 
       {/* 主区:批次流 + omnibox */}
       <div className="relative flex min-w-0 flex-1 flex-col">
-        <div className="flex-1 overflow-y-auto px-6 pt-6 pb-48">
+        <div className="flex-1 overflow-y-auto px-6 pt-6 pb-60">
           {batches.length === 0 ? (
             <div className="flex h-full flex-col items-center justify-center gap-3 text-zinc-600">
               <Sparkles className="h-8 w-8" />
@@ -254,7 +254,7 @@ export default function StudioPage() {
               </p>
             </div>
           ) : (
-            <div className="mx-auto max-w-5xl space-y-4">
+            <div className="mx-auto max-w-7xl space-y-4">
               {batches.map((batch) => (
                 <BatchCard
                   key={batch.id}

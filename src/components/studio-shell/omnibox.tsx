@@ -269,6 +269,17 @@ export function Omnibox({
     }
   };
 
+  // Esc 取消进行中的链接解析(角色浮层开着时让位给浮层的 Esc 关闭)
+  useEffect(() => {
+    if (linkChip?.status !== "parsing") return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !pickerOpen) clearLinkCard();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [linkChip?.status, pickerOpen]);
+
   const uploading = attachments.some((a) => a.status === "uploading");
   // 失败附件阻断发送:否则实际提交内容与用户所见不符(失败图被静默剔除)
   const hasFailedAttachment = attachments.some((a) => a.status === "failed");
@@ -419,7 +430,7 @@ export function Omnibox({
   const qualities = getAvailableQualities(videoParams.modelType);
 
   return (
-    <div className="pointer-events-auto relative mx-auto w-full max-w-[760px] rounded-2xl border border-white/10 bg-zinc-900/90 shadow-2xl shadow-black/40 backdrop-blur-xl">
+    <div className="pointer-events-auto relative mx-auto w-full max-w-[980px] rounded-2xl border border-white/10 bg-zinc-900/90 shadow-2xl shadow-black/40 backdrop-blur-xl">
       {/* @角色选择面板(悬浮于 omnibox 上方) */}
       {pickerOpen && characterApplicable && (
         <div className="absolute inset-x-0 bottom-full mb-2 rounded-2xl border border-white/10 bg-zinc-900/95 p-3 shadow-2xl shadow-black/50 backdrop-blur-xl">
@@ -528,7 +539,7 @@ export function Omnibox({
                   <button
                     type="button"
                     onClick={() => startLinkParse(linkChip.url)}
-                    className="shrink-0 rounded border border-red-400/40 px-2 py-0.5 text-red-300 hover:bg-red-500/10"
+                    className="shrink-0 rounded-md border border-red-400/40 px-2.5 py-1 text-red-300 transition-colors hover:bg-red-500/10"
                   >
                     重试
                   </button>
@@ -548,10 +559,11 @@ export function Omnibox({
               <button
                 type="button"
                 onClick={clearLinkCard}
-                className="shrink-0 text-zinc-600 hover:text-zinc-300"
-                title="移除链接与商品卡"
+                className="flex shrink-0 items-center gap-1 rounded-md border border-white/15 px-2.5 py-1 text-zinc-400 transition-colors hover:border-red-400/40 hover:bg-red-500/10 hover:text-red-300"
+                title={linkChip.status === "parsing" ? "取消解析(Esc)" : "移除链接与商品卡"}
               >
                 <X className="h-3.5 w-3.5" />
+                {linkChip.status === "parsing" ? "取消 (Esc)" : "移除"}
               </button>
             </div>
           )}
@@ -972,8 +984,8 @@ export function Omnibox({
                   ? "拖入 2-9 张商品图,或粘贴 Amazon/Shopify/TikTok Shop 商品链接;发送=按勾选卖点批量出成片"
                   : "描述你要的图片,可拖入参考图…"
           }
-          rows={2}
-          className="max-h-40 min-h-[52px] flex-1 resize-none bg-transparent text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none"
+          rows={3}
+          className="max-h-56 min-h-[72px] flex-1 resize-none bg-transparent text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none"
         />
         <div className="flex shrink-0 flex-col items-end gap-1.5">
           {hasFailedAttachment ? (
