@@ -406,12 +406,14 @@ export function buildDeconstructBlueprint(report: DeconstructReport): {
     };
   });
 
+  // selected 恒 false:拆解 hook 是原片逐字台词,属报告信息项——绝不作为
+  // 矩阵注入候选(注入=原片文本进成片,违 structure_only;审查 high 实锤)
   const hooks: DeconstructBlueprintHook[] = [
     {
       id: "hook-0",
       type: report.hook.type,
       text: report.hook.text,
-      selected: true,
+      selected: false,
       ...(report.hook.rationale ? { rationale: report.hook.rationale } : {}),
     },
   ];

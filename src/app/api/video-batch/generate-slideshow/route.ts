@@ -52,6 +52,10 @@ interface SlideshowRequest {
     // (task_id=clientTaskIds[i],batch_id=batchId),供入库/跨会话任务中心使用
     clientTaskIds?: string[];
     batchId?: string;
+    // 蓝图溯源 + 批量矩阵变体(S3.4):落 generations.spec(此前幻灯片腿不写
+    // spec/blueprint_id,「再跑一批」溯源断链——侦查记录的缺口)
+    blueprintId?: string;
+    variant?: { hook_id?: string; hook_text?: string; voice_id?: string; aspect?: string };
 
     // 新增：BGM 配置
     bgm?: {
@@ -249,12 +253,24 @@ export async function POST(req: NextRequest) {
             subtitle,
             clientTaskIds,
             batchId,
+            blueprintId,
+            variant,
         } = body;
         const normalizedBatchId =
             typeof batchId === 'string' &&
             /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(batchId.trim())
                 ? batchId.trim()
                 : null;
+        const normalizedBlueprintId =
+            typeof blueprintId === 'string' && blueprintId.trim() ? blueprintId.trim().slice(0, 64) : null;
+        // 变体快照键白名单(S3.4 批量矩阵)
+        const normalizedVariant: Record<string, string> = {};
+        if (variant && typeof variant === 'object') {
+            for (const key of ['hook_id', 'hook_text', 'voice_id', 'aspect'] as const) {
+                const v = (variant as Record<string, unknown>)[key];
+                if (typeof v === 'string' && v) normalizedVariant[key] = v.slice(0, 300);
+            }
+        }
 
         log('📋 REQUEST BODY', {
             mode,
@@ -869,6 +885,14 @@ export async function POST(req: NextRequest) {
                         user_id: user.id,
                         task_id: clientTaskId,
                         ...(normalizedBatchId ? { batch_id: normalizedBatchId } : {}),
+                        // S3.4:蓝图溯源+矩阵变体落 spec(「再跑一批」/任务中心溯源)
+                        spec: {
+                            render_mode: 'slideshow',
+                            ...(normalizedBlueprintId ? { blueprint_id: normalizedBlueprintId } : {}),
+                            ...(Object.keys(normalizedVariant).length > 0
+                                ? { variant: normalizedVariant }
+                                : {}),
+                        },
                         type: 'video',
                         generation_type: 'video',
                         source: 'slideshow',
@@ -893,9 +917,15 @@ export async function POST(req: NextRequest) {
 
             if (rows.length > 0) {
                 const adminSupabase = createAdminClient();
-                const { error: genInsertError } = await adminSupabase
+                let { error: genInsertError } = await adminSupabase
                     .from('generations')
                     .insert(rows as never);
+                if (genInsertError) {
+                    // 漂移降级:去 spec 重试一次(对齐 stitch 路由的降级链思路)
+                    const bare = rows.map(({ spec: _spec, ...rest }) => rest);
+                    const retry = await adminSupabase.from('generations').insert(bare as never);
+                    genInsertError = retry.error;
+                }
                 if (genInsertError) {
                     // 不阻断响应:视频已渲染并扣费,落库失败只影响入库/任务中心
                     console.error('[Slideshow API] generations insert failed:', genInsertError.message);

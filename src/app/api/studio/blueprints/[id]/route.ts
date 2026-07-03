@@ -30,6 +30,47 @@ const SCENE_BEATS = new Set(["hook", "point", "demo", "cta"]);
 const SLOT_KINDS = new Set(["product_image", "broll", "avatar", "ai_gen"]);
 const MAX_SCENES = 30;
 
+// hooks 元素消毒(S3.4:[{id,type,text,selected,rationale?}],type 四枚举)
+const HOOK_TYPES = new Set(["痛点", "悬念", "对比", "场景"]);
+const MAX_HOOKS = 8;
+
+interface SanitizedHook {
+  id: string;
+  type: string;
+  text: string;
+  selected: boolean;
+  rationale?: string;
+}
+
+function sanitizeHooks(raw: unknown): SanitizedHook[] | null {
+  if (!Array.isArray(raw) || raw.length > MAX_HOOKS) return null;
+  const hooks: SanitizedHook[] = [];
+  const seenIds = new Set<string>();
+  for (let i = 0; i < raw.length; i++) {
+    const item = raw[i];
+    if (!item || typeof item !== "object") return null;
+    const rec = item as Record<string, unknown>;
+    const text = typeof rec.text === "string" ? rec.text.trim().slice(0, 300) : "";
+    if (!text) return null;
+    const type =
+      typeof rec.type === "string" && HOOK_TYPES.has(rec.type) ? rec.type : "悬念";
+    let id = typeof rec.id === "string" && rec.id.trim() ? rec.id.trim().slice(0, 40) : `hook-${i}`;
+    // 兜底值 `hook-${i}` 也可能与已收录 id 撞车(审查实锤),循环唯一化
+    while (seenIds.has(id)) id = `${id}-dup`;
+    seenIds.add(id);
+    hooks.push({
+      id,
+      type,
+      text,
+      selected: rec.selected === true,
+      ...(typeof rec.rationale === "string" && rec.rationale.trim()
+        ? { rationale: rec.rationale.trim().slice(0, 500) }
+        : {}),
+    });
+  }
+  return hooks;
+}
+
 function sanitizeScenes(raw: unknown): SanitizedScene[] | null {
   if (!Array.isArray(raw) || raw.length === 0 || raw.length > MAX_SCENES) return null;
   const scenes: SanitizedScene[] = [];
@@ -148,6 +189,14 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         return NextResponse.json({ success: false, error: "分镜数据不合法" }, { status: 400 });
       }
       patch.scenes = scenes;
+    }
+
+    if (body?.hooks !== undefined) {
+      const hooks = sanitizeHooks(body.hooks);
+      if (!hooks) {
+        return NextResponse.json({ success: false, error: "hooks 数据不合法" }, { status: 400 });
+      }
+      patch.hooks = hooks;
     }
 
     if (body?.status !== undefined) {

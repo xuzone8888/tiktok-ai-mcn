@@ -53,6 +53,8 @@ export interface AssemblyTask {
   /** 全片统一音色(适配器选定即持久化,刷新恢复声线一致) */
   voiceId: string;
   scenes: AssemblySceneTask[];
+  /** 批量矩阵变体快照(S3.4;stitch 时透传落 generations.spec.variant) */
+  variant?: { hook_id?: string; hook_text?: string; voice_id?: string; aspect?: string };
   /** 拼接成片(最终交付物;generations.task_id = job id) */
   stitchedUrl: string | null;
   status: AssemblyTaskStatus;

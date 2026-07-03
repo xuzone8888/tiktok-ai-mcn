@@ -184,6 +184,16 @@ export async function POST(request: NextRequest) {
           .filter((s: unknown): s is string => typeof s === "string")
           .slice(0, MAX_SEGMENTS)
       : [];
+    // 批量矩阵变体快照(S3.4):键白名单拾取,落 spec.variant
+    const rawVariant = body?.variant as Record<string, unknown> | undefined;
+    const variant: Record<string, string> = {};
+    if (rawVariant && typeof rawVariant === "object") {
+      for (const key of ["hook_id", "hook_text", "voice_id", "aspect"] as const) {
+        if (typeof rawVariant[key] === "string" && rawVariant[key]) {
+          variant[key] = (rawVariant[key] as string).slice(0, 300);
+        }
+      }
+    }
 
     const admin = createAdminClient();
 
@@ -259,6 +269,7 @@ export async function POST(request: NextRequest) {
           scene_task_ids: sceneTaskIds,
           segment_count: videoUrls.length,
           model_type: modelType,
+          ...(Object.keys(variant).length > 0 ? { variant } : {}),
         };
         const attempts: Record<string, unknown>[] = [
           { ...baseRow, ...extras, spec },

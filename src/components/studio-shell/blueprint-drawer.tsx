@@ -53,11 +53,20 @@ interface DeconstructReportData {
   suggested_duration?: number;
 }
 
+interface BlueprintHook {
+  id: string;
+  type: string;
+  text: string;
+  selected: boolean;
+  rationale?: string;
+}
+
 interface BlueprintData {
   id: string;
   source_type: string;
   source_ref: { url?: string; asset_urls?: string[]; title?: string } | null;
   product: ProductCard | null;
+  hooks?: BlueprintHook[];
   scenes: BlueprintScene[];
   /** 门B 溯源(S3.3 报告视图数据源) */
   origin?: {
@@ -106,6 +115,10 @@ export function BlueprintDrawer({ batch, onClose }: BlueprintDrawerProps) {
   const [blueprint, setBlueprint] = useState<BlueprintData | null>(null);
   const [card, setCard] = useState<ProductCard | null>(null);
   const [scenes, setScenes] = useState<BlueprintScene[]>([]);
+  const [hooks, setHooks] = useState<BlueprintHook[]>([]);
+  const [hooksGenerating, setHooksGenerating] = useState(false);
+  /** 比例多选(S3.4 矩阵维度;空=沿用批次 spec 的比例) */
+  const [rerunAspects, setRerunAspects] = useState<Array<"9:16" | "16:9">>([]);
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [rerunCount, setRerunCount] = useState(3);
@@ -151,6 +164,7 @@ export function BlueprintDrawer({ batch, onClose }: BlueprintDrawerProps) {
           setBlueprint(data);
           setCard(data.product);
           setScenes(Array.isArray(data.scenes) ? data.scenes : []);
+          setHooks(Array.isArray(data.hooks) ? data.hooks : []);
           setDirty(false);
         } else {
           setLoadError(result.error || "蓝图读取失败");
@@ -203,6 +217,41 @@ export function BlueprintDrawer({ batch, onClose }: BlueprintDrawerProps) {
     setDirty(true);
   };
 
+  const toggleHook = (id: string) => {
+    setHooks((prev) => prev.map((h) => (h.id === id ? { ...h, selected: !h.selected } : h)));
+    setDirty(true);
+  };
+
+  /** hook 候选生成(S3.4,商品蓝图;拆解蓝图 hook 来自原片分析) */
+  const generateHooks = async () => {
+    setHooksGenerating(true);
+    try {
+      const res = await fetch(`/api/studio/blueprints/${blueprintId}/hooks`, { method: "POST" });
+      const result = await res.json();
+      if (result.success && Array.isArray(result.data?.hooks)) {
+        // 服务端只按 DB 已存勾选做 text 匹配保留——本地未保存的勾选(dirty)
+        // 会被覆盖丢失(审查实锤),按 text 合并回来并标 dirty 待保存
+        const localSelected = new Set(
+          hooks.filter((h) => h.selected && h.text.trim()).map((h) => h.text)
+        );
+        const merged = (result.data.hooks as BlueprintHook[]).map((h) =>
+          localSelected.has(h.text) ? { ...h, selected: true } : h
+        );
+        setHooks(merged);
+        if (merged.some((h, i) => h.selected !== (result.data.hooks as BlueprintHook[])[i].selected)) {
+          setDirty(true);
+        }
+        toast({ title: `已生成 ${merged.length} 个 hook 候选,勾选后进入变体矩阵` });
+      } else {
+        toast({ title: "hook 生成失败", description: result.error, variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "hook 生成失败,请重试", variant: "destructive" });
+    } finally {
+      setHooksGenerating(false);
+    }
+  };
+
   // 门B 拆解蓝图(source_type='reference_video'):product=null,渲染结构报告视图
   const isDeconstruct = blueprint?.source_type === "reference_video";
   const report = blueprint?.origin?.report;
@@ -215,7 +264,7 @@ export function BlueprintDrawer({ batch, onClose }: BlueprintDrawerProps) {
         const res = await fetch(`/api/studio/blueprints/${blueprintId}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ scenes }),
+          body: JSON.stringify({ scenes, ...(hooks.length > 0 ? { hooks } : {}) }),
         });
         const result = await res.json();
         if (!result.success) {
@@ -250,7 +299,11 @@ export function BlueprintDrawer({ batch, onClose }: BlueprintDrawerProps) {
       const res = await fetch(`/api/studio/blueprints/${blueprintId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ product: cleanCard, scenes }),
+        body: JSON.stringify({
+          product: cleanCard,
+          scenes,
+          ...(hooks.length > 0 ? { hooks } : {}),
+        }),
       });
       const result = await res.json();
       if (!result.success) {
@@ -304,7 +357,16 @@ export function BlueprintDrawer({ batch, onClose }: BlueprintDrawerProps) {
       beat: s.beat === "demo" ? "demo" : s.beat,
       imageUrl: s.slot?.asset_ref?.startsWith("http") ? s.slot.asset_ref : undefined,
     }));
-    const result = rerunBlueprint(batch, effectiveCard, blueprintId, rerunCount, editedScenes);
+    // 批量矩阵(S3.4):选中 hooks × 比例多选,变体轮转注入。
+    // 拆解蓝图恒不传 hooks:其 hook 是原片逐字台词,注入=原片文本进成片,
+    // 违 structure_only 且会覆盖用户已替换的 hook 镜台词(审查 high 实锤)
+    const selectedHooks = isDeconstruct
+      ? []
+      : hooks.filter((h) => h.selected && h.text.trim()).map((h) => ({ id: h.id, text: h.text }));
+    const result = rerunBlueprint(batch, effectiveCard, blueprintId, rerunCount, editedScenes, {
+      hooks: selectedHooks,
+      aspects: rerunAspects,
+    });
     if (result.ok) {
       toast({ title: `已按蓝图排队 ${rerunCount} 条成片` });
       onClose();
@@ -512,6 +574,60 @@ export function BlueprintDrawer({ batch, onClose }: BlueprintDrawerProps) {
               </div>
             )}
 
+            {/* Hook 候选多选(S3.4 批量矩阵维度;拆解蓝图不展示——其 hook 属
+                报告信息项已在上方 HOOK 卡呈现,不可作注入候选) */}
+            {!isDeconstruct && (
+              <div>
+                <div className="mb-1.5 flex items-center justify-between">
+                  <p className="text-[11px] font-medium text-zinc-500">
+                    Hook 候选(勾选进入变体矩阵,逐条轮转注入首镜口播)
+                  </p>
+                  {!isDeconstruct && (
+                    <button
+                      type="button"
+                      disabled={hooksGenerating}
+                      onClick={() => void generateHooks()}
+                      className="flex items-center gap-1 rounded border border-amber-400/30 px-2 py-0.5 text-[11px] text-amber-300 transition-colors hover:bg-amber-500/10 disabled:opacity-50"
+                    >
+                      {hooksGenerating ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <Sparkles className="h-3 w-3" />
+                      )}
+                      {hooks.length > 0 ? "重新生成" : "生成候选"}
+                    </button>
+                  )}
+                </div>
+                {hooks.length === 0 ? (
+                  <p className="text-[11px] text-zinc-600">
+                    暂无候选——点「生成候选」按商品卡出 4 个类型各异的开场 hook
+                  </p>
+                ) : (
+                  <div className="space-y-1.5">
+                    {hooks.map((h) => (
+                      <label
+                        key={h.id}
+                        className="flex cursor-pointer items-start gap-2 text-xs text-zinc-300"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={h.selected}
+                          onChange={() => toggleHook(h.id)}
+                          className="mt-0.5 shrink-0 accent-rose-400"
+                        />
+                        <span className="min-w-0 flex-1">
+                          <span className="mr-1.5 rounded border border-rose-400/30 bg-rose-500/10 px-1 py-0.5 text-[10px] text-rose-300">
+                            {h.type}
+                          </span>
+                          {h.text}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* 分镜台词 */}
             {scenes.length > 0 && (
               <div>
@@ -586,6 +702,30 @@ export function BlueprintDrawer({ batch, onClose }: BlueprintDrawerProps) {
             )}
             {dirty ? "保存蓝图" : "已保存"}
           </Button>
+          {/* 比例多选(S3.4 矩阵维度;空=沿用批次比例) */}
+          <div className="flex items-center gap-1.5">
+            <span className="text-[11px] text-zinc-600">比例</span>
+            {(["9:16", "16:9"] as const).map((a) => (
+              <button
+                key={a}
+                type="button"
+                onClick={() =>
+                  setRerunAspects((prev) =>
+                    prev.includes(a) ? prev.filter((x) => x !== a) : [...prev, a]
+                  )
+                }
+                className={
+                  "rounded-md border px-2 py-0.5 text-[11px] transition-colors " +
+                  (rerunAspects.includes(a)
+                    ? "border-sky-400/50 bg-sky-500/15 text-sky-300"
+                    : "border-white/10 bg-black/30 text-zinc-500 hover:text-zinc-300")
+                }
+              >
+                {a}
+              </button>
+            ))}
+            <span className="text-[10px] text-zinc-700">不选=沿用原比例;全选=变体轮转</span>
+          </div>
           <div className="flex items-center gap-2">
             <div className="flex items-center gap-1 rounded-lg border border-white/10 bg-black/30 px-1 py-0.5">
               <button
@@ -625,6 +765,21 @@ export function BlueprintDrawer({ batch, onClose }: BlueprintDrawerProps) {
             <Zap className="h-3 w-3" />
             预估 ≈ {estimatedCredits} 积分(按任务在服务端逐条扣除,失败自动退款)
           </p>
+          {(() => {
+            // 矩阵覆盖提示:条数不足以轮转到全部选中组合时如实说明(审查实锤)
+            if (isDeconstruct) return null;
+            const hookCount = hooks.filter((h) => h.selected && h.text.trim()).length;
+            const aspectCount = rerunAspects.length || 1;
+            const cellCount = Math.max(hookCount, 1) * aspectCount;
+            if (cellCount > 1 && rerunCount < cellCount) {
+              return (
+                <p className="text-[10px] text-amber-400/80">
+                  已选组合 {cellCount} 种(hook×比例)&gt; 条数 {rerunCount},部分组合本批不会用到
+                </p>
+              );
+            }
+            return null;
+          })()}
           <p className="text-[10px] leading-relaxed text-zinc-600">
             编辑只影响新批次;已提交批次按其提交时快照渲染。
           </p>

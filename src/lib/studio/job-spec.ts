@@ -37,6 +37,14 @@ import { PRESET_VOICES } from "@/lib/voice-data";
 // 规格类型
 // ============================================================================
 
+/** 批量矩阵变体快照(S3.4):随成片落 generations.spec.variant,溯源哪一格 */
+export interface VariantInfo {
+  hook_id?: string;
+  hook_text?: string;
+  voice_id?: string;
+  aspect?: string;
+}
+
 interface JobSpecBase {
   /** 主提示词(视频 prompt 模式 / 图片 generate 模式必填语义,由调用方校验非空) */
   prompt: string;
@@ -50,6 +58,8 @@ interface JobSpecBase {
   batchId?: string;
   /** 蓝图管线预留(S2+):spec 快照随 generations.spec 落库时携带 */
   blueprintId?: string;
+  /** 批量矩阵变体(S3.4:hook×音色×比例;由 rerunBlueprint 矩阵展开逐格填入) */
+  variant?: VariantInfo;
 }
 
 export interface VideoJobSpec extends JobSpecBase {
@@ -317,6 +327,8 @@ export function toSlideshowTask(spec: SlideshowJobSpec, opts: AdapterOptions = {
     ...(voiceEnabled ? { voice: { enabled: true, voiceId: "random", voiceName: "智能选声" } } : {}),
     clientTaskIds: [id],
     ...(spec.batchId ? { batchId: spec.batchId } : {}),
+    ...(spec.blueprintId ? { blueprintId: spec.blueprintId } : {}),
+    ...(spec.variant ? { variant: spec.variant } : {}),
   };
 
   return {
@@ -368,6 +380,7 @@ export function toAiGenTask(spec: AiGenJobSpec, opts: AdapterOptions = {}): AiGe
     durationSeconds: spec.durationSeconds,
     quality: spec.quality ?? "standard",
     scenes,
+    variant: spec.variant,
     stitchedUrl: null,
     status: "pending",
     progress: 0,
@@ -449,6 +462,7 @@ export function toAssemblyTask(spec: AssemblyJobSpec, opts: AdapterOptions = {})
     kenburns: spec.kenburns,
     voiceId,
     scenes,
+    variant: spec.variant ? { ...spec.variant, voice_id: voiceId } : undefined,
     stitchedUrl: null,
     status: "pending",
     progress: 0,
@@ -501,5 +515,105 @@ export function toAssemblyTasks(
   const voiceIds = shuffled((pool.length > 0 ? pool : PRESET_VOICES).map((v) => v.id));
   return Array.from({ length: n }, (_, i) =>
     toAssemblyTask({ ...spec, voiceId: voiceIds[i % voiceIds.length] }, opts)
+  );
+}
+
+// ============================================================================
+// 批量矩阵展开(S3.4:蓝图抽屉「再出 N 条」——选中 hooks × 比例 × 音色轮转)
+// ============================================================================
+
+/** 矩阵格:单个变体的差异化参数(缺省=沿用基础 spec) */
+export interface MatrixCell {
+  hook?: { id: string; text: string };
+  aspect?: "9:16" | "16:9";
+}
+
+/**
+ * count 个变体的矩阵格(空维度=全部沿用基础值)。
+ * hook 逐格轮转,aspect 按 hook 整轮步进(floor(i/hooks)):两维同相位轮转
+ * 在维度长度有公因子时组合覆盖恒不全(2 hook×2 比例只走对角线,审查实锤),
+ * 步进保证 count ≥ hooks×aspects 时全组合覆盖。
+ */
+export function buildMatrixPlan(
+  count: number,
+  matrix?: { hooks?: Array<{ id: string; text: string }>; aspects?: Array<"9:16" | "16:9"> }
+): MatrixCell[] {
+  const hooks = (matrix?.hooks ?? []).filter((h) => h.text.trim());
+  const aspects = matrix?.aspects ?? [];
+  return Array.from({ length: clampCount(count) }, (_, i) => ({
+    hook: hooks.length > 0 ? hooks[i % hooks.length] : undefined,
+    aspect:
+      aspects.length > 0
+        ? aspects[(hooks.length > 0 ? Math.floor(i / hooks.length) : i) % aspects.length]
+        : undefined,
+  }));
+}
+
+/** hook 注入:替换 hook 镜(有 beat 认 beat,否则最小 idx 镜)台词 */
+function injectHookLine<T extends { idx: number; line: string; beat?: string }>(
+  scenes: T[],
+  hookText: string
+): T[] {
+  const byBeat = scenes.findIndex((s) => s.beat === "hook");
+  const minIdx = Math.min(...scenes.map((s) => s.idx));
+  const targetIdx = byBeat >= 0 ? scenes[byBeat].idx : minIdx;
+  return scenes.map((s) => (s.idx === targetIdx ? { ...s, line: hookText } : s));
+}
+
+function cellVariant(cell: MatrixCell): VariantInfo | undefined {
+  const v: VariantInfo = {
+    ...(cell.hook ? { hook_id: cell.hook.id, hook_text: cell.hook.text } : {}),
+    ...(cell.aspect ? { aspect: cell.aspect } : {}),
+  };
+  return Object.keys(v).length > 0 ? v : undefined;
+}
+
+/** 矩阵展开:AI 生成腿(hook 注入 hook 镜台词 + 比例轮转) */
+export function toAiGenTasksWithMatrix(spec: AiGenJobSpec, plan: MatrixCell[]): AiGenTask[] {
+  return plan.map((cell) =>
+    toAiGenTask({
+      ...spec,
+      count: 1,
+      scenes: cell.hook ? injectHookLine(spec.scenes, cell.hook.text) : spec.scenes,
+      aspectRatio: cell.aspect ?? spec.aspectRatio,
+      variant: cellVariant(cell),
+    })
+  );
+}
+
+/** 矩阵展开:拼装口播腿(hook 注入 + 比例轮转 + 音色无放回轮转) */
+export function toAssemblyTasksWithMatrix(
+  spec: AssemblyJobSpec,
+  plan: MatrixCell[]
+): AssemblyTask[] {
+  const language = detectLanguage(spec.scenes.map((s) => s.line).join(""));
+  const pool = PRESET_VOICES.filter((v) => v.lang === language);
+  const voiceIds = shuffled((pool.length > 0 ? pool : PRESET_VOICES).map((v) => v.id));
+  const explicitVoice = spec.voiceId && spec.voiceId !== "random" ? spec.voiceId : null;
+  return plan.map((cell, i) =>
+    toAssemblyTask({
+      ...spec,
+      count: 1,
+      scenes: cell.hook ? injectHookLine(spec.scenes, cell.hook.text) : spec.scenes,
+      aspectRatio: cell.aspect ?? spec.aspectRatio,
+      voiceId: explicitVoice ?? voiceIds[i % voiceIds.length],
+      variant: cellVariant(cell) ?? {},
+    })
+  );
+}
+
+/** 矩阵展开:幻灯片腿(hook 作文案关键词前缀 + 比例轮转;图序洗牌既有) */
+export function toSlideshowTasksWithMatrix(
+  spec: SlideshowJobSpec,
+  plan: MatrixCell[]
+): SlideshowTask[] {
+  return plan.map((cell) =>
+    toSlideshowTask({
+      ...spec,
+      count: 1,
+      prompt: cell.hook ? `${cell.hook.text};${spec.prompt}` : spec.prompt,
+      aspectRatio: cell.aspect ?? spec.aspectRatio,
+      variant: cellVariant(cell),
+    })
   );
 }

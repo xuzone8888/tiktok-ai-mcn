@@ -1525,6 +1525,7 @@ function useAiGenTaskExecutor() {
             modelType,
             groupName: finalSnapshot.groupName,
             sceneTaskIds: finalSnapshot.scenes.map(s => s.upstreamTaskId ?? s.clientTaskId),
+            variant: finalSnapshot.variant,
           }),
           // 略大于服务端 maxDuration=300s(挂起请求会饿死串行队列,同 S1.2)
           signal: AbortSignal.timeout(330_000),
@@ -1772,6 +1773,7 @@ function useAssemblyTaskExecutor() {
             title: finalSnapshot.title,
             groupName: finalSnapshot.groupName,
             sceneTaskIds: finalSnapshot.scenes.map(s => s.clientTaskId),
+            variant: finalSnapshot.variant,
           }),
           signal: AbortSignal.timeout(330_000),
         });

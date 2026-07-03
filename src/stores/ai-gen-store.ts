@@ -55,6 +55,8 @@ export interface AiGenTask {
   durationSeconds: VideoDuration;
   quality: VideoQuality;
   scenes: AiGenSceneTask[];
+  /** 批量矩阵变体快照(S3.4;stitch 时透传落 generations.spec.variant) */
+  variant?: { hook_id?: string; hook_text?: string; voice_id?: string; aspect?: string };
   /** 拼接成片(最终交付物;generations.task_id = job id) */
   stitchedUrl: string | null;
   status: AiGenTaskStatus;

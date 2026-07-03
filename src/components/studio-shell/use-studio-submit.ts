@@ -10,10 +10,15 @@
 
 import { useCallback, useEffect } from "react";
 import {
+  buildMatrixPlan,
+  createJobId,
   toAiGenTasks,
+  toAiGenTasksWithMatrix,
   toAssemblyTasks,
+  toAssemblyTasksWithMatrix,
   toQuickGenImageTasks,
   toSlideshowTasks,
+  toSlideshowTasksWithMatrix,
   toVideoBatchTasks,
   type AiGenJobSpec,
   type AiGenSceneSpec,
@@ -641,9 +646,10 @@ export function useStudioSubmit() {
   );
 
   /**
-   * 从(编辑后的)蓝图再出一批(S2.2):渲染参数沿用原批次 spec 快照,
-   * 标题+勾选卖点重建文案关键词,产出新 Batch(同 blueprintId,新 batchId)。
-   * 台词行不进幻灯片腿(口播由服务端按关键词 diverse 生成),将用于 AI 生成腿。
+   * 从(编辑后的)蓝图再出一批(S2.2;S3.4 加批量矩阵):渲染参数沿用原批次
+   * spec 快照,标题+勾选卖点重建文案关键词,产出新 Batch(同 blueprintId,新
+   * batchId)。矩阵维度(选中 hooks × 比例 × 音色轮转)逐格变异 spec:
+   * hook 注入 hook 镜台词(幻灯片=关键词前缀),变体参数落 generations.spec.variant。
    */
   const rerunBlueprint = useCallback(
     (
@@ -652,7 +658,9 @@ export function useStudioSubmit() {
       blueprintId: string,
       count: number,
       /** 编辑后的分镜(AI 生成腿重跑时台词改动经此生效;幻灯片腿忽略) */
-      editedScenes?: AiGenSceneSpec[]
+      editedScenes?: AiGenSceneSpec[],
+      /** 批量矩阵(S3.4):选中 hooks 与比例多选,空=沿用基础 spec */
+      matrix?: { hooks?: Array<{ id: string; text: string }>; aspects?: Array<"9:16" | "16:9"> }
     ): SubmitResult => {
       const baseSpec = batch.spec as unknown as SlideshowJobSpec | AiGenJobSpec | AssemblyJobSpec;
 
@@ -683,7 +691,7 @@ export function useStudioSubmit() {
           groupName: studioGroupName(now),
           blueprintId,
         };
-        const tasks = toAssemblyTasks(assemblySpec);
+        const tasks = toAssemblyTasksWithMatrix(assemblySpec, buildMatrixPlan(clamped, matrix));
         useAssemblyStore.getState().addTasks(tasks);
         addBatch({
           id: batchId,
@@ -723,7 +731,7 @@ export function useStudioSubmit() {
           groupName: studioGroupName(now),
           blueprintId,
         };
-        const tasks = toAiGenTasks(aiGenSpec);
+        const tasks = toAiGenTasksWithMatrix(aiGenSpec, buildMatrixPlan(clamped, matrix));
         useAiGenStore.getState().addTasks(tasks);
         addBatch({
           id: batchId,
@@ -776,7 +784,7 @@ export function useStudioSubmit() {
         groupName: studioGroupName(now),
         blueprintId,
       };
-      const tasks = toSlideshowTasks(spec);
+      const tasks = toSlideshowTasksWithMatrix(spec, buildMatrixPlan(clamped, matrix));
       useSlideshowStore.getState().addTasks(tasks);
 
       addBatch({
@@ -831,7 +839,32 @@ export function useStudioSubmit() {
         useAssemblyStore.getState().retryTask(failedTaskId);
         return { ok: true, batchId: batch.id };
       }
-      // slideshow:按批次 spec 重建(重新洗牌图序,变体差异保持)
+      // slideshow:优先克隆失败任务的 renderRequest(保矩阵变体——hook 前缀
+      // 关键词/比例/variant 快照;按基础 spec 重建会让重试变回「基础组合」,
+      // 变体溯源跑偏还照常扣费,审查 high 实锤),仅换任务 id
+      const failedTask = useSlideshowStore.getState().tasks.find((t) => t.id === failedTaskId);
+      if (failedTask?.renderRequest) {
+        const id = createJobId("slideshow");
+        const nowIso = new Date().toISOString();
+        useSlideshowStore.getState().addTasks([
+          {
+            ...failedTask,
+            id,
+            status: "pending",
+            progress: 0,
+            outputUrl: undefined,
+            outputUrls: undefined,
+            thumbnailUrl: undefined,
+            errorMessage: undefined,
+            renderRequest: { ...failedTask.renderRequest, clientTaskIds: [id] },
+            createdAt: nowIso,
+            updatedAt: nowIso,
+          },
+        ]);
+        replaceJobRef(batch.id, failedTaskId, { kind, taskId: id });
+        return { ok: true, batchId: batch.id };
+      }
+      // 兜底(失败任务已被裁剪):按批次 spec 重建(重新洗牌图序)
       const spec = { ...(batch.spec as unknown as SlideshowJobSpec), count: 1 };
       const [task] = toSlideshowTasks(spec);
       useSlideshowStore.getState().addTasks([task]);
