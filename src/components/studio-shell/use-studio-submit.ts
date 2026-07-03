@@ -86,6 +86,10 @@ export interface StudioDraft {
   linkUrl?: string;
   /** 商品成片渲染腿:幻灯片(默认,分级积分)| AI 逐镜生成(video 计价)| 拼装口播(1分/镜,S3.1) */
   productRenderMode?: "slideshow" | "ai_gen" | "assembly";
+  /** 配方实例化(S3.5):seed-* 内置或用户配方 UUID;蓝图 scenes 按配方骨架填槽 */
+  recipeId?: string;
+  /** 选中配方的镜数(S3.5 审查实锤:assembly/ai_gen 逐镜计价按配方镜数而非图数) */
+  recipeSceneCount?: number;
   /** 门B 爆款拆解(S3.3):已直传 OSS 的视频 */
   deconstructVideo?: { url: string; name?: string } | null;
   /** 门B 权利确认(强制显式勾选,服务端二次校验) */
@@ -127,21 +131,29 @@ export function estimateCredits(draft: StudioDraft): number {
       ) * draft.count
     );
   }
+  // 逐镜腿镜数:配方实例化=配方镜数(与图数可不同,估价/门控按实扣口径——审查实锤);
+  // 默认结构=每图一镜
+  const sceneCount = Math.max(
+    draft.recipeId && draft.recipeSceneCount
+      ? draft.recipeSceneCount
+      : draft.attachmentUrls.length,
+    1
+  );
   if (draft.mode === "product" && draft.productRenderMode === "ai_gen") {
-    // AI 生成腿:每图一镜逐镜计价(拼接不新增扣费)
+    // AI 生成腿:逐镜计价(拼接不新增扣费)
     return (
       getVideoBatchTotalPrice(
         draft.video.modelType,
         draft.video.durationSeconds,
         draft.video.quality
       ) *
-      Math.max(draft.attachmentUrls.length, 1) *
+      sceneCount *
       draft.count
     );
   }
   if (draft.mode === "product" && draft.productRenderMode === "assembly") {
-    // 拼装口播腿:每图一镜,1 积分/镜(TTS+渲染;拼接不新增扣费)
-    return assemblyCreditsPerVideo(draft.attachmentUrls.length) * draft.count;
+    // 拼装口播腿:1 积分/镜(TTS+渲染;拼接不新增扣费)
+    return assemblyCreditsPerVideo(sceneCount) * draft.count;
   }
   if (draft.mode === "slideshow" || draft.mode === "product") {
     return slideshowCreditsPerVideo(draft.attachmentUrls.length) * draft.count;
@@ -427,6 +439,7 @@ export function useStudioSubmit() {
                         bgm_style: draft.slideshow.bgmEnabled ? "random" : "none",
                       },
               renderMode,
+              ...(draft.recipeId ? { recipeId: draft.recipeId } : {}),
               ...(draft.linkUrl
                 ? { sourceType: "product_link", sourceUrl: draft.linkUrl }
                 : {}),
@@ -443,8 +456,10 @@ export function useStudioSubmit() {
                 line: (s.line as string) ?? "",
                 visual: (s.visual as string) ?? "",
                 beat: s.beat as AiGenSceneSpec["beat"],
+                // 空串必须归一为 undefined:'' 非 nullish 会击穿下游
+                // 「visual 是 URL 则作参考图」的兜底链(审查实锤)
                 imageUrl:
-                  ((s.slot as { asset_ref?: string } | undefined)?.asset_ref as string) ??
+                  ((s.slot as { asset_ref?: string } | undefined)?.asset_ref as string) ||
                   undefined,
               }))
             : [];
@@ -506,12 +521,23 @@ export function useStudioSubmit() {
           spec = aiGenSpec as unknown as Record<string, unknown>;
         } else {
           // 变体在脚本层做:标题+勾选卖点作为文案关键词,服务端 diverse 模式
-          // 每条成片生成不同角度口播;图序差异由适配器洗牌提供(素材级)
+          // 每条成片生成不同角度口播;图序差异由适配器洗牌提供(素材级)。
+          // 配方实例化时:配方台词拼成整片脚本直达渲染端(否则配方对幻灯片
+          // 腿零效果——审查实锤)
           const selectedPoints = card.selling_points.filter((p) => p.selected);
           const keywords = [card.title, ...selectedPoints.map((p) => p.text)].join(";");
+          const recipeScript =
+            draft.recipeId && blueprintScenes.length > 0
+              ? blueprintScenes
+                  .map((s) => s.line.trim())
+                  .filter(Boolean)
+                  .map((l) => (/[。!?!?.]$/.test(l) ? l : `${l}。`))
+                  .join("")
+              : undefined;
           const slideshowSpec: SlideshowJobSpec = {
             kind: "slideshow",
             prompt: keywords,
+            scriptText: recipeScript,
             imageUrls: draft.attachmentUrls,
             aspectRatio: draft.slideshow.aspectRatio,
             durationPerImage: draft.slideshow.durationPerImage,
@@ -775,9 +801,19 @@ export function useStudioSubmit() {
       const keywords = [card.title, ...selected.map((p) => p.text)].join(";");
       const batchId = crypto.randomUUID();
       const now = new Date();
+      // 配方腿重跑:台词编辑经 scriptText 重建生效(否则沿用基础 spec 快照)
+      const rerunScript =
+        baseSpec.scriptText && editedScenes && editedScenes.length > 0
+          ? editedScenes
+              .map((s) => s.line.trim())
+              .filter(Boolean)
+              .map((l) => (/[。!?!?.]$/.test(l) ? l : `${l}。`))
+              .join("")
+          : baseSpec.scriptText;
       const spec: SlideshowJobSpec = {
         ...baseSpec,
         prompt: keywords,
+        scriptText: rerunScript,
         imageUrls,
         count: clamped,
         batchId,

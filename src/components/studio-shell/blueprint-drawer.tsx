@@ -11,6 +11,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { FileText, Loader2, Minus, Plus, RotateCcw, Save, Sparkles, X, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -119,6 +120,25 @@ export function BlueprintDrawer({ batch, onClose }: BlueprintDrawerProps) {
   const [hooksGenerating, setHooksGenerating] = useState(false);
   /** 比例多选(S3.4 矩阵维度;空=沿用批次 spec 的比例) */
   const [rerunAspects, setRerunAspects] = useState<Array<"9:16" | "16:9">>([]);
+  /** 存为配方(S3.5):脱敏建议稿,diff 确认弹窗数据(null=关闭) */
+  const [recipeDraft, setRecipeDraft] = useState<null | {
+    name: string;
+    scenes: Array<{
+      idx: number;
+      beat: string;
+      duration_ms: number;
+      slot_kind: string;
+      visual?: string;
+      original: string;
+      deidentified: string;
+    }>;
+    hooks: Array<{ id: string; type: string; original: string; deidentified: string }>;
+    globals: Record<string, unknown>;
+    renderMode: string | null;
+    origin: { viral_ref?: string; why_viral?: string; license?: string } | null;
+  }>(null);
+  const [deidentifying, setDeidentifying] = useState(false);
+  const [savingRecipe, setSavingRecipe] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [rerunCount, setRerunCount] = useState(3);
@@ -220,6 +240,91 @@ export function BlueprintDrawer({ batch, onClose }: BlueprintDrawerProps) {
   const toggleHook = (id: string) => {
     setHooks((prev) => prev.map((h) => (h.id === id ? { ...h, selected: !h.selected } : h)));
     setDirty(true);
+  };
+
+  /** 存为配方(S3.5):脱敏建议稿 → diff 确认弹窗(红队:LLM 脱敏必经人工确认) */
+  const startSaveRecipe = async () => {
+    if (dirty) {
+      const saved = await save();
+      if (!saved) return;
+    }
+    setDeidentifying(true);
+    try {
+      const res = await fetch("/api/studio/recipes/deidentify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ blueprintId }),
+      });
+      const result = await res.json();
+      if (result.success && result.data) {
+        setRecipeDraft(result.data);
+      } else {
+        toast({ title: "脱敏失败", description: result.error, variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "脱敏失败,请重试", variant: "destructive" });
+    } finally {
+      setDeidentifying(false);
+    }
+  };
+
+  const confirmSaveRecipe = async () => {
+    if (!recipeDraft) return;
+    if (!recipeDraft.name.trim()) {
+      toast({ title: "配方需要名称", variant: "destructive" });
+      return;
+    }
+    // 提交前指认空行(服务端整包 400 不说明哪一行——审查实锤)
+    const emptyScene = recipeDraft.scenes.find((s) => !s.deidentified.trim());
+    if (emptyScene) {
+      toast({
+        title: `第 ${emptyScene.idx + 1} 镜台词为空`,
+        description: "配方台词是骨架本体,请补上或恢复原文",
+        variant: "destructive",
+      });
+      return;
+    }
+    setSavingRecipe(true);
+    try {
+      const res = await fetch("/api/studio/recipes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: recipeDraft.name,
+          hooks: recipeDraft.hooks.map((h) => ({
+            id: h.id,
+            type: h.type,
+            text: h.deidentified,
+            selected: false,
+          })),
+          scenes: recipeDraft.scenes.map((s) => ({
+            idx: s.idx,
+            line: s.deidentified,
+            visual: s.visual ?? "",
+            slot: { kind: s.slot_kind, asset_ref: "" },
+            duration_ms: s.duration_ms,
+            beat: s.beat,
+          })),
+          globals: recipeDraft.globals,
+          renderMode: recipeDraft.renderMode,
+          sourceBlueprintId: blueprintId,
+          ...(recipeDraft.origin ? { origin: recipeDraft.origin } : {}),
+        }),
+      });
+      const result = await res.json();
+      if (result.success) {
+        setRecipeDraft(null);
+        toast({ title: "📕 配方已入库", description: recipeDraft.name });
+        // 通知 omnibox 刷新配方列表(否则本会话找不到新配方——审查实锤)
+        window.dispatchEvent(new CustomEvent("recipes-updated"));
+      } else {
+        toast({ title: "配方保存失败", description: result.error, variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "配方保存失败,请重试", variant: "destructive" });
+    } finally {
+      setSavingRecipe(false);
+    }
   };
 
   /** hook 候选生成(S3.4,商品蓝图;拆解蓝图 hook 来自原片分析) */
@@ -688,20 +793,37 @@ export function BlueprintDrawer({ batch, onClose }: BlueprintDrawerProps) {
       {/* 动作区 */}
       {!loading && !loadError && (card || isDeconstruct) && (
         <div className="space-y-2 border-t border-white/5 p-4">
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={!dirty || saving}
-            className="w-full gap-1.5"
-            onClick={() => void save()}
-          >
-            {saving ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <Save className="h-3.5 w-3.5" />
-            )}
-            {dirty ? "保存蓝图" : "已保存"}
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={!dirty || saving}
+              className="flex-1 gap-1.5"
+              onClick={() => void save()}
+            >
+              {saving ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Save className="h-3.5 w-3.5" />
+              )}
+              {dirty ? "保存蓝图" : "已保存"}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={deidentifying || saving}
+              className="flex-1 gap-1.5"
+              title="脱敏为可复用配方(台词槽位化,经 diff 确认后入配方库)"
+              onClick={() => void startSaveRecipe()}
+            >
+              {deidentifying ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <FileText className="h-3.5 w-3.5" />
+              )}
+              存为配方
+            </Button>
+          </div>
           {/* 比例多选(S3.4 矩阵维度;空=沿用批次比例) */}
           <div className="flex items-center gap-1.5">
             <span className="text-[11px] text-zinc-600">比例</span>
@@ -784,6 +906,113 @@ export function BlueprintDrawer({ batch, onClose }: BlueprintDrawerProps) {
             编辑只影响新批次;已提交批次按其提交时快照渲染。
           </p>
         </div>
+      )}
+
+      {/* 存为配方:脱敏 diff 确认弹窗(红队裁决:LLM 脱敏必经人工 diff——
+          左原文/右槽位稿可改,漏删的品牌词在这里人工兜)。
+          必须 Portal 到 body:aside 的 backdrop-blur 会成为 fixed 后代的
+          containing block,弹窗被困在 420px 右栏内(审查实锤) */}
+      {recipeDraft &&
+        typeof document !== "undefined" &&
+        createPortal(
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="flex max-h-[85vh] w-full max-w-xl flex-col rounded-2xl border border-white/10 bg-zinc-950 shadow-2xl">
+            <div className="border-b border-white/5 px-4 py-3">
+              <p className="text-sm font-medium text-zinc-100">存为配方:确认脱敏结果</p>
+              <p className="mt-0.5 text-[11px] text-zinc-500">
+                右列为槽位化后的模板(可改)——请检查是否残留商品名/品牌词/具体数值;
+                {"{商品名}"}/{"{卖点N}"}/{"{价格}"} 会在实例化时按新商品卡自动填充
+              </p>
+              {recipeDraft.origin?.license === "structure_only" && (
+                <p className="mt-1 text-[11px] text-rose-400">
+                  来源为爆款拆解:配方仅复刻结构,非复刻素材(structure_only 随配方携带)
+                </p>
+              )}
+            </div>
+            <div className="flex-1 space-y-3 overflow-y-auto p-4">
+              <input
+                value={recipeDraft.name}
+                onChange={(e) =>
+                  setRecipeDraft((d) => (d ? { ...d, name: e.target.value } : d))
+                }
+                maxLength={100}
+                placeholder="配方名称"
+                className="w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-zinc-100 focus:border-amber-400/50 focus:outline-none"
+              />
+              {recipeDraft.hooks.length > 0 && (
+                <p className="text-[11px] font-medium text-zinc-500">Hook 候选</p>
+              )}
+              {recipeDraft.hooks.map((h, i) => (
+                <div key={h.id} className="rounded-lg border border-white/5 bg-black/20 p-2">
+                  <p className="mb-1 text-[10px] text-zinc-600">
+                    [{h.type}] 原文:{h.original}
+                  </p>
+                  <textarea
+                    value={h.deidentified}
+                    onChange={(e) =>
+                      setRecipeDraft((d) => {
+                        if (!d) return d;
+                        const hooks = [...d.hooks];
+                        hooks[i] = { ...hooks[i], deidentified: e.target.value };
+                        return { ...d, hooks };
+                      })
+                    }
+                    maxLength={300}
+                    rows={1}
+                    className="w-full resize-none rounded-md border border-transparent bg-transparent px-1.5 py-1 text-xs text-zinc-200 focus:border-white/15 focus:bg-black/30 focus:outline-none"
+                  />
+                </div>
+              ))}
+              <p className="text-[11px] font-medium text-zinc-500">分镜台词</p>
+              {recipeDraft.scenes.map((s, i) => (
+                <div key={s.idx} className="rounded-lg border border-white/5 bg-black/20 p-2">
+                  <p className="mb-1 text-[10px] text-zinc-600">
+                    #{s.idx + 1}·{s.beat} 原文:{s.original}
+                  </p>
+                  <textarea
+                    value={s.deidentified}
+                    onChange={(e) =>
+                      setRecipeDraft((d) => {
+                        if (!d) return d;
+                        const scenes = [...d.scenes];
+                        scenes[i] = { ...scenes[i], deidentified: e.target.value };
+                        return { ...d, scenes };
+                      })
+                    }
+                    maxLength={500}
+                    rows={s.deidentified.length > 40 ? 2 : 1}
+                    className="w-full resize-none rounded-md border border-transparent bg-transparent px-1.5 py-1 text-xs text-zinc-200 focus:border-white/15 focus:bg-black/30 focus:outline-none"
+                  />
+                </div>
+              ))}
+            </div>
+            <div className="flex justify-end gap-2 border-t border-white/5 px-4 py-3">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={savingRecipe}
+                onClick={() => setRecipeDraft(null)}
+              >
+                取消
+              </Button>
+              <Button
+                variant="mermaid"
+                size="sm"
+                disabled={savingRecipe}
+                className="gap-1.5"
+                onClick={() => void confirmSaveRecipe()}
+              >
+                {savingRecipe ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Save className="h-3.5 w-3.5" />
+                )}
+                确认入库
+              </Button>
+            </div>
+          </div>
+        </div>,
+        document.body
       )}
 
       {/* 大批量/高积分二次确认(与 omnibox 同阈值) */}

@@ -2,6 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { normalizeCard, type ProductCard } from "@/lib/studio/product-vision";
+import {
+  getBuiltinRecipe,
+  instantiateRecipe,
+  requiredPointCount,
+  type Recipe,
+} from "@/lib/studio/recipes";
 
 export const dynamic = "force-dynamic";
 
@@ -125,10 +131,64 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const scenes = buildScenes(product, durationMs);
+    // 配方实例化(S3.5):recipeId 提供时按配方骨架填槽出 scenes/hooks,
+    // 替代默认图序骨架。seed-* 为内置常量(不依赖 recipes 表);UUID 为用户配方
+    const db = supabase as unknown as SupabaseClient;
+    const recipeId = typeof body?.recipeId === "string" ? body.recipeId.trim() : "";
+    let recipe: Pick<Recipe, "scenes" | "hooks"> | null = null;
+    let dbRecipeId: string | null = null;
+    if (recipeId) {
+      if (recipeId.startsWith("seed-")) {
+        recipe = getBuiltinRecipe(recipeId) ?? null;
+        if (!recipe) {
+          return NextResponse.json({ success: false, error: "内置配方不存在" }, { status: 400 });
+        }
+      } else if (/^[0-9a-f-]{36}$/i.test(recipeId)) {
+        const { data: recipeRow, error: recipeError } = await db
+          .from("recipes")
+          .select("id, scenes, hooks")
+          .eq("id", recipeId)
+          .eq("status", "active")
+          .maybeSingle();
+        if (recipeError || !recipeRow) {
+          return NextResponse.json({ success: false, error: "配方不存在或未就绪" }, { status: 400 });
+        }
+        recipe = recipeRow as unknown as Pick<Recipe, "scenes" | "hooks">;
+        dbRecipeId = recipeId;
+      } else {
+        return NextResponse.json({ success: false, error: "recipeId 非法" }, { status: 400 });
+      }
+    }
+
+    let scenes: unknown;
+    let hooks: unknown = [];
+    if (recipe) {
+      // 卖点门槛:模板槽位号超出勾选数会轮回复读同一卖点(「第一/第二/第三」
+      // 全念同一句的复读机成片,审查实锤)——提交前拦截
+      const needPoints = requiredPointCount([
+        ...(recipe.scenes ?? []).map((s) => s.line),
+        ...(recipe.hooks ?? []).map((h) => h.text),
+      ]);
+      const selectedCount = product.selling_points.filter((p) => p.selected).length;
+      if (needPoints > selectedCount) {
+        return NextResponse.json(
+          { success: false, error: `该配方需要至少勾选 ${needPoints} 个卖点(当前 ${selectedCount})` },
+          { status: 400 }
+        );
+      }
+      const instantiated = instantiateRecipe(recipe, {
+        title: product.title,
+        price: product.price,
+        images: product.images,
+        selling_points: product.selling_points,
+      });
+      scenes = instantiated.scenes;
+      hooks = instantiated.hooks;
+    } else {
+      scenes = buildScenes(product, durationMs);
+    }
 
     // blueprints 为 S0.1 新表,尚未进 database.ts 生成类型——用未参数化 client 访问
-    const db = supabase as unknown as SupabaseClient;
     const { data, error } = await db
       .from("blueprints")
       .insert({
@@ -139,10 +199,11 @@ export async function POST(request: NextRequest) {
           : { asset_urls: product.images },
         rights_ack: body?.rightsAck !== false, // 商品图腿=用户自传自有素材,默认确认
         product,
-        hooks: [],
+        hooks,
         scenes,
         globals,
         render_mode: renderMode,
+        ...(dbRecipeId ? { recipe_id: dbRecipeId } : {}),
         status: "ready",
       } as never)
       .select("id")
@@ -151,6 +212,27 @@ export async function POST(request: NextRequest) {
     if (error || !data) {
       console.error("[Studio Blueprints] insert failed:", error);
       return NextResponse.json({ success: false, error: "蓝图保存失败" }, { status: 500 });
+    }
+
+    // 配方使用计数(best-effort:读改写竞态可接受,失败不影响蓝图)
+    if (dbRecipeId) {
+      try {
+        const { data: r } = await db
+          .from("recipes")
+          .select("use_count")
+          .eq("id", dbRecipeId)
+          .maybeSingle();
+        if (r) {
+          await db
+            .from("recipes")
+            .update({
+              use_count: ((r as { use_count: number }).use_count ?? 0) + 1,
+            } as never)
+            .eq("id", dbRecipeId);
+        }
+      } catch {
+        // 忽略
+      }
     }
 
     return NextResponse.json({

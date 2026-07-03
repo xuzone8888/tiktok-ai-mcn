@@ -63,6 +63,7 @@ import {
   type VideoParams,
 } from "./use-studio-submit";
 import type { ProductCard } from "@/lib/studio/product-vision";
+import { BUILTIN_RECIPES } from "@/lib/studio/recipes";
 import { CharacterPicker, type CharacterOption } from "@/components/character-picker";
 import type { CharacterAssetSnapshot } from "@/lib/character-assets";
 
@@ -198,6 +199,95 @@ export function Omnibox({
   const [productRenderMode, setProductRenderMode] = useState<
     "slideshow" | "ai_gen" | "assembly"
   >("slideshow");
+
+  // ==================== 商品成片:配方(S3.5) ====================
+  // 默认结构 | 内置种子 | 用户配方(懒加载;存新配方后经 recipes-updated 事件刷新)
+  interface RecipeMeta {
+    id: string;
+    name: string;
+    sceneCount: number;
+    renderMode?: string | null;
+    aspect?: string;
+    durationMs?: number;
+  }
+  const [recipeId, setRecipeId] = useState<string>("");
+  const [recipeOptions, setRecipeOptions] = useState<RecipeMeta[]>([]);
+  const recipesLoadedRef = useRef(false);
+  useEffect(() => {
+    const load = () => {
+      fetch("/api/studio/recipes")
+        .then((res) => res.json())
+        .then((result) => {
+          const own = Array.isArray(result?.data?.recipes)
+            ? (result.data.recipes as Array<{
+                id: string;
+                name: string;
+                scenes?: unknown[];
+                render_mode?: string | null;
+                globals?: { aspect?: string; duration_per_image_ms?: number };
+              }>).map((r) => ({
+                id: r.id,
+                name: r.name,
+                sceneCount: Array.isArray(r.scenes) ? r.scenes.length : 0,
+                renderMode: r.render_mode,
+                aspect: r.globals?.aspect,
+                durationMs: r.globals?.duration_per_image_ms,
+              }))
+            : [];
+          setRecipeOptions(own);
+          recipesLoadedRef.current = true; // 成功才置位,失败下次进模式重试(审查实锤)
+        })
+        .catch(() => {});
+    };
+    if (mode === "product" && !recipesLoadedRef.current) load();
+    // 抽屉「存为配方」成功后广播刷新(否则本会话看不到新配方)
+    const onUpdated = () => load();
+    window.addEventListener("recipes-updated", onUpdated);
+    return () => window.removeEventListener("recipes-updated", onUpdated);
+  }, [mode]);
+
+  /** 选中配方的元数据(内置常量或已加载的用户配方) */
+  const selectedRecipeMeta: RecipeMeta | null = useMemo(() => {
+    if (!recipeId) return null;
+    const builtin = BUILTIN_RECIPES.find((r) => r.id === recipeId);
+    if (builtin) {
+      return {
+        id: builtin.id,
+        name: builtin.name,
+        sceneCount: builtin.scenes.length,
+        renderMode: builtin.render_mode,
+        aspect: builtin.globals?.aspect as string | undefined,
+        durationMs: builtin.globals?.duration_per_image_ms as number | undefined,
+      };
+    }
+    return recipeOptions.find((r) => r.id === recipeId) ?? null;
+  }, [recipeId, recipeOptions]);
+
+  /** 选配方即应用其渲染预设(腿/比例/每镜秒数)——配方 render_mode 写而不读
+      会让预设变死数据(审查实锤);用户随后仍可手动改 */
+  const applyRecipe = (id: string) => {
+    setRecipeId(id);
+    if (!id) return;
+    const builtin = BUILTIN_RECIPES.find((r) => r.id === id);
+    const meta = builtin
+      ? {
+          renderMode: builtin.render_mode,
+          aspect: builtin.globals?.aspect as string | undefined,
+          durationMs: builtin.globals?.duration_per_image_ms as number | undefined,
+        }
+      : recipeOptions.find((r) => r.id === id);
+    if (!meta) return;
+    if (meta.renderMode === "slideshow" || meta.renderMode === "assembly" || meta.renderMode === "ai_gen") {
+      setProductRenderMode(meta.renderMode);
+    }
+    setSlideshowParams((p) => ({
+      ...p,
+      ...(meta.aspect === "9:16" || meta.aspect === "16:9" ? { aspectRatio: meta.aspect } : {}),
+      ...(typeof meta.durationMs === "number" && meta.durationMs >= 500
+        ? { durationPerImage: Math.round(meta.durationMs / 100) / 10 }
+        : {}),
+    }));
+  };
 
   // ==================== 爆款拆解(门B,S3.3):mp4 预签名直传 + 权利勾选 ====================
   const [deconstructVideo, setDeconstructVideo] = useState<{
@@ -441,6 +531,11 @@ export function Omnibox({
           ? linkChip.url
           : undefined,
       productRenderMode: mode === "product" ? productRenderMode : undefined,
+      recipeId: mode === "product" && recipeId ? recipeId : undefined,
+      recipeSceneCount:
+        mode === "product" && selectedRecipeMeta?.sceneCount
+          ? selectedRecipeMeta.sceneCount
+          : undefined,
       deconstructVideo:
         mode === "deconstruct" && deconstructVideo?.status === "done" && deconstructVideo.url
           ? { url: deconstructVideo.url, name: deconstructVideo.name }
@@ -461,6 +556,8 @@ export function Omnibox({
       cardSource,
       linkChip,
       productRenderMode,
+      recipeId,
+      selectedRecipeMeta,
       deconstructVideo,
       deconstructRightsAck,
       count,
@@ -502,6 +599,7 @@ export function Omnibox({
         setDeconstructVideo(null);
         setDeconstructRightsAck(false);
         videoUploadNonceRef.current++;
+        setRecipeId("");
       }
     } finally {
       setSubmitting(false);
@@ -856,6 +954,30 @@ export function Omnibox({
               </button>
             ))}
           </div>
+        )}
+
+        {/* 商品成片:配方选择(S3.5——蓝图 scenes 按配方骨架填槽,替代默认图序结构) */}
+        {mode === "product" && (
+          <Select value={recipeId || "none"} onValueChange={(v) => applyRecipe(v === "none" ? "" : v)}>
+            <SelectTrigger className="h-7 w-auto gap-1 border-white/10 bg-black/30 px-2.5 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none" className="text-xs">
+                默认结构
+              </SelectItem>
+              {BUILTIN_RECIPES.map((r) => (
+                <SelectItem key={r.id} value={r.id} className="text-xs">
+                  📐 {r.name}
+                </SelectItem>
+              ))}
+              {recipeOptions.map((r) => (
+                <SelectItem key={r.id} value={r.id} className="text-xs">
+                  📕 {r.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         )}
 
         {mode === "video" || (mode === "product" && productRenderMode === "ai_gen") ? (

@@ -106,6 +106,12 @@ export interface SlideshowJobSpec extends JobSpecBase {
   voiceEnabled?: boolean;
   /** 预设库随机 BGM */
   bgmEnabled?: boolean;
+  /**
+   * 整片口播脚本(S3.5 配方腿):提供时经 aiCaption.generatedTexts 直达渲染端,
+   * 配方台词才会真正进幻灯片成片(否则口播仅由关键词 diverse 生成——审查实锤:
+   * 配方对默认幻灯片腿零效果)
+   */
+  scriptText?: string;
 }
 
 export interface AiGenSceneSpec extends AiGenSceneInput {
@@ -298,9 +304,10 @@ export function toSlideshowTask(spec: SlideshowJobSpec, opts: AdapterOptions = {
   // 素材级去同质化(BLUEPRINT §四):每个变体独立洗牌图序
   const images = shuffled(spec.imageUrls);
   const text = spec.prompt.trim();
-  const language = /[一-鿿]/.test(text) ? "zh" : "en";
+  const scriptText = spec.scriptText?.trim() || "";
+  const language = /[一-鿿]/.test(scriptText || text) ? "zh" : "en";
   const bgmEnabled = spec.bgmEnabled ?? false;
-  const voiceEnabled = !!(text && spec.voiceEnabled);
+  const voiceEnabled = !!((text || scriptText) && spec.voiceEnabled);
 
   // POST /api/video-batch/generate-slideshow 的完整请求体快照,
   // imagesPerVideo=全部图片 → 一次调用产出一条成片
@@ -313,14 +320,16 @@ export function toSlideshowTask(spec: SlideshowJobSpec, opts: AdapterOptions = {
     transition: spec.transition,
     kenburns: spec.kenburns ?? false,
     bgm: { enabled: bgmEnabled, mode: bgmEnabled ? "random" : "none" },
-    ...(text
+    ...(text || scriptText
       ? {
           aiCaption: {
             enabled: true,
             mode: "diverse",
-            keywords: text,
+            keywords: text || scriptText.slice(0, 100),
             style: "lively",
             language,
+            // 配方脚本直达渲染端(服务端优先用预生成文案,过短才重新生成)
+            ...(scriptText ? { generatedTexts: [scriptText] } : {}),
           },
         }
       : {}),
@@ -361,8 +370,9 @@ export function toAiGenTask(spec: AiGenJobSpec, opts: AdapterOptions = {}): AiGe
       idx: scene.idx,
       // 逐镜编译(scene 结构贯穿到生成端,BLUEPRINT §四渲染腿②)
       prompt: compileScenePrompt(scene, spec.productTitle, spec.aspectRatio, spec.durationSeconds),
+      // || 而非 ??:空串 imageUrl 会击穿 visual-URL 兜底(审查实锤)
       imageUrl:
-        scene.imageUrl ?? (scene.visual.startsWith("http") ? scene.visual : undefined),
+        scene.imageUrl || (scene.visual.startsWith("http") ? scene.visual : undefined),
       clientTaskId: `${id}-s${scene.idx}`,
       upstreamTaskId: null,
       videoUrl: null,
