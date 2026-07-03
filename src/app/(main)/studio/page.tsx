@@ -19,6 +19,7 @@ import { BatchCard } from "@/components/studio-shell/batch-card";
 import { JobDrawer } from "@/components/studio-shell/job-drawer";
 import { BlueprintDrawer } from "@/components/studio-shell/blueprint-drawer";
 import {
+  useDeconstructReconciler,
   useStudioSubmit,
   type StudioDraft,
 } from "@/components/studio-shell/use-studio-submit";
@@ -35,6 +36,8 @@ export default function StudioPage() {
   const setActiveBlueprintBatch = useStudioStore((state) => state.setActiveBlueprintBatch);
   const removeBatch = useStudioStore((state) => state.removeBatch);
   const { submit, retryJob, markLibrary } = useStudioSubmit();
+  // 门B 拆解在途卡对账(S3.3):刷新后按 videoUrl 找回服务端已完成的报告
+  useDeconstructReconciler();
 
   // ==================== 积分余额 ====================
   const [credits, setCredits] = useState<number | null>(null);

@@ -58,6 +58,12 @@ export interface StudioBatch {
   blueprintId?: string;
   /** @角色快照(卡头回显) */
   character?: Pick<CharacterAssetSnapshot, "id" | "name" | "avatar_url">;
+  /**
+   * 门B 拆解在途标记(S3.3):提交即插乐观卡,后台 fetch/刷新恢复由
+   * reconciler 按 videoUrl 对账(GET /api/studio/deconstruct);
+   * 解析成功(拿到 blueprintId)后清空。failedAt 非空 = 对账判死,可移除重试。
+   */
+  deconstructPending?: { videoUrl: string; failedAt?: string } | null;
 }
 
 export interface StudioState {
@@ -71,6 +77,13 @@ export interface StudioState {
 export interface StudioActions {
   addBatch: (batch: StudioBatch) => void;
   removeBatch: (batchId: string) => void;
+  /** 批次元数据补写(拆解卡从「拆解中」置为已解析/失败;只合并给定键) */
+  updateBatchMeta: (
+    batchId: string,
+    patch: Partial<
+      Pick<StudioBatch, "title" | "summary" | "spec" | "blueprintId" | "deconstructPending">
+    >
+  ) => void;
   /** 单条重试后替换 jobRef(旧任务 id → 新任务 id) */
   replaceJobRef: (batchId: string, oldTaskId: string, newRef: StudioJobRef) => void;
   /** 入库成功后标记(乐观 UI) */
@@ -108,6 +121,20 @@ export const useStudioStore = create<StudioState & StudioActions>()(
             state.batches.unshift(batch);
             if (state.batches.length > MAX_BATCHES) {
               state.batches.length = MAX_BATCHES;
+            }
+          });
+        },
+
+        updateBatchMeta: (batchId, patch) => {
+          set((state) => {
+            const batch = state.batches.find((b) => b.id === batchId);
+            if (!batch) return;
+            if (patch.title !== undefined) batch.title = patch.title;
+            if (patch.summary !== undefined) batch.summary = patch.summary;
+            if (patch.spec !== undefined) batch.spec = patch.spec;
+            if (patch.blueprintId !== undefined) batch.blueprintId = patch.blueprintId;
+            if (patch.deconstructPending !== undefined) {
+              batch.deconstructPending = patch.deconstructPending;
             }
           });
         },

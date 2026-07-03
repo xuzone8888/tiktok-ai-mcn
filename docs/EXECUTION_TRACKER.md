@@ -110,7 +110,14 @@
   - 基准 harness:scripts/deconstruct-benchmark.mjs(mp4 目录上传 OSS(重试 1 次,单条失败跳过不作废整跑)或 urls.txt→逐条打路由(420s 超时≥服务端最坏,修级联 429 冤杀)→打分:解析 30/转录 10/**时间线 15(看 quality 原始信号,消毒后单调恒真是死代码——审查 high 实锤)**/分镜 15/hook 15/why_viral 10/**cta 5(只认模型识别,末镜 beat 恒 cta 属模板)**→report.md;门槛=解析率≥90%+均分≥80+hook 完整率≥80%+人工抽查 5 条,样本<20 标注不作开 UI 依据;--cleanup 按 title 前缀兜底删行+删 OSS 对象)
   - 对抗审查(3 维度×3 反驳者,33 agent,8 实锤全闭环;2 条 0/3 驳回:PASS 无样本量校验(已顺手加标注)、成本放大面);**实弹冒烟 PASS×2**(用 S3.1 成片喂 qwen:40s 出报告,逐字转录准确、6 分镜节拍、hook/cta/why_viral 有洞察;幂等重放 0.7s fromCache;负例闸 rightsAck/外部 URL 均 400;落库溯源字段全对,测试行已清)
   - **待用户:20 条真实爆款 mp4 到位后跑 `node scripts/deconstruct-benchmark.mjs <目录>`(dev server 3100 需在跑),达标(自动三线+人工抽查)才开 S3.3 UI**
-- **下一步:**执行 S3.3(门B UI,feature flag 后置)。待用户手动:①(可选)线上对原失败批次点「重试失败 1 条」体感确认;②Supabase dashboard 执行 20260702_drop_link_video.sql;③**为基准备 20 条真实爆款 mp4(本地文件夹即可)**
+- **S3.3 门B UI 完成(2026-07-03,tsc+build 过,对抗审查 5 实锤闭环,数据链实弹验证 PASS;feature flag 后置)**:
+  - 链路:omnibox「爆款拆解」模式(**NEXT_PUBLIC_ENABLE_DECONSTRUCT=1 才显示**,基准达标前生产不开;本机 .env.local 已加)——mp4 预签名直传(oss-credentials+xhr PUT,≤200MB 预检,上传代际 nonce)+视频 chip+**强制权利勾选**(仅复用结构与创意)→ 发送即插「拆解中…」乐观卡**立刻返回**(fetch 页面后台续跑 420s)→ 成功更新卡为「结构报告」+右栏空闲才自动开抽屉;失败判死可移除重试
+  - **对账恢复(审查 high 实锤修复)**:新 GET /api/studio/deconstruct?videoUrl(按 URL 查 24h 内 ready 拆解蓝图,零 qwen)+useDeconstructReconciler(挂 studio 页:20s 首查/30s 轮询/15min 判死)——刷新/关页丢请求不再产生不可见孤儿蓝图,也不再重烧 qwen(原同步等待设计:刷新即孤儿+重传新 URL 必幂等 miss 双倍成本)
+  - 报告抽屉(blueprint-drawer isDeconstruct 分支):hook 卡(类型徽章+文案+为什么留得住人)/「这条为什么火」列表/节奏条(beat 配色按时长比例)/CTA 卡/完整转录折叠/逐镜台词编辑(共用,引导「出片前替换为自己的商品」);save 只 PATCH scenes;「用此结构出 N 条」走既有 ai_gen rerun 链(spec 存 grok/9:16/10s 骨架,合成最小卡,**出片一律弹 structure_only 确认**);GET 蓝图路由 select 加 origin
+  - 其余审查修复:成功回调不再无条件清全局草稿(乐观返回后 reset=点击即清,与其他模式一致);确认弹窗阈值/文案改用 draft.count(修其他模式遗留 stepper 值在拆解模式弹「N 个图片任务」);拆解出片批次标「结构复刻」(修 rerun 硬编码 mode='product' 丢溯源);报告入口 chip 文案「报告」;cta 占位不再假承诺(按腿说明留空行为)
+  - 实弹验证 PASS(.temp/s33-verify.mjs):拆解→GET 蓝图带 origin.report→PATCH 纯 scenes 回读一致→GET 对账正反例(found/blueprintId/report 完整;不存在 URL found=false),测试行已清。**UI 手感层(模式切换/上传进度/报告排版/确认弹窗)留人工验收**(flag 开着,dev:3100 即可走查)
+  - 偏差记录:「换商品重生成」的 LLM 自动逐镜重写不在本期(红队裁决:门B MVP 只出结构报告;当前替换=用户在抽屉手动改写台词+确认,自动重写留首批付费后);移除「拆解中」卡后服务端仍完成的蓝图成孤儿(用户显式操作,可接受);hooks 候选仍未在抽屉展示(S3.4)
+- **下一步:**执行 S3.4(hooks 生成源+批量矩阵)。待用户手动:①(可选)线上对原失败批次点「重试失败 1 条」体感确认;②Supabase dashboard 执行 20260702_drop_link_video.sql;③**为基准备 20 条真实爆款 mp4(本地文件夹即可)**——达标后把 NEXT_PUBLIC_ENABLE_DECONSTRUCT=1 加进生产 env 开 UI
 - ~~**下一步:S1+S2 人工验收 → S3**~~(已完成,见上):①dev server 真实登录态走查:S1 四路径 + 贴海外链接(Shopify 站最稳)→蓝图→改卖点→3 变体 + AI 生成腿一条(需 MAC_WORKER_URL 隧道通,留意 worker /api/stitch 无生产先例)+ /link-video 死链确认;②用户经 dashboard 执行 20260702_drop_link_video.sql(含退款清扫+归档,先看 NOTICE 输出);③S3 = 拼装腿+爆款拆解(20 条基准门槛)+批量矩阵+存为配方(BLUEPRINT §七,收钱线在 S2 后)
 - **分支**:`claude/zealous-leavitt-65253a`(worktree:E:\StarGaze\.claude\worktrees\zealous-leavitt-65253a,自 877dc61 续;S2 及以前在 practical-curie-42f4b1)。S3 期间只本地 commit,push main=自动生产部署,须等人工验收后由用户裁决
 - **待用户/环境**:S0.1 生产执行——**exec_sql RPC 在生产库不存在**(老 runner 从没跑成过),执行通道=用户登录 Supabase dashboard SQL editor,我经浏览器贴 SQL 执行(源 IP 预检已通过:生产 source 取值 8 种全部被「基础枚举+batch_video% 通配」覆盖)。届时连同 20260702_drop_viral_clone.sql 一起执行。

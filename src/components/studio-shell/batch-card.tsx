@@ -95,7 +95,11 @@ export function BatchCard({
                     ? "幻灯片"
                     : batch.summary.mode === "product"
                       ? "商品成片"
-                      : batch.summary.mode}
+                      : batch.summary.mode === "deconstruct"
+                        ? "爆款拆解"
+                        : batch.summary.mode === "structure_rerun"
+                          ? "结构复刻"
+                          : batch.summary.mode}
             </Chip>
             {batch.summary.modelLabel && <Chip>{batch.summary.modelLabel}</Chip>}
             {batch.summary.aspectRatio && <Chip>{batch.summary.aspectRatio === "auto" ? "自动比例" : batch.summary.aspectRatio}</Chip>}
@@ -110,10 +114,14 @@ export function BatchCard({
                 type="button"
                 onClick={() => onOpenBlueprint(batch)}
                 className="flex items-center gap-1 rounded-md border border-amber-400/30 bg-amber-500/10 px-2 py-0.5 text-[11px] text-amber-300 transition-colors hover:bg-amber-500/20"
-                title="打开蓝图:改卖点/台词,再出一批"
+                title={
+                  batch.summary.mode === "deconstruct"
+                    ? "打开结构报告:hook/台词/节奏,可用此结构出片"
+                    : "打开蓝图:改卖点/台词,再出一批"
+                }
               >
                 <FileText className="h-3 w-3" />
-                蓝图
+                {batch.summary.mode === "deconstruct" ? "报告" : "蓝图"}
               </button>
             )}
             <span className="flex items-center gap-1 text-[11px] text-zinc-500">

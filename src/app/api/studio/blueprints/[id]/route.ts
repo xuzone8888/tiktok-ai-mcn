@@ -89,7 +89,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
     const { data, error } = await db
       .from("blueprints")
       .select(
-        "id, source_type, source_ref, rights_ack, product, hooks, scenes, globals, render_mode, status, version, created_at, updated_at"
+        "id, source_type, source_ref, rights_ack, product, hooks, scenes, globals, render_mode, origin, status, version, created_at, updated_at"
       )
       .eq("id", id)
       .maybeSingle();

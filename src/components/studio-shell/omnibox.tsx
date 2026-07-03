@@ -20,6 +20,7 @@ import {
   Package,
   Plus,
   Send,
+  Video,
   X,
   Zap,
 } from "lucide-react";
@@ -51,6 +52,7 @@ import {
   type VideoQuality,
 } from "@/types/video-batch";
 import {
+  DECONSTRUCT_ENABLED,
   estimateCredits,
   validateDraft,
   VIDEO_MODEL_LABELS,
@@ -93,7 +95,12 @@ const MODES: { key: StudioMode; label: string }[] = [
   { key: "video", label: "视频" },
   { key: "slideshow", label: "幻灯片" },
   { key: "product", label: "商品成片" },
+  // 门B(S3.3):20 条真实爆款基准达标前 flag 关闭(红队裁决)
+  ...(DECONSTRUCT_ENABLED ? [{ key: "deconstruct" as StudioMode, label: "爆款拆解" }] : []),
 ];
+
+/** 门B 上传限制:客户端预检(预签名 PUT 本身不校验大小) */
+const DECONSTRUCT_MAX_MB = 200;
 
 const IMAGE_ASPECT_OPTIONS = ["auto", "1:1", "9:16", "16:9", "3:4", "4:3"];
 const VIDEO_MODEL_OPTIONS = Object.keys(VIDEO_MODEL_LABELS) as VideoModelType[];
@@ -191,6 +198,78 @@ export function Omnibox({
   const [productRenderMode, setProductRenderMode] = useState<
     "slideshow" | "ai_gen" | "assembly"
   >("slideshow");
+
+  // ==================== 爆款拆解(门B,S3.3):mp4 预签名直传 + 权利勾选 ====================
+  const [deconstructVideo, setDeconstructVideo] = useState<{
+    name: string;
+    url?: string;
+    status: "uploading" | "done" | "failed";
+    progress: number;
+    error?: string;
+  } | null>(null);
+  const [deconstructRightsAck, setDeconstructRightsAck] = useState(false);
+  const videoInputRef = useRef<HTMLInputElement>(null);
+  // 上传代际:换文件时旧上传的迟到回调作废
+  const videoUploadNonceRef = useRef(0);
+
+  const uploadDeconstructVideo = async (file: File) => {
+    if (!/\.(mp4|mov|webm)$/i.test(file.name) && !file.type.startsWith("video/")) {
+      setDeconstructVideo({ name: file.name, status: "failed", progress: 0, error: "只支持 mp4/mov/webm" });
+      return;
+    }
+    if (file.size > DECONSTRUCT_MAX_MB * 1024 * 1024) {
+      setDeconstructVideo({
+        name: file.name,
+        status: "failed",
+        progress: 0,
+        error: `视频超过 ${DECONSTRUCT_MAX_MB}MB,请压缩后再传`,
+      });
+      return;
+    }
+    const nonce = ++videoUploadNonceRef.current;
+    setDeconstructVideo({ name: file.name, status: "uploading", progress: 3 });
+    try {
+      const credRes = await fetch("/api/upload/oss-credentials", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ filename: file.name, contentType: file.type || "video/mp4" }),
+      });
+      const cred = await credRes.json();
+      if (!credRes.ok || !cred?.success || !cred.data?.uploadUrl) {
+        throw new Error(cred?.error || "获取上传凭证失败");
+      }
+      const publicUrl: string = await new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.upload.onprogress = (e) => {
+          if (e.lengthComputable && nonce === videoUploadNonceRef.current) {
+            setDeconstructVideo((v) =>
+              v ? { ...v, progress: Math.round(5 + (e.loaded / e.total) * 92) } : v
+            );
+          }
+        };
+        xhr.onload = () =>
+          xhr.status >= 200 && xhr.status < 300
+            ? resolve(cred.data.publicUrl)
+            : reject(new Error(`上传失败 (${xhr.status})`));
+        xhr.onerror = () => reject(new Error("网络错误"));
+        xhr.ontimeout = () => reject(new Error("上传超时"));
+        xhr.open("PUT", cred.data.uploadUrl);
+        xhr.setRequestHeader("Content-Type", file.type || "video/mp4");
+        xhr.timeout = 600_000;
+        xhr.send(file);
+      });
+      if (nonce !== videoUploadNonceRef.current) return;
+      setDeconstructVideo({ name: file.name, url: publicUrl, status: "done", progress: 100 });
+    } catch (e) {
+      if (nonce !== videoUploadNonceRef.current) return;
+      setDeconstructVideo({
+        name: file.name,
+        status: "failed",
+        progress: 0,
+        error: e instanceof Error ? e.message : "上传失败",
+      });
+    }
+  };
 
   // ==================== 商品成片:自动分析商品卡 ====================
   const [productCard, setProductCard] = useState<ProductCard | null>(null);
@@ -362,7 +441,12 @@ export function Omnibox({
           ? linkChip.url
           : undefined,
       productRenderMode: mode === "product" ? productRenderMode : undefined,
-      count,
+      deconstructVideo:
+        mode === "deconstruct" && deconstructVideo?.status === "done" && deconstructVideo.url
+          ? { url: deconstructVideo.url, name: deconstructVideo.name }
+          : undefined,
+      deconstructRightsAck: mode === "deconstruct" ? deconstructRightsAck : undefined,
+      count: mode === "deconstruct" ? 1 : count,
     }),
     [
       mode,
@@ -377,6 +461,8 @@ export function Omnibox({
       cardSource,
       linkChip,
       productRenderMode,
+      deconstructVideo,
+      deconstructRightsAck,
       count,
     ]
   );
@@ -413,6 +499,9 @@ export function Omnibox({
         setLinkHint(null);
         linkNonceRef.current++;
         linkInjectedUrlsRef.current = []; // 附件已由页面层清空,指针同步复位
+        setDeconstructVideo(null);
+        setDeconstructRightsAck(false);
+        videoUploadNonceRef.current++;
       }
     } finally {
       setSubmitting(false);
@@ -421,7 +510,9 @@ export function Omnibox({
 
   const handleSend = () => {
     if (sendDisabled || submitting) return;
-    if (count > CONFIRM_COUNT_THRESHOLD || estimated > CONFIRM_CREDITS_THRESHOLD) {
+    // 阈值按 draft.count(拆解模式恒 1):裸 count 会把其他模式遗留的 stepper
+    // 值带进拆解模式,弹出内容错误的批量确认(审查实锤)
+    if (draft.count > CONFIRM_COUNT_THRESHOLD || estimated > CONFIRM_CREDITS_THRESHOLD) {
       setConfirmOpen(true);
       return;
     }
@@ -518,6 +609,60 @@ export function Omnibox({
           >
             <X className="h-3.5 w-3.5" />
           </button>
+        </div>
+      )}
+
+      {/* 爆款拆解:视频 chip + 权利确认(门B,强制显式勾选) */}
+      {mode === "deconstruct" && (
+        <div className="space-y-2 border-b border-white/5 px-4 py-2">
+          {deconstructVideo ? (
+            <div className="flex items-center gap-2 text-xs">
+              <Video className="h-3.5 w-3.5 shrink-0 text-rose-300" />
+              {deconstructVideo.status === "uploading" ? (
+                <span className="flex min-w-0 flex-1 items-center gap-2 text-rose-300">
+                  <span className="truncate">{deconstructVideo.name}</span>
+                  <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
+                  <span className="shrink-0 tabular-nums">{deconstructVideo.progress}%</span>
+                </span>
+              ) : deconstructVideo.status === "failed" ? (
+                <span className="min-w-0 flex-1 truncate text-red-400">
+                  {deconstructVideo.name}:{deconstructVideo.error}
+                </span>
+              ) : (
+                <span className="min-w-0 flex-1 truncate text-zinc-300">
+                  {deconstructVideo.name}
+                  <span className="ml-1 text-zinc-600">已上传</span>
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={() => {
+                  videoUploadNonceRef.current++;
+                  setDeconstructVideo(null);
+                }}
+                className="flex shrink-0 items-center gap-1 rounded-md border border-white/15 px-2.5 py-1 text-zinc-400 transition-colors hover:border-red-400/40 hover:text-red-300"
+              >
+                <X className="h-3.5 w-3.5" />
+                移除
+              </button>
+            </div>
+          ) : (
+            <p className="text-xs text-zinc-500">
+              上传一条爆款视频(mp4,≤{DECONSTRUCT_MAX_MB}MB)→ 出结构报告:hook 类型/逐镜台词/节奏/CTA——这条为什么火
+            </p>
+          )}
+          <label className="flex cursor-pointer items-start gap-2 text-[11px] leading-relaxed text-zinc-400">
+            <input
+              type="checkbox"
+              checked={deconstructRightsAck}
+              onChange={(e) => setDeconstructRightsAck(e.target.checked)}
+              className="mt-0.5 accent-rose-400"
+            />
+            <span>
+              我确认拥有分析该视频的权利,且仅复用其<b className="text-zinc-300">结构与创意</b>
+              ——原片画面与声音不会进入任何生成内容
+            </span>
+          </label>
         </div>
       )}
 
@@ -781,6 +926,10 @@ export function Omnibox({
               </Select>
             )}
           </>
+        ) : mode === "deconstruct" ? (
+          <span className="text-[11px] text-zinc-600">
+            拆解免费(限 3 次/分,30 次/天);耗时约 1-5 分钟
+          </span>
         ) : mode === "product" && productRenderMode === "assembly" ? (
           <>
             <Select
@@ -920,38 +1069,62 @@ export function Omnibox({
           </>
         )}
 
-        {/* 数量 stepper */}
-        <div className="ml-auto flex items-center gap-1 rounded-lg border border-white/10 bg-black/30 px-1 py-0.5">
-          <button
-            type="button"
-            onClick={() => setCount((c) => Math.max(1, c - 1))}
-            className="rounded p-1 text-zinc-400 hover:text-white"
-          >
-            <Minus className="h-3 w-3" />
-          </button>
-          <span className="min-w-[3ch] text-center text-xs tabular-nums text-zinc-200">
-            ×{count}
-          </span>
-          <button
-            type="button"
-            onClick={() => setCount((c) => Math.min(100, c + 1))}
-            className="rounded p-1 text-zinc-400 hover:text-white"
-          >
-            <Plus className="h-3 w-3" />
-          </button>
-        </div>
+        {/* 数量 stepper(拆解模式恒为 1,隐藏) */}
+        {mode !== "deconstruct" && (
+          <div className="ml-auto flex items-center gap-1 rounded-lg border border-white/10 bg-black/30 px-1 py-0.5">
+            <button
+              type="button"
+              onClick={() => setCount((c) => Math.max(1, c - 1))}
+              className="rounded p-1 text-zinc-400 hover:text-white"
+            >
+              <Minus className="h-3 w-3" />
+            </button>
+            <span className="min-w-[3ch] text-center text-xs tabular-nums text-zinc-200">
+              ×{count}
+            </span>
+            <button
+              type="button"
+              onClick={() => setCount((c) => Math.min(100, c + 1))}
+              className="rounded p-1 text-zinc-400 hover:text-white"
+            >
+              <Plus className="h-3 w-3" />
+            </button>
+          </div>
+        )}
       </div>
 
       {/* 输入区 */}
       <div className="flex items-end gap-2 px-4 py-3">
-        <button
-          type="button"
-          onClick={() => fileInputRef.current?.click()}
-          className="shrink-0 rounded-lg border border-white/10 bg-black/30 p-2 text-zinc-400 transition-colors hover:text-white"
-          title="添加素材图"
-        >
-          <ImagePlus className="h-4 w-4" />
-        </button>
+        {mode === "deconstruct" ? (
+          <button
+            type="button"
+            onClick={() => videoInputRef.current?.click()}
+            className="shrink-0 rounded-lg border border-white/10 bg-black/30 p-2 text-zinc-400 transition-colors hover:text-white"
+            title="上传爆款视频(mp4)"
+          >
+            <Video className="h-4 w-4" />
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            className="shrink-0 rounded-lg border border-white/10 bg-black/30 p-2 text-zinc-400 transition-colors hover:text-white"
+            title="添加素材图"
+          >
+            <ImagePlus className="h-4 w-4" />
+          </button>
+        )}
+        <input
+          ref={videoInputRef}
+          type="file"
+          accept="video/mp4,video/quicktime,video/webm"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) void uploadDeconstructVideo(file);
+            e.target.value = "";
+          }}
+        />
         <button
           type="button"
           disabled={!characterApplicable}
@@ -1026,13 +1199,17 @@ export function Omnibox({
                 ? "拖入 2-15 张图;这里写文案主题(可选,AI 生成口播文案与配音)…"
                 : mode === "product"
                   ? "拖入 2-9 张商品图,或粘贴 Amazon/Shopify/TikTok Shop 商品链接;发送=按勾选卖点批量出成片"
-                  : "描述你要的图片,可拖入参考图…"
+                  : mode === "deconstruct"
+                    ? "可选:给这条爆款做个备注(作为报告标题)…"
+                    : "描述你要的图片,可拖入参考图…"
           }
           rows={3}
           className="max-h-56 min-h-[72px] flex-1 resize-none bg-transparent text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none"
         />
         <div className="flex shrink-0 flex-col items-end gap-1.5">
-          {hasFailedAttachment ? (
+          {submitting && mode === "deconstruct" ? (
+            <span className="text-[11px] text-rose-300">拆解中,约 1-5 分钟,请勿关闭页面…</span>
+          ) : hasFailedAttachment ? (
             <span className="text-[11px] text-red-400">有素材上传失败,移除后可发送</span>
           ) : (
             <span
@@ -1069,7 +1246,7 @@ export function Omnibox({
           <AlertDialogHeader>
             <AlertDialogTitle>确认批量提交</AlertDialogTitle>
             <AlertDialogDescription>
-              将提交 {count} 个
+              将提交 {draft.count} 个
               {mode === "video"
                 ? "视频"
                 : mode === "product" && productRenderMode === "ai_gen"

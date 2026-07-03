@@ -8,7 +8,7 @@
  * Studio 不发任何轮询,状态由 BTM 写回宿主 store 驱动(裁决,PLAN §五)。
  */
 
-import { useCallback } from "react";
+import { useCallback, useEffect } from "react";
 import {
   toAiGenTasks,
   toAssemblyTasks,
@@ -22,6 +22,7 @@ import {
   type SlideshowJobSpec,
   type VideoJobSpec,
 } from "@/lib/studio/job-spec";
+import { useToast } from "@/hooks/use-toast";
 import { useVideoBatchStore } from "@/stores/video-batch-store";
 import { useQuickGenStore } from "@/stores/quick-gen-store";
 import { useSlideshowStore } from "@/stores/slideshow-store";
@@ -38,7 +39,10 @@ import type { ProductCard } from "@/lib/studio/product-vision";
 // Draft 类型(omnibox 唯一真值:模式切换器 + 参数 chips + 附件 + @角色)
 // ============================================================================
 
-export type StudioMode = "image" | "video" | "slideshow" | "product";
+export type StudioMode = "image" | "video" | "slideshow" | "product" | "deconstruct";
+
+/** 门B UI 开关(红队裁决:20 条真实爆款基准达标才开;服务端路由不受此限,供基准 harness 打) */
+export const DECONSTRUCT_ENABLED = process.env.NEXT_PUBLIC_ENABLE_DECONSTRUCT === "1";
 
 export interface VideoParams {
   modelType: VideoModelType;
@@ -77,6 +81,10 @@ export interface StudioDraft {
   linkUrl?: string;
   /** 商品成片渲染腿:幻灯片(默认,分级积分)| AI 逐镜生成(video 计价)| 拼装口播(1分/镜,S3.1) */
   productRenderMode?: "slideshow" | "ai_gen" | "assembly";
+  /** 门B 爆款拆解(S3.3):已直传 OSS 的视频 */
+  deconstructVideo?: { url: string; name?: string } | null;
+  /** 门B 权利确认(强制显式勾选,服务端二次校验) */
+  deconstructRightsAck?: boolean;
   count: number;
 }
 
@@ -104,6 +112,7 @@ export function assemblyCreditsPerVideo(sceneCount: number): number {
 
 /** 预估积分(展示用;权威扣退在服务端网关) */
 export function estimateCredits(draft: StudioDraft): number {
+  if (draft.mode === "deconstruct") return 0; // 拆解 MVP 免费(服务端频控兜滥用)
   if (draft.mode === "video") {
     return (
       getVideoBatchTotalPrice(
@@ -136,6 +145,13 @@ export function estimateCredits(draft: StudioDraft): number {
 }
 
 export function validateDraft(draft: StudioDraft): string | null {
+  if (draft.mode === "deconstruct") {
+    if (!draft.deconstructVideo?.url) return "请先上传要拆解的爆款视频(mp4)";
+    if (draft.deconstructRightsAck !== true) {
+      return "请勾选权利确认(仅复用结构与创意)";
+    }
+    return null;
+  }
   if (draft.mode === "video") {
     if (!draft.text.trim() && draft.attachmentUrls.length === 0) {
       return "视频任务需要提示词或至少一张素材图";
@@ -170,6 +186,9 @@ function batchTitle(draft: StudioDraft): string {
   if (draft.mode === "video") return "图生视频批次";
   if (draft.mode === "slideshow") return "轮播成片批次";
   if (draft.mode === "product") return "商品成片批次";
+  if (draft.mode === "deconstruct") {
+    return draft.deconstructVideo?.name ? `拆解·${draft.deconstructVideo.name}` : "爆款拆解";
+  }
   return "图片批次";
 }
 
@@ -191,7 +210,120 @@ export interface SubmitResult {
   batchId?: string;
 }
 
+// ---------------------------------------------------------------------------
+// 门B 拆解(S3.3,审查重构):提交即插「拆解中」乐观卡立刻返回,fetch 在页面
+// 后台续跑;刷新丢请求由 reconciler 按 videoUrl 对账恢复(服务端幂等锚保证
+// 同 URL 不重跑 qwen)。以下为共享的结果落卡/判死助手(模块级,store 经
+// getState 访问,供在途回调与 reconciler 两条路径复用)。
+// ---------------------------------------------------------------------------
+
+interface DeconstructResultData {
+  blueprintId: string;
+  scenes?: unknown;
+  report?: { summary?: string };
+}
+
+function applyDeconstructResult(batchId: string, data: DeconstructResultData): void {
+  const store = useStudioStore.getState();
+  const batch = store.batches.find((b) => b.id === batchId);
+  if (!batch || !batch.deconstructPending) return; // 已解析/已移除
+  const sceneList = Array.isArray(data.scenes)
+    ? (data.scenes as Array<Record<string, unknown>>)
+    : [];
+  // spec 存 ai_gen 骨架:报告抽屉「用此结构出片」直接走既有 rerun 链
+  const aiGenSpec: AiGenJobSpec = {
+    kind: "ai_gen",
+    prompt: "",
+    modelType: "grok",
+    aspectRatio: "9:16",
+    durationSeconds: 10,
+    quality: "standard",
+    scenes: sceneList.map((s) => ({
+      idx: s.idx as number,
+      line: (s.line as string) ?? "",
+      visual: (s.visual as string) ?? "",
+      beat: s.beat as AiGenSceneSpec["beat"],
+    })),
+    productTitle: batch.title,
+    count: 1,
+    batchId,
+    blueprintId: data.blueprintId,
+  };
+  store.updateBatchMeta(batchId, {
+    blueprintId: data.blueprintId,
+    spec: aiGenSpec as unknown as Record<string, unknown>,
+    summary: {
+      ...batch.summary,
+      modelLabel: "结构报告",
+      attachmentCount: sceneList.length,
+    },
+    deconstructPending: null,
+  });
+  // 右栏空闲才自动打开报告(不打断用户正在看的任务/蓝图)
+  const fresh = useStudioStore.getState();
+  if (!fresh.activeJob && !fresh.activeBlueprintBatchId) {
+    fresh.setActiveBlueprintBatch(batchId);
+  }
+}
+
+function markDeconstructFailed(batchId: string, message: string): void {
+  const store = useStudioStore.getState();
+  const batch = store.batches.find((b) => b.id === batchId);
+  if (!batch || !batch.deconstructPending || batch.deconstructPending.failedAt) return;
+  store.updateBatchMeta(batchId, {
+    summary: { ...batch.summary, modelLabel: `拆解失败:${message.slice(0, 40)}` },
+    deconstructPending: {
+      ...batch.deconstructPending,
+      failedAt: new Date().toISOString(),
+    },
+  });
+}
+
+/** 拆解在途卡对账:刷新后按 videoUrl 轮询服务端结果,15 分钟未见判死 */
+export function useDeconstructReconciler() {
+  const batches = useStudioStore((s) => s.batches);
+  const pendingKey = batches
+    .filter((b) => b.deconstructPending && !b.deconstructPending.failedAt)
+    .map((b) => b.id)
+    .join(",");
+
+  useEffect(() => {
+    if (!pendingKey) return;
+    let cancelled = false;
+    const tick = async () => {
+      const list = useStudioStore
+        .getState()
+        .batches.filter((b) => b.deconstructPending && !b.deconstructPending.failedAt);
+      for (const b of list) {
+        try {
+          const res = await fetch(
+            `/api/studio/deconstruct?videoUrl=${encodeURIComponent(b.deconstructPending!.videoUrl)}`
+          );
+          const body = await res.json();
+          if (cancelled) return;
+          if (body.success && body.data?.found) {
+            applyDeconstructResult(b.id, body.data as DeconstructResultData);
+          } else if (Date.now() - new Date(b.createdAt).getTime() > 15 * 60_000) {
+            markDeconstructFailed(b.id, "超时未完成,可移除本卡后重新提交");
+          }
+        } catch {
+          // 单次查询失败不致命,下一轮继续
+        }
+      }
+    };
+    // 首查延迟 20s(同页在途 fetch 先行),之后每 30s 对账一次
+    const first = setTimeout(tick, 20_000);
+    const interval = setInterval(tick, 30_000);
+    return () => {
+      cancelled = true;
+      clearTimeout(first);
+      clearInterval(interval);
+    };
+  }, [pendingKey]);
+}
+
 export function useStudioSubmit() {
+  const { toast } = useToast();
   const addBatch = useStudioStore((state) => state.addBatch);
   const replaceJobRef = useStudioStore((state) => state.replaceJobRef);
   const markJobsLibrary = useStudioStore((state) => state.markJobsLibrary);
@@ -207,6 +339,53 @@ export function useStudioSubmit() {
       let jobRefs: StudioJobRef[];
       let spec: Record<string, unknown>;
       let blueprintId: string | undefined;
+
+      if (draft.mode === "deconstruct") {
+        // 门B(S3.3,审查重构):提交即插「拆解中」乐观卡立刻返回,不阻塞
+        // omnibox(原同步等待 1-5 分钟:刷新丢卡出孤儿蓝图、成功回调清掉
+        // 用户切走后编辑的草稿——均为审查实锤)。fetch 在页面后台续跑;
+        // 刷新/关页由 useDeconstructReconciler 按 videoUrl 对账恢复,
+        // 服务端同 URL 24h 幂等锚保证不重跑 qwen。
+        const videoUrl = draft.deconstructVideo!.url;
+        const title = batchTitle(draft);
+        const reportTitle = draft.text.trim() || draft.deconstructVideo!.name || "";
+        addBatch({
+          id: batchId,
+          createdAt: now.toISOString(),
+          title,
+          summary: { mode: "deconstruct", modelLabel: "拆解中…", count: 1, estimatedCredits: 0 },
+          spec: { kind: "deconstruct", videoUrl },
+          jobRefs: [],
+          deconstructPending: { videoUrl },
+        });
+        void (async () => {
+          try {
+            const res = await fetch("/api/studio/deconstruct", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ videoUrl, rightsAck: true, title: reportTitle }),
+              signal: AbortSignal.timeout(420_000),
+            });
+            const result = await res.json();
+            if (result.success && result.data?.blueprintId) {
+              applyDeconstructResult(batchId, result.data as DeconstructResultData);
+              toast({ title: "📋 结构报告已就绪", description: title });
+            } else {
+              // 服务端明确业务失败(频控/无口播/格式异常)→ 判死可重试
+              markDeconstructFailed(batchId, result.error || "拆解失败");
+              toast({
+                title: "拆解失败",
+                description: result.error || "请移除该卡后重试",
+                variant: "destructive",
+              });
+            }
+          } catch {
+            // 网络断/超时:服务端可能仍在跑,不判死——交 reconciler 对账
+            console.warn("[Studio Deconstruct] 在途请求中断,等待 reconciler 对账恢复");
+          }
+        })();
+        return { ok: true, batchId };
+      }
 
       if (draft.mode === "product") {
         // 商品图/链接腿:商品卡 → 蓝图落库 → 渲染腿出 N 条(幻灯片|AI 逐镜|拼装口播)
@@ -458,7 +637,7 @@ export function useStudioSubmit() {
       addBatch(batch);
       return { ok: true, batchId };
     },
-    [addBatch]
+    [addBatch, toast]
   );
 
   /**
@@ -551,7 +730,8 @@ export function useStudioSubmit() {
           createdAt: now.toISOString(),
           title: card.title,
           summary: {
-            mode: "product",
+            // 拆解蓝图出片的批次标「结构复刻」,保住 structure_only 溯源链(审查实锤)
+            mode: batch.summary.mode === "deconstruct" ? "structure_rerun" : "product",
             modelLabel: `AI 生成·${VIDEO_MODEL_LABELS[aiGenSpec.modelType]}`,
             aspectRatio: aiGenSpec.aspectRatio,
             durationSeconds: aiGenSpec.durationSeconds,

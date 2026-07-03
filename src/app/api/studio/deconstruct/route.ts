@@ -55,6 +55,60 @@ function checkRate(userId: string): string | null {
   return null;
 }
 
+/**
+ * 拆解结果对账查询(S3.3):按 videoUrl 查同用户 24h 内的 ready 拆解蓝图。
+ * 供客户端刷新恢复用——提交后刷新/关页,服务端仍会完成并落库,
+ * reconciler 轮询本端点把「拆解中」乐观卡接回结果(零 qwen 调用,纯 select)。
+ */
+export async function GET(request: NextRequest) {
+  try {
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) {
+      return NextResponse.json({ success: false, error: "请先登录" }, { status: 401 });
+    }
+    const videoUrl = request.nextUrl.searchParams.get("videoUrl")?.trim() ?? "";
+    if (!isOSSUrl(videoUrl)) {
+      return NextResponse.json({ success: false, error: "videoUrl 非法" }, { status: 400 });
+    }
+    const db = supabase as unknown as SupabaseClient;
+    const { data: rows } = await db
+      .from("blueprints")
+      .select("id, scenes, hooks, origin, created_at")
+      .eq("user_id", user.id)
+      .eq("source_type", "reference_video")
+      .eq("status", "ready")
+      .filter("source_ref->>url", "eq", videoUrl)
+      .gte("created_at", new Date(Date.now() - 24 * 3600_000).toISOString())
+      .order("created_at", { ascending: false })
+      .limit(1);
+    const hit = (rows as Array<{
+      id: string;
+      scenes: unknown;
+      hooks: unknown;
+      origin: { report?: unknown } | null;
+    }> | null)?.[0];
+    if (!hit?.origin?.report) {
+      return NextResponse.json({ success: true, data: { found: false } });
+    }
+    return NextResponse.json({
+      success: true,
+      data: {
+        found: true,
+        blueprintId: hit.id,
+        report: hit.origin.report,
+        scenes: hit.scenes,
+        hooks: hit.hooks,
+      },
+    });
+  } catch (error) {
+    console.error("[Studio Deconstruct GET] error:", error);
+    return NextResponse.json({ success: false, error: "查询失败" }, { status: 500 });
+  }
+}
+
 export async function POST(request: NextRequest) {
   let userId: string | null = null;
   try {
