@@ -261,7 +261,14 @@ function RecipeLibrary() {
               <input
                 value={renameValue}
                 onChange={(e) => setRenameValue(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !busy) {
+                    e.preventDefault()
+                    void confirmRename()
+                  }
+                }}
                 maxLength={100}
+                autoFocus
                 className="mt-2 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-zinc-100 focus:border-amber-400/50 focus:outline-none"
               />
             </AlertDialogDescription>

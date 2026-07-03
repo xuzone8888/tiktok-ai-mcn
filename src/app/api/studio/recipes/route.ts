@@ -214,6 +214,17 @@ export async function POST(request: NextRequest) {
           { status: 503 }
         );
       }
+      // 23514 = CHECK 约束拒绝:库存 recipes 表还是旧版枚举(不含 photo_post),
+      // 指路重贴迁移而不是抛泛化 500(审查发现)
+      if (error?.code === "23514" && renderMode === "photo_post") {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "配方表枚举需升级:请在 Supabase dashboard 重新执行 20260703_recipes.sql(幂等,含约束升级段)",
+          },
+          { status: 400 }
+        );
+      }
       console.error("[Studio Recipes POST] insert failed:", error);
       return NextResponse.json({ success: false, error: "配方保存失败" }, { status: 500 });
     }

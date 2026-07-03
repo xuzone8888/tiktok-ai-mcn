@@ -62,7 +62,11 @@ export function BatchCard({
   const finished = stats.success + stats.failed;
   const failedViews = views.filter((v) => v.status === "failed");
   const librariable = views.filter(
-    (v) => v.status === "success" && v.generationTaskId && v.libraryStatus !== "ready"
+    (v) =>
+      v.status === "success" &&
+      v.generationTaskId &&
+      v.libraryStatus !== "ready" &&
+      v.libraryStatus !== "published" // 已直发不可降级回 ready(审查实锤)
   );
 
   const visibleViews = expanded ? views : views.slice(0, COLLAPSED_LIMIT);

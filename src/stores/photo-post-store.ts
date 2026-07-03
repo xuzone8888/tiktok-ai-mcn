@@ -34,6 +34,12 @@ export interface PhotoPostTask {
   variant?: { hook_id?: string; hook_text?: string; voice_id?: string; aspect?: string };
   status: PhotoPostTaskStatus;
   errorMessage: string | null;
+  /**
+   * 直发在途锚(S4.2 审查实锤):发布状态原本只活在组件轮询里,关抽屉/切任务/
+   * 刷新即丢,TikTok 实际发布成功但 published 永不落本地→诱导重复发帖。
+   * POST 起飞即持久化,组件重挂载时按锚恢复轮询;完成/明确失败后清空。
+   */
+  publish?: { accountId: string; publishId: string; startedAt: string } | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -50,7 +56,7 @@ export interface PhotoPostActions {
   addTasks: (tasks: PhotoPostTask[]) => void;
   updateTask: (
     id: string,
-    patch: Partial<Pick<PhotoPostTask, "status" | "caption" | "errorMessage">>
+    patch: Partial<Pick<PhotoPostTask, "status" | "caption" | "errorMessage" | "publish">>
   ) => void;
   /** 失败重试:复位回 generating(服务端按 task_id 幂等,已落库变体直接命中) */
   retryTask: (id: string) => void;

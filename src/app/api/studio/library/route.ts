@@ -49,21 +49,44 @@ export async function POST(request: NextRequest) {
     }
 
     const adminSupabase = createAdminClient();
-    const { data, error } = await adminSupabase
-      .from("generations")
-      .update({ library_status: libraryStatus } as never)
-      .in("task_id", taskIds)
-      .eq("user_id", user.id)
-      // 只有已完成的产出才可入库(挡掉对进行中/失败行的直接 API 调用)
-      .eq("status", "completed")
-      .select("id, task_id");
+    const baseUpdate = () =>
+      adminSupabase
+        .from("generations")
+        .update({ library_status: libraryStatus } as never)
+        .in("task_id", taskIds)
+        .eq("user_id", user.id)
+        // 只有已完成的产出才可入库(挡掉对进行中/失败行的直接 API 调用)
+        .eq("status", "completed");
 
-    if (error) {
-      console.error("[Studio Library] update failed:", error);
-      return NextResponse.json({ success: false, error: "入库失败,请重试" }, { status: 500 });
+    let rows: Array<{ task_id: string | null }> = [];
+    if (libraryStatus === "published") {
+      const { data, error } = await baseUpdate().select("id, task_id");
+      if (error) {
+        console.error("[Studio Library] update failed:", error);
+        return NextResponse.json({ success: false, error: "入库失败,请重试" }, { status: 500 });
+      }
+      rows = data ?? [];
+    } else {
+      // 发布态守卫(S4 对抗审查实锤):published 是直发成功后的权威终态,
+      // 常规「入库」动作不得把它降回 draft/ready。
+      // 拆两次互斥更新而非 .or():①SQL 三值逻辑下裸 .neq 会把 NULL 行
+      // (从未标记过的)也滤掉;②本项目 PostgREST 对百分号编码的 or=
+      // 参数解析报 42703(supabase-js 恒编码,实测复现)
+      const [nullRes, neqRes] = await Promise.all([
+        baseUpdate().is("library_status", null).select("id, task_id"),
+        baseUpdate().neq("library_status", "published").select("id, task_id"),
+      ]);
+      if (nullRes.error || neqRes.error) {
+        console.error(
+          "[Studio Library] update failed:",
+          nullRes.error ?? neqRes.error
+        );
+        return NextResponse.json({ success: false, error: "入库失败,请重试" }, { status: 500 });
+      }
+      rows = [...(nullRes.data ?? []), ...(neqRes.data ?? [])];
     }
 
-    const updatedTaskIds = (data ?? [])
+    const updatedTaskIds = rows
       .map((row: { task_id: string | null }) => row.task_id)
       .filter((id): id is string => typeof id === "string");
     return NextResponse.json({

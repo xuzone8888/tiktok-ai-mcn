@@ -11,7 +11,7 @@
  * 直发不可用/未授权账号时人工发布不受阻)。
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Download, Loader2, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useStudioStore } from "@/stores/studio-store";
+import { usePhotoPostStore } from "@/stores/photo-post-store";
 import type { StudioJobView } from "@/lib/studio/batch-view";
 
 interface TikTokAccountOption {
@@ -88,6 +89,54 @@ export function PhotoPostActions({ batchId, view }: PhotoPostActionsProps) {
     }
   };
 
+  /**
+   * 轮询直发状态(4s × 30 ≈ 2 分钟)。锚已持久化在 photo-post store:
+   * 组件卸载只是本地停轮询,重开抽屉自动恢复;服务端 GET 是 published 落库
+   * 的权威写入端(审查实锤:状态不再只活在一次性轮询里)。
+   */
+  const pollPublish = useCallback(
+    async (publishId: string, pollAccountId: string): Promise<void> => {
+      for (let i = 0; i < 30; i++) {
+        await new Promise((r) => setTimeout(r, 4000));
+        if (!aliveRef.current) return;
+        let status: { status?: string; failReason?: string } = {};
+        try {
+          const poll = await fetch(
+            `/api/studio/photo-post/publish?taskId=${encodeURIComponent(view.taskId)}&accountId=${encodeURIComponent(pollAccountId)}&publishId=${encodeURIComponent(publishId)}`,
+            { signal: AbortSignal.timeout(30_000) }
+          );
+          const pollResult = await poll.json();
+          if (!pollResult.success) continue; // 单次查询失败不判死
+          status = pollResult.data ?? {};
+        } catch {
+          continue;
+        }
+        if (status.status === "PUBLISH_COMPLETE" || status.status === "SEND_TO_USER_INBOX") {
+          useStudioStore.getState().markJobsLibrary(batchId, [view.taskId], "published");
+          usePhotoPostStore.getState().updateTask(view.taskId, { publish: null });
+          if (!aliveRef.current) return;
+          setPublishNote(null);
+          setPanelOpen(false);
+          toast({
+            title:
+              status.status === "PUBLISH_COMPLETE"
+                ? "🎉 已发布到 TikTok"
+                : "已送达 TikTok 收件箱(账号内确认后可见)",
+          });
+          return;
+        }
+        if (status.status === "FAILED") {
+          usePhotoPostStore.getState().updateTask(view.taskId, { publish: null });
+          throw new Error(status.failReason || "TikTok 处理失败");
+        }
+        if (aliveRef.current) setPublishNote(`TikTok 处理中(${i + 1}/30)…`);
+      }
+      // 超时不清锚:重开抽屉会继续查(服务端一旦 COMPLETE 即落 published)
+      throw new Error("发布仍在处理,重开本抽屉会继续查询(未扣任何费用)");
+    },
+    [batchId, view.taskId, toast]
+  );
+
   const publish = async () => {
     if (!accountId) {
       toast({ title: "请先选择 TikTok 账号", variant: "destructive" });
@@ -113,41 +162,12 @@ export function PhotoPostActions({ batchId, view }: PhotoPostActionsProps) {
         throw new Error(result.error || "发布请求失败");
       }
       const publishId: string = result.data.publishId;
+      // 在途锚持久化:卸载/刷新后重开抽屉可恢复轮询,不诱导重复发布
+      usePhotoPostStore.getState().updateTask(view.taskId, {
+        publish: { accountId, publishId, startedAt: new Date().toISOString() },
+      });
       setPublishNote("TikTok 处理中(拉取图片)…");
-      // 轮询:4s × 30 次 ≈ 2 分钟
-      for (let i = 0; i < 30; i++) {
-        await new Promise((r) => setTimeout(r, 4000));
-        if (!aliveRef.current) return;
-        let status: { status?: string; failReason?: string } = {};
-        try {
-          const poll = await fetch(
-            `/api/studio/photo-post/publish?taskId=${encodeURIComponent(view.taskId)}&accountId=${encodeURIComponent(accountId)}&publishId=${encodeURIComponent(publishId)}`,
-            { signal: AbortSignal.timeout(30_000) }
-          );
-          const pollResult = await poll.json();
-          if (!pollResult.success) continue; // 单次查询失败不判死
-          status = pollResult.data ?? {};
-        } catch {
-          continue;
-        }
-        if (status.status === "PUBLISH_COMPLETE" || status.status === "SEND_TO_USER_INBOX") {
-          useStudioStore.getState().markJobsLibrary(batchId, [view.taskId], "published");
-          setPublishNote(null);
-          setPanelOpen(false);
-          toast({
-            title:
-              status.status === "PUBLISH_COMPLETE"
-                ? "🎉 已发布到 TikTok"
-                : "已送达 TikTok 收件箱(账号内确认后可见)",
-          });
-          return;
-        }
-        if (status.status === "FAILED") {
-          throw new Error(status.failReason || "TikTok 处理失败");
-        }
-        setPublishNote(`TikTok 处理中(${i + 1}/30)…`);
-      }
-      throw new Error("发布仍在处理,可稍后在 TikTok 账号内确认(未扣任何费用)");
+      await pollPublish(publishId, accountId);
     } catch (error) {
       const message = error instanceof Error ? error.message : "发布失败";
       setPublishNote(null);
@@ -160,6 +180,34 @@ export function PhotoPostActions({ batchId, view }: PhotoPostActionsProps) {
       if (aliveRef.current) setPublishing(false);
     }
   };
+
+  // 恢复在途发布(挂载时一次):上次直发起飞后抽屉被关/任务被切走,
+  // 锚还在 store——静默续轮询,完成即标 published
+  const resumedRef = useRef(false);
+  useEffect(() => {
+    if (resumedRef.current) return;
+    resumedRef.current = true;
+    const task = usePhotoPostStore.getState().tasks.find((t) => t.id === view.taskId);
+    if (!task?.publish || view.libraryStatus === "published") return;
+    const anchor = task.publish;
+    setPublishing(true);
+    setPublishNote("恢复查询上次发布状态…");
+    void (async () => {
+      try {
+        await pollPublish(anchor.publishId, anchor.accountId);
+      } catch (error) {
+        if (!aliveRef.current) return;
+        setPublishNote(null);
+        toast({
+          title: "发布状态查询",
+          description: error instanceof Error ? error.message : "请稍后重开抽屉再查",
+        });
+      } finally {
+        if (aliveRef.current) setPublishing(false);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const exportZip = async () => {
     if (images.length === 0) return;

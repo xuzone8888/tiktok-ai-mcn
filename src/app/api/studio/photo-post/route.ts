@@ -34,6 +34,15 @@ const RATE_PER_MIN = 10;
 const RATE_PER_DAY = 100;
 const rateMap = new Map<string, number[]>();
 
+/**
+ * 在途任务单飞(对抗审查 high 实锤):generations.task_id 无唯一约束,
+ * check-then-insert 对并发同 taskId 零防护(双击重试/双标签/网络断后立即重试
+ * 而服务端首请求仍在 60s LLM 窗口内)会双插行。逐任务认领:已被其他在途
+ * 请求认领的任务本请求跳过(返回 inFlight,客户端保持生成中不判死),
+ * 首请求落库后按 task_id 幂等对一切后续请求生效。
+ */
+const inflightTasks = new Set<string>();
+
 function checkRate(userId: string): string | null {
   const now = Date.now();
   const stamps = (rateMap.get(userId) ?? []).filter((t) => now - t < 24 * 3600_000);
@@ -148,11 +157,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: "任务 id 重复" }, { status: 400 });
     }
 
-    const rateError = checkRate(user.id);
-    if (rateError) {
-      return NextResponse.json({ success: false, error: rateError }, { status: 429 });
-    }
-
     // ---- 蓝图(RLS own:0 行 = 不存在或非属主) ----
     const db = supabase as unknown as SupabaseClient;
     const { data: bp } = await db
@@ -209,120 +213,152 @@ export async function POST(request: NextRequest) {
       existingById.set(row.task_id, { caption, images });
     }
 
-    const missing = tasks.filter((t) => !existingById.has(t.id));
-
-    // ---- 文案:一次 LLM diverse 出 N 条;失败降级规则模板(变体差异仍在) ----
-    const isZh = /[一-鿿]/.test(`${title}${sellingPoints.join("")}`);
-    let bodies: string[] = [];
-    let captionSource: "llm" | "fallback" = "llm";
-    if (missing.length > 0) {
-      try {
-        bodies = await generatePhotoPostCaptions({
-          title,
-          sellingPoints,
-          sceneLines,
-          direction,
-          count: missing.length,
-          language: isZh ? "zh" : "en",
-        });
-      } catch (error) {
-        console.error("[Studio PhotoPost] captions LLM failed, using fallback:", error);
-        bodies = fallbackCaptions(title, sellingPoints, missing.length, isZh);
-        captionSource = "fallback";
-      }
-    }
-
-    // ---- 逐任务落库(独立 try:单条失败不作废整批,客户端可单条重试) ----
-    const nowIso = new Date().toISOString();
-    const results = new Map<string, { caption: string; images: string[]; error?: string }>();
-    for (let i = 0; i < missing.length; i++) {
-      const task = missing[i];
-      const caption = (
-        task.hookText ? `${task.hookText}\n\n${bodies[i]}` : bodies[i]
-      ).slice(0, 2000);
-      const baseRow: Record<string, unknown> = {
-        user_id: user.id,
-        task_id: task.id,
-        type: "image",
-        generation_type: "image",
-        source: "photo_post",
-        prompt: caption,
-        model: "photo-post",
-        status: "completed",
-        progress: 100,
-        result_url: task.imageUrls[0],
-        image_url: task.imageUrls[0],
-        credit_cost: 0,
-        credits_used: 0,
-        completed_at: nowIso,
-        created_at: nowIso,
-      };
-      const extras: Record<string, unknown> = {
-        ...(batchId ? { batch_id: batchId } : {}),
-        ...(groupName ? { group_name: groupName } : {}),
-      };
-      const variant = {
-        ...(task.hookId ? { hook_id: task.hookId } : {}),
-        ...(task.hookText ? { hook_text: task.hookText } : {}),
-      };
-      const spec = {
-        render_mode: "photo_post",
-        blueprint_id: blueprintId,
-        images: task.imageUrls,
-        caption,
-        title,
-        cover_index: 0,
-        caption_source: captionSource,
-        ...(Object.keys(variant).length > 0 ? { variant } : {}),
-      };
-      // 漂移降级链(同 stitch 落库口径):完整行 → 去 spec → 去 batch/group。
-      // 注意去 spec 即丢图序/文案全文,只保 prompt+封面——仍失败必须响亮报错,
-      // 否则任务置 completed 后图序只剩 localStorage 一份
-      const attempts: Record<string, unknown>[] = [
-        { ...baseRow, ...extras, spec },
-        { ...baseRow, ...extras },
-      ];
-      let inserted = false;
-      let lastError: { message: string } | null = null;
-      for (const row of attempts) {
-        const { error: insertError } = await admin.from("generations").insert(row as never);
-        if (!insertError) {
-          inserted = true;
-          break;
-        }
-        lastError = insertError;
-      }
-      if (inserted) {
-        results.set(task.id, { caption, images: task.imageUrls });
+    // ---- 在途认领:被其他请求占用的任务本请求跳过(防并发双插) ----
+    const notCached = tasks.filter((t) => !existingById.has(t.id));
+    const missing: TaskPayload[] = [];
+    const inFlightIds = new Set<string>();
+    for (const t of notCached) {
+      const flightKey = `${user.id}:${t.id}`;
+      if (inflightTasks.has(flightKey)) {
+        inFlightIds.add(t.id);
       } else {
-        console.error("[Studio PhotoPost] insert failed:", task.id, lastError?.message);
-        results.set(task.id, {
-          caption,
-          images: task.imageUrls,
-          error: "任务记录保存失败,请重试(重试不重复生成)",
-        });
+        inflightTasks.add(flightKey);
+        missing.push(t);
       }
     }
 
-    return NextResponse.json({
-      success: true,
-      data: {
-        posts: tasks.map((t) => {
-          const cached = existingById.get(t.id);
-          if (cached) {
-            return {
-              id: t.id,
-              caption: cached.caption,
-              // 存量行缺图序(降级行)时回退请求图序,保证客户端可渲染
-              images: cached.images.length > 0 ? cached.images : t.imageUrls,
-              fromCache: true,
-            };
+    try {
+      // 频控只对真实生成计费(fromCache 重放/纯在途合流不烧配额——审查实锤:
+      // 首发整批 1 个戳而逐条重试每条 1 个戳,>10 条批量重试必撞分钟闸)
+      if (missing.length > 0) {
+        const rateError = checkRate(user.id);
+        if (rateError) {
+          return NextResponse.json({ success: false, error: rateError }, { status: 429 });
+        }
+      }
+
+      // ---- 文案:一次 LLM diverse 出 N 条;失败降级规则模板(变体差异仍在) ----
+      const isZh = /[一-鿿]/.test(`${title}${sellingPoints.join("")}`);
+      let bodies: string[] = [];
+      let captionSource: "llm" | "fallback" = "llm";
+      if (missing.length > 0) {
+        try {
+          bodies = await generatePhotoPostCaptions({
+            title,
+            sellingPoints,
+            sceneLines,
+            direction,
+            count: missing.length,
+            language: isZh ? "zh" : "en",
+          });
+        } catch (error) {
+          console.error("[Studio PhotoPost] captions LLM failed, using fallback:", error);
+          bodies = fallbackCaptions(title, sellingPoints, missing.length, isZh);
+          captionSource = "fallback";
+        }
+      }
+
+      // ---- 逐任务落库(独立 try:单条失败不作废整批,客户端可单条重试) ----
+      const nowIso = new Date().toISOString();
+      const results = new Map<string, { caption: string; images: string[]; error?: string }>();
+      for (let i = 0; i < missing.length; i++) {
+        const task = missing[i];
+        const caption = (
+          task.hookText ? `${task.hookText}\n\n${bodies[i]}` : bodies[i]
+        ).slice(0, 2000);
+        const baseRow: Record<string, unknown> = {
+          user_id: user.id,
+          task_id: task.id,
+          type: "image",
+          generation_type: "image",
+          source: "photo_post",
+          prompt: caption,
+          model: "photo-post",
+          status: "completed",
+          progress: 100,
+          result_url: task.imageUrls[0],
+          image_url: task.imageUrls[0],
+          credit_cost: 0,
+          credits_used: 0,
+          completed_at: nowIso,
+          created_at: nowIso,
+        };
+        const extras: Record<string, unknown> = {
+          ...(batchId ? { batch_id: batchId } : {}),
+          ...(groupName ? { group_name: groupName } : {}),
+        };
+        const variant = {
+          ...(task.hookId ? { hook_id: task.hookId } : {}),
+          ...(task.hookText ? { hook_text: task.hookText } : {}),
+        };
+        const spec = {
+          render_mode: "photo_post",
+          blueprint_id: blueprintId,
+          images: task.imageUrls,
+          caption,
+          title,
+          cover_index: 0,
+          caption_source: captionSource,
+          ...(Object.keys(variant).length > 0 ? { variant } : {}),
+        };
+        // 漂移降级链(对齐 stitch 四档口径,spec 是图序/文案本体尽量保住):
+        // 完整行 → 去 batch/group(保 spec)→ 去 spec(保 batch/group)→ 裸行。
+        // 全败必须响亮报错,否则任务置 completed 后图序只剩 localStorage 一份
+        const attempts: Record<string, unknown>[] = [
+          { ...baseRow, ...extras, spec },
+          { ...baseRow, spec },
+          { ...baseRow, ...extras },
+          baseRow,
+        ];
+        let inserted = false;
+        let lastError: { message: string } | null = null;
+        for (const row of attempts) {
+          const { error: insertError } = await admin.from("generations").insert(row as never);
+          if (!insertError) {
+            inserted = true;
+            break;
           }
-          const r = results.get(t.id)!;
-          return { id: t.id, caption: r.caption, images: r.images, fromCache: false, ...(r.error ? { error: r.error } : {}) };
-        }),
-      },
-    });
+          lastError = insertError;
+        }
+        if (inserted) {
+          results.set(task.id, { caption, images: task.imageUrls });
+        } else {
+          console.error("[Studio PhotoPost] insert failed:", task.id, lastError?.message);
+          results.set(task.id, {
+            caption,
+            images: task.imageUrls,
+            error: "任务记录保存失败,请重试(重试不重复生成)",
+          });
+        }
+      }
+
+      return NextResponse.json({
+        success: true,
+        data: {
+          posts: tasks.map((t) => {
+            const cached = existingById.get(t.id);
+            if (cached) {
+              return {
+                id: t.id,
+                caption: cached.caption,
+                // 存量行缺图序(降级行)时回退请求图序,保证客户端可渲染
+                images: cached.images.length > 0 ? cached.images : t.imageUrls,
+                fromCache: true,
+              };
+            }
+            if (inFlightIds.has(t.id)) {
+              // 另一在途请求正在生成:客户端保持「生成中」,由该请求写回/
+              // 复水重试按幂等恢复,不判死不双跑
+              return { id: t.id, inFlight: true };
+            }
+            const r = results.get(t.id)!;
+            return { id: t.id, caption: r.caption, images: r.images, fromCache: false, ...(r.error ? { error: r.error } : {}) };
+          }),
+        },
+      });
+    } finally {
+      for (const t of missing) inflightTasks.delete(`${user.id}:${t.id}`);
+    }
   } catch (error) {
     console.error("[Studio PhotoPost] error:", error);
     return NextResponse.json(

@@ -223,8 +223,9 @@ export function Omnibox({
     if (param.startsWith("seed-")) {
       applyRecipe(param);
     } else if (/^[0-9a-f-]{36}$/i.test(param)) {
+      // 不预选:已删除/他人 UUID 会成隐形死配方(提交才报错,审查实锤)——
+      // 等列表载入命中才选中并应用预设
       pendingRecipeParamRef.current = param;
-      setRecipeId(param); // 先落选中态,预设待列表载入后补应用
     }
     // 清掉 query,防刷新重复应用覆盖用户手动改过的参数
     window.history.replaceState(null, "", window.location.pathname);
@@ -253,10 +254,13 @@ export function Omnibox({
             : [];
           setRecipeOptions(own);
           recipesLoadedRef.current = true; // 成功才置位,失败下次进模式重试(审查实锤)
-          // 携参配方此刻才有元数据,补应用渲染预设(腿/比例/每镜秒数)
+          // 携参配方此刻才有元数据,补应用渲染预设(腿/比例/每镜秒数)。
+          // 无论命中与否首次成功载入即清 pending:残留会在用户手动改过参数后
+          // 被任意一次迟到 load 无条件覆盖(审查实锤);未命中=已删除/他人
+          // 配方,静默落空保持「默认结构」
           const pending = pendingRecipeParamRef.current;
+          pendingRecipeParamRef.current = null;
           if (pending && own.some((r) => r.id === pending)) {
-            pendingRecipeParamRef.current = null;
             applyRecipeWithOptions(pending, own);
           }
         })

@@ -179,6 +179,14 @@ export function validateDraft(draft: StudioDraft): string | null {
     if (!draft.text.trim() && draft.attachmentUrls.length === 0) {
       return "视频任务需要提示词或至少一张素材图";
     }
+  } else if (draft.mode === "product" && draft.productRenderMode === "photo_post") {
+    // 图文帖:服务端契约 1-10 图;上限对齐视觉分析管线 9(与其他商品腿同因)
+    if (draft.attachmentUrls.length < 1) return "图文帖至少需要 1 张图";
+    if (draft.attachmentUrls.length > 9) return "图文帖最多 9 张图(视觉分析上限)";
+    if (!draft.productCard) return "等待商品卡分析完成";
+    if (!draft.productCard.selling_points.some((p) => p.selected)) {
+      return "至少勾选一个卖点";
+    }
   } else if (draft.mode === "slideshow" || draft.mode === "product") {
     if (draft.attachmentUrls.length < 2) return "轮播成片至少需要 2 张图";
     // product 上限 9:与视觉分析管线(analyze-product slice 9)对齐,
@@ -359,6 +367,34 @@ export function useDeconstructReconciler() {
 // 刷新中断由 store 复水归一化判失败,同样走重试恢复。
 // ---------------------------------------------------------------------------
 
+/**
+ * 重试合流(对抗审查实锤):批次卡「重试失败 N 条」逐任务调 retryJob,若每条
+ * 各发一个 POST,服务端频控按请求计数,N>10 直接 429 再度全失败。同批次
+ * 250ms 窗口内的重试合并为一个 POST(与首发同口径:整批一个请求)。
+ */
+const pendingPhotoPostRetries = new Map<
+  string,
+  { spec: PhotoPostJobSpec; tasks: PhotoPostTask[]; timer: ReturnType<typeof setTimeout> }
+>();
+
+function queuePhotoPostRetry(spec: PhotoPostJobSpec, task: PhotoPostTask): void {
+  const key = spec.batchId ?? task.batchId ?? task.id;
+  const pending = pendingPhotoPostRetries.get(key);
+  if (pending) {
+    if (!pending.tasks.some((t) => t.id === task.id)) pending.tasks.push(task);
+    return;
+  }
+  const entry = {
+    spec,
+    tasks: [task],
+    timer: setTimeout(() => {
+      pendingPhotoPostRetries.delete(key);
+      runPhotoPostGeneration(entry.spec, entry.tasks);
+    }, 250),
+  };
+  pendingPhotoPostRetries.set(key, entry);
+}
+
 function runPhotoPostGeneration(
   spec: PhotoPostJobSpec,
   tasks: PhotoPostTask[]
@@ -389,10 +425,16 @@ function runPhotoPostGeneration(
           id: string;
           caption?: string;
           error?: string;
+          inFlight?: boolean;
         }>;
         const seen = new Set<string>();
         for (const post of posts) {
           seen.add(post.id);
+          if (post.inFlight) {
+            // 另一在途请求(双击/双标签)正在生成同任务:保持「生成中」,
+            // 由该请求写回;若其响应也丢失,复水归一化 + 重试幂等兜底
+            continue;
+          }
           if (post.error) {
             usePhotoPostStore.getState().updateTask(post.id, {
               status: "failed",
@@ -1051,14 +1093,15 @@ export function useStudioSubmit() {
         return { ok: true, batchId: batch.id };
       }
       if (kind === "photo_post") {
-        // 图文帖原地重试:保留本变体图序,服务端按 task_id 幂等(已落库直接命中)
+        // 图文帖原地重试:保留本变体图序,服务端按 task_id 幂等(已落库直接命中);
+        // 同批次 250ms 内的多条重试合流为一个 POST(批量重试防撞频控)
         const store = usePhotoPostStore.getState();
         const failedTask = store.tasks.find((t) => t.id === failedTaskId);
         if (failedTask) {
           store.retryTask(failedTaskId);
-          runPhotoPostGeneration(
+          queuePhotoPostRetry(
             batch.spec as unknown as PhotoPostJobSpec,
-            [{ ...failedTask, status: "generating" }]
+            { ...failedTask, status: "generating" }
           );
           return { ok: true, batchId: batch.id };
         }
@@ -1109,7 +1152,12 @@ export function useStudioSubmit() {
   const markLibrary = useCallback(
     async (batchId: string, views: StudioJobView[]): Promise<SubmitResult> => {
       const candidates = views.filter(
-        (v) => v.status === "success" && v.generationTaskId && v.libraryStatus !== "ready"
+        (v) =>
+          v.status === "success" &&
+          v.generationTaskId &&
+          v.libraryStatus !== "ready" &&
+          // published 是直发成功的权威终态,批量入库不得把它降回 ready(审查实锤)
+          v.libraryStatus !== "published"
       );
       if (candidates.length === 0) return { ok: false, error: "没有可入库的成片" };
 

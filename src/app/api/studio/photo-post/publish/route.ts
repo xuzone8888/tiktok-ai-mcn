@@ -54,6 +54,8 @@ async function loadOwnPhotoPost(
   userId: string,
   taskId: string
 ): Promise<PhotoPostRow | null> {
+  // 确定性选行(对抗审查实锤):历史重复行下 limit(1) 无排序键会让 POST 与
+  // GET 选到不同行,processing/published 溯源写散——恒取最早插入的那行
   const { data } = await admin
     .from("generations")
     .select("id, task_id, prompt, spec")
@@ -61,9 +63,28 @@ async function loadOwnPhotoPost(
     .eq("source", "photo_post")
     .eq("task_id", taskId)
     .eq("status", "completed")
+    .order("created_at", { ascending: true })
     .limit(1);
   const row = (data as unknown as PhotoPostRow[] | null)?.[0];
   return row ?? null;
+}
+
+// 发布频控(进程内滑动窗口):直发打 TikTok 开放 API(共享 app 配额),
+// 免积分动作也须节流
+const PUBLISH_RATE_PER_MIN = 6;
+const publishRateMap = new Map<string, number[]>();
+function checkPublishRate(userId: string): string | null {
+  const now = Date.now();
+  const stamps = (publishRateMap.get(userId) ?? []).filter((t) => now - t < 60_000);
+  if (stamps.length >= PUBLISH_RATE_PER_MIN) return "发布过于频繁,请稍候再试";
+  stamps.push(now);
+  publishRateMap.set(userId, stamps);
+  if (publishRateMap.size > 5000) {
+    for (const [k, v] of publishRateMap) {
+      if (v.every((t) => now - t > 60_000)) publishRateMap.delete(k);
+    }
+  }
+  return null;
 }
 
 interface TikTokAccountRow {
@@ -141,6 +162,10 @@ export async function POST(request: NextRequest) {
     }
     if (!privacyLevel) {
       return NextResponse.json({ success: false, error: "请选择可见范围" }, { status: 400 });
+    }
+    const rateError = checkPublishRate(user.id);
+    if (rateError) {
+      return NextResponse.json({ success: false, error: rateError }, { status: 429 });
     }
 
     const admin = createAdminClient();

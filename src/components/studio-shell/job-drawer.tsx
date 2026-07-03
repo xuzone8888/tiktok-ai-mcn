@@ -52,7 +52,10 @@ export function JobDrawer({
   const [marking, setMarking] = useState(false);
   const { toast } = useToast();
   const canLibrary =
-    view.status === "success" && !!view.generationTaskId && view.libraryStatus !== "ready";
+    view.status === "success" &&
+    !!view.generationTaskId &&
+    view.libraryStatus !== "ready" &&
+    view.libraryStatus !== "published"; // 已直发的不可降级回 ready(审查实锤)
   const referenceUrl = view.resultType === "image" ? view.resultUrl : view.coverUrl;
   const isPhotoPost = view.resultType === "photo_post";
   const photoImages = isPhotoPost ? (view.images ?? []) : [];
@@ -222,9 +225,10 @@ export function JobDrawer({
             打开 / 下载
           </Button>
         )}
-        {/* 图文帖(S4.2):TikTok 直发 + 导出图包降级 */}
+        {/* 图文帖(S4.2):TikTok 直发 + 导出图包降级。key 按任务隔离内部
+            发布状态(切任务不串台,审查实锤);发布在途锚在 store,重挂载自动恢复 */}
         {isPhotoPost && view.status === "success" && (
-          <PhotoPostActions batchId={batch.id} view={view} />
+          <PhotoPostActions key={view.taskId} batchId={batch.id} view={view} />
         )}
         {referenceUrl && (
           <Button
