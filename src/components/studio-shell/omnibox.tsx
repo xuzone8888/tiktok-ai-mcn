@@ -213,6 +213,23 @@ export function Omnibox({
   const [recipeId, setRecipeId] = useState<string>("");
   const [recipeOptions, setRecipeOptions] = useState<RecipeMeta[]>([]);
   const recipesLoadedRef = useRef(false);
+  // 配方库页「去使用」携参跳转(S4.3):?recipe=<id> 落地即切商品模式并预选;
+  // 用户配方需等列表载入后才能应用预设,先记 pending
+  const pendingRecipeParamRef = useRef<string | null>(null);
+  useEffect(() => {
+    const param = new URLSearchParams(window.location.search).get("recipe");
+    if (!param) return;
+    setMode("product");
+    if (param.startsWith("seed-")) {
+      applyRecipe(param);
+    } else if (/^[0-9a-f-]{36}$/i.test(param)) {
+      pendingRecipeParamRef.current = param;
+      setRecipeId(param); // 先落选中态,预设待列表载入后补应用
+    }
+    // 清掉 query,防刷新重复应用覆盖用户手动改过的参数
+    window.history.replaceState(null, "", window.location.pathname);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   useEffect(() => {
     const load = () => {
       fetch("/api/studio/recipes")
@@ -236,6 +253,12 @@ export function Omnibox({
             : [];
           setRecipeOptions(own);
           recipesLoadedRef.current = true; // 成功才置位,失败下次进模式重试(审查实锤)
+          // 携参配方此刻才有元数据,补应用渲染预设(腿/比例/每镜秒数)
+          const pending = pendingRecipeParamRef.current;
+          if (pending && own.some((r) => r.id === pending)) {
+            pendingRecipeParamRef.current = null;
+            applyRecipeWithOptions(pending, own);
+          }
         })
         .catch(() => {});
     };
@@ -244,6 +267,7 @@ export function Omnibox({
     const onUpdated = () => load();
     window.addEventListener("recipes-updated", onUpdated);
     return () => window.removeEventListener("recipes-updated", onUpdated);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode]);
 
   /** 选中配方的元数据(内置常量或已加载的用户配方) */
@@ -264,8 +288,9 @@ export function Omnibox({
   }, [recipeId, recipeOptions]);
 
   /** 选配方即应用其渲染预设(腿/比例/每镜秒数)——配方 render_mode 写而不读
-      会让预设变死数据(审查实锤);用户随后仍可手动改 */
-  const applyRecipe = (id: string) => {
+      会让预设变死数据(审查实锤);用户随后仍可手动改。
+      options 参数供携参路径使用(setState 未落地时 recipeOptions 还是旧值) */
+  const applyRecipeWithOptions = (id: string, options: RecipeMeta[]) => {
     setRecipeId(id);
     if (!id) return;
     const builtin = BUILTIN_RECIPES.find((r) => r.id === id);
@@ -275,9 +300,14 @@ export function Omnibox({
           aspect: builtin.globals?.aspect as string | undefined,
           durationMs: builtin.globals?.duration_per_image_ms as number | undefined,
         }
-      : recipeOptions.find((r) => r.id === id);
+      : options.find((r) => r.id === id);
     if (!meta) return;
-    if (meta.renderMode === "slideshow" || meta.renderMode === "assembly" || meta.renderMode === "ai_gen") {
+    if (
+      meta.renderMode === "slideshow" ||
+      meta.renderMode === "assembly" ||
+      meta.renderMode === "ai_gen" ||
+      meta.renderMode === "photo_post"
+    ) {
       setProductRenderMode(meta.renderMode);
     }
     setSlideshowParams((p) => ({
@@ -288,6 +318,8 @@ export function Omnibox({
         : {}),
     }));
   };
+
+  const applyRecipe = (id: string) => applyRecipeWithOptions(id, recipeOptions);
 
   // ==================== 爆款拆解(门B,S3.3):mp4 预签名直传 + 权利勾选 ====================
   const [deconstructVideo, setDeconstructVideo] = useState<{

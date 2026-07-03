@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS public.recipes (
     hooks JSONB NOT NULL DEFAULT '[]'::jsonb,   -- 槽位化 hook 候选 [{id,type,text,selected}]
     scenes JSONB NOT NULL DEFAULT '[]'::jsonb,  -- 槽位化分镜 [{idx,line,visual,slot,duration_ms,beat}]
     globals JSONB NOT NULL DEFAULT '{}'::jsonb, -- 渲染预设 {aspect,duration_per_image_ms,...}
-    render_mode TEXT CHECK (render_mode IS NULL OR render_mode IN ('slideshow', 'assembly', 'ai_gen')),
+    render_mode TEXT CHECK (render_mode IS NULL OR render_mode IN ('slideshow', 'assembly', 'ai_gen', 'photo_post')),
     origin JSONB,                               -- 门B溯源 {viral_ref,why_viral,license}
     source_blueprint_id UUID,                   -- 来源蓝图(无 FK,蓝图删除不连坐)
     use_count INTEGER NOT NULL DEFAULT 0,
@@ -51,5 +51,10 @@ CREATE POLICY "recipes_update_own" ON public.recipes
 DROP POLICY IF EXISTS "recipes_delete_own" ON public.recipes;
 CREATE POLICY "recipes_delete_own" ON public.recipes
     FOR DELETE USING (auth.uid() = user_id);
+
+-- render_mode 枚举升级(S4.1 图文帖):若表在旧版枚举下已建,重建约束幂等升级
+ALTER TABLE public.recipes DROP CONSTRAINT IF EXISTS recipes_render_mode_check;
+ALTER TABLE public.recipes ADD CONSTRAINT recipes_render_mode_check
+    CHECK (render_mode IS NULL OR render_mode IN ('slideshow', 'assembly', 'ai_gen', 'photo_post'));
 
 NOTIFY pgrst, 'reload schema';

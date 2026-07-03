@@ -166,7 +166,13 @@ ${hookLines.length > 0 ? `\nhook 候选(序号: 内容):\n${hookLines.map((h, i)
           deidentified: hookByI.get(i) || h.text || "",
         })),
         globals: bp.globals ?? {},
-        renderMode: bp.render_mode,
+        // 图文帖蓝图 render_mode=null(DB CHECK 只放三条视频腿),真实腿在
+        // globals.render_intent——配方保真还原,选中配方时 omnibox 才能切回图文帖
+        renderMode:
+          bp.render_mode ??
+          ((bp.globals as { render_intent?: unknown } | null)?.render_intent === "photo_post"
+            ? "photo_post"
+            : null),
         origin:
           bp.source_type === "reference_video"
             ? {

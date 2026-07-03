@@ -147,7 +147,10 @@ export async function POST(request: NextRequest) {
     }
     const hooks = sanitizeRecipeHooks(body?.hooks);
     const renderMode =
-      body?.renderMode === "slideshow" || body?.renderMode === "assembly" || body?.renderMode === "ai_gen"
+      body?.renderMode === "slideshow" ||
+      body?.renderMode === "assembly" ||
+      body?.renderMode === "ai_gen" ||
+      body?.renderMode === "photo_post"
         ? body.renderMode
         : null;
     const rawGlobals = (body?.globals ?? {}) as Record<string, unknown>;

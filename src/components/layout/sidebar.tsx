@@ -106,10 +106,10 @@ function getNavGroups(lang: string): NavGroup[] {
       header: t ? "Creative Studio" : "创作灵感",
       items: [
         {
-          title: t ? "Templates" : "模板中心",
+          title: t ? "Recipe Library" : "配方库",
           href: "/templates",
           icon: LayoutTemplate,
-          description: t ? "Discover templates" : "发现灵感模板",
+          description: t ? "Reusable content recipes" : "配方管理与灵感模板",
         },
       ],
     },
