@@ -1991,10 +1991,10 @@ function TaskStatusIndicator() {
         </div>
       )}
 
-      {/* 批量视频生成 */}
+      {/* 批量视频生成(S4.4:video-batch 大页已消解,状态胶囊指向 Studio) */}
       {(videoJobStatus === "running" || runningVideoTasks > 0) && (
         <div
-          onClick={() => router.push("/pro-studio/video-batch")}
+          onClick={() => router.push("/studio")}
           className="flex items-center gap-3 bg-gradient-to-r from-cyan-500/10 to-blue-500/10 backdrop-blur-xl border border-cyan-500/30 rounded-xl px-4 py-3 shadow-xl shadow-cyan-500/10 hover:scale-[1.02] transition-transform cursor-pointer group"
         >
           <div className="relative flex items-center justify-center w-10 h-10 rounded-lg bg-cyan-500/20">

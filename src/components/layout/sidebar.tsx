@@ -140,15 +140,10 @@ function getNavGroups(lang: string): NavGroup[] {
       ],
     },
     // --- Video Creation ---
+    // S4.4:「素材生成视频」(video-batch 大页)已消解并入 /studio,入口下线
     {
       header: t ? "Video Creation" : "视频制作",
       items: [
-        {
-          title: t ? "Batch Videos" : "素材生成视频",
-          href: "/pro-studio/video-batch",
-          icon: Clapperboard,
-          description: t ? "Generate multiple videos" : "多个视频同时生成",
-        },
         {
           title: t ? "Image to Video" : "图片生成视频",
           href: "/pro-studio/image-slideshow",

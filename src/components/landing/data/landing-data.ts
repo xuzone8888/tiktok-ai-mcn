@@ -300,7 +300,7 @@ export const footerLinks = {
     product: [
         { label: "角色市场", href: "/models" },
         { label: "单图生成", href: "/quick-gen" },
-        { label: "素材生成视频", href: "/pro-studio/video-batch" },
+        { label: "创作工作台", href: "/studio" },
     ],
     support: [
         { label: "价格方案", href: "/pricing" },
@@ -450,7 +450,7 @@ export const footerLinksEn = {
     product: [
         { label: "Character Market",  href: "/models" },
         { label: "Single Image Gen",  href: "/quick-gen" },
-        { label: "Video Batch Gen",   href: "/pro-studio/video-batch" },
+        { label: "Creation Studio",   href: "/studio" },
     ],
     support: [
         { label: "Pricing",     href: "/pricing" },
