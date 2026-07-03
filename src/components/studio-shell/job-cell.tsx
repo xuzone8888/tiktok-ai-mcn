@@ -18,6 +18,7 @@ interface JobCellProps {
 export function JobCell({ view, active, onClick }: JobCellProps) {
   const showVideo = view.status === "success" && view.resultType === "video" && view.resultUrl;
   const coverUrl = view.resultType === "image" ? (view.resultUrl ?? view.coverUrl) : view.coverUrl;
+  const photoCount = view.resultType === "photo_post" ? (view.images?.length ?? 0) : 0;
 
   return (
     <button
@@ -67,6 +68,13 @@ export function JobCell({ view, active, onClick }: JobCellProps) {
         />
         {view.libraryStatus === "ready" && <StatusBadge status="library" />}
       </div>
+
+      {/* 图文帖:图数角标(S4.1) */}
+      {photoCount > 0 && (
+        <span className="absolute right-1.5 top-1.5 rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-medium text-amber-300">
+          图文×{photoCount}
+        </span>
+      )}
 
       {/* 进行中进度条 */}
       {view.status === "running" && (

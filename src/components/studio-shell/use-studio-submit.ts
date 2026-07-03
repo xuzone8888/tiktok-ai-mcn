@@ -16,6 +16,8 @@ import {
   toAiGenTasksWithMatrix,
   toAssemblyTasks,
   toAssemblyTasksWithMatrix,
+  toPhotoPostTasks,
+  toPhotoPostTasksWithMatrix,
   toQuickGenImageTasks,
   toSlideshowTasks,
   toSlideshowTasksWithMatrix,
@@ -24,6 +26,7 @@ import {
   type AiGenSceneSpec,
   type AssemblyJobSpec,
   type ImageJobSpec,
+  type PhotoPostJobSpec,
   type SlideshowJobSpec,
   type VideoJobSpec,
 } from "@/lib/studio/job-spec";
@@ -33,6 +36,7 @@ import { useQuickGenStore } from "@/stores/quick-gen-store";
 import { useSlideshowStore } from "@/stores/slideshow-store";
 import { useAiGenStore } from "@/stores/ai-gen-store";
 import { useAssemblyStore } from "@/stores/assembly-store";
+import { usePhotoPostStore, type PhotoPostTask } from "@/stores/photo-post-store";
 import { useStudioStore, type StudioBatch, type StudioJobRef } from "@/stores/studio-store";
 import type { StudioJobView } from "@/lib/studio/batch-view";
 import { getVideoBatchTotalPrice, type VideoAspectRatio, type VideoDuration, type VideoModelType, type VideoQuality } from "@/types/video-batch";
@@ -84,8 +88,8 @@ export interface StudioDraft {
   productCard?: ProductCard | null;
   /** 链接腿(S2.1):商品卡来自链接解析时的来源 URL(蓝图 source_ref 溯源) */
   linkUrl?: string;
-  /** 商品成片渲染腿:幻灯片(默认,分级积分)| AI 逐镜生成(video 计价)| 拼装口播(1分/镜,S3.1) */
-  productRenderMode?: "slideshow" | "ai_gen" | "assembly";
+  /** 商品成片渲染腿:幻灯片(默认,分级积分)| AI 逐镜生成(video 计价)| 拼装口播(1分/镜,S3.1)| 图文帖(免费,S4.1) */
+  productRenderMode?: "slideshow" | "ai_gen" | "assembly" | "photo_post";
   /** 配方实例化(S3.5):seed-* 内置或用户配方 UUID;蓝图 scenes 按配方骨架填槽 */
   recipeId?: string;
   /** 选中配方的镜数(S3.5 审查实锤:assembly/ai_gen 逐镜计价按配方镜数而非图数) */
@@ -122,6 +126,8 @@ export function assemblyCreditsPerVideo(sceneCount: number): number {
 /** 预估积分(展示用;权威扣退在服务端网关) */
 export function estimateCredits(draft: StudioDraft): number {
   if (draft.mode === "deconstruct") return 0; // 拆解 MVP 免费(服务端频控兜滥用)
+  // 图文帖免费(图=自有素材零生成费,文案一次 LLM;服务端频控兜滥用)
+  if (draft.mode === "product" && draft.productRenderMode === "photo_post") return 0;
   if (draft.mode === "video") {
     return (
       getVideoBatchTotalPrice(
@@ -193,6 +199,13 @@ export function validateDraft(draft: StudioDraft): string | null {
     if (!draft.text.trim()) return "图片任务需要提示词";
   }
   if (draft.count < 1 || draft.count > 100) return "数量需在 1-100 之间";
+  if (
+    draft.mode === "product" &&
+    draft.productRenderMode === "photo_post" &&
+    draft.count > 20
+  ) {
+    return "图文帖单批最多 20 条(服务端上限)";
+  }
   return null;
 }
 
@@ -339,6 +352,87 @@ export function useDeconstructReconciler() {
   }, [pendingKey]);
 }
 
+// ---------------------------------------------------------------------------
+// 图文帖(S4.1):任务写入 store 即插卡(状态=生成文案中),本函数在页面后台
+// POST /api/studio/photo-post 并写回结果。服务端按 task_id 幂等落库:
+// 网络中断后重试(retryJob→retryTask 复位)已落库变体直接命中零重复成本;
+// 刷新中断由 store 复水归一化判失败,同样走重试恢复。
+// ---------------------------------------------------------------------------
+
+function runPhotoPostGeneration(
+  spec: PhotoPostJobSpec,
+  tasks: PhotoPostTask[]
+): void {
+  void (async () => {
+    const store = usePhotoPostStore.getState();
+    try {
+      const res = await fetch("/api/studio/photo-post", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          blueprintId: spec.blueprintId,
+          batchId: spec.batchId,
+          groupName: spec.groupName,
+          direction: spec.prompt,
+          tasks: tasks.map((t) => ({
+            id: t.id,
+            imageUrls: t.imageUrls,
+            ...(t.hookText ? { hookText: t.hookText } : {}),
+            ...(t.variant?.hook_id ? { hookId: t.variant.hook_id } : {}),
+          })),
+        }),
+        signal: AbortSignal.timeout(110_000),
+      });
+      const result = await res.json();
+      if (result.success && Array.isArray(result.data?.posts)) {
+        const posts = result.data.posts as Array<{
+          id: string;
+          caption?: string;
+          error?: string;
+        }>;
+        const seen = new Set<string>();
+        for (const post of posts) {
+          seen.add(post.id);
+          if (post.error) {
+            usePhotoPostStore.getState().updateTask(post.id, {
+              status: "failed",
+              errorMessage: post.error,
+            });
+          } else {
+            usePhotoPostStore.getState().updateTask(post.id, {
+              status: "completed",
+              caption: typeof post.caption === "string" ? post.caption : "",
+              errorMessage: null,
+            });
+          }
+        }
+        // 响应缺失的任务(理论不发生)判失败,不留永久转圈
+        for (const t of tasks) {
+          if (!seen.has(t.id)) {
+            usePhotoPostStore.getState().updateTask(t.id, {
+              status: "failed",
+              errorMessage: "服务端未返回该条结果,请重试",
+            });
+          }
+        }
+      } else {
+        const message = result?.error || "图文帖生成失败,请重试";
+        for (const t of tasks) {
+          store.updateTask(t.id, { status: "failed", errorMessage: message });
+        }
+      }
+    } catch {
+      // 网络断/超时:服务端可能已落库部分变体,重试按 task_id 幂等恢复
+      for (const t of tasks) {
+        usePhotoPostStore.getState().updateTask(t.id, {
+          status: "failed",
+          errorMessage: "网络中断,点击重试恢复(已生成的不重复计费)",
+        });
+      }
+    }
+  })();
+}
+
 export function useStudioSubmit() {
   const { toast } = useToast();
   const addBatch = useStudioStore((state) => state.addBatch);
@@ -405,10 +499,12 @@ export function useStudioSubmit() {
       }
 
       if (draft.mode === "product") {
-        // 商品图/链接腿:商品卡 → 蓝图落库 → 渲染腿出 N 条(幻灯片|AI 逐镜|拼装口播)
+        // 商品图/链接腿:商品卡 → 蓝图落库 → 渲染腿出 N 条(幻灯片|AI 逐镜|拼装口播|图文帖)
         const card = draft.productCard!;
         const renderMode =
-          draft.productRenderMode === "ai_gen" || draft.productRenderMode === "assembly"
+          draft.productRenderMode === "ai_gen" ||
+          draft.productRenderMode === "assembly" ||
+          draft.productRenderMode === "photo_post"
             ? draft.productRenderMode
             : "slideshow";
         let blueprintScenes: AiGenSceneSpec[] = [];
@@ -433,11 +529,13 @@ export function useStudioSubmit() {
                           draft.slideshow.durationPerImage * 1000
                         ),
                       }
-                    : {
-                        aspect: draft.slideshow.aspectRatio,
-                        duration_per_image_ms: Math.round(draft.slideshow.durationPerImage * 1000),
-                        bgm_style: draft.slideshow.bgmEnabled ? "random" : "none",
-                      },
+                    : renderMode === "photo_post"
+                      ? {} // 图文帖无渲染参数(render_intent 由路由写入)
+                      : {
+                          aspect: draft.slideshow.aspectRatio,
+                          duration_per_image_ms: Math.round(draft.slideshow.durationPerImage * 1000),
+                          bgm_style: draft.slideshow.bgmEnabled ? "random" : "none",
+                        },
               renderMode,
               ...(draft.recipeId ? { recipeId: draft.recipeId } : {}),
               ...(draft.linkUrl
@@ -467,7 +565,28 @@ export function useStudioSubmit() {
           return { ok: false, error: "蓝图保存失败,请重试" };
         }
 
-        if (renderMode === "assembly") {
+        if (renderMode === "photo_post") {
+          // 图文帖腿(S4.1):图=素材图序(每变体独立洗牌),文案=服务端 LLM。
+          // 任务即插即显(生成文案中),后台 fetch 写回;无 BTM 执行器
+          const selectedPoints = card.selling_points.filter((p) => p.selected);
+          const photoSpec: PhotoPostJobSpec = {
+            kind: "photo_post",
+            prompt: draft.text.trim(),
+            imageUrls: draft.attachmentUrls,
+            productTitle: card.title,
+            sellingPoints: selectedPoints.map((p) => p.text),
+            sceneLines: blueprintScenes.map((s) => s.line.trim()).filter(Boolean),
+            count: draft.count,
+            batchId,
+            groupName,
+            blueprintId,
+          };
+          const tasks = toPhotoPostTasks(photoSpec);
+          usePhotoPostStore.getState().addTasks(tasks);
+          runPhotoPostGeneration(photoSpec, tasks);
+          jobRefs = tasks.map((t) => ({ kind: "photo_post" as const, taskId: t.id }));
+          spec = photoSpec as unknown as Record<string, unknown>;
+        } else if (renderMode === "assembly") {
           // 拼装口播腿(S3.1):蓝图 scenes 逐镜 TTS+字幕出段 → stitch
           if (blueprintScenes.length === 0) {
             return { ok: false, error: "蓝图分镜为空,无法拼装出片" };
@@ -632,16 +751,20 @@ export function useStudioSubmit() {
                     ? `AI 生成·${VIDEO_MODEL_LABELS[draft.video.modelType]}`
                     : draft.productRenderMode === "assembly"
                       ? `拼装口播${draft.slideshow.kenburns ? "·运镜" : ""}`
-                      : `商品成片${draft.slideshow.kenburns ? "·运镜" : ""}`
+                      : draft.productRenderMode === "photo_post"
+                        ? "图文帖"
+                        : `商品成片${draft.slideshow.kenburns ? "·运镜" : ""}`
                   : "GPT Image 2",
           aspectRatio:
             draft.mode === "video"
               ? draft.video.aspectRatio
               : draft.mode === "product" && draft.productRenderMode === "ai_gen"
                 ? draft.video.aspectRatio
-                : draft.mode === "slideshow" || draft.mode === "product"
-                  ? draft.slideshow.aspectRatio
-                  : draft.image.aspectRatio,
+                : draft.mode === "product" && draft.productRenderMode === "photo_post"
+                  ? undefined // 图文帖无比例语义
+                  : draft.mode === "slideshow" || draft.mode === "product"
+                    ? draft.slideshow.aspectRatio
+                    : draft.image.aspectRatio,
           durationSeconds:
             draft.mode === "video"
               ? draft.video.durationSeconds
@@ -688,7 +811,59 @@ export function useStudioSubmit() {
       /** 批量矩阵(S3.4):选中 hooks 与比例多选,空=沿用基础 spec */
       matrix?: { hooks?: Array<{ id: string; text: string }>; aspects?: Array<"9:16" | "16:9"> }
     ): SubmitResult => {
-      const baseSpec = batch.spec as unknown as SlideshowJobSpec | AiGenJobSpec | AssemblyJobSpec;
+      const baseSpec = batch.spec as unknown as
+        | SlideshowJobSpec
+        | AiGenJobSpec
+        | AssemblyJobSpec
+        | PhotoPostJobSpec;
+
+      if (baseSpec?.kind === "photo_post") {
+        // 图文帖重跑:卖点勾选/台词编辑经商品卡+蓝图 scenes 重建文案上下文;
+        // hook 矩阵作文案开头行;比例维度无意义(适配器忽略)
+        const selected = card.selling_points.filter((p) => p.selected);
+        if (selected.length === 0) return { ok: false, error: "至少勾选一个卖点" };
+        const imageUrls =
+          card.images.length >= 1 ? card.images.slice(0, 10) : baseSpec.imageUrls;
+        if (!imageUrls || imageUrls.length === 0) {
+          return { ok: false, error: "图文帖至少需要 1 张图" };
+        }
+        const clamped = Math.max(1, Math.min(20, Math.floor(count) || 1));
+        const batchId = crypto.randomUUID();
+        const now = new Date();
+        const photoSpec: PhotoPostJobSpec = {
+          ...baseSpec,
+          imageUrls,
+          productTitle: card.title,
+          sellingPoints: selected.map((p) => p.text),
+          sceneLines:
+            editedScenes && editedScenes.length > 0
+              ? editedScenes.map((s) => s.line.trim()).filter(Boolean)
+              : baseSpec.sceneLines,
+          count: clamped,
+          batchId,
+          groupName: studioGroupName(now),
+          blueprintId,
+        };
+        const tasks = toPhotoPostTasksWithMatrix(photoSpec, buildMatrixPlan(clamped, matrix));
+        usePhotoPostStore.getState().addTasks(tasks);
+        runPhotoPostGeneration(photoSpec, tasks);
+        addBatch({
+          id: batchId,
+          createdAt: now.toISOString(),
+          title: card.title,
+          summary: {
+            mode: "product",
+            modelLabel: "图文帖",
+            count: clamped,
+            attachmentCount: imageUrls.length,
+            estimatedCredits: 0,
+          },
+          spec: photoSpec as unknown as Record<string, unknown>,
+          jobRefs: tasks.map((t) => ({ kind: "photo_post" as const, taskId: t.id })),
+          blueprintId,
+        });
+        return { ok: true, batchId };
+      }
 
       if (baseSpec?.kind === "assembly") {
         // 拼装口播腿重跑:台词/卖点编辑经蓝图 scenes 生效,新批次独立随机音色
@@ -873,6 +1048,26 @@ export function useStudioSubmit() {
       if (kind === "assembly") {
         // 拼装任务原地重试:只补失败镜(服务端内容寻址幂等,已渲染镜零扣费)
         useAssemblyStore.getState().retryTask(failedTaskId);
+        return { ok: true, batchId: batch.id };
+      }
+      if (kind === "photo_post") {
+        // 图文帖原地重试:保留本变体图序,服务端按 task_id 幂等(已落库直接命中)
+        const store = usePhotoPostStore.getState();
+        const failedTask = store.tasks.find((t) => t.id === failedTaskId);
+        if (failedTask) {
+          store.retryTask(failedTaskId);
+          runPhotoPostGeneration(
+            batch.spec as unknown as PhotoPostJobSpec,
+            [{ ...failedTask, status: "generating" }]
+          );
+          return { ok: true, batchId: batch.id };
+        }
+        // 兜底(任务已被裁剪):按批次 spec 重建 1 条(重新洗牌图序)
+        const spec = { ...(batch.spec as unknown as PhotoPostJobSpec), count: 1 };
+        const [task] = toPhotoPostTasks(spec);
+        usePhotoPostStore.getState().addTasks([task]);
+        runPhotoPostGeneration(spec, [task]);
+        replaceJobRef(batch.id, failedTaskId, { kind, taskId: task.id });
         return { ok: true, batchId: batch.id };
       }
       // slideshow:优先克隆失败任务的 renderRequest(保矩阵变体——hook 前缀

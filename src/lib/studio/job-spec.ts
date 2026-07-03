@@ -30,6 +30,7 @@ import type { QuickGenImageTask } from "@/stores/quick-gen-store";
 import type { SlideshowTask } from "@/stores/slideshow-store";
 import type { AiGenSceneTask, AiGenTask } from "@/stores/ai-gen-store";
 import type { AssemblySceneTask, AssemblyTask } from "@/stores/assembly-store";
+import type { PhotoPostTask } from "@/stores/photo-post-store";
 import { compileScenePrompt, type AiGenSceneInput } from "@/lib/studio/ai-gen-prompts";
 import { PRESET_VOICES } from "@/lib/voice-data";
 
@@ -154,18 +155,31 @@ export interface AssemblyJobSpec extends JobSpecBase {
   voiceId?: string;
 }
 
+export interface PhotoPostJobSpec extends JobSpecBase {
+  kind: "photo_post";
+  /** 素材图(蓝图 scenes 序;每变体由适配器独立洗牌,TikTok photo post ≤10 张) */
+  imageUrls: string[];
+  /** 商品标题(卡片回显 + 文案上下文) */
+  productTitle: string;
+  /** 已勾选卖点文本(文案上下文) */
+  sellingPoints: string[];
+  /** 蓝图逐镜台词(可选,给 LLM 叙事脉络) */
+  sceneLines?: string[];
+}
+
 export type JobSpec =
   | VideoJobSpec
   | ImageJobSpec
   | SlideshowJobSpec
   | AiGenJobSpec
-  | AssemblyJobSpec;
+  | AssemblyJobSpec
+  | PhotoPostJobSpec;
 
 // ============================================================================
 // 工具
 // ============================================================================
 
-/** 任务 id 生成,沿用现有惯例:video=vbt-*,image=qg-*,slideshow=ss-*,ai_gen=ag-*,assembly=asm-* */
+/** 任务 id 生成,沿用现有惯例:video=vbt-*,image=qg-*,slideshow=ss-*,ai_gen=ag-*,assembly=asm-*,photo_post=pp-* */
 export function createJobId(kind: JobSpec["kind"]): string {
   const rand = Math.random().toString(36).slice(2, 11);
   const prefix =
@@ -177,7 +191,9 @@ export function createJobId(kind: JobSpec["kind"]): string {
           ? "ag"
           : kind === "assembly"
             ? "asm"
-            : "ss";
+            : kind === "photo_post"
+              ? "pp"
+              : "ss";
   return `${prefix}-${Date.now()}-${rand}`;
 }
 
@@ -487,6 +503,37 @@ export function toAssemblyTask(spec: AssemblyJobSpec, opts: AdapterOptions = {})
 // ============================================================================
 
 /** 按 spec.count 展开为 N 个 VideoBatchTask(id 互不相同,内容相同) */
+/**
+ * PhotoPostJobSpec → PhotoPostTask(S4.1 图文帖腿)。
+ * 首个变体保留蓝图 scenes 原序(hook 图打头),其余变体独立洗牌
+ * (素材级去同质化,BLUEPRINT §六「强制图序差异」);variantIndex 由
+ * toPhotoPostTasks/WithMatrix 传入。文案由服务端 LLM 生成后写回。
+ */
+export function toPhotoPostTask(
+  spec: PhotoPostJobSpec,
+  opts: AdapterOptions & { variantIndex?: number } = {}
+): PhotoPostTask {
+  const id = opts.id ?? createJobId("photo_post");
+  const now = opts.now ?? new Date().toISOString();
+  const ordered =
+    (opts.variantIndex ?? 0) === 0 ? [...spec.imageUrls] : shuffled(spec.imageUrls);
+  return {
+    id,
+    groupName: spec.groupName ?? "Studio",
+    batchId: spec.batchId,
+    blueprintId: spec.blueprintId,
+    title: spec.productTitle,
+    imageUrls: ordered.slice(0, 10), // TikTok photo post 上限 10 张
+    caption: null,
+    hookText: spec.variant?.hook_text,
+    variant: spec.variant,
+    status: "generating",
+    errorMessage: null,
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
 export function toVideoBatchTasks(spec: VideoJobSpec, opts: Omit<AdapterOptions, "id"> = {}): VideoBatchTask[] {
   return Array.from({ length: clampCount(spec.count) }, () => toVideoBatchTask(spec, opts));
 }
@@ -511,6 +558,15 @@ export function toAiGenTasks(spec: AiGenJobSpec, opts: Omit<AdapterOptions, "id"
  * 音色是拼装腿变体间唯一差异轴(画面/台词/转场确定性),有放回随机会撞声线
  * 产出实质重复成片(审查实锤)——按语言池洗牌后无放回轮转分配。
  */
+export function toPhotoPostTasks(
+  spec: PhotoPostJobSpec,
+  opts: Omit<AdapterOptions, "id"> = {}
+): PhotoPostTask[] {
+  return Array.from({ length: clampCount(spec.count) }, (_, i) =>
+    toPhotoPostTask(spec, { ...opts, variantIndex: i })
+  );
+}
+
 export function toAssemblyTasks(
   spec: AssemblyJobSpec,
   opts: Omit<AdapterOptions, "id"> = {}
@@ -609,6 +665,23 @@ export function toAssemblyTasksWithMatrix(
       voiceId: explicitVoice ?? voiceIds[i % voiceIds.length],
       variant: cellVariant(cell) ?? {},
     })
+  );
+}
+
+/** 矩阵展开:图文帖腿(hook 作文案开头行;比例维度无意义,忽略) */
+export function toPhotoPostTasksWithMatrix(
+  spec: PhotoPostJobSpec,
+  plan: MatrixCell[]
+): PhotoPostTask[] {
+  return plan.map((cell, i) =>
+    toPhotoPostTask(
+      {
+        ...spec,
+        count: 1,
+        variant: cell.hook ? { hook_id: cell.hook.id, hook_text: cell.hook.text } : undefined,
+      },
+      { variantIndex: i }
+    )
   );
 }
 

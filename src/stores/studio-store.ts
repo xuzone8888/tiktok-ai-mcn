@@ -18,7 +18,7 @@ import type { CharacterAssetSnapshot } from "@/lib/character-assets";
 // ============================================================================
 
 /** Job 引用:指向任务真正所在的 store */
-export type StudioJobKind = "video" | "image" | "slideshow" | "ai_gen" | "assembly";
+export type StudioJobKind = "video" | "image" | "slideshow" | "ai_gen" | "assembly" | "photo_post";
 
 export interface StudioJobRef {
   kind: StudioJobKind;

@@ -9,6 +9,8 @@ import { isTikTokMockCredential, isTikTokTestMockEnabled } from './test-mock';
 
 // TikTok Content Posting API endpoints
 const TIKTOK_PUBLISH_VIDEO_INIT = 'https://open.tiktokapis.com/v2/post/publish/video/init/';
+// photo post 走 content/init(S0 核验:同 video.publish/video.upload scope + 同 Direct Post 审批)
+const TIKTOK_PUBLISH_CONTENT_INIT = 'https://open.tiktokapis.com/v2/post/publish/content/init/';
 const TIKTOK_PUBLISH_STATUS = 'https://open.tiktokapis.com/v2/post/publish/status/fetch/';
 const TIKTOK_CREATOR_INFO = 'https://open.tiktokapis.com/v2/post/publish/creator_info/query/';
 
@@ -183,6 +185,104 @@ export async function initVideoPublishFromUrl(
                 throw e
             }
             throw new Error(`Failed to init video publish (${response.status}): ${errorText.substring(0, 200)}`);
+        }
+    }
+
+    const data: TikTokVideoUploadInitResponse = await response.json();
+
+    if (data.error && data.error.code !== 'ok') {
+        throw new Error(`TikTok publish error: ${data.error.message} (${data.error.code})`);
+    }
+
+    return data.data.publish_id;
+}
+
+// Initialize photo post publish from URLs (S4.2 图文帖直发)
+// 端点=content/init(media_type=PHOTO);图片 URL 经 PULL_FROM_URL 拉取,
+// 与视频直发同域名前缀(生产已在用 PULL_FROM_URL 发视频)。
+export async function initPhotoPublishFromUrl(
+    accessToken: string,
+    photos: {
+        /** 发布图序(≤10 张,https 直链) */
+        imageUrls: string[];
+        /** 封面图下标(缺省 0) */
+        coverIndex?: number;
+    },
+    postInfo: {
+        /** 帖子标题(TikTok 上限 90 字符) */
+        title?: string;
+        /** 正文文案(TikTok 上限 4000 字符,支持 #话题) */
+        description?: string;
+        privacyLevel: 'PUBLIC_TO_EVERYONE' | 'MUTUAL_FOLLOW_FRIENDS' | 'FOLLOWER_OF_CREATOR' | 'SELF_ONLY';
+        disableComment?: boolean;
+        /** 自动配乐(photo post 专属,缺省 true) */
+        autoAddMusic?: boolean;
+        brandContentToggle?: boolean;
+        brandOrganicToggle?: boolean;
+    }
+): Promise<string> {
+    if (shouldUseLocalTikTokMock(accessToken)) {
+        const suffix = Math.random().toString(36).slice(2, 10)
+        console.log('[TikTok PhotoPublish] Local mock init:', {
+            imageCount: photos.imageUrls.length,
+            title: postInfo.title?.substring(0, 50),
+        })
+        return `mock-publish-${Date.now()}-${suffix}`
+    }
+
+    const requestBody = {
+        post_info: {
+            title: (postInfo.title ?? '').slice(0, 90),
+            description: (postInfo.description ?? '').slice(0, 4000),
+            privacy_level: postInfo.privacyLevel,
+            disable_comment: postInfo.disableComment ?? false,
+            auto_add_music: postInfo.autoAddMusic ?? true,
+            brand_content_toggle: postInfo.brandContentToggle ?? false,
+            brand_organic_toggle: postInfo.brandOrganicToggle ?? false,
+        },
+        source_info: {
+            source: 'PULL_FROM_URL' as const,
+            photo_cover_index: Math.min(
+                Math.max(photos.coverIndex ?? 0, 0),
+                photos.imageUrls.length - 1
+            ),
+            photo_images: photos.imageUrls.slice(0, 10),
+        },
+        post_mode: 'DIRECT_POST' as const,
+        media_type: 'PHOTO' as const,
+    };
+
+    console.log('[TikTok PhotoPublish] Initiating publish:', {
+        imageCount: photos.imageUrls.length,
+        title: postInfo.title?.substring(0, 50),
+        privacyLevel: postInfo.privacyLevel,
+    })
+
+    const response = await fetchWithRetry(TIKTOK_PUBLISH_CONTENT_INIT, {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json; charset=UTF-8',
+        },
+        body: JSON.stringify(requestBody),
+    });
+
+    if (!response.ok) {
+        const errorText = await response.text();
+        console.error('[TikTok PhotoPublish] API Error:', {
+            status: response.status,
+            statusText: response.statusText,
+            errorBody: errorText.substring(0, 500),
+        })
+        try {
+            const errorJson = JSON.parse(errorText);
+            const message = errorJson.error?.message || errorJson.message || errorText;
+            throw new Error(`TikTok API Error (${response.status}): ${message}`);
+        } catch (e) {
+            if (e instanceof Error && e.message.startsWith('TikTok API Error')) {
+                throw e
+            }
+            throw new Error(`Failed to init photo publish (${response.status}): ${errorText.substring(0, 200)}`);
         }
     }
 

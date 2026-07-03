@@ -12,6 +12,7 @@ import { useQuickGenStore, type QuickGenImageTask } from "@/stores/quick-gen-sto
 import { useSlideshowStore, type SlideshowTask } from "@/stores/slideshow-store";
 import { useAiGenStore, type AiGenTask } from "@/stores/ai-gen-store";
 import { useAssemblyStore, type AssemblyTask } from "@/stores/assembly-store";
+import { usePhotoPostStore, type PhotoPostTask } from "@/stores/photo-post-store";
 import { getStatusLabel, type VideoBatchTask } from "@/types/video-batch";
 import type { StudioBatch, StudioJobRef } from "@/stores/studio-store";
 
@@ -30,10 +31,13 @@ export interface StudioJobView {
   /** 中文细分状态(生成脚本/轮询中…) */
   statusLabel: string;
   progress: number;
-  resultType: "video" | "image";
+  resultType: "video" | "image" | "photo_post";
   resultUrl?: string;
-  /** 缩略用:图片=成图;视频=首张素材图 */
+  /** 缩略用:图片=成图;视频=首张素材图;图文帖=封面图 */
   coverUrl?: string;
+  /** 图文帖(S4.1):变体图序 + 发布文案 */
+  images?: string[];
+  caption?: string;
   errorMessage?: string;
   /** 入库匹配键 = generations.task_id(上游任务 id);任务未提交成功时为空 */
   generationTaskId?: string;
@@ -227,6 +231,39 @@ function fromAssemblyTask(ref: StudioJobRef, task: AssemblyTask): StudioJobView 
   };
 }
 
+const PHOTO_POST_STATUS_LABELS: Record<PhotoPostTask["status"], string> = {
+  generating: "生成文案中",
+  completed: "已完成",
+  failed: "失败",
+};
+
+function fromPhotoPostTask(ref: StudioJobRef, task: PhotoPostTask): StudioJobView {
+  const status: StudioJobStatus =
+    task.status === "completed"
+      ? "success"
+      : task.status === "failed"
+        ? "failed"
+        : "running";
+  return {
+    ref,
+    kind: "photo_post",
+    taskId: task.id,
+    status,
+    statusLabel: PHOTO_POST_STATUS_LABELS[task.status],
+    progress: task.status === "completed" ? 100 : task.status === "failed" ? 0 : 50,
+    resultType: "photo_post",
+    resultUrl: task.imageUrls[0],
+    coverUrl: task.imageUrls[0],
+    images: task.imageUrls,
+    caption: task.caption ?? undefined,
+    errorMessage: task.errorMessage ?? undefined,
+    // 落库 generations.task_id = 任务 id(photo-post 路由写入)
+    generationTaskId: task.status === "completed" ? task.id : undefined,
+    libraryStatus: ref.libraryStatus,
+    prompt: task.caption ?? task.title,
+  };
+}
+
 function missingView(ref: StudioJobRef): StudioJobView {
   return {
     ref,
@@ -235,7 +272,8 @@ function missingView(ref: StudioJobRef): StudioJobView {
     status: "missing",
     statusLabel: "记录已清理",
     progress: 0,
-    resultType: ref.kind === "image" ? "image" : "video",
+    resultType:
+      ref.kind === "image" ? "image" : ref.kind === "photo_post" ? "photo_post" : "video",
     libraryStatus: ref.libraryStatus,
   };
 }
@@ -250,6 +288,7 @@ export interface HostTaskMaps {
   slideshowById: Map<string, SlideshowTask>;
   aiGenById: Map<string, AiGenTask>;
   assemblyById: Map<string, AssemblyTask>;
+  photoPostById: Map<string, PhotoPostTask>;
 }
 
 /**
@@ -262,6 +301,7 @@ export function useHostTaskMaps(): HostTaskMaps {
   const slideshowTasks = useSlideshowStore((state) => state.tasks);
   const aiGenTasks = useAiGenStore((state) => state.tasks);
   const assemblyTasks = useAssemblyStore((state) => state.tasks);
+  const photoPostTasks = usePhotoPostStore((state) => state.tasks);
 
   return useMemo(
     () => ({
@@ -270,8 +310,9 @@ export function useHostTaskMaps(): HostTaskMaps {
       slideshowById: new Map(slideshowTasks.map((t) => [t.id, t])),
       aiGenById: new Map(aiGenTasks.map((t) => [t.id, t])),
       assemblyById: new Map(assemblyTasks.map((t) => [t.id, t])),
+      photoPostById: new Map(photoPostTasks.map((t) => [t.id, t])),
     }),
-    [videoTasks, imageTasks, slideshowTasks, aiGenTasks, assemblyTasks]
+    [videoTasks, imageTasks, slideshowTasks, aiGenTasks, assemblyTasks, photoPostTasks]
   );
 }
 
@@ -293,6 +334,10 @@ export function buildBatchJobViews(batch: StudioBatch, maps: HostTaskMaps): Stud
     if (ref.kind === "assembly") {
       const task = maps.assemblyById.get(ref.taskId);
       return task ? fromAssemblyTask(ref, task) : missingView(ref);
+    }
+    if (ref.kind === "photo_post") {
+      const task = maps.photoPostById.get(ref.taskId);
+      return task ? fromPhotoPostTask(ref, task) : missingView(ref);
     }
     const task = maps.slideshowById.get(ref.taskId);
     return task ? fromSlideshowTask(ref, task) : missingView(ref);

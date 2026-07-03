@@ -72,14 +72,19 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
 
-    // renderMode 白名单:slideshow(S1.3)+ ai_gen(S2.3)+ assembly(S3.1 拼装口播腿)
+    // renderMode 白名单:slideshow(S1.3)+ ai_gen(S2.3)+ assembly(S3.1)+ photo_post(S4.1)。
+    // photo_post 落库 render_mode=null(生产 blueprints CHECK 只放三条视频腿,
+    // 与拆解蓝图同款 null 先例,免掉一次纯语义迁移),真实腿标记进
+    // globals.render_intent + generations.spec.render_mode
+    const requested = body?.renderMode === undefined ? "slideshow" : body.renderMode;
+    const isPhotoPost = requested === "photo_post";
     const renderMode =
-      body?.renderMode === undefined || body.renderMode === "slideshow"
-        ? "slideshow"
-        : body.renderMode === "ai_gen" || body.renderMode === "assembly"
-          ? (body.renderMode as "ai_gen" | "assembly")
-          : null;
-    if (!renderMode) {
+      requested === "slideshow" || requested === "ai_gen" || requested === "assembly"
+        ? (requested as "slideshow" | "ai_gen" | "assembly")
+        : isPhotoPost
+          ? null
+          : undefined;
+    if (renderMode === undefined) {
       return NextResponse.json({ success: false, error: "renderMode 非法" }, { status: 400 });
     }
 
@@ -130,6 +135,7 @@ export async function POST(request: NextRequest) {
         globals[key] = (rawGlobals[key] as string).slice(0, 100);
       }
     }
+    if (isPhotoPost) globals.render_intent = "photo_post";
 
     // 配方实例化(S3.5):recipeId 提供时按配方骨架填槽出 scenes/hooks,
     // 替代默认图序骨架。seed-* 为内置常量(不依赖 recipes 表);UUID 为用户配方

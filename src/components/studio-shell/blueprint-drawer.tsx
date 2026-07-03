@@ -145,10 +145,14 @@ export function BlueprintDrawer({ batch, onClose }: BlueprintDrawerProps) {
   const [reloadNonce, setReloadNonce] = useState(0);
   const [confirmOpen, setConfirmOpen] = useState(false);
 
+  // 图文帖批次(S4.1):免费、无比例维度、单批 ≤20 条
+  const isPhotoPostBatch = (batch.spec as { kind?: string })?.kind === "photo_post";
+
   // 重跑估价镜像 omnibox estimateCredits(权威扣退在服务端):
-  // ai_gen=逐镜计价×镜数×条数;assembly=1分/镜×镜数×条数;slideshow=图数分级×条数
+  // ai_gen=逐镜计价×镜数×条数;assembly=1分/镜×镜数×条数;slideshow=图数分级×条数;photo_post=免费
   const estimatedCredits = useMemo(() => {
     const baseSpec = batch.spec as unknown as { kind?: string };
+    if (baseSpec?.kind === "photo_post") return 0;
     if (baseSpec?.kind === "assembly") {
       const asmSpec = batch.spec as unknown as AssemblyJobSpec;
       const sceneCount = scenes.length || asmSpec.scenes?.length || 1;
@@ -470,7 +474,8 @@ export function BlueprintDrawer({ batch, onClose }: BlueprintDrawerProps) {
       : hooks.filter((h) => h.selected && h.text.trim()).map((h) => ({ id: h.id, text: h.text }));
     const result = rerunBlueprint(batch, effectiveCard, blueprintId, rerunCount, editedScenes, {
       hooks: selectedHooks,
-      aspects: rerunAspects,
+      // 图文帖无比例语义:UI 已隐藏比例多选,残留 state 不进矩阵
+      aspects: isPhotoPostBatch ? [] : rerunAspects,
     });
     if (result.ok) {
       toast({ title: `已按蓝图排队 ${rerunCount} 条成片` });
@@ -685,7 +690,9 @@ export function BlueprintDrawer({ batch, onClose }: BlueprintDrawerProps) {
               <div>
                 <div className="mb-1.5 flex items-center justify-between">
                   <p className="text-[11px] font-medium text-zinc-500">
-                    Hook 候选(勾选进入变体矩阵,逐条轮转注入首镜口播)
+                    {isPhotoPostBatch
+                      ? "Hook 候选(勾选进入变体矩阵,逐条轮转作为文案开头)"
+                      : "Hook 候选(勾选进入变体矩阵,逐条轮转注入首镜口播)"}
                   </p>
                   {!isDeconstruct && (
                     <button
@@ -739,7 +746,9 @@ export function BlueprintDrawer({ batch, onClose }: BlueprintDrawerProps) {
                 <p className="mb-1.5 text-[11px] font-medium text-zinc-500">
                   {isDeconstruct
                     ? "逐镜台词(原片结构;出片前请改写为你自己的商品/内容——原台词不应进入生成物)"
-                    : "分镜台词(行内编辑;幻灯片口播由 AI 按卖点生成,AI 生成/拼装口播腿逐镜以此为口播本体)"}
+                    : isPhotoPostBatch
+                      ? "分镜台词(图文帖:作为文案叙事参考,发布正文由 AI 按卖点+台词生成)"
+                      : "分镜台词(行内编辑;幻灯片口播由 AI 按卖点生成,AI 生成/拼装口播腿逐镜以此为口播本体)"}
                 </p>
                 <div className="space-y-2">
                   {scenes.map((scene) => (
@@ -824,7 +833,8 @@ export function BlueprintDrawer({ batch, onClose }: BlueprintDrawerProps) {
               存为配方
             </Button>
           </div>
-          {/* 比例多选(S3.4 矩阵维度;空=沿用批次比例) */}
+          {/* 比例多选(S3.4 矩阵维度;空=沿用批次比例;图文帖无比例语义不展示) */}
+          {!isPhotoPostBatch && (
           <div className="flex items-center gap-1.5">
             <span className="text-[11px] text-zinc-600">比例</span>
             {(["9:16", "16:9"] as const).map((a) => (
@@ -848,6 +858,7 @@ export function BlueprintDrawer({ batch, onClose }: BlueprintDrawerProps) {
             ))}
             <span className="text-[10px] text-zinc-700">不选=沿用原比例;全选=变体轮转</span>
           </div>
+          )}
           <div className="flex items-center gap-2">
             <div className="flex items-center gap-1 rounded-lg border border-white/10 bg-black/30 px-1 py-0.5">
               <button
@@ -862,7 +873,7 @@ export function BlueprintDrawer({ batch, onClose }: BlueprintDrawerProps) {
               </span>
               <button
                 type="button"
-                onClick={() => setRerunCount((c) => Math.min(100, c + 1))}
+                onClick={() => setRerunCount((c) => Math.min(isPhotoPostBatch ? 20 : 100, c + 1))}
                 className="rounded p-1 text-zinc-400 hover:text-white"
               >
                 <Plus className="h-3 w-3" />
@@ -885,13 +896,15 @@ export function BlueprintDrawer({ batch, onClose }: BlueprintDrawerProps) {
           </div>
           <p className="flex items-center gap-1 text-[11px] tabular-nums text-zinc-500">
             <Zap className="h-3 w-3" />
-            预估 ≈ {estimatedCredits} 积分(按任务在服务端逐条扣除,失败自动退款)
+            {isPhotoPostBatch
+              ? "图文帖免费(图=素材图序,文案 AI 生成;hook 勾选作为文案开头轮转)"
+              : `预估 ≈ ${estimatedCredits} 积分(按任务在服务端逐条扣除,失败自动退款)`}
           </p>
           {(() => {
             // 矩阵覆盖提示:条数不足以轮转到全部选中组合时如实说明(审查实锤)
             if (isDeconstruct) return null;
             const hookCount = hooks.filter((h) => h.selected && h.text.trim()).length;
-            const aspectCount = rerunAspects.length || 1;
+            const aspectCount = isPhotoPostBatch ? 1 : rerunAspects.length || 1;
             const cellCount = Math.max(hookCount, 1) * aspectCount;
             if (cellCount > 1 && rerunCount < cellCount) {
               return (

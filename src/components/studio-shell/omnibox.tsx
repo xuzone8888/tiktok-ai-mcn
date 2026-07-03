@@ -194,10 +194,10 @@ export function Omnibox({
     setPickerOpen(false);
   };
 
-  // ==================== 商品成片:渲染腿(S2.3/S3.1) ====================
-  // 幻灯片(默认,分级积分)| AI 逐镜生成(video 参数计价)| 拼装口播(1分/镜)
+  // ==================== 商品成片:渲染腿(S2.3/S3.1/S4.1) ====================
+  // 幻灯片(默认,分级积分)| AI 逐镜生成(video 参数计价)| 拼装口播(1分/镜)| 图文帖(免费)
   const [productRenderMode, setProductRenderMode] = useState<
-    "slideshow" | "ai_gen" | "assembly"
+    "slideshow" | "ai_gen" | "assembly" | "photo_post"
   >("slideshow");
 
   // ==================== 商品成片:配方(S3.5) ====================
@@ -929,7 +929,7 @@ export function Omnibox({
           </span>
         )}
 
-        {/* 商品成片:渲染腿切换(幻灯片=分级积分;AI 生成=逐镜 video 计价) */}
+        {/* 商品成片:渲染腿切换(幻灯片=分级积分;AI 生成=逐镜 video 计价;图文帖=免费) */}
         {mode === "product" && (
           <div className="flex items-center rounded-lg border border-white/10 bg-black/30 p-0.5">
             {(
@@ -937,6 +937,7 @@ export function Omnibox({
                 { key: "slideshow", label: "幻灯片" },
                 { key: "assembly", label: "拼装口播" },
                 { key: "ai_gen", label: "AI 生成" },
+                { key: "photo_post", label: "图文帖" },
               ] as const
             ).map((leg) => (
               <button
@@ -1051,6 +1052,10 @@ export function Omnibox({
         ) : mode === "deconstruct" ? (
           <span className="text-[11px] text-zinc-600">
             拆解免费(限 3 次/分,30 次/天);耗时约 1-5 分钟
+          </span>
+        ) : mode === "product" && productRenderMode === "photo_post" ? (
+          <span className="text-[11px] text-zinc-600">
+            图=素材图序(每条独立洗牌),文案 AI 生成;免费,可直发 TikTok 图文
           </span>
         ) : mode === "product" && productRenderMode === "assembly" ? (
           <>
@@ -1375,9 +1380,11 @@ export function Omnibox({
                   ? "AI 逐镜成片(每图一镜逐镜计价)"
                   : mode === "product" && productRenderMode === "assembly"
                     ? "拼装口播成片(每图一镜,1 积分/镜)"
-                    : mode === "slideshow" || mode === "product"
-                      ? "轮播成片"
-                      : "图片"}
+                    : mode === "product" && productRenderMode === "photo_post"
+                      ? "图文帖(免费)"
+                      : mode === "slideshow" || mode === "product"
+                        ? "轮播成片"
+                        : "图片"}
               任务,预估消耗{" "}
               <span className="font-semibold text-amber-500 tabular-nums">{estimated}</span> 积分
               {credits !== null && <>(当前余额 {credits})</>}。积分按任务在服务端逐条扣除,失败自动退款。
