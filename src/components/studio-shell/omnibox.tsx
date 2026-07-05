@@ -226,6 +226,10 @@ export function Omnibox({
   // ==================== @角色(S1.4:image/video 模式可用) ====================
   const [character, setCharacter] = useState<CharacterAssetSnapshot | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
+  // @浮层交互 refs:Esc 关闭后焦点还给输入框;点浮层外关闭需知道"内外"边界
+  const pickerPopoverRef = useRef<HTMLDivElement>(null);
+  const atBtnRef = useRef<HTMLButtonElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const characterApplicable = mode === "image" || mode === "video";
 
   const handleCharacterSelect = (option: CharacterOption | null) => {
@@ -556,14 +560,32 @@ export function Omnibox({
 
   // @角色浮层 Esc 关闭:挂 window 级,不依赖焦点在主输入框——走查实锤,
   // 点 @按钮唤起或点浮层内搜索框后焦点不在输入框,主输入框 onKeyDown 的
-  // Esc 分支收不到事件,浮层关不掉(只有键盘敲 @ 唤起、焦点没离开时才行)
+  // Esc 分支收不到事件,浮层关不掉(只有键盘敲 @ 唤起、焦点没离开时才行)。
+  // isComposing/229 守卫:IME 组字中按 Esc 是取消候选词,不能连浮层一起关
+  // (与本文件 Enter 提交守卫同款);关闭后焦点还给输入框,键盘流不断
   useEffect(() => {
     if (!pickerOpen) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setPickerOpen(false);
+      if (e.key !== "Escape" || e.isComposing || e.keyCode === 229) return;
+      setPickerOpen(false);
+      textareaRef.current?.focus();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
+  }, [pickerOpen]);
+
+  // 点浮层外任意处关闭(@按钮除外——它自身是 toggle;pointerdown 若先关这里,
+  // 随后的 click 又切开,浮层永远关不上,故排除按钮、由其 onClick 统一切换)
+  useEffect(() => {
+    if (!pickerOpen) return;
+    const onPointerDown = (e: PointerEvent) => {
+      const t = e.target as Node;
+      if (pickerPopoverRef.current?.contains(t)) return;
+      if (atBtnRef.current?.contains(t)) return;
+      setPickerOpen(false);
+    };
+    window.addEventListener("pointerdown", onPointerDown);
+    return () => window.removeEventListener("pointerdown", onPointerDown);
   }, [pickerOpen]);
 
   const uploading = attachments.some((a) => a.status === "uploading");
@@ -740,7 +762,7 @@ export function Omnibox({
     <div className="pointer-events-auto relative mx-auto w-full max-w-[980px] rounded-2xl border border-white/10 bg-zinc-900/90 shadow-2xl shadow-black/40 backdrop-blur-xl">
       {/* @角色选择面板(悬浮于 omnibox 上方) */}
       {pickerOpen && characterApplicable && (
-        <div className="absolute inset-x-0 bottom-full mb-2 rounded-2xl border border-white/10 bg-zinc-900/95 p-3 shadow-2xl shadow-black/50 backdrop-blur-xl">
+        <div ref={pickerPopoverRef} className="absolute inset-x-0 bottom-full mb-2 rounded-2xl border border-white/10 bg-zinc-900/95 p-3 shadow-2xl shadow-black/50 backdrop-blur-xl">
           <div className="mb-1 flex items-center justify-between">
             <span className="text-xs font-medium text-zinc-400">@角色 · 一致性引用</span>
             <button
@@ -1370,6 +1392,7 @@ export function Omnibox({
           }}
         />
         <button
+          ref={atBtnRef}
           type="button"
           disabled={!characterApplicable}
           onClick={() => setPickerOpen((v) => !v)}
@@ -1398,6 +1421,7 @@ export function Omnibox({
           }}
         />
         <textarea
+          ref={textareaRef}
           value={text}
           onChange={(e) => setText(e.target.value)}
           onPaste={(e) => {
@@ -1428,12 +1452,10 @@ export function Omnibox({
               handleSend();
               return;
             }
-            // 输入 @ 唤起角色选择器(仅唤起,不吞字符;Esc 关闭)
+            // 输入 @ 唤起角色选择器(仅唤起,不吞字符;Esc 关闭统一走
+            // window 级 pickerOpen effect——这里不再重复一份,双路径易漂移)
             if (e.key === "@" && characterApplicable && !e.nativeEvent.isComposing) {
               setPickerOpen(true);
-            }
-            if (e.key === "Escape" && pickerOpen) {
-              setPickerOpen(false);
             }
           }}
           placeholder={

@@ -139,6 +139,21 @@ export function BlueprintDrawer({ batch, onClose }: BlueprintDrawerProps) {
   }>(null);
   const [deidentifying, setDeidentifying] = useState(false);
   const [savingRecipe, setSavingRecipe] = useState(false);
+  const recipeModalOpen = recipeDraft !== null;
+
+  // 脱敏 diff 弹窗 Esc 关闭(镜像「取消」按钮:保存中不可关)。capture+stopPropagation:
+  // 弹窗是最顶层,这次 Esc 要整个吃掉,不能漏给底下 omnibox 的 @浮层/链接解析监听;
+  // isComposing/229 守卫:槽位稿 textarea 里 IME 组字按 Esc 是取消候选词
+  useEffect(() => {
+    if (!recipeModalOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || e.isComposing || e.keyCode === 229) return;
+      e.stopPropagation();
+      if (!savingRecipe) setRecipeDraft(null);
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [recipeModalOpen, savingRecipe]);
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [rerunCount, setRerunCount] = useState(3);
