@@ -554,6 +554,18 @@ export function Omnibox({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [linkChip?.status, pickerOpen]);
 
+  // @角色浮层 Esc 关闭:挂 window 级,不依赖焦点在主输入框——走查实锤,
+  // 点 @按钮唤起或点浮层内搜索框后焦点不在输入框,主输入框 onKeyDown 的
+  // Esc 分支收不到事件,浮层关不掉(只有键盘敲 @ 唤起、焦点没离开时才行)
+  useEffect(() => {
+    if (!pickerOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setPickerOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [pickerOpen]);
+
   const uploading = attachments.some((a) => a.status === "uploading");
   // 失败附件阻断发送:否则实际提交内容与用户所见不符(失败图被静默剔除)
   const hasFailedAttachment = attachments.some((a) => a.status === "failed");
