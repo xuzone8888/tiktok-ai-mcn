@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { isOSSUrl } from "@/lib/oss";
 import { buildDeconstructBlueprint, deconstructVideo } from "@/lib/studio/deconstruct";
+import { probeVideoDurationSec } from "@/lib/studio/video-probe";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -32,6 +33,10 @@ export const maxDuration = 300;
 const RATE_PER_MIN = 3;
 const RATE_PER_DAY = 30;
 const MAX_CONCURRENT_PER_USER = 1;
+// 时长闸(裁决 90s):qwen omni 分析天花板实测 ~100s(基准 #15/#18 实锤:
+// 104s/221s 均烧满 135s×2 预算后超时)。超长视频与其进管线白等 4 分半,
+// 不如当场拦截。+2s 容差:容器时长常有零点几秒溢出,90.x 的「90 秒片」不冤杀
+const MAX_VIDEO_DURATION_SEC = 90;
 const rateLog = new Map<string, number[]>();
 const inflightByUser = new Map<string, number>();
 
@@ -110,6 +115,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  // 硬期限从请求入口起算(nginx 300s 墙同参照系,留 5s 响应余量):
+  // auth/幂等锚/ffprobe/落库的耗时全部计入 deconstructVideo 的重生成预算
+  const deadlineAtMs = Date.now() + 295_000;
   let userId: string | null = null;
   try {
     const supabase = await createClient();
@@ -190,8 +198,22 @@ export async function POST(request: NextRequest) {
     userId = user.id;
     inflightByUser.set(user.id, (inflightByUser.get(user.id) ?? 0) + 1);
 
+    // ---------- 时长兜底闸(主闸在客户端 omnibox 预检;此处拦绕过 UI 的直打) ----------
+    // 放在频控计戳之后:走 UI 的正常用户到不了这里,直打超长视频烧掉自己的
+    // 额度是合理代价。探测失败(null)放行,绝不冤杀——见 video-probe 注释
+    const durationSec = await probeVideoDurationSec(videoUrl);
+    if (durationSec !== null && durationSec > MAX_VIDEO_DURATION_SEC + 2) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: `视频约 ${Math.round(durationSec)} 秒——当前版本适合拆解 ${MAX_VIDEO_DURATION_SEC} 秒内的爆款视频,请换一条更短的(长视频支持在路上)`,
+        },
+        { status: 400 }
+      );
+    }
+
     // ---------- Qwen omni 一次调用拆解(分钟级) ----------
-    const report = await deconstructVideo(videoUrl);
+    const report = await deconstructVideo(videoUrl, { deadlineAtMs });
     const { scenes, hooks } = buildDeconstructBlueprint(report);
 
     // ---------- 蓝图落库(cookie client,RLS own;blueprints 未进生成类型) ----------

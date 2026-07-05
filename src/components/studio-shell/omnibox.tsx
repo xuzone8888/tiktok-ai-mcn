@@ -102,6 +102,45 @@ const MODES: { key: StudioMode; label: string }[] = [
 
 /** 门B 上传限制:客户端预检(预签名 PUT 本身不校验大小) */
 const DECONSTRUCT_MAX_MB = 200;
+// 时长闸(裁决 90s):qwen 分析天花板实测 ~100s(基准实锤:104s/221s 均烧满
+// 135s×2 预算后超时)——上传前本地读元数据当场拦住,别让用户传完再白等 4 分半。
+// +1s 容差:容器时长常有零点几秒溢出,90.x 的「90 秒片」不冤杀
+const DECONSTRUCT_MAX_SEC = 90;
+
+/** 浏览器端读视频时长(本地 blob 元数据,秒级不耗流量;读不出返回 null=放行,服务端 ffprobe 有兜底闸) */
+function readVideoDurationSec(file: File): Promise<number | null> {
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(file);
+    const video = document.createElement("video");
+    video.preload = "metadata";
+    let settled = false;
+    const done = (d: number | null) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      URL.revokeObjectURL(url);
+      video.removeAttribute("src");
+      resolve(d);
+    };
+    const timer = setTimeout(() => done(null), 10_000);
+    video.onloadedmetadata = () => {
+      if (video.duration === Infinity) {
+        // 流式容器(如 MediaRecorder 录屏 webm)无时长头,duration 恒 Infinity——
+        // 而正是这个缺头让服务端 ffprobe 同样读不出时长,客户端是唯一能廉价
+        // 恢复的层(审查实锤:否则长录屏双闸皆穿,白等 4 分半)。标准恢复法:
+        // seek 到超大时间点,浏览器解析出真实时长并派发 durationchange
+        video.ondurationchange = () => {
+          if (Number.isFinite(video.duration) && video.duration > 0) done(video.duration);
+        };
+        video.currentTime = 1e10;
+        return;
+      }
+      done(Number.isFinite(video.duration) && video.duration > 0 ? video.duration : null);
+    };
+    video.onerror = () => done(null);
+    video.src = url;
+  });
+}
 
 const IMAGE_ASPECT_OPTIONS = ["auto", "1:1", "9:16", "16:9", "3:4", "4:3"];
 const VIDEO_MODEL_OPTIONS = Object.keys(VIDEO_MODEL_LABELS) as VideoModelType[];
@@ -337,8 +376,19 @@ export function Omnibox({
   const videoInputRef = useRef<HTMLInputElement>(null);
   // 上传代际:换文件时旧上传的迟到回调作废
   const videoUploadNonceRef = useRef(0);
+  // 在途 xhr:换片/移除时 abort,不让被撤回的大文件继续吃上行带宽
+  // (对已完成的 xhr 调 abort 是无害 no-op,故各处不必先判状态)
+  const videoUploadXhrRef = useRef<XMLHttpRequest | null>(null);
+  const abortDeconstructUpload = () => {
+    videoUploadXhrRef.current?.abort();
+    videoUploadXhrRef.current = null;
+  };
 
   const uploadDeconstructVideo = async (file: File) => {
+    // nonce 入口即推进(审查实锤:原在预检之后,预检失败不作废在途旧上传,
+    // 旧回调会把新 failed 文案无声覆盖回 uploading/done);顺带掐掉旧 xhr
+    const nonce = ++videoUploadNonceRef.current;
+    abortDeconstructUpload();
     if (!/\.(mp4|mov|webm)$/i.test(file.name) && !file.type.startsWith("video/")) {
       setDeconstructVideo({ name: file.name, status: "failed", progress: 0, error: "只支持 mp4/mov/webm" });
       return;
@@ -352,7 +402,20 @@ export function Omnibox({
       });
       return;
     }
-    const nonce = ++videoUploadNonceRef.current;
+    setDeconstructVideo({ name: file.name, status: "uploading", progress: 1 });
+    // 时长预检:读元数据是异步的,期间用户可能换文件——nonce 已先占位,
+    // 迟到的检查结果作废
+    const durationSec = await readVideoDurationSec(file);
+    if (nonce !== videoUploadNonceRef.current) return;
+    if (durationSec !== null && durationSec > DECONSTRUCT_MAX_SEC + 1) {
+      setDeconstructVideo({
+        name: file.name,
+        status: "failed",
+        progress: 0,
+        error: `视频约 ${Math.round(durationSec)} 秒——当前版本适合拆解 ${DECONSTRUCT_MAX_SEC} 秒内的爆款,请换一条更短的(长视频支持在路上)`,
+      });
+      return;
+    }
     setDeconstructVideo({ name: file.name, status: "uploading", progress: 3 });
     try {
       const credRes = await fetch("/api/upload/oss-credentials", {
@@ -361,11 +424,14 @@ export function Omnibox({
         body: JSON.stringify({ filename: file.name, contentType: file.type || "video/mp4" }),
       });
       const cred = await credRes.json();
+      // 凭证在途时用户换片/移除:别再起 xhr 把撤回的文件传上去(审查实锤)
+      if (nonce !== videoUploadNonceRef.current) return;
       if (!credRes.ok || !cred?.success || !cred.data?.uploadUrl) {
         throw new Error(cred?.error || "获取上传凭证失败");
       }
       const publicUrl: string = await new Promise((resolve, reject) => {
         const xhr = new XMLHttpRequest();
+        videoUploadXhrRef.current = xhr;
         xhr.upload.onprogress = (e) => {
           if (e.lengthComputable && nonce === videoUploadNonceRef.current) {
             setDeconstructVideo((v) =>
@@ -378,6 +444,7 @@ export function Omnibox({
             ? resolve(cred.data.publicUrl)
             : reject(new Error(`上传失败 (${xhr.status})`));
         xhr.onerror = () => reject(new Error("网络错误"));
+        xhr.onabort = () => reject(new Error("已取消"));
         xhr.ontimeout = () => reject(new Error("上传超时"));
         xhr.open("PUT", cred.data.uploadUrl);
         xhr.setRequestHeader("Content-Type", file.type || "video/mp4");
@@ -635,6 +702,7 @@ export function Omnibox({
         setDeconstructVideo(null);
         setDeconstructRightsAck(false);
         videoUploadNonceRef.current++;
+        abortDeconstructUpload();
         setRecipeId("");
       }
     } finally {
@@ -772,6 +840,7 @@ export function Omnibox({
                 type="button"
                 onClick={() => {
                   videoUploadNonceRef.current++;
+                  abortDeconstructUpload();
                   setDeconstructVideo(null);
                 }}
                 className="flex shrink-0 items-center gap-1 rounded-md border border-white/15 px-2.5 py-1 text-zinc-400 transition-colors hover:border-red-400/40 hover:text-red-300"
@@ -782,7 +851,7 @@ export function Omnibox({
             </div>
           ) : (
             <p className="text-xs text-zinc-500">
-              上传一条爆款视频(mp4,≤{DECONSTRUCT_MAX_MB}MB)→ 出结构报告:hook 类型/逐镜台词/节奏/CTA——这条为什么火
+              上传一条爆款视频(mp4,≤{DECONSTRUCT_MAX_SEC} 秒、≤{DECONSTRUCT_MAX_MB}MB)→ 出结构报告:hook 类型/逐镜台词/节奏/CTA——这条为什么火
             </p>
           )}
           <label className="flex cursor-pointer items-start gap-2 text-[11px] leading-relaxed text-zinc-400">

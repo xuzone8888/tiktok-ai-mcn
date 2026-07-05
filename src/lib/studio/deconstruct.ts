@@ -141,24 +141,66 @@ const DECONSTRUCT_USER_PROMPT = `请深度分析这条视频,返回以下 JSON �
 
 const HOOK_TYPES: HookType[] = ["痛点", "悬念", "对比", "场景"];
 
-/**
- * 拆解一条视频:Qwen omni 一次调用 + 解析校验。
- * 失败抛 Error(带用户可读文案);耗时分钟级(单次尝试 180s,最多 2 次)。
- */
-export async function deconstructVideo(videoUrl: string): Promise<DeconstructReport> {
-  const result = await analyzeVideo(videoUrl, DECONSTRUCT_SYSTEM_PROMPT, DECONSTRUCT_USER_PROMPT, {
+function callDeconstructModel(videoUrl: string, maxRetries: number) {
+  return analyzeVideo(videoUrl, DECONSTRUCT_SYSTEM_PROMPT, DECONSTRUCT_USER_PROMPT, {
     maxTokens: 8192,
     temperature: 0.3,
-    maxRetries: 2,
+    maxRetries,
     // 长视频:下载+抽帧+完整转录输出远超默认 60s;但两次尝试+3s 退避的最坏
     // 总耗时必须压在路由 maxDuration/nginx 300s 之内(135×2+3≈273s,审查实锤:
     // 原 180s×2≈363s 会让响应被 300s 墙杀掉、客户端误判失败重试双开销)
     timeoutMs: 135_000,
   });
-  if (!result.success || !result.content) {
-    throw new Error(`视频分析失败:${result.error || "模型无返回"}`);
+}
+
+/** qwen-client 错误 → 用户可读文案(审核拒标记见 callQwen,基准 #20 实锤) */
+function toUserFacingAnalysisError(rawError: string | undefined): Error {
+  if (/data[_]?inspection[_]?failed/i.test(rawError ?? "")) {
+    return new Error("该视频未通过内容安全检测(平台审核拒绝分析此内容),请换一条视频");
   }
-  return parseDeconstructReport(result.content);
+  return new Error(`视频分析失败:${rawError || "模型无返回"}`);
+}
+
+/**
+ * 拆解一条视频:Qwen omni 一次调用 + 解析校验。
+ * 失败抛 Error(带用户可读文案);耗时分钟级(单次尝试 135s,最多 2 次;
+ * 解析失败且预算充足时追加 1 次重生成)。
+ *
+ * opts.deadlineAtMs:调用方(路由)从请求入口起算的硬期限——auth/幂等锚/
+ * ffprobe/落库 RTT 全部自动计价(审查实锤:原「函数内起算 150s」漏算路由
+ * 前置耗时,最坏成功路径 ~297-300.5s 贴穿 nginx 300s 墙)。独立调用缺省时
+ * 按本函数入口兜底。
+ */
+export async function deconstructVideo(
+  videoUrl: string,
+  opts?: { deadlineAtMs?: number }
+): Promise<DeconstructReport> {
+  const deadlineAtMs = opts?.deadlineAtMs ?? Date.now() + 295_000;
+  const result = await callDeconstructModel(videoUrl, 2);
+  if (!result.success || !result.content) {
+    throw toUserFacingAnalysisError(result.error);
+  }
+  try {
+    return parseDeconstructReport(result.content);
+  } catch (parseError) {
+    // 模型 200 返回但 JSON 坏掉是偶发(基准 #5 实锤:32s 快速返回坏 JSON,
+    // 同视频直连重打一次即成功)。analyzeVideo 的重试圈只兜 HTTP/超时错误,
+    // 解析失败在圈外——在此补一次重生成。预算纪律:重打全程上界 = 限流等待
+    // 1.5s + 单次 135s + 落库余量 ≈ 140s,塞不进剩余预算就直接抛——
+    // 基准 #5 的快速坏 JSON 形态(~35s)预算绰绰有余;「双尝试后才坏 JSON」
+    // 的 ~150s 形态主动放弃重打,防越墙
+    if (Date.now() + 140_000 > deadlineAtMs) throw parseError;
+    console.warn(
+      `[Deconstruct] 解析失败(剩余预算 ${Math.round((deadlineAtMs - Date.now()) / 1000)}s),触发重生成:`,
+      parseError instanceof Error ? parseError.message : parseError
+    );
+    const retry = await callDeconstructModel(videoUrl, 1);
+    if (!retry.success || !retry.content) {
+      // 二轮调用本身失败时抛一轮的解析错误——那才是本次失败的真根因文案
+      throw parseError;
+    }
+    return parseDeconstructReport(retry.content);
+  }
 }
 
 // ============================================================================

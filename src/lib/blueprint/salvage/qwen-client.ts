@@ -435,6 +435,16 @@ async function callQwen(
         const errorText = await response.text();
         console.error(`[QwenClient] HTTP ${response.status}:`, errorText.substring(0, 300));
 
+        // DashScope 内容审核拒(DataInspectionFailed):对同一输入系统性拒绝,
+        // 重试必然同结果——立即短路,error 携带可识别标记供调用方转用户文案
+        // (基准 #20 实锤:原先只回「请求失败: 400」,根因全靠翻服务器日志)
+        if (/data[_]?inspection[_]?failed/i.test(errorText)) {
+          return {
+            success: false,
+            error: `DataInspectionFailed: 内容未通过平台安全审核 (HTTP ${response.status})`,
+          };
+        }
+
         // 429 限流 → 指数退避重试
         if (response.status === 429 && attempt < maxRetries) {
           const retryDelay = Math.min(5000 * Math.pow(2, attempt - 1), 30000);
