@@ -189,7 +189,7 @@ const nextConfig = {
   // 日志配置 - 减少生产环境日志
   logging: {
     fetches: {
-      fullUrl: process.env.NODE_ENV === 'development',
+      fullUrl: process.env.NEXT_ENABLE_FULL_FETCH_URL_LOGGING === 'true',
     },
   },
   // 生产环境移除 console

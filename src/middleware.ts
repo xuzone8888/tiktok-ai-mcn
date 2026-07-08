@@ -22,6 +22,7 @@ const PUBLIC_ROUTES = [
   "/auth/callback",
   "/terms",
   "/privacy",
+  "/data-deletion",
   "/legal",
 ];
 
@@ -37,10 +38,27 @@ const PROTECTED_ROUTES = [
   "/youtube-publish",
   "/facebook-publish",
   "/instagram-publish",
+  "/whatsapp-business",
   "/admin",
 ];
 
 const AUTH_ENTRY_ROUTES = ["/", "/auth/login", "/auth/register"];
+
+function getSafeInternalRedirect(req: NextRequest) {
+  const redirect = req.nextUrl.searchParams.get("redirect");
+  if (!redirect || !redirect.startsWith("/") || redirect.startsWith("//")) {
+    return "/models";
+  }
+
+  try {
+    const url = new URL(redirect, req.url);
+    if (url.origin !== req.nextUrl.origin) return "/models";
+    if (AUTH_ENTRY_ROUTES.includes(url.pathname)) return "/models";
+    return `${url.pathname}${url.search}${url.hash}`;
+  } catch {
+    return "/models";
+  }
+}
 
 export async function middleware(req: NextRequest) {
   let res = NextResponse.next({
@@ -159,7 +177,7 @@ export async function middleware(req: NextRequest) {
     }
 
     if (shouldRedirectAuthenticatedEntry) {
-      return NextResponse.redirect(new URL("/models", req.url));
+      return NextResponse.redirect(new URL(getSafeInternalRedirect(req), req.url));
     }
 
     // ============================================

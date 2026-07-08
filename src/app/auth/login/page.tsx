@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, Suspense, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
@@ -11,6 +11,13 @@ import { useToast } from "@/hooks/use-toast";
 import { useLang } from "@/contexts/LangContext";
 import { LangToggle } from "@/components/ui/LangToggle";
 
+function getSafeRedirectPath(value: string | null) {
+  if (!value || !value.startsWith("/") || value.startsWith("//")) return "/models";
+  if (value === "/auth/login" || value.startsWith("/auth/login?")) return "/models";
+  if (value === "/auth/register" || value.startsWith("/auth/register?")) return "/models";
+  return value;
+}
+
 // 包装组件以支持 useSearchParams
 function LoginPageContent() {
   const router = useRouter();
@@ -19,7 +26,7 @@ function LoginPageContent() {
   const { lang } = useLang();
 
   // 获取重定向目标
-  const redirectTo = searchParams.get('redirect') || '/models';
+  const redirectTo = getSafeRedirectPath(searchParams.get('redirect'));
 
   // 登录方式: password (邮箱登录) | phone (手机登录)
   const [loginMethod, setLoginMethod] = useState<"password" | "phone">("password");
@@ -32,6 +39,31 @@ function LoginPageContent() {
 
   // 加载状态
   const [isLoading, setIsLoading] = useState(false);
+
+  const completeLoginRedirect = useCallback(async () => {
+    const supabase = createClient();
+    const { data: { session } } = await supabase.auth.getSession();
+
+    if (!session) {
+      throw new Error(lang === "en" ? "Session was not created, please try again" : "登录会话未建立，请重试");
+    }
+
+    router.replace(redirectTo);
+    router.refresh();
+  }, [lang, redirectTo, router]);
+
+  useEffect(() => {
+    const redirectExistingSession = async () => {
+      const supabase = createClient();
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        router.replace(redirectTo);
+        router.refresh();
+      }
+    };
+
+    void redirectExistingSession();
+  }, [redirectTo, router]);
 
   // 处理 URL hash 中的 auth token（从 Supabase magic link 回调）
   useEffect(() => {
@@ -69,7 +101,7 @@ function LoginPageContent() {
                 title: lang === "en" ? "🎉 Signed In!" : "🎉 登录成功！",
                 description: lang === "en" ? "Redirecting..." : "正在跳转到控制台...",
               });
-              window.location.replace(redirectTo);
+              await completeLoginRedirect();
             }
           } catch (err) {
             console.error("Auth callback error:", err);
@@ -79,7 +111,7 @@ function LoginPageContent() {
     };
 
     handleAuthCallback();
-  }, [toast]);
+  }, [completeLoginRedirect, lang, toast]);
 
 
   // 密码登录处理
@@ -111,9 +143,7 @@ function LoginPageContent() {
           title: lang === "en" ? "Signed In!" : "登录成功！",
           description: lang === "en" ? "Redirecting..." : "正在跳转到控制台...",
         });
-        setTimeout(() => {
-          window.location.href = redirectTo;
-        }, 500);
+        await completeLoginRedirect();
       }
     } catch (error: any) {
       console.error("Login error:", error);
@@ -267,7 +297,7 @@ function LoginPageContent() {
       });
 
       setIsLoading(false);
-      window.location.replace(redirectTo);
+      await completeLoginRedirect();
       return;
     } catch (error: any) {
       console.error("Phone login error:", error);

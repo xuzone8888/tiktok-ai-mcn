@@ -22,8 +22,11 @@ import {
   LayoutTemplate,
   ShoppingBag,
   Youtube,
+  Linkedin,
   Share2,
   Instagram,
+  MessageCircle,
+  Building2,
 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -35,7 +38,7 @@ import {
 } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { useLang } from "@/contexts/LangContext";
-import { isImageFactoryUiEnabled } from "@/lib/feature-flags";
+import { isImageFactoryUiEnabled, isLinkedInPublishEnabled, isWhatsAppInboxEnabled } from "@/lib/feature-flags";
 
 const CURRENT_YEAR = new Date().getFullYear();
 
@@ -189,6 +192,24 @@ function getNavGroups(lang: string): NavGroup[] {
           description: t ? "Publish to YouTube" : "发布视频到 YouTube",
           beta: true,
         },
+        ...(isLinkedInPublishEnabled()
+          ? [
+            {
+              title: t ? "LinkedIn Accounts" : "领英账号绑定",
+              href: "/linkedin-publish/accounts",
+              icon: Linkedin,
+              description: t ? "Connect LinkedIn identities" : "绑定领英发布身份",
+              beta: true,
+            },
+            {
+              title: t ? "LinkedIn Publish" : "领英视频发布",
+              href: "/linkedin-publish",
+              icon: Linkedin,
+              description: t ? "Publish to LinkedIn" : "发布视频到领英",
+              beta: true,
+            },
+          ]
+          : []),
         {
           title: t ? "Facebook Accounts" : "Facebook 账号绑定",
           href: "/facebook-publish/accounts",
@@ -219,6 +240,29 @@ function getNavGroups(lang: string): NavGroup[] {
         },
       ],
     },
+    ...(isWhatsAppInboxEnabled()
+      ? [
+        {
+          header: t ? "Customer Messages" : "客户消息",
+          items: [
+            {
+              title: t ? "WhatsApp Business" : "WhatsApp 商家绑定",
+              href: "/whatsapp-business",
+              icon: Building2,
+              description: t ? "Connect business accounts" : "绑定商家 WhatsApp Business",
+              beta: true,
+            },
+            {
+              title: t ? "WhatsApp Inbox" : "WhatsApp 询盘",
+              href: "/whatsapp-inbox",
+              icon: MessageCircle,
+              description: t ? "Customer conversations" : "客户会话处理",
+              beta: true,
+            },
+          ],
+        },
+      ]
+      : []),
     // --- Shop Publishing ---
     {
       header: t ? "Shop Publishing" : "电商内容发布",

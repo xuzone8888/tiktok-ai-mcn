@@ -10,7 +10,9 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { processFacebookPublishQueue } from '@/lib/facebook/processor'
+import { isLinkedInPublishEnabledServer } from '@/lib/feature-flags'
 import { processInstagramPublishQueue } from '@/lib/instagram/processor'
+import { processLinkedInPublishQueue } from '@/lib/linkedin/processor'
 import { processPublishQueue } from '@/lib/publish-processor'
 import { processYouTubePublishQueue } from '@/lib/youtube/processor'
 
@@ -39,7 +41,21 @@ export async function GET(request: NextRequest) {
 
         // 2. 处理所有平台的到期定时任务
         //    legacy = TikTok（publish-processor，含本次合并进来的调度恢复修复 + debugRecovery 诊断开关）
-        const [legacyResult, youtubeResult, facebookResult, instagramResult] = await Promise.all([
+        const linkedinProcessPromise = isLinkedInPublishEnabledServer()
+            ? processLinkedInPublishQueue({
+                mode: 'scheduled',
+                maxItems: 50
+            })
+            : Promise.resolve({
+                success: 0,
+                failed: 0,
+                skipped: 0,
+                errors: [],
+                duration_ms: 0,
+                disabled: true
+            })
+
+        const [legacyResult, youtubeResult, facebookResult, instagramResult, linkedinResult] = await Promise.all([
             processPublishQueue({
                 mode: 'scheduled',
                 maxItems: 50,
@@ -57,13 +73,15 @@ export async function GET(request: NextRequest) {
                 mode: 'scheduled',
                 maxItems: 50
             }),
+            linkedinProcessPromise,
         ])
 
         const processed =
             legacyResult.success + legacyResult.failed + (legacyResult.confirming || 0) +
             youtubeResult.success + youtubeResult.failed +
             facebookResult.success + facebookResult.failed +
-            instagramResult.success + instagramResult.failed + instagramResult.deferred
+            instagramResult.success + instagramResult.failed + instagramResult.deferred +
+            linkedinResult.success + linkedinResult.failed
 
         // 沿用 TikTok 修复的“错误可见化”意图：汇总各平台逐条错误，success=false 表示本轮有失败需关注。
         // 但返回 HTTP 200（非 500）——多平台下单账号/单条失败属正常运营事件，不应让整轮 cron 标记失败/触发重试；
@@ -73,6 +91,7 @@ export async function GET(request: NextRequest) {
             ...youtubeResult.errors,
             ...facebookResult.errors,
             ...instagramResult.errors,
+            ...linkedinResult.errors,
         ]
         const duration = Date.now() - startTime
         console.log('[Scheduler] Completed in', duration, 'ms. Processed:', processed, 'Errors:', errors.length)
@@ -85,6 +104,7 @@ export async function GET(request: NextRequest) {
                 youtube: youtubeResult,
                 facebook: facebookResult,
                 instagram: instagramResult,
+                linkedin: linkedinResult,
             },
             ...(legacyResult.recovery_debug ? { recovery_debug: legacyResult.recovery_debug } : {}),
             duration_ms: duration

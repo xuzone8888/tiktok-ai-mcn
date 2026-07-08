@@ -39,8 +39,8 @@ export default function PrivacyPage() {
         <div className="container max-w-4xl mx-auto px-6">
           <div className="mb-12">
             <h1 className="text-4xl font-bold mb-4">{lang === "en" ? "Privacy Policy - Wuhan Guanxing Cultural Media Co., Ltd. (Star Gaze)" : "隐私政策 - 武汉观星文化传媒有限公司 (Star Gaze)"}</h1>
-            <p className="text-gray-400">{lang === "en" ? "Updated Date: April 13, 2026" : "更新日期：2026年4月13日"}</p>
-            <p className="text-gray-400">{lang === "en" ? "Effective Date: April 13, 2026" : "生效日期：2026年4月13日"}</p>
+            <p className="text-gray-400">{lang === "en" ? "Updated Date: July 1, 2026" : "更新日期：2026年7月1日"}</p>
+            <p className="text-gray-400">{lang === "en" ? "Effective Date: July 1, 2026" : "生效日期：2026年7月1日"}</p>
           </div>
 
           <div className="space-y-6 text-gray-300">
@@ -50,7 +50,7 @@ export default function PrivacyPage() {
                 <div className="p-3 rounded-lg bg-cyan-500/10 text-cyan-400 shrink-0"><FileText className="h-6 w-6" /></div>
                 <div>
                   <h2 className="text-xl font-bold text-white mb-3">{lang === "en" ? "Introduction" : "引言"}</h2>
-                  <p className="leading-relaxed font-semibold text-white/80 mb-4">{lang === "en" ? 'This Privacy Policy explains how Wuhan Guanxing Cultural Media Co., Ltd. ("Company", "we", "us"), operating under the brand name Star Gaze, collects, uses, stores, and protects personal information when users access our website, services, and TikTok-related integrations.' : '本隐私政策说明武汉观星文化传媒有限公司（以下简称"本公司"）作为 Star Gaze 品牌运营方，在用户访问本网站、使用本服务及相关 TikTok 集成能力时，如何收集、使用、存储和保护个人信息。'}</p>
+                  <p className="leading-relaxed font-semibold text-white/80 mb-4">{lang === "en" ? 'This Privacy Policy explains how Wuhan Guanxing Cultural Media Co., Ltd. ("Company", "we", "us"), operating under the brand name Star Gaze, collects, uses, stores, and protects personal information when users access our website, services, content publishing integrations, and customer messaging integrations, including TikTok, YouTube, Facebook, Instagram, and WhatsApp/Meta services where enabled.' : '本隐私政策说明武汉观星文化传媒有限公司（以下简称"本公司"）作为 Star Gaze 品牌运营方，在用户访问本网站、使用本服务、内容发布集成能力及客户消息集成能力时，如何收集、使用、存储和保护个人信息；相关能力可能包括 TikTok、YouTube、Facebook、Instagram 以及 WhatsApp/Meta 服务。'}</p>
                   <p className="leading-relaxed">{lang === "en" ? '"Star Gaze" refers to the client application labeled "Star Gaze" and the official website, as well as the Software Development Kit (SDK) and Application Programming Interface (API) for third-party websites and applications, legally owned and operated by Wuhan Guanxing Cultural Media Co., Ltd. and its affiliates (hereinafter referred to as "we").' : '"Star Gaze"是指武汉观星文化传媒有限公司及其关联方（以下简称"我们"）依法拥有并运营的标注名称为"Star Gaze"的客户端应用程序及官方网站，以及为第三方网站和应用程序提供的软件开发工具包（SDK）和应用程序编程接口（API）。'}</p>
                   <p className="leading-relaxed mt-3">{lang === "en" ? 'As the operator of Star Gaze, we are fully aware of the importance of personal information to you, and we will protect your personal information and privacy security in accordance with laws and regulations. We have formulated this Privacy Policy and specially prompt you: We hope you carefully read and understand this Privacy Policy before using Star Gaze and related services so as to make appropriate choices.' : '作为 Star Gaze 的运营者，我们充分意识到个人信息对您的重要性，我们将依法保护您的个人信息和隐私安全。我们特制定本隐私政策并特别提示您：希望您在使用 Star Gaze 及相关服务前仔细阅读并理解本隐私政策，以做出适当的选择。'}</p>
                 </div>
@@ -137,7 +137,7 @@ export default function PrivacyPage() {
                   <p className="leading-relaxed">{lang === "en" ? 'We guarantee your rights to query, copy, correct, supplement, delete, withdraw consent, and cancel your account regarding personal information.' : '我们保障您对个人信息的查询、复制、更正、补充、删除、撤回同意和注销账户的权利。'}</p>
                   <p className="leading-relaxed mt-3">{lang === "en" ? 'You can manage your personal information through the settings function in the application or by contacting customer service.' : '您可以通过应用程序中的设置功能或联系客服来管理您的个人信息。'}</p>
                   <p className="leading-relaxed mt-3">{lang === "en" ? 'For account cancellation, you can find the cancellation entrance in "Settings - Account Security". After cancellation, we will delete or anonymize your relevant data.' : '对于账户注销，您可以在"设置 - 账户安全"中找到注销入口。注销后，我们将删除或匿名化您的相关数据。'}</p>
-                  <p className="leading-relaxed mt-3">{lang === "en" ? '3.4 TikTok Authorization Revocation: You may revoke Star Gaze\'s access to your TikTok account at any time through your TikTok account settings. Once authorization is revoked, we will delete all associated TikTok data (including access tokens and user identifiers) within 30 days.' : '3.4 TikTok 授权撤回：您可以随时通过 TikTok 账户设置撤回 Star Gaze 对您 TikTok 账户的访问授权。授权撤回后，我们将在 30 天内删除所有相关的 TikTok 数据（包括访问令牌和用户标识符）。'}</p>
+                  <p className="leading-relaxed mt-3">{lang === "en" ? '3.4 Connected Platform Authorization Revocation: You may revoke Star Gaze\'s access to connected TikTok, YouTube, Facebook, Instagram, or WhatsApp/Meta accounts through the relevant platform settings or by contacting us. Once authorization is revoked or an account is disconnected, we will delete related access tokens, refresh tokens where applicable, account mappings, and associated platform identifiers within 30 days unless retention is required by law or necessary for security, billing, or dispute records.' : '3.4 已连接平台授权撤回：您可以通过相关平台设置或联系我们，撤回 Star Gaze 对已连接 TikTok、YouTube、Facebook、Instagram 或 WhatsApp/Meta 账号的访问授权。授权撤回或账号断开后，除法律要求或安全、账务、争议记录所必需的保留外，我们将在 30 天内删除相关访问令牌、适用的刷新令牌、账号映射及相关平台标识符。'}</p>
                 </div>
               </div>
             </ReflectiveCard>
@@ -162,9 +162,9 @@ export default function PrivacyPage() {
                 <div className="p-3 rounded-lg bg-orange-500/10 text-orange-400 shrink-0"><Server className="h-6 w-6" /></div>
                 <div>
                   <h2 className="text-xl font-bold text-white mb-3">{lang === "en" ? "5. How We Store Personal Information" : "五、我们如何存储个人信息"}</h2>
-                  <p className="leading-relaxed"><strong>{lang === "en" ? "5.1 Storage Location:" : "5.1 存储地点："}</strong> {lang === "en" ? "Your personal information is stored and processed on servers located in the United States. TikTok-related data, including OAuth access tokens and user identifiers, is stored and processed on US-based infrastructure. We apply appropriate safeguards to protect data handled in connection with our services." : "您的个人信息存储并处理于位于美国的服务器上。TikTok 相关数据（包括 OAuth 访问令牌和用户标识符）存储并处理于美国基础设施。我们对与本服务相关的数据采取适当的安全保护措施。"}</p>
-                  <p className="leading-relaxed mt-3"><strong>{lang === "en" ? "5.2 Storage Period:" : "5.2 存储期限："}</strong> {lang === "en" ? "We only retain your personal information for the period necessary to provide services. Specific retention periods include: OAuth access tokens are stored until expiration and automatically refreshed; product showcase data is fetched in real-time via API and not permanently stored; video files are deleted from our servers after successful upload to TikTok. After account cancellation, we will delete or anonymize your information within 30 days, unless otherwise stipulated by laws." : "我们仅在提供服务所必需的期间内保留您的个人信息。具体保留期限包括：OAuth 访问令牌存储至过期后自动刷新；橱窗商品数据通过 API 实时获取，不做持久化存储；视频文件在成功上传至 TikTok 后从我们的服务器删除。账户注销后，我们将在 30 天内删除或匿名化您的信息，法律另有规定除外。"}</p>
-                  <p className="leading-relaxed mt-3"><strong>{lang === "en" ? "5.3 Data Deletion:" : "5.3 数据删除："}</strong> {lang === "en" ? "You may request deletion of your personal data at any time by contacting us at toryxai@outlook.com. Upon receiving a valid deletion request, we will process it within 30 days. When a seller revokes TikTok authorization or when a service contract ends, we will promptly delete all associated TikTok data." : "您可以随时通过联系 toryxai@outlook.com 请求删除您的个人数据。收到有效的删除请求后，我们将在 30 天内处理。当卖家撤回 TikTok 授权或服务合同终止时，我们将及时删除所有相关的 TikTok 数据。"}</p>
+                  <p className="leading-relaxed"><strong>{lang === "en" ? "5.1 Storage Location:" : "5.1 存储地点："}</strong> {lang === "en" ? "Your personal information is stored and processed on servers located in the United States. Platform-related data, including TikTok, YouTube, Facebook, Instagram, and Meta/WhatsApp authorization tokens, account identifiers, message records, and operational metadata, may be stored and processed on US-based infrastructure. We apply appropriate safeguards to protect data handled in connection with our services." : "您的个人信息存储并处理于位于美国的服务器上。平台相关数据（包括 TikTok、YouTube、Facebook、Instagram 以及 Meta/WhatsApp 的授权令牌、账号标识符、消息记录和运营元数据）可能存储并处理于美国基础设施。我们对与本服务相关的数据采取适当的安全保护措施。"}</p>
+                  <p className="leading-relaxed mt-3"><strong>{lang === "en" ? "5.2 Storage Period:" : "5.2 存储期限："}</strong> {lang === "en" ? "We only retain your personal information for the period necessary to provide services. Specific retention periods include: OAuth access tokens are stored until expiration and refreshed only where supported; product or account data may be fetched through platform APIs for enabled features; video files are deleted from our servers after successful upload where the feature requires temporary processing; WhatsApp conversation records are retained while the Inbox service is active or as needed for customer support history and troubleshooting. After account cancellation, we will delete or anonymize your information within 30 days, unless otherwise stipulated by laws." : "我们仅在提供服务所必需的期间内保留您的个人信息。具体保留期限包括：OAuth 访问令牌存储至过期，并仅在平台支持时刷新；商品或账号数据可能通过平台 API 为已启用功能获取；视频文件在相关功能需要临时处理并成功上传后从我们的服务器删除；WhatsApp 会话记录会在 Inbox 服务启用期间或客户支持历史、故障排查所需期间保留。账户注销后，除法律另有规定外，我们将在 30 天内删除或匿名化您的信息。"}</p>
+                  <p className="leading-relaxed mt-3"><strong>{lang === "en" ? "5.3 Data Deletion:" : "5.3 数据删除："}</strong> {lang === "en" ? "You may request deletion of your personal data at any time by contacting us at toryxai@outlook.com. Upon receiving a valid deletion request, we will delete or anonymize applicable account, platform authorization, WhatsApp contact, and message data within 30 days unless retention is required by law. You may also review our Data Deletion Instructions." : "您可以随时通过联系 toryxai@outlook.com 请求删除您的个人数据。收到有效的删除请求后，除法律要求保留外，我们将在 30 天内删除或匿名化适用的账户、平台授权、WhatsApp 联系人和消息数据。您也可以查看我们的数据删除说明。"} <Link href="/data-deletion" className="text-cyan-400 hover:underline">{lang === "en" ? "Data Deletion Instructions" : "数据删除说明"}</Link></p>
                 </div>
               </div>
             </ReflectiveCard>
@@ -247,12 +247,55 @@ export default function PrivacyPage() {
               </div>
             </ReflectiveCard>
 
-            {/* 9. AIGC Content Disclosure */}
+            {/* 9. YouTube, Facebook, and Instagram Integrations */}
+            <ReflectiveCard className="!rounded-xl">
+              <div className="flex items-start gap-4 p-6">
+                <div className="p-3 rounded-lg bg-sky-500/10 text-sky-400 shrink-0"><Users className="h-6 w-6" /></div>
+                <div>
+                  <h2 className="text-xl font-bold text-white mb-3">{lang === "en" ? "9. YouTube, Facebook, and Instagram Integrations" : "九、YouTube、Facebook 和 Instagram 集成"}</h2>
+                  <p className="leading-relaxed">{lang === "en" ? "When you connect YouTube, Facebook, or Instagram accounts to Star Gaze, we process only the account, authorization, media, publishing, and status data needed to provide the features you enable." : "当您将 YouTube、Facebook 或 Instagram 账号连接到 Star Gaze 时，我们仅处理为提供您启用功能所需的账号、授权、媒体、发布和状态数据。"}</p>
+                  <ul className="list-disc pl-6 space-y-2 mt-3 text-gray-300">
+                    <li>{lang === "en" ? "Account identifiers, display names, profile images, page/channel/account IDs, access tokens, and authorization status used to identify connected accounts." : "账号标识符、显示名称、头像、主页/频道/账号 ID、访问令牌和授权状态，用于识别已连接账号。"}</li>
+                    <li>{lang === "en" ? "Content drafts, captions, media URLs or temporary upload metadata, scheduled publish time, platform response IDs, and publishing status used to publish content at your direction." : "内容草稿、标题/文案、媒体 URL 或临时上传元数据、计划发布时间、平台响应 ID 和发布状态，用于按您的指令发布内容。"}</li>
+                    <li>{lang === "en" ? "Operational logs and API response metadata used for troubleshooting, security, audit, and support." : "运营日志和 API 响应元数据，用于故障排查、安全、审计和支持。"}</li>
+                  </ul>
+                  <p className="leading-relaxed mt-3 font-semibold">{lang === "en" ? "We do not sell YouTube, Facebook, Instagram, or other connected platform data." : "我们不会出售 YouTube、Facebook、Instagram 或其他已连接平台的数据。"}</p>
+                </div>
+              </div>
+            </ReflectiveCard>
+
+            {/* 10. WhatsApp Business Cloud API and Inbox Data */}
+            <ReflectiveCard className="!rounded-xl">
+              <div className="flex items-start gap-4 p-6">
+                <div className="p-3 rounded-lg bg-emerald-500/10 text-emerald-400 shrink-0"><Database className="h-6 w-6" /></div>
+                <div>
+                  <h2 className="text-xl font-bold text-white mb-3">{lang === "en" ? "10. WhatsApp Business Cloud API and Inbox Data" : "十、WhatsApp Business Cloud API 与 Inbox 数据"}</h2>
+                  <p className="leading-relaxed">{lang === "en" ? "If WhatsApp Inbox is enabled for your workspace, Star Gaze uses the WhatsApp Business Cloud API to receive customer messages and support manual replies from your authorized business account." : "如果您的工作区启用了 WhatsApp Inbox，Star Gaze 会使用 WhatsApp Business Cloud API 接收客户消息，并支持从您授权的业务账号进行人工回复。"}</p>
+                  <h3 className="text-lg font-medium text-white mt-4 mb-2">{lang === "en" ? "Data We Process" : "我们处理的数据"}</h3>
+                  <ul className="list-disc pl-6 space-y-2 mt-3 text-gray-300">
+                    <li>{lang === "en" ? "WhatsApp phone number ID and WhatsApp Business Account ID used to route webhook events to the correct workspace." : "WhatsApp phone number id 和 WhatsApp business account id，用于将 webhook 事件路由到正确工作区。"}</li>
+                    <li>{lang === "en" ? "Customer contact data such as phone number, wa_id, display name, country where available, source platform, assignment status, and last message time." : "客户联系人数据，例如手机号、wa_id、显示名称、可用时的国家/地区、来源平台、分配状态和最后消息时间。"}</li>
+                    <li>{lang === "en" ? "Inbound and outbound message records, including text, message type, media ID or media URL when applicable, message status, error reason, timestamps, and WhatsApp message ID." : "入站和出站消息记录，包括文本、消息类型、适用时的 media id 或 media URL、消息状态、错误原因、时间戳和 WhatsApp message id。"}</li>
+                    <li>{lang === "en" ? "Webhook payload metadata and API response metadata retained for troubleshooting, delivery status tracking, security review, and support." : "webhook payload 元数据和 API 响应元数据，用于故障排查、投递状态追踪、安全审查和支持。"}</li>
+                  </ul>
+                  <h3 className="text-lg font-medium text-white mt-4 mb-2">{lang === "en" ? "How We Use WhatsApp Data" : "我们如何使用 WhatsApp 数据"}</h3>
+                  <ul className="list-disc pl-6 space-y-2 mt-3 text-gray-300">
+                    <li>{lang === "en" ? "Display customer conversations in the Inbox for authorized users." : "在 Inbox 中向授权用户展示客户会话。"}</li>
+                    <li>{lang === "en" ? "Support manual customer service replies initiated by your team." : "支持由您的团队人工触发的客户服务回复。"}</li>
+                    <li>{lang === "en" ? "Track message delivery status, failures, timestamps, and troubleshooting information." : "追踪消息投递状态、失败原因、时间戳和故障排查信息。"}</li>
+                  </ul>
+                  <p className="leading-relaxed mt-3 font-semibold">{lang === "en" ? "We do not sell WhatsApp or Meta data, and we do not use WhatsApp Inbox for unsolicited automated marketing broadcasts." : "我们不会出售 WhatsApp 或 Meta 数据，也不会使用 WhatsApp Inbox 进行未经用户触发的自动营销群发。"}</p>
+                  <p className="leading-relaxed mt-3">{lang === "en" ? "When you disconnect a WhatsApp account or revoke authorization, we delete related tokens and account mappings within 30 days unless retention is required by law or needed for security and dispute records." : "当您断开 WhatsApp 账号或撤回授权时，除法律要求或安全、争议记录所需外，我们将在 30 天内删除相关令牌和账号映射。"}</p>
+                </div>
+              </div>
+            </ReflectiveCard>
+
+            {/* 11. AIGC Content Disclosure */}
             <ReflectiveCard className="!rounded-xl">
               <div className="flex items-start gap-4 p-6">
                 <div className="p-3 rounded-lg bg-fuchsia-500/10 text-fuchsia-400 shrink-0"><Cpu className="h-6 w-6" /></div>
                 <div>
-                  <h2 className="text-xl font-bold text-white mb-3">{lang === "en" ? "9. AIGC Content Disclosure" : "九、AIGC 内容披露"}</h2>
+                  <h2 className="text-xl font-bold text-white mb-3">{lang === "en" ? "11. AIGC Content Disclosure" : "十一、AIGC 内容披露"}</h2>
                   <p className="leading-relaxed">{lang === "en" ? 'Star Gaze is an AI-powered content creation platform. Videos generated through our platform are created using artificial intelligence technology, including AI-generated characters, voiceovers, and scripts.' : 'Star Gaze 是一个 AI 驱动的内容创作平台。通过我们平台生成的视频使用人工智能技术创建，包括 AI 生成的角色、配音和脚本。'}</p>
                   <p className="leading-relaxed mt-3">{lang === "en" ? 'In compliance with TikTok\'s content policies, all AI-generated videos published through Star Gaze to TikTok will be automatically labeled as AIGC (AI-Generated Content). This labeling ensures transparency and compliance with platform regulations regarding synthetic media.' : '为遵守 TikTok 的内容政策，通过 Star Gaze 发布到 TikTok 的所有 AI 生成视频将自动标注为 AIGC（AI 生成内容）。此标注确保了合成媒体相关平台法规的透明度和合规性。'}</p>
                   <p className="leading-relaxed mt-3">{lang === "en" ? 'Users acknowledge and agree that AI-generated content published through Star Gaze will carry appropriate AIGC disclosures as required by applicable platform rules and regulations.' : '用户确认并同意，通过 Star Gaze 发布的 AI 生成内容将按照适用的平台规则和法规附带适当的 AIGC 披露标注。'}</p>
@@ -260,12 +303,12 @@ export default function PrivacyPage() {
               </div>
             </ReflectiveCard>
 
-            {/* 11. Third-Party Services */}
+            {/* 12. Third-Party Services */}
             <ReflectiveCard className="!rounded-xl">
               <div className="flex items-start gap-4 p-6">
                 <div className="p-3 rounded-lg bg-emerald-500/10 text-emerald-400 shrink-0"><ExternalLink className="h-6 w-6" /></div>
                 <div>
-                  <h2 className="text-xl font-bold text-white mb-3">{lang === "en" ? "10. Third-Party Services" : "十、第三方服务"}</h2>
+                  <h2 className="text-xl font-bold text-white mb-3">{lang === "en" ? "12. Third-Party Services" : "十二、第三方服务"}</h2>
                   <p className="leading-relaxed">{lang === "en" ? 'When Star Gaze integrates third-party services, it will follow the data policies of relevant platforms.' : '当 Star Gaze 集成第三方服务时，将遵循相关平台的数据政策。'}</p>
                   <ul className="list-disc pl-6 space-y-2 mt-3 text-gray-300">
                     <li>{lang === "en" ? "TikTok: " : "TikTok："}<Link href="https://www.tiktok.com/legal/privacy-policy?lang=en" target="_blank" className="text-cyan-400 hover:underline">{lang === "en" ? "TikTok Privacy Policy" : "TikTok 隐私政策"}</Link></li>
@@ -273,17 +316,20 @@ export default function PrivacyPage() {
                     <li>{lang === "en" ? "TikTok Shop Developer: " : "TikTok Shop 开发者："}<Link href="https://partner.tiktokshop.com/docv2/page/6507ead7b99d5302be949ba9" target="_blank" className="text-cyan-400 hover:underline">{lang === "en" ? "TikTok Shop Developer Terms" : "TikTok Shop 开发者条款"}</Link></li>
                     <li>{lang === "en" ? "Google/YouTube: " : "Google/YouTube："}<Link href="https://www.google.com/policies/privacy" target="_blank" className="text-cyan-400 hover:underline">{lang === "en" ? "Google Privacy Policy" : "Google 隐私政策"}</Link></li>
                     <li>{lang === "en" ? "To revoke Google/YouTube authorization: " : "撤销 Google/YouTube 授权："}<Link href="https://security.google.com/settings/security/permissions" target="_blank" className="text-cyan-400 hover:underline">{lang === "en" ? "Google Security Settings" : "Google 安全设置"}</Link></li>
+                    <li>{lang === "en" ? "Meta/Facebook/Instagram: " : "Meta/Facebook/Instagram："}<Link href="https://www.facebook.com/privacy/policy" target="_blank" className="text-cyan-400 hover:underline">{lang === "en" ? "Meta Privacy Policy" : "Meta 隐私政策"}</Link></li>
+                    <li>{lang === "en" ? "WhatsApp: " : "WhatsApp："}<Link href="https://www.whatsapp.com/legal/privacy-policy" target="_blank" className="text-cyan-400 hover:underline">{lang === "en" ? "WhatsApp Privacy Policy" : "WhatsApp 隐私政策"}</Link></li>
+                    <li>{lang === "en" ? "Data Deletion: " : "数据删除："}<Link href="/data-deletion" className="text-cyan-400 hover:underline">{lang === "en" ? "Star Gaze Data Deletion Instructions" : "Star Gaze 数据删除说明"}</Link></li>
                   </ul>
                 </div>
               </div>
             </ReflectiveCard>
 
-            {/* 11. Contact Us */}
+            {/* 13. Contact Us */}
             <ReflectiveCard className="!rounded-xl">
               <div className="flex items-start gap-4 p-6">
                 <div className="p-3 rounded-lg bg-teal-500/10 text-teal-400 shrink-0"><Phone className="h-6 w-6" /></div>
                 <div>
-                  <h2 className="text-xl font-bold text-white mb-3">{lang === "en" ? "11. Contact Us" : "十一、联系我们"}</h2>
+                  <h2 className="text-xl font-bold text-white mb-3">{lang === "en" ? "13. Contact Us" : "十三、联系我们"}</h2>
                   <p className="leading-relaxed">{lang === "en" ? 'If you have questions, suggestions, or complaints about personal information protection, data deletion requests, or any privacy-related matters, you can contact us:' : '如您对个人信息保护、数据删除请求或任何隐私相关事项有疑问、建议或投诉，可以联系我们：'}</p>
                   <div className="grid sm:grid-cols-2 gap-4 mt-4">
                     <div>
@@ -319,6 +365,7 @@ export default function PrivacyPage() {
             <div className="flex items-center gap-6 text-gray-500 text-sm">
               <Link href="/terms" className="hover:text-white transition-colors">{lang === "en" ? "Terms" : "服务条款"}</Link>
               <Link href="/privacy" className="hover:text-white transition-colors">{lang === "en" ? "Privacy" : "隐私政策"}</Link>
+              <Link href="/data-deletion" className="hover:text-white transition-colors">{lang === "en" ? "Data Deletion" : "数据删除"}</Link>
               <Link href="/legal" className="hover:text-white transition-colors">{lang === "en" ? "Legal" : "法律声明"}</Link>
               <Link href="https://beian.miit.gov.cn/" target="_blank" className="hover:text-white transition-colors flex items-center gap-1"><Shield className="h-4 w-4" />鄂ICP备2023007484号</Link>
             </div>
