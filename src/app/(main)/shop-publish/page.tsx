@@ -151,7 +151,7 @@ export default function ShopPublishPage() {
     ].filter(Boolean) as string[];
 
     const submitHint = missingItems.length
-        ? `${SHOP_TEXT.review.completeFirst[lang]}: ${missingItems.join(' / ')}`
+        ? `${SHOP_TEXT.review.completeFirst[lang]}${missingItems.join(' / ')}`
         : '';
 
     // ============================================================

@@ -129,7 +129,7 @@ const SHOP_TEXT = {
     previewNotice:   { en: 'Preview is for confirmation only. Actual delivery on TikTok may vary.',
                        zh: '预览仅用于确认发布内容，实际 TikTok 展示可能略有差异' },
     singleProductHint:{ en: 'Only 1 product can be attached per video', zh: '每条视频仅挂载 1 个商品' },
-    completeFirst:   { en: 'Please complete first',  zh: '请先完成' },
+    completeFirst:   { en: 'Please complete first: ',  zh: '请先完成：' },
     precheckOn:      { en: 'Precheck ON',            zh: '预检已开启' },
     platformNotice:  { en: 'Platform Notice',        zh: '平台声明' },
     guidelinesItems: {
@@ -324,8 +324,8 @@ export function getPlatformNoticeText(lang: Lang) {
   const brand = APP_BRAND.appDisplayName
   return {
     text1: lang === 'en'
-      ? `${brand} is an AI-powered content management platform that helps creators streamline their publishing workflow.`
-      : `${brand} 是一个AI驱动的内容管理平台，帮助创作者简化发布流程。`,
+      ? `${brand} is a content management platform where creators manually prepare each publish task.`
+      : `${brand} 是一个内容管理平台，创作者在此手动准备每一条发布任务。`,
     text2: lang === 'en'
       ? 'By publishing, you acknowledge that you have reviewed this video and its associated content for accuracy and compliance. You are solely responsible for ensuring all published material meets:'
       : '提交发布即表示您已审阅视频及关联内容的准确性和合规性。您需确保所有发布内容符合：',
