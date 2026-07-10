@@ -24,6 +24,14 @@ function LoginPageContent() {
   // 登录方式: password (邮箱登录) | phone (手机登录)
   const [loginMethod, setLoginMethod] = useState<"password" | "phone">("password");
 
+  // 手机验证码登录仅限中国大陆号码；英文模式强制回落到邮箱密码登录，
+  // 防止用户在中文下切到「验证码登录」再切英文后仍停留在手机表单（Tab 已隐藏但表单体未随之关闭）。
+  useEffect(() => {
+    if (lang === "en" && loginMethod === "phone") {
+      setLoginMethod("password");
+    }
+  }, [lang, loginMethod]);
+
   // 表单状态
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");

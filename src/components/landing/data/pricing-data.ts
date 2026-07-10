@@ -476,7 +476,7 @@ export const marketingCopyEn = {
         ai: {
             label: "Star Gaze",
             cost: "From ¥99/mo",
-            items: ["Fully automated creation", "Streamlined workflow", "Analytics"],
+            items: ["AI-assisted creation", "Streamlined workflow", "Analytics"],
         },
         savings: "Save 98% on costs",
     },

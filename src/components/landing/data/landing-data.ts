@@ -357,8 +357,8 @@ export const characterShowcase: CharacterShowcaseItem[] = [
     { id: 12, name: "Aria",   nameEn: "Aria",   role: "音乐推荐", roleEn: "Music Curator",        style: "3d",           src: "/images/landing/char-3d-4.png" },
     // 插画 ×4
     { id: 13, name: "墨墨",   nameEn: "Momo",    role: "绘本故事", roleEn: "Storybook Host",       style: "illustration", src: "/images/landing/char-illust-1.png" },
-    { id: 14, name: "圆圆",   nameEn: "Yoyo",    role: "儿童教育", roleEn: "Kids Education",       style: "illustration", src: "/images/landing/char-illust-2.png" },
-    { id: 15, name: "豆子",   nameEn: "Beans",   role: "生活Vlog", roleEn: "Lifestyle Vlog",       style: "illustration", src: "/images/landing/char-illust-3.png" },
+    { id: 14, name: "圆圆",   nameEn: "Yoyo",    role: "儿童教育", roleEn: "Kids Educator",        style: "illustration", src: "/images/landing/char-illust-2.png" },
+    { id: 15, name: "豆子",   nameEn: "Beans",   role: "生活Vlog", roleEn: "Lifestyle Vlogger",    style: "illustration", src: "/images/landing/char-illust-3.png" },
     { id: 16, name: "阿花",   nameEn: "Hana",    role: "手绘教程", roleEn: "Drawing Tutor",        style: "illustration", src: "/images/landing/char-illust-4.png" },
 ];
 

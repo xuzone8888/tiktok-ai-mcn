@@ -26,7 +26,15 @@ function detectBrowserLang(): Lang {
   if (typeof navigator === "undefined") return "zh";
   const candidates = [navigator.language, ...(navigator.languages || [])];
   const primary = candidates.find(Boolean)?.toLowerCase() ?? "";
+  if (!primary) return "zh"; // 浏览器未暴露任何语言信息 → 回落到文档默认中文
   return primary.startsWith("zh") ? "zh" : "en";
+}
+
+// 保持 <html lang> 与实际渲染语言一致（root layout 静态为 en，此处按解析结果校正）
+function syncHtmlLang(next: Lang) {
+  if (typeof document !== "undefined") {
+    document.documentElement.lang = next;
+  }
 }
 
 export function LangProvider({ children }: { children: React.ReactNode }) {
@@ -37,18 +45,16 @@ export function LangProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     setMounted(true);
     const saved = localStorage.getItem("toryx-lang") as Lang | null;
-    if (saved === "en" || saved === "zh") {
-      // 用户曾手动选择过，尊重其选择
-      setLangState(saved);
-    } else {
-      // 首次访问、无历史选择：按浏览器语言自动检测（不写入 localStorage，
-      // 以便用户后续手动切换才落盘为持久偏好）
-      setLangState(detectBrowserLang());
-    }
+    // 用户曾手动选择过则尊重其选择；否则按浏览器语言自动检测
+    // （检测结果不写入 localStorage，以便仅在用户手动切换时才落盘为持久偏好）
+    const resolved: Lang = saved === "en" || saved === "zh" ? saved : detectBrowserLang();
+    setLangState(resolved);
+    syncHtmlLang(resolved);
   }, []);
 
   const setLang = (newLang: Lang) => {
     setLangState(newLang);
+    syncHtmlLang(newLang);
     if (mounted) {
       localStorage.setItem("toryx-lang", newLang);
     }
