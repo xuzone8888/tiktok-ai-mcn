@@ -106,7 +106,7 @@ export default function ShopPublishPage() {
     const [publishSettings, setPublishSettings] = useState<ShopPublishSettingsData>({
         title: '',
         product_anchor_title: '',
-        enable_precheck: false,
+        enable_precheck: true,
     });
 
     // Account list
@@ -380,7 +380,7 @@ export default function ShopPublishPage() {
             setPublishSettings({
                 title: '',
                 product_anchor_title: '',
-                enable_precheck: false,
+                enable_precheck: true,
             });
             setConfirmed(false);
             setActiveTab('tasks');
@@ -419,7 +419,7 @@ export default function ShopPublishPage() {
         handleClearVideo();
         setSelectedProduct(null);
         setSelectedAccountId(null);
-        setPublishSettings({ title: '', product_anchor_title: '', enable_precheck: false });
+        setPublishSettings({ title: '', product_anchor_title: '', enable_precheck: true });
         setConfirmed(false);
     };
 
@@ -665,6 +665,7 @@ export default function ShopPublishPage() {
                             </div>
                             <div className="flex-1 min-w-0">
                                 <h3 className="text-sm font-semibold text-white">{SHOP_TEXT.settings.sectionTitle[lang]}</h3>
+                                <p className="text-xs text-gray-500">{SHOP_TEXT.settings.sectionDesc[lang]}</p>
                             </div>
                         </div>
                         <div className="p-5">
@@ -726,7 +727,7 @@ export default function ShopPublishPage() {
                         <div className="flex items-center gap-3">
                             <div className="flex-1 min-w-0">
                                 {submitHint && (
-                                    <p className="text-xs text-red-400/80 truncate">{submitHint}</p>
+                                    <p className="text-xs text-red-400/80 line-clamp-2 leading-relaxed">{submitHint}</p>
                                 )}
                             </div>
                             <Button variant="outline" size="sm" onClick={handleReset} className="text-gray-400 border-white/10 hover:text-white shrink-0">

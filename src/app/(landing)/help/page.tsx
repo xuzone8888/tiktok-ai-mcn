@@ -3,8 +3,10 @@
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Zap, Book, HelpCircle, Shield } from "lucide-react";
+import { useLang } from "@/contexts/LangContext";
 
 export default function HelpPage() {
+    const { lang } = useLang();
     return (
         <div className="min-h-screen bg-[#0a0a0f] text-white">
             {/* 背景装饰 */}
@@ -25,7 +27,7 @@ export default function HelpPage() {
                         <Link href="/">
                             <Button variant="ghost" className="text-gray-300 hover:text-white">
                                 <ArrowLeft className="h-4 w-4 mr-2" />
-                                返回首页
+                                {lang === "en" ? "Back to Home" : "返回首页"}
                             </Button>
                         </Link>
                     </nav>
@@ -34,9 +36,11 @@ export default function HelpPage() {
 
             {/* Hero Section */}
             <main className="relative z-10 py-20 px-6 text-center">
-                <h1 className="text-4xl md:text-5xl font-bold mb-6">我们能帮你什么？</h1>
+                <h1 className="text-4xl md:text-5xl font-bold mb-6">{lang === "en" ? "How can we help?" : "我们能帮你什么？"}</h1>
                 <p className="text-xl text-gray-400 mb-16 max-w-2xl mx-auto">
-                    浏览指南了解平台功能，或直接联系我们获取帮助
+                    {lang === "en"
+                        ? "Browse our guides to learn how the platform works, or reach out to us directly for help."
+                        : "浏览指南了解平台功能，或直接联系我们获取帮助"}
                 </p>
 
                 {/* 帮助分类 */}
@@ -46,8 +50,8 @@ export default function HelpPage() {
                             <div className="w-12 h-12 rounded-xl bg-white/10 flex items-center justify-center mb-6 text-white group-hover:scale-110 transition-transform">
                                 <Zap className="h-6 w-6" />
                             </div>
-                            <h3 className="text-xl font-bold mb-3">快速入门</h3>
-                            <p className="text-gray-400 leading-relaxed">注册账号即送 100 积分，创建你的首个 AI 角色，60 秒生成第一条视频。</p>
+                            <h3 className="text-xl font-bold mb-3">{lang === "en" ? "Getting Started" : "快速入门"}</h3>
+                            <p className="text-gray-400 leading-relaxed">{lang === "en" ? "Get 100 free credits when you sign up, create your first AI character, and generate your first video in 60 seconds." : "注册账号即送 100 积分，创建你的首个 AI 角色，60 秒生成第一条视频。"}</p>
                         </div>
                     </Link>
                     <Link href="/#character-engine" className="group">
@@ -55,8 +59,8 @@ export default function HelpPage() {
                             <div className="w-12 h-12 rounded-xl bg-white/10 flex items-center justify-center mb-6 text-white group-hover:scale-110 transition-transform">
                                 <Book className="h-6 w-6" />
                             </div>
-                            <h3 className="text-xl font-bold mb-3">使用指南</h3>
-                            <p className="text-gray-400 leading-relaxed">深入了解 AI 角色库、视频生成引擎和批量创作工具的高级用法。</p>
+                            <h3 className="text-xl font-bold mb-3">{lang === "en" ? "User Guide" : "使用指南"}</h3>
+                            <p className="text-gray-400 leading-relaxed">{lang === "en" ? "Explore the advanced usage of the AI character library and the video generation engine." : "深入了解 AI 角色库、视频生成引擎和批量创作工具的高级用法。"}</p>
                         </div>
                     </Link>
                     <Link href="/#faq" className="group">
@@ -64,24 +68,24 @@ export default function HelpPage() {
                             <div className="w-12 h-12 rounded-xl bg-white/10 flex items-center justify-center mb-6 text-white group-hover:scale-110 transition-transform">
                                 <HelpCircle className="h-6 w-6" />
                             </div>
-                            <h3 className="text-xl font-bold mb-3">常见问题</h3>
-                            <p className="text-gray-400 leading-relaxed">关于账号计费、版权归属和平台规则的常见疑问解答。</p>
+                            <h3 className="text-xl font-bold mb-3">{lang === "en" ? "FAQ" : "常见问题"}</h3>
+                            <p className="text-gray-400 leading-relaxed">{lang === "en" ? "Answers to common questions about account billing, content ownership, and platform rules." : "关于账号计费、版权归属和平台规则的常见疑问解答。"}</p>
                         </div>
                     </Link>
                 </div>
 
                 {/* 底部联系 */}
                 <div className="mt-24">
-                    <h2 className="text-2xl font-bold mb-6">没找到答案？</h2>
+                    <h2 className="text-2xl font-bold mb-6">{lang === "en" ? "Didn't find your answer?" : "没找到答案？"}</h2>
                     <div className="flex items-center justify-center gap-4">
                         <Link href="/contact">
                             <Button className="h-12 px-8 rounded-xl bg-white text-black hover:bg-gray-200 font-bold text-base">
-                                联系客服
+                                {lang === "en" ? "Contact Support" : "联系客服"}
                             </Button>
                         </Link>
                         <Link href="/feedback">
                             <Button variant="outline" className="h-12 px-8 rounded-xl border-white/20 bg-transparent text-white hover:bg-white/10 font-bold text-base">
-                                提交反馈
+                                {lang === "en" ? "Submit Feedback" : "提交反馈"}
                             </Button>
                         </Link>
                     </div>
@@ -96,9 +100,9 @@ export default function HelpPage() {
                             © {new Date().getFullYear()} Star Gaze by Wuhan Guanxing Cultural Media Co., Ltd. All Rights Reserved.
                         </div>
                         <div className="flex items-center gap-6 text-gray-500 text-sm">
-                            <Link href="/terms" className="hover:text-white transition-colors">服务条款</Link>
-                            <Link href="/privacy" className="hover:text-white transition-colors">隐私政策</Link>
-                            <Link href="/legal" className="hover:text-white transition-colors">法律声明</Link>
+                            <Link href="/terms" className="hover:text-white transition-colors">{lang === "en" ? "Terms of Service" : "服务条款"}</Link>
+                            <Link href="/privacy" className="hover:text-white transition-colors">{lang === "en" ? "Privacy Policy" : "隐私政策"}</Link>
+                            <Link href="/legal" className="hover:text-white transition-colors">{lang === "en" ? "Legal Notice" : "法律声明"}</Link>
                             <Link href="https://beian.miit.gov.cn/" target="_blank" className="hover:text-white transition-colors flex items-center gap-1">
                                 <Shield className="h-4 w-4" />
                                 鄂ICP备2023007484号

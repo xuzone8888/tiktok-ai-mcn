@@ -62,12 +62,6 @@ export function ShopPublishSettings({
 
     return (
         <div className="space-y-6">
-            {/* Section Title */}
-            <div className="flex items-center gap-2">
-                <div className="w-1 h-6 rounded-full bg-gradient-to-b from-[#CCFF00] to-[#00F2EA]" />
-                <h3 className="text-lg font-semibold text-white">{T.sectionTitle[lang]}</h3>
-            </div>
-
             {/* Video Title */}
             <div className="space-y-2">
                 <Label className="flex items-center gap-2 text-sm font-medium text-gray-300">

@@ -39,7 +39,7 @@ const SHOP_TEXT = {
 
   // ====== Step 1 — Video selection ======
   video: {
-    sectionTitle:    { en: 'Select Your Video',    zh: '选择你的视频' },
+    sectionTitle:    { en: 'Select Video',          zh: '选择视频' },
     sectionDesc:     { en: 'Upload a video file or provide a URL to an existing video',
                        zh: '上传视频文件或输入已有视频的 URL' },
     uploadTab:       { en: 'Upload Video',         zh: '上传视频' },
@@ -95,6 +95,7 @@ const SHOP_TEXT = {
   // ====== Step 4 — Settings (ShopPublishSettings) ======
   settings: {
     sectionTitle:    { en: 'Publish Settings',       zh: '发布设置' },
+    sectionDesc:     { en: 'Set the video title and product anchor text', zh: '设置视频标题与商品锚点文案' },
     videoTitle:      { en: 'Video Title',            zh: '视频标题' },
     required:        { en: '*',                      zh: '*' },
     titlePlaceholder:{ en: 'Enter a catchy title for your shoppable video...',
