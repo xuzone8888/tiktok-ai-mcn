@@ -4,15 +4,28 @@ import { useState } from "react";
 import Link from "next/link";
 import { Check, X, Sparkles, Zap, Crown, Building2 } from "lucide-react";
 import ReflectiveCard from "@/components/ui/ReflectiveCard";
+import { useLang } from "@/contexts/LangContext";
 import {
     pricingPlans,
     creditPackages,
     featureComparison,
     pricingFaqs,
     marketingCopy,
+    pricingPlansEn,
+    creditPackagesEn,
+    featureComparisonEn,
+    pricingFaqsEn,
+    marketingCopyEn,
 } from "../data/pricing-data";
 
 export default function PricingSection() {
+    const { lang } = useLang();
+    const en = lang === "en";
+    const plans = en ? pricingPlansEn : pricingPlans;
+    const packages = en ? creditPackagesEn : creditPackages;
+    const comparison = en ? featureComparisonEn : featureComparison;
+    const faqs = en ? pricingFaqsEn : pricingFaqs;
+    const copy = en ? marketingCopyEn : marketingCopy;
     const [billingCycle, setBillingCycle] = useState<"monthly" | "yearly">("monthly");
     const [expandedFaq, setExpandedFaq] = useState<number | null>(null);
 
@@ -37,10 +50,10 @@ export default function PricingSection() {
                 {/* 标题区 */}
                 <div className="text-center mb-16">
                     <h1 className="text-4xl md:text-6xl font-bold text-white mb-4">
-                        {marketingCopy.hero.title}
+                        {copy.hero.title}
                     </h1>
                     <p className="text-gray-400 text-lg md:text-xl max-w-2xl mx-auto">
-                        {marketingCopy.hero.subtitle}
+                        {copy.hero.subtitle}
                     </p>
 
                     {/* 月付/年付切换 */}
@@ -52,7 +65,7 @@ export default function PricingSection() {
                                     : "text-gray-400 hover:text-white"
                                 }`}
                         >
-                            月付
+                            {en ? "Monthly" : "月付"}
                         </button>
                         <button
                             onClick={() => setBillingCycle("yearly")}
@@ -61,9 +74,9 @@ export default function PricingSection() {
                                     : "text-gray-400 hover:text-white"
                                 }`}
                         >
-                            年付
+                            {en ? "Yearly" : "年付"}
                             <span className="text-xs px-2 py-0.5 bg-emerald-500 text-white rounded-full">
-                                省20%
+                                {en ? "Save 20%" : "省20%"}
                             </span>
                         </button>
                     </div>
@@ -71,7 +84,7 @@ export default function PricingSection() {
 
                 {/* 套餐卡片 */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-20">
-                    {pricingPlans.map((plan) => (
+                    {plans.map((plan) => (
                         <ReflectiveCard
                             key={plan.id}
                             className={`!rounded-2xl relative ${plan.recommended ? "ring-2 ring-emerald-500/50" : ""
@@ -83,7 +96,7 @@ export default function PricingSection() {
                                 {plan.recommended && (
                                     <div className="absolute -top-3 left-1/2 -translate-x-1/2">
                                         <span className="px-4 py-1 bg-emerald-500 text-white text-sm font-medium rounded-full">
-                                            最受欢迎
+                                            {en ? "Most Popular" : "最受欢迎"}
                                         </span>
                                     </div>
                                 )}
@@ -113,13 +126,13 @@ export default function PricingSection() {
                                                 ? plan.monthlyPrice
                                                 : plan.yearlyPrice}
                                         </span>
-                                        <span className="text-gray-500">/月</span>
+                                        <span className="text-gray-500">{en ? "/mo" : "/月"}</span>
                                     </div>
                                     {billingCycle === "yearly" && plan.monthlyPrice > 0 && (
                                         <p className="text-sm text-gray-500 mt-1">
-                                            年付 ¥{plan.yearlyPrice * 12}
+                                            {en ? "Billed yearly" : "年付"} ¥{plan.yearlyPrice * 12}
                                             <span className="text-emerald-400 ml-2">
-                                                省 ¥{(plan.monthlyPrice - plan.yearlyPrice) * 12}
+                                                {en ? "save" : "省"} ¥{(plan.monthlyPrice - plan.yearlyPrice) * 12}
                                             </span>
                                         </p>
                                     )}
@@ -160,14 +173,14 @@ export default function PricingSection() {
                 {/* 积分充值区 */}
                 <div className="mb-20">
                     <div className="text-center mb-10">
-                        <h2 className="text-3xl font-bold text-white mb-2">积分充值</h2>
+                        <h2 className="text-3xl font-bold text-white mb-2">{en ? "Credit Top-Up" : "积分充值"}</h2>
                         <p className="text-gray-400">
-                            会员积分用完？随时补充，买得越多越划算
+                            {en ? "Running low on credits? Refill anytime — the more you buy, the better the deal." : "会员积分用完？随时补充，买得越多越划算"}
                         </p>
                     </div>
 
                     <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
-                        {creditPackages.map((pkg) => (
+                        {packages.map((pkg) => (
                             <ReflectiveCard
                                 key={pkg.id}
                                 className={`!rounded-xl cursor-pointer hover:scale-105 transition-transform ${pkg.popular ? "ring-2 ring-amber-500/50" : ""
@@ -183,7 +196,7 @@ export default function PricingSection() {
                                                         : "bg-blue-500 text-white"
                                                     }`}
                                             >
-                                                {pkg.popular ? "最受欢迎" : pkg.badge}
+                                                {pkg.popular ? (en ? "Most Popular" : "最受欢迎") : pkg.badge}
                                             </span>
                                         </div>
                                     )}
@@ -192,7 +205,7 @@ export default function PricingSection() {
                                     <div className="text-2xl font-bold text-white font-mono mt-2">
                                         {pkg.credits.toLocaleString()}
                                     </div>
-                                    <div className="text-xs text-gray-500 mb-3">积分</div>
+                                    <div className="text-xs text-gray-500 mb-3">{en ? "credits" : "积分"}</div>
 
                                     {/* 价格 */}
                                     <div className="text-lg font-bold text-white">
@@ -215,8 +228,8 @@ export default function PricingSection() {
                 {/* 功能对比表 */}
                 <div className="mb-20">
                     <div className="text-center mb-10">
-                        <h2 className="text-3xl font-bold text-white mb-2">功能对比</h2>
-                        <p className="text-gray-400">详细了解各套餐包含的功能</p>
+                        <h2 className="text-3xl font-bold text-white mb-2">{en ? "Feature Comparison" : "功能对比"}</h2>
+                        <p className="text-gray-400">{en ? "See exactly what each plan includes" : "详细了解各套餐包含的功能"}</p>
                     </div>
 
                     <ReflectiveCard className="!rounded-2xl overflow-hidden">
@@ -224,17 +237,17 @@ export default function PricingSection() {
                             <table className="w-full">
                                 <thead>
                                     <tr className="border-b border-white/10">
-                                        <th className="text-left p-4 text-gray-400 font-medium">功能</th>
-                                        <th className="p-4 text-center text-white font-medium">免费版</th>
-                                        <th className="p-4 text-center text-white font-medium">创作者</th>
+                                        <th className="text-left p-4 text-gray-400 font-medium">{en ? "Feature" : "功能"}</th>
+                                        <th className="p-4 text-center text-white font-medium">{en ? "Free" : "免费版"}</th>
+                                        <th className="p-4 text-center text-white font-medium">{en ? "Creator" : "创作者"}</th>
                                         <th className="p-4 text-center text-emerald-400 font-medium">
-                                            专业版 ⭐
+                                            {en ? "Pro ⭐" : "专业版 ⭐"}
                                         </th>
-                                        <th className="p-4 text-center text-white font-medium">企业版</th>
+                                        <th className="p-4 text-center text-white font-medium">{en ? "Enterprise" : "企业版"}</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {featureComparison.categories.map((category, catIdx) => (
+                                    {comparison.categories.map((category, catIdx) => (
                                         <>
                                             <tr key={`cat-${catIdx}`} className="bg-white/5">
                                                 <td
@@ -278,7 +291,7 @@ export default function PricingSection() {
                         <div className="p-8 md:p-12">
                             <div className="text-center mb-8">
                                 <h2 className="text-3xl font-bold text-white mb-2">
-                                    {marketingCopy.comparison.title}
+                                    {copy.comparison.title}
                                 </h2>
                             </div>
 
@@ -286,13 +299,13 @@ export default function PricingSection() {
                                 {/* 传统方式 */}
                                 <div className="text-center">
                                     <div className="text-sm text-gray-500 uppercase tracking-wider mb-4">
-                                        {marketingCopy.comparison.traditional.label}
+                                        {copy.comparison.traditional.label}
                                     </div>
                                     <div className="text-4xl font-bold text-gray-400 font-mono mb-4">
-                                        {marketingCopy.comparison.traditional.cost}
+                                        {copy.comparison.traditional.cost}
                                     </div>
                                     <div className="space-y-2">
-                                        {marketingCopy.comparison.traditional.items.map((item, idx) => (
+                                        {copy.comparison.traditional.items.map((item, idx) => (
                                             <div key={idx} className="text-gray-500">
                                                 {item}
                                             </div>
@@ -308,13 +321,13 @@ export default function PricingSection() {
                                 {/* AI 方式 */}
                                 <div className="text-center">
                                     <div className="text-sm text-emerald-400 uppercase tracking-wider mb-4">
-                                        {marketingCopy.comparison.ai.label}
+                                        {copy.comparison.ai.label}
                                     </div>
                                     <div className="text-4xl font-bold text-emerald-400 font-mono mb-4">
-                                        {marketingCopy.comparison.ai.cost}
+                                        {copy.comparison.ai.cost}
                                     </div>
                                     <div className="space-y-2">
-                                        {marketingCopy.comparison.ai.items.map((item, idx) => (
+                                        {copy.comparison.ai.items.map((item, idx) => (
                                             <div key={idx} className="text-gray-300">
                                                 {item}
                                             </div>
@@ -325,7 +338,7 @@ export default function PricingSection() {
 
                             <div className="text-center mt-8">
                                 <span className="inline-block px-6 py-3 bg-emerald-500/20 border border-emerald-500/30 rounded-full text-emerald-400 font-bold text-xl">
-                                    {marketingCopy.comparison.savings}
+                                    {copy.comparison.savings}
                                 </span>
                             </div>
                         </div>
@@ -335,11 +348,11 @@ export default function PricingSection() {
                 {/* FAQ */}
                 <div className="mb-20">
                     <div className="text-center mb-10">
-                        <h2 className="text-3xl font-bold text-white mb-2">常见问题</h2>
+                        <h2 className="text-3xl font-bold text-white mb-2">{en ? "FAQ" : "常见问题"}</h2>
                     </div>
 
                     <div className="max-w-3xl mx-auto space-y-4">
-                        {pricingFaqs.map((faq, idx) => (
+                        {faqs.map((faq, idx) => (
                             <ReflectiveCard key={idx} className="!rounded-xl">
                                 <button
                                     onClick={() => setExpandedFaq(expandedFaq === idx ? null : idx)}
@@ -364,7 +377,7 @@ export default function PricingSection() {
                 {/* 信任标识 */}
                 <div className="text-center">
                     <div className="flex flex-wrap items-center justify-center gap-6">
-                        {marketingCopy.trust.map((item, idx) => (
+                        {copy.trust.map((item, idx) => (
                             <span key={idx} className="text-gray-500">
                                 {item}
                             </span>

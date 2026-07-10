@@ -279,3 +279,210 @@ export const marketingCopy = {
         "🚀 10,000+ 创作者正在使用",
     ],
 };
+
+// ============================================
+// ✦ ENGLISH PARALLEL DATA — scrubbed for the international / US audience
+// Intentional differences from the Chinese data (which is untouched for the CN market):
+//   • Bulk-posting quotas ("X posts/day") and auto-scheduling ("smart/timed publishing")
+//     are omitted — they conflict with the manual, single-post, no-scheduling positioning.
+//   • China-only commerce (WeChat Pay / Alipay / VAT fapiao) → neutral wording
+//     (cards, receipts, priority support).
+//   • Prices stay in ¥; edit these *En objects to localize to USD.
+// ============================================
+
+export const pricingPlansEn: PricingPlan[] = [
+    {
+        id: "free",
+        name: "Free",
+        subtitle: "Explore the limitless possibilities of AI creation",
+        monthlyPrice: 0,
+        yearlyPrice: 0,
+        credits: 100,
+        features: [
+            "🎁 Welcome gift: 100 credits",
+            "🎬 AI video generation (all models)",
+            "🖼️ AI image generation (multiple styles)",
+            "📝 AI copywriting",
+            "📱 Publish to TikTok",
+            "📊 Basic analytics",
+        ],
+        cta: "Start Free",
+        ctaLink: "/auth/register",
+    },
+    {
+        id: "creator",
+        name: "Creator",
+        subtitle: "The efficiency booster for solo creators",
+        monthlyPrice: 39,
+        yearlyPrice: 31,
+        credits: 200,
+        features: [
+            "🎁 200 monthly credits",
+            "⚡ Faster generation (priority processing)",
+            "📱 Manage up to 3 accounts",
+            "🎬 AI video generation (all models)",
+            "🖼️ AI image generation (4K HD)",
+            "📝 AI copy: multilingual translation",
+            "📊 Advanced analytics",
+            "💬 Online support",
+            "📥 Watermark-free HD downloads",
+        ],
+        cta: "Get Started",
+        ctaLink: "/contact",
+    },
+    {
+        id: "pro",
+        name: "Pro",
+        subtitle: "The high-efficiency creation platform for teams",
+        monthlyPrice: 99,
+        yearlyPrice: 79,
+        credits: 1000,
+        recommended: true,
+        features: [
+            "🎁 1000 monthly credits",
+            "⚡ Fastest generation (priority processing)",
+            "📱 Manage up to 10 accounts",
+            "👥 Team collaboration: 3 seats",
+            "🎬 AI video: dedicated fast lane",
+            "🖼️ Multi-task generation + style transfer",
+            "📝 100+ title variations",
+            "📊 Real-time monitoring + auto reports",
+            "📦 10GB cloud asset library",
+            "💬 1-on-1 priority support",
+            "🧾 Invoices / receipts",
+        ],
+        cta: "Get Started",
+        ctaLink: "/contact",
+    },
+    {
+        id: "enterprise",
+        name: "Enterprise",
+        subtitle: "The growth engine for large-scale e-commerce",
+        monthlyPrice: 299,
+        yearlyPrice: 239,
+        credits: 5000,
+        features: [
+            "🎁 5000 monthly credits",
+            "⚡ Dedicated processing (no wait)",
+            "📱 Unlimited accounts",
+            "👥 Team collaboration: 10 seats",
+            "🏢 Sub-account management",
+            "🎬 All models + API access",
+            "🖼️ Custom model training",
+            "📝 Brand-tone customization",
+            "📊 BI dashboard + ROI tracking",
+            "📦 100GB cloud asset library",
+            "💬 24/7 dedicated VIP support",
+            "🧾 Business invoicing",
+            "🎓 1-on-1 onboarding & training",
+            "🔐 Optional on-premise deployment",
+        ],
+        cta: "Contact Us",
+        ctaLink: "/contact",
+    },
+];
+
+export const creditPackagesEn: CreditPackage[] = [
+    { id: "starter",    credits: 200,   price: 9.9,  badge: "First-purchase offer" },
+    { id: "basic",      credits: 500,   price: 25,   originalPrice: 25 },
+    { id: "standard",   credits: 1000,  price: 45,   originalPrice: 50,   discount: "10% off" },
+    { id: "popular",    credits: 2000,  price: 80,   originalPrice: 100,  discount: "20% off", popular: true },
+    { id: "business",   credits: 5000,  price: 175,  originalPrice: 250,  discount: "30% off" },
+    { id: "enterprise", credits: 10000, price: 300,  originalPrice: 500,  discount: "40% off" },
+    { id: "unlimited",  credits: 50000, price: 1250, originalPrice: 2500, discount: "50% off", badge: "Enterprise exclusive" },
+];
+
+// Publishing category keeps only manual, single-post capability + account management;
+// bulk "posts/day" and "smart scheduling" rows are intentionally dropped.
+export const featureComparisonEn = {
+    categories: [
+        {
+            name: "AI Generation",
+            features: [
+                { name: "AI video generation", free: true, creator: true, pro: true, enterprise: true },
+                { name: "AI image generation", free: true, creator: true, pro: true, enterprise: true },
+                { name: "AI copywriting", free: true, creator: true, pro: true, enterprise: true },
+                { name: "4K HD output", free: false, creator: true, pro: true, enterprise: true },
+                { name: "Multi-task generation", free: false, creator: false, pro: true, enterprise: true },
+                { name: "Custom models", free: false, creator: false, pro: false, enterprise: true },
+            ],
+        },
+        {
+            name: "Publishing",
+            features: [
+                { name: "Publish to TikTok", free: true, creator: true, pro: true, enterprise: true },
+                { name: "Account management", free: "1", creator: "3", pro: "10", enterprise: "Unlimited" },
+            ],
+        },
+        {
+            name: "Team Collaboration",
+            features: [
+                { name: "Team members", free: "1", creator: "1", pro: "3", enterprise: "10" },
+                { name: "Sub-account management", free: false, creator: false, pro: false, enterprise: true },
+                { name: "Permissions", free: false, creator: false, pro: true, enterprise: true },
+            ],
+        },
+        {
+            name: "Support",
+            features: [
+                { name: "Online support", free: false, creator: true, pro: true, enterprise: true },
+                { name: "1-on-1 support", free: false, creator: false, pro: true, enterprise: true },
+                { name: "Dedicated account manager", free: false, creator: false, pro: false, enterprise: true },
+                { name: "Invoices / receipts", free: false, creator: false, pro: true, enterprise: true },
+            ],
+        },
+    ],
+};
+
+export const pricingFaqsEn = [
+    {
+        question: "What are credits and how are they used?",
+        answer: "Credits are the platform's universal currency. Generating one video costs 20 credits; generating one image costs 4 credits. Each plan includes monthly credits, and you can top up anytime.",
+    },
+    {
+        question: "How long can I use the Free plan?",
+        answer: "The Free plan is permanent! Get 100 credits on sign-up — enough for about 5 videos. When credits run out, upgrade for more or buy a credit pack.",
+    },
+    {
+        question: "How do I upgrade or downgrade?",
+        answer: "You can upgrade anytime and unused credits roll over. Downgrades take effect at the end of the current billing cycle. Contact support if you need help.",
+    },
+    {
+        question: "What payment methods are supported?",
+        answer: "We accept major credit and debit cards. For other payment options, please contact our support team.",
+    },
+    {
+        question: "How do I get a receipt?",
+        answer: "Downloadable receipts are available under Account Settings after purchase. For business invoicing, please contact support.",
+    },
+    {
+        question: "Can I get a refund if I'm not satisfied?",
+        answer: "If you're not satisfied within 7 days of your first purchase, you can request a full refund (used credits deducted). Please submit your request through support.",
+    },
+];
+
+export const marketingCopyEn = {
+    hero: {
+        title: "Choose the plan that fits you",
+        subtitle: "From solo creators to enterprise teams, there's a plan for everyone",
+    },
+    comparison: {
+        title: "vs. Manual Operations Cost",
+        traditional: {
+            label: "Traditional way",
+            cost: "¥5,000+/mo",
+            items: ["Hire operators", "Designers", "Copywriters"],
+        },
+        ai: {
+            label: "Star Gaze",
+            cost: "From ¥99/mo",
+            items: ["Fully automated creation", "Streamlined workflow", "Analytics"],
+        },
+        savings: "Save 98% on costs",
+    },
+    trust: [
+        "🔒 Secure payments",
+        "💯 7-day money-back guarantee",
+        "🚀 10,000+ creators onboard",
+    ],
+};
