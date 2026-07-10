@@ -32,7 +32,7 @@ export function LangToggle() {
           title={lang === "zh" ? "切换语言" : "Switch Language"}
         >
           <Globe className="h-[18px] w-[18px] text-muted-foreground" />
-          <span className="sr-only">切换语言 / Switch Language</span>
+          <span className="sr-only">{lang === "zh" ? "切换语言" : "Switch Language"}</span>
         </Button>
       </DropdownMenuTrigger>
 

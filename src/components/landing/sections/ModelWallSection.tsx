@@ -72,7 +72,7 @@ export default function ModelWallSection() {
                                 <div className="aspect-[4/5] relative overflow-hidden">
                                     <Image
                                         src={char.src}
-                                        alt={`${char.name} - ${char.role}`}
+                                        alt={lang === "en" ? `${char.nameEn} - ${char.roleEn}` : `${char.name} - ${char.role}`}
                                         fill
                                         sizes="(max-width: 768px) 50vw, 25vw"
                                         className="object-cover group-hover:scale-105 transition-transform duration-300"
@@ -81,10 +81,10 @@ export default function ModelWallSection() {
                                 {/* 信息区 */}
                                 <div className="p-3">
                                     <div className="text-white text-sm font-medium">
-                                        {char.name}
+                                        {lang === "en" ? char.nameEn : char.name}
                                     </div>
                                     <div className="text-xs text-gray-500 mt-0.5">
-                                        {char.role}
+                                        {lang === "en" ? char.roleEn : char.role}
                                     </div>
                                 </div>
                             </div>
