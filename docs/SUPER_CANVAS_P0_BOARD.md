@@ -33,8 +33,8 @@
 
 - **D1 canvases 表迁移 + 文档体积闸**(DDL 全文照抄 [SUPER_CANVAS_DATA_MODEL.md](./SUPER_CANVAS_DATA_MODEL.md) §六,迁移文件 `20260714_canvases.sql`;SQL 落盘由用户经 dashboard 执行,本地先写 runner 脚本+语法自校)
   - ✅ canvases 文档 schema(#27:本任务建 jsonb 表[拓扑+引用+schemaVersion+deps];doc 结构 zod 定义归 D2,二者合成同一功能点)
-  - ✅ 文档 >512KB 拒存(#29 数据半:doc_bytes 列/阈值;拒存逻辑在 D3 API;提示 toast 在 S7)
-  - ✅ jsonb>2MB 告警(#47 数据半:阈值检测;告警 banner UI 在 S7)
+  - ✅ 文档 >512KB 软告警(#29 数据半:doc_bytes 列 + 512KB 阈值;不拒存,横幅 UI 在 S7)
+  - ✅ 文档 >2MB 硬拒存(#47 数据半:2MB 阈值;硬拒逻辑在 D3 API 返 400,拒存 toast 在 S7)
 - **D2 zod schema + 迁移注册表 + 坏档降级(数据面)**(`src/lib/canvas/schema.ts`:doc/node/edge/group 的 zod v1 + refs 引用约定 + deps 结构;此文件是 shell/data 共享合约)
   - ✅ canvases 文档 schema 的结构定义(#27 结构半:doc/node/edge/group zod;与 D1 表迁移合成同一功能点)
   - ✅ zod 加载校验+非法节点降级「损坏节点」占位卡(可删),永不整画布白屏(数据面:校验失败节点标记 broken,占位卡 UI 归 S3)
@@ -44,6 +44,7 @@
 - **D3 文档存取 API + 补丁保存协议**(`src/app/api/canvas/[id]/route.ts`:GET 整包 / PATCH 节点级补丁 + rev CAS + updated_at 手动写[仓库惯例,表无触发器])
   - ✅ 自动保存=节点级补丁(op log),非重叠自动 rebase(协议+服务端;客户端定时器归 S 侧接入)
   - ✅ 断网 30s 恢复自动补存(补丁队列重放机制)
+  - ✅ 文档 >2MB 硬拒存(#47 服务半,P0-Q1 已裁):POST/PATCH 计算 doc_bytes,>2MB 返 400 拒存;≤2MB 正常入库并写 doc_bytes(512KB 软告警不在此拒,由 S7 横幅提示)
 - **D4 IndexedDB 影子副本**(`src/lib/canvas/shadow.ts`)
   - ✅ IndexedDB 影子副本 + shadow>server 一键恢复(不占 localStorage 5MB 配额)
 - **D5 单写者锁**(`src/lib/canvas/writer-lock.ts` + API 侧 writer_tag/heartbeat)
@@ -92,7 +93,7 @@
   - ✅ 组件级错误边界+「尝试恢复/重新加载画布」按钮
   - ✅ store 层防护+错误边界触发进监控(单画布>1 次/日报警)
   - ✅ 单写者只读横幅 UI(消费 D5 状态)
-  - ✅ 文档健康反馈 UI:512KB 拒存 toast(#29 UI 半;阈值/列 D1、拒存 D3)、2MB 告警 banner(#47 UI 半;阈值检测 D1)
+  - ✅ 文档健康反馈 UI(P0-Q1 已裁):>512KB 软告警横幅「画布偏大建议拆分」(#29 UI 半;不拒存,阈值 D1)、>2MB 硬拒 toast(#47 UI 半;拒存在 D3 返 400,阈值 D1)
 - **S8 历史资产面板 + omnibox 确认**
   - ✅ 历史资产面板 UI(三 tab 图/视频/音频+计数+日期分组+从中选素材建节点;消费 D6)
   - ✅ omnibox 长期保留轻量快捷入口(零改动,验证不受画布影响即可)
@@ -126,7 +127,7 @@
 
 > 规则:写入窗遇「必须裁决才能做下去」的问题,写此处,等审核窗+技术负责人(必要时用户)裁决;裁决前**不擅改 CHECKLIST 功能取舍**(铁律#10)。
 
-- **P0-Q1 · 512KB 硬拒 vs 2MB 告警语义矛盾**(D3/S7 实现前必须裁决):CHECKLIST #29「文档 >512KB **拒存**并提示」是 512KB 硬上限;#47「jsonb>**2MB** 告警建议拆画布」是 2MB 软告警——若 512KB 就硬拒,文档永远到不了 2MB,2MB 告警不可达,二者阈值语义冲突。**现状**:D1 只落**原始阈值契约**(doc_bytes 列 + 两个阈值常量),**不实现拒存/告警行为、不擅改清单**。**待裁决**:硬拒阈值到底取 512KB 还是 2MB?或「512KB 软告警 + 2MB 硬拒」重新分层?裁决落定后再改 CHECKLIST #29/#47 并同步 D3(拒存逻辑)/S7(提示 UI)。归属:D1 先行(仅契约)→ 裁决 → D3+S7 实现。
+- **P0-Q1 · ✅ 已裁决(2026-07-12,技术负责人)**:体积双闸统一为 **>512KB 软告警(建议拆画布,不拒存)/ >2MB 硬拒存并提示**。理由:告警必须早于硬闸,且不妨碍 200 节点 P0 目标。**已落地**:CHECKLIST #29(A 组,改「>512KB 软告警建议拆画布」)/#47(G 组,改「>2MB 硬拒存并提示」)文字与备注、本看板覆盖表(#29→D1+S7、#47→D1+D3+S7)、D1/D3/S7 任务明细、总纲 §五/§七、DATA_MODEL §六 均已同步。**分工**:D3 实施 2MB 硬拒(POST/PATCH >2MB 返 400);S7 实施 512KB 软告警横幅 + 2MB 拒存 toast;D1 只提供两个阈值契约。**待 data 后续 commit 同步(非审核窗改)**:`src/lib/canvas/doc-limits.ts` 常量按裁决翻转(`HARD_LIMIT=2MB`、`WARN_LIMIT=512KB`;f838476 原实现是 hard=512KB/warn=2MB 反的,导致告警分支死代码)+ 迁移文件 `doc_bytes` 注释同步;供 D2 复审时一并核。
 
 ## 合流顺序建议
 D1→D2(schema.ts 落地)→ S1/S3 与 D3-D6 并行 → S2/S4/S5 → S6/S7/S8 → R1 全量跑 → R2 收口(含上「跨目录归属项」两条)。
@@ -166,7 +167,7 @@ D1→D2(schema.ts 落地)→ S1/S3 与 D3-D6 并行 → S2/S4/S5 → S6/S7/S8 �
 | 26 | 单写者锁(navigator.locks)+ 双标签第二个只读+横幅 | D5+S7 |
 | 27 | canvases 文档 schema(jsonb 拓扑+引用+schemaVersion+deps 依赖清单字段) | D1+D2 |
 | 28 | 禁存 dataURL/签名 URL,只存 OSS object key(渲染层换签名 URL+内存缓存) | D2+S6 |
-| 29 | 文档 >512KB 拒存并提示 | D1+D3+S7 |
+| 29 | 文档 >512KB 软告警建议拆画布 | D1+S7 |
 | 30 | 断网 30s 恢复自动补存 | D3 |
 | 31 | 新路由 /canvas,不动 /studio | S1 |
 | 32 | omnibox 长期保留轻量快捷入口 | S8 |
@@ -184,5 +185,5 @@ D1→D2(schema.ts 落地)→ S1/S3 与 D3-D6 并行 → S2/S4/S5 → S6/S7/S8 �
 | 44 | 内容节点删除二次确认 | S3 |
 | 45 | 媒体降级策略(节点默认 poster 缩略图/选中才挂 `<video>` 且 DOM 断言进 DoD/同屏活跃视频≤6/低 zoom 语义缩放降级色块) | S6 |
 | 46 | 性能预算数值验收(200 节点 pan/zoom≥50fps 中端机/冷加载<3s/100 节点+30 视频 poster 内存<800MB/100 节点保存<1s) | R1 |
-| 47 | jsonb>2MB 告警建议拆画布 | D1+S7 |
+| 47 | 文档 >2MB 硬拒存并提示 | D1+D3+S7 |
 | 48 | 每期验收脚本惯例 .temp/canvas-p{n}-verify.mjs + tsc/build/实弹/大改动对抗审查 workflow | R1 |

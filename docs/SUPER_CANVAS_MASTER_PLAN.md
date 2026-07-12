@@ -40,7 +40,7 @@
 2. **执行留在现有链路,画布只是编排视图**。铁律:**双轨期画布零 fork 任何 API/执行器/store 原语,出现"必须 fork"即停手上会。**明确:BTM 是**浏览器内**编排器(不是服务端),画布沿用之;**节点执行状态唯一真相源 = 服务端 generations 表**,画布文档只存 `nodeId→taskId/generationId` 引用,BTM 写回仅作乐观 UI。
 3. **单写者**:同一画布任一时刻仅一个写者标签(navigator.locks,P0 交付不许推迟),其余标签只读+横幅。
 4. **统一对账合约(P1 前置交付物)**:每类节点注册 `{jobKey, fetchStatus(jobKey), pollInterval, terminalTimeout}`;触发点=画布加载/visibilitychange 回前台/手动刷新;超时判死必触发幂等退款。验收:提交后 kill 标签→重开→状态收敛到服务端真值。
-5. **画布文档 schema**:`canvases` 表,jsonb 存**拓扑+引用**(nodes/edges/groups + schemaVersion + deps 依赖清单[模型/音色/角色/配方 ID,v1 即有字段可空]);**禁存 dataURL/签名 URL,只存 OSS object key**(渲染层换签名 URL+内存缓存);文档 >512KB 拒存并提示;保存=节点级补丁(op log),非重叠自动 rebase;本地影子副本用 IndexedDB(不占 localStorage 5MB 配额),重载 shadow>server 提示一键恢复。
+5. **画布文档 schema**:`canvases` 表,jsonb 存**拓扑+引用**(nodes/edges/groups + schemaVersion + deps 依赖清单[模型/音色/角色/配方 ID,v1 即有字段可空]);**禁存 dataURL/签名 URL,只存 OSS object key**(渲染层换签名 URL+内存缓存);文档 >2MB 硬拒存并提示、>512KB 软告警建议拆画布(P0-Q1 已裁 2026-07-12:告警须早于硬闸);保存=节点级补丁(op log),非重叠自动 rebase;本地影子副本用 IndexedDB(不占 localStorage 5MB 配额),重载 shadow>server 提示一键恢复。
 6. **坏档防御**:加载走 zod 校验,非法节点降级为「损坏节点」占位卡(可删),**永不整画布白屏**;迁移注册表(v1→v2→…),「上一 schema 版本文档能打开」进 DoD。LibTV 实测崩过 React #185——错误边界+恢复按钮照抄,并加 store 层防护(见 §七 性能预算)。
 7. **合成/批量类重任务一律 DB 排队**(local-stitch 并发闸=2、3.4G 小机),节点显示排队位,禁止 fail-fast 报错甩用户。
 8. **路由**:新 `/canvas`(P0 起),不动 `/studio`。**omnibox 长期保留为轻量快捷入口,画布只收编多节点编排型链路;幻灯片/图文帖明确不进画布 v1**。三库同源(积分/角色/历史),画布「从历史选择」直读现有 generations/assets/blueprints,不建平行表。
@@ -90,7 +90,7 @@
 - 最小支持 1366×768:侧栏默认图标态、小地图默认收起、生成器面板超视口自动 dock 底部、胶囊≥5 折叠「更多」;此分辨率走查进每期 DoD。
 - 常驻「?」入口=快捷键表+两个交互式教程(电商带货版/剧情创作版,跟手走完最短链);完成奖励小额积分(=积分发放链路首个真实用例)。
 
-**性能预算(P0 DoD 数值验收)**:200 节点画布 pan/zoom ≥50fps(中端机);冷加载 <3s;100 节点+30 视频 poster 内存 <800MB;jsonb >2MB 告警建议拆画布;错误边界触发进监控(单画布 >1 次/日报警)。
+**性能预算(P0 DoD 数值验收)**:200 节点画布 pan/zoom ≥50fps(中端机);冷加载 <3s;100 节点+30 视频 poster 内存 <800MB;文档 >2MB 硬拒存、>512KB 软告警建议拆画布(P0-Q1 已裁 2026-07-12);错误边界触发进监控(单画布 >1 次/日报警)。
 
 **每期「稳定使用流程」验收模板(操作→预期,尽量脚本化,`.temp/canvas-p{n}-verify.mjs` 惯例)**
 - P0:空态快捷位可点/建节点编辑 5s 后刷新零丢失/断网 30s 恢复自动补存/双标签第二个只读+横幅/塞坏 node json 画布照开+占位卡/100 节点保存<1s/Ctrl+Z。

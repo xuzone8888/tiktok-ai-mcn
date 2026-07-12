@@ -46,7 +46,7 @@
 | 单写者锁(navigator.locks)+ 双标签第二个只读+横幅 | 独有 | 做 | P0 | 新建 M | ADR3,P0 交付不许推迟 |
 | canvases 文档 schema(jsonb 拓扑+引用+schemaVersion+deps 依赖清单字段) | 独有 | 做 | P0 | 新建 M(新表迁移) | deps=模型/音色/角色/配方 ID,v1 即有字段可空 |
 | 禁存 dataURL/签名 URL,只存 OSS object key(渲染层换签名 URL+内存缓存) | 独有 | 做 | P0 | 新建 S | ADR5 红线 |
-| 文档 >512KB 拒存并提示 | 独有 | 做 | P0 | 新建 S | |
+| 文档 >512KB 软告警建议拆画布 | 独有 | 做 | P0 | 新建 S | P0-Q1 已裁(2026-07-12):512KB=软告警(不拒存,S7 横幅);硬拒在 >2MB(见 G 组) |
 | 断网 30s 恢复自动补存 | 独有 | 做 | P0 | 新建 S | P0 验收模板项 |
 | 统一对账合约(每类节点注册 {jobKey, fetchStatus, pollInterval, terminalTimeout};触发=加载/回前台/手动刷新) | 独有(复审) | 做 | P1 | 新建 M | P1 前置交付物;超时判死必触发幂等退款 |
 | 新路由 /canvas,不动 /studio | 独有 | 做 | P0 | 新建 S | ADR8 |
@@ -254,7 +254,7 @@
 | 双标签无双跑双扣 | 独有 | 做 | P1 | 依赖单写者锁+提交幂等 | P1 验收模板项 |
 | 媒体降级策略(节点默认 poster 缩略图/选中才挂 `<video>` 且 DOM 断言进 DoD/同屏活跃视频≤6/低 zoom 语义缩放降级色块) | 独有 | 做 | P0 | 新建 M | ADR1 |
 | 性能预算数值验收(200 节点 pan/zoom≥50fps 中端机/冷加载<3s/100 节点+30 视频 poster 内存<800MB/100 节点保存<1s) | 独有 | 做 | P0 | 新建验收脚本 S | P0 DoD |
-| jsonb>2MB 告警建议拆画布 | 独有 | 做 | P0 | 新建 S | |
+| 文档 >2MB 硬拒存并提示 | 独有 | 做 | P0 | 新建 S | P0-Q1 已裁(2026-07-12):2MB=硬拒存(D3 返 400 + S7 toast);软告警在 >512KB(见 A 组) |
 | 批量/合成重任务一律 DB 排队+排队位显示,禁 fail-fast(local-stitch 并发闸=2,3.4G 小机) | 独有 | 做 | P2 批量/P3 合成 | 复用 src/lib/studio/local-stitch.ts + 新建队列 M | ADR7 |
 | 批量生分镜图先落库排队(batch 预创建 generations queued 行+并发闸 2-3+429 退避;关标签经对账恢复) | 复审 | 做 | P2 | 复用 generations.batch_id+spec,新建 M | 图片腿无批量网关,ADR7 在图片腿的承载物 |
 | 注入上游失败→节点 failed+恰好一条 refund | 独有 | 做 | P1 | 依赖 F 组幂等退款 | P1 验收模板项 |

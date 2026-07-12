@@ -372,7 +372,7 @@ CREATE TABLE IF NOT EXISTS public.canvases (
     rev BIGINT NOT NULL DEFAULT 0,                      -- 保存序号:UPDATE…SET rev=rev+1 WHERE rev=:expected(补丁 rebase 的服务端锚)
     writer_tag TEXT,                                    -- 单写者:当前写者标签 id(navigator.locks 持有者上报)
     writer_heartbeat_at TIMESTAMPTZ,                    -- 写者心跳;超时(如 30s)其他标签可接管
-    doc_bytes INTEGER,                                  -- 保存时服务端计算;>524288(512KB)API 拒存
+    doc_bytes INTEGER,                                  -- 保存时服务端计算;>2097152(2MB)API 硬拒存;>524288(512KB)软告警建议拆(P0-Q1 已裁 2026-07-12)
 
     share_slug TEXT UNIQUE,                             -- P3 只读分享链接(NULL=未分享)
     status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'archived')),
@@ -437,6 +437,8 @@ NOTIFY pgrst, 'reload schema';
 **deps 结构**:`{"models":["seedance"],"voices":["voice_x"],"characters":[{"id":"…","table":"ai_models"}],"assets":[{"id":"…","table":"canvas_assets"}],"recipes":["uuid"]}` ——保存时由前端从 nodes 聚合去重写入(v1 即有字段可空,ADR 5);P3 复制画布时逐项查可用性(模型下线/音色无权限/角色未签约逐项红字)。
 
 **updated_at 维护条款**:canvases 与 canvas_assets 均**不建 updated_at 触发器**,updated_at 由写路由手动更新——沿用 blueprints 既有惯例([id]/route.ts:16 注释「表无触发器」,:212 手动写 patch.updated_at)。**canvases 的 PATCH 保存合约必须每次补丁保存都写 updated_at**,否则 `idx_canvases_user_updated` 的「最近编辑」排序失真。
+
+**体积双闸语义(P0-Q1 已裁,2026-07-12 技术负责人)**:统一为 **>512KB 软告警(建议拆画布,不拒存)/ >2MB 硬拒存并提示**(告警须早于硬闸,且不妨碍 200 节点 P0 目标)。`doc_bytes` 列不变(仍存 `computeDocBytes` 的 UTF-8 串字节),仅阈值语义定稿:硬拒阈值=2097152、软告警阈值=524288,均对 `doc` 串字节判定。落地分工:**D3** 在 POST/PATCH 计算 `doc_bytes`,>2MB 返 400 硬拒存(≤2MB 正常入库并写 `doc_bytes`);**S7** 渲染 >512KB 软告警横幅 + >2MB 拒存 toast。**待 data 同步(非本文改)**:`src/lib/canvas/doc-limits.ts` 常量按裁决翻转(`HARD=2MB`、`WARN=512KB`;原实现是 hard=512KB/warn=2MB 反的)+ 迁移文件 `20260714_canvases.sql` 的 `doc_bytes` 注释同步为「>2MB 硬拒」。字节度量口径钉死=客户端 `JSON.stringify(doc)` 的 UTF-8 字节(与 jsonb 存储字节可不等,以客户端串字节为准,客户端预检与服务端计算共用同一 `computeDocBytes`)。
 
 **单写者与对账**:写者持 navigator.locks 后 `UPDATE canvases SET writer_tag=:tag, writer_heartbeat_at=now() WHERE id=:id AND (writer_tag IS NULL OR writer_tag=:tag OR writer_heartbeat_at < now()-interval '30 seconds')`,行更新 0 行=只读横幅;每次补丁保存带 `WHERE rev=:expected` CAS。对账=遍历 nodes 收集 `refs.taskId/generationId` → 按对账合约批量查 generations 收敛状态(超时判死触发幂等退款,ADR 4)。op log 不入 DB(本地 IndexedDB 影子副本承担),避免 P0 造平行事件表。
 
