@@ -194,6 +194,13 @@
 - **TikTok photo post 结论(代码侧)**:已申请 scope=user.info.basic/video.publish/video.upload/user.info.stats;photo post 用同一 video.publish scope,大概率无需新申请,待用户登录开发者后台经浏览器最终核验(不阻塞)
 - **link-video-script.ts 处置修订**:S0.2 不动它(link-video 旧页仍在线引用),S2 拆 link-video 时再摘进 salvage
 
+## 当前方向:超级画布(2026-07-12 用户裁决,新篇章)
+
+- **方向沿革**:07-11 方向重置(S5/战略评估作废)→ 07-11 当晚 17-agent UX 方案被整体否决 → 07-12「全屏导演工作台」方案 v1(artifact 732bdf3c)产出后,用户裁决**改做超级画布形态**(对标 liblib.tv LibTV 画布,能真出片;验证目标=工业级视频生成,满足大型漫剧+电商视频工作室;愿景=画布公有可分享互嵌生态)。v1 的导演层引擎设计折入画布脚本节点。
+- **执行总纲(新窗口恢复入口)= [SUPER_CANVAS_MASTER_PLAN.md](./SUPER_CANVAS_MASTER_PLAN.md)**:两条黄金旅程定范围(电商≤7步/漫剧≤9步)、LibTV 功能做/裁/延三列表、架构 ADR(React Flow+执行留现有链路零 fork+generations 唯一真相源+单写者锁+统一对账合约)、6 类节点白名单、脚本节点=蓝图画布宿主(复用 blueprint-drawer 不重写)、积分框架 P1 五件套(estimate 同源/无鉴权 deduct·refund 路由下线/退款幂等下沉 DB 约束/流水标准化/客户端零金额)、每期「稳定使用流程」验收模板、分期 P0-P4。
+- **依据**:LibTV 实地走查(用户登录态,零积分消耗,测试节点已清)+ 4 路网络研究(LibTV考古/竞品/开源底盘选型 React Flow 主选/协作生态)+ 4 视角对抗复审(易用性/稳定性/范围/积分)。复审实锤要点已并入总纲:BTM 是浏览器内编排器非服务端、canvases 文档禁存 dataURL 只存 object key、合成 DB 排队禁 fail-fast、**发现现网安全洞 /api/user/credits/{deduct,refund} 无鉴权(P1 前必须下线)**、幻灯片/图文帖不进画布 v1(omnibox 长期保留轻量入口)、音频节点 v1 砍、收编量化判据。
+- **下一步**:P0 画布骨架开工(先出 A 级 HTML 交互预览页给用户确认视觉方向,再写代码;/canvas 新路由,不动 /studio)。
+
 ## S0 任务清单(与会话内 Task #1-#9 对应)
 | # | 任务 | 状态 | 验收 |
 |---|---|---|---|
