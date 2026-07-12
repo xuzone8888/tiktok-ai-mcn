@@ -5,13 +5,13 @@
  *
  * 两段:
  *   ① SQL 结构自校(离线,无需 DB):必备列/RLS/四策略/索引/NOTIFY/体积注释齐全。
- *   ② doc-limits 契约(离线,typescript 剥类型后跑):512KB 硬闸 / 2MB 告警 / 边界 / 不可序列化。
+ *   ② doc-limits 契约(离线,typescript 剥类型后跑):512KB 软告警 / 2MB 硬闸 / 边界 / 不可序列化。
  *
  * 可选③ 真 Postgres 语法校验(默认跳过,绝不碰生产):
  *   仅当显式设置 `CANVAS_VERIFY_PG_URL` 指向一次性本地库时启用。事务内先建最小桩
  *   (auth.uid()/public.profiles/pgcrypto)再跑迁移,**结束一律 ROLLBACK**,不落任何行。
- *   URL 命中生产标记(supabase.co / 已知 project ref)一律拒跑。生产迁移永远由用户
- *   经 Supabase dashboard 手动执行(铁律 §六)。
+ *   URL 主机必须严格等于 localhost / 127.0.0.1 / ::1,其余一律拒跑。生产迁移
+ *   永远由用户经 Supabase dashboard 手动执行(铁律 §六)。
  */
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -92,10 +92,16 @@ for (const [pol, clause] of Object.entries(POLICY_CLAUSE)) {
     `RLS 策略 canvases_${pol}_own 的 ${clause.replace("\\s+", " ")} 谓词=auth.uid()=user_id(逐策略体校验)`
   );
 }
+const updatePolicy = sql.match(/CREATE POLICY "canvases_update_own"[\s\S]*?;/i)?.[0] ?? "";
+ok(
+  /WITH\s+CHECK\s*\(\s*auth\.uid\(\)\s*=\s*user_id\s*\)/i.test(updatePolicy),
+  "RLS UPDATE 显式 WITH CHECK=auth.uid()=user_id"
+);
 ok(/CREATE INDEX IF NOT EXISTS idx_canvases_user_updated/i.test(sql), "最近编辑索引(user_id,updated_at DESC)");
 ok(/on public\.canvases\(user_id, updated_at DESC\)/i.test(sql), "索引列序 user_id, updated_at DESC");
 ok(/NOTIFY pgrst, 'reload schema'/i.test(sql), "结尾 NOTIFY pgrst 重载 schema(仓库惯例)");
-ok(/524288|512KB/.test(sql), "体积闸数值 524288/512KB 注释在案");
+ok(/524288|512KB/.test(sql), "软告警数值 524288/512KB 注释在案");
+ok(/2097152|2MB/i.test(sql), "硬拒数值 2097152/2MB 注释在案");
 ok(/COMMENT ON TABLE public\.canvases/i.test(sql), "表注释在案");
 // 分号计数:粗校语句完整性(不含结尾多余空语句)
 const stmtCount = sqlNoComments.split(";").map((s) => s.trim()).filter((s) => s.length > 0).length;
@@ -114,8 +120,8 @@ const {
   formatBytes,
 } = dl;
 
-eq(DOC_BYTES_HARD_LIMIT, 524288, "硬闸常量 = 524288 (512KB)");
-eq(DOC_JSONB_WARN_LIMIT, 2097152, "告警闸常量 = 2097152 (2MB)");
+eq(DOC_BYTES_HARD_LIMIT, 2097152, "硬闸常量 = 2097152 (2MB)");
+eq(DOC_JSONB_WARN_LIMIT, 524288, "告警闸常量 = 524288 (512KB)");
 
 // 字节计算与 TextEncoder 一致(含非 ASCII)
 const sample = { nodes: [], edges: [], groups: [], t: "中文·mix" };
@@ -128,25 +134,25 @@ ok(rEmpty.ok && !rEmpty.overHardLimit && !rEmpty.overWarnLimit, "空文档:ok �
 eq(rEmpty.message, null, "空文档:message 为 null");
 eq(rEmpty.serializable, true, "空文档:可序列化");
 
-// 硬闸边界:恰好 524288 字节不算超;+1 算超
+// 告警边界:恰好 512KB 不告警;+1 仅告警、不拒存
 const overhead = computeDocBytes({ big: "" }); // {"big":""} 的字节数
 const padTo = (target) => ({ big: "x".repeat(Math.max(0, target - overhead)) });
-const atLimit = padTo(DOC_BYTES_HARD_LIMIT);
-eq(computeDocBytes(atLimit), DOC_BYTES_HARD_LIMIT, "构造 == 硬闸字节");
-const rAt = checkDocSize(atLimit);
-ok(!rAt.overHardLimit && rAt.ok, "恰好 524288:不拒(严格 >)");
-const rOver = checkDocSize(padTo(DOC_BYTES_HARD_LIMIT + 1));
-ok(rOver.overHardLimit && !rOver.ok, "524289:超硬闸 → 拒存");
-ok(typeof rOver.message === "string" && rOver.message.length > 0, "超硬闸:有中文拒存文案");
+const atWarn = checkDocSize(padTo(DOC_JSONB_WARN_LIMIT));
+ok(!atWarn.overWarnLimit && atWarn.ok, "恰好 512KB:不告警(严格 >)");
+const overWarn = checkDocSize(padTo(DOC_JSONB_WARN_LIMIT + 1));
+ok(overWarn.overWarnLimit && !overWarn.overHardLimit && overWarn.ok, "512KB+1:仅软告警");
+ok(typeof overWarn.message === "string" && overWarn.message.includes("建议拆分"), "软告警有建议拆分文案");
 
-// 告警闸:>2MB 同时超硬闸与告警闸
-const rWarn = checkDocSize(padTo(DOC_JSONB_WARN_LIMIT + 1));
-ok(rWarn.overWarnLimit, "2MB+:overWarnLimit=true");
-ok(rWarn.overHardLimit, "2MB+:亦超硬闸(数值张力已在契约文档标注)");
-
-// 512KB~2MB 之间:超硬闸但未到告警闸
+// 512KB~2MB 之间:告警但仍可保存
 const rMid = checkDocSize(padTo(1024 * 1024)); // 1MB
-ok(rMid.overHardLimit && !rMid.overWarnLimit, "1MB:超硬闸、未到 2MB 告警");
+ok(!rMid.overHardLimit && rMid.overWarnLimit && rMid.ok, "1MB:软告警但允许保存");
+
+// 硬闸边界:恰好 2MB 仍可保存;+1 拒存
+const atHard = checkDocSize(padTo(DOC_BYTES_HARD_LIMIT));
+ok(!atHard.overHardLimit && atHard.overWarnLimit && atHard.ok, "恰好 2MB:告警但不拒(严格 >)");
+const overHard = checkDocSize(padTo(DOC_BYTES_HARD_LIMIT + 1));
+ok(overHard.overHardLimit && overHard.overWarnLimit && !overHard.ok, "2MB+1:硬拒存");
+ok(typeof overHard.message === "string" && overHard.message.includes("上限"), "硬拒有上限文案");
 
 // 不可序列化(循环引用):拒存
 const circular = {};
@@ -162,14 +168,33 @@ ok(formatBytes(2097152) === "2.00MB", `formatBytes(2097152)=${formatBytes(209715
 // ─────────────────────────────────────────────────────────────────────────────
 // ③ 可选:真 Postgres 语法校验(默认跳过,绝不碰生产)
 // ─────────────────────────────────────────────────────────────────────────────
+function isLoopbackPgUrl(value) {
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "postgres:" && url.protocol !== "postgresql:") return false;
+    const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, "");
+    return host === "localhost" || host === "127.0.0.1" || host === "::1";
+  } catch {
+    return false;
+  }
+}
+
+ok(isLoopbackPgUrl("postgres://u:p@localhost:5432/db"), "PG 白名单:localhost");
+ok(isLoopbackPgUrl("postgresql://u:p@127.0.0.1/db"), "PG 白名单:127.0.0.1");
+ok(isLoopbackPgUrl("postgres://u:p@[::1]:5432/db"), "PG 白名单:::1");
+ok(!isLoopbackPgUrl("postgres://u:p@127.0.0.2/db"), "PG 白名单拒绝其他 127/8 地址");
+ok(!isLoopbackPgUrl("postgres://u:p@db.internal/db"), "PG 白名单拒绝任意内网主机");
+ok(!isLoopbackPgUrl("postgres://u:p@example.supabase.co/db"), "PG 白名单拒绝远端主机");
+ok(!isLoopbackPgUrl("not-a-url"), "PG 白名单拒绝非法 URL");
+
 const PG_URL = process.env.CANVAS_VERIFY_PG_URL;
-const PROD_MARKERS = ["supabase.co", "supabase.com", "hfabrifuvujpdzarlbky", "pooler.supabase"];
 if (!PG_URL) {
   console.log(
     "③ 真 PG 语法校验:跳过(设 CANVAS_VERIFY_PG_URL=一次性本地库 可开启完整语法校验;生产迁移永远经 dashboard 手动执行)"
   );
-} else if (PROD_MARKERS.some((m) => PG_URL.includes(m))) {
-  console.log(`③ 真 PG 语法校验:拒跑 —— CANVAS_VERIFY_PG_URL 命中生产标记,本机绝不对生产执行迁移`);
+} else if (!isLoopbackPgUrl(PG_URL)) {
+  console.log("③ 真 PG 语法校验:拒跑 —— CANVAS_VERIFY_PG_URL 不是严格 loopback 地址");
+  ok(false, "真 PG:非 loopback URL 必须拒跑");
 } else {
   console.log("③ 真 PG 语法校验(事务内跑,结束 ROLLBACK,不落行)");
   try {

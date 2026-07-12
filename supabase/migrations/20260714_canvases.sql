@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS public.canvases (
     rev BIGINT NOT NULL DEFAULT 0,                      -- 保存序号:UPDATE…SET rev=rev+1 WHERE rev=:expected(补丁 rebase 的服务端锚)
     writer_tag TEXT,                                    -- 单写者:当前写者标签 id(navigator.locks 持有者上报)
     writer_heartbeat_at TIMESTAMPTZ,                    -- 写者心跳;超时(如 30s)其他标签可接管
-    doc_bytes INTEGER,                                  -- 保存时服务端计算;>524288(512KB)API 拒存
+    doc_bytes INTEGER,                                  -- 保存时服务端计算;>2MB 硬拒存;>512KB 软告警
 
     share_slug TEXT UNIQUE,                             -- P3 只读分享链接(NULL=未分享)
     status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'archived')),
@@ -41,7 +41,8 @@ CREATE POLICY "canvases_insert_own" ON public.canvases
     FOR INSERT WITH CHECK (auth.uid() = user_id);
 DROP POLICY IF EXISTS "canvases_update_own" ON public.canvases;
 CREATE POLICY "canvases_update_own" ON public.canvases
-    FOR UPDATE USING (auth.uid() = user_id);
+    FOR UPDATE USING (auth.uid() = user_id)
+    WITH CHECK (auth.uid() = user_id);
 DROP POLICY IF EXISTS "canvases_delete_own" ON public.canvases;
 CREATE POLICY "canvases_delete_own" ON public.canvases
     FOR DELETE USING (auth.uid() = user_id);

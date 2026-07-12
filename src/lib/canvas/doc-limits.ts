@@ -1,32 +1,24 @@
 /**
  * 超级画布 · 文档体积阈值校验契约(P0 · D1)
  *
- * 这是「文档 >512KB 拒存 / jsonb >2MB 告警建议拆画布」两道体积闸的**唯一事实源**,
+ * 这是「文档 >512KB 软告警 / >2MB 硬拒存」两道体积闸的**唯一事实源**,
  * 由服务端(D3 的 POST/PATCH 路由)与客户端(S 侧保存前预检、告警横幅)共用。
  * 纯函数、零 IO、无第三方依赖,故意用 `TextEncoder`(浏览器与 Node 均为全局)而非
  * `Buffer`,保证同一份契约在两端产出**同一个字节数**。
  *
- * 依据:SUPER_CANVAS_DATA_MODEL.md §六(canvases.doc_bytes:保存时服务端计算;
- * >524288(512KB)API 拒存)+ SUPER_CANVAS_P0_BOARD.md D1
- * (「文档 >512KB 拒存并提示」+「jsonb >2MB 告警建议拆画布(阈值检测,UI 提示由 S 侧消费)」)。
+ * P0-Q1 裁决(2026-07-12):告警必须早于硬闸。D3 在 >2MB 时拒存,
+ * S7 在 >512KB 时显示建议拆分横幅,并展示 >2MB 的拒存 toast。
  *
  * ⚠ 接线状态:本文件只提供纯校验。把 `checkDocSize` 接进 POST/PATCH「拒存」响应、
  *   把 `doc_bytes` 写进 canvases 行,属 D3;S 侧消费 `overWarnLimit` 渲染横幅属 S7。
- *   见看板「问题区」关于 512KB 硬闸与 2MB 告警阈值高低关系的待裁决项。
+ *   字节口径统一为 JSON.stringify(doc) 的 UTF-8 字节数。
  */
 
-/** 硬闸:doc 序列化字节 > 此值 → API 拒存(§六 DDL doc_bytes>524288)。 */
-export const DOC_BYTES_HARD_LIMIT = 512 * 1024; // 524288
+/** 硬闸:doc 序列化字节 > 此值 → API 拒存。 */
+export const DOC_BYTES_HARD_LIMIT = 2 * 1024 * 1024; // 2097152
 
-/**
- * 告警闸:jsonb 字节 > 此值 → 建议拆画布(UI 提示由 S 侧消费,不拒存)。
- *
- * ⚠ 已知张力(看板问题区待裁决):2MB 告警高于 512KB 硬闸,在「硬闸拦 doc」的
- *   前提下 2MB 实际不可达(doc 到 512KB 就已被拒,更谈不上到 2MB)。本契约忠实
- *   落两个原始数值并暴露两个独立布尔位,策略(何时拒/何时仅告警)交由 D3/S 决定;
- *   建议方案见 checkDocSize 返回值文档与看板问题区。
- */
-export const DOC_JSONB_WARN_LIMIT = 2 * 1024 * 1024; // 2097152
+/** 告警闸:doc 序列化字节 > 此值 → 建议拆画布,不拒存。 */
+export const DOC_JSONB_WARN_LIMIT = 512 * 1024; // 524288
 
 export interface DocSizeResult {
   /** doc 的规范 JSON 序列化字节数(UTF-8);无法序列化时为 Number.POSITIVE_INFINITY。 */
