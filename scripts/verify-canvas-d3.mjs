@@ -72,6 +72,7 @@ const {
   isDirty,
   previewOps,
   OFFLINE_QUEUE_SNAPSHOT_VERSION,
+  OfflineQueueSnapshotSchema,
 } = queue;
 const { CANVAS_API_ERROR_CODES, httpStatusForCanvasError, canvasApiError, canvasApiSuccess } =
   apiTypes;
@@ -618,6 +619,42 @@ console.log("⑧ 离线队列状态机");
   restored.pending[0].op.value.position.x = 555; // 改恢复态
   ok(snap2.pending[0].op.value.position.x === 111, "restore 独立:改恢复态不污染源 snapshot");
   ok(nodeA.position.x === 0, "全程未污染模块级 nodeA(zod parse 已解耦)");
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+console.log("⑨ D3 快照不变量(OfflineQueueSnapshotSchema superRefine)");
+{
+  let q = createOfflineQueue(0);
+  q = enqueue(q, "sa", addOp("node", nodeA));
+  q = enqueue(q, "sb", addOp("node", nodeB));
+  const base = snapshot(q); // pending seq 1,2;seq(高水位)=2
+  ok(OfflineQueueSnapshotSchema.safeParse(base).success, "正常快照满足不变量");
+  ok(
+    !OfflineQueueSnapshotSchema.safeParse({ ...base, pending: [base.pending[1], base.pending[0]] }).success,
+    "乱序 seq(2,1)→ 拒绝(防 restore 保留错序、coalesce 丢编辑)"
+  );
+  ok(
+    !OfflineQueueSnapshotSchema.safeParse({ ...base, pending: [base.pending[0], { ...base.pending[1], seq: base.pending[0].seq }] }).success,
+    "重复 seq → 拒绝"
+  );
+  ok(
+    !OfflineQueueSnapshotSchema.safeParse({ ...base, pending: [base.pending[0], { ...base.pending[1], opId: base.pending[0].opId }] }).success,
+    "重复 opId → 拒绝"
+  );
+  ok(!OfflineQueueSnapshotSchema.safeParse({ ...base, seq: 0 }).success, "snapshot.seq 低于最大 queued seq → 拒绝(高水位回退)");
+  ok(restore({ ...base, pending: [base.pending[1], base.pending[0]] }) === null, "restore 乱序快照 → null(不保留错序编辑)");
+
+  let q2 = enqueue(createOfflineQueue(0), "ia", addOp("node", nodeA));
+  q2 = enqueue(buildPatch(q2).state, "ib", addOp("node", nodeB)); // inflight seq1 + pending seq2
+  const withInflight = snapshot(q2);
+  ok(OfflineQueueSnapshotSchema.safeParse(withInflight).success, "inflight(seq1)+pending(seq2)合并递增 → 通过");
+  ok(
+    !OfflineQueueSnapshotSchema.safeParse({
+      ...withInflight,
+      inflight: { ...withInflight.inflight, ops: [{ ...withInflight.inflight.ops[0], seq: 9 }] },
+    }).success,
+    "inflight seq(9) > pending seq(2)→ 合并序非递增拒绝"
+  );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

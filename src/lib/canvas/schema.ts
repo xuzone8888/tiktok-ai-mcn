@@ -306,15 +306,26 @@ export interface CreateCanvasNodeInput {
 }
 
 export function createCanvasNode(input: CreateCanvasNodeInput = {}): CanvasNode {
-  const data = input.data ?? {};
-  return CanvasNodeSchema.parse({
+  const inputData = input.data ?? {};
+  // 只在 optional 字段**有值**时写键——Zod `.optional()` 会保留显式 `undefined` 作为 own key,
+  // 会污染 JSON round-trip(键被 JSON 静默删)并被 D4 strictJsonClone 正确拒绝。refs 各字段是
+  // `.default(null)`,即便 spread 进 undefined 也会被 default 归一为 null,故无 own undefined。
+  const data: Record<string, unknown> = {
+    refs: { ...createCanvasRefs(), ...(inputData.refs ?? {}) },
+  };
+  if (inputData.title !== undefined) data.title = inputData.title;
+  if (inputData.params !== undefined) data.params = inputData.params;
+  if (inputData.media !== undefined) data.media = inputData.media;
+
+  const raw: Record<string, unknown> = {
     id: input.id ?? createCanvasId("node"),
     type: input.type ?? "text",
-    variant: input.variant,
     position: { x: input.position?.x ?? 0, y: input.position?.y ?? 0 },
     group_id: input.groupId ?? null,
-    data: { ...data, refs: { ...createCanvasRefs(), ...(data.refs ?? {}) } },
-  });
+    data,
+  };
+  if (input.variant !== undefined) raw.variant = input.variant;
+  return CanvasNodeSchema.parse(raw);
 }
 
 export interface CreateCanvasEdgeInput {

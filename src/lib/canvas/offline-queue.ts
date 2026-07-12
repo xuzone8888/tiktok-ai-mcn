@@ -78,21 +78,69 @@ const QueuedOpSchema = z.strictObject({
   op: CanvasOpSchema,
 });
 
-/** 快照 = 状态本体 + version;结构已是 JSON 安全,restore 时严格重校(含逐 op)。 */
-export const OfflineQueueSnapshotSchema = z.strictObject({
-  version: z.literal(OFFLINE_QUEUE_SNAPSHOT_VERSION),
-  baseRev: CanvasRevisionSchema,
-  seq: z.number().int().nonnegative(),
-  pending: z.array(QueuedOpSchema).max(OFFLINE_QUEUE_MAX_PENDING),
-  inflight: z
-    .strictObject({
-      token: z.string().min(1).max(200),
-      baseRev: CanvasRevisionSchema,
-      ops: z.array(QueuedOpSchema).max(OFFLINE_QUEUE_MAX_PENDING),
-    })
-    .nullable(),
-  seen: z.array(z.string().min(1).max(200)).max(OFFLINE_QUEUE_SEEN_CAP),
-});
+/**
+ * 快照 = 状态本体 + version;结构已是 JSON 安全,restore 时严格重校(含逐 op)。
+ *
+ * superRefine 固化 D3 快照不变量(损坏/乱序快照会让 restore 保留错序、coalesce 静默丢编辑):
+ *   - 合并序(inflight.ops 在前、pending 在后,= restore 折叠顺序)`seq` **严格递增**;
+ *   - `seq` 与 `opId` 在合并集内**全局唯一**;
+ *   - `seq` **高水位**:snapshot.seq >= 所有已入队 op 的 seq(发号器不得回退)。
+ * 既有 build/snapshot 产物天然满足(inflight 先于 pending 冲刷、seq 单调、发号器不减)。
+ */
+export const OfflineQueueSnapshotSchema = z
+  .strictObject({
+    version: z.literal(OFFLINE_QUEUE_SNAPSHOT_VERSION),
+    baseRev: CanvasRevisionSchema,
+    seq: z.number().int().nonnegative(),
+    pending: z.array(QueuedOpSchema).max(OFFLINE_QUEUE_MAX_PENDING),
+    inflight: z
+      .strictObject({
+        token: z.string().min(1).max(200),
+        baseRev: CanvasRevisionSchema,
+        ops: z.array(QueuedOpSchema).max(OFFLINE_QUEUE_MAX_PENDING),
+      })
+      .nullable(),
+    seen: z.array(z.string().min(1).max(200)).max(OFFLINE_QUEUE_SEEN_CAP),
+  })
+  .superRefine((snap, ctx) => {
+    const inflightOps = snap.inflight ? snap.inflight.ops : [];
+    const merged = [...inflightOps, ...snap.pending];
+    const seenSeq = new Set<number>();
+    const seenOpId = new Set<string>();
+    let prevSeq = -1; // seq 非负整数,-1 < 任何合法 seq
+    let highWater = 0;
+    for (let i = 0; i < merged.length; i += 1) {
+      const q = merged[i];
+      const path =
+        i < inflightOps.length
+          ? (["inflight", "ops", i] as const)
+          : (["pending", i - inflightOps.length] as const);
+      if (q.seq <= prevSeq) {
+        ctx.addIssue({
+          code: "custom",
+          path: [...path, "seq"],
+          message: "队列 seq 必须严格递增(inflight 在前、pending 在后)",
+        });
+      }
+      prevSeq = q.seq;
+      if (seenSeq.has(q.seq)) {
+        ctx.addIssue({ code: "custom", path: [...path, "seq"], message: `seq 重复:${q.seq}` });
+      }
+      seenSeq.add(q.seq);
+      if (seenOpId.has(q.opId)) {
+        ctx.addIssue({ code: "custom", path: [...path, "opId"], message: `opId 重复:${q.opId}` });
+      }
+      seenOpId.add(q.opId);
+      if (q.seq > highWater) highWater = q.seq;
+    }
+    if (snap.seq < highWater) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["seq"],
+        message: `snapshot.seq(${snap.seq}) 必须 >= 所有 queued seq(${highWater})——高水位不得回退`,
+      });
+    }
+  });
 export type OfflineQueueSnapshot = z.infer<typeof OfflineQueueSnapshotSchema>;
 
 /**

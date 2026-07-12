@@ -229,6 +229,52 @@ ok(CanvasDocumentEnvelopeSchema.safeParse(envelope).success, "envelope factory �
 ok(!Object.hasOwn(envelope.doc, "schemaVersion") && !Object.hasOwn(envelope.doc, "deps"), "factory 不复制元数据进 doc");
 ok(CanvasRevisionSchema.safeParse(0).success && !CanvasRevisionSchema.safeParse(-1).success, "rev CAS 非负整数");
 
+// factory 输出必须 JSON round-trip 无损:无任何 own undefined 键(否则 JSON.stringify 静默删键,
+// 且 D4 strictJsonClone 会正确拒绝——现实中 S2 新建节点即会 put false)。
+function hasOwnUndefined(v, seen = new WeakSet()) {
+  if (v === null || typeof v !== "object") return false;
+  if (seen.has(v)) return false;
+  seen.add(v);
+  for (const key of Object.keys(v)) {
+    if (v[key] === undefined) return true;
+    if (hasOwnUndefined(v[key], seen)) return true;
+  }
+  return false;
+}
+const plainNode = createCanvasNode();
+ok(!("variant" in plainNode), "createCanvasNode() 不写 variant 键(input.variant undefined 时省略)");
+ok(!hasOwnUndefined(plainNode), "createCanvasNode() 输出无 own undefined 键");
+const nodeRt = JSON.parse(JSON.stringify(plainNode));
+ok(
+  Object.keys(nodeRt).length === Object.keys(plainNode).length &&
+    Object.keys(nodeRt.data).length === Object.keys(plainNode.data).length,
+  "createCanvasNode() JSON round-trip 键无丢失"
+);
+ok(CanvasNodeSchema.safeParse(plainNode).success, "createCanvasNode() 输出仍严格合法");
+const withVariant = createCanvasNode({ variant: "story_brief" });
+ok(withVariant.variant === "story_brief" && !hasOwnUndefined(withVariant), "有值时写 variant、无 own undefined");
+const undefDataNode = createCanvasNode({ data: { title: undefined, params: undefined, media: undefined } });
+ok(
+  !("title" in undefDataNode.data) &&
+    !("params" in undefDataNode.data) &&
+    !("media" in undefDataNode.data) &&
+    !hasOwnUndefined(undefDataNode),
+  "data 的 title/params/media 显式 undefined 时不写键、无 own undefined"
+);
+const richNode = createCanvasNode({ data: { title: "T", params: { a: 1 }, media: { ossKey: "u/a.jpg" } } });
+ok(
+  richNode.data.title === "T" &&
+    richNode.data.params.a === 1 &&
+    richNode.data.media.ossKey === "u/a.jpg" &&
+    !hasOwnUndefined(richNode),
+  "data 有值时写键、无 own undefined"
+);
+ok(!hasOwnUndefined(createCanvasEdge({ source: "a", target: "b" })), "createCanvasEdge 无 own undefined");
+ok(!hasOwnUndefined(createCanvasGroup({ label: "G" })), "createCanvasGroup 无 own undefined");
+ok(!hasOwnUndefined(createCanvasRefs()), "createCanvasRefs 无 own undefined");
+ok(!hasOwnUndefined(createEmptyCanvasDeps()), "createEmptyCanvasDeps 无 own undefined");
+ok(!hasOwnUndefined(createCanvasDocumentEnvelope()), "createCanvasDocumentEnvelope 无 own undefined");
+
 console.log("④ 引用与成组一致性");
 const groupedDoc = {
   nodes: [{ ...basicNode, group_id: "g1" }],
