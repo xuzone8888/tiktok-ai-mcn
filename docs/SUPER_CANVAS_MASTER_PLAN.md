@@ -3,7 +3,7 @@
 > **本文件是「超级画布」项目的执行总纲与新窗口恢复入口。**恢复工作:①读本文件;②读 [LIBTV_FEATURE_INVENTORY.md](./LIBTV_FEATURE_INVENTORY.md)(LibTV 逐节点实测功能字典,对标基准);③读 docs/EXECUTION_TRACKER.md 末尾「当前方向」;④按 §九 分期从当前期继续,一边做一边验证。
 > 定稿于 2026-07-12:LibTV 实地走查(用户登录态)+ 4 路网络研究 + 4 视角对抗复审后综合。**二轮**:用户充值 LibTV 后 Claude 逐节点亲手实测全功能(见 LIBTV_FEATURE_INVENTORY.md),确立**电商+漫剧双轨统一**方向。**三轮**:三路合成审查(checklist/数据模型/遗漏风险)+ 三层对抗复核后,双轨+资产装配系统并入本总纲(§二/§五/§六/§七/§九 已升级)。用户裁决记录见 §一。
 
-> **✅ 双轨并入完成(2026-07-12 三轮)**:经三路审查(功能 checklist/双轨数据模型/遗漏风险)+ 三层对抗复核(完整性×代码实证×交叉一致性,28 实锤已仲裁)后,双轨与资产装配系统已并入本总纲:§二增双轨统一原理、§五节点表升级、§六升级为「脚本节点+资产装配系统」。**配套文档(与本总纲同为事实源)**:[SUPER_CANVAS_CHECKLIST.md](./SUPER_CANVAS_CHECKLIST.md)(功能点级开发 checklist 唯一事实源,215 项逐项标 来源×做裁延×期次×复用/成本:174 做/29 裁/12 延,P0=48/P1=59/P2=55/P3=11/P4=1;含四轮补实测增补)、[SUPER_CANVAS_DATA_MODEL.md](./SUPER_CANVAS_DATA_MODEL.md)(双轨数据模型:canvases/canvas_assets 两新表 DDL+blueprints 双轨扩展+@资产注入链,全部断言经代码实证)。
+> **✅ 双轨并入完成(2026-07-12 三轮)**:经三路审查(功能 checklist/双轨数据模型/遗漏风险)+ 三层对抗复核(完整性×代码实证×交叉一致性,28 实锤已仲裁)后,双轨与资产装配系统已并入本总纲:§二增双轨统一原理、§五节点表升级、§六升级为「脚本节点+资产装配系统」。**配套文档(与本总纲同为事实源)**:[SUPER_CANVAS_CHECKLIST.md](./SUPER_CANVAS_CHECKLIST.md)(功能点级开发 checklist 唯一事实源,220 项逐项标 来源×做裁延×期次×复用/成本:176 做/31 裁/13 延,P0=48/P1=61/P2=55/P3=11/P4=1;含四轮补实测+五轮实弹增补)、[SUPER_CANVAS_DATA_MODEL.md](./SUPER_CANVAS_DATA_MODEL.md)(双轨数据模型:canvases/canvas_assets 两新表 DDL+blueprints 双轨扩展+@资产注入链,全部断言经代码实证)。
 
 ## 一、目标与裁决(用户原话为准)
 
