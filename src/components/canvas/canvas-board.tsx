@@ -1,20 +1,21 @@
 "use client";
 
 /**
- * 超级画布 · 底盘(P0 · S1–S3 + S5)
+ * 超级画布 · 底盘(P0 · S1–S5)
  *
  * S5:真空画布显示 4 起点引导(CanvasEmptyState),底部工具栏(CanvasBottomToolbar,看板 7 入口、
  * P0 点亮添加节点/快捷键),Alt+Shift+F 整理画布(dagre LR 纯布局 → applyNodePositions → fitView)。
  *
- * 视图/领域分层(硬约束):领域真相 = canvas-store 的 nodes/edges(无任何 RF 视图字段);
- * 视图态 = 本组件本地 ephemeral viewNodes/viewEdges。onNodesChange 先 applyNodeChanges 更新
- * 视图,再经 rf-adapter 只把合法 position 回写领域;领域更新按 id reconcile。视图字段永不进 store。
+ * S4:成组/解组/连接/复制/删除/撤销/重做全套快捷键(use-canvas-command-shortcuts,只在画布上下文、非
+ * 交互控件、非 IME 时处理,文档键只读不动、只在真正执行时 preventDefault);Alt/Ctrl+Alt 拖动复制(原节点
+ * 保留、副本落点=拖拽落点,带线只复制内部边);一段拖动经 begin/endPositionDrag 合并成一个 undo 项;
+ * 成组用纯视图 __group 组框投影(projectGroupFrames,不可选/拖/连/删,永不写回文档);批量删除走一次
+ * AlertDialog 二确认。缩放走 RF zoomIn/zoomOut。
  *
- * S2 建节点五入口 + 连线(全部经 store.addNode/addEdge → D2 工厂,受 readOnly 保护):
- *   1) 双击空白在指针处建默认文本节点;2) Tab 在视口中心建默认文本节点(输入区不抢);
- *   3) 拖入文件上传(只取 OSS object key)按类型建图片/视频节点;4) 左侧工具条建 6 类节点;
- *   5) 从 handle 拉到空白弹 6 类菜单,建节点并自动连线;已有节点间 onConnect 建 edge。
- * 坐标一律走 screenToFlowPosition,保证 zoom/pan 后准确。
+ * 视图/领域分层(硬约束):领域真相 = canvas-store 的 nodes/edges/groups(无任何 RF 视图字段);
+ * 视图态 = 本组件本地 ephemeral viewNodes/viewEdges。onNodesChange 先 applyNodeChanges 更新
+ * 视图,再经 rf-adapter 只把合法 position 回写领域(复制拖动时不回写,落点转为造副本);领域更新按 id
+ * reconcile。视图字段永不进 store。
  */
 import {
   useCallback,
@@ -56,6 +57,7 @@ import {
   useCanvasBrokenNodes,
   useCanvasEdges,
   useCanvasEdgesHidden,
+  useCanvasGroups,
   useCanvasMinimapCollapsed,
   useCanvasNodes,
   useCanvasReadOnly,
@@ -63,6 +65,13 @@ import {
   useCanvasStore,
 } from "@/stores/canvas-store";
 
+import {
+  clearCanvasDraggingFlags,
+  hasTerminalCanvasDragFrame,
+  isCanvasViewOnlyNodeChange,
+  shouldSuppressCanvasNodeChanges,
+} from "./canvas-command-shortcuts";
+import { CanvasBatchDeleteDialog } from "./canvas-batch-delete-dialog";
 import { CanvasBottomToolbar } from "./canvas-bottom-toolbar";
 import { shouldShowEmptyState } from "./canvas-chrome-policy";
 import { CanvasEmptyState } from "./canvas-empty-state";
@@ -71,9 +80,11 @@ import { CanvasToolbar } from "./canvas-toolbar";
 import { canvasNodeTypes } from "./node-registry";
 import { ConnectNodeMenu } from "./connect-menu";
 import { NodePalette } from "./node-palette";
+import { projectGroupFrames } from "./group-frame";
 import { ShortcutPanel } from "./shortcut-panel";
 import { uploadCanvasFile } from "./canvas-upload";
 import { useCanvasShortcuts } from "./use-canvas-shortcuts";
+import { useCanvasCommandShortcuts } from "./use-canvas-command-shortcuts";
 import {
   CANVAS_INTERACTIVE_FOCUS_SELECTOR,
   shouldTabCreateNode,
@@ -82,6 +93,8 @@ import {
 
 const GRID_SIZE = 16;
 const SNAP_GRID: [number, number] = [GRID_SIZE, GRID_SIZE];
+/** Ctrl+D 键盘复制的固定落点偏移(与网格对齐,避免与原节点完全重叠)。 */
+const DUPLICATE_OFFSET: CanvasPosition = { x: GRID_SIZE * 2, y: GRID_SIZE * 2 };
 /** 超过此视口宽度时挂载即展开小地图;≤此宽(含 1366×768)默认收起。 */
 const MINIMAP_EXPAND_MIN_WIDTH = 1440;
 
@@ -94,6 +107,18 @@ interface ConnectMenuState {
   fromHandleType: "source" | "target";
 }
 
+/** 复制拖动手势态(Alt=仅节点;Ctrl+Alt=带内部连线):记下参与节点与起点位置以判定是否真移动。 */
+interface CopyDragState {
+  withEdges: boolean;
+  ids: string[];
+  startById: Map<string, CanvasPosition>;
+}
+
+interface PendingDelete {
+  nodeIds: string[];
+  edgeIds: string[];
+}
+
 function eventClientPoint(event: MouseEvent | TouchEvent): { x: number; y: number } {
   if ("clientX" in event) return { x: event.clientX, y: event.clientY };
   const touch = event.changedTouches[0] ?? event.touches[0];
@@ -103,6 +128,7 @@ function eventClientPoint(event: MouseEvent | TouchEvent): { x: number; y: numbe
 export function CanvasBoard() {
   const domainNodes = useCanvasNodes();
   const domainEdges = useCanvasEdges();
+  const domainGroups = useCanvasGroups();
   const brokenNodes = useCanvasBrokenNodes();
   const edgesHidden = useCanvasEdgesHidden();
   const snapToGrid = useCanvasSnapToGrid();
@@ -116,28 +142,49 @@ export function CanvasBoard() {
   const addEdge = useCanvasStore((state) => state.addEdge);
   const addNodeAndEdge = useCanvasStore((state) => state.addNodeAndEdge);
   const applyNodePositions = useCanvasStore((state) => state.applyNodePositions);
-  const { screenToFlowPosition, fitView } = useReactFlow();
+  const groupNodes = useCanvasStore((state) => state.groupNodes);
+  const ungroupNodes = useCanvasStore((state) => state.ungroupNodes);
+  const duplicateNodes = useCanvasStore((state) => state.duplicateNodes);
+  const connectNodes = useCanvasStore((state) => state.connectNodes);
+  const removeEntities = useCanvasStore((state) => state.removeEntities);
+  const undo = useCanvasStore((state) => state.undo);
+  const redo = useCanvasStore((state) => state.redo);
+  const beginPositionDrag = useCanvasStore((state) => state.beginPositionDrag);
+  const endPositionDrag = useCanvasStore((state) => state.endPositionDrag);
+  const { screenToFlowPosition, fitView, zoomIn, zoomOut } = useReactFlow();
   const { resolvedTheme } = useTheme();
   const wrapperRef = useRef<HTMLDivElement>(null);
   const fitRafRef = useRef<number | null>(null);
   const [shortcutOpen, setShortcutOpen] = useState(false);
   const [connectMenu, setConnectMenu] = useState<ConnectMenuState | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
 
   // 本地 ephemeral 视图态(承载 selected/dragging/measured 等,永不回流领域)。
-  // 视图节点 = 领域投影 + brokenNodes 的纯视图 __broken 投影(broken 绝不进领域/持久化)。
-  const [viewNodes, setViewNodes] = useState<Node[]>(() => [
-    ...toReactFlowNodes(useCanvasStore.getState().nodes),
-    ...toBrokenReactFlowNodes(useCanvasStore.getState().brokenNodes),
-  ]);
+  // viewNodes = 领域投影 + brokenNodes 的 __broken 投影;__group 组框在**渲染时**派生(见 nodesForRF),
+  // 随成员测量尺寸/位置实时重算,绝不进入 viewNodes state,也绝不写回领域。
+  const [viewNodes, setViewNodes] = useState<Node[]>(() => {
+    const state = useCanvasStore.getState();
+    return [
+      ...toReactFlowNodes(state.nodes),
+      ...toBrokenReactFlowNodes(state.brokenNodes),
+    ];
+  });
   const [viewEdges, setViewEdges] = useState<Edge[]>(() =>
     toReactFlowEdges(useCanvasStore.getState().edges, {
       hidden: useCanvasStore.getState().edgesHidden,
     })
   );
 
+  // 选择读取 refs(命令 handler 与复制拖动需要最新视图选择态,避免闭包过期)。
+  const viewNodesRef = useRef(viewNodes);
+  viewNodesRef.current = viewNodes;
+  const viewEdgesRef = useRef(viewEdges);
+  viewEdgesRef.current = viewEdges;
+  // 复制拖动手势态 + 拖动进行中标记(begin/end 双触发去重:node 与 selection 事件都可能触发)。
+  const copyDragRef = useRef<CopyDragState | null>(null);
+  const dragActiveRef = useRef(false);
+
   // 整理后的 fitView:双 requestAnimationFrame 等提交(RF 依 reconcile 重排后)→ fitView。
-  // 由 tidyCanvas 在 applyNodePositions 后直接调用,内部先 cancel 旧帧;不依赖 domainNodes effect,
-  // 故重复整理(布局与现状相同、immer 不发状态变化)也重新框选。持有 raf id,unmount 时 cancel。
   const scheduleFit = useCallback(() => {
     if (fitRafRef.current !== null) cancelAnimationFrame(fitRafRef.current);
     fitRafRef.current = requestAnimationFrame(() => {
@@ -179,6 +226,97 @@ export function CanvasBoard() {
     onToggleShortcuts: () => setShortcutOpen((open) => !open),
   });
 
+  // 从领域重建视图节点(复制拖动结束时:原节点未动 → ghost 位归位;副本从领域投影补入)。
+  const syncViewNodesFromDomain = useCallback((viewOnlyChanges: NodeChange[] = []) => {
+    const state = useCanvasStore.getState();
+    const reconciled = clearCanvasDraggingFlags([
+      ...reconcileReactFlowNodes(viewNodesRef.current, state.nodes),
+      ...toBrokenReactFlowNodes(state.brokenNodes),
+    ]);
+    const nextViewNodes =
+      viewOnlyChanges.length > 0 ? applyNodeChanges(viewOnlyChanges, reconciled) : reconciled;
+    viewNodesRef.current = nextViewNodes;
+    setViewNodes(nextViewNodes);
+  }, []);
+
+  // __group 组框:渲染时从领域 groups + 当前视图成员位置/测量尺寸派生(纯视图,zIndex 更低画在背面)。
+  // dimensionsById 取自 RF measured/width/height —— 绝不写回领域;组框永不进 viewNodes state。
+  const frameNodes = useMemo(() => {
+    const dimensionsById: Record<string, { width?: number; height?: number }> = {};
+    for (const view of viewNodes) {
+      const width = view.measured?.width ?? view.width ?? undefined;
+      const height = view.measured?.height ?? view.height ?? undefined;
+      if (width != null || height != null) dimensionsById[view.id] = { width, height };
+    }
+    return projectGroupFrames(domainGroups, viewNodes, dimensionsById);
+  }, [domainGroups, viewNodes]);
+  const nodesForRF = useMemo<Node[]>(() => [...frameNodes, ...viewNodes], [frameNodes, viewNodes]);
+
+  // ---------------------------------------------------------------- 选择读取
+  const getSelectedDomainNodeIds = useCallback((): string[] => {
+    const domainIds = new Set(useCanvasStore.getState().nodes.map((node) => node.id));
+    return viewNodesRef.current
+      .filter((node) => node.selected && domainIds.has(node.id))
+      .map((node) => node.id);
+  }, []);
+  const getSelectedEdgeIds = useCallback(
+    (): string[] => viewEdgesRef.current.filter((edge) => edge.selected).map((edge) => edge.id),
+    []
+  );
+
+  // ---------------------------------------------------------------- S4 命令
+  const handleGroup = useCallback(
+    () => groupNodes(getSelectedDomainNodeIds()) !== null,
+    [groupNodes, getSelectedDomainNodeIds]
+  );
+  const handleUngroup = useCallback(
+    () => ungroupNodes(getSelectedDomainNodeIds()),
+    [ungroupNodes, getSelectedDomainNodeIds]
+  );
+  const handleConnect = useCallback(() => {
+    const ids = getSelectedDomainNodeIds();
+    if (ids.length !== 2) return false; // 恰好两个所选领域节点
+    return connectNodes(ids[0], ids[1]) !== null;
+  }, [connectNodes, getSelectedDomainNodeIds]);
+  const handleDuplicate = useCallback(() => {
+    const ids = getSelectedDomainNodeIds();
+    if (ids.length === 0) return false;
+    return duplicateNodes(ids, { withEdges: true, offset: DUPLICATE_OFFSET }) !== null;
+  }, [duplicateNodes, getSelectedDomainNodeIds]);
+  const handleDelete = useCallback(() => {
+    const nodeIds = getSelectedDomainNodeIds();
+    const edgeIds = getSelectedEdgeIds();
+    if (nodeIds.length === 0 && edgeIds.length === 0) return false;
+    setPendingDelete({ nodeIds, edgeIds }); // 一次批量二确认
+    return true;
+  }, [getSelectedDomainNodeIds, getSelectedEdgeIds]);
+  const handleZoomIn = useCallback(() => {
+    void zoomIn({ duration: 200 });
+  }, [zoomIn]);
+  const handleZoomOut = useCallback(() => {
+    void zoomOut({ duration: 200 });
+  }, [zoomOut]);
+
+  useCanvasCommandShortcuts({
+    wrapperRef,
+    handlers: {
+      onGroup: handleGroup,
+      onUngroup: handleUngroup,
+      onConnect: handleConnect,
+      onDuplicate: handleDuplicate,
+      onDelete: handleDelete,
+      onUndo: undo,
+      onRedo: redo,
+      onZoomIn: handleZoomIn,
+      onZoomOut: handleZoomOut,
+    },
+  });
+
+  const confirmBatchDelete = useCallback(() => {
+    if (pendingDelete) removeEntities(pendingDelete.nodeIds, pendingDelete.edgeIds);
+    setPendingDelete(null);
+  }, [pendingDelete, removeEntities]);
+
   // ---------------------------------------------------------------- S2
   const createNodeAt = useCallback(
     (type: CanvasNodeType, flowPosition: CanvasPosition) =>
@@ -215,7 +353,6 @@ export function CanvasBoard() {
   );
 
   // 2) Tab → 视口中心建默认文本节点:仅无修饰纯 Tab、焦点非交互控件、画布上下文、非只读。
-  //    不误拦 Ctrl+Tab / Shift+Tab;输入/可编辑/按钮/链接/菜单/对话框等聚焦时不抢键。
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
       if (event.key !== "Tab") return;
@@ -256,7 +393,6 @@ export function CanvasBoard() {
     const updates = layoutCanvasNodes(state.nodes, state.edges);
     if (updates.length === 0) return;
     applyNodePositions(updates);
-    // 直接调度 fitView(双 rAF 等提交);不经 pendingFit/effect,重复整理也框选。
     scheduleFit();
   }, [applyNodePositions, scheduleFit]);
 
@@ -366,7 +502,6 @@ export function CanvasBoard() {
   const onConnectMenuPick = useCallback(
     (type: CanvasNodeType) => {
       if (!connectMenu) return;
-      // 原子建节点+边:要么同时成功,要么都不写(不留孤儿节点)。
       addNodeAndEdge({
         node: { type, position: connectMenu.flowPosition },
         fromNodeId: connectMenu.fromNodeId,
@@ -378,12 +513,113 @@ export function CanvasBoard() {
     [connectMenu, addNodeAndEdge]
   );
 
+  // ---------------------------------------------------------------- S4 拖动/复制
+  // 拖动开始:Alt=复制手势(不动领域,记参与节点+起点视图位);否则常规拖动(store 只锚这批节点的原始
+  // 实体、合并成一项,不存 doc 快照)。共享 beginDrag 只接纯 modifiers,不绑定某一事件类
+  //(OnNodeDrag=原生 MouseEvent|TouchEvent;SelectionDragHandler=ReactMouseEvent)。
+  const beginDrag = useCallback(
+    (modifiers: { altKey: boolean; ctrlKey: boolean; metaKey: boolean }, dragged: Node[]) => {
+      if (dragActiveRef.current) return; // node 与 selection 事件双触发去重
+      const domainIds = new Set(useCanvasStore.getState().nodes.map((node) => node.id));
+      const ids = dragged.map((node) => node.id).filter((id) => domainIds.has(id));
+      if (ids.length === 0) return;
+      dragActiveRef.current = true;
+      if (modifiers.altKey) {
+        const startById = new Map<string, CanvasPosition>();
+        const byId = new Map(viewNodesRef.current.map((node) => [node.id, node] as const));
+        for (const id of ids) {
+          const view = byId.get(id);
+          if (view) startById.set(id, { x: view.position.x, y: view.position.y });
+        }
+        copyDragRef.current = { withEdges: modifiers.ctrlKey || modifiers.metaKey, ids, startById };
+      } else {
+        copyDragRef.current = null;
+        beginPositionDrag(ids); // 只锚可能移动的这批节点(最小实体锚,不存 doc 快照)
+      }
+    },
+    [beginPositionDrag]
+  );
+
+  // 拖动结束:复制手势 → 用落点(视图末位)造副本(原节点保留、ghost 归位);常规 → 合并成一个位置历史项。
+  const endDrag = useCallback(() => {
+    if (!dragActiveRef.current) return;
+    dragActiveRef.current = false;
+    const copy = copyDragRef.current;
+    copyDragRef.current = null;
+    if (copy) {
+      const byId = new Map(viewNodesRef.current.map((node) => [node.id, node] as const));
+      // Map(非普通 Record):落点按真实 node id 存取,合法 id "__proto__"/"constructor" 等既不写污染原型、
+      // 也不丢精确落点(group-ops lookupDuplicatePosition 对 Map 走 get)。
+      const positionsById = new Map<string, CanvasPosition>();
+      let moved = false;
+      for (const id of copy.ids) {
+        const view = byId.get(id);
+        if (!view) continue;
+        const final = { x: view.position.x, y: view.position.y };
+        positionsById.set(id, final);
+        const start = copy.startById.get(id);
+        if (!start || start.x !== final.x || start.y !== final.y) moved = true;
+      }
+      // 仅在真正拖动过时造副本(Alt+点击无位移不造重叠副本);无论是否造副本都把 ghost 从领域归位。
+      if (moved) duplicateNodes(copy.ids, { withEdges: copy.withEdges, positionsById });
+      syncViewNodesFromDomain();
+    } else {
+      endPositionDrag();
+    }
+  }, [duplicateNodes, endPositionDrag, syncViewNodesFromDomain]);
+
+  // OnNodeDrag 的 event 是**原生** MouseEvent|TouchEvent:触摸手势无修饰键(不触发复制),鼠标取实际修饰键。
+  const onNodeDragStart = useCallback(
+    (event: MouseEvent | TouchEvent, _node: Node, nodes: Node[]) => {
+      const modifiers =
+        event instanceof MouseEvent
+          ? { altKey: event.altKey, ctrlKey: event.ctrlKey, metaKey: event.metaKey }
+          : { altKey: false, ctrlKey: false, metaKey: false };
+      beginDrag(modifiers, nodes);
+    },
+    [beginDrag]
+  );
+  const onNodeDragStop = useCallback(() => endDrag(), [endDrag]);
+  // SelectionDragHandler 的 event 是 ReactMouseEvent:取其修饰键。
+  const onSelectionDragStart = useCallback(
+    (event: ReactMouseEvent, nodes: Node[]) =>
+      beginDrag({ altKey: event.altKey, ctrlKey: event.ctrlKey, metaKey: event.metaKey }, nodes),
+    [beginDrag]
+  );
+  const onSelectionDragStop = useCallback(() => endDrag(), [endDrag]);
+
   const onNodesChange = useCallback(
     (changes: NodeChange[]) => {
-      setViewNodes((previous) => applyNodeChanges(changes, previous));
-      applyNodePositionChanges(changes);
+      // 在任何 setViewNodes/applyNodePositionChanges 之前:领域拖动锚是否仍存活(可能已被结构动作的事务
+      // 屏障 endPositionDrag 提前结束,而 RF 手势仍在吐剩余帧)。
+      const domainDragActive = useCanvasStore.getState().dragAnchor !== null;
+      const viewOnlyChanges = changes.filter(isCanvasViewOnlyNodeChange);
+      const documentAffectingChanges = viewOnlyChanges.length !== changes.length;
+      const terminalDragFrame =
+        dragActiveRef.current && hasTerminalCanvasDragFrame(changes);
+      if (
+        shouldSuppressCanvasNodeChanges({
+          readOnly,
+          gestureActive: dragActiveRef.current,
+          copyGestureActive: copyDragRef.current !== null,
+          domainDragActive,
+          documentAffectingChanges,
+        })
+      ) {
+        // 抑制文档型帧但保留同批 select/dimensions；领域重同步同时清 dragging。终止帧自身也收口
+        // 手势，覆盖触摸加入第二指等 RF 不发 stop callback 的取消路径。
+        syncViewNodesFromDomain(viewOnlyChanges);
+        if (terminalDragFrame) endDrag();
+        return;
+      }
+      const nextViewNodes = applyNodeChanges(changes, viewNodesRef.current);
+      viewNodesRef.current = nextViewNodes;
+      setViewNodes(nextViewNodes);
+      // 复制拖动中不回写领域(原节点不动;落点在 endDrag 转为造副本)。
+      if (!copyDragRef.current) applyNodePositionChanges(changes);
+      if (terminalDragFrame) endDrag();
     },
-    [applyNodePositionChanges]
+    [applyNodePositionChanges, endDrag, readOnly, syncViewNodesFromDomain]
   );
 
   const onEdgesChange = useCallback((changes: EdgeChange[]) => {
@@ -402,12 +638,16 @@ export function CanvasBoard() {
       onDrop={onDrop}
     >
       <ReactFlow
-        nodes={viewNodes}
+        nodes={nodesForRF}
         edges={viewEdges}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
         onConnectEnd={onConnectEnd}
+        onNodeDragStart={onNodeDragStart}
+        onNodeDragStop={onNodeDragStop}
+        onSelectionDragStart={onSelectionDragStart}
+        onSelectionDragStop={onSelectionDragStop}
         nodeTypes={memoizedNodeTypes}
         colorMode={colorMode}
         snapToGrid={snapToGrid}
@@ -416,6 +656,7 @@ export function CanvasBoard() {
         deleteKeyCode={null}
         nodesConnectable={!readOnly}
         nodesDraggable={!readOnly}
+        autoPanOnNodeDrag={false}
         zoomOnDoubleClick={false}
         minZoom={0.1}
         maxZoom={2.5}
@@ -445,6 +686,15 @@ export function CanvasBoard() {
           onClose={() => setConnectMenu(null)}
         />
       )}
+      <CanvasBatchDeleteDialog
+        open={pendingDelete !== null}
+        nodeCount={pendingDelete?.nodeIds.length ?? 0}
+        edgeCount={pendingDelete?.edgeIds.length ?? 0}
+        onConfirm={confirmBatchDelete}
+        onOpenChange={(open) => {
+          if (!open) setPendingDelete(null);
+        }}
+      />
       <ShortcutPanel open={shortcutOpen} onOpenChange={setShortcutOpen} />
     </div>
   );

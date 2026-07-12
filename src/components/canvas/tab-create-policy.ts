@@ -21,6 +21,7 @@ export const CANVAS_INTERACTIVE_FOCUS_SELECTOR = [
   "[role='menuitem']",
   "[role='menubar']",
   "[role='dialog']",
+  "[role='alertdialog']",
   "[role='listbox']",
   "[role='combobox']",
   "[role='option']",

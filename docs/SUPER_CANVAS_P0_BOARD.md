@@ -18,7 +18,7 @@
 | S1 /canvas 路由+React Flow 底盘 | shell | ✅ 代码/构建审核通过(合流 2026-07-13;登录态 UI 走查归 R1/R2) | 无(第一个做) |
 | S2 建节点五入口+连线 | shell | ✅ 代码/构建审核通过(合流 2026-07-13;登录态 UI 走查归 R1/R2) | S1、D2(schema) |
 | S3 6 类节点空壳 | shell | ✅ 代码/构建审核通过(合流 2026-07-13;登录态 UI 走查归 R1/R2) | S1、D2(schema) |
-| S4 成组+快捷键全套+undo/redo | shell | 待认领 | S1;undo 依赖 D3 op log |
+| S4 成组+快捷键全套+undo/redo | shell | ✅ 本分支代码/全量构建/独立终审通过(待合流 2026-07-13;登录态 UI 走查归 R1/R2) | S1;undo 依赖 D3 op log |
 | S5 空态+底部工具栏+整理画布 | shell | ✅ 代码/构建审核通过(合流 2026-07-13;登录态 UI 走查归 R1/R2) | S1 |
 | S6 1366×768+媒体降级 | shell | 待认领 | S3 |
 | S7 错误边界+store 防护 | shell | 待认领 | S1 |
@@ -81,6 +81,15 @@
   - ✅ Ctrl+Z 撤销(只覆盖画布文档,不撤生成任务;op log 逆操作) ✅ 重做 Ctrl+Shift+Z(正向重放)
   - ✅ 缩放 Ctrl+加减号
   - ✅ 常驻「?」快捷键面板
+  - **备注·实现决策(shell 落文字,审核窗可再裁)**:
+    - **纯变换落 `src/lib/canvas/`**(`history.ts`=diffDocs/op-log 历史;`group-ops.ts`=成组/解组/复制纯 planner),沿用 rf-adapter.ts 先例(shell 在 lib/canvas 落纯域变换、离线可测、保持 store→lib 单向依赖);消费 D3 `patch.ts` 的 `CanvasOp`/`applyPatch`/`deepEqual` 与 schema 的 `validateCanvasDoc`,不改 data 文件。
+    - **undo/redo 只存 forward/inverse 实体 op log**(不存整份 doc snapshot、不 persist);用户文档变更入栈、新变更清 redo、readOnly 拦截、容量上限 100、apply 后 `validateCanvasDoc` 失败原子不动;一段拖动合并成一个 entry;load/reset/recovery/视图开关不进历史。
+    - **文本编辑=用户文档变更,进 canvas history(合并会话)**:textarea 聚焦时原生 Ctrl+Z 优先(快捷键守卫不劫持);blur/明确提交后,最近一次「同 node 连续编辑会话」合并为**一个** forward/inverse op entry(非每键入栈),画布 Ctrl+Z 可撤销、Ctrl+Shift+Z 可重做;非法内容原子拒绝且不入栈;任一结构性动作/undo/redo/换 node 编辑前先 flush 当前待提交文本会话,保证顺序正确。
+    - **成组数据面权威**:`group.node_ids`↔`node.group_id` 严格双向一致;≥2 个未成组的合法领域节点方可成组(跨组策略=已成组节点被排除,不隐式改动旧组);broken 不入组;RF 组框=纯视图投影 `__group`(不可选/拖/连/删,永不写回 doc)。
+    - **快捷键**:S1 `matchCanvasShortcut`(Ctrl+0/?)保持不变(S1 验证器锁定其对 S4 键返 null),S4 键走新增权威匹配器 `canvas-command-shortcuts.ts`;仅画布上下文、非 input/textarea/contenteditable/button/menu/dialog、非 IME 时处理;视图键(缩放)只读可用,文档键只读不动;文档键仅在真正执行时 preventDefault。删除键**只登记 Delete**(不含 Backspace,避免画布上误拦浏览器/系统退格)。
+    - **早审硬化(多轮早审后落定,S4 verifier 全覆盖)**:①**锚点最小化**——撤销/重做绝不存 doc 快照;文本会话只锚该 node 原始深拷实体、拖动只锚本次可能移动节点原始深拷实体(`beginPositionDrag(nodeIds)`),commit/end 才生成 node update op;anchor 形状经断言无 CanvasDoc。②**历史载荷深拷稳定**——所有 op 的 value/base/next 建 entry 时 `cloneCanvasEntity`,后续源突变不改旧 history。③**复制彻底解耦**——`planDuplicate` 用 `structuredClone` 深拷 data(改副本嵌套 params 不污染原节点),不可克隆则原子返回 null。④**结构键无控制字**——边去重键 `JSON.stringify([...])`,并加源码卫生断言(新增源无 NUL/控制字)。⑤`pushHistory` limit 负/非有限时 clamp,防 while 死循环。⑥**组框硬化**——RF id 使用 `__group:<groupId>` 并对真实 node id/同批 frame id 做确定性避碰;groups 先按 id 规范排序,保证 remove→undo 后 frame id 不漂移;`projectGroupFrames` 接纯视图 `dimensionsById`(RF measured,优先真实尺寸,缺失回退,防高节点截断)、显式 `zIndex<0` 画在成员背面 + `pointer-events:none`。
+    - **早审硬化·续(独立审查第 2 轮)**:⑦**op 类型安全构造**——history 按 entity 字面量具体构造 CanvasOp(每类一函数),不做泛型 `as CanvasOp` 双重盲断言(消 TS2352)。⑧**RF 拖动事件类型**——`OnNodeDrag` 是原生 `MouseEvent|TouchEvent`、`SelectionDragHandler` 是 `ReactMouseEvent`;共享 `beginDrag` 只接纯 modifiers,onNodeDragStart 对 TouchEvent 传 alt/ctrl/meta=false、对原生 MouseEvent 传实际修饰键(消 TS2322)。⑨**键盘可达性移动**——方向键只发 position、不触发 begin/end drag:无 active drag(dragAnchor=null)的位置批次作为**原子历史项**入栈(可撤销、清 redo);拖动逐帧仍不入栈。⑩**拖动中途转只读**——`setReadOnly(true)` 前(readOnly 尚 false)原子 finalize 进行中的拖动(已写位置合并成一个历史项,不丢不悬)+ 提交待提交文本会话。⑪**新 ID 有界碰撞重试**——group/duplicate 的 node/edge 新 id 对当前 doc 同类 id 集合重试(≤8 次),耗尽原子返回 null。
+    - **终审硬化(独立审查多轮,401 项 S4 聚焦断言)**:⑫**结构事务屏障**——结构动作在拖动/文本会话后基于 fresh doc 构造;拖动与文本不可重叠,无效补丁零副作用;clone 失败原子回滚。⑬**严格历史数据边界**——仅接受可稳定持久化的 JSON 形状(Date/Map/Set/RegExp/循环/访问器/稀疏数组/非有限数等 fail-closed),合法 CanvasNode 根级 `variant:undefined` 为唯一窄例外;所有比较先安全克隆,重放结果与 history payload 再解耦。⑭**RF 生命周期收口**——领域屏障后的残余 position 帧从领域重同步并清 `dragging`;只读仍接收 `select/dimensions` 视图态;触摸取消仅发 `dragging:false` 也能结束事务。P0 明确 `autoPanOnNodeDrag={false}`,消除 React Flow 触摸取消后不可取消 auto-pan RAF 尾帧,画布 Space/pan 与缩放不受影响。
 - **S5 空态 + 底部工具栏 + 整理画布**
   - ✅ 空态四快捷位(P0 =壳:仅建节点引导,真快捷位 P1/P2 按首渲期次点亮,未上线不渲染)
   - ✅ 底部工具栏(添加节点/工作流/素材库/角色库/历史记录/快捷键/教程;壳 P0,入口随所属期点亮)

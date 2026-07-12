@@ -1,5 +1,5 @@
 /**
- * 超级画布 · 画布状态 store(P0 · S1)
+ * 超级画布 · 画布状态 store(P0 · S1–S5)
  *
  * 房内惯例的单文件例外(技术负责人 R-d 批准):遵循 zustand 房内风格,但**严禁 persist 文档**。
  * 领域文档(nodes/edges/groups/schemaVersion)是唯一真相;React Flow 的视图字段一律经
@@ -9,10 +9,21 @@
  * 关键不变量(技术负责人硬约束):loadCanvasDoc 返回 recoveryRequired=true 时必须阻断自动保存
  * (见 isCanvasAutosaveBlocked);broken 实体原样保留交给 S3 显式处理,S1 不渲染、不静默丢弃。
  *
- * P0 边界:S1 底盘 + S2 建节点/连线 + S3 文本编辑/删除/损坏实体删除
- * (updateNodeData 经 CanvasNodeDataSchema 校验回写、removeNode 级联 edges/group、
- * removeBrokenNode 删纯视图恢复实体并重算 recoveryRequired,全部受 readOnly 保护,零平行类型)。
- * 成组/撤销(S4)、错误监控(S7)各自阶段再加,不在此提前实现。
+ * S4 撤销/重做(硬契约):历史只存 forward/inverse 实体 op log(复用 D3 patch.ts + D2
+ * validateCanvasDoc,见 lib/canvas/history.ts),**绝不**存整份 doc snapshot、绝不 persist、绝不碰
+ * 生成任务。所有**结构性**用户文档变更走 applyDocWithHistory(**先屏障后构造**:先 endPositionDrag 结束
+ * 进行中拖动、再 flush 待提交文本会话 → 取屏障后的 fresh doc → builder(current) 构造候选/跑 planner 合法性
+ * → 严格 validateCanvasDoc 失败原子不动 → 单次 set 写入并入栈,新变更清空 redo,容量上限)。一段拖动经
+ * beginPositionDrag/endPositionDrag 合并为**一个** entry;文本编辑经 editAnchor 会话合并(blur 提交为
+ * 一个 entry,非每键入栈);load/reset/recovery/视图开关不进历史。成组/解组/复制/连接/批量删除为纯
+ * 变换(lib/canvas/group-ops.ts)+ store 原子动作,严格维持 group.node_ids ↔ node.group_id 双向一致。
+ *
+ * 锚点最小化(硬契约):撤销/重做绝不存 doc 快照 —— 文本会话只锚**该 node 的原始深拷实体**
+ * (editAnchor.base),拖动只锚**本次可能移动节点的原始深拷实体**(dragAnchor.bases,可序列化 entry
+ * array,由 begin 传入 nodeIds);commit/end 时才与当前实体生成一对 node update op(经 applyPatch+validate,
+ * 载荷深拷稳定)。
+ * 任何 anchor 均**不含** CanvasDoc/nodes+edges+groups 全量快照。applyDocWithHistory 内的 getDoc() 仅为
+ * **临时**求 diff(用后即弃),不存快照。
  */
 import { create } from "zustand";
 import { devtools } from "zustand/middleware";
@@ -28,8 +39,10 @@ import {
   createEmptyCanvasDoc,
   inspectUnsafeCanvasValue,
   loadCanvasDoc,
+  validateCanvasDoc,
   type BrokenCanvasEdge,
   type BrokenCanvasNode,
+  type CanvasDoc,
   type CanvasEdge,
   type CanvasGroup,
   type CanvasNode,
@@ -41,6 +54,21 @@ import {
   collectNodePositionUpdates,
   type CanvasNodePositionUpdate,
 } from "@/lib/canvas/rf-adapter";
+import {
+  applyOpsToDoc,
+  CANVAS_HISTORY_LIMIT,
+  cloneCanvasEntity,
+  deepEqual,
+  makeHistoryEntry,
+  makeNodeUpdateEntry,
+  type HistoryEntry,
+} from "@/lib/canvas/history";
+import {
+  planDuplicate,
+  planGroupNodes,
+  planUngroupNodes,
+  type DuplicateOptions,
+} from "@/lib/canvas/group-ops";
 
 /** 连线入参(与 React Flow Connection 兼容,但 store 不依赖 RF 类型)。 */
 export interface CanvasConnection {
@@ -57,6 +85,22 @@ export interface AddNodeAndEdgeInput {
   fromHandleId: string | null;
   /** 拉出的 handle 类型:source → 边为 源→新;target → 边为 新→源。 */
   fromHandleType: "source" | "target";
+}
+
+/** 待提交文本编辑会话(同一 node 的连续编辑合并成一个历史项)。锚=该 node 的原始深拷实体,非 doc。 */
+export interface CanvasTextEditSession {
+  nodeId: string;
+  /** 会话起点(首个成功修改前)该 node 的**深拷实体**;commit 时与当前 node 生成一对 update op。 */
+  base: CanvasNode;
+}
+
+/**
+ * 拖动锚:仅本次可能移动节点的**原始深拷实体**条目。用**可序列化 entry array** 而非 Record<string,…> ——
+ * 合法节点 id 如 "__proto__"/"constructor"/"prototype" 在普通对象上会被原型链吞掉/误落原型,entry array
+ * 则与普通 id 完全同语义。按 doc 顺序收集;end 时对真正变化的节点逐条生成 update op,整段合并成一个历史项。非 doc。
+ */
+export interface CanvasDragAnchor {
+  bases: Array<{ id: string; base: CanvasNode }>;
 }
 
 export interface CanvasStoreState {
@@ -79,6 +123,16 @@ export interface CanvasStoreState {
   // ---- 会话态(单写者只读:D5 接线设置,S7 渲染横幅) ----
   readOnly: boolean;
 
+  // ---- 撤销/重做(S4;运行态,永不持久化) ----
+  /** 已发生的用户文档变更栈(每项=一对 forward/inverse op log)。 */
+  past: HistoryEntry[];
+  /** 被撤销、可重做的变更栈(新用户变更即清空)。 */
+  future: HistoryEntry[];
+  /** 待提交的文本编辑会话(blur/切 node/结构动作时合并入栈);无则 null。锚=最小实体,非 doc。 */
+  editAnchor: CanvasTextEditSession | null;
+  /** 一段拖动的最小实体锚(拖动中非 null);endPositionDrag 据此合并成一个 entry。非 doc 快照。 */
+  dragAnchor: CanvasDragAnchor | null;
+
   // ---- 视图开关(短暂态,永不持久化、永不进领域文档) ----
   edgesHidden: boolean;
   snapToGrid: boolean;
@@ -97,42 +151,71 @@ export interface CanvasStoreActions {
   initializeEmptyDoc: () => void;
   /**
    * 建节点(S2):经 D2 createCanvasNode 落库;只读时忽略。非法输入(如 media.ossKey 非
-   * OSS object key)返回 null,不建半节点。成功返回节点 id。
+   * OSS object key)返回 null,不建半节点。成功返回节点 id 并入历史。
    */
   addNode: (input: CreateCanvasNodeInput) => string | null;
   /**
    * 连线(S2):经 canAddCanvasEdge 校验(禁自环/悬空端/重复)+ D2 createCanvasEdge 落库;
-   * 只读或非法返回 null,成功返回 edge id。
+   * 只读或非法返回 null,成功返回 edge id 并入历史。
    */
   addEdge: (connection: CanvasConnection) => string | null;
   /**
    * 原子建「新节点 + 连线」(S2 拉线到空白建节点):同一次 set 前完整校验(只读 / 源节点仍在 /
-   * 节点可建 / 连线合法),要么节点+边同时写入,要么都不写——不留孤儿节点。成功返回 {nodeId,edgeId}。
+   * 节点可建 / 连线合法),要么节点+边同时写入(一个历史项),要么都不写——不留孤儿节点。
    */
   addNodeAndEdge: (input: AddNodeAndEdgeInput) => { nodeId: string; edgeId: string } | null;
   /**
    * 更新节点 data(S3 文本编辑等):合并 patch 后经 CanvasNodeDataSchema 校验 + 危险值扫描
-   * (拒 dataURL/签名 URL),通过才回写;只读/节点不存在/校验失败返回 false。
+   * (拒 dataURL/签名 URL),通过才回写;只读/节点不存在/校验失败返回 false。成功则并入(或开启)
+   * 该 node 的文本编辑会话——连续编辑合并、blur/结构动作时提交为一个历史项(非每键入栈)。
    */
   updateNodeData: (id: string, patch: Partial<CanvasNodeData>) => boolean;
   /**
-   * 删除内容节点(S3):级联移除其 edges、从各 group.node_ids 移除,保持 group_id/group 一致;
-   * 只读时忽略。二次确认 UI 由卡片承担。
+   * 提交当前待提交的文本编辑会话(textarea blur 调用):把整段会话合并为一个 forward/inverse
+   * 历史项(无净变化则只清会话不入栈)。清空 redo。
+   */
+  commitTextEdit: () => void;
+  /**
+   * 删除单个内容节点(S3):级联移除其 edges、从各 group.node_ids 移除,保持 group_id/group 一致;
+   * 只读时忽略。二次确认 UI 由卡片承担。入历史。
    */
   removeNode: (id: string) => void;
   /**
-   * 删除损坏恢复实体(S3):同一次原子 set 从 brokenNodes 移除、级联清理 domain edges 中 source/target
-   * 指向它的正常引用、从各 group.node_ids 移除它(D2 容错加载会保留这些引用供占位展示),再按剩余
-   * brokenNodes/brokenEdges/migrationComplete 重算 recoveryRequired;只读时忽略。绝不触碰领域 nodes。
+   * 批量删除所选(S4 Delete):原子级联删除所选领域节点(连带其 edges)+ 所选独立 edges,并从各
+   * group.node_ids 移除,清掉变空的组;只读时忽略。一次批量二确认(AlertDialog)后调用,入一个历史项。
+   */
+  removeEntities: (nodeIds: readonly string[], edgeIds?: readonly string[]) => void;
+  /**
+   * 删除损坏恢复实体(S3):同一次原子 set 从 brokenNodes 移除、级联清理 domain edges/groups 里指向它
+   * 的引用,重算 recoveryRequired;**清空历史**(恢复动作不可撤销)。只读时忽略。绝不触碰领域 nodes。
    */
   removeBrokenNode: (id: string) => void;
-  /** React Flow 节点变更回写:只取 position,其余视图变更丢弃;只读时忽略。 */
+  /** React Flow 节点变更回写:只取 position,其余视图变更丢弃;只读时忽略。历史由 begin/endPositionDrag 合并。 */
   applyNodePositionChanges: (changes: NodeChange[]) => void;
   /**
    * 批量写节点 position(S5 整理画布用):一次原子 set 只改 position,只读时忽略;
-   * 绝不触碰 RF 视图字段或 viewport。
+   * 绝不触碰 RF 视图字段或 viewport。入一个历史项。
    */
   applyNodePositions: (updates: CanvasNodePositionUpdate[]) => void;
+  /** 成组(S4 Ctrl/Alt+G):把≥2 个未成组的合法领域节点收进新组,返回 group id;非法/只读返回 null。入历史。 */
+  groupNodes: (nodeIds: readonly string[]) => string | null;
+  /** 解组(S4 Ctrl/Alt+Shift+G):解散所选任一节点所属的全部组;有变更返回 true。只读返回 false。入历史。 */
+  ungroupNodes: (nodeIds: readonly string[]) => boolean;
+  /** 复制所选(S4 Ctrl+D / Alt|Ctrl+Alt 拖动):造新 id 副本(+可选内部连线),返回新节点 id;只读/空返回 null。入历史。 */
+  duplicateNodes: (nodeIds: readonly string[], opts: DuplicateOptions) => string[] | null;
+  /** 连接两点(S4 Ctrl+L):恰好两个所选领域节点由调用方保证;禁自环/悬空/重复。返回 edge id 或 null。入历史。 */
+  connectNodes: (source: string, target: string) => string | null;
+  /** 撤销(S4 Ctrl+Z):对当前 doc 应用上一步 inverse(applyPatch+validate 失败原子不动);只读/空栈/拖动中返回 false。 */
+  undo: () => boolean;
+  /** 重做(S4 Ctrl+Shift+Z):对当前 doc 应用下一步 forward;只读/空栈/拖动中返回 false。 */
+  redo: () => boolean;
+  /**
+   * 拖动开始(S4):flush 待提交文本会话,并只对**传入的可能移动节点** id 记下原始深拷实体锚
+   * (不存 doc 快照);合并整段拖动为一个历史项。只读/已在拖动中/无有效 id 时忽略。
+   */
+  beginPositionDrag: (nodeIds: readonly string[]) => void;
+  /** 拖动结束(S4):对锚定节点里**真正变化**的生成 update op 合并成一个历史项(无移动不入栈);清 dragAnchor。 */
+  endPositionDrag: () => void;
   setReadOnly: (readOnly: boolean) => void;
   setEdgesHidden: (hidden: boolean) => void;
   toggleEdgesHidden: () => void;
@@ -159,6 +242,10 @@ function createInitialState(): CanvasStoreState {
     loadIssues: [],
     hydrated: false,
     readOnly: false,
+    past: [],
+    future: [],
+    editAnchor: null,
+    dragAnchor: null,
     edgesHidden: false,
     snapToGrid: true,
     // 1366×768 默认收起(CHECKLIST 条款);宽屏由 CanvasBoard 挂载时展开。
@@ -168,314 +255,653 @@ function createInitialState(): CanvasStoreState {
 
 export const useCanvasStore = create<CanvasStore>()(
   devtools(
-    immer((set, get) => ({
-      ...createInitialState(),
+    immer((set, get) => {
+      /** 当前领域 doc 的浅快照(引用已由 immer 冻结,仅供 diff/apply 只读)。 */
+      const getDoc = (): CanvasDoc => {
+        const state = get();
+        return { nodes: state.nodes, edges: state.edges, groups: state.groups };
+      };
 
-      hydrate: (result) =>
+      /** 危险 current 先克隆失败即视为有变化，绝不把循环/访问器直接交给 deepEqual。 */
+      const nodeChangedOrUnsafe = (before: CanvasNode, after: CanvasNode | undefined): boolean => {
+        if (after === undefined) return true;
+        const safeAfter = cloneCanvasEntity(after);
+        return safeAfter === null || !deepEqual(before, safeAfter);
+      };
+
+      /**
+       * 提交待提交文本会话:把 会话起点→当前 的净变化合并成一个历史项(无净变化只清会话)。
+       * 有净变化时清空 redo(它是一次新的用户变更)。供 blur/结构动作/undo/redo 前统一调用。
+       */
+      const flushTextSession = (): void => {
+        const anchor = get().editAnchor;
+        if (!anchor) return;
+        const current = get().nodes.find((node) => node.id === anchor.nodeId);
+        // 最小实体锚:该 node 的 原始→当前 合并成一个 node update op(无净变化则不入栈)。
+        const entry = makeNodeUpdateEntry([{ before: anchor.base, after: current }]);
+        // 防御路径:当前与 base 确有净变化、却因载荷不可深拷而 entry===null(makeNodeUpdateEntry 原子放弃)。
+        // updateNodeData 的预检本应挡住此路,这里兜底:doc 里已有一个进不了历史、不可撤销的变更 → 回滚该
+        // node 到会话起点 anchor.base 后清 anchor,绝不留「改了 doc 却无历史」。无净变化(entry===null 且
+        // deepEqual)则正常只清 anchor。
+        const needsRollback =
+          entry === null && current !== undefined && nodeChangedOrUnsafe(anchor.base, current);
         set(
           (state) => {
-            state.nodes = result.nodes;
-            state.edges = result.edges;
-            state.groups = result.groups;
-            state.schemaVersion = result.schemaVersion;
-            state.brokenNodes = result.brokenNodes;
-            state.brokenEdges = result.brokenEdges;
-            state.migratedFrom = result.migratedFrom;
-            state.migrationComplete = result.migrationComplete;
-            state.recoveryRequired = result.recoveryRequired;
-            state.loadIssues = result.issues;
-            state.hydrated = true;
+            if (entry) {
+              state.past.push(entry);
+              if (state.past.length > CANVAS_HISTORY_LIMIT) state.past.shift();
+              state.future = [];
+            } else if (needsRollback) {
+              const index = state.nodes.findIndex((node) => node.id === anchor.nodeId);
+              if (index !== -1) state.nodes[index] = anchor.base;
+            }
+            state.editAnchor = null;
           },
           false,
-          "canvas/hydrate"
-        ),
-
-      hydrateFromDoc: (rawDoc, fromVersion) => {
-        const result = loadCanvasDoc(rawDoc, fromVersion);
-        get().hydrate(result);
-      },
-
-      initializeEmptyDoc: () => {
-        if (get().hydrated) return;
-        get().hydrateFromDoc(createEmptyCanvasDoc());
-      },
-
-      addNode: (input) => {
-        if (get().readOnly) return null;
-        let node: CanvasNode;
-        try {
-          node = createCanvasNode(input);
-        } catch {
-          // 非法输入(如 media.ossKey 非 OSS object key)——不建半节点。
-          return null;
-        }
-        set(
-          (state) => {
-            state.nodes.push(node);
-          },
-          false,
-          "canvas/addNode"
+          "canvas/commitTextEdit"
         );
-        return node.id;
-      },
+      };
 
-      addEdge: (connection) => {
-        if (get().readOnly) return null;
-        if (!canAddCanvasEdge(get().nodes, get().edges, connection)) return null;
-        let edge: CanvasEdge;
-        try {
-          edge = createCanvasEdge({
-            source: connection.source as string,
-            target: connection.target as string,
-            sourceHandle: connection.sourceHandle ?? null,
-            targetHandle: connection.targetHandle ?? null,
-          });
-        } catch {
-          return null;
-        }
+      /**
+       * 结构性文档变更的唯一原子入口。**先屏障,后构造**:任何结构动作都必须先把进行中的交互 finalize,
+       * 再基于「屏障后的 fresh doc」构造候选 —— 否则(1)拖动中删除会拿旧位置生成冲突历史;(2)flush 文本会话
+       * 的防御回滚会改动 doc,而预先构造的 candidate 基于回滚前的脏 doc,diff 后要么冲突、要么静默取消动作。
+       *
+       * 因此本函数接收 **builder(currentDoc)=>CanvasDoc|null**(而非预构造 candidate):内部依次
+       *   ① endPositionDrag(若拖动中)—— 合并已写位置为一个历史项(或 fail-closed 回滚);
+       *   ② flushTextSession —— 提交/回滚待提交文本会话;
+       *   ③ 取**屏障后的 fresh current**;④ 调 builder(planner/合法性检查须在此基于 fresh current);
+       *   ⑤ validate;⑥ 与 fresh current diff 成一个历史项(无净变化/载荷不可克隆 → 不写);⑦ 单次 set 写入。
+       * builder 返回 null(planner/合法性拒绝)→ 原子不动。返回是否真正写入。
+       */
+      const applyDocWithHistory = (
+        name: string,
+        build: (currentDoc: CanvasDoc) => CanvasDoc | null
+      ): boolean => {
+        // ①② 屏障:先结束进行中的拖动、再 flush 文本会话(顺序即历史顺序:交互 finalize 早于本结构动作)。
+        if (get().dragAnchor !== null) get().endPositionDrag();
+        flushTextSession();
+        // ③ 屏障后的 fresh current —— candidate、diff 基线都取自它,绝不用屏障前的旧快照。
+        const current = getDoc();
+        const candidate = build(current);
+        if (candidate === null) return false; // builder(planner/合法性)拒绝 → 原子不动
+        const validated = validateCanvasDoc(candidate);
+        if (!validated.ok || validated.data === null) return false;
+        const entry = makeHistoryEntry(current, validated.data);
+        if (!entry) return false;
+        const next = validated.data;
         set(
           (state) => {
-            state.edges.push(edge);
+            state.nodes = next.nodes;
+            state.edges = next.edges;
+            state.groups = next.groups;
+            state.past.push(entry);
+            if (state.past.length > CANVAS_HISTORY_LIMIT) state.past.shift();
+            state.future = [];
           },
           false,
-          "canvas/addEdge"
-        );
-        return edge.id;
-      },
-
-      addNodeAndEdge: ({ node: nodeInput, fromNodeId, fromHandleId, fromHandleType }) => {
-        if (get().readOnly) return null;
-        const current = get();
-        // 源节点必须仍存在(避免选类型期间源被删 → 孤儿节点)。
-        if (!current.nodes.some((candidate) => candidate.id === fromNodeId)) return null;
-
-        let node: CanvasNode;
-        try {
-          node = createCanvasNode(nodeInput);
-        } catch {
-          return null;
-        }
-
-        const connection: CanvasConnection =
-          fromHandleType === "source"
-            ? { source: fromNodeId, sourceHandle: fromHandleId, target: node.id, targetHandle: null }
-            : { source: node.id, sourceHandle: null, target: fromNodeId, targetHandle: fromHandleId };
-
-        // 针对「含新节点」的集合校验连线合法性(禁自环/悬空/重复)。
-        if (!canAddCanvasEdge([...current.nodes, node], current.edges, connection)) return null;
-
-        let edge: CanvasEdge;
-        try {
-          edge = createCanvasEdge({
-            source: connection.source as string,
-            target: connection.target as string,
-            sourceHandle: connection.sourceHandle ?? null,
-            targetHandle: connection.targetHandle ?? null,
-          });
-        } catch {
-          return null;
-        }
-
-        // 单次原子 set:节点与边同时写入(全部校验已在前置完成)。
-        set(
-          (state) => {
-            state.nodes.push(node);
-            state.edges.push(edge);
-          },
-          false,
-          "canvas/addNodeAndEdge"
-        );
-        return { nodeId: node.id, edgeId: edge.id };
-      },
-
-      updateNodeData: (id, patch) => {
-        if (get().readOnly) return false;
-        const node = get().nodes.find((candidate) => candidate.id === id);
-        if (!node) return false;
-        let nextData: CanvasNodeData;
-        try {
-          nextData = CanvasNodeDataSchema.parse({ ...node.data, ...patch });
-        } catch {
-          return false;
-        }
-        // 危险值扫描(与保存写契约一致):title/params 等任何字符串拒 dataURL/签名 URL。
-        if (inspectUnsafeCanvasValue(nextData).length > 0) return false;
-        set(
-          (state) => {
-            const target = state.nodes.find((candidate) => candidate.id === id);
-            if (target) target.data = nextData;
-          },
-          false,
-          "canvas/updateNodeData"
+          name
         );
         return true;
-      },
+      };
 
-      removeNode: (id) => {
-        if (get().readOnly) return;
-        set(
-          (state) => {
-            state.nodes = state.nodes.filter((node) => node.id !== id);
-            // 级联删除关联连线。
-            state.edges = state.edges.filter(
-              (edge) => edge.source !== id && edge.target !== id
-            );
-            // 从各 group.node_ids 移除;剩余节点的 group_id 不受影响(与 group 一致)。
-            for (const group of state.groups) {
-              const index = group.node_ids.indexOf(id);
-              if (index !== -1) group.node_ids.splice(index, 1);
-            }
-          },
-          false,
-          "canvas/removeNode"
-        );
-      },
+      return {
+        ...createInitialState(),
 
-      removeBrokenNode: (id) => {
-        if (get().readOnly) return;
-        set(
-          (state) => {
-            state.brokenNodes = state.brokenNodes.filter((node) => node.id !== id);
-            // D2 容错加载会在 domain edges/groups 里保留指向安全 broken id 的正常引用(供占位展示);
-            // 显式删除 broken 实体必须同一次原子 set 一并级联清理这些引用,否则留悬空 edge/group
-            // 成员,recoveryRequired 归 false 后下次 autosave 会非法。domain nodes 不动。
-            state.edges = state.edges.filter(
-              (edge) => edge.source !== id && edge.target !== id
-            );
-            for (const group of state.groups) {
-              const index = group.node_ids.indexOf(id);
-              if (index !== -1) group.node_ids.splice(index, 1);
-            }
-            state.recoveryRequired = computeRecoveryRequired(
-              state.migrationComplete,
-              state.brokenNodes,
-              state.brokenEdges
-            );
-          },
-          false,
-          "canvas/removeBrokenNode"
-        );
-      },
+        hydrate: (result) =>
+          set(
+            (state) => {
+              state.nodes = result.nodes;
+              state.edges = result.edges;
+              state.groups = result.groups;
+              state.schemaVersion = result.schemaVersion;
+              state.brokenNodes = result.brokenNodes;
+              state.brokenEdges = result.brokenEdges;
+              state.migratedFrom = result.migratedFrom;
+              state.migrationComplete = result.migrationComplete;
+              state.recoveryRequired = result.recoveryRequired;
+              state.loadIssues = result.issues;
+              state.hydrated = true;
+              // 装载不进历史:清空撤销/重做与任何待提交会话。
+              state.past = [];
+              state.future = [];
+              state.editAnchor = null;
+              state.dragAnchor = null;
+            },
+            false,
+            "canvas/hydrate"
+          ),
 
-      applyNodePositionChanges: (changes) => {
-        if (get().readOnly) return;
-        const updates = collectNodePositionUpdates(changes);
-        if (updates.length === 0) return;
-        set(
-          (state) => {
-            for (const update of updates) {
-              const node = state.nodes.find((candidate) => candidate.id === update.id);
-              if (node) node.position = { x: update.position.x, y: update.position.y };
-            }
-          },
-          false,
-          "canvas/applyNodePositionChanges"
-        );
-      },
+        hydrateFromDoc: (rawDoc, fromVersion) => {
+          const result = loadCanvasDoc(rawDoc, fromVersion);
+          get().hydrate(result);
+        },
 
-      applyNodePositions: (updates) => {
-        if (get().readOnly) return;
-        if (!Array.isArray(updates) || updates.length === 0) return;
-        // 公共写入口,不盲信布局输入:只接受 id 为非空字符串、x/y 有限的更新;
-        // NaN/Infinity/非法 id 一律丢弃,绝不污染领域 doc。
-        const byId = new Map<string, { x: number; y: number }>();
-        for (const update of updates) {
-          if (!update || typeof update.id !== "string" || update.id === "") continue;
-          const position = update.position;
-          if (
-            !position ||
-            !Number.isFinite(position.x) ||
-            !Number.isFinite(position.y)
-          ) {
-            continue;
+        initializeEmptyDoc: () => {
+          if (get().hydrated) return;
+          get().hydrateFromDoc(createEmptyCanvasDoc());
+        },
+
+        addNode: (input) => {
+          if (get().readOnly) return null;
+          let node: CanvasNode;
+          try {
+            node = createCanvasNode(input);
+          } catch {
+            // 非法输入(如 media.ossKey 非 OSS object key)——不建半节点。
+            return null;
           }
-          byId.set(update.id, { x: position.x, y: position.y });
-        }
-        if (byId.size === 0) return;
-        set(
-          (state) => {
-            for (const node of state.nodes) {
-              const position = byId.get(node.id);
-              if (position) node.position = { x: position.x, y: position.y };
+          // builder 在屏障后基于 fresh current 追加(node 工厂结果与 doc 无关,可在外造并闭包捕获 id)。
+          const ok = applyDocWithHistory("canvas/addNode", (current) => ({
+            nodes: [...current.nodes, node],
+            edges: current.edges,
+            groups: current.groups,
+          }));
+          return ok ? node.id : null;
+        },
+
+        addEdge: (connection) => {
+          if (get().readOnly) return null;
+          // 合法性检查(禁自环/悬空/重复)与建边都在 builder 内基于屏障后的 fresh current 完成。
+          // 只用闭包回传**标量 edgeId**(而非闭包赋值的对象:那会被 TS 控制流判为 never;属性访问放闭包内)。
+          let edgeId: string | null = null;
+          const ok = applyDocWithHistory("canvas/addEdge", (current) => {
+            if (!canAddCanvasEdge(current.nodes, current.edges, connection)) return null;
+            let edge: CanvasEdge;
+            try {
+              edge = createCanvasEdge({
+                source: connection.source as string,
+                target: connection.target as string,
+                sourceHandle: connection.sourceHandle ?? null,
+                targetHandle: connection.targetHandle ?? null,
+              });
+            } catch {
+              return null;
             }
-          },
-          false,
-          "canvas/applyNodePositions"
-        );
-      },
+            edgeId = edge.id;
+            return { nodes: current.nodes, edges: [...current.edges, edge], groups: current.groups };
+          });
+          return ok ? edgeId : null;
+        },
 
-      setReadOnly: (readOnly) =>
-        set(
-          (state) => {
-            state.readOnly = readOnly;
-          },
-          false,
-          "canvas/setReadOnly"
-        ),
+        addNodeAndEdge: ({ node: nodeInput, fromNodeId, fromHandleId, fromHandleType }) => {
+          if (get().readOnly) return null;
 
-      setEdgesHidden: (hidden) =>
-        set(
-          (state) => {
-            state.edgesHidden = hidden;
-          },
-          false,
-          "canvas/setEdgesHidden"
-        ),
+          let node: CanvasNode;
+          try {
+            node = createCanvasNode(nodeInput);
+          } catch {
+            return null;
+          }
 
-      toggleEdgesHidden: () =>
-        set(
-          (state) => {
-            state.edgesHidden = !state.edgesHidden;
-          },
-          false,
-          "canvas/toggleEdgesHidden"
-        ),
+          const connection: CanvasConnection =
+            fromHandleType === "source"
+              ? { source: fromNodeId, sourceHandle: fromHandleId, target: node.id, targetHandle: null }
+              : { source: node.id, sourceHandle: null, target: fromNodeId, targetHandle: fromHandleId };
 
-      setSnapToGrid: (enabled) =>
-        set(
-          (state) => {
-            state.snapToGrid = enabled;
-          },
-          false,
-          "canvas/setSnapToGrid"
-        ),
+          // 源节点仍存在 + 连线合法性 + 建边,全部在 builder 内基于屏障后的 fresh current 判定(避免选类型
+          // 期间源被删或期间被拖动 finalize 后拿旧 doc 判定 → 孤儿节点/冲突历史)。node 在闭包外造(未被闭包
+          // 赋值,node.id 可安全外读);edge 仅闭包内造,只回传标量 edgeId。
+          let edgeId: string | null = null;
+          const ok = applyDocWithHistory("canvas/addNodeAndEdge", (current) => {
+            if (!current.nodes.some((candidate) => candidate.id === fromNodeId)) return null;
+            if (!canAddCanvasEdge([...current.nodes, node], current.edges, connection)) return null;
+            let edge: CanvasEdge;
+            try {
+              edge = createCanvasEdge({
+                source: connection.source as string,
+                target: connection.target as string,
+                sourceHandle: connection.sourceHandle ?? null,
+                targetHandle: connection.targetHandle ?? null,
+              });
+            } catch {
+              return null;
+            }
+            edgeId = edge.id;
+            return {
+              nodes: [...current.nodes, node],
+              edges: [...current.edges, edge],
+              groups: current.groups,
+            };
+          });
+          return ok && edgeId ? { nodeId: node.id, edgeId } : null;
+        },
 
-      toggleSnapToGrid: () =>
-        set(
-          (state) => {
-            state.snapToGrid = !state.snapToGrid;
-          },
-          false,
-          "canvas/toggleSnapToGrid"
-        ),
+        updateNodeData: (id, patch) => {
+          if (get().readOnly) return false;
+          const prepareNextData = (node: CanvasNode): CanvasNodeData | null => {
+            let prepared: CanvasNodeData;
+            try {
+              prepared = CanvasNodeDataSchema.parse({ ...node.data, ...patch });
+            } catch {
+              return null;
+            }
+            if (inspectUnsafeCanvasValue(prepared).length > 0) return null;
+            return cloneCanvasEntity({ ...node, data: prepared }) === null ? null : prepared;
+          };
 
-      setMinimapCollapsed: (collapsed) =>
-        set(
-          (state) => {
-            state.minimapCollapsed = collapsed;
-          },
-          false,
-          "canvas/setMinimapCollapsed"
-        ),
+          // 先在**当前状态**预检；无效补丁必须完全无副作用，不能仅因尝试失败就结束拖动。
+          let current = get();
+          let node = current.nodes.find((candidate) => candidate.id === id);
+          if (!node) return false;
+          let nextData = prepareNextData(node);
+          if (nextData === null) return false;
 
-      toggleMinimapCollapsed: () =>
-        set(
-          (state) => {
-            state.minimapCollapsed = !state.minimapCollapsed;
-          },
-          false,
-          "canvas/toggleMinimapCollapsed"
-        ),
+          // 文本编辑与拖动是两个独立事务。合法补丁先结束拖动再建立文本锚，避免同一 data 变化同时被
+          // 拖动 entry 和文本 entry 捕获，导致第二次 undo 的 base 冲突、历史栈卡死。
+          if (current.dragAnchor !== null) get().endPositionDrag();
 
-      reset: () =>
-        set(
-          (state) => {
-            Object.assign(state, createInitialState());
-          },
-          false,
-          "canvas/reset"
-        ),
-    })),
+          // 屏障可能 fail-closed 回滚当前节点；必须基于 fresh node 重算并再次预检，不能沿用旧闭包。
+          current = get();
+          node = current.nodes.find((candidate) => candidate.id === id);
+          if (!node) return false;
+          nextData = prepareNextData(node);
+          if (nextData === null) return false;
+
+          // 切到别的 node 编辑 → 先提交上一个待提交文本会话(顺序正确)。
+          if (current.editAnchor && current.editAnchor.nodeId !== id) flushTextSession();
+
+          // 该 node 尚无进行中的会话 → 记下会话起点该 node 的**深拷实体**(本次修改前);连续编辑复用同一锚。
+          const startSession = get().editAnchor?.nodeId !== id;
+          const baseNode = startSession ? get().nodes.find((candidate) => candidate.id === id) : undefined;
+          const base = baseNode ? cloneCanvasEntity(baseNode) : null;
+          // 需开新会话但锚实体不可安全深拷(cloneCanvasEntity→null)→ 原子拒绝本次编辑:不改 doc、不开会话。
+          // 保证「文本编辑必可撤销」——绝不产出改了 doc 却无历史锚的不可撤销状态(fail-closed)。
+          if (startSession && baseNode && base === null) return false;
+          set(
+            (state) => {
+              if (startSession && base) state.editAnchor = { nodeId: id, base };
+              const target = state.nodes.find((candidate) => candidate.id === id);
+              if (target) target.data = nextData;
+            },
+            false,
+            "canvas/updateNodeData"
+          );
+          return true;
+        },
+
+        commitTextEdit: () => {
+          flushTextSession();
+        },
+
+        removeNode: (id) => {
+          if (get().readOnly) return;
+          // 在 builder 内基于屏障后的 fresh current 判定存在性并级联(拖动中删除会先 finalize 拖动再基于
+          // 屏障后的位置删,不再拿旧位置生成冲突历史)。
+          applyDocWithHistory("canvas/removeNode", (current) => {
+            if (!current.nodes.some((node) => node.id === id)) return null;
+            const nodes = current.nodes.filter((node) => node.id !== id);
+            // 级联删除关联连线。
+            const edges = current.edges.filter((edge) => edge.source !== id && edge.target !== id);
+            // 从各 group.node_ids 移除;剩余节点的 group_id 不受影响(与 group 一致)。单删保留成员>0 的组。
+            const groups = current.groups.map((group) =>
+              group.node_ids.includes(id)
+                ? { ...group, node_ids: group.node_ids.filter((member) => member !== id) }
+                : group
+            );
+            return { nodes, edges, groups };
+          });
+        },
+
+        removeEntities: (nodeIds, edgeIds) => {
+          if (get().readOnly) return;
+          const removeNodes = new Set(nodeIds);
+          const removeEdges = new Set(edgeIds ?? []);
+          if (removeNodes.size === 0 && removeEdges.size === 0) return;
+          applyDocWithHistory("canvas/removeEntities", (current) => {
+            const nodes = current.nodes.filter((node) => !removeNodes.has(node.id));
+            // 级联:删掉端点被删的边 + 显式所选独立边。
+            const edges = current.edges.filter(
+              (edge) =>
+                !removeNodes.has(edge.source) &&
+                !removeNodes.has(edge.target) &&
+                !removeEdges.has(edge.id)
+            );
+            // 各组移除被删成员;变空的组一并删掉(保持双向一致)。
+            const groups = current.groups
+              .map((group) => ({
+                ...group,
+                node_ids: group.node_ids.filter((member) => !removeNodes.has(member)),
+              }))
+              .filter((group) => group.node_ids.length > 0);
+            return { nodes, edges, groups };
+          });
+        },
+
+        removeBrokenNode: (id) => {
+          if (get().readOnly) return;
+          set(
+            (state) => {
+              state.brokenNodes = state.brokenNodes.filter((node) => node.id !== id);
+              // D2 容错加载会在 domain edges/groups 里保留指向安全 broken id 的正常引用(供占位展示);
+              // 显式删除 broken 实体必须同一次原子 set 一并级联清理这些引用,否则留悬空 edge/group
+              // 成员,recoveryRequired 归 false 后下次 autosave 会非法。domain nodes 不动。
+              state.edges = state.edges.filter(
+                (edge) => edge.source !== id && edge.target !== id
+              );
+              for (const group of state.groups) {
+                const index = group.node_ids.indexOf(id);
+                if (index !== -1) group.node_ids.splice(index, 1);
+              }
+              state.recoveryRequired = computeRecoveryRequired(
+                state.migrationComplete,
+                state.brokenNodes,
+                state.brokenEdges
+              );
+              // 恢复动作不可撤销:清空历史与待提交会话(避免旧 op 指向已被恢复清理的实体)。
+              state.past = [];
+              state.future = [];
+              state.editAnchor = null;
+              state.dragAnchor = null;
+            },
+            false,
+            "canvas/removeBrokenNode"
+          );
+        },
+
+        applyNodePositionChanges: (changes) => {
+          if (get().readOnly) return;
+          const updates = collectNodePositionUpdates(changes);
+          if (updates.length === 0) return;
+          if (get().dragAnchor !== null) {
+            // 拖动中:逐帧只写领域 position(不入历史;整段拖动由 begin/endPositionDrag 合并成一个 entry)。
+            set(
+              (state) => {
+                for (const update of updates) {
+                  const node = state.nodes.find((candidate) => candidate.id === update.id);
+                  if (node) node.position = { x: update.position.x, y: update.position.y };
+                }
+              },
+              false,
+              "canvas/applyNodePositionChanges"
+            );
+            return;
+          }
+          // 无 active drag(如键盘方向键移动焦点节点,只发 position、不触发 begin/end):作为**原子历史项**
+          // 写入,可撤销并清空 redo(applyDocWithHistory 的无净变化保护使拖动结束的重复 settle 不产多余项)。
+          const byId = new Map(updates.map((update) => [update.id, update.position] as const));
+          applyDocWithHistory("canvas/moveNodesKeyboard", (current) => ({
+            nodes: current.nodes.map((node) => {
+              const position = byId.get(node.id);
+              return position ? { ...node, position: { x: position.x, y: position.y } } : node;
+            }),
+            edges: current.edges,
+            groups: current.groups,
+          }));
+        },
+
+        applyNodePositions: (updates) => {
+          if (get().readOnly) return;
+          if (!Array.isArray(updates) || updates.length === 0) return;
+          // 公共写入口,不盲信布局输入:只接受 id 为非空字符串、x/y 有限的更新;
+          // NaN/Infinity/非法 id 一律丢弃,绝不污染领域 doc。
+          const byId = new Map<string, { x: number; y: number }>();
+          for (const update of updates) {
+            if (!update || typeof update.id !== "string" || update.id === "") continue;
+            const position = update.position;
+            if (!position || !Number.isFinite(position.x) || !Number.isFinite(position.y)) {
+              continue;
+            }
+            byId.set(update.id, { x: position.x, y: position.y });
+          }
+          if (byId.size === 0) return;
+          applyDocWithHistory("canvas/applyNodePositions", (current) => ({
+            nodes: current.nodes.map((node) => {
+              const position = byId.get(node.id);
+              return position ? { ...node, position: { x: position.x, y: position.y } } : node;
+            }),
+            edges: current.edges,
+            groups: current.groups,
+          }));
+        },
+
+        groupNodes: (nodeIds) => {
+          if (get().readOnly) return null;
+          // planner 在屏障后基于 fresh current 运行(拖动/文本会话已 finalize),group id 闭包捕获。
+          let groupId: string | null = null;
+          const ok = applyDocWithHistory("canvas/groupNodes", (current) => {
+            const plan = planGroupNodes(current, nodeIds);
+            if (!plan) return null;
+            groupId = plan.groupId;
+            return plan.doc;
+          });
+          return ok ? groupId : null;
+        },
+
+        ungroupNodes: (nodeIds) => {
+          if (get().readOnly) return false;
+          return applyDocWithHistory("canvas/ungroupNodes", (current) =>
+            planUngroupNodes(current, nodeIds)
+          );
+        },
+
+        duplicateNodes: (nodeIds, opts) => {
+          if (get().readOnly) return null;
+          // planner 在屏障后基于 fresh current 运行;新 id 集闭包捕获。
+          let newNodeIds: string[] | null = null;
+          const ok = applyDocWithHistory("canvas/duplicateNodes", (current) => {
+            const plan = planDuplicate(current, nodeIds, opts);
+            if (!plan) return null;
+            newNodeIds = plan.newNodeIds;
+            return plan.doc;
+          });
+          return ok ? newNodeIds : null;
+        },
+
+        connectNodes: (source, target) => {
+          if (get().readOnly) return null;
+          const connection: CanvasConnection = {
+            source,
+            target,
+            sourceHandle: null,
+            targetHandle: null,
+          };
+          // 合法性检查与建边都在 builder 内基于屏障后的 fresh current 完成;只回传标量 edgeId。
+          let edgeId: string | null = null;
+          const ok = applyDocWithHistory("canvas/connectNodes", (current) => {
+            if (!canAddCanvasEdge(current.nodes, current.edges, connection)) return null;
+            let edge: CanvasEdge;
+            try {
+              edge = createCanvasEdge({ source, target, sourceHandle: null, targetHandle: null });
+            } catch {
+              return null;
+            }
+            edgeId = edge.id;
+            return { nodes: current.nodes, edges: [...current.edges, edge], groups: current.groups };
+          });
+          return ok ? edgeId : null;
+        },
+
+        undo: () => {
+          if (get().readOnly) return false;
+          flushTextSession();
+          const state0 = get();
+          if (state0.dragAnchor !== null) return false; // 拖动中不撤销
+          if (state0.past.length === 0) return false;
+          const entry = state0.past[state0.past.length - 1];
+          const result = applyOpsToDoc(getDoc(), entry.inverse);
+          if (!result.ok) return false; // 原子不动
+          const next = result.doc;
+          set(
+            (state) => {
+              state.nodes = next.nodes;
+              state.edges = next.edges;
+              state.groups = next.groups;
+              state.past.pop();
+              state.future.push(entry);
+              if (state.future.length > CANVAS_HISTORY_LIMIT) state.future.shift();
+            },
+            false,
+            "canvas/undo"
+          );
+          return true;
+        },
+
+        redo: () => {
+          if (get().readOnly) return false;
+          flushTextSession();
+          const state0 = get();
+          if (state0.dragAnchor !== null) return false;
+          if (state0.future.length === 0) return false;
+          const entry = state0.future[state0.future.length - 1];
+          const result = applyOpsToDoc(getDoc(), entry.forward);
+          if (!result.ok) return false;
+          const next = result.doc;
+          set(
+            (state) => {
+              state.nodes = next.nodes;
+              state.edges = next.edges;
+              state.groups = next.groups;
+              state.future.pop();
+              state.past.push(entry);
+              if (state.past.length > CANVAS_HISTORY_LIMIT) state.past.shift();
+            },
+            false,
+            "canvas/redo"
+          );
+          return true;
+        },
+
+        beginPositionDrag: (nodeIds) => {
+          if (get().readOnly) return;
+          if (get().dragAnchor !== null) return; // 双触发去重:已在拖动中不重设锚
+          flushTextSession();
+          // 只锚**可能移动的节点**的原始深拷实体(不存 doc 快照);按 doc 顺序收集成可序列化 entry array。
+          const wanted = new Set(nodeIds);
+          const bases: Array<{ id: string; base: CanvasNode }> = [];
+          for (const node of get().nodes) {
+            if (!wanted.has(node.id)) continue;
+            const base = cloneCanvasEntity(node);
+            // 任一选中的现存节点不可安全深拷 → **整个 begin 原子放弃**(绝不部分锚定:否则漏锚节点会让本段
+            // 拖动只半可撤销)。schema 合法节点恒可克隆,此为 fail-closed 兜底。
+            if (base === null) return;
+            bases.push({ id: node.id, base });
+          }
+          if (bases.length === 0) return; // 无有效可锚节点 → 放弃
+          set(
+            (state) => {
+              state.dragAnchor = { bases };
+            },
+            false,
+            "canvas/beginPositionDrag"
+          );
+        },
+
+        endPositionDrag: () => {
+          const anchor = get().dragAnchor;
+          if (anchor === null) return;
+          const nodesById = new Map(get().nodes.map((node) => [node.id, node] as const));
+          // 只对**真正变化**的锚定节点生成 update op,整段多选合并成**一个**历史项(无移动不入栈)。
+          // 走 entry array + Map 查找,合法 id "__proto__"/"constructor"/"prototype" 与普通 id 完全同语义。
+          const pairs = anchor.bases.map(({ id, base }) => ({ before: base, after: nodesById.get(id) }));
+          const entry = get().readOnly ? null : makeNodeUpdateEntry(pairs);
+          // 净变化检测(仿 flushTextSession):任一锚定 node 与其 base 不同(或已不在)即有净变化。
+          const changed = pairs.some(({ before, after }) => nodeChangedOrUnsafe(before, after));
+          // 有净变化但建不出 entry(readOnly / 载荷不可克隆 → makeNodeUpdateEntry 原子放弃):把已逐帧写入的
+          // 位置原子回滚到各 base —— 绝不留「改了 doc 却无历史、不可撤销」的状态;无净变化则正常只清 anchor。
+          const needsRollback = entry === null && changed;
+          const rollbackById = needsRollback
+            ? new Map(anchor.bases.map(({ id, base }) => [id, base] as const))
+            : null;
+          set(
+            (state) => {
+              state.dragAnchor = null;
+              if (entry) {
+                state.past.push(entry);
+                if (state.past.length > CANVAS_HISTORY_LIMIT) state.past.shift();
+                state.future = [];
+              } else if (rollbackById) {
+                for (let index = 0; index < state.nodes.length; index += 1) {
+                  const base = rollbackById.get(state.nodes[index].id);
+                  if (base) state.nodes[index] = base;
+                }
+              }
+            },
+            false,
+            "canvas/endPositionDrag"
+          );
+        },
+
+        setReadOnly: (readOnly) => {
+          if (readOnly) {
+            // 转只读前(readOnly 尚为 false):原子 finalize 进行中的拖动——把已逐帧写入的位置合并成一个
+            // 历史项(避免已写位置既不回滚也不入历史),并提交待提交文本会话。之后再置只读。
+            if (get().dragAnchor !== null) get().endPositionDrag();
+            flushTextSession();
+          }
+          set(
+            (state) => {
+              state.readOnly = readOnly;
+            },
+            false,
+            "canvas/setReadOnly"
+          );
+        },
+
+        setEdgesHidden: (hidden) =>
+          set(
+            (state) => {
+              state.edgesHidden = hidden;
+            },
+            false,
+            "canvas/setEdgesHidden"
+          ),
+
+        toggleEdgesHidden: () =>
+          set(
+            (state) => {
+              state.edgesHidden = !state.edgesHidden;
+            },
+            false,
+            "canvas/toggleEdgesHidden"
+          ),
+
+        setSnapToGrid: (enabled) =>
+          set(
+            (state) => {
+              state.snapToGrid = enabled;
+            },
+            false,
+            "canvas/setSnapToGrid"
+          ),
+
+        toggleSnapToGrid: () =>
+          set(
+            (state) => {
+              state.snapToGrid = !state.snapToGrid;
+            },
+            false,
+            "canvas/toggleSnapToGrid"
+          ),
+
+        setMinimapCollapsed: (collapsed) =>
+          set(
+            (state) => {
+              state.minimapCollapsed = collapsed;
+            },
+            false,
+            "canvas/setMinimapCollapsed"
+          ),
+
+        toggleMinimapCollapsed: () =>
+          set(
+            (state) => {
+              state.minimapCollapsed = !state.minimapCollapsed;
+            },
+            false,
+            "canvas/toggleMinimapCollapsed"
+          ),
+
+        reset: () =>
+          set(
+            (state) => {
+              Object.assign(state, createInitialState());
+            },
+            false,
+            "canvas/reset"
+          ),
+      };
+    }),
     { name: "CanvasStore", enabled: process.env.NODE_ENV !== "production" }
   )
 );
@@ -535,6 +961,8 @@ export const useCanvasRecoveryRequired = () =>
   useCanvasStore((state) => state.recoveryRequired);
 export const useCanvasHydrated = () => useCanvasStore((state) => state.hydrated);
 export const useCanvasLoadIssues = () => useCanvasStore((state) => state.loadIssues);
+export const useCanvasCanUndo = () => useCanvasStore((state) => state.past.length > 0);
+export const useCanvasCanRedo = () => useCanvasStore((state) => state.future.length > 0);
 
 /**
  * 自动保存闸(纯函数,供 D3 接线与离线单测复用):未装载 / 需恢复 / 只读 三者任一为真时,

@@ -68,8 +68,13 @@ async function loadExtra(absPath, outName, rewrites = {}) {
 }
 
 async function main() {
-  // 先落 schema.mjs / rf-adapter.mjs,供 store 改写后的相对 import 解析。
+  // 先落 store 依赖的全部 lib/canvas 模块(schema→patch→history→group-ops→rf-adapter),供 store
+  // 改写后的相对 import 解析。S4 起 store 新增依赖 history/group-ops,旧 loader 必须一并编译+改写,
+  // 否则 '@/lib/canvas/history' 被当包解析 → ERR_MODULE_NOT_FOUND。
   const schema = await loadCanvasModule("schema");
+  await loadCanvasModule("patch");
+  await loadCanvasModule("history");
+  await loadCanvasModule("group-ops");
   const adapter = await loadCanvasModule("rf-adapter");
   const shortcuts = await loadExtra(
     join(ROOT, "src", "components", "canvas", "canvas-shortcuts.ts"),
@@ -81,6 +86,8 @@ async function main() {
     {
       "@/lib/canvas/schema": "./schema.mjs",
       "@/lib/canvas/rf-adapter": "./rf-adapter.mjs",
+      "@/lib/canvas/history": "./history.mjs",
+      "@/lib/canvas/group-ops": "./group-ops.mjs",
     }
   );
 

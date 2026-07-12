@@ -76,7 +76,11 @@ async function loadExtra(absPath, outName, rewrites = {}) {
 }
 
 async function main() {
+  // store(S4 起)依赖 history/group-ops:必须一并编译并改写,否则 '@/lib/canvas/history' 当包解析报错。
   await loadCanvasModule("schema");
+  await loadCanvasModule("patch");
+  await loadCanvasModule("history");
+  await loadCanvasModule("group-ops");
   await loadCanvasModule("rf-adapter");
   const schema = await import(
     `${pathToFileURL(join(OUT_DIR, "schema.mjs")).href}?t=${Date.now()}`
@@ -87,6 +91,8 @@ async function main() {
     {
       "@/lib/canvas/schema": "./schema.mjs",
       "@/lib/canvas/rf-adapter": "./rf-adapter.mjs",
+      "@/lib/canvas/history": "./history.mjs",
+      "@/lib/canvas/group-ops": "./group-ops.mjs",
     }
   );
   const upload = await loadExtra(

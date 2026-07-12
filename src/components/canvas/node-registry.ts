@@ -10,7 +10,9 @@ import type { NodeTypes } from "@xyflow/react";
 import { BROKEN_NODE_TYPE } from "@/lib/canvas/rf-adapter";
 import type { CanvasNodeType } from "@/lib/canvas/schema";
 
+import { GROUP_FRAME_TYPE } from "./group-frame";
 import { BrokenNode } from "./nodes/broken-node";
+import { GroupFrameNode } from "./nodes/group-frame-node";
 import {
   ComposeNode,
   ImageNode,
@@ -33,4 +35,5 @@ const domainNodeTypes = {
 export const canvasNodeTypes: NodeTypes = {
   ...domainNodeTypes,
   [BROKEN_NODE_TYPE]: BrokenNode,
+  [GROUP_FRAME_TYPE]: GroupFrameNode,
 };
