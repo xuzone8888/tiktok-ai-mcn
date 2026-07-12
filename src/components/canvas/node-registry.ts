@@ -1,16 +1,36 @@
 /**
- * 超级画布 · 节点类型注册表(P0 · S1 接缝)
+ * 超级画布 · 节点类型注册表(P0 · S3)
  *
- * 以 schema.ts 的运行时白名单 NODE_TYPES 为唯一键源(绝不硬编码 6 类字符串数组),
- * S1 全部映射到通用 PlaceholderNode。S3 逐类替换为真渲染器时,只改本表的值,
- * PlaceholderNode 保留为未知/兜底渲染。nodeTypes 为模块级稳定引用,避免 React Flow 重渲告警。
+ * 领域 6 类各映射到各自可辨识组件;`__broken` 为纯视图恢复实体占位卡。用
+ * `Record<CanvasNodeType, …>` 强制覆盖 D2 白名单全集——新增/删类型即编译报错,
+ * 绝不硬编码平行类型数组。nodeTypes 为模块级稳定引用,避免 React Flow 重渲告警。
  */
 import type { NodeTypes } from "@xyflow/react";
 
-import { NODE_TYPES } from "@/lib/canvas/schema";
+import { BROKEN_NODE_TYPE } from "@/lib/canvas/rf-adapter";
+import type { CanvasNodeType } from "@/lib/canvas/schema";
 
-import { PlaceholderNode } from "./nodes/placeholder-node";
+import { BrokenNode } from "./nodes/broken-node";
+import {
+  ComposeNode,
+  ImageNode,
+  ProductNode,
+  ScriptNode,
+  VideoNode,
+} from "./nodes/reference-nodes";
+import { TextNode } from "./nodes/text-node";
 
-export const canvasNodeTypes: NodeTypes = Object.fromEntries(
-  NODE_TYPES.map((type) => [type, PlaceholderNode])
-);
+// satisfies:强制 6 类白名单全覆盖(缺一即编译错),值为合法 RF 节点组件。
+const domainNodeTypes = {
+  text: TextNode,
+  image: ImageNode,
+  video: VideoNode,
+  product: ProductNode,
+  script: ScriptNode,
+  compose: ComposeNode,
+} satisfies Record<CanvasNodeType, NodeTypes[string]>;
+
+export const canvasNodeTypes: NodeTypes = {
+  ...domainNodeTypes,
+  [BROKEN_NODE_TYPE]: BrokenNode,
+};

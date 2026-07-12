@@ -44,11 +44,13 @@ import { toast } from "@/hooks/use-toast";
 import {
   reconcileReactFlowEdges,
   reconcileReactFlowNodes,
+  toBrokenReactFlowNodes,
   toReactFlowEdges,
   toReactFlowNodes,
 } from "@/lib/canvas/rf-adapter";
 import type { CanvasNodeType, CanvasPosition } from "@/lib/canvas/schema";
 import {
+  useCanvasBrokenNodes,
   useCanvasEdges,
   useCanvasEdgesHidden,
   useCanvasMinimapCollapsed,
@@ -90,6 +92,7 @@ function eventClientPoint(event: MouseEvent | TouchEvent): { x: number; y: numbe
 export function CanvasBoard() {
   const domainNodes = useCanvasNodes();
   const domainEdges = useCanvasEdges();
+  const brokenNodes = useCanvasBrokenNodes();
   const edgesHidden = useCanvasEdgesHidden();
   const snapToGrid = useCanvasSnapToGrid();
   const minimapCollapsed = useCanvasMinimapCollapsed();
@@ -108,9 +111,11 @@ export function CanvasBoard() {
   const [connectMenu, setConnectMenu] = useState<ConnectMenuState | null>(null);
 
   // 本地 ephemeral 视图态(承载 selected/dragging/measured 等,永不回流领域)。
-  const [viewNodes, setViewNodes] = useState<Node[]>(() =>
-    toReactFlowNodes(useCanvasStore.getState().nodes)
-  );
+  // 视图节点 = 领域投影 + brokenNodes 的纯视图 __broken 投影(broken 绝不进领域/持久化)。
+  const [viewNodes, setViewNodes] = useState<Node[]>(() => [
+    ...toReactFlowNodes(useCanvasStore.getState().nodes),
+    ...toBrokenReactFlowNodes(useCanvasStore.getState().brokenNodes),
+  ]);
   const [viewEdges, setViewEdges] = useState<Edge[]>(() =>
     toReactFlowEdges(useCanvasStore.getState().edges, {
       hidden: useCanvasStore.getState().edgesHidden,
@@ -121,8 +126,11 @@ export function CanvasBoard() {
     useCanvasStore.getState().initializeEmptyDoc();
   }, []);
   useEffect(() => {
-    setViewNodes((previous) => reconcileReactFlowNodes(previous, domainNodes));
-  }, [domainNodes]);
+    setViewNodes((previous) => [
+      ...reconcileReactFlowNodes(previous, domainNodes),
+      ...toBrokenReactFlowNodes(brokenNodes),
+    ]);
+  }, [domainNodes, brokenNodes]);
   useEffect(() => {
     setViewEdges((previous) =>
       reconcileReactFlowEdges(previous, domainEdges, { hidden: edgesHidden })

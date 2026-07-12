@@ -16,6 +16,7 @@
 import type { Edge, Node, NodeChange } from "@xyflow/react";
 
 import type {
+  BrokenCanvasNode,
   CanvasEdge,
   CanvasNode,
   CanvasNodeData,
@@ -48,6 +49,33 @@ export function toReactFlowNode(node: CanvasNode): CanvasReactFlowNode {
 /** 领域节点数组 → React Flow 节点数组(纯投影,无视图字段)。 */
 export function toReactFlowNodes(nodes: readonly CanvasNode[]): CanvasReactFlowNode[] {
   return nodes.map(toReactFlowNode);
+}
+
+/** 损坏节点的 React Flow 视图类型(非领域白名单;纯视图,绝不入领域文档/持久化)。 */
+export const BROKEN_NODE_TYPE = "__broken" as const;
+
+const BROKEN_FALLBACK_X = -320;
+const BROKEN_FALLBACK_GAP = 88;
+
+/**
+ * D2 原始恢复实体 brokenNodes → 纯视图 __broken RF 节点(不可拖/连/RF 删除,仅显式删除)。
+ * position 用实体原始坐标,缺失时按序确定性降级到画布左侧,避免堆叠原点。data 仅承载
+ * rawType/issues 供占位卡展示——绝不构造领域 node,绝不静默丢弃 raw。
+ */
+export function toBrokenReactFlowNodes(broken: readonly BrokenCanvasNode[]): Node[] {
+  return broken.map((entity, index) => ({
+    id: entity.id,
+    type: BROKEN_NODE_TYPE,
+    position: entity.position ?? {
+      x: BROKEN_FALLBACK_X,
+      y: index * BROKEN_FALLBACK_GAP,
+    },
+    data: { rawType: entity.rawType, issues: entity.issues },
+    draggable: false,
+    connectable: false,
+    deletable: false,
+    selectable: true,
+  }));
 }
 
 /** 单个领域连线 → React Flow 连线;hidden 为「隐藏连线开关」视图态注入。 */

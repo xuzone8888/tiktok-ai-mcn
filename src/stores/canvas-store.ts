@@ -9,9 +9,10 @@
  * 关键不变量(技术负责人硬约束):loadCanvasDoc 返回 recoveryRequired=true 时必须阻断自动保存
  * (见 isCanvasAutosaveBlocked);broken 实体原样保留交给 S3 显式处理,S1 不渲染、不静默丢弃。
  *
- * P0 边界:S1 底盘(文档装载 + 视图开关 + 单写者只读位 + 位置回写)+ S2 建节点/连线
- * (addNode/addEdge,受 readOnly 保护,一律经 D2 createCanvasNode/createCanvasEdge 落库,
- * 零平行类型)。成组/撤销(S4)、错误监控(S7)各自阶段再加,不在此提前实现。
+ * P0 边界:S1 底盘 + S2 建节点/连线 + S3 文本编辑/删除/损坏实体删除
+ * (updateNodeData 经 CanvasNodeDataSchema 校验回写、removeNode 级联 edges/group、
+ * removeBrokenNode 删纯视图恢复实体并重算 recoveryRequired,全部受 readOnly 保护,零平行类型)。
+ * 成组/撤销(S4)、错误监控(S7)各自阶段再加,不在此提前实现。
  */
 import { create } from "zustand";
 import { devtools } from "zustand/middleware";
@@ -21,15 +22,18 @@ import type { NodeChange } from "@xyflow/react";
 
 import {
   CANVAS_SCHEMA_VERSION,
+  CanvasNodeDataSchema,
   createCanvasEdge,
   createCanvasNode,
   createEmptyCanvasDoc,
+  inspectUnsafeCanvasValue,
   loadCanvasDoc,
   type BrokenCanvasEdge,
   type BrokenCanvasNode,
   type CanvasEdge,
   type CanvasGroup,
   type CanvasNode,
+  type CanvasNodeData,
   type CreateCanvasNodeInput,
   type LoadCanvasResult,
 } from "@/lib/canvas/schema";
@@ -103,6 +107,22 @@ export interface CanvasStoreActions {
    * 节点可建 / 连线合法),要么节点+边同时写入,要么都不写——不留孤儿节点。成功返回 {nodeId,edgeId}。
    */
   addNodeAndEdge: (input: AddNodeAndEdgeInput) => { nodeId: string; edgeId: string } | null;
+  /**
+   * 更新节点 data(S3 文本编辑等):合并 patch 后经 CanvasNodeDataSchema 校验 + 危险值扫描
+   * (拒 dataURL/签名 URL),通过才回写;只读/节点不存在/校验失败返回 false。
+   */
+  updateNodeData: (id: string, patch: Partial<CanvasNodeData>) => boolean;
+  /**
+   * 删除内容节点(S3):级联移除其 edges、从各 group.node_ids 移除,保持 group_id/group 一致;
+   * 只读时忽略。二次确认 UI 由卡片承担。
+   */
+  removeNode: (id: string) => void;
+  /**
+   * 删除损坏恢复实体(S3):同一次原子 set 从 brokenNodes 移除、级联清理 domain edges 中 source/target
+   * 指向它的正常引用、从各 group.node_ids 移除它(D2 容错加载会保留这些引用供占位展示),再按剩余
+   * brokenNodes/brokenEdges/migrationComplete 重算 recoveryRequired;只读时忽略。绝不触碰领域 nodes。
+   */
+  removeBrokenNode: (id: string) => void;
   /** React Flow 节点变更回写:只取 position,其余视图变更丢弃;只读时忽略。 */
   applyNodePositionChanges: (changes: NodeChange[]) => void;
   setReadOnly: (readOnly: boolean) => void;
@@ -260,6 +280,75 @@ export const useCanvasStore = create<CanvasStore>()(
         return { nodeId: node.id, edgeId: edge.id };
       },
 
+      updateNodeData: (id, patch) => {
+        if (get().readOnly) return false;
+        const node = get().nodes.find((candidate) => candidate.id === id);
+        if (!node) return false;
+        let nextData: CanvasNodeData;
+        try {
+          nextData = CanvasNodeDataSchema.parse({ ...node.data, ...patch });
+        } catch {
+          return false;
+        }
+        // 危险值扫描(与保存写契约一致):title/params 等任何字符串拒 dataURL/签名 URL。
+        if (inspectUnsafeCanvasValue(nextData).length > 0) return false;
+        set(
+          (state) => {
+            const target = state.nodes.find((candidate) => candidate.id === id);
+            if (target) target.data = nextData;
+          },
+          false,
+          "canvas/updateNodeData"
+        );
+        return true;
+      },
+
+      removeNode: (id) => {
+        if (get().readOnly) return;
+        set(
+          (state) => {
+            state.nodes = state.nodes.filter((node) => node.id !== id);
+            // 级联删除关联连线。
+            state.edges = state.edges.filter(
+              (edge) => edge.source !== id && edge.target !== id
+            );
+            // 从各 group.node_ids 移除;剩余节点的 group_id 不受影响(与 group 一致)。
+            for (const group of state.groups) {
+              const index = group.node_ids.indexOf(id);
+              if (index !== -1) group.node_ids.splice(index, 1);
+            }
+          },
+          false,
+          "canvas/removeNode"
+        );
+      },
+
+      removeBrokenNode: (id) => {
+        if (get().readOnly) return;
+        set(
+          (state) => {
+            state.brokenNodes = state.brokenNodes.filter((node) => node.id !== id);
+            // D2 容错加载会在 domain edges/groups 里保留指向安全 broken id 的正常引用(供占位展示);
+            // 显式删除 broken 实体必须同一次原子 set 一并级联清理这些引用,否则留悬空 edge/group
+            // 成员,recoveryRequired 归 false 后下次 autosave 会非法。domain nodes 不动。
+            state.edges = state.edges.filter(
+              (edge) => edge.source !== id && edge.target !== id
+            );
+            for (const group of state.groups) {
+              const index = group.node_ids.indexOf(id);
+              if (index !== -1) group.node_ids.splice(index, 1);
+            }
+            state.recoveryRequired = computeRecoveryRequired(
+              state.migrationComplete,
+              state.brokenNodes,
+              state.brokenEdges
+            );
+          },
+          false,
+          "canvas/removeBrokenNode"
+        );
+      },
+
       applyNodePositionChanges: (changes) => {
         if (get().readOnly) return;
         const updates = collectNodePositionUpdates(changes);
@@ -378,12 +467,25 @@ export function canAddCanvasEdge(
   );
 }
 
+/**
+ * 恢复闸重算(纯函数,供 removeBrokenNode 与离线单测复用):迁移未完成、或仍有 broken 节点/边
+ * 时需恢复。与 schema.loadCanvasDoc 的口径一致。
+ */
+export function computeRecoveryRequired(
+  migrationComplete: boolean,
+  brokenNodes: readonly BrokenCanvasNode[],
+  brokenEdges: readonly BrokenCanvasEdge[]
+): boolean {
+  return !migrationComplete || brokenNodes.length > 0 || brokenEdges.length > 0;
+}
+
 // ============================================================================
 // 选择器(房内惯例:窄选择 hooks)
 // ============================================================================
 
 export const useCanvasNodes = () => useCanvasStore((state) => state.nodes);
 export const useCanvasEdges = () => useCanvasStore((state) => state.edges);
+export const useCanvasBrokenNodes = () => useCanvasStore((state) => state.brokenNodes);
 export const useCanvasGroups = () => useCanvasStore((state) => state.groups);
 export const useCanvasEdgesHidden = () => useCanvasStore((state) => state.edgesHidden);
 export const useCanvasSnapToGrid = () => useCanvasStore((state) => state.snapToGrid);
