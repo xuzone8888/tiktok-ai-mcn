@@ -36,6 +36,7 @@
     "@radix-ui/react-tooltip": "^1.2.8",
     "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.86.0",
+    "@xyflow/react": "^12.11.2",
     "ai": "^6.0.184",
     "ali-oss": "^6.23.0",
     "alipay-sdk": "^4.14.0",
