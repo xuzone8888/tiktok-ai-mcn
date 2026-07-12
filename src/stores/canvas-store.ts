@@ -9,9 +9,9 @@
  * 关键不变量(技术负责人硬约束):loadCanvasDoc 返回 recoveryRequired=true 时必须阻断自动保存
  * (见 isCanvasAutosaveBlocked);broken 实体原样保留交给 S3 显式处理,S1 不渲染、不静默丢弃。
  *
- * P0 边界:本 store 只覆盖 S1 底盘所需——文档装载 + 视图开关(隐藏连线/网格吸附/小地图收起)+
- * 单写者只读位(D5 接线、S7 渲染横幅)+ 节点位置回写。建节点/连线(S2)、成组/撤销(S4)、
- * 错误监控(S7)等各自阶段再加动作,不在此提前实现。
+ * P0 边界:S1 底盘(文档装载 + 视图开关 + 单写者只读位 + 位置回写)+ S2 建节点/连线
+ * (addNode/addEdge,受 readOnly 保护,一律经 D2 createCanvasNode/createCanvasEdge 落库,
+ * 零平行类型)。成组/撤销(S4)、错误监控(S7)各自阶段再加,不在此提前实现。
  */
 import { create } from "zustand";
 import { devtools } from "zustand/middleware";
@@ -21,6 +21,8 @@ import type { NodeChange } from "@xyflow/react";
 
 import {
   CANVAS_SCHEMA_VERSION,
+  createCanvasEdge,
+  createCanvasNode,
   createEmptyCanvasDoc,
   loadCanvasDoc,
   type BrokenCanvasEdge,
@@ -28,9 +30,27 @@ import {
   type CanvasEdge,
   type CanvasGroup,
   type CanvasNode,
+  type CreateCanvasNodeInput,
   type LoadCanvasResult,
 } from "@/lib/canvas/schema";
 import { collectNodePositionUpdates } from "@/lib/canvas/rf-adapter";
+
+/** 连线入参(与 React Flow Connection 兼容,但 store 不依赖 RF 类型)。 */
+export interface CanvasConnection {
+  source: string | null;
+  target: string | null;
+  sourceHandle?: string | null;
+  targetHandle?: string | null;
+}
+
+/** 原子建「新节点 + 与已有节点的连线」入参(拉线到空白建节点用)。 */
+export interface AddNodeAndEdgeInput {
+  node: CreateCanvasNodeInput;
+  fromNodeId: string;
+  fromHandleId: string | null;
+  /** 拉出的 handle 类型:source → 边为 源→新;target → 边为 新→源。 */
+  fromHandleType: "source" | "target";
+}
 
 export interface CanvasStoreState {
   // ---- 领域文档(唯一真相;可持久化子集,但 S1 不接持久化) ----
@@ -68,6 +88,21 @@ export interface CanvasStoreActions {
    * 已 hydrated(D3/SSR/路由预加载已灌入服务端文档)则原样保留,绝不覆盖。
    */
   initializeEmptyDoc: () => void;
+  /**
+   * 建节点(S2):经 D2 createCanvasNode 落库;只读时忽略。非法输入(如 media.ossKey 非
+   * OSS object key)返回 null,不建半节点。成功返回节点 id。
+   */
+  addNode: (input: CreateCanvasNodeInput) => string | null;
+  /**
+   * 连线(S2):经 canAddCanvasEdge 校验(禁自环/悬空端/重复)+ D2 createCanvasEdge 落库;
+   * 只读或非法返回 null,成功返回 edge id。
+   */
+  addEdge: (connection: CanvasConnection) => string | null;
+  /**
+   * 原子建「新节点 + 连线」(S2 拉线到空白建节点):同一次 set 前完整校验(只读 / 源节点仍在 /
+   * 节点可建 / 连线合法),要么节点+边同时写入,要么都不写——不留孤儿节点。成功返回 {nodeId,edgeId}。
+   */
+  addNodeAndEdge: (input: AddNodeAndEdgeInput) => { nodeId: string; edgeId: string } | null;
   /** React Flow 节点变更回写:只取 position,其余视图变更丢弃;只读时忽略。 */
   applyNodePositionChanges: (changes: NodeChange[]) => void;
   setReadOnly: (readOnly: boolean) => void;
@@ -135,6 +170,94 @@ export const useCanvasStore = create<CanvasStore>()(
       initializeEmptyDoc: () => {
         if (get().hydrated) return;
         get().hydrateFromDoc(createEmptyCanvasDoc());
+      },
+
+      addNode: (input) => {
+        if (get().readOnly) return null;
+        let node: CanvasNode;
+        try {
+          node = createCanvasNode(input);
+        } catch {
+          // 非法输入(如 media.ossKey 非 OSS object key)——不建半节点。
+          return null;
+        }
+        set(
+          (state) => {
+            state.nodes.push(node);
+          },
+          false,
+          "canvas/addNode"
+        );
+        return node.id;
+      },
+
+      addEdge: (connection) => {
+        if (get().readOnly) return null;
+        if (!canAddCanvasEdge(get().nodes, get().edges, connection)) return null;
+        let edge: CanvasEdge;
+        try {
+          edge = createCanvasEdge({
+            source: connection.source as string,
+            target: connection.target as string,
+            sourceHandle: connection.sourceHandle ?? null,
+            targetHandle: connection.targetHandle ?? null,
+          });
+        } catch {
+          return null;
+        }
+        set(
+          (state) => {
+            state.edges.push(edge);
+          },
+          false,
+          "canvas/addEdge"
+        );
+        return edge.id;
+      },
+
+      addNodeAndEdge: ({ node: nodeInput, fromNodeId, fromHandleId, fromHandleType }) => {
+        if (get().readOnly) return null;
+        const current = get();
+        // 源节点必须仍存在(避免选类型期间源被删 → 孤儿节点)。
+        if (!current.nodes.some((candidate) => candidate.id === fromNodeId)) return null;
+
+        let node: CanvasNode;
+        try {
+          node = createCanvasNode(nodeInput);
+        } catch {
+          return null;
+        }
+
+        const connection: CanvasConnection =
+          fromHandleType === "source"
+            ? { source: fromNodeId, sourceHandle: fromHandleId, target: node.id, targetHandle: null }
+            : { source: node.id, sourceHandle: null, target: fromNodeId, targetHandle: fromHandleId };
+
+        // 针对「含新节点」的集合校验连线合法性(禁自环/悬空/重复)。
+        if (!canAddCanvasEdge([...current.nodes, node], current.edges, connection)) return null;
+
+        let edge: CanvasEdge;
+        try {
+          edge = createCanvasEdge({
+            source: connection.source as string,
+            target: connection.target as string,
+            sourceHandle: connection.sourceHandle ?? null,
+            targetHandle: connection.targetHandle ?? null,
+          });
+        } catch {
+          return null;
+        }
+
+        // 单次原子 set:节点与边同时写入(全部校验已在前置完成)。
+        set(
+          (state) => {
+            state.nodes.push(node);
+            state.edges.push(edge);
+          },
+          false,
+          "canvas/addNodeAndEdge"
+        );
+        return { nodeId: node.id, edgeId: edge.id };
       },
 
       applyNodePositionChanges: (changes) => {
@@ -228,6 +351,32 @@ export const useCanvasStore = create<CanvasStore>()(
     { name: "CanvasStore", enabled: process.env.NODE_ENV !== "production" }
   )
 );
+
+/**
+ * 连线合法性(纯函数,供 addEdge 与离线单测复用):
+ * 需源/目标都有值、非自环、两端节点都存在、且不与现有 edge 重复
+ * (source + target + 两个 handle 全等视为重复)。
+ */
+export function canAddCanvasEdge(
+  nodes: readonly CanvasNode[],
+  edges: readonly CanvasEdge[],
+  connection: CanvasConnection
+): boolean {
+  const { source, target } = connection;
+  if (!source || !target) return false;
+  if (source === target) return false; // 禁自环
+  if (!nodes.some((node) => node.id === source)) return false; // 悬空源
+  if (!nodes.some((node) => node.id === target)) return false; // 悬空目标
+  const sourceHandle = connection.sourceHandle ?? null;
+  const targetHandle = connection.targetHandle ?? null;
+  return !edges.some(
+    (edge) =>
+      edge.source === source &&
+      edge.target === target &&
+      (edge.sourceHandle ?? null) === sourceHandle &&
+      (edge.targetHandle ?? null) === targetHandle
+  );
+}
 
 // ============================================================================
 // 选择器(房内惯例:窄选择 hooks)

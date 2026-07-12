@@ -64,7 +64,7 @@ export function CanvasToolbar({ onOpenShortcuts }: { onOpenShortcuts: () => void
   const toggleMinimapCollapsed = useCanvasStore((state) => state.toggleMinimapCollapsed);
 
   return (
-    <Panel position="top-left" className="!m-2">
+    <Panel position="top-right" className="!m-2">
       <TooltipProvider delayDuration={300}>
         <div className="flex items-center gap-0.5 rounded-lg border border-border bg-card/90 p-1 shadow-sm backdrop-blur">
           <ToolbarToggle
