@@ -22,6 +22,8 @@ StarGaze 是一个 AI 视频创作平台(Next.js + Supabase + 阿里云 OSS,生�
 | `.claude/worktrees/canvas-p0-data` | claude/canvas-p0-data | **写入②数据** | supabase/migrations/、src/lib/canvas/、src/app/api/canvas/ |
 | `.claude/worktrees/studio-content-ux-redesign-70bfa0` | claude/studio-content-ux-redesign-70bfa0 | **审核+集成** | 合流/验收/文档/看板 |
 
+> **管辖例外(2026-07-12 接口评审裁决,详见 P0 看板《data-shell 接口评审裁决》)**:`src/stores/canvas-store.ts` 归 shell(devtools+immer,**严禁 persist 画布文档**,持久化域节点 vs RF 视图节点由 rf-adapter 严格分层);`src/middleware.ts`(/canvas 硬鉴权)与 `src/types/database.ts`(canvases 类型)属跨切面文件,由审核窗合流阶段实施,写入窗勿动。**P0 /canvas 不挂 BTM**;P1 接生成前 BTM/执行上下文接入为前置验收。
+
 **协作规则(违反会互相踩脚,严格执行):**
 - **认领即锁**:动工前先在看板把任务标 `进行中`,commit 到自己分支;看板冲突以集成分支为准。
 - **接口先行**:`src/lib/canvas/schema.ts`(zod+类型)由 data 窗口最先落地;shell 窗口 rebase 集成分支后消费,**禁止自定义平行类型**。

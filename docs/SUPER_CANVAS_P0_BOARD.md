@@ -52,9 +52,9 @@
   - ✅ 历史资产库(数据面:跨画布图/视频/音频生成历史查询,按类型三 tab+日期分组+计数)
 
 ### shell 窗口(worktree: canvas-p0-shell,分支 claude/canvas-p0-shell)
-**负责**:`src/app/(canvas)/canvas/`(新路由,不动 /studio)、`src/components/canvas/`。**消费 data 的 schema.ts,不得自定义平行类型。**
+**负责**:`src/app/(canvas)/canvas/`(新路由,不动 /studio)、`src/components/canvas/`、`src/stores/canvas-store.ts`(裁决 2 管辖例外)。**消费 data 的 schema.ts,不得自定义平行类型。**
 
-- **S1 /canvas 路由 + React Flow 底盘**
+- **S1 /canvas 路由 + React Flow 底盘**(依《接口评审裁决》:含 `src/stores/canvas-store.ts` 管辖[devtools+immer,禁 persist 文档,rf-adapter 分层];**只装 `@xyflow/react`,dagre 延 S5**;**P0 不挂 BTM**;`/canvas` 硬鉴权由审核窗合流加 middleware)
   - ✅ 无限画布 pan/zoom(React Flow MIT 底盘 + zustand)
   - ✅ 新路由 /canvas,不动 /studio
   - ✅ 小地图(1366×768 下默认收起)
@@ -111,12 +111,22 @@
 ## P0 明确不做(防scope蔓延,开发时别顺手加)
 生成器面板/积分预估/费用条(P1)、任何生成提交(P1)、脚本节点向导(P2)、资产装配(P2)、分享(P3)、合成(P3)。空态只渲染建节点引导。
 
-## 跨目录归属/合流实施项(审核窗裁决,写入窗勿越界)
+## data-shell 接口评审裁决(2026-07-12 固化,审核窗+技术负责人裁决,写入窗遵照)
 
-以下改动落在**跨切面共享文件**(不属任一写入窗管辖目录),统一由审核窗在 R2 合流阶段实施,写入窗**勿在自己分支单独改**以免合流冲突/越权:
+以下为 data 与 shell 接口评审的已裁决结论,固化于此作为跨窗口权威依据;技术决策同步为架构约定(等价 ADR),写入窗遵照执行、勿再各自另定。
 
-- **`/canvas` 路由须加入 `src/middleware.ts` 的 `PROTECTED_ROUTES`**(鉴权保护):S1 建路由,但 middleware.ts 是全站鉴权切面文件,由审核窗合流时统一加。**验收**:未登录访问 `/canvas` 被拦到登录页。(关联 #31 新路由)
-- **canvases 新表须同步 `src/types/database.ts` 类型**:D1 出迁移,但 database.ts 是共享生成/手写类型文件,由审核窗合流时同步 canvases 行类型。**验收**:`npx tsc --noEmit` 过、引用 canvases 处有类型。(关联 #27 canvases schema)
+- **裁决 1·跨切面文件由审核窗合流实施**(不属任一写入窗管辖目录,写入窗勿在自己分支单独改以免冲突/越权):
+  - **`/canvas` 硬鉴权**:审核窗在 R2 合流阶段给 `src/middleware.ts` 的 `PROTECTED_ROUTES` 加 `/canvas`(全站鉴权切面)。**验收**:未登录访问 `/canvas` 被拦到登录页。(关联 #31 新路由)
+  - **canvases 类型同步**:审核窗合流时同步 `src/types/database.ts` 的 canvases 行类型(共享类型文件,D1 出迁移但不单独改此文件)。**验收**:`npx tsc --noEmit` 过、引用 canvases 处有类型。(关联 #27 canvases schema)
+- **裁决 2·shell 管辖例外 + store 架构约定**:批准 shell 窗口**唯一**跨界管辖 `src/stores/canvas-store.ts`(其余仍限 `src/app/(canvas)/`+`src/components/canvas/`)。约定(强制):store = **devtools + immer**;**严禁 `persist` 画布文档**(文档持久化归 D3 API + D4 IndexedDB 影子,store 只持运行态);**持久化域节点(schema/canvases.doc)与 React Flow 视图节点由 `rf-adapter` 严格分层**,两者禁止直接互相赋值/透传。
+- **裁决 3·P0/P1 执行上下文边界**:**P0 `/canvas` 不挂 BTM**(background-task-manager),P0 不接任何生成;**P1 接生成前置验收**:BTM/执行上下文接入(节点状态机经 generations 对账、乐观 UI)必须先过验收再开 P1 生成链——列为 P0→P1 交接硬门。
+- **裁决 4·S1 依赖范围**:**S1 只加 `@xyflow/react`**(React Flow 底盘);`dagre`(自动布局依赖)**延到 S5**(#8「整理画布自动布局」本就属 S5),S1 不引入,避免 P0 早期依赖膨胀。
+
+## 待裁决问题区(P0 开工前/相应任务前必须裁决,勿擅改 CHECKLIST)
+
+> 规则:写入窗遇「必须裁决才能做下去」的问题,写此处,等审核窗+技术负责人(必要时用户)裁决;裁决前**不擅改 CHECKLIST 功能取舍**(铁律#10)。
+
+- **P0-Q1 · 512KB 硬拒 vs 2MB 告警语义矛盾**(D3/S7 实现前必须裁决):CHECKLIST #29「文档 >512KB **拒存**并提示」是 512KB 硬上限;#47「jsonb>**2MB** 告警建议拆画布」是 2MB 软告警——若 512KB 就硬拒,文档永远到不了 2MB,2MB 告警不可达,二者阈值语义冲突。**现状**:D1 只落**原始阈值契约**(doc_bytes 列 + 两个阈值常量),**不实现拒存/告警行为、不擅改清单**。**待裁决**:硬拒阈值到底取 512KB 还是 2MB?或「512KB 软告警 + 2MB 硬拒」重新分层?裁决落定后再改 CHECKLIST #29/#47 并同步 D3(拒存逻辑)/S7(提示 UI)。归属:D1 先行(仅契约)→ 裁决 → D3+S7 实现。
 
 ## 合流顺序建议
 D1→D2(schema.ts 落地)→ S1/S3 与 D3-D6 并行 → S2/S4/S5 → S6/S7/S8 → R1 全量跑 → R2 收口(含上「跨目录归属项」两条)。
