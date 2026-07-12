@@ -32,13 +32,14 @@
 **负责**:`supabase/migrations/`、`src/lib/canvas/`(新建目录,含 schema.ts=双窗口共享合约)、`src/app/api/canvas/`。**接口先行纪律:D2 的 schema.ts 最先落地并 commit,shell 窗口 rebase 消费。**
 
 - **D1 canvases 表迁移 + 文档体积闸**(DDL 全文照抄 [SUPER_CANVAS_DATA_MODEL.md](./SUPER_CANVAS_DATA_MODEL.md) §六,迁移文件 `20260714_canvases.sql`;SQL 落盘由用户经 dashboard 执行,本地先写 runner 脚本+语法自校)
-  - ✅ canvases 文档 schema(jsonb 拓扑+引用+schemaVersion+deps 依赖清单字段)
-  - ✅ 文档 >512KB 拒存并提示(服务端 doc_bytes 计算+API 拒存)
-  - ✅ jsonb>2MB 告警建议拆画布(阈值检测,UI 提示由 S 侧消费)
+  - ✅ canvases 文档 schema(#27:本任务建 jsonb 表[拓扑+引用+schemaVersion+deps];doc 结构 zod 定义归 D2,二者合成同一功能点)
+  - ✅ 文档 >512KB 拒存(#29 数据半:doc_bytes 列/阈值;拒存逻辑在 D3 API;提示 toast 在 S7)
+  - ✅ jsonb>2MB 告警(#47 数据半:阈值检测;告警 banner UI 在 S7)
 - **D2 zod schema + 迁移注册表 + 坏档降级(数据面)**(`src/lib/canvas/schema.ts`:doc/node/edge/group 的 zod v1 + refs 引用约定 + deps 结构;此文件是 shell/data 共享合约)
+  - ✅ canvases 文档 schema 的结构定义(#27 结构半:doc/node/edge/group zod;与 D1 表迁移合成同一功能点)
   - ✅ zod 加载校验+非法节点降级「损坏节点」占位卡(可删),永不整画布白屏(数据面:校验失败节点标记 broken,占位卡 UI 归 S3)
   - ✅ schema 迁移注册表(v1→v2→…;上一版本文档能打开进 DoD)
-  - ✅ 禁存 dataURL/签名 URL,只存 OSS object key(schema 校验层拒绝 data:/签名 URL 入库;渲染层换签名 URL 归 shell)
+  - ✅ 禁存 dataURL/签名 URL,只存 OSS object key(#28 数据半:schema 校验层拒绝 data:/签名 URL 入库;渲染层换签名 URL+内存缓存归 S6)
   - ✅ 节点白名单纪律(6 类 v1)——schema 的 node.type 枚举即白名单载体
 - **D3 文档存取 API + 补丁保存协议**(`src/app/api/canvas/[id]/route.ts`:GET 整包 / PATCH 节点级补丁 + rev CAS + updated_at 手动写[仓库惯例,表无触发器])
   - ✅ 自动保存=节点级补丁(op log),非重叠自动 rebase(协议+服务端;客户端定时器归 S 侧接入)
@@ -83,13 +84,15 @@
   - ✅ 空态四快捷位(P0 =壳:仅建节点引导,真快捷位 P1/P2 按首渲期次点亮,未上线不渲染)
   - ✅ 底部工具栏(添加节点/工作流/素材库/角色库/历史记录/快捷键/教程;壳 P0,入口随所属期点亮)
   - ✅ 整理画布自动布局(Alt+Shift+F,dagre/elk)
-- **S6 1366×768 + 媒体降级**
+- **S6 1366×768 + 媒体降级 + 渲染层 URL 解析**
   - ✅ 1366×768 最小适配(侧栏默认图标态/生成器超视口 dock 底部/胶囊≥5 折叠——P0 先落侧栏与布局骨架)
   - ✅ 媒体降级策略(节点默认 poster 缩略图/选中才挂 `<video>` 且 DOM 断言进 DoD/同屏活跃视频≤6/低 zoom 语义缩放降级色块——P0 落机制,P1 有真媒体后实测)
-- **S7 错误边界 + store 防护**
+  - ✅ 渲染层 OSS object key→签名 URL + 内存缓存(#28 渲染半:上传缩略图/媒体展示统一经此;schema 层拒绝非法 URL 入库在 D2)
+- **S7 错误边界 + store 防护 + 文档健康反馈 UI**
   - ✅ 组件级错误边界+「尝试恢复/重新加载画布」按钮
   - ✅ store 层防护+错误边界触发进监控(单画布>1 次/日报警)
   - ✅ 单写者只读横幅 UI(消费 D5 状态)
+  - ✅ 文档健康反馈 UI:512KB 拒存 toast(#29 UI 半;阈值/列 D1、拒存 D3)、2MB 告警 banner(#47 UI 半;阈值检测 D1)
 - **S8 历史资产面板 + omnibox 确认**
   - ✅ 历史资产面板 UI(三 tab 图/视频/音频+计数+日期分组+从中选素材建节点;消费 D6)
   - ✅ omnibox 长期保留轻量快捷入口(零改动,验证不受画布影响即可)
@@ -108,8 +111,15 @@
 ## P0 明确不做(防scope蔓延,开发时别顺手加)
 生成器面板/积分预估/费用条(P1)、任何生成提交(P1)、脚本节点向导(P2)、资产装配(P2)、分享(P3)、合成(P3)。空态只渲染建节点引导。
 
+## 跨目录归属/合流实施项(审核窗裁决,写入窗勿越界)
+
+以下改动落在**跨切面共享文件**(不属任一写入窗管辖目录),统一由审核窗在 R2 合流阶段实施,写入窗**勿在自己分支单独改**以免合流冲突/越权:
+
+- **`/canvas` 路由须加入 `src/middleware.ts` 的 `PROTECTED_ROUTES`**(鉴权保护):S1 建路由,但 middleware.ts 是全站鉴权切面文件,由审核窗合流时统一加。**验收**:未登录访问 `/canvas` 被拦到登录页。(关联 #31 新路由)
+- **canvases 新表须同步 `src/types/database.ts` 类型**:D1 出迁移,但 database.ts 是共享生成/手写类型文件,由审核窗合流时同步 canvases 行类型。**验收**:`npx tsc --noEmit` 过、引用 canvases 处有类型。(关联 #27 canvases schema)
+
 ## 合流顺序建议
-D1→D2(schema.ts 落地)→ S1/S3 与 D3-D6 并行 → S2/S4/S5 → S6/S7/S8 → R1 全量跑 → R2 收口。
+D1→D2(schema.ts 落地)→ S1/S3 与 D3-D6 并行 → S2/S4/S5 → S6/S7/S8 → R1 全量跑 → R2 收口(含上「跨目录归属项」两条)。
 
 ## P0 功能点覆盖清单(机器核对区,勿手改「原文键」列的字)
 
@@ -144,9 +154,9 @@ D1→D2(schema.ts 落地)→ S1/S3 与 D3-D6 并行 → S2/S4/S5 → S6/S7/S8 �
 | 24 | 自动保存=节点级补丁(op log),非重叠自动 rebase | D3 |
 | 25 | IndexedDB 影子副本 + shadow>server 一键恢复 | D4 |
 | 26 | 单写者锁(navigator.locks)+ 双标签第二个只读+横幅 | D5+S7 |
-| 27 | canvases 文档 schema(jsonb 拓扑+引用+schemaVersion+deps 依赖清单字段) | D1 |
-| 28 | 禁存 dataURL/签名 URL,只存 OSS object key(渲染层换签名 URL+内存缓存) | D2 |
-| 29 | 文档 >512KB 拒存并提示 | D1 |
+| 27 | canvases 文档 schema(jsonb 拓扑+引用+schemaVersion+deps 依赖清单字段) | D1+D2 |
+| 28 | 禁存 dataURL/签名 URL,只存 OSS object key(渲染层换签名 URL+内存缓存) | D2+S6 |
+| 29 | 文档 >512KB 拒存并提示 | D1+D3+S7 |
 | 30 | 断网 30s 恢复自动补存 | D3 |
 | 31 | 新路由 /canvas,不动 /studio | S1 |
 | 32 | omnibox 长期保留轻量快捷入口 | S8 |
@@ -164,5 +174,5 @@ D1→D2(schema.ts 落地)→ S1/S3 与 D3-D6 并行 → S2/S4/S5 → S6/S7/S8 �
 | 44 | 内容节点删除二次确认 | S3 |
 | 45 | 媒体降级策略(节点默认 poster 缩略图/选中才挂 `<video>` 且 DOM 断言进 DoD/同屏活跃视频≤6/低 zoom 语义缩放降级色块) | S6 |
 | 46 | 性能预算数值验收(200 节点 pan/zoom≥50fps 中端机/冷加载<3s/100 节点+30 视频 poster 内存<800MB/100 节点保存<1s) | R1 |
-| 47 | jsonb>2MB 告警建议拆画布 | D1 |
+| 47 | jsonb>2MB 告警建议拆画布 | D1+S7 |
 | 48 | 每期验收脚本惯例 .temp/canvas-p{n}-verify.mjs + tsc/build/实弹/大改动对抗审查 workflow | R1 |

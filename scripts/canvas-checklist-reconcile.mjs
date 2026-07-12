@@ -211,9 +211,11 @@ for (const line of boardMd.split(/\r?\n/)) {
   if (m) statusIds.add(m[1]);
 }
 for (const c of coverage) {
-  const t = c.task.match(/[A-Z]\d+/);
-  if (!t) problems.push(`[看板覆盖] 键「${c.key}」未标任务`);
-  else if (!statusIds.has(t[0])) problems.push(`[看板覆盖] 任务 ${t[0]} 不在状态总览`);
+  const ids = c.task.match(/[A-Z]\d+/g) || []; // 多任务映射(如 D2+S6)校验每一个
+  if (ids.length === 0) { problems.push(`[看板覆盖] 键「${c.key}」未标任务`); continue; }
+  for (const id of ids) {
+    if (!statusIds.has(id)) problems.push(`[看板覆盖] 键「${c.key}」的任务 ${id} 不在状态总览`);
+  }
 }
 
 // 校验 4:文档声明的 P0 总数

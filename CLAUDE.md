@@ -41,7 +41,7 @@ StarGaze 是一个 AI 视频创作平台(Next.js + Supabase + 阿里云 OSS,生�
 7. **每子任务过 `npx tsc --noEmit`;涉页面过 `npm run build`**;大改动跑对抗审查 workflow 修实锤。
 8. **commit 中文、里程碑级、结尾中性署名 `Co-Authored-By: Claude <noreply@anthropic.com>`(不写死具体模型名——切模型/换窗口会使记录失真);绝不 push**(push main=生产自动部署,须用户裁决)。
 9. **积分框架期零价目变更**;P0 不接任何生成/扣费。
-10. **功能取舍不擅改**:做/裁/延与期次以 CHECKLIST 为准;认为需调整→写「建议调整」交用户,不直接改。改动 CHECKLIST 或 P0 看板后**必须跑 `node scripts/canvas-checklist-reconcile.mjs` 至绿**(统计表自洽 + P0 功能点与看板一一对应的机器守卫;期次单元格只填裸 `Pn`,勿写「P0 起」等变体)。
+10. **功能取舍不擅改**:做/裁/延与期次以 CHECKLIST 为准;认为需调整→写「建议调整」交用户,不直接改。改动 CHECKLIST 或 P0 看板后**必须跑 `node scripts/canvas-checklist-reconcile.mjs` 至绿**(统计表自洽 + P0 功能点与看板一一对应的机器守卫)。期次填写规则见 CHECKLIST 顶部「机器守卫」:复合/跨期期次(P1/P2、P2 批量/P3 合成 等)合法,脚本按首个 Pn 归一起始期;仅 **P0 首落行须以裸 `P0` 开头**(勿写「P0 起」),勿据此误改其它期次。
 
 ## 关键路径速查
 
@@ -56,5 +56,5 @@ StarGaze 是一个 AI 视频创作平台(Next.js + Supabase + 阿里云 OSS,生�
 ## 当前状态(2026-07-12)
 
 - 方案五轮定稿(三路审查+三层复核+两轮 LibTV 补实测+实弹 1 图 2 视频验证),用户已批准 P0 开工。
-- P0 = 画布骨架 48 功能点(看板 16 任务),内部不对外;P1 生成接入起才对外灰度。48 项与看板一一对应由 `scripts/canvas-checklist-reconcile.mjs` 机器守卫(2026-07-13 基线审计已修:一处「P0 起」格式行曾致严格 grep 少计 1,零功能缺失)。
+- P0 = 画布骨架 48 功能点(看板 16 任务),内部不对外;P1 生成接入起才对外灰度。48 项与看板一一对应由 `scripts/canvas-checklist-reconcile.mjs` 机器守卫(2026-07-12 基线审计已修:一处「P0 起」格式行曾致严格 grep 少计 1,零功能缺失)。
 - LibTV 参照画布:spaceId=2614745(用户已充值,余额约 ⚡1281;上面留有实测成片与视频故事节点)。
