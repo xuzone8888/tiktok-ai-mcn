@@ -8,7 +8,11 @@
  * 「?」面板只列本表,S4 落地全套快捷键时再扩为 CHECKLIST A 组权威表。
  */
 
-export type CanvasShortcutId = "pan-canvas" | "fit-view" | "toggle-shortcuts";
+export type CanvasShortcutId =
+  | "pan-canvas"
+  | "fit-view"
+  | "tidy-canvas"
+  | "toggle-shortcuts";
 
 export interface CanvasShortcutSpec {
   id: CanvasShortcutId;
@@ -18,12 +22,14 @@ export interface CanvasShortcutSpec {
 }
 
 /**
- * 面板展示顺序即本数组顺序。只列 S1 已生效键:缩放按键(Ctrl+加减号)归 S4(看板 #22),
- * S1 不列、不宣称已生效;鼠标缩放走 React Flow 原生 <Controls>。
+ * 面板展示顺序即本数组顺序。只列已生效键:缩放按键(Ctrl+加减号)归 S4(看板 #22),
+ * 不列;鼠标缩放走 React Flow 原生 <Controls>。整理画布(Alt+Shift+F)由 CanvasBoard 的
+ * shouldTidyCanvas 处理,不走 matchCanvasShortcut(同 pan-canvas 由 RF 接管),仅在此展示。
  */
 export const CANVAS_VIEW_SHORTCUTS: CanvasShortcutSpec[] = [
   { id: "pan-canvas", keys: "Space + 拖动", label: "拖动画布 · Pan canvas" },
   { id: "fit-view", keys: "Ctrl / ⌘ + 0", label: "适应视图 · Fit view" },
+  { id: "tidy-canvas", keys: "Alt + Shift + F", label: "整理画布 · Tidy layout" },
   { id: "toggle-shortcuts", keys: "?", label: "快捷键面板 · Shortcuts" },
 ];
 

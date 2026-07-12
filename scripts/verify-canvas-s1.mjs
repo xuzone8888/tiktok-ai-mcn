@@ -277,7 +277,7 @@ async function main() {
   eq(matchCanvasShortcut({ key: "a" }), null, "普通键不匹配");
   eq(matchCanvasShortcut({ key: "z", ctrlKey: true }), null, "Ctrl+Z(撤销)不匹配(S4 接缝)");
   eq(matchCanvasShortcut({ key: "d", ctrlKey: true }), null, "Ctrl+D(复制)不匹配(S4 接缝)");
-  eq(CANVAS_VIEW_SHORTCUTS.length, 3, "面板列 3 条已生效视图键(缩放键归 S4,不列)");
+  eq(CANVAS_VIEW_SHORTCUTS.length, 4, "面板列 4 条已生效键(Space/Ctrl+0/Alt+Shift+F 整理/?;缩放键归 S4 不列)");
 
   console.log(`\n结果:${passed} 通过,${failed} 失败`);
   if (failed > 0) {

@@ -37,7 +37,10 @@ import {
   type CreateCanvasNodeInput,
   type LoadCanvasResult,
 } from "@/lib/canvas/schema";
-import { collectNodePositionUpdates } from "@/lib/canvas/rf-adapter";
+import {
+  collectNodePositionUpdates,
+  type CanvasNodePositionUpdate,
+} from "@/lib/canvas/rf-adapter";
 
 /** 连线入参(与 React Flow Connection 兼容,但 store 不依赖 RF 类型)。 */
 export interface CanvasConnection {
@@ -125,6 +128,11 @@ export interface CanvasStoreActions {
   removeBrokenNode: (id: string) => void;
   /** React Flow 节点变更回写:只取 position,其余视图变更丢弃;只读时忽略。 */
   applyNodePositionChanges: (changes: NodeChange[]) => void;
+  /**
+   * 批量写节点 position(S5 整理画布用):一次原子 set 只改 position,只读时忽略;
+   * 绝不触碰 RF 视图字段或 viewport。
+   */
+  applyNodePositions: (updates: CanvasNodePositionUpdate[]) => void;
   setReadOnly: (readOnly: boolean) => void;
   setEdgesHidden: (hidden: boolean) => void;
   toggleEdgesHidden: () => void;
@@ -362,6 +370,37 @@ export const useCanvasStore = create<CanvasStore>()(
           },
           false,
           "canvas/applyNodePositionChanges"
+        );
+      },
+
+      applyNodePositions: (updates) => {
+        if (get().readOnly) return;
+        if (!Array.isArray(updates) || updates.length === 0) return;
+        // 公共写入口,不盲信布局输入:只接受 id 为非空字符串、x/y 有限的更新;
+        // NaN/Infinity/非法 id 一律丢弃,绝不污染领域 doc。
+        const byId = new Map<string, { x: number; y: number }>();
+        for (const update of updates) {
+          if (!update || typeof update.id !== "string" || update.id === "") continue;
+          const position = update.position;
+          if (
+            !position ||
+            !Number.isFinite(position.x) ||
+            !Number.isFinite(position.y)
+          ) {
+            continue;
+          }
+          byId.set(update.id, { x: position.x, y: position.y });
+        }
+        if (byId.size === 0) return;
+        set(
+          (state) => {
+            for (const node of state.nodes) {
+              const position = byId.get(node.id);
+              if (position) node.position = { x: position.x, y: position.y };
+            }
+          },
+          false,
+          "canvas/applyNodePositions"
         );
       },
 

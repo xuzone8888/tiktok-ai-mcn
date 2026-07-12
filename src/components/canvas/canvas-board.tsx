@@ -1,7 +1,10 @@
 "use client";
 
 /**
- * 超级画布 · 底盘(P0 · S1 + S2)
+ * 超级画布 · 底盘(P0 · S1–S3 + S5)
+ *
+ * S5:真空画布显示 4 起点引导(CanvasEmptyState),底部工具栏(CanvasBottomToolbar,看板 7 入口、
+ * P0 点亮添加节点/快捷键),Alt+Shift+F 整理画布(dagre LR 纯布局 → applyNodePositions → fitView)。
  *
  * 视图/领域分层(硬约束):领域真相 = canvas-store 的 nodes/edges(无任何 RF 视图字段);
  * 视图态 = 本组件本地 ephemeral viewNodes/viewEdges。onNodesChange 先 applyNodeChanges 更新
@@ -60,6 +63,10 @@ import {
   useCanvasStore,
 } from "@/stores/canvas-store";
 
+import { CanvasBottomToolbar } from "./canvas-bottom-toolbar";
+import { shouldShowEmptyState } from "./canvas-chrome-policy";
+import { CanvasEmptyState } from "./canvas-empty-state";
+import { layoutCanvasNodes } from "./canvas-layout";
 import { CanvasToolbar } from "./canvas-toolbar";
 import { canvasNodeTypes } from "./node-registry";
 import { ConnectNodeMenu } from "./connect-menu";
@@ -67,7 +74,11 @@ import { NodePalette } from "./node-palette";
 import { ShortcutPanel } from "./shortcut-panel";
 import { uploadCanvasFile } from "./canvas-upload";
 import { useCanvasShortcuts } from "./use-canvas-shortcuts";
-import { CANVAS_INTERACTIVE_FOCUS_SELECTOR, shouldTabCreateNode } from "./tab-create-policy";
+import {
+  CANVAS_INTERACTIVE_FOCUS_SELECTOR,
+  shouldTabCreateNode,
+  shouldTidyCanvas,
+} from "./tab-create-policy";
 
 const GRID_SIZE = 16;
 const SNAP_GRID: [number, number] = [GRID_SIZE, GRID_SIZE];
@@ -104,9 +115,11 @@ export function CanvasBoard() {
   const addNode = useCanvasStore((state) => state.addNode);
   const addEdge = useCanvasStore((state) => state.addEdge);
   const addNodeAndEdge = useCanvasStore((state) => state.addNodeAndEdge);
-  const { screenToFlowPosition } = useReactFlow();
+  const applyNodePositions = useCanvasStore((state) => state.applyNodePositions);
+  const { screenToFlowPosition, fitView } = useReactFlow();
   const { resolvedTheme } = useTheme();
   const wrapperRef = useRef<HTMLDivElement>(null);
+  const fitRafRef = useRef<number | null>(null);
   const [shortcutOpen, setShortcutOpen] = useState(false);
   const [connectMenu, setConnectMenu] = useState<ConnectMenuState | null>(null);
 
@@ -122,6 +135,19 @@ export function CanvasBoard() {
     })
   );
 
+  // 整理后的 fitView:双 requestAnimationFrame 等提交(RF 依 reconcile 重排后)→ fitView。
+  // 由 tidyCanvas 在 applyNodePositions 后直接调用,内部先 cancel 旧帧;不依赖 domainNodes effect,
+  // 故重复整理(布局与现状相同、immer 不发状态变化)也重新框选。持有 raf id,unmount 时 cancel。
+  const scheduleFit = useCallback(() => {
+    if (fitRafRef.current !== null) cancelAnimationFrame(fitRafRef.current);
+    fitRafRef.current = requestAnimationFrame(() => {
+      fitRafRef.current = requestAnimationFrame(() => {
+        fitRafRef.current = null;
+        void fitView({ duration: 400, padding: 0.2 });
+      });
+    });
+  }, [fitView]);
+
   useEffect(() => {
     useCanvasStore.getState().initializeEmptyDoc();
   }, []);
@@ -131,6 +157,13 @@ export function CanvasBoard() {
       ...toBrokenReactFlowNodes(brokenNodes),
     ]);
   }, [domainNodes, brokenNodes]);
+  // 卸载时取消未跑的 fitView(fitView 绝不在卸载后跑)。
+  useEffect(
+    () => () => {
+      if (fitRafRef.current !== null) cancelAnimationFrame(fitRafRef.current);
+    },
+    []
+  );
   useEffect(() => {
     setViewEdges((previous) =>
       reconcileReactFlowEdges(previous, domainEdges, { hidden: edgesHidden })
@@ -215,6 +248,51 @@ export function CanvasBoard() {
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [createNodeAtCenter]);
+
+  // S5 整理画布:纯 dagre LR 布局 → applyNodePositions(只写 position)→ fitView。
+  const tidyCanvas = useCallback(() => {
+    const state = useCanvasStore.getState();
+    if (state.readOnly) return;
+    const updates = layoutCanvasNodes(state.nodes, state.edges);
+    if (updates.length === 0) return;
+    applyNodePositions(updates);
+    // 直接调度 fitView(双 rAF 等提交);不经 pendingFit/effect,重复整理也框选。
+    scheduleFit();
+  }, [applyNodePositions, scheduleFit]);
+
+  // Alt+Shift+F → 整理画布:仅画布上下文、焦点非交互控件、非只读时生效。
+  useEffect(() => {
+    const handler = (event: KeyboardEvent) => {
+      if (event.code !== "KeyF" || !event.altKey || !event.shiftKey) return;
+      const target = event.target instanceof HTMLElement ? event.target : null;
+      const wrapper = wrapperRef.current;
+      const inCanvasContext =
+        target === null ||
+        target === document.body ||
+        target === document.documentElement ||
+        (!!wrapper && (target === wrapper || wrapper.contains(target)));
+      const targetInteractive =
+        !!target && target.closest(CANVAS_INTERACTIVE_FOCUS_SELECTOR) !== null;
+      if (
+        !shouldTidyCanvas({
+          code: event.code,
+          altKey: event.altKey,
+          shiftKey: event.shiftKey,
+          ctrlKey: event.ctrlKey,
+          metaKey: event.metaKey,
+          targetInteractive,
+          inCanvasContext,
+          readOnly: useCanvasStore.getState().readOnly,
+        })
+      ) {
+        return;
+      }
+      event.preventDefault();
+      tidyCanvas();
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [tidyCanvas]);
 
   // 3) 拖入文件 → 上传(只取 object key)→ 建图片/视频节点
   const onDragOver = useCallback(
@@ -350,7 +428,15 @@ export function CanvasBoard() {
         )}
         <NodePalette onCreate={createNodeAtCenter} disabled={readOnly} />
         <CanvasToolbar onOpenShortcuts={() => setShortcutOpen(true)} />
+        <CanvasBottomToolbar
+          onCreate={createNodeAtCenter}
+          onOpenShortcuts={() => setShortcutOpen(true)}
+          disabled={readOnly}
+        />
       </ReactFlow>
+      {shouldShowEmptyState(domainNodes.length, brokenNodes.length) && (
+        <CanvasEmptyState onCreate={createNodeAtCenter} disabled={readOnly} />
+      )}
       {connectMenu && (
         <ConnectNodeMenu
           x={connectMenu.x}
