@@ -9,8 +9,8 @@
 
 | 任务 | 窗口 | 状态 | 依赖 |
 |---|---|---|---|
-| D1 canvases 表迁移+文档体积闸 | data | 待认领 | 无(第一个做) |
-| D2 zod schema+迁移注册表+坏档降级 | data | 待认领 | D1 |
+| D1 canvases 表迁移+文档体积闸 | data | ✅ 审核通过(合流 2026-07-12) | 无(第一个做) |
+| D2 zod schema+迁移注册表+坏档降级 | data | ✅ 审核通过(合流 2026-07-12) | D1 |
 | D3 文档存取 API+补丁保存协议 | data | 待认领 | D1、D2 |
 | D4 IndexedDB 影子副本 | data | 待认领 | D3 |
 | D5 单写者锁 | data | 待认领 | D1 |
@@ -32,7 +32,7 @@
 **负责**:`supabase/migrations/`、`src/lib/canvas/`(新建目录,含 schema.ts=双窗口共享合约)、`src/app/api/canvas/`。**接口先行纪律:D2 的 schema.ts 最先落地并 commit,shell 窗口 rebase 消费。**
 
 - **D1 canvases 表迁移 + 文档体积闸**(DDL 全文照抄 [SUPER_CANVAS_DATA_MODEL.md](./SUPER_CANVAS_DATA_MODEL.md) §六,迁移文件 `20260714_canvases.sql`;SQL 落盘由用户经 dashboard 执行,本地先写 runner 脚本+语法自校)
-  - ✅ canvases 文档 schema(#27:本任务建 jsonb 表[拓扑+引用+schemaVersion+deps];doc 结构 zod 定义归 D2,二者合成同一功能点)
+  - ✅ canvases 文档 schema(#27:本任务建表——`doc` jsonb 只存拓扑+引用[nodes/edges/groups],`schema_version`/`deps` 是独立 DB 列非 doc 内嵌;doc 结构 zod 定义归 D2,二者合成同一功能点)
   - ✅ 文档 >512KB 软告警(#29 数据半:doc_bytes 列 + 512KB 阈值;不拒存,横幅 UI 在 S7)
   - ✅ 文档 >2MB 硬拒存(#47 数据半:2MB 阈值;硬拒逻辑在 D3 API 返 400,拒存 toast 在 S7)
 - **D2 zod schema + 迁移注册表 + 坏档降级(数据面)**(`src/lib/canvas/schema.ts`:doc/node/edge/group 的 zod v1 + refs 引用约定 + deps 结构;此文件是 shell/data 共享合约)
@@ -122,6 +122,11 @@
 - **裁决 2·shell 管辖例外 + store 架构约定**:批准 shell 窗口**唯一**跨界管辖 `src/stores/canvas-store.ts`(其余仍限 `src/app/(canvas)/`+`src/components/canvas/`)。约定(强制):store = **devtools + immer**;**严禁 `persist` 画布文档**(文档持久化归 D3 API + D4 IndexedDB 影子,store 只持运行态);**持久化域节点(schema/canvases.doc)与 React Flow 视图节点由 `rf-adapter` 严格分层**,两者禁止直接互相赋值/透传。
 - **裁决 3·P0/P1 执行上下文边界**:**P0 `/canvas` 不挂 BTM**(background-task-manager),P0 不接任何生成;**P1 接生成前置验收**:BTM/执行上下文接入(节点状态机经 generations 对账、乐观 UI)必须先过验收再开 P1 生成链——列为 P0→P1 交接硬门。
 - **裁决 4·S1 依赖范围**:**S1 只加 `@xyflow/react`**(React Flow 底盘);`dagre`(自动布局依赖)**延到 S5**(#8「整理画布自动布局」本就属 S5),S1 不引入,避免 P0 早期依赖膨胀。
+- **裁决 5·D2 schema 消费合约(shell 接线,D1/D2 已合流固化,S1/S3/S7 遵照)**:`src/lib/canvas/schema.ts` 已落地(强 strict + 容错 `loadCanvasDoc`),shell 接线三条硬约束:
+  1. **`loadCanvasDoc(...).recoveryRequired === true` 时必须阻止 autosave**(迁移未完成 / 存在 broken 节点或连线 / 危险 params);未清理前保存会把坏档写回,禁止。
+  2. **broken 实体(`brokenNodes`/`brokenEdges`)由 S3 显式处理**(占位卡 + 用户删除/修复)**后才能解除保存阻断**;S3 消费 D2 的 broken 标记渲染占位卡,不得静默丢弃。
+  3. **不得持久化 React Flow 视图字段**(selected/dragging/measured/width/…):写库前经 `rf-adapter` 把 RF 节点降回域节点;`CanvasNodeSchema` 用 `strictObject` 会**直接拒绝**任何 RF view 字段入库(裁决 2 的 rf-adapter 分层由此强制)。
+  - 补充:节点级补丁 / op-log 保存协议归 **D3**(schema.ts 仅提供 `CanvasRevisionSchema` 的 rev CAS 原语,未臆造 op-log);envelope(`schemaVersion`+`doc`+`deps`)仅用于 API/导出组合,**禁止写回 `doc` jsonb 列**。
 
 ## 待裁决问题区(P0 开工前/相应任务前必须裁决,勿擅改 CHECKLIST)
 
@@ -165,7 +170,7 @@ D1→D2(schema.ts 落地)→ S1/S3 与 D3-D6 并行 → S2/S4/S5 → S6/S7/S8 �
 | 24 | 自动保存=节点级补丁(op log),非重叠自动 rebase | D3 |
 | 25 | IndexedDB 影子副本 + shadow>server 一键恢复 | D4 |
 | 26 | 单写者锁(navigator.locks)+ 双标签第二个只读+横幅 | D5+S7 |
-| 27 | canvases 文档 schema(jsonb 拓扑+引用+schemaVersion+deps 依赖清单字段) | D1+D2 |
+| 27 | canvases 文档 schema(doc jsonb=拓扑+引用;schema_version/deps 独立列) | D1+D2 |
 | 28 | 禁存 dataURL/签名 URL,只存 OSS object key(渲染层换签名 URL+内存缓存) | D2+S6 |
 | 29 | 文档 >512KB 软告警建议拆画布 | D1+S7 |
 | 30 | 断网 30s 恢复自动补存 | D3 |

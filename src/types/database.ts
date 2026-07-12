@@ -386,6 +386,66 @@ export interface Database {
       };
 
       // -----------------------------------------------------------------------
+      // Canvases 表(超级画布文档;20260714_canvases.sql,P0)
+      // doc 只含 nodes/edges/groups;schema_version、deps 是独立列(非 doc 内嵌)。
+      // -----------------------------------------------------------------------
+      canvases: {
+        Row: {
+          id: string;
+          user_id: string;
+          title: string;
+          schema_version: number;
+          doc: Json;
+          deps: Json;
+          rev: number;
+          writer_tag: string | null;
+          writer_heartbeat_at: string | null;
+          doc_bytes: number | null;
+          share_slug: string | null;
+          status: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          title?: string;
+          schema_version?: number;
+          doc?: Json;
+          deps?: Json;
+          rev?: number;
+          writer_tag?: string | null;
+          writer_heartbeat_at?: string | null;
+          doc_bytes?: number | null;
+          share_slug?: string | null;
+          status?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          title?: string;
+          schema_version?: number;
+          doc?: Json;
+          deps?: Json;
+          rev?: number;
+          writer_tag?: string | null;
+          writer_heartbeat_at?: string | null;
+          doc_bytes?: number | null;
+          share_slug?: string | null;
+          status?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "canvases_user_id_fkey";
+            columns: ["user_id"];
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
+
+      // -----------------------------------------------------------------------
       // Credit Transactions 表
       // -----------------------------------------------------------------------
       credit_transactions: {

@@ -44,7 +44,7 @@
 | 连线后上游产物自动进下游生成器引用区(缩略图带序号) | 对标(五轮实弹新录) | 做 | P1 | 新建 S(生成器面板读上游 refs) | 五轮实弹:LibTV 新建下游节点(⊕菜单)同样自动连线+带引用;连线即引用是画布核心语义 |
 | IndexedDB 影子副本 + shadow>server 一键恢复 | 独有 | 做 | P0 | 新建 M | 不占 localStorage 5MB 配额 |
 | 单写者锁(navigator.locks)+ 双标签第二个只读+横幅 | 独有 | 做 | P0 | 新建 M | ADR3,P0 交付不许推迟 |
-| canvases 文档 schema(jsonb 拓扑+引用+schemaVersion+deps 依赖清单字段) | 独有 | 做 | P0 | 新建 M(新表迁移) | deps=模型/音色/角色/配方 ID,v1 即有字段可空 |
+| canvases 文档 schema(doc jsonb=拓扑+引用;schema_version/deps 独立列) | 独有 | 做 | P0 | 新建 M(新表迁移) | doc 只含 nodes/edges/groups;schema_version 与 deps(模型/音色/角色/配方 ID,v1 即有字段可空)是独立 DB 列,非 doc 内嵌;transport envelope 才组合三者 |
 | 禁存 dataURL/签名 URL,只存 OSS object key(渲染层换签名 URL+内存缓存) | 独有 | 做 | P0 | 新建 S | ADR5 红线 |
 | 文档 >512KB 软告警建议拆画布 | 独有 | 做 | P0 | 新建 S | P0-Q1 已裁(2026-07-12):512KB=软告警(不拒存,S7 横幅);硬拒在 >2MB(见 G 组) |
 | 断网 30s 恢复自动补存 | 独有 | 做 | P0 | 新建 S | P0 验收模板项 |

@@ -40,7 +40,7 @@
 2. **执行留在现有链路,画布只是编排视图**。铁律:**双轨期画布零 fork 任何 API/执行器/store 原语,出现"必须 fork"即停手上会。**明确:BTM 是**浏览器内**编排器(不是服务端),画布沿用之;**节点执行状态唯一真相源 = 服务端 generations 表**,画布文档只存 `nodeId→taskId/generationId` 引用,BTM 写回仅作乐观 UI。
 3. **单写者**:同一画布任一时刻仅一个写者标签(navigator.locks,P0 交付不许推迟),其余标签只读+横幅。
 4. **统一对账合约(P1 前置交付物)**:每类节点注册 `{jobKey, fetchStatus(jobKey), pollInterval, terminalTimeout}`;触发点=画布加载/visibilitychange 回前台/手动刷新;超时判死必触发幂等退款。验收:提交后 kill 标签→重开→状态收敛到服务端真值。
-5. **画布文档 schema**:`canvases` 表,jsonb 存**拓扑+引用**(nodes/edges/groups + schemaVersion + deps 依赖清单[模型/音色/角色/配方 ID,v1 即有字段可空]);**禁存 dataURL/签名 URL,只存 OSS object key**(渲染层换签名 URL+内存缓存);文档 >2MB 硬拒存并提示、>512KB 软告警建议拆画布(P0-Q1 已裁 2026-07-12:告警须早于硬闸);保存=节点级补丁(op log),非重叠自动 rebase;本地影子副本用 IndexedDB(不占 localStorage 5MB 配额),重载 shadow>server 提示一键恢复。
+5. **画布文档 schema**:`canvases` 表,**`doc` jsonb 只存拓扑+引用**(nodes/edges/groups);**`schema_version` 与 `deps` 依赖清单[模型/音色/角色/配方 ID,v1 即有字段可空]是独立 DB 列,非 doc 内嵌**——API/导出的 transport envelope 才组合三者,写库时禁止把 envelope 写回 doc;**禁存 dataURL/签名 URL,只存 OSS object key**(渲染层换签名 URL+内存缓存);文档 >2MB 硬拒存并提示、>512KB 软告警建议拆画布(P0-Q1 已裁 2026-07-12:告警须早于硬闸);保存=节点级补丁(op log),非重叠自动 rebase;本地影子副本用 IndexedDB(不占 localStorage 5MB 配额),重载 shadow>server 提示一键恢复。
 6. **坏档防御**:加载走 zod 校验,非法节点降级为「损坏节点」占位卡(可删),**永不整画布白屏**;迁移注册表(v1→v2→…),「上一 schema 版本文档能打开」进 DoD。LibTV 实测崩过 React #185——错误边界+恢复按钮照抄,并加 store 层防护(见 §七 性能预算)。
 7. **合成/批量类重任务一律 DB 排队**(local-stitch 并发闸=2、3.4G 小机),节点显示排队位,禁止 fail-fast 报错甩用户。
 8. **路由**:新 `/canvas`(P0 起),不动 `/studio`。**omnibox 长期保留为轻量快捷入口,画布只收编多节点编排型链路;幻灯片/图文帖明确不进画布 v1**。三库同源(积分/角色/历史),画布「从历史选择」直读现有 generations/assets/blueprints,不建平行表。
@@ -112,7 +112,7 @@
 
 | 期 | 内容 | 关键验收 |
 |---|---|---|
-| **P0 画布骨架**(内部) | React Flow 壳/**canvases 表迁移(20260714)**/6 类节点空壳(可创建连线占位,不接生成)/双击+Tab/连线/成组/隐藏连线/上传+历史直读现有表/自动保存(补丁+IndexedDB 影子)/单写者锁/zod+schemaVersion+deps 字段/错误边界/快捷键面板/空态(P0 仅建节点引导)/1366×768 | P0 模板 7 项+性能预算数值 |
+| **P0 画布骨架**(内部) | React Flow 壳/**canvases 表迁移(20260714)**/6 类节点空壳(可创建连线占位,不接生成)/双击+Tab/连线/成组/隐藏连线/上传+历史直读现有表/自动保存(补丁+IndexedDB 影子)/单写者锁/zod schema+schema_version·deps 独立列/错误边界/快捷键面板/空态(P0 仅建节点引导)/1366×768 | P0 模板 7 项+性能预算数值 |
 | **P1 生成接入**(首个灰度) | 图片/视频节点真出片(经 BTM+网关零改动)/**商品节点轻量版**(上传图+文本→卖点卡)/**商品多角度 nine_grid 露出**/**直发 TikTok 产物动作+自动 AIGC 标注**/费用汇总条/积分框架 5 件(§八)/统一对账合约/首次教程(电商版) | 「上传图→图生视频→下载/直发」+P1 模板 6 项+黄金旅程 A ≤7 步(单视频收口) |
 | **P2 脚本节点+资产装配**(剧情创作) | **双轨迁移第一批(canvas_assets 表+blueprints story/assets 列+source_type story_script+render_mode storyboard)**/剧本节点(文本 story_brief 变体)/蓝图画布宿主三步向导+9 维度分镜表(按轨列显隐+行拖拽排序)/资产装配(三类+黄金 prompt 模板+全局风格+多版本+门控软化)/**剧情分镜编排段(P2 第一子任务,最大技术风险)**/导演引擎两段式/批量生图先落库排队+批量生视频(先试 3 镜+失败分型)+批次进度面板/生成音频开关(价目结论前置)/教程(剧情创作版)+批量记账 | P2 模板 3 项+黄金旅程 B ≤9 步 |
 | **P3 编排完善** | 商品链接解析/合成节点 DB 排队/成组存工作流(与配方分工:配方=内容参数模板留 /templates,工作流=结构模板,互不越界)/分享 v1(只读链接+复制+依赖清单校验)/hold_settle 启用评估 | P3 模板 4 项+收编判据开始计数 |
