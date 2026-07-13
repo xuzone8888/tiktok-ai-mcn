@@ -26,6 +26,14 @@ import {
 } from "./schema";
 import { applyPatch, coalesce, deepEqual, type CanvasOp, type CanvasPatchConflict } from "./patch";
 import { checkDocSize, computeDocBytes, type DocSizeResult } from "./doc-limits";
+import {
+  authorizeWriterPatch,
+  CANVAS_WRITER_TAG_RE,
+  WRITER_HEARTBEAT_MS,
+  WRITER_LEASE_MS,
+  type StoredWriterState,
+} from "./writer-lock";
+import { CANVAS_WRITER_ACTIONS } from "./api-types";
 import type {
   CanvasApiErrorDetails,
   CanvasEnvelopeWithMeta,
@@ -33,6 +41,9 @@ import type {
   CanvasSizeWarning,
   CanvasTolerantEnvelope,
   CanvasTolerantEnvelopeWithMeta,
+  CanvasWriterAction,
+  CanvasWriterInfo,
+  CanvasWriterLeaseData,
 } from "./api-types";
 
 /** 画布 id 必须是 UUID(表主键 gen_random_uuid);非 UUID 直接 INVALID_ID,避免打空查询。 */
@@ -52,18 +63,86 @@ export const CanvasCreateRequestSchema = z.strictObject({
 });
 export type CanvasCreateRequest = z.infer<typeof CanvasCreateRequestSchema>;
 
+/** 单写者 tag 严格契约(D5):`[A-Za-z0-9_-]{8,128}`,可安全内插 PostgREST `.or()` 过滤。 */
+export const CanvasWriterTagSchema = z
+  .string()
+  .regex(CANVAS_WRITER_TAG_RE, "writer tag 非法(需 [A-Za-z0-9_-]{8,128})");
+
 /**
- * PATCH /api/canvas/[id] **顶层**严格契约(第一阶段):只允许 baseRev/ops/title/deps,
- * 拒非对象/未知顶层字段/title 超长(→ INVALID_BODY)。`ops` 在此仅收为 unknown,
- * **结构校验留第二阶段** CanvasOpsArraySchema,使 op 非法回稳定的 INVALID_OPS 而非 INVALID_BODY。
+ * **决策层**宽松 PATCH body(writerTag 可选)。`ops` 在此仅收为 unknown,**结构校验留第二阶段**
+ * CanvasOpsArraySchema,使 op 非法回稳定的 INVALID_OPS 而非 INVALID_BODY。
+ * writerTag 可选以镜像纯决策 {@link decidePatch} 的旧行为(D1–D4 单测不带 tag 仍走 legacy 分支)。
+ * **注意:这不是生产路由用的 schema**——真实 PATCH 路由用 {@link CanvasPatchWriteBodySchema}
+ * (强制 writerTag);本 schema 仅供决策层/纯 helper 单测,勿在任何 route 直接消费,以免绕过 D5。
  */
 export const CanvasPatchBodySchema = z.strictObject({
   baseRev: CanvasRevisionSchema,
   ops: z.unknown().optional(),
   title: z.string().max(200).optional(),
   deps: CanvasDepsSchema.optional(),
+  writerTag: CanvasWriterTagSchema.optional(),
 });
 export type CanvasPatchBody = z.infer<typeof CanvasPatchBodySchema>;
+
+/**
+ * PATCH /api/canvas/[id] **生产** write 请求体(D5 收紧,真实路由第一阶段解析用此)。
+ * 与 {@link CanvasPatchBodySchema} 唯一差异:**强制 writerTag**——P0 单写者安全边界要求任何
+ * 文档写都必须持合法写者标签,杜绝无 tag 绕过单写者门禁。缺 tag / tag 非法 / 未知顶层字段
+ * 一律 → INVALID_BODY;`ops` 仍留第二阶段结构校验(INVALID_OPS)。
+ * (纯决策 decidePatch 仍容忍省略 writerTag,仅供旧单测;真实 route/schema 永不无 tag 写。)
+ */
+export const CanvasPatchWriteBodySchema = z.strictObject({
+  baseRev: CanvasRevisionSchema,
+  ops: z.unknown().optional(),
+  title: z.string().max(200).optional(),
+  deps: CanvasDepsSchema.optional(),
+  writerTag: CanvasWriterTagSchema,
+});
+export type CanvasPatchWriteBody = z.infer<typeof CanvasPatchWriteBodySchema>;
+
+/** POST /api/canvas/[id]/writer 请求体严格契约(D5):只允许 writerTag/action,拒未知字段。 */
+export const CanvasWriterRequestSchema = z.strictObject({
+  writerTag: CanvasWriterTagSchema,
+  action: z.enum(CANVAS_WRITER_ACTIONS),
+});
+export type CanvasWriterRequest = z.infer<typeof CanvasWriterRequestSchema>;
+
+/**
+ * 组装 writer 路由成功响应体(claim/heartbeat/release 共用)。`row` 为动作后**权威**
+ * 写者列(release 清空后为 {null,null});`holding` = 本 tag 动作后是否持锁。
+ */
+export function buildWriterLeaseData(
+  action: CanvasWriterAction,
+  holding: boolean,
+  tag: string,
+  row: StoredWriterState,
+  serverNowIso: string
+): CanvasWriterLeaseData {
+  return {
+    action,
+    holding,
+    tag,
+    writer: { tag: row.writerTag ?? null, heartbeatAt: row.writerHeartbeatAt ?? null },
+    leaseMs: WRITER_LEASE_MS,
+    heartbeatMs: WRITER_HEARTBEAT_MS,
+    serverNow: serverNowIso,
+  };
+}
+
+/** WRITER_LOCKED 错误 details(供 S7 只读横幅展示当前持有者 + 租约预算)。 */
+export function writerLockedDetails(
+  writer: CanvasWriterInfo,
+  serverNowIso: string,
+  serverRev?: number
+): CanvasApiErrorDetails {
+  return {
+    writer,
+    leaseMs: WRITER_LEASE_MS,
+    heartbeatMs: WRITER_HEARTBEAT_MS,
+    serverNow: serverNowIso,
+    ...(serverRev !== undefined ? { serverRev } : {}),
+  };
+}
 
 export function sanitizeCanvasTitle(raw: unknown, fallback = CANVAS_DEFAULT_TITLE): string {
   if (typeof raw !== "string") return fallback;
@@ -245,6 +324,22 @@ export interface DecidePatchInput {
   ops: CanvasOp[];
   title?: string;
   deps?: CanvasDeps;
+  /**
+   * 单写者门禁(D5):
+   *   - `writerTag` 省略 → 不做门禁(D1–D4 旧行为,契约不回归);
+   *   - 给了 → 必须精确匹配 `storedWriter.writerTag` 才放行,否则 `kind:"locked"`(→ WRITER_LOCKED)。
+   * 最终原子安全由路由 UPDATE 的 `writer_tag=:tag AND rev=:baseRev` 兜底;本门禁是读行后快速失败。
+   */
+  writerTag?: string;
+  storedWriter?: StoredWriterState;
+  /** 锁冲突响应里的 serverNow(路由传入,保持 decidePatch 纯净不读时钟)。 */
+  nowIso?: string;
+  /**
+   * 单写者门禁判活跃租约用的当前时刻(ms)。路由每个 CAS attempt 传入,与 UPDATE 的
+   * `.gte("writer_heartbeat_at", now-lease)` 用同一 now,读门禁与原子写门禁逐毫秒一致。
+   * 缺失/非有限 → {@link authorizeWriterPatch} fail-closed(→ WRITER_LOCKED)。
+   */
+  nowMs?: number;
 }
 
 export type PatchDecision =
@@ -256,6 +351,7 @@ export type PatchDecision =
     }
   | { kind: "conflict"; message: string; details: CanvasApiErrorDetails }
   | { kind: "invalid"; message: string; details: CanvasApiErrorDetails }
+  | { kind: "locked"; message: string; details: CanvasApiErrorDetails }
   | { kind: "too_large"; message: string }
   | {
       kind: "noop";
@@ -287,6 +383,34 @@ export type PatchDecision =
  * reload/conflict/invalid/too_large → 相应错误码;noop → 不写库回当前态;write → CAS 写。
  */
 export function decidePatch(input: DecidePatchInput): PatchDecision {
+  // ⓪ 单写者门禁(D5,仅当客户端带 writerTag):**非活跃同 tag** → 直接 WRITER_LOCKED,
+  //    不泄露文档健康/内容,也不浪费补丁计算。放最前:非活跃写者本就不该写,与文档状态无关。
+  //    活跃 = 合法同 tag 且心跳在 lease(30s)内未过期;过期同 tag 也拒(不得经 PATCH 顺手复活,
+  //    须先走 writer 路由续租)。与 rev 冲突严格可区分(kind:"locked" → 409 WRITER_LOCKED,
+  //    而非 REV_CONFLICT/ENTITY_CONFLICT)。最终原子安全由路由 UPDATE 的
+  //    `writer_tag=:tag AND writer_heartbeat_at>=now-lease AND rev=:baseRev` 三谓词兜底。
+  if (input.writerTag !== undefined) {
+    const storedWriter: StoredWriterState = input.storedWriter ?? {
+      writerTag: null,
+      writerHeartbeatAt: null,
+    };
+    if (!authorizeWriterPatch(storedWriter, input.writerTag, input.nowMs ?? Number.NaN)) {
+      const writer: CanvasWriterInfo = {
+        tag: storedWriter.writerTag,
+        heartbeatAt: storedWriter.writerHeartbeatAt,
+      };
+      return {
+        kind: "locked",
+        message: "画布正被另一个标签/设备编辑(单写者锁),已拒绝保存",
+        details: writerLockedDetails(
+          writer,
+          input.nowIso ?? "",
+          input.storedRev
+        ),
+      };
+    }
+  }
+
   const load = loadCanvasDoc(input.storedDoc, input.storedSchemaVersion);
   const depsView = parseDepsForTransport(input.storedDeps);
   const storedBytes = input.storedDocBytes ?? computeDocBytes(input.storedDoc);

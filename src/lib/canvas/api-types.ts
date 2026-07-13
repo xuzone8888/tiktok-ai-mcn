@@ -23,6 +23,7 @@ export const CANVAS_API_ERROR_CODES = [
   "NOT_FOUND", // 404 画布不存在或非属主(RLS 命中 0 行)
   "REV_CONFLICT", // 409 CAS 竞争耗尽 / baseRev 越前 / 库内文档损坏,需整包重载
   "ENTITY_CONFLICT", // 409 重叠补丁(目标实体已变化),附可诊断冲突清单
+  "WRITER_LOCKED", // 409 单写者锁被他标签/他设备持有(D5),写被拒;details.writer 供只读横幅
   "CANVAS_DOC_INVALID", // 422 应用后文档校验失败 / recoveryRequired / 危险值,绝不保存
   "INTERNAL", // 500 未预期错误
 ] as const;
@@ -39,6 +40,7 @@ export const CANVAS_API_ERROR_STATUS: Record<CanvasApiErrorCode, number> = {
   NOT_FOUND: 404,
   REV_CONFLICT: 409,
   ENTITY_CONFLICT: 409,
+  WRITER_LOCKED: 409,
   CANVAS_DOC_INVALID: 422,
   INTERNAL: 500,
 };
@@ -102,6 +104,12 @@ export interface CanvasApiErrorDetails {
   latest?: CanvasTolerantEnvelopeWithMeta;
   /** Broken-entity recovery payload — present when the stored doc needs recovery, so the client can render/repair placeholders instead of silently losing them. */
   recovery?: CanvasRecoveryReport;
+  /** WRITER_LOCKED (D5): the current single-writer holder so S7 can render "someone else is editing". */
+  writer?: CanvasWriterInfo;
+  /** WRITER_LOCKED (D5): server lease/heartbeat budgets + clock so the client can reason about when it might take over. */
+  leaseMs?: number;
+  heartbeatMs?: number;
+  serverNow?: string;
 }
 
 export interface CanvasApiSuccessBody<T> {
@@ -145,6 +153,26 @@ export type CanvasRecoveryReport = Omit<
 export interface CanvasWriterInfo {
   tag: string | null;
   heartbeatAt: string | null;
+}
+
+/** Single-writer actions the shell may take over the lease (D5). */
+export const CANVAS_WRITER_ACTIONS = ["claim", "heartbeat", "release"] as const;
+export type CanvasWriterAction = (typeof CANVAS_WRITER_ACTIONS)[number];
+
+/**
+ * POST /api/canvas/[id]/writer success payload (D5). One shape for claim/heartbeat/release:
+ * `holding` says whether the caller owns the lock after this action; `writer` is the
+ * authoritative DB bookkeeping; `serverNow` lets the client reason about lease expiry
+ * despite clock skew. A failed claim/heartbeat is a WRITER_LOCKED error, not this shape.
+ */
+export interface CanvasWriterLeaseData {
+  action: CanvasWriterAction;
+  holding: boolean;
+  tag: string;
+  writer: CanvasWriterInfo;
+  leaseMs: number;
+  heartbeatMs: number;
+  serverNow: string;
 }
 
 /** GET /api/canvas/[id] → clean envelope + full recovery payload + metadata. */

@@ -87,6 +87,7 @@ const {
   parseDepsForTransport,
   CanvasCreateRequestSchema,
   CanvasPatchBodySchema,
+  CanvasPatchWriteBodySchema,
 } = helpers;
 
 const parseOp = (raw) => CanvasOpSchema.parse(raw);
@@ -385,6 +386,7 @@ ok(deepEqual(parseStoredDeps({ models: ["m1"] }).models, ["m1"]), "parseStoredDe
     NOT_FOUND: 404,
     REV_CONFLICT: 409,
     ENTITY_CONFLICT: 409,
+    WRITER_LOCKED: 409, // D5 新增共享错误码:保持 D3 错误码↔状态表一一对应断言为绿
     CANVAS_DOC_INVALID: 422,
     INTERNAL: 500,
   };
@@ -519,17 +521,33 @@ ok(!CanvasCreateRequestSchema.safeParse({ foo: 1 }).success, "POST 未知顶层�
 ok(!CanvasCreateRequestSchema.safeParse({ title: "z".repeat(201) }).success, "POST title 超长被拒");
 
 // PATCH 顶层第一阶段:严格 known-key + title≤200;ops 结构留第二阶段(INVALID_OPS)。
-ok(CanvasPatchBodySchema.safeParse({ baseRev: 0 }).success, "PATCH baseRev 即合法(ops 可选)");
-ok(CanvasPatchBodySchema.safeParse({ baseRev: 3, ops: [], title: "x", deps: {} }).success, "PATCH 全字段合法");
-ok(CanvasPatchBodySchema.safeParse({ baseRev: 0, ops: "notarray" }).success, "PATCH 顶层不校验 ops 结构(留第二阶段 INVALID_OPS)");
-ok(!CanvasPatchBodySchema.safeParse({}).success, "PATCH 缺 baseRev 被拒(→INVALID_BODY)");
-ok(!CanvasPatchBodySchema.safeParse({ baseRev: -1 }).success, "PATCH baseRev 负数被拒");
-ok(!CanvasPatchBodySchema.safeParse({ baseRev: 1.5 }).success, "PATCH baseRev 非整被拒");
-ok(!CanvasPatchBodySchema.safeParse({ baseRev: 0, title: "z".repeat(201) }).success, "PATCH title 超长 → INVALID_BODY(不截断)");
-ok(!CanvasPatchBodySchema.safeParse([]).success, "PATCH 数组体被拒");
-ok(!CanvasPatchBodySchema.safeParse("x").success, "PATCH 基元体被拒");
-ok(!CanvasPatchBodySchema.safeParse({ baseRev: 0, foo: 1 }).success, "PATCH 未知顶层字段被拒");
-ok(!CanvasPatchBodySchema.safeParse({ baseRev: 0, deps: { models: [123] } }).success, "PATCH deps 非法被拒");
+// CanvasPatchBodySchema = **决策层宽松 body**(writerTag 可选,镜像 decidePatch 纯 helper 旧行为);
+// 生产 PATCH 路由用的是强制 writerTag 的 CanvasPatchWriteBodySchema(见本节末)。
+ok(CanvasPatchBodySchema.safeParse({ baseRev: 0 }).success, "决策层 body:baseRev 即合法(ops/writerTag 可选)");
+ok(CanvasPatchBodySchema.safeParse({ baseRev: 3, ops: [], title: "x", deps: {} }).success, "决策层 body:全字段(不含 writerTag)合法");
+ok(CanvasPatchBodySchema.safeParse({ baseRev: 0, ops: "notarray" }).success, "决策层 body:顶层不校验 ops 结构(留第二阶段 INVALID_OPS)");
+ok(!CanvasPatchBodySchema.safeParse({}).success, "决策层 body:缺 baseRev 被拒(→INVALID_BODY)");
+ok(!CanvasPatchBodySchema.safeParse({ baseRev: -1 }).success, "决策层 body:baseRev 负数被拒");
+ok(!CanvasPatchBodySchema.safeParse({ baseRev: 1.5 }).success, "决策层 body:baseRev 非整被拒");
+ok(!CanvasPatchBodySchema.safeParse({ baseRev: 0, title: "z".repeat(201) }).success, "决策层 body:title 超长 → INVALID_BODY(不截断)");
+ok(!CanvasPatchBodySchema.safeParse([]).success, "决策层 body:数组体被拒");
+ok(!CanvasPatchBodySchema.safeParse("x").success, "决策层 body:基元体被拒");
+ok(!CanvasPatchBodySchema.safeParse({ baseRev: 0, foo: 1 }).success, "决策层 body:未知顶层字段被拒");
+ok(!CanvasPatchBodySchema.safeParse({ baseRev: 0, deps: { models: [123] } }).success, "决策层 body:deps 非法被拒");
+
+// **生产** PATCH write body(CanvasPatchWriteBodySchema,真实路由用此):**强制 writerTag**——
+// P0 单写者安全边界:无 tag 写在解析层即被拦下(真实 route/schema 不得无 tag 写,杜绝绕过 D5)。
+{
+  const validTag = "writer_abcd1234"; // 合法 [A-Za-z0-9_-]{8,128}
+  ok(!CanvasPatchWriteBodySchema.safeParse({ baseRev: 0 }).success, "生产 body:缺 writerTag → 被拒(不得无 tag 写)");
+  ok(!CanvasPatchWriteBodySchema.safeParse({ baseRev: 3, ops: [], title: "x", deps: {} }).success, "生产 body:全字段但缺 writerTag → 被拒");
+  ok(CanvasPatchWriteBodySchema.safeParse({ baseRev: 0, writerTag: validTag }).success, "生产 body:带合法 writerTag → 合法");
+  ok(CanvasPatchWriteBodySchema.safeParse({ baseRev: 3, ops: [], title: "x", deps: {}, writerTag: validTag }).success, "生产 body:全字段(含 writerTag)→ 合法");
+  ok(!CanvasPatchWriteBodySchema.safeParse({ baseRev: 0, writerTag: "bad tag" }).success, "生产 body:非法 writerTag(含空格)→ 被拒");
+  ok(!CanvasPatchWriteBodySchema.safeParse({ baseRev: 0, writerTag: "short" }).success, "生产 body:过短 writerTag → 被拒");
+  ok(!CanvasPatchWriteBodySchema.safeParse({ baseRev: 0, writerTag: validTag, foo: 1 }).success, "生产 body:未知顶层字段 → 被拒(strict)");
+  ok(!CanvasPatchWriteBodySchema.safeParse({ baseRev: -1, writerTag: validTag }).success, "生产 body:baseRev 负数 → 被拒");
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 console.log("⑧ 离线队列状态机");
