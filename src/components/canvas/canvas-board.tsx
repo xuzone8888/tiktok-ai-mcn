@@ -52,7 +52,12 @@ import {
   toReactFlowEdges,
   toReactFlowNodes,
 } from "@/lib/canvas/rf-adapter";
-import type { CanvasNodeType, CanvasPosition } from "@/lib/canvas/schema";
+import type {
+  CanvasMedia,
+  CanvasNodeType,
+  CanvasPosition,
+} from "@/lib/canvas/schema";
+import type { HistoryItem } from "@/lib/canvas/history-client";
 import {
   useCanvasBrokenNodes,
   useCanvasEdges,
@@ -75,6 +80,7 @@ import { CanvasBatchDeleteDialog } from "./canvas-batch-delete-dialog";
 import { CanvasAsyncSession, runGuardedCanvasTask } from "./canvas-async-session";
 import { CanvasBottomToolbar } from "./canvas-bottom-toolbar";
 import { shouldShowEmptyState } from "./canvas-chrome-policy";
+import { CanvasHistoryPanel } from "./canvas-history-panel";
 import { CanvasEmptyState } from "./canvas-empty-state";
 import { layoutCanvasNodes } from "./canvas-layout";
 import { CanvasToolbar } from "./canvas-toolbar";
@@ -98,6 +104,18 @@ const GRID_SIZE = 16;
 const SNAP_GRID: [number, number] = [GRID_SIZE, GRID_SIZE];
 /** Ctrl+D 键盘复制的固定落点偏移(与网格对齐,避免与原节点完全重叠)。 */
 const DUPLICATE_OFFSET: CanvasPosition = { x: GRID_SIZE * 2, y: GRID_SIZE * 2 };
+// Stable media node footprint (flow units; nodes are sized in unzoomed flow
+// space) used to center an imported asset on its projected drop point.
+const MEDIA_NODE_WIDTH = 208;
+const MEDIA_NODE_HEIGHT = 156;
+// Bounded 3x3 screen-space offset table (px) around the wrapper center. A
+// deterministic start slot (by fresh node count) fans repeated imports out with
+// no unbounded diagonal; every target is clamped inside the wrapper.
+const HISTORY_OFFSET_AXIS = [-48, 0, 48] as const;
+const HISTORY_SCREEN_OFFSETS: readonly { dx: number; dy: number }[] =
+  HISTORY_OFFSET_AXIS.flatMap((dx) =>
+    HISTORY_OFFSET_AXIS.map((dy) => ({ dx, dy }))
+  );
 
 interface ConnectMenuState {
   x: number; // 容器内坐标(渲染菜单)
@@ -175,6 +193,7 @@ export function CanvasBoard({
   // 记录上一次小地图自动展开阈值状态,仅在跨越阈值时干预(不覆盖用户手动开关)。
   const minimapWideRef = useRef<boolean | null>(null);
   const [shortcutOpen, setShortcutOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [connectMenu, setConnectMenu] = useState<ConnectMenuState | null>(null);
   const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
 
@@ -380,6 +399,89 @@ export function CanvasBoard({
     },
     [viewportCenterFlow, createNodeAt]
   );
+
+  // Add a history asset to the canvas as an image/video node. Synchronous
+  // boolean: true only when addNode yields an id (the panel closes itself on
+  // true). Audio is browse-only; P0 has no independent audio node.
+  const handleAddHistoryAsset = useCallback(
+    (item: HistoryItem): boolean => {
+      // Gate on both the render closure AND the freshest store readOnly right
+      // before mutating, so a writer/identity/readOnly change landing between
+      // render and click cannot slip a write past the gate.
+      if (readOnly || !interactionActive) return false;
+      if (useCanvasStore.getState().readOnly) return false;
+      if (item.type !== "image" && item.type !== "video") return false;
+
+      const rect = wrapperRef.current?.getBoundingClientRect();
+      if (!rect) return false;
+      const store = useCanvasStore.getState();
+      // Bounded, deterministic, visible placement: start from a slot chosen by
+      // the fresh node count, walk the 3x3 screen-offset table around the
+      // wrapper center, clamp each target inside the wrapper, project it to
+      // flow, and center the stable media node on it (flow-unit half-size, so
+      // the center stays on-screen at any zoom). Use the first slot that does
+      // not land exactly on an existing node; fall back to the first slot.
+      const occupied = new Set(
+        store.nodes.map((node) => `${node.position.x},${node.position.y}`)
+      );
+      const startSlot = store.nodes.length % HISTORY_SCREEN_OFFSETS.length;
+      const centerX = rect.left + rect.width / 2;
+      const centerY = rect.top + rect.height / 2;
+      let firstCandidate: CanvasPosition | null = null;
+      let position: CanvasPosition | null = null;
+      for (let i = 0; i < HISTORY_SCREEN_OFFSETS.length; i += 1) {
+        const offset =
+          HISTORY_SCREEN_OFFSETS[
+            (startSlot + i) % HISTORY_SCREEN_OFFSETS.length
+          ];
+        const screenX = Math.min(
+          Math.max(centerX + offset.dx, rect.left),
+          rect.right
+        );
+        const screenY = Math.min(
+          Math.max(centerY + offset.dy, rect.top),
+          rect.bottom
+        );
+        const projected = screenToFlowPosition({ x: screenX, y: screenY });
+        const candidate: CanvasPosition = {
+          x: projected.x - MEDIA_NODE_WIDTH / 2,
+          y: projected.y - MEDIA_NODE_HEIGHT / 2,
+        };
+        if (firstCandidate === null) firstCandidate = candidate;
+        if (!occupied.has(`${candidate.x},${candidate.y}`)) {
+          position = candidate;
+          break;
+        }
+      }
+      position = position ?? firstCandidate;
+      if (!position) return false;
+
+      // Persist only the OSS object keys; never source/sourceId/URLs/metadata.
+      const media: CanvasMedia = { ossKey: item.objectKey };
+      if (item.posterKey) media.posterKey = item.posterKey;
+
+      const id = addNode({ type: item.type, position, data: { media } });
+      if (!id) {
+        toast({
+          title: "添加失败",
+          description: "无法将素材添加到画布",
+          variant: "destructive",
+        });
+        return false;
+      }
+      toast({ title: "已添加到画布" });
+      return true;
+    },
+    [addNode, interactionActive, readOnly, screenToFlowPosition]
+  );
+
+  // Opening the history panel is gated on both the render closure interaction
+  // state and the freshest store readOnly, never an unconditional setter.
+  const openHistory = useCallback(() => {
+    if (!interactionActive) return;
+    if (useCanvasStore.getState().readOnly) return;
+    setHistoryOpen(true);
+  }, [interactionActive]);
 
   // 1) 双击空白 → 指针处建默认文本节点(节点/控件上双击不触发)
   const onWrapperDoubleClick = useCallback(
@@ -729,6 +831,7 @@ export function CanvasBoard({
         <CanvasBottomToolbar
           onCreate={createNodeAtCenter}
           onOpenShortcuts={() => setShortcutOpen(true)}
+          onOpenHistory={openHistory}
           disabled={readOnly}
         />
       </ReactFlow>
@@ -753,6 +856,14 @@ export function CanvasBoard({
         }}
       />
       <ShortcutPanel open={shortcutOpen} onOpenChange={setShortcutOpen} />
+      {/* Rendered outside ReactFlow but inside the board lifecycle; its own gate
+          (interactionEnabled) closes it when identity/writer/readOnly is lost. */}
+      <CanvasHistoryPanel
+        open={historyOpen}
+        onOpenChange={setHistoryOpen}
+        interactionEnabled={interactionActive}
+        onAddAsset={handleAddHistoryAsset}
+      />
     </div>
   );
 }

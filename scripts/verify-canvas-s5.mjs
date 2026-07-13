@@ -2,7 +2,7 @@
 /**
  * 超级画布 · S5 聚焦验证(离线,零测试运行器)
  *
- * 断言:① 空态门控 + 4 引导;② 底部工具栏 gating(7 入口、P0 点亮 add-node/shortcuts);
+ * 断言:① 空态门控 + 4 引导;② 底部工具栏 gating(7 入口、P0 点亮 add-node/history/shortcuts);
  * ③ 布局确定性/健壮性(0/1/孤立/环、无 NaN、不重叠、幂等);④ store.applyNodePositions
  * (只读拦截、只写 position、RF 字段不泄漏);⑤ Alt+Shift+F 快捷键焦点/修饰键守卫。
  *
@@ -142,13 +142,13 @@ async function main() {
   ], "7 入口顺序=看板");
   eq(
     BOTTOM_TOOLBAR_ENTRIES.filter((e) => e.enabled).map((e) => e.id),
-    ["add-node", "shortcuts"],
-    "P0 只点亮 add-node/shortcuts"
+    ["add-node", "history", "shortcuts"],
+    "P0 点亮 add-node/history/shortcuts"
   );
   eq(
     BOTTOM_TOOLBAR_ENTRIES.filter((e) => !e.enabled).map((e) => e.id),
-    ["workflow", "assets", "characters", "history", "tutorial"],
-    "其余 5 入口 disabled"
+    ["workflow", "assets", "characters", "tutorial"],
+    "其余 4 入口 disabled"
   );
   // 静态断言:disabled 按钮由可聚焦 span 包裹(disabled Button 不接 pointer/focus,否则 tooltip 不可达)。
   const toolbarSrc = readFileSync(

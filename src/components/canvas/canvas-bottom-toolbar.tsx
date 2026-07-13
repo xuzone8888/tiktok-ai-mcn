@@ -4,8 +4,9 @@
  * 超级画布 · 底部工具栏(P0 · S5)
  *
  * 看板 7 入口(添加节点/工作流/素材库/角色库/历史记录/快捷键/教程),lucide 图标 + tooltip、
- * 稳定尺寸。P0 只点亮「添加节点」(下拉复用 S2 的 6 类列表 NODE_TYPE_ITEMS,不复制类型定义)与
- * 「快捷键」(开现有 ShortcutPanel);其余未来入口 disabled——tooltip 仅名称,不写开发状态/操作说明。
+ * 稳定尺寸。P0 点亮「添加节点」(下拉复用 S2 的 6 类列表 NODE_TYPE_ITEMS,不复制类型定义)、
+ * 「历史记录」(开 CanvasHistoryPanel,只读时禁用)与「快捷键」(开现有 ShortcutPanel,只读仍可用);
+ * 其余未来入口 disabled——tooltip 仅名称,不写开发状态/操作说明。
  *
  * 无障碍:disabled 的 Button 不接 pointer/focus,Radix tooltip 不可达;故 disabled 时用可 hover/
  * focus 的 span 包裹(tabIndex+role+aria-disabled),保证 tooltip 可达且键盘可聚焦;启用按钮保持原语义。
@@ -107,10 +108,12 @@ function ToolbarIconButton({
 export function CanvasBottomToolbar({
   onCreate,
   onOpenShortcuts,
+  onOpenHistory,
   disabled = false,
 }: {
   onCreate: (type: CanvasNodeType) => void;
   onOpenShortcuts: () => void;
+  onOpenHistory: () => void;
   disabled?: boolean;
 }) {
   return (
@@ -163,15 +166,22 @@ export function CanvasBottomToolbar({
               );
             }
 
-            // 快捷键=纯视图动作(只读仍可用);未来入口=disabled(仅名称 tooltip)。
+            // 快捷键=纯视图动作(只读仍可用);历史记录=浏览动作(随 disabled 只读禁用);
+            // 未来入口=disabled(仅名称 tooltip)。
             const entryDisabled =
               (entry.id === "shortcuts" ? false : disabled) || !entry.enabled;
+            const onClick =
+              entry.id === "shortcuts"
+                ? onOpenShortcuts
+                : entry.id === "history"
+                  ? onOpenHistory
+                  : undefined;
             return (
               <ToolbarIconButton
                 key={entry.id}
                 label={entry.label}
                 disabled={entryDisabled}
-                onClick={entry.id === "shortcuts" ? onOpenShortcuts : undefined}
+                onClick={onClick}
               >
                 <Icon className="h-4 w-4" />
               </ToolbarIconButton>
