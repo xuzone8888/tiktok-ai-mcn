@@ -14,14 +14,14 @@
 | D3 文档存取 API+补丁保存协议 | data | ✅ 代码/构建审核通过(合流 2026-07-13) | D1、D2 |
 | D4 IndexedDB 影子副本 | data | ✅ 代码/构建审核通过(合流 2026-07-13) | D3 |
 | D5 单写者锁 | data | ✅ 代码/安全/全量构建审核通过(合流 2026-07-13;只读横幅 UI 归 S7) | D1 |
-| D6 历史资产直读查询 | data | 待认领 | 无 |
+| D6 历史资产直读查询 | data | ✅ 代码/安全/全量构建/独立终审通过(合流 2026-07-13;生产迁移待 dashboard 执行;登录态 UI 归 R1/R2) | 无 |
 | S1 /canvas 路由+React Flow 底盘 | shell | ✅ 代码/构建审核通过(合流 2026-07-13;登录态 UI 走查归 R1/R2) | 无(第一个做) |
 | S2 建节点五入口+连线 | shell | ✅ 代码/构建审核通过(合流 2026-07-13;登录态 UI 走查归 R1/R2) | S1、D2(schema) |
 | S3 6 类节点空壳 | shell | ✅ 代码/构建审核通过(合流 2026-07-13;登录态 UI 走查归 R1/R2) | S1、D2(schema) |
 | S4 成组+快捷键全套+undo/redo | shell | ✅ 代码/全量构建/独立终审通过(合流 2026-07-13;登录态 UI 走查归 R1/R2) | S1;undo 依赖 D3 op log |
 | S5 空态+底部工具栏+整理画布 | shell | ✅ 代码/构建审核通过(合流 2026-07-13;登录态 UI 走查归 R1/R2) | S1 |
 | S6 1366×768+媒体降级 | shell | ✅ 代码/安全/全量构建审核通过(合流 2026-07-13;登录态真媒体 UI/性能实测归 R1/R2) | S3 |
-| S7 错误边界+store 防护 | shell | 待认领 | S1 |
+| S7 错误边界+store 防护 | shell | ✅ 代码/安全/全量构建/独立终审通过(合流 2026-07-13;登录态 UI 归 R1/R2) | S1 |
 | S8 历史资产面板+omnibox 确认 | shell | 待认领 | D6 |
 | R1 验收脚本+性能实测 | review | 待认领 | 随各任务滚动 |
 | R2 合流+对抗审查+真人走查 | review | 持续 | 各任务转「待审」时 |
@@ -52,6 +52,7 @@
   - **审核收口(2026-07-13)**:D5 verifier 208/208、D3 153/153、D1-D4/S1-S6 全回归、`tsc`、生产构建全绿；生产 PATCH 强制合法 writerTag，并将活跃 heartbeat、writer_tag、rev CAS 置于同一原子 UPDATE。控制器补双标签低频自动接管、挂起心跳超租约本地判死、迟到 claim/heartbeat 补偿释放与 release 重入屏障，所有异常/stop/abort/迟到回调 fail-closed。只读横幅 UI 仍由 S7 接线。
 - **D6 历史资产直读查询**(`src/app/api/canvas/history/route.ts` 或复用现有查询;**三库同源:直读 generations/assets/blueprints,不建平行表**)
   - ✅ 历史资产库(数据面:跨画布图/视频/音频生成历史查询,按类型三 tab+日期分组+计数)
+  - **审核收口(2026-07-13)**:D6 verifier 162/162、D1-D5 81/119/153/96/208、S1-S7 53/72/54/401/52/138/220、48 项 P0 精确对账、`tsc`、生产构建 140/140 全绿。查询按 owner/status 与复合 keyset 有界扫描 generations/products/blueprints，兼容当前线上 `type+result_url` 与历史 `generation_type+output_url` schema；products 仅在明确 relation-missing 时降级并回传稳定 health，其余权限/网络/数据库错误 fail-closed。媒体只返回 owner-bound object key。`20260715_generations_service_role_policy.sql` 修复旧 PUBLIC service policy，仍须经 Supabase dashboard 人工执行；跨批读取不声称 MVCC snapshot，限制与运维步骤见 `SUPER_CANVAS_D6_OPERATIONS.md`。
 
 ### shell 窗口(worktree: canvas-p0-shell,分支 claude/canvas-p0-shell)
 **负责**:`src/app/(canvas)/canvas/`(新路由,不动 /studio)、`src/components/canvas/`、`src/stores/canvas-store.ts`(裁决 2 管辖例外)。**消费 data 的 schema.ts,不得自定义平行类型。**
@@ -105,6 +106,7 @@
   - ✅ store 层防护+错误边界触发进监控(单画布>1 次/日报警)
   - ✅ 单写者只读横幅 UI(消费 D5 状态)
   - ✅ 文档健康反馈 UI(P0-Q1 已裁):>512KB 软告警横幅「画布偏大建议拆分」(#29 UI 半;不拒存,阈值 D1)、>2MB 硬拒 toast(#47 UI 半;拒存在 D3 返 400,阈值 D1)
+  - **审核收口(2026-07-13)**:S7 verifier 220/220、D1-D6/S1-S6 全回归、48 项 P0 精确对账、`tsc`、生产构建 140/140 全绿。运行时以 requested/session/hydrated/writer 身份一致性开放交互；写者生命周期、迟到回调、上传异步任务与错误恢复全部 fail-closed。store hydration 使用 descriptor-safe 原子替换，broken edge 必须显式恢复；错误监控只发结构化匿名字段且队列/LRU 有界；512KB 告警、2MB 本地/服务端拒存、D5 只读横幅和根级错误边界已统一接线。
 - **S8 历史资产面板 + omnibox 确认**
   - ✅ 历史资产面板 UI(三 tab 图/视频/音频+计数+日期分组+从中选素材建节点;消费 D6)
   - ✅ omnibox 长期保留轻量快捷入口(零改动,验证不受画布影响即可)
