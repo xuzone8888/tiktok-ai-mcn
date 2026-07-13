@@ -16,6 +16,7 @@ import { useCanvasStore } from "@/stores/canvas-store";
 
 import {
   decideCanvasCommand,
+  isCanvasDocumentInteractionBlocked,
   type CanvasCommandId,
 } from "./canvas-command-shortcuts";
 import { CANVAS_INTERACTIVE_FOCUS_SELECTOR } from "./tab-create-policy";
@@ -37,10 +38,13 @@ export interface CanvasCommandHandlers {
 export function useCanvasCommandShortcuts(options: {
   wrapperRef: RefObject<HTMLElement | null>;
   handlers: CanvasCommandHandlers;
+  interactionEnabled?: boolean;
 }): void {
   const { wrapperRef } = options;
   const handlersRef = useRef(options.handlers);
   handlersRef.current = options.handlers;
+  const interactionEnabledRef = useRef(options.interactionEnabled ?? true);
+  interactionEnabledRef.current = options.interactionEnabled ?? true;
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -68,7 +72,10 @@ export function useCanvasCommandShortcuts(options: {
           inCanvasContext,
           targetInteractive,
           composing,
-          readOnly: useCanvasStore.getState().readOnly,
+          readOnly: isCanvasDocumentInteractionBlocked(
+            interactionEnabledRef.current,
+            useCanvasStore.getState().readOnly
+          ),
         }
       );
       if (decision.kind === "ignore") return;

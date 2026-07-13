@@ -28,12 +28,18 @@
 import { create } from "zustand";
 import { devtools } from "zustand/middleware";
 import { immer } from "zustand/middleware/immer";
+import { z } from "zod";
 
 import type { NodeChange } from "@xyflow/react";
 
 import {
   CANVAS_SCHEMA_VERSION,
   CanvasNodeDataSchema,
+  CanvasEdgeSchema,
+  CanvasGroupSchema,
+  CanvasIdSchema,
+  CanvasNodeSchema,
+  CanvasPositionSchema,
   createCanvasEdge,
   createCanvasNode,
   createEmptyCanvasDoc,
@@ -69,6 +75,11 @@ import {
   planUngroupNodes,
   type DuplicateOptions,
 } from "@/lib/canvas/group-ops";
+import type {
+  CanvasPatchPreparationInput,
+  CanvasSavePreparation,
+  CanvasSaveStateView,
+} from "@/lib/canvas/canvas-save-adapter";
 
 /** 连线入参(与 React Flow Connection 兼容,但 store 不依赖 RF 类型)。 */
 export interface CanvasConnection {
@@ -119,6 +130,10 @@ export interface CanvasStoreState {
   recoveryRequired: boolean;
   loadIssues: string[];
   hydrated: boolean;
+  /** Runtime session requested by CanvasRoot. null is the local, unpersisted canvas. */
+  sessionCanvasId: string | null;
+  /** Identity of the document currently held in nodes/edges/groups. */
+  hydratedCanvasId: string | null;
 
   // ---- 会话态(单写者只读:D5 接线设置,S7 渲染横幅) ----
   readOnly: boolean;
@@ -140,15 +155,28 @@ export interface CanvasStoreState {
 }
 
 export interface CanvasStoreActions {
+  /** Begin a runtime session, retaining only a preloaded document with the same identity. */
+  beginCanvasSession: (canvasId: string | null) => boolean;
   /** 用 schema.loadCanvasDoc 的容错结果装载(SSR/测试可传预算结果)。 */
-  hydrate: (result: LoadCanvasResult) => void;
+  hydrate: (result: LoadCanvasResult, canvasId?: string | null) => boolean;
   /** 便捷装载:内部走 loadCanvasDoc(永不抛错)。 */
-  hydrateFromDoc: (rawDoc: unknown, fromVersion?: number) => void;
+  hydrateFromDoc: (
+    rawDoc: unknown,
+    fromVersionOrCanvasId?: number | string | null,
+    canvasId?: string | null
+  ) => boolean;
   /**
    * 仅在**尚未 hydrated** 时用空文档初始化(P0 无持久化时的兜底)。
    * 已 hydrated(D3/SSR/路由预加载已灌入服务端文档)则原样保留,绝不覆盖。
    */
-  initializeEmptyDoc: () => void;
+  initializeEmptyDoc: () => boolean;
+  /** Revalidate and atomically replace the current load state. Used by the error boundary recovery action. */
+  recoverCurrentState: () => boolean;
+  /**
+   * Prepare, but never send, the real D3 PATCH request. The single adapter enforces load/recovery/read-only,
+   * document size, active writer identity, and request validation before exposing a RequestInit.
+   */
+  preparePatchSave: (input: CanvasPatchPreparationInput) => CanvasSavePreparation;
   /**
    * 建节点(S2):经 D2 createCanvasNode 落库;只读时忽略。非法输入(如 media.ossKey 非
    * OSS object key)返回 null,不建半节点。成功返回节点 id 并入历史。
@@ -188,8 +216,10 @@ export interface CanvasStoreActions {
   /**
    * 删除损坏恢复实体(S3):同一次原子 set 从 brokenNodes 移除、级联清理 domain edges/groups 里指向它
    * 的引用,重算 recoveryRequired;**清空历史**(恢复动作不可撤销)。只读时忽略。绝不触碰领域 nodes。
-   */
+  */
   removeBrokenNode: (id: string) => void;
+  /** Explicit user-triggered cleanup for every isolated broken edge; ignored while read-only. */
+  removeBrokenEdges: () => void;
   /** React Flow 节点变更回写:只取 position,其余视图变更丢弃;只读时忽略。历史由 begin/endPositionDrag 合并。 */
   applyNodePositionChanges: (changes: NodeChange[]) => void;
   /**
@@ -228,6 +258,305 @@ export interface CanvasStoreActions {
 
 export type CanvasStore = CanvasStoreState & CanvasStoreActions;
 
+type CanvasSavePreparer = (
+  state: CanvasSaveStateView,
+  input: CanvasPatchPreparationInput
+) => CanvasSavePreparation;
+
+let canvasSavePreparer: CanvasSavePreparer | null = null;
+
+/** Root-owned runtime wiring keeps the store testable while preserving one save adapter. */
+export function connectCanvasSavePreparer(preparer: CanvasSavePreparer): () => void {
+  canvasSavePreparer = preparer;
+  return () => {
+    if (canvasSavePreparer === preparer) canvasSavePreparer = null;
+  };
+}
+
+interface PreparedCanvasHydration {
+  nodes: CanvasNode[];
+  edges: CanvasEdge[];
+  groups: CanvasGroup[];
+  brokenNodes: BrokenCanvasNode[];
+  brokenEdges: BrokenCanvasEdge[];
+  schemaVersion: number;
+  migratedFrom: number;
+  migrationComplete: boolean;
+  recoveryRequired: boolean;
+  loadIssues: string[];
+}
+
+type DataFieldSnapshot = Record<string, unknown>;
+
+const PERSISTED_CANVAS_ID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function isCanvasSessionIdentity(value: unknown): value is string | null {
+  return value === null || (typeof value === "string" && PERSISTED_CANVAS_ID_RE.test(value));
+}
+
+/** Reads each requested field exactly once through its own data descriptor. */
+function snapshotDataFields(
+  source: unknown,
+  fields: readonly string[]
+): DataFieldSnapshot | null {
+  if (!source || typeof source !== "object") return null;
+  const snapshot: DataFieldSnapshot = Object.create(null) as DataFieldSnapshot;
+  try {
+    for (const field of fields) {
+      const descriptor = Object.getOwnPropertyDescriptor(source, field);
+      if (!descriptor || !("value" in descriptor)) return null;
+      snapshot[field] = descriptor.value;
+    }
+    return snapshot;
+  } catch {
+    return null;
+  }
+}
+
+/** Snapshots a dense ordinary array without invoking iteration or index accessors. */
+function snapshotArrayEntries(value: unknown): unknown[] | null {
+  if (!Array.isArray(value)) return null;
+  try {
+    if (Object.getPrototypeOf(value) !== Array.prototype) return null;
+    const lengthDescriptor = Object.getOwnPropertyDescriptor(value, "length");
+    if (!lengthDescriptor || !("value" in lengthDescriptor)) return null;
+    const length = lengthDescriptor.value;
+    if (!Number.isSafeInteger(length) || length < 0) return null;
+
+    const keys = Reflect.ownKeys(value);
+    if (
+      keys.length !== length + 1 ||
+      keys.some((key) => typeof key === "symbol") ||
+      !keys.includes("length")
+    ) {
+      return null;
+    }
+
+    const entries: unknown[] = [];
+    for (let index = 0; index < length; index += 1) {
+      const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
+      if (!descriptor || !descriptor.enumerable || !("value" in descriptor)) return null;
+      entries.push(descriptor.value);
+    }
+    return entries;
+  } catch {
+    return null;
+  }
+}
+
+function cloneAndParse<T>(value: unknown, schema: z.ZodType<T>): T | null {
+  const detached = cloneCanvasEntity(value);
+  if (detached === null) return null;
+  try {
+    const parsed = schema.safeParse(detached);
+    if (!parsed.success) return null;
+    return cloneCanvasEntity(parsed.data);
+  } catch {
+    return null;
+  }
+}
+
+function prepareBrokenNodes(value: unknown): {
+  entities: BrokenCanvasNode[];
+  cloneIssues: string[];
+} | null {
+  const entries = snapshotArrayEntries(value);
+  if (!entries) return null;
+  const entities: BrokenCanvasNode[] = [];
+  const cloneIssues: string[] = [];
+
+  try {
+    for (const candidate of entries) {
+      const item = snapshotDataFields(candidate, [
+        "id",
+        "position",
+        "group_id",
+        "rawType",
+        "issues",
+        "raw",
+      ]);
+      if (!item) return null;
+
+      const id = cloneAndParse(item.id, CanvasIdSchema);
+      const issues = cloneAndParse(item.issues, z.array(z.string()));
+      const position =
+        item.position === null
+          ? null
+          : cloneAndParse(item.position, CanvasPositionSchema);
+      const groupId =
+        item.group_id === null
+          ? null
+          : cloneAndParse(item.group_id, CanvasIdSchema);
+      const rawType = item.rawType === null ? null : cloneCanvasEntity(item.rawType);
+      if (
+        id === null ||
+        issues === null ||
+        (item.position !== null && position === null) ||
+        (item.group_id !== null && groupId === null) ||
+        (item.rawType !== null && rawType === null)
+      ) {
+        return null;
+      }
+
+      const rawValue = item.raw;
+      const raw = cloneCanvasEntity(rawValue);
+      if (rawValue !== null && raw === null) {
+        issues.push("raw payload was not safely cloneable");
+        cloneIssues.push(`broken node ${id}: raw payload omitted from runtime diagnostics`);
+      }
+
+      entities.push({
+        id,
+        position,
+        group_id: groupId,
+        rawType,
+        issues,
+        raw: raw ?? null,
+      });
+    }
+  } catch {
+    return null;
+  }
+  return { entities, cloneIssues };
+}
+
+function prepareBrokenEdges(value: unknown): {
+  entities: BrokenCanvasEdge[];
+  cloneIssues: string[];
+} | null {
+  const entries = snapshotArrayEntries(value);
+  if (!entries) return null;
+  const entities: BrokenCanvasEdge[] = [];
+  const cloneIssues: string[] = [];
+
+  try {
+    for (const candidate of entries) {
+      const item = snapshotDataFields(candidate, ["id", "issues", "raw"]);
+      if (!item) return null;
+      const id = cloneAndParse(item.id, CanvasIdSchema);
+      const issues = cloneAndParse(item.issues, z.array(z.string()));
+      if (id === null || issues === null) return null;
+      const rawValue = item.raw;
+      const raw = cloneCanvasEntity(rawValue);
+      if (rawValue !== null && raw === null) {
+        issues.push("raw payload was not safely cloneable");
+        cloneIssues.push(`broken edge ${id}: raw payload omitted from runtime diagnostics`);
+      }
+      entities.push({ id, issues, raw: raw ?? null });
+    }
+  } catch {
+    return null;
+  }
+  return { entities, cloneIssues };
+}
+
+/** Build a detached replacement before entering zustand/immer. Any exception returns null with zero writes. */
+export function prepareCanvasHydration(result: LoadCanvasResult): PreparedCanvasHydration | null {
+  try {
+    const source = snapshotDataFields(result, [
+      "nodes",
+      "brokenNodes",
+      "edges",
+      "brokenEdges",
+      "groups",
+      "schemaVersion",
+      "migratedFrom",
+      "targetSchemaVersion",
+      "migrationComplete",
+      "recoveryRequired",
+      "issues",
+    ]);
+    if (!source) return null;
+
+    const nodes = cloneAndParse(source.nodes, z.array(CanvasNodeSchema));
+    const edges = cloneAndParse(source.edges, z.array(CanvasEdgeSchema));
+    const groups = cloneAndParse(source.groups, z.array(CanvasGroupSchema));
+    const brokenNodes = prepareBrokenNodes(source.brokenNodes);
+    const brokenEdges = prepareBrokenEdges(source.brokenEdges);
+    const issues = cloneAndParse(source.issues, z.array(z.string()));
+    if (!nodes || !edges || !groups || !brokenNodes || !brokenEdges || !issues) {
+      return null;
+    }
+    if (!Number.isSafeInteger(source.schemaVersion) || (source.schemaVersion as number) < 1) {
+      return null;
+    }
+    if (!Number.isSafeInteger(source.migratedFrom) || (source.migratedFrom as number) < 1) {
+      return null;
+    }
+    if (
+      !Number.isSafeInteger(source.targetSchemaVersion) ||
+      (source.targetSchemaVersion as number) < 1
+    ) {
+      return null;
+    }
+    if (typeof source.migrationComplete !== "boolean") return null;
+    if (typeof source.recoveryRequired !== "boolean") return null;
+
+    const nodeIds = new Set(nodes.map((node) => node.id));
+    if (nodeIds.size !== nodes.length) return null;
+    const brokenNodeIds = new Set(brokenNodes.entities.map((node) => node.id));
+    if (brokenNodeIds.size !== brokenNodes.entities.length) return null;
+    const allNodeIds = new Set([...nodeIds, ...brokenNodeIds]);
+    if (allNodeIds.size !== nodeIds.size + brokenNodeIds.size) return null;
+    const edgeIds = new Set(edges.map((edge) => edge.id));
+    if (edgeIds.size !== edges.length) return null;
+    const brokenEdgeIds = new Set(brokenEdges.entities.map((edge) => edge.id));
+    if (brokenEdgeIds.size !== brokenEdges.entities.length) return null;
+    if (new Set([...edgeIds, ...brokenEdgeIds]).size !== edgeIds.size + brokenEdgeIds.size) {
+      return null;
+    }
+    const groupIds = new Set(groups.map((group) => group.id));
+    if (groupIds.size !== groups.length) return null;
+    if (edges.some((edge) => !allNodeIds.has(edge.source) || !allNodeIds.has(edge.target))) {
+      return null;
+    }
+    if (groups.some((group) => group.node_ids.some((id) => !allNodeIds.has(id)))) return null;
+
+    // Broken nodes stay isolated from state.nodes, but their safe placeholder identities participate
+    // in topology validation so recovery-only edge/group references cannot bypass graph invariants.
+    const recoveryPlaceholders = brokenNodes.entities.map((node) =>
+      createCanvasNode({
+        id: node.id,
+        type: "text",
+        position: node.position ?? { x: 0, y: 0 },
+        groupId: node.group_id,
+      })
+    );
+    const strict = validateCanvasDoc({
+      nodes: [...nodes, ...recoveryPlaceholders],
+      edges,
+      groups,
+    });
+    if (!strict.ok) return null;
+
+    const recoveryRequired =
+      source.recoveryRequired ||
+      !source.migrationComplete ||
+      brokenNodes.entities.length > 0 ||
+      brokenEdges.entities.length > 0;
+
+    return {
+      nodes,
+      edges,
+      groups,
+      brokenNodes: brokenNodes.entities,
+      brokenEdges: brokenEdges.entities,
+      schemaVersion: source.schemaVersion as number,
+      migratedFrom: source.migratedFrom as number,
+      migrationComplete: source.migrationComplete,
+      recoveryRequired,
+      loadIssues: [
+        ...issues,
+        ...brokenNodes.cloneIssues,
+        ...brokenEdges.cloneIssues,
+      ],
+    };
+  } catch {
+    return null;
+  }
+}
+
 function createInitialState(): CanvasStoreState {
   return {
     nodes: [],
@@ -241,6 +570,8 @@ function createInitialState(): CanvasStoreState {
     recoveryRequired: false,
     loadIssues: [],
     hydrated: false,
+    sessionCanvasId: null,
+    hydratedCanvasId: null,
     readOnly: false,
     past: [],
     future: [],
@@ -260,6 +591,15 @@ export const useCanvasStore = create<CanvasStore>()(
       const getDoc = (): CanvasDoc => {
         const state = get();
         return { nodes: state.nodes, edges: state.edges, groups: state.groups };
+      };
+
+      const canMutateCurrentDocument = (): boolean => {
+        const state = get();
+        return (
+          !state.readOnly &&
+          state.hydrated &&
+          state.sessionCanvasId === state.hydratedCanvasId
+        );
       };
 
       /** 危险 current 先克隆失败即视为有变化，绝不把循环/访问器直接交给 deepEqual。 */
@@ -345,24 +685,25 @@ export const useCanvasStore = create<CanvasStore>()(
         return true;
       };
 
-      return {
-        ...createInitialState(),
-
-        hydrate: (result) =>
+      const commitHydration = (
+        next: PreparedCanvasHydration,
+        canvasId: string | null
+      ): boolean => {
+        try {
           set(
             (state) => {
-              state.nodes = result.nodes;
-              state.edges = result.edges;
-              state.groups = result.groups;
-              state.schemaVersion = result.schemaVersion;
-              state.brokenNodes = result.brokenNodes;
-              state.brokenEdges = result.brokenEdges;
-              state.migratedFrom = result.migratedFrom;
-              state.migrationComplete = result.migrationComplete;
-              state.recoveryRequired = result.recoveryRequired;
-              state.loadIssues = result.issues;
+              state.nodes = next.nodes;
+              state.edges = next.edges;
+              state.groups = next.groups;
+              state.schemaVersion = next.schemaVersion;
+              state.brokenNodes = next.brokenNodes;
+              state.brokenEdges = next.brokenEdges;
+              state.migratedFrom = next.migratedFrom;
+              state.migrationComplete = next.migrationComplete;
+              state.recoveryRequired = next.recoveryRequired;
+              state.loadIssues = next.loadIssues;
               state.hydrated = true;
-              // 装载不进历史:清空撤销/重做与任何待提交会话。
+              state.hydratedCanvasId = canvasId;
               state.past = [];
               state.future = [];
               state.editAnchor = null;
@@ -370,20 +711,157 @@ export const useCanvasStore = create<CanvasStore>()(
             },
             false,
             "canvas/hydrate"
-          ),
+          );
+          return true;
+        } catch {
+          return false;
+        }
+      };
 
-        hydrateFromDoc: (rawDoc, fromVersion) => {
-          const result = loadCanvasDoc(rawDoc, fromVersion);
-          get().hydrate(result);
+      return {
+        ...createInitialState(),
+
+        beginCanvasSession: (canvasId) => {
+          if (!isCanvasSessionIdentity(canvasId)) return false;
+          try {
+            const current = snapshotDataFields(get(), [
+              "sessionCanvasId",
+              "hydratedCanvasId",
+              "hydrated",
+            ]);
+            if (!current || !isCanvasSessionIdentity(current.sessionCanvasId)) return false;
+            if (!isCanvasSessionIdentity(current.hydratedCanvasId)) return false;
+
+            const documentMatches =
+              current.hydrated === true && current.hydratedCanvasId === canvasId;
+            const sessionMatches = current.sessionCanvasId === canvasId;
+            if (sessionMatches && documentMatches) return true;
+
+            set(
+              (state) => {
+                state.sessionCanvasId = canvasId;
+                state.readOnly = canvasId !== null;
+                state.past = [];
+                state.future = [];
+                state.editAnchor = null;
+                state.dragAnchor = null;
+                if (documentMatches) return;
+
+                state.nodes = [];
+                state.edges = [];
+                state.groups = [];
+                state.schemaVersion = CANVAS_SCHEMA_VERSION;
+                state.brokenNodes = [];
+                state.brokenEdges = [];
+                state.migratedFrom = CANVAS_SCHEMA_VERSION;
+                state.migrationComplete = true;
+                state.recoveryRequired = false;
+                state.loadIssues = [];
+                state.hydrated = false;
+                state.hydratedCanvasId = null;
+              },
+              false,
+              "canvas/beginSession"
+            );
+            return true;
+          } catch {
+            return false;
+          }
+        },
+
+        hydrate: (result, canvasId = null) => {
+          if (!isCanvasSessionIdentity(canvasId)) return false;
+          const next = prepareCanvasHydration(result);
+          return next ? commitHydration(next, canvasId) : false;
+        },
+
+        hydrateFromDoc: (rawDoc, fromVersionOrCanvasId, canvasId = null) => {
+          const resolvedCanvasId =
+            typeof fromVersionOrCanvasId === "string" || fromVersionOrCanvasId === null
+              ? fromVersionOrCanvasId
+              : canvasId;
+          const fromVersion =
+            typeof fromVersionOrCanvasId === "number" ? fromVersionOrCanvasId : undefined;
+          if (!isCanvasSessionIdentity(resolvedCanvasId)) return false;
+          try {
+            const result = loadCanvasDoc(rawDoc, fromVersion);
+            const next = prepareCanvasHydration(result);
+            return next ? commitHydration(next, resolvedCanvasId) : false;
+          } catch {
+            return false;
+          }
         },
 
         initializeEmptyDoc: () => {
-          if (get().hydrated) return;
-          get().hydrateFromDoc(createEmptyCanvasDoc());
+          try {
+            const current = snapshotDataFields(get(), [
+              "hydrated",
+              "sessionCanvasId",
+              "hydratedCanvasId",
+            ]);
+            if (!current || typeof current.hydrated !== "boolean") return false;
+            if (current.sessionCanvasId !== null) return false;
+            if (current.hydrated) return current.hydratedCanvasId === null;
+            const next = prepareCanvasHydration(loadCanvasDoc(createEmptyCanvasDoc()));
+            return next ? commitHydration(next, null) : false;
+          } catch {
+            return false;
+          }
+        },
+
+        recoverCurrentState: () => {
+          try {
+            const current = snapshotDataFields(get(), [
+              "hydrated",
+              "sessionCanvasId",
+              "hydratedCanvasId",
+              "nodes",
+              "edges",
+              "groups",
+              "brokenNodes",
+              "brokenEdges",
+              "schemaVersion",
+              "migratedFrom",
+              "migrationComplete",
+              "recoveryRequired",
+              "loadIssues",
+            ]);
+            if (!current || current.hydrated !== true) return false;
+            if (current.sessionCanvasId !== current.hydratedCanvasId) return false;
+            if (!isCanvasSessionIdentity(current.hydratedCanvasId)) return false;
+            const next = prepareCanvasHydration({
+              nodes: current.nodes,
+              edges: current.edges,
+              groups: current.groups,
+              brokenNodes: current.brokenNodes,
+              brokenEdges: current.brokenEdges,
+              schemaVersion: current.schemaVersion,
+              migratedFrom: current.migratedFrom,
+              targetSchemaVersion: CANVAS_SCHEMA_VERSION,
+              migrationComplete: current.migrationComplete,
+              recoveryRequired: current.recoveryRequired,
+              issues: current.loadIssues,
+            } as LoadCanvasResult);
+            return next ? commitHydration(next, current.hydratedCanvasId) : false;
+          } catch {
+            return false;
+          }
+        },
+
+        preparePatchSave: (input) => {
+          if (canvasSavePreparer) return canvasSavePreparer(get(), input);
+          return {
+            ok: false,
+            error: {
+              code: "NO_ACTIVE_WRITER",
+              title: "尚未连接持久化画布",
+              description: "保存适配器尚未由画布根组件接线。",
+            },
+          };
         },
 
         addNode: (input) => {
-          if (get().readOnly) return null;
+          if (!canMutateCurrentDocument()) return null;
           let node: CanvasNode;
           try {
             node = createCanvasNode(input);
@@ -401,7 +879,7 @@ export const useCanvasStore = create<CanvasStore>()(
         },
 
         addEdge: (connection) => {
-          if (get().readOnly) return null;
+          if (!canMutateCurrentDocument()) return null;
           // 合法性检查(禁自环/悬空/重复)与建边都在 builder 内基于屏障后的 fresh current 完成。
           // 只用闭包回传**标量 edgeId**(而非闭包赋值的对象:那会被 TS 控制流判为 never;属性访问放闭包内)。
           let edgeId: string | null = null;
@@ -425,7 +903,7 @@ export const useCanvasStore = create<CanvasStore>()(
         },
 
         addNodeAndEdge: ({ node: nodeInput, fromNodeId, fromHandleId, fromHandleType }) => {
-          if (get().readOnly) return null;
+          if (!canMutateCurrentDocument()) return null;
 
           let node: CanvasNode;
           try {
@@ -468,7 +946,7 @@ export const useCanvasStore = create<CanvasStore>()(
         },
 
         updateNodeData: (id, patch) => {
-          if (get().readOnly) return false;
+          if (!canMutateCurrentDocument()) return false;
           const prepareNextData = (node: CanvasNode): CanvasNodeData | null => {
             let prepared: CanvasNodeData;
             try {
@@ -521,11 +999,12 @@ export const useCanvasStore = create<CanvasStore>()(
         },
 
         commitTextEdit: () => {
+          if (!canMutateCurrentDocument()) return;
           flushTextSession();
         },
 
         removeNode: (id) => {
-          if (get().readOnly) return;
+          if (!canMutateCurrentDocument()) return;
           // 在 builder 内基于屏障后的 fresh current 判定存在性并级联(拖动中删除会先 finalize 拖动再基于
           // 屏障后的位置删,不再拿旧位置生成冲突历史)。
           applyDocWithHistory("canvas/removeNode", (current) => {
@@ -544,7 +1023,7 @@ export const useCanvasStore = create<CanvasStore>()(
         },
 
         removeEntities: (nodeIds, edgeIds) => {
-          if (get().readOnly) return;
+          if (!canMutateCurrentDocument()) return;
           const removeNodes = new Set(nodeIds);
           const removeEdges = new Set(edgeIds ?? []);
           if (removeNodes.size === 0 && removeEdges.size === 0) return;
@@ -569,13 +1048,13 @@ export const useCanvasStore = create<CanvasStore>()(
         },
 
         removeBrokenNode: (id) => {
-          if (get().readOnly) return;
+          if (!canMutateCurrentDocument()) return;
           set(
             (state) => {
               state.brokenNodes = state.brokenNodes.filter((node) => node.id !== id);
               // D2 容错加载会在 domain edges/groups 里保留指向安全 broken id 的正常引用(供占位展示);
               // 显式删除 broken 实体必须同一次原子 set 一并级联清理这些引用,否则留悬空 edge/group
-              // 成员,recoveryRequired 归 false 后下次 autosave 会非法。domain nodes 不动。
+              // 成员,recoveryRequired 归 false 后未来 transport 提交会非法。domain nodes 不动。
               state.edges = state.edges.filter(
                 (edge) => edge.source !== id && edge.target !== id
               );
@@ -599,8 +1078,28 @@ export const useCanvasStore = create<CanvasStore>()(
           );
         },
 
+        removeBrokenEdges: () => {
+          if (!canMutateCurrentDocument() || get().brokenEdges.length === 0) return;
+          set(
+            (state) => {
+              state.brokenEdges = [];
+              state.recoveryRequired = computeRecoveryRequired(
+                state.migrationComplete,
+                state.brokenNodes,
+                state.brokenEdges
+              );
+              state.past = [];
+              state.future = [];
+              state.editAnchor = null;
+              state.dragAnchor = null;
+            },
+            false,
+            "canvas/removeBrokenEdges"
+          );
+        },
+
         applyNodePositionChanges: (changes) => {
-          if (get().readOnly) return;
+          if (!canMutateCurrentDocument()) return;
           const updates = collectNodePositionUpdates(changes);
           if (updates.length === 0) return;
           if (get().dragAnchor !== null) {
@@ -631,7 +1130,7 @@ export const useCanvasStore = create<CanvasStore>()(
         },
 
         applyNodePositions: (updates) => {
-          if (get().readOnly) return;
+          if (!canMutateCurrentDocument()) return;
           if (!Array.isArray(updates) || updates.length === 0) return;
           // 公共写入口,不盲信布局输入:只接受 id 为非空字符串、x/y 有限的更新;
           // NaN/Infinity/非法 id 一律丢弃,绝不污染领域 doc。
@@ -656,7 +1155,7 @@ export const useCanvasStore = create<CanvasStore>()(
         },
 
         groupNodes: (nodeIds) => {
-          if (get().readOnly) return null;
+          if (!canMutateCurrentDocument()) return null;
           // planner 在屏障后基于 fresh current 运行(拖动/文本会话已 finalize),group id 闭包捕获。
           let groupId: string | null = null;
           const ok = applyDocWithHistory("canvas/groupNodes", (current) => {
@@ -669,14 +1168,14 @@ export const useCanvasStore = create<CanvasStore>()(
         },
 
         ungroupNodes: (nodeIds) => {
-          if (get().readOnly) return false;
+          if (!canMutateCurrentDocument()) return false;
           return applyDocWithHistory("canvas/ungroupNodes", (current) =>
             planUngroupNodes(current, nodeIds)
           );
         },
 
         duplicateNodes: (nodeIds, opts) => {
-          if (get().readOnly) return null;
+          if (!canMutateCurrentDocument()) return null;
           // planner 在屏障后基于 fresh current 运行;新 id 集闭包捕获。
           let newNodeIds: string[] | null = null;
           const ok = applyDocWithHistory("canvas/duplicateNodes", (current) => {
@@ -689,7 +1188,7 @@ export const useCanvasStore = create<CanvasStore>()(
         },
 
         connectNodes: (source, target) => {
-          if (get().readOnly) return null;
+          if (!canMutateCurrentDocument()) return null;
           const connection: CanvasConnection = {
             source,
             target,
@@ -713,7 +1212,7 @@ export const useCanvasStore = create<CanvasStore>()(
         },
 
         undo: () => {
-          if (get().readOnly) return false;
+          if (!canMutateCurrentDocument()) return false;
           flushTextSession();
           const state0 = get();
           if (state0.dragAnchor !== null) return false; // 拖动中不撤销
@@ -738,7 +1237,7 @@ export const useCanvasStore = create<CanvasStore>()(
         },
 
         redo: () => {
-          if (get().readOnly) return false;
+          if (!canMutateCurrentDocument()) return false;
           flushTextSession();
           const state0 = get();
           if (state0.dragAnchor !== null) return false;
@@ -763,7 +1262,7 @@ export const useCanvasStore = create<CanvasStore>()(
         },
 
         beginPositionDrag: (nodeIds) => {
-          if (get().readOnly) return;
+          if (!canMutateCurrentDocument()) return;
           if (get().dragAnchor !== null) return; // 双触发去重:已在拖动中不重设锚
           flushTextSession();
           // 只锚**可能移动的节点**的原始深拷实体(不存 doc 快照);按 doc 顺序收集成可序列化 entry array。
@@ -794,7 +1293,7 @@ export const useCanvasStore = create<CanvasStore>()(
           // 只对**真正变化**的锚定节点生成 update op,整段多选合并成**一个**历史项(无移动不入栈)。
           // 走 entry array + Map 查找,合法 id "__proto__"/"constructor"/"prototype" 与普通 id 完全同语义。
           const pairs = anchor.bases.map(({ id, base }) => ({ before: base, after: nodesById.get(id) }));
-          const entry = get().readOnly ? null : makeNodeUpdateEntry(pairs);
+          const entry = canMutateCurrentDocument() ? makeNodeUpdateEntry(pairs) : null;
           // 净变化检测(仿 flushTextSession):任一锚定 node 与其 base 不同(或已不在)即有净变化。
           const changed = pairs.some(({ before, after }) => nodeChangedOrUnsafe(before, after));
           // 有净变化但建不出 entry(readOnly / 载荷不可克隆 → makeNodeUpdateEntry 原子放弃):把已逐帧写入的
@@ -960,16 +1459,23 @@ export const useCanvasReadOnly = () => useCanvasStore((state) => state.readOnly)
 export const useCanvasRecoveryRequired = () =>
   useCanvasStore((state) => state.recoveryRequired);
 export const useCanvasHydrated = () => useCanvasStore((state) => state.hydrated);
+export const useCanvasHydratedCanvasId = () =>
+  useCanvasStore((state) => state.hydratedCanvasId);
 export const useCanvasLoadIssues = () => useCanvasStore((state) => state.loadIssues);
 export const useCanvasCanUndo = () => useCanvasStore((state) => state.past.length > 0);
 export const useCanvasCanRedo = () => useCanvasStore((state) => state.future.length > 0);
 
 /**
- * 自动保存闸(纯函数,供 D3 接线与离线单测复用):未装载 / 需恢复 / 只读 三者任一为真时,
- * 绝不允许自动保存。技术负责人硬约束:recoveryRequired=true 必须阻断 autosave。
+ * 未来 transport 提交闸(保留既有导出名供 D3 接线):未装载 / 需恢复 / 只读 三者任一为真时,
+ * 绝不允许准备持久化提交。S7 当前没有 autosave 或网络执行器。
  */
 export function isCanvasAutosaveBlocked(state: CanvasStore): boolean {
-  return !state.hydrated || state.recoveryRequired || state.readOnly;
+  return (
+    !state.hydrated ||
+    state.sessionCanvasId !== state.hydratedCanvasId ||
+    state.recoveryRequired ||
+    state.readOnly
+  );
 }
 
 export const useCanvasAutosaveBlocked = () => useCanvasStore(isCanvasAutosaveBlocked);

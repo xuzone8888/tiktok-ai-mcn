@@ -12,17 +12,141 @@
  */
 import "@xyflow/react/dist/style.css";
 
+import { useCallback, useEffect } from "react";
 import { ReactFlowProvider } from "@xyflow/react";
+
+import type { CanvasErrorMonitor } from "@/lib/canvas/canvas-monitoring";
+import { normalizeCanvasId } from "@/lib/canvas/canvas-writer-lifecycle";
+import { useCanvasStore } from "@/stores/canvas-store";
 
 import { CanvasBoard } from "./canvas-board";
 import { CanvasErrorBoundary } from "./canvas-error-boundary";
+import { CanvasHealthBanners } from "./canvas-health-banners";
+import { CanvasSaveFeedbackBridge } from "./canvas-save-feedback-bridge";
+import { useCanvasWriterLock } from "./use-canvas-writer-lock";
 
-export function CanvasRoot() {
+export interface CanvasRootProps {
+  canvasId?: string | null;
+  onRecover?: () => boolean | void | Promise<boolean | void>;
+  onReload?: () => void;
+  monitor?: Pick<CanvasErrorMonitor, "capture">;
+}
+
+interface CanvasRuntimeInnerProps {
+  canvasId?: string | null;
+}
+
+interface CanvasSessionBootstrapProps {
+  requestedCanvasId: string | null;
+  writerCanvasId: string | null;
+  writerCanEdit: boolean;
+  identityReady: boolean;
+}
+
+function CanvasSessionBootstrap({
+  requestedCanvasId,
+  writerCanvasId,
+  writerCanEdit,
+  identityReady,
+}: CanvasSessionBootstrapProps) {
+  useEffect(() => {
+    const store = useCanvasStore.getState();
+    if (!store.beginCanvasSession(requestedCanvasId)) return;
+    if (requestedCanvasId === null) store.initializeEmptyDoc();
+
+    const current = useCanvasStore.getState();
+    const ready =
+      current.hydrated &&
+      current.sessionCanvasId === requestedCanvasId &&
+      current.hydratedCanvasId === requestedCanvasId &&
+      writerCanvasId === requestedCanvasId &&
+      writerCanEdit;
+    current.setReadOnly(!ready);
+  }, [identityReady, requestedCanvasId, writerCanEdit, writerCanvasId]);
+
+  return null;
+}
+
+export function CanvasRuntimeInner({ canvasId }: CanvasRuntimeInnerProps) {
+  const requestedCanvasId = normalizeCanvasId(canvasId);
+  const writer = useCanvasWriterLock(requestedCanvasId);
+  const hydrated = useCanvasStore((state) => state.hydrated);
+  const sessionCanvasId = useCanvasStore((state) => state.sessionCanvasId);
+  const hydratedCanvasId = useCanvasStore((state) => state.hydratedCanvasId);
+  const readOnly = useCanvasStore((state) => state.readOnly);
+  const identityReady =
+    hydrated &&
+    sessionCanvasId === requestedCanvasId &&
+    hydratedCanvasId === requestedCanvasId &&
+    writer.canvasId === requestedCanvasId &&
+    writer.canEdit;
+  const interactionEnabled = identityReady && !readOnly;
+
   return (
-    <CanvasErrorBoundary>
-      <ReactFlowProvider>
-        <CanvasBoard />
-      </ReactFlowProvider>
+    <div className="flex h-full w-full min-h-0 flex-col overflow-hidden" data-canvas-root>
+      <CanvasSessionBootstrap
+        requestedCanvasId={requestedCanvasId}
+        writerCanvasId={writer.canvasId}
+        writerCanEdit={writer.canEdit}
+        identityReady={identityReady}
+      />
+      <CanvasSaveFeedbackBridge />
+      <CanvasHealthBanners persistent={writer.persistent} writerStatus={writer.status} />
+      <div
+        className="min-h-0 flex-1"
+        data-canvas-critical-area
+        inert={interactionEnabled ? undefined : true}
+        aria-busy={!interactionEnabled}
+      >
+        <ReactFlowProvider>
+          <CanvasBoard interactionEnabled={interactionEnabled} />
+        </ReactFlowProvider>
+      </div>
+    </div>
+  );
+}
+
+export function recoverCanvasRuntimeState(canvasId?: string | null): boolean {
+  try {
+    const requestedCanvasId = normalizeCanvasId(canvasId);
+    const state = useCanvasStore.getState();
+    if (
+      state.sessionCanvasId !== requestedCanvasId ||
+      (state.hydrated && state.hydratedCanvasId !== requestedCanvasId)
+    ) {
+      return false;
+    }
+    if (state.recoverCurrentState()) return true;
+    if (requestedCanvasId === null) {
+      const current = useCanvasStore.getState();
+      const hydrated = Object.getOwnPropertyDescriptor(current, "hydrated");
+      if (hydrated && "value" in hydrated && hydrated.value === false) {
+        return current.initializeEmptyDoc();
+      }
+    }
+  } catch {
+    return false;
+  }
+  return false;
+}
+
+export function CanvasRoot({ canvasId, onRecover, onReload, monitor }: CanvasRootProps) {
+  const recover = useCallback(() => {
+    if (onRecover) return onRecover();
+    return recoverCanvasRuntimeState(canvasId);
+  }, [canvasId, onRecover]);
+
+  const runtimeKey = normalizeCanvasId(canvasId) ?? "local-unpersisted";
+
+  return (
+    <CanvasErrorBoundary
+      key={runtimeKey}
+      canvasId={canvasId}
+      onRecover={recover}
+      onReload={onReload}
+      monitor={monitor}
+    >
+      <CanvasRuntimeInner canvasId={canvasId} />
     </CanvasErrorBoundary>
   );
 }

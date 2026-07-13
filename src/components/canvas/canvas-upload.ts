@@ -57,7 +57,10 @@ export interface CanvasUploadResult {
 }
 
 /** 上传单个文件,只返回 object key;任何失败抛错(调用方不建半节点)。 */
-export async function uploadCanvasFile(file: File): Promise<CanvasUploadResult> {
+export async function uploadCanvasFile(
+  file: File,
+  signal?: AbortSignal
+): Promise<CanvasUploadResult> {
   const kind = canvasFileKind(file.type);
   if (!kind) throw new Error(`不支持的文件类型:${file.type || "未知"}`);
 
@@ -68,6 +71,7 @@ export async function uploadCanvasFile(file: File): Promise<CanvasUploadResult> 
     method: "POST",
     body: formData,
     credentials: "include",
+    signal,
   });
   if (!response.ok) throw new Error(`上传失败(HTTP ${response.status})`);
 

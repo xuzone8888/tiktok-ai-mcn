@@ -39,6 +39,13 @@ export function isViewCommand(command: CanvasCommandId): boolean {
   return VIEW_COMMANDS.has(command);
 }
 
+export function isCanvasDocumentInteractionBlocked(
+  interactionEnabled: boolean,
+  storeReadOnly: boolean
+): boolean {
+  return !interactionEnabled || storeReadOnly;
+}
+
 /** 把一次按键映射为 S4 命令;不属于本表则 null。守卫不在此处,见 decideCanvasCommand。 */
 export function matchCanvasCommand(event: CanvasCommandKeyEvent): CanvasCommandId | null {
   const primary = event.ctrlKey || event.metaKey; // Ctrl(Win/Linux)/⌘(Mac)

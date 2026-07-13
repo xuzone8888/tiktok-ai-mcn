@@ -72,6 +72,7 @@ import {
   shouldSuppressCanvasNodeChanges,
 } from "./canvas-command-shortcuts";
 import { CanvasBatchDeleteDialog } from "./canvas-batch-delete-dialog";
+import { CanvasAsyncSession, runGuardedCanvasTask } from "./canvas-async-session";
 import { CanvasBottomToolbar } from "./canvas-bottom-toolbar";
 import { shouldShowEmptyState } from "./canvas-chrome-policy";
 import { CanvasEmptyState } from "./canvas-empty-state";
@@ -125,7 +126,13 @@ function eventClientPoint(event: MouseEvent | TouchEvent): { x: number; y: numbe
   return { x: touch?.clientX ?? 0, y: touch?.clientY ?? 0 };
 }
 
-export function CanvasBoard() {
+export interface CanvasBoardProps {
+  interactionEnabled?: boolean;
+}
+
+export function CanvasBoard({
+  interactionEnabled = true,
+}: CanvasBoardProps) {
   const domainNodes = useCanvasNodes();
   const domainEdges = useCanvasEdges();
   const domainGroups = useCanvasGroups();
@@ -133,7 +140,16 @@ export function CanvasBoard() {
   const edgesHidden = useCanvasEdgesHidden();
   const snapToGrid = useCanvasSnapToGrid();
   const minimapCollapsed = useCanvasMinimapCollapsed();
-  const readOnly = useCanvasReadOnly();
+  const storeReadOnly = useCanvasReadOnly();
+  const readOnly = storeReadOnly || !interactionEnabled;
+  const interactionActive = interactionEnabled && !storeReadOnly;
+  const asyncSessionRef = useRef<CanvasAsyncSession | null>(null);
+  if (asyncSessionRef.current === null) {
+    asyncSessionRef.current = new CanvasAsyncSession(interactionActive);
+  }
+  const asyncSession = asyncSessionRef.current;
+  asyncSession.setInteraction(interactionActive);
+  const uploadControllersRef = useRef(new Set<AbortController>());
   const setMinimapCollapsed = useCanvasStore((state) => state.setMinimapCollapsed);
   const applyNodePositionChanges = useCanvasStore(
     (state) => state.applyNodePositionChanges
@@ -187,6 +203,21 @@ export function CanvasBoard() {
   const copyDragRef = useRef<CopyDragState | null>(null);
   const dragActiveRef = useRef(false);
 
+  useEffect(() => {
+    if (interactionActive) return;
+    for (const controller of uploadControllersRef.current) controller.abort();
+    uploadControllersRef.current.clear();
+  }, [interactionActive]);
+
+  useEffect(
+    () => () => {
+      asyncSession.invalidate();
+      for (const controller of uploadControllersRef.current) controller.abort();
+      uploadControllersRef.current.clear();
+    },
+    [asyncSession]
+  );
+
   // 整理后的 fitView:双 requestAnimationFrame 等提交(RF 依 reconcile 重排后)→ fitView。
   const scheduleFit = useCallback(() => {
     if (fitRafRef.current !== null) cancelAnimationFrame(fitRafRef.current);
@@ -198,9 +229,6 @@ export function CanvasBoard() {
     });
   }, [fitView]);
 
-  useEffect(() => {
-    useCanvasStore.getState().initializeEmptyDoc();
-  }, []);
   useEffect(() => {
     setViewNodes((previous) => [
       ...reconcileReactFlowNodes(previous, domainNodes),
@@ -272,30 +300,33 @@ export function CanvasBoard() {
 
   // ---------------------------------------------------------------- S4 命令
   const handleGroup = useCallback(
-    () => groupNodes(getSelectedDomainNodeIds()) !== null,
-    [groupNodes, getSelectedDomainNodeIds]
+    () => !readOnly && groupNodes(getSelectedDomainNodeIds()) !== null,
+    [groupNodes, getSelectedDomainNodeIds, readOnly]
   );
   const handleUngroup = useCallback(
-    () => ungroupNodes(getSelectedDomainNodeIds()),
-    [ungroupNodes, getSelectedDomainNodeIds]
+    () => !readOnly && ungroupNodes(getSelectedDomainNodeIds()),
+    [ungroupNodes, getSelectedDomainNodeIds, readOnly]
   );
   const handleConnect = useCallback(() => {
+    if (readOnly) return false;
     const ids = getSelectedDomainNodeIds();
     if (ids.length !== 2) return false; // 恰好两个所选领域节点
     return connectNodes(ids[0], ids[1]) !== null;
-  }, [connectNodes, getSelectedDomainNodeIds]);
+  }, [connectNodes, getSelectedDomainNodeIds, readOnly]);
   const handleDuplicate = useCallback(() => {
+    if (readOnly) return false;
     const ids = getSelectedDomainNodeIds();
     if (ids.length === 0) return false;
     return duplicateNodes(ids, { withEdges: true, offset: DUPLICATE_OFFSET }) !== null;
-  }, [duplicateNodes, getSelectedDomainNodeIds]);
+  }, [duplicateNodes, getSelectedDomainNodeIds, readOnly]);
   const handleDelete = useCallback(() => {
+    if (readOnly) return false;
     const nodeIds = getSelectedDomainNodeIds();
     const edgeIds = getSelectedEdgeIds();
     if (nodeIds.length === 0 && edgeIds.length === 0) return false;
     setPendingDelete({ nodeIds, edgeIds }); // 一次批量二确认
     return true;
-  }, [getSelectedDomainNodeIds, getSelectedEdgeIds]);
+  }, [getSelectedDomainNodeIds, getSelectedEdgeIds, readOnly]);
   const handleZoomIn = useCallback(() => {
     void zoomIn({ duration: 200 });
   }, [zoomIn]);
@@ -305,23 +336,26 @@ export function CanvasBoard() {
 
   useCanvasCommandShortcuts({
     wrapperRef,
+    interactionEnabled,
     handlers: {
       onGroup: handleGroup,
       onUngroup: handleUngroup,
       onConnect: handleConnect,
       onDuplicate: handleDuplicate,
       onDelete: handleDelete,
-      onUndo: undo,
-      onRedo: redo,
+      onUndo: () => !readOnly && undo(),
+      onRedo: () => !readOnly && redo(),
       onZoomIn: handleZoomIn,
       onZoomOut: handleZoomOut,
     },
   });
 
   const confirmBatchDelete = useCallback(() => {
-    if (pendingDelete) removeEntities(pendingDelete.nodeIds, pendingDelete.edgeIds);
+    if (!readOnly && pendingDelete) {
+      removeEntities(pendingDelete.nodeIds, pendingDelete.edgeIds);
+    }
     setPendingDelete(null);
-  }, [pendingDelete, removeEntities]);
+  }, [pendingDelete, readOnly, removeEntities]);
 
   // ---------------------------------------------------------------- S2
   const createNodeAt = useCallback(
@@ -361,6 +395,7 @@ export function CanvasBoard() {
   // 2) Tab → 视口中心建默认文本节点:仅无修饰纯 Tab、焦点非交互控件、画布上下文、非只读。
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
+      if (!interactionEnabled) return;
       if (event.key !== "Tab") return;
       const target = event.target instanceof HTMLElement ? event.target : null;
       const wrapper = wrapperRef.current;
@@ -380,7 +415,7 @@ export function CanvasBoard() {
           shiftKey: event.shiftKey,
           targetInteractive,
           inCanvasContext,
-          readOnly: useCanvasStore.getState().readOnly,
+          readOnly,
         })
       ) {
         return;
@@ -390,21 +425,23 @@ export function CanvasBoard() {
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [createNodeAtCenter]);
+  }, [createNodeAtCenter, interactionEnabled, readOnly]);
 
   // S5 整理画布:纯 dagre LR 布局 → applyNodePositions(只写 position)→ fitView。
   const tidyCanvas = useCallback(() => {
+    if (readOnly) return;
     const state = useCanvasStore.getState();
     if (state.readOnly) return;
     const updates = layoutCanvasNodes(state.nodes, state.edges);
     if (updates.length === 0) return;
     applyNodePositions(updates);
     scheduleFit();
-  }, [applyNodePositions, scheduleFit]);
+  }, [applyNodePositions, readOnly, scheduleFit]);
 
   // Alt+Shift+F → 整理画布:仅画布上下文、焦点非交互控件、非只读时生效。
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
+      if (!interactionEnabled) return;
       if (event.code !== "KeyF" || !event.altKey || !event.shiftKey) return;
       const target = event.target instanceof HTMLElement ? event.target : null;
       const wrapper = wrapperRef.current;
@@ -424,7 +461,7 @@ export function CanvasBoard() {
           metaKey: event.metaKey,
           targetInteractive,
           inCanvasContext,
-          readOnly: useCanvasStore.getState().readOnly,
+          readOnly,
         })
       ) {
         return;
@@ -434,7 +471,7 @@ export function CanvasBoard() {
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [tidyCanvas]);
+  }, [interactionEnabled, readOnly, tidyCanvas]);
 
   // 3) 拖入文件 → 上传(只取 object key)→ 建图片/视频节点
   const onDragOver = useCallback(
@@ -455,32 +492,42 @@ export function CanvasBoard() {
       const base = screenToFlowPosition({ x: event.clientX, y: event.clientY });
       files.forEach((file, index) => {
         const position = { x: base.x + index * 24, y: base.y + index * 24 };
-        void uploadCanvasFile(file)
-          .then(({ kind, ossKey }) => {
+        const controller = new AbortController();
+        uploadControllersRef.current.add(controller);
+        void runGuardedCanvasTask(
+          asyncSession,
+          uploadCanvasFile(file, controller.signal),
+          {
+            onSuccess: ({ kind, ossKey }) => {
             const id = addNode({ type: kind, position, data: { media: { ossKey } } });
             if (!id) {
               toast({ title: "建节点失败", description: file.name, variant: "destructive" });
             }
-          })
-          .catch((error: unknown) => {
-            const message = error instanceof Error ? error.message : "上传失败";
-            toast({
-              title: "上传失败",
-              description: `${file.name}:${message}`,
-              variant: "destructive",
-            });
-          });
+            },
+            onError: (error) => {
+              const message = error instanceof Error ? error.message : "上传失败";
+              toast({
+                title: "上传失败",
+                description: `${file.name}:${message}`,
+                variant: "destructive",
+              });
+            },
+          }
+        ).finally(() => {
+          uploadControllersRef.current.delete(controller);
+        });
       });
     },
-    [readOnly, screenToFlowPosition, addNode]
+    [addNode, asyncSession, readOnly, screenToFlowPosition]
   );
 
   // 5a) 已有节点间连线
   const onConnect = useCallback(
     (connection: Connection) => {
+      if (readOnly) return;
       addEdge(connection);
     },
-    [addEdge]
+    [addEdge, readOnly]
   );
 
   // 5b) 从 handle 拉到空白 → 弹 6 类菜单(落在节点上则交给 onConnect)
@@ -507,7 +554,7 @@ export function CanvasBoard() {
 
   const onConnectMenuPick = useCallback(
     (type: CanvasNodeType) => {
-      if (!connectMenu) return;
+      if (readOnly || !connectMenu) return;
       addNodeAndEdge({
         node: { type, position: connectMenu.flowPosition },
         fromNodeId: connectMenu.fromNodeId,
@@ -516,7 +563,7 @@ export function CanvasBoard() {
       });
       setConnectMenu(null);
     },
-    [connectMenu, addNodeAndEdge]
+    [connectMenu, addNodeAndEdge, readOnly]
   );
 
   // ---------------------------------------------------------------- S4 拖动/复制
@@ -525,6 +572,7 @@ export function CanvasBoard() {
   //(OnNodeDrag=原生 MouseEvent|TouchEvent;SelectionDragHandler=ReactMouseEvent)。
   const beginDrag = useCallback(
     (modifiers: { altKey: boolean; ctrlKey: boolean; metaKey: boolean }, dragged: Node[]) => {
+      if (readOnly) return;
       if (dragActiveRef.current) return; // node 与 selection 事件双触发去重
       const domainIds = new Set(useCanvasStore.getState().nodes.map((node) => node.id));
       const ids = dragged.map((node) => node.id).filter((id) => domainIds.has(id));
@@ -543,7 +591,7 @@ export function CanvasBoard() {
         beginPositionDrag(ids); // 只锚可能移动的这批节点(最小实体锚,不存 doc 快照)
       }
     },
-    [beginPositionDrag]
+    [beginPositionDrag, readOnly]
   );
 
   // 拖动结束:复制手势 → 用落点(视图末位)造副本(原节点保留、ghost 归位);常规 → 合并成一个位置历史项。
@@ -639,6 +687,9 @@ export function CanvasBoard() {
     <div
       ref={wrapperRef}
       className="relative h-full w-full"
+      inert={interactionEnabled ? undefined : true}
+      aria-busy={!interactionEnabled}
+      data-canvas-interactive={interactionEnabled ? "true" : "false"}
       onDoubleClick={onWrapperDoubleClick}
       onDragOver={onDragOver}
       onDrop={onDrop}
