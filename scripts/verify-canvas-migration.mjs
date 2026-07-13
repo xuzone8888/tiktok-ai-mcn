@@ -21,6 +21,13 @@ import { loadCanvasModule } from "./canvas-build.mjs";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..");
 const SQL_PATH = join(ROOT, "supabase", "migrations", "20260714_canvases.sql");
+const GENERATIONS_POLICY_PATH = join(
+  ROOT,
+  "supabase",
+  "migrations",
+  "20260715_generations_service_role_policy.sql"
+);
+const GENERATIONS_BASE_PATH = join(ROOT, "supabase", "migrations", "006_generations_table.sql");
 
 let pass = 0;
 let fail = 0;
@@ -43,6 +50,8 @@ function eq(actual, expected, label) {
 // ─────────────────────────────────────────────────────────────────────────────
 console.log("① 迁移结构自校(20260714_canvases.sql)");
 const sql = readFileSync(SQL_PATH, "utf8");
+const generationsPolicySql = readFileSync(GENERATIONS_POLICY_PATH, "utf8");
+const generationsBaseSql = readFileSync(GENERATIONS_BASE_PATH, "utf8");
 const sqlNoComments = sql
   .split("\n")
   .filter((l) => !l.trimStart().startsWith("--"))
@@ -106,6 +115,42 @@ ok(/COMMENT ON TABLE public\.canvases/i.test(sql), "表注释在案");
 // 分号计数:粗校语句完整性(不含结尾多余空语句)
 const stmtCount = sqlNoComments.split(";").map((s) => s.trim()).filter((s) => s.length > 0).length;
 ok(stmtCount >= 10, `语句数合理(${stmtCount} ≥ 10)`);
+
+console.log("D1 generations RLS follow-up migration");
+ok(
+  /DROP POLICY IF EXISTS "Service can manage all generations" ON public\.generations\s*;/i.test(
+    generationsPolicySql
+  ),
+  "repair migration drops the legacy unscoped service policy"
+);
+const generationsServicePolicy = generationsPolicySql.match(
+  /CREATE POLICY "Service can manage all generations"[\s\S]*?;/i
+)?.[0] ?? "";
+ok(generationsServicePolicy.length > 0, "repair migration recreates the service policy");
+ok(
+  /FOR ALL\s+TO service_role\s+USING\s*\(\s*true\s*\)\s+WITH CHECK\s*\(\s*true\s*\)/i.test(
+    generationsServicePolicy
+  ),
+  "recreated generations policy is scoped only to service_role"
+);
+ok(
+  !/\bTO\s+(?:PUBLIC|authenticated)\b/i.test(generationsServicePolicy),
+  "repair migration does not preserve a public or authenticated service policy"
+);
+ok(
+  !/DROP POLICY[^;]+Users can (?:view|insert|update) own generations/i.test(generationsPolicySql),
+  "repair migration leaves authenticated own-row policies intact"
+);
+for (const policyName of [
+  "Users can view own generations",
+  "Users can insert own generations",
+  "Users can update own generations",
+]) {
+  ok(
+    new RegExp(`CREATE POLICY "${policyName}" ON public\\.generations`, "i").test(generationsBaseSql),
+    `base migration still defines authenticated own policy: ${policyName}`
+  );
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ② doc-limits 体积契约

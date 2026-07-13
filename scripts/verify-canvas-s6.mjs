@@ -112,9 +112,11 @@ async function main() {
     componentPath("canvas-responsive.ts"),
     "canvas-responsive.mjs"
   );
+  await loadCanvasModule("media-ownership");
   const ownership = await loadExtra(
     join(ROOT, "src", "app", "api", "storage", "media-url", "ownership.ts"),
-    "media-url-ownership.mjs"
+    "media-url-ownership.mjs",
+    { "@/lib/canvas/media-ownership": "./media-ownership.mjs" }
   );
 
   const { describeMediaKeyRejection, isOssObjectKey, loadCanvasDoc } = schema;
@@ -316,6 +318,13 @@ async function main() {
   ok(isOwnedObjectKey(`images/${ME}/1-a.png`, ME) === true, "自有 images 对象放行");
   ok(isOwnedObjectKey(`videos/${ME}/1-a.mp4`, ME) === true, "自有 videos 对象放行");
   ok(isOwnedObjectKey(`videos/slideshow/${ME}/x.mp4`, ME) === true, "自有 slideshow 对象放行");
+  ok(isOwnedObjectKey(`veo-videos/${ME}/x.mp4`, ME) === true, "owned VEO layout is accepted");
+  ok(isOwnedObjectKey(`videos/assembly/${ME}/x.mp4`, ME) === true, "owned assembly layout is accepted");
+  ok(isOwnedObjectKey(`veo-videos/${OTHER}/x.mp4`, ME) === false, "cross-user VEO layout is rejected");
+  ok(isOwnedObjectKey(`videos/assembly/${OTHER}/x.mp4`, ME) === false, "cross-user assembly layout is rejected");
+  ok(isOwnedObjectKey(`veo-videos/${ME}/extra/x.mp4`, ME) === false, "extra VEO path segments are rejected");
+  ok(isOwnedObjectKey(`videos/assembly/${ME}/extra/x.mp4`, ME) === false, "extra assembly path segments are rejected");
+  ok(isOwnedObjectKey(`videos/assembly/${ME}/../${OTHER}`, ME) === false, "assembly traversal segments are rejected");
   ok(isOwnedObjectKey(`images/${OTHER}/1-a.png`, ME) === false, "他人 owner UUID 拒");
   ok(isOwnedObjectKey(`images/1-a.png`, ME) === false, "缺 owner 段拒");
   ok(isOwnedObjectKey(`images/${ME}/sub/1-a.png`, ME) === false, "额外段拒");
@@ -494,6 +503,7 @@ async function main() {
   const newFiles = [
     "src/app/api/storage/media-url/route.ts",
     "src/app/api/storage/media-url/ownership.ts",
+    "src/lib/canvas/media-ownership.ts",
     "src/components/canvas/media-url-cache.ts",
     "src/components/canvas/active-video-registry.ts",
     "src/components/canvas/canvas-responsive.ts",
