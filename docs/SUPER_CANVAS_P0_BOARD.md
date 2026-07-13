@@ -13,7 +13,7 @@
 | D2 zod schema+迁移注册表+坏档降级 | data | ✅ 审核通过(合流 2026-07-12) | D1 |
 | D3 文档存取 API+补丁保存协议 | data | ✅ 代码/构建审核通过(合流 2026-07-13) | D1、D2 |
 | D4 IndexedDB 影子副本 | data | ✅ 代码/构建审核通过(合流 2026-07-13) | D3 |
-| D5 单写者锁 | data | 待认领 | D1 |
+| D5 单写者锁 | data | ✅ 代码/安全/全量构建审核通过(合流 2026-07-13;只读横幅 UI 归 S7) | D1 |
 | D6 历史资产直读查询 | data | 待认领 | 无 |
 | S1 /canvas 路由+React Flow 底盘 | shell | ✅ 代码/构建审核通过(合流 2026-07-13;登录态 UI 走查归 R1/R2) | 无(第一个做) |
 | S2 建节点五入口+连线 | shell | ✅ 代码/构建审核通过(合流 2026-07-13;登录态 UI 走查归 R1/R2) | S1、D2(schema) |
@@ -49,6 +49,7 @@
   - ✅ IndexedDB 影子副本 + shadow>server 一键恢复(不占 localStorage 5MB 配额)
 - **D5 单写者锁**(`src/lib/canvas/writer-lock.ts` + API 侧 writer_tag/heartbeat)
   - ✅ 单写者锁(navigator.locks)+ 双标签第二个只读+横幅(横幅 UI 归 S7 消费其状态)
+  - **审核收口(2026-07-13)**:D5 verifier 208/208、D3 153/153、D1-D4/S1-S6 全回归、`tsc`、生产构建全绿；生产 PATCH 强制合法 writerTag，并将活跃 heartbeat、writer_tag、rev CAS 置于同一原子 UPDATE。控制器补双标签低频自动接管、挂起心跳超租约本地判死、迟到 claim/heartbeat 补偿释放与 release 重入屏障，所有异常/stop/abort/迟到回调 fail-closed。只读横幅 UI 仍由 S7 接线。
 - **D6 历史资产直读查询**(`src/app/api/canvas/history/route.ts` 或复用现有查询;**三库同源:直读 generations/assets/blueprints,不建平行表**)
   - ✅ 历史资产库(数据面:跨画布图/视频/音频生成历史查询,按类型三 tab+日期分组+计数)
 

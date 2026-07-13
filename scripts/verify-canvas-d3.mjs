@@ -37,6 +37,7 @@ const docLimits = await loadCanvasModule("doc-limits");
 const patch = await loadCanvasModule("patch");
 const queue = await loadCanvasModule("offline-queue");
 const apiTypes = await loadCanvasModule("api-types");
+await loadCanvasModule("writer-lock");
 const helpers = await loadCanvasModule("api-helpers");
 
 const {
