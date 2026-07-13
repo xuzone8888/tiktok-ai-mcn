@@ -1,10 +1,13 @@
 "use client";
 
 /**
- * 超级画布 · 左侧节点类型工具条(P0 · S2)
+ * 超级画布 · 左侧节点类型工具条(P0 · S2 建节点入口 + S6 窄屏图标态)
  *
  * 6 类白名单节点各一入口按钮,点击在当前视口中心建对应默认节点(坐标由 CanvasBoard 用
  * screenToFlowPosition 计算)。安静图标风格,配 tooltip;只读时禁用。
+ *
+ * S6 响应式(#33):侧栏**默认图标态**(不展开成大卡片/营销面板),并夹 max-height + 内部滚动 ——
+ * 即便 1366×768 或未来入口更多,也绝不纵向溢出视口、不与其它面板重叠。
  */
 import { Panel } from "@xyflow/react";
 
@@ -32,7 +35,8 @@ export function NodePalette({
         <div
           role="toolbar"
           aria-label="添加节点"
-          className="flex flex-col gap-0.5 rounded-lg border border-border bg-card/90 p-1 shadow-sm backdrop-blur"
+          data-sidebar-mode="icon"
+          className="flex max-h-[calc(100vh-5rem)] flex-col gap-0.5 overflow-y-auto rounded-lg border border-border bg-card/90 p-1 shadow-sm backdrop-blur"
         >
           {NODE_TYPE_ITEMS.map(({ type, label, Icon }) => (
             <Tooltip key={type}>

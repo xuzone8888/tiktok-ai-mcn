@@ -13,13 +13,9 @@ import type { CanvasNodeType } from "@/lib/canvas/schema";
 import { GROUP_FRAME_TYPE } from "./group-frame";
 import { BrokenNode } from "./nodes/broken-node";
 import { GroupFrameNode } from "./nodes/group-frame-node";
-import {
-  ComposeNode,
-  ImageNode,
-  ProductNode,
-  ScriptNode,
-  VideoNode,
-} from "./nodes/reference-nodes";
+// 图片/视频节点(S6 媒体降级 + object key→URL 解析)独立于 media-node;其余引用型节点在 reference-nodes。
+import { ImageNode, VideoNode } from "./nodes/media-node";
+import { ComposeNode, ProductNode, ScriptNode } from "./nodes/reference-nodes";
 import { TextNode } from "./nodes/text-node";
 
 // satisfies:强制 6 类白名单全覆盖(缺一即编译错),值为合法 RF 节点组件。

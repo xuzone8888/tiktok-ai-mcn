@@ -82,9 +82,11 @@ import { ConnectNodeMenu } from "./connect-menu";
 import { NodePalette } from "./node-palette";
 import { projectGroupFrames } from "./group-frame";
 import { ShortcutPanel } from "./shortcut-panel";
+import { shouldExpandMinimap } from "./canvas-responsive";
 import { uploadCanvasFile } from "./canvas-upload";
 import { useCanvasShortcuts } from "./use-canvas-shortcuts";
 import { useCanvasCommandShortcuts } from "./use-canvas-command-shortcuts";
+import { useViewportSize } from "./use-viewport-size";
 import {
   CANVAS_INTERACTIVE_FOCUS_SELECTOR,
   shouldTabCreateNode,
@@ -95,8 +97,6 @@ const GRID_SIZE = 16;
 const SNAP_GRID: [number, number] = [GRID_SIZE, GRID_SIZE];
 /** Ctrl+D 键盘复制的固定落点偏移(与网格对齐,避免与原节点完全重叠)。 */
 const DUPLICATE_OFFSET: CanvasPosition = { x: GRID_SIZE * 2, y: GRID_SIZE * 2 };
-/** 超过此视口宽度时挂载即展开小地图;≤此宽(含 1366×768)默认收起。 */
-const MINIMAP_EXPAND_MIN_WIDTH = 1440;
 
 interface ConnectMenuState {
   x: number; // 容器内坐标(渲染菜单)
@@ -153,8 +153,11 @@ export function CanvasBoard() {
   const endPositionDrag = useCanvasStore((state) => state.endPositionDrag);
   const { screenToFlowPosition, fitView, zoomIn, zoomOut } = useReactFlow();
   const { resolvedTheme } = useTheme();
+  const { width: viewportWidth } = useViewportSize();
   const wrapperRef = useRef<HTMLDivElement>(null);
   const fitRafRef = useRef<number | null>(null);
+  // 记录上一次小地图自动展开阈值状态,仅在跨越阈值时干预(不覆盖用户手动开关)。
+  const minimapWideRef = useRef<boolean | null>(null);
   const [shortcutOpen, setShortcutOpen] = useState(false);
   const [connectMenu, setConnectMenu] = useState<ConnectMenuState | null>(null);
   const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
@@ -216,11 +219,14 @@ export function CanvasBoard() {
       reconcileReactFlowEdges(previous, domainEdges, { hidden: edgesHidden })
     );
   }, [domainEdges, edgesHidden]);
+  // 响应式小地图(#33):仅在视口宽**跨越** 1440 阈值时自动展开/收起;阈值内不干预用户手动开关。
+  // 窄屏(含 1366×768)默认收起,避免小地图占用宝贵横向空间、与右上工具条挤压。
   useEffect(() => {
-    if (typeof window !== "undefined" && window.innerWidth > MINIMAP_EXPAND_MIN_WIDTH) {
-      setMinimapCollapsed(false);
-    }
-  }, [setMinimapCollapsed]);
+    const wide = shouldExpandMinimap(viewportWidth);
+    if (minimapWideRef.current === wide) return;
+    minimapWideRef.current = wide;
+    setMinimapCollapsed(!wide);
+  }, [viewportWidth, setMinimapCollapsed]);
 
   useCanvasShortcuts({
     onToggleShortcuts: () => setShortcutOpen((open) => !open),
