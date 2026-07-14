@@ -1,6 +1,6 @@
 import type { CanvasApiErrorBody, CanvasApiErrorCode, CanvasSizeWarning } from "./api-types";
 import { CANVAS_API_ERROR_CODES } from "./api-types";
-import { CANVAS_UUID_RE } from "./api-helpers";
+import { CANVAS_UUID_RE, parseCanvasRepairRequest } from "./api-helpers";
 import { checkDocSize } from "./doc-limits";
 import { CanvasOpsArraySchema, type CanvasOp } from "./patch";
 import {
@@ -40,6 +40,11 @@ export interface CanvasPatchPreparationInput {
   ops: CanvasOp[];
   title?: string;
   deps?: CanvasDeps;
+}
+
+export interface CanvasRepairPreparationInput {
+  baseRev: number;
+  deps: CanvasDeps;
 }
 
 export interface CanvasSaveFeedback {
@@ -177,6 +182,29 @@ function snapshotPatchInput(input: unknown): CanvasPatchInputSnapshot | null {
   }
 }
 
+function snapshotRepairInput(
+  input: unknown
+): { baseRev: unknown; deps: unknown } | null {
+  if (!input || typeof input !== "object") return null;
+  try {
+    const descriptors = Object.getOwnPropertyDescriptors(input);
+    const ownKeys = Reflect.ownKeys(descriptors);
+    if (
+      ownKeys.length !== 2 ||
+      !Object.prototype.hasOwnProperty.call(descriptors, "baseRev") ||
+      !Object.prototype.hasOwnProperty.call(descriptors, "deps")
+    ) {
+      return null;
+    }
+    const baseRev = descriptors.baseRev;
+    const deps = descriptors.deps;
+    if (!("value" in baseRev) || !("value" in deps)) return null;
+    return { baseRev: baseRev.value, deps: deps.value };
+  } catch {
+    return null;
+  }
+}
+
 function snapshotSaveIdentity(
   state: unknown
 ): { sessionCanvasId: string | null; hydratedCanvasId: string | null } | null {
@@ -199,6 +227,34 @@ function snapshotSaveIdentity(
   }
 }
 
+function snapshotRequiredSaveDoc(
+  state: unknown
+): { nodes: CanvasNode[]; edges: CanvasEdge[]; groups: CanvasGroup[] } | null {
+  if (!state || typeof state !== "object") return null;
+  try {
+    const descriptors = Object.getOwnPropertyDescriptors(state);
+    const nodes = descriptors.nodes;
+    const edges = descriptors.edges;
+    const groups = descriptors.groups;
+    if (
+      !nodes ||
+      !("value" in nodes) ||
+      !edges ||
+      !("value" in edges) ||
+      !groups ||
+      !("value" in groups) ||
+      !Array.isArray(nodes.value) ||
+      !Array.isArray(edges.value) ||
+      !Array.isArray(groups.value)
+    ) {
+      return null;
+    }
+    return { nodes: nodes.value, edges: edges.value, groups: groups.value };
+  } catch {
+    return null;
+  }
+}
+
 export function guardCanvasSaveState(
   state: CanvasSaveStateView
 ):
@@ -216,11 +272,17 @@ export function guardCanvasSaveState(
     }
     if (state.readOnly) return { ok: false, error: feedback("WRITER_LOCKED") };
 
-    const validation = validateCanvasDoc({
-      nodes: state.nodes,
-      edges: state.edges,
-      groups: state.groups,
-    });
+    // The shared CanvasDoc schema defaults absent collections for tolerant create/load flows.
+    // A save/repair must instead prove all three authoritative collections are explicit own data
+    // properties, otherwise a partial runtime object could be serialized as an empty overwrite.
+    const explicitDoc = snapshotRequiredSaveDoc(state);
+    if (!explicitDoc) {
+      return {
+        ok: false,
+        error: feedback("CANVAS_DOC_INVALID", "当前文档缺少显式 nodes/edges/groups,已阻止保存。"),
+      };
+    }
+    const validation = validateCanvasDoc(explicitDoc);
     if (!validation.ok || !validation.data) {
       return {
         ok: false,
@@ -375,6 +437,89 @@ export class CanvasSaveAdapter {
       };
     } catch {
       return this.reject(feedback("INVALID_BODY", "保存预检读取失败,未构造保存请求。"));
+    }
+  }
+
+  prepareRepair(
+    state: CanvasSaveStateView,
+    input: CanvasRepairPreparationInput
+  ): CanvasSavePreparation {
+    try {
+      const repairInput = snapshotRepairInput(input);
+      if (!repairInput) {
+        return this.reject(feedback("INVALID_BODY", "恢复请求元数据读取失败。"));
+      }
+      const guard = guardCanvasSaveState(state);
+      if (!guard.ok) return this.reject(guard.error);
+
+      const writer = this.getActiveWriter();
+      if (!writer) return this.reject(feedback("NO_ACTIVE_WRITER"));
+      const identity = snapshotSaveIdentity(state);
+      if (
+        !identity ||
+        identity.sessionCanvasId !== writer.canvasId ||
+        identity.hydratedCanvasId !== writer.canvasId
+      ) {
+        return this.reject(feedback("CANVAS_IDENTITY_MISMATCH"));
+      }
+      if (
+        !Number.isSafeInteger(repairInput.baseRev) ||
+        (repairInput.baseRev as number) < 0 ||
+        (repairInput.baseRev as number) > Number.MAX_SAFE_INTEGER - 1
+      ) {
+        return this.reject(feedback("INVALID_BODY", "恢复请求 baseRev 非法。"));
+      }
+
+      const size = checkDocSize(guard.doc);
+      if (size.overHardLimit) {
+        return this.reject(feedback("DOC_TOO_LARGE", size.message ?? undefined));
+      }
+      const candidate = {
+        baseRev: repairInput.baseRev,
+        writerTag: writer.writerTag,
+        confirmRecovery: true as const,
+        doc: guard.doc,
+        deps: repairInput.deps,
+      };
+      const parsedRepair = parseCanvasRepairRequest(candidate);
+      if (!parsedRepair.ok) {
+        return this.reject(
+          feedback(
+            "INVALID_BODY",
+            "恢复请求必须显式包含完整 nodes/edges/groups 与 models/voices/characters/assets/recipes。"
+          )
+        );
+      }
+      let serialized: string;
+      try {
+        serialized = JSON.stringify(parsedRepair.data);
+      } catch {
+        return this.reject(feedback("INVALID_BODY", "恢复请求无法序列化。"));
+      }
+
+      const warning: CanvasSizeWarning | null = size.overWarnLimit
+        ? {
+            code: "DOC_SIZE_WARNING",
+            bytes: size.bytes,
+            warnLimit: size.warnLimit,
+            hardLimit: size.hardLimit,
+            message: size.message || "画布偏大，建议拆分。",
+          }
+        : null;
+      return {
+        ok: true,
+        request: {
+          url: `/api/canvas/${encodeURIComponent(writer.canvasId)}`,
+          init: {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: serialized,
+          },
+        },
+        warning,
+      };
+    } catch {
+      return this.reject(feedback("INVALID_BODY", "恢复请求预检失败。"));
     }
   }
 

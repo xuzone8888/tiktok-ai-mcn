@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { AlertTriangle, Info, LockKeyhole, Trash2 } from "lucide-react";
+import { AlertTriangle, Cloud, Info, LockKeyhole, RotateCcw, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { checkDocSize, formatBytes } from "@/lib/canvas/doc-limits";
@@ -9,7 +9,11 @@ import {
   createCanvasDocSizeController,
   type CanvasDocSizeController,
 } from "@/lib/canvas/canvas-size-controller";
-import type { CanvasDoc } from "@/lib/canvas/schema";
+import type {
+  CanvasRuntimeIssue,
+  CanvasShadowRecoveryNotice,
+} from "@/lib/canvas/canvas-runtime";
+import { CANVAS_SCHEMA_VERSION, type CanvasDoc } from "@/lib/canvas/schema";
 import type { WriterLockStatus } from "@/lib/canvas/writer-lock";
 import { cn } from "@/lib/utils";
 import { useCanvasStore } from "@/stores/canvas-store";
@@ -17,6 +21,10 @@ import { useCanvasStore } from "@/stores/canvas-store";
 interface CanvasHealthBannersProps {
   persistent: boolean;
   writerStatus: WriterLockStatus | null;
+  runtimeIssue?: CanvasRuntimeIssue | null;
+  shadowRecovery?: CanvasShadowRecoveryNotice | null;
+  onRestoreShadow?: () => boolean;
+  onDiscardShadow?: () => boolean;
 }
 
 export function writerBannerMessage(status: WriterLockStatus | null): string {
@@ -67,15 +75,23 @@ function Banner({
 export function CanvasHealthBanners({
   persistent,
   writerStatus,
+  runtimeIssue = null,
+  shadowRecovery = null,
+  onRestoreShadow,
+  onDiscardShadow,
 }: CanvasHealthBannersProps) {
   const nodes = useCanvasStore((state) => state.nodes);
   const edges = useCanvasStore((state) => state.edges);
   const groups = useCanvasStore((state) => state.groups);
   const recoveryRequired = useCanvasStore((state) => state.recoveryRequired);
   const loadIssues = useCanvasStore((state) => state.loadIssues);
+  const brokenNodes = useCanvasStore((state) => state.brokenNodes);
   const brokenEdges = useCanvasStore((state) => state.brokenEdges);
+  const schemaVersion = useCanvasStore((state) => state.schemaVersion);
+  const migratedFrom = useCanvasStore((state) => state.migratedFrom);
   const readOnly = useCanvasStore((state) => state.readOnly);
   const removeBrokenEdges = useCanvasStore((state) => state.removeBrokenEdges);
+  const confirmSafeRecovery = useCanvasStore((state) => state.confirmSafeRecovery);
 
   const latestDocRef = useRef<CanvasDoc>({ nodes, edges, groups });
   latestDocRef.current = { nodes, edges, groups };
@@ -101,8 +117,64 @@ export function CanvasHealthBanners({
     sizeControllerRef.current?.update(latestDocRef.current);
   }, [nodes, edges, groups]);
 
+  const futureSchemaRecovery =
+    recoveryRequired &&
+    (schemaVersion > CANVAS_SCHEMA_VERSION || migratedFrom > CANVAS_SCHEMA_VERSION);
+
   return (
     <div className="relative z-20 shrink-0" aria-live="polite" data-canvas-health-banners>
+      {shadowRecovery && (
+        <Banner tone="warning" icon={<RotateCcw className="h-3.5 w-3.5" />}>
+          <span className="min-w-0 flex-1">
+            {futureSchemaRecovery ? (
+              <>
+                检测到尚未合并的本地版本，但云端画布来自更高版本。请升级 StarGaze
+                后再处理；当前版本不会恢复或丢弃本地版本。
+              </>
+            ) : (
+              <>
+                检测到尚未合并的本地版本（本地 rev {shadowRecovery.shadowServerRev}，云端 rev{" "}
+                {shadowRecovery.serverRev}）。请选择要保留的版本。
+              </>
+            )}
+          </span>
+          {!futureSchemaRecovery && (
+            <>
+              <Button
+                type="button"
+                variant="default"
+                size="sm"
+                className="h-7 shrink-0 px-2 text-xs"
+                onClick={() => onRestoreShadow?.()}
+                disabled={readOnly || !onRestoreShadow}
+                aria-label="恢复本地版本"
+              >
+                <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
+                恢复本地版本
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 shrink-0 px-2 text-xs"
+                onClick={() => onDiscardShadow?.()}
+                disabled={readOnly || !onDiscardShadow}
+                aria-label="保留云端版本"
+              >
+                <Cloud className="h-3.5 w-3.5" aria-hidden="true" />
+                保留云端版本
+              </Button>
+            </>
+          )}
+        </Banner>
+      )}
+      {runtimeIssue && (
+        <Banner tone="danger" icon={<AlertTriangle className="h-3.5 w-3.5" />}>
+          <span className="min-w-0 flex-1">
+            自动保存已暂停以保护当前修改。请保持此页面打开，当前修改仍保留在本页。
+          </span>
+        </Banner>
+      )}
       {persistent && !writerStatus?.canWrite && (
         <Banner tone="warning" icon={<LockKeyhole className="h-3.5 w-3.5" />}>
           {writerBannerMessage(writerStatus)}
@@ -111,12 +183,14 @@ export function CanvasHealthBanners({
       {recoveryRequired && (
         <Banner tone="danger" icon={<AlertTriangle className="h-3.5 w-3.5" />}>
           <span className="min-w-0 flex-1">
-            {brokenEdges.length > 0
+            {futureSchemaRecovery
+              ? `该画布来自更高版本（文档 schema ${schemaVersion}，迁移来源 ${migratedFrom}）。请升级 StarGaze 后再恢复；当前版本不会确认或保存。`
+              : brokenEdges.length > 0
               ? `检测到 ${brokenEdges.length} 条损坏连线,修复前不会保存。`
               : "画布包含待恢复内容,修复前不会保存。"}
             {loadIssues.length > 0 ? ` 诊断 ${loadIssues.length} 项。` : ""}
           </span>
-          {brokenEdges.length > 0 && (
+          {!futureSchemaRecovery && brokenEdges.length > 0 && (
             <Button
               type="button"
               variant="destructive"
@@ -128,6 +202,20 @@ export function CanvasHealthBanners({
             >
               <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
               清除 {brokenEdges.length} 条损坏连线
+            </Button>
+          )}
+          {!futureSchemaRecovery && brokenNodes.length === 0 && brokenEdges.length === 0 && (
+            <Button
+              type="button"
+              variant="destructive"
+              size="sm"
+              className="h-7 shrink-0 px-2 text-xs"
+              onClick={confirmSafeRecovery}
+              disabled={!(persistent && writerStatus?.canWrite === true && readOnly === false)}
+              aria-label="确认使用当前安全恢复版本"
+            >
+              <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
+              确认恢复
             </Button>
           )}
         </Banner>

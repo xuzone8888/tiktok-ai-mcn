@@ -23,6 +23,7 @@ import {
   CanvasCreateRequestSchema,
   sanitizeCanvasTitle,
 } from "@/lib/canvas/api-helpers";
+import { deepEqual } from "@/lib/canvas/patch";
 
 export const dynamic = "force-dynamic";
 
@@ -39,6 +40,36 @@ export const dynamic = "force-dynamic";
  * - rev 从 0 起(与迁移默认一致);updated_at 手动写(表无触发器,沿用 blueprints 惯例)。
  * - canvases 未进 database.ts 生成类型,沿用 blueprints 路由的 untyped client 断言。
  */
+
+const CREATED_COLUMNS = "id, title, rev, schema_version, doc_bytes, created_at, updated_at";
+/** 幂等采纳读回列:额外取 doc/deps,以逐字段比对既有行是否仍是本次创建请求的原始未改副本。 */
+const ADOPT_COLUMNS =
+  "id, user_id, title, rev, schema_version, doc, deps, doc_bytes, created_at, updated_at";
+
+interface CanvasCreatedRow {
+  id: string;
+  title: string;
+  rev: number;
+  schema_version: number;
+  doc_bytes: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+interface CanvasAdoptRow extends CanvasCreatedRow {
+  user_id: string;
+  doc: unknown;
+  deps: unknown;
+}
+
+/** Postgres unique-violation(重复主键)。supabase-js 透传 PostgREST 的 `code`。 */
+function isUniqueViolation(error: unknown): boolean {
+  return (
+    !!error &&
+    typeof error === "object" &&
+    (error as { code?: unknown }).code === "23505"
+  );
+}
 
 function fail(code: CanvasApiErrorCode, message: string) {
   return NextResponse.json(canvasApiError(code, message), {
@@ -63,7 +94,7 @@ export async function POST(request: NextRequest) {
     // 严格顶层:损坏 JSON/数组/基元/未知字段一律 INVALID_BODY,绝不误当空画布创建。
     const parsedBody = CanvasCreateRequestSchema.safeParse(body);
     if (!parsedBody.success) {
-      return fail("INVALID_BODY", "请求体字段非法(仅允许 title/doc/deps)");
+      return fail("INVALID_BODY", "请求体字段非法(仅允许 id/title/doc/deps)");
     }
     const input = parsedBody.data;
 
@@ -106,35 +137,65 @@ export async function POST(request: NextRequest) {
 
     const nowIso = new Date().toISOString();
     const db = supabase as unknown as SupabaseClient;
+    const insertValues: Record<string, unknown> = {
+      user_id: user.id,
+      title,
+      schema_version: CANVAS_SCHEMA_VERSION,
+      doc,
+      deps,
+      rev: 0,
+      doc_bytes: size.bytes,
+      updated_at: nowIso,
+    };
+    // 客户端提供稳定 UUID → 显式落主键,使并发/重试/中止/重挂的多次创建幂等收敛为一行。
+    if (input.id !== undefined) insertValues.id = input.id;
+
     const { data, error } = await db
       .from("canvases")
-      .insert({
-        user_id: user.id,
-        title,
-        schema_version: CANVAS_SCHEMA_VERSION,
-        doc,
-        deps,
-        rev: 0,
-        doc_bytes: size.bytes,
-        updated_at: nowIso,
-      } as never)
-      .select("id, title, rev, schema_version, doc_bytes, created_at, updated_at")
+      .insert(insertValues as never)
+      .select(CREATED_COLUMNS)
       .single();
 
-    if (error || !data) {
-      console.error("[Canvas POST] insert failed:", error);
-      return fail("INTERNAL", "画布创建失败");
-    }
+    let row: CanvasCreatedRow | null = (data as unknown as CanvasCreatedRow) ?? null;
+    let adopted = false;
 
-    const row = data as unknown as {
-      id: string;
-      title: string;
-      rev: number;
-      schema_version: number;
-      doc_bytes: number | null;
-      created_at: string;
-      updated_at: string;
-    };
+    if (error || !row) {
+      // 幂等新建:同一 own UUID 的重复创建撞主键(23505)→ 读回**本人**既有行,仅当它仍是这次创建请求的
+      // **原始未改**副本(rev===0 且 title/schema/doc/deps/doc_bytes 逐字段全等)才原样采纳。
+      // 一旦已被后续 PATCH 推进(rev>0),或标题/文档/依赖已不同,或非本人持有(RLS 命中 0 行)→ REV_CONFLICT,
+      // 绝不把一次「新建」静默返回成他人的或已演进的画布(fail-closed)。
+      if (input.id !== undefined && isUniqueViolation(error)) {
+        const { data: existing, error: readbackError } = await db
+          .from("canvases")
+          .select(ADOPT_COLUMNS)
+          .eq("id", input.id)
+          .eq("user_id", user.id)
+          .maybeSingle();
+        if (readbackError) {
+          console.error("[Canvas POST] idempotent readback failed:", readbackError);
+          return fail("INTERNAL", "画布创建结果确认失败，请重试");
+        }
+        const existingRow = (existing as unknown as CanvasAdoptRow) ?? null;
+        if (
+          existingRow &&
+          existingRow.user_id === user.id &&
+          existingRow.rev === 0 &&
+          existingRow.schema_version === CANVAS_SCHEMA_VERSION &&
+          existingRow.title === title &&
+          existingRow.doc_bytes === size.bytes &&
+          deepEqual(existingRow.doc, doc) &&
+          deepEqual(existingRow.deps, deps)
+        ) {
+          row = existingRow;
+          adopted = true;
+        } else {
+          return fail("REV_CONFLICT", "画布 ID 冲突,请重试");
+        }
+      } else {
+        console.error("[Canvas POST] insert failed:", error);
+        return fail("INTERNAL", "画布创建失败");
+      }
+    }
 
     const created: CanvasCreatedData = {
       id: row.id,
@@ -146,8 +207,9 @@ export async function POST(request: NextRequest) {
       updatedAt: row.updated_at,
     };
 
+    // 新建 201;幂等采纳既有行 200(不改动其内容,仅回其权威摘要)。
     return NextResponse.json(canvasApiSuccess(created, buildSizeWarning(size) ?? undefined), {
-      status: 201,
+      status: adopted ? 200 : 201,
     });
   } catch (error) {
     console.error("[Canvas POST] error:", error);

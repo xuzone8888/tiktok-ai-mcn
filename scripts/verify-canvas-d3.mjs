@@ -2,9 +2,48 @@
  *
  * 脱离数据库直测补丁协议纯核心:幂等重放 / 重叠 409 / 非重叠 rebase / 引用完整性 /
  * RF+URL 攻击 / 体积边界,以及离线队列状态机(opId 去重 / coalesce / buildPatch /
- * ack / fail / snapshot / restore)。IO(鉴权/RLS/CAS 写)由 route 承接,不在此测。
+ * ack / fail / snapshot / restore)。PATCH IO 由专门 route verifier 承接；POST 稳定 ID 的
+ * 201/23505/readback 路径在本脚本中直接转译并执行生产 route.ts。
  */
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
+import { dirname, join } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import vm from "node:vm";
 import { loadCanvasModule } from "./canvas-build.mjs";
+
+const require = createRequire(import.meta.url);
+const ts = require("typescript");
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
+const OUT = join(ROOT, ".temp", "canvas-verify-build");
+
+function addExt(code) {
+  return code.replace(
+    /(\bfrom\s*|\bimport\s*|\bexport\s*(?:\*|\{[^}]*\})\s*from\s*)(["'])(\.\.?\/[^"']+?)(["'])/g,
+    (match, prefix, quote, specifier, endQuote) =>
+      /\.[a-z]+$/i.test(specifier)
+        ? match
+        : `${prefix}${quote}${specifier}.mjs${endQuote}`
+  );
+}
+
+async function loadExtra(sourcePath, outputName, rewrites = {}) {
+  mkdirSync(OUT, { recursive: true });
+  const source = readFileSync(sourcePath, "utf8");
+  const { outputText } = ts.transpileModule(source, {
+    compilerOptions: {
+      module: ts.ModuleKind.ESNext,
+      target: ts.ScriptTarget.ES2020,
+      moduleResolution: ts.ModuleResolutionKind.Bundler,
+    },
+    fileName: sourcePath,
+  });
+  let code = addExt(outputText);
+  for (const [from, to] of Object.entries(rewrites)) code = code.split(from).join(to);
+  const outputPath = join(OUT, outputName);
+  writeFileSync(outputPath, code, "utf8");
+  return import(`${pathToFileURL(outputPath).href}?t=${Date.now()}`);
+}
 
 const fails = [];
 let pass = 0;
@@ -37,8 +76,23 @@ const docLimits = await loadCanvasModule("doc-limits");
 const patch = await loadCanvasModule("patch");
 const queue = await loadCanvasModule("offline-queue");
 const apiTypes = await loadCanvasModule("api-types");
-await loadCanvasModule("writer-lock");
+const writerLock = await loadCanvasModule("writer-lock");
 const helpers = await loadCanvasModule("api-helpers");
+await loadCanvasModule("history");
+await loadCanvasModule("group-ops");
+await loadCanvasModule("rf-adapter");
+const saveAdapterModule = await loadCanvasModule("canvas-save-adapter");
+const storeModule = await loadExtra(
+  join(ROOT, "src", "stores", "canvas-store.ts"),
+  "canvas-store-d3.mjs",
+  {
+    '"@/lib/canvas/schema"': '"./schema.mjs"',
+    '"@/lib/canvas/rf-adapter"': '"./rf-adapter.mjs"',
+    '"@/lib/canvas/history"': '"./history.mjs"',
+    '"@/lib/canvas/group-ops"': '"./group-ops.mjs"',
+    '"@/lib/canvas/api-helpers"': '"./api-helpers.mjs"',
+  }
+);
 
 const {
   createCanvasNode,
@@ -49,9 +103,11 @@ const {
   createEmptyCanvasDeps,
   CanvasDocSchema,
   CanvasDocumentEnvelopeSchema,
+  CANVAS_SCHEMA_VERSION,
   loadCanvasDoc,
 } = schema;
 const { DOC_BYTES_HARD_LIMIT, DOC_JSONB_WARN_LIMIT } = docLimits;
+const { WRITER_LEASE_MS } = writerLock;
 const {
   CanvasOpSchema,
   CanvasOpsArraySchema,
@@ -80,16 +136,207 @@ const { CANVAS_API_ERROR_CODES, httpStatusForCanvasError, canvasApiError, canvas
 const {
   computePatch,
   decidePatch,
+  decideRepair,
   buildSizeWarning,
   sanitizeCanvasTitle,
   recoveryReport,
   tolerantEnvelope,
   parseStoredDeps,
   parseDepsForTransport,
+  parseCanvasRepairRequest,
   CanvasCreateRequestSchema,
   CanvasPatchBodySchema,
   CanvasPatchWriteBodySchema,
+  CanvasRepairRequestSchema,
 } = helpers;
+const { CanvasSaveAdapter } = saveAdapterModule;
+const { useCanvasStore } = storeModule;
+
+// Production POST route harness. This is intentionally a transpile+VM execution of route.ts,
+// not a copied helper, so the 23505/readback control flow and its exact Supabase predicates run.
+const postRoutePath = join(ROOT, "src", "app", "api", "canvas", "route.ts");
+const postRouteBuilt = ts.transpileModule(readFileSync(postRoutePath, "utf8"), {
+  compilerOptions: {
+    module: ts.ModuleKind.CommonJS,
+    target: ts.ScriptTarget.ES2020,
+    moduleResolution: ts.ModuleResolutionKind.Node10,
+    esModuleInterop: true,
+  },
+  fileName: postRoutePath,
+  reportDiagnostics: true,
+});
+const postTranspileErrors = (postRouteBuilt.diagnostics ?? []).filter(
+  (diagnostic) => diagnostic.category === ts.DiagnosticCategory.Error
+);
+const POST_NOW_MS = Date.parse("2026-07-14T09:00:00.000Z");
+const POST_NOW_ISO = new Date(POST_NOW_MS).toISOString();
+class PostFixedDate extends Date {
+  constructor(value) {
+    super(value === undefined ? POST_NOW_MS : value);
+  }
+  static now() {
+    return POST_NOW_MS;
+  }
+}
+let activePostClient = null;
+const postRouteModule = { exports: {} };
+const postRouteContext = vm.createContext({
+  module: postRouteModule,
+  exports: postRouteModule.exports,
+  require(specifier) {
+    if (specifier === "next/server") {
+      return {
+        NextRequest: class NextRequest {},
+        NextResponse: {
+          json(body, init = {}) {
+            return { body, status: init.status ?? 200, headers: init.headers ?? {} };
+          },
+        },
+      };
+    }
+    if (specifier === "@supabase/supabase-js") return {};
+    if (specifier === "@/lib/supabase/server") {
+      return {
+        async createClient() {
+          if (!activePostClient) throw new Error("No active POST Supabase client");
+          return activePostClient;
+        },
+      };
+    }
+    if (specifier === "@/lib/canvas/schema") return schema;
+    if (specifier === "@/lib/canvas/doc-limits") return docLimits;
+    if (specifier === "@/lib/canvas/api-types") return apiTypes;
+    if (specifier === "@/lib/canvas/api-helpers") return helpers;
+    if (specifier === "@/lib/canvas/patch") return patch;
+    throw new Error(`Unexpected POST route dependency: ${specifier}`);
+  },
+  console: { error() {}, log() {}, warn() {} },
+  process,
+  Promise,
+  Object,
+  Array,
+  Error,
+  RegExp,
+  String,
+  Number,
+  Boolean,
+  JSON,
+  Map,
+  Set,
+  Date: PostFixedDate,
+  TextEncoder,
+  URL,
+});
+new vm.Script(postRouteBuilt.outputText, { filename: postRoutePath }).runInContext(
+  postRouteContext
+);
+const productionPost = postRouteModule.exports.POST;
+
+const POST_USER = "11111111-1111-4111-8111-111111111111";
+const POST_OTHER_USER = "22222222-2222-4222-8222-222222222222";
+const POST_ID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+const POST_TITLE = "Idempotent create";
+const POST_DOC = createEmptyCanvasDoc();
+const POST_DEPS = createEmptyCanvasDeps();
+const POST_DOC_BYTES = docLimits.computeDocBytes(POST_DOC);
+
+function makePostRow(overrides = {}) {
+  return {
+    id: POST_ID,
+    user_id: POST_USER,
+    title: POST_TITLE,
+    rev: 0,
+    schema_version: CANVAS_SCHEMA_VERSION,
+    doc: POST_DOC,
+    deps: POST_DEPS,
+    doc_bytes: POST_DOC_BYTES,
+    created_at: POST_NOW_ISO,
+    updated_at: POST_NOW_ISO,
+    ...overrides,
+  };
+}
+
+function makePostClient(options = {}) {
+  const calls = [];
+  class Query {
+    constructor(source) {
+      this.source = source;
+      this.operation = "read";
+      this.columns = "";
+      this.values = null;
+      this.filters = [];
+    }
+    insert(values) {
+      this.operation = "insert";
+      this.values = values;
+      return this;
+    }
+    select(columns) {
+      this.columns = columns;
+      return this;
+    }
+    eq(field, value) {
+      this.filters.push({ field, value });
+      return this;
+    }
+    async single() {
+      calls.push({
+        operation: this.operation,
+        source: this.source,
+        columns: this.columns,
+        values: this.values,
+        filters: this.filters.map((filter) => ({ ...filter })),
+      });
+      return {
+        data: Object.prototype.hasOwnProperty.call(options, "insertRow")
+          ? options.insertRow
+          : makePostRow(),
+        error: options.insertError ?? null,
+      };
+    }
+    async maybeSingle() {
+      calls.push({
+        operation: "readback",
+        source: this.source,
+        columns: this.columns,
+        values: this.values,
+        filters: this.filters.map((filter) => ({ ...filter })),
+      });
+      return {
+        data: Object.prototype.hasOwnProperty.call(options, "readbackRow")
+          ? options.readbackRow
+          : null,
+        error: options.readbackError ?? null,
+      };
+    }
+  }
+  return {
+    calls,
+    auth: {
+      async getUser() {
+        return { data: { user: { id: options.userId ?? POST_USER } }, error: null };
+      },
+    },
+    from(source) {
+      return new Query(source);
+    },
+  };
+}
+
+async function invokeProductionPost(client, body = {}) {
+  activePostClient = client;
+  return productionPost({
+    async json() {
+      return {
+        id: POST_ID,
+        title: POST_TITLE,
+        doc: POST_DOC,
+        deps: POST_DEPS,
+        ...body,
+      };
+    },
+  });
+}
 
 const parseOp = (raw) => CanvasOpSchema.parse(raw);
 const addOp = (entity, value) => parseOp({ entity, op: "add", value });
@@ -508,7 +755,287 @@ ok(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-console.log("⑦ POST / PATCH 请求体严格契约");
+console.log("⑦ PUT repair 严格请求 + 纯决策");
+const repairNowMs = Date.parse("2026-07-14T08:00:00.000Z");
+const repairNowIso = new Date(repairNowMs).toISOString();
+const repairTag = "writer_repair_1234";
+const repairDoc = createEmptyCanvasDoc();
+const repairDeps = createEmptyCanvasDeps();
+const brokenStoredDoc = {
+  nodes: [{ id: "broken", type: "audio", position: { x: 0, y: 0 } }],
+  edges: [],
+  groups: [],
+};
+const repair = (overrides = {}) =>
+  decideRepair({
+    storedDoc: brokenStoredDoc,
+    storedDeps: repairDeps,
+    storedDocBytes: docLimits.computeDocBytes(brokenStoredDoc),
+    storedRev: 7,
+    storedSchemaVersion: CANVAS_SCHEMA_VERSION,
+    storedWriter: {
+      writerTag: repairTag,
+      writerHeartbeatAt: new Date(repairNowMs - 1_000).toISOString(),
+    },
+    baseRev: 7,
+    writerTag: repairTag,
+    doc: repairDoc,
+    deps: repairDeps,
+    nowMs: repairNowMs,
+    nowIso: repairNowIso,
+    ...overrides,
+  });
+
+{
+  const d = repair();
+  ok(
+    d.kind === "write" &&
+      d.schemaVersion === CANVAS_SCHEMA_VERSION &&
+      d.docBytes > 0 &&
+      deepEqual(d.doc, repairDoc) &&
+      deepEqual(d.deps, repairDeps),
+    "损坏存量 + 当前严格 replacement → repair write"
+  );
+}
+ok(repair({ baseRev: 6 }).kind === "stale", "repair stale baseRev → stale(禁止 rebase/覆盖)");
+ok(repair({ writerTag: "writer_other_1234" }).kind === "locked", "repair 错 writerTag → locked");
+ok(
+  repair({
+    storedWriter: {
+      writerTag: repairTag,
+      writerHeartbeatAt: new Date(repairNowMs - WRITER_LEASE_MS - 1).toISOString(),
+    },
+  }).kind === "locked",
+  "repair 过期同 tag → locked(不得经 PUT 复活)"
+);
+ok(
+  repair({ storedDoc: repairDoc, storedDeps: repairDeps }).kind === "not_required",
+  "健康存量拒绝 repair,PUT 不能成为整包覆盖旁路"
+);
+ok(
+  repair({ storedSchemaVersion: CANVAS_SCHEMA_VERSION + 1 }).kind === "invalid",
+  "future-schema 存量拒绝 repair,禁止伪降级 write"
+);
+{
+  const appliedBytes = docLimits.computeDocBytes(repairDoc);
+  const d = repair({
+    storedDoc: repairDoc,
+    storedDeps: repairDeps,
+    storedDocBytes: appliedBytes,
+    storedRev: 8,
+  });
+  ok(
+    d.kind === "already_applied" &&
+      d.docBytes === appliedBytes &&
+      deepEqual(d.doc, repairDoc) &&
+      deepEqual(d.deps, repairDeps),
+    "同 body/baseRev 的 rev+1 repair 重试 → already_applied success envelope"
+  );
+  ok(
+    repair({
+      storedDoc: { nodes: [nodeA], edges: [], groups: [] },
+      storedDeps: repairDeps,
+      storedDocBytes: docLimits.computeDocBytes({ nodes: [nodeA], edges: [], groups: [] }),
+      storedRev: 8,
+    }).kind === "stale",
+    "rev+1 但 doc 不同仍为 stale"
+  );
+}
+ok(
+  repair({ storedDoc: repairDoc, storedDeps: { models: [123] } }).kind === "write",
+  "raw deps 损坏即构成真实 recovery gate"
+);
+ok(
+  repair({
+    doc: {
+      nodes: [nodeA],
+      edges: [{ id: "dangling", source: nodeA.id, target: "missing" }],
+      groups: [],
+    },
+  }).kind === "invalid",
+  "repair replacement 悬空引用 → invalid"
+);
+ok(
+  repair({
+    doc: {
+      nodes: [{ ...nodeA, data: { ...nodeA.data, params: { payload: "data:text/plain,x" } } }],
+      edges: [],
+      groups: [],
+    },
+  }).kind === "invalid",
+  "repair replacement 危险 dataURL → invalid"
+);
+{
+  let getterReads = 0;
+  const hostileDoc = {};
+  Object.defineProperty(hostileDoc, "nodes", {
+    enumerable: true,
+    get() {
+      getterReads += 1;
+      return [];
+    },
+  });
+  Object.defineProperty(hostileDoc, "edges", { enumerable: true, value: [] });
+  Object.defineProperty(hostileDoc, "groups", { enumerable: true, value: [] });
+  ok(repair({ doc: hostileDoc }).kind === "invalid", "repair hostile doc accessor → invalid");
+  eq(getterReads, 0, "repair doc descriptor gate 不触发 getter");
+}
+{
+  let getterReads = 0;
+  const hostileDeps = {};
+  Object.defineProperty(hostileDeps, "models", {
+    enumerable: true,
+    get() {
+      getterReads += 1;
+      return [];
+    },
+  });
+  ok(repair({ deps: hostileDeps }).kind === "invalid", "repair hostile deps accessor → invalid");
+  eq(getterReads, 0, "repair deps descriptor gate 不触发 getter");
+}
+{
+  const hugeNode = {
+    ...nodeA,
+    id: "repair_huge",
+    data: { ...nodeA.data, params: { payload: "x".repeat(DOC_BYTES_HARD_LIMIT + 1024) } },
+  };
+  ok(
+    repair({ doc: { nodes: [hugeNode], edges: [], groups: [] } }).kind === "too_large",
+    "repair replacement >2MB → too_large"
+  );
+}
+
+const validRepairBody = {
+  baseRev: 7,
+  writerTag: repairTag,
+  confirmRecovery: true,
+  doc: repairDoc,
+  deps: repairDeps,
+};
+ok(CanvasRepairRequestSchema.safeParse(validRepairBody).success, "PUT repair 精确五字段合法");
+for (const missing of ["baseRev", "writerTag", "confirmRecovery", "doc", "deps"]) {
+  const candidate = { ...validRepairBody };
+  delete candidate[missing];
+  ok(!CanvasRepairRequestSchema.safeParse(candidate).success, `PUT repair 缺 ${missing} 被拒`);
+}
+ok(
+  !CanvasRepairRequestSchema.safeParse({ ...validRepairBody, extra: true }).success,
+  "PUT repair 未知字段被拒(strict)"
+);
+ok(
+  !CanvasRepairRequestSchema.safeParse({ ...validRepairBody, confirmRecovery: false }).success,
+  "PUT repair confirmRecovery 必须 literal true"
+);
+ok(
+  !CanvasRepairRequestSchema.safeParse({ ...validRepairBody, baseRev: Number.MAX_SAFE_INTEGER }).success,
+  "PUT repair baseRev 留出精确 +1 空间"
+);
+for (const missing of ["nodes", "edges", "groups"]) {
+  const doc = { ...repairDoc };
+  delete doc[missing];
+  ok(
+    !parseCanvasRepairRequest({ ...validRepairBody, doc }).ok,
+    `PUT parser 拒 repair doc 缺显式 ${missing}`
+  );
+}
+for (const missing of ["models", "voices", "characters", "assets", "recipes"]) {
+  const deps = { ...repairDeps };
+  delete deps[missing];
+  ok(
+    !parseCanvasRepairRequest({ ...validRepairBody, deps }).ok,
+    `PUT parser 拒 repair deps 缺显式 ${missing}`
+  );
+}
+{
+  let getterReads = 0;
+  const hostileBody = { ...validRepairBody };
+  Object.defineProperty(hostileBody, "doc", {
+    enumerable: true,
+    get() {
+      getterReads += 1;
+      return repairDoc;
+    },
+  });
+  ok(!parseCanvasRepairRequest(hostileBody).ok, "PUT parser 拒 hostile 顶层 accessor");
+  eq(getterReads, 0, "PUT parser 在 Zod 前不触发 accessor");
+}
+{
+  const sparseDeps = { ...repairDeps, models: Array(1) };
+  ok(!parseCanvasRepairRequest({ ...validRepairBody, deps: sparseDeps }).ok, "PUT parser 拒稀疏 deps 数组");
+}
+{
+  const adapter = new CanvasSaveAdapter();
+  const owner = {};
+  const canvasId = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+  adapter.beginWriterSession(owner);
+  ok(
+    adapter.activateWriter(owner, { canvasId, writerTag: repairTag }),
+    "repair adapter activates exact writer fixture"
+  );
+  const state = {
+    nodes: [],
+    edges: [],
+    groups: [],
+    brokenNodes: [],
+    brokenEdges: [],
+    hydrated: true,
+    sessionCanvasId: canvasId,
+    hydratedCanvasId: canvasId,
+    migrationComplete: true,
+    recoveryRequired: false,
+    readOnly: false,
+  };
+  ok(
+    adapter.prepareRepair(state, { baseRev: 7, deps: repairDeps }).ok,
+    "repair adapter prepares a complete explicit request"
+  );
+  for (const missing of ["nodes", "edges", "groups"]) {
+    const partialState = { ...state };
+    delete partialState[missing];
+    ok(
+      !adapter.prepareRepair(partialState, { baseRev: 7, deps: repairDeps }).ok,
+      `repair adapter refuses state missing explicit ${missing}`
+    );
+  }
+  for (const missing of ["models", "voices", "characters", "assets", "recipes"]) {
+    const deps = { ...repairDeps };
+    delete deps[missing];
+    ok(
+      !adapter.prepareRepair(state, { baseRev: 7, deps }).ok,
+      `repair adapter refuses deps missing explicit ${missing}`
+    );
+  }
+}
+{
+  const state = () => useCanvasStore.getState();
+  const canvasId = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
+  state().reset();
+  ok(state().beginCanvasSession(canvasId), "future-schema store fixture begins session");
+  ok(
+    state().hydrate(
+      loadCanvasDoc(createEmptyCanvasDoc(), CANVAS_SCHEMA_VERSION + 1),
+      canvasId
+    ),
+    "future-schema recovery payload hydrates for read/recovery display"
+  );
+  state().setReadOnly(false);
+  const before = {
+    schemaVersion: state().schemaVersion,
+    migratedFrom: state().migratedFrom,
+    migrationComplete: state().migrationComplete,
+    recoveryRequired: state().recoveryRequired,
+    loadIssues: [...state().loadIssues],
+  };
+  ok(!state().confirmSafeRecovery(), "confirmSafeRecovery refuses future-schema pseudo-downgrade");
+  eq(state().schemaVersion, before.schemaVersion, "future schema version remains unchanged");
+  eq(state().migratedFrom, before.migratedFrom, "future migration source remains unchanged");
+  eq(state().migrationComplete, before.migrationComplete, "future migration completeness remains unchanged");
+  eq(state().recoveryRequired, before.recoveryRequired, "future recovery gate remains active");
+  ok(deepEqual(state().loadIssues, before.loadIssues), "future recovery diagnostics remain unchanged");
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+console.log("⑧ POST / PATCH 请求体严格契约");
 ok(CanvasCreateRequestSchema.safeParse({}).success, "POST 空对象合法(建空画布)");
 ok(CanvasCreateRequestSchema.safeParse({ title: "x" }).success, "POST title 合法");
 ok(
@@ -520,6 +1047,85 @@ ok(!CanvasCreateRequestSchema.safeParse("x").success, "POST 基元体被拒");
 ok(!CanvasCreateRequestSchema.safeParse(null).success, "POST null 体被拒");
 ok(!CanvasCreateRequestSchema.safeParse({ foo: 1 }).success, "POST 未知顶层字段被拒");
 ok(!CanvasCreateRequestSchema.safeParse({ title: "z".repeat(201) }).success, "POST title 超长被拒");
+
+console.log("⑧a production POST 23505/readback idempotency");
+ok(postTranspileErrors.length === 0, "production POST route transpiles without diagnostics");
+ok(typeof productionPost === "function", "production POST route exports executable handler");
+{
+  const client = makePostClient({ insertRow: makePostRow() });
+  const response = await invokeProductionPost(client);
+  eq(response.status, 201, "production POST first stable-id create returns 201");
+  ok(response.body.success === true && response.body.data.id === POST_ID, "first create returns exact created id");
+  eq(client.calls.length, 1, "first create performs one insert and no readback");
+  ok(client.calls[0].values.id === POST_ID, "first create inserts the caller stable UUID");
+}
+{
+  const client = makePostClient({
+    insertRow: null,
+    insertError: { code: "23505", message: "duplicate key" },
+    readbackRow: makePostRow(),
+  });
+  const response = await invokeProductionPost(client);
+  eq(response.status, 200, "exact 23505 duplicate is adopted with 200");
+  ok(response.body.success === true && response.body.data.rev === 0, "exact duplicate returns authoritative rev=0 summary");
+  eq(client.calls.length, 2, "exact duplicate performs one insert attempt and one readback");
+  const readback = client.calls[1];
+  ok(
+    readback.filters.some(({ field, value }) => field === "id" && value === POST_ID) &&
+      readback.filters.some(({ field, value }) => field === "user_id" && value === POST_USER),
+    "duplicate readback explicitly predicates both stable id and authenticated owner"
+  );
+  ok(readback.columns.includes("user_id"), "duplicate readback selects owner for defense-in-depth verification");
+}
+{
+  const client = makePostClient({
+    insertRow: null,
+    insertError: { code: "23505" },
+    readbackError: { code: "XX000", message: "readback failed" },
+  });
+  const response = await invokeProductionPost(client);
+  eq([response.status, response.body.code].join(":"), "500:INTERNAL", "23505 readback error fails INTERNAL");
+}
+{
+  const client = makePostClient({
+    insertRow: null,
+    insertError: { code: "23505" },
+    readbackRow: null,
+  });
+  const response = await invokeProductionPost(client);
+  eq([response.status, response.body.code].join(":"), "409:REV_CONFLICT", "23505 null/not-owned readback conflicts");
+}
+{
+  const client = makePostClient({
+    insertRow: null,
+    insertError: { code: "23505" },
+    // Deliberately return an other-user row even though the query has an owner predicate: the
+    // production row check itself must still fail closed if a backend/stub violates that filter.
+    readbackRow: makePostRow({ user_id: POST_OTHER_USER }),
+  });
+  const response = await invokeProductionPost(client);
+  eq([response.status, response.body.code].join(":"), "409:REV_CONFLICT", "23505 other-owner readback conflicts");
+}
+for (const [label, overrides] of [
+  ["rev>0", { rev: 1 }],
+  ["title mismatch", { title: `${POST_TITLE} changed` }],
+  ["schema mismatch", { schema_version: CANVAS_SCHEMA_VERSION + 1 }],
+  ["doc mismatch", { doc: { nodes: [nodeA], edges: [], groups: [] } }],
+  ["deps mismatch", { deps: { ...POST_DEPS, models: ["model_other"] } }],
+  ["doc_bytes mismatch", { doc_bytes: POST_DOC_BYTES + 1 }],
+]) {
+  const client = makePostClient({
+    insertRow: null,
+    insertError: { code: "23505" },
+    readbackRow: makePostRow(overrides),
+  });
+  const response = await invokeProductionPost(client);
+  eq(
+    [response.status, response.body.code].join(":"),
+    "409:REV_CONFLICT",
+    `23505 ${label} readback conflicts`
+  );
+}
 
 // PATCH 顶层第一阶段:严格 known-key + title≤200;ops 结构留第二阶段(INVALID_OPS)。
 // CanvasPatchBodySchema = **决策层宽松 body**(writerTag 可选,镜像 decidePatch 纯 helper 旧行为);
@@ -551,7 +1157,7 @@ ok(!CanvasPatchBodySchema.safeParse({ baseRev: 0, deps: { models: [123] } }).suc
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-console.log("⑧ 离线队列状态机");
+console.log("⑨ 离线队列状态机");
 {
   let q = createOfflineQueue(3);
   eq(q.baseRev, 3, "createOfflineQueue 锚定 rev");
@@ -641,7 +1247,7 @@ console.log("⑧ 离线队列状态机");
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-console.log("⑨ D3 快照不变量(OfflineQueueSnapshotSchema superRefine)");
+console.log("⑩ D3 快照不变量(OfflineQueueSnapshotSchema superRefine)");
 {
   let q = createOfflineQueue(0);
   q = enqueue(q, "sa", addOp("node", nodeA));

@@ -39,7 +39,7 @@ async function returnsNullNoThrow(label, fn) {
 }
 
 // ── fake IndexedDB(异步微任务事务 + 按操作名注入故障 + close 计数 + blocked→迟到成功)──
-function makeFakeIndexedDB(faults = {}) {
+function makeLegacyFakeIndexedDB(faults = {}) {
   const dbs = new Map(); // name -> { name, stores: Map<storeName, Map<key,val>>, closeCount }
 
   function makeTx(storeMap) {
@@ -178,6 +178,293 @@ function makeFakeIndexedDB(faults = {}) {
   };
 }
 
+// v2 verifier fake: version-aware, keyPath-aware and transactionally serialized. Readwrite
+// mutations are staged and commit only on oncomplete, so abort/error tests cannot accidentally
+// pass against state that a real IndexedDB transaction would have rolled back.
+function makeFakeIndexedDB(faults = {}) {
+  const dbs = new Map();
+
+  const makeEntry = (name) => ({
+    name,
+    version: 0,
+    stores: new Map(),
+    keyPaths: new Map(),
+    connections: new Set(),
+    closeCount: 0,
+    txTail: Promise.resolve(),
+  });
+
+  const cloneMap = (source) => {
+    const out = new Map();
+    for (const [key, value] of source) out.set(key, idbClone(value));
+    return out;
+  };
+
+  function makeTx(entry, storeName, mode) {
+    const source = entry.stores.get(storeName);
+    if (!source) throw new Error(`NotFoundError: ${storeName}`);
+    const keyPath = entry.keyPaths.get(storeName);
+    let active = false;
+    let processing = false;
+    let finished = false;
+    let aborted = false;
+    let working = null;
+    const operations = [];
+    let release;
+    const predecessor = entry.txTail;
+    entry.txTail = new Promise((resolve) => {
+      release = resolve;
+    });
+
+    const tx = {
+      oncomplete: null,
+      onabort: null,
+      onerror: null,
+      abort() {
+        abortTx(false);
+      },
+      objectStore(requestedName) {
+        if (requestedName !== undefined && requestedName !== storeName) {
+          throw new Error(`NotFoundError: ${requestedName}`);
+        }
+        const request = (kind, argument, faultKey) => {
+          if (finished) throw new Error("TransactionInactiveError");
+          if (mode === "readonly" && ["put", "delete", "clear"].includes(kind)) {
+            throw new Error("ReadOnlyError");
+          }
+          const req = { onsuccess: null, onerror: null, result: undefined, error: null };
+          operations.push({ kind, argument, faultKey, req });
+          pump();
+          return req;
+        };
+        return {
+          get: (key) => request("get", key, "get"),
+          put: (value) => request("put", value, "put"),
+          delete: (key) => request("delete", key, "delete"),
+          clear: () => request("clear", undefined, "clear"),
+        };
+      },
+    };
+
+    function finishSuccess() {
+      if (finished || aborted) return;
+      finished = true;
+      if (mode === "readwrite") {
+        source.clear();
+        for (const [key, value] of working) source.set(key, idbClone(value));
+      }
+      queueMicrotask(() => {
+        if (typeof tx.oncomplete === "function") tx.oncomplete({ target: tx });
+        release();
+      });
+    }
+
+    function abortTx(fromRequest) {
+      if (finished || aborted) return;
+      aborted = true;
+      finished = true;
+      queueMicrotask(() => {
+        if (fromRequest && typeof tx.onerror === "function") tx.onerror({ target: tx });
+        if (typeof tx.onabort === "function") tx.onabort({ target: tx });
+        release();
+      });
+    }
+
+    function pump() {
+      if (!active || processing || finished || aborted) return;
+      const next = operations.shift();
+      if (!next) {
+        queueMicrotask(() => {
+          if (operations.length === 0 && !processing) finishSuccess();
+          else pump();
+        });
+        return;
+      }
+      processing = true;
+      queueMicrotask(() => {
+        if (finished || aborted) return;
+        const { kind, argument, faultKey, req } = next;
+        if (faults[faultKey]) {
+          req.error = new Error(`${faultKey} failed`);
+          if (typeof req.onerror === "function") req.onerror({ target: req });
+          processing = false;
+          abortTx(true);
+          return;
+        }
+        try {
+          if (kind === "get") req.result = idbClone(working.get(argument));
+          else if (kind === "put") {
+            const value = idbClone(argument);
+            const key = value?.[keyPath];
+            if (key === undefined) throw new Error(`DataError: missing keyPath ${keyPath}`);
+            working.set(key, value);
+            req.result = key;
+          } else if (kind === "delete") {
+            working.delete(argument);
+            req.result = undefined;
+          } else if (kind === "clear") {
+            working.clear();
+            req.result = undefined;
+          }
+        } catch (error) {
+          req.error = error;
+          if (typeof req.onerror === "function") req.onerror({ target: req });
+          processing = false;
+          abortTx(true);
+          return;
+        }
+        if (typeof req.onsuccess === "function") req.onsuccess({ target: req });
+        processing = false;
+        pump();
+      });
+    }
+
+    void predecessor.then(() => {
+      if (finished) {
+        release();
+        return;
+      }
+      working = mode === "readwrite" ? cloneMap(source) : source;
+      active = true;
+      pump();
+    });
+    return tx;
+  }
+
+  function makeDb(entry) {
+    let closed = false;
+    const db = {
+      objectStoreNames: { contains: (name) => entry.stores.has(name) },
+      createObjectStore(name, options = {}) {
+        if (faults.createStore === true || faults.createStore === name) {
+          throw new Error(`CreateStoreError: ${name}`);
+        }
+        if (entry.stores.has(name)) throw new Error(`ConstraintError: ${name}`);
+        entry.stores.set(name, new Map());
+        entry.keyPaths.set(name, options.keyPath);
+        return {};
+      },
+      onversionchange: null,
+      close() {
+        if (closed) return;
+        closed = true;
+        entry.connections.delete(db);
+        entry.closeCount += 1;
+      },
+      transaction(storeName, mode = "readonly") {
+        if (closed) throw new Error("InvalidStateError: closed");
+        if (Array.isArray(storeName)) {
+          if (storeName.length !== 1) throw new Error("fake supports one store per transaction");
+          return makeTx(entry, storeName[0], mode);
+        }
+        return makeTx(entry, storeName, mode);
+      },
+      get version() {
+        return entry.version;
+      },
+    };
+    return db;
+  }
+
+  function fireError(req, name) {
+    req.error = new Error(name);
+    if (typeof req.onerror === "function") req.onerror({ target: req });
+  }
+
+  function fireOpen(req, name, requestedVersion) {
+    let entry = dbs.get(name);
+    if (!entry) {
+      entry = makeEntry(name);
+      dbs.set(name, entry);
+    }
+    const version = requestedVersion ?? (entry.version || 1);
+    if (version < entry.version) {
+      fireError(req, "VersionError");
+      return;
+    }
+    const upgrading = version > entry.version;
+    if (upgrading) {
+      for (const connection of [...entry.connections]) {
+        if (typeof connection.onversionchange === "function") {
+          connection.onversionchange({ oldVersion: entry.version, newVersion: version });
+        }
+      }
+      if (entry.connections.size > 0) {
+        if (typeof req.onblocked === "function") req.onblocked({ target: req });
+        return;
+      }
+    }
+    const db = makeDb(entry);
+    req.result = db;
+    let upgradeAborted = false;
+    const storesBeforeUpgrade = new Map(
+      [...entry.stores].map(([storeName, values]) => [storeName, cloneMap(values)])
+    );
+    const keyPathsBeforeUpgrade = new Map(entry.keyPaths);
+    req.transaction = {
+      abort() {
+        upgradeAborted = true;
+      },
+    };
+    if (upgrading && typeof req.onupgradeneeded === "function") {
+      req.onupgradeneeded({ target: req, oldVersion: entry.version, newVersion: version });
+    }
+    if (upgradeAborted) {
+      for (const storeName of [...entry.stores.keys()]) {
+        if (!storesBeforeUpgrade.has(storeName)) entry.stores.delete(storeName);
+      }
+      for (const [storeName, values] of storesBeforeUpgrade) {
+        let target = entry.stores.get(storeName);
+        if (!target) {
+          target = new Map();
+          entry.stores.set(storeName, target);
+        }
+        target.clear();
+        for (const [key, value] of values) target.set(key, idbClone(value));
+      }
+      entry.keyPaths.clear();
+      for (const [storeName, keyPath] of keyPathsBeforeUpgrade) {
+        entry.keyPaths.set(storeName, keyPath);
+      }
+      fireError(req, "AbortError");
+      return;
+    }
+    entry.version = version;
+    entry.connections.add(db);
+    if (typeof req.onsuccess === "function") req.onsuccess({ target: req });
+  }
+
+  return {
+    _dbs: dbs,
+    open(name, version) {
+      const req = {
+        onupgradeneeded: null,
+        onsuccess: null,
+        onerror: null,
+        onblocked: null,
+        result: null,
+        error: null,
+        transaction: null,
+      };
+      if (faults.blockedThenSuccess) {
+        queueMicrotask(() => {
+          if (typeof req.onblocked === "function") req.onblocked({ target: req });
+        });
+        queueMicrotask(() => fireOpen(req, name, version));
+        return req;
+      }
+      queueMicrotask(() => {
+        if (faults.open) {
+          fireError(req, "OpenError");
+          return;
+        }
+        fireOpen(req, name, version);
+      });
+      return req;
+    },
+  };
+}
+
 // ── 载入模块(依赖顺序:schema → patch → offline-queue → shadow)─────────────────
 const schema = await loadCanvasModule("schema");
 const patch = await loadCanvasModule("patch");
@@ -193,6 +480,9 @@ const {
   validateShadowRecord,
   strictJsonClone,
   CANVAS_SHADOW_SCHEMA_VERSION,
+  CANVAS_SHADOW_DB_VERSION,
+  CANVAS_SHADOW_STORAGE_VERSION,
+  CANVAS_PENDING_CREATE_KEY,
 } = shadow;
 
 const validDoc = createEmptyCanvasDoc();
@@ -212,7 +502,7 @@ const paramsNode = (id, params) => ({
   group_id: null,
   data: { refs: createCanvasRefs(), params },
 });
-const rec = (canvasId, serverRev, queueSnap = null) => ({
+const rec = (canvasId, serverRev, queueSnap = null, snapshotRecoveryRequired = false) => ({
   version: CANVAS_SHADOW_SCHEMA_VERSION,
   canvasId,
   schemaVersion: 1,
@@ -221,6 +511,7 @@ const rec = (canvasId, serverRev, queueSnap = null) => ({
   serverRev,
   updatedAt: ISO,
   queue: queueSnap,
+  snapshotRecoveryRequired,
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -232,6 +523,23 @@ ok(await store.put({ canvasId: "cv-1", doc: validDoc, deps: validDeps, serverRev
 const got = await store.get("cv-1");
 ok(got && got.canvasId === "cv-1" && got.serverRev === 3, "get 取回影子(canvasId/serverRev 正确)");
 ok(got?.queue && got.queue.pending.length === 1, "get 保留 D3 队列快照");
+ok(got?.snapshotRecoveryRequired === false, "普通 shadow 默认无需显式快照恢复");
+ok(
+  await store.put({
+    canvasId: "cv-overflow",
+    doc: validDoc,
+    deps: validDeps,
+    serverRev: 3,
+    queue: dirtyQueue(3),
+    snapshotRecoveryRequired: true,
+    updatedAt: ISO,
+  }),
+  "put 接受队列溢出后的显式快照恢复标记"
+);
+ok(
+  (await store.get("cv-overflow"))?.snapshotRecoveryRequired === true,
+  "显式快照恢复标记可持久化往返"
+);
 ok(await store.put({ canvasId: "cv-1", doc: validDoc, deps: validDeps, serverRev: 5, queue: cleanQueue(5), updatedAt: ISO }), "覆盖 put → true");
 const got2 = await store.get("cv-1");
 ok(got2?.serverRev === 5 && got2.queue.pending.length === 0, "覆盖后取回新值");
@@ -275,6 +583,11 @@ ok((await store.get("cv-oldschema")) === null, "旧/错 doc schemaVersion(999)�
 ok((await store.put({ canvasId: "cv-sv", doc: validDoc, deps: validDeps, serverRev: 1, schemaVersion: 999, updatedAt: ISO })) === false, "put schemaVersion≠当前 → 拒绝 false");
 t1.set("cv-badiso", { version: 1, canvasId: "cv-badiso", schemaVersion: 1, doc: validDoc, deps: validDeps, serverRev: 1, updatedAt: "x", queue: null });
 ok((await store.get("cv-badiso")) === null, "updatedAt 非 ISO datetime → null");
+const legacyWithoutRecoveryMarker = { version: 1, canvasId: "cv-legacy-marker", schemaVersion: 1, doc: validDoc, deps: validDeps, serverRev: 1, updatedAt: ISO, queue: null };
+t1.set("cv-legacy-marker", legacyWithoutRecoveryMarker);
+ok((await store.get("cv-legacy-marker"))?.snapshotRecoveryRequired === false, "旧 shadow 缺少恢复标记时向后兼容为 false");
+t1.set("cv-bad-marker", { ...legacyWithoutRecoveryMarker, canvasId: "cv-bad-marker", snapshotRecoveryRequired: "yes" });
+ok((await store.get("cv-bad-marker")) === null, "非布尔恢复标记严格拒绝");
 ok(validateShadowRecord(rec("cv-x", 1), "cv-x") !== null, "validateShadowRecord 属主一致 → 通过");
 ok(validateShadowRecord(rec("cv-x", 1), "cv-y") === null, "validateShadowRecord 跨 canvas → null");
 const danglingDoc = { nodes: [node], edges: [{ id: "e", source: "node_1", target: "ghost" }], groups: [] };
@@ -334,6 +647,348 @@ try {
 
 // ─────────────────────────────────────────────────────────────────────────────
 console.log("⑨ ahead 判定 + 恢复策略(replay_queue / restore_snapshot)");
+console.log("⑨ v2 discriminated reads / version fence / transactional rollback");
+
+const openFakeDb = (factory, name, version, upgrade) =>
+  new Promise((resolve, reject) => {
+    const req = factory.open(name, version);
+    req.onupgradeneeded = () => upgrade?.(req.result);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error || new Error("open failed"));
+    req.onblocked = () => reject(new Error("open blocked"));
+  });
+const openFakeDbFails = (factory, name, version) =>
+  new Promise((resolve) => {
+    const req = factory.open(name, version);
+    req.onsuccess = () => {
+      req.result.close();
+      resolve(false);
+    };
+    req.onerror = () => resolve(true);
+    req.onblocked = () => resolve(false);
+  });
+
+{
+  const f = makeFakeIndexedDB();
+  const s = createCanvasShadowStore({ factory: f, dbName: "v2-read" });
+  ok((await s.read("missing")).status === "absent", "v2 read: committed undefined alone is absent");
+  const raw = f._dbs.get("v2-read").stores.get("shadows");
+  raw.set("damaged", { canvasId: "damaged", garbage: true });
+  const damaged = await s.read("damaged");
+  ok(damaged.status === "failure" && damaged.reason === "invalid-record", "v2 read: damaged row is failure, never absent");
+  const unavailable = createCanvasShadowStore({ factory: null });
+  ok((await unavailable.read("cv")).status === "unavailable", "v2 read: missing IDB is explicit unavailable");
+  const failedGet = createCanvasShadowStore({ factory: makeFakeIndexedDB({ get: true }), dbName: "v2-get-fail" });
+  const getOutcome = await failedGet.read("cv");
+  ok(getOutcome.status === "failure" && getOutcome.reason === "request", "v2 read: get abort is failure, never absent");
+  const failedOpen = createCanvasShadowStore({ factory: makeFakeIndexedDB({ open: true }), dbName: "v2-open-fail" });
+  const openOutcome = await failedOpen.read("cv");
+  ok(openOutcome.status === "failure" && openOutcome.reason === "open", "v2 read: open failure is discriminated");
+  const tooLongId = "x".repeat(201);
+  const rejectedLongClaim = await s.claim(tooLongId, "owner-long-id");
+  ok(rejectedLongClaim.status === "failure" && rejectedLongClaim.reason === "invalid-input", "claim rejects an id that cannot form a valid envelope");
+  ok(!raw.has(tooLongId), "rejected overlong claim cannot poison a durable row");
+  const hostileLease = new Proxy({}, { ownKeys() { throw new Error("lease trap"); } });
+  let hostileLeaseThrew = false;
+  let hostileLeaseResult;
+  try {
+    hostileLeaseResult = await s.putIfOwned(
+      { canvasId: "cv", doc: validDoc, deps: validDeps, serverRev: 1, updatedAt: ISO },
+      hostileLease
+    );
+  } catch {
+    hostileLeaseThrew = true;
+  }
+  ok(!hostileLeaseThrew && hostileLeaseResult?.status === "failure", "hostile lease input is rejected without escaping an exception");
+}
+
+{
+  const f = makeFakeIndexedDB();
+  const oldDb = await openFakeDb(f, "upgrade", 1, (db) => {
+    db.createObjectStore("shadows", { keyPath: "canvasId" });
+  });
+  f._dbs.get("upgrade").stores.get("shadows").set("legacy", rec("legacy", 7, dirtyQueue(7)));
+  let sawVersionChange = false;
+  oldDb.onversionchange = () => {
+    sawVersionChange = true;
+    oldDb.close();
+  };
+  const upgraded = createCanvasShadowStore({ factory: f, dbName: "upgrade" });
+  const legacy = await upgraded.read("legacy");
+  const entry = f._dbs.get("upgrade");
+  ok(sawVersionChange, "v2 upgrade notifies and closes an already-open v1 connection");
+  ok(entry.version === CANVAS_SHADOW_DB_VERSION && entry.stores.has("pending-creates"), "v2 upgrade creates pending store and records DB version");
+  ok(legacy.status === "found" && legacy.record.serverRev === 7, "v2 migration reads the exact legacy shadow payload");
+  ok(await openFakeDbFails(f, "upgrade", 1), "after v2 upgrade an old bundle open(version=1) gets VersionError");
+}
+
+{
+  const faults = {};
+  const f = makeFakeIndexedDB(faults);
+  const oldDb = await openFakeDb(f, "upgrade-abort", 1, (db) => {
+    db.createObjectStore("shadows", { keyPath: "canvasId" });
+  });
+  f._dbs.get("upgrade-abort").stores.get("shadows").set("legacy", rec("legacy", 8));
+  oldDb.onversionchange = () => oldDb.close();
+  faults.createStore = "pending-creates";
+  const brokenUpgradeStore = createCanvasShadowStore({ factory: f, dbName: "upgrade-abort" });
+  const brokenUpgrade = await brokenUpgradeStore.read("legacy");
+  const entry = f._dbs.get("upgrade-abort");
+  ok(brokenUpgrade.status === "failure" && brokenUpgrade.reason === "open", "failed v2 store creation aborts the upgrade");
+  ok(entry.version === 1 && !entry.stores.has("pending-creates") && entry.stores.get("shadows").has("legacy"), "aborted upgrade rolls back stores/version and preserves v1 payload");
+  delete faults.createStore;
+  const recoveredUpgrade = await brokenUpgradeStore.read("legacy");
+  ok(recoveredUpgrade.status === "found" && recoveredUpgrade.record.serverRev === 8 && entry.version === 2, "a later clean v2 upgrade succeeds after rollback");
+}
+
+{
+  const faults = {};
+  const f = makeFakeIndexedDB(faults);
+  const s = createCanvasShadowStore({ factory: f, dbName: "rollback" });
+  faults.put = true;
+  const failedClaim = await s.claim("cv", "owner-rollback");
+  ok(failedClaim.status === "failure" && failedClaim.reason === "request", "claim put failure is surfaced");
+  delete faults.put;
+  ok((await s.read("cv")).status === "absent", "aborted claim leaves no half-committed lease/envelope");
+}
+
+console.log("⑩ v2 cross-realm owner epoch/write sequence CAS + tombstones");
+{
+  const f = makeFakeIndexedDB();
+  const a = createCanvasShadowStore({ factory: f, dbName: "cas" });
+  const b = createCanvasShadowStore({ factory: f, dbName: "cas" });
+  const claimedA = await a.claim("cv", "owner-A");
+  ok(claimedA.status === "claimed" && claimedA.record === null, "first writer atomically claims an absent canvas");
+  const wroteA1 = await a.putIfOwned(
+    { canvasId: "cv", doc: validDoc, deps: validDeps, serverRev: 1, updatedAt: "2099-01-01T00:00:00.000Z" },
+    claimedA.lease
+  );
+  ok(wroteA1.status === "written" && wroteA1.lease.writeSeq === 1, "owned put advances writeSeq");
+  const observedByB = await b.read("cv");
+  ok(observedByB.status === "found" && observedByB.record.serverRev === 1, "reader observes without claiming or mutating");
+  const wroteA2 = await a.putIfOwned(
+    { canvasId: "cv", doc: validDoc, deps: validDeps, serverRev: 2, updatedAt: "2099-02-01T00:00:00.000Z" },
+    wroteA1.lease
+  );
+  const claimedB = await b.claim("cv", "owner-B");
+  ok(wroteA2.status === "written" && claimedB.status === "claimed" && claimedB.record.serverRev === 2, "claim transaction returns the latest record, not an earlier read");
+  ok(claimedB.lease.ownerEpoch > wroteA2.lease.ownerEpoch && claimedB.lease.writeSeq === 0, "takeover increments epoch and resets sequence");
+  const wroteB = await b.putIfOwned(
+    { canvasId: "cv", doc: validDoc, deps: validDeps, serverRev: 3, updatedAt: "1970-01-01T00:00:00.000Z" },
+    claimedB.lease
+  );
+  const lateA = await a.putIfOwned(
+    { canvasId: "cv", doc: validDoc, deps: validDeps, serverRev: 99, updatedAt: "2100-01-01T00:00:00.000Z" },
+    wroteA2.lease
+  );
+  const lateRemoveA = await a.removeIfOwned(wroteA2.lease);
+  const final = await b.read("cv");
+  ok(lateA.status === "stale" && lateRemoveA.status === "stale", "old owner late put/remove are both fenced stale");
+  ok(final.status === "found" && final.record.serverRev === 3, "reverse/forward clocks cannot override owner epoch CAS");
+  const removedB = await b.removeIfOwned(wroteB.lease);
+  ok(removedB.status === "removed" && (await b.read("cv")).status === "absent", "owned remove writes a logical tombstone");
+  const claimedC = await a.claim("cv", "owner-C");
+  ok(claimedC.status === "claimed" && claimedC.record === null && claimedC.lease.ownerEpoch > removedB.lease.ownerEpoch, "claim after tombstone advances epoch (no ABA)");
+  ok((await b.putIfOwned({ canvasId: "cv", doc: validDoc, deps: validDeps, serverRev: 4, updatedAt: ISO }, removedB.lease)).status === "stale", "tombstone owner's old sequence cannot revive after takeover");
+}
+
+{
+  const f = makeFakeIndexedDB();
+  const a = createCanvasShadowStore({ factory: f, dbName: "concurrent" });
+  const b = createCanvasShadowStore({ factory: f, dbName: "concurrent" });
+  const [claimA, claimB] = await Promise.all([a.claim("cv", "parallel-A"), b.claim("cv", "parallel-B")]);
+  ok(claimA.status === "claimed" && claimB.status === "claimed" && claimB.lease.ownerEpoch === claimA.lease.ownerEpoch + 1, "concurrent claims serialize with strictly increasing epochs");
+  ok((await a.putIfOwned({ canvasId: "cv", doc: validDoc, deps: validDeps, serverRev: 1, updatedAt: ISO }, claimA.lease)).status === "stale", "serialized second claim immediately fences first lease");
+}
+
+{
+  const f = makeFakeIndexedDB();
+  const beforeCrash = createCanvasShadowStore({ factory: f, dbName: "response-lost" });
+  const claimed = await beforeCrash.claim("cv", "crash-owner-A");
+  await beforeCrash.putIfOwned(
+    { canvasId: "cv", doc: validDoc, deps: validDeps, serverRev: 9, updatedAt: ISO },
+    claimed.lease
+  ); // Simulate commit followed by caller/realm loss before consuming the returned lease.
+  const afterCrash = createCanvasShadowStore({ factory: f, dbName: "response-lost" });
+  const reclaimed = await afterCrash.claim("cv", "crash-owner-B");
+  ok(reclaimed.status === "claimed" && reclaimed.record.serverRev === 9, "committed put with lost response converges through a fresh claim");
+  await afterCrash.removeIfOwned(reclaimed.lease); // discard response again
+  const afterRemoveCrash = await beforeCrash.claim("cv", "crash-owner-C");
+  ok(afterRemoveCrash.status === "claimed" && afterRemoveCrash.record === null, "committed tombstone with lost response also converges through claim");
+}
+
+console.log("⑪ durable per-user pending-create singleton CAS");
+{
+  const id = "11111111-1111-4111-8111-111111111111";
+  const f = makeFakeIndexedDB();
+  const a = createCanvasShadowStore({ factory: f, dbName: "pending" });
+  const b = createCanvasShadowStore({ factory: f, dbName: "pending" });
+  const seed = { createId: id.toUpperCase(), capturedDoc: validDoc, latestDoc: validDoc, trailingQueue: null, phase: "pending", updatedAt: ISO };
+  const claimed = await a.pendingCreate.claim("pending-A", seed);
+  ok(claimed.status === "claimed" && claimed.record.createId === id, "pending claim canonicalizes UUID and durably seeds singleton");
+  const pendingRead = await b.pendingCreate.read();
+  ok(pendingRead.status === "found" && pendingRead.record.phase === "pending", "pending singleton is discoverable after a new store/runtime instance");
+  const latestDoc = { nodes: [node], edges: [], groups: [] };
+  const wrote = await a.pendingCreate.putIfOwned(
+    { ...seed, createId: id, latestDoc, trailingQueue: dirtyQueue(0), phase: "posting" },
+    claimed.lease
+  );
+  ok(wrote.status === "written" && wrote.lease.writeSeq === 1, "pending edits/queue/phase advance under CAS");
+  const takeover = await b.pendingCreate.claim("pending-B");
+  ok(takeover.status === "claimed" && takeover.record.latestDoc.nodes.length === 1 && takeover.record.phase === "posting", "pending takeover preserves exact latest doc and phase");
+  ok((await a.pendingCreate.putIfOwned({ ...seed, createId: id, phase: "posting" }, wrote.lease)).status === "stale", "old pending owner cannot overwrite newer tab");
+  const changedCapture = { nodes: [node], edges: [], groups: [] };
+  const immutable = await b.pendingCreate.putIfOwned(
+    { ...seed, createId: id, capturedDoc: changedCapture, latestDoc: changedCapture, phase: "posting" },
+    takeover.lease
+  );
+  ok(immutable.status === "failure" && immutable.reason === "invalid-record", "captured POST document is immutable after first durable write");
+  const regressedPhase = await b.pendingCreate.putIfOwned(
+    { ...seed, createId: id, latestDoc, trailingQueue: dirtyQueue(0), phase: "pending" },
+    takeover.lease
+  );
+  ok(regressedPhase.status === "failure" && regressedPhase.reason === "invalid-record", "pending phase cannot regress from posting to pending");
+  ok((await b.pendingCreate.removeIfOwned(takeover.lease, { createId: id, phase: "pending" })).status === "stale", "pending remove requires exact expected phase");
+  const removed = await b.pendingCreate.removeIfOwned(takeover.lease, { createId: id, phase: "posting" });
+  ok(removed.status === "removed" && (await a.pendingCreate.read()).status === "absent", "exact owned pending remove leaves a tombstone");
+  const afterRemove = await a.pendingCreate.claim("pending-C");
+  ok(afterRemove.status === "claimed" && afterRemove.record === null && afterRemove.lease.ownerEpoch > removed.lease.ownerEpoch, "pending tombstone also prevents ABA");
+  const skippedPhase = await a.pendingCreate.putIfOwned(
+    { ...seed, createId: id, phase: "created-awaiting-route" },
+    afterRemove.lease
+  );
+  ok(skippedPhase.status === "failure" && skippedPhase.reason === "invalid-record", "new pending intent cannot skip directly to created-awaiting-route");
+  const invalidUuid = await a.pendingCreate.claim("pending-D", { ...seed, createId: "not-a-uuid" });
+  ok(invalidUuid.status === "failure" && invalidUuid.reason === "invalid-input", "pending seed rejects non-UUID createId");
+  const skipSeedStore = createCanvasShadowStore({ factory: f, dbName: "pending-skip-seed" });
+  const skippedSeed = await skipSeedStore.pendingCreate.claim("pending-seed-owner", {
+    ...seed,
+    createId: id,
+    phase: "created-awaiting-route",
+  });
+  ok(skippedSeed.status === "failure" && skippedSeed.reason === "invalid-input", "an absent pending singleton can only be seeded in pending phase");
+  ok((await skipSeedStore.pendingCreate.read()).status === "absent", "rejected phase-skipping seed leaves no durable intent");
+  const invalidInflight = await a.pendingCreate.putIfOwned({ ...seed, createId: id, trailingQueue: inflightSnap(0) }, afterRemove.lease);
+  ok(invalidInflight.status === "failure" && invalidInflight.reason === "invalid-input", "pending record rejects inflight PATCH state");
+  const invalidAnchor = await a.pendingCreate.putIfOwned({ ...seed, createId: id, trailingQueue: dirtyQueue(1) }, afterRemove.lease);
+  ok(invalidAnchor.status === "failure" && invalidAnchor.reason === "invalid-input", "pending trailing queue is fixed at revision zero");
+}
+
+console.log("鈶?pending-create expected-id/phase claim is atomic and mismatch-inert");
+{
+  const idA = "33333333-3333-4333-8333-333333333333";
+  const idC = "44444444-4444-4444-8444-444444444444";
+  const f = makeFakeIndexedDB();
+  const a = createCanvasShadowStore({ factory: f, dbName: "pending-expected" });
+  const b = createCanvasShadowStore({ factory: f, dbName: "pending-expected" });
+  const seedA = {
+    createId: idA,
+    capturedDoc: validDoc,
+    latestDoc: validDoc,
+    trailingQueue: null,
+    phase: "pending",
+  };
+  const ownerA = await a.pendingCreate.claim("expected-owner-A", seedA);
+  const postingA = await a.pendingCreate.putIfOwned(
+    { ...seedA, phase: "posting" },
+    ownerA.lease
+  );
+
+  const wrongId = await b.pendingCreate.claimIfMatches("wrong-id-owner", {
+    createId: idC,
+    phase: "posting",
+  });
+  ok(wrongId.status === "mismatch", "expected claim rejects an unrelated replacement without claiming it");
+  const stillOwnedAfterWrongId = await a.pendingCreate.putIfOwned(
+    { ...seedA, phase: "posting" },
+    postingA.lease
+  );
+  ok(stillOwnedAfterWrongId.status === "written", "id mismatch leaves the exact prior owner lease writable");
+
+  const wrongPhase = await b.pendingCreate.claimIfMatches("wrong-phase-owner", {
+    createId: idA,
+    phase: "pending",
+  });
+  ok(wrongPhase.status === "mismatch", "expected claim also matches the optional phase exactly");
+  const stillOwnedAfterWrongPhase = await a.pendingCreate.putIfOwned(
+    { ...seedA, phase: "posting" },
+    stillOwnedAfterWrongId.lease
+  );
+  ok(stillOwnedAfterWrongPhase.status === "written", "phase mismatch performs no ownerEpoch or writeSeq mutation");
+
+  const hostileExpected = await b.pendingCreate.claimIfMatches("hostile-expected-owner", {
+    createId: idA,
+    phase: "posting",
+    extra: true,
+  });
+  ok(hostileExpected.status === "failure" && hostileExpected.reason === "invalid-input", "expected claim rejects unknown fields descriptor-safely");
+  const exact = await b.pendingCreate.claimIfMatches("expected-owner-B", {
+    createId: idA.toUpperCase(),
+    phase: "posting",
+  });
+  ok(
+    exact.status === "claimed" &&
+      exact.record.createId === idA &&
+      exact.record.phase === "posting" &&
+      exact.lease.ownerEpoch === ownerA.lease.ownerEpoch + 1,
+    "exact expected claim canonicalizes id and advances owner epoch once"
+  );
+
+  const removedA = await b.pendingCreate.removeIfOwned(exact.lease, {
+    createId: idA,
+    phase: "posting",
+  });
+  const seedC = { ...seedA, createId: idC };
+  const ownerC = await a.pendingCreate.claim("replacement-owner-C", seedC);
+  const staleExpectedA = await b.pendingCreate.claimIfMatches("late-route-A", {
+    createId: idA,
+    phase: "posting",
+  });
+  ok(staleExpectedA.status === "mismatch", "late route A cannot claim a singleton atomically replaced by C");
+  const postingC = await a.pendingCreate.putIfOwned(
+    { ...seedC, phase: "posting" },
+    ownerC.lease
+  );
+  ok(postingC.status === "written", "mismatched late route leaves replacement C ownership intact");
+
+  const removedC = await a.pendingCreate.removeIfOwned(postingC.lease, {
+    createId: idC,
+    phase: "posting",
+  });
+  const absentMatch = await b.pendingCreate.claimIfMatches("absent-match-owner", {
+    createId: idC,
+  });
+  ok(absentMatch.status === "mismatch", "expected claim treats a tombstone as mismatch without reviving it");
+  const afterAbsentMismatch = await b.pendingCreate.claim("after-absent-mismatch");
+  ok(
+    afterAbsentMismatch.status === "claimed" &&
+      afterAbsentMismatch.record === null &&
+      afterAbsentMismatch.lease.ownerEpoch === removedC.lease.ownerEpoch + 1,
+    "tombstone mismatch performs no hidden ownerEpoch increment"
+  );
+}
+
+{
+  const id = "22222222-2222-4222-8222-222222222222";
+  const f = makeFakeIndexedDB();
+  const userA = createCanvasShadowStore({ factory: f, dbName: "user:A" });
+  const userB = createCanvasShadowStore({ factory: f, dbName: "user:B" });
+  const seed = { createId: id, capturedDoc: validDoc, latestDoc: validDoc, phase: "pending", updatedAt: ISO };
+  await userA.pendingCreate.claim("owner-user-A", seed);
+  ok((await userA.pendingCreate.read()).status === "found" && (await userB.pendingCreate.read()).status === "absent", "per-user database scope isolates pending create drafts");
+  ok(f._dbs.get("user:A").stores.get("pending-creates").has(CANVAS_PENDING_CREATE_KEY), "pending envelope uses the declared keyPath singleton key");
+}
+
+{
+  const f = makeFakeIndexedDB();
+  const s = createCanvasShadowStore({ factory: f, dbName: "recovery-flags" });
+  await s.put({ canvasId: "cv", doc: validDoc, deps: validDeps, serverRev: 4, serverRecoveryRequired: true, localRecoveryRequired: false, updatedAt: ISO });
+  const flagged = await s.read("cv");
+  ok(flagged.status === "found" && flagged.record.serverRecoveryRequired === true && flagged.record.localRecoveryRequired === false, "explicit same-revision recovery confirmation flags round-trip");
+  ok(CANVAS_SHADOW_STORAGE_VERSION === 2, "storage envelope version is explicitly v2");
+}
+
+console.log("⑫ ahead 判定 + 恢复策略(replay_queue / restore_snapshot)");
 ok(decideShadowRecovery(null, { rev: 0 }).canRecover === false, "无影子 → 不恢复");
 ok(decideShadowRecovery(rec("cv-1", 3, cleanQueue(3)), { rev: 3 }).canRecover === false, "同 rev + 无 dirty → 不恢复");
 {

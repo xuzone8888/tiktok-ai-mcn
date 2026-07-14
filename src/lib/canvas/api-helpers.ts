@@ -14,9 +14,11 @@
  */
 import { z } from "zod";
 import {
+  CanvasDocSchema,
   CanvasDepsSchema,
   CanvasRevisionSchema,
   CANVAS_SCHEMA_VERSION,
+  CANVAS_UUID_RE,
   createEmptyCanvasDeps,
   loadCanvasDoc,
   validateCanvasDoc,
@@ -47,16 +49,24 @@ import type {
 } from "./api-types";
 
 /** 画布 id 必须是 UUID(表主键 gen_random_uuid);非 UUID 直接 INVALID_ID,避免打空查询。 */
-export const CANVAS_UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+export { CANVAS_UUID_RE } from "./schema";
 
 /** CAS 写总尝试次数(1 次初始 + 4 次重读重试);耗尽 → REV_CONFLICT。 */
 export const CANVAS_CAS_MAX_ATTEMPTS = 5;
 
 export const CANVAS_DEFAULT_TITLE = "未命名画布";
 
-/** POST /api/canvas 请求体严格契约:只允许 title/doc/deps,拒数组/基元/未知字段。 */
+/**
+ * POST /api/canvas 请求体严格契约:只允许 id/title/doc/deps,拒数组/基元/未知字段。
+ * `id` 可选——客户端提供**稳定 UUID** 时,路由据表主键做幂等新建(并发/重试/中止/重挂的多次
+ * 创建请求恰好落成一行 own row);缺省则由 DB gen_random_uuid。非 UUID 的 id → INVALID_BODY。
+ */
 export const CanvasCreateRequestSchema = z.strictObject({
+  id: z
+    .string()
+    .regex(CANVAS_UUID_RE, "id 必须是 UUID")
+    .transform((value) => value.toLowerCase())
+    .optional(),
   title: z.string().max(200).optional(),
   doc: z.unknown().optional(),
   deps: z.unknown().optional(),
@@ -99,6 +109,53 @@ export const CanvasPatchWriteBodySchema = z.strictObject({
   writerTag: CanvasWriterTagSchema,
 });
 export type CanvasPatchWriteBody = z.infer<typeof CanvasPatchWriteBodySchema>;
+
+/**
+ * PUT /api/canvas/[id] full-document recovery request.
+ *
+ * This is deliberately separate from PATCH: every field is mandatory, confirmation is the
+ * literal `true`, and unknown fields are rejected. The deps schema is wrapped in an explicit
+ * presence check because CanvasDepsSchema has a standalone default and would otherwise accept
+ * an omitted property. A repair revision is capped below MAX_SAFE_INTEGER so `baseRev + 1` is
+ * always an exact JavaScript integer before it is sent to the BIGINT column.
+ */
+const CanvasRepairBaseRevisionSchema = CanvasRevisionSchema.max(
+  Number.MAX_SAFE_INTEGER - 1,
+  "baseRev 过大,无法安全递增"
+);
+/**
+ * Repair is the one path that can replace a damaged row wholesale, so its aggregate fields must
+ * be present on the wire. The shared document/dependency schemas intentionally default omitted
+ * collections for tolerant creation/loading; piping an explicit presence shape into them keeps
+ * those defaults from silently turning a partial repair into destructive empty collections.
+ */
+const RequiredRepairDocSchema = z.intersection(
+  z.strictObject({
+    nodes: z.array(z.unknown()),
+    edges: z.array(z.unknown()),
+    groups: z.array(z.unknown()),
+  }),
+  CanvasDocSchema
+);
+const RequiredRepairDepsSchema = z.intersection(
+  z.strictObject({
+    models: z.array(z.unknown()),
+    voices: z.array(z.unknown()),
+    characters: z.array(z.unknown()),
+    assets: z.array(z.unknown()),
+    recipes: z.array(z.unknown()),
+  }),
+  CanvasDepsSchema.unwrap()
+);
+
+export const CanvasRepairRequestSchema = z.strictObject({
+  baseRev: CanvasRepairBaseRevisionSchema,
+  writerTag: CanvasWriterTagSchema,
+  confirmRecovery: z.literal(true),
+  doc: RequiredRepairDocSchema,
+  deps: RequiredRepairDepsSchema,
+});
+export type CanvasRepairRequest = z.infer<typeof CanvasRepairRequestSchema>;
 
 /** POST /api/canvas/[id]/writer 请求体严格契约(D5):只允许 writerTag/action,拒未知字段。 */
 export const CanvasWriterRequestSchema = z.strictObject({
@@ -183,6 +240,168 @@ export function parseStoredDeps(rawDeps: unknown): CanvasDeps {
 
 function dedupeIssues(issues: string[]): string[] {
   return [...new Set(issues)].slice(0, 50);
+}
+
+const REPAIR_JSON_MAX_DEPTH = 128;
+const REPAIR_JSON_MAX_NODES = 500_000;
+
+type DescriptorSafeJsonCloneResult<T> =
+  | { ok: true; value: T }
+  | { ok: false; reason: string };
+
+/**
+ * Canonical JSON clone used before repair-body Zod parsing. It reads descriptor values rather
+ * than properties, so accessors are never invoked, and rejects every shape JSON would silently
+ * alter (cycles, sparse arrays, undefined, non-finite numbers, custom prototypes, symbol or
+ * non-enumerable keys). Proxy/descriptor traps that throw are caught and become a clean reject.
+ */
+function descriptorSafeJsonClone<T>(input: T): DescriptorSafeJsonCloneResult<T> {
+  let nodes = 0;
+  const ancestors = new WeakSet<object>();
+
+  const visit = (value: unknown, depth: number): unknown => {
+    nodes += 1;
+    if (nodes > REPAIR_JSON_MAX_NODES) throw new Error("节点数超限");
+    if (depth > REPAIR_JSON_MAX_DEPTH) throw new Error("嵌套深度超限");
+
+    if (value === null) return null;
+    const valueType = typeof value;
+    if (valueType === "string" || valueType === "boolean") return value;
+    if (valueType === "number") {
+      if (!Number.isFinite(value)) throw new Error("非有限数值");
+      return value;
+    }
+    if (
+      valueType === "undefined" ||
+      valueType === "function" ||
+      valueType === "symbol" ||
+      valueType === "bigint"
+    ) {
+      throw new Error(`非 JSON 值:${valueType}`);
+    }
+
+    const objectValue = value as object;
+    if (ancestors.has(objectValue)) throw new Error("循环引用");
+    ancestors.add(objectValue);
+    try {
+      if (Array.isArray(objectValue)) {
+        if (Object.getPrototypeOf(objectValue) !== Array.prototype) {
+          throw new Error("非普通数组");
+        }
+        if (Object.getOwnPropertySymbols(objectValue).length > 0) {
+          throw new Error("数组含 symbol 键");
+        }
+        const descriptors = Object.getOwnPropertyDescriptors(objectValue) as Record<
+          string,
+          PropertyDescriptor
+        >;
+        const lengthDescriptor = descriptors["length"];
+        const length = lengthDescriptor?.value;
+        if (
+          !lengthDescriptor ||
+          typeof lengthDescriptor.get === "function" ||
+          typeof lengthDescriptor.set === "function" ||
+          !Number.isSafeInteger(length) ||
+          length < 0 ||
+          length > REPAIR_JSON_MAX_NODES
+        ) {
+          throw new Error("数组 length 非法");
+        }
+        for (const key of Object.keys(descriptors)) {
+          if (key === "length") continue;
+          const index = Number(key);
+          const descriptor = descriptors[key];
+          if (
+            !Number.isInteger(index) ||
+            index < 0 ||
+            index >= length ||
+            String(index) !== key
+          ) {
+            throw new Error("数组含额外 own 键");
+          }
+          if (
+            !descriptor.enumerable ||
+            typeof descriptor.get === "function" ||
+            typeof descriptor.set === "function"
+          ) {
+            throw new Error("数组索引不是 enumerable data property");
+          }
+        }
+        const output: unknown[] = [];
+        for (let index = 0; index < length; index += 1) {
+          const descriptor = descriptors[String(index)];
+          if (!descriptor) throw new Error("稀疏数组");
+          output.push(visit(descriptor.value, depth + 1));
+        }
+        return output;
+      }
+
+      const prototype = Object.getPrototypeOf(objectValue);
+      if (prototype !== Object.prototype && prototype !== null) {
+        throw new Error("非普通对象");
+      }
+      if (Object.getOwnPropertySymbols(objectValue).length > 0) {
+        throw new Error("对象含 symbol 键");
+      }
+      const descriptors = Object.getOwnPropertyDescriptors(objectValue);
+      const output: Record<string, unknown> = {};
+      for (const key of Object.keys(descriptors)) {
+        const descriptor = descriptors[key];
+        if (
+          !descriptor.enumerable ||
+          typeof descriptor.get === "function" ||
+          typeof descriptor.set === "function"
+        ) {
+          throw new Error("对象属性不是 enumerable data property");
+        }
+        Object.defineProperty(output, key, {
+          value: visit(descriptor.value, depth + 1),
+          enumerable: true,
+          writable: true,
+          configurable: true,
+        });
+      }
+      return output;
+    } finally {
+      ancestors.delete(objectValue);
+    }
+  };
+
+  try {
+    return { ok: true, value: visit(input, 0) as T };
+  } catch (error) {
+    return {
+      ok: false,
+      reason: error instanceof Error ? error.message : "非法 JSON 值",
+    };
+  }
+}
+
+export type CanvasRepairRequestParseResult =
+  | { ok: true; data: CanvasRepairRequest }
+  | { ok: false; issues: string[] };
+
+/** Descriptor-safe entry point used by PUT; malformed input is rejected without escaping. */
+export function parseCanvasRepairRequest(raw: unknown): CanvasRepairRequestParseResult {
+  const canonical = descriptorSafeJsonClone(raw);
+  if (!canonical.ok) return { ok: false, issues: [canonical.reason] };
+  try {
+    const parsed = CanvasRepairRequestSchema.safeParse(canonical.value);
+    if (!parsed.success) {
+      return {
+        ok: false,
+        issues: parsed.error.issues
+          .map((issue) => `${issue.path.join(".") || "(root)"}: ${issue.message}`)
+          .slice(0, 50),
+      };
+    }
+    return { ok: true, data: parsed.data };
+  } catch (error) {
+    return {
+      ok: false,
+      issues: [error instanceof Error ? error.message : "请求体校验失败"],
+    };
+  }
 }
 
 /** >512KB 且未超硬闸时的软告警;超硬闸(会走 too_large)或未超告警闸 → null。 */
@@ -306,6 +525,252 @@ export function computePatch(currentDoc: CanvasDoc, ops: CanvasOp[]): PatchCompu
     applied: applied.applied,
     noop: applied.noop,
     warning: buildSizeWarning(size),
+  };
+}
+
+// ── Full-document repair decision (PUT) ─────────────────────────────────────
+
+interface RepairDocAssessment {
+  valid: boolean;
+  doc: CanvasDoc | null;
+  issues: string[];
+}
+
+interface RepairDepsAssessment {
+  valid: boolean;
+  deps: CanvasDeps | null;
+  issues: string[];
+}
+
+function assessRepairDoc(rawDoc: unknown, schemaVersion: number, label: string): RepairDocAssessment {
+  const canonical = descriptorSafeJsonClone(rawDoc);
+  if (!canonical.ok) {
+    return { valid: false, doc: null, issues: [`${label}: ${canonical.reason}`] };
+  }
+
+  let required: ReturnType<typeof RequiredRepairDocSchema.safeParse>;
+  try {
+    required = RequiredRepairDocSchema.safeParse(canonical.value);
+  } catch (error) {
+    return {
+      valid: false,
+      doc: null,
+      issues: [`${label}: ${error instanceof Error ? error.message : "文档校验失败"}`],
+    };
+  }
+  if (!required.success) {
+    return {
+      valid: false,
+      doc: null,
+      issues: required.error.issues.map(
+        (issue) => `${label}.${issue.path.join(".") || "(root)"}: ${issue.message}`
+      ),
+    };
+  }
+
+  const validation = validateCanvasDoc(required.data);
+  const load = loadCanvasDoc(required.data, schemaVersion);
+  const valid = validation.ok && validation.data !== null && !load.recoveryRequired;
+  return {
+    valid,
+    doc: valid ? validation.data : null,
+    issues: dedupeIssues([
+      ...(validation.ok ? [] : validation.errors.map((issue) => `${label}.${issue}`)),
+      ...(load.recoveryRequired ? load.issues.map((issue) => `${label}.${issue}`) : []),
+      ...(valid ? [] : [`${label}: 文档不是当前可写状态`]),
+    ]),
+  };
+}
+
+function assessRepairDeps(rawDeps: unknown, label: string): RepairDepsAssessment {
+  const canonical = descriptorSafeJsonClone(rawDeps);
+  if (!canonical.ok) {
+    return { valid: false, deps: null, issues: [`${label}: ${canonical.reason}`] };
+  }
+  try {
+    const parsed = RequiredRepairDepsSchema.safeParse(canonical.value);
+    if (!parsed.success) {
+      return {
+        valid: false,
+        deps: null,
+        issues: parsed.error.issues.map(
+          (issue) => `${label}.${issue.path.join(".") || "(root)"}: ${issue.message}`
+        ),
+      };
+    }
+    return { valid: true, deps: parsed.data, issues: [] };
+  } catch (error) {
+    return {
+      valid: false,
+      deps: null,
+      issues: [`${label}: ${error instanceof Error ? error.message : "依赖校验失败"}`],
+    };
+  }
+}
+
+export interface DecideRepairInput {
+  storedDoc: unknown;
+  storedDeps: unknown;
+  storedDocBytes: number | null;
+  storedRev: number;
+  storedSchemaVersion: number;
+  storedWriter: StoredWriterState;
+  baseRev: number;
+  writerTag: string;
+  doc: unknown;
+  deps: unknown;
+  nowMs: number;
+  nowIso: string;
+}
+
+export type RepairDecision =
+  | { kind: "locked"; message: string; details: CanvasApiErrorDetails }
+  | { kind: "stale"; message: string; details: CanvasApiErrorDetails }
+  | { kind: "not_required"; message: string; details: CanvasApiErrorDetails }
+  | { kind: "invalid"; message: string; details: CanvasApiErrorDetails }
+  | { kind: "too_large"; message: string; bytes: number }
+  | {
+      kind: "already_applied";
+      doc: CanvasDoc;
+      deps: CanvasDeps;
+      schemaVersion: number;
+      docBytes: number;
+    }
+  | {
+      kind: "write";
+      doc: CanvasDoc;
+      deps: CanvasDeps;
+      schemaVersion: number;
+      docBytes: number;
+    };
+
+/**
+ * Pure authorization/recovery decision for PUT. A valid replacement is not enough: the current
+ * raw row must itself fail strict doc/deps validation or tolerant loading. The sole healthy-row
+ * exception is an exact rev=baseRev+1 replay of the already committed body. This keeps PUT from
+ * becoming a general full-document overwrite path while making response-loss retries idempotent.
+ */
+export function decideRepair(input: DecideRepairInput): RepairDecision {
+  if (!authorizeWriterPatch(input.storedWriter, input.writerTag, input.nowMs)) {
+    return {
+      kind: "locked",
+      message: "画布写者租约不匹配或已过期,已拒绝恢复",
+      details: writerLockedDetails(
+        {
+          tag: input.storedWriter.writerTag,
+          heartbeatAt: input.storedWriter.writerHeartbeatAt,
+        },
+        input.nowIso,
+        input.storedRev
+      ),
+    };
+  }
+
+  // A newer writer owns the meaning of this row. Recovery may migrate an older schema forward,
+  // but it must never reinterpret a future-schema row as damaged and overwrite it with vCurrent.
+  if (input.storedSchemaVersion > CANVAS_SCHEMA_VERSION) {
+    return {
+      kind: "invalid",
+      message: "文档 schema 版本高于当前运行时,禁止伪降级恢复",
+      details: {
+        serverRev: input.storedRev,
+        issues: [
+          `schema_version v${input.storedSchemaVersion} 高于运行时 v${CANVAS_SCHEMA_VERSION},禁止 repair write`,
+        ],
+      },
+    };
+  }
+
+  if (input.storedRev !== input.baseRev) {
+    // A PUT can commit and its response can be lost. The exact same body/baseRev retry observes
+    // rev=baseRev+1 and the exact current-schema payload/byte metadata written by that PUT. Treat
+    // only that narrow state as success; every other stale request keeps the existing conflict.
+    if (
+      input.storedRev === input.baseRev + 1 &&
+      input.storedSchemaVersion === CANVAS_SCHEMA_VERSION
+    ) {
+      const storedDoc = assessRepairDoc(
+        input.storedDoc,
+        input.storedSchemaVersion,
+        "storedDoc"
+      );
+      const storedDeps = assessRepairDeps(input.storedDeps, "storedDeps");
+      const replacementDoc = assessRepairDoc(input.doc, CANVAS_SCHEMA_VERSION, "doc");
+      const replacementDeps = assessRepairDeps(input.deps, "deps");
+      if (
+        storedDoc.valid &&
+        storedDoc.doc &&
+        storedDeps.valid &&
+        storedDeps.deps &&
+        replacementDoc.valid &&
+        replacementDoc.doc &&
+        replacementDeps.valid &&
+        replacementDeps.deps
+      ) {
+        const replacementSize = checkDocSize(replacementDoc.doc);
+        if (
+          !replacementSize.overHardLimit &&
+          input.storedDocBytes === replacementSize.bytes &&
+          deepEqual(storedDoc.doc, replacementDoc.doc) &&
+          deepEqual(storedDeps.deps, replacementDeps.deps)
+        ) {
+          return {
+            kind: "already_applied",
+            doc: storedDoc.doc,
+            deps: storedDeps.deps,
+            schemaVersion: CANVAS_SCHEMA_VERSION,
+            docBytes: replacementSize.bytes,
+          };
+        }
+      }
+    }
+    return {
+      kind: "stale",
+      message: "恢复基线已过期,请重载后重试",
+      details: { serverRev: input.storedRev },
+    };
+  }
+
+  const storedDoc = assessRepairDoc(input.storedDoc, input.storedSchemaVersion, "storedDoc");
+  const storedDeps = assessRepairDeps(input.storedDeps, "storedDeps");
+  if (storedDoc.valid && storedDeps.valid) {
+    return {
+      kind: "not_required",
+      message: "库内画布状态健康,恢复写入不适用",
+      details: {
+        serverRev: input.storedRev,
+        issues: ["repair 仅允许替换 recoveryRequired/invalid 的库内 doc 或 deps"],
+      },
+    };
+  }
+
+  const replacementDoc = assessRepairDoc(input.doc, CANVAS_SCHEMA_VERSION, "doc");
+  const replacementDeps = assessRepairDeps(input.deps, "deps");
+  if (!replacementDoc.valid || !replacementDoc.doc || !replacementDeps.valid || !replacementDeps.deps) {
+    return {
+      kind: "invalid",
+      message: "恢复文档或依赖未通过当前 schema 的完整校验",
+      details: {
+        issues: dedupeIssues([...replacementDoc.issues, ...replacementDeps.issues]),
+      },
+    };
+  }
+
+  const size = checkDocSize(replacementDoc.doc);
+  if (size.overHardLimit) {
+    return {
+      kind: "too_large",
+      message: size.message ?? "画布文档超出 2MB 上限,已拒绝恢复",
+      bytes: size.bytes,
+    };
+  }
+
+  return {
+    kind: "write",
+    doc: replacementDoc.doc,
+    deps: replacementDeps.deps,
+    schemaVersion: CANVAS_SCHEMA_VERSION,
+    docBytes: size.bytes,
   };
 }
 

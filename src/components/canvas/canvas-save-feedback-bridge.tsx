@@ -4,7 +4,10 @@ import { useEffect } from "react";
 
 import { useToast } from "@/hooks/use-toast";
 import { canvasSaveAdapter } from "@/lib/canvas/canvas-save-adapter";
-import { connectCanvasSavePreparer } from "@/stores/canvas-store";
+import {
+  connectCanvasRepairPreparer,
+  connectCanvasSavePreparer,
+} from "@/stores/canvas-store";
 
 export function CanvasSaveFeedbackBridge() {
   const { toast } = useToast();
@@ -12,6 +15,9 @@ export function CanvasSaveFeedbackBridge() {
   useEffect(() => {
     const disconnectStore = connectCanvasSavePreparer((state, input) =>
       canvasSaveAdapter.preparePatch(state, input)
+    );
+    const disconnectRepair = connectCanvasRepairPreparer((state, input) =>
+      canvasSaveAdapter.prepareRepair(state, input)
     );
     const unsubscribe = canvasSaveAdapter.subscribe((feedback) => {
         toast({
@@ -22,6 +28,7 @@ export function CanvasSaveFeedbackBridge() {
     });
     return () => {
       unsubscribe();
+      disconnectRepair();
       disconnectStore();
     };
   }, [toast]);

@@ -23,7 +23,10 @@ interface ObservedWriterSession {
   status: WriterLockStatus | null;
 }
 
-export function useCanvasWriterLock(canvasId?: string | null): CanvasWriterSession {
+export function useCanvasWriterLock(
+  canvasId?: string | null,
+  authIdentity?: string | null
+): CanvasWriterSession {
   const normalized = normalizeCanvasId(canvasId);
   const [observed, setObserved] = useState<ObservedWriterSession>({
     canvasId: null,
@@ -46,11 +49,15 @@ export function useCanvasWriterLock(canvasId?: string | null): CanvasWriterSessi
   useLayoutEffect(() => {
     const lifecycle = lifecycleRef.current;
     if (!lifecycle) return;
+    if (normalized !== null && authIdentity === undefined) {
+      void lifecycle.stop();
+      return;
+    }
     void lifecycle.start(normalized);
     return () => {
       void lifecycle.stop();
     };
-  }, [normalized]);
+  }, [authIdentity, normalized]);
 
   return resolveCanvasWriterSession(normalized, observed.canvasId, observed.status);
 }

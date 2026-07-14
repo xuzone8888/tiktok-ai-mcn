@@ -44,7 +44,9 @@ function defaultControllerFactory(
 }
 
 export function normalizeCanvasId(canvasId?: string | null): string | null {
-  return typeof canvasId === "string" && CANVAS_UUID_RE.test(canvasId) ? canvasId : null;
+  return typeof canvasId === "string" && CANVAS_UUID_RE.test(canvasId)
+    ? canvasId.toLowerCase()
+    : null;
 }
 
 export interface CanvasWriterSessionView {

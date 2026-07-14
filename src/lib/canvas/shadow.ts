@@ -20,6 +20,7 @@ import {
   CanvasDepsSchema,
   CanvasRevisionSchema,
   CANVAS_SCHEMA_VERSION,
+  CANVAS_UUID_RE,
   validateCanvasDoc,
   type CanvasDoc,
   type CanvasDeps,
@@ -28,7 +29,14 @@ import { OfflineQueueSnapshotSchema, type OfflineQueueSnapshot } from "./offline
 
 export const CANVAS_SHADOW_DB_NAME = "stargaze-canvas-shadow";
 export const CANVAS_SHADOW_STORE = "shadows";
-export const CANVAS_SHADOW_DB_VERSION = 1;
+export const CANVAS_PENDING_CREATE_STORE = "pending-creates";
+/**
+ * Storage v2 is an intentional hard fence.  A v1 bundle attempting to reopen the upgraded
+ * database with version=1 receives VersionError, while already-open v1 connections are closed
+ * by `onversionchange`.  That prevents an old tab from bypassing the v2 ownership CAS.
+ */
+export const CANVAS_SHADOW_DB_VERSION = 2;
+export const CANVAS_SHADOW_STORAGE_VERSION = 2 as const;
 /** 影子记录结构版本;旧版记录由 z.literal 拒绝(将来结构变更时据此迁移/丢弃)。 */
 export const CANVAS_SHADOW_SCHEMA_VERSION = 1 as const;
 
@@ -54,6 +62,9 @@ export const CanvasShadowRecordSchema = z
     serverRev: CanvasRevisionSchema,
     updatedAt: z.string().regex(ISO_DATETIME_RE, "updatedAt 必须是 ISO datetime"),
     queue: OfflineQueueSnapshotSchema.nullable(),
+    snapshotRecoveryRequired: z.boolean().optional().default(false),
+    serverRecoveryRequired: z.boolean().optional().default(false),
+    localRecoveryRequired: z.boolean().optional().default(false),
   })
   .superRefine((record, ctx) => {
     if (record.queue) {
@@ -84,6 +95,63 @@ export interface CanvasShadowInput {
   deps: CanvasDeps;
   serverRev: number;
   queue?: OfflineQueueSnapshot | null;
+  snapshotRecoveryRequired?: boolean;
+  serverRecoveryRequired?: boolean;
+  localRecoveryRequired?: boolean;
+  updatedAt?: string;
+}
+
+export const CANVAS_PENDING_CREATE_RECORD_VERSION = 1 as const;
+export const CANVAS_PENDING_CREATE_KEY = "singleton" as const;
+export const CanvasPendingCreatePhaseSchema = z.enum([
+  "pending",
+  "posting",
+  "created-awaiting-route",
+]);
+export type CanvasPendingCreatePhase = z.infer<typeof CanvasPendingCreatePhaseSchema>;
+
+/**
+ * Durable first-create intent. `capturedDoc` is the immutable POST body, while `latestDoc` and
+ * `trailingQueue` preserve edits made after that capture (including across a hard reload).
+ */
+export const CanvasPendingCreateRecordSchema = z
+  .strictObject({
+    version: z.literal(CANVAS_PENDING_CREATE_RECORD_VERSION),
+    createId: z
+      .string()
+      .regex(CANVAS_UUID_RE, "createId must be a UUID")
+      .transform((value) => value.toLowerCase()),
+    capturedDoc: CanvasDocSchema,
+    latestDoc: CanvasDocSchema,
+    trailingQueue: OfflineQueueSnapshotSchema.nullable(),
+    phase: CanvasPendingCreatePhaseSchema,
+    updatedAt: z.string().regex(ISO_DATETIME_RE, "updatedAt must be an ISO datetime"),
+  })
+  .superRefine((record, ctx) => {
+    if (record.trailingQueue && record.trailingQueue.baseRev !== 0) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["trailingQueue", "baseRev"],
+        message: "pending-create trailing queue must remain anchored at revision 0",
+      });
+    }
+    if (record.trailingQueue?.inflight !== null && record.trailingQueue?.inflight !== undefined) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["trailingQueue", "inflight"],
+        message: "pending-create queue cannot contain an inflight PATCH",
+      });
+    }
+  });
+
+export type CanvasPendingCreateRecord = z.infer<typeof CanvasPendingCreateRecordSchema>;
+
+export interface CanvasPendingCreateInput {
+  createId: string;
+  capturedDoc: CanvasDoc;
+  latestDoc: CanvasDoc;
+  trailingQueue?: OfflineQueueSnapshot | null;
+  phase: CanvasPendingCreatePhase;
   updatedAt?: string;
 }
 
@@ -244,6 +312,9 @@ function buildRecord(input: CanvasShadowInput): CanvasShadowRecord | null {
       serverRev: input.serverRev,
       updatedAt: input.updatedAt ?? new Date().toISOString(),
       queue: input.queue ?? null,
+      snapshotRecoveryRequired: input.snapshotRecoveryRequired ?? false,
+      serverRecoveryRequired: input.serverRecoveryRequired ?? false,
+      localRecoveryRequired: input.localRecoveryRequired ?? false,
     };
     return fullyValidateRecord(record);
   } catch {
@@ -253,7 +324,7 @@ function buildRecord(input: CanvasShadowInput): CanvasShadowRecord | null {
 
 // ── 原生 IndexedDB 封装(全部错误可恢复,绝不抛到整页)─────────────────────────
 
-export interface ShadowStoreOptions {
+interface LegacyShadowStoreOptions {
   /**
    * 注入 IDBFactory(测试用 fake)。**显式传 null 可禁用**(available=false);
    * 未提供该键时才回退到 globalThis.indexedDB(presence-aware,非 nullish)。
@@ -262,7 +333,7 @@ export interface ShadowStoreOptions {
   dbName?: string;
 }
 
-function resolveFactory(options: ShadowStoreOptions): IDBFactory | null {
+function resolveLegacyFactory(options: LegacyShadowStoreOptions): IDBFactory | null {
   // presence-aware:只要显式给了 factory 键(哪怕是 null)就采用它,不回退全局。
   const candidate =
     "factory" in options
@@ -271,7 +342,7 @@ function resolveFactory(options: ShadowStoreOptions): IDBFactory | null {
   return candidate && typeof candidate.open === "function" ? candidate : null;
 }
 
-function openDb(factory: IDBFactory, dbName: string): Promise<IDBDatabase | null> {
+function openLegacyDb(factory: IDBFactory, dbName: string): Promise<IDBDatabase | null> {
   return new Promise((resolve) => {
     let settled = false;
     const settle = (db: IDBDatabase | null) => {
@@ -339,7 +410,7 @@ async function runTx(
   mode: IDBTransactionMode,
   op: (store: IDBObjectStore) => IDBRequest
 ): Promise<TxResult> {
-  const db = await openDb(factory, dbName);
+  const db = await openLegacyDb(factory, dbName);
   if (!db) return { ok: false, value: undefined };
   try {
     return await new Promise<TxResult>((resolve) => {
@@ -392,7 +463,7 @@ async function runTx(
   }
 }
 
-export interface CanvasShadowStore {
+interface LegacyCanvasShadowStore {
   /** IndexedDB 是否可用(无/显式禁用则所有操作安全降级为 null/false)。 */
   readonly available: boolean;
   /** 写入/覆盖某 canvas 的影子;非法 doc/deps、不可序列化输入或 IDB 失败(含 Quota/abort)→ false。 */
@@ -409,8 +480,10 @@ export interface CanvasShadowStore {
  * 创建绑定到某 IDBFactory 的影子存储。无 IndexedDB(SSR/隐私模式/显式 factory:null)→
  * available=false,所有操作安全降级(get→null / put→false),不抛。
  */
-export function createCanvasShadowStore(options: ShadowStoreOptions = {}): CanvasShadowStore {
-  const factory = resolveFactory(options);
+function createLegacyCanvasShadowStore(
+  options: LegacyShadowStoreOptions = {}
+): LegacyCanvasShadowStore {
+  const factory = resolveLegacyFactory(options);
   const dbName = options.dbName ?? CANVAS_SHADOW_DB_NAME;
 
   return {
@@ -443,6 +516,1106 @@ export function createCanvasShadowStore(options: ShadowStoreOptions = {}): Canva
 }
 
 // ── 纯判定:是否提示一键恢复 ──────────────────────────────────────────────────
+
+export interface ShadowStoreOptions {
+  /** Explicit `null` disables storage; an omitted factory falls back to global IndexedDB. */
+  factory?: IDBFactory | null;
+  dbName?: string;
+}
+
+export type CanvasStorageFailureReason =
+  | "invalid-input"
+  | "invalid-record"
+  | "open"
+  | "transaction"
+  | "request";
+
+export interface CanvasShadowLease {
+  canvasId: string;
+  ownerId: string;
+  ownerEpoch: number;
+  writeSeq: number;
+}
+
+export interface CanvasPendingCreateLease {
+  ownerId: string;
+  ownerEpoch: number;
+  writeSeq: number;
+}
+
+export type CanvasShadowReadResult =
+  | { status: "found"; record: CanvasShadowRecord }
+  | { status: "absent" }
+  | { status: "unavailable" }
+  | { status: "failure"; reason: CanvasStorageFailureReason };
+
+export type CanvasShadowClaimResult =
+  | { status: "claimed"; record: CanvasShadowRecord | null; lease: CanvasShadowLease }
+  | { status: "unavailable" }
+  | { status: "failure"; reason: CanvasStorageFailureReason };
+
+export type CanvasShadowWriteResult =
+  | { status: "written"; lease: CanvasShadowLease }
+  | { status: "stale" }
+  | { status: "unavailable" }
+  | { status: "failure"; reason: CanvasStorageFailureReason };
+
+export type CanvasShadowRemoveResult =
+  | { status: "removed"; lease: CanvasShadowLease }
+  | { status: "stale" }
+  | { status: "unavailable" }
+  | { status: "failure"; reason: CanvasStorageFailureReason };
+
+export type CanvasPendingCreateReadResult =
+  | { status: "found"; record: CanvasPendingCreateRecord }
+  | { status: "absent" }
+  | { status: "unavailable" }
+  | { status: "failure"; reason: CanvasStorageFailureReason };
+
+export type CanvasPendingCreateClaimResult =
+  | {
+      status: "claimed";
+      record: CanvasPendingCreateRecord | null;
+      lease: CanvasPendingCreateLease;
+    }
+  | { status: "unavailable" }
+  | { status: "failure"; reason: CanvasStorageFailureReason };
+
+export type CanvasPendingCreateMatchClaimResult =
+  | CanvasPendingCreateClaimResult
+  | { status: "mismatch" };
+
+export type CanvasPendingCreateWriteResult =
+  | { status: "written"; lease: CanvasPendingCreateLease }
+  | { status: "stale" }
+  | { status: "unavailable" }
+  | { status: "failure"; reason: CanvasStorageFailureReason };
+
+export type CanvasPendingCreateRemoveResult =
+  | { status: "removed"; lease: CanvasPendingCreateLease }
+  | { status: "stale" }
+  | { status: "unavailable" }
+  | { status: "failure"; reason: CanvasStorageFailureReason };
+
+interface StoredShadowEnvelope {
+  canvasId: string;
+  storageVersion: typeof CANVAS_SHADOW_STORAGE_VERSION;
+  kind: "canvas";
+  ownerId: string | null;
+  ownerEpoch: number;
+  writeSeq: number;
+  payload: CanvasShadowRecord | null;
+}
+
+interface StoredPendingCreateEnvelope {
+  key: typeof CANVAS_PENDING_CREATE_KEY;
+  storageVersion: typeof CANVAS_SHADOW_STORAGE_VERSION;
+  kind: "pending-create";
+  ownerId: string | null;
+  ownerEpoch: number;
+  writeSeq: number;
+  payload: CanvasPendingCreateRecord | null;
+}
+
+const OwnerIdSchema = z.string().min(1).max(200);
+const SequenceSchema = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
+const CanvasShadowLeaseSchema = z.strictObject({
+  canvasId: z.string().min(1).max(200),
+  ownerId: OwnerIdSchema,
+  ownerEpoch: SequenceSchema,
+  writeSeq: SequenceSchema,
+});
+const CanvasPendingCreateLeaseSchema = z.strictObject({
+  ownerId: OwnerIdSchema,
+  ownerEpoch: SequenceSchema,
+  writeSeq: SequenceSchema,
+});
+const CanvasPendingCreateExpectedSchema = z.strictObject({
+  createId: z
+    .string()
+    .regex(CANVAS_UUID_RE)
+    .transform((value) => value.toLowerCase()),
+  phase: CanvasPendingCreatePhaseSchema.optional(),
+});
+const StoredShadowEnvelopeShapeSchema = z.strictObject({
+  canvasId: z.string().min(1).max(200),
+  storageVersion: z.literal(CANVAS_SHADOW_STORAGE_VERSION),
+  kind: z.literal("canvas"),
+  ownerId: OwnerIdSchema.nullable(),
+  ownerEpoch: SequenceSchema,
+  writeSeq: SequenceSchema,
+  payload: z.unknown().nullable(),
+});
+const StoredPendingCreateEnvelopeShapeSchema = z.strictObject({
+  key: z.literal(CANVAS_PENDING_CREATE_KEY),
+  storageVersion: z.literal(CANVAS_SHADOW_STORAGE_VERSION),
+  kind: z.literal("pending-create"),
+  ownerId: OwnerIdSchema.nullable(),
+  ownerEpoch: SequenceSchema,
+  writeSeq: SequenceSchema,
+  payload: z.unknown().nullable(),
+});
+
+function fullyValidatePendingCreateRecord(raw: unknown): CanvasPendingCreateRecord | null {
+  try {
+    const canonical = strictJsonClone(raw);
+    if (!canonical.ok) return null;
+    const parsed = CanvasPendingCreateRecordSchema.safeParse(canonical.value);
+    if (!parsed.success) return null;
+    const captured = validateCanvasDoc(parsed.data.capturedDoc);
+    const latest = validateCanvasDoc(parsed.data.latestDoc);
+    if (!captured.ok || !captured.data || !latest.ok || !latest.data) return null;
+    const out = strictJsonClone({
+      ...parsed.data,
+      capturedDoc: captured.data,
+      latestDoc: latest.data,
+    });
+    return out.ok ? out.value : null;
+  } catch {
+    return null;
+  }
+}
+
+function buildPendingCreateRecord(
+  input: CanvasPendingCreateInput
+): CanvasPendingCreateRecord | null {
+  try {
+    return fullyValidatePendingCreateRecord({
+      version: CANVAS_PENDING_CREATE_RECORD_VERSION,
+      createId: input.createId,
+      capturedDoc: input.capturedDoc,
+      latestDoc: input.latestDoc,
+      trailingQueue: input.trailingQueue ?? null,
+      phase: input.phase,
+      updatedAt: input.updatedAt ?? new Date().toISOString(),
+    });
+  } catch {
+    return null;
+  }
+}
+
+function sameJson(left: unknown, right: unknown): boolean {
+  try {
+    return JSON.stringify(left) === JSON.stringify(right);
+  } catch {
+    return false;
+  }
+}
+
+const PENDING_CREATE_PHASE_ORDER: Record<CanvasPendingCreatePhase, number> = {
+  pending: 0,
+  posting: 1,
+  "created-awaiting-route": 2,
+};
+
+type StoredParse<T> = { ok: true; value: T } | { ok: false };
+
+function parseStoredShadow(raw: unknown, canvasId: string): StoredParse<StoredShadowEnvelope> {
+  try {
+    const canonical = strictJsonClone(raw);
+    if (!canonical.ok) return { ok: false };
+    const shaped = StoredShadowEnvelopeShapeSchema.safeParse(canonical.value);
+    if (shaped.success) {
+      if (shaped.data.canvasId !== canvasId) return { ok: false };
+      const payload =
+        shaped.data.payload === null
+          ? null
+          : validateShadowRecord(shaped.data.payload, canvasId);
+      if (shaped.data.payload !== null && payload === null) return { ok: false };
+      return { ok: true, value: { ...shaped.data, payload } };
+    }
+
+    // v1 rows remain readable during migration, but claim rewrites them to a v2 envelope.
+    const legacy = validateShadowRecord(canonical.value, canvasId);
+    return legacy
+      ? {
+          ok: true,
+          value: {
+            canvasId,
+            storageVersion: CANVAS_SHADOW_STORAGE_VERSION,
+            kind: "canvas",
+            ownerId: null,
+            ownerEpoch: 0,
+            writeSeq: 0,
+            payload: legacy,
+          },
+        }
+      : { ok: false };
+  } catch {
+    return { ok: false };
+  }
+}
+
+function parseStoredPendingCreate(raw: unknown): StoredParse<StoredPendingCreateEnvelope> {
+  try {
+    const canonical = strictJsonClone(raw);
+    if (!canonical.ok) return { ok: false };
+    const shaped = StoredPendingCreateEnvelopeShapeSchema.safeParse(canonical.value);
+    if (!shaped.success) return { ok: false };
+    const payload =
+      shaped.data.payload === null
+        ? null
+        : fullyValidatePendingCreateRecord(shaped.data.payload);
+    if (shaped.data.payload !== null && payload === null) return { ok: false };
+    return { ok: true, value: { ...shaped.data, payload } };
+  } catch {
+    return { ok: false };
+  }
+}
+
+function resolveV2Factory(options: ShadowStoreOptions): IDBFactory | null {
+  const candidate =
+    "factory" in options
+      ? options.factory
+      : (globalThis as { indexedDB?: IDBFactory }).indexedDB;
+  return candidate && typeof candidate.open === "function" ? candidate : null;
+}
+
+type V2OpenResult = { ok: true; db: IDBDatabase } | { ok: false; reason: "open" };
+
+function openV2Db(factory: IDBFactory, dbName: string): Promise<V2OpenResult> {
+  return new Promise((resolve) => {
+    let settled = false;
+    let upgradeFailed = false;
+    const settle = (result: V2OpenResult) => {
+      if (settled) {
+        if (result.ok) {
+          try {
+            result.db.close();
+          } catch {
+            // ignore a late success after blocked/error
+          }
+        }
+        return;
+      }
+      settled = true;
+      resolve(result);
+    };
+
+    let request: IDBOpenDBRequest;
+    try {
+      request = factory.open(dbName, CANVAS_SHADOW_DB_VERSION);
+    } catch {
+      settle({ ok: false, reason: "open" });
+      return;
+    }
+    request.onupgradeneeded = () => {
+      try {
+        const db = request.result;
+        if (!db.objectStoreNames.contains(CANVAS_SHADOW_STORE)) {
+          db.createObjectStore(CANVAS_SHADOW_STORE, { keyPath: "canvasId" });
+        }
+        if (!db.objectStoreNames.contains(CANVAS_PENDING_CREATE_STORE)) {
+          db.createObjectStore(CANVAS_PENDING_CREATE_STORE, { keyPath: "key" });
+        }
+      } catch {
+        upgradeFailed = true;
+        try {
+          request.transaction?.abort();
+        } catch {
+          // request.onerror will settle the open
+        }
+      }
+    };
+    request.onsuccess = () => {
+      const db = request.result;
+      if (
+        upgradeFailed ||
+        !db.objectStoreNames.contains(CANVAS_SHADOW_STORE) ||
+        !db.objectStoreNames.contains(CANVAS_PENDING_CREATE_STORE)
+      ) {
+        try {
+          db.close();
+        } catch {
+          // ignore
+        }
+        settle({ ok: false, reason: "open" });
+        return;
+      }
+      try {
+        db.onversionchange = () => {
+          try {
+            db.close();
+          } catch {
+            // ignore
+          }
+        };
+      } catch {
+        // Closing is a stale-bundle safety hook; the operation can still proceed.
+      }
+      settle({ ok: true, db });
+    };
+    request.onerror = () => settle({ ok: false, reason: "open" });
+    request.onblocked = () => settle({ ok: false, reason: "open" });
+  });
+}
+
+type V2TxExecution<T> =
+  | { ok: true; value: T }
+  | { ok: false; reason: "open" | "transaction" | "request" };
+
+async function runV2RequestTx(
+  factory: IDBFactory,
+  dbName: string,
+  storeName: string,
+  mode: IDBTransactionMode,
+  op: (store: IDBObjectStore) => IDBRequest
+): Promise<V2TxExecution<unknown>> {
+  const opened = await openV2Db(factory, dbName);
+  if (!opened.ok) return opened;
+  const { db } = opened;
+  try {
+    return await new Promise<V2TxExecution<unknown>>((resolve) => {
+      let settled = false;
+      let requestFailed = false;
+      let requestSucceeded = false;
+      let value: unknown;
+      const finish = (result: V2TxExecution<unknown>) => {
+        if (!settled) {
+          settled = true;
+          resolve(result);
+        }
+      };
+      let tx: IDBTransaction;
+      try {
+        tx = db.transaction(storeName, mode);
+      } catch {
+        finish({ ok: false, reason: "transaction" });
+        return;
+      }
+      tx.oncomplete = () =>
+        requestSucceeded
+          ? finish({ ok: true, value })
+          : finish({ ok: false, reason: requestFailed ? "request" : "transaction" });
+      tx.onabort = () =>
+        finish({ ok: false, reason: requestFailed ? "request" : "transaction" });
+      tx.onerror = () =>
+        finish({ ok: false, reason: requestFailed ? "request" : "transaction" });
+      let request: IDBRequest;
+      try {
+        request = op(tx.objectStore(storeName));
+      } catch {
+        try {
+          tx.abort();
+        } catch {
+          // ignore
+        }
+        finish({ ok: false, reason: "transaction" });
+        return;
+      }
+      request.onsuccess = () => {
+        value = request.result;
+        requestSucceeded = true;
+      };
+      request.onerror = () => {
+        requestFailed = true;
+      };
+    });
+  } catch {
+    return { ok: false, reason: "transaction" };
+  } finally {
+    try {
+      db.close();
+    } catch {
+      // ignore
+    }
+  }
+}
+
+type V2AtomicDecision<T> =
+  | { kind: "return"; result: T }
+  | { kind: "write"; value: unknown; result: T };
+
+async function runV2AtomicUpdate<T>(
+  factory: IDBFactory,
+  dbName: string,
+  storeName: string,
+  key: IDBValidKey,
+  decide: (raw: unknown) => V2AtomicDecision<T>
+): Promise<V2TxExecution<T>> {
+  const opened = await openV2Db(factory, dbName);
+  if (!opened.ok) return opened;
+  const { db } = opened;
+  try {
+    return await new Promise<V2TxExecution<T>>((resolve) => {
+      let settled = false;
+      let requestFailed = false;
+      let outcome: T | undefined;
+      let outcomeReady = false;
+      const finish = (result: V2TxExecution<T>) => {
+        if (!settled) {
+          settled = true;
+          resolve(result);
+        }
+      };
+      let tx: IDBTransaction;
+      let store: IDBObjectStore;
+      try {
+        tx = db.transaction(storeName, "readwrite");
+        store = tx.objectStore(storeName);
+      } catch {
+        finish({ ok: false, reason: "transaction" });
+        return;
+      }
+      tx.oncomplete = () =>
+        outcomeReady
+          ? finish({ ok: true, value: outcome as T })
+          : finish({ ok: false, reason: requestFailed ? "request" : "transaction" });
+      tx.onabort = () =>
+        finish({ ok: false, reason: requestFailed ? "request" : "transaction" });
+      tx.onerror = () =>
+        finish({ ok: false, reason: requestFailed ? "request" : "transaction" });
+
+      let getRequest: IDBRequest;
+      try {
+        getRequest = store.get(key);
+      } catch {
+        try {
+          tx.abort();
+        } catch {
+          // ignore
+        }
+        finish({ ok: false, reason: "transaction" });
+        return;
+      }
+      getRequest.onerror = () => {
+        requestFailed = true;
+      };
+      getRequest.onsuccess = () => {
+        let decision: V2AtomicDecision<T>;
+        try {
+          decision = decide(getRequest.result);
+        } catch {
+          try {
+            tx.abort();
+          } catch {
+            // ignore
+          }
+          finish({ ok: false, reason: "transaction" });
+          return;
+        }
+        if (decision.kind === "return") {
+          outcome = decision.result;
+          outcomeReady = true;
+          return;
+        }
+        let putRequest: IDBRequest;
+        try {
+          putRequest = store.put(decision.value);
+        } catch {
+          try {
+            tx.abort();
+          } catch {
+            // ignore
+          }
+          finish({ ok: false, reason: "transaction" });
+          return;
+        }
+        putRequest.onerror = () => {
+          requestFailed = true;
+        };
+        putRequest.onsuccess = () => {
+          outcome = decision.result;
+          outcomeReady = true;
+        };
+      };
+    });
+  } catch {
+    return { ok: false, reason: "transaction" };
+  } finally {
+    try {
+      db.close();
+    } catch {
+      // ignore
+    }
+  }
+}
+
+function validOwnerId(ownerId: unknown): ownerId is string {
+  return OwnerIdSchema.safeParse(ownerId).success;
+}
+
+function normalizeShadowLease(raw: unknown): CanvasShadowLease | null {
+  try {
+    const canonical = strictJsonClone(raw);
+    if (!canonical.ok) return null;
+    const parsed = CanvasShadowLeaseSchema.safeParse(canonical.value);
+    return parsed.success ? parsed.data : null;
+  } catch {
+    return null;
+  }
+}
+
+function normalizePendingLease(raw: unknown): CanvasPendingCreateLease | null {
+  try {
+    const canonical = strictJsonClone(raw);
+    if (!canonical.ok) return null;
+    const parsed = CanvasPendingCreateLeaseSchema.safeParse(canonical.value);
+    return parsed.success ? parsed.data : null;
+  } catch {
+    return null;
+  }
+}
+
+function normalizePendingExpected(
+  raw: unknown
+): { createId: string; phase?: CanvasPendingCreatePhase } | null {
+  try {
+    const canonical = strictJsonClone(raw);
+    if (!canonical.ok) return null;
+    const parsed = CanvasPendingCreateExpectedSchema.safeParse(canonical.value);
+    return parsed.success ? parsed.data : null;
+  } catch {
+    return null;
+  }
+}
+
+function matchesOwner(
+  envelope: { ownerId: string | null; ownerEpoch: number; writeSeq: number },
+  lease: { ownerId: string; ownerEpoch: number; writeSeq: number }
+): boolean {
+  return (
+    envelope.ownerId === lease.ownerId &&
+    envelope.ownerEpoch === lease.ownerEpoch &&
+    envelope.writeSeq === lease.writeSeq
+  );
+}
+
+export interface CanvasPendingCreateStore {
+  read(): Promise<CanvasPendingCreateReadResult>;
+  claim(
+    ownerId: string,
+    seed?: CanvasPendingCreateInput
+  ): Promise<CanvasPendingCreateClaimResult>;
+  /** Atomically claims only the expected singleton payload. A mismatch performs no write. */
+  claimIfMatches(
+    ownerId: string,
+    expected: { createId: string; phase?: CanvasPendingCreatePhase }
+  ): Promise<CanvasPendingCreateMatchClaimResult>;
+  putIfOwned(
+    input: CanvasPendingCreateInput,
+    lease: CanvasPendingCreateLease
+  ): Promise<CanvasPendingCreateWriteResult>;
+  removeIfOwned(
+    lease: CanvasPendingCreateLease,
+    expected: { createId: string; phase?: CanvasPendingCreatePhase }
+  ): Promise<CanvasPendingCreateRemoveResult>;
+}
+
+export interface CanvasShadowStore {
+  readonly available: boolean;
+  /** Non-mutating read. Only a successful get of `undefined` is reported as absent. */
+  read(canvasId: string): Promise<CanvasShadowReadResult>;
+  /** Atomically preserves the latest payload, increments ownerEpoch and resets writeSeq. */
+  claim(canvasId: string, ownerId: string): Promise<CanvasShadowClaimResult>;
+  putIfOwned(
+    input: CanvasShadowInput,
+    lease: CanvasShadowLease
+  ): Promise<CanvasShadowWriteResult>;
+  /** Writes a tombstone rather than deleting, so a late old owner cannot cause ABA. */
+  removeIfOwned(lease: CanvasShadowLease): Promise<CanvasShadowRemoveResult>;
+  readonly pendingCreate: CanvasPendingCreateStore;
+  /** @deprecated Production Runtime must use read/claim/CAS methods. */
+  put(input: CanvasShadowInput): Promise<boolean>;
+  /** @deprecated Compatibility helper that intentionally maps failure to null. */
+  get(canvasId: string): Promise<CanvasShadowRecord | null>;
+  /** @deprecated Compatibility helper that writes a v2 tombstone. */
+  remove(canvasId: string): Promise<boolean>;
+}
+
+export function createCanvasShadowStore(options: ShadowStoreOptions = {}): CanvasShadowStore {
+  const factory = resolveV2Factory(options);
+  const dbName = options.dbName ?? CANVAS_SHADOW_DB_NAME;
+
+  const read = async (canvasId: string): Promise<CanvasShadowReadResult> => {
+    if (typeof canvasId !== "string" || canvasId.length < 1 || canvasId.length > 200) {
+      return { status: "failure", reason: "invalid-input" };
+    }
+    if (!factory) return { status: "unavailable" };
+    const result = await runV2RequestTx(
+      factory,
+      dbName,
+      CANVAS_SHADOW_STORE,
+      "readonly",
+      (store) => store.get(canvasId)
+    );
+    if (!result.ok) return { status: "failure", reason: result.reason };
+    if (result.value === undefined) return { status: "absent" };
+    const parsed = parseStoredShadow(result.value, canvasId);
+    if (!parsed.ok) return { status: "failure", reason: "invalid-record" };
+    return parsed.value.payload
+      ? { status: "found", record: parsed.value.payload }
+      : { status: "absent" };
+  };
+
+  const claim = async (
+    canvasId: string,
+    ownerId: string
+  ): Promise<CanvasShadowClaimResult> => {
+    if (
+      typeof canvasId !== "string" ||
+      canvasId.length < 1 ||
+      canvasId.length > 200 ||
+      !validOwnerId(ownerId)
+    ) {
+      return { status: "failure", reason: "invalid-input" };
+    }
+    if (!factory) return { status: "unavailable" };
+    const result = await runV2AtomicUpdate<CanvasShadowClaimResult>(
+      factory,
+      dbName,
+      CANVAS_SHADOW_STORE,
+      canvasId,
+      (raw) => {
+        let current: StoredShadowEnvelope = {
+          canvasId,
+          storageVersion: CANVAS_SHADOW_STORAGE_VERSION,
+          kind: "canvas",
+          ownerId: null,
+          ownerEpoch: 0,
+          writeSeq: 0,
+          payload: null,
+        };
+        if (raw !== undefined) {
+          const parsed = parseStoredShadow(raw, canvasId);
+          if (!parsed.ok) {
+            return {
+              kind: "return",
+              result: { status: "failure", reason: "invalid-record" },
+            };
+          }
+          current = parsed.value;
+        }
+        const ownerEpoch = current.ownerEpoch + 1;
+        if (!Number.isSafeInteger(ownerEpoch)) {
+          return {
+            kind: "return",
+            result: { status: "failure", reason: "invalid-record" },
+          };
+        }
+        const envelope: StoredShadowEnvelope = {
+          ...current,
+          ownerId,
+          ownerEpoch,
+          writeSeq: 0,
+        };
+        const lease: CanvasShadowLease = { canvasId, ownerId, ownerEpoch, writeSeq: 0 };
+        return {
+          kind: "write",
+          value: envelope,
+          result: { status: "claimed", record: current.payload, lease },
+        };
+      }
+    );
+    return result.ok ? result.value : { status: "failure", reason: result.reason };
+  };
+
+  const putIfOwned = async (
+    input: CanvasShadowInput,
+    lease: CanvasShadowLease
+  ): Promise<CanvasShadowWriteResult> => {
+    const ownedLease = normalizeShadowLease(lease);
+    const record = buildRecord(input);
+    if (!ownedLease || !record || record.canvasId !== ownedLease.canvasId) {
+      return { status: "failure", reason: "invalid-input" };
+    }
+    if (!factory) return { status: "unavailable" };
+    const result = await runV2AtomicUpdate<CanvasShadowWriteResult>(
+      factory,
+      dbName,
+      CANVAS_SHADOW_STORE,
+      ownedLease.canvasId,
+      (raw) => {
+        if (raw === undefined) return { kind: "return", result: { status: "stale" } };
+        const parsed = parseStoredShadow(raw, ownedLease.canvasId);
+        if (!parsed.ok) {
+          return {
+            kind: "return",
+            result: { status: "failure", reason: "invalid-record" },
+          };
+        }
+        if (!matchesOwner(parsed.value, ownedLease)) {
+          return { kind: "return", result: { status: "stale" } };
+        }
+        const writeSeq = ownedLease.writeSeq + 1;
+        if (!Number.isSafeInteger(writeSeq)) {
+          return {
+            kind: "return",
+            result: { status: "failure", reason: "invalid-record" },
+          };
+        }
+        const nextLease: CanvasShadowLease = { ...ownedLease, writeSeq };
+        return {
+          kind: "write",
+          value: { ...parsed.value, writeSeq, payload: record },
+          result: { status: "written", lease: nextLease },
+        };
+      }
+    );
+    return result.ok ? result.value : { status: "failure", reason: result.reason };
+  };
+
+  const removeIfOwned = async (
+    lease: CanvasShadowLease
+  ): Promise<CanvasShadowRemoveResult> => {
+    const ownedLease = normalizeShadowLease(lease);
+    if (!ownedLease) return { status: "failure", reason: "invalid-input" };
+    if (!factory) return { status: "unavailable" };
+    const result = await runV2AtomicUpdate<CanvasShadowRemoveResult>(
+      factory,
+      dbName,
+      CANVAS_SHADOW_STORE,
+      ownedLease.canvasId,
+      (raw) => {
+        if (raw === undefined) return { kind: "return", result: { status: "stale" } };
+        const parsed = parseStoredShadow(raw, ownedLease.canvasId);
+        if (!parsed.ok) {
+          return {
+            kind: "return",
+            result: { status: "failure", reason: "invalid-record" },
+          };
+        }
+        if (!matchesOwner(parsed.value, ownedLease)) {
+          return { kind: "return", result: { status: "stale" } };
+        }
+        const writeSeq = ownedLease.writeSeq + 1;
+        if (!Number.isSafeInteger(writeSeq)) {
+          return {
+            kind: "return",
+            result: { status: "failure", reason: "invalid-record" },
+          };
+        }
+        const nextLease: CanvasShadowLease = { ...ownedLease, writeSeq };
+        return {
+          kind: "write",
+          value: { ...parsed.value, writeSeq, payload: null },
+          result: { status: "removed", lease: nextLease },
+        };
+      }
+    );
+    return result.ok ? result.value : { status: "failure", reason: result.reason };
+  };
+
+  const pendingCreate: CanvasPendingCreateStore = {
+    async read() {
+      if (!factory) return { status: "unavailable" };
+      const result = await runV2RequestTx(
+        factory,
+        dbName,
+        CANVAS_PENDING_CREATE_STORE,
+        "readonly",
+        (store) => store.get(CANVAS_PENDING_CREATE_KEY)
+      );
+      if (!result.ok) return { status: "failure", reason: result.reason };
+      if (result.value === undefined) return { status: "absent" };
+      const parsed = parseStoredPendingCreate(result.value);
+      if (!parsed.ok) return { status: "failure", reason: "invalid-record" };
+      return parsed.value.payload
+        ? { status: "found", record: parsed.value.payload }
+        : { status: "absent" };
+    },
+    async claim(ownerId, seed) {
+      if (!validOwnerId(ownerId)) return { status: "failure", reason: "invalid-input" };
+      const seedRecord = seed === undefined ? null : buildPendingCreateRecord(seed);
+      if (
+        seed !== undefined &&
+        (seedRecord === null || seedRecord.phase !== "pending")
+      ) {
+        return { status: "failure", reason: "invalid-input" };
+      }
+      if (!factory) return { status: "unavailable" };
+      const result = await runV2AtomicUpdate<CanvasPendingCreateClaimResult>(
+        factory,
+        dbName,
+        CANVAS_PENDING_CREATE_STORE,
+        CANVAS_PENDING_CREATE_KEY,
+        (raw) => {
+          let current: StoredPendingCreateEnvelope = {
+            key: CANVAS_PENDING_CREATE_KEY,
+            storageVersion: CANVAS_SHADOW_STORAGE_VERSION,
+            kind: "pending-create",
+            ownerId: null,
+            ownerEpoch: 0,
+            writeSeq: 0,
+            payload: seedRecord,
+          };
+          if (raw !== undefined) {
+            const parsed = parseStoredPendingCreate(raw);
+            if (!parsed.ok) {
+              return {
+                kind: "return",
+                result: { status: "failure", reason: "invalid-record" },
+              };
+            }
+            current = parsed.value;
+            if (current.payload === null && seedRecord !== null) {
+              current = { ...current, payload: seedRecord };
+            }
+          }
+          const ownerEpoch = current.ownerEpoch + 1;
+          if (!Number.isSafeInteger(ownerEpoch)) {
+            return {
+              kind: "return",
+              result: { status: "failure", reason: "invalid-record" },
+            };
+          }
+          const envelope: StoredPendingCreateEnvelope = {
+            ...current,
+            ownerId,
+            ownerEpoch,
+            writeSeq: 0,
+          };
+          const lease: CanvasPendingCreateLease = { ownerId, ownerEpoch, writeSeq: 0 };
+          return {
+            kind: "write",
+            value: envelope,
+            result: { status: "claimed", record: envelope.payload, lease },
+          };
+        }
+      );
+      return result.ok ? result.value : { status: "failure", reason: result.reason };
+    },
+    async claimIfMatches(ownerId, expected) {
+      const normalizedExpected = normalizePendingExpected(expected);
+      if (!validOwnerId(ownerId) || !normalizedExpected) {
+        return { status: "failure", reason: "invalid-input" };
+      }
+      if (!factory) return { status: "unavailable" };
+      const result = await runV2AtomicUpdate<CanvasPendingCreateMatchClaimResult>(
+        factory,
+        dbName,
+        CANVAS_PENDING_CREATE_STORE,
+        CANVAS_PENDING_CREATE_KEY,
+        (raw) => {
+          if (raw === undefined) {
+            return { kind: "return", result: { status: "mismatch" } };
+          }
+          const parsed = parseStoredPendingCreate(raw);
+          if (!parsed.ok) {
+            return {
+              kind: "return",
+              result: { status: "failure", reason: "invalid-record" },
+            };
+          }
+          const payload = parsed.value.payload;
+          if (
+            payload === null ||
+            payload.createId !== normalizedExpected.createId ||
+            (normalizedExpected.phase !== undefined &&
+              payload.phase !== normalizedExpected.phase)
+          ) {
+            return { kind: "return", result: { status: "mismatch" } };
+          }
+          const ownerEpoch = parsed.value.ownerEpoch + 1;
+          if (!Number.isSafeInteger(ownerEpoch)) {
+            return {
+              kind: "return",
+              result: { status: "failure", reason: "invalid-record" },
+            };
+          }
+          const envelope: StoredPendingCreateEnvelope = {
+            ...parsed.value,
+            ownerId,
+            ownerEpoch,
+            writeSeq: 0,
+          };
+          const lease: CanvasPendingCreateLease = { ownerId, ownerEpoch, writeSeq: 0 };
+          return {
+            kind: "write",
+            value: envelope,
+            result: { status: "claimed", record: payload, lease },
+          };
+        }
+      );
+      return result.ok ? result.value : { status: "failure", reason: result.reason };
+    },
+    async putIfOwned(input, lease) {
+      const ownedLease = normalizePendingLease(lease);
+      if (!ownedLease) return { status: "failure", reason: "invalid-input" };
+      const record = buildPendingCreateRecord(input);
+      if (!record) return { status: "failure", reason: "invalid-input" };
+      if (!factory) return { status: "unavailable" };
+      const result = await runV2AtomicUpdate<CanvasPendingCreateWriteResult>(
+        factory,
+        dbName,
+        CANVAS_PENDING_CREATE_STORE,
+        CANVAS_PENDING_CREATE_KEY,
+        (raw) => {
+          if (raw === undefined) return { kind: "return", result: { status: "stale" } };
+          const parsed = parseStoredPendingCreate(raw);
+          if (!parsed.ok) {
+            return {
+              kind: "return",
+              result: { status: "failure", reason: "invalid-record" },
+            };
+          }
+          if (!matchesOwner(parsed.value, ownedLease)) {
+            return { kind: "return", result: { status: "stale" } };
+          }
+          if (
+            parsed.value.payload !== null &&
+            (parsed.value.payload.createId !== record.createId ||
+              !sameJson(parsed.value.payload.capturedDoc, record.capturedDoc))
+          ) {
+            return {
+              kind: "return",
+              result: { status: "failure", reason: "invalid-record" },
+            };
+          }
+          const previousPhase = parsed.value.payload?.phase;
+          const previousOrder = previousPhase === undefined ? -1 : PENDING_CREATE_PHASE_ORDER[previousPhase];
+          const nextOrder = PENDING_CREATE_PHASE_ORDER[record.phase];
+          if (nextOrder < previousOrder || nextOrder > previousOrder + 1) {
+            return {
+              kind: "return",
+              result: { status: "failure", reason: "invalid-record" },
+            };
+          }
+          const writeSeq = ownedLease.writeSeq + 1;
+          if (!Number.isSafeInteger(writeSeq)) {
+            return {
+              kind: "return",
+              result: { status: "failure", reason: "invalid-record" },
+            };
+          }
+          const nextLease: CanvasPendingCreateLease = { ...ownedLease, writeSeq };
+          return {
+            kind: "write",
+            value: { ...parsed.value, writeSeq, payload: record },
+            result: { status: "written", lease: nextLease },
+          };
+        }
+      );
+      return result.ok ? result.value : { status: "failure", reason: result.reason };
+    },
+    async removeIfOwned(lease, expected) {
+      const ownedLease = normalizePendingLease(lease);
+      const normalizedExpected = normalizePendingExpected(expected);
+      if (!ownedLease || !normalizedExpected) {
+        return { status: "failure", reason: "invalid-input" };
+      }
+      if (!factory) return { status: "unavailable" };
+      const result = await runV2AtomicUpdate<CanvasPendingCreateRemoveResult>(
+        factory,
+        dbName,
+        CANVAS_PENDING_CREATE_STORE,
+        CANVAS_PENDING_CREATE_KEY,
+        (raw) => {
+          if (raw === undefined) return { kind: "return", result: { status: "stale" } };
+          const parsed = parseStoredPendingCreate(raw);
+          if (!parsed.ok) {
+            return {
+              kind: "return",
+              result: { status: "failure", reason: "invalid-record" },
+            };
+          }
+          if (!matchesOwner(parsed.value, ownedLease)) {
+            return { kind: "return", result: { status: "stale" } };
+          }
+          if (
+            parsed.value.payload === null ||
+            parsed.value.payload.createId !== normalizedExpected.createId ||
+            (normalizedExpected.phase !== undefined &&
+              parsed.value.payload.phase !== normalizedExpected.phase)
+          ) {
+            return { kind: "return", result: { status: "stale" } };
+          }
+          const writeSeq = ownedLease.writeSeq + 1;
+          if (!Number.isSafeInteger(writeSeq)) {
+            return {
+              kind: "return",
+              result: { status: "failure", reason: "invalid-record" },
+            };
+          }
+          const nextLease: CanvasPendingCreateLease = { ...ownedLease, writeSeq };
+          return {
+            kind: "write",
+            value: { ...parsed.value, writeSeq, payload: null },
+            result: { status: "removed", lease: nextLease },
+          };
+        }
+      );
+      return result.ok ? result.value : { status: "failure", reason: result.reason };
+    },
+  };
+
+  return {
+    available: factory !== null,
+    read,
+    claim,
+    putIfOwned,
+    removeIfOwned,
+    pendingCreate,
+    async put(input) {
+      const record = buildRecord(input);
+      if (!factory || !record) return false;
+      const result = await runV2AtomicUpdate<boolean>(
+        factory,
+        dbName,
+        CANVAS_SHADOW_STORE,
+        record.canvasId,
+        (raw) => {
+          let ownerEpoch = 1;
+          if (raw !== undefined) {
+            const parsed = parseStoredShadow(raw, record.canvasId);
+            if (!parsed.ok) return { kind: "return", result: false };
+            ownerEpoch = parsed.value.ownerEpoch + 1;
+          }
+          if (!Number.isSafeInteger(ownerEpoch)) return { kind: "return", result: false };
+          const envelope: StoredShadowEnvelope = {
+            canvasId: record.canvasId,
+            storageVersion: CANVAS_SHADOW_STORAGE_VERSION,
+            kind: "canvas",
+            ownerId: "__legacy__",
+            ownerEpoch,
+            writeSeq: 0,
+            payload: record,
+          };
+          return { kind: "write", value: envelope, result: true };
+        }
+      );
+      return result.ok && result.value;
+    },
+    async get(canvasId) {
+      const result = await read(canvasId);
+      return result.status === "found" ? result.record : null;
+    },
+    async remove(canvasId) {
+      if (
+        !factory ||
+        typeof canvasId !== "string" ||
+        canvasId.length < 1 ||
+        canvasId.length > 200
+      ) return false;
+      const result = await runV2AtomicUpdate<boolean>(
+        factory,
+        dbName,
+        CANVAS_SHADOW_STORE,
+        canvasId,
+        (raw) => {
+          let ownerEpoch = 1;
+          if (raw !== undefined) {
+            const parsed = parseStoredShadow(raw, canvasId);
+            if (!parsed.ok) return { kind: "return", result: false };
+            ownerEpoch = parsed.value.ownerEpoch + 1;
+          }
+          if (!Number.isSafeInteger(ownerEpoch)) return { kind: "return", result: false };
+          const envelope: StoredShadowEnvelope = {
+            canvasId,
+            storageVersion: CANVAS_SHADOW_STORAGE_VERSION,
+            kind: "canvas",
+            ownerId: "__legacy__",
+            ownerEpoch,
+            writeSeq: 0,
+            payload: null,
+          };
+          return { kind: "write", value: envelope, result: true };
+        }
+      );
+      return result.ok && result.value;
+    },
+  };
+}
 
 export interface ShadowServerState {
   /** 当前服务端 rev。 */

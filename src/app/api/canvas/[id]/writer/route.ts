@@ -81,7 +81,7 @@ async function requireUserAndId(params: RouteParams["params"]): Promise<WriterGa
   if (!user) {
     return { ok: false, response: errorResponse("UNAUTHENTICATED", "请先登录") };
   }
-  return { ok: true, db: supabase as unknown as SupabaseClient, id };
+  return { ok: true, db: supabase as unknown as SupabaseClient, id: id.toLowerCase() };
 }
 
 /** 条件 UPDATE 落 0 行后重读区分 NOT_FOUND / WRITER_LOCKED;读失败 → INTERNAL。 */
@@ -147,7 +147,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         .from("canvases")
         .update({ writer_tag: writerTag, writer_heartbeat_at: nowIso } as never)
         .eq("id", id)
-        .or(`writer_tag.is.null,writer_tag.eq.${writerTag},writer_heartbeat_at.lt.${cutoff}`)
+        .or(
+          `writer_tag.is.null,writer_tag.eq.${writerTag},writer_heartbeat_at.is.null,writer_heartbeat_at.lt.${cutoff}`
+        )
         .select(WRITER_COLS)
         .maybeSingle();
       if (error) {

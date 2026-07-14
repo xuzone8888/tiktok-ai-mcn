@@ -70,6 +70,11 @@ async function main() {
   await loadCanvasModule("history");
   await loadCanvasModule("group-ops");
   const adapter = await loadCanvasModule("rf-adapter");
+  writeFileSync(
+    join(OUT_DIR, "api-helpers-store-stub.mjs"),
+    "export const CANVAS_UUID_RE=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;\n",
+    "utf8"
+  );
   const storeMod = await loadExtra(
     join(ROOT, "src", "stores", "canvas-store.ts"),
     "canvas-store.mjs",
@@ -78,6 +83,7 @@ async function main() {
       "@/lib/canvas/rf-adapter": "./rf-adapter.mjs",
       "@/lib/canvas/history": "./history.mjs",
       "@/lib/canvas/group-ops": "./group-ops.mjs",
+      "@/lib/canvas/api-helpers": "./api-helpers-store-stub.mjs",
     }
   );
 

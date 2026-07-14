@@ -12,17 +12,21 @@ import {
   type CanvasApiErrorDetails,
   type CanvasDocumentData,
   type CanvasPatchResultData,
+  type CanvasRepairResultData,
 } from "@/lib/canvas/api-types";
 import {
   CANVAS_CAS_MAX_ATTEMPTS,
   CANVAS_UUID_RE,
   CanvasPatchWriteBodySchema,
   decidePatch,
+  decideRepair,
   envelopeWithMeta,
   parseDepsForTransport,
+  parseCanvasRepairRequest,
   recoveryReport,
   sanitizeCanvasTitle,
   tolerantEnvelope,
+  type RepairDecision,
 } from "@/lib/canvas/api-helpers";
 import { WRITER_LEASE_MS, writerActiveSinceIso } from "@/lib/canvas/writer-lock";
 
@@ -45,6 +49,11 @@ export const dynamic = "force-dynamic";
  *   (`writer_tag=:tag AND writer_heartbeat_at>=now-lease AND rev=:baseRev`)——0 行时下一轮重读:
  *   tag 已变或心跳过期 → WRITER_LOCKED(409),仅 rev 变 → 续 rebase;锁冲突与 rev 冲突严格可区分。
  *   过期同 tag 不得经 PATCH 复活(须先走 writer 路由续租);活跃写者保存顺带续租(writer_heartbeat_at=now)。
+ *
+ * PUT /api/canvas/[id] body: { baseRev, writerTag, confirmRecovery:true, doc, deps }
+ *   仅当库内 raw doc/deps 确实损坏或 recoveryRequired 时允许当前 schema 整包恢复。健康行拒绝,
+ *   防止 PUT 成为普通覆盖旁路;owner+rev+writer+活跃心跳同一 UPDATE。提交后响应丢失时，仅
+ *   rev=baseRev+1 且 schema/doc/deps/doc_bytes 全等的重试按 already-applied 成功返回，不二次写。
  *
  * 权限:cookie 用户 client + RLS own,跨用户/不存在都表现为 0 行 → NOT_FOUND。
  * canvases 未进 database.ts 生成类型,沿用 blueprints 路由的 untyped client 断言。
@@ -81,7 +90,7 @@ function errorResponse(
 }
 
 type CanvasGate =
-  | { ok: true; db: SupabaseClient; id: string }
+  | { ok: true; db: SupabaseClient; id: string; userId: string }
   | { ok: false; response: NextResponse };
 
 async function requireUserAndId(params: RouteParams["params"]): Promise<CanvasGate> {
@@ -96,7 +105,54 @@ async function requireUserAndId(params: RouteParams["params"]): Promise<CanvasGa
   if (!user) {
     return { ok: false, response: errorResponse("UNAUTHENTICATED", "请先登录") };
   }
-  return { ok: true, db: supabase as unknown as SupabaseClient, id };
+  return {
+    ok: true,
+    db: supabase as unknown as SupabaseClient,
+    id: id.toLowerCase(),
+    userId: user.id,
+  };
+}
+
+type RepairRejection = Exclude<
+  RepairDecision,
+  { kind: "write" } | { kind: "already_applied" }
+>;
+type RepairAccepted = Extract<
+  RepairDecision,
+  { kind: "write" } | { kind: "already_applied" }
+>;
+
+function repairErrorResponse(decision: RepairRejection) {
+  if (decision.kind === "locked") {
+    return errorResponse("WRITER_LOCKED", decision.message, decision.details);
+  }
+  if (decision.kind === "stale") {
+    return errorResponse("REV_CONFLICT", decision.message, decision.details);
+  }
+  if (decision.kind === "too_large") {
+    return errorResponse("DOC_TOO_LARGE", decision.message);
+  }
+  return errorResponse("CANVAS_DOC_INVALID", decision.message, decision.details);
+}
+
+function repairSuccessResponse(
+  id: string,
+  rev: number,
+  updatedAt: string,
+  decision: RepairAccepted
+) {
+  const envelope = envelopeWithMeta(decision.doc, decision.deps, rev, decision.docBytes);
+  const result: CanvasRepairResultData = {
+    id,
+    rev,
+    schemaVersion: decision.schemaVersion,
+    docBytes: decision.docBytes,
+    persisted: true,
+    recovered: true,
+    updatedAt,
+    envelope,
+  };
+  return NextResponse.json(canvasApiSuccess(result));
 }
 
 export async function GET(_request: NextRequest, { params }: RouteParams) {
@@ -141,6 +197,182 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
   } catch (error) {
     console.error("[Canvas GET] error:", error);
     return errorResponse("INTERNAL", "画布读取失败");
+  }
+}
+
+export async function PUT(request: NextRequest, { params }: RouteParams) {
+  try {
+    const gate = await requireUserAndId(params);
+    if (!gate.ok) return gate.response;
+    const { db, id, userId } = gate;
+
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      return errorResponse("INVALID_BODY", "请求体不是合法 JSON");
+    }
+
+    const parsedBody = parseCanvasRepairRequest(body);
+    if (!parsedBody.ok) {
+      return errorResponse(
+        "INVALID_BODY",
+        "恢复请求字段非法(仅允许且必须包含 baseRev/writerTag/confirmRecovery:true/doc/deps)",
+        { issues: parsedBody.issues }
+      );
+    }
+    const { baseRev, writerTag, doc, deps } = parsedBody.data;
+
+    // RLS remains authoritative; the explicit owner predicate is defense in depth and is also
+    // repeated on the CAS UPDATE and its zero-row classification reread.
+    const { data, error } = await db
+      .from("canvases")
+      .select(ROW_COLUMNS)
+      .eq("id", id)
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    if (error) {
+      console.error("[Canvas PUT repair] read failed:", error);
+      return errorResponse("INTERNAL", "画布恢复读取失败");
+    }
+    if (!data) return errorResponse("NOT_FOUND", "画布不存在");
+
+    const row = data as unknown as CanvasRow;
+    const nowMs = Date.now();
+    const nowIso = new Date(nowMs).toISOString();
+    const decideForRow = (current: CanvasRow) =>
+      decideRepair({
+        storedDoc: current.doc,
+        storedDeps: current.deps,
+        storedDocBytes: current.doc_bytes,
+        storedRev: current.rev,
+        storedSchemaVersion: current.schema_version,
+        storedWriter: {
+          writerTag: current.writer_tag,
+          writerHeartbeatAt: current.writer_heartbeat_at,
+        },
+        baseRev,
+        writerTag,
+        doc,
+        deps,
+        nowMs,
+        nowIso,
+      });
+
+    const decision = decideForRow(row);
+    if (decision.kind === "already_applied") {
+      if (
+        row.id !== id ||
+        row.rev !== baseRev + 1 ||
+        row.schema_version !== decision.schemaVersion ||
+        row.doc_bytes !== decision.docBytes ||
+        typeof row.updated_at !== "string"
+      ) {
+        console.error("[Canvas PUT repair] unexpected idempotent readback metadata");
+        return errorResponse("INTERNAL", "画布恢复结果校验失败");
+      }
+      return repairSuccessResponse(row.id, row.rev, row.updated_at, decision);
+    }
+    if (decision.kind !== "write") return repairErrorResponse(decision);
+
+    const nextRev = baseRev + 1;
+    const update: Record<string, unknown> = {
+      doc: decision.doc,
+      deps: decision.deps,
+      rev: nextRev,
+      schema_version: decision.schemaVersion,
+      doc_bytes: decision.docBytes,
+      updated_at: nowIso,
+      writer_heartbeat_at: nowIso,
+    };
+
+    // Exactly one atomic write attempt. WHERE evaluates the old lease while SET renews it.
+    const { data: saved, error: saveError } = await db
+      .from("canvases")
+      .update(update as never)
+      .eq("id", id)
+      .eq("user_id", userId)
+      .eq("rev", baseRev)
+      .eq("writer_tag", writerTag)
+      .gte("writer_heartbeat_at", writerActiveSinceIso(nowMs, WRITER_LEASE_MS))
+      .select("id, rev, schema_version, doc_bytes, updated_at")
+      .maybeSingle();
+
+    if (saveError) {
+      console.error("[Canvas PUT repair] update failed:", saveError);
+      return errorResponse("INTERNAL", "画布恢复保存失败");
+    }
+
+    if (!saved) {
+      // No blind retry: classify the failed CAS against the current owner-scoped row. Only
+      // expected state transitions are surfaced; an unchanged write-eligible row is INTERNAL.
+      const { data: reread, error: rereadError } = await db
+        .from("canvases")
+        .select(ROW_COLUMNS)
+        .eq("id", id)
+        .eq("user_id", userId)
+        .maybeSingle();
+
+      if (rereadError) {
+        console.error("[Canvas PUT repair] CAS reread failed:", rereadError);
+        return errorResponse("INTERNAL", "画布恢复状态确认失败");
+      }
+      if (!reread) return errorResponse("NOT_FOUND", "画布不存在");
+
+      const rereadRow = reread as unknown as CanvasRow;
+      const rereadDecision = decideForRow(rereadRow);
+      if (rereadDecision.kind === "already_applied") {
+        if (
+          rereadRow.id !== id ||
+          rereadRow.rev !== baseRev + 1 ||
+          rereadRow.schema_version !== rereadDecision.schemaVersion ||
+          rereadRow.doc_bytes !== rereadDecision.docBytes ||
+          typeof rereadRow.updated_at !== "string"
+        ) {
+          console.error("[Canvas PUT repair] unexpected idempotent CAS readback metadata");
+          return errorResponse("INTERNAL", "画布恢复结果校验失败");
+        }
+        return repairSuccessResponse(
+          rereadRow.id,
+          rereadRow.rev,
+          rereadRow.updated_at,
+          rereadDecision
+        );
+      }
+      if (
+        rereadDecision.kind === "locked" ||
+        rereadDecision.kind === "stale" ||
+        rereadDecision.kind === "not_required"
+      ) {
+        return repairErrorResponse(rereadDecision);
+      }
+      console.error("[Canvas PUT repair] zero-row CAS remained write-eligible");
+      return errorResponse("INTERNAL", "画布恢复竞争状态无法确认");
+    }
+
+    const savedRow = saved as unknown as {
+      id: string;
+      rev: number;
+      schema_version: number;
+      doc_bytes: number;
+      updated_at: string;
+    };
+    if (
+      savedRow.id !== id ||
+      savedRow.rev !== nextRev ||
+      savedRow.schema_version !== decision.schemaVersion ||
+      savedRow.doc_bytes !== decision.docBytes ||
+      typeof savedRow.updated_at !== "string"
+    ) {
+      console.error("[Canvas PUT repair] unexpected update result metadata");
+      return errorResponse("INTERNAL", "画布恢复结果校验失败");
+    }
+
+    return repairSuccessResponse(savedRow.id, savedRow.rev, savedRow.updated_at, decision);
+  } catch (error) {
+    console.error("[Canvas PUT repair] error:", error);
+    return errorResponse("INTERNAL", "画布恢复失败");
   }
 }
 

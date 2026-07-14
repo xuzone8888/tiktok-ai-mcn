@@ -88,8 +88,7 @@ export function isWriterLeaseActive(
  * `writer_tag IS NULL OR writer_tag = :tag OR writer_heartbeat_at < now()-lease`:
  *   - 无写者(tag 空)→ 可领;
  *   - 已是本 tag → 可重入续领;
- *   - 他 tag:仅当其心跳**存在且早于** now-lease 才可接管
- *     (SQL null 语义:心跳为 null 时 `< cutoff` 不成立 → 不可接管,与 DB `.lt` 一致)。
+ *   - 他 tag:心跳缺失(异常/遗留半行)或早于 now-lease 时可接管。
  */
 export function canClaimWriter(
   stored: StoredWriterState | null | undefined,
@@ -103,7 +102,7 @@ export function canClaimWriter(
   if (current === tag) return true;
   if (!Number.isFinite(nowMs)) return false;
   const hb = heartbeatEpochMs(stored?.writerHeartbeatAt);
-  if (hb === null) return false; // 与 SQL `null < cutoff → 非真` 一致:不可接管
+  if (hb === null) return true; // 非空 tag + NULL heartbeat 是不可能续租的半行，按失效租约接管。
   return nowMs - hb > leaseMs; // 严格早于 cutoff ⟺ now-hb>lease
 }
 

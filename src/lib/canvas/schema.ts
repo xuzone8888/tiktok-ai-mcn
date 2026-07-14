@@ -15,6 +15,10 @@ import { z } from "zod";
 
 export const CANVAS_SCHEMA_VERSION = 1 as const;
 
+/** Canonical persisted canvas identity (shared by API, Runtime and durable pending-create). */
+export const CANVAS_UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export const CANVAS_NODE_TYPES = [
   "text",
   "image",

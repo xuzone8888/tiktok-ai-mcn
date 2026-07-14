@@ -207,6 +207,22 @@ export interface CanvasPatchResultData {
   envelope?: CanvasEnvelopeWithMeta;
 }
 
+/**
+ * PUT /api/canvas/[id] explicit recovery result. Recovery always persists exactly one CAS
+ * revision and always returns the authoritative strict replacement envelope; there is no noop
+ * or rebased variant for this contract.
+ */
+export interface CanvasRepairResultData {
+  id: string;
+  rev: number;
+  schemaVersion: number;
+  docBytes: number;
+  persisted: true;
+  recovered: true;
+  updatedAt: string;
+  envelope: CanvasEnvelopeWithMeta;
+}
+
 export function canvasApiSuccess<T>(data: T, warning?: CanvasSizeWarning): CanvasApiSuccessBody<T> {
   return warning ? { success: true, data, warning } : { success: true, data };
 }

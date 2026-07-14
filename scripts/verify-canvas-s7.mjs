@@ -192,10 +192,11 @@ async function main() {
       '"@/lib/canvas/rf-adapter"': '"./rf-adapter.mjs"',
       '"@/lib/canvas/history"': '"./history.mjs"',
       '"@/lib/canvas/group-ops"': '"./group-ops.mjs"',
+      '"@/lib/canvas/api-helpers"': '"./api-helpers.mjs"',
     }
   );
 
-  const { createCanvasNode, loadCanvasDoc } = schema;
+  const { CANVAS_SCHEMA_VERSION, createCanvasNode, loadCanvasDoc } = schema;
   const {
     DOC_BYTES_HARD_LIMIT,
     DOC_JSONB_WARN_LIMIT,
@@ -212,7 +213,7 @@ async function main() {
   const { decideCanvasCommand, isCanvasDocumentInteractionBlocked } = commandModule;
   const { CanvasAsyncSession, runGuardedCanvasTask } = asyncSessionModule;
   const { createCanvasErrorMonitor } = monitoringModule;
-  const { connectCanvasSavePreparer, useCanvasStore } = storeModule;
+  const { connectCanvasRepairPreparer, connectCanvasSavePreparer, useCanvasStore } = storeModule;
   const state = () => useCanvasStore.getState();
   const canvasId = "11111111-1111-4111-8111-111111111111";
   const canvasIdB = "22222222-2222-4222-8222-222222222222";
@@ -333,6 +334,16 @@ async function main() {
   });
   ok(state().hydrate(broken) === true, "tolerant broken document hydrates");
   ok(state().recoveryRequired && state().brokenNodes.length === 1, "broken document remains blocked");
+  const beforeRecoveryPromotion = storeSnapshot(state());
+  ok(
+    state().promoteLocalToPersisted(canvasId) === false,
+    "recoveryRequired local document cannot promote to persisted identity"
+  );
+  eq(
+    storeSnapshot(state()),
+    beforeRecoveryPromotion,
+    "rejected recovery promotion leaves the complete store unchanged"
+  );
   const brokenRaw = new Proxy({}, {
     ownKeys() {
       throw new Error("hostile raw payload");
@@ -447,6 +458,78 @@ async function main() {
     state().brokenEdges.length === 0 && !state().recoveryRequired && state().past.length === 0,
     "explicit broken-edge cleanup recomputes recovery and clears history"
   );
+  const metadataRecovery = loadCanvasDoc({
+    nodes: [
+      createCanvasNode({
+        id: "metadata_recovery_node",
+        type: "text",
+        position: { x: 12, y: 34 },
+        data: { title: "retained recovery document" },
+      }),
+    ],
+    edges: [],
+    groups: [],
+  });
+  metadataRecovery.recoveryRequired = true;
+  metadataRecovery.issues = ["stored deps require explicit replacement"];
+  ok(state().beginCanvasSession(canvasId), "metadata recovery begins a persistent session");
+  ok(state().hydrate(metadataRecovery, canvasId), "metadata-only recovery hydrates safely");
+  state().setReadOnly(false);
+
+  const confirmationNode = state().nodes[0];
+  const confirmationPast = [{ id: "past_recovery_entry", forward: [], inverse: [] }];
+  const confirmationFuture = [{ id: "future_recovery_entry", forward: [], inverse: [] }];
+  const confirmationEditAnchor = {
+    nodeId: confirmationNode.id,
+    base: JSON.parse(JSON.stringify(confirmationNode)),
+  };
+  const confirmationDragAnchor = {
+    bases: [{ id: confirmationNode.id, base: JSON.parse(JSON.stringify(confirmationNode)) }],
+  };
+  useCanvasStore.setState({
+    schemaVersion: -1,
+    migratedFrom: -2,
+    migrationComplete: false,
+    recoveryRequired: true,
+    loadIssues: ["stored deps require explicit replacement"],
+    past: confirmationPast,
+    future: confirmationFuture,
+    editAnchor: confirmationEditAnchor,
+    dragAnchor: confirmationDragAnchor,
+    edgesHidden: true,
+    snapToGrid: true,
+    minimapCollapsed: true,
+  });
+  const beforeSafeConfirmation = state();
+  const confirmationMetadataFields = new Set([
+    "schemaVersion",
+    "migratedFrom",
+    "migrationComplete",
+    "recoveryRequired",
+    "loadIssues",
+  ]);
+  ok(
+    beforeSafeConfirmation.nodes.length === 1 &&
+      beforeSafeConfirmation.past.length === 1 &&
+      beforeSafeConfirmation.future.length === 1 &&
+      beforeSafeConfirmation.editAnchor !== null &&
+      beforeSafeConfirmation.dragAnchor !== null,
+    "safe recovery confirmation fixture retains document, history, and live interaction anchors"
+  );
+  ok(state().confirmSafeRecovery(), "explicit confirmation accepts a strictly valid recovered document");
+  const afterSafeConfirmation = state();
+  eq(afterSafeConfirmation.schemaVersion, CANVAS_SCHEMA_VERSION, "confirmation normalizes schema version only");
+  eq(afterSafeConfirmation.migratedFrom, CANVAS_SCHEMA_VERSION, "confirmation normalizes migration source only");
+  ok(afterSafeConfirmation.migrationComplete, "confirmation marks migration complete");
+  ok(!afterSafeConfirmation.recoveryRequired, "confirmation clears the recovery gate");
+  eq(afterSafeConfirmation.loadIssues, [], "confirmation clears recovery diagnostics");
+  for (const field of Object.keys(beforeSafeConfirmation)) {
+    if (confirmationMetadataFields.has(field)) continue;
+    ok(
+      Object.is(afterSafeConfirmation[field], beforeSafeConfirmation[field]),
+      `confirmSafeRecovery preserves ${field} identity/reference`
+    );
+  }
 
   console.log("2. Monitoring privacy, daily threshold, dedupe, and bounds");
   const events = [];
@@ -898,6 +981,97 @@ async function main() {
   await strictLifecycle.stop();
   eq(live.stops, 1, "repeated stop is idempotent for the live controller");
 
+  writeFileSync(
+    join(OUT, "writer-hook-react-stub.mjs"),
+    String.raw`
+let slots=[];
+let cursor=0;
+let queued=[];
+const changed=(a,b)=>!a||!b||a.length!==b.length||a.some((value,index)=>!Object.is(value,b[index]));
+export function useState(initial){
+  const index=cursor++;
+  if(!(index in slots)) slots[index]={kind:"state",value:initial};
+  return [slots[index].value,(next)=>{slots[index].value=typeof next==="function"?next(slots[index].value):next}];
+}
+export function useRef(initial){
+  const index=cursor++;
+  if(!(index in slots)) slots[index]={kind:"ref",value:{current:initial}};
+  return slots[index].value;
+}
+export function useLayoutEffect(effect,deps){
+  const index=cursor++;
+  const previous=slots[index];
+  if(previous?.kind==="effect"&&!changed(previous.deps,deps)) return;
+  queued.push(()=>{
+    previous?.cleanup?.();
+    const cleanup=effect();
+    slots[index]={kind:"effect",deps,cleanup:typeof cleanup==="function"?cleanup:null};
+  });
+}
+export function __render(render){
+  cursor=0;
+  const result=render();
+  const effects=queued;
+  queued=[];
+  for(const run of effects) run();
+  return result;
+}
+export function __unmount(){
+  for(let index=slots.length-1;index>=0;index-=1) slots[index]?.cleanup?.();
+  slots=[];
+  queued=[];
+  cursor=0;
+}
+`,
+    "utf8"
+  );
+  writeFileSync(
+    join(OUT, "writer-hook-lifecycle-stub.mjs"),
+    String.raw`
+export const metrics={created:0,starts:[],stops:0};
+let activeId=null;
+export function createCanvasWriterLifecycle(){
+  metrics.created+=1;
+  return {
+    start(id){activeId=id;metrics.starts.push(id);return Promise.resolve(true)},
+    stop(){activeId=null;metrics.stops+=1;return Promise.resolve()},
+    getCanvasId(){return activeId},
+  };
+}
+export function normalizeCanvasId(value){return typeof value==="string"?value.toLowerCase():null}
+export function resolveCanvasWriterSession(canvasId,observedCanvasId,status){
+  return {canvasId,persistent:canvasId!==null,status:observedCanvasId===canvasId?status:null,canEdit:false};
+}
+`,
+    "utf8"
+  );
+  writeFileSync(
+    join(OUT, "writer-hook-store-stub.mjs"),
+    "export const useCanvasStore={getState(){return {setReadOnly(){}}}};\n",
+    "utf8"
+  );
+  const writerHookReact = await import(
+    pathToFileURL(join(OUT, "writer-hook-react-stub.mjs")).href
+  );
+  const writerHookLifecycle = await import(
+    pathToFileURL(join(OUT, "writer-hook-lifecycle-stub.mjs")).href
+  );
+  const writerHook = await loadExtra(
+    join(ROOT, "src", "components", "canvas", "use-canvas-writer-lock.ts"),
+    "use-canvas-writer-lock-test.mjs",
+    {
+      '"react"': '"./writer-hook-react-stub.mjs"',
+      '"@/lib/canvas/canvas-writer-lifecycle"': '"./writer-hook-lifecycle-stub.mjs"',
+      '"@/stores/canvas-store"': '"./writer-hook-store-stub.mjs"',
+    }
+  );
+  writerHookReact.__render(() => writerHook.useCanvasWriterLock(canvasId, undefined));
+  eq(writerHookLifecycle.metrics.starts, [], "unresolved auth starts zero writer lifecycles");
+  ok(writerHookLifecycle.metrics.stops >= 1, "unresolved auth actively stops a retained writer lifecycle");
+  writerHookReact.__render(() => writerHook.useCanvasWriterLock(canvasId, "owner_a"));
+  eq(writerHookLifecycle.metrics.starts, [canvasId], "resolved auth starts the requested writer exactly once");
+  writerHookReact.__unmount();
+
   const acquiredA = makeWriterStatus("render_tag_a", true, "acquired");
   const switchedFirstFrame = resolveCanvasWriterSession(canvasIdB, canvasId, acquiredA);
   ok(
@@ -1118,6 +1292,9 @@ async function main() {
   const disconnect = connectCanvasSavePreparer((storeState, input) =>
     saveAdapter.preparePatch(storeState, input)
   );
+  const disconnectRepair = connectCanvasRepairPreparer((storeState, input) =>
+    saveAdapter.prepareRepair(storeState, input)
+  );
   const owner = {};
   saveAdapter.beginWriterSession(owner);
   ok(saveAdapter.activateWriter(owner, { canvasId, writerTag: "writer_tag_save" }), "valid writer binds");
@@ -1206,10 +1383,85 @@ async function main() {
     "local and server hard-limit failures share one toast title contract"
   );
 
-  ok(state().hydrate(loadCanvasDoc({ nodes: [], edges: [], groups: [] }), canvasId) === true, "healthy doc restored");
+  const repairDocument = {
+    nodes: [
+      createCanvasNode({
+        id: "repair_body_node",
+        type: "text",
+        position: { x: 7, y: 9 },
+        data: { title: "repair body must survive exactly" },
+      }),
+    ],
+    edges: [],
+    groups: [],
+  };
+  ok(state().hydrate(loadCanvasDoc(repairDocument), canvasId) === true, "healthy nonempty repair doc restored");
   state().setReadOnly(false);
   const preparedOnly = state().preparePatchSave({ baseRev: 4, ops: [] });
   ok(preparedOnly.ok && preparedOnly.request.init.method === "PATCH", "healthy state only prepares PATCH metadata");
+  const preparedRepair = state().prepareRepairSave({
+    baseRev: 4,
+    deps: { models: [], voices: [], characters: [], assets: [], recipes: [] },
+  });
+  ok(preparedRepair.ok && preparedRepair.request.init.method === "PUT", "healthy recovered state prepares explicit PUT metadata");
+  if (preparedRepair.ok) {
+    const repairBody = JSON.parse(preparedRepair.request.init.body);
+    eq(repairBody.confirmRecovery, true, "repair PUT requires an explicit confirmation literal");
+    eq(repairBody.writerTag, "writer_tag_save", "repair PUT binds the active writer tag");
+    eq(repairBody.baseRev, 4, "repair PUT preserves the exact loaded revision");
+    ok(Array.isArray(repairBody.doc.nodes), "repair PUT carries the complete strict document");
+  }
+  const nonemptyRepairDeps = {
+    models: ["model_repair_exact"],
+    voices: ["voice_repair_exact"],
+    characters: [{ id: "character_repair_exact", table: "canvas_assets" }],
+    assets: [{ id: "asset_repair_exact", table: "canvas_assets" }],
+    recipes: ["recipe_repair_exact"],
+  };
+  const maximumAcceptedRepair = saveAdapter.prepareRepair(state(), {
+    baseRev: Number.MAX_SAFE_INTEGER - 1,
+    deps: nonemptyRepairDeps,
+  });
+  ok(
+    maximumAcceptedRepair.ok && maximumAcceptedRepair.request.init.method === "PUT",
+    "repair accepts the server CAS maximum Number.MAX_SAFE_INTEGER - 1"
+  );
+  if (maximumAcceptedRepair.ok) {
+    const expectedRepairBody = {
+      baseRev: Number.MAX_SAFE_INTEGER - 1,
+      writerTag: "writer_tag_save",
+      confirmRecovery: true,
+      doc: repairDocument,
+      deps: nonemptyRepairDeps,
+    };
+    eq(
+      JSON.parse(maximumAcceptedRepair.request.init.body),
+      expectedRepairBody,
+      "repair preserves the complete nonempty document, dependency lists, and exact wire fields"
+    );
+    eq(
+      Object.keys(JSON.parse(maximumAcceptedRepair.request.init.body)),
+      ["baseRev", "writerTag", "confirmRecovery", "doc", "deps"],
+      "repair body contains no defaulted or surplus fields"
+    );
+  }
+  for (const [label, invalidRepairInput] of [
+    [
+      "Number.MAX_SAFE_INTEGER",
+      { baseRev: Number.MAX_SAFE_INTEGER, deps: nonemptyRepairDeps },
+    ],
+    ["missing deps", { baseRev: 4 }],
+    ["own deps undefined", { baseRev: 4, deps: undefined }],
+  ]) {
+    const rejectedFetchCalls = fetchCalls;
+    const invalidRepair = saveAdapter.prepareRepair(state(), invalidRepairInput);
+    ok(
+      !invalidRepair.ok && invalidRepair.error.code === "INVALID_BODY",
+      `repair rejects ${label} with INVALID_BODY`
+    );
+    ok(!("request" in invalidRepair), `repair rejection for ${label} exposes no request metadata`);
+    eq(fetchCalls, rejectedFetchCalls, `repair rejection for ${label} performs no network request`);
+  }
   const identityMismatch = saveAdapter.preparePatch(
     { ...state(), hydratedCanvasId: canvasIdB },
     { baseRev: 4, ops: [] }
@@ -1234,6 +1486,23 @@ async function main() {
     "hostile PATCH input fails closed without throwing"
   );
   eq(hostilePatchGetterCalls, 0, "preparePatch never invokes hostile field getters");
+  let hostileRepairGetterCalls = 0;
+  const hostileRepairInput = {};
+  for (const field of ["baseRev", "deps"]) {
+    Object.defineProperty(hostileRepairInput, field, {
+      enumerable: true,
+      get() {
+        hostileRepairGetterCalls += 1;
+        throw new Error(`hostile repair ${field}`);
+      },
+    });
+  }
+  const hostileRepairResult = saveAdapter.prepareRepair(state(), hostileRepairInput);
+  ok(
+    !hostileRepairResult.ok && hostileRepairResult.error.code === "INVALID_BODY",
+    "hostile repair input fails closed without throwing"
+  );
+  eq(hostileRepairGetterCalls, 0, "prepareRepair never invokes hostile field getters");
   eq(fetchCalls, 0, "prepare and response consumption execute no network request");
   globalThis.fetch = originalFetch;
   productionSaveAdapter.clearWriter(productionOwner);
@@ -1242,6 +1511,12 @@ async function main() {
   saveAdapter.clearWriter(owner);
   const noWriter = state().preparePatchSave({ baseRev: 0, ops: [] });
   ok(!noWriter.ok && noWriter.error.code === "NO_ACTIVE_WRITER", "no writer means no PATCH construction");
+  const noRepairWriter = state().prepareRepairSave({
+    baseRev: 0,
+    deps: { models: [], voices: [], characters: [], assets: [], recipes: [] },
+  });
+  ok(!noRepairWriter.ok && noRepairWriter.error.code === "NO_ACTIVE_WRITER", "no writer means no repair PUT construction");
+  disconnectRepair();
   disconnect();
 
   console.log("6. Boundary behavior and client wiring");
@@ -1384,9 +1659,162 @@ async function main() {
   );
 
   writeFileSync(
+    join(OUT, "runtime-hook-react-stub.mjs"),
+    `let effects=[];let stateIndex=0;
+export function resetRuntimeHook(){effects=[];stateIndex=0}
+export function useCallback(callback){return callback}
+export function useEffect(effect){effects.push(effect)}
+export function useRef(value){return {current:value}}
+export function useState(initial){const index=stateIndex++;return [index===0?"runtime-hook-user":initial,()=>{}]}
+export function getRuntimeHookEffectCount(){return effects.length}
+export function runRuntimeHookEffect(index){if(!effects[index])throw new Error("missing runtime hook effect");return effects[index]()}
+`,
+    "utf8"
+  );
+  writeFileSync(
+    join(OUT, "runtime-hook-router-stub.mjs"),
+    "export function useRouter(){return {replace(){}}}\n",
+    "utf8"
+  );
+  writeFileSync(
+    join(OUT, "runtime-hook-core-stub.mjs"),
+    `const runtimeDeps=[];const writerSignals=[];
+export function createCanvasAuthStateCoordinator(){return {resolveEvent(){},dispose(){}}}
+export function resolveCanvasAuthSnapshot(){}
+export function createCanvasCreateIntentRegistry(){return {handleUserChange(){},forUser(){return {get(){return null},set(){},clear(){},getSessionHandoff(){return null},setSessionHandoff(){},clearSessionHandoff(){}}}}}
+export function createCanvasRuntime(deps){
+  runtimeDeps.push(deps);
+  return {configure(){},handleStoreChange(){},handleOnline(){},handleWriterSignal(signal){writerSignals.push(signal)},restoreShadowSnapshot(){return Promise.resolve(true)},discardShadowSnapshot(){return Promise.resolve(true)},dispose(){},getDebugState(){return {}}};
+}
+export function subscribeCanvasRuntimeStore(){return ()=>{}}
+export function getRuntimeDeps(){return runtimeDeps.slice()}
+export function getWriterSignals(){return writerSignals.slice()}
+`,
+    "utf8"
+  );
+  writeFileSync(
+    join(OUT, "runtime-hook-shadow-stub.mjs"),
+    "export function createCanvasShadowStore(options){return {options}}\n",
+    "utf8"
+  );
+  writeFileSync(
+    join(OUT, "runtime-hook-save-stub.mjs"),
+    "export function consumeCanvasPatchResponse(){}\n",
+    "utf8"
+  );
+  writeFileSync(
+    join(OUT, "runtime-hook-lifecycle-stub.mjs"),
+    "export function normalizeCanvasId(value){return typeof value==='string'?value.toLowerCase():null}\n",
+    "utf8"
+  );
+  writeFileSync(
+    join(OUT, "runtime-hook-supabase-stub.mjs"),
+    "export function createClient(){throw new Error('auth effect must not run in owner-id wiring test')}\n",
+    "utf8"
+  );
+  writeFileSync(
+    join(OUT, "runtime-hook-store-stub.mjs"),
+    `const state={nodes:[],edges:[],groups:[],hydrated:false,sessionCanvasId:null,hydratedCanvasId:null,readOnly:true,recoveryRequired:false,reset(){}};
+export function useCanvasStore(){}
+useCanvasStore.getState=()=>state;
+useCanvasStore.subscribe=()=>()=>{};
+`,
+    "utf8"
+  );
+  const runtimeHookModule = await loadExtra(
+    join(ROOT, "src", "components", "canvas", "use-canvas-runtime.ts"),
+    "use-canvas-runtime-production-test.mjs",
+    {
+      '"react"': '"./runtime-hook-react-stub.mjs"',
+      '"next/navigation"': '"./runtime-hook-router-stub.mjs"',
+      '"@/lib/canvas/canvas-runtime"': '"./runtime-hook-core-stub.mjs"',
+      '"@/lib/canvas/shadow"': '"./runtime-hook-shadow-stub.mjs"',
+      '"@/lib/canvas/canvas-save-adapter"': '"./runtime-hook-save-stub.mjs"',
+      '"@/lib/canvas/canvas-writer-lifecycle"': '"./runtime-hook-lifecycle-stub.mjs"',
+      '"@/lib/supabase/client"': '"./runtime-hook-supabase-stub.mjs"',
+      '"@/stores/canvas-store"': '"./runtime-hook-store-stub.mjs"',
+    }
+  );
+  const runtimeHookReactStub = await import(
+    pathToFileURL(join(OUT, "runtime-hook-react-stub.mjs")).href
+  );
+  const runtimeHookCoreStub = await import(
+    pathToFileURL(join(OUT, "runtime-hook-core-stub.mjs")).href
+  );
+  const originalCryptoDescriptor = Object.getOwnPropertyDescriptor(globalThis, "crypto");
+  let createUuidCalls = 0;
+  let ownerRandomRounds = 0;
+  Object.defineProperty(globalThis, "crypto", {
+    configurable: true,
+    value: {
+      randomUUID() {
+        createUuidCalls += 1;
+        return "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+      },
+      getRandomValues(bytes) {
+        const offset = ownerRandomRounds * 16;
+        ownerRandomRounds += 1;
+        for (let index = 0; index < bytes.length; index += 1) bytes[index] = offset + index;
+        return bytes;
+      },
+    },
+  });
+  try {
+    runtimeHookReactStub.resetRuntimeHook();
+    const firstRuntimeView = runtimeHookModule.useCanvasRuntime(canvasId);
+    eq(
+      runtimeHookReactStub.getRuntimeHookEffectCount(),
+      3,
+      "production Runtime hook registers auth, construction, and configure effects"
+    );
+    const firstRuntimeCleanup = runtimeHookReactStub.runRuntimeHookEffect(1);
+    runtimeHookReactStub.resetRuntimeHook();
+    runtimeHookModule.useCanvasRuntime(canvasIdB);
+    const secondRuntimeCleanup = runtimeHookReactStub.runRuntimeHookEffect(1);
+    const constructedRuntimeDeps = runtimeHookCoreStub.getRuntimeDeps();
+    eq(
+      constructedRuntimeDeps.map((deps) => deps.shadowOwnerId),
+      [
+        "00010203-0405-4607-8809-0a0b0c0d0e0f",
+        "10111213-1415-4617-9819-1a1b1c1d1e1f",
+      ],
+      "each production Runtime construction receives one independent stable v4 shadow owner id"
+    );
+    eq(createUuidCalls, 0, "shadow owner construction does not consume the create-id UUID stream");
+    eq(
+      constructedRuntimeDeps[0].uuid(),
+      "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      "the injected UUID function remains the idempotent canvas-create id source"
+    );
+    eq(createUuidCalls, 1, "only an explicit create-id request consumes crypto.randomUUID");
+    firstRuntimeView.handleWriterSignal({
+      canvasId,
+      writerTag: "hook_forwarded_tag",
+      acquired: true,
+    });
+    eq(
+      runtimeHookCoreStub.getWriterSignals(),
+      [{ canvasId, writerTag: "hook_forwarded_tag", acquired: true }],
+      "production hook forwards the exact writer signal to the constructed Runtime"
+    );
+    firstRuntimeCleanup();
+    secondRuntimeCleanup();
+  } finally {
+    if (originalCryptoDescriptor) {
+      Object.defineProperty(globalThis, "crypto", originalCryptoDescriptor);
+    } else {
+      delete globalThis.crypto;
+    }
+  }
+
+  writeFileSync(
     join(OUT, "root-store-stub.mjs"),
-    `let state={hydrated:false,sessionCanvasId:null,hydratedCanvasId:null,readOnly:true,beginCanvasSession(){return true},recoverCurrentState(){return false},initializeEmptyDoc(){return false},setReadOnly(){}};
+    `let events=[];
+let state={nodes:[],hydrated:false,sessionCanvasId:null,hydratedCanvasId:null,readOnly:true,beginCanvasSession(){return true},recoverCurrentState(){return false},initializeEmptyDoc(){return false},setReadOnly(){}};
 export function setRootStoreState(next){state=next}
+export function recordRootEvent(event){events.push(event)}
+export function resetRootEvents(){events=[]}
+export function getRootEvents(){return events.slice()}
 export function useCanvasStore(selector){return selector(state)}
 useCanvasStore.getState=()=>state;
 `,
@@ -1405,7 +1833,22 @@ export function useCanvasWriterLock(){return session}
     "export function ReactFlowProvider({children}){return children}\n",
     "utf8"
   );
-  writeFileSync(join(OUT, "canvas-board.mjs"), "export function CanvasBoard(){return null}\n", "utf8");
+  writeFileSync(
+    join(OUT, "canvas-board.mjs"),
+    `import {recordRootEvent,useCanvasStore} from "./root-store-stub.mjs";
+let renders=[];
+export function resetBoardRenders(){renders=[]}
+export function getBoardRenders(){return renders.slice()}
+export function CanvasBoard({interactionEnabled}){
+  const nodeIds=(useCanvasStore((state)=>state.nodes)??[]).map((node)=>node.id);
+  const render={nodeIds,interactionEnabled};
+  renders.push(render);
+  recordRootEvent(\`board:\${nodeIds.join(",")}\`);
+  return null;
+}
+`,
+    "utf8"
+  );
   writeFileSync(
     join(OUT, "canvas-error-boundary.mjs"),
     `import {createElement} from "react";
@@ -1413,14 +1856,52 @@ export function CanvasErrorBoundary({children}){return createElement("section",{
 `,
     "utf8"
   );
-  writeFileSync(join(OUT, "canvas-health-banners.mjs"), "export function CanvasHealthBanners(){return null}\n", "utf8");
+  writeFileSync(
+    join(OUT, "canvas-health-banners.mjs"),
+    `import {recordRootEvent,useCanvasStore} from "./root-store-stub.mjs";
+export function CanvasHealthBanners(){
+  const nodeIds=(useCanvasStore((state)=>state.nodes)??[]).map((node)=>node.id);
+  recordRootEvent(\`health:\${nodeIds.join(",")}\`);
+  return null;
+}
+`,
+    "utf8"
+  );
   writeFileSync(join(OUT, "canvas-save-feedback-bridge.mjs"), "export function CanvasSaveFeedbackBridge(){return null}\n", "utf8");
+  writeFileSync(
+    join(OUT, "use-canvas-runtime.mjs"),
+    "export function useCanvasRuntime(){return {authIdentity:null,runtimeState:{mode:'local',interactionReady:true,issue:null},shadowRecovery:null,handleWriterSignal(){},restoreShadowSnapshot(){return false},discardShadowSnapshot(){return false}}}\n",
+    "utf8"
+  );
+  writeFileSync(
+    join(OUT, "root-render-react-stub.mjs"),
+    `let effects=[];let layoutEffects=[];
+export function useCallback(callback){return callback}
+export function useEffect(effect){effects.push(effect)}
+export function useLayoutEffect(effect){layoutEffects.push(effect)}
+export function resetEffects(){effects=[];layoutEffects=[]}
+export function getEffectCount(){return effects.length}
+export function getLayoutEffectCount(){return layoutEffects.length}
+export function flushEffects(){const queued=effects;effects=[];for(const effect of queued)effect()}
+export function flushLayoutEffects(){const queued=layoutEffects;layoutEffects=[];return queued.map((effect)=>effect()).filter((cleanup)=>typeof cleanup==="function")}
+`,
+    "utf8"
+  );
+  writeFileSync(
+    join(OUT, "root-render-jsx-runtime-stub.mjs"),
+    `export const Fragment=({children})=>children;
+export function jsx(type,props){return typeof type==="function"?type(props??{}):{type,props:props??{}}}
+export const jsxs=jsx;
+`,
+    "utf8"
+  );
 
   const rootModule = await loadExtra(
     join(ROOT, "src", "components", "canvas", "canvas-root.tsx"),
     "canvas-root-test.mjs",
     {
       'import "@xyflow/react/dist/style.css";': "",
+      '"react"': '"./root-render-react-stub.mjs"',
       '"@xyflow/react"': '"./root-xyflow-stub.mjs"',
       '"@/stores/canvas-store"': '"./root-store-stub.mjs"',
       '"@/lib/canvas/canvas-writer-lifecycle"': '"./canvas-writer-lifecycle.mjs"',
@@ -1434,8 +1915,22 @@ export function CanvasErrorBoundary({children}){return createElement("section",{
     ),
     "runtimeKey is applied to CanvasErrorBoundary itself"
   );
+  const rootSource = readFileSync(
+    join(ROOT, "src", "components", "canvas", "canvas-root.tsx"),
+    "utf8"
+  );
+  ok(
+    /beginCanvasSession\(requestedCanvasId\)[\s\S]*?\}, \[hydrated, requestedCanvasId\]\);[\s\S]*?setReadOnly\(!ready\)/.test(
+      rootSource
+    ),
+    "session switching is isolated from writer/read-only effect churn"
+  );
   const rootStoreStub = await import(pathToFileURL(join(OUT, "root-store-stub.mjs")).href);
   const rootWriterStub = await import(pathToFileURL(join(OUT, "root-writer-hook-stub.mjs")).href);
+  const rootBoardStub = await import(pathToFileURL(join(OUT, "canvas-board.mjs")).href);
+  const rootRenderReactStub = await import(
+    pathToFileURL(join(OUT, "root-render-react-stub.mjs")).href
+  );
   const reactModule = await import("react");
   const { renderToStaticMarkup } = await import("react-dom/server");
 
@@ -1466,10 +1961,13 @@ export function CanvasErrorBoundary({children}){return createElement("section",{
 
   writeFileSync(
     join(OUT, "health-store-stub.mjs"),
-    `let cleanupCalls=0;
-const state={nodes:[],edges:[],groups:[],recoveryRequired:true,loadIssues:["issue"],brokenEdges:[{id:"broken_1"},{id:"broken_2"}],readOnly:false,removeBrokenEdges(){cleanupCalls+=1}};
+    `import {CANVAS_SCHEMA_VERSION} from "./schema.mjs";
+let cleanupCalls=0;let confirmCalls=0;
+const state={nodes:[],edges:[],groups:[],schemaVersion:CANVAS_SCHEMA_VERSION,migratedFrom:CANVAS_SCHEMA_VERSION,recoveryRequired:true,loadIssues:["issue"],brokenNodes:[],brokenEdges:[{id:"broken_1"},{id:"broken_2"}],readOnly:false,removeBrokenEdges(){cleanupCalls+=1},confirmSafeRecovery(){confirmCalls+=1}};
 export function useCanvasStore(selector){return selector(state)}
 export function getHealthCleanupCalls(){return cleanupCalls}
+export function getHealthConfirmCalls(){return confirmCalls}
+export function setHealthState(next){Object.assign(state,next)}
 `,
     "utf8"
   );
@@ -1495,7 +1993,10 @@ export function formatBytes(value){return String(value)}
   writeFileSync(
     join(OUT, "health-button-stub.mjs"),
     `import {createElement} from "react";
-export function Button({variant,size,...props}){return createElement("button",props)}
+let capturedButtons=[];
+export function resetCapturedButtons(){capturedButtons=[]}
+export function getCapturedButtons(){return capturedButtons.slice()}
+export function Button(props){capturedButtons.push(props);const {variant,size,...buttonProps}=props;return createElement("button",buttonProps)}
 `,
     "utf8"
   );
@@ -1503,7 +2004,7 @@ export function Button({variant,size,...props}){return createElement("button",pr
     join(OUT, "health-icons-stub.mjs"),
     `import {createElement} from "react";
 const Icon=(props)=>createElement("span",props);
-export const AlertTriangle=Icon;export const Info=Icon;export const LockKeyhole=Icon;export const Trash2=Icon;
+export const AlertTriangle=Icon;export const Cloud=Icon;export const Info=Icon;export const LockKeyhole=Icon;export const RotateCcw=Icon;export const Trash2=Icon;
 `,
     "utf8"
   );
@@ -1514,6 +2015,7 @@ export const AlertTriangle=Icon;export const Info=Icon;export const LockKeyhole=
       '"@/components/ui/button"': '"./health-button-stub.mjs"',
       '"@/lib/canvas/doc-limits"': '"./health-doc-limits-stub.mjs"',
       '"@/lib/canvas/canvas-size-controller"': '"./health-size-controller-stub.mjs"',
+      '"@/lib/canvas/schema"': '"./schema.mjs"',
       '"@/lib/utils"': '"./health-utils-stub.mjs"',
       '"@/stores/canvas-store"': '"./health-store-stub.mjs"',
       '"lucide-react"': '"./health-icons-stub.mjs"',
@@ -1521,6 +2023,8 @@ export const AlertTriangle=Icon;export const Info=Icon;export const LockKeyhole=
     true
   );
   const healthStoreStub = await import(pathToFileURL(join(OUT, "health-store-stub.mjs")).href);
+  const healthButtonStub = await import(pathToFileURL(join(OUT, "health-button-stub.mjs")).href);
+  healthButtonStub.resetCapturedButtons();
   const healthMarkup = renderToStaticMarkup(
     reactModule.createElement(healthModule.CanvasHealthBanners, {
       persistent: false,
@@ -1533,8 +2037,450 @@ export const AlertTriangle=Icon;export const Info=Icon;export const LockKeyhole=
     "health banner exposes the broken-edge count and an explicit cleanup command"
   );
   eq(healthStoreStub.getHealthCleanupCalls(), 0, "health banner never silently cleans broken edges");
+  healthStoreStub.setHealthState({
+    schemaVersion: CANVAS_SCHEMA_VERSION,
+    migratedFrom: CANVAS_SCHEMA_VERSION,
+    recoveryRequired: true,
+    loadIssues: ["metadata recovery"],
+    brokenNodes: [],
+    brokenEdges: [],
+    readOnly: false,
+  });
+  healthButtonStub.resetCapturedButtons();
+  const metadataRecoveryMarkup = renderToStaticMarkup(
+    reactModule.createElement(healthModule.CanvasHealthBanners, {
+      persistent: true,
+      writerStatus: makeWriterStatus("root_tag_repair", true, "acquired"),
+    })
+  );
+  const enabledRecoveryButton = healthButtonStub
+    .getCapturedButtons()
+    .find((props) => props["aria-label"] === "确认使用当前安全恢复版本");
+  ok(
+    metadataRecoveryMarkup.includes("确认恢复") &&
+      metadataRecoveryMarkup.includes('aria-label="确认使用当前安全恢复版本"'),
+    "metadata-only recovery exposes an explicit confirmation command"
+  );
+  eq(healthStoreStub.getHealthConfirmCalls(), 0, "rendering the real health banner never confirms recovery");
+  ok(
+    enabledRecoveryButton && enabledRecoveryButton.disabled === false,
+    "recovery confirmation is enabled only for the active persistent writer"
+  );
+  enabledRecoveryButton?.onClick();
+  eq(healthStoreStub.getHealthConfirmCalls(), 1, "the real recovery confirmation onClick delegates exactly once");
 
-  function renderRuntime(writerSession, storeView) {
+  const recoveryControlCases = [
+    {
+      label: "local canvas",
+      props: { persistent: false, writerStatus: makeWriterStatus("local_tag", true, "acquired") },
+      store: { recoveryRequired: true, brokenNodes: [], brokenEdges: [], readOnly: false },
+      present: true,
+    },
+    {
+      label: "missing writer status",
+      props: { persistent: true, writerStatus: null },
+      store: { recoveryRequired: true, brokenNodes: [], brokenEdges: [], readOnly: false },
+      present: true,
+    },
+    {
+      label: "reader session",
+      props: { persistent: true, writerStatus: makeWriterStatus("reader_tag", false, "held-by-other-tab") },
+      store: { recoveryRequired: true, brokenNodes: [], brokenEdges: [], readOnly: false },
+      present: true,
+    },
+    {
+      label: "read-only store",
+      props: { persistent: true, writerStatus: makeWriterStatus("readonly_tag", true, "acquired") },
+      store: { recoveryRequired: true, brokenNodes: [], brokenEdges: [], readOnly: true },
+      present: true,
+    },
+    {
+      label: "broken recovery document",
+      props: { persistent: true, writerStatus: makeWriterStatus("broken_tag", true, "acquired") },
+      store: {
+        recoveryRequired: true,
+        brokenNodes: [{ id: "broken_recovery_node" }],
+        brokenEdges: [],
+        readOnly: false,
+      },
+      present: false,
+    },
+    {
+      label: "healthy document",
+      props: { persistent: true, writerStatus: makeWriterStatus("healthy_tag", true, "acquired") },
+      store: { recoveryRequired: false, brokenNodes: [], brokenEdges: [], readOnly: false },
+      present: false,
+    },
+  ];
+  for (const recoveryCase of recoveryControlCases) {
+    healthStoreStub.setHealthState({
+      loadIssues: [],
+      schemaVersion: CANVAS_SCHEMA_VERSION,
+      migratedFrom: CANVAS_SCHEMA_VERSION,
+      ...recoveryCase.store,
+    });
+    healthButtonStub.resetCapturedButtons();
+    renderToStaticMarkup(
+      reactModule.createElement(healthModule.CanvasHealthBanners, recoveryCase.props)
+    );
+    const recoveryButton = healthButtonStub
+      .getCapturedButtons()
+      .find((props) => props["aria-label"] === "确认使用当前安全恢复版本");
+    if (recoveryCase.present) {
+      ok(
+        recoveryButton && recoveryButton.disabled === true,
+        `${recoveryCase.label} renders a disabled recovery confirmation`
+      );
+    } else {
+      ok(!recoveryButton, `${recoveryCase.label} does not render a recovery confirmation`);
+    }
+  }
+  eq(
+    healthStoreStub.getHealthConfirmCalls(),
+    1,
+    "disabled or absent recovery controls never invoke confirmation during negative renders"
+  );
+  for (const futureField of ["schemaVersion", "migratedFrom"]) {
+    healthStoreStub.setHealthState({
+      schemaVersion: CANVAS_SCHEMA_VERSION,
+      migratedFrom: CANVAS_SCHEMA_VERSION,
+      [futureField]: CANVAS_SCHEMA_VERSION + 1,
+      recoveryRequired: true,
+      loadIssues: ["future schema"],
+      brokenNodes: [],
+      brokenEdges: [],
+      readOnly: false,
+    });
+    healthButtonStub.resetCapturedButtons();
+    const futureSchemaMarkup = renderToStaticMarkup(
+      reactModule.createElement(healthModule.CanvasHealthBanners, {
+        persistent: true,
+        writerStatus: makeWriterStatus(`future_${futureField}`, true, "acquired"),
+      })
+    );
+    const futureButtons = healthButtonStub.getCapturedButtons();
+    const futureConfirmation = futureButtons
+      .find((props) => props["aria-label"] === "确认使用当前安全恢复版本");
+    ok(
+      futureSchemaMarkup.includes("该画布来自更高版本") &&
+        futureSchemaMarkup.includes("请升级 StarGaze 后再恢复") &&
+        futureButtons.length === 0 &&
+        !futureConfirmation,
+      `future ${futureField} recovery shows an upgrade requirement and no confirmation action`
+    );
+  }
+  eq(
+    healthStoreStub.getHealthConfirmCalls(),
+    1,
+    "future-schema recovery renders never invoke or expose the confirmation callback"
+  );
+  healthStoreStub.setHealthState({
+    schemaVersion: CANVAS_SCHEMA_VERSION + 1,
+    migratedFrom: CANVAS_SCHEMA_VERSION,
+    recoveryRequired: true,
+    loadIssues: ["future schema with retained shadow"],
+    brokenNodes: [],
+    brokenEdges: [],
+    readOnly: false,
+  });
+  let futureRestoreCalls = 0;
+  let futureDiscardCalls = 0;
+  healthButtonStub.resetCapturedButtons();
+  const futureShadowMarkup = renderToStaticMarkup(
+    reactModule.createElement(healthModule.CanvasHealthBanners, {
+      persistent: true,
+      writerStatus: makeWriterStatus("future_shadow_writer", true, "acquired"),
+      shadowRecovery: {
+        canvasId,
+        serverRev: 8,
+        shadowServerRev: 7,
+        updatedAt: "2026-07-14T00:00:00.000Z",
+      },
+      onRestoreShadow: () => {
+        futureRestoreCalls += 1;
+        return true;
+      },
+      onDiscardShadow: () => {
+        futureDiscardCalls += 1;
+        return true;
+      },
+    })
+  );
+  ok(
+    futureShadowMarkup.includes("云端画布来自更高版本") &&
+      futureShadowMarkup.includes("当前版本不会恢复或丢弃本地版本") &&
+      healthButtonStub.getCapturedButtons().length === 0,
+    "future-schema plus retained shadow shows upgrade guidance with no restore, discard, or repair action"
+  );
+  eq(
+    [futureRestoreCalls, futureDiscardCalls, healthStoreStub.getHealthConfirmCalls()],
+    [0, 0, 1],
+    "future-schema shadow render cannot invoke any recovery callback"
+  );
+  healthStoreStub.setHealthState({
+    schemaVersion: CANVAS_SCHEMA_VERSION,
+    migratedFrom: CANVAS_SCHEMA_VERSION,
+    recoveryRequired: false,
+    loadIssues: [],
+    brokenNodes: [],
+    brokenEdges: [],
+    readOnly: false,
+  });
+  const shadowRecoveryMarkup = renderToStaticMarkup(
+    reactModule.createElement(healthModule.CanvasHealthBanners, {
+      persistent: true,
+      writerStatus: makeWriterStatus("root_tag_b", true, "acquired"),
+      shadowRecovery: {
+        canvasId,
+        serverRev: 3,
+        shadowServerRev: 5,
+        updatedAt: "2026-07-13T00:00:00.000Z",
+      },
+      onRestoreShadow: () => true,
+      onDiscardShadow: () => true,
+    })
+  );
+  ok(
+    shadowRecoveryMarkup.includes('aria-label="恢复本地版本"') &&
+      shadowRecoveryMarkup.includes('aria-label="保留云端版本"') &&
+      shadowRecoveryMarkup.includes("本地 rev 5") &&
+      shadowRecoveryMarkup.includes("云端 rev 3"),
+    "shadow-ahead banner exposes explicit restore and keep-cloud commands"
+  );
+
+  writeFileSync(
+    join(OUT, "bridge-react-stub.mjs"),
+    `let effects=[];
+export function useEffect(effect,deps){effects.push({effect,deps})}
+export function resetEffects(){effects=[]}
+export function getEffectCount(){return effects.length}
+export function runEffect(index=0){if(!effects[index])throw new Error("missing captured effect");return effects[index].effect()}
+`,
+    "utf8"
+  );
+  writeFileSync(
+    join(OUT, "bridge-toast-stub.mjs"),
+    `const toastCalls=[];
+const toast=(payload)=>{toastCalls.push(payload)};
+export function useToast(){return {toast}}
+export function getToastCalls(){return toastCalls.slice()}
+export function resetToastCalls(){toastCalls.length=0}
+`,
+    "utf8"
+  );
+  writeFileSync(
+    join(OUT, "bridge-store-spy.mjs"),
+    `let patchPreparer=null;let repairPreparer=null;
+let patchConnects=0;let repairConnects=0;let patchDisconnects=0;let repairDisconnects=0;
+export function connectCanvasSavePreparer(preparer){patchConnects+=1;patchPreparer=preparer;let active=true;return()=>{if(!active)return;active=false;patchDisconnects+=1;if(patchPreparer===preparer)patchPreparer=null}}
+export function connectCanvasRepairPreparer(preparer){repairConnects+=1;repairPreparer=preparer;let active=true;return()=>{if(!active)return;active=false;repairDisconnects+=1;if(repairPreparer===preparer)repairPreparer=null}}
+export function invokePatch(state,input){if(!patchPreparer)throw new Error("patch preparer is disconnected");return patchPreparer(state,input)}
+export function invokeRepair(state,input){if(!repairPreparer)throw new Error("repair preparer is disconnected");return repairPreparer(state,input)}
+export function getBridgeStoreStats(){return {patchConnects,repairConnects,patchDisconnects,repairDisconnects,patchActive:patchPreparer!==null,repairActive:repairPreparer!==null}}
+`,
+    "utf8"
+  );
+  writeFileSync(
+    join(OUT, "bridge-adapter-spy.mjs"),
+    `import {canvasSaveAdapter as productionAdapter} from "./canvas-save-adapter.mjs";
+const patchResult=Object.freeze({kind:"bridge-patch-result"});
+const repairResult=Object.freeze({kind:"bridge-repair-result"});
+const patchCalls=[];const repairCalls=[];
+let subscribeCalls=0;let unsubscribeCalls=0;let activeSubscriptions=0;
+export const canvasSaveAdapter={
+  preparePatch(state,input){patchCalls.push({state,input});return patchResult},
+  prepareRepair(state,input){repairCalls.push({state,input});return repairResult},
+  subscribe(listener){subscribeCalls+=1;activeSubscriptions+=1;const disconnect=productionAdapter.subscribe(listener);let active=true;return()=>{if(!active)return;active=false;unsubscribeCalls+=1;activeSubscriptions-=1;disconnect()}},
+};
+export function emitBridgeFeedback(description="bridge listener payload"){return productionAdapter.notifyApiError({success:false,code:"DOC_TOO_LARGE",error:description})}
+export function getPatchResult(){return patchResult}
+export function getRepairResult(){return repairResult}
+export function getLastPatchCall(){return patchCalls.at(-1)??null}
+export function getLastRepairCall(){return repairCalls.at(-1)??null}
+export function getBridgeAdapterStats(){return {patchCalls:patchCalls.length,repairCalls:repairCalls.length,subscribeCalls,unsubscribeCalls,activeSubscriptions}}
+`,
+    "utf8"
+  );
+  const bridgeModule = await loadExtra(
+    join(ROOT, "src", "components", "canvas", "canvas-save-feedback-bridge.tsx"),
+    "canvas-save-feedback-bridge-real-test.mjs",
+    {
+      '"react"': '"./bridge-react-stub.mjs"',
+      '"@/hooks/use-toast"': '"./bridge-toast-stub.mjs"',
+      '"@/lib/canvas/canvas-save-adapter"': '"./bridge-adapter-spy.mjs"',
+      '"@/stores/canvas-store"': '"./bridge-store-spy.mjs"',
+    },
+    true
+  );
+  const renderedRootModule = await loadExtra(
+    join(ROOT, "src", "components", "canvas", "canvas-root.tsx"),
+    "canvas-root-render-order-test.mjs",
+    {
+      'import "@xyflow/react/dist/style.css";': "",
+      '"react"': '"./root-render-react-stub.mjs"',
+      '"react/jsx-runtime"': '"./root-render-jsx-runtime-stub.mjs"',
+      '"@xyflow/react"': '"./root-xyflow-stub.mjs"',
+      '"@/stores/canvas-store"': '"./root-store-stub.mjs"',
+      '"@/lib/canvas/canvas-writer-lifecycle"': '"./canvas-writer-lifecycle.mjs"',
+      '"./use-canvas-writer-lock.mjs"': '"./root-writer-hook-stub.mjs"',
+    },
+    true
+  );
+  const bridgeReactStub = await import(pathToFileURL(join(OUT, "bridge-react-stub.mjs")).href);
+  const bridgeToastStub = await import(pathToFileURL(join(OUT, "bridge-toast-stub.mjs")).href);
+  const bridgeStoreSpy = await import(pathToFileURL(join(OUT, "bridge-store-spy.mjs")).href);
+  const bridgeAdapterSpy = await import(pathToFileURL(join(OUT, "bridge-adapter-spy.mjs")).href);
+
+  bridgeReactStub.resetEffects();
+  bridgeToastStub.resetToastCalls();
+  eq(bridgeModule.CanvasSaveFeedbackBridge(), null, "production save feedback bridge renders no UI");
+  eq(bridgeReactStub.getEffectCount(), 1, "production bridge registers exactly one effect");
+  eq(
+    bridgeStoreSpy.getBridgeStoreStats(),
+    {
+      patchConnects: 0,
+      repairConnects: 0,
+      patchDisconnects: 0,
+      repairDisconnects: 0,
+      patchActive: false,
+      repairActive: false,
+    },
+    "bridge render alone performs no store wiring"
+  );
+
+  const firstBridgeCleanup = bridgeReactStub.runEffect(0);
+  eq(
+    bridgeStoreSpy.getBridgeStoreStats(),
+    {
+      patchConnects: 1,
+      repairConnects: 1,
+      patchDisconnects: 0,
+      repairDisconnects: 0,
+      patchActive: true,
+      repairActive: true,
+    },
+    "bridge mount installs one PATCH and one repair preparer"
+  );
+  eq(
+    bridgeAdapterSpy.getBridgeAdapterStats(),
+    { patchCalls: 0, repairCalls: 0, subscribeCalls: 1, unsubscribeCalls: 0, activeSubscriptions: 1 },
+    "bridge mount installs exactly one production adapter listener"
+  );
+  const bridgePatchState = { identity: "exact patch state" };
+  const bridgePatchInput = { identity: "exact patch input" };
+  const bridgeRepairState = { identity: "exact repair state" };
+  const bridgeRepairInput = { identity: "exact repair input" };
+  ok(
+    bridgeStoreSpy.invokePatch(bridgePatchState, bridgePatchInput) === bridgeAdapterSpy.getPatchResult(),
+    "real bridge returns the adapter PATCH preparation result"
+  );
+  ok(
+    bridgeAdapterSpy.getLastPatchCall()?.state === bridgePatchState &&
+      bridgeAdapterSpy.getLastPatchCall()?.input === bridgePatchInput,
+    "real bridge delegates exact PATCH state and input identities"
+  );
+  ok(
+    bridgeStoreSpy.invokeRepair(bridgeRepairState, bridgeRepairInput) === bridgeAdapterSpy.getRepairResult(),
+    "real bridge returns the adapter repair preparation result"
+  );
+  ok(
+    bridgeAdapterSpy.getLastRepairCall()?.state === bridgeRepairState &&
+      bridgeAdapterSpy.getLastRepairCall()?.input === bridgeRepairInput,
+    "real bridge delegates exact repair state and input identities"
+  );
+  bridgeAdapterSpy.emitBridgeFeedback("bridge listener payload");
+  eq(
+    bridgeToastStub.getToastCalls(),
+    [
+      {
+        variant: "destructive",
+        title: "画布超过保存上限",
+        description: "bridge listener payload",
+      },
+    ],
+    "production adapter feedback reaches one destructive toast with the exact payload"
+  );
+
+  firstBridgeCleanup();
+  eq(
+    bridgeStoreSpy.getBridgeStoreStats(),
+    {
+      patchConnects: 1,
+      repairConnects: 1,
+      patchDisconnects: 1,
+      repairDisconnects: 1,
+      patchActive: false,
+      repairActive: false,
+    },
+    "bridge unmount disconnects each preparer exactly once"
+  );
+  eq(
+    bridgeAdapterSpy.getBridgeAdapterStats(),
+    { patchCalls: 1, repairCalls: 1, subscribeCalls: 1, unsubscribeCalls: 1, activeSubscriptions: 0 },
+    "bridge unmount removes its adapter listener exactly once"
+  );
+  bridgeAdapterSpy.emitBridgeFeedback("post-unmount feedback");
+  eq(bridgeToastStub.getToastCalls().length, 1, "post-unmount adapter feedback is silent");
+
+  const strictReplayCleanup = bridgeReactStub.runEffect(0);
+  eq(
+    bridgeStoreSpy.getBridgeStoreStats(),
+    {
+      patchConnects: 2,
+      repairConnects: 2,
+      patchDisconnects: 1,
+      repairDisconnects: 1,
+      patchActive: true,
+      repairActive: true,
+    },
+    "StrictMode effect replay reconnects one preparer of each kind"
+  );
+  bridgeAdapterSpy.emitBridgeFeedback("StrictMode replay payload");
+  eq(
+    bridgeToastStub.getToastCalls().at(-1),
+    {
+      variant: "destructive",
+      title: "画布超过保存上限",
+      description: "StrictMode replay payload",
+    },
+    "StrictMode replay keeps one exact destructive toast listener"
+  );
+  eq(bridgeToastStub.getToastCalls().length, 2, "StrictMode replay does not duplicate feedback");
+  strictReplayCleanup();
+
+  bridgeReactStub.resetEffects();
+  eq(bridgeModule.CanvasSaveFeedbackBridge(), null, "production bridge can render again after unmount");
+  eq(bridgeReactStub.getEffectCount(), 1, "remount registers one fresh bridge effect");
+  const remountBridgeCleanup = bridgeReactStub.runEffect(0);
+  bridgeAdapterSpy.emitBridgeFeedback("remount payload");
+  eq(bridgeToastStub.getToastCalls().length, 3, "remount has one listener and no duplicate toast");
+  eq(
+    bridgeToastStub.getToastCalls().at(-1),
+    { variant: "destructive", title: "画布超过保存上限", description: "remount payload" },
+    "remount preserves the exact destructive toast contract"
+  );
+  remountBridgeCleanup();
+  eq(
+    bridgeStoreSpy.getBridgeStoreStats(),
+    {
+      patchConnects: 3,
+      repairConnects: 3,
+      patchDisconnects: 3,
+      repairDisconnects: 3,
+      patchActive: false,
+      repairActive: false,
+    },
+    "mount, StrictMode replay, and remount each receive one balanced store cleanup"
+  );
+  eq(
+    bridgeAdapterSpy.getBridgeAdapterStats(),
+    { patchCalls: 1, repairCalls: 1, subscribeCalls: 3, unsubscribeCalls: 3, activeSubscriptions: 0 },
+    "all bridge listener subscriptions are balanced after final unmount"
+  );
+  bridgeAdapterSpy.emitBridgeFeedback("after final cleanup");
+  eq(bridgeToastStub.getToastCalls().length, 3, "final post-unmount feedback remains silent");
+
+  function renderRuntime(writerSession, storeView, options = {}) {
     rootWriterStub.setWriterSession(writerSession);
     rootStoreStub.setRootStoreState({
       ...storeView,
@@ -1543,17 +2489,48 @@ export const AlertTriangle=Icon;export const Info=Icon;export const LockKeyhole=
       initializeEmptyDoc: () => false,
       setReadOnly: () => {},
     });
-    const runtime = rootModule.CanvasRuntimeInner({ canvasId: writerSession.canvasId });
+    const runtime = rootModule.CanvasRuntimeInner({
+      canvasId: Object.hasOwn(options, "canvasId") ? options.canvasId : writerSession.canvasId,
+      authIdentity: Object.hasOwn(options, "authIdentity") ? options.authIdentity : null,
+      runtimeState: options.runtimeState,
+      onWriterSignal: options.onWriterSignal,
+    });
+    if (runtime.props["data-canvas-auth-pending"] === true) return { runtime };
     const runtimeChildren = runtime.props.children;
-    const critical = runtimeChildren[3];
+    const pending = runtimeChildren.find(
+      (child) => child?.props?.["data-canvas-document-pending"] === true
+    );
+    const critical = runtimeChildren.find(
+      (child) => child?.props?.["data-canvas-critical-area"] === true
+    );
+    if (!critical) {
+      return { runtime, runtimeChildren, pending, critical: null, board: null };
+    }
     const provider = critical.props.children;
     return {
       runtime,
       runtimeChildren,
+      pending,
       critical,
       board: provider.props.children,
     };
   }
+
+  const authPendingRuntime = renderRuntime(
+    { canvasId: canvasIdB, status: null, persistent: true, canEdit: false },
+    {
+      hydrated: true,
+      sessionCanvasId: canvasIdB,
+      hydratedCanvasId: canvasIdB,
+      readOnly: true,
+    },
+    { authIdentity: undefined }
+  );
+  ok(
+    authPendingRuntime.runtime.props["data-canvas-auth-pending"] === true &&
+      authPendingRuntime.runtime.props["aria-busy"] === "true",
+    "unresolved auth renders an inert blank placeholder instead of the previous user's document"
+  );
 
   const switchedRuntime = renderRuntime(
     { canvasId: canvasIdB, status: null, persistent: true, canEdit: false },
@@ -1566,9 +2543,9 @@ export const AlertTriangle=Icon;export const Info=Icon;export const LockKeyhole=
   );
   ok(
     switchedRuntime.critical.props.inert === true &&
-      switchedRuntime.critical.props["aria-busy"] === true &&
+      switchedRuntime.critical.props["aria-busy"] === false &&
       switchedRuntime.board.props.interactionEnabled === false,
-    "persisted switch commit renders Board inert until B acquires"
+    "identity-matched reader renders B Board read-only without reporting document loading"
   );
   ok(
     switchedRuntime.runtimeChildren[0].props.requestedCanvasId === canvasIdB,
@@ -1591,6 +2568,28 @@ export const AlertTriangle=Icon;export const Info=Icon;export const LockKeyhole=
     "hydrated acquired B commit enables Board interaction"
   );
 
+  const failedRuntime = renderRuntime(
+    { canvasId: canvasIdB, status: makeWriterStatus("root_tag_b", true, "acquired"), persistent: true, canEdit: true },
+    {
+      hydrated: true,
+      sessionCanvasId: canvasIdB,
+      hydratedCanvasId: canvasIdB,
+      readOnly: false,
+    },
+    {
+      runtimeState: {
+        mode: "failed",
+        interactionReady: false,
+        issue: { code: "failed", message: "internal verifier detail" },
+      },
+    }
+  );
+  ok(
+    failedRuntime.critical.props.inert === true &&
+      failedRuntime.board.props.interactionEnabled === false,
+    "runtime failure state blocks Board interaction even after writer acquisition"
+  );
+
   const mismatchedRuntime = renderRuntime(
     { canvasId: canvasIdB, status: makeWriterStatus("root_tag_b", true, "acquired"), persistent: true, canEdit: true },
     {
@@ -1601,9 +2600,28 @@ export const AlertTriangle=Icon;export const Info=Icon;export const LockKeyhole=
     }
   );
   ok(
-    mismatchedRuntime.critical.props.inert === true &&
-      mismatchedRuntime.board.props.interactionEnabled === false,
-    "requested B, hydrated A, and writer B cannot pass the three-way identity gate"
+    mismatchedRuntime.pending?.props["aria-busy"] === "true" &&
+      mismatchedRuntime.pending?.props["aria-label"] === "正在加载画布" &&
+      mismatchedRuntime.critical === null &&
+      mismatchedRuntime.board === null &&
+      mismatchedRuntime.runtimeChildren[0].props.requestedCanvasId === canvasIdB,
+    "requested B with hydrated A mounts bootstrap and a pending shell without instantiating Board"
+  );
+
+  const writerMismatchRuntime = renderRuntime(
+    { canvasId, status: makeWriterStatus("root_tag_a", true, "acquired"), persistent: true, canEdit: true },
+    {
+      hydrated: true,
+      sessionCanvasId: canvasIdB,
+      hydratedCanvasId: canvasIdB,
+      readOnly: true,
+    },
+    { canvasId: canvasIdB }
+  );
+  ok(
+    writerMismatchRuntime.critical !== null &&
+      writerMismatchRuntime.board.props.interactionEnabled === false,
+    "writer identity mismatch only disables interaction after B document identity is ready"
   );
 
   const localUnhydratedRuntime = renderRuntime(
@@ -1611,9 +2629,11 @@ export const AlertTriangle=Icon;export const Info=Icon;export const LockKeyhole=
     { hydrated: false, sessionCanvasId: null, hydratedCanvasId: null, readOnly: false }
   );
   ok(
-    localUnhydratedRuntime.critical.props.inert === true &&
+    localUnhydratedRuntime.pending?.props["aria-busy"] === "true" &&
+      localUnhydratedRuntime.critical === null &&
+      localUnhydratedRuntime.board === null &&
       localUnhydratedRuntime.runtimeChildren[0].props.requestedCanvasId === null,
-    "local first render stays gated while requesting controlled empty initialization"
+    "local first render mounts bootstrap and pending shell without instantiating Board"
   );
   const localHydratedRuntime = renderRuntime(
     { canvasId: null, status: null, persistent: false, canEdit: true },
@@ -1623,6 +2643,171 @@ export const AlertTriangle=Icon;export const Info=Icon;export const LockKeyhole=
     localHydratedRuntime.critical.props.inert === undefined &&
       localHydratedRuntime.board.props.interactionEnabled === true,
     "initialized local draft becomes editable without writer identity"
+  );
+
+  const exactWriterSignals = [];
+  rootRenderReactStub.resetEffects();
+  renderRuntime(
+    {
+      canvasId: canvasIdB,
+      status: makeWriterStatus("exact_runtime_tag_b", true, "acquired"),
+      persistent: true,
+      canEdit: true,
+    },
+    {
+      hydrated: true,
+      sessionCanvasId: canvasIdB,
+      hydratedCanvasId: canvasIdB,
+      readOnly: false,
+    },
+    { onWriterSignal: (signal) => exactWriterSignals.push(signal) }
+  );
+  eq(
+    rootRenderReactStub.getLayoutEffectCount(),
+    1,
+    "production-transpiled Runtime writer bridge uses a commit-phase layout effect"
+  );
+  const [cleanupExactWriter] = rootRenderReactStub.flushLayoutEffects();
+  eq(
+    exactWriterSignals,
+    [{ canvasId: canvasIdB, writerTag: "exact_runtime_tag_b", acquired: true }],
+    "only the exact identity-ready acquired D5 canvas/tag opens the Runtime writer gate"
+  );
+  cleanupExactWriter();
+  eq(
+    exactWriterSignals.at(-1),
+    { canvasId: canvasIdB, writerTag: "exact_runtime_tag_b", acquired: false },
+    "layout cleanup closes the exact old canvas/tag instead of a mutable current tag"
+  );
+
+  const gatedWriterSignals = [];
+  rootRenderReactStub.resetEffects();
+  renderRuntime(
+    {
+      canvasId: canvasIdB,
+      status: makeWriterStatus("not_committed_tag_b", true, "acquired"),
+      persistent: true,
+      canEdit: true,
+    },
+    {
+      hydrated: true,
+      sessionCanvasId: canvasIdB,
+      hydratedCanvasId: canvasIdB,
+      readOnly: true,
+    },
+    { onWriterSignal: (signal) => gatedWriterSignals.push(signal) }
+  );
+  rootRenderReactStub.flushLayoutEffects();
+  eq(
+    gatedWriterSignals,
+    [{ canvasId: canvasIdB, writerTag: "not_committed_tag_b", acquired: false }],
+    "an acquired status cannot open Runtime before save-adapter/read-only commit is visible"
+  );
+
+  const mismatchedWriterSignals = [];
+  rootRenderReactStub.resetEffects();
+  renderRuntime(
+    {
+      canvasId,
+      status: makeWriterStatus("stale_runtime_tag_a", true, "acquired"),
+      persistent: true,
+      canEdit: true,
+    },
+    {
+      hydrated: true,
+      sessionCanvasId: canvasIdB,
+      hydratedCanvasId: canvasIdB,
+      readOnly: false,
+    },
+    {
+      canvasId: canvasIdB,
+      onWriterSignal: (signal) => mismatchedWriterSignals.push(signal),
+    }
+  );
+  rootRenderReactStub.flushLayoutEffects();
+  eq(
+    mismatchedWriterSignals,
+    [],
+    "a stale A controller cannot publish its tag into the requested B Runtime"
+  );
+
+  rootBoardStub.resetBoardRenders();
+  rootStoreStub.resetRootEvents();
+  rootRenderReactStub.resetEffects();
+  rootWriterStub.setWriterSession({
+    canvasId: canvasIdB,
+    status: makeWriterStatus("render_order_reader_b", false, "held-by-other-tab"),
+    persistent: true,
+    canEdit: false,
+  });
+  rootStoreStub.setRootStoreState({
+    nodes: [{ id: "a_secret_node" }],
+    hydrated: true,
+    sessionCanvasId: canvasId,
+    hydratedCanvasId: canvasId,
+    readOnly: false,
+    beginCanvasSession(nextCanvasId) {
+      rootStoreStub.recordRootEvent(`begin:${nextCanvasId}`);
+      return true;
+    },
+    recoverCurrentState: () => false,
+    initializeEmptyDoc: () => false,
+    setReadOnly: () => {},
+  });
+  const routeSwitchWriterSignals = [];
+  const firstBCommit = renderedRootModule.CanvasRuntimeInner({
+    canvasId: canvasIdB,
+    authIdentity: null,
+    onWriterSignal: (signal) => routeSwitchWriterSignals.push(signal),
+  });
+  const firstBPending = firstBCommit.props.children.find(
+    (child) => child?.props?.["data-canvas-document-pending"] === true
+  );
+  ok(
+    firstBPending?.props["aria-busy"] === "true" &&
+      rootRenderReactStub.getEffectCount() === 2 &&
+      rootRenderReactStub.getLayoutEffectCount() === 1,
+    "production-transpiled B render mounts pending bootstrap effects before commit"
+  );
+  eq(rootBoardStub.getBoardRenders(), [], "B render never instantiates Board against A nodes");
+  eq(rootStoreStub.getRootEvents(), [], "bootstrap effects do not run during the B render phase");
+  eq(routeSwitchWriterSignals, [], "writer ownership does not mutate Runtime during render");
+
+  rootRenderReactStub.flushLayoutEffects();
+  eq(
+    routeSwitchWriterSignals,
+    [{ canvasId: canvasIdB, writerTag: "render_order_reader_b", acquired: false }],
+    "writer loss reaches Runtime in the layout phase before route bootstrap passive effects"
+  );
+  eq(rootStoreStub.getRootEvents(), [], "writer loss layout commit does not read retained A nodes");
+
+  rootRenderReactStub.flushEffects();
+  eq(
+    rootStoreStub.getRootEvents(),
+    [`begin:${canvasIdB}`],
+    "B session bootstrap begins only after the A-bearing render commits"
+  );
+  rootStoreStub.setRootStoreState({
+    nodes: [{ id: "b_visible_node" }],
+    hydrated: true,
+    sessionCanvasId: canvasIdB,
+    hydratedCanvasId: canvasIdB,
+    readOnly: true,
+    beginCanvasSession: () => false,
+    recoverCurrentState: () => false,
+    initializeEmptyDoc: () => false,
+    setReadOnly: () => {},
+  });
+  renderedRootModule.CanvasRuntimeInner({ canvasId: canvasIdB, authIdentity: null });
+  eq(
+    rootBoardStub.getBoardRenders(),
+    [{ nodeIds: ["b_visible_node"], interactionEnabled: false }],
+    "identity-ready B reader renders only B nodes with interaction disabled"
+  );
+  eq(
+    rootStoreStub.getRootEvents(),
+    [`begin:${canvasIdB}`, "health:b_visible_node", "board:b_visible_node"],
+    "effect-order render log contains no read or render of A nodes under the B URL"
   );
 
   let rootRecoverCalls = 0;

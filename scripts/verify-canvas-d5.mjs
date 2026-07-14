@@ -263,7 +263,7 @@ ok(canClaimWriter({ writerTag: A, writerHeartbeatAt: freshHb }, A, NOW) === true
 ok(canClaimWriter({ writerTag: B, writerHeartbeatAt: freshHb }, A, NOW) === false, "他人活跃 → 不可领");
 ok(canClaimWriter({ writerTag: B, writerHeartbeatAt: staleHb }, A, NOW) === true, "他人过期 → 可接管");
 ok(canClaimWriter({ writerTag: B, writerHeartbeatAt: edgeHb }, A, NOW) === false, "他人恰好整租约 → 尚不可接管(严格 >)");
-ok(canClaimWriter({ writerTag: B, writerHeartbeatAt: null }, A, NOW) === false, "他人心跳为 null → SQL null 语义不可接管");
+ok(canClaimWriter({ writerTag: B, writerHeartbeatAt: null }, A, NOW) === true, "他人心跳为 null → 异常半行可安全接管");
 ok(canClaimWriter({ writerTag: null, writerHeartbeatAt: null }, "bad tag", NOW) === false, "非法 tag → 不可领");
 ok(canClaimWriter({ writerTag: B, writerHeartbeatAt: staleHb }, A, Number.NaN) === false, "now 非有限 → 不可领(防误接管)");
 
@@ -980,6 +980,7 @@ const CONTROL_CHARS = /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/;
   ok(!/service_role|SERVICE_ROLE|serviceRole/.test(routeSrc), "writer 路由绝不 service-role");
   ok(/auth\.getUser\(\)/.test(routeSrc), "writer 路由做鉴权");
   ok(/\.or\(/.test(routeSrc), "claim 用原子 .or() 谓词(null/同 tag/过期)");
+  ok(/writer_heartbeat_at\.is\.null/.test(routeSrc), "claim 可修复非空 tag + NULL heartbeat 的异常半行");
   ok(/\.eq\("writer_tag"/.test(routeSrc), "heartbeat/release 谓词 writer_tag=:tag(只能同 tag)");
   ok(routeSrc.includes('.from("canvases")') && !/create\s+table|CREATE\s+TABLE|\.rpc\(/i.test(routeSrc), "writer 路由只摸 canvases,零平行事件表 / 零 RPC");
   ok(!CONTROL_CHARS.test(routeSrc), "writer 路由无 NUL/控制字节");
