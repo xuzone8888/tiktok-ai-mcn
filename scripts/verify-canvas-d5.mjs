@@ -140,8 +140,19 @@ function transportFor(server, tag, counters) {
 /** 忠实模拟 navigator.locks:exclusive + ifAvailable。持锁期间他者请求得 null(不排队、不误删他人锁)。 */
 function makeFakeLockManager() {
   const held = new Set();
+  const calls = [];
   return {
+    calls,
     request(name, options, cb) {
+      calls.push({ ...options });
+      // The Web Locks spec rejects signal + ifAvailable before invoking the
+      // callback. Keep this fake browser-strict so a regression cannot pass
+      // while every real tab remains read-only.
+      if (options.ifAvailable && Object.hasOwn(options, "signal")) {
+        const error = new Error("signal cannot be combined with ifAvailable");
+        error.name = "NotSupportedError";
+        return Promise.reject(error);
+      }
       if (held.has(name)) {
         // 已被占用:ifAvailable → 授 null(绝不触碰 held,不释放在持者)
         return Promise.resolve(cb(null));
@@ -446,6 +457,13 @@ console.log("⑤ 控制器:本地双标签(第二个只读)+ 释放接管");
 
   w1.start();
   await flush();
+  ok(
+    locks.calls.length === 1 &&
+      locks.calls[0].ifAvailable === true &&
+      !("signal" in locks.calls[0]),
+    "Web Locks 非阻塞请求不携带 signal(避免规范 NotSupportedError)"
+  );
+  eq(cA.claim, 1, "规范严格的 Web Locks 授权后恰好发出一次服务端 claim");
   ok(w1.getStatus().role === "writer" && w1.getStatus().reason === "acquired" && w1.getStatus().canWrite === true, "第一个标签 → 写者");
   ok(server.row.writerTag === tagA, "服务端行记 tagA");
   ok(w1.getStatus().serverWriter && w1.getStatus().serverWriter.tag === tagA, "写者 serverWriter 反映自身持有");

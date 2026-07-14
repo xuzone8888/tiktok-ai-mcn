@@ -222,7 +222,6 @@ export interface WebLockLike {
 export interface WebLockRequestOptionsLike {
   mode?: "exclusive" | "shared";
   ifAvailable?: boolean;
-  signal?: AbortSignal;
 }
 export interface LockManagerLike {
   request(
@@ -352,7 +351,6 @@ export function createWriterLockController(
   let writerLeaseToken = 0;
   let lastAcquireAttemptMs: number | null = null; // 上次竞锁时刻;供未持锁时的低频重试节流
   let timer: unknown = null;
-  let abort: AbortController | null = null;
   let visibilityHandler: (() => void) | null = null;
 
   function snapshot(): WriterLockStatus {
@@ -522,13 +520,15 @@ export function createWriterLockController(
     if (acquiring || holdingNavLock) return;
     acquiring = true;
     lastAcquireAttemptMs = now(); // 记录竞锁时刻供 reacquireIfDue 节流(start/refresh 不受节流约束)
-    abort = new AbortController();
     let request: Promise<unknown>;
     try {
       request = Promise.resolve(
         locks.request(
           lockName,
-          { mode: "exclusive", ifAvailable: true, signal: abort.signal },
+          // Web Locks rejects `signal` together with `ifAvailable` with
+          // NotSupportedError. An ifAvailable request never queues, so the
+          // generation/phase guard below is the cancellation boundary.
+          { mode: "exclusive", ifAvailable: true },
           (lock) => {
             acquiring = false;
             if (gen !== generation || phase !== "running") return; // 迟到/已停止:fail-closed
@@ -620,12 +620,6 @@ export function createWriterLockController(
     generation += 1; // 使一切迟到回调失效
     clearTimer();
     detachVisibility();
-    try {
-      abort?.abort();
-    } catch {
-      // ignore
-    }
-    abort = null;
     const attemptedClaim = holdingNavLock; // 持过 navigator 锁 → 曾尝试领租约,需尽力释放
     if (releaseNavLock) {
       try {
