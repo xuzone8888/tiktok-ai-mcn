@@ -15,13 +15,14 @@ import {
   UserPlus,
 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { ReactNode } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
+import { useLang } from '@/contexts/LangContext'
 import { useToast } from '@/hooks/use-toast'
-import type { PlatformPublishConfig } from '@/lib/publish/platform-config'
 import { cn } from '@/lib/utils'
 
 type SortOption = 'followers_desc' | 'followers_asc' | 'auth_time_desc' | 'auth_time_asc'
@@ -43,8 +44,28 @@ interface PlatformAccount {
   updated_at: string
 }
 
+export interface PlatformAccountsConfig {
+  platformName: string
+  accountsPageTitle?: string
+  accountsPageTitleEn?: string
+  accountsPageDescription?: string
+  accountsPageDescriptionEn?: string
+  routeBase: string
+  apiBase: string
+  emptyAccountTitle: string
+  emptyAccountTitleEn?: string
+  emptyAccountDescription: string
+  emptyAccountDescriptionEn?: string
+  bindButtonText: string
+  bindButtonTextEn?: string
+  statsVideoLabel: string
+  statsVideoLabelEn?: string
+  icon?: ReactNode
+  requiredCommentScopes?: string[]
+}
+
 interface PlatformAccountsPageProps {
-  config: PlatformPublishConfig
+  config: PlatformAccountsConfig
 }
 
 type AuthNotice = {
@@ -53,24 +74,34 @@ type AuthNotice = {
   description: string
 }
 
-const SORT_OPTIONS: { value: SortOption; label: string }[] = [
-  { value: 'followers_desc', label: '粉丝最多' },
-  { value: 'followers_asc', label: '粉丝最少' },
-  { value: 'auth_time_desc', label: '最近绑定' },
-  { value: 'auth_time_asc', label: '最早绑定' },
+const SORT_OPTIONS: { value: SortOption; label: { zh: string; en: string } }[] = [
+  { value: 'followers_desc', label: { zh: '粉丝最多', en: 'Most followers' } },
+  { value: 'followers_asc', label: { zh: '粉丝最少', en: 'Fewest followers' } },
+  { value: 'auth_time_desc', label: { zh: '最近绑定', en: 'Recently connected' } },
+  { value: 'auth_time_asc', label: { zh: '最早绑定', en: 'Earliest connected' } },
 ]
 
-const FILTER_OPTIONS: { value: FilterOption; label: string }[] = [
-  { value: 'all', label: '全部账号' },
-  { value: 'active', label: '已授权' },
-  { value: 'expiring', label: '即将过期' },
-  { value: 'expired', label: '已过期' },
+const FILTER_OPTIONS: { value: FilterOption; label: { zh: string; en: string } }[] = [
+  { value: 'all', label: { zh: '全部账号', en: 'All accounts' } },
+  { value: 'active', label: { zh: '已授权', en: 'Authorized' } },
+  { value: 'expiring', label: { zh: '即将过期', en: 'Expiring soon' } },
+  { value: 'expired', label: { zh: '已过期', en: 'Expired' } },
 ]
 
-function formatNumber(num: number) {
-  if (num >= 10000) return `${(num / 10000).toFixed(1)}万`
+function t(isEnglish: boolean, zh: string, en: string) {
+  return isEnglish ? en : zh
+}
+
+function formatNumber(num: number, isEnglish: boolean) {
+  if (num >= 10000) return isEnglish ? `${(num / 1000).toFixed(1)}K` : `${(num / 10000).toFixed(1)}万`
   if (num >= 1000) return `${(num / 1000).toFixed(1)}K`
   return num.toString()
+}
+
+function localizeError(message: unknown, isEnglish: boolean, englishFallback: string) {
+  const normalized = typeof message === 'string' ? message.trim() : ''
+  if (!normalized) return englishFallback
+  return isEnglish && /[\u3400-\u9fff]/.test(normalized) ? englishFallback : normalized
 }
 
 function isExpired(expiresAt: string | null) {
@@ -153,12 +184,12 @@ function AccountAvatar({ account }: { account: PlatformAccount }) {
   )
 }
 
-function StatusBadge({ account }: { account: PlatformAccount }) {
+function StatusBadge({ account, isEnglish }: { account: PlatformAccount; isEnglish: boolean }) {
   if (requiresReauthorization(account)) {
     return (
       <span className="inline-flex items-center gap-1 rounded-full bg-red-500/10 px-2 py-0.5 text-xs text-red-300">
         <AlertCircle className="h-3 w-3" />
-        需重新授权
+        {t(isEnglish, '需重新授权', 'Reconnect required')}
       </span>
     )
   }
@@ -167,7 +198,7 @@ function StatusBadge({ account }: { account: PlatformAccount }) {
     return (
       <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2 py-0.5 text-xs text-amber-300">
         <AlertCircle className="h-3 w-3" />
-        即将过期
+        {t(isEnglish, '即将过期', 'Expiring soon')}
       </span>
     )
   }
@@ -175,13 +206,25 @@ function StatusBadge({ account }: { account: PlatformAccount }) {
   return (
     <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs text-emerald-300">
       <CheckCircle className="h-3 w-3" />
-      已授权
+      {t(isEnglish, '已授权', 'Authorized')}
     </span>
   )
 }
 
 export function PlatformAccountsPage({ config }: PlatformAccountsPageProps) {
   const router = useRouter()
+  const { lang } = useLang()
+  const isEnglish = lang === 'en'
+  const pageTitle = isEnglish
+    ? config.accountsPageTitleEn || `${config.platformName} Account Management`
+    : config.accountsPageTitle || `${config.platformName} 账号绑定`
+  const pageDescription = isEnglish
+    ? config.accountsPageDescriptionEn || `Connect and manage your ${config.platformName} accounts for video publishing.`
+    : config.accountsPageDescription || `绑定和管理您的 ${config.platformName} 账号，用于发布视频内容`
+  const emptyAccountTitle = isEnglish ? config.emptyAccountTitleEn || `No ${config.platformName} account connected yet` : config.emptyAccountTitle
+  const emptyAccountDescription = isEnglish ? config.emptyAccountDescriptionEn || `Connect a ${config.platformName} account to publish videos.` : config.emptyAccountDescription
+  const bindButtonText = isEnglish ? config.bindButtonTextEn || `Connect ${config.platformName} account` : config.bindButtonText
+  const statsVideoLabel = isEnglish ? config.statsVideoLabelEn || 'Videos' : config.statsVideoLabel
   const { toast } = useToast()
   const [accounts, setAccounts] = useState<PlatformAccount[]>([])
   const [loading, setLoading] = useState(true)
@@ -191,6 +234,15 @@ export function PlatformAccountsPage({ config }: PlatformAccountsPageProps) {
   const [sortBy, setSortBy] = useState<SortOption>('followers_desc')
   const [filterBy, setFilterBy] = useState<FilterOption>('all')
   const [authNotice, setAuthNotice] = useState<AuthNotice | null>(null)
+  const bindingInFlightRef = useRef(false)
+  const accountsMissingCommentScopes = useMemo(() => {
+    const required = config.requiredCommentScopes || []
+    if (required.length === 0) return []
+    return accounts.filter((account) => {
+      const granted = new Set(account.scopes || [])
+      return required.some((scope) => !granted.has(scope))
+    })
+  }, [accounts, config.requiredCommentScopes])
 
   const fetchAccounts = useCallback(async () => {
     setLoading(true)
@@ -202,18 +254,18 @@ export function PlatformAccountsPage({ config }: PlatformAccountsPageProps) {
         router.push(`/auth/login?redirect=${redirect}`)
         return
       }
-      if (!response.ok) throw new Error(data?.error || '加载账号失败')
+      if (!response.ok) throw new Error(localizeError(data?.error, isEnglish, t(isEnglish, '加载账号失败', 'Failed to load accounts')))
       setAccounts(data.accounts || [])
     } catch (error) {
       toast({
-        title: '加载失败',
-        description: error instanceof Error ? error.message : `无法获取 ${config.platformName} 账号`,
+        title: t(isEnglish, '加载失败', 'Load failed'),
+        description: error instanceof Error ? localizeError(error.message, isEnglish, `Unable to get ${config.platformName} accounts`) : t(isEnglish, `无法获取 ${config.platformName} 账号`, `Unable to get ${config.platformName} accounts`),
         variant: 'destructive',
       })
     } finally {
       setLoading(false)
     }
-  }, [config.apiBase, config.platformName, config.routeBase, router, toast])
+  }, [config.apiBase, config.platformName, config.routeBase, isEnglish, router, toast])
 
   useEffect(() => {
     fetchAccounts()
@@ -228,28 +280,28 @@ export function PlatformAccountsPage({ config }: PlatformAccountsPageProps) {
     if (success) {
       setAuthNotice({
         type: 'success',
-        title: `${config.platformName} 账号已绑定`,
-        description: name ? `已连接账号：${name}` : '授权完成',
+        title: t(isEnglish, `${config.platformName} 账号已绑定`, `${config.platformName} account connected`),
+        description: name ? t(isEnglish, `已连接账号：${name}`, `Connected account: ${name}`) : t(isEnglish, '授权完成', 'Authorization completed'),
       })
       toast({
-        title: `${config.platformName} 账号已绑定`,
-        description: name ? `已连接账号：${name}` : '授权完成',
+        title: t(isEnglish, `${config.platformName} 账号已绑定`, `${config.platformName} account connected`),
+        description: name ? t(isEnglish, `已连接账号：${name}`, `Connected account: ${name}`) : t(isEnglish, '授权完成', 'Authorization completed'),
       })
       window.history.replaceState({}, '', `${config.routeBase}/accounts`)
     } else if (error) {
       setAuthNotice({
         type: 'error',
-        title: `${config.platformName} 授权未完成`,
-        description: error,
+        title: t(isEnglish, `${config.platformName} 授权未完成`, `${config.platformName} authorization incomplete`),
+        description: localizeError(error, isEnglish, `${config.platformName} authorization was not completed`),
       })
       toast({
-        title: `${config.platformName} 授权失败`,
-        description: error,
+        title: t(isEnglish, `${config.platformName} 授权失败`, `${config.platformName} authorization failed`),
+        description: localizeError(error, isEnglish, `${config.platformName} authorization failed`),
         variant: 'destructive',
       })
       window.history.replaceState({}, '', `${config.routeBase}/accounts`)
     }
-  }, [config.platformName, config.routeBase, toast])
+  }, [config.platformName, config.routeBase, isEnglish, toast])
 
   const overview = useMemo(() => ({
     total: accounts.length,
@@ -271,16 +323,20 @@ export function PlatformAccountsPage({ config }: PlatformAccountsPageProps) {
   }, [accounts, filterBy, search, sortBy])
 
   const startBinding = async () => {
+    if (bindingInFlightRef.current) return
+
+    bindingInFlightRef.current = true
     setBinding(true)
     try {
       const response = await fetch(`${config.apiBase}/auth/url`, { method: 'POST' })
       const data = await response.json().catch(() => null)
-      if (!response.ok) throw new Error(data?.error || `无法生成 ${config.platformName} 授权链接`)
+      if (!response.ok) throw new Error(localizeError(data?.error, isEnglish, `Unable to create ${config.platformName} authorization link`))
       window.location.href = data.authUrl
     } catch (error) {
+      bindingInFlightRef.current = false
       toast({
-        title: '无法绑定',
-        description: error instanceof Error ? error.message : '初始化授权失败',
+        title: t(isEnglish, '无法绑定', 'Unable to connect'),
+        description: error instanceof Error ? localizeError(error.message, isEnglish, 'Failed to initialize authorization') : t(isEnglish, '初始化授权失败', 'Failed to initialize authorization'),
         variant: 'destructive',
       })
       setBinding(false)
@@ -291,13 +347,13 @@ export function PlatformAccountsPage({ config }: PlatformAccountsPageProps) {
     setBusyAccountId(accountId)
     try {
       const response = await fetch(`${config.apiBase}/accounts/${accountId}/refresh`, { method: 'POST' })
-      if (!response.ok) throw new Error(await readApiError(response, '刷新失败'))
-      toast({ title: '授权已刷新' })
+      if (!response.ok) throw new Error(await readApiError(response, t(isEnglish, '刷新失败', 'Refresh failed')))
+      toast({ title: t(isEnglish, '授权已刷新', 'Authorization refreshed') })
       fetchAccounts()
     } catch (error) {
       toast({
-        title: '刷新失败',
-        description: error instanceof Error ? error.message : '请重新绑定该账号',
+        title: t(isEnglish, '刷新失败', 'Refresh failed'),
+        description: error instanceof Error ? localizeError(error.message, isEnglish, 'Please reconnect this account') : t(isEnglish, '请重新绑定该账号', 'Please reconnect this account'),
         variant: 'destructive',
       })
     } finally {
@@ -306,17 +362,17 @@ export function PlatformAccountsPage({ config }: PlatformAccountsPageProps) {
   }
 
   const removeAccount = async (accountId: string) => {
-    if (!window.confirm(`确定解绑这个 ${config.platformName} 账号吗？`)) return
+    if (!window.confirm(t(isEnglish, `确定解绑这个 ${config.platformName} 账号吗？`, `Disconnect this ${config.platformName} account?`))) return
     setBusyAccountId(accountId)
     try {
       const response = await fetch(`${config.apiBase}/accounts/${accountId}`, { method: 'DELETE' })
-      if (!response.ok) throw new Error(await readApiError(response, '解绑失败'))
-      toast({ title: '账号已解绑' })
+      if (!response.ok) throw new Error(await readApiError(response, t(isEnglish, '解绑失败', 'Disconnect failed')))
+      toast({ title: t(isEnglish, '账号已解绑', 'Account disconnected') })
       fetchAccounts()
     } catch (error) {
       toast({
-        title: '解绑失败',
-        description: error instanceof Error ? error.message : '请稍后重试',
+        title: t(isEnglish, '解绑失败', 'Disconnect failed'),
+        description: error instanceof Error ? localizeError(error.message, isEnglish, 'Please try again later') : t(isEnglish, '请稍后重试', 'Please try again later'),
         variant: 'destructive',
       })
     } finally {
@@ -335,20 +391,22 @@ export function PlatformAccountsPage({ config }: PlatformAccountsPageProps) {
             <div>
               <h1 className="flex items-center gap-2 text-2xl font-bold text-white">
                 {config.icon}
-                {config.platformName} 账号绑定
+                {pageTitle}
               </h1>
-              <p className="mt-0.5 text-sm text-white/50">绑定和管理您的 {config.platformName} 账号，用于发布视频内容</p>
+              <p className="mt-0.5 text-sm text-white/50">
+                {pageDescription}
+              </p>
             </div>
           </div>
 
           <div className="flex flex-wrap gap-2">
             <Button variant="titanium-outline" onClick={fetchAccounts} disabled={loading}>
               <RefreshCw className={cn('h-4 w-4', loading && 'animate-spin')} />
-              刷新列表
+              {t(isEnglish, '刷新列表', 'Refresh list')}
             </Button>
             <Button variant="mermaid" onClick={startBinding} disabled={binding}>
               {binding ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />}
-              {config.bindButtonText}
+              {bindButtonText}
             </Button>
           </div>
         </header>
@@ -376,13 +434,19 @@ export function PlatformAccountsPage({ config }: PlatformAccountsPageProps) {
           </section>
         )}
 
+        {accountsMissingCommentScopes.length > 0 && (
+          <section className="rounded-2xl border border-amber-400/25 bg-amber-400/10 p-4 text-sm text-amber-100">
+            {t(isEnglish, `有 ${accountsMissingCommentScopes.length} 个账号缺少评论读取或回复权限，请重新绑定并完成最新授权。`, `${accountsMissingCommentScopes.length} account(s) are missing comment read or reply permissions. Reconnect them and complete the latest authorization.`)}
+          </section>
+        )}
+
         <section className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex flex-wrap items-center gap-2 text-sm">
-              <span className="font-semibold text-white/80">账号库 {overview.total}</span>
-              <span className="text-white/35">已授权 {overview.active}</span>
-              <span className="text-white/35">即将过期 {overview.expiring}</span>
-              <span className="text-white/35">已过期 {overview.expired}</span>
+              <span className="font-semibold text-white/80">{t(isEnglish, '账号库', 'Accounts')} {overview.total}</span>
+              <span className="text-white/35">{t(isEnglish, '已授权', 'Authorized')} {overview.active}</span>
+              <span className="text-white/35">{t(isEnglish, '即将过期', 'Expiring soon')} {overview.expiring}</span>
+              <span className="text-white/35">{t(isEnglish, '已过期', 'Expired')} {overview.expired}</span>
             </div>
 
             <div className="flex flex-wrap gap-2">
@@ -391,7 +455,7 @@ export function PlatformAccountsPage({ config }: PlatformAccountsPageProps) {
                 <Input
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
-                  placeholder="搜索账号"
+                  placeholder={t(isEnglish, '搜索账号', 'Search accounts')}
                   className="h-10 w-56 border-white/10 bg-black/25 pl-9 text-white"
                 />
               </div>
@@ -399,13 +463,13 @@ export function PlatformAccountsPage({ config }: PlatformAccountsPageProps) {
                 <DropdownMenuTrigger asChild>
                   <Button variant="titanium-outline">
                     <Filter className="h-4 w-4" />
-                    {FILTER_OPTIONS.find((option) => option.value === filterBy)?.label}
+                    {FILTER_OPTIONS.find((option) => option.value === filterBy)?.label[isEnglish ? 'en' : 'zh']}
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
                   {FILTER_OPTIONS.map((option) => (
                     <DropdownMenuItem key={option.value} onClick={() => setFilterBy(option.value)}>
-                      {option.label}
+                      {option.label[isEnglish ? 'en' : 'zh']}
                     </DropdownMenuItem>
                   ))}
                 </DropdownMenuContent>
@@ -414,13 +478,13 @@ export function PlatformAccountsPage({ config }: PlatformAccountsPageProps) {
                 <DropdownMenuTrigger asChild>
                   <Button variant="titanium-outline">
                     <ArrowUpDown className="h-4 w-4" />
-                    {SORT_OPTIONS.find((option) => option.value === sortBy)?.label}
+                    {SORT_OPTIONS.find((option) => option.value === sortBy)?.label[isEnglish ? 'en' : 'zh']}
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
                   {SORT_OPTIONS.map((option) => (
                     <DropdownMenuItem key={option.value} onClick={() => setSortBy(option.value)}>
-                      {option.label}
+                      {option.label[isEnglish ? 'en' : 'zh']}
                     </DropdownMenuItem>
                   ))}
                 </DropdownMenuContent>
@@ -436,17 +500,20 @@ export function PlatformAccountsPage({ config }: PlatformAccountsPageProps) {
         ) : accounts.length === 0 ? (
           <div className="flex min-h-72 flex-col items-center justify-center rounded-2xl border border-dashed border-white/15 bg-white/[0.03] text-center">
             <UserPlus className="mb-4 h-12 w-12 text-cyan-300/70" />
-            <h2 className="text-lg font-medium">{config.emptyAccountTitle}</h2>
-            <p className="mt-2 max-w-md text-sm text-white/45">{config.emptyAccountDescription}</p>
+            <h2 className="text-lg font-medium">{emptyAccountTitle}</h2>
+            <p className="mt-2 max-w-md text-sm text-white/45">{emptyAccountDescription}</p>
             <Button variant="mermaid" className="mt-6" onClick={startBinding} disabled={binding}>
               {binding ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />}
-              {config.bindButtonText}
+              {bindButtonText}
             </Button>
           </div>
         ) : (
           <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {filteredAccounts.map((account) => {
               const busy = busyAccountId === account.id
+              const missingCommentScopes = (config.requiredCommentScopes || []).filter(
+                (scope) => !(account.scopes || []).includes(scope)
+              )
               return (
                 <div key={account.id} className="group relative flex h-[168px] flex-col overflow-hidden rounded-lg border border-white/[0.075] bg-white/[0.035] p-5 transition-all duration-300 hover:border-cyan-300/25 hover:bg-white/[0.055]">
                   <div className="absolute right-3 top-3 flex items-center gap-1 opacity-35 transition-opacity group-hover:opacity-100">
@@ -455,7 +522,7 @@ export function PlatformAccountsPage({ config }: PlatformAccountsPageProps) {
                       onClick={() => refreshAccount(account.id)}
                       disabled={busy}
                       className="rounded-md p-1.5 text-white/45 hover:bg-white/[0.08] hover:text-white"
-                      title="刷新授权"
+                      title={t(isEnglish, '刷新授权', 'Refresh authorization')}
                     >
                       {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
                     </button>
@@ -464,7 +531,7 @@ export function PlatformAccountsPage({ config }: PlatformAccountsPageProps) {
                       onClick={() => removeAccount(account.id)}
                       disabled={busy}
                       className="rounded-md p-1.5 text-white/45 hover:bg-rose-500/10 hover:text-rose-300"
-                      title="解绑账号"
+                      title={t(isEnglish, '解绑账号', 'Disconnect account')}
                     >
                       <Trash2 className="h-4 w-4" />
                     </button>
@@ -476,22 +543,27 @@ export function PlatformAccountsPage({ config }: PlatformAccountsPageProps) {
                       <h3 className="truncate text-base font-bold text-white">{getAccountName(account)}</h3>
                       <p className="mt-1 truncate text-sm text-white/45">{account.channel_id}</p>
                       <div className="mt-2">
-                        <StatusBadge account={account} />
+                        <StatusBadge account={account} isEnglish={isEnglish} />
+                        {missingCommentScopes.length > 0 && (
+                          <span className="ml-2 inline-flex rounded-full bg-amber-500/10 px-2 py-0.5 text-xs text-amber-300">
+                            {t(isEnglish, '评论权限缺失', 'Comment permissions missing')}
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>
 
                   <div className="mt-auto flex items-center justify-between gap-3 text-xs text-white/45">
-                    <span>粉丝 {formatNumber(account.subscriber_count)}</span>
-                    <span>{config.statsVideoLabel} {formatNumber(account.video_count)}</span>
-                    <span>浏览 {formatNumber(account.view_count)}</span>
+                    <span>{t(isEnglish, '粉丝', 'Followers')} {formatNumber(account.subscriber_count, isEnglish)}</span>
+                    <span>{statsVideoLabel} {formatNumber(account.video_count, isEnglish)}</span>
+                    <span>{t(isEnglish, '浏览', 'Views')} {formatNumber(account.view_count, isEnglish)}</span>
                   </div>
                 </div>
               )
             })}
             {filteredAccounts.length === 0 && (
               <div className="col-span-full rounded-2xl border border-dashed border-white/10 py-12 text-center text-white/45">
-                没有匹配的账号
+                {t(isEnglish, '没有匹配的账号', 'No matching accounts')}
               </div>
             )}
           </section>

@@ -18,22 +18,36 @@ export interface PlatformPublishConfig {
   platform: MetaPublishPlatform
   platformName: string
   pageTitle?: string
+  pageTitleEn?: string
   pageDescription?: string
+  pageDescriptionEn?: string
+  accountsPageTitle?: string
+  accountsPageTitleEn?: string
+  accountsPageDescription?: string
+  accountsPageDescriptionEn?: string
+  accountManagementLabel?: string
+  accountManagementLabelEn?: string
   routeBase: string
   accountManagePath?: string
   apiBase: string
   accountNoun: string
   accountNounPlural: string
   emptyAccountTitle: string
+  emptyAccountTitleEn?: string
   emptyAccountDescription: string
+  emptyAccountDescriptionEn?: string
   bindButtonText: string
+  bindButtonTextEn?: string
   statsVideoLabel: string
+  statsVideoLabelEn?: string
   maxTitleLength: number
   maxDescriptionLength: number
   maxTagsLength: number
   maxCombinedTextLength?: number
   maxFileSizeBytes?: number
   maxFileSizeLabel?: string
+  acceptedVideoExtensions?: string[]
+  videoFormatsLabel?: string
   privacyLabel?: string
   privacyPlaceholder?: string
   privacyMissingMessage?: string
@@ -80,14 +94,28 @@ export const META_PLATFORM_CONFIGS: Record<MetaPublishPlatform, Omit<PlatformPub
   facebook: {
     platform: 'facebook',
     platformName: 'Facebook',
+    pageTitle: 'Facebook 视频管理',
+    pageTitleEn: 'Facebook Video Management',
+    pageDescription: '管理 Facebook 视频发布、预约发布、任务历史和评论。',
+    pageDescriptionEn: 'Manage Facebook video publishing, scheduled publishing, task history, and comments.',
+    accountsPageTitle: 'Facebook 账号管理',
+    accountsPageTitleEn: 'Facebook Account Management',
+    accountsPageDescription: '绑定和管理 Facebook Page、授权状态与账号数据。',
+    accountsPageDescriptionEn: 'Connect and manage Facebook Pages, authorization status, and account data.',
+    accountManagementLabel: '账号管理',
+    accountManagementLabelEn: 'Account Management',
     routeBase: '/facebook-publish',
     apiBase: '/api/facebook',
     accountNoun: 'Page',
     accountNounPlural: 'Page',
     emptyAccountTitle: '还没有绑定 Facebook Page',
+    emptyAccountTitleEn: 'No Facebook Page connected yet',
     emptyAccountDescription: '绑定 Facebook Page 后，可以直接发布视频内容',
+    emptyAccountDescriptionEn: 'Connect a Facebook Page to publish video content directly.',
     bindButtonText: '绑定 Facebook Page',
+    bindButtonTextEn: 'Connect Facebook Page',
     statsVideoLabel: '视频',
+    statsVideoLabelEn: 'Videos',
     maxTitleLength: 255,
     maxDescriptionLength: 63206,
     maxTagsLength: 500,
@@ -115,18 +143,36 @@ export const META_PLATFORM_CONFIGS: Record<MetaPublishPlatform, Omit<PlatformPub
   instagram: {
     platform: 'instagram',
     platformName: 'Instagram',
+    pageTitle: 'Instagram 视频管理',
+    pageTitleEn: 'Instagram Video Management',
+    pageDescription: '管理 Instagram 视频发布、预约发布和任务历史。',
+    pageDescriptionEn: 'Manage Instagram video publishing, scheduled publishing, and task history.',
+    accountsPageTitle: 'Instagram 账号管理',
+    accountsPageTitleEn: 'Instagram Account Management',
+    accountsPageDescription: '绑定和管理 Instagram 账号、授权状态与账号数据。',
+    accountsPageDescriptionEn: 'Connect and manage Instagram accounts, authorization status, and account data.',
+    accountManagementLabel: '账号管理',
+    accountManagementLabelEn: 'Account Management',
     routeBase: '/instagram-publish',
     apiBase: '/api/instagram',
     accountNoun: '账号',
     accountNounPlural: '账号',
     emptyAccountTitle: '还没有绑定 Instagram 账号',
+    emptyAccountTitleEn: 'No Instagram account connected yet',
     emptyAccountDescription: '绑定账号后，可以直接从平台发布视频内容',
+    emptyAccountDescriptionEn: 'Connect an account to publish video content directly.',
     bindButtonText: '绑定 Instagram 账号',
+    bindButtonTextEn: 'Connect Instagram account',
     statsVideoLabel: '媒体',
+    statsVideoLabelEn: 'Media',
     maxTitleLength: 255,
     maxDescriptionLength: 2200,
     maxTagsLength: 500,
     maxCombinedTextLength: 2200,
+    maxFileSizeBytes: 1024 * 1024 * 1024,
+    maxFileSizeLabel: '1GB',
+    acceptedVideoExtensions: ['.mp4', '.mov'],
+    videoFormatsLabel: '.mp4 .mov',
     titleDescriptionHint: '发布到 Instagram 时，标题与描述会合并为 caption。',
     tagsHint: '话题/标签将追加到 Instagram caption 中，不会作为独立 API 字段发送。',
     scheduleLabel: '本地预约队列',

@@ -3,17 +3,12 @@ import crypto from 'crypto'
 import { NextRequest, NextResponse } from 'next/server'
 
 import { createClient } from '@/lib/supabase/server'
+import { validateInstagramMediaUpload } from '@/lib/publish/platform-media'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 const EXPIRES_SECONDS = 24 * 60 * 60
-const ALLOWED_MIME_BY_EXTENSION: Record<string, string[]> = {
-  mp4: ['video/mp4'],
-  webm: ['video/webm'],
-  mov: ['video/quicktime', 'video/mp4'],
-}
-
 function getRequestOrigin(request: NextRequest) {
   const host = request.headers.get('host') || request.nextUrl.host
   const protocol = request.headers.get('x-forwarded-proto') || request.nextUrl.protocol.replace(':', '') || 'http'
@@ -97,11 +92,20 @@ export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => ({}))
   const filename = typeof body.filename === 'string' ? body.filename : ''
   const contentType = typeof body.contentType === 'string' ? body.contentType : 'video/mp4'
-  const ext = getExtension(filename)
-  const allowedTypes = ALLOWED_MIME_BY_EXTENSION[ext]
+  const validationError = validateInstagramMediaUpload({
+    filename,
+    contentType,
+    fileSize: body.fileSize,
+  })
 
-  if (!filename || !allowedTypes || !allowedTypes.includes(contentType)) {
+  if (validationError === 'unsupported_format') {
     return NextResponse.json({ success: false, error: '不支持的视频格式' }, { status: 400 })
+  }
+  if (validationError === 'invalid_file_size') {
+    return NextResponse.json({ success: false, error: '视频大小无效' }, { status: 400 })
+  }
+  if (validationError === 'file_too_large') {
+    return NextResponse.json({ success: false, error: '单个视频不能超过 1GB' }, { status: 400 })
   }
 
   const id = `${crypto.randomUUID()}-${safeFileName(filename)}`
