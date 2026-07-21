@@ -10,11 +10,6 @@
 - **文件存储**: Supabase Storage (外部服务)
 - **并发处理**: API 路由处理图片/视频生成请求
 
-### 当前 Vercel 使用情况（参考）
-- Edge Requests (6小时): 2.2K
-- Function Invocations (6小时): 1.4K
-- 平均每小时: ~367 请求
-
 ---
 
 ## 💰 推荐配置方案

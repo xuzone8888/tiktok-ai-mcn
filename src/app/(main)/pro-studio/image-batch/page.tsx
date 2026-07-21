@@ -1297,7 +1297,7 @@ export default function ImageBatchPage() {
               >
                 {/* Aurora Background Effect */}
                 <div className="absolute inset-0 bg-gradient-to-br from-mermaid-cyan/5 via-transparent to-mermaid-pink/5 opacity-50" />
-                <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-10" />
+                <div className="absolute inset-0 bg-[url('/noise.svg')] opacity-10" />
 
                 {/* Animated Rings */}
                 <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] border border-white/5 rounded-full animate-[spin_20s_linear_infinite]" />

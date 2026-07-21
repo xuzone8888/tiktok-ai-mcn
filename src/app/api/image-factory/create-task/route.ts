@@ -22,7 +22,7 @@ import type {
   ModeConfig,
 } from "@/types/ecom-image";
 
-// Vercel 函数配置
+// Route runtime configuration
 export const maxDuration = 30;
 
 interface CreateTaskRequest {

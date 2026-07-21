@@ -3,7 +3,7 @@
 /**
  * 检查本地文件与服务器版本是否一致
  * 使用方法: node scripts/check-server-consistency.js <网站URL>
- * 例如: node scripts/check-server-consistency.js https://your-app.vercel.app
+ * 例如: node scripts/check-server-consistency.js https://www.toryxai.com
  */
 
 const https = require('https');
@@ -16,7 +16,6 @@ const crypto = require('crypto');
 const KEY_FILES = [
   'package.json',
   'next.config.mjs',
-  'vercel.json',
   'src/app/layout.tsx',
   'src/app/page.tsx',
   'src/middleware.ts',
@@ -266,7 +265,7 @@ async function checkServerConsistency(baseUrl) {
   console.log('  - 如果页面返回404，可能是路由配置问题');
   console.log('  - 如果API返回401/403，可能是认证问题');
   console.log('  - 如果所有端点都超时，可能是服务器问题或网络问题');
-  console.log('  - 建议检查Vercel部署日志以获取更多信息');
+  console.log('  - 建议检查阿里云 PM2 和 webhook 部署日志以获取更多信息');
 }
 
 // 主程序
@@ -275,7 +274,7 @@ const baseUrl = process.argv[2];
 if (!baseUrl) {
   console.error('❌ 错误: 请提供网站URL');
   console.error('使用方法: node scripts/check-server-consistency.js <网站URL>');
-  console.error('例如: node scripts/check-server-consistency.js https://your-app.vercel.app');
+  console.error('例如: node scripts/check-server-consistency.js https://www.toryxai.com');
   process.exit(1);
 }
 

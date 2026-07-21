@@ -6,7 +6,7 @@
 - [ ] 服务器公网 IP 地址
 - [ ] SSH 登录用户名（通常是 `root` 或 `ubuntu`）
 - [ ] SSH 密码或密钥
-- [ ] 所有环境变量值（从 Vercel 获取）
+- [ ] 所有环境变量值（从密码管理器或受限的生产配置备份获取）
 
 ---
 
@@ -85,14 +85,14 @@ nano .env.local
 
 ```bash
 # ==========================================
-# Supabase 配置（从 Vercel 环境变量获取）
+# Supabase 配置（从 Supabase 控制台或密码管理器获取）
 # ==========================================
 NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
 SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
 
 # ==========================================
-# API 密钥（从 Vercel 环境变量获取）
+# API 密钥（从对应服务控制台或密码管理器获取）
 # ==========================================
 DOUBAO_API_KEY=your_doubao_key
 DOUBAO_ENDPOINT_ID=your_endpoint_id
@@ -114,15 +114,15 @@ ADMIN_EMAIL=admin@example.com
 
 ### 如何获取环境变量值
 
-**从 Vercel 获取**:
-1. 登录 Vercel
-2. 进入项目设置: `Settings` > `Environment Variables`
-3. 点击每个变量旁边的 "Click to reveal" 查看值
+**从安全来源获取**:
+1. 优先使用团队密码管理器或受限的生产配置备份
+2. Supabase 变量从 Supabase 项目设置核对
+3. 其他 API 密钥从对应服务控制台核对
 4. 复制到 `.env.local` 文件
 
 **重要**: 
 - `NEXT_PUBLIC_APP_URL` 应该使用阿里云服务器的 IP 或域名
-- 其他变量值与 Vercel 完全相同
+- 其他变量值必须与当前生产配置逐项核对
 
 ### 保存文件
 在 nano 编辑器中：
