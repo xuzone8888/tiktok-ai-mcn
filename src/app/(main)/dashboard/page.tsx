@@ -433,8 +433,8 @@ export default function DashboardPage() {
               },
               {
                 title: t ? "Batch Videos" : "批量生产视频",
-                desc: t ? "Batch Production" : "批量产线区",
-                href: "/pro-studio/video-batch",
+                desc: t ? "Studio Batch Flow" : "Studio 批次流",
+                href: "/studio",
                 color: "pink",
               },
               {

@@ -253,6 +253,27 @@ export async function videoExists(objectPath: string): Promise<boolean> {
 }
 
 /**
+ * Check if file exists in OSS — strict variant for idempotency anchors.
+ * Only a definite 404/NoSuchKey means "not exists"; any other error
+ * (network timeout, throttling 5xx, credential 403) is rethrown so the
+ * caller fails the request instead of mistaking a transient fault for a
+ * cache miss (which would re-run charged work).
+ */
+export async function fileExistsStrict(objectPath: string): Promise<boolean> {
+    const client = createOSSClient()
+    try {
+        await client.head(objectPath)
+        return true
+    } catch (err) {
+        const e = err as { status?: number; code?: string }
+        if (e?.status === 404 || e?.code === 'NoSuchKey' || e?.code === 'NoSuchKeyError') {
+            return false
+        }
+        throw err
+    }
+}
+
+/**
  * Get file metadata from OSS
  * @param objectPath - OSS object path
  */

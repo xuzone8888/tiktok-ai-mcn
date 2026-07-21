@@ -1239,8 +1239,10 @@ export default function ModelsPage() {
     router.push(`/quick-gen?characterId=${encodeURIComponent(model.id)}`);
   };
 
-  const goVideo = (model: PublicModel) => {
-    router.push(`/pro-studio/video-batch?characterId=${encodeURIComponent(model.id)}&modelType=veo`);
+  const goVideo = (_model: PublicModel) => {
+    // S4.4:video-batch 大页已消解;Studio 里用 @ 按钮重选角色(携参预选留待
+    // omnibox 支持 characterId query 时恢复)
+    router.push("/studio");
   };
 
   let modelsContent: ReactNode;

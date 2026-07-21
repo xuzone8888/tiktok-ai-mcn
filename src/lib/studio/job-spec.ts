@@ -1,0 +1,702 @@
+/**
+ * JobSpec — Studio 统一任务规格(S0.7)
+ *
+ * omnibox 把任何输入(文字/链接/拖图/@角色/参数 chips)编译成 JobSpec,
+ * 再经适配器写入现有 store,由 background-task-manager(BTM)原样执行:
+ *
+ *   JobSpec ──toVideoBatchTask──▶ video-batch store ──▶ BTM ──▶ /api/video-batch/models/submit
+ *   JobSpec ──toQuickGenImageTask──▶ quick-gen store ──▶ BTM ──▶ /api/generate/image
+ *
+ * 字段与两个服务端入口的 DTO 对齐(扣积分/退款均在服务端,此处不涉及)。
+ *
+ * 已知差异(S0.7 侦查,详见 docs/EXECUTION_TRACKER.md):
+ * video-batch 页面内联提交会传 characterId/characterName/characterReferenceImages/
+ * characterAsset,而 BTM 提交路径不传这四个字段(角色元数据丢失)。适配器在 store
+ * 任务上补全全部角色字段;BTM 提交侧的缺失在 S1 收编时修复。
+ */
+
+import type { CharacterAssetSnapshot } from "@/lib/character-assets";
+import type { ImageModel } from "@/types/generation";
+import type {
+  TaskImageInfo,
+  VideoAspectRatio,
+  VideoBatchTask,
+  VideoBatchTaskMode,
+  VideoDuration,
+  VideoModelType,
+  VideoQuality,
+} from "@/types/video-batch";
+import type { QuickGenImageTask } from "@/stores/quick-gen-store";
+import type { SlideshowTask } from "@/stores/slideshow-store";
+import type { AiGenSceneTask, AiGenTask } from "@/stores/ai-gen-store";
+import type { AssemblySceneTask, AssemblyTask } from "@/stores/assembly-store";
+import type { PhotoPostTask } from "@/stores/photo-post-store";
+import { compileScenePrompt, type AiGenSceneInput } from "@/lib/studio/ai-gen-prompts";
+import { PRESET_VOICES } from "@/lib/voice-data";
+
+// ============================================================================
+// 规格类型
+// ============================================================================
+
+/** 批量矩阵变体快照(S3.4):随成片落 generations.spec.variant,溯源哪一格 */
+export interface VariantInfo {
+  hook_id?: string;
+  hook_text?: string;
+  voice_id?: string;
+  aspect?: string;
+}
+
+interface JobSpecBase {
+  /** 主提示词(视频 prompt 模式 / 图片 generate 模式必填语义,由调用方校验非空) */
+  prompt: string;
+  /** @角色(character-picker 输出的快照,原样携带) */
+  character?: CharacterAssetSnapshot;
+  /** 任务组(video-batch Tab 分组;缺省与网关一致为「默认」) */
+  groupName?: string;
+  /** 数量 stepper:一次提交展开为 N 个任务(1-100,展开用 toXxxTasks) */
+  count?: number;
+  /** Studio 批次 ID(S1:随任务透传到提交体,服务端落 generations.batch_id) */
+  batchId?: string;
+  /** 蓝图管线预留(S2+):spec 快照随 generations.spec 落库时携带 */
+  blueprintId?: string;
+  /** 批量矩阵变体(S3.4:hook×音色×比例;由 rerunBlueprint 矩阵展开逐格填入) */
+  variant?: VariantInfo;
+}
+
+export interface VideoJobSpec extends JobSpecBase {
+  kind: "video";
+  modelType: VideoModelType;
+  aspectRatio: VideoAspectRatio;
+  durationSeconds: VideoDuration;
+  quality?: VideoQuality; // 缺省 "standard"(与网关一致)
+  /** 缺省按 imageUrls 是否非空推导(与网关 route 行为一致) */
+  mode?: VideoBatchTaskMode;
+  /** 素材图(image_to_video 的输入图;第一张按现有惯例标记为主图) */
+  imageUrls?: string[];
+  /** 参考图组(HappyHorse R2V 等) */
+  referenceImageUrls?: string[];
+  /** VEO 首尾帧(已上传 OSS 的 URL) */
+  firstFrameUrl?: string;
+  lastFrameUrl?: string;
+}
+
+export interface ImageJobSpec extends JobSpecBase {
+  kind: "image";
+  imageModel: ImageModel;
+  action?: "generate" | "upscale" | "nine_grid"; // 缺省 "generate"
+  aspectRatio?: string; // 缺省 "auto"(与 /api/generate/image 一致)
+  resolution?: "1k" | "2k" | "4k"; // 缺省 "1k"
+  /** 参考图/待处理图(upscale、nine_grid 至少需要一张,由调用方校验) */
+  sourceImageUrls?: string[];
+  /** 展示用预估积分(权威扣费在服务端);缺省 0 */
+  creditCost?: number;
+}
+
+export interface SlideshowJobSpec extends JobSpecBase {
+  kind: "slideshow";
+  /** 轮播素材图(OSS URL,调用方校验 ≥2 张) */
+  imageUrls: string[];
+  aspectRatio: "9:16" | "16:9";
+  /** 每张图停留秒数 */
+  durationPerImage: number;
+  /** xfade 转场效果名("none"=硬切) */
+  transition: string;
+  /** ken-burns 运镜(S0.4 已在 worker/python 就位) */
+  kenburns?: boolean;
+  /** AI 配音(智能选声;需 prompt 非空作文案主题) */
+  voiceEnabled?: boolean;
+  /** 预设库随机 BGM */
+  bgmEnabled?: boolean;
+  /**
+   * 整片口播脚本(S3.5 配方腿):提供时经 aiCaption.generatedTexts 直达渲染端,
+   * 配方台词才会真正进幻灯片成片(否则口播仅由关键词 diverse 生成——审查实锤:
+   * 配方对默认幻灯片腿零效果)
+   */
+  scriptText?: string;
+}
+
+export interface AiGenSceneSpec extends AiGenSceneInput {
+  /** 该镜素材图(蓝图 slot.asset_ref;image_to_video 输入) */
+  imageUrl?: string;
+}
+
+export interface AiGenJobSpec extends JobSpecBase {
+  kind: "ai_gen";
+  /** 逐镜走统一视频网关的模型/规格(全镜一致,MVP) */
+  modelType: VideoModelType;
+  aspectRatio: Extract<VideoAspectRatio, "9:16" | "16:9">;
+  durationSeconds: VideoDuration;
+  quality?: VideoQuality;
+  /** 蓝图 scenes(台词/beat 已定;prompt 在适配器逐镜编译) */
+  scenes: AiGenSceneSpec[];
+  /** 商品标题(StyleBible.product + 卡片回显) */
+  productTitle: string;
+}
+
+export interface AssemblySceneSpec {
+  idx: number;
+  /** 台词(TTS 口播;空行由适配器按语言补默认 CTA) */
+  line: string;
+  /** 该镜素材图(蓝图 slot.asset_ref,自有 OSS URL) */
+  imageUrl: string;
+}
+
+export interface AssemblyJobSpec extends JobSpecBase {
+  kind: "assembly";
+  aspectRatio: "9:16" | "16:9";
+  /** 每镜基准秒数(TTS 超长时服务端自动延长该镜) */
+  durationPerImage: number;
+  kenburns: boolean;
+  /** 蓝图 scenes(每镜 素材图+台词 → TTS+字幕出段 → stitch) */
+  scenes: AssemblySceneSpec[];
+  /** 商品标题(卡片回显 + stitch 落库 prompt) */
+  productTitle: string;
+  /** 指定音色 id;缺省/'random' 由适配器按台词语言从预设池随机(每变体独立) */
+  voiceId?: string;
+}
+
+export interface PhotoPostJobSpec extends JobSpecBase {
+  kind: "photo_post";
+  /** 素材图(蓝图 scenes 序;每变体由适配器独立洗牌,TikTok photo post ≤10 张) */
+  imageUrls: string[];
+  /** 商品标题(卡片回显 + 文案上下文) */
+  productTitle: string;
+  /** 已勾选卖点文本(文案上下文) */
+  sellingPoints: string[];
+  /** 蓝图逐镜台词(可选,给 LLM 叙事脉络) */
+  sceneLines?: string[];
+}
+
+export type JobSpec =
+  | VideoJobSpec
+  | ImageJobSpec
+  | SlideshowJobSpec
+  | AiGenJobSpec
+  | AssemblyJobSpec
+  | PhotoPostJobSpec;
+
+// ============================================================================
+// 工具
+// ============================================================================
+
+/** 任务 id 生成,沿用现有惯例:video=vbt-*,image=qg-*,slideshow=ss-*,ai_gen=ag-*,assembly=asm-*,photo_post=pp-* */
+export function createJobId(kind: JobSpec["kind"]): string {
+  const rand = Math.random().toString(36).slice(2, 11);
+  const prefix =
+    kind === "video"
+      ? "vbt"
+      : kind === "image"
+        ? "qg"
+        : kind === "ai_gen"
+          ? "ag"
+          : kind === "assembly"
+            ? "asm"
+            : kind === "photo_post"
+              ? "pp"
+              : "ss";
+  return `${prefix}-${Date.now()}-${rand}`;
+}
+
+/** Fisher-Yates 洗牌(幻灯片素材级去同质化:每个变体独立图序) */
+function shuffled<T>(arr: T[]): T[] {
+  const copy = [...arr];
+  for (let i = copy.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  return copy;
+}
+
+function clampCount(count: number | undefined): number {
+  if (!count || !Number.isFinite(count)) return 1;
+  return Math.max(1, Math.min(100, Math.floor(count)));
+}
+
+function buildTaskImages(taskId: string, imageUrls: string[] | undefined): TaskImageInfo[] {
+  return (imageUrls ?? []).map((url, i) => ({
+    id: `${taskId}-img-${i}`,
+    url,
+    name: `image-${i + 1}`,
+    isMainGrid: i === 0, // 现有惯例:第一张为主图(mainGridImageUrl 取首图)
+    order: i,
+  }));
+}
+
+// ============================================================================
+// 适配器:JobSpec → store 任务对象
+// ============================================================================
+
+export interface AdapterOptions {
+  /** 指定任务 id(缺省自动生成);批量展开时由 toXxxTasks 自动生成互不相同的 id */
+  id?: string;
+  /** 指定创建时间(ISO),便于测试;缺省 now */
+  now?: string;
+}
+
+/** VideoJobSpec → VideoBatchTask(写入 video-batch store,BTM 自动执行) */
+export function toVideoBatchTask(spec: VideoJobSpec, opts: AdapterOptions = {}): VideoBatchTask {
+  const id = opts.id ?? createJobId("video");
+  const now = opts.now ?? new Date().toISOString();
+  const images = buildTaskImages(id, spec.imageUrls);
+  const mode: VideoBatchTaskMode =
+    spec.mode ?? (images.length > 0 ? "image_to_video" : "prompt_to_video");
+
+  return {
+    id,
+    images,
+    aspectRatio: spec.aspectRatio,
+    groupName: spec.groupName ?? "默认",
+    batchId: spec.batchId,
+    mode,
+    // 用户文字只要非空就随任务携带:prompt 模式它是脚本源;image 模式它触发
+    // BTM 的短路分支(跳过豆包看图管线,直接以用户文字为最终提示词)。
+    // 纯拖图无文字时保持 undefined,走既有豆包看图生成脚本管线。
+    customPrompt: spec.prompt.trim() ? spec.prompt.trim() : undefined,
+    referenceImageUrl: spec.referenceImageUrls?.[0],
+    referenceImageUrls: spec.referenceImageUrls,
+
+    // 角色字段全量补齐(修复 BTM 路径丢角色元数据的差异,见文件头注释)
+    characterId: spec.character?.id,
+    characterName: spec.character?.name,
+    characterRefUrl:
+      spec.character?.reference_sheet_url ?? spec.character?.reference_images?.[0],
+    characterReferenceImages: spec.character?.reference_images,
+    characterAsset: spec.character,
+
+    firstFrameUrl: spec.firstFrameUrl,
+    lastFrameUrl: spec.lastFrameUrl,
+
+    modelType: spec.modelType,
+    duration: spec.durationSeconds,
+    quality: spec.quality ?? "standard",
+
+    doubaoTalkingScript: null,
+    doubaoAiVideoPrompt: null,
+    soraTaskId: null,
+    soraVideoUrl: null,
+
+    status: "pending",
+    currentStep: 0,
+    progress: 0,
+    errorMessage: null,
+
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+/** ImageJobSpec → QuickGenImageTask(写入 quick-gen store 的 imageTasks,BTM 自动执行) */
+export function toQuickGenImageTask(spec: ImageJobSpec, opts: AdapterOptions = {}): QuickGenImageTask {
+  const id = opts.id ?? createJobId("image");
+  const now = opts.now ?? new Date().toISOString();
+  const resolution = spec.resolution ?? "1k";
+
+  return {
+    id,
+    prompt: spec.prompt,
+    model: spec.imageModel,
+    action: spec.action ?? "generate",
+    tier: resolution, // tier 的 "1k"|"2k"|"4k" 分支与 resolution 同值(fast/pro 为旧档遗留)
+    aspectRatio: spec.aspectRatio ?? "auto",
+    resolution,
+    sourceImageUrls: spec.sourceImageUrls ?? [],
+    characterAsset: spec.character,
+    batchId: spec.batchId,
+
+    status: "idle", // S0.6 生命周期:idle=已创建待执行,BTM 执行器自动拉起
+    progress: 0,
+
+    createdAt: now,
+
+    creditCost: spec.creditCost ?? 0,
+    creditsDeducted: false,
+  };
+}
+
+/** SlideshowJobSpec → SlideshowTask(写入 slideshow store,BTM 幻灯片执行器自动拉起) */
+export function toSlideshowTask(spec: SlideshowJobSpec, opts: AdapterOptions = {}): SlideshowTask {
+  const id = opts.id ?? createJobId("slideshow");
+  const now = opts.now ?? new Date().toISOString();
+  // 素材级去同质化(BLUEPRINT §四):每个变体独立洗牌图序
+  const images = shuffled(spec.imageUrls);
+  const text = spec.prompt.trim();
+  const scriptText = spec.scriptText?.trim() || "";
+  const language = /[一-鿿]/.test(scriptText || text) ? "zh" : "en";
+  const bgmEnabled = spec.bgmEnabled ?? false;
+  const voiceEnabled = !!((text || scriptText) && spec.voiceEnabled);
+
+  // POST /api/video-batch/generate-slideshow 的完整请求体快照,
+  // imagesPerVideo=全部图片 → 一次调用产出一条成片
+  const renderRequest: Record<string, unknown> = {
+    mode: "random",
+    images,
+    imagesPerVideo: images.length,
+    aspectRatio: spec.aspectRatio,
+    durationPerImage: spec.durationPerImage,
+    transition: spec.transition,
+    kenburns: spec.kenburns ?? false,
+    bgm: { enabled: bgmEnabled, mode: bgmEnabled ? "random" : "none" },
+    ...(text || scriptText
+      ? {
+          aiCaption: {
+            enabled: true,
+            mode: "diverse",
+            keywords: text || scriptText.slice(0, 100),
+            style: "lively",
+            language,
+            // 配方脚本直达渲染端(服务端优先用预生成文案,过短才重新生成)
+            ...(scriptText ? { generatedTexts: [scriptText] } : {}),
+          },
+        }
+      : {}),
+    ...(voiceEnabled ? { voice: { enabled: true, voiceId: "random", voiceName: "智能选声" } } : {}),
+    clientTaskIds: [id],
+    ...(spec.batchId ? { batchId: spec.batchId } : {}),
+    ...(spec.blueprintId ? { blueprintId: spec.blueprintId } : {}),
+    ...(spec.variant ? { variant: spec.variant } : {}),
+  };
+
+  return {
+    id,
+    groupName: spec.groupName ?? "Studio",
+    mode: "random",
+    status: "pending",
+    progress: 0,
+    imageCount: images.length,
+    duration: spec.durationPerImage,
+    transition: spec.transition,
+    aspectRatio: spec.aspectRatio,
+    hasVoice: voiceEnabled,
+    hasBgm: bgmEnabled,
+    hasSubtitle: !!text,
+    batchId: spec.batchId,
+    renderRequest,
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+/** AiGenJobSpec → AiGenTask(写入 ai-gen store,BTM AI 生成执行器自动拉起) */
+export function toAiGenTask(spec: AiGenJobSpec, opts: AdapterOptions = {}): AiGenTask {
+  const id = opts.id ?? createJobId("ai_gen");
+  const now = opts.now ?? new Date().toISOString();
+  const scenes: AiGenSceneTask[] = [...spec.scenes]
+    .sort((a, b) => a.idx - b.idx)
+    .map((scene) => ({
+      idx: scene.idx,
+      // 逐镜编译(scene 结构贯穿到生成端,BLUEPRINT §四渲染腿②)
+      prompt: compileScenePrompt(scene, spec.productTitle, spec.aspectRatio, spec.durationSeconds),
+      // || 而非 ??:空串 imageUrl 会击穿 visual-URL 兜底(审查实锤)
+      imageUrl:
+        scene.imageUrl || (scene.visual.startsWith("http") ? scene.visual : undefined),
+      clientTaskId: `${id}-s${scene.idx}`,
+      upstreamTaskId: null,
+      videoUrl: null,
+      status: "pending",
+    }));
+
+  return {
+    id,
+    groupName: spec.groupName ?? "Studio",
+    batchId: spec.batchId,
+    blueprintId: spec.blueprintId,
+    title: spec.productTitle,
+    modelType: spec.modelType,
+    aspectRatio: spec.aspectRatio,
+    durationSeconds: spec.durationSeconds,
+    quality: spec.quality ?? "standard",
+    scenes,
+    variant: spec.variant,
+    stitchedUrl: null,
+    status: "pending",
+    progress: 0,
+    errorMessage: null,
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+/** 台词语言检测(与幻灯片腿同款启发式) */
+function detectLanguage(text: string): "zh" | "en" {
+  return /[一-鿿]/.test(text) ? "zh" : "en";
+}
+
+/** 空 CTA 行的默认口播(蓝图 cta 镜留空时补齐;可在抽屉行内改) */
+const DEFAULT_CTA_LINE: Record<"zh" | "en", string> = {
+  zh: "心动不如行动,点击下方链接马上入手!",
+  en: "Don't wait - tap the link below and get yours today!",
+};
+
+/**
+ * emoji 过滤(镜像 assembly/scene 服务端消毒口径):纯 emoji 台词若放行,
+ * 服务端 strip 后判空返 400,该镜会永久失败且重试无修复路径(审查实锤)
+ */
+function stripEmojiLike(text: string): string {
+  let result = "";
+  for (const char of text) {
+    const code = char.codePointAt(0) || 0;
+    const isEmoji =
+      (code >= 0x1f300 && code <= 0x1faff) ||
+      (code >= 0x2600 && code <= 0x27bf) ||
+      (code >= 0x1f1e0 && code <= 0x1f1ff);
+    if (!isEmoji) result += char;
+  }
+  return result.replace(/\s+/g, " ").trim();
+}
+
+/** AssemblyJobSpec → AssemblyTask(写入 assembly store,BTM 拼装执行器自动拉起) */
+export function toAssemblyTask(spec: AssemblyJobSpec, opts: AdapterOptions = {}): AssemblyTask {
+  const id = opts.id ?? createJobId("assembly");
+  const now = opts.now ?? new Date().toISOString();
+  const language = detectLanguage(spec.scenes.map((s) => s.line).join(""));
+
+  // 音色:显式指定沿用;random/缺省从语言匹配池随机(每变体独立=声线维度去同质化)。
+  // 服务端按 PRESET_VOICES 白名单校验,此处选定即持久化,刷新恢复后声线一致
+  let voiceId = spec.voiceId && spec.voiceId !== "random" ? spec.voiceId : "";
+  if (!voiceId) {
+    const pool = PRESET_VOICES.filter((v) => v.lang === language);
+    const candidates = pool.length > 0 ? pool : PRESET_VOICES;
+    voiceId = candidates[Math.floor(Math.random() * candidates.length)].id;
+  }
+
+  const fallbackLine = stripEmojiLike(spec.productTitle) || DEFAULT_CTA_LINE[language];
+  const scenes: AssemblySceneTask[] = [...spec.scenes]
+    .sort((a, b) => a.idx - b.idx)
+    .map((scene) => {
+      // 原始留空(cta 镜)→ 默认 CTA;非空但消毒后为空(纯 emoji)→ 商品标题兜底
+      const raw = scene.line.trim();
+      const sanitized = stripEmojiLike(raw);
+      const line = raw ? sanitized || fallbackLine : DEFAULT_CTA_LINE[language];
+      return {
+        idx: scene.idx,
+        line,
+        imageUrl: scene.imageUrl,
+        clientTaskId: `${id}-s${scene.idx}`,
+        videoUrl: null,
+        status: "pending" as const,
+      };
+    });
+
+  return {
+    id,
+    groupName: spec.groupName ?? "Studio",
+    batchId: spec.batchId,
+    blueprintId: spec.blueprintId,
+    title: spec.productTitle,
+    aspectRatio: spec.aspectRatio,
+    durationPerImage: spec.durationPerImage,
+    kenburns: spec.kenburns,
+    voiceId,
+    scenes,
+    variant: spec.variant ? { ...spec.variant, voice_id: voiceId } : undefined,
+    stitchedUrl: null,
+    status: "pending",
+    progress: 0,
+    errorMessage: null,
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+// ============================================================================
+// 批量展开(数量 stepper)
+// ============================================================================
+
+/** 按 spec.count 展开为 N 个 VideoBatchTask(id 互不相同,内容相同) */
+/**
+ * PhotoPostJobSpec → PhotoPostTask(S4.1 图文帖腿)。
+ * 首个变体保留蓝图 scenes 原序(hook 图打头),其余变体独立洗牌
+ * (素材级去同质化,BLUEPRINT §六「强制图序差异」);variantIndex 由
+ * toPhotoPostTasks/WithMatrix 传入。文案由服务端 LLM 生成后写回。
+ */
+export function toPhotoPostTask(
+  spec: PhotoPostJobSpec,
+  opts: AdapterOptions & { variantIndex?: number } = {}
+): PhotoPostTask {
+  const id = opts.id ?? createJobId("photo_post");
+  const now = opts.now ?? new Date().toISOString();
+  const ordered =
+    (opts.variantIndex ?? 0) === 0 ? [...spec.imageUrls] : shuffled(spec.imageUrls);
+  return {
+    id,
+    groupName: spec.groupName ?? "Studio",
+    batchId: spec.batchId,
+    blueprintId: spec.blueprintId,
+    title: spec.productTitle,
+    imageUrls: ordered.slice(0, 10), // TikTok photo post 上限 10 张
+    caption: null,
+    hookText: spec.variant?.hook_text,
+    variant: spec.variant,
+    status: "generating",
+    errorMessage: null,
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+export function toVideoBatchTasks(spec: VideoJobSpec, opts: Omit<AdapterOptions, "id"> = {}): VideoBatchTask[] {
+  return Array.from({ length: clampCount(spec.count) }, () => toVideoBatchTask(spec, opts));
+}
+
+/** 按 spec.count 展开为 N 个 QuickGenImageTask */
+export function toQuickGenImageTasks(spec: ImageJobSpec, opts: Omit<AdapterOptions, "id"> = {}): QuickGenImageTask[] {
+  return Array.from({ length: clampCount(spec.count) }, () => toQuickGenImageTask(spec, opts));
+}
+
+/** 按 spec.count 展开为 N 个 SlideshowTask(每个变体独立洗牌图序) */
+export function toSlideshowTasks(spec: SlideshowJobSpec, opts: Omit<AdapterOptions, "id"> = {}): SlideshowTask[] {
+  return Array.from({ length: clampCount(spec.count) }, () => toSlideshowTask(spec, opts));
+}
+
+/** 按 spec.count 展开为 N 个 AiGenTask(变体差异靠生成端随机性;脚本层变体 S3 配方库) */
+export function toAiGenTasks(spec: AiGenJobSpec, opts: Omit<AdapterOptions, "id"> = {}): AiGenTask[] {
+  return Array.from({ length: clampCount(spec.count) }, () => toAiGenTask(spec, opts));
+}
+
+/**
+ * 按 spec.count 展开为 N 个 AssemblyTask。
+ * 音色是拼装腿变体间唯一差异轴(画面/台词/转场确定性),有放回随机会撞声线
+ * 产出实质重复成片(审查实锤)——按语言池洗牌后无放回轮转分配。
+ */
+export function toPhotoPostTasks(
+  spec: PhotoPostJobSpec,
+  opts: Omit<AdapterOptions, "id"> = {}
+): PhotoPostTask[] {
+  return Array.from({ length: clampCount(spec.count) }, (_, i) =>
+    toPhotoPostTask(spec, { ...opts, variantIndex: i })
+  );
+}
+
+export function toAssemblyTasks(
+  spec: AssemblyJobSpec,
+  opts: Omit<AdapterOptions, "id"> = {}
+): AssemblyTask[] {
+  const n = clampCount(spec.count);
+  if (spec.voiceId && spec.voiceId !== "random") {
+    // 用户显式指定音色:全部变体沿用
+    return Array.from({ length: n }, () => toAssemblyTask(spec, opts));
+  }
+  const language = detectLanguage(spec.scenes.map((s) => s.line).join(""));
+  const pool = PRESET_VOICES.filter((v) => v.lang === language);
+  const voiceIds = shuffled((pool.length > 0 ? pool : PRESET_VOICES).map((v) => v.id));
+  return Array.from({ length: n }, (_, i) =>
+    toAssemblyTask({ ...spec, voiceId: voiceIds[i % voiceIds.length] }, opts)
+  );
+}
+
+// ============================================================================
+// 批量矩阵展开(S3.4:蓝图抽屉「再出 N 条」——选中 hooks × 比例 × 音色轮转)
+// ============================================================================
+
+/** 矩阵格:单个变体的差异化参数(缺省=沿用基础 spec) */
+export interface MatrixCell {
+  hook?: { id: string; text: string };
+  aspect?: "9:16" | "16:9";
+}
+
+/**
+ * count 个变体的矩阵格(空维度=全部沿用基础值)。
+ * hook 逐格轮转,aspect 按 hook 整轮步进(floor(i/hooks)):两维同相位轮转
+ * 在维度长度有公因子时组合覆盖恒不全(2 hook×2 比例只走对角线,审查实锤),
+ * 步进保证 count ≥ hooks×aspects 时全组合覆盖。
+ */
+export function buildMatrixPlan(
+  count: number,
+  matrix?: { hooks?: Array<{ id: string; text: string }>; aspects?: Array<"9:16" | "16:9"> }
+): MatrixCell[] {
+  const hooks = (matrix?.hooks ?? []).filter((h) => h.text.trim());
+  const aspects = matrix?.aspects ?? [];
+  return Array.from({ length: clampCount(count) }, (_, i) => ({
+    hook: hooks.length > 0 ? hooks[i % hooks.length] : undefined,
+    aspect:
+      aspects.length > 0
+        ? aspects[(hooks.length > 0 ? Math.floor(i / hooks.length) : i) % aspects.length]
+        : undefined,
+  }));
+}
+
+/** hook 注入:替换 hook 镜(有 beat 认 beat,否则最小 idx 镜)台词 */
+function injectHookLine<T extends { idx: number; line: string; beat?: string }>(
+  scenes: T[],
+  hookText: string
+): T[] {
+  const byBeat = scenes.findIndex((s) => s.beat === "hook");
+  const minIdx = Math.min(...scenes.map((s) => s.idx));
+  const targetIdx = byBeat >= 0 ? scenes[byBeat].idx : minIdx;
+  return scenes.map((s) => (s.idx === targetIdx ? { ...s, line: hookText } : s));
+}
+
+function cellVariant(cell: MatrixCell): VariantInfo | undefined {
+  const v: VariantInfo = {
+    ...(cell.hook ? { hook_id: cell.hook.id, hook_text: cell.hook.text } : {}),
+    ...(cell.aspect ? { aspect: cell.aspect } : {}),
+  };
+  return Object.keys(v).length > 0 ? v : undefined;
+}
+
+/** 矩阵展开:AI 生成腿(hook 注入 hook 镜台词 + 比例轮转) */
+export function toAiGenTasksWithMatrix(spec: AiGenJobSpec, plan: MatrixCell[]): AiGenTask[] {
+  return plan.map((cell) =>
+    toAiGenTask({
+      ...spec,
+      count: 1,
+      scenes: cell.hook ? injectHookLine(spec.scenes, cell.hook.text) : spec.scenes,
+      aspectRatio: cell.aspect ?? spec.aspectRatio,
+      variant: cellVariant(cell),
+    })
+  );
+}
+
+/** 矩阵展开:拼装口播腿(hook 注入 + 比例轮转 + 音色无放回轮转) */
+export function toAssemblyTasksWithMatrix(
+  spec: AssemblyJobSpec,
+  plan: MatrixCell[]
+): AssemblyTask[] {
+  const language = detectLanguage(spec.scenes.map((s) => s.line).join(""));
+  const pool = PRESET_VOICES.filter((v) => v.lang === language);
+  const voiceIds = shuffled((pool.length > 0 ? pool : PRESET_VOICES).map((v) => v.id));
+  const explicitVoice = spec.voiceId && spec.voiceId !== "random" ? spec.voiceId : null;
+  return plan.map((cell, i) =>
+    toAssemblyTask({
+      ...spec,
+      count: 1,
+      scenes: cell.hook ? injectHookLine(spec.scenes, cell.hook.text) : spec.scenes,
+      aspectRatio: cell.aspect ?? spec.aspectRatio,
+      voiceId: explicitVoice ?? voiceIds[i % voiceIds.length],
+      variant: cellVariant(cell) ?? {},
+    })
+  );
+}
+
+/** 矩阵展开:图文帖腿(hook 作文案开头行;比例维度无意义,忽略) */
+export function toPhotoPostTasksWithMatrix(
+  spec: PhotoPostJobSpec,
+  plan: MatrixCell[]
+): PhotoPostTask[] {
+  return plan.map((cell, i) =>
+    toPhotoPostTask(
+      {
+        ...spec,
+        count: 1,
+        variant: cell.hook ? { hook_id: cell.hook.id, hook_text: cell.hook.text } : undefined,
+      },
+      { variantIndex: i }
+    )
+  );
+}
+
+/** 矩阵展开:幻灯片腿(hook 作文案关键词前缀 + 比例轮转;图序洗牌既有) */
+export function toSlideshowTasksWithMatrix(
+  spec: SlideshowJobSpec,
+  plan: MatrixCell[]
+): SlideshowTask[] {
+  return plan.map((cell) =>
+    toSlideshowTask({
+      ...spec,
+      count: 1,
+      prompt: cell.hook ? `${cell.hook.text};${spec.prompt}` : spec.prompt,
+      aspectRatio: cell.aspect ?? spec.aspectRatio,
+      variant: cellVariant(cell),
+    })
+  );
+}

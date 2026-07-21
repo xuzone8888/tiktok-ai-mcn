@@ -354,11 +354,17 @@ export async function POST(request: Request) {
       qualityLevel,
       source = "quick_gen",         // "quick_gen" | "batch_image"
       requestId,                    // 前端生成的 ID
+      batchId,                      // Studio 批次 ID(UUID,落 generations.batch_id)
       characterId,
       characterName,
       characterReferenceImages,
       characterAsset,
     } = body;
+    const normalizedBatchId =
+      typeof batchId === "string" &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(batchId.trim())
+        ? batchId.trim()
+        : null;
     const sanitizedCharacterAsset = sanitizeCharacterAsset(characterAsset);
     const normalizedCharacterReferenceImages = normalizeCharacterAssetImages(characterReferenceImages);
     const characterAssetReferenceUrls = sanitizedCharacterAsset
@@ -492,9 +498,11 @@ export async function POST(request: Request) {
     // 计算积分消耗
     // ============================================
     const creditCost = getNewImageCost(imageModel, imageResolution);
+    // 兜底 id 带随机后缀:并发提交同毫秒会撞裸 Date.now(),导致 task_id 重复、轮询串台
+    const taskIdSuffix = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
     const taskId = requestId || (modeValue === "upscale" || modeValue === "nine_grid"
-      ? `openai-${modeValue}-${Date.now()}`
-      : `openai-${Date.now()}`);
+      ? `openai-${modeValue}-${taskIdSuffix}`
+      : `openai-${taskIdSuffix}`);
     const generationId = crypto.randomUUID();
 
     // ============================================
@@ -551,6 +559,7 @@ export async function POST(request: Request) {
         id: generationId,
         user_id: authUserId,
         task_id: taskId,
+        ...(normalizedBatchId ? { batch_id: normalizedBatchId } : {}),
         type: "image",
         generation_type: "image",
         source,

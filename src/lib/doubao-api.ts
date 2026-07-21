@@ -22,12 +22,12 @@ const DOUBAO_ENDPOINT_ID = process.env.DOUBAO_ENDPOINT_ID || "";
 // 类型定义
 // ============================================================================
 
-interface DoubaoMessage {
+export interface DoubaoMessage {
   role: "system" | "user" | "assistant";
   content: string | DoubaoContentPart[];
 }
 
-interface DoubaoContentPart {
+export interface DoubaoContentPart {
   type: "text" | "image_url";
   text?: string;
   image_url?: {
@@ -184,7 +184,7 @@ async function waitForRateLimit(): Promise<void> {
 /**
  * 调用豆包 API 进行文本/图片理解（带重试机制）
  */
-async function callDoubaoAPI(
+export async function callDoubaoAPI(
   messages: DoubaoMessage[],
   options?: {
     maxTokens?: number;
@@ -235,6 +235,8 @@ async function callDoubaoAPI(
           "Authorization": `Bearer ${apiKey}`,
         },
         body: JSON.stringify(requestBody),
+        // 单次尝试 60s 上限:挂起连接不允许吃光调用方的时间预算(重试由外层 for 循环负责)
+        signal: AbortSignal.timeout(60_000),
       });
 
       if (!response.ok) {
@@ -366,7 +368,10 @@ async function callDoubaoAPI(
  * 将图片URL转换为base64格式
  * 豆包API对外部URL下载有超时限制，使用base64可以避免这个问题
  */
-async function imageUrlToBase64(url: string): Promise<string | null> {
+export async function imageUrlToBase64(
+  url: string,
+  opts?: { signal?: AbortSignal }
+): Promise<string | null> {
   try {
     // 如果已经是base64格式，直接返回
     if (url.startsWith("data:image")) {
@@ -390,6 +395,7 @@ async function imageUrlToBase64(url: string): Promise<string | null> {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
       },
       redirect: "follow",
+      signal: opts?.signal,
     });
 
     if (!response.ok) {

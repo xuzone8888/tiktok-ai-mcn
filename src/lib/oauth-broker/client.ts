@@ -38,16 +38,34 @@ function redact(message: string): string {
   const secret = process.env.BROKER_SECRET
   if (secret) out = out.split(secret).join('[redacted]')
   return out
+    .replace(/Bearer\s+[^\s,;]+/gi, 'Bearer [redacted]')
+    .replace(/\b(access_token|authorization|client_secret|refresh_token|token|secret|code)=([^\s&]+)/gi, '$1=[redacted]')
+    .replace(/https?:\/\/[^\s]+/gi, '[redacted-url]')
+    .replace(/[\u0000-\u001f\u007f]+/g, ' ')
+    .trim()
+    .slice(0, 240)
 }
 
 type BrokerResponse<T> =
   | { ok: true; result: T }
-  | { ok: false; error: string; httpStatus: number | null }
+  | {
+      ok: false
+      error: string
+      httpStatus: number | null
+      code?: string | null
+      retryable?: boolean
+      retryAfter?: string | null
+    }
+
+interface BrokerCallOptions {
+  timeoutMs?: number
+}
 
 export async function callBroker<T>(
   platform: BrokerPlatform,
   op: string,
   args: Record<string, unknown>,
+  options: BrokerCallOptions = {},
 ): Promise<T> {
   const secret = process.env.BROKER_SECRET
   if (!secret) {
@@ -56,7 +74,10 @@ export async function callBroker<T>(
   }
 
   const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), BROKER_TIMEOUT_MS)
+  const timeoutMs = Number.isFinite(options.timeoutMs) && Number(options.timeoutMs) > 0
+    ? Math.min(Math.floor(Number(options.timeoutMs)), 120_000)
+    : BROKER_TIMEOUT_MS
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
   let response: Response
   try {
     response = await fetch(brokerEndpoint(), {
@@ -93,9 +114,17 @@ export async function callBroker<T>(
   }
 
   // Meta/Google 真的拒了：还原成带 httpStatus 的 Error，让上层 expired 判定继续生效。
-  const error = new Error(redact(data.error || 'OAuth broker call failed')) as Error & { httpStatus?: number }
+  const error = new Error(redact(data.error || 'OAuth broker call failed')) as Error & {
+    httpStatus?: number
+    code?: string
+    retryable?: boolean
+    retryAfter?: string | null
+  }
   if (typeof data.httpStatus === 'number') {
     error.httpStatus = data.httpStatus
   }
+  if (typeof data.code === 'string' && data.code) error.code = data.code
+  if (typeof data.retryable === 'boolean') error.retryable = data.retryable
+  if (typeof data.retryAfter === 'string' || data.retryAfter === null) error.retryAfter = data.retryAfter
   throw error
 }

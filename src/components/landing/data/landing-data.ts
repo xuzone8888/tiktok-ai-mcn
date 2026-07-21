@@ -300,7 +300,7 @@ export const footerLinks = {
     product: [
         { label: "角色市场", href: "/models" },
         { label: "单图生成", href: "/quick-gen" },
-        { label: "素材生成视频", href: "/pro-studio/video-batch" },
+        { label: "创作工作台", href: "/studio" },
     ],
     support: [
         { label: "价格方案", href: "/pricing" },
@@ -324,7 +324,9 @@ export type CharacterStyle = "realistic" | "anime" | "3d" | "illustration";
 export interface CharacterShowcaseItem {
     id: number;
     name: string;
+    nameEn: string;
     role: string;
+    roleEn: string;
     style: CharacterStyle;
     src: string;
 }
@@ -339,25 +341,25 @@ export const styleFilters: readonly { id: CharacterStyle | "all"; label: string 
 
 export const characterShowcase: CharacterShowcaseItem[] = [
     // 写实 ×4
-    { id: 1,  name: "Emily",  role: "时尚博主", style: "realistic",    src: "/images/landing/char-realistic-1.png" },
-    { id: 2,  name: "Marco",  role: "美食探店", style: "realistic",    src: "/images/landing/char-realistic-2.png" },
-    { id: 3,  name: "Sophie", role: "旅行达人", style: "realistic",    src: "/images/landing/char-realistic-3.png" },
-    { id: 4,  name: "James",  role: "商务讲解", style: "realistic",    src: "/images/landing/char-realistic-4.png" },
+    { id: 1,  name: "Emily",  nameEn: "Emily",  role: "时尚博主", roleEn: "Fashion Blogger",     style: "realistic",    src: "/images/landing/char-realistic-1.png" },
+    { id: 2,  name: "Marco",  nameEn: "Marco",  role: "美食探店", roleEn: "Food Explorer",       style: "realistic",    src: "/images/landing/char-realistic-2.png" },
+    { id: 3,  name: "Sophie", nameEn: "Sophie", role: "旅行达人", roleEn: "Travel Vlogger",      style: "realistic",    src: "/images/landing/char-realistic-3.png" },
+    { id: 4,  name: "James",  nameEn: "James",  role: "商务讲解", roleEn: "Business Host",        style: "realistic",    src: "/images/landing/char-realistic-4.png" },
     // 动漫 ×4
-    { id: 5,  name: "小柚",   role: "二次元科普", style: "anime",      src: "/images/landing/char-anime-1.png" },
-    { id: 6,  name: "星河",   role: "虚拟偶像",   style: "anime",      src: "/images/landing/char-anime-2.png" },
-    { id: 7,  name: "零",     role: "游戏解说",   style: "anime",      src: "/images/landing/char-anime-3.png" },
-    { id: 8,  name: "樱",     role: "日语教学",   style: "anime",      src: "/images/landing/char-anime-4.png" },
+    { id: 5,  name: "小柚",   nameEn: "Yuzu",    role: "二次元科普", roleEn: "Anime Explainer",   style: "anime",      src: "/images/landing/char-anime-1.png" },
+    { id: 6,  name: "星河",   nameEn: "Galaxy",  role: "虚拟偶像",   roleEn: "Virtual Idol",       style: "anime",      src: "/images/landing/char-anime-2.png" },
+    { id: 7,  name: "零",     nameEn: "Zero",    role: "游戏解说",   roleEn: "Game Commentator",   style: "anime",      src: "/images/landing/char-anime-3.png" },
+    { id: 8,  name: "樱",     nameEn: "Sakura",  role: "日语教学",   roleEn: "Japanese Tutor",     style: "anime",      src: "/images/landing/char-anime-4.png" },
     // 3D ×4
-    { id: 9,  name: "Nova",   role: "科技评测", style: "3d",           src: "/images/landing/char-3d-1.png" },
-    { id: 10, name: "Luna",   role: "品牌代言", style: "3d",           src: "/images/landing/char-3d-2.png" },
-    { id: 11, name: "Bolt",   role: "体育解说", style: "3d",           src: "/images/landing/char-3d-3.png" },
-    { id: 12, name: "Aria",   role: "音乐推荐", style: "3d",           src: "/images/landing/char-3d-4.png" },
+    { id: 9,  name: "Nova",   nameEn: "Nova",   role: "科技评测", roleEn: "Tech Reviewer",        style: "3d",           src: "/images/landing/char-3d-1.png" },
+    { id: 10, name: "Luna",   nameEn: "Luna",   role: "品牌代言", roleEn: "Brand Ambassador",     style: "3d",           src: "/images/landing/char-3d-2.png" },
+    { id: 11, name: "Bolt",   nameEn: "Bolt",   role: "体育解说", roleEn: "Sports Commentator",   style: "3d",           src: "/images/landing/char-3d-3.png" },
+    { id: 12, name: "Aria",   nameEn: "Aria",   role: "音乐推荐", roleEn: "Music Curator",        style: "3d",           src: "/images/landing/char-3d-4.png" },
     // 插画 ×4
-    { id: 13, name: "墨墨",   role: "绘本故事", style: "illustration", src: "/images/landing/char-illust-1.png" },
-    { id: 14, name: "圆圆",   role: "儿童教育", style: "illustration", src: "/images/landing/char-illust-2.png" },
-    { id: 15, name: "豆子",   role: "生活Vlog", style: "illustration", src: "/images/landing/char-illust-3.png" },
-    { id: 16, name: "阿花",   role: "手绘教程", style: "illustration", src: "/images/landing/char-illust-4.png" },
+    { id: 13, name: "墨墨",   nameEn: "Momo",    role: "绘本故事", roleEn: "Storybook Host",       style: "illustration", src: "/images/landing/char-illust-1.png" },
+    { id: 14, name: "圆圆",   nameEn: "Yoyo",    role: "儿童教育", roleEn: "Kids Educator",        style: "illustration", src: "/images/landing/char-illust-2.png" },
+    { id: 15, name: "豆子",   nameEn: "Beans",   role: "生活Vlog", roleEn: "Lifestyle Vlogger",    style: "illustration", src: "/images/landing/char-illust-3.png" },
+    { id: 16, name: "阿花",   nameEn: "Hana",    role: "手绘教程", roleEn: "Drawing Tutor",        style: "illustration", src: "/images/landing/char-illust-4.png" },
 ];
 
 // ============================================
@@ -450,7 +452,7 @@ export const footerLinksEn = {
     product: [
         { label: "Character Market",  href: "/models" },
         { label: "Single Image Gen",  href: "/quick-gen" },
-        { label: "Video Batch Gen",   href: "/pro-studio/video-batch" },
+        { label: "Creation Studio",   href: "/studio" },
     ],
     support: [
         { label: "Pricing",     href: "/pricing" },

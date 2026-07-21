@@ -78,6 +78,7 @@ export interface FacebookPublishTaskItem {
   title: string
   description: string | null
   facebook_video_id: string | null
+  facebook_post_id: string | null
   facebook_watch_url: string | null
   status: 'pending' | 'uploading' | 'processing' | 'published' | 'draft_created' | 'failed' | 'cancelled'
   error_code: string | null

@@ -207,6 +207,7 @@ def generate_slideshow(
     transition: str = "fade",
     music_path: str = None,
     subtitle: dict = None,  # {text, position, fontSize, fontColor, voiceDuration}
+    kenburns: bool = False,
 ):
     """
     生成轮播视频
@@ -226,7 +227,12 @@ def generate_slideshow(
     if not images:
         print("Error: No images provided")
         return False
-    
+
+    # ken-burns 依赖 filter_complex 路径,无转场模式强制升级为 fade 路径
+    if kenburns and transition == "none":
+        print("[Slideshow] kenburns enabled: transition 'none' upgraded to 'fade'")
+        transition = "fade"
+
     # 智能调整视频时长：确保配音能完整播放
     # 配音延迟 1 秒 + 配音时长 + 0.5 秒缓冲
     VOICE_DELAY = 1.0
@@ -290,7 +296,8 @@ def generate_slideshow(
         else:
             # 使用转场效果 - 支持多种 xfade 效果
             cmd = build_fade_slideshow_cmd(
-                processed_images, output_path, duration_per_image, music_path, subtitle, transition, work_dir
+                processed_images, output_path, duration_per_image, music_path, subtitle, transition, work_dir,
+                kenburns=kenburns, aspect_ratio=aspect_ratio
             )
         
         # Step 3: 执行 FFmpeg
@@ -1326,26 +1333,50 @@ def build_simple_slideshow_cmd(images: list, output: str, duration: float, music
     return cmd
 
 
-def build_fade_slideshow_cmd(images: list, output: str, duration: float, music: str = None, subtitle: dict = None, transition: str = "fade", work_dir: str = None):
-    """构建转场轮播命令 - 支持多种转场效果"""
+def build_fade_slideshow_cmd(images: list, output: str, duration: float, music: str = None, subtitle: dict = None, transition: str = "fade", work_dir: str = None, kenburns: bool = False, aspect_ratio: str = "9:16"):
+    """构建转场轮播命令 - 支持多种转场效果(可选 ken-burns 运镜)"""
     # 如果没有 work_dir，从图片路径派生
     if not work_dir:
         work_dir = os.path.dirname(images[0])
-    
+
     fade_duration = 0.5  # 转场时长
-    
+
     # 输入文件
     inputs = []
     for img in images:
         inputs.extend(["-loop", "1", "-t", str(duration), "-i", img])
-    
+
     # 构建 filter_complex
     n = len(images)
     filters = []
-    
-    # 设置帧率
-    for i in range(n):
-        filters.append(f"[{i}:v]fps=30,format=yuv420p[v{i}]")
+
+    if kenburns:
+        # ken-burns 运镜:先 2x 放大(防 zoompan 抖动)再 zoompan,四种运镜按图序轮换
+        kb_w, kb_h = RESOLUTIONS.get(aspect_ratio, RESOLUTIONS["9:16"])
+        kb_frames = max(int(round(duration * 30)), 1)
+        for i in range(n):
+            variant = i % 4
+            if variant == 0:    # 中心推近
+                z = f"1+0.10*on/{kb_frames}"
+                x, y = "iw/2-(iw/zoom/2)", "ih/2-(ih/zoom/2)"
+            elif variant == 1:  # 中心拉远
+                z = f"1.10-0.10*on/{kb_frames}"
+                x, y = "iw/2-(iw/zoom/2)", "ih/2-(ih/zoom/2)"
+            elif variant == 2:  # 轻推 + 左→右平移
+                z = "1.08"
+                x, y = f"(iw-iw/zoom)*on/{kb_frames}", "ih/2-(ih/zoom/2)"
+            else:               # 轻推 + 上→下平移
+                z = "1.08"
+                x, y = "iw/2-(iw/zoom/2)", f"(ih-ih/zoom)*on/{kb_frames}"
+            filters.append(
+                f"[{i}:v]fps=30,scale={kb_w*2}:{kb_h*2}:flags=lanczos,"
+                f"zoompan=z='{z}':x='{x}':y='{y}':d=1:s={kb_w}x{kb_h}:fps=30,"
+                f"format=yuv420p[v{i}]"
+            )
+    else:
+        # 设置帧率
+        for i in range(n):
+            filters.append(f"[{i}:v]fps=30,format=yuv420p[v{i}]")
     
     # 添加淡入淡出
     if n == 1:
@@ -1551,6 +1582,7 @@ def main():
                  "radial", "smoothleft", "smoothright", "fadeblack", "fadewhite"])
     parser.add_argument("--music", type=str, default=None, help="Background music path")
     parser.add_argument("--subtitle", type=str, default=None, help="Subtitle JSON: {text, position, fontSize, fontColor}")
+    parser.add_argument("--kenburns", action="store_true", help="Enable ken-burns motion (zoompan) per image")
     
     args = parser.parse_args()
     
@@ -1584,6 +1616,7 @@ def main():
             transition=args.transition,
             music_path=args.music,
             subtitle=subtitle,
+            kenburns=args.kenburns,
         )
         sys.exit(0 if success else 1)
 

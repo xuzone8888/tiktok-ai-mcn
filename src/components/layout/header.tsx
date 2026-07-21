@@ -164,7 +164,6 @@ export function Header({ initialUser = null }: { initialUser?: HeaderUser | null
   useEffect(() => {
     if (initialUser) {
       setLoading(false);
-      refreshServerCredits();
     } else {
       fetchUser();
     }
@@ -208,6 +207,7 @@ export function Header({ initialUser = null }: { initialUser?: HeaderUser | null
 
     // 定时刷新积分（每30秒）
     const intervalId = setInterval(() => {
+      if (document.visibilityState !== "visible") return;
       if (initialUser) {
         refreshServerCredits();
       } else {
@@ -215,9 +215,20 @@ export function Header({ initialUser = null }: { initialUser?: HeaderUser | null
       }
     }, 30000);
 
+    const handleVisibilityChange = () => {
+      if (document.visibilityState !== "visible") return;
+      if (initialUser) {
+        refreshServerCredits();
+      } else {
+        fetchUser();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
     return () => {
       subscription.unsubscribe();
       window.removeEventListener("credits-updated", handleCreditsUpdate);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
       clearInterval(intervalId);
     };
   }, []);

@@ -39,10 +39,21 @@ export interface YouTubeChannelInfo {
   viewCount: number
 }
 
+function resolveYouTubeRedirectUri(configuredRedirectUri: string | undefined): string | undefined {
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL
+  if (process.env.NODE_ENV !== 'production' || !appUrl) return configuredRedirectUri
+
+  try {
+    return new URL('/api/youtube/auth/callback', appUrl).toString()
+  } catch {
+    throw new Error('NEXT_PUBLIC_APP_URL must be a valid absolute URL in production.')
+  }
+}
+
 export function getYouTubeOAuthConfig(): YouTubeOAuthConfig {
   const clientId = process.env.YOUTUBE_CLIENT_ID || process.env.GOOGLE_CLIENT_ID
   const clientSecret = process.env.YOUTUBE_CLIENT_SECRET || process.env.GOOGLE_CLIENT_SECRET
-  const redirectUri = process.env.YOUTUBE_REDIRECT_URI || process.env.GOOGLE_REDIRECT_URI
+  const redirectUri = resolveYouTubeRedirectUri(process.env.YOUTUBE_REDIRECT_URI || process.env.GOOGLE_REDIRECT_URI)
 
   if (!clientId || !clientSecret || !redirectUri) {
     throw new Error('YouTube OAuth configuration is incomplete. Please set YOUTUBE_CLIENT_ID, YOUTUBE_CLIENT_SECRET, and YOUTUBE_REDIRECT_URI.')
@@ -55,6 +66,7 @@ export function getYouTubeOAuthConfig(): YouTubeOAuthConfig {
     scopes: [
       'https://www.googleapis.com/auth/youtube.upload',
       'https://www.googleapis.com/auth/youtube.readonly',
+      'https://www.googleapis.com/auth/youtube.force-ssl',
     ],
   }
 }
@@ -222,5 +234,5 @@ export function calculateYouTubeTokenExpiration(expiresIn: number): Date {
 }
 
 export function scopesToArray(scope: string | undefined): string[] {
-  return scope ? scope.split(/\s+/).filter(Boolean) : getYouTubeOAuthConfig().scopes
+  return scope ? scope.split(/\s+/).filter(Boolean) : []
 }

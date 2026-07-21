@@ -1,3 +1,5 @@
+const isProduction = process.env.NODE_ENV === 'production';
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // ESLint 配置 - 暂时跳过以确保构建成功
@@ -122,7 +124,9 @@ const nextConfig = {
         headers: [
           {
             key: 'Cache-Control',
-            value: 'public, max-age=31536000, immutable',
+            value: isProduction
+              ? 'public, max-age=31536000, immutable'
+              : 'no-store, max-age=0, must-revalidate',
           },
         ],
       },
@@ -174,6 +178,14 @@ const nextConfig = {
             key: 'Permissions-Policy',
             value: 'camera=(), microphone=(), geolocation=()',
           },
+          ...(!isProduction
+            ? [
+                {
+                  key: 'Clear-Site-Data',
+                  value: '"cache"',
+                },
+              ]
+            : []),
         ],
       },
     ];

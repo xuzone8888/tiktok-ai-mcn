@@ -14,6 +14,7 @@ import {
     getPresetMusicList,
 } from '@/lib/ffmpeg-slideshow';
 import { uploadBuffer } from '@/lib/oss';
+import { adjustProfileCredits, insertCreditTransaction } from '@/lib/video-models/credits';
 import { generateCaptions, generateTextOverlays, CaptionStyle, CaptionMode } from '@/lib/deepseek-api';
 import { textToSpeechWithTimestamps, WordTimestamp } from '@/lib/elevenlabs-api';
 import { doubaoTextToSpeechWithTimestamps } from '@/lib/doubao-tts-api';
@@ -24,6 +25,10 @@ import fs from 'fs/promises';
 import path from 'path';
 import os from 'os';
 import { spawn, execSync } from 'child_process';
+
+// 同步渲染长请求:下载图片+AI 文案+TTS+ffmpeg 合成,给足预算
+export const maxDuration = 300;
+export const dynamic = 'force-dynamic';
 
 // 请求类型 - 与前端 CreateSlideshowModal 配置对齐
 interface SlideshowRequest {
@@ -40,6 +45,17 @@ interface SlideshowRequest {
     aspectRatio: '9:16' | '16:9';
     durationPerImage?: number;
     transition: string;
+    // ken-burns 运镜(S1.2:worker/python 侧 S0.4 已支持,这里接线透传)
+    kenburns?: boolean;
+
+    // Studio 批次(S1.2):提供时按索引与视频一一对应,成片写 generations
+    // (task_id=clientTaskIds[i],batch_id=batchId),供入库/跨会话任务中心使用
+    clientTaskIds?: string[];
+    batchId?: string;
+    // 蓝图溯源 + 批量矩阵变体(S3.4):落 generations.spec(此前幻灯片腿不写
+    // spec/blueprint_id,「再跑一批」溯源断链——侦查记录的缺口)
+    blueprintId?: string;
+    variant?: { hook_id?: string; hook_text?: string; voice_id?: string; aspect?: string };
 
     // 新增：BGM 配置
     bgm?: {
@@ -230,11 +246,31 @@ export async function POST(req: NextRequest) {
             aspectRatio = '9:16',
             durationPerImage = 2,
             transition = 'fade',
+            kenburns = false,
             bgm,
             voice,
             aiCaption,
             subtitle,
+            clientTaskIds,
+            batchId,
+            blueprintId,
+            variant,
         } = body;
+        const normalizedBatchId =
+            typeof batchId === 'string' &&
+            /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(batchId.trim())
+                ? batchId.trim()
+                : null;
+        const normalizedBlueprintId =
+            typeof blueprintId === 'string' && blueprintId.trim() ? blueprintId.trim().slice(0, 64) : null;
+        // 变体快照键白名单(S3.4 批量矩阵)
+        const normalizedVariant: Record<string, string> = {};
+        if (variant && typeof variant === 'object') {
+            for (const key of ['hook_id', 'hook_text', 'voice_id', 'aspect'] as const) {
+                const v = (variant as Record<string, unknown>)[key];
+                if (typeof v === 'string' && v) normalizedVariant[key] = v.slice(0, 300);
+            }
+        }
 
         log('📋 REQUEST BODY', {
             mode,
@@ -700,6 +736,7 @@ export async function POST(req: NextRequest) {
                 aspectRatio,
                 durationPerImage,
                 transition,
+                kenburns,
             },
             musicPool,
             subtitleConfigs, // 传递字幕配置数组，每个视频使用对应的配置
@@ -756,6 +793,8 @@ export async function POST(req: NextRequest) {
 
         // 上传成功的视频到 OSS
         const videos: { url: string; cost: number }[] = [];
+        // 成功视频对应的原始 results 索引(与 clientTaskIds/generatedCaptions 对账)
+        const successIndices: number[] = [];
         let successCount = 0;
 
         for (let i = 0; i < results.length; i++) {
@@ -766,6 +805,7 @@ export async function POST(req: NextRequest) {
             if (result.success && result.videoUrl) {
                 console.log(`[Slideshow API] Video ${i + 1}: Worker URL = ${result.videoUrl}`);
                 videos.push({ url: result.videoUrl, cost: creditsPerVideo });
+                successIndices.push(i);
                 successCount++;
             } else if (result.success && result.videoPath) {
                 try {
@@ -776,6 +816,7 @@ export async function POST(req: NextRequest) {
                     const videoUrl = await uploadBuffer(videoBuffer, ossKey, 'video/mp4');
                     console.log(`[Slideshow API] Video ${i + 1} uploaded: ${videoUrl}`);
                     videos.push({ url: videoUrl, cost: creditsPerVideo });
+                    successIndices.push(i);
                     successCount++;
                     // 删除本地临时文件
                     await fs.unlink(result.videoPath).catch(() => { });
@@ -800,17 +841,96 @@ export async function POST(req: NextRequest) {
         }
         console.log(`[Slideshow API] 🧹 Cleaned ${tempDirsToClean.size} temp image dirs`);
 
-        // 扣除积分（原子操作）
+        // 扣除积分——直连扣费(乐观锁+流水,与统一视频网关同一原语)。
+        // 旧实现调 rpc('deduct_credits') 且不查错误,而该 RPC 从未在任何迁移中
+        // 定义过(生产 404),幻灯片渲染自上线起从未实际扣费(S2 脚本验收发现)。
         const actualCredits = successCount * creditsPerVideo;
         if (actualCredits > 0) {
             const adminSupabase = createAdminClient();
-            await adminSupabase.rpc('deduct_credits' as never, {
-                p_user_id: user.id,
-                p_amount: actualCredits,
-                p_description: `视频生成 - ${successCount}个视频`,
-                p_reference_type: 'slideshow_batch',
-                p_reference_id: crypto.randomUUID(),
-            } as never);
+            try {
+                const { before, after } = await adjustProfileCredits({
+                    supabase: adminSupabase,
+                    userId: user.id,
+                    delta: -actualCredits,
+                });
+                await insertCreditTransaction(adminSupabase, {
+                    userId: user.id,
+                    type: 'consume',
+                    amount: -actualCredits,
+                    balanceBefore: before,
+                    balanceAfter: after,
+                    taskId: clientTaskIds?.[0] ?? `slideshow-${Date.now()}`,
+                    description: `幻灯片成片 - ${successCount}个视频`,
+                    metadata: { reference_type: 'slideshow_batch', video_count: successCount },
+                });
+            } catch (chargeError) {
+                // 成片已交付,扣费失败必须响亮记录供人工对账(绝不再静默)
+                console.error(
+                    `[Slideshow API] ❌ 扣费失败需人工对账 user=${user.id} amount=${actualCredits}:`,
+                    chargeError
+                );
+            }
+        }
+
+        // Studio 批次:成片写 generations(入库/跨会话可见的前提;S1.2)
+        // 旧 image-slideshow 页不传 clientTaskIds,保持原「只活在 localStorage」语义
+        if (clientTaskIds && clientTaskIds.length > 0 && videos.length > 0) {
+            const nowIso = new Date().toISOString();
+            const rows = videos
+                .map((v, k) => {
+                    const originalIndex = successIndices[k];
+                    const clientTaskId = clientTaskIds[originalIndex];
+                    if (!clientTaskId) return null;
+                    return {
+                        user_id: user.id,
+                        task_id: clientTaskId,
+                        ...(normalizedBatchId ? { batch_id: normalizedBatchId } : {}),
+                        // S3.4:蓝图溯源+矩阵变体落 spec(「再跑一批」/任务中心溯源)
+                        spec: {
+                            render_mode: 'slideshow',
+                            ...(normalizedBlueprintId ? { blueprint_id: normalizedBlueprintId } : {}),
+                            ...(Object.keys(normalizedVariant).length > 0
+                                ? { variant: normalizedVariant }
+                                : {}),
+                        },
+                        type: 'video',
+                        generation_type: 'video',
+                        source: 'slideshow',
+                        prompt: generatedCaptions[originalIndex] || aiCaption?.keywords || null,
+                        model: 'slideshow',
+                        duration: Math.round(
+                            (imageGroups[originalIndex]?.length ?? 0) * durationPerImage
+                        ),
+                        aspect_ratio: aspectRatio,
+                        status: 'completed',
+                        progress: 100,
+                        result_url: v.url,
+                        video_url: v.url,
+                        output_url: v.url,
+                        credit_cost: creditsPerVideo,
+                        credits_used: creditsPerVideo,
+                        completed_at: nowIso,
+                        created_at: nowIso,
+                    };
+                })
+                .filter((row): row is NonNullable<typeof row> => row !== null);
+
+            if (rows.length > 0) {
+                const adminSupabase = createAdminClient();
+                let { error: genInsertError } = await adminSupabase
+                    .from('generations')
+                    .insert(rows as never);
+                if (genInsertError) {
+                    // 漂移降级:去 spec 重试一次(对齐 stitch 路由的降级链思路)
+                    const bare = rows.map(({ spec: _spec, ...rest }) => rest);
+                    const retry = await adminSupabase.from('generations').insert(bare as never);
+                    genInsertError = retry.error;
+                }
+                if (genInsertError) {
+                    // 不阻断响应:视频已渲染并扣费,落库失败只影响入库/任务中心
+                    console.error('[Slideshow API] generations insert failed:', genInsertError.message);
+                }
+            }
         }
 
         return NextResponse.json({

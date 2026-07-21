@@ -23,9 +23,9 @@ function trimTitle(value: string) {
   return truncateYouTubeTextByCharacters(value, YOUTUBE_TITLE_MAX_CHARACTERS)
 }
 
-function makeFallbackTitles(description: string, count: number, videoNames: string[]): GeneratedTitle[] {
+function makeFallbackTitles(description: string, count: number, videoNames: string[], language: 'zh' | 'en' = 'zh'): GeneratedTitle[] {
   const safeCount = Math.min(Math.max(count, 1), 50)
-  const base = sanitizeTitle(description) || 'YouTube 视频'
+  const base = sanitizeTitle(description) || (language === 'en' ? 'YouTube video' : 'YouTube 视频')
 
   return Array.from({ length: safeCount }, (_, index) => {
     const videoName = sanitizeTitle(videoNames[index] || '')
@@ -42,6 +42,8 @@ function makeFallbackTitles(description: string, count: number, videoNames: stri
 }
 
 export async function POST(request: NextRequest) {
+  let language: 'zh' | 'en' = 'zh'
+
   try {
     const supabase = await createClient()
     const { data: { user }, error: authError } = await supabase.auth.getUser()
@@ -52,7 +54,7 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json().catch(() => ({}))
     const description = typeof body.description === 'string' ? body.description.trim() : ''
-    const language = body.language === 'en' ? 'en' : 'zh'
+    language = body.language === 'en' ? 'en' : 'zh'
     const count = Number(body.count || 1)
     const videoNames = Array.isArray(body.videoNames)
       ? body.videoNames.filter((name: unknown): name is string => typeof name === 'string')
@@ -66,7 +68,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: '生成数量需在 1-50 之间' }, { status: 400 })
     }
 
-    const result = await generateTitles(description || videoNames[0] || 'YouTube 视频', count, language)
+    const fallbackBase = language === 'en' ? 'YouTube video' : 'YouTube 视频'
+    const result = await generateTitles(description || videoNames[0] || fallbackBase, count, language, "youtube")
     if (result.success && result.titles?.length) {
       return NextResponse.json({
         success: true,
@@ -85,18 +88,24 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       fallback: true,
-      warning: result.error
-        ? `AI 标题服务暂不可用：${result.error}。已使用本地标题。`
-        : 'AI 标题服务暂不可用，已使用本地标题。',
-      titles: makeFallbackTitles(description, count, videoNames),
+      warning: language === 'en'
+        ? (result.error
+            ? `AI title service is unavailable: ${result.error}. Local titles were used.`
+            : 'AI title service is unavailable. Local titles were used.')
+        : (result.error
+            ? `AI 标题服务暂不可用：${result.error}。已使用本地标题。`
+            : 'AI 标题服务暂不可用，已使用本地标题。'),
+      titles: makeFallbackTitles(description, count, videoNames, language),
     })
   } catch (error) {
     console.error('[YouTube Generate Titles] Error:', error)
-    const fallbackTitles = makeFallbackTitles('YouTube 视频', 1, [])
+    const fallbackTitles = makeFallbackTitles(language === 'en' ? 'YouTube video' : 'YouTube 视频', 1, [], language)
     return NextResponse.json({
       success: true,
       fallback: true,
-      warning: 'AI 标题服务暂不可用，已使用本地标题。',
+      warning: language === 'en'
+        ? 'AI title service is unavailable. Local titles were used.'
+        : 'AI 标题服务暂不可用，已使用本地标题。',
       titles: fallbackTitles,
     })
   }

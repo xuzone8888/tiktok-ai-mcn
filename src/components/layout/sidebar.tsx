@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import {
   LayoutDashboard,
@@ -13,19 +13,18 @@ import {
   Sparkles,
   Lock,
   Zap,
-  Link2,
   Images,
   Camera,
   Send,
-  Clapperboard,
   CreditCard,
   LayoutTemplate,
   ShoppingBag,
   Youtube,
   Share2,
   Instagram,
+  Loader2,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
@@ -35,7 +34,6 @@ import {
 } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { useLang } from "@/contexts/LangContext";
-import { isImageFactoryUiEnabled } from "@/lib/feature-flags";
 
 const CURRENT_YEAR = new Date().getFullYear();
 
@@ -43,10 +41,14 @@ const CURRENT_YEAR = new Date().getFullYear();
 // Types
 // ============================================================================
 
+interface SidebarProps {
+  showImageFactory?: boolean;
+}
+
 interface NavItem {
   title: string;
   href: string;
-  icon: React.ComponentType<{ className?: string }>;
+  icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
   description?: string;
   comingSoon?: boolean;
   comingSoonMessage?: string;
@@ -62,13 +64,23 @@ interface NavGroup {
 // Nav Data — bilingual via getNavGroups(lang)
 // ============================================================================
 
-function getNavGroups(lang: string): NavGroup[] {
+function getNavGroups(
+  lang: string,
+  showImageFactory: boolean
+): NavGroup[] {
   const t = lang === "en";
   return [
     // --- Top Level ---
     {
       header: null,
       items: [
+        {
+          title: "Studio",
+          href: "/studio",
+          icon: Sparkles,
+          description: t ? "Unified creation workspace" : "统一创作工作台",
+          beta: true,
+        },
         {
           title: t ? "Dashboard" : "数据总览",
           href: "/dashboard",
@@ -100,10 +112,10 @@ function getNavGroups(lang: string): NavGroup[] {
       header: t ? "Creative Studio" : "创作灵感",
       items: [
         {
-          title: t ? "Templates" : "模板中心",
+          title: t ? "Recipe Library" : "配方库",
           href: "/templates",
           icon: LayoutTemplate,
-          description: t ? "Discover templates" : "发现灵感模板",
+          description: t ? "Reusable content recipes" : "配方管理与灵感模板",
         },
       ],
     },
@@ -123,7 +135,7 @@ function getNavGroups(lang: string): NavGroup[] {
           icon: Images,
           description: t ? "Generate multiple images" : "多张图片同时生成",
         },
-        ...(isImageFactoryUiEnabled()
+        ...(showImageFactory
           ? [{
             title: t ? "Product Photo" : "商图精修",
             href: "/image-factory",
@@ -134,21 +146,10 @@ function getNavGroups(lang: string): NavGroup[] {
       ],
     },
     // --- Video Creation ---
+    // S4.4:「素材生成视频」(video-batch 大页)已消解并入 /studio,入口下线
     {
       header: t ? "Video Creation" : "视频制作",
       items: [
-        {
-          title: t ? "Batch Videos" : "素材生成视频",
-          href: "/pro-studio/video-batch",
-          icon: Clapperboard,
-          description: t ? "Generate multiple videos" : "多个视频同时生成",
-        },
-        {
-          title: t ? "Link to Video" : "链接生成视频",
-          href: "/link-video",
-          icon: Link2,
-          description: t ? "Generate video from URL" : "通过链接一键生成视频",
-        },
         {
           title: t ? "Image to Video" : "图片生成视频",
           href: "/pro-studio/image-slideshow",
@@ -176,45 +177,45 @@ function getNavGroups(lang: string): NavGroup[] {
           beta: true,
         },
         {
-          title: t ? "YouTube Accounts" : "YouTube 账号绑定",
+          title: t ? "YouTube Account Management" : "YouTube 账号管理",
           href: "/youtube-publish/accounts",
           icon: Youtube,
-          description: t ? "Connect YouTube channels" : "绑定 YouTube 发布频道",
+          description: t ? "Manage YouTube channels" : "管理 YouTube 发布频道",
           beta: true,
         },
         {
-          title: t ? "YouTube Publish" : "YouTube 视频发布",
+          title: t ? "YouTube Video Management" : "YouTube 视频管理",
           href: "/youtube-publish",
           icon: Youtube,
-          description: t ? "Publish to YouTube" : "发布视频到 YouTube",
+          description: t ? "Manage and publish YouTube videos" : "管理并发布 YouTube 视频",
           beta: true,
         },
         {
-          title: t ? "Facebook Accounts" : "Facebook 账号绑定",
+          title: t ? "Facebook Account Management" : "Facebook 账号管理",
           href: "/facebook-publish/accounts",
           icon: Share2,
-          description: t ? "Connect Facebook Pages" : "绑定 Facebook Page",
+          description: t ? "Manage Facebook Pages" : "管理 Facebook Page 与授权",
           beta: true,
         },
         {
-          title: t ? "Facebook Publish" : "Facebook 视频发布",
+          title: t ? "Facebook Video Management" : "Facebook 视频管理",
           href: "/facebook-publish",
           icon: Share2,
-          description: t ? "Publish to Facebook" : "发布视频到 Facebook",
+          description: t ? "Manage and publish Facebook videos" : "管理并发布 Facebook 视频",
           beta: true,
         },
         {
-          title: t ? "Instagram Accounts" : "Instagram 账号绑定",
+          title: t ? "Instagram Account Management" : "Instagram 账号管理",
           href: "/instagram-publish/accounts",
           icon: Instagram,
-          description: t ? "Connect Instagram accounts" : "绑定 Instagram 账号",
+          description: t ? "Manage Instagram accounts" : "管理 Instagram 账号与授权",
           beta: true,
         },
         {
-          title: t ? "Instagram Publish" : "Instagram 视频发布",
+          title: t ? "Instagram Video Management" : "Instagram 视频管理",
           href: "/instagram-publish",
           icon: Instagram,
-          description: t ? "Publish to Instagram" : "发布视频到 Instagram",
+          description: t ? "Manage and publish Instagram videos" : "管理并发布 Instagram 视频",
           beta: true,
         },
       ],
@@ -228,14 +229,12 @@ function getNavGroups(lang: string): NavGroup[] {
           href: "/shop-publish/accounts",
           icon: UserCheck,
           description: t ? "Connect TikTok Shop" : "绑定 TikTok Shop 账号",
-          beta: true,
         },
         {
           title: t ? "Shop Publish" : "TikTok Shop 带货发布",
           href: "/shop-publish",
           icon: ShoppingBag,
           description: t ? "Publish to TikTok Shop" : "发布带货视频到 TikTok Shop",
-          beta: true,
         },
       ],
     },
@@ -270,13 +269,21 @@ function getNavGroups(lang: string): NavGroup[] {
 // Sidebar Component
 // ============================================================================
 
-export function Sidebar() {
+export function Sidebar({
+  showImageFactory = false,
+}: SidebarProps) {
   const pathname = usePathname();
+  const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
+  const [pendingHref, setPendingHref] = useState<string | null>(null);
   const { toast } = useToast();
   const { lang } = useLang();
 
-  const navGroups = getNavGroups(lang);
+  const navGroups = getNavGroups(lang, showImageFactory);
+
+  useEffect(() => {
+    setPendingHref(null);
+  }, [pathname]);
 
   // Handle coming-soon item click
   const handleComingSoonClick = (item: NavItem) => {
@@ -290,6 +297,7 @@ export function Sidebar() {
   const renderNavItem = (item: NavItem, isActive: boolean) => {
     const Icon = item.icon;
     const isComingSoon = item.comingSoon;
+    const isNavigating = pendingHref === item.href && !isActive;
 
     // Coming Soon items — not clickable, soft display
     if (isComingSoon) {
@@ -343,6 +351,21 @@ export function Sidebar() {
       <Link
         key={item.href}
         href={item.href}
+        onMouseEnter={() => router.prefetch(item.href)}
+        onFocus={() => router.prefetch(item.href)}
+        onClick={(event) => {
+          if (
+            !isActive &&
+            event.button === 0 &&
+            !event.metaKey &&
+            !event.ctrlKey &&
+            !event.shiftKey &&
+            !event.altKey
+          ) {
+            setPendingHref(item.href);
+          }
+        }}
+        aria-busy={isNavigating}
         className={cn(
           "nav-interactive group relative flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium",
           "transition-all duration-300 ease-out",
@@ -351,10 +374,14 @@ export function Sidebar() {
             : "text-white/60 hover:bg-white/[0.05] hover:text-white hover:translate-x-1"
         )}
       >
-        {/* Active indicator - right neon bar */}
-        {isActive && (
-          <div className="absolute right-0 top-1/2 h-6 w-[3px] -translate-y-1/2 rounded-l-full bg-mermaid-cyan shadow-[0_0_10px_#00F2EA]" />
-        )}
+        {/* Keep the node mounted so pathname hydration cannot shift icon SVGs. */}
+        <div
+          aria-hidden="true"
+          className={cn(
+            "absolute right-0 top-1/2 h-6 w-[3px] -translate-y-1/2 rounded-l-full bg-mermaid-cyan shadow-[0_0_10px_#00F2EA] transition-opacity",
+            isActive ? "opacity-100" : "opacity-0"
+          )}
+        />
 
         <div
           className={cn(
@@ -364,7 +391,11 @@ export function Sidebar() {
               : "bg-white/[0.04] group-hover:bg-white/[0.1] text-white/70"
           )}
         >
-          <Icon className="h-4 w-4 transition-transform duration-300 group-hover:scale-110" />
+          {isNavigating ? (
+            <Loader2 className="h-4 w-4 animate-spin text-mermaid-cyan" />
+          ) : (
+            <Icon className="h-4 w-4 transition-transform duration-300 group-hover:scale-110" />
+          )}
         </div>
 
         {!collapsed && (
@@ -384,9 +415,13 @@ export function Sidebar() {
         )}
 
         {/* Hover glow effect */}
-        {isActive && (
-          <div className="absolute inset-0 -z-10 rounded-xl bg-mermaid-cyan/5 opacity-0 blur-xl transition-opacity group-hover:opacity-100" />
-        )}
+        <div
+          aria-hidden="true"
+          className={cn(
+            "absolute inset-0 -z-10 rounded-xl bg-mermaid-cyan/5 opacity-0 blur-xl transition-opacity",
+            isActive && "group-hover:opacity-100"
+          )}
+        />
       </Link>
     );
   };

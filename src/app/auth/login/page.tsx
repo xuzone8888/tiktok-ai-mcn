@@ -24,6 +24,14 @@ function LoginPageContent() {
   // 登录方式: password (邮箱登录) | phone (手机登录)
   const [loginMethod, setLoginMethod] = useState<"password" | "phone">("password");
 
+  // 手机验证码登录仅限中国大陆号码；英文模式强制回落到邮箱密码登录，
+  // 防止用户在中文下切到「验证码登录」再切英文后仍停留在手机表单（Tab 已隐藏但表单体未随之关闭）。
+  useEffect(() => {
+    if (lang === "en" && loginMethod === "phone") {
+      setLoginMethod("password");
+    }
+  }, [lang, loginMethod]);
+
   // 表单状态
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -457,27 +465,29 @@ function LoginPageContent() {
             <div className="flex-1 h-px bg-white/5" />
           </div>
 
-          {/* 药丸式 Tab 切换 */}
-          <div className="grid grid-cols-2 gap-1 mb-8 p-1 bg-black/40 rounded-xl relative">
-            <button
-              type="button"
-              onClick={() => setLoginMethod("password")}
-              className={`py-2.5 text-sm font-medium rounded-lg transition-all duration-300 z-10 ${
-                loginMethod === "password" ? "text-white bg-white/10 shadow-sm" : "text-white/40 hover:text-white/70 hover:bg-white/5"
-              }`}
-            >
-              {lang === "en" ? "Password" : "密码登录"}
-            </button>
-            <button
-              type="button"
-              onClick={() => setLoginMethod("phone")}
-              className={`py-2.5 text-sm font-medium rounded-lg transition-all duration-300 z-10 ${
-                loginMethod === "phone" ? "text-white bg-white/10 shadow-sm" : "text-white/40 hover:text-white/70 hover:bg-white/5"
-              }`}
-            >
-              {lang === "en" ? "Verification Code" : "验证码登录"}
-            </button>
-          </div>
+          {/* 药丸式 Tab 切换 — 手机验证码登录仅限中国大陆号码，英文模式下隐藏，只保留邮箱密码/Google 登录 */}
+          {lang !== "en" && (
+            <div className="grid grid-cols-2 gap-1 mb-8 p-1 bg-black/40 rounded-xl relative">
+              <button
+                type="button"
+                onClick={() => setLoginMethod("password")}
+                className={`py-2.5 text-sm font-medium rounded-lg transition-all duration-300 z-10 ${
+                  loginMethod === "password" ? "text-white bg-white/10 shadow-sm" : "text-white/40 hover:text-white/70 hover:bg-white/5"
+                }`}
+              >
+                密码登录
+              </button>
+              <button
+                type="button"
+                onClick={() => setLoginMethod("phone")}
+                className={`py-2.5 text-sm font-medium rounded-lg transition-all duration-300 z-10 ${
+                  loginMethod === "phone" ? "text-white bg-white/10 shadow-sm" : "text-white/40 hover:text-white/70 hover:bg-white/5"
+                }`}
+              >
+                验证码登录
+              </button>
+            </div>
+          )}
 
           {/* 表单主体 */}
           <form onSubmit={handleSubmit}>

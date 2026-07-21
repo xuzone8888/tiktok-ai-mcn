@@ -289,6 +289,98 @@ Return JSON: {"captions": ["script"]}`)
     }
 }
 
+// === 图文帖文案(S4.1) ===
+
+export interface GeneratePhotoPostCaptionsParams {
+    /** 商品标题 */
+    title: string;
+    /** 已勾选卖点 */
+    sellingPoints: string[];
+    /** 蓝图逐镜台词(可选,提供叙事脉络) */
+    sceneLines?: string[];
+    /** 用户额外创意方向(omnibox 输入框文字) */
+    direction?: string;
+    count: number;
+    language?: CaptionLanguage;
+}
+
+/**
+ * TikTok 图文帖文案:与 generateCaptions(TTS 口播,禁 emoji/#)语域相反——
+ * 图文帖文案是「发布时的正文」,鼓励 emoji、结尾带 3-6 个 hashtag,
+ * N 条之间切入角度必须不同(素材级去同质化,BLUEPRINT §六)。
+ */
+export async function generatePhotoPostCaptions({
+    title,
+    sellingPoints,
+    sceneLines,
+    direction,
+    count,
+    language = 'zh',
+}: GeneratePhotoPostCaptionsParams): Promise<string[]> {
+    if (!DEEPSEEK_API_KEY) {
+        throw new Error('DeepSeek API key not configured. Set DEEPSEEK_API_KEY in environment.');
+    }
+    const isZh = language === 'zh';
+    const systemMessage = isZh
+        ? `你是顶级 TikTok 图文帖(photo mode)文案撰稿人。
+规则:
+1. 只返回有效 JSON:{"captions": ["文案1", ...]},不要 markdown。
+2. 每条文案 60-200 字:第一行是抓人的钩子,中间自然带出卖点(像真人分享,不是广告词),结尾一个行动号召 + 3-6 个相关话题标签(#开头)。
+3. 允许并鼓励适度使用 emoji(每条 2-5 个),让排版有呼吸感(可用换行)。
+4. 生成 ${count} 条,彼此切入角度必须明显不同(痛点/场景/对比/清单/亲测)。`
+        : `You are a top-tier TikTok photo-post caption writer.
+Rules:
+1. Return ONLY valid JSON: {"captions": ["caption1", ...]}. No markdown.
+2. Each caption 40-120 words: hook first line, weave selling points naturally (authentic sharing tone, not ad copy), end with a CTA + 3-6 relevant hashtags.
+3. Use 2-5 emojis per caption; line breaks welcome.
+4. Generate ${count} captions with clearly different angles (pain point / scenario / comparison / listicle / personal review).`;
+    const contextLines = [
+        `${isZh ? '商品' : 'Product'}: ${title}`,
+        sellingPoints.length > 0
+            ? `${isZh ? '卖点' : 'Selling points'}: ${sellingPoints.join('; ')}`
+            : '',
+        sceneLines && sceneLines.length > 0
+            ? `${isZh ? '图片叙事顺序(参考)' : 'Image narrative (reference)'}: ${sceneLines.join(' / ')}`
+            : '',
+        direction ? `${isZh ? '用户创意方向(优先遵从)' : "User's direction (takes priority)"}: ${direction}` : '',
+    ].filter(Boolean);
+    const prompt = `${contextLines.join('\n')}\n\n${isZh ? `生成 ${count} 条图文帖文案。` : `Generate ${count} photo-post captions.`}\n${isZh ? '返回 JSON:{"captions": [...]}' : 'Return JSON: {"captions": [...]}'}`;
+
+    const response = await fetch(DEEPSEEK_API_BASE, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${DEEPSEEK_API_KEY}`,
+        },
+        body: JSON.stringify({
+            model: 'deepseek-chat',
+            messages: [
+                { role: 'system', content: systemMessage },
+                { role: 'user', content: prompt },
+            ],
+            response_format: { type: 'json_object' },
+            temperature: 0.9,
+            max_tokens: 2000,
+        }),
+        signal: AbortSignal.timeout(60_000),
+    });
+    if (!response.ok) {
+        const error = new Error(`DeepSeek API error: ${response.status}`) as DeepSeekError;
+        error.status = response.status;
+        throw error;
+    }
+    const data = await response.json();
+    const content = data.choices?.[0]?.message?.content;
+    if (!content) throw new Error('Empty response from DeepSeek API');
+    const parsed = JSON.parse(content);
+    const captions: string[] = Array.isArray(parsed.captions)
+        ? parsed.captions.filter((c: unknown): c is string => typeof c === 'string' && c.trim().length > 0)
+        : [];
+    if (captions.length === 0) throw new Error('No captions generated');
+    // 不足 count 时轮转补齐(与 generateCaptions diverse 模式同口径)
+    return Array.from({ length: count }, (_, i) => captions[i % captions.length].trim());
+}
+
 /**
  * 获取可用的文案风格列表
  */
