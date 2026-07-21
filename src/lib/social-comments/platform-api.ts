@@ -1,6 +1,7 @@
 import { getFacebookAppSecretProof } from '@/lib/facebook/oauth'
 import { instagramGraphHeaders } from '@/lib/instagram/graph-auth'
 import { getInstagramAuthMode } from '@/lib/instagram/oauth'
+import { BrokerTransportError, callBroker, isBrokerEnabled } from '@/lib/oauth-broker/client'
 import type { ExternalSocialComment, SocialCommentListResult, SocialPlatform } from '@/lib/social-comments/types'
 
 const YOUTUBE_COMMENT_THREADS_URL = 'https://www.googleapis.com/youtube/v3/commentThreads'
@@ -48,6 +49,46 @@ export class SocialCommentUnsupportedError extends SocialCommentApiError {
   constructor(platform: SocialPlatform, message: string) {
     super(platform, 'unsupported_platform_operation', message, 501, false)
     this.name = 'SocialCommentUnsupportedError'
+  }
+}
+
+const COMMENT_BROKER_TIMEOUT_MS = 60_000
+
+async function callCommentBroker<T>(
+  platform: Exclude<SocialPlatform, 'tiktok'>,
+  op: string,
+  args: Record<string, unknown>
+): Promise<T> {
+  try {
+    return await callBroker<T>(platform, op, args, { timeoutMs: COMMENT_BROKER_TIMEOUT_MS })
+  } catch (error) {
+    if (error instanceof BrokerTransportError) {
+      throw new SocialCommentApiError(
+        platform,
+        'provider_unreachable',
+        `${platform} comment service is temporarily unreachable through the overseas gateway.`,
+        503,
+        true
+      )
+    }
+
+    const brokerError = error && typeof error === 'object'
+      ? error as {
+          code?: unknown
+          httpStatus?: unknown
+          retryable?: unknown
+          retryAfter?: unknown
+        }
+      : null
+    const httpStatus = typeof brokerError?.httpStatus === 'number' ? brokerError.httpStatus : 500
+    throw new SocialCommentApiError(
+      platform,
+      typeof brokerError?.code === 'string' && brokerError.code ? brokerError.code : 'provider_error',
+      error instanceof Error ? error.message : `${platform} comment request failed.`,
+      httpStatus,
+      brokerError?.retryable === true,
+      typeof brokerError?.retryAfter === 'string' ? brokerError.retryAfter : null
+    )
   }
 }
 
@@ -281,6 +322,9 @@ export async function listYouTubeComments(
   token: CommentTokenContext,
   externalContentId: string
 ): Promise<SocialCommentListResult> {
+  if (isBrokerEnabled()) {
+    return callCommentBroker<SocialCommentListResult>('youtube', 'listYouTubeComments', { token, externalContentId })
+  }
   const comments: ExternalSocialComment[] = []
   let pageToken: string | null = null
   let topLevelCount = 0
@@ -372,6 +416,13 @@ export async function replyToYouTubeComment(
   parentExternalCommentId: string,
   message: string
 ): Promise<ExternalSocialComment> {
+  if (isBrokerEnabled()) {
+    return callCommentBroker<ExternalSocialComment>('youtube', 'replyToYouTubeComment', {
+      token,
+      parentExternalCommentId,
+      message,
+    })
+  }
   const params = new URLSearchParams({ part: 'snippet' })
   const response = await fetch(`${YOUTUBE_COMMENTS_URL}?${params.toString()}`, {
     method: 'POST',
@@ -516,6 +567,9 @@ export async function listInstagramComments(
   token: CommentTokenContext,
   externalContentId: string
 ): Promise<InstagramCommentListResult> {
+  if (isBrokerEnabled()) {
+    return callCommentBroker<InstagramCommentListResult>('instagram', 'listInstagramComments', { token, externalContentId })
+  }
   const fetchReplies = INSTAGRAM_AUTH_MODE !== 'instagram'
   const comments: ExternalSocialComment[] = []
   const topLevelComments: ExternalSocialComment[] = []
@@ -638,6 +692,14 @@ export async function replyToInstagramComment(
   externalContentId: string,
   message: string
 ): Promise<ExternalSocialComment> {
+  if (isBrokerEnabled()) {
+    return callCommentBroker<ExternalSocialComment>('instagram', 'replyToInstagramComment', {
+      token,
+      parentExternalCommentId,
+      externalContentId,
+      message,
+    })
+  }
   const response = await fetch(`${INSTAGRAM_GRAPH_URL}/${encodeURIComponent(parentExternalCommentId)}/replies`, {
     method: 'POST',
     cache: 'no-store',
@@ -779,6 +841,9 @@ export async function listFacebookComments(
   token: CommentTokenContext,
   externalContentId: string
 ): Promise<ExternalSocialComment[]> {
+  if (isBrokerEnabled()) {
+    return callCommentBroker<ExternalSocialComment[]>('facebook', 'listFacebookComments', { token, externalContentId })
+  }
   const comments: ExternalSocialComment[] = []
   let topLevelCount = 0
   let after: string | null = null
@@ -834,6 +899,14 @@ export async function replyToFacebookComment(
   externalContentId: string,
   message: string
 ): Promise<ExternalSocialComment> {
+  if (isBrokerEnabled()) {
+    return callCommentBroker<ExternalSocialComment>('facebook', 'replyToFacebookComment', {
+      token,
+      parentExternalCommentId,
+      externalContentId,
+      message,
+    })
+  }
   const accessToken = token.accessToken
   const body = new URLSearchParams({
     message,

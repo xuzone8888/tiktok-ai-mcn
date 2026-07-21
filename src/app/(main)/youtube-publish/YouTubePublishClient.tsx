@@ -30,12 +30,13 @@ import {
 import { useRouter } from "next/navigation"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
+import SocialCommentsClient from "@/components/social-comments/SocialCommentsClient"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import SocialCommentsClient from "@/components/social-comments/SocialCommentsClient"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { useLang } from "@/contexts/LangContext"
+import { usePersistedPublishTab, type PublishPageTab } from "@/hooks/use-persisted-publish-tab"
 import { useToast } from "@/hooks/use-toast"
 import { cn } from "@/lib/utils"
 import {
@@ -62,7 +63,7 @@ import {
   type YouTubeSelectedVideo,
 } from "@/types/youtube-publish"
 
-type TabType = "create" | "tasks" | "comments"
+type TabType = PublishPageTab
 type VideoSourceType = "upload" | "asset"
 type AccountSelectionMode = "accounts" | "groups"
 type MetadataContentMode = "same" | "different"
@@ -641,7 +642,7 @@ export default function YouTubePublishClient({ showCommentManagement, enableYouT
   const isEnglish = lang === "en"
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const [activeTab, setActiveTab] = useState<TabType>("create")
+  const [activeTab, setActiveTab] = usePersistedPublishTab(showCommentManagement)
   const effectiveActiveTab = showCommentManagement || activeTab !== "comments" ? activeTab : "create"
   const [videoSource, setVideoSource] = useState<VideoSourceType>("upload")
   const [accounts, setAccounts] = useState<YouTubeAccount[]>([])

@@ -40,7 +40,7 @@ import {
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
-import { useLang } from '@/contexts/LangContext'
+import SocialCommentsClient from '@/components/social-comments/SocialCommentsClient'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -58,8 +58,9 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
+import { useLang } from '@/contexts/LangContext'
+import { usePersistedPublishTab, type PublishPageTab } from '@/hooks/use-persisted-publish-tab'
 import { useToast } from '@/hooks/use-toast'
-import SocialCommentsClient from '@/components/social-comments/SocialCommentsClient'
 import { getInstagramPublishReconciliationDisplay } from '@/lib/instagram/publish-display'
 import type { PlatformPrivacyStatus, PlatformPublishConfig } from '@/lib/publish/platform-config'
 import {
@@ -85,7 +86,7 @@ const DEFAULT_MAX_FILE_SIZE = 4 * 1024 * 1024 * 1024
 const DEFAULT_MAX_FILE_SIZE_LABEL = '4GB'
 const MAX_VIDEOS = 40
 
-type TabType = 'create' | 'tasks' | 'comments'
+type TabType = PublishPageTab
 type VideoSourceType = 'upload' | 'asset'
 type PublishMode = 'now' | 'scheduled'
 type IntervalMode = '0' | '3' | '5' | '10' | '30' | '60' | '120' | '360' | '720' | '1440' | 'custom'
@@ -867,7 +868,7 @@ export function PlatformPublishPage({
   const fileInputRef = useRef<HTMLInputElement>(null)
   const privacyDropdownRef = useRef<HTMLDivElement>(null)
 
-  const [activeTab, setActiveTab] = useState<TabType>('create')
+  const [activeTab, setActiveTab] = usePersistedPublishTab(showCommentManagement)
   const [videoSource, setVideoSource] = useState<VideoSourceType>('upload')
   const [selectedVideos, setSelectedVideos] = useState<SelectedVideo[]>([])
   const [selectedAccounts, setSelectedAccounts] = useState<string[]>([])
