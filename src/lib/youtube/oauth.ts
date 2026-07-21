@@ -39,10 +39,21 @@ export interface YouTubeChannelInfo {
   viewCount: number
 }
 
+function resolveYouTubeRedirectUri(configuredRedirectUri: string | undefined): string | undefined {
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL
+  if (process.env.NODE_ENV !== 'production' || !appUrl) return configuredRedirectUri
+
+  try {
+    return new URL('/api/youtube/auth/callback', appUrl).toString()
+  } catch {
+    throw new Error('NEXT_PUBLIC_APP_URL must be a valid absolute URL in production.')
+  }
+}
+
 export function getYouTubeOAuthConfig(): YouTubeOAuthConfig {
   const clientId = process.env.YOUTUBE_CLIENT_ID || process.env.GOOGLE_CLIENT_ID
   const clientSecret = process.env.YOUTUBE_CLIENT_SECRET || process.env.GOOGLE_CLIENT_SECRET
-  const redirectUri = process.env.YOUTUBE_REDIRECT_URI || process.env.GOOGLE_REDIRECT_URI
+  const redirectUri = resolveYouTubeRedirectUri(process.env.YOUTUBE_REDIRECT_URI || process.env.GOOGLE_REDIRECT_URI)
 
   if (!clientId || !clientSecret || !redirectUri) {
     throw new Error('YouTube OAuth configuration is incomplete. Please set YOUTUBE_CLIENT_ID, YOUTUBE_CLIENT_SECRET, and YOUTUBE_REDIRECT_URI.')
