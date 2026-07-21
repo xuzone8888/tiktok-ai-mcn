@@ -39,6 +39,18 @@ export interface YouTubeChannelInfo {
   viewCount: number
 }
 
+export class YouTubeOAuthTokenExchangeError extends Error {
+  code: string
+  httpStatus: number
+
+  constructor(code: string, message: string, httpStatus: number) {
+    super(`YouTube OAuth token exchange failed: ${code}: ${message}`)
+    this.name = 'YouTubeOAuthTokenExchangeError'
+    this.code = code
+    this.httpStatus = httpStatus
+  }
+}
+
 function resolveYouTubeRedirectUri(configuredRedirectUri: string | undefined): string | undefined {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL
   if (process.env.NODE_ENV !== 'production' || !appUrl) return configuredRedirectUri
@@ -84,10 +96,9 @@ export function generateYouTubeState(userId: string): string {
 export function buildYouTubeAuthorizationUrl(userId: string): {
   authUrl: string
   state: string
-  codeVerifier: string
+  codeVerifier: null
 } {
   const config = getYouTubeOAuthConfig()
-  const { codeVerifier, codeChallenge } = generateYouTubePKCE()
   const state = generateYouTubeState(userId)
 
   const params = new URLSearchParams({
@@ -99,14 +110,12 @@ export function buildYouTubeAuthorizationUrl(userId: string): {
     access_type: 'offline',
     include_granted_scopes: 'true',
     prompt: 'consent',
-    code_challenge: codeChallenge,
-    code_challenge_method: 'S256',
   })
 
   return {
     authUrl: `${GOOGLE_AUTH_URL}?${params.toString()}`,
     state,
-    codeVerifier,
+    codeVerifier: null,
   }
 }
 
@@ -133,12 +142,11 @@ export async function exchangeYouTubeCodeForToken(code: string, codeVerifier?: s
 
   const data = await response.json().catch(() => null) as Record<string, unknown> | null
   if (!response.ok) {
+    const code = typeof data?.error === 'string' ? data.error : 'token_exchange_failed'
     const message = typeof data?.error_description === 'string'
       ? data.error_description
-      : typeof data?.error === 'string'
-        ? data.error
-        : await response.text().catch(() => 'Token exchange failed')
-    throw new Error(`YouTube OAuth token exchange failed: ${message}`)
+      : 'Token exchange failed'
+    throw new YouTubeOAuthTokenExchangeError(code, message, response.status)
   }
 
   if (!data || typeof data.access_token !== 'string') {

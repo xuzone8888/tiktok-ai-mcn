@@ -20,6 +20,7 @@ const INSTAGRAM_GRAPH_URL = INSTAGRAM_AUTH_MODE === 'instagram'
   : `https://graph.facebook.com/${INSTAGRAM_API_VERSION}`
 const INSTAGRAM_PAGE_SIZE = 50
 const INSTAGRAM_NATIVE_COMMENT_FIELDS = 'from,text'
+const INSTAGRAM_NATIVE_REPLY_FIELDS = 'from,text'
 const INSTAGRAM_FACEBOOK_COMMENT_FIELDS = 'id,text,from{id,username},timestamp,like_count,hidden,replies{id,text,from{id,username},timestamp,like_count,hidden}'
 const INSTAGRAM_FACEBOOK_REPLY_FIELDS = 'id,text,from{id,username},timestamp,like_count,hidden'
 export const INSTAGRAM_COMMENT_SYNC_LIMITS = {
@@ -491,7 +492,8 @@ async function listRemainingInstagramReplies(
   externalContentId: string,
   parentExternalCommentId: string,
   embeddedReplies: any[],
-  repliesEdge: any
+  repliesEdge: any,
+  options: { fetchFirstPage?: boolean; fields?: string } = {}
 ): Promise<{ comments: ExternalSocialComment[]; truncated: boolean }> {
   const comments: ExternalSocialComment[] = []
   const seen = new Set<string>()
@@ -513,19 +515,20 @@ async function listRemainingInstagramReplies(
   let after = readMetaAfterCursor(repliesEdge)
   let truncated = comments.length >= INSTAGRAM_COMMENT_SYNC_LIMITS.repliesPerComment && hasNext
   const seenCursors = new Set<string>()
+  let fetchFirstPage = options.fetchFirstPage === true
 
-  while (hasNext && !truncated) {
-    if (!after || seenCursors.has(after)) {
+  while ((fetchFirstPage || hasNext) && !truncated) {
+    if (!fetchFirstPage && (!after || seenCursors.has(after))) {
       truncated = true
       break
     }
-    seenCursors.add(after)
+    if (!fetchFirstPage && after) seenCursors.add(after)
 
     const params = new URLSearchParams({
-      fields: INSTAGRAM_FACEBOOK_REPLY_FIELDS,
+      fields: options.fields || INSTAGRAM_FACEBOOK_REPLY_FIELDS,
       limit: String(INSTAGRAM_PAGE_SIZE),
-      after,
     })
+    if (!fetchFirstPage && after) params.set('after', after)
     const response = await fetch(`${INSTAGRAM_GRAPH_URL}/${encodeURIComponent(parentExternalCommentId)}/replies?${params.toString()}`, {
       cache: 'no-store',
       headers: instagramGraphHeaders(token.accessToken),
@@ -537,6 +540,7 @@ async function listRemainingInstagramReplies(
     }
 
     const data = await readJson(response)
+    fetchFirstPage = false
     const pageReplies = Array.isArray(data?.data) ? data.data : []
     for (let index = 0; index < pageReplies.length; index += 1) {
       if (!append(pageReplies[index])) {
@@ -570,7 +574,7 @@ export async function listInstagramComments(
   if (isBrokerEnabled()) {
     return callCommentBroker<InstagramCommentListResult>('instagram', 'listInstagramComments', { token, externalContentId })
   }
-  const fetchReplies = INSTAGRAM_AUTH_MODE !== 'instagram'
+  let repliesFetched = true
   const comments: ExternalSocialComment[] = []
   const topLevelComments: ExternalSocialComment[] = []
   const seenTopLevelComments = new Set<string>()
@@ -583,7 +587,7 @@ export async function listInstagramComments(
 
   do {
     const params = new URLSearchParams({
-      fields: fetchReplies ? INSTAGRAM_FACEBOOK_COMMENT_FIELDS : INSTAGRAM_NATIVE_COMMENT_FIELDS,
+      fields: INSTAGRAM_AUTH_MODE === 'instagram' ? INSTAGRAM_NATIVE_COMMENT_FIELDS : INSTAGRAM_FACEBOOK_COMMENT_FIELDS,
       limit: String(INSTAGRAM_PAGE_SIZE),
     })
     if (after) params.set('after', after)
@@ -615,24 +619,37 @@ export async function listInstagramComments(
       topLevelCount += 1
       mappedCount += 1
 
-      if (!fetchReplies) {
-        topLevelComments.push(mapped)
-        comments.push(mapped)
-        continue
-      }
-
       const embeddedReplies = Array.isArray(comment?.replies?.data) ? comment.replies.data : []
-      const replies = await listRemainingInstagramReplies(
-        token,
-        externalContentId,
-        mapped.external_comment_id,
-        embeddedReplies,
-        comment?.replies
-      )
+      let replies: { comments: ExternalSocialComment[]; truncated: boolean }
+      try {
+        replies = await listRemainingInstagramReplies(
+          token,
+          externalContentId,
+          mapped.external_comment_id,
+          embeddedReplies,
+          comment?.replies,
+          {
+            fetchFirstPage: INSTAGRAM_AUTH_MODE === 'instagram',
+            fields: INSTAGRAM_AUTH_MODE === 'instagram' ? INSTAGRAM_NATIVE_REPLY_FIELDS : INSTAGRAM_FACEBOOK_REPLY_FIELDS,
+          }
+        )
+      } catch (error) {
+        if (
+          INSTAGRAM_AUTH_MODE === 'instagram'
+          && error instanceof SocialCommentApiError
+          && (error.httpStatus === 400 || error.httpStatus === 403)
+        ) {
+          repliesFetched = false
+          replies = { comments: [], truncated: false }
+        } else {
+          throw error
+        }
+      }
       mapped.reply_count = Math.max(mapped.reply_count, replies.comments.length)
       mapped.metadata = {
         ...(mapped.metadata || {}),
-        pagination_complete: !replies.truncated,
+        pagination_complete: repliesFetched && !replies.truncated,
+        replies_fetched: repliesFetched,
         truncated: replies.truncated,
         reply_limit: INSTAGRAM_COMMENT_SYNC_LIMITS.repliesPerComment,
       }
@@ -656,17 +673,24 @@ export async function listInstagramComments(
   } while (after)
 
   for (const comment of topLevelComments) {
-    const replyTruncated = fetchReplies && comment.metadata?.truncated === true
+    const replyTruncated = repliesFetched && comment.metadata?.truncated === true
     comment.metadata = {
       ...(comment.metadata || {}),
-      pagination_complete: fetchReplies && !topLevelTruncated && !replyTruncated,
+      pagination_complete: repliesFetched && !topLevelTruncated && !replyTruncated,
       top_level_pagination_complete: !topLevelTruncated,
-      replies_fetched: fetchReplies,
+      replies_fetched: repliesFetched,
       truncated: topLevelTruncated || replyTruncated,
       top_level_limit: INSTAGRAM_COMMENT_SYNC_LIMITS.topLevel,
       provider_raw_count: providerRawCount,
       mapped_count: mappedCount,
     }
+  }
+
+  let threadCompleteness: 'complete' | 'incomplete' | 'truncated' = 'complete'
+  if (topLevelTruncated || topLevelComments.some((comment) => comment.metadata?.truncated === true)) {
+    threadCompleteness = 'truncated'
+  } else if (!repliesFetched) {
+    threadCompleteness = 'incomplete'
   }
 
   return {
@@ -675,13 +699,9 @@ export async function listInstagramComments(
       provider_raw_count: providerRawCount,
       mapped_count: mappedCount,
       top_level_pagination_complete: !topLevelTruncated,
-      replies_fetched: fetchReplies,
+      replies_fetched: repliesFetched,
       truncated: topLevelTruncated || topLevelComments.some((comment) => comment.metadata?.truncated === true),
-      thread_completeness: topLevelTruncated || topLevelComments.some((comment) => comment.metadata?.truncated === true)
-        ? 'truncated'
-        : !fetchReplies
-          ? 'incomplete'
-          : 'complete',
+      thread_completeness: threadCompleteness,
     },
   }
 }

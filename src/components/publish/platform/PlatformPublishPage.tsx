@@ -1697,6 +1697,7 @@ export function PlatformPublishPage({
         <SocialCommentsClient
           platformLock={config.platform}
           embedded
+          initialSyncEnabled={config.platform === 'facebook'}
           instagramReplyEnabled={instagramReplyEnabled}
         />
       ) : (
