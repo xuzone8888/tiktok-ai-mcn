@@ -8,5 +8,5 @@ export default function FacebookCommentsPage() {
     notFound()
   }
 
-  return <SocialCommentsClient platformLock="facebook" />
+  return <SocialCommentsClient platformLock="facebook" initialSyncEnabled />
 }

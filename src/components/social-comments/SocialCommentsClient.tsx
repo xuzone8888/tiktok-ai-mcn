@@ -44,6 +44,7 @@ interface SocialCommentsClientProps {
   platformLock?: ConcretePlatform
   embedded?: boolean
   autoSyncEnabled?: boolean
+  initialSyncEnabled?: boolean
   instagramReplyEnabled?: boolean
 }
 
@@ -55,6 +56,7 @@ interface LoadErrorState {
 const PLATFORM_ORDER: Platform[] = ["all", "youtube", "tiktok", "instagram", "facebook"]
 const YOUTUBE_AUTO_SYNC_INTERVAL_MS = 5 * 60 * 1000
 const YOUTUBE_AUTO_SYNC_INITIAL_DELAY_MS = 2000
+const FACEBOOK_INITIAL_SYNC_WINDOW_MS = 60 * 1000
 
 const TEXT = {
   title: { zh: "评论管理", en: "Comments" },
@@ -416,6 +418,7 @@ export default function SocialCommentsClient({
   platformLock,
   embedded = false,
   autoSyncEnabled = false,
+  initialSyncEnabled = false,
   instagramReplyEnabled = false,
 }: SocialCommentsClientProps) {
   const { lang } = useLang()
@@ -425,6 +428,7 @@ export default function SocialCommentsClient({
   const isFacebookLocked = platformLock === "facebook"
   const lastAutoSyncAtByTarget = useRef<Map<string, number>>(new Map())
   const autoSyncInFlightTarget = useRef<string | null>(null)
+  const initialSyncAttemptedTargets = useRef<Set<string>>(new Set())
   const contentAbortRef = useRef<AbortController | null>(null)
   const commentsAbortRef = useRef(new Map<string, AbortController>())
   const detailAbortRef = useRef<AbortController | null>(null)
@@ -851,16 +855,17 @@ export default function SocialCommentsClient({
     void loadDetailComments(comment, { visibleToken })
   }
 
-  const syncComments = useCallback(async ({ source = "manual" }: { source?: "manual" | "auto" } = {}) => {
+  const syncComments = useCallback(async ({ source = "manual" }: { source?: "manual" | "auto" | "initial" } = {}) => {
     const isAuto = source === "auto"
+    const isBackground = source !== "manual"
     const selectedContentId = selectedContent?.id
     if (accountId === "all") {
-      if (!isAuto) toast({ title: TEXT.missingSelection[lang], variant: "destructive" })
+      if (!isBackground) toast({ title: TEXT.missingSelection[lang], variant: "destructive" })
       return { status: "skipped" as const }
     }
 
     if (selectedPlatformCapabilities?.requires_explicit_content && !selectedContentId) {
-      if (!isAuto) toast({ title: TEXT.selectContentFirst[lang], variant: "destructive" })
+      if (!isBackground) toast({ title: TEXT.selectContentFirst[lang], variant: "destructive" })
       return { status: "skipped" as const }
     }
 
@@ -888,9 +893,12 @@ export default function SocialCommentsClient({
     syncRequestTokenRef.current = requestToken
     setSyncing(true)
     try {
-      const idempotencyKey = isAuto && selectedContent?.id
-        ? `auto:youtube:${accountId}:${selectedContent.id}:${Math.floor(Date.now() / YOUTUBE_AUTO_SYNC_INTERVAL_MS)}`
-        : undefined
+      let idempotencyKey: string | undefined
+      if (isAuto && selectedContent?.id) {
+        idempotencyKey = `auto:youtube:${accountId}:${selectedContent.id}:${Math.floor(Date.now() / YOUTUBE_AUTO_SYNC_INTERVAL_MS)}`
+      } else if (source === "initial" && syncPlatform === "facebook") {
+        idempotencyKey = `initial:facebook:${accountId}:${Math.floor(Date.now() / FACEBOOK_INITIAL_SYNC_WINDOW_MS)}`
+      }
       const data = await fetch("/api/social-comments/sync", {
         method: "POST",
         headers: {
@@ -914,7 +922,7 @@ export default function SocialCommentsClient({
         })
       }
 
-      if (!isAuto && workspaceGuardRef.current.isActive(workspaceToken)) {
+      if (!isBackground && workspaceGuardRef.current.isActive(workspaceToken)) {
         const failedCount = Number(data.failedCount || 0)
         const descriptionParts = [
           `${data.syncedCount || 0} ${TEXT.comments[lang]}`,
@@ -929,11 +937,11 @@ export default function SocialCommentsClient({
           description: descriptionParts.join(" · "),
         })
       }
-      await loadComments({ silent: isAuto, target: syncTarget, visibleToken: workspaceToken })
+      await loadComments({ silent: isBackground, target: syncTarget, visibleToken: workspaceToken })
       return { status: "completed" as const, data }
     } catch (error) {
       const apiError = error as SocialCommentsApiError
-      const isExpectedAutoThrottle = isAuto && (
+      const isExpectedAutoThrottle = isBackground && (
         apiError.code === "sync_throttled"
           || apiError.code === "sync_already_running"
           || (apiError instanceof Error && /sync_(throttled|already_running)/.test(apiError.message))
@@ -957,6 +965,19 @@ export default function SocialCommentsClient({
       }
     }
   }, [accountId, canSyncSelectedAccount, lang, loadComments, requestHeaders, selectedAccount, selectedContent?.id, selectedPlatformCapabilities?.requires_explicit_content, toast])
+
+  const initialSyncTargetKey = initialSyncEnabled
+    && selectedAccount?.platform === "facebook"
+    && accountId !== "all"
+    && canSyncSelectedAccount
+      ? `facebook:${accountId}`
+      : null
+
+  useEffect(() => {
+    if (!initialSyncTargetKey || initialSyncAttemptedTargets.current.has(initialSyncTargetKey)) return
+    initialSyncAttemptedTargets.current.add(initialSyncTargetKey)
+    void syncComments({ source: "initial" })
+  }, [initialSyncTargetKey, syncComments])
 
   useEffect(() => {
     setAutoSyncError(null)
