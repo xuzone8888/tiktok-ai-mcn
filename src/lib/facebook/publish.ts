@@ -11,13 +11,16 @@ export interface UploadFacebookVideoOptions {
 
 export interface FacebookVideoUploadResult {
   videoId: string
+  postId: string | null
   watchUrl: string | null
   published: boolean
 }
 
 const FACEBOOK_API_VERSION = process.env.FACEBOOK_API_VERSION || 'v20.0'
+const FACEBOOK_GRAPH_URL = `https://graph.facebook.com/${FACEBOOK_API_VERSION}`
 const FACEBOOK_VIDEO_GRAPH_URL = `https://graph-video.facebook.com/${FACEBOOK_API_VERSION}`
 const FACEBOOK_SINGLE_VIDEO_TEST_LIMIT_BYTES = 500 * 1024 * 1024
+const FACEBOOK_POST_ID_RESOLUTION_DELAYS_MS = [0, 750, 1_500, 3_000] as const
 const FACEBOOK_CONTENT_CATEGORIES = new Set([
   'BEAUTY_FASHION',
   'BUSINESS',
@@ -106,6 +109,45 @@ async function fetchVideoBlob(videoUrl: string): Promise<Blob> {
   return new Blob([bytes], { type: contentType })
 }
 
+async function resolvePublishedVideoIdentity(accessToken: string, videoId: string) {
+  const url = new URL(`${FACEBOOK_GRAPH_URL}/${encodeURIComponent(videoId)}`)
+  url.searchParams.set('fields', 'id,post_id,permalink_url')
+  url.searchParams.set('appsecret_proof', getFacebookAppSecretProof(accessToken))
+
+  const response = await fetch(url, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  })
+  if (!response.ok) return null
+
+  const data = await response.json().catch(() => null) as any
+  return {
+    postId: typeof data?.post_id === 'string' && data.post_id ? data.post_id : null,
+    permalinkUrl: typeof data?.permalink_url === 'string' && data.permalink_url
+      ? data.permalink_url
+      : null,
+  }
+}
+
+async function resolvePublishedVideoIdentityWithRetry(accessToken: string, videoId: string) {
+  let bestPostId: string | null = null
+  let bestPermalinkUrl: string | null = null
+
+  for (const delayMs of FACEBOOK_POST_ID_RESOLUTION_DELAYS_MS) {
+    if (delayMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, delayMs))
+    }
+
+    const identity = await resolvePublishedVideoIdentity(accessToken, videoId).catch(() => null)
+    bestPostId = identity?.postId || bestPostId
+    bestPermalinkUrl = identity?.permalinkUrl || bestPermalinkUrl
+    if (bestPostId) return { postId: bestPostId, permalinkUrl: bestPermalinkUrl }
+  }
+
+  return bestPostId || bestPermalinkUrl
+    ? { postId: bestPostId, permalinkUrl: bestPermalinkUrl }
+    : null
+}
+
 export async function uploadFacebookVideoFromUrl(
   accessToken: string,
   videoUrl: string,
@@ -141,9 +183,14 @@ export async function uploadFacebookVideoFromUrl(
     throw new Error('Facebook 上传成功但未返回视频 ID')
   }
 
+  // Facebook may return the video before its backing Page post is queryable. Retry only
+  // this read-only identity lookup, with a fixed bound, and never repeat the upload.
+  const identity = await resolvePublishedVideoIdentityWithRetry(accessToken, data.id)
+
   return {
     videoId: data.id,
-    watchUrl: `https://www.facebook.com/watch/?v=${data.id}`,
+    postId: identity?.postId || null,
+    watchUrl: identity?.permalinkUrl || `https://www.facebook.com/watch/?v=${data.id}`,
     published: true,
   }
 }

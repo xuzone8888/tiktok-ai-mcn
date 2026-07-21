@@ -38,6 +38,12 @@ function redact(message: string): string {
   const secret = process.env.BROKER_SECRET
   if (secret) out = out.split(secret).join('[redacted]')
   return out
+    .replace(/Bearer\s+[^\s,;]+/gi, 'Bearer [redacted]')
+    .replace(/\b(access_token|authorization|client_secret|refresh_token|token|secret|code)=([^\s&]+)/gi, '$1=[redacted]')
+    .replace(/https?:\/\/[^\s]+/gi, '[redacted-url]')
+    .replace(/[\u0000-\u001f\u007f]+/g, ' ')
+    .trim()
+    .slice(0, 240)
 }
 
 type BrokerResponse<T> =

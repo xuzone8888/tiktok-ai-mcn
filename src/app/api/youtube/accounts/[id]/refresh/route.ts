@@ -22,7 +22,7 @@ export async function POST(_request: NextRequest, { params }: { params: { id: st
 
     const { data: account, error: fetchError } = await (supabase as any)
       .from('youtube_accounts')
-      .select('id')
+      .select('id, scopes')
       .eq('id', params.id)
       .eq('user_id', user.id)
       .single()
@@ -46,6 +46,7 @@ export async function POST(_request: NextRequest, { params }: { params: { id: st
     const channel = await getMyYouTubeChannel(token.access_token)
     const expiresAt = calculateYouTubeTokenExpiration(token.expires_in).toISOString()
     const now = new Date().toISOString()
+    const refreshedScopes = token.scope ? scopesToArray(token.scope) : null
 
     const { error } = await adminSupabase
       .from('youtube_accounts')
@@ -57,7 +58,7 @@ export async function POST(_request: NextRequest, { params }: { params: { id: st
         video_count: channel.videoCount,
         view_count: channel.viewCount,
         access_token_expires_at: expiresAt,
-        scopes: scopesToArray(token.scope),
+        ...(refreshedScopes ? { scopes: refreshedScopes } : {}),
         status: 'active',
         updated_at: now,
       })
