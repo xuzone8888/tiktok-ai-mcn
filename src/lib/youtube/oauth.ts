@@ -55,6 +55,7 @@ export function getYouTubeOAuthConfig(): YouTubeOAuthConfig {
     scopes: [
       'https://www.googleapis.com/auth/youtube.upload',
       'https://www.googleapis.com/auth/youtube.readonly',
+      'https://www.googleapis.com/auth/youtube.force-ssl',
     ],
   }
 }
@@ -222,5 +223,5 @@ export function calculateYouTubeTokenExpiration(expiresIn: number): Date {
 }
 
 export function scopesToArray(scope: string | undefined): string[] {
-  return scope ? scope.split(/\s+/).filter(Boolean) : getYouTubeOAuthConfig().scopes
+  return scope ? scope.split(/\s+/).filter(Boolean) : []
 }

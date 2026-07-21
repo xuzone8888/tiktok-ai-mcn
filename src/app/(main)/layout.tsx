@@ -4,6 +4,7 @@ import { DownloadWidget } from "@/components/download-widget";
 import { ForgeStatusFloat } from "@/components/forge-status-float";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { isImageFactoryUiEnabled } from "@/lib/feature-flags";
 import type { UserRole } from "@/lib/admin";
 
 async function getInitialHeaderUser(): Promise<HeaderUser | null> {
@@ -49,12 +50,13 @@ export default async function MainLayout({
   children: React.ReactNode;
 }) {
   const initialUser = await getInitialHeaderUser();
+  const showImageFactory = isImageFactoryUiEnabled();
 
   return (
     <div className="flex min-h-screen h-screen overflow-hidden bg-titanium-grid relative selection:bg-white/20">
       {/* JCUI 1.0: 已移除旧版彩色渐变光球，使用干净的钛空银网格背景 */}
 
-      <Sidebar />
+      <Sidebar showImageFactory={showImageFactory} />
       <div className="flex flex-1 flex-col overflow-hidden relative z-10">
         <Header initialUser={initialUser} />
         <main className="flex-1 overflow-y-auto relative">

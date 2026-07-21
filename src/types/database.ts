@@ -75,6 +75,284 @@ export interface Database {
       };
 
       // -----------------------------------------------------------------------
+      // Social Comments 表
+      // -----------------------------------------------------------------------
+      social_comments: {
+        Row: {
+          id: string;
+          user_id: string;
+          platform: "youtube" | "tiktok" | "instagram" | "facebook";
+          account_id: string;
+          task_item_id: string | null;
+          external_content_id: string;
+          external_comment_id: string;
+          parent_external_comment_id: string | null;
+          thread_external_id: string | null;
+          direction: "inbound" | "outbound";
+          author_id: string | null;
+          author_name: string | null;
+          author_avatar_url: string | null;
+          message: string;
+          like_count: number;
+          reply_count: number;
+          can_reply: boolean;
+          is_from_account: boolean;
+          permalink: string | null;
+          status: "synced" | "sending" | "sent" | "failed" | "unsupported" | "deleted" | "hidden";
+          metadata: Json;
+          remote_created_at: string | null;
+          last_synced_at: string;
+          reply_to_comment_id: string | null;
+          local_error_code: string | null;
+          local_error_message: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          platform: "youtube" | "tiktok" | "instagram" | "facebook";
+          account_id: string;
+          task_item_id?: string | null;
+          external_content_id: string;
+          external_comment_id: string;
+          parent_external_comment_id?: string | null;
+          thread_external_id?: string | null;
+          direction?: "inbound" | "outbound";
+          author_id?: string | null;
+          author_name?: string | null;
+          author_avatar_url?: string | null;
+          message: string;
+          like_count?: number;
+          reply_count?: number;
+          can_reply?: boolean;
+          is_from_account?: boolean;
+          permalink?: string | null;
+          status?: "synced" | "sending" | "sent" | "failed" | "unsupported" | "deleted" | "hidden";
+          metadata?: Json;
+          remote_created_at?: string | null;
+          last_synced_at?: string;
+          reply_to_comment_id?: string | null;
+          local_error_code?: string | null;
+          local_error_message?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          platform?: "youtube" | "tiktok" | "instagram" | "facebook";
+          account_id?: string;
+          task_item_id?: string | null;
+          external_content_id?: string;
+          external_comment_id?: string;
+          parent_external_comment_id?: string | null;
+          thread_external_id?: string | null;
+          direction?: "inbound" | "outbound";
+          author_id?: string | null;
+          author_name?: string | null;
+          author_avatar_url?: string | null;
+          message?: string;
+          like_count?: number;
+          reply_count?: number;
+          can_reply?: boolean;
+          is_from_account?: boolean;
+          permalink?: string | null;
+          status?: "synced" | "sending" | "sent" | "failed" | "unsupported" | "deleted" | "hidden";
+          metadata?: Json;
+          remote_created_at?: string | null;
+          last_synced_at?: string;
+          reply_to_comment_id?: string | null;
+          local_error_code?: string | null;
+          local_error_message?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+
+      social_comment_translations: {
+        Row: {
+          id: string;
+          user_id: string;
+          comment_id: string;
+          target_language: "zh" | "en";
+          source_message_hash: string;
+          detected_source_language: string | null;
+          translated_text: string | null;
+          status: "processing" | "translated" | "same_language" | "failed";
+          provider: string;
+          model: string;
+          lease_token: string | null;
+          lease_expires_at: string | null;
+          error_code: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          comment_id: string;
+          target_language: "zh" | "en";
+          source_message_hash: string;
+          detected_source_language?: string | null;
+          translated_text?: string | null;
+          status: "processing" | "translated" | "same_language" | "failed";
+          provider: string;
+          model: string;
+          lease_token?: string | null;
+          lease_expires_at?: string | null;
+          error_code?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          comment_id?: string;
+          target_language?: "zh" | "en";
+          source_message_hash?: string;
+          detected_source_language?: string | null;
+          translated_text?: string | null;
+          status?: "processing" | "translated" | "same_language" | "failed";
+          provider?: string;
+          model?: string;
+          lease_token?: string | null;
+          lease_expires_at?: string | null;
+          error_code?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+
+      social_comment_translation_rate_limits: {
+        Row: {
+          id: string;
+          user_id: string;
+          window_started_at: string;
+          request_count: number;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          window_started_at?: string;
+          request_count?: number;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          window_started_at?: string;
+          request_count?: number;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+
+      social_comment_sync_runs: {
+        Row: {
+          id: string;
+          user_id: string;
+          platform: "youtube" | "tiktok" | "instagram" | "facebook";
+          account_id: string | null;
+          external_content_id: string | null;
+          status: "running" | "completed" | "failed" | "unsupported";
+          synced_count: number;
+          error_code: string | null;
+          error_message: string | null;
+          metadata: Json;
+          started_at: string;
+          completed_at: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          platform: "youtube" | "tiktok" | "instagram" | "facebook";
+          account_id?: string | null;
+          external_content_id?: string | null;
+          status?: "running" | "completed" | "failed" | "unsupported";
+          synced_count?: number;
+          error_code?: string | null;
+          error_message?: string | null;
+          metadata?: Json;
+          started_at?: string;
+          completed_at?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          platform?: "youtube" | "tiktok" | "instagram" | "facebook";
+          account_id?: string | null;
+          external_content_id?: string | null;
+          status?: "running" | "completed" | "failed" | "unsupported";
+          synced_count?: number;
+          error_code?: string | null;
+          error_message?: string | null;
+          metadata?: Json;
+          started_at?: string;
+          completed_at?: string | null;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+
+      social_comment_action_logs: {
+        Row: {
+          id: string;
+          user_id: string;
+          platform: "youtube" | "tiktok" | "instagram" | "facebook";
+          account_id: string | null;
+          external_content_id: string | null;
+          external_comment_id: string | null;
+          action_type: "sync" | "reply" | "permission_error" | "token_error";
+          status: "running" | "sent" | "completed" | "failed" | "unsupported";
+          idempotency_key: string | null;
+          error_code: string | null;
+          error_message: string | null;
+          metadata: Json;
+          created_at: string;
+          completed_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          platform: "youtube" | "tiktok" | "instagram" | "facebook";
+          account_id?: string | null;
+          external_content_id?: string | null;
+          external_comment_id?: string | null;
+          action_type: "sync" | "reply" | "permission_error" | "token_error";
+          status?: "running" | "sent" | "completed" | "failed" | "unsupported";
+          idempotency_key?: string | null;
+          error_code?: string | null;
+          error_message?: string | null;
+          metadata?: Json;
+          created_at?: string;
+          completed_at?: string | null;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          platform?: "youtube" | "tiktok" | "instagram" | "facebook";
+          account_id?: string | null;
+          external_content_id?: string | null;
+          external_comment_id?: string | null;
+          action_type?: "sync" | "reply" | "permission_error" | "token_error";
+          status?: "running" | "sent" | "completed" | "failed" | "unsupported";
+          idempotency_key?: string | null;
+          error_code?: string | null;
+          error_message?: string | null;
+          metadata?: Json;
+          created_at?: string;
+          completed_at?: string | null;
+        };
+        Relationships: [];
+      };
+
+      // -----------------------------------------------------------------------
       // AI Models 表
       // -----------------------------------------------------------------------
       ai_models: {

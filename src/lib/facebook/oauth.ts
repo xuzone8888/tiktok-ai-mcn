@@ -63,7 +63,9 @@ export const FACEBOOK_PAGE_SCOPES = [
   'pages_show_list',
   'pages_manage_metadata',
   'pages_read_engagement',
+  'pages_read_user_content',
   'pages_manage_posts',
+  'pages_manage_engagement',
 ]
 export function hasFacebookPagePublishPermission(tasks: string[] | null | undefined): boolean {
   return Array.isArray(tasks) && tasks.some((task) => FACEBOOK_PAGE_PUBLISH_TASKS.has(task))
