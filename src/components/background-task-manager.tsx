@@ -24,11 +24,38 @@ import { getCharacterReferenceMaxImages, mergeCharacterReferenceImages } from "@
 import { getCharacterAssetReferenceUrls } from "@/lib/character-assets";
 import { Video, Image as ImageIcon, Sparkles, Palette, ExternalLink } from "lucide-react";
 
+type ResolveCurrentUserId = () => Promise<string | null>;
+
+function useCurrentUserIdResolver(): ResolveCurrentUserId {
+  const userIdRef = useRef<string | null>(null);
+  const pendingRef = useRef<Promise<string | null> | null>(null);
+
+  return useCallback(async () => {
+    if (userIdRef.current) return userIdRef.current;
+    if (pendingRef.current) return pendingRef.current;
+
+    pendingRef.current = fetch("/api/user/credits", { cache: "no-store" })
+      .then(async (response) => {
+        if (!response.ok) return null;
+        const data = await response.json().catch(() => null);
+        const userId = data?.userId || data?.user_id;
+        userIdRef.current = typeof userId === "string" && userId ? userId : null;
+        return userIdRef.current;
+      })
+      .catch(() => null)
+      .finally(() => {
+        pendingRef.current = null;
+      });
+
+    return pendingRef.current;
+  }, []);
+}
+
 // ============================================================================
 // 视频任务执行器
 // ============================================================================
 
-function useVideoTaskExecutor() {
+function useVideoTaskExecutor(resolveCurrentUserId: ResolveCurrentUserId) {
   const { toast } = useToast();
   const tasks = useVideoBatchStore((state) => state.tasks);
   const jobStatus = useVideoBatchStore((state) => state.jobStatus);
@@ -38,30 +65,8 @@ function useVideoTaskExecutor() {
 
   const isExecutingRef = useRef(false);
   const executedTasksRef = useRef<Set<string>>(new Set());
-  const userIdRef = useRef<string | null>(null);
   // 执行循环收尾后的自唤醒信号(见执行 effect 尾注)
   const [rescanTick, forceRescan] = useReducer((x: number) => x + 1, 0);
-
-  // 获取用户 ID
-  useEffect(() => {
-    fetch("/api/user/credits")
-      .then(async res => {
-        const text = await res.text();
-        try {
-          return JSON.parse(text);
-        } catch (e) {
-          console.error("[VideoTaskExecutor] Failed to parse credits response:", text, e);
-          return {};
-        }
-      })
-      .then(data => {
-        if (data.userId) {
-          userIdRef.current = data.userId;
-          console.log("[VideoTaskExecutor] Got userId:", data.userId);
-        }
-      })
-      .catch(console.error);
-  }, []);
 
   // 执行单个视频任务
   const executeVideoTask = useCallback(async (taskId: string) => {
@@ -70,26 +75,7 @@ function useVideoTaskExecutor() {
     if (!task || task.status !== "pending") return;
 
     try {
-      // 如果 userId 还没获取到，先获取
-      if (!userIdRef.current) {
-        try {
-          const creditsRes = await fetch("/api/user/credits");
-          const creditsText = await creditsRes.text();
-          let creditsData;
-          try {
-            creditsData = JSON.parse(creditsText);
-          } catch (e) {
-            console.error("[VideoTaskExecutor] Failed to parse credits response:", creditsText, e);
-            creditsData = {};
-          }
-          if (creditsData.userId) {
-            userIdRef.current = creditsData.userId;
-            console.log("[VideoTaskExecutor] Got userId on demand:", creditsData.userId);
-          }
-        } catch (e) {
-          console.error("[VideoTaskExecutor] Failed to get userId:", e);
-        }
-      }
+      const userId = await resolveCurrentUserId();
 
       // 【修复】优先使用任务创建时保存的模特ID，而不是当前全局设置
       const taskModelId = task.aiModelId || globalSettings.aiModelId;
@@ -357,7 +343,7 @@ function useVideoTaskExecutor() {
           talkingScript: scriptResult.data.script,
           taskId: taskId,
           // 【修复】传递任务创建时保存的模特ID，而不是当前全局设置
-          userId: userIdRef.current,
+          userId,
           modelId: taskUseAiModel ? taskModelId : undefined,
           // 保留前端触发词作为后备（向后兼容）
           modelTriggerWord: taskUseAiModel ? taskModelTriggerWord : undefined,
@@ -435,7 +421,7 @@ function useVideoTaskExecutor() {
           modelType: taskModelType,
           imageUrls: unifiedImageUrls,
           clientTaskId: taskId,
-          userId: userIdRef.current,
+          userId,
           mode: isPromptMode ? "prompt_to_video" : "image_to_video",
           groupName: task.groupName,
           batchId: task.batchId,
@@ -478,7 +464,7 @@ function useVideoTaskExecutor() {
         errorMessage: error instanceof Error ? error.message : "任务执行失败",
       });
     }
-  }, [globalSettings, updateTaskStatus, toast]);
+  }, [globalSettings, resolveCurrentUserId, updateTaskStatus, toast]);
 
   // 监听并执行任务
   //
@@ -564,7 +550,7 @@ function useVideoTaskExecutor() {
 // 图片任务执行器
 // ============================================================================
 
-function useImageTaskExecutor() {
+function useImageTaskExecutor(resolveCurrentUserId: ResolveCurrentUserId) {
   const { toast } = useToast();
   const tasks = useImageBatchStore((state) => state.tasks);
   const jobStatus = useImageBatchStore((state) => state.jobStatus);
@@ -573,27 +559,6 @@ function useImageTaskExecutor() {
 
   const isExecutingRef = useRef(false);
   const executedTasksRef = useRef<Set<string>>(new Set());
-  const userIdRef = useRef<string | null>(null);
-
-  // 获取用户 ID
-  useEffect(() => {
-    fetch("/api/user/credits")
-      .then(async res => {
-        const text = await res.text();
-        try {
-          return JSON.parse(text);
-        } catch (e) {
-          console.error("[ImageTaskExecutor] Failed to parse credits response:", text, e);
-          return {};
-        }
-      })
-      .then(data => {
-        if (data.userId) {
-          userIdRef.current = data.userId;
-        }
-      })
-      .catch(console.error);
-  }, []);
 
   // 执行单个图片任务
   const executeImageTask = useCallback(async (taskId: string) => {
@@ -601,6 +566,7 @@ function useImageTaskExecutor() {
     if (!task || task.status !== "pending") return;
 
     try {
+      const userId = await resolveCurrentUserId();
       updateTaskResult(taskId, { status: "processing" });
 
       // 上传图片（如果是 blob URL）
@@ -668,7 +634,7 @@ function useImageTaskExecutor() {
           aspectRatio: task.config.aspectRatio,
           resolution: task.config.resolution,
           prompt: task.config.action === "generate" ? (task.config.prompt || "High quality product photo") : undefined,
-          userId: userIdRef.current, // 传递用户 ID 以写入任务日志
+          userId, // 传递用户 ID 以写入任务日志
           source: "batch_image", // 标记来源
           characterId: task.config.characterId,
           characterName: task.config.characterName,
@@ -738,7 +704,7 @@ function useImageTaskExecutor() {
         error: error instanceof Error ? error.message : "任务执行失败",
       });
     }
-  }, [tasks, updateTaskResult]);
+  }, [resolveCurrentUserId, tasks, updateTaskResult]);
 
   // 监听并执行任务
   useEffect(() => {
@@ -801,7 +767,7 @@ function useImageTaskExecutor() {
 // Quick Gen 视频任务执行器
 // ============================================================================
 
-function useQuickGenTaskExecutor() {
+function useQuickGenTaskExecutor(resolveCurrentUserId: ResolveCurrentUserId) {
   const { toast } = useToast();
   // S0.6：从"监听单槽"改为"遍历多任务队列"，支持并发多任务
   const videoTasks = useQuickGenStore((state) => state.videoTasks);
@@ -809,27 +775,6 @@ function useQuickGenTaskExecutor() {
 
   // 去重集合：每个任务只启动一次执行链（复用 image-batch 执行器的并发控制模式）
   const executedTasksRef = useRef<Set<string>>(new Set());
-  const userIdRef = useRef<string | null>(null);
-
-  // 获取用户 ID
-  useEffect(() => {
-    fetch("/api/user/credits")
-      .then(async res => {
-        const text = await res.text();
-        try {
-          return JSON.parse(text);
-        } catch (e) {
-          console.error("[QuickGenTaskExecutor] Failed to parse credits response:", text, e);
-          return {};
-        }
-      })
-      .then(data => {
-        if (data.userId) {
-          userIdRef.current = data.userId;
-        }
-      })
-      .catch(console.error);
-  }, []);
 
   // 执行单个 Quick Gen 视频任务（提交 + 轮询）
   const executeTask = useCallback(async (taskIdToRun: string) => {
@@ -838,6 +783,7 @@ function useQuickGenTaskExecutor() {
 
       try {
         if (activeTask.status === "idle") {
+          const userId = await resolveCurrentUserId();
           // 新任务，调用 API
           updateTaskStatus(activeTask.id, "generating", { progress: 10 });
 
@@ -863,7 +809,7 @@ function useQuickGenTaskExecutor() {
               modelType,
               imageUrls: activeTask.sourceImageUrl ? [activeTask.sourceImageUrl] : [],
               clientTaskId: activeTask.id,
-              userId: userIdRef.current,
+              userId,
               mode: activeTask.sourceImageUrl ? "image_to_video" : "prompt_to_video",
               // 角色元数据随任务上送；参考图推导与合并由网关完成
               characterId: activeTask.characterAsset?.id,
@@ -950,7 +896,7 @@ function useQuickGenTaskExecutor() {
         });
         toast({ variant: "destructive", title: "❌ 快速视频生成失败", description: error instanceof Error ? error.message : "未知错误" });
       }
-  }, [updateTaskStatus, toast]);
+  }, [resolveCurrentUserId, updateTaskStatus, toast]);
 
   // 监听队列：把所有待执行（idle）/ 待恢复轮询（polling）且未启动过的任务并发拉起
   useEffect(() => {
@@ -979,7 +925,7 @@ function useQuickGenTaskExecutor() {
 // Quick Gen 图片任务执行器
 // ============================================================================
 
-function useQuickGenImageTaskExecutor() {
+function useQuickGenImageTaskExecutor(resolveCurrentUserId: ResolveCurrentUserId) {
   const { toast } = useToast();
   // S0.6：从"监听单槽"改为"遍历多任务队列"，支持并发多任务
   const imageTasks = useQuickGenStore((state) => state.imageTasks);
@@ -987,27 +933,6 @@ function useQuickGenImageTaskExecutor() {
 
   // 去重集合：每个任务只启动一次执行链（复用 image-batch 执行器的并发控制模式）
   const executedTasksRef = useRef<Set<string>>(new Set());
-  const userIdRef = useRef<string | null>(null);
-
-  // 获取用户 ID
-  useEffect(() => {
-    fetch("/api/user/credits")
-      .then(async res => {
-        const text = await res.text();
-        try {
-          return JSON.parse(text);
-        } catch (e) {
-          console.error("[QuickGenImageTaskExecutor] Failed to parse credits response:", text, e);
-          return {};
-        }
-      })
-      .then(data => {
-        if (data.userId) {
-          userIdRef.current = data.userId;
-        }
-      })
-      .catch(console.error);
-  }, []);
 
   // 执行单个 Quick Gen 图片任务（提交 + 轮询）
   const executeTask = useCallback(async (taskIdToRun: string) => {
@@ -1016,6 +941,7 @@ function useQuickGenImageTaskExecutor() {
 
       try {
         if (activeTask.status === "idle") {
+          const userId = await resolveCurrentUserId();
           updateTaskStatus(activeTask.id, "generating", { progress: 10 });
 
           // 调用图片生成 API
@@ -1031,7 +957,7 @@ function useQuickGenImageTaskExecutor() {
               tier: activeTask.tier,
               aspectRatio: activeTask.aspectRatio,
               resolution: activeTask.resolution,
-              userId: userIdRef.current, // 传递用户 ID 以写入任务日志
+              userId, // 传递用户 ID 以写入任务日志
               batchId: activeTask.batchId,
               // 以本地任务 id 作服务端 task_id:防并发提交撞 openai-${Date.now()},
               // 同时让 generations.task_id 可与本地任务对账(入库匹配)
@@ -1157,7 +1083,7 @@ function useQuickGenImageTaskExecutor() {
         });
         toast({ variant: "destructive", title: "❌ 单图生成失败", description: error instanceof Error ? error.message : "未知错误" });
       }
-  }, [updateTaskStatus, toast]);
+  }, [resolveCurrentUserId, updateTaskStatus, toast]);
 
   // 监听队列：把所有待执行（idle）/ 待恢复轮询（polling）且未启动过的任务并发拉起
   useEffect(() => {
@@ -2041,17 +1967,19 @@ function TaskStatusIndicator() {
 // ============================================================================
 
 export function BackgroundTaskManager() {
+  const resolveCurrentUserId = useCurrentUserIdResolver();
+
   // 启动视频批量任务执行器
-  useVideoTaskExecutor();
+  useVideoTaskExecutor(resolveCurrentUserId);
 
   // 启动图片批量任务执行器
-  useImageTaskExecutor();
+  useImageTaskExecutor(resolveCurrentUserId);
 
   // 启动 Quick Gen 视频任务执行器
-  useQuickGenTaskExecutor();
+  useQuickGenTaskExecutor(resolveCurrentUserId);
 
   // 启动 Quick Gen 图片任务执行器
-  useQuickGenImageTaskExecutor();
+  useQuickGenImageTaskExecutor(resolveCurrentUserId);
 
   // 启动 Studio 幻灯片渲染执行器(S1.2)
   useSlideshowTaskExecutor();

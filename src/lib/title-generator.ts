@@ -67,9 +67,60 @@ Return ONLY valid JSON array, no explanations, no markdown code blocks.
 Each element format: {"title": "Title text", "hashtags": ["#tag1", "#tag2", ...]}`
 };
 
+const YOUTUBE_TITLE_GENERATOR_PROMPTS = {
+    system: `You are a professional YouTube content strategist. Generate clear, specific, search-friendly video titles that match viewer intent and are suitable for YouTube recommendations.
+
+Each title should:
+1. Be natural and ready to publish on YouTube
+2. Be specific about the video's core value or topic
+3. Avoid exaggerated clickbait and unrelated short-form platform hooks
+4. Keep the title under 100 characters when possible
+5. Do not put hashtags in the title
+
+Output Format: Valid JSON array only, no explanations, no markdown code blocks.
+[
+  {
+    "title": "Title text",
+    "hashtags": []
+  }
+]`,
+    user_zh: `请为以下视频内容生成 {{COUNT}} 条中文 YouTube 标题。
+
+视频内容描述:
+{{DESCRIPTION}}
+
+要求:
+1. 标题清晰、具体，适合 YouTube 搜索和推荐
+2. 准确表达视频核心看点或用户意图
+3. 避免夸张标题党和无关短视频平台风格
+4. 标题尽量控制在 90-100 个字符以内
+5. 不要把 hashtag 放进标题
+6. 每条标题要独特，避免重复
+
+返回严格的JSON数组格式，不要任何解释、注释或markdown代码块。
+每个元素格式: {"title": "标题文字", "hashtags": []}`,
+
+    user_en: `Generate {{COUNT}} English YouTube titles for videos about:
+
+{{DESCRIPTION}}
+
+Requirements:
+1. Make each title clear, specific, search-friendly, and aligned with viewer intent
+2. Highlight the core value or topic of the video accurately
+3. Avoid exaggerated clickbait and unrelated short-form platform hooks
+4. Keep each title under 100 characters when possible
+5. Do not include hashtags in the title
+6. Each title must be unique, no repetition
+
+Return ONLY valid JSON array, no explanations, no markdown code blocks.
+Each element format: {"title": "Title text", "hashtags": []}`
+};
+
 // ============================================================================
 // 类型定义
 // ============================================================================
+
+export type TitleGenerationPlatform = 'tiktok' | 'youtube'
 
 export interface GeneratedTitle {
     index: number
@@ -95,7 +146,8 @@ export interface GenerateTitlesResult {
 export async function generateTitles(
     description: string,
     count: number,
-    language: 'zh' | 'en'
+    language: 'zh' | 'en',
+    platform: TitleGenerationPlatform = 'tiktok'
 ): Promise<GenerateTitlesResult> {
     // 动态导入避免循环依赖
     const { callDoubaoAPI } = await import('./doubao-api-client');
@@ -108,12 +160,16 @@ export async function generateTitles(
         return { success: false, error: '生成数量需在 1-50 之间' };
     }
 
-    console.log(`[Title Generator] Generating ${count} titles in ${language} for: ${description.substring(0, 50)}...`);
+    console.log(`[Title Generator] Generating ${platform} titles (${count}) in ${language} for: ${description.substring(0, 50)}...`);
+
+    const prompts = platform === 'youtube'
+        ? YOUTUBE_TITLE_GENERATOR_PROMPTS
+        : TITLE_GENERATOR_PROMPTS;
 
     // 选择对应语言的提示词模板
     const userPromptTemplate = language === 'zh'
-        ? TITLE_GENERATOR_PROMPTS.user_zh
-        : TITLE_GENERATOR_PROMPTS.user_en;
+        ? prompts.user_zh
+        : prompts.user_en;
 
     // 替换模板变量
     const userPrompt = userPromptTemplate
@@ -122,7 +178,7 @@ export async function generateTitles(
 
     // 调用豆包 API
     const result = await callDoubaoAPI([
-        { role: 'system', content: TITLE_GENERATOR_PROMPTS.system },
+        { role: 'system', content: prompts.system },
         { role: 'user', content: userPrompt }
     ], {
         maxTokens: 4000,
@@ -170,10 +226,12 @@ export async function generateTitles(
             const topics = Array.isArray(item.topics) ? item.topics : [];
             const tags = Array.isArray(item.tags) ? item.tags : [];
 
-            // Merge and hard-cap at 5 hashtags (TikTok API limit)
-            const allHashtags = (hashtags.length > 0 ? hashtags : [...topics, ...tags])
-                .filter(Boolean)
-                .slice(0, 5);
+            const allHashtags = platform === 'youtube'
+                ? []
+                // Merge and hard-cap at 5 hashtags (TikTok API limit)
+                : (hashtags.length > 0 ? hashtags : [...topics, ...tags])
+                    .filter(Boolean)
+                    .slice(0, 5);
             const combined = allHashtags.length > 0
                 ? `${title} ${allHashtags.join(' ')}`
                 : title;
@@ -181,8 +239,8 @@ export async function generateTitles(
             return {
                 index,
                 title,
-                topics,
-                tags,
+                topics: platform === 'youtube' ? [] : topics,
+                tags: platform === 'youtube' ? [] : tags,
                 combined
             };
         });

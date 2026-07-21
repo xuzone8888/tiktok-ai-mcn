@@ -1,21 +1,49 @@
 import crypto from 'crypto'
 import { createReadStream, createWriteStream } from 'fs'
-import { mkdir, readFile, stat, unlink, writeFile } from 'fs/promises'
+import { mkdir, readFile, rename, stat, unlink, writeFile } from 'fs/promises'
 import path from 'path'
 import { Readable } from 'stream'
 
 import { NextRequest, NextResponse } from 'next/server'
 
+import {
+  InstagramMediaProbeError,
+  probeInstagramMedia,
+  validateInstagramMediaMetadata,
+} from '@/lib/instagram/media-validation'
+import {
+  INSTAGRAM_MAX_VIDEO_FILE_SIZE_BYTES,
+  isInstagramMediaTypeAllowed,
+  normalizeMediaContentType,
+} from '@/lib/publish/platform-media'
+
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 const UPLOAD_DIR = path.join('/private/tmp', 'stargaze-instagram-uploads')
-const MAX_FILE_SIZE = 4 * 1024 * 1024 * 1024
+const MAX_FILE_SIZE = INSTAGRAM_MAX_VIDEO_FILE_SIZE_BYTES
 
 interface RouteContext {
   params: {
     id: string
   }
+}
+
+class InstagramLocalUploadValidationError extends Error {
+  code: 'empty_file' | 'file_too_large' | 'media_not_supported'
+
+  constructor(code: InstagramLocalUploadValidationError['code'], message: string) {
+    super(message)
+    this.name = 'InstagramLocalUploadValidationError'
+    this.code = code
+  }
+}
+
+function getProbeErrorStatus(code: InstagramMediaProbeError['code']) {
+  if (code === 'media_unreadable') return 422
+  if (code === 'probe_unavailable') return 503
+  if (code === 'probe_timeout') return 504
+  return 500
 }
 
 function getSigningSecret() {
@@ -58,7 +86,7 @@ function safeId(id: string) {
 
 async function writeRequestBody(request: NextRequest, filePath: string) {
   if (!request.body) {
-    throw new Error('上传内容为空')
+    throw new InstagramLocalUploadValidationError('empty_file', '上传内容为空')
   }
 
   const writer = createWriteStream(filePath)
@@ -75,7 +103,7 @@ async function writeRequestBody(request: NextRequest, filePath: string) {
       if (totalBytes > MAX_FILE_SIZE) {
         writer.destroy()
         await unlink(filePath).catch(() => undefined)
-        throw new Error('视频超过 4GB')
+        throw new InstagramLocalUploadValidationError('file_too_large', '视频超过 1GB')
       }
 
       await new Promise<void>((resolve, reject) => {
@@ -96,7 +124,7 @@ async function writeRequestBody(request: NextRequest, filePath: string) {
 
   if (totalBytes === 0) {
     await unlink(filePath).catch(() => undefined)
-    throw new Error('上传内容为空')
+    throw new InstagramLocalUploadValidationError('empty_file', '上传内容为空')
   }
 }
 
@@ -196,18 +224,69 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
     return NextResponse.json({ success: false, error: '上传链接无效或已过期' }, { status: 403 })
   }
 
+  const contentType = normalizeMediaContentType(request.headers.get('content-type'))
+  if (!isInstagramMediaTypeAllowed(id, contentType)) {
+    return NextResponse.json(
+      { success: false, error: '不支持的视频格式', code: 'unsupported_media_type' },
+      { status: 400 }
+    )
+  }
+
   await mkdir(UPLOAD_DIR, { recursive: true })
   const filePath = path.join(UPLOAD_DIR, id)
   const metaPath = `${filePath}.json`
-  const contentType = request.headers.get('content-type') || 'video/mp4'
+  const tempPath = `${filePath}.${crypto.randomUUID()}.upload`
+  let committed = false
 
   try {
-    await writeRequestBody(request, filePath)
+    await writeRequestBody(request, tempPath)
+    const metadata = await probeInstagramMedia(tempPath)
+    const validation = validateInstagramMediaMetadata(metadata)
+    if (!validation.valid) {
+      throw new InstagramLocalUploadValidationError(
+        'media_not_supported',
+        `视频不符合 Instagram Reels 媒体要求 (${validation.errors[0]})`
+      )
+    }
+
+    await rename(tempPath, filePath)
+    committed = true
     await writeFile(metaPath, JSON.stringify({ contentType, uploadedAt: new Date().toISOString() }))
     return NextResponse.json({ success: true })
   } catch (error) {
+    await unlink(tempPath).catch(() => undefined)
+    if (committed) {
+      await Promise.all([
+        unlink(filePath).catch(() => undefined),
+        unlink(metaPath).catch(() => undefined),
+      ])
+    }
+    if (error instanceof InstagramMediaProbeError) {
+      const status = getProbeErrorStatus(error.code)
+      console.error('[Instagram Local Upload] Media probe rejected', {
+        code: error.code,
+        category: status >= 500 ? 'infrastructure' : 'client_media',
+      })
+      return NextResponse.json(
+        { success: false, error: error.message, code: error.code },
+        { status }
+      )
+    }
+    if (error instanceof InstagramLocalUploadValidationError) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: error.message,
+          code: error.code,
+        },
+        { status: error.code === 'media_not_supported' ? 422 : 400 }
+      )
+    }
+    console.error('[Instagram Local Upload] Upload infrastructure failure', {
+      code: 'local_upload_failed',
+    })
     return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : '本地上传失败' },
+      { success: false, error: '本地上传失败', code: 'local_upload_failed' },
       { status: 500 }
     )
   }

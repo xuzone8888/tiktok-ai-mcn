@@ -1,0 +1,2 @@
+[functions.instagram-comments-webhook]
+verify_jwt = false
