@@ -1260,10 +1260,14 @@ export async function syncSocialComments(userId: string, target: CommentSyncTarg
       threadCompleteness = result.metadata.thread_completeness
       syncMetadata = {
         ...syncMetadata,
-        pagination_complete: result.metadata.top_level_pagination_complete && result.metadata.replies_fetched,
+        pagination_complete: result.metadata.top_level_pagination_complete
+          && result.metadata.replies_fetched
+          && !result.metadata.provider_visibility_mismatch,
         top_level_pagination_complete: result.metadata.top_level_pagination_complete,
         replies_fetched: result.metadata.replies_fetched,
         provider_raw_count: result.metadata.provider_raw_count,
+        provider_reported_comment_count: result.metadata.provider_reported_comment_count,
+        provider_visibility_mismatch: result.metadata.provider_visibility_mismatch,
         mapped_count: result.metadata.mapped_count,
         top_level_limit: INSTAGRAM_COMMENT_SYNC_LIMITS.topLevel,
         reply_limit_per_comment: result.metadata.replies_fetched
@@ -1303,6 +1307,14 @@ export async function syncSocialComments(userId: string, target: CommentSyncTarg
       thread_completeness: threadCompleteness,
       replies_fetched: repliesFetched,
       truncated,
+      provider_reported_comment_count: target.platform === 'instagram'
+        ? typeof syncMetadata.provider_reported_comment_count === 'number'
+          ? syncMetadata.provider_reported_comment_count
+          : null
+        : undefined,
+      provider_visibility_mismatch: target.platform === 'instagram'
+        ? syncMetadata.provider_visibility_mismatch === true
+        : undefined,
     }
 
     const commentsToSave = target.platform === 'instagram'

@@ -919,6 +919,10 @@ export default function SocialCommentsClient({
           thread_completeness: data.thread_completeness || "unknown",
           replies_fetched: data.replies_fetched === true,
           truncated: data.truncated === true,
+          provider_reported_comment_count: typeof data.provider_reported_comment_count === "number"
+            ? data.provider_reported_comment_count
+            : null,
+          provider_visibility_mismatch: data.provider_visibility_mismatch === true,
         })
       }
 
@@ -929,6 +933,12 @@ export default function SocialCommentsClient({
         ]
         if (syncPlatform === "instagram" && data.truncated === true) {
           descriptionParts.push(TEXT.paginationTruncated[lang])
+        }
+        if (syncPlatform === "instagram" && data.provider_visibility_mismatch === true) {
+          const reportedCount = Number(data.provider_reported_comment_count || 0)
+          descriptionParts.push(lang === "zh"
+            ? `Meta 显示 ${reportedCount} 条，但暂未向应用返回评论内容`
+            : `Meta reports ${reportedCount}, but has not returned the comment content to the app`)
         }
         if (failedCount > 0) descriptionParts.push(TEXT.partialSyncFailure[lang])
 
@@ -1292,11 +1302,17 @@ export default function SocialCommentsClient({
               </Button>
               {syncCompleteness ? (
                 <span className={cn("text-xs", syncCompleteness.thread_completeness === "complete" ? "text-emerald-300/75" : "text-amber-200/75")}>
-                  {syncCompleteness.thread_completeness === "complete"
+                  {syncCompleteness.provider_visibility_mismatch
+                    ? (lang === "zh"
+                        ? `Meta 显示 ${syncCompleteness.provider_reported_comment_count || 0} 条，但未返回内容`
+                        : `Meta reports ${syncCompleteness.provider_reported_comment_count || 0}, but returned no content`)
+                    : syncCompleteness.thread_completeness === "complete"
                     ? (lang === "zh" ? "讨论串完整" : "Thread complete")
                     : syncCompleteness.thread_completeness === "truncated"
                       ? (lang === "zh" ? "结果已截断" : "Results truncated")
-                      : (lang === "zh" ? "回复未完整读取" : "Replies incomplete")}
+                      : !syncCompleteness.replies_fetched
+                        ? (lang === "zh" ? "回复未完整读取" : "Replies incomplete")
+                        : (lang === "zh" ? "评论读取不完整" : "Comments incomplete")}
                 </span>
               ) : null}
             </div>

@@ -103,11 +103,32 @@ export interface InstagramCommentListResult {
   comments: ExternalSocialComment[]
   metadata: {
     provider_raw_count: number
+    provider_reported_comment_count: number | null
+    provider_visibility_mismatch: boolean
     mapped_count: number
     top_level_pagination_complete: boolean
     replies_fetched: boolean
     truncated: boolean
     thread_completeness: SocialCommentListResult['thread_completeness']
+  }
+}
+
+async function readInstagramReportedCommentCount(
+  token: CommentTokenContext,
+  externalContentId: string
+): Promise<number | null> {
+  const params = new URLSearchParams({ fields: 'comments_count' })
+  try {
+    const response = await fetch(`${INSTAGRAM_GRAPH_URL}/${encodeURIComponent(externalContentId)}?${params.toString()}`, {
+      cache: 'no-store',
+      headers: instagramGraphHeaders(token.accessToken),
+    })
+    if (!response.ok) return null
+    const data = await readJson(response)
+    const count = Number(data?.comments_count)
+    return Number.isFinite(count) && count >= 0 ? Math.floor(count) : null
+  } catch {
+    return null
   }
 }
 
@@ -584,6 +605,7 @@ export async function listInstagramComments(
   let topLevelCount = 0
   let topLevelTruncated = false
   const seenCursors = new Set<string>()
+  const providerReportedCommentCount = await readInstagramReportedCommentCount(token, externalContentId)
 
   do {
     const params = new URLSearchParams({
@@ -686,10 +708,13 @@ export async function listInstagramComments(
     }
   }
 
+  const providerVisibilityMismatch = providerRawCount === 0
+    && typeof providerReportedCommentCount === 'number'
+    && providerReportedCommentCount > 0
   let threadCompleteness: 'complete' | 'incomplete' | 'truncated' = 'complete'
   if (topLevelTruncated || topLevelComments.some((comment) => comment.metadata?.truncated === true)) {
     threadCompleteness = 'truncated'
-  } else if (!repliesFetched) {
+  } else if (!repliesFetched || providerVisibilityMismatch) {
     threadCompleteness = 'incomplete'
   }
 
@@ -697,6 +722,8 @@ export async function listInstagramComments(
     comments,
     metadata: {
       provider_raw_count: providerRawCount,
+      provider_reported_comment_count: providerReportedCommentCount,
+      provider_visibility_mismatch: providerVisibilityMismatch,
       mapped_count: mappedCount,
       top_level_pagination_complete: !topLevelTruncated,
       replies_fetched: repliesFetched,
