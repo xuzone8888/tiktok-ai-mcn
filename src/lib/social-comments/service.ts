@@ -1340,6 +1340,14 @@ export async function syncSocialComments(userId: string, target: CommentSyncTarg
       thread_completeness: threadCompleteness,
       replies_fetched: repliesFetched,
       truncated,
+      provider_reported_comment_count: target.platform === 'instagram'
+        ? typeof syncMetadata.provider_reported_comment_count === 'number'
+          ? syncMetadata.provider_reported_comment_count
+          : null
+        : undefined,
+      provider_visibility_mismatch: target.platform === 'instagram'
+        ? syncMetadata.provider_visibility_mismatch === true
+        : undefined,
     }
   } catch (error) {
     const mapped = mapApiError(error, 'Comment sync failed.')
