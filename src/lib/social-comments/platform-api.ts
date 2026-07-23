@@ -140,7 +140,7 @@ type CommentScopeRequirement = {
 
 export const COMMENT_SCOPE_REQUIREMENTS: Record<Exclude<SocialPlatform, 'tiktok' | 'instagram'>, CommentScopeRequirement> = {
   youtube: {
-    read: ['https://www.googleapis.com/auth/youtube.readonly'],
+    read: ['https://www.googleapis.com/auth/youtube.force-ssl'],
     reply: ['https://www.googleapis.com/auth/youtube.force-ssl'],
   },
   facebook: {

@@ -62,6 +62,16 @@ export interface PlatformAccountsConfig {
   statsVideoLabelEn?: string
   icon?: ReactNode
   requiredCommentScopes?: string[]
+  disconnectConfirmation?: string
+  disconnectConfirmationEn?: string
+  requireLegalConsent?: boolean
+  legalConsentText?: string
+  legalConsentTextEn?: string
+  deleteAllDataEndpoint?: string
+  deleteAllDataLabel?: string
+  deleteAllDataLabelEn?: string
+  deleteAllDataConfirmation?: string
+  deleteAllDataConfirmationEn?: string
 }
 
 interface PlatformAccountsPageProps {
@@ -229,6 +239,8 @@ export function PlatformAccountsPage({ config }: PlatformAccountsPageProps) {
   const [accounts, setAccounts] = useState<PlatformAccount[]>([])
   const [loading, setLoading] = useState(true)
   const [binding, setBinding] = useState(false)
+  const [legalAccepted, setLegalAccepted] = useState(false)
+  const [deletingAllData, setDeletingAllData] = useState(false)
   const [busyAccountId, setBusyAccountId] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [sortBy, setSortBy] = useState<SortOption>('followers_desc')
@@ -324,6 +336,14 @@ export function PlatformAccountsPage({ config }: PlatformAccountsPageProps) {
 
   const startBinding = async () => {
     if (bindingInFlightRef.current) return
+    if (config.requireLegalConsent && !legalAccepted) {
+      toast({
+        title: t(isEnglish, '请先确认政策', 'Please confirm the policies'),
+        description: t(isEnglish, '绑定前请阅读并同意当前隐私政策和服务条款。', 'Read and accept the current Privacy Policy and Terms before connecting.'),
+        variant: 'destructive',
+      })
+      return
+    }
 
     bindingInFlightRef.current = true
     setBinding(true)
@@ -362,7 +382,12 @@ export function PlatformAccountsPage({ config }: PlatformAccountsPageProps) {
   }
 
   const removeAccount = async (accountId: string) => {
-    if (!window.confirm(t(isEnglish, `确定解绑这个 ${config.platformName} 账号吗？`, `Disconnect this ${config.platformName} account?`))) return
+    const confirmation = t(
+      isEnglish,
+      config.disconnectConfirmation || `确定解绑这个 ${config.platformName} 账号吗？`,
+      config.disconnectConfirmationEn || `Disconnect this ${config.platformName} account?`,
+    )
+    if (!window.confirm(confirmation)) return
     setBusyAccountId(accountId)
     try {
       const response = await fetch(`${config.apiBase}/accounts/${accountId}`, { method: 'DELETE' })
@@ -377,6 +402,35 @@ export function PlatformAccountsPage({ config }: PlatformAccountsPageProps) {
       })
     } finally {
       setBusyAccountId(null)
+    }
+  }
+
+  const deleteAllPlatformData = async () => {
+    if (!config.deleteAllDataEndpoint) return
+    const confirmation = t(
+      isEnglish,
+      config.deleteAllDataConfirmation || `确定删除所有本地 ${config.platformName} 数据吗？`,
+      config.deleteAllDataConfirmationEn || `Delete all locally stored ${config.platformName} data?`,
+    )
+    if (!window.confirm(confirmation)) return
+
+    setDeletingAllData(true)
+    try {
+      const response = await fetch(config.deleteAllDataEndpoint, { method: 'DELETE' })
+      if (!response.ok) throw new Error(await readApiError(response, t(isEnglish, '删除失败', 'Deletion failed')))
+      toast({
+        title: t(isEnglish, `${config.platformName} 数据已删除`, `${config.platformName} data deleted`),
+        description: t(isEnglish, '本地数据已删除；平台托管的视频和评论不会被删除。', 'Local data was deleted; platform-hosted videos and comments were not deleted.'),
+      })
+      await fetchAccounts()
+    } catch (error) {
+      toast({
+        title: t(isEnglish, '删除失败', 'Deletion failed'),
+        description: error instanceof Error ? localizeError(error.message, isEnglish, 'Please try again later') : t(isEnglish, '请稍后重试', 'Please try again later'),
+        variant: 'destructive',
+      })
+    } finally {
+      setDeletingAllData(false)
     }
   }
 
@@ -410,6 +464,33 @@ export function PlatformAccountsPage({ config }: PlatformAccountsPageProps) {
             </Button>
           </div>
         </header>
+
+        {config.requireLegalConsent && (
+          <section className="rounded-xl border border-white/10 bg-white/[0.03] p-4 text-sm text-white/65">
+            <label className="flex cursor-pointer items-start gap-3">
+              <input
+                type="checkbox"
+                checked={legalAccepted}
+                onChange={(event) => setLegalAccepted(event.target.checked)}
+                className="mt-1 h-4 w-4"
+              />
+              <span>
+                {t(
+                  isEnglish,
+                  config.legalConsentText || '我已阅读并同意当前隐私政策和服务条款。',
+                  config.legalConsentTextEn || 'I have read and accept the current Privacy Policy and Terms of Service.',
+                )}{' '}
+                <a href="/privacy" target="_blank" rel="noreferrer" className="text-cyan-300 underline">
+                  {t(isEnglish, '隐私政策', 'Privacy Policy')}
+                </a>
+                {' · '}
+                <a href="/terms" target="_blank" rel="noreferrer" className="text-cyan-300 underline">
+                  {t(isEnglish, '服务条款', 'Terms of Service')}
+                </a>
+              </span>
+            </label>
+          </section>
+        )}
 
         {authNotice && (
           <section
@@ -566,6 +647,27 @@ export function PlatformAccountsPage({ config }: PlatformAccountsPageProps) {
                 {t(isEnglish, '没有匹配的账号', 'No matching accounts')}
               </div>
             )}
+          </section>
+        )}
+
+        {config.deleteAllDataEndpoint && (
+          <section className="rounded-xl border border-rose-400/20 bg-rose-400/[0.04] p-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="text-sm font-semibold text-white">{t(isEnglish, 'YouTube 数据控制', 'YouTube data controls')}</h2>
+                <p className="mt-1 text-xs text-white/50">
+                  {t(isEnglish, '删除全部本地 YouTube 账号、令牌、发布记录、评论缓存和操作日志。不会删除 YouTube 上的视频或评论。', 'Delete all local YouTube accounts, tokens, publishing history, cached comments, and action logs. This does not delete videos or comments hosted on YouTube.')}
+                </p>
+              </div>
+              <Button variant="destructive" onClick={deleteAllPlatformData} disabled={deletingAllData}>
+                {deletingAllData ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                {t(
+                  isEnglish,
+                  config.deleteAllDataLabel || '删除全部 YouTube 数据',
+                  config.deleteAllDataLabelEn || 'Delete all YouTube data',
+                )}
+              </Button>
+            </div>
           </section>
         )}
       </div>

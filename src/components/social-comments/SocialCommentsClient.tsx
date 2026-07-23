@@ -205,8 +205,8 @@ const TEXT = {
     en: "This account is missing comment permissions. Reconnect it with the latest OAuth scopes.",
   },
   youtubeScopeHelp: {
-    zh: "YouTube 评论管理需要 youtube.readonly 读取评论，并需要 youtube.force-ssl 发送人工回复。",
-    en: "YouTube comment management requires youtube.readonly to read comments and youtube.force-ssl to send manual replies.",
+    zh: "YouTube 使用 youtube.force-ssl 读取评论、上传视频并发送人工回复；评论回复没有更窄的 OAuth scope。",
+    en: "YouTube uses youtube.force-ssl to read comments, upload videos, and send manual replies; YouTube provides no narrower OAuth scope for comment replies.",
   },
   instagramScopeHelp: {
     zh: "当前 Native Instagram Login 模式需要实际授予 instagram_business_basic 和 instagram_business_manage_comments。请求这些 scopes 不代表已经授权。",

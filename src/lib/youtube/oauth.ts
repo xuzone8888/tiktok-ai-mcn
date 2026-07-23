@@ -62,6 +62,28 @@ function resolveYouTubeRedirectUri(configuredRedirectUri: string | undefined): s
   }
 }
 
+export class YouTubeOAuthError extends Error {
+  readonly code: string | null
+
+  constructor(message: string, code: string | null = null) {
+    super(message)
+    this.name = 'YouTubeOAuthError'
+    this.code = code
+  }
+}
+
+export function isYouTubeAuthorizationRevokedError(error: unknown) {
+  if (error instanceof YouTubeOAuthError) {
+    return error.code === 'invalid_grant' || error.code === 'invalid_token'
+  }
+
+  const message = error instanceof Error ? error.message.toLowerCase() : ''
+  return message.includes('invalid_grant')
+    || message.includes('invalid_token')
+    || message.includes('token has been expired or revoked')
+    || message.includes('token has been revoked')
+}
+
 export function getYouTubeOAuthConfig(): YouTubeOAuthConfig {
   const clientId = process.env.YOUTUBE_CLIENT_ID || process.env.GOOGLE_CLIENT_ID
   const clientSecret = process.env.YOUTUBE_CLIENT_SECRET || process.env.GOOGLE_CLIENT_SECRET
@@ -76,8 +98,6 @@ export function getYouTubeOAuthConfig(): YouTubeOAuthConfig {
     clientSecret,
     redirectUri,
     scopes: [
-      'https://www.googleapis.com/auth/youtube.upload',
-      'https://www.googleapis.com/auth/youtube.readonly',
       'https://www.googleapis.com/auth/youtube.force-ssl',
     ],
   }
@@ -108,7 +128,6 @@ export function buildYouTubeAuthorizationUrl(userId: string): {
     scope: config.scopes.join(' '),
     state,
     access_type: 'offline',
-    include_granted_scopes: 'true',
     prompt: 'consent',
   })
 
@@ -157,7 +176,21 @@ export async function exchangeYouTubeCodeForToken(code: string, codeVerifier?: s
 }
 
 export async function refreshYouTubeAccessToken(refreshToken: string): Promise<YouTubeRefreshTokenResponse> {
-  if (isBrokerEnabled()) return callBroker<YouTubeRefreshTokenResponse>('youtube', 'refreshYouTubeAccessToken', { refreshToken })
+  if (isBrokerEnabled()) {
+    try {
+      return await callBroker<YouTubeRefreshTokenResponse>('youtube', 'refreshYouTubeAccessToken', { refreshToken })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'YouTube token refresh failed'
+      const normalized = message.toLowerCase()
+      const code = normalized.includes('invalid_grant')
+        ? 'invalid_grant'
+        : normalized.includes('invalid_token')
+          ? 'invalid_token'
+          : null
+      if (code) throw new YouTubeOAuthError(message, code)
+      throw error
+    }
+  }
   const config = getYouTubeOAuthConfig()
   const response = await fetch(GOOGLE_TOKEN_URL, {
     method: 'POST',
@@ -172,12 +205,13 @@ export async function refreshYouTubeAccessToken(refreshToken: string): Promise<Y
 
   const data = await response.json().catch(() => null) as Record<string, unknown> | null
   if (!response.ok) {
+    const code = typeof data?.error === 'string' ? data.error : null
     const message = typeof data?.error_description === 'string'
       ? data.error_description
-      : typeof data?.error === 'string'
-        ? data.error
+      : code
+        ? code
         : 'Refresh token request failed'
-    throw new Error(`YouTube token refresh failed: ${message}`)
+    throw new YouTubeOAuthError(`YouTube token refresh failed: ${message}`, code)
   }
 
   if (!data || typeof data.access_token !== 'string') {
@@ -196,7 +230,11 @@ export async function revokeYouTubeToken(token: string): Promise<void> {
 
   if (!response.ok) {
     const errorText = await response.text().catch(() => '')
-    throw new Error(`Failed to revoke YouTube token: ${errorText || response.statusText}`)
+    const message = `Failed to revoke YouTube token: ${errorText || response.statusText}`
+    if (response.status === 400 || response.status === 401) {
+      throw new YouTubeOAuthError(message, 'invalid_token')
+    }
+    throw new Error(message)
   }
 }
 

@@ -134,6 +134,8 @@ export async function GET(request: NextRequest) {
         access_token_expires_at: expiresAt,
         scopes: grantedScopes,
         status: 'active',
+        last_authorization_verified_at: now,
+        authorization_invalidated_at: null,
         updated_at: now,
       }, {
         onConflict: 'user_id,channel_id',

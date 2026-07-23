@@ -10,6 +10,7 @@ import {
 } from '@/lib/instagram/oauth'
 import {
   calculateYouTubeTokenExpiration,
+  isYouTubeAuthorizationRevokedError,
   refreshYouTubeAccessToken,
   scopesToArray as youtubeScopesToArray,
 } from '@/lib/youtube/oauth'
@@ -268,7 +269,21 @@ async function getYouTubeToken(admin: any, userId: string, accountId: string): P
   let accessToken = tokenRecord.access_token
   let scopes = normalizeScopes(account.scopes)
   if (shouldRefreshToken(tokenRecord.access_token_expires_at || account.access_token_expires_at)) {
-    const refreshed = await refreshYouTubeAccessToken(tokenRecord.refresh_token)
+    let refreshed
+    try {
+      refreshed = await refreshYouTubeAccessToken(tokenRecord.refresh_token)
+    } catch (refreshError) {
+      if (isYouTubeAuthorizationRevokedError(refreshError)) {
+        const { error: invalidationError } = await admin.rpc('mark_youtube_authorization_invalid', {
+          p_user_id: userId,
+          p_account_id: accountId,
+        })
+        if (invalidationError) {
+          throw new Error(`Unable to record invalid YouTube authorization: ${invalidationError.message}`)
+        }
+      }
+      throw refreshError
+    }
     const expiresAt = calculateYouTubeTokenExpiration(refreshed.expires_in).toISOString()
     accessToken = refreshed.access_token
     scopes = refreshed.scope ? youtubeScopesToArray(refreshed.scope) : scopes
