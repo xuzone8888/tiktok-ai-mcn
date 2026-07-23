@@ -56,7 +56,7 @@ interface LoadErrorState {
 const PLATFORM_ORDER: Platform[] = ["all", "youtube", "tiktok", "instagram", "facebook"]
 const YOUTUBE_AUTO_SYNC_INTERVAL_MS = 5 * 60 * 1000
 const YOUTUBE_AUTO_SYNC_INITIAL_DELAY_MS = 2000
-const FACEBOOK_INITIAL_SYNC_WINDOW_MS = 60 * 1000
+const INITIAL_SYNC_WINDOW_MS = 60 * 1000
 
 const TEXT = {
   title: { zh: "评论管理", en: "Comments" },
@@ -154,8 +154,8 @@ const TEXT = {
     en: "No YouTube comments yet.",
   },
   noYoutubeCommentsHelp: {
-    zh: "选择频道和已发布视频后点击同步；如果仍为空，可能是该视频暂无评论。",
-    en: "Select a channel and published video, then click Sync. If it stays empty, the video may not have comments yet.",
+    zh: "进入评论管理时会自动同步最近发布内容；如果仍为空，可能是视频暂无评论。",
+    en: "Recent published content is synced automatically when you open comment management. If it stays empty, the videos may not have comments yet.",
   },
   noInstagramComments: {
     zh: "暂无 Instagram 评论。",
@@ -896,8 +896,8 @@ export default function SocialCommentsClient({
       let idempotencyKey: string | undefined
       if (isAuto && selectedContent?.id) {
         idempotencyKey = `auto:youtube:${accountId}:${selectedContent.id}:${Math.floor(Date.now() / YOUTUBE_AUTO_SYNC_INTERVAL_MS)}`
-      } else if (source === "initial" && syncPlatform === "facebook") {
-        idempotencyKey = `initial:facebook:${accountId}:${Math.floor(Date.now() / FACEBOOK_INITIAL_SYNC_WINDOW_MS)}`
+      } else if (source === "initial") {
+        idempotencyKey = `initial:${syncPlatform}:${accountId}:${Math.floor(Date.now() / INITIAL_SYNC_WINDOW_MS)}`
       }
       const data = await fetch("/api/social-comments/sync", {
         method: "POST",
@@ -977,10 +977,11 @@ export default function SocialCommentsClient({
   }, [accountId, canSyncSelectedAccount, lang, loadComments, requestHeaders, selectedAccount, selectedContent?.id, selectedPlatformCapabilities?.requires_explicit_content, toast])
 
   const initialSyncTargetKey = initialSyncEnabled
-    && selectedAccount?.platform === "facebook"
+    && selectedAccount
+    && selectedPlatformCapabilities?.recent_sync
     && accountId !== "all"
     && canSyncSelectedAccount
-      ? `facebook:${accountId}`
+      ? `${selectedAccount.platform}:${accountId}`
       : null
 
   useEffect(() => {

@@ -1411,6 +1411,7 @@ export default function YouTubePublishClient({ showCommentManagement, enableYouT
             platformLock="youtube"
             embedded
             autoSyncEnabled={enableYouTubeAutoSync}
+            initialSyncEnabled
           />
         ) : (
           <div className="space-y-6">

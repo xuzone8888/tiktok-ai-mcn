@@ -9,6 +9,8 @@ const root = path.resolve(__dirname, '..')
 const client = fs.readFileSync(path.join(root, 'src/components/social-comments/SocialCommentsClient.tsx'), 'utf8')
 const service = fs.readFileSync(path.join(root, 'src/lib/social-comments/service.ts'), 'utf8')
 const types = fs.readFileSync(path.join(root, 'src/lib/social-comments/types.ts'), 'utf8')
+const youtubeClient = fs.readFileSync(path.join(root, 'src/app/(main)/youtube-publish/YouTubePublishClient.tsx'), 'utf8')
+const youtubeCommentsPage = fs.readFileSync(path.join(root, 'src/app/(main)/youtube-publish/comments/page.tsx'), 'utf8')
 const guardSource = fs.readFileSync(path.join(root, 'src/components/social-comments/workspace-request-guard.ts'), 'utf8')
 const guardModule = new Module('workspace-request-guard')
 guardModule._compile(ts.transpileModule(guardSource, {
@@ -126,4 +128,17 @@ test('batch replies select replyable comments and send one message sequentially'
   assert.match(client, /await postReply\(comment, message\)/)
   assert.match(client, /successfulIds\.add\(comment\.id\)/)
   assert.match(client, /setSelectedReplyIds\(allReplyableSelected \? new Set\(\)/)
+})
+
+test('YouTube comment surfaces sync recent content once when opened', () => {
+  assert.match(youtubeClient, /platformLock="youtube"[\s\S]*initialSyncEnabled/)
+  assert.match(youtubeCommentsPage, /platformLock="youtube"[\s\S]*initialSyncEnabled/)
+  assert.match(client, /initialSyncAttemptedTargets\.current\.has\(initialSyncTargetKey\)/)
+  assert.match(client, /selectedPlatformCapabilities\?\.recent_sync/)
+  assert.match(client, /idempotencyKey = `initial:\$\{syncPlatform\}:\$\{accountId\}:/)
+})
+
+test('saved comments remain ordered newest first after automatic sync', () => {
+  assert.match(service, /\.order\('remote_created_at', \{ ascending: false, nullsFirst: false \}\)/)
+  assert.match(service, /\.order\('created_at', \{ ascending: false \}\)/)
 })
