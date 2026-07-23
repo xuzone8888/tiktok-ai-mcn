@@ -58,8 +58,10 @@ FILTERED_CRONTAB="$(
 echo ""
 echo "✅ Cron Job 配置完成！"
 echo ""
-echo "📋 当前 Cron 任务列表:"
-crontab -l | grep -v "^#" | head -10
+echo "📋 当前 Cron 任务摘要（参数已隐藏）:"
+crontab -l \
+  | awk 'NF && $1 !~ /^#/ { print $1, $2, $3, $4, $5, $6 }' \
+  | head -10
 echo ""
 echo "📊 发布日志: tail -f $PUBLISH_LOG_FILE"
 echo "📊 YouTube 数据治理日志: tail -f $YOUTUBE_RETENTION_LOG_FILE"
