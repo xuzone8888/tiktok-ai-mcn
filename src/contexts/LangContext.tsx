@@ -12,11 +12,13 @@ type Lang = "zh" | "en";
 
 interface LangContextValue {
   lang: Lang;
+  isReady: boolean;
   setLang: (lang: Lang) => void;
 }
 
 const LangContext = createContext<LangContextValue>({
   lang: "zh",
+  isReady: false,
   setLang: () => {},
 });
 
@@ -61,7 +63,7 @@ export function LangProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <LangContext.Provider value={{ lang, setLang }}>
+    <LangContext.Provider value={{ lang, isReady: mounted, setLang }}>
       {children}
     </LangContext.Provider>
   );

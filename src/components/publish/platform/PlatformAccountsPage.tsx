@@ -19,6 +19,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 
 import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
 import { useLang } from '@/contexts/LangContext'
@@ -223,7 +231,7 @@ function StatusBadge({ account, isEnglish }: { account: PlatformAccount; isEngli
 
 export function PlatformAccountsPage({ config }: PlatformAccountsPageProps) {
   const router = useRouter()
-  const { lang } = useLang()
+  const { lang, isReady: languageReady } = useLang()
   const isEnglish = lang === 'en'
   const pageTitle = isEnglish
     ? config.accountsPageTitleEn || `${config.platformName} Account Management`
@@ -240,6 +248,7 @@ export function PlatformAccountsPage({ config }: PlatformAccountsPageProps) {
   const [loading, setLoading] = useState(true)
   const [binding, setBinding] = useState(false)
   const [legalAccepted, setLegalAccepted] = useState(false)
+  const [legalDialogOpen, setLegalDialogOpen] = useState(false)
   const [deletingAllData, setDeletingAllData] = useState(false)
   const [busyAccountId, setBusyAccountId] = useState<string | null>(null)
   const [search, setSearch] = useState('')
@@ -284,6 +293,8 @@ export function PlatformAccountsPage({ config }: PlatformAccountsPageProps) {
   }, [fetchAccounts])
 
   useEffect(() => {
+    if (!languageReady) return
+
     const params = new URLSearchParams(window.location.search)
     const success = params.get('success')
     const error = params.get('error')
@@ -313,7 +324,7 @@ export function PlatformAccountsPage({ config }: PlatformAccountsPageProps) {
       })
       window.history.replaceState({}, '', `${config.routeBase}/accounts`)
     }
-  }, [config.platformName, config.routeBase, isEnglish, toast])
+  }, [config.platformName, config.routeBase, isEnglish, languageReady, toast])
 
   const overview = useMemo(() => ({
     total: accounts.length,
@@ -334,16 +345,8 @@ export function PlatformAccountsPage({ config }: PlatformAccountsPageProps) {
     return sortAccounts(filtered, sortBy)
   }, [accounts, filterBy, search, sortBy])
 
-  const startBinding = async () => {
+  const beginBinding = async () => {
     if (bindingInFlightRef.current) return
-    if (config.requireLegalConsent && !legalAccepted) {
-      toast({
-        title: t(isEnglish, '请先确认政策', 'Please confirm the policies'),
-        description: t(isEnglish, '绑定前请阅读并同意当前隐私政策和服务条款。', 'Read and accept the current Privacy Policy and Terms before connecting.'),
-        variant: 'destructive',
-      })
-      return
-    }
 
     bindingInFlightRef.current = true
     setBinding(true)
@@ -361,6 +364,22 @@ export function PlatformAccountsPage({ config }: PlatformAccountsPageProps) {
       })
       setBinding(false)
     }
+  }
+
+  const startBinding = () => {
+    if (bindingInFlightRef.current) return
+    if (config.requireLegalConsent) {
+      setLegalAccepted(false)
+      setLegalDialogOpen(true)
+      return
+    }
+    void beginBinding()
+  }
+
+  const confirmLegalConsentAndBind = () => {
+    if (!legalAccepted || bindingInFlightRef.current) return
+    setLegalDialogOpen(false)
+    void beginBinding()
   }
 
   const refreshAccount = async (accountId: string) => {
@@ -465,33 +484,6 @@ export function PlatformAccountsPage({ config }: PlatformAccountsPageProps) {
           </div>
         </header>
 
-        {config.requireLegalConsent && (
-          <section className="rounded-xl border border-white/10 bg-white/[0.03] p-4 text-sm text-white/65">
-            <label className="flex cursor-pointer items-start gap-3">
-              <input
-                type="checkbox"
-                checked={legalAccepted}
-                onChange={(event) => setLegalAccepted(event.target.checked)}
-                className="mt-1 h-4 w-4"
-              />
-              <span>
-                {t(
-                  isEnglish,
-                  config.legalConsentText || '我已阅读并同意当前隐私政策和服务条款。',
-                  config.legalConsentTextEn || 'I have read and accept the current Privacy Policy and Terms of Service.',
-                )}{' '}
-                <a href="/privacy" target="_blank" rel="noreferrer" className="text-cyan-300 underline">
-                  {t(isEnglish, '隐私政策', 'Privacy Policy')}
-                </a>
-                {' · '}
-                <a href="/terms" target="_blank" rel="noreferrer" className="text-cyan-300 underline">
-                  {t(isEnglish, '服务条款', 'Terms of Service')}
-                </a>
-              </span>
-            </label>
-          </section>
-        )}
-
         {authNotice && (
           <section
             className={cn(
@@ -513,6 +505,75 @@ export function PlatformAccountsPage({ config }: PlatformAccountsPageProps) {
               </div>
             </div>
           </section>
+        )}
+
+        {config.requireLegalConsent && (
+          <Dialog
+            open={legalDialogOpen}
+            onOpenChange={(open) => {
+              if (binding) return
+              setLegalDialogOpen(open)
+              if (!open) setLegalAccepted(false)
+            }}
+          >
+            <DialogContent className="border-white/10 bg-zinc-950 text-white sm:max-w-lg">
+              <DialogHeader>
+                <DialogTitle>
+                  {t(isEnglish, `连接 ${config.platformName} 前请确认`, `Before connecting ${config.platformName}`)}
+                </DialogTitle>
+                <DialogDescription className="text-white/60">
+                  {t(
+                    isEnglish,
+                    `Star Gaze 将跳转至 ${config.platformName} 完成账号授权。继续前，请阅读并确认以下政策。`,
+                    `Star Gaze will redirect you to ${config.platformName} to authorize your account. Review and confirm the policies below before continuing.`,
+                  )}
+                </DialogDescription>
+              </DialogHeader>
+
+              <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-white/10 bg-white/[0.04] p-4 text-sm text-white/75">
+                <input
+                  type="checkbox"
+                  checked={legalAccepted}
+                  onChange={(event) => setLegalAccepted(event.target.checked)}
+                  className="mt-1 h-4 w-4 shrink-0"
+                />
+                <span>
+                  {t(
+                    isEnglish,
+                    config.legalConsentText || '我已阅读并同意当前隐私政策和服务条款。',
+                    config.legalConsentTextEn || 'I have read and accept the current Privacy Policy and Terms of Service.',
+                  )}{' '}
+                  <a href="/privacy" target="_blank" rel="noreferrer" className="text-cyan-300 underline">
+                    {t(isEnglish, '隐私政策', 'Privacy Policy')}
+                  </a>
+                  {' · '}
+                  <a href="/terms" target="_blank" rel="noreferrer" className="text-cyan-300 underline">
+                    {t(isEnglish, '服务条款', 'Terms of Service')}
+                  </a>
+                </span>
+              </label>
+
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="titanium-outline"
+                  disabled={binding}
+                  onClick={() => setLegalDialogOpen(false)}
+                >
+                  {t(isEnglish, '取消', 'Cancel')}
+                </Button>
+                <Button
+                  type="button"
+                  variant="mermaid"
+                  disabled={!legalAccepted || binding}
+                  onClick={confirmLegalConsentAndBind}
+                >
+                  {binding ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />}
+                  {t(isEnglish, '同意并继续', 'Agree and continue')}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         )}
 
         {accountsMissingCommentScopes.length > 0 && (
