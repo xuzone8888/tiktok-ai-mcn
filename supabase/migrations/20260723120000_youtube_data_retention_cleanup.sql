@@ -146,6 +146,7 @@ DECLARE
   v_sync_run_count INTEGER := 0;
   v_action_log_count INTEGER := 0;
   v_account_count INTEGER := 0;
+  v_task_count INTEGER := 0;
 BEGIN
   IF auth.role() IS DISTINCT FROM 'service_role' THEN
     RAISE EXCEPTION 'service_role required' USING ERRCODE = '42501';
@@ -181,9 +182,20 @@ BEGIN
   WHERE id = p_account_id AND user_id = p_user_id;
   GET DIAGNOSTICS v_account_count = ROW_COUNT;
 
+  -- Account deletion cascades its task items. Remove any now-empty parent
+  -- tasks so the disconnected account leaves no orphaned publishing history.
+  DELETE FROM public.youtube_publish_tasks AS task
+  WHERE task.user_id = p_user_id
+    AND NOT EXISTS (
+      SELECT 1 FROM public.youtube_publish_task_items AS item
+      WHERE item.task_id = task.id
+    );
+  GET DIAGNOSTICS v_task_count = ROW_COUNT;
+
   RETURN pg_catalog.jsonb_build_object(
     'revocation_job_id', v_job_id,
     'accounts_deleted', v_account_count,
+    'tasks_deleted', v_task_count,
     'comments_deleted', v_comment_count,
     'sync_runs_deleted', v_sync_run_count,
     'action_logs_deleted', v_action_log_count

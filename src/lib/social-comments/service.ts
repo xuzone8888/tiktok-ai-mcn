@@ -285,6 +285,7 @@ async function getYouTubeToken(admin: any, userId: string, accountId: string): P
       throw refreshError
     }
     const expiresAt = calculateYouTubeTokenExpiration(refreshed.expires_in).toISOString()
+    const verifiedAt = new Date().toISOString()
     accessToken = refreshed.access_token
     scopes = refreshed.scope ? youtubeScopesToArray(refreshed.scope) : scopes
     await Promise.all([
@@ -293,7 +294,7 @@ async function getYouTubeToken(admin: any, userId: string, accountId: string): P
         .update({
           access_token: accessToken,
           access_token_expires_at: expiresAt,
-          updated_at: new Date().toISOString(),
+          updated_at: verifiedAt,
         })
         .eq('account_id', accountId),
       admin
@@ -302,7 +303,9 @@ async function getYouTubeToken(admin: any, userId: string, accountId: string): P
           access_token_expires_at: expiresAt,
           scopes,
           status: 'active',
-          updated_at: new Date().toISOString(),
+          last_authorization_verified_at: verifiedAt,
+          authorization_invalidated_at: null,
+          updated_at: verifiedAt,
         })
         .eq('id', accountId),
     ])

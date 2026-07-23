@@ -21,7 +21,8 @@ const privacyPage = read('src/app/(landing)/privacy/page.tsx')
 const termsPage = read('src/app/(landing)/terms/page.tsx')
 const reviewScript = read('docs/youtube-comments-review-script.md')
 const acceptanceChecklist = read('docs/youtube-comments-acceptance-checklist.md')
-const vercel = JSON.parse(read('vercel.json'))
+const cronSetup = read('scripts/cron_setup.sh')
+const retentionRunner = read('run-youtube-data-retention.sh')
 
 test('keeps YouTube governance tables and functions service-role-only', () => {
   assert.match(migration, /ALTER TABLE public\.youtube_revocation_jobs ENABLE ROW LEVEL SECURITY/)
@@ -72,7 +73,7 @@ test('deletes all local YouTube data through an authenticated user control', () 
   assert.doesNotMatch(dataRoute, /processYouTubeRevocationJobs/)
 })
 
-test('verifies active authorizations every 28 days with a 29-day hourly backstop', () => {
+test('verifies active authorizations every 28 days with an Aliyun 29-day hourly backstop', () => {
   assert.match(retentionRoute, /if \(!cronSecret\) return false/)
   assert.match(retentionRoute, /28 \* 24 \* 60 \* 60 \* 1000/)
   assert.match(retentionRoute, /refreshYouTubeAccessToken/)
@@ -87,18 +88,11 @@ test('verifies active authorizations every 28 days with a 29-day hourly backstop
   )
   assert.match(migration, /p_retention_days IS NULL/)
   assert.match(migration, /p_retention_days > 29/)
-  assert.deepEqual(vercel.crons.find((cron) => cron.path === '/api/youtube/data-retention'), {
-    path: '/api/youtube/data-retention',
-    schedule: '17 * * * *',
-  })
-  for (const existingPath of [
-    '/api/cron/process-image-generation',
-    '/api/youtube/publish/process',
-    '/api/facebook/publish/process',
-    '/api/instagram/publish/process',
-  ]) {
-    assert.ok(vercel.crons.some((cron) => cron.path === existingPath))
-  }
+  assert.match(cronSetup, /17 \* \* \* \* \$APP_DIR\/run-youtube-data-retention\.sh/)
+  assert.match(cronSetup, /\* \* \* \* \* \$APP_DIR\/run-scheduler\.sh/)
+  assert.match(retentionRunner, /\/api\/youtube\/data-retention/)
+  assert.match(retentionRunner, /x-cron-secret: \$\{CRON_SECRET\}/)
+  assert.match(retentionRunner, /flock -n 9/)
 })
 
 test('covers cached channel, publishing, comment, and log API data', () => {
@@ -127,6 +121,10 @@ test('records terminal authorization errors without resetting the compliance clo
   assert.doesNotMatch(migration, /authorization_invalidated_at = pg_catalog\.now\(\)/)
   assert.match(processor, /\.from\('youtube_accounts'\)[\s\S]{0,120}\.select\('id, user_id'\)/)
   assert.match(processor, /\.from\('youtube_publish_task_items'\)[\s\S]{0,260}\.select\('id'\)/)
+  for (const source of [commentService, processor]) {
+    assert.match(source, /last_authorization_verified_at/)
+    assert.match(source, /authorization_invalidated_at: null/)
+  }
 })
 
 test('does not merge previously granted YouTube OAuth scopes', () => {

@@ -22,10 +22,6 @@
     {
       "path": "/api/instagram/publish/process",
       "schedule": "* * * * *"
-    },
-    {
-      "path": "/api/youtube/data-retention",
-      "schedule": "17 * * * *"
     }
   ],
   "headers": [

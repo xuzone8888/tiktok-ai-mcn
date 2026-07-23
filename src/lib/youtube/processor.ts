@@ -329,6 +329,8 @@ async function getValidAccessToken(supabase: any, account: YouTubeAccountToken):
       access_token_expires_at: expiresAt,
       ...(scopes ? { scopes } : {}),
       status: 'active',
+      last_authorization_verified_at: now,
+      authorization_invalidated_at: null,
       updated_at: now,
     })
     .eq('id', account.account_id)
