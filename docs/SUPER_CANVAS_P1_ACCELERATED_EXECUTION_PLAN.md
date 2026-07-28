@@ -677,6 +677,13 @@ Phase 5 退出条件：
 - 最终自动保存稳定后，服务器使用既有生产 `.env.local` 与 service role 在进程内只读核验且不回显密钥：Canvas owner 精确匹配，`rev=44 / schema_version=1 / doc_bytes=20,582 / nodes=100 / edges=0 / updated_at=2026-07-28T09:20:59.669Z`；目标 generation=0、ledger=1。较多 rev 是长批次中浏览器控制往返超过 debounce 后的多次安全 CAS 收敛，不影响最终 100 节点真相。
 - **下一唯一动作**：对已稳定的 100 节点文档只改第一个测试文本一次，使用仅记录 loopback TCP 时间戳/方向/字节长度、绝不采集 payload/cookie/body 的短时 `tcpdump` 元数据观测该唯一 PATCH，从首个请求字节到响应字节计算服务端观测时延；同时核对 rev 仅按本次最终保存推进、100 节点及文案持久、无 5xx/生成/ledger 变化。诊断进程和临时元数据随后定向删除。
 
+### 永久 post-100-node timing 检查点（2026-07-28 17:24 CST）
+
+- 100 个 textarea 的 UI 计数精确确认后，只把第一个测试文本改为 `Canvas P1 production smoke 2026-07-28 timed` 并失焦。短时 loopback 元数据中，唯一大请求为 Nginx→Next `24,127 bytes`，首个请求字节 `17:23:46.189182`、响应最后字节 `17:23:46.652945`，服务端观测时延精确 `463.763 ms`，满足 `<1s`。相邻每 10 秒约 3,459-byte 请求是独立 writer heartbeat，不计入保存样本。
+- 只读数据库随即证明 `rev=45 / doc_bytes=20,588 / nodes=100 / title exact / updated_at=2026-07-28T09:23:46.196Z`，目标 generation=0、ledger=1。正式页面 reload 后先处于正常异步载入，7 秒内恢复精确 100 个文本节点与新文案，无恢复入口或白屏。
+- 诊断只记录时间戳、方向与包长度，未采集 payload/cookie/body；精确 `timeout/tcpdump` 进程已停止，`/tmp/canvas-p1-timing-786cec58.log` 与 `.pid` 已验证路径后定向删除。未修改 Nginx、应用或数据库来取得该时延。
+- **下一唯一动作**：严格进入 runbook §3.2 最小付费链。先选定仓库内无敏感内容的单张商品测试图并通过产品 UI 上传，记录上传对象/节点与积分基线；随后只允许一张图片、一次图生视频、一次下载、一个可控失败和一次重复点击幂等证明。TikTok 因尚未明确确认测试/私有账号，保持禁止；禁止真实支付或扩充样本。
+
 ## 九、完成定义
 
 只有同时满足以下条件，超级画布 P1 加速任务才可报告“完成并可申请上线”：
