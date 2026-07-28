@@ -624,6 +624,14 @@ Phase 5 退出条件：
 - **切换/回滚闸**：先把上述固定哈希原文件复制为 root-only 永久 rollback 文件，再由该原文生成只改一行 `3000→3002` 的同目录临时文件；验证旧/新 upstream 各恰为 0/1 后原子 rename，`nginx -t` 成功才 reload。reload 后立即核对公网 `/auth/login=200`、`/canvas=307`、`/api/canvas/not-a-uuid=INVALID_ID` 与公开只读生产数据路由；任一步失败则原子恢复固定 rollback 文件、再次 `nginx -t` 和 reload。绝不修改 `/etc/nginx/sites-enabled/okspeakai.com` 或其独立服务。
 - **下一唯一动作**：按上述单行、单域、原子且可回滚步骤把 `toryxai.com` 从旧 `3000` 切到健康候选 `3002`，随后立即记录切换后永久检查点；在公网验收完成前保留旧 3000，不停止任何既有进程。
 
+### 永久 post-switch 检查点（2026-07-28 16:58 CST，正式流量已切到候选）
+
+- 切换脚本在写入前再次验证 enabled symlink、旧配置固定 SHA、唯一旧 upstream、3002 候选存活和候选登录页 200。旧配置已完整保存为 root-only `/etc/nginx/sites-available/toryxai.com.rollback-canvas-p1-1ddb35f5`，权限 `600`、SHA-256 仍为 `1ddb35f539a645e0f454c3cebca3971fb49bb26b55f0538078a7ea8abc0dc354`。
+- 新配置由固定旧配置只替换唯一 `proxy_pass http://127.0.0.1:3000;` 为 `proxy_pass http://127.0.0.1:3002;`，同目录临时文件断言 old/new upstream 为 0/1 后原子 rename；新 SHA-256 为 `fef1d150f4f3af576f6f25b821a5f0a21280593f8493ed2fd71c559dd5e59fa4`。全局 `nginx -t` 成功后仅 reload；既有 protocol-options warning 不变。脚本带 EXIT rollback trap，任一后续断言失败都会原子恢复旧文件、复验并 reload，本次所有断言通过所以未触发回滚。
+- 主机内经 TLS/SNI 的新正式路径：`/auth/login=200`、`/canvas?benchmark=1=307`、`/api/canvas/not-a-uuid=INVALID_ID`、`/api/models/public=200 / 48,912 bytes / 0.795s`。随后从工作站经外部 DNS/TLS 复验：登录 `200 / 10,230 bytes / 0.994s`，Canvas `307` 且精确跳转同域登录，Canvas API 新合约命中，公开生产数据 `200 / 48,912 bytes / 2.217s`。
+- 独立 `okspeakai.com/api/health` 外部仍为 `200 / 37 bytes / 1.417s`，证明其 Nginx/8788 服务未受影响。旧正式应用 `3000`、webhook `3001` 和全部既有 PM2 进程仍在线，回滚无需重新构建或重启即可只把 toryx upstream 恢复到 3000。
+- **下一唯一动作**：再次确认 3002 online/restart 0、新配置哈希、外部关键路由与生产数据库 postflight 健康后执行 `pm2 save` 固化双进程可回滚状态；随后严格按 runbook §3 的最小生产样本完成 Canvas 创建/编辑/刷新/100 节点保存、生成状态机与积分守恒验收。禁止真实支付；TikTok 仍须先确认测试/私有账号，否则跳过并报告。
+
 ## 九、完成定义
 
 只有同时满足以下条件，超级画布 P1 加速任务才可报告“完成并可申请上线”：
