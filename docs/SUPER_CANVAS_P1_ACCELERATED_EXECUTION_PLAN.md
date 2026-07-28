@@ -684,6 +684,13 @@ Phase 5 退出条件：
 - 诊断只记录时间戳、方向与包长度，未采集 payload/cookie/body；精确 `timeout/tcpdump` 进程已停止，`/tmp/canvas-p1-timing-786cec58.log` 与 `.pid` 已验证路径后定向删除。未修改 Nginx、应用或数据库来取得该时延。
 - **下一唯一动作**：严格进入 runbook §3.2 最小付费链。先选定仓库内无敏感内容的单张商品测试图并通过产品 UI 上传，记录上传对象/节点与积分基线；随后只允许一张图片、一次图生视频、一次下载、一个可控失败和一次重复点击幂等证明。TikTok 因尚未明确确认测试/私有账号，保持禁止；禁止真实支付或扩充样本。
 
+### 永久 pre-paid-sample 检查点（2026-07-28 17:32 CST，唯一图片付费提交前）
+
+- 生产测试身份仍固定为 UID `24743ce9-4794-46dd-be29-01fb82c841b7`，唯一 Canvas 仍固定为 `786cec58-88d5-436a-a97f-64cbb7dbf41e`。对临时探索产生的一个空商品节点和一个空图片节点均已通过产品 UI 的确认对话框删除；随后服务端只读核验为 `rev=49 / schema_version=1 / nodes=100 / edges=0 / title="Canvas P1 production smoke 2026-07-28 timed" / updated_at=2026-07-28T09:30:31.533Z`，没有恢复态或坏节点。
+- 付费前精确基线为 `credits=100 / target_generations=0 / target_ledger=1 / ledger_amounts=[100]`；唯一账本仍是注册赠送，没有消费、退款或未知提交。生产和候选进程身份、固定 release、Nginx 原子切换及 rollback 文件保持上一检查点不变。
+- `NEXT_PUBLIC_IMAGE_FACTORY_ENABLED=false` 与 `IMAGE_FACTORY_ENABLED=false` 是当前生产的有意配置，因此不为验收全局开启该功能。唯一图片样本改走已上线的 `/quick-gen` 产品 UI：单图、1K、预计 5 积分。样本固定为仓库文件 `public/images/landing/white-hoodie.png`，大小 `441,939 bytes`，SHA-256 `849433BCC29E6DE9F3786583B65FFDE3883399DC9F2E56FF2CFBAF97CE123E56`；内容为无人物、无文字、无隐私的白色卫衣商品图。
+- **下一唯一动作**：通过产品 UI 的唯一文件输入上传该固定样本，填入单张、无人、无文字的安全商品图提示词；确认按钮由禁用变为可提交且仍显示 `1K / 5 积分` 后只点击一次。点击后不得因等待、超时或页面刷新再次提交，只按目标 UID 跟踪唯一 generation、积分扣减、终态及后续退款/下载证据。
+
 ## 九、完成定义
 
 只有同时满足以下条件，超级画布 P1 加速任务才可报告“完成并可申请上线”：
