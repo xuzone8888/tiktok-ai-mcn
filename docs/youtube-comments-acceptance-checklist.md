@@ -27,7 +27,6 @@ Use this checklist before running a real YouTube comments acceptance test. Do no
 - The test user can sign in to the app.
 - The test user has connected a YouTube channel through `/youtube-publish/accounts`.
 - The stored YouTube account scopes include:
-  - `https://www.googleapis.com/auth/youtube.readonly`
   - `https://www.googleapis.com/auth/youtube.force-ssl`
 - The test user has at least one YouTube publish task item with:
   - `status = 'published'`
@@ -56,7 +55,7 @@ Use this checklist before running a real YouTube comments acceptance test. Do no
 
 ### Missing Scope
 
-- Setup: Use an older connected account missing `youtube.readonly` or `youtube.force-ssl`.
+- Setup: Use an older connected account missing `youtube.force-ssl`.
 - UI: The YouTube comments page shows a reconnect warning and a CTA to `/youtube-publish/accounts`.
 - API: Sync or reply returns `missing_comment_scope` if attempted server-side.
 - Action log: A `permission_error` action is recorded with `error_code = 'missing_comment_scope'`.
@@ -119,8 +118,7 @@ Only enable it temporarily in a test environment when validating the automatic r
 - `SOCIAL_COMMENTS_API_ENABLED=true`
 - `SOCIAL_COMMENTS_ENABLED_PLATFORMS=youtube`
 - `NEXT_PUBLIC_YOUTUBE_COMMENTS_ENABLED=true`
-- A YouTube account is connected and includes both scopes:
-  - `https://www.googleapis.com/auth/youtube.readonly`
+- A YouTube account is connected and includes the required scope:
   - `https://www.googleapis.com/auth/youtube.force-ssl`
 - At least one video was published successfully through this platform.
 - The selected YouTube video has real comments.

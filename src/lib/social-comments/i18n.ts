@@ -97,6 +97,10 @@ const API_MESSAGES: Record<string, Record<SocialCommentLang, string>> = {
     zh: '同步过于频繁，请稍后再试',
     en: 'Sync was requested too recently. Please wait before trying again.',
   },
+  provider_unreachable: {
+    zh: '海外平台接口暂时无法连接，请稍后重试。',
+    en: 'The overseas platform API is temporarily unreachable. Please try again shortly.',
+  },
   internal_error: {
     zh: '服务器错误',
     en: 'Server error.',

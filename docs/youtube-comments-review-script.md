@@ -10,7 +10,7 @@ This video demonstrates manual YouTube comment management for videos published t
 
 - The reviewer can sign in to the app with a test account.
 - The test account has a connected YouTube channel.
-- The connected channel granted `youtube.readonly` and `youtube.force-ssl`.
+- The connected channel granted `youtube.force-ssl`.
 - At least one YouTube video was published through the app and has a stored YouTube video ID.
 - The demo environment enables only the YouTube comments path:
   - `SOCIAL_COMMENTS_API_ENABLED=true`
@@ -58,8 +58,8 @@ Do not describe automatic replies in the review flow. The system does not provid
 
 ## Permission Explanation
 
-- `youtube.readonly` is required to read YouTube video comments and related comment metadata.
-- `youtube.force-ssl` is required by the YouTube Data API for write operations such as posting a comment reply.
+- `youtube.force-ssl` covers the app's YouTube channel access, video publishing, comment reading, and user-initiated comment replies.
+- YouTube does not provide a narrower OAuth scope that supports posting comment replies, so the app requests only `youtube.force-ssl` instead of combining it with redundant read or upload scopes.
 
 ## Product Boundaries
 
