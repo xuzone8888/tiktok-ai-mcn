@@ -94,6 +94,26 @@ Complete these in order after the branch is deployed:
 ## Current Meta dashboard findings
 
 - The app is published/live.
+- The company has confirmed the irreversible **technology provider** designation in Meta. The Review section now exposes Testing, Verification, and App Review.
+- The business portfolio `StarGaze` (`1717744712985897`) is eligible for business verification but is still **unverified**. Access verification remains blocked until business verification is completed.
+- The business-verification flow has been started and classified as:
+  - country/region: China;
+  - organization type: private company;
+  - legal name: `武汉观星文化传媒有限公司`;
+  - public/alternate name: `Star Gaze`.
+  No verification request has been submitted. The next required fields must match the supporting document exactly: street address, city, province/region, and postal code. The optional USCC/USCI/TIN/BRN/NOC registration number is currently blank.
+- Meta accepts a utility bill, bank statement, or business license to prove the organization's address and phone number. Use a document that shows the same legal name and address entered in the form.
+- A Website platform has been added and saved with `https://www.toryxai.com/`. This removed the “no platform” blocker from Reviewer Instructions.
+- The application is still ineligible for submission because the required 1024×1024 app icon is missing. The repository's existing approved-size candidate is `public/images/toryx_logo_icon_new.png`; upload must be completed through the native file picker.
+- The current App Review draft has been narrowed to the Facebook-only scope: the six Page permissions in this package plus the default `public_profile`. Five Instagram permissions and `business_management` were removed from this submission only, not from the app.
+- Reviewer Instructions now request the website navigation/test steps, confirmation that Facebook Login is integrated, optional access credentials/codes, optional geographic restrictions, and optional supporting recordings/screenshots. Do not enter reviewer credentials until a dedicated account is ready and the review branch is deployed.
+- Every requested Page permission requires its own usage explanation, end-to-end screen recording, applicable test API call, and acceptable-use attestation.
+- The Data Handling form asks for:
+  - whether any processors/service providers can access Platform Data and their legal names;
+  - the legal entity responsible for Platform Data and its country;
+  - whether Platform Data was disclosed for national-security requests in the preceding 12 months;
+  - which government-request review, challenge, minimization, and logging procedures actually exist.
+  These answers must be factually confirmed before they are entered.
 - Both “all calls” and “app role calls” are set to Graph API `v25.0`; the implementation has been aligned to that version.
 - All six required Page permissions are present and currently marked **Ready for testing**.
 - Meta's Page use-case test is currently marked **Testing completed**. Meta notes that test activity can take up to 24 hours to appear and remains valid for 30 days, so rerun the final reviewer path shortly before submission.
@@ -102,7 +122,6 @@ Complete these in order after the branch is deployed:
 - User Data Deletion currently points to the privacy-policy instructions page rather than a callback.
 - The advanced deauthorization callback is empty.
 - The newly implemented production data-deletion and deauthorization routes are not deployed yet; both currently return `404` on `www.toryxai.com`.
-- Meta displays the “Become a technology provider” path and says access verification is required for access to other businesses' data. That choice is irreversible in the current UI; confirm the company's role and verification owner before selecting it.
 
 ## Pre-submission gate
 
@@ -112,8 +131,11 @@ Complete these in order after the branch is deployed:
 - [ ] Deauthorization and data-deletion callbacks configured and tested
 - [ ] Existing test Page reconnected/refreshed
 - [ ] Six permissions confirmed in Business Login configuration
-- [ ] Business verification/access verification completed or actively accepted by Meta
+- [ ] Complete business verification with the exact registered address/postal code and accepted proof document
+- [ ] Complete access verification after business verification
+- [ ] Upload the required 1024×1024 Meta app icon
 - [ ] Reviewer test credentials and Page role prepared
+- [ ] Confirm all Data Handling answers with the company, including processors and government-request history/procedures
 - [ ] One continuous end-to-end recording plus permission-specific clips prepared
 - [ ] English permission explanations pasted from this package and adjusted only if product behavior changes
 - [ ] No secrets, personal accounts, unrelated customer data, browser password managers, or admin consoles appear in recordings
