@@ -1,0 +1,169 @@
+{
+  "__README__": [
+    "Frozen manifest data the accepted expected-catalog.json does not carry.",
+    "",
+    "PRE-APPLY: every value below is established by reviewed evidence, cited per section.",
+    "",
+    "UNPROVEN is a REFUSAL, never a wildcard. assertManifestComplete() stops the gate on any",
+    "UNPROVEN required section. A fabricated-but-plausible value would be strictly worse than a",
+    "refusal, and omitting the section would be worse still: that is exactly the vacuous pass the",
+    "empty-ACL disposition (Codex F2, 2026-07-15) warns about.",
+    "",
+    "Every UNPROVEN section here is closable WITHOUT another production read. Each names the exact",
+    "retained artifact and derivation that closes it."
+  ],
+
+  "preApply": {
+    "__evidence__": {
+      "target_expectations": [
+        "The four baseline tables: accepted expected-catalog.json `relations`, all relkind 'r',",
+        "owner postgres. Independently re-derived by Codex from production artifact C3BBA412...E6486",
+        "and re-measured on Preview Branch liibsugstuidwlmliyif (2026-07-16): 'Expected target tables",
+        "are all present as ordinary tables.'",
+        "",
+        "generation_quota_buckets is ABSENT, and that absence is the load-bearing pre-apply fact:",
+        "the lifecycle migration CREATEs it. If it already existed, this would not be a pre-apply",
+        "state and CREATE TABLE IF NOT EXISTS would silently adopt whatever table bears the name."
+      ],
+      "column_acl": [
+        "Exactly ZERO rows. Codex, 2026-07-16 Preview Branch baseline: '128 relation ACL rows, 0",
+        "column ACL rows', matching the production snapshot exactly.",
+        "",
+        "Asserted explicitly rather than omitted: the lifecycle migration GRANTs column-level SELECT",
+        "on generations and column-level UPDATE on profiles, so this section transitions from empty",
+        "to populated. An empty expectation that is skipped rather than asserted cannot detect a",
+        "pre-existing column grant."
+      ],
+      "lifecycle_routines": [
+        "MUST be empty. No canvas_p1_* / lifecycle-named routine exists on either the production or",
+        "Preview baseline: the accepted snapshot inventories 20 public routines, all pre-existing",
+        "application functions, none under these names.",
+        "",
+        "This is a security assertion, not bookkeeping. CREATE OR REPLACE FUNCTION preserves the",
+        "EXISTING ACL of a same-name function, and a same-name function with a DIFFERENT signature",
+        "is not replaced at all -- it becomes an overload that CREATE OR REPLACE never touches,",
+        "leaving an unreviewed body reachable under a reviewed name."
+      ],
+      "auth_signup_trigger": [
+        "Directly measured through the closed READ ONLY Preview probe on 2026-07-27:",
+        "auth_signup_trigger.present=false on canvas-p1-staging (liibsugstuidwlmliyif).",
+        "",
+        "This differs from production-derived 002_complete_setup.sql because Supabase Branching 2.0",
+        "reconstructs branches from migration history rather than a schema dump. The P1 migration",
+        "therefore must repair the missing trigger deterministically instead of assuming it exists."
+      ],
+      "auth_user_triggers": [
+        "Directly measured through the closed READ ONLY auth_user_triggers probe on 2026-07-27:",
+        "the complete non-internal trigger inventory on auth.users is exactly [].",
+        "",
+        "The empty inventory is load-bearing evidence: it proves the repair will not add a second",
+        "signup initializer beside an unreviewed differently named trigger. The migration repeats",
+        "this refusal in SQL before it creates on_auth_user_created."
+      ],
+      "handle_new_user": [
+        "The PRE-apply identity of the function 20260717 replaces. Directly measured in both retained",
+        "catalog artifacts: E:\\pg17-stargaze-test\\preflight-prod.json (SHA-256",
+        "C3BBA412DA5632D5D2C2C34BBA82FD1F7AD81AB1D8880C88285E50CB5D6E6486) and",
+        "preflight-canvas-p1-staging.csv (SHA-256",
+        "4D67655C5BEEA00E9B86BE354C7447ADC827C61ED49A2C076E36FE8B2B176202).",
+        "  CREATE OR REPLACE FUNCTION public.handle_new_user()",
+        "  RETURNS TRIGGER AS $$ ... $$ LANGUAGE plpgsql SECURITY DEFINER;",
+        "",
+        "The whitelisted fields match exactly across production and Preview: owner postgres, language",
+        "plpgsql, kind f, SECURITY DEFINER true, empty identity arguments, and config",
+        "'search_path=public'. The raw function body was neither copied nor frozen here.",
+        "",
+        "returns_trigger is independently established by 002_complete_setup.sql:478-497."
+      ],
+      "trigger_functions": [
+        "Directly measured from both retained catalog artifacts cited above. Their raw",
+        "trigger_functions sections are byte-for-byte equivalent after canonical JSON serialization",
+        "(SHA-256 CE243D21AF8FA48DFBA0E109D044CA44F28A635048EFAB058FCE91E9A9A504E7).",
+        "",
+        "Only the reviewed whitelist is frozen below: schema, name, owner, language,",
+        "security_definer, config, ACL null/empty state, and normalized EXECUTE grants. The raw",
+        "function definition was inspected only to establish equality and was not copied, logged,",
+        "committed, or uploaded.",
+        "",
+        "The resulting one-row catalog identifies public.update_updated_at_column(): owner postgres,",
+        "plpgsql, not SECURITY DEFINER, no per-function config, and EXECUTE for",
+        "anon/authenticated/postgres/PUBLIC/service_role."
+      ]
+    },
+
+    "target_expectations": [
+      { "name": "canvases", "present": true, "relkind": "r" },
+      { "name": "credit_transactions", "present": true, "relkind": "r" },
+      { "name": "generation_quota_buckets", "present": false, "relkind": "<absent>" },
+      { "name": "generations", "present": true, "relkind": "r" },
+      { "name": "profiles", "present": true, "relkind": "r" }
+    ],
+
+    "column_acl": [],
+
+    "lifecycle_routines": [],
+
+    "auth_signup_trigger": {
+      "present": false,
+      "name": "<absent>",
+      "table": "auth.users",
+      "function": "<absent>",
+      "enabled": "<absent>",
+      "for_each_row": false,
+      "timing": "<absent>",
+      "on_insert": false
+    },
+
+    "auth_user_triggers": [],
+
+    "handle_new_user": {
+      "present": true,
+      "kind": "f",
+      "owner": "postgres",
+      "language": "plpgsql",
+      "security_definer": true,
+      "returns_trigger": true,
+      "config": "search_path=public"
+    },
+
+    "trigger_functions": [
+      {
+        "schema": "public",
+        "name": "update_updated_at_column",
+        "owner": "postgres",
+        "language": "plpgsql",
+        "security_definer": false,
+        "config": "<none>",
+        "acl_is_null": false,
+        "acl_is_empty": false,
+        "grants": [
+          { "grantee": "PUBLIC", "privilege": "EXECUTE" },
+          { "grantee": "anon", "privilege": "EXECUTE" },
+          { "grantee": "authenticated", "privilege": "EXECUTE" },
+          { "grantee": "postgres", "privilege": "EXECUTE" },
+          { "grantee": "service_role", "privilege": "EXECUTE" }
+        ]
+      }
+    ]
+  },
+
+  "postApply": {
+    "__evidence__": [
+      "Captured from the first successful authorized Preview apply on 2026-07-27 through the",
+      "closed server-enforced READ ONLY batch2_catalog probe immediately after the five locked",
+      "migrations committed.",
+      "",
+      "The same five locked migrations were then reapplied atomically and the catalog was captured",
+      "again. post-apply.redacted.json and reapply.redacted.json are byte-identical:",
+      "SHA-256 2689ca12d250ebc305871e66e07cd55de87c2c965b53495f0ac0534a1631ee05.",
+      "Both canonical catalog digests are",
+      "c41445c27ca3811172743d827fd04480f5b9aff146f1f9897763d8095a2e7d24.",
+      "",
+      "Human review confirmed all 18 required sections, no extra sections, no credentials, refs,",
+      "tokens, private keys, function bodies, production data or __UNPROVEN__ values. The exact",
+      "redacted catalog is stored separately so post-apply and reapply load one hash-pinned object."
+    ],
+    "__catalog_file__": "post-apply-catalog.json",
+    "__sha256__": "2689ca12d250ebc305871e66e07cd55de87c2c965b53495f0ac0534a1631ee05"
+  }
+}

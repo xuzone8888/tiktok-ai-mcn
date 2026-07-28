@@ -1,0 +1,80 @@
+{
+  "version": "canvas-p1-remote-preflight-v1",
+  "reviewedAt": "2026-07-27",
+  "head": "8bb58dba12d38f3984ba8d07935325bd1c09ea4d",
+  "purpose": "Exact byte locks for every file that can identify, migrate, probe, recover, clean or exercise the Canvas P1 Preview Branch.",
+  "files": [
+    {
+      "path": "scripts/verify-canvas-p1-batch2.mjs",
+      "sha256": "2a15ade1b8ced10bc5cc9b4ee37c8cf33eaa00635dd47edaaec8932e25d7be59"
+    },
+    {
+      "path": "scripts/fixtures/canvas-p1/identity.mjs",
+      "sha256": "a9e81ea944beb0a2a8c229df5cd40957322f701a430850d87f08b3a5936ca576"
+    },
+    {
+      "path": "scripts/fixtures/canvas-p1/expected-catalog.json",
+      "sha256": "60747532147a5be8f8593661275c39977ff09b9344c397827f9cceffa8b3b93d"
+    },
+    {
+      "path": "scripts/fixtures/canvas-p1/batch2/callsite-allowlist.json",
+      "sha256": "4f04914303504beb61d66f09da30b84ce7f96511843db10627b70d9b8eb3c227"
+    },
+    {
+      "path": "scripts/fixtures/canvas-p1/batch2/callsites.mjs",
+      "sha256": "18d42bfcfe59158dcc73da79bc14c677f53f0082eeab04ec5a3317d0410fbe5f"
+    },
+    {
+      "path": "scripts/fixtures/canvas-p1/batch2/manifest-additions.json",
+      "sha256": "6edcae1457a9fc2066ed10cd2d2152487d09f0b1a60b0ccf276ddbb2a395b824"
+    },
+    {
+      "path": "scripts/fixtures/canvas-p1/batch2/manifests.mjs",
+      "sha256": "12877ced44b2dd10d6ab283d79e37fbdfc9f6fff54461f0fa474d90df390d52c"
+    },
+    {
+      "path": "scripts/fixtures/canvas-p1/batch2/post-apply-catalog.json",
+      "sha256": "f45d91fcf9a4074ff440549c37cca512dc949158b0b0758897a13cf26f89e30f"
+    },
+    {
+      "path": "scripts/fixtures/canvas-p1/batch2/runtime.mjs",
+      "sha256": "7112c5178c1507c9fc12ddf8077eb4c8ac489158f8a4d8cf9dd7517e97599d3b"
+    },
+    {
+      "path": "scripts/fixtures/canvas-p1/batch2/scenarios.mjs",
+      "sha256": "2f7ad37359c6519b77acc31067742269fd2b7623f82cfd5832f5e48ada0e93af"
+    },
+    {
+      "path": "scripts/fixtures/canvas-p1/batch2/session.mjs",
+      "sha256": "6f6da59bf9cbdafbd2b1035644fffc7cc53f4548ce15073103c160d9f67a2926"
+    },
+    {
+      "path": "scripts/fixtures/canvas-p1/batch2/sql/batch2-introspect.sql",
+      "sha256": "d2fb5bc7a44b13b0ead299d1fc8ea123de02a9b715143d3c6f7aa074ed2e6dfa"
+    },
+    {
+      "path": "scripts/fixtures/canvas-p1/batch2/target.mjs",
+      "sha256": "a6d501efe5c81708e277de095b62f17f2a42bd37abe32b36cb6e4e554832244f"
+    },
+    {
+      "path": "supabase/migrations/20260715_generations_service_role_policy.sql",
+      "sha256": "2949cfe12695923fa0c441cb79d82db73abd84225a5b7c3cc348c9876e788555"
+    },
+    {
+      "path": "supabase/migrations/20260716_canvas_p1_lifecycle_foundation.sql",
+      "sha256": "c525036a97c01c90bf92a684afae9403c4b02876a4281e298bd22507853594dd"
+    },
+    {
+      "path": "supabase/migrations/20260717_canvas_p1_credit_boundary.sql",
+      "sha256": "d6d1ad82472806fb3284070cbcdc53267709a4593976b67e1e271c98951814c2"
+    },
+    {
+      "path": "supabase/migrations/20260718_canvas_p1_generation_api.sql",
+      "sha256": "7275f5bb1c3c8e76c94dbcb180e39a679eedfed889806796f76a7eef9d319638"
+    },
+    {
+      "path": "supabase/migrations/20260719_canvas_p1_reconciliation.sql",
+      "sha256": "6bf13cba88842ba173883fd6f0dd7d1d7b4d95cabd72d74e1280000522608524"
+    }
+  ]
+}
