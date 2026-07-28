@@ -646,6 +646,13 @@ Phase 5 退出条件：
 - 创建前聚合基线仍为 `profiles=31 / canvases=0 / generations=30839 / credit_transactions=294`，Auth 为 31。测试结束只允许按新 UID、明确 Canvas ID、明确 generation/transaction anchor 做定向清理；若外键/触发器使清理边界不明确则保留测试数据并停止删除，不做级联猜测或广域 SQL。
 - **下一唯一动作**：在精确生产 Auth Dashboard 通过 Add user 创建并自动确认该唯一测试身份，随后只读证明 Auth=32、对应 profile/tenant 各一且其他业务聚合未漂移，再用产品密码登录。任何重复 email、UID/trigger 数量、初始积分或租户归属歧义都停止后续样本写入。
 
+### 永久 post-identity-write 检查点（2026-07-28 17:06 CST）
+
+- 生产 Auth Dashboard 只提交一次 Add user，Auto confirm 保持开启；测试 UID 固定为 `24743ce9-4794-46dd-be29-01fb82c841b7`，email 精确匹配且 confirmed。密码仅存在当前 REPL 内存；创建完成后对话框已关闭，不保存、不输出到永久材料。
+- signup 双触发器结果精确：Auth 总数 32、profiles 总数 32、目标 profile 1、初始 credits 100；目标 tenant `id=owner_user_id=UID` 精确 1。Canvas/generation 总数仍为 0/30839。`credit_transactions` 从 294 增为 295，目标 UID ledger 精确 1，且唯一行为是 `signup-grant:24743ce9-4794-46dd-be29-01fb82c841b7 / amount=100`，目标其他 ledger 为 0；这是冻结 signup grant 合约的预期写入，不是计数漂移。
+- 迁移后的 anchored ledger 追加写保护意味着硬删除 profile/auth 可能因 `credit_transactions_user_id_fkey` 与保护触发器被拒绝。最终清理不得尝试级联删除或临时关闭保护；如需关闭测试身份，只允许调用已冻结的 `canvas_p1_deactivate_account_v1` 做定向匿名化/禁用并保留 ledger，Canvas/任务也只按明确 ID 走产品或审核过的定向路径。
+- **下一唯一动作**：在正式产品登录页使用该专用 email/内存密码登录，确认 redirect 回 `/canvas?benchmark=1`；登录成功后立即清除内存密码，再由产品 UI 创建唯一测试 Canvas。若登录、初始 100 credits、UID 归属或 API 5xx 有任何异常，停止新写入。
+
 ## 九、完成定义
 
 只有同时满足以下条件，超级画布 P1 加速任务才可报告“完成并可申请上线”：
