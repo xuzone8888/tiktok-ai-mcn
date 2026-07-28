@@ -659,6 +659,12 @@ Phase 5 退出条件：
 - 登录后的正式 Canvas UI 正常渲染 React Flow、添加文本/图片/商品/脚本入口、工具栏/小地图和历史/快捷键；当前为空画布起点，无恢复横幅、白屏或 5xx。只读 SQL 再次证明目标 UID `target_canvases=0 / target_generations=0` 且全库 `canvases_total=0`，因此后续第一条 Canvas 行可无歧义归属于该测试身份。
 - **下一唯一动作**：仅通过产品 UI 点击“添加文本”创建第一节点并触发唯一 Canvas 创建，等待 autosave 后从 URL 记录 Canvas ID；只读证明目标 Canvas 仅 1、rev/schema/writer/doc_bytes 合法且无 generation/额外 ledger，再刷新确认首节点持久化。禁止通过 SQL 直接插入或修补 UI 样本。
 
+### 永久 post-create / pre-edit 检查点（2026-07-28 17:12 CST）
+
+- 产品 UI “添加文本”只点击一次；在创建/route adoption 完成后 URL 固定为 `https://toryxai.com/canvas?id=786cec58-88d5-436a-a97f-64cbb7dbf41e`。只读数据库证明该 ID 与测试 UID 精确匹配、目标及全库 Canvas 均为 1，`rev=0 / schema_version=1 / doc_bytes=239 / nodes=1 / edges=0 / writer_tag present`。
+- 创建没有触发生成或积分变化：目标 generations=0，目标 ledger 仍为唯一 signup grant。重新导航同一正式 URL 后仍精确显示一个文本输入节点、不再显示空起点，无“删除损坏节点”入口或恢复态，证明首节点已由服务器持久化而非仅留在浏览器。
+- **下一唯一动作**：在该唯一文本节点输入 `Canvas P1 production smoke 2026-07-28`，等待一次自动保存后只读证明 rev 增加、节点文本精确持久且 generation/ledger 不变，再刷新复核。之后才进入 100 节点单次保存样本。
+
 ## 九、完成定义
 
 只有同时满足以下条件，超级画布 P1 加速任务才可报告“完成并可申请上线”：
