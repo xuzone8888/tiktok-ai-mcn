@@ -992,19 +992,25 @@ eq(activeClient.calls.length, 0, "unauthenticated requests read no source");
 
 console.log("D6 generations RLS repair migration");
 const servicePolicy = generationsPolicySource.match(
-  /CREATE POLICY "Service can manage all generations"[\s\S]*?;/i
+  /CREATE POLICY "generations_service_role_all"[\s\S]*?;/i
 )?.[0] ?? "";
 ok(
   /DROP POLICY IF EXISTS "Service can manage all generations" ON public\.generations\s*;/i.test(
     generationsPolicySource
   ),
-  "the follow-up migration drops the legacy unscoped service policy"
+  "the follow-up migration drops the legacy fictional service policy"
+);
+ok(
+  /DROP POLICY IF EXISTS "allow_all" ON public\.generations\s*;/i.test(
+    generationsPolicySource
+  ),
+  "the follow-up migration drops the measured live PUBLIC catch-all policy"
 );
 ok(
   /FOR ALL\s+TO service_role\s+USING\s*\(\s*true\s*\)\s+WITH CHECK\s*\(\s*true\s*\)/i.test(
     servicePolicy
   ),
-  "the recreated generations service policy is scoped to service_role"
+  "the reviewed generations service policy is scoped to service_role"
 );
 ok(
   !/\bTO\s+(?:PUBLIC|authenticated)\b/i.test(servicePolicy),
@@ -1040,9 +1046,12 @@ ok(!adminIdentifier, "route AST contains no admin bypass identifier");
 ok(ownershipCompatSource.includes('from "@/lib/canvas/media-ownership"'), "S6 compatibility path still delegates to shared ownership");
 ok(
   !/[\u0080-\uffff]/.test(
-    helperSource + routeSource + generationsPolicySource + readFileSync(fileURLToPath(import.meta.url), "utf8")
+    helperSource +
+      routeSource +
+      generationsPolicySource.replace(/--.*$/gm, "") +
+      readFileSync(fileURLToPath(import.meta.url), "utf8")
   ),
-  "D6 implementation and verifier remain ASCII"
+  "D6 executable implementation and verifier remain ASCII (SQL comments may be UTF-8)"
 );
 
 console.log(`D6 result: ${passed} passed, ${failures.length} failed`);

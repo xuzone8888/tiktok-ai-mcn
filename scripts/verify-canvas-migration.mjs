@@ -121,17 +121,26 @@ ok(
   /DROP POLICY IF EXISTS "Service can manage all generations" ON public\.generations\s*;/i.test(
     generationsPolicySql
   ),
-  "repair migration drops the legacy unscoped service policy"
+  "repair migration drops the legacy fictional service policy"
+);
+ok(
+  /DROP POLICY IF EXISTS "allow_all" ON public\.generations\s*;/i.test(
+    generationsPolicySql
+  ),
+  "repair migration drops the measured live PUBLIC catch-all policy"
 );
 const generationsServicePolicy = generationsPolicySql.match(
-  /CREATE POLICY "Service can manage all generations"[\s\S]*?;/i
+  /CREATE POLICY "generations_service_role_all"[\s\S]*?;/i
 )?.[0] ?? "";
-ok(generationsServicePolicy.length > 0, "repair migration recreates the service policy");
+ok(
+  generationsServicePolicy.length > 0,
+  "repair migration creates the reviewed service-role defence-in-depth policy"
+);
 ok(
   /FOR ALL\s+TO service_role\s+USING\s*\(\s*true\s*\)\s+WITH CHECK\s*\(\s*true\s*\)/i.test(
     generationsServicePolicy
   ),
-  "recreated generations policy is scoped only to service_role"
+  "reviewed generations policy is scoped only to service_role"
 );
 ok(
   !/\bTO\s+(?:PUBLIC|authenticated)\b/i.test(generationsServicePolicy),
