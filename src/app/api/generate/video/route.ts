@@ -8,11 +8,13 @@
  */
 
 import { NextResponse } from "next/server";
+import { applyTaskCreditDelta } from "@/lib/credits/atomic-task-credit";
 import { submitSora2, querySora2Result } from "@/lib/suchuang-api";
 import { submitVeo3Video, queryVeoResult } from "@/lib/gaorui-veo-api";
 import { VIDEO_MODEL_CONFIG, type VideoModel } from "@/types/generation";
 import { getNewVideoCost } from "@/lib/credits";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
 import { transferVeoVideoToOSS, isOSSPermanentUrl } from "@/lib/transfer-veo-to-oss";
 
 // ============================================================================
@@ -67,8 +69,26 @@ export async function POST(request: Request) {
       modelId,
       sourceImageUrl,
       sourceImageUrls,  // VEO3 多张参考图
-      userId,
+      userId: requestedUserId,
     } = body;
+
+    const authClient = await createClient();
+    const {
+      data: { user },
+    } = await authClient.auth.getUser();
+    if (!user) {
+      return NextResponse.json(
+        { success: false, error: "请先登录" },
+        { status: 401 }
+      );
+    }
+    if (requestedUserId && requestedUserId !== user.id) {
+      return NextResponse.json(
+        { success: false, error: "用户身份不匹配" },
+        { status: 403 }
+      );
+    }
+    const userId = user.id;
 
     if (!prompt || prompt.trim().length < 5) {
       return NextResponse.json(
@@ -90,7 +110,8 @@ export async function POST(request: Request) {
     // ============================================
     const creditCost = getVideoCreditCost(duration, quality, videoModel);
 
-    if (userId) {
+    const billingTaskId = crypto.randomUUID();
+    {
       const supabase = createAdminClient();
 
       // 获取用户当前积分
@@ -115,13 +136,21 @@ export async function POST(request: Request) {
       }
 
       // 扣除积分
-      const { error: deductError } = await supabase
-        .from("profiles")
-        .update({ credits: profile.credits - creditCost })
-        .eq("id", userId);
-
-      if (deductError) {
-        console.error("[Generate Video] Failed to deduct credits:", deductError);
+      let chargeResult;
+      try {
+        chargeResult = await applyTaskCreditDelta({
+          supabase,
+          userId,
+          entryKind: "consume",
+          amount: -creditCost,
+          scope: "quick-video",
+          taskId: billingTaskId,
+          operation: "consume",
+          pricingVersion: `quick-video-${videoModel || duration}-${quality}-v1`,
+          description: "快速视频生成扣费",
+        });
+      } catch (error) {
+        console.error("[Generate Video] Failed to deduct credits:", error);
         return NextResponse.json(
           { success: false, error: "Failed to deduct credits" },
           { status: 500 }
@@ -132,8 +161,8 @@ export async function POST(request: Request) {
         userId,
         cost: creditCost,
         duration,
-        before: profile.credits,
-        after: profile.credits - creditCost,
+        before: chargeResult.balanceBefore,
+        after: chargeResult.balanceAfter,
       });
     }
 
@@ -308,29 +337,25 @@ export async function POST(request: Request) {
       console.error("[Generate Video] Submit failed:", result.error);
 
       // 如果提交失败，退还积分
-      if (userId) {
-        try {
-          const supabase = createAdminClient();
-          const { data: profile } = await supabase
-            .from("profiles")
-            .select("credits")
-            .eq("id", userId)
-            .single();
-
-          if (profile) {
-            await supabase
-              .from("profiles")
-              .update({ credits: profile.credits + creditCost })
-              .eq("id", userId);
-
-            console.log("[Generate Video] Credits refunded due to submit failure:", {
-              userId,
-              refund: creditCost,
-            });
-          }
-        } catch (refundError) {
-          console.error("[Generate Video] Failed to refund credits:", refundError);
-        }
+      try {
+        const supabase = createAdminClient();
+        await applyTaskCreditDelta({
+          supabase,
+          userId,
+          entryKind: "refund",
+          amount: creditCost,
+          scope: "quick-video",
+          taskId: billingTaskId,
+          operation: "refund",
+          pricingVersion: `quick-video-${videoModel || duration}-${quality}-v1`,
+          description: "快速视频生成提交失败退款",
+        });
+        console.log("[Generate Video] Credits refunded due to submit failure:", {
+          userId,
+          refund: creditCost,
+        });
+      } catch (refundError) {
+        console.error("[Generate Video] Failed to refund credits:", refundError);
       }
 
       return NextResponse.json(
@@ -340,13 +365,13 @@ export async function POST(request: Request) {
     }
 
     // 保存任务记录到数据库
-    if (userId) {
-      try {
-        const supabase = createAdminClient();
+    {
+      const supabase = createAdminClient();
         // 注意：数据库的 "model" 字段存储 API 模型名称
         // actualModelId 存储选中的 AI 模特 ID（等数据库添加 ai_model_id 字段后启用）
         // finalPrompt 包含注入的唤醒词（等数据库添加 final_prompt 字段后启用）
-        await supabase.from("generations").insert({
+        const { error: insertError } = await supabase.from("generations").insert({
+          id: billingTaskId,
           user_id: userId,
           task_id: result.taskId,
           type: "video",
@@ -367,14 +392,30 @@ export async function POST(request: Request) {
             ai_model_id: actualModelId,
             final_prompt: finalPrompt,
             trigger_word: triggerWord,
+            billing_task_id: billingTaskId,
+            billing_scope: "quick-video",
           },
           created_at: new Date().toISOString(),
         });
+        if (insertError) {
+          console.error("[Generate Video] Failed to save to DB:", insertError);
+          await applyTaskCreditDelta({
+            supabase,
+            userId,
+            entryKind: "refund",
+            amount: creditCost,
+            scope: "quick-video",
+            taskId: billingTaskId,
+            operation: "refund",
+            pricingVersion: `quick-video-${videoModel || duration}-${quality}-v1`,
+            description: "快速视频任务记录失败退款",
+          });
+          return NextResponse.json(
+            { success: false, error: "任务记录失败，积分已退还" },
+            { status: 500 }
+          );
+        }
         console.log("[Generate Video] Saved to generations table:", result.taskId, actualModelId ? `with model ${actualModelId}` : "no model");
-      } catch (dbError) {
-        console.error("[Generate Video] Failed to save to DB:", dbError);
-        // 不阻止主流程
-      }
     }
 
     console.log("[Generate Video] Task submitted successfully:", {
@@ -422,6 +463,31 @@ export async function GET(request: Request) {
       );
     }
 
+    const authClient = await createClient();
+    const {
+      data: { user },
+    } = await authClient.auth.getUser();
+    if (!user) {
+      return NextResponse.json(
+        { success: false, error: "请先登录" },
+        { status: 401 }
+      );
+    }
+
+    const ownershipClient = createAdminClient();
+    const { data: ownedGeneration } = await ownershipClient
+      .from("generations")
+      .select("id, user_id, status, result_url")
+      .eq("task_id", taskId)
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (!ownedGeneration) {
+      return NextResponse.json(
+        { success: false, error: "任务不存在或无权查看" },
+        { status: 404 }
+      );
+    }
+
     console.log("[Generate Video] Querying task:", taskId, { usePro, videoModel });
 
     // 根据 videoModel 路由查询
@@ -432,12 +498,7 @@ export async function GET(request: Request) {
     if (modelConfig && modelConfig.provider === "gaorui") {
       // VEO3 异步查询
       // 先检查数据库是否已有 OSS URL（之前已转存过）
-      const supabaseCheck = createAdminClient();
-      const { data: existingGen } = await supabaseCheck
-        .from("generations")
-        .select("status, result_url, user_id")
-        .eq("task_id", taskId)
-        .single();
+      const existingGen = ownedGeneration;
 
       if (existingGen?.status === "completed" && existingGen?.result_url && isOSSPermanentUrl(existingGen.result_url)) {
         // 已有 OSS URL，直接返回
@@ -505,8 +566,9 @@ export async function GET(request: Request) {
         // 获取 generation 记录以获取 user_id 和 duration
         const { data: generation } = await supabase
           .from("generations")
-          .select("user_id, duration, status, credit_cost")
+          .select("id, user_id, duration, status, credit_cost")
           .eq("task_id", taskId)
+          .eq("user_id", user.id)
           .single();
 
         // 使用原子操作更新状态（防止并发重复退款）
@@ -527,33 +589,22 @@ export async function GET(request: Request) {
           if (updateResult && !updateError && generation?.user_id) {
             const refundAmount = generation.credit_cost || (generation.duration ? CREDIT_COST_MAP[generation.duration] : null) || 50;
 
-            const { data: profile } = await supabase
-              .from("profiles")
-              .select("credits")
-              .eq("id", generation.user_id)
-              .single();
+            await applyTaskCreditDelta({
+              supabase,
+              userId: generation.user_id,
+              entryKind: "refund",
+              amount: refundAmount,
+              scope: "quick-video",
+              taskId: generation.id,
+              operation: "refund",
+              pricingVersion: "quick-video-refund-v1",
+              description: `视频生成失败自动退款 (${taskId})`,
+            });
 
-            if (profile) {
-              await supabase
-                .from("profiles")
-                .update({ credits: profile.credits + refundAmount })
-                .eq("id", generation.user_id);
-
-              // 记录退款交易
-              await supabase.from("credit_transactions").insert({
-                user_id: generation.user_id,
-                amount: refundAmount,
-                type: "refund",
-                description: `视频生成失败自动退款 (${taskId})`,
-                balance_before: profile.credits,
-                balance_after: profile.credits + refundAmount,
-              });
-
-              console.log("[Generate Video] Credits refunded due to failure:", {
-                userId: generation.user_id,
-                refund: refundAmount,
-              });
-            }
+            console.log("[Generate Video] Credits refunded due to failure:", {
+              userId: generation.user_id,
+              refund: refundAmount,
+            });
           } else if (updateError) {
             console.log("[Generate Video] Skipping refund - already processed:", taskId);
           }

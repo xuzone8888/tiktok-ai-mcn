@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { generateSlideshow, type SubtitleConfig } from "@/lib/ffmpeg-slideshow";
 import { fileExistsStrict, getPublicUrl, isOSSUrl, uploadBuffer } from "@/lib/oss";
-import { adjustProfileCredits, insertCreditTransaction } from "@/lib/video-models/credits";
+import { applyTaskCreditDelta } from "@/lib/credits/atomic-task-credit";
 import { textToSpeechWithTimestamps, type WordTimestamp } from "@/lib/elevenlabs-api";
 import { doubaoTextToSpeechWithTimestamps } from "@/lib/doubao-tts-api";
 import { PRESET_VOICES } from "@/lib/voice-data";
@@ -339,20 +339,16 @@ export async function POST(request: NextRequest) {
 
           // ---------- 扣费(成片已交付;扣费失败响亮记录,不拒付) ----------
           try {
-            const { before, after } = await adjustProfileCredits({
+            await applyTaskCreditDelta({
               supabase: admin,
               userId: user.id,
-              delta: -CREDITS_PER_SCENE,
-            });
-            await insertCreditTransaction(admin, {
-              userId: user.id,
-              type: "consume",
+              entryKind: "consume",
               amount: -CREDITS_PER_SCENE,
-              balanceBefore: before,
-              balanceAfter: after,
+              scope: "studio-assembly",
               taskId: clientTaskId,
+              operation: "consume",
+              pricingVersion: "studio-assembly-v1",
               description: `拼装口播·单镜渲染 (${clientTaskId})`,
-              metadata: { render_mode: "assembly", job_id: jobId, scene_idx: sceneIdx },
             });
           } catch (chargeError) {
             console.error(

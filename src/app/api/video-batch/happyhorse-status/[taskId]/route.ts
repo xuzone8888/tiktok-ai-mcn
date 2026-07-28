@@ -5,35 +5,27 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { applyTaskCreditDelta } from "@/lib/credits/atomic-task-credit";
 import { queryHappyHorseVideo } from "@/lib/dashscope-video-api";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
 import { transferVeoVideoToOSS, isOSSPermanentUrl } from "@/lib/transfer-veo-to-oss";
 
 export const maxDuration = 120;
 
-async function refundCredits(userId: string, amount: number, taskId: string, reason: string) {
+async function refundCredits(userId: string, amount: number, billingTaskId: string, taskId: string, reason: string) {
   try {
     const supabase = createAdminClient();
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("credits")
-      .eq("id", userId)
-      .single();
-
-    if (!profile) return;
-
-    await supabase
-      .from("profiles")
-      .update({ credits: profile.credits + amount })
-      .eq("id", userId);
-
-    await supabase.from("credit_transactions").insert({
-      user_id: userId,
+    await applyTaskCreditDelta({
+      supabase,
+      userId,
+      entryKind: "refund",
       amount,
-      type: "refund",
+      scope: "happyhorse",
+      taskId: billingTaskId,
+      operation: "refund",
+      pricingVersion: "happyhorse-refund-v1",
       description: reason,
-      balance_before: profile.credits,
-      balance_after: profile.credits + amount,
     });
   } catch (error) {
     console.error("[HappyHorse Status] Refund failed:", error);
@@ -54,11 +46,29 @@ export async function GET(
     }
 
     const supabase = createAdminClient();
+    const authClient = await createClient();
+    const {
+      data: { user },
+    } = await authClient.auth.getUser();
+    if (!user) {
+      return NextResponse.json(
+        { success: false, error: "请先登录" },
+        { status: 401 }
+      );
+    }
     const { data: existingGen } = await supabase
       .from("generations")
-      .select("status, result_url, video_url, user_id, credit_cost")
+      .select("id, status, result_url, video_url, user_id, credit_cost")
       .eq("task_id", taskId)
+      .eq("user_id", user.id)
       .maybeSingle();
+
+    if (!existingGen) {
+      return NextResponse.json(
+        { success: false, error: "任务不存在或无权查看" },
+        { status: 404 }
+      );
+    }
 
     if (existingGen?.status === "completed" && existingGen?.result_url && isOSSPermanentUrl(existingGen.result_url)) {
       return NextResponse.json({
@@ -159,13 +169,14 @@ export async function GET(
         })
         .eq("task_id", taskId)
         .eq("status", "processing")
-        .select("user_id, credit_cost")
+        .select("id, user_id, credit_cost")
         .single();
 
       if (failedRecord?.user_id && failedRecord.credit_cost > 0) {
         await refundCredits(
           failedRecord.user_id,
           failedRecord.credit_cost,
+          failedRecord.id,
           taskId,
           `HappyHorse 视频生成失败自动退款 (${taskId})`
         );

@@ -6,6 +6,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { applyTaskCreditDelta } from "@/lib/credits/atomic-task-credit";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -73,15 +74,23 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 使用 admin client 扣除积分
     const adminSupabase = createAdminClient();
-    const { error: deductError } = await adminSupabase
-      .from("profiles")
-      .update({ credits: profile.credits - creditsRequired })
-      .eq("id", user.id);
-
-    if (deductError) {
-      console.error("[Generations API] Failed to deduct credits:", deductError);
+    const generationId = crypto.randomUUID();
+    let chargeResult;
+    try {
+      chargeResult = await applyTaskCreditDelta({
+        supabase: adminSupabase,
+        userId: user.id,
+        entryKind: "consume",
+        amount: -creditsRequired,
+        scope: "legacy-generation",
+        taskId: generationId,
+        operation: "consume",
+        pricingVersion: `legacy-generation-${type}-v1`,
+        description: `旧版 generation ${type} 扣费`,
+      });
+    } catch (error) {
+      console.error("[Generations API] Failed to deduct credits:", error);
       return NextResponse.json(
         { error: "扣除积分失败" },
         { status: 500 }
@@ -92,6 +101,7 @@ export async function POST(request: NextRequest) {
     const { data: generation, error: insertError } = await adminSupabase
       .from("generations")
       .insert({
+        id: generationId,
         user_id: user.id,
         model_id,
         product_id: product_id || null,
@@ -105,11 +115,17 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (insertError) {
-      // 退还积分
-      await adminSupabase
-        .from("profiles")
-        .update({ credits: profile.credits })
-        .eq("id", user.id);
+      await applyTaskCreditDelta({
+        supabase: adminSupabase,
+        userId: user.id,
+        entryKind: "refund",
+        amount: creditsRequired,
+        scope: "legacy-generation",
+        taskId: generationId,
+        operation: "refund",
+        pricingVersion: `legacy-generation-${type}-v1`,
+        description: `旧版 generation ${type} 创建失败退款`,
+      });
 
       console.error("[Generations API] Failed to create generation:", insertError);
       return NextResponse.json(
@@ -121,7 +137,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       generation,
-      new_balance: profile.credits - creditsRequired,
+      new_balance: chargeResult.balanceAfter,
     });
   } catch (error) {
     console.error("Generation error:", error);
