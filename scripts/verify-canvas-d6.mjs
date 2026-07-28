@@ -732,6 +732,21 @@ function makeSupabase(tables, options = {}) {
         if (options.unauthenticated) return { data: { user: null }, error: { code: "AUTH" } };
         return { data: { user: { id: USER } }, error: null };
       },
+      async getClaims() {
+        if (options.unauthenticated) {
+          return { data: null, error: { code: "AUTH" } };
+        }
+        return { data: { claims: { sub: USER } }, error: null };
+      },
+      async getSession() {
+        if (options.unauthenticated) {
+          return { data: { session: null }, error: { code: "AUTH" } };
+        }
+        return {
+          data: { session: { access_token: "verified-by-postgrest" } },
+          error: null,
+        };
+      },
     },
     from(source) {
       return new Query(source);

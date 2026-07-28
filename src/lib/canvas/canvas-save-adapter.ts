@@ -1,6 +1,10 @@
 import type { CanvasApiErrorBody, CanvasApiErrorCode, CanvasSizeWarning } from "./api-types";
 import { CANVAS_API_ERROR_CODES } from "./api-types";
-import { CANVAS_UUID_RE, parseCanvasRepairRequest } from "./api-helpers";
+import {
+  CANVAS_UUID_RE,
+  CanvasSaveProofSchema,
+  parseCanvasRepairRequest,
+} from "./api-helpers";
 import { checkDocSize } from "./doc-limits";
 import { CanvasOpsArraySchema, type CanvasOp } from "./patch";
 import {
@@ -40,6 +44,7 @@ export interface CanvasPatchPreparationInput {
   ops: CanvasOp[];
   title?: string;
   deps?: CanvasDeps;
+  saveProof?: string;
 }
 
 export interface CanvasRepairPreparationInput {
@@ -159,6 +164,7 @@ interface CanvasPatchInputSnapshot {
   ops: unknown;
   title: unknown;
   deps: unknown;
+  saveProof: unknown;
 }
 
 function snapshotPatchInput(input: unknown): CanvasPatchInputSnapshot | null {
@@ -168,14 +174,17 @@ function snapshotPatchInput(input: unknown): CanvasPatchInputSnapshot | null {
     const ops = Object.getOwnPropertyDescriptor(input, "ops");
     const title = Object.getOwnPropertyDescriptor(input, "title");
     const deps = Object.getOwnPropertyDescriptor(input, "deps");
+    const saveProof = Object.getOwnPropertyDescriptor(input, "saveProof");
     if (!baseRev || !("value" in baseRev) || !ops || !("value" in ops)) return null;
     if (title && !("value" in title)) return null;
     if (deps && !("value" in deps)) return null;
+    if (saveProof && !("value" in saveProof)) return null;
     return {
       baseRev: baseRev.value,
       ops: ops.value,
       title: title && "value" in title ? title.value : undefined,
       deps: deps && "value" in deps ? deps.value : undefined,
+      saveProof: saveProof && "value" in saveProof ? saveProof.value : undefined,
     };
   } catch {
     return null;
@@ -398,12 +407,26 @@ export class CanvasSaveAdapter {
       if (patchInput.title !== undefined && typeof patchInput.title !== "string") {
         return this.reject(feedback("INVALID_BODY", "title 非法,未构造保存请求。"));
       }
+      let saveProof: string | undefined;
+      if (patchInput.saveProof !== undefined) {
+        const parsedSaveProof = CanvasSaveProofSchema.safeParse(patchInput.saveProof);
+        if (!parsedSaveProof.success) {
+          return this.reject(feedback("INVALID_BODY", "save proof 非法,未构造保存请求。"));
+        }
+        saveProof = parsedSaveProof.data;
+      }
       const body = {
         baseRev: patchInput.baseRev,
         writerTag: writer.writerTag,
-        ops: parsedOps.data,
+        // A valid proof lets the route persist the strict snapshot directly. Keep the original
+        // operations in the durable local queue until this exact count is acknowledged, but avoid
+        // duplicating a large snapshot with the full op payload on the wire.
+        ops: saveProof !== undefined ? [] : parsedOps.data,
         ...(patchInput.title !== undefined ? { title: patchInput.title } : {}),
         ...(deps !== undefined ? { deps } : {}),
+        ...(saveProof !== undefined
+          ? { snapshot: guard.doc, saveProof, opCount: parsedOps.data.length }
+          : {}),
       };
 
       let serialized: string;

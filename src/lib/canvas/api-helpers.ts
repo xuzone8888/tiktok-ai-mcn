@@ -26,7 +26,14 @@ import {
   type CanvasDeps,
   type LoadCanvasResult,
 } from "./schema";
-import { applyPatch, coalesce, deepEqual, type CanvasOp, type CanvasPatchConflict } from "./patch";
+import {
+  applyPatch,
+  coalesce,
+  deepEqual,
+  CANVAS_PATCH_MAX_OPS,
+  type CanvasOp,
+  type CanvasPatchConflict,
+} from "./patch";
 import { checkDocSize, computeDocBytes, type DocSizeResult } from "./doc-limits";
 import {
   authorizeWriterPatch,
@@ -78,6 +85,11 @@ export const CanvasWriterTagSchema = z
   .string()
   .regex(CANVAS_WRITER_TAG_RE, "writer tag 非法(需 [A-Za-z0-9_-]{8,128})");
 
+export const CANVAS_SAVE_PROOF_RE = /^[A-Za-z0-9_-]{43}$/;
+export const CanvasSaveProofSchema = z
+  .string()
+  .regex(CANVAS_SAVE_PROOF_RE, "save proof 非法");
+
 /**
  * **决策层**宽松 PATCH body(writerTag 可选)。`ops` 在此仅收为 unknown,**结构校验留第二阶段**
  * CanvasOpsArraySchema,使 op 非法回稳定的 INVALID_OPS 而非 INVALID_BODY。
@@ -107,6 +119,9 @@ export const CanvasPatchWriteBodySchema = z.strictObject({
   title: z.string().max(200).optional(),
   deps: CanvasDepsSchema.optional(),
   writerTag: CanvasWriterTagSchema,
+  snapshot: CanvasDocSchema.optional(),
+  saveProof: CanvasSaveProofSchema.optional(),
+  opCount: z.number().int().min(1).max(CANVAS_PATCH_MAX_OPS).optional(),
 });
 export type CanvasPatchWriteBody = z.infer<typeof CanvasPatchWriteBodySchema>;
 

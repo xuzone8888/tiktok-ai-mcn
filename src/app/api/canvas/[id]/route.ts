@@ -1,9 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
-import { loadCanvasDoc } from "@/lib/canvas/schema";
-import { computeDocBytes } from "@/lib/canvas/doc-limits";
+import {
+  CANVAS_SCHEMA_VERSION,
+  loadCanvasDoc,
+  validateCanvasDoc,
+} from "@/lib/canvas/schema";
+import { checkDocSize, computeDocBytes } from "@/lib/canvas/doc-limits";
 import { CanvasOpsArraySchema, type CanvasOp } from "@/lib/canvas/patch";
+import {
+  issueCanvasSaveProof,
+  verifyCanvasSaveProof,
+} from "@/lib/canvas/save-proof";
 import {
   canvasApiError,
   canvasApiSuccess,
@@ -18,6 +26,7 @@ import {
   CANVAS_CAS_MAX_ATTEMPTS,
   CANVAS_UUID_RE,
   CanvasPatchWriteBodySchema,
+  buildSizeWarning,
   decidePatch,
   decideRepair,
   envelopeWithMeta,
@@ -93,23 +102,59 @@ type CanvasGate =
   | { ok: true; db: SupabaseClient; id: string; userId: string }
   | { ok: false; response: NextResponse };
 
+type CanvasPatchGate =
+  | { ok: true; db: SupabaseClient; id: string }
+  | { ok: false; response: NextResponse };
+
 async function requireUserAndId(params: RouteParams["params"]): Promise<CanvasGate> {
   const { id } = await params;
   if (!CANVAS_UUID_RE.test(id)) {
     return { ok: false, response: errorResponse("INVALID_ID", "画布 ID 非法") };
   }
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
+  // getClaims() verifies the access token but can reuse the project's cached JWKS, avoiding the
+  // unconditional Auth-server round trip performed by getUser() on every autosave. RLS still
+  // receives the same cookie-bound access token; the validated `sub` is used only for the explicit
+  // owner predicate on recovery writes.
+  const { data: claimsData, error: claimsError } = await supabase.auth.getClaims();
+  const userId = claimsData?.claims?.sub;
+  if (
+    claimsError ||
+    typeof userId !== "string" ||
+    !CANVAS_UUID_RE.test(userId)
+  ) {
     return { ok: false, response: errorResponse("UNAUTHENTICATED", "请先登录") };
   }
   return {
     ok: true,
     db: supabase as unknown as SupabaseClient,
     id: id.toLowerCase(),
-    userId: user.id,
+    userId: userId.toLowerCase(),
+  };
+}
+
+async function requirePatchAccessAndId(
+  params: RouteParams["params"]
+): Promise<CanvasPatchGate> {
+  const { id } = await params;
+  if (!CANVAS_UUID_RE.test(id)) {
+    return { ok: false, response: errorResponse("INVALID_ID", "画布 ID 非法") };
+  }
+  const supabase = await createClient();
+  // PATCH never trusts cookie session claims for ownership. The local session read only avoids
+  // dispatching an obviously unauthenticated request; PostgREST verifies the signed access token
+  // and RLS remains the sole authorization boundary for both the read and atomic CAS update.
+  const {
+    data: { session },
+    error,
+  } = await supabase.auth.getSession();
+  if (error || !session?.access_token) {
+    return { ok: false, response: errorResponse("UNAUTHENTICATED", "请先登录") };
+  }
+  return {
+    ok: true,
+    db: supabase as unknown as SupabaseClient,
+    id: id.toLowerCase(),
   };
 }
 
@@ -142,6 +187,7 @@ function repairSuccessResponse(
   decision: RepairAccepted
 ) {
   const envelope = envelopeWithMeta(decision.doc, decision.deps, rev, decision.docBytes);
+  const saveProof = issueCanvasSaveProof(id, rev);
   const result: CanvasRepairResultData = {
     id,
     rev,
@@ -150,6 +196,7 @@ function repairSuccessResponse(
     persisted: true,
     recovered: true,
     updatedAt,
+    ...(saveProof ? { saveProof } : {}),
     envelope,
   };
   return NextResponse.json(canvasApiSuccess(result));
@@ -179,6 +226,14 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
     // 避免客户端先允许保存再对损坏 deps 反复 422)。
     const depsView = parseDepsForTransport(row.deps);
     const docBytes = row.doc_bytes ?? computeDocBytes(row.doc);
+    const recovery = recoveryReport(load, {
+      forceRecovery: !depsView.ok,
+      extraIssues: depsView.issues,
+    });
+    const saveProof =
+      !recovery.recoveryRequired && row.schema_version === CANVAS_SCHEMA_VERSION
+        ? issueCanvasSaveProof(row.id, row.rev)
+        : null;
 
     const payload: CanvasDocumentData = {
       id: row.id,
@@ -186,12 +241,13 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       rev: row.rev,
       schemaVersion: row.schema_version,
       envelope: tolerantEnvelope(load, depsView.deps),
-      recovery: recoveryReport(load, { forceRecovery: !depsView.ok, extraIssues: depsView.issues }),
+      recovery,
       docBytes,
       status: row.status,
       writer: { tag: row.writer_tag, heartbeatAt: row.writer_heartbeat_at },
       createdAt: row.created_at,
       updatedAt: row.updated_at,
+      ...(saveProof ? { saveProof } : {}),
     };
     return NextResponse.json(canvasApiSuccess(payload));
   } catch (error) {
@@ -378,7 +434,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
   try {
-    const gate = await requireUserAndId(params);
+    const gate = await requirePatchAccessAndId(params);
     if (!gate.ok) return gate.response;
     const { db, id } = gate;
 
@@ -395,10 +451,20 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     if (!parsedBody.success) {
       return errorResponse(
         "INVALID_BODY",
-        "请求体字段非法(仅允许 baseRev/ops/title/deps/writerTag,title≤200,writerTag 必填且合法)"
+        "请求体字段非法(仅允许 baseRev/ops/title/deps/writerTag/snapshot/saveProof/opCount,title≤200,writerTag 必填且合法)"
       );
     }
-    const { baseRev, deps: reqDeps, writerTag } = parsedBody.data;
+    const {
+      baseRev,
+      deps: reqDeps,
+      writerTag,
+      snapshot,
+      saveProof,
+      opCount,
+    } = parsedBody.data;
+    if ((snapshot === undefined) !== (saveProof === undefined)) {
+      return errorResponse("INVALID_BODY", "snapshot 与 saveProof 必须同时提供");
+    }
 
     // 第二阶段:op 数组结构校验——非法(含非数组)→ INVALID_OPS,与顶层错误分流。
     const opsResult = CanvasOpsArraySchema.safeParse(parsedBody.data.ops ?? []);
@@ -410,12 +476,113 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       });
     }
     const ops: CanvasOp[] = opsResult.data;
+    if (
+      opCount !== undefined &&
+      (snapshot === undefined || saveProof === undefined || ops.length !== 0)
+    ) {
+      return errorResponse(
+        "INVALID_BODY",
+        "opCount 仅允许与 snapshot/saveProof 和空 ops 共同提供"
+      );
+    }
 
     // title:已保证 string≤200;trim + 空→默认(undefined = 不改名)。
     const title =
       parsedBody.data.title !== undefined
         ? sanitizeCanvasTitle(parsedBody.data.title)
         : undefined;
+
+    // A healthy GET (or preceding PATCH/repair) returns an opaque proof for its exact revision.
+    // When the client presents that proof plus its strict current snapshot, the common no-conflict
+    // path can perform one RLS-protected CAS UPDATE. A missing/invalid proof or a zero-row CAS falls
+    // through to the full read/decide/rebase path below; recovery documents never receive proofs.
+    const fastAppliedOps = opCount ?? ops.length;
+    if (
+      fastAppliedOps > 0 &&
+      snapshot !== undefined &&
+      saveProof !== undefined &&
+      verifyCanvasSaveProof(saveProof, id, baseRev)
+    ) {
+      const validatedSnapshot = validateCanvasDoc(snapshot);
+      if (!validatedSnapshot.ok || validatedSnapshot.data === null) {
+        return errorResponse("CANVAS_DOC_INVALID", "保存快照未通过完整文档校验", {
+          issues: validatedSnapshot.errors.slice(0, 50),
+        });
+      }
+      const snapshotSize = checkDocSize(validatedSnapshot.data);
+      if (snapshotSize.overHardLimit) {
+        return errorResponse(
+          "DOC_TOO_LARGE",
+          snapshotSize.message ?? "画布文档超出 2MB 上限,已拒绝保存"
+        );
+      }
+      const nowMs = Date.now();
+      const nowIso = new Date(nowMs).toISOString();
+      const update: Record<string, unknown> = {
+        doc: validatedSnapshot.data,
+        rev: baseRev + 1,
+        schema_version: CANVAS_SCHEMA_VERSION,
+        doc_bytes: snapshotSize.bytes,
+        updated_at: nowIso,
+        writer_heartbeat_at: nowIso,
+      };
+      if (title !== undefined) update.title = title;
+      if (reqDeps !== undefined) update.deps = reqDeps;
+
+      const { data: saved, error: saveError } = await db
+        .from("canvases")
+        .update(update as never)
+        .eq("id", id)
+        .eq("rev", baseRev)
+        .eq("writer_tag", writerTag)
+        .gte("writer_heartbeat_at", writerActiveSinceIso(nowMs, WRITER_LEASE_MS))
+        .select("id, rev, updated_at")
+        .maybeSingle();
+
+      if (saveError) {
+        console.error("[Canvas PATCH] fast update failed:", saveError);
+        return errorResponse("INTERNAL", "画布保存失败");
+      }
+      if (saved) {
+        const savedRow = saved as unknown as {
+          id: string;
+          rev: number;
+          updated_at: string;
+        };
+        if (
+          savedRow.id !== id ||
+          savedRow.rev !== baseRev + 1 ||
+          typeof savedRow.updated_at !== "string"
+        ) {
+          console.error("[Canvas PATCH] fast update returned unexpected metadata");
+          return errorResponse("INTERNAL", "画布保存结果校验失败");
+        }
+        const nextProof = issueCanvasSaveProof(savedRow.id, savedRow.rev);
+        const result: CanvasPatchResultData = {
+          id: savedRow.id,
+          rev: savedRow.rev,
+          schemaVersion: CANVAS_SCHEMA_VERSION,
+          docBytes: snapshotSize.bytes,
+          rebased: false,
+          appliedOps: fastAppliedOps,
+          noopOps: 0,
+          persisted: true,
+          updatedAt: savedRow.updated_at,
+          ...(nextProof ? { saveProof: nextProof } : {}),
+        };
+        return NextResponse.json(
+          canvasApiSuccess(result, buildSizeWarning(snapshotSize) ?? undefined)
+        );
+      }
+      if (opCount !== undefined) {
+        return errorResponse(
+          "REV_CONFLICT",
+          "画布版本或写入租约已变化,请重新加载后再保存"
+        );
+      }
+    } else if (opCount !== undefined) {
+      return errorResponse("REV_CONFLICT", "保存凭证已失效,请重新加载后再保存");
+    }
 
     // CAS 失败重读重试:每个 attempt 读到最新行 → decidePatch 纯决策 → 仅 write 才 CAS 写。
     for (let attempt = 0; attempt < CANVAS_CAS_MAX_ATTEMPTS; attempt += 1) {
@@ -471,6 +638,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       }
 
       if (decision.kind === "noop") {
+        const nextProof = issueCanvasSaveProof(row.id, decision.rev);
         const result: CanvasPatchResultData = {
           id: row.id,
           rev: decision.rev,
@@ -481,6 +649,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
           noopOps: decision.noop,
           persisted: false,
           updatedAt: row.updated_at,
+          ...(nextProof ? { saveProof: nextProof } : {}),
           ...(decision.envelope ? { envelope: decision.envelope } : {}),
         };
         return NextResponse.json(canvasApiSuccess(result, decision.warning ?? undefined));
@@ -525,6 +694,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       }
 
       const savedRow = saved as unknown as { rev: number; updated_at: string };
+      const nextProof = issueCanvasSaveProof(row.id, savedRow.rev);
       const result: CanvasPatchResultData = {
         id: row.id,
         rev: savedRow.rev,
@@ -535,6 +705,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         noopOps: decision.noop,
         persisted: true,
         updatedAt: savedRow.updated_at,
+        ...(nextProof ? { saveProof: nextProof } : {}),
         ...(decision.rebased
           ? {
               envelope: envelopeWithMeta(

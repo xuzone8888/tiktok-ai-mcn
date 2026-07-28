@@ -190,6 +190,8 @@ export interface CanvasDocumentData {
   writer: CanvasWriterInfo;
   createdAt: string;
   updatedAt: string;
+  /** Opaque proof enabling the next same-revision save to use the one-round-trip CAS path. */
+  saveProof?: string;
 }
 
 /** PATCH /api/canvas/[id] → save result. `envelope` is present iff `rebased`. */
@@ -203,6 +205,8 @@ export interface CanvasPatchResultData {
   noopOps: number;
   persisted: boolean;
   updatedAt: string;
+  /** Opaque proof for the exact revision returned by this response. */
+  saveProof?: string;
   /** Authoritative envelope, returned when the save rebased onto newer server state. */
   envelope?: CanvasEnvelopeWithMeta;
 }
@@ -220,6 +224,8 @@ export interface CanvasRepairResultData {
   persisted: true;
   recovered: true;
   updatedAt: string;
+  /** Opaque proof for the repaired revision. */
+  saveProof?: string;
   envelope: CanvasEnvelopeWithMeta;
 }
 

@@ -3505,19 +3505,23 @@ async function verifyPatchResponse(dataFactory, label, accepted, options = {}) {
   const empty = createEmptyCanvasDoc();
   const scheduler = makeScheduler();
   const intentStore = makeIntentStore();
+  let preparedSaveProof;
   const store = makeStore(empty, {
     ...options,
-    preparePatchSave: ({ baseRev, ops }) => ({
-      ok: true,
-      request: {
-        url: `/api/canvas/${CREATE_ID}`,
-        init: {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ baseRev, ops }),
+    preparePatchSave: ({ baseRev, ops, saveProof }) => {
+      preparedSaveProof = saveProof;
+      return {
+        ok: true,
+        request: {
+          url: `/api/canvas/${CREATE_ID}`,
+          init: {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ baseRev, ops, saveProof }),
+          },
         },
-      },
-    }),
+      };
+    },
   });
   let patchCalls = 0;
   const runtime = createCanvasRuntime(
@@ -3531,7 +3535,12 @@ async function verifyPatchResponse(dataFactory, label, accepted, options = {}) {
           return {
             ok: true,
             status: 200,
-            json: async () => ({ success: true, data: makeDocumentData(empty) }),
+            json: async () => ({
+              success: true,
+              data: makeDocumentData(empty, {
+                ...(options.loadSaveProof ? { saveProof: options.loadSaveProof } : {}),
+              }),
+            }),
           };
         }
         patchCalls += 1;
@@ -3562,6 +3571,13 @@ async function verifyPatchResponse(dataFactory, label, accepted, options = {}) {
   }
   await drainMicrotasks();
   eq(patchCalls, 1, `${label}: one PATCH reaches transport`);
+  if (Object.prototype.hasOwnProperty.call(options, "expectedPreparedSaveProof")) {
+    eq(
+      preparedSaveProof,
+      options.expectedPreparedSaveProof,
+      `${label}: exact GET proof is forwarded to save preparation`
+    );
+  }
   eq(runtime.getDebugState().conflicted, !accepted, `${label}: conflict state matches decode`);
   eq(runtime.getDebugState().pending, accepted ? 0 : 1, `${label}: local op is not lost`);
   eq(
@@ -3579,7 +3595,20 @@ async function verifyPatchResponse(dataFactory, label, accepted, options = {}) {
   runtime.dispose();
 }
 
-await verifyPatchResponse(() => makePatchData(), "valid PATCH response", true);
+await verifyPatchResponse(
+  () => makePatchData({ saveProof: "N".repeat(43) }),
+  "valid PATCH response with save proof",
+  true,
+  {
+    loadSaveProof: "P".repeat(43),
+    expectedPreparedSaveProof: "P".repeat(43),
+  }
+);
+await verifyPatchResponse(
+  () => makePatchData({ saveProof: "invalid" }),
+  "malformed PATCH save proof",
+  false
+);
 await verifyPatchResponse(
   () => makePatchData({ id: OTHER_ID }),
   "mismatched PATCH id",

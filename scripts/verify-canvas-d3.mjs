@@ -316,6 +316,21 @@ function makePostClient(options = {}) {
       async getUser() {
         return { data: { user: { id: options.userId ?? POST_USER } }, error: null };
       },
+      async getClaims() {
+        return {
+          data: { claims: { sub: options.userId ?? POST_USER } },
+          error: null,
+        };
+      },
+      async getSession() {
+        if (options.unauthenticated) {
+          return { data: { session: null }, error: { code: "AUTH" } };
+        }
+        return {
+          data: { session: { access_token: "verified-by-postgrest" } },
+          error: null,
+        };
+      },
     },
     from(source) {
       return new Query(source);
@@ -988,6 +1003,42 @@ for (const missing of ["models", "voices", "characters", "assets", "recipes"]) {
   ok(
     adapter.prepareRepair(state, { baseRev: 7, deps: repairDeps }).ok,
     "repair adapter prepares a complete explicit request"
+  );
+  const proof = "P".repeat(43);
+  const proofPatch = adapter.preparePatch(
+    { ...state, nodes: [nodeA] },
+    {
+      baseRev: 7,
+      ops: [{ entity: "node", op: "add", value: nodeA }],
+      saveProof: proof,
+    }
+  );
+  ok(proofPatch.ok, "proof-backed adapter prepares compressed fast PATCH");
+  if (proofPatch.ok) {
+    const proofBody = JSON.parse(proofPatch.request.init.body);
+    ok(
+      Array.isArray(proofBody.ops) && proofBody.ops.length === 0,
+      "proof-backed PATCH does not duplicate entity ops on the wire"
+    );
+    eq(proofBody.opCount, 1, "proof-backed PATCH carries the exact durable queue op count");
+    ok(
+      Array.isArray(proofBody.snapshot.nodes) &&
+        proofBody.snapshot.nodes.length === 1 &&
+        proofBody.snapshot.nodes[0].id === nodeA.id,
+      "proof-backed PATCH carries the strict current snapshot"
+    );
+    eq(proofBody.saveProof, proof, "proof-backed PATCH forwards the exact opaque proof");
+  }
+  ok(
+    !adapter.preparePatch(
+      { ...state, nodes: [nodeA] },
+      {
+        baseRev: 7,
+        ops: [{ entity: "node", op: "add", value: nodeA }],
+        saveProof: "invalid",
+      }
+    ).ok,
+    "adapter rejects malformed save proof before transport"
   );
   for (const missing of ["nodes", "edges", "groups"]) {
     const partialState = { ...state };

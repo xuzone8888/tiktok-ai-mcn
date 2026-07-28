@@ -37,6 +37,7 @@ const patchModule = await loadCanvasModule("patch");
 const apiTypes = await loadCanvasModule("api-types");
 const writerLock = await loadCanvasModule("writer-lock");
 const helpers = await loadCanvasModule("api-helpers");
+const saveProofModule = await loadCanvasModule("save-proof");
 
 const routeSource = readFileSync(routePath, "utf8");
 const routeBuilt = ts.transpileModule(routeSource, {
@@ -62,6 +63,8 @@ class FixedDate extends Date {
 }
 
 let activeClient = null;
+let proofVerificationResult = false;
+let issuedSaveProof = null;
 const routeModule = { exports: {} };
 const quietConsole = { error() {}, log() {}, warn() {} };
 const routeContext = vm.createContext({
@@ -94,6 +97,16 @@ const routeContext = vm.createContext({
     if (specifier === "@/lib/canvas/api-types") return apiTypes;
     if (specifier === "@/lib/canvas/api-helpers") return helpers;
     if (specifier === "@/lib/canvas/writer-lock") return writerLock;
+    if (specifier === "@/lib/canvas/save-proof") {
+      return {
+        issueCanvasSaveProof() {
+          return issuedSaveProof;
+        },
+        verifyCanvasSaveProof() {
+          return proofVerificationResult;
+        },
+      };
+    }
     throw new Error(`Unexpected route dependency: ${specifier}`);
   },
   console: quietConsole,
@@ -247,6 +260,24 @@ function makeSupabase(seedRows, options = {}) {
         }
         return { data: { user: { id: options.userId ?? USER } }, error: null };
       },
+      async getClaims() {
+        if (options.unauthenticated) {
+          return { data: null, error: { code: "AUTH" } };
+        }
+        return {
+          data: { claims: { sub: options.userId ?? USER } },
+          error: null,
+        };
+      },
+      async getSession() {
+        if (options.unauthenticated) {
+          return { data: { session: null }, error: { code: "AUTH" } };
+        }
+        return {
+          data: { session: { access_token: "verified-by-postgrest" } },
+          error: null,
+        };
+      },
     },
     from(source) {
       return new Query(source);
@@ -297,8 +328,145 @@ async function invoke(client, body, options = {}) {
   });
 }
 
+async function invokePatch(client, body, options = {}) {
+  activeClient = client;
+  const request = {
+    async json() {
+      if (options.jsonError) throw new Error("bad json");
+      return body;
+    },
+  };
+  return route.PATCH(request, {
+    params: Promise.resolve({ id: options.id ?? ID }),
+  });
+}
+
 function callsOf(client, operation) {
   return client.calls.filter((call) => call.operation === operation);
+}
+
+console.log("save proof cryptography and one-round-trip PATCH");
+{
+  const previousSecret = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-secret-that-is-long-enough";
+  try {
+    const proof = saveProofModule.issueCanvasSaveProof(ID, 7);
+    ok(typeof proof === "string" && /^[A-Za-z0-9_-]{43}$/.test(proof), "issued proof is opaque base64url SHA-256");
+    ok(saveProofModule.verifyCanvasSaveProof(proof, ID, 7), "proof verifies for exact canvas and revision");
+    ok(!saveProofModule.verifyCanvasSaveProof(proof, OTHER_USER, 7), "proof is canvas-bound");
+    ok(!saveProofModule.verifyCanvasSaveProof(proof, ID, 8), "proof is revision-bound");
+    ok(!saveProofModule.verifyCanvasSaveProof("A".repeat(43), ID, 7), "forged proof is rejected");
+  } finally {
+    if (previousSecret === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    else process.env.SUPABASE_SERVICE_ROLE_KEY = previousSecret;
+  }
+}
+{
+  const added = schema.createCanvasNode({
+    id: "compressed_fast_save_node",
+    type: "text",
+    position: { x: 15, y: 25 },
+  });
+  const snapshot = { nodes: [added], edges: [], groups: [] };
+  const body = {
+    baseRev: 7,
+    writerTag: WRITER,
+    ops: [],
+    opCount: 1,
+    snapshot,
+    saveProof: "C".repeat(43),
+  };
+  const client = makeSupabase([makeRow({ doc: EMPTY_DOC, doc_bytes: docLimits.computeDocBytes(EMPTY_DOC) })]);
+  proofVerificationResult = true;
+  issuedSaveProof = "S".repeat(43);
+  const response = await invokePatch(client, body);
+  proofVerificationResult = false;
+  issuedSaveProof = null;
+
+  eq(response.status, 200, "compressed proof PATCH succeeds without sending entity ops");
+  eq([client.readCount, client.updateCount], [0, 1], "compressed proof PATCH remains one CAS and zero reads");
+  eq(response.body.data.appliedOps, 1, "compressed proof PATCH acknowledges the durable queue op count");
+  eq(client.rows[0].doc, snapshot, "compressed proof PATCH persists the strict snapshot");
+}
+{
+  const client = makeSupabase([makeRow({ doc: EMPTY_DOC })]);
+  const response = await invokePatch(client, {
+    baseRev: 7,
+    writerTag: WRITER,
+    ops: [],
+    opCount: 1,
+    snapshot: EMPTY_DOC,
+    saveProof: "I".repeat(43),
+  });
+  eq([response.status, response.body.code], [409, "REV_CONFLICT"], "unverified compressed proof fails closed");
+  eq(client.calls.length, 0, "unverified compressed proof never reaches the database");
+}
+{
+  const added = schema.createCanvasNode({
+    id: "fast_save_node",
+    type: "text",
+    position: { x: 10, y: 20 },
+  });
+  const snapshot = { nodes: [added], edges: [], groups: [] };
+  const body = {
+    baseRev: 7,
+    writerTag: WRITER,
+    ops: [{ entity: "node", op: "add", value: added }],
+    snapshot,
+    saveProof: "P".repeat(43),
+  };
+  const client = makeSupabase([makeRow({ doc: EMPTY_DOC, doc_bytes: docLimits.computeDocBytes(EMPTY_DOC) })]);
+  proofVerificationResult = true;
+  issuedSaveProof = "N".repeat(43);
+  const response = await invokePatch(client, body);
+  proofVerificationResult = false;
+  issuedSaveProof = null;
+
+  eq(response.status, 200, "valid proof fast PATCH succeeds");
+  eq([client.readCount, client.updateCount], [0, 1], "fast PATCH performs zero reads and one CAS update");
+  eq(client.rows[0].doc, snapshot, "fast PATCH persists the strict submitted snapshot");
+  eq(client.rows[0].rev, 8, "fast PATCH bumps exactly one revision");
+  eq(response.body?.data?.saveProof, "N".repeat(43), "fast PATCH rotates proof to the committed revision");
+  const updateCall = callsOf(client, "update")[0];
+  eq(
+    updateCall?.filters.map((filter) => [filter.operator, filter.field, filter.value]),
+    [
+      ["eq", "id", ID],
+      ["eq", "rev", 7],
+      ["eq", "writer_tag", WRITER],
+      ["gte", "writer_heartbeat_at", new Date(NOW_MS - writerLock.WRITER_LEASE_MS).toISOString()],
+    ],
+    "fast PATCH CAS is scoped by id+rev+writer+active lease; signed JWT RLS supplies ownership"
+  );
+}
+{
+  const added = schema.createCanvasNode({
+    id: "fallback_save_node",
+    type: "text",
+    position: { x: 30, y: 40 },
+  });
+  const body = {
+    baseRev: 7,
+    writerTag: WRITER,
+    ops: [{ entity: "node", op: "add", value: added }],
+    snapshot: { nodes: [added], edges: [], groups: [] },
+    saveProof: "F".repeat(43),
+  };
+  const client = makeSupabase([makeRow({ doc: EMPTY_DOC, doc_bytes: docLimits.computeDocBytes(EMPTY_DOC) })]);
+  const response = await invokePatch(client, body);
+  eq(response.status, 200, "unverified proof safely falls back to full PATCH path");
+  eq([client.readCount, client.updateCount], [1, 1], "unverified proof cannot bypass the authoritative read/decision path");
+}
+{
+  const client = makeSupabase([makeRow({ doc: EMPTY_DOC })]);
+  const response = await invokePatch(client, {
+    baseRev: 7,
+    writerTag: WRITER,
+    ops: [],
+    snapshot: EMPTY_DOC,
+  });
+  eq([response.status, response.body.code], [400, "INVALID_BODY"], "unpaired snapshot/proof is rejected before database access");
+  eq(client.calls.length, 0, "unpaired snapshot/proof performs zero database operations");
 }
 
 console.log("repair auth, identity, and exact request contract");

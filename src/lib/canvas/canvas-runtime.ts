@@ -46,7 +46,7 @@ import {
   type OfflineQueueSnapshot,
   type OfflineQueueState,
 } from "./offline-queue";
-import { CANVAS_UUID_RE } from "./api-helpers";
+import { CANVAS_SAVE_PROOF_RE, CANVAS_UUID_RE } from "./api-helpers";
 import {
   decideShadowRecovery,
   strictJsonClone,
@@ -438,6 +438,8 @@ interface RuntimeSession {
   saveAbort: AbortHandle | null;
   saveAttempt: number;
   saveToken: string | null;
+  /** Opaque server-issued proof for the exact activeId/queue revision. Never persisted locally. */
+  saveProof: string | null;
   recoveryEpoch: number;
   loadInFlight: boolean;
   loadAttempt: number;
@@ -571,7 +573,7 @@ function isNonnegativeInteger(value: unknown): value is number {
 function decodeDocumentData(
   value: unknown,
   expectedId: string
-): { rev: number; deps: CanvasDeps; loadResult: LoadCanvasResult } | null {
+): { rev: number; deps: CanvasDeps; loadResult: LoadCanvasResult; saveProof: string | null } | null {
   const cloned = strictJsonClone(value);
   if (!cloned.ok) return null;
   const safeValue = cloned.value;
@@ -586,6 +588,7 @@ function decodeDocumentData(
   const writer = readOwnDataValue(safeValue, "writer");
   const createdAt = readOwnDataValue(safeValue, "createdAt");
   const updatedAt = readOwnDataValue(safeValue, "updatedAt");
+  const rawSaveProof = readOwnDataValue(safeValue, "saveProof");
   if (
     id !== expectedId ||
     typeof title !== "string" ||
@@ -595,7 +598,11 @@ function decodeDocumentData(
     !isNonnegativeInteger(docBytes) ||
     typeof status !== "string" ||
     typeof createdAt !== "string" ||
-    typeof updatedAt !== "string"
+    typeof updatedAt !== "string" ||
+    !(
+      rawSaveProof === undefined ||
+      (typeof rawSaveProof === "string" && CANVAS_SAVE_PROOF_RE.test(rawSaveProof))
+    )
   ) {
     return null;
   }
@@ -659,6 +666,7 @@ function decodeDocumentData(
   return {
     rev,
     deps: parsedDeps.data,
+    saveProof: typeof rawSaveProof === "string" ? rawSaveProof : null,
     loadResult: {
       nodes,
       edges,
@@ -681,7 +689,7 @@ function decodeRepairData(
   baseRev: number,
   expectedDoc: CanvasDoc,
   expectedDeps: CanvasDeps
-): { rev: number; envelope: CanvasEnvelopeWithMeta } | null {
+): { rev: number; envelope: CanvasEnvelopeWithMeta; saveProof: string | null } | null {
   const cloned = strictJsonClone(value);
   if (!cloned.ok) return null;
   const safeValue = cloned.value;
@@ -693,6 +701,7 @@ function decodeRepairData(
   const recovered = readOwnDataValue(safeValue, "recovered");
   const updatedAt = readOwnDataValue(safeValue, "updatedAt");
   const rawEnvelope = readOwnDataValue(safeValue, "envelope");
+  const rawSaveProof = readOwnDataValue(safeValue, "saveProof");
   if (
     id !== expectedId ||
     rev !== baseRev + 1 ||
@@ -700,7 +709,11 @@ function decodeRepairData(
     !isNonnegativeInteger(docBytes) ||
     persisted !== true ||
     recovered !== true ||
-    typeof updatedAt !== "string"
+    typeof updatedAt !== "string" ||
+    !(
+      rawSaveProof === undefined ||
+      (typeof rawSaveProof === "string" && CANVAS_SAVE_PROOF_RE.test(rawSaveProof))
+    )
   ) {
     return null;
   }
@@ -739,6 +752,7 @@ function decodeRepairData(
   }
   return {
     rev,
+    saveProof: typeof rawSaveProof === "string" ? rawSaveProof : null,
     envelope: {
       schemaVersion,
       doc: validatedDoc.data,
@@ -754,7 +768,12 @@ function decodePatchData(
   expectedId: string,
   baseRev: number,
   submittedOps: number
-): { rev: number; rebased: boolean; envelope: CanvasEnvelopeWithMeta | null } | null {
+): {
+  rev: number;
+  rebased: boolean;
+  envelope: CanvasEnvelopeWithMeta | null;
+  saveProof: string | null;
+} | null {
   const cloned = strictJsonClone(value);
   if (!cloned.ok) return null;
   const safeValue = cloned.value;
@@ -767,6 +786,7 @@ function decodePatchData(
   const noopOps = readOwnDataValue(safeValue, "noopOps");
   const persisted = readOwnDataValue(safeValue, "persisted");
   const updatedAt = readOwnDataValue(safeValue, "updatedAt");
+  const rawSaveProof = readOwnDataValue(safeValue, "saveProof");
   if (
     id !== expectedId ||
     !isNonnegativeInteger(rev) ||
@@ -781,13 +801,26 @@ function decodePatchData(
     typeof updatedAt !== "string" ||
     (persisted ? appliedOps === 0 : appliedOps !== 0) ||
     (!rebased && rev !== baseRev + (persisted ? 1 : 0)) ||
-    (rebased && rev <= baseRev + (persisted ? 1 : 0))
+    (rebased && rev <= baseRev + (persisted ? 1 : 0)) ||
+    !(
+      rawSaveProof === undefined ||
+      (typeof rawSaveProof === "string" && CANVAS_SAVE_PROOF_RE.test(rawSaveProof))
+    )
   ) {
     return null;
   }
 
   const rawEnvelope = readOwnDataValue(safeValue, "envelope");
-  if (!rebased) return rawEnvelope === undefined ? { rev, rebased, envelope: null } : null;
+  if (!rebased) {
+    return rawEnvelope === undefined
+      ? {
+          rev,
+          rebased,
+          envelope: null,
+          saveProof: typeof rawSaveProof === "string" ? rawSaveProof : null,
+        }
+      : null;
+  }
 
   const envelopeVersion = readOwnDataValue(rawEnvelope, "schemaVersion");
   const envelopeDoc = readOwnDataValue(rawEnvelope, "doc");
@@ -812,6 +845,7 @@ function decodePatchData(
   return {
     rev,
     rebased,
+    saveProof: typeof rawSaveProof === "string" ? rawSaveProof : null,
     envelope: {
       schemaVersion,
       doc: validatedDoc.data,
@@ -2322,6 +2356,7 @@ export function createCanvasRuntime(deps: CanvasRuntimeDeps): CanvasRuntime {
     }
     active.queue = createOfflineQueue(data.rev);
     active.deps = data.deps;
+    active.saveProof = data.saveProof;
     active.serverRecoveryRequired = data.loadResult.recoveryRequired;
     active.baseline = readDoc(store.getState());
     let handoffOutcome: "none" | "applied" | "halted" = "none";
@@ -3087,6 +3122,7 @@ export function createCanvasRuntime(deps: CanvasRuntimeDeps): CanvasRuntime {
         } else {
           active.serverRecoveryRequired = false;
           active.deps = data.envelope.deps;
+          active.saveProof = data.saveProof;
           active.queue = createOfflineQueue(data.rev);
           active.baseline = submitted.data;
           const current = readDoc(store.getState());
@@ -3156,6 +3192,7 @@ export function createCanvasRuntime(deps: CanvasRuntimeDeps): CanvasRuntime {
     const prep = store.preparePatchSave({
       baseRev: outcome.flush.patch.baseRev,
       ops: outcome.flush.patch.ops,
+      saveProof: active.saveProof ?? undefined,
     });
     if (!prep.ok) {
       // Pre-flight guard rejected (writer/size/identity). Requeue to preserve intent.
@@ -3230,6 +3267,7 @@ export function createCanvasRuntime(deps: CanvasRuntimeDeps): CanvasRuntime {
         await persistShadow(active);
         return;
       }
+      active.saveProof = data.saveProof;
       const ackedQueue = queueAck(active.queue, token, data.rev);
       if (data.rebased && data.envelope) {
         if (!adoptRebase(active, data.envelope, ackedQueue)) {
@@ -3444,6 +3482,7 @@ export function createCanvasRuntime(deps: CanvasRuntimeDeps): CanvasRuntime {
       saveAbort: null,
       saveAttempt: 0,
       saveToken: null,
+      saveProof: null,
       recoveryEpoch: 0,
       loadInFlight: false,
       loadAttempt: 0,
