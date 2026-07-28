@@ -10,9 +10,12 @@ import {
   getFacebookGrantedPermissions,
   getFacebookOAuthConfig,
   getFacebookPagePublishPermissionError,
+  getFacebookUserInfo,
   getMyFacebookPages,
   hasFacebookPagePublishPermission,
+  isFacebookPageWebhookEnabled,
   scopesToArray,
+  subscribeFacebookPageToWebhooks,
   type FacebookPermissionInfo,
   type FacebookTokenDebugInfo,
 } from '@/lib/facebook/oauth'
@@ -144,7 +147,10 @@ export async function GET(request: NextRequest) {
 
     const shortToken = await exchangeFacebookCodeForToken(code, authState.code_verifier)
     const longLivedToken = await exchangeForLongLivedUserToken(shortToken.access_token)
-    const pages = await getMyFacebookPages(longLivedToken.access_token)
+    const [facebookUser, pages] = await Promise.all([
+      getFacebookUserInfo(longLivedToken.access_token),
+      getMyFacebookPages(longLivedToken.access_token),
+    ])
 
     if (pages.length === 0) {
       const [permissions, tokenDebug] = await Promise.all([
@@ -165,11 +171,18 @@ export async function GET(request: NextRequest) {
     const scopes = scopesToArray(shortToken.scope)
     let savedCount = 0
 
+    if (isFacebookPageWebhookEnabled()) {
+      await Promise.all(publishablePages.map((page) =>
+        subscribeFacebookPageToWebhooks(page.pageId, page.accessToken)
+      ))
+    }
+
     for (const page of publishablePages) {
       const { data: savedAccount, error: upsertError } = await supabase
         .from('facebook_accounts')
         .upsert({
           user_id: authState.user_id,
+          authorized_by_facebook_user_id: facebookUser.id,
           channel_id: page.pageId,
           channel_title: page.name,
           channel_handle: page.category,

@@ -76,6 +76,10 @@ export interface PlatformAccountsConfig {
   legalConsentText?: string
   legalConsentTextEn?: string
   deleteAllDataEndpoint?: string
+  dataControlsTitle?: string
+  dataControlsTitleEn?: string
+  dataControlsDescription?: string
+  dataControlsDescriptionEn?: string
   deleteAllDataLabel?: string
   deleteAllDataLabelEn?: string
   deleteAllDataConfirmation?: string
@@ -715,9 +719,19 @@ export function PlatformAccountsPage({ config }: PlatformAccountsPageProps) {
           <section className="rounded-xl border border-rose-400/20 bg-rose-400/[0.04] p-4">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <h2 className="text-sm font-semibold text-white">{t(isEnglish, 'YouTube 数据控制', 'YouTube data controls')}</h2>
+                <h2 className="text-sm font-semibold text-white">
+                  {t(
+                    isEnglish,
+                    config.dataControlsTitle || `${config.platformName} 数据控制`,
+                    config.dataControlsTitleEn || `${config.platformName} data controls`,
+                  )}
+                </h2>
                 <p className="mt-1 text-xs text-white/50">
-                  {t(isEnglish, '删除全部本地 YouTube 账号、令牌、发布记录、评论缓存和操作日志。不会删除 YouTube 上的视频或评论。', 'Delete all local YouTube accounts, tokens, publishing history, cached comments, and action logs. This does not delete videos or comments hosted on YouTube.')}
+                  {t(
+                    isEnglish,
+                    config.dataControlsDescription || `删除全部本地 ${config.platformName} 账号、令牌、发布记录、评论缓存和操作日志。不会删除平台托管的内容。`,
+                    config.dataControlsDescriptionEn || `Delete all locally stored ${config.platformName} accounts, tokens, publishing history, cached comments, and action logs. This does not delete platform-hosted content.`,
+                  )}
                 </p>
               </div>
               <Button variant="destructive" onClick={deleteAllPlatformData} disabled={deletingAllData}>

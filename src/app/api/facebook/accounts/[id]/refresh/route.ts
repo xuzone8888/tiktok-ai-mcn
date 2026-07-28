@@ -4,7 +4,10 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import {
   calculateFacebookTokenExpiration,
+  getFacebookUserInfo,
+  isFacebookPageWebhookEnabled,
   refreshFacebookPageAccessToken,
+  subscribeFacebookPageToWebhooks,
 } from '@/lib/facebook/oauth'
 
 export const dynamic = 'force-dynamic'
@@ -41,12 +44,17 @@ export async function POST(_request: NextRequest, { params }: { params: { id: st
     }
 
     const token = await refreshFacebookPageAccessToken(tokenRecord.refresh_token, account.channel_id)
+    const facebookUser = await getFacebookUserInfo(token.user_access_token)
+    if (isFacebookPageWebhookEnabled()) {
+      await subscribeFacebookPageToWebhooks(token.page.pageId, token.access_token)
+    }
     const expiresAt = calculateFacebookTokenExpiration(token.expires_in)?.toISOString() || null
     const now = new Date().toISOString()
 
     const { error } = await adminSupabase
       .from('facebook_accounts')
       .update({
+        authorized_by_facebook_user_id: facebookUser.id,
         channel_title: token.page.name,
         channel_handle: token.page.category,
         thumbnail_url: token.page.thumbnailUrl,

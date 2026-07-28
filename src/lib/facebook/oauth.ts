@@ -2,7 +2,7 @@ import crypto from 'crypto'
 
 import { callBroker, isBrokerEnabled } from '@/lib/oauth-broker/client'
 
-const FACEBOOK_API_VERSION = process.env.FACEBOOK_API_VERSION || 'v20.0'
+const FACEBOOK_API_VERSION = process.env.FACEBOOK_API_VERSION || 'v25.0'
 const FACEBOOK_AUTH_URL = `https://www.facebook.com/${FACEBOOK_API_VERSION}/dialog/oauth`
 const FACEBOOK_GRAPH_URL = `https://graph.facebook.com/${FACEBOOK_API_VERSION}`
 
@@ -53,6 +53,10 @@ export interface FacebookTokenDebugInfo {
 export interface FacebookPermissionInfo {
   permission: string
   status: string
+}
+
+export interface FacebookUserInfo {
+  id: string
 }
 
 const FACEBOOK_PAGE_PUBLISH_TASKS = new Set(['CREATE_CONTENT'])
@@ -147,6 +151,100 @@ async function readFacebookApiError(response: Response): Promise<string> {
 // 仅用于携带用户/页面令牌的调用；使用 app access token 的 debug_token 不需要。
 export function getFacebookAppSecretProof(accessToken: string): string {
   return crypto.createHmac('sha256', getFacebookOAuthConfig().clientSecret).update(accessToken).digest('hex')
+}
+
+export function isFacebookPageWebhookEnabled(): boolean {
+  return process.env.FACEBOOK_PAGE_WEBHOOK_ENABLED === 'true'
+}
+
+export async function getFacebookUserInfo(userAccessToken: string): Promise<FacebookUserInfo> {
+  if (isBrokerEnabled()) {
+    return callBroker<FacebookUserInfo>('facebook', 'getFacebookUserInfo', { userAccessToken })
+  }
+  const params = new URLSearchParams({
+    fields: 'id',
+    appsecret_proof: getFacebookAppSecretProof(userAccessToken),
+  })
+  const response = await fetch(`${FACEBOOK_GRAPH_URL}/me?${params.toString()}`, {
+    headers: { Authorization: `Bearer ${userAccessToken}` },
+  })
+  if (!response.ok) {
+    throw new Error(`Failed to fetch Facebook user identity: ${await readFacebookApiError(response)}`)
+  }
+
+  const data = await response.json().catch(() => null) as Record<string, unknown> | null
+  if (!data || typeof data.id !== 'string' || !data.id) {
+    throw new Error('Facebook user identity response is invalid.')
+  }
+  return { id: data.id }
+}
+
+export async function subscribeFacebookPageToWebhooks(
+  pageId: string,
+  pageAccessToken: string,
+): Promise<void> {
+  if (isBrokerEnabled()) {
+    await callBroker<void>('facebook', 'subscribeFacebookPageToWebhooks', {
+      pageId,
+      pageAccessToken,
+    })
+    return
+  }
+
+  const body = new URLSearchParams({
+    subscribed_fields: 'feed',
+    appsecret_proof: getFacebookAppSecretProof(pageAccessToken),
+  })
+  const response = await fetch(
+    `${FACEBOOK_GRAPH_URL}/${encodeURIComponent(pageId)}/subscribed_apps`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${pageAccessToken}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body,
+    },
+  )
+  if (!response.ok) {
+    throw new Error(`Failed to subscribe Facebook Page webhooks: ${await readFacebookApiError(response)}`)
+  }
+
+  const data = await response.json().catch(() => null) as Record<string, unknown> | null
+  if (data?.success !== true) {
+    throw new Error('Facebook Page webhook subscription returned an invalid response.')
+  }
+}
+
+export async function unsubscribeFacebookPageFromWebhooks(
+  pageId: string,
+  pageAccessToken: string,
+): Promise<void> {
+  if (isBrokerEnabled()) {
+    await callBroker<void>('facebook', 'unsubscribeFacebookPageFromWebhooks', {
+      pageId,
+      pageAccessToken,
+    })
+    return
+  }
+
+  const body = new URLSearchParams({
+    appsecret_proof: getFacebookAppSecretProof(pageAccessToken),
+  })
+  const response = await fetch(
+    `${FACEBOOK_GRAPH_URL}/${encodeURIComponent(pageId)}/subscribed_apps`,
+    {
+      method: 'DELETE',
+      headers: {
+        Authorization: `Bearer ${pageAccessToken}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body,
+    },
+  )
+  if (!response.ok) {
+    throw new Error(`Failed to unsubscribe Facebook Page webhooks: ${await readFacebookApiError(response)}`)
+  }
 }
 
 export async function exchangeFacebookCodeForToken(code: string, codeVerifier?: string | null): Promise<FacebookTokenResponse> {

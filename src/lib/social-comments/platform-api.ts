@@ -8,12 +8,12 @@ const YOUTUBE_COMMENT_THREADS_URL = 'https://www.googleapis.com/youtube/v3/comme
 const YOUTUBE_COMMENTS_URL = 'https://www.googleapis.com/youtube/v3/comments'
 const YOUTUBE_PAGE_SIZE = 100
 const YOUTUBE_MAX_TOP_LEVEL_COMMENTS = 500
-const FACEBOOK_API_VERSION = process.env.FACEBOOK_API_VERSION || 'v20.0'
+const FACEBOOK_API_VERSION = process.env.FACEBOOK_API_VERSION || 'v25.0'
 const FACEBOOK_GRAPH_URL = `https://graph.facebook.com/${FACEBOOK_API_VERSION}`
 const FACEBOOK_PAGE_SIZE = 100
 const FACEBOOK_MAX_TOP_LEVEL_COMMENTS = 500
 const FACEBOOK_MAX_REPLIES_PER_COMMENT = 500
-const INSTAGRAM_API_VERSION = process.env.INSTAGRAM_API_VERSION || process.env.FACEBOOK_API_VERSION || 'v20.0'
+const INSTAGRAM_API_VERSION = process.env.INSTAGRAM_API_VERSION || process.env.FACEBOOK_API_VERSION || 'v25.0'
 const INSTAGRAM_AUTH_MODE = getInstagramAuthMode()
 const INSTAGRAM_GRAPH_URL = INSTAGRAM_AUTH_MODE === 'instagram'
   ? `https://graph.instagram.com/${INSTAGRAM_API_VERSION}`

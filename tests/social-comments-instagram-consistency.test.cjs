@@ -320,7 +320,7 @@ test('Instagram Native reply uses the official JSON request and maps the outboun
   const reply = await api.replyToInstagramComment(token, 'comment/with space', 'media-1', 'manual reply')
   assert.deepEqual(request, {
     host: 'graph.instagram.com',
-    pathname: '/v20.0/comment%2Fwith%20space/replies',
+    pathname: '/v25.0/comment%2Fwith%20space/replies',
     method: 'POST',
     contentType: 'application/json',
     urlHasAccessToken: false,
@@ -422,7 +422,7 @@ test('YouTube and Facebook reply request formats remain unchanged', async () => 
   const facebook = requests[1]
   const facebookBody = facebook.init.body
   assert.equal(facebook.url.host, 'graph.facebook.com')
-  assert.equal(facebook.url.pathname, '/v20.0/facebook-parent/comments')
+  assert.equal(facebook.url.pathname, '/v25.0/facebook-parent/comments')
   assert.equal(facebook.init.method, 'POST')
   assert.equal(facebook.headers.get('Content-Type'), 'application/x-www-form-urlencoded')
   assert.equal(facebookBody instanceof URLSearchParams, true)

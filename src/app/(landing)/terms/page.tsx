@@ -3,7 +3,7 @@
 import Link from "next/link";
 import ReflectiveCard from "@/components/ui/ReflectiveCard";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Sparkles, Shield, Globe, FileText, Users, UserCheck, AlertTriangle, BookOpen, Scale, Gavel, RefreshCw, Phone, CreditCard, Megaphone, Receipt, ShieldX, Layers, Baby, MoreHorizontal, Youtube, DollarSign } from "lucide-react";
+import { ArrowLeft, Sparkles, Shield, Globe, FileText, Users, UserCheck, AlertTriangle, BookOpen, Scale, Gavel, RefreshCw, Phone, CreditCard, Megaphone, Receipt, ShieldX, Layers, Baby, MoreHorizontal, Youtube, DollarSign, Share2 } from "lucide-react";
 import { useLang } from "@/contexts/LangContext";
 
 export default function TermsPage() {
@@ -354,6 +354,28 @@ export default function TermsPage() {
                     <Link href="/privacy" className="text-cyan-400 hover:underline">{lang === "en" ? "Star Gaze Privacy Policy" : "Star Gaze 隐私政策"}</Link>
                     <Link href="https://security.google.com/settings/security/permissions" target="_blank" className="text-cyan-400 hover:underline">{lang === "en" ? "Google Account third-party connections" : "Google 账号第三方连接"}</Link>
                     <Link href="https://policies.google.com/privacy" target="_blank" className="text-cyan-400 hover:underline">{lang === "en" ? "Google Privacy Policy" : "Google 隐私政策"}</Link>
+                  </div>
+                </div>
+              </div>
+            </ReflectiveCard>
+
+            {/* 21. Facebook Platform Integration Terms */}
+            <ReflectiveCard className="!rounded-xl">
+              <div className="flex items-start gap-4 p-6">
+                <div className="p-3 rounded-lg bg-blue-500/10 text-blue-400 shrink-0"><Share2 className="h-6 w-6" /></div>
+                <div>
+                  <h2 className="text-xl font-bold text-white mb-3">{lang === "en" ? "21. Facebook Platform Integration Terms" : "二十一、Facebook 平台集成条款"}</h2>
+                  <p className="leading-loose">{lang === "en" ? "21.1 Service Description: Subject to availability and your authorization, Star Gaze uses Meta Platform APIs to connect Facebook Pages you manage, display Page information, publish or schedule Page videos and posts, synchronize Page comments through API calls and webhooks, and submit replies that you initiate or confirm." : "21.1 服务说明：在相关功能可用且您已完成授权的前提下，Star Gaze 使用 Meta 平台 API 绑定您管理的 Facebook Page、展示 Page 信息、发布或预约发布 Page 视频与帖子、通过 API 调用和 webhook 同步 Page 评论，以及提交由您主动发起或确认的回复。"}</p>
+                  <p className="leading-loose mt-3">{lang === "en" ? "21.2 Meta Terms: By accessing Facebook features through Star Gaze, you agree to comply with applicable Meta terms, policies, Page rules, community standards, and developer requirements." : "21.2 Meta 条款：当您通过 Star Gaze 使用 Facebook 功能时，您同意遵守适用的 Meta 条款、政策、Page 规则、社群守则及开发者要求。"}</p>
+                  <p className="leading-loose mt-3">{lang === "en" ? "21.3 Authorization: You represent that you own or are lawfully authorized to manage every Facebook Page you connect. You decide which available Pages to connect. Star Gaze requests Page permissions only for the visible Page listing, metadata and webhook subscription, content reading, publishing, comment reading, and user-confirmed reply features described here and in our Privacy Policy." : "21.3 授权：您声明并保证，您拥有或有权合法管理所绑定的每个 Facebook Page。您自行决定绑定哪些可用 Page。Star Gaze 仅为本条款及隐私政策所述的可见 Page 列表、元数据与 webhook 订阅、内容读取、发布、评论读取及用户确认回复功能请求 Page 权限。"}</p>
+                  <p className="leading-loose mt-3">{lang === "en" ? "21.4 User Control: You retain final control over the selected Page, source media, text, publication timing, and reply text. Star Gaze submits a publication or reply only after you initiate or confirm the action. You are responsible for reviewing content before submission." : "21.4 用户控制：您对所选 Page、源媒体、文本、发布时间及回复文本保留最终控制权。Star Gaze 仅在您主动发起或确认操作后提交发布或回复。您有责任在提交前审核内容。"}</p>
+                  <p className="leading-loose mt-3">{lang === "en" ? "21.5 User Responsibility: You are responsible for the legality, accuracy, rights, licenses, disclosures, and platform compliance of all content and replies submitted through Star Gaze, including compliance with copyright, publicity, advertising, commercial-content, and synthetic-media requirements." : "21.5 用户责任：您对通过 Star Gaze 提交的所有内容与回复的合法性、准确性、权利许可、披露及平台合规性负责，包括遵守著作权、肖像权、广告、商业内容及合成媒体相关要求。"}</p>
+                  <p className="leading-loose mt-3">{lang === "en" ? "21.6 Platform Decisions: Meta independently controls processing, moderation, availability, visibility, recommendation, monetization, removal, and other treatment of Facebook content. Star Gaze does not guarantee that a publication or reply will be accepted, displayed, recommended, monetized, or retained." : "21.6 平台决定：Meta 独立决定 Facebook 内容的处理、审核、可用性、可见性、推荐、商业化、删除及其他处置方式。Star Gaze 不保证发布内容或回复一定会被接受、展示、推荐、商业化或保留。"}</p>
+                  <p className="leading-loose mt-3">{lang === "en" ? "21.7 Privacy, Revocation, and Deletion: Our handling of Facebook Platform Data is described in the Star Gaze Privacy Policy. You may disconnect one Page, use “Delete all Facebook data,” revoke access through Facebook Apps and Websites settings, use Meta’s data-deletion mechanism, or contact us. Deleting locally stored data does not delete content hosted by Facebook." : "21.7 隐私、撤权与删除：我们对 Facebook 平台数据的处理方式详见 Star Gaze 隐私政策。您可以解绑单个 Page、使用“删除全部 Facebook 数据”、通过 Facebook“应用和网站”设置撤销访问、使用 Meta 的数据删除机制，或联系我们。删除本地保存的数据不会删除 Facebook 平台托管的内容。"}</p>
+                  <div className="flex flex-wrap gap-x-4 gap-y-2 mt-3 text-sm">
+                    <Link href="/privacy" className="text-cyan-400 hover:underline">{lang === "en" ? "Star Gaze Privacy Policy" : "Star Gaze 隐私政策"}</Link>
+                    <Link href="https://developers.facebook.com/terms/" target="_blank" className="text-cyan-400 hover:underline">{lang === "en" ? "Meta Platform Terms" : "Meta 平台条款"}</Link>
+                    <Link href="https://www.facebook.com/settings?tab=applications" target="_blank" className="text-cyan-400 hover:underline">{lang === "en" ? "Facebook Apps and Websites settings" : "Facebook 应用和网站设置"}</Link>
                   </div>
                 </div>
               </div>
