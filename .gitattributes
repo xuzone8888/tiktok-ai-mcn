@@ -1,4 +1,24 @@
-scripts/fixtures/canvas-p1/expected-catalog.json text eol=lf
+# Remote execution artifacts are byte-locked. Store and check out their exact
+# reviewed bytes instead of applying core.autocrlf normalization.
+scripts/verify-canvas-p1-batch2.mjs -text whitespace=cr-at-eol
+scripts/fixtures/canvas-p1/identity.mjs -text whitespace=cr-at-eol
+scripts/fixtures/canvas-p1/expected-catalog.json -text whitespace=cr-at-eol
+scripts/fixtures/canvas-p1/batch2/callsite-allowlist.json -text whitespace=cr-at-eol
+scripts/fixtures/canvas-p1/batch2/callsites.mjs -text whitespace=cr-at-eol
+scripts/fixtures/canvas-p1/batch2/manifest-additions.json -text whitespace=cr-at-eol
+scripts/fixtures/canvas-p1/batch2/manifests.mjs -text whitespace=cr-at-eol
+scripts/fixtures/canvas-p1/batch2/post-apply-catalog.json -text whitespace=cr-at-eol
+scripts/fixtures/canvas-p1/batch2/remote-preflight-locks.json -text whitespace=cr-at-eol
+scripts/fixtures/canvas-p1/batch2/runtime.mjs -text whitespace=cr-at-eol
+scripts/fixtures/canvas-p1/batch2/scenarios.mjs -text whitespace=cr-at-eol
+scripts/fixtures/canvas-p1/batch2/session.mjs -text whitespace=cr-at-eol
+scripts/fixtures/canvas-p1/batch2/sql/batch2-introspect.sql -text whitespace=cr-at-eol
+scripts/fixtures/canvas-p1/batch2/target.mjs -text whitespace=cr-at-eol
+supabase/migrations/20260715_generations_service_role_policy.sql -text whitespace=cr-at-eol
+supabase/migrations/20260716_canvas_p1_lifecycle_foundation.sql -text whitespace=cr-at-eol
+supabase/migrations/20260717_canvas_p1_credit_boundary.sql -text whitespace=cr-at-eol
+supabase/migrations/20260718_canvas_p1_generation_api.sql -text whitespace=cr-at-eol
+supabase/migrations/20260719_canvas_p1_reconciliation.sql -text whitespace=cr-at-eol
 src/app/api/user/credits/deduct/route.ts text eol=lf
 src/app/api/user/credits/refund/route.ts text eol=lf
 src/app/api/sms/verify/route.ts text eol=lf
