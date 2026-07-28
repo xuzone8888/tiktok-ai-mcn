@@ -337,11 +337,12 @@ Phase 5 退出条件：
 - 更新时间：2026-07-28 00:47（Asia/Shanghai）
 - 更新时间：2026-07-28 00:53（Asia/Shanghai）
 - 更新时间：2026-07-28 11:40（Asia/Shanghai）
+- 更新时间：2026-07-28 11:42（Asia/Shanghai）
 - 执行状态：`READY_FOR_FINAL_VALIDATION`
 - 当前 Phase：Phase 1-4、Preview 五迁移首次应用/重放、真实 post/reapply 冻结、77/77 场景、定向清理和最终目录证明全部完成；Phase 5/6 中无需真实付费供应商、生产权限、推送、合并或部署的本地门禁、构建、回归、主线冲突预演、发布拆分和上线材料均已完成。剩余唯一阶段是用户在明确绑定 Preview 的应用中做真人 UI/最小付费黄金旅程最终检验，随后按单独授权执行真实合并、生产迁移、推送和部署
 - 分支：`claude/canvas-p1-generation`
-- 代码候选 HEAD：`623e426`（本检查点与发布手册将组成其后的纯文档提交）
-- 工作树：代码与验证器改动已拆为 5 个本地提交；当前仅本方案、发布手册与明确排除提交的 `.claude/settings.local.json` 未跟踪/待提交
+- 代码候选 HEAD：`a6fd9b336c970b34cb9746cc01e3551deefaf021`（本检查点将组成其后的纯文档提交）
+- 工作树：代码、验证器、发布文档和字节可移植性修复已拆为 7 个本地提交；当前仅本检查点修改与明确排除提交的 `.claude/settings.local.json` 未提交
 - 恢复快照：
   - 路径：`.temp/super-canvas-p1-baseline-20260727-184149.zip`
   - 文件数：46（明确排除 `.claude/*`）
@@ -536,8 +537,11 @@ Phase 5 退出条件：
 - 11:40 **真人 UI 前生产硬拒绝**：只分类、不回显地检查本地应用环境，发现 `.env.local` 的 `NEXT_PUBLIC_SUPABASE_URL` 属于生产 ref `hfabrifuvujpdzarlbky`。因此未启动本地应用、未执行 UI API 或数据库请求，也未读取/复用其中任何凭据。真人 Preview UI 必须等待明确绑定 `liibsugstuidwlmliyif` 的 Preview 应用环境
 - 11:40 远端 `main` 与本地 `main` 均为 `6fac3f0f8e2c6a6a35e6ca26cb03fcb6e283a64c`；相对共同祖先，`main` 的 38 个变更路径与当前候选 174 个变更路径交集为 0，`git merge-tree --write-tree HEAD main` 退出 0。未执行真实合并
 - 11:40 已新增 `docs/SUPER_CANVAS_P1_RELEASE_RUNBOOK.md`：冻结五迁移/目录/执行锁哈希，明确生产单事务顺序、生产专用只读闸、应用放量顺序、只前进回滚、即时/5 分钟/30 分钟/24 小时监控阈值、Preview 真人与最小付费检验清单
-- 11:40 本地候选已拆为 5 个未推送提交：`c0f2989` 跨平台验证载入、`16264ff` 数据库生命周期底座、`ae30d76` 生成意图与积分合约、`1417003` 发布阻断调用点、`623e426` RLS 验证器对齐。敏感形状扫描覆盖 78 文件；仅命中方案里的脱敏连接占位符和验证器的 loopback 假 URI，未发现真实 JWT、私钥、Supabase key 或带真实密码连接串；`.claude/`、`.temp/`、环境文件、证书均未跟踪、未暂存
+- 11:40 本地候选已拆为未推送提交：`c0f2989` 跨平台验证载入、`16264ff` 数据库生命周期底座、`ae30d76` 生成意图与积分合约、`1417003` 发布阻断调用点、`623e426` RLS 验证器对齐、`883dfa4` 上线验收手册。敏感形状扫描覆盖 78 文件；仅命中方案里的脱敏连接占位符和验证器的 loopback 假 URI，未发现真实 JWT、私钥、Supabase key 或带真实密码连接串；`.claude/`、`.temp/`、环境文件、证书均未跟踪、未暂存
 - 11:40 远程锁清单仍为 `d8427bd23f812ca4de2e0ae76d35567d832183260a76c6125cc873a04b5778e9`，冻结 post-apply 目录仍为 `f45d91fcf9a4074ff440549c37cca512dc949158b0b0758897a13cf26f89e30f`，CA 仍为 `700723581420dd1ac98fd7e9ac529f0ef210eadcaf87fc868a3ad7d114c2f3b7`；`psql=0`、Batch 2 harness node=0，无远程写入在途
+- 11:42 **字节锁跨平台收口**：提交后检查发现 `core.autocrlf=true` 会让 16 个混合/CRLF 远程锁定文件在 Git 对象中规范化为 LF，Linux 新检出会产生机械哈希失败。已在 `.gitattributes` 将全部 18 个锁定文件及锁清单标记为 `-text whitespace=cr-at-eol`，以二进制精确保存已真实执行的原始字节；提交 `a6fd9b3` 仅固化相同工作树字节，不修改任何迁移/运行逻辑或冻结哈希
+- 11:42 使用全新 `.temp` 目录执行 `git checkout-index` 模拟干净检出，18/18 文件对锁清单 `CLEAN_CHECKOUT_LOCK_MISMATCHES=0`；检出后的锁清单 SHA-256 仍精确为 `d8427bd23f812ca4de2e0ae76d35567d832183260a76c6125cc873a04b5778e9`
+- 11:42 最终关键回归：迁移验证器 `82/82`、D6 `163/163`、生成意图 `122/122`、视频合约 `599/599`、Batch 2 离线静态 `487/487`、TypeScript、diff-check 全部通过；工作树除 `.claude/settings.local.json` 与本检查点外无其他改动
 - 11:40 **下一唯一动作**：用户在明确指向 Preview ref `liibsugstuidwlmliyif` 的 Preview 应用中按发布手册 §3 完成真人 UI 和最小付费黄金旅程最终检验。通过前不执行生产迁移、真实合并、推送或部署；需要真实图片/视频/TikTok 时必须另行确认最小付费样本授权
 
 ## 九、完成定义
