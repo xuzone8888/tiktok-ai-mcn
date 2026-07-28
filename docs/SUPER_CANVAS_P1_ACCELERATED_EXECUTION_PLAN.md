@@ -592,6 +592,14 @@ Phase 5 退出条件：
 - `2026-07-28T08:28:17Z` 已在生产 SQL Editor 重跑生产兼容 preflight：17 个目录段全部精确匹配、mismatch 为空、最近 30 分钟 generation/started 均为 0、相关会话与其他非 idle 会话均为 0。第一次大查询仅遇到 Dashboard 到 `api.supabase.com` 的客户端 fetch 失败，未执行写入；原文重试后完整成功。截至本检查点，生产数据库、生产主机文件、进程、Nginx 和公网流量仍全部零写入/零切换。
 - **下一唯一动作**：再次验证操作生成器、TypeScript、仓库测试、差异与敏感信息边界，排除 `.claude/` 后冻结并推送精确应用候选提交。候选应用 SHA 未固定、未写入下一永久 pre-write 检查点前，生产迁移保持关闭。
 
+### 永久 pre-write 检查点（2026-07-28 16:42 CST，候选已冻结）
+
+- 精确应用候选已提交并推送到 `origin/claude/canvas-p1-generation`：commit `8b83ac7a54c9e080ee8d0fd057ed9d182d9721e2`，tree `6a5118f3ace0e7612c5f0a4d093bc62c7d021362`。提交包含 13 个明确文件、`1,256 insertions / 33 deletions`；不包含用户自有 `.claude/settings.local.json`，也不包含 `canvas-root.tsx`、`media-node.tsx` 两个无内容差异的换行工作树标记。阿里云 release 和构建必须固定使用该应用 commit；本段仅作永久文档检查点，不改变应用候选。
+- 候选冻结前独立复验：生产操作生成器/验证器 `node --check` 通过，安全断言 `43/43`，TypeScript 通过，仓库 Node 测试 `158/158`；cached diff check 无错误，候选 diff 与三个新增文件对 JWT、Supabase secret、OpenAI/GitHub token 和 private-key 形态命中均为 0。migrate 输出仍为 `411,410 bytes / 6b096c1050ffb45bdac146f2006f654b30cf2074dc9fc691eb104822484f94b2`，五个迁移哈希不变。
+- `2026-07-28T08:42:37.931332Z` 在生产 `hfabrifuvujpdzarlbky`、database/user `postgres` 再次执行完全相同的只读 preflight：`catalog_all_match=true`、17 段、mismatch `[]`；`profiles=31 / canvases=0 / generations=30839 / credit_transactions=294`；`failed=10897 / completed=16761 / processing=3181`；最近 30 分钟 generation 与 started、scoped/other non-idle sessions 均为 0，最新 nonterminal 仍为 `2026-06-30T11:30:46.41Z`。生产身份、目录、活动闸与上一检查点一致。
+- 上线前恢复闸仍固定为最新已确认 scheduled physical backup `2026-07-28 04:43:07 UTC`，Restore 可用；PITR add-on 未开启且本次不购买。生产迁移具备单事务、单 advisory xact lock、固定迁移哈希、触发器事务内原样恢复、前后目录断言和失败自动回滚。到本段落盘时，生产数据库写入、主机文件/进程变更和 Nginx 切换仍为 0。
+- **下一唯一动作**：从 commit `8b83ac7a54c9e080ee8d0fd057ed9d182d9721e2` 中的生成器重新生成并核对 SHA-256 为 `6b096c1050ffb45bdac146f2006f654b30cf2074dc9fc691eb104822484f94b2` 的 migrate SQL，只执行一次。若 SQL Editor 载入、哈希、生产 ref、备份、前置目录、最近活动、事务结果或回滚语义任一漂移，立即停止且不重试写入；成功后立刻执行固定 postflight。
+
 ## 九、完成定义
 
 只有同时满足以下条件，超级画布 P1 加速任务才可报告“完成并可申请上线”：
