@@ -724,6 +724,15 @@ Phase 5 退出条件：
 - 删除前已把该 exact row 的完整可恢复 JSON 保存到阿里云 root-only `/root/canvas-p1-targeted-backups/canvas-12735ac5-c7d5-407d-bad0-44b22d849998-pre-delete.json`，权限 `600`、大小 783 bytes、SHA-256 `709b4a736fc8e05970b239b02dff3869254bba6f362e2c26a3e7b445cb98ac60`；文件只包含专用测试身份的这一条空 Canvas，不包含密钥、普通用户数据或其他行。
 - **下一唯一动作**：先以生产 SQL Editor 在一个显式事务内断言 exact Canvas ID、exact owner、exact 单一空 image 节点、无 generation/ledger 引用，只删除这一行并在事务内断言受影响行数为 1；提交后只读证明测试 UID Canvas 回到 1、积分/任务/账本不变。任一断言不成立则整个事务回滚并停止清理。
 
+### 永久 navigation-release-complete / online-golden-path-deferred 检查点（2026-07-28 18:34 CST）
+
+- 生产 SQL Editor 只执行一次已检查的 58 行定向事务；首次发现 Monaco 尾部残留旧文本时只打开了 destructive warning，立即 Cancel，未执行。清空编辑器并重新装载后确认无旧尾，再由唯一一次 `Run query` 提交。事务结果精确为 `target_canvases=1 / target_credits=100 / target_generations=1 / target_ledger=3`；服务端独立只读复核只剩主 Canvas `786cec58-88d5-436a-a97f-64cbb7dbf41e`，`rev=50 / schema=1 / nodes=100 / edges=0`，任务仍仅是一个 quick_gen image failed，账本金额仍为 `[100,-5,+5]`。可恢复单行备份继续保留。
+- `pm2 save` 已在 Nginx/候选/公网/数据库全部复核后执行。持久化进程面保留：旧正式 `tiktok-ai-mcn / 3000`、首个 Canvas release `tiktok-ai-mcn-candidate / 3002 / restart 0`、当前导航 release `tiktok-ai-mcn-nav-candidate / 3003 / restart 0`、原 webhook 和独立 `okspeak-proxy / 8788`。当前 Nginx SHA 仍为 `4354cc11293dc0f04f92286c287a34d32715cf8df5e522bc61824a59ecda17c5`，即时回滚文件 SHA 仍为 `fef1d150...e59fa4`。
+- 当前正式发布完成范围：生产五迁移和 18/18 postflight、阿里云蓝绿发布、公开/鉴权/Canvas API 合同、专用身份下 Canvas 创建/编辑/刷新、100 节点、`463.763ms` 保存、恢复安全、侧边栏唯一入口与实际点击进入 Canvas、定向测试垃圾清理及回滚固化均完成。Vercel、本地 PostgreSQL、真实支付和 TikTok 均未使用。
+- 用户已明确把剩余真实线上黄金路径移到后续独立窗口；本窗口不再勾选 runbook §3.2 的图片成功、图生视频成功、下载、关闭标签恢复或 TikTok 私有发布。已发生的一次图片受控失败/唯一退款只是交接证据，不冒充成功路径。供应商 `/v1/models` 可读且列出 `gpt-image-2`，但执行渠道 503 是后续窗口开始前必须重新确认的外部状态。
+- 专用测试身份保持 active，密码不在任何永久材料或当前可恢复变量中；后续窗口若复用，必须经生产 Auth Dashboard 做受控密码轮换，先只读核验 UID、credits 100、Canvas 1、generation 1 failed、ledger 3，再开始任何付费操作。TikTok 仍无明确测试/私有账号确认，因此该步继续禁止。真实线上验收结束后只允许 exact IDs 定向清理或冻结函数停用，不得硬删 anchored profile/auth。
+- **后续独立线上验收窗口第一步**：从头完整阅读本方案与 runbook，核对当前 active/rollback Nginx SHA、release commit、PM2 restart 0、生产 ref 与上述测试身份基线；确认供应商图片渠道恢复且用户明确测试/私有 TikTok 账号后，才从 runbook §3.2 的唯一图片成功样本开始。当前窗口至此不再产生业务写入。
+
 ## 九、完成定义
 
 只有同时满足以下条件，超级画布 P1 加速任务才可报告“完成并可申请上线”：

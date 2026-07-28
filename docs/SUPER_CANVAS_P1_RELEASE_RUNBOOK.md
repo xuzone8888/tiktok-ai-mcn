@@ -1,8 +1,8 @@
 # 超级画布 P1 上线、回滚与监控手册
 
-> 状态：`READY_FOR_FINAL_VALIDATION`
+> 状态：`DEPLOYED_NAVIGATION_READY / ONLINE_GOLDEN_PATH_DEFERRED`
 >
-> 本手册只准备上线动作，不授予生产数据库写入、真实付费供应商调用、推送、合并或部署权限。任何生产动作仍须用户逐项明确授权。
+> 生产迁移、推送和阿里云部署已经在 2026-07-28 的明确授权下完成；剩余真实付费/供应商黄金路径由用户明确移到后续独立窗口。本手册的安全闸继续有效，已完成授权不得推定为后续真实支付或 TikTok 发布授权。
 
 ## 1. 当前候选已经证明的范围
 
@@ -166,3 +166,13 @@
 5. 验收修复与文档：P0 验证器兼容、执行方案、本手册。
 
 每个提交前先做敏感信息扫描；`.claude/settings.local.json` 永远不进入任何提交。
+
+## 10. 2026-07-28 正式发布执行记录
+
+- 生产 Supabase 固定 ref `hfabrifuvujpdzarlbky`；五迁移以固定哈希、单事务执行，生产 postflight `18/18`，注册触发器、RLS/ACL、账本约束和目录冻结均匹配。迁移前后业务汇总无非测试漂移；已有物理备份恢复点已记录，未购买/启用额外 PITR addon。
+- 实际应用 release 固定为 commit `52fd6c7da7c6389fba9cd91507bc0b5cff8f6327`、tree `620891900b3eb6144e0baab47d8b69ae4bcd99ff`、build ID `yVgSWTn3eQliOaANjqVln`。发布目录 `/var/www/tiktok-ai-mcn-releases/52fd6c7da7c6389fba9cd91507bc0b5cff8f6327`，PM2 名称 `tiktok-ai-mcn-nav-candidate`，端口 `3003`，online/restart 0。
+- 正式 Nginx 当前 SHA-256 `4354cc11293dc0f04f92286c287a34d32715cf8df5e522bc61824a59ecda17c5`，唯一 toryx upstream 为 `127.0.0.1:3003`。立即回滚文件 `/etc/nginx/sites-available/toryxai.com.rollback-canvas-p1-nav-52fd6c7-fef1d150` 为 root-only，SHA-256 `fef1d150f4f3af576f6f25b821a5f0a21280593f8493ed2fd71c559dd5e59fa4`，可恢复到 3002；3000/3002、webhook 3001 与独立 okspeak 8788 均保留，`pm2 save` 已执行。
+- 正式侧边栏已在 Studio 与数据总览之间显示唯一“超级画布”/“Super Canvas”，href `/canvas`；生产会话实际点击后成功进入完整 Canvas。主测试 Canvas `786cec58-88d5-436a-a97f-64cbb7dbf41e` 已证明 100 节点持久化、刷新安全和 `463.763ms` 保存。遗留单一空 image Canvas 已在 exact-ID 单事务中删除，删除前完整行备份位于 `/root/canvas-p1-targeted-backups/canvas-12735ac5-c7d5-407d-bad0-44b22d849998-pre-delete.json`，权限 600、SHA-256 `709b4a736fc8e05970b239b02dff3869254bba6f362e2c26a3e7b445cb98ac60`。
+- 专用生产测试 UID `24743ce9-4794-46dd-be29-01fb82c841b7` 暂时保留供独立线上验收窗口使用；当前基线固定为 `credits=100 / canvases=1 / generations=1 failed / ledger=3 / amounts=[100,-5,+5]`。密码未持久化，复用前必须受控轮换并重新只读核验；anchored ledger 禁止硬删 profile/auth。
+- §3.2 尚未完成。唯一图片提交因外部供应商分发组没有 `gpt-image-2` 可用渠道而在 4 次 HTTP 503 后确定性失败，系统只产生一次 consume 和一次 refund，余额完整恢复。图片成功、图生视频成功、下载、关闭标签恢复和 TikTok 私有发布均未执行；不得把受控失败/退款证明写成黄金路径通过。
+- 后续独立窗口必须先完整阅读本手册与执行方案，核对 active/rollback SHA、release/PM2、生产 ref、测试身份基线和供应商渠道；TikTok 只有在用户明确确认测试/私有账号后才允许执行。Vercel和本地 PostgreSQL继续排除。
