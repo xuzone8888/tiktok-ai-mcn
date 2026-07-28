@@ -715,6 +715,14 @@ Phase 5 退出条件：
 - 当前正式 Nginx 仍是 SHA-256 `fef1d150f4f3af576f6f25b821a5f0a21280593f8493ed2fd71c559dd5e59fa4` 且唯一 toryx upstream 仍为 `3002`；3000、3001、3002、8788 全部保留，尚未切流。生产只读样本基线仍为 `credits=100 / generation=1 failed / ledger amounts=[100,-5,+5]`，没有 slideshow/video generation 或新扣费。
 - **下一唯一动作**：把当前 `3002` 配置完整保存为新的 root-only rollback 文件；从固定旧配置只替换唯一 toryx upstream `3002→3003`，断言 old/new 各 0/1、同目录原子 rename、`nginx -t` 成功后 reload。随后立即验证公网导航可见、点击进入 `/canvas`、关键只读 API 与独立 okspeak 健康；任一步失败自动恢复该次 rollback 文件。
 
+### 永久 post-navigation-switch / pre-targeted-cleanup 检查点（2026-07-28 18:31 CST）
+
+- Nginx 已由固定旧 SHA `fef1d150f4f3af576f6f25b821a5f0a21280593f8493ed2fd71c559dd5e59fa4` 仅替换唯一 upstream `3002→3003`；旧文件保存为 root-only `/etc/nginx/sites-available/toryxai.com.rollback-canvas-p1-nav-52fd6c7-fef1d150`，SHA 与旧配置一致。新配置 SHA-256 `4354cc11293dc0f04f92286c287a34d32715cf8df5e522bc61824a59ecda17c5`，old/new upstream 精确 0/1，`nginx -t`、reload 和退出回滚脚本的全部公网断言通过，未触发回滚。
+- 公网未登录合同继续为 login 200、Canvas 307、无效 Canvas ID `INVALID_ID`、模型 API 200，独立 `okspeakai.com/api/health` 仍为 200。用既有专用生产测试会话重新打开 `/studio` 后，侧边栏在 Studio 与数据总览之间精确显示唯一“超级画布”链接且 href `/canvas`；实际点击后 URL 变为 `https://toryxai.com/canvas` 并正常渲染 React Flow、六类节点工具栏、空态起点和标题“超级画布 · Star Gaze”。
+- 点击导航后只读清点发现测试 UID 当前有两个 Canvas，而不是先前记录的一个。新增/遗留测试 Canvas `12735ac5-c7d5-407d-bad0-44b22d849998` 实际创建于 `2026-07-28T10:05:59.109591Z`，不是本次切换瞬间新建；其内容精确为 `rev=30 / nodes=1 / edges=0`，唯一节点 `node_cIzZMqdaEqAY` 为无 media 的空 image，generation refs=0、ledger refs=0、owner 精确测试 UID。主 100 节点 Canvas `786cec58-88d5-436a-a97f-64cbb7dbf41e` 保持独立。
+- 该空 image Canvas 属于本次生产验收遗留测试垃圾，满足 runbook 定向清理边界；但禁止使用 PostgREST 猜测级联、广域条件或关闭约束。生产测试身份仍为 `credits=100 / generations=1 failed / ledger=[100,-5,+5]`，没有 slideshow/video 写入。
+- **下一唯一动作**：先以生产 SQL Editor 在一个显式事务内断言 exact Canvas ID、exact owner、exact 单一空 image 节点、无 generation/ledger 引用，只删除这一行并在事务内断言受影响行数为 1；提交后只读证明测试 UID Canvas 回到 1、积分/任务/账本不变。任一断言不成立则整个事务回滚并停止清理。
+
 ## 九、完成定义
 
 只有同时满足以下条件，超级画布 P1 加速任务才可报告“完成并可申请上线”：
