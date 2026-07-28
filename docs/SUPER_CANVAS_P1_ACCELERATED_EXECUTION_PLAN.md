@@ -600,6 +600,14 @@ Phase 5 退出条件：
 - 上线前恢复闸仍固定为最新已确认 scheduled physical backup `2026-07-28 04:43:07 UTC`，Restore 可用；PITR add-on 未开启且本次不购买。生产迁移具备单事务、单 advisory xact lock、固定迁移哈希、触发器事务内原样恢复、前后目录断言和失败自动回滚。到本段落盘时，生产数据库写入、主机文件/进程变更和 Nginx 切换仍为 0。
 - **下一唯一动作**：从 commit `8b83ac7a54c9e080ee8d0fd057ed9d182d9721e2` 中的生成器重新生成并核对 SHA-256 为 `6b096c1050ffb45bdac146f2006f654b30cf2074dc9fc691eb104822484f94b2` 的 migrate SQL，只执行一次。若 SQL Editor 载入、哈希、生产 ref、备份、前置目录、最近活动、事务结果或回滚语义任一漂移，立即停止且不重试写入；成功后立刻执行固定 postflight。
 
+### 永久检查点（2026-07-28 16:48 CST，生产迁移已提交）
+
+- 固定 migrate artifact 再生成结果为 `411,410 bytes / 411,243 chars / 6b096c1050ffb45bdac146f2006f654b30cf2074dc9fc691eb104822484f94b2`，仅一个 `BEGIN` 与一个 `COMMIT`。Supabase SQL Editor 位于精确生产 ref `hfabrifuvujpdzarlbky`、Primary database、role `postgres`；编辑器显示 6602 行，精确等于 artifact 的 LF 数、2 个裸 CR 经 Monaco 归一化及末行之和，开头/结尾为 `BEGIN`/`COMMIT`。destructive-operation 二次确认只确认一次，事务于 `2026-07-28T08:46:37.676Z` 启动；未作第二次迁移尝试。
+- 单事务正常返回 advisory lock 结果且无错误/未完成状态。随后立即执行固定 `98,061 bytes / 33157df0ab209573d4cd396dbdef2112e22ec29f7d9d5249c956ef3eee57b89f` postflight；`2026-07-28T08:47:47.67956Z` 结果为 `catalog_all_match=true`、18 段、mismatch `[]`，精确证明 Canvas P1 后置目录与生产租户触发器均已恢复到冻结状态。
+- 迁移前后业务聚合完全不变：`profiles=31 / canvases=0 / generations=30839 / credit_transactions=294`，状态仍为 `failed=10897 / completed=16761 / processing=3181`，最新 nonterminal 仍为 `2026-06-30T11:30:46.41Z`；最近 30 分钟 generation/started、scoped/other non-idle sessions 均为 0。后置 ledger/reconciliation 闸：`negative_credit_profiles=0`、`duplicate_operation_anchors=0`、`submission_unknown_generations=0`。没有修改历史 processing 行或其他现有用户数据。
+- 数据库恢复闸仍为上线前 physical backup `2026-07-28 04:43:07 UTC`；该恢复点与单事务失败自动回滚共同保留。生产应用主机、PM2、Nginx 和公网流量尚未变化；旧正式应用仍是 `6fac3f0f8e2c6a6a35e6ca26cb03fcb6e283a64c`、端口 `3000`。
+- **下一唯一动作**：在 `123.56.75.68` 上以精确应用 commit `8b83ac7a54c9e080ee8d0fd057ed9d182d9721e2` 建立独立 release，服务器内复制既有生产 `.env.local`（不回显值），执行锁文件安装与生产构建；构建和 ref 核对成功后以独立 PM2 candidate 监听 `3001`，仅做本机健康/路由验证。旧 `3000` 与 Nginx 保持不动，候选健康检查点落盘前禁止流量切换。
+
 ## 九、完成定义
 
 只有同时满足以下条件，超级画布 P1 加速任务才可报告“完成并可申请上线”：
