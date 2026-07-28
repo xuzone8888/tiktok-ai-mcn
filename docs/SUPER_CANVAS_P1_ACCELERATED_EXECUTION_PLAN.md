@@ -721,6 +721,7 @@ Phase 5 退出条件：
 - 公网未登录合同继续为 login 200、Canvas 307、无效 Canvas ID `INVALID_ID`、模型 API 200，独立 `okspeakai.com/api/health` 仍为 200。用既有专用生产测试会话重新打开 `/studio` 后，侧边栏在 Studio 与数据总览之间精确显示唯一“超级画布”链接且 href `/canvas`；实际点击后 URL 变为 `https://toryxai.com/canvas` 并正常渲染 React Flow、六类节点工具栏、空态起点和标题“超级画布 · Star Gaze”。
 - 点击导航后只读清点发现测试 UID 当前有两个 Canvas，而不是先前记录的一个。新增/遗留测试 Canvas `12735ac5-c7d5-407d-bad0-44b22d849998` 实际创建于 `2026-07-28T10:05:59.109591Z`，不是本次切换瞬间新建；其内容精确为 `rev=30 / nodes=1 / edges=0`，唯一节点 `node_cIzZMqdaEqAY` 为无 media 的空 image，generation refs=0、ledger refs=0、owner 精确测试 UID。主 100 节点 Canvas `786cec58-88d5-436a-a97f-64cbb7dbf41e` 保持独立。
 - 该空 image Canvas 属于本次生产验收遗留测试垃圾，满足 runbook 定向清理边界；但禁止使用 PostgREST 猜测级联、广域条件或关闭约束。生产测试身份仍为 `credits=100 / generations=1 failed / ledger=[100,-5,+5]`，没有 slideshow/video 写入。
+- 删除前已把该 exact row 的完整可恢复 JSON 保存到阿里云 root-only `/root/canvas-p1-targeted-backups/canvas-12735ac5-c7d5-407d-bad0-44b22d849998-pre-delete.json`，权限 `600`、大小 783 bytes、SHA-256 `709b4a736fc8e05970b239b02dff3869254bba6f362e2c26a3e7b445cb98ac60`；文件只包含专用测试身份的这一条空 Canvas，不包含密钥、普通用户数据或其他行。
 - **下一唯一动作**：先以生产 SQL Editor 在一个显式事务内断言 exact Canvas ID、exact owner、exact 单一空 image 节点、无 generation/ledger 引用，只删除这一行并在事务内断言受影响行数为 1；提交后只读证明测试 UID Canvas 回到 1、积分/任务/账本不变。任一断言不成立则整个事务回滚并停止清理。
 
 ## 九、完成定义
