@@ -699,6 +699,14 @@ Phase 5 退出条件：
 - 独立图生视频入口 `/pro-studio/image-slideshow` 会进入 `/studio` 的“幻灯片”模式；当前默认 `9:16 / 2s每图 / 淡入淡出 / ×1`，配音、BGM、运镜均未开启，预计 1 积分，但产品约束需要 2-15 张图。由于图片供应商失败而没有第二张生成图，后续只允许把同一固定、同哈希、无敏感白色卫衣样本在一次多选中复用两次；若 UI 去重或拒绝则停止，不制作/引入第二个用户样本。
 - **下一唯一动作**：在“幻灯片”模式的产品 UI 文件选择器中一次选择两份同一路径固定样本，确认界面只形成两个素材槽、仍显示预计 1 积分且发送只可点击一次；提交前再次只读核验 `credits=100 / generations=1 failed / ledger=3`。若任一计数、默认开关或费用漂移，不执行视频写入。
 
+### 永久 scope-change / pre-navigation-deploy 检查点（2026-07-28 17:58 CST）
+
+- 用户明确要求当前窗口跳过剩余线上真实小样本；图片成功、图生视频成功、下载和 TikTok 私有发布全部移交到后续独立窗口。本窗口禁止继续付费/供应商提交。暂停时 `/studio` 幻灯片表单仅在浏览器内选择了两槽同一固定测试图，发送按钮从未点击；服务端没有新增 slideshow/video generation 或扣费，测试身份余额仍以 post-image-refund 的 100 为基线。
+- 当前窗口新增正式侧边栏顶层入口：`src/components/layout/sidebar.tsx` 在 Studio 与数据总览之间加入中文“超级画布”/英文“Super Canvas”，固定 href `/canvas`，使用 `Network` 图标，描述为“无限画布创作空间”/“Infinite canvas workspace”，不受 Image Factory 功能开关影响。Canvas 自身仍保持独立全屏 route-group layout，不把普通 Studio 侧栏/Header/后台任务管理器注入 Canvas 运行时。
+- 本地针对性门禁已通过：`git diff --check`、`npm run type-check`、`npm run build` 均退出 0；Next.js 14.2.33 编译成功、类型成功、静态页 `143/143`，`/canvas` 继续列为动态路由。构建期间既有 dynamic-server-usage 诊断仍只是已知日志且最终 build exit 0；没有使用生产 `.env.local`。
+- 专用测试 UID、唯一测试 Canvas、一次失败图片任务和守恒账本暂时保留用于后续独立线上验收窗口的精确交接；不硬删 profile/auth，不禁用账本保护，不清理其他用户数据。后续窗口开始前须重新确认身份、余额、任务和账本基线，并自行决定复用或调用冻结的定向停用函数。
+- **下一唯一动作**：仅提交并推送侧边栏与本检查点，固定新 release commit；随后在阿里云创建独立 release 目录、复制既有生产环境文件、构建精确 commit，并在新的空闲 loopback 端口启动候选。候选健康、生产 ref 身份、导航 bundle 和 `/canvas` 合同全部验证前不得切换 Nginx。
+
 ## 九、完成定义
 
 只有同时满足以下条件，超级画布 P1 加速任务才可报告“完成并可申请上线”：

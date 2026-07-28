@@ -23,6 +23,7 @@ import {
   Share2,
   Instagram,
   Loader2,
+  Network,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -80,6 +81,12 @@ function getNavGroups(
           icon: Sparkles,
           description: t ? "Unified creation workspace" : "统一创作工作台",
           beta: true,
+        },
+        {
+          title: t ? "Super Canvas" : "超级画布",
+          href: "/canvas",
+          icon: Network,
+          description: t ? "Infinite canvas workspace" : "无限画布创作空间",
         },
         {
           title: t ? "Dashboard" : "数据总览",
