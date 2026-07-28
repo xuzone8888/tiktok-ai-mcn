@@ -16,7 +16,13 @@ export const VIDEO_MODEL_CATALOG: Record<VideoModelId, VideoModelCatalogEntry> =
     durationSeconds: 12,
     qualityLabel: "12s standard",
     resolution: "adaptive",
+    supportedDurations: [12],
+    supportedQualities: ["standard"],
     supportedAspectRatios: ["9:16", "16:9"],
+    supportedModes: ["prompt_to_video", "image_to_video"],
+    referenceRoles: ["generic"],
+    nativeAudio: "always",
+    supportsCancel: false,
     maxImages: 1,
     supportsNoImage: true,
     requiresOssTransfer: true,
@@ -32,7 +38,13 @@ export const VIDEO_MODEL_CATALOG: Record<VideoModelId, VideoModelCatalogEntry> =
     durationSeconds: 12,
     qualityLabel: "12s Pro",
     resolution: "adaptive",
+    supportedDurations: [12],
+    supportedQualities: ["hd"],
     supportedAspectRatios: ["9:16", "16:9"],
+    supportedModes: ["prompt_to_video", "image_to_video"],
+    referenceRoles: ["generic"],
+    nativeAudio: "always",
+    supportsCancel: false,
     maxImages: 1,
     supportsNoImage: true,
     requiresOssTransfer: true,
@@ -48,7 +60,13 @@ export const VIDEO_MODEL_CATALOG: Record<VideoModelId, VideoModelCatalogEntry> =
     durationSeconds: 10,
     qualityLabel: "10s 720P",
     resolution: "720P",
+    supportedDurations: [10, 15],
+    supportedQualities: ["standard"],
     supportedAspectRatios: ["9:16", "16:9"],
+    supportedModes: ["prompt_to_video", "image_to_video"],
+    referenceRoles: ["generic"],
+    nativeAudio: "unknown",
+    supportsCancel: false,
     maxImages: 4,
     supportsNoImage: true,
     requiresOssTransfer: true,
@@ -64,7 +82,13 @@ export const VIDEO_MODEL_CATALOG: Record<VideoModelId, VideoModelCatalogEntry> =
     durationSeconds: 8,
     qualityLabel: "8s 1080P",
     resolution: "1080P",
+    supportedDurations: [8],
+    supportedQualities: ["standard"],
     supportedAspectRatios: ["9:16", "16:9"],
+    supportedModes: ["prompt_to_video", "image_to_video"],
+    referenceRoles: ["generic"],
+    nativeAudio: "unknown",
+    supportsCancel: false,
     maxImages: 3,
     supportsNoImage: true,
     requiresOssTransfer: true,
@@ -80,7 +104,13 @@ export const VIDEO_MODEL_CATALOG: Record<VideoModelId, VideoModelCatalogEntry> =
     durationSeconds: 10,
     qualityLabel: "10s 720P",
     resolution: "720P",
+    supportedDurations: [10],
+    supportedQualities: ["standard"],
     supportedAspectRatios: ["9:16", "16:9"],
+    supportedModes: ["prompt_to_video", "image_to_video"],
+    referenceRoles: ["generic"],
+    nativeAudio: "unknown",
+    supportsCancel: false,
     maxImages: 7,
     supportsNoImage: true,
     requiresOssTransfer: true,
@@ -96,7 +126,13 @@ export const VIDEO_MODEL_CATALOG: Record<VideoModelId, VideoModelCatalogEntry> =
     durationSeconds: 5,
     qualityLabel: "5/10s existing capability",
     resolution: "1080P / Pro 720P",
+    supportedDurations: [5, 10],
+    supportedQualities: ["standard", "hd"],
     supportedAspectRatios: ["9:16", "16:9"],
+    supportedModes: ["prompt_to_video", "image_to_video"],
+    referenceRoles: ["generic"],
+    nativeAudio: "always",
+    supportsCancel: false,
     maxImages: 1,
     supportsNoImage: true,
     requiresOssTransfer: true,
@@ -112,7 +148,13 @@ export const VIDEO_MODEL_CATALOG: Record<VideoModelId, VideoModelCatalogEntry> =
     durationSeconds: 5,
     qualityLabel: "5/12s 720P",
     resolution: "720P",
+    supportedDurations: [5, 12],
+    supportedQualities: ["standard"],
     supportedAspectRatios: ["9:16", "16:9"],
+    supportedModes: ["prompt_to_video", "image_to_video"],
+    referenceRoles: ["generic"],
+    nativeAudio: "unknown",
+    supportsCancel: false,
     maxImages: 9,
     supportsNoImage: true,
     requiresOssTransfer: true,
@@ -142,17 +184,29 @@ export function getVideoModelCreditCost(
   durationSeconds?: number,
   quality?: VideoQuality
 ): number {
+  const entry = VIDEO_MODEL_CATALOG[modelType];
+  const duration = durationSeconds === undefined ? entry.durationSeconds : durationSeconds;
+  const resolvedQuality = quality === undefined ? entry.supportedQualities[0] : quality;
+
+  if (!Number.isFinite(duration) || !Number.isInteger(duration) || !entry.supportedDurations.some((value) => value === duration)) {
+    throw new RangeError(`${entry.label} does not support duration ${String(durationSeconds)}`);
+  }
+  if (!entry.supportedQualities.includes(resolvedQuality)) {
+    throw new RangeError(`${entry.label} does not support quality ${String(quality)}`);
+  }
+
   if (modelType === "seedance") {
-    const duration = durationSeconds === 10 ? 10 : 5;
-    if (quality === "hd") return duration === 10 ? 994 : 497;
+    if (resolvedQuality === "hd") return duration === 10 ? 994 : 497;
     return duration === 10 ? 466 : 233;
   }
 
   if (modelType === "happyhorse") {
-    return durationSeconds === 12 ? 1080 : 450;
+    return duration === 12 ? 1080 : 450;
   }
 
-  return VIDEO_MODEL_CATALOG[modelType].creditCostPlaceholder;
+  if (modelType === "grok") return duration === 15 ? 8 : 5;
+
+  return entry.creditCostPlaceholder;
 }
 
 export function getVideoModelImageLimit(modelType: VideoModelId): number {

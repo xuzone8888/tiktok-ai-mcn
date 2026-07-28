@@ -1,18 +1,29 @@
 import { querySeedanceTask, submitSeedanceTask, getSeedanceParams, needsUpscaling } from "@/lib/seedance-api";
 import { upscaleVideo, getUpscaleTarget } from "@/lib/video-upscale";
 import { generateMediaPath, uploadVideoBuffer } from "@/lib/oss";
-import type { VideoModelAdapter, VideoModelSubmitInput } from "../types";
+import type { VideoModelAdapter, VideoQuality } from "../types";
 
-function getSeedanceModel(input: Pick<VideoModelSubmitInput, "durationSeconds" | "quality">): string {
-  const duration = input.durationSeconds === 10 ? 10 : 5;
-  const pro = input.quality === "hd";
-  if (pro) return duration === 10 ? "seedance-10s-pro" : "seedance-5s-pro";
+export function resolveSeedanceModel(input: {
+  durationSeconds?: number;
+  quality?: VideoQuality;
+}): string {
+  const duration = input.durationSeconds === undefined ? 5 : input.durationSeconds;
+  const quality = input.quality === undefined ? "standard" : input.quality;
+
+  if (duration !== 5 && duration !== 10) {
+    throw new RangeError(`Seedance does not support duration ${String(input.durationSeconds)}`);
+  }
+  if (quality !== "standard" && quality !== "hd") {
+    throw new RangeError(`Seedance does not support quality ${String(input.quality)}`);
+  }
+
+  if (quality === "hd") return duration === 10 ? "seedance-10s-pro" : "seedance-5s-pro";
   return duration === 10 ? "seedance-10s" : "seedance-5s";
 }
 
 export const seedanceAdapter: VideoModelAdapter = {
   async submit(input) {
-    const model = getSeedanceModel(input);
+    const model = resolveSeedanceModel(input);
     const { duration, resolution } = getSeedanceParams(model);
     const result = await submitSeedanceTask({
       prompt: input.prompt,
@@ -74,7 +85,7 @@ export const seedanceAdapter: VideoModelAdapter = {
       throw new Error("Seedance 完成任务缺少视频 URL");
     }
 
-    const model = getSeedanceModel(input);
+    const model = resolveSeedanceModel(input);
     const ratio = input.aspectRatio || "9:16";
     const response = await fetch(input.status.videoUrl, { cache: "no-store" });
     if (!response.ok) {

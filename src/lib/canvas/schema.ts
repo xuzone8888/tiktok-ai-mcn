@@ -13,6 +13,8 @@
 import { nanoid } from "nanoid";
 import { z } from "zod";
 
+import { CanvasGenerationIntentV1Schema } from "./generation-intent";
+
 export const CANVAS_SCHEMA_VERSION = 1 as const;
 
 /** Canonical persisted canvas identity (shared by API, Runtime and durable pending-create). */
@@ -111,10 +113,29 @@ export const CanvasMediaSchema = z.strictObject({
 });
 export type CanvasMedia = z.infer<typeof CanvasMediaSchema>;
 
+export const CanvasNodeParamsSchema = z
+  .object({
+    generation: CanvasGenerationIntentV1Schema.optional(),
+  })
+  .catchall(z.unknown())
+  .superRefine((params, ctx) => {
+    if (
+      Object.prototype.hasOwnProperty.call(params, "generation") &&
+      params.generation === undefined
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["generation"],
+        message: "generation must be absent or a strict Canvas generation intent",
+      });
+    }
+  });
+export type CanvasNodeParams = z.infer<typeof CanvasNodeParamsSchema>;
+
 export const CanvasNodeDataSchema = z
   .strictObject({
     title: z.string().max(2000).optional(),
-    params: z.record(z.string(), z.unknown()).optional(),
+    params: CanvasNodeParamsSchema.optional(),
     refs: CanvasRefsSchema.default(createCanvasRefs),
     media: CanvasMediaSchema.optional(),
   })

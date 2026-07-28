@@ -9,13 +9,20 @@ import type { VideoModelAdapter } from "../types";
 
 export const grokAdapter: VideoModelAdapter = {
   async submit(input) {
-    const imageUrls = input.imageUrls.slice(0, 4);
+    if (input.durationSeconds !== 10 && input.durationSeconds !== 15) {
+      throw new Error("Grok duration must be validated as 10 or 15 seconds");
+    }
+    if (input.imageUrls.length > 4) {
+      throw new Error("Grok supports at most 4 reference images");
+    }
+
+    const imageUrls = input.imageUrls;
     const model = "grok-imagine-1.0-video";
     const task = await submitPlatformVideo({
       model,
       prompt: input.prompt,
       size: toPlatformSize(input.aspectRatio, "720p"),
-      seconds: "10",
+      seconds: String(input.durationSeconds),
       async: true,
       ...(imageUrls.length > 0 ? { image_reference: imageUrls } : {}),
     });
@@ -27,6 +34,7 @@ export const grokAdapter: VideoModelAdapter = {
       metadata: {
         provider: "video-platform",
         model,
+        duration_seconds: input.durationSeconds,
         reference_image_count: imageUrls.length,
         resolution: "720P",
       },

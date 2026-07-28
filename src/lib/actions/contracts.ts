@@ -11,6 +11,11 @@
 
 "use server";
 
+import {
+  applyTaskCreditDelta,
+  type AppliedTaskCreditDelta,
+} from "@/lib/credits/atomic-task-credit";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 
@@ -96,19 +101,33 @@ function calculatePrice(basePrice: number, period: string): number {
  * @returns HireModelResult
  */
 export async function hireModel(input: HireModelInput): Promise<HireModelResult> {
-  const { modelId, userId, rentalPeriod = "monthly" } = input;
+  const {
+    modelId,
+    userId: requestedUserId,
+    rentalPeriod = "monthly",
+  } = input;
 
-  console.log(`[Contracts] Starting hire process: model=${modelId}, user=${userId}, period=${rentalPeriod}`);
+  console.log(`[Contracts] Starting hire process: model=${modelId}, user=${requestedUserId}, period=${rentalPeriod}`);
 
   try {
     const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user || user.id !== requestedUserId) {
+      return {
+        success: false,
+        error: "登录身份与签约用户不一致",
+        errorCode: "USER_NOT_FOUND",
+      };
+    }
+    const userId = user.id;
+    const adminSupabase = createAdminClient();
 
     // ========================================================================
     // Step 1: 获取模特信息
     // ========================================================================
-    const { data: model, error: modelError } = await supabase
+    const { data: model, error: modelError } = await adminSupabase
       .from("ai_models")
-      .select("id, name, price_monthly, is_active")
+      .select("id, name, price_monthly, is_active, total_rentals, source, owner_id")
       .eq("id", modelId)
       .single();
 
@@ -132,7 +151,7 @@ export async function hireModel(input: HireModelInput): Promise<HireModelResult>
     // ========================================================================
     // Step 2: 检查是否已签约 (防重)
     // ========================================================================
-    const { data: existingContract, error: contractCheckError } = await supabase
+    const { data: existingContract, error: contractCheckError } = await adminSupabase
       .from("contracts")
       .select("id, end_date")
       .eq("user_id", userId)
@@ -157,7 +176,7 @@ export async function hireModel(input: HireModelInput): Promise<HireModelResult>
     // ========================================================================
     // Step 3: 获取用户余额
     // ========================================================================
-    const { data: profile, error: profileError } = await supabase
+    const { data: profile, error: profileError } = await adminSupabase
       .from("profiles")
       .select("id, credits")
       .eq("id", userId)
@@ -190,22 +209,25 @@ export async function hireModel(input: HireModelInput): Promise<HireModelResult>
     }
 
     // ========================================================================
-    // Step 5: 执行原子交易
+    // Step 5: 执行任务级原子积分交易
     // ========================================================================
-    const newBalance = profile.credits - price;
-
-    // 5.1 扣除积分
-    const { error: deductError } = await supabase
-      .from("profiles")
-      .update({ 
-        credits: newBalance,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", userId)
-      .eq("credits", profile.credits); // 乐观锁：确保余额未变
-
-    if (deductError) {
-      console.error("[Contracts] Failed to deduct credits:", deductError);
+    const contractId = crypto.randomUUID();
+    const taskId = `contract:${contractId}:create`;
+    let charge: AppliedTaskCreditDelta;
+    try {
+      charge = await applyTaskCreditDelta({
+        supabase: adminSupabase,
+        userId,
+        entryKind: "consume",
+        amount: -price,
+        scope: "contract",
+        taskId,
+        operation: "buyer-consume",
+        pricingVersion: `contract-create-${rentalPeriod}-v1`,
+        description: `聘用模特 ${model.name} (${rentalPeriod})`,
+      });
+    } catch (error) {
+      console.error("[Contracts] Failed to deduct credits atomically:", error);
       return {
         success: false,
         error: "扣费失败，请重试",
@@ -214,9 +236,10 @@ export async function hireModel(input: HireModelInput): Promise<HireModelResult>
     }
 
     // 5.2 创建合约记录
-    const { data: contract, error: contractError } = await supabase
+    const { data: contract, error: contractError } = await adminSupabase
       .from("contracts")
       .insert({
+        id: contractId,
         user_id: userId,
         model_id: modelId,
         rental_period: rentalPeriod,
@@ -232,44 +255,62 @@ export async function hireModel(input: HireModelInput): Promise<HireModelResult>
 
     if (contractError || !contract) {
       console.error("[Contracts] Failed to create contract:", contractError);
-      
-      // 回滚：退还积分
-      await supabase
-        .from("profiles")
-        .update({ credits: profile.credits })
-        .eq("id", userId);
-      
+
+      let refundSucceeded = true;
+      try {
+        await applyTaskCreditDelta({
+          supabase: adminSupabase,
+          userId,
+          entryKind: "refund",
+          amount: price,
+          scope: "contract",
+          taskId,
+          operation: "buyer-refund",
+          pricingVersion: `contract-create-${rentalPeriod}-v1`,
+          description: `聘用模特 ${model.name} 失败退款`,
+        });
+      } catch (refundError) {
+        refundSucceeded = false;
+        console.error("[Contracts] Failed to refund credits atomically:", refundError);
+      }
+
       return {
         success: false,
-        error: "创建合约失败，积分已退还",
+        error: refundSucceeded
+          ? "创建合约失败，积分已退还"
+          : "创建合约失败，自动退款未完成，请联系支持",
         errorCode: "TRANSACTION_FAILED",
       };
     }
 
-    // 5.3 记录交易流水
-    const { error: logError } = await supabase
-      .from("credit_transactions")
-      .insert({
-        user_id: userId,
-        amount: -price,
-        type: "usage",
-        description: `聘用模特 ${model.name} (${rentalPeriod})`,
-        reference_id: contract.id,
-        reference_type: "contract",
-        balance_before: profile.credits,
-        balance_after: newBalance,
-      });
-
-    if (logError) {
-      console.error("[Contracts] Failed to log transaction:", logError);
-      // 交易流水失败不回滚，但记录错误
+    // 5.3 社区角色积分分成：合约创建成功后，100% 归创作者。
+    if (
+      model.source === "user_created" &&
+      model.owner_id &&
+      model.owner_id !== userId
+    ) {
+      try {
+        await applyTaskCreditDelta({
+          supabase: adminSupabase,
+          userId: model.owner_id,
+          entryKind: "grant",
+          amount: price,
+          scope: "contract",
+          taskId,
+          operation: "creator-grant",
+          pricingVersion: `contract-create-${rentalPeriod}-v1`,
+          description: `角色 ${model.name} 被签约收益`,
+        });
+      } catch (grantError) {
+        console.error("[Contracts] Failed to grant creator revenue:", grantError);
+      }
     }
 
     // 5.4 更新模特统计
-    await supabase
+    await adminSupabase
       .from("ai_models")
       .update({ 
-        total_rentals: (model as any).total_rentals ? (model as any).total_rentals + 1 : 1,
+        total_rentals: model.total_rentals ? model.total_rentals + 1 : 1,
         updated_at: new Date().toISOString(),
       })
       .eq("id", modelId);
@@ -281,14 +322,14 @@ export async function hireModel(input: HireModelInput): Promise<HireModelResult>
     revalidatePath("/models");
     revalidatePath("/quick-gen");
 
-    console.log(`[Contracts] Hire successful: contract=${contract.id}, credits_used=${price}, new_balance=${newBalance}`);
+    console.log(`[Contracts] Hire successful: contract=${contract.id}, credits_used=${price}, new_balance=${charge.balanceAfter}`);
 
     return {
       success: true,
       data: {
         contractId: contract.id,
         creditsUsed: price,
-        newBalance: newBalance,
+        newBalance: charge.balanceAfter,
         endDate: endDate,
       },
     };

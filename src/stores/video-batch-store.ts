@@ -24,6 +24,10 @@ import {
 } from "@/types/video-batch";
 import { getCharacterReferenceMaxImages } from "@/lib/video-models/character-reference";
 import { getCharacterAssetReferenceUrls } from "@/lib/character-assets";
+import {
+  normalizePersistedVideoGlobalSelection,
+} from "@/lib/video-models/contract";
+import { resolvePersistedVideoTaskRecovery } from "@/lib/video-models/client-preflight";
 
 // ============================================================================
 // 状态类型
@@ -969,6 +973,26 @@ export const useVideoBatchStore = create<VideoBatchState & VideoBatchActions>()(
           removeItem: () => { },
         };
       }),
+      merge: (persistedState, currentState) => {
+        const persisted = (persistedState ?? {}) as Partial<VideoBatchState>;
+        const persistedSettings = persisted.globalSettings;
+        const normalizedSelection = normalizePersistedVideoGlobalSelection({
+          modelType: persistedSettings?.modelType,
+          duration: persistedSettings?.duration,
+          quality: persistedSettings?.quality,
+          aspectRatio: persistedSettings?.aspectRatio,
+        });
+
+        return {
+          ...currentState,
+          ...persisted,
+          globalSettings: {
+            ...currentState.globalSettings,
+            ...persistedSettings,
+            ...normalizedSelection.value,
+          },
+        };
+      },
       // 只持久化任务和全局设置，不持久化临时状态
       partialize: (state) => ({
         tasks: state.tasks.map(task => ({
@@ -997,6 +1021,7 @@ export const useVideoBatchStore = create<VideoBatchState & VideoBatchActions>()(
             taskCount: state.tasks.length,
             jobStatus: state.jobStatus,
           });
+          const statusRecoveryTaskIds = new Set<string>();
           // 处理每个任务
           state.tasks.forEach(task => {
             // 将正在处理中的任务重置为待处理（不显示错误消息，让用户重新开始）
@@ -1015,6 +1040,23 @@ export const useVideoBatchStore = create<VideoBatchState & VideoBatchActions>()(
               }
             }
 
+            const recovery = resolvePersistedVideoTaskRecovery({
+              upstreamTaskId: task.soraTaskId,
+              modelType: task.modelType,
+              duration: task.duration,
+              quality: task.quality,
+              aspectRatio: task.aspectRatio,
+            });
+            if (task.status === "pending" && recovery.ok && recovery.mode === "status") {
+              statusRecoveryTaskIds.add(task.id);
+              task.errorMessage = null;
+            } else if (task.status === "pending" && !recovery.ok) {
+              task.status = "failed";
+              task.currentStep = 0;
+              task.progress = 0;
+              task.errorMessage = `保存的视频配置已不受支持（${recovery.error.field}）：${recovery.error.message}。请检查任务配置后重新创建任务。`;
+            }
+
             // 【重要】确保 isMainGrid 属性正确设置
             // 恢复后重新标记第一张图片为主图
             if (task.images.length > 0) {
@@ -1031,7 +1073,11 @@ export const useVideoBatchStore = create<VideoBatchState & VideoBatchActions>()(
               const hasValidImages = task.images.some(img =>
                 img.url && (img.url.startsWith("http://") || img.url.startsWith("https://"))
               );
-              if (!hasValidImages && task.status === "pending") {
+              if (
+                !hasValidImages &&
+                task.status === "pending" &&
+                !statusRecoveryTaskIds.has(task.id)
+              ) {
                 task.errorMessage = "图片已失效，请重新上传";
               }
             }
@@ -1040,6 +1086,7 @@ export const useVideoBatchStore = create<VideoBatchState & VideoBatchActions>()(
           state.tasks = state.tasks.filter(task =>
             task.status !== "pending" ||
             task.mode === "prompt_to_video" || // 纯提示词任务不需要图片
+            statusRecoveryTaskIds.has(task.id) ||
             task.images.some(img => img.url && !img.url.startsWith("blob:"))
           );
 
