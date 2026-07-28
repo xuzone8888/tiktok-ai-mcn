@@ -616,6 +616,14 @@ Phase 5 退出条件：
 - 截至本检查点，release 文件和构建产物已落盘，但旧正式 PM2 `tiktok-ai-mcn`、webhook、`okspeak-proxy`、Nginx 与公网流量均未改变；尚不存在 `tiktok-ai-mcn-candidate`。
 - **下一唯一动作**：在该精确 release 以独立 PM2 `tiktok-ai-mcn-candidate` 启动 `PORT=3002`，等待 `/auth/login` 本机 200，并核对 `/canvas` 未认证行为及新 Canvas API 的 `INVALID_ID` 合约。若进程、端口、生产 ref、HTTP、日志或数据库健康任一异常，停止且不切流。
 
+### 永久 pre-switch 检查点（2026-07-28 16:56 CST，3002 候选健康）
+
+- PM2 `tiktok-ai-mcn-candidate` 已从精确 release 启动到 `3002`，PID `1091043`，cwd 精确为 `/var/www/tiktok-ai-mcn-releases/8b83ac7a54c9e080ee8d0fd057ed9d182d9721e2`；稳定窗口后状态 online、restart 0。日志仅含 Next 14.2.33 在 `localhost:3002` 启动并于 215ms Ready，error log 为空；构建产物内 `star-gaze:canvas-save-proof:v1` 标记存在。
+- 本机 Host=`toryxai.com` 验收：`/auth/login` 为 200，`/canvas?benchmark=1` 未认证为 307，`/api/canvas/not-a-uuid` 命中新版 `INVALID_ID` 合约。公开只读生产数据路由 `/api/models/public` 为 `200 / 48,912 bytes / 0.938s`，证明候选到生产 Supabase 的真实只读链路可用。旧 `3000` 正式应用和 `3001` webhook 同时保持在线。
+- Nginx enabled config 为 `/etc/nginx/sites-enabled/toryxai.com`，解析到 `/etc/nginx/sites-available/toryxai.com`，当前 SHA-256 `1ddb35f539a645e0f454c3cebca3971fb49bb26b55f0538078a7ea8abc0dc354`。其中 `toryxai.com/www.toryxai.com` 的唯一 upstream 位于第 44 行 `proxy_pass http://127.0.0.1:3000;`；当前全局 `nginx -t` 成功，仅有既有 443 protocol-options 重定义 warning。该文件还引用现有证书命名，不能按文件名文字做广域替换；只允许精确替换这一条 upstream。
+- **切换/回滚闸**：先把上述固定哈希原文件复制为 root-only 永久 rollback 文件，再由该原文生成只改一行 `3000→3002` 的同目录临时文件；验证旧/新 upstream 各恰为 0/1 后原子 rename，`nginx -t` 成功才 reload。reload 后立即核对公网 `/auth/login=200`、`/canvas=307`、`/api/canvas/not-a-uuid=INVALID_ID` 与公开只读生产数据路由；任一步失败则原子恢复固定 rollback 文件、再次 `nginx -t` 和 reload。绝不修改 `/etc/nginx/sites-enabled/okspeakai.com` 或其独立服务。
+- **下一唯一动作**：按上述单行、单域、原子且可回滚步骤把 `toryxai.com` 从旧 `3000` 切到健康候选 `3002`，随后立即记录切换后永久检查点；在公网验收完成前保留旧 3000，不停止任何既有进程。
+
 ## 九、完成定义
 
 只有同时满足以下条件，超级画布 P1 加速任务才可报告“完成并可申请上线”：
