@@ -639,6 +639,13 @@ Phase 5 退出条件：
 - **生产样本写闸**：runbook §3 原文要求用户最终 UI 清单在 Preview 完成；不得把完整破坏/离线/双标签/内存/付费矩阵扩大到生产。正式环境只允许本任务授权的最小黄金路径：使用明确的测试身份创建一个定向 Canvas，编辑、自动保存、刷新、100 节点单次保存并记录时延；付费调用严格限 §3.2 各一次及一个可控失败/一次重复点击幂等证明，禁止真实支付。TikTok 只有明确确认测试/私有账号才执行，否则停止该子步并记录。
 - **下一唯一动作**：先以产品 UI 只读打开正式 `/canvas`，确认是否已有可证明的测试登录会话；没有则仅使用可明确标识且可定向清理的测试身份，不接管普通用户。测试身份、作用域或清理边界有歧义时停止生产样本写入，但继续完成所有无需该身份的在线只读验收。
 
+### 永久 pre-sample-write 检查点（2026-07-28 17:02 CST，专用测试身份）
+
+- 正式 `/canvas?benchmark=1` 经产品 UI 只读打开后精确跳转 `/auth/login?redirect=...`，浏览器没有任何正式应用登录会话；未接管或尝试普通用户凭据。生产 Auth Dashboard 当前 `Total: 31 users`，按 email 精确搜索 `codex-canvas-p1-20260728@example.com` 返回 `Total: 0 users / No users`。
+- 唯一允许创建的测试身份固定为保留域 email `codex-canvas-p1-20260728@example.com`，用途仅为 Canvas P1 正式黄金路径；随机高强度密码只保留在当前受控浏览器/REPL 内存，不写本地/服务器文件、终端、日志、文档或提交。创建后立即记录 auth UID，并只按该 UID 跟踪 signup trigger 产生的 profile/tenant、Canvas、generation 和 ledger；不得查询或修改其他用户内容。
+- 创建前聚合基线仍为 `profiles=31 / canvases=0 / generations=30839 / credit_transactions=294`，Auth 为 31。测试结束只允许按新 UID、明确 Canvas ID、明确 generation/transaction anchor 做定向清理；若外键/触发器使清理边界不明确则保留测试数据并停止删除，不做级联猜测或广域 SQL。
+- **下一唯一动作**：在精确生产 Auth Dashboard 通过 Add user 创建并自动确认该唯一测试身份，随后只读证明 Auth=32、对应 profile/tenant 各一且其他业务聚合未漂移，再用产品密码登录。任何重复 email、UID/trigger 数量、初始积分或租户归属歧义都停止后续样本写入。
+
 ## 九、完成定义
 
 只有同时满足以下条件，超级画布 P1 加速任务才可报告“完成并可申请上线”：
