@@ -608,6 +608,14 @@ Phase 5 退出条件：
 - 数据库恢复闸仍为上线前 physical backup `2026-07-28 04:43:07 UTC`；该恢复点与单事务失败自动回滚共同保留。生产应用主机、PM2、Nginx 和公网流量尚未变化；旧正式应用仍是 `6fac3f0f8e2c6a6a35e6ca26cb03fcb6e283a64c`、端口 `3000`。
 - **下一唯一动作**：在 `123.56.75.68` 上以精确应用 commit `8b83ac7a54c9e080ee8d0fd057ed9d182d9721e2` 建立独立 release，服务器内复制既有生产 `.env.local`（不回显值），执行锁文件安装与生产构建；构建和 ref 核对成功后以独立 PM2 candidate 监听 `3001`，仅做本机健康/路由验证。旧 `3000` 与 Nginx 保持不动，候选健康检查点落盘前禁止流量切换。
 
+### 永久检查点（2026-07-28 16:51 CST，隔离 release 已构建）
+
+- 主机再次只读固定为 `i-2ze6lo7hpqlhqfx52ggw / cn-beijing`，旧应用 SHA `6fac3f0f8e2c6a6a35e6ca26cb03fcb6e283a64c` 且工作树干净。已在 `/var/www/tiktok-ai-mcn-releases/8b83ac7a54c9e080ee8d0fd057ed9d182d9721e2` 建立 detached worktree，HEAD 精确为应用候选；既有生产 `.env.local` 仅在服务器内以 `600 root:root` 复制，先断言生产 ref `hfabrifuvujpdzarlbky` 存在、Preview ref `liibsugstuidwlmliyif` 不存在，全程未回显值。
+- Node `20.19.6` / npm `10.8.2` 上锁文件安装成功，生产构建编译、类型检查和静态生成 `143/143` 全部成功；BUILD_ID 为 `2acbCr4_rUbh-qc-J2jfU`，`.next` 中生产 ref 命中 175 个文件、Preview ref 命中 0。构建日志中的若干 `DYNAMIC_SERVER_USAGE` 是 Next 对依赖 cookies/request URL 的动态 API 静态探测信息，最终 build 退出成功；随后首个核对脚本仅因 `pipefail` 把“Preview ref 零命中”的 grep 退出码 1 当成失败，使用不歧义的只读计数复核后所有断言通过。
+- 启动前端口闸发现原计划的 `3001` 已由现有 PM2 `webhook` 的 PID `352359` 自 `2026-07-05` 起监听，cwd `/var/www/tiktok-ai-mcn`。候选启动因此在创建 PM2 进程前拒绝，没有终止、重启或修改该 webhook，也没有复用其端口。`3002` 已只读确认无监听者且未被任何 Nginx enabled/conf.d 配置引用，故候选端口固定改为 `3002`。
+- 截至本检查点，release 文件和构建产物已落盘，但旧正式 PM2 `tiktok-ai-mcn`、webhook、`okspeak-proxy`、Nginx 与公网流量均未改变；尚不存在 `tiktok-ai-mcn-candidate`。
+- **下一唯一动作**：在该精确 release 以独立 PM2 `tiktok-ai-mcn-candidate` 启动 `PORT=3002`，等待 `/auth/login` 本机 200，并核对 `/canvas` 未认证行为及新 Canvas API 的 `INVALID_ID` 合约。若进程、端口、生产 ref、HTTP、日志或数据库健康任一异常，停止且不切流。
+
 ## 九、完成定义
 
 只有同时满足以下条件，超级画布 P1 加速任务才可报告“完成并可申请上线”：
