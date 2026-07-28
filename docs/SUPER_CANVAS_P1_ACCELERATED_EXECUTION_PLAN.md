@@ -707,6 +707,14 @@ Phase 5 退出条件：
 - 专用测试 UID、唯一测试 Canvas、一次失败图片任务和守恒账本暂时保留用于后续独立线上验收窗口的精确交接；不硬删 profile/auth，不禁用账本保护，不清理其他用户数据。后续窗口开始前须重新确认身份、余额、任务和账本基线，并自行决定复用或调用冻结的定向停用函数。
 - **下一唯一动作**：仅提交并推送侧边栏与本检查点，固定新 release commit；随后在阿里云创建独立 release 目录、复制既有生产环境文件、构建精确 commit，并在新的空闲 loopback 端口启动候选。候选健康、生产 ref 身份、导航 bundle 和 `/canvas` 合同全部验证前不得切换 Nginx。
 
+### 永久 post-navigation-candidate / pre-switch 检查点（2026-07-28 18:26 CST）
+
+- 导航 release 固定为 commit `52fd6c7da7c6389fba9cd91507bc0b5cff8f6327`、tree `620891900b3eb6144e0baab47d8b69ae4bcd99ff`，代码提交与本检查点后的文档提交严格分离。阿里云独立目录为 `/var/www/tiktok-ai-mcn-releases/52fd6c7da7c6389fba9cd91507bc0b5cff8f6327`；生产环境文件由既有正式目录 server-side 复制为 root-only `600`，确认只含固定生产 ref `hfabrifuvujpdzarlbky` 且不含 Preview ref。
+- 服务器内 `npm ci` 与 `npm run build` 均退出 0：Next.js 14.2.33 编译/类型/静态页 `143/143`，build ID `yVgSWTn3eQliOaANjqVln`，构建产物不含 Preview ref；静态 chunks 对中文“超级画布”和英文“Super Canvas”各精确命中一个文件。
+- 新候选 `tiktok-ai-mcn-nav-candidate` 独占此前空闲的 loopback `3003`，PM2 PID `1102556`、cwd 精确 release、online、restart 0。直连候选合同：`/auth/login=200 / 10,230 bytes`、匿名 `/canvas?benchmark=1=307` 且精确重定向登录、无效 Canvas ID `400 / INVALID_ID`、`/api/models/public=200 / 48,912 bytes`。
+- 当前正式 Nginx 仍是 SHA-256 `fef1d150f4f3af576f6f25b821a5f0a21280593f8493ed2fd71c559dd5e59fa4` 且唯一 toryx upstream 仍为 `3002`；3000、3001、3002、8788 全部保留，尚未切流。生产只读样本基线仍为 `credits=100 / generation=1 failed / ledger amounts=[100,-5,+5]`，没有 slideshow/video generation 或新扣费。
+- **下一唯一动作**：把当前 `3002` 配置完整保存为新的 root-only rollback 文件；从固定旧配置只替换唯一 toryx upstream `3002→3003`，断言 old/new 各 0/1、同目录原子 rename、`nginx -t` 成功后 reload。随后立即验证公网导航可见、点击进入 `/canvas`、关键只读 API 与独立 okspeak 健康；任一步失败自动恢复该次 rollback 文件。
+
 ## 九、完成定义
 
 只有同时满足以下条件，超级画布 P1 加速任务才可报告“完成并可申请上线”：
