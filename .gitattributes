@@ -1,0 +1,7 @@
+scripts/fixtures/canvas-p1/expected-catalog.json text eol=lf
+src/app/api/user/credits/deduct/route.ts text eol=lf
+src/app/api/user/credits/refund/route.ts text eol=lf
+src/app/api/sms/verify/route.ts text eol=lf
+src/app/auth/register/page.tsx text eol=lf
+src/app/api/admin/set-credits/route.ts text eol=lf
+src/app/api/sora/generate/route.ts text eol=lf
