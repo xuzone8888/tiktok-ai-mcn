@@ -653,6 +653,12 @@ Phase 5 退出条件：
 - 迁移后的 anchored ledger 追加写保护意味着硬删除 profile/auth 可能因 `credit_transactions_user_id_fkey` 与保护触发器被拒绝。最终清理不得尝试级联删除或临时关闭保护；如需关闭测试身份，只允许调用已冻结的 `canvas_p1_deactivate_account_v1` 做定向匿名化/禁用并保留 ledger，Canvas/任务也只按明确 ID 走产品或审核过的定向路径。
 - **下一唯一动作**：在正式产品登录页使用该专用 email/内存密码登录，确认 redirect 回 `/canvas?benchmark=1`；登录成功后立即清除内存密码，再由产品 UI 创建唯一测试 Canvas。若登录、初始 100 credits、UID 归属或 API 5xx 有任何异常，停止新写入。
 
+### 永久 pre-canvas-write 检查点（2026-07-28 17:10 CST）
+
+- 产品密码登录只提交一次，异步完成后精确回到 `https://toryxai.com/canvas?benchmark=1`，页面标题“超级画布 · Star Gaze”。随机密码变量已立即置空；当前受控内存、页面和永久文件之外不再保留密码值。
+- 登录后的正式 Canvas UI 正常渲染 React Flow、添加文本/图片/商品/脚本入口、工具栏/小地图和历史/快捷键；当前为空画布起点，无恢复横幅、白屏或 5xx。只读 SQL 再次证明目标 UID `target_canvases=0 / target_generations=0` 且全库 `canvases_total=0`，因此后续第一条 Canvas 行可无歧义归属于该测试身份。
+- **下一唯一动作**：仅通过产品 UI 点击“添加文本”创建第一节点并触发唯一 Canvas 创建，等待 autosave 后从 URL 记录 Canvas ID；只读证明目标 Canvas 仅 1、rev/schema/writer/doc_bytes 合法且无 generation/额外 ledger，再刷新确认首节点持久化。禁止通过 SQL 直接插入或修补 UI 样本。
+
 ## 九、完成定义
 
 只有同时满足以下条件，超级画布 P1 加速任务才可报告“完成并可申请上线”：
