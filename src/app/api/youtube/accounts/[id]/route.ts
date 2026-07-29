@@ -40,9 +40,21 @@ export async function DELETE(_request: NextRequest, { params }: { params: { id: 
     }
 
     const revocationJobId = deletion?.revocation_job_id
-    const revocation = revocationJobId
-      ? await processYouTubeRevocationJobs(adminSupabase, { jobId: revocationJobId, limit: 1 })
-      : { attempted: 0, completed: 0, deferred: 0 }
+    let revocation = { attempted: 0, completed: 0, deferred: 0 }
+    if (revocationJobId) {
+      try {
+        revocation = await processYouTubeRevocationJobs(adminSupabase, {
+          jobId: revocationJobId,
+          limit: 1,
+        })
+      } catch (revocationError) {
+        // Local deletion is the commit point. A failure in this best-effort
+        // immediate attempt must not turn an already-completed disconnect into
+        // an HTTP 500; the durable queue remains available to the cron worker.
+        console.error('Process YouTube revocation job after account deletion failed:', revocationError)
+        revocation = { attempted: 0, completed: 0, deferred: 1 }
+      }
+    }
 
     return NextResponse.json({ success: true, deletion, revocation })
   } catch (error) {

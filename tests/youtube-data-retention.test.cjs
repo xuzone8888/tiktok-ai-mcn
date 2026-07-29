@@ -8,6 +8,7 @@ function read(relativePath) {
 }
 
 const migration = read('supabase/migrations/20260723120000_youtube_data_retention_cleanup.sql')
+const claimCompatibilityMigration = read('supabase/migrations/20260729120000_youtube_revocation_claim_fencing_compat.sql')
 const accountRoute = read('src/app/api/youtube/accounts/[id]/route.ts')
 const dataRoute = read('src/app/api/youtube/data/route.ts')
 const retentionRoute = read('src/app/api/youtube/data-retention/route.ts')
@@ -55,6 +56,18 @@ test('uses a durable revocation queue as the local deletion commit point', () =>
   assert.match(governance, /claimed_at/)
   assert.match(governance, /last_error_code === 'revoked'/)
   assert.match(governance, /\.delete\(\)[\s\S]*\.from\('youtube_revocation_jobs'\)|\.from\('youtube_revocation_jobs'\)[\s\S]*\.delete\(\)/)
+})
+
+test('keeps an already-completed disconnect successful when immediate revocation processing fails', () => {
+  assert.match(
+    claimCompatibilityMigration,
+    /ALTER TABLE public\.youtube_revocation_jobs\s+ADD COLUMN IF NOT EXISTS claimed_at TIMESTAMPTZ/,
+  )
+  assert.match(
+    accountRoute,
+    /try \{[\s\S]*processYouTubeRevocationJobs[\s\S]*\} catch \(revocationError\) \{[\s\S]*deferred: 1/,
+  )
+  assert.match(accountRoute, /return NextResponse\.json\(\{ success: true, deletion, revocation \}\)/)
 })
 
 test('deletes all local YouTube data through an authenticated user control', () => {
