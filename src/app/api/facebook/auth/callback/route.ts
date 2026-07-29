@@ -7,6 +7,7 @@ import {
   exchangeFacebookCodeForToken,
   exchangeForLongLivedUserToken,
   FACEBOOK_PAGE_SCOPES,
+  getGrantedFacebookScopes,
   getFacebookGrantedPermissions,
   getFacebookOAuthConfig,
   getFacebookPagePublishPermissionError,
@@ -14,7 +15,6 @@ import {
   getMyFacebookPages,
   hasFacebookPagePublishPermission,
   isFacebookPageWebhookEnabled,
-  scopesToArray,
   subscribeFacebookPageToWebhooks,
   type FacebookPermissionInfo,
   type FacebookTokenDebugInfo,
@@ -147,16 +147,14 @@ export async function GET(request: NextRequest) {
 
     const shortToken = await exchangeFacebookCodeForToken(code, authState.code_verifier)
     const longLivedToken = await exchangeForLongLivedUserToken(shortToken.access_token)
-    const [facebookUser, pages] = await Promise.all([
+    const [facebookUser, pages, permissions] = await Promise.all([
       getFacebookUserInfo(longLivedToken.access_token),
       getMyFacebookPages(longLivedToken.access_token),
+      getFacebookGrantedPermissions(longLivedToken.access_token),
     ])
 
     if (pages.length === 0) {
-      const [permissions, tokenDebug] = await Promise.all([
-        getFacebookGrantedPermissions(longLivedToken.access_token).catch(() => []),
-        debugFacebookUserToken(longLivedToken.access_token).catch(() => null),
-      ])
+      const tokenDebug = await debugFacebookUserToken(longLivedToken.access_token).catch(() => null)
 
       throw new Error(buildFacebookNoPageError(permissions, tokenDebug))
     }
@@ -168,7 +166,7 @@ export async function GET(request: NextRequest) {
 
     const now = new Date().toISOString()
     const expiresAt = calculateFacebookTokenExpiration(longLivedToken.expires_in)?.toISOString() || null
-    const scopes = scopesToArray(shortToken.scope)
+    const scopes = getGrantedFacebookScopes(permissions)
     let savedCount = 0
 
     if (isFacebookPageWebhookEnabled()) {

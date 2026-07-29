@@ -303,11 +303,11 @@ export async function exchangeForLongLivedUserToken(accessToken: string): Promis
 export async function revokeFacebookToken(token: string): Promise<void> {
   if (isBrokerEnabled()) { await callBroker<void>('facebook', 'revokeFacebookToken', { token }); return }
   const params = new URLSearchParams({
-    access_token: token,
     appsecret_proof: getFacebookAppSecretProof(token),
   })
   const response = await fetch(`${FACEBOOK_GRAPH_URL}/me/permissions?${params.toString()}`, {
     method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
   })
 
   if (!response.ok) {
@@ -319,10 +319,11 @@ export async function revokeFacebookToken(token: string): Promise<void> {
 export async function getFacebookGrantedPermissions(userAccessToken: string): Promise<FacebookPermissionInfo[]> {
   if (isBrokerEnabled()) return callBroker<FacebookPermissionInfo[]>('facebook', 'getFacebookGrantedPermissions', { userAccessToken })
   const params = new URLSearchParams({
-    access_token: userAccessToken,
     appsecret_proof: getFacebookAppSecretProof(userAccessToken),
   })
-  const response = await fetch(`${FACEBOOK_GRAPH_URL}/me/permissions?${params.toString()}`)
+  const response = await fetch(`${FACEBOOK_GRAPH_URL}/me/permissions?${params.toString()}`, {
+    headers: { Authorization: `Bearer ${userAccessToken}` },
+  })
 
   if (!response.ok) {
     throw new Error(`Failed to fetch Facebook permissions: ${await readFacebookApiError(response)}`)
@@ -337,6 +338,15 @@ export async function getFacebookGrantedPermissions(userAccessToken: string): Pr
       permission: entry.permission,
       status: typeof entry.status === 'string' ? entry.status : 'unknown',
     }))
+}
+
+export function getGrantedFacebookScopes(permissions: FacebookPermissionInfo[]): string[] {
+  return [...new Set(
+    permissions
+      .filter((entry) => entry.status === 'granted')
+      .map((entry) => entry.permission.trim())
+      .filter(Boolean)
+  )]
 }
 
 export async function debugFacebookUserToken(userAccessToken: string): Promise<FacebookTokenDebugInfo> {
@@ -406,11 +416,12 @@ function getDebugPageTargets(debugInfo: FacebookTokenDebugInfo): Map<string, Set
 async function getFacebookPageById(userAccessToken: string, pageId: string, fields: string, mode: string): Promise<any | null> {
   const params = new URLSearchParams({
     fields,
-    access_token: userAccessToken,
     appsecret_proof: getFacebookAppSecretProof(userAccessToken),
   })
 
-  const response = await fetch(`${FACEBOOK_GRAPH_URL}/${encodeURIComponent(pageId)}?${params.toString()}`)
+  const response = await fetch(`${FACEBOOK_GRAPH_URL}/${encodeURIComponent(pageId)}?${params.toString()}`, {
+    headers: { Authorization: `Bearer ${userAccessToken}` },
+  })
   if (!response.ok) {
     console.warn('Facebook direct Page fallback failed:', {
       pageId,
@@ -459,12 +470,13 @@ export async function getMyFacebookPages(userAccessToken: string): Promise<Faceb
   if (isBrokerEnabled()) return callBroker<FacebookPageInfo[]>('facebook', 'getMyFacebookPages', { userAccessToken })
   const params = new URLSearchParams({
     fields: FACEBOOK_ACCOUNT_EDGE_FIELDS,
-    access_token: userAccessToken,
     appsecret_proof: getFacebookAppSecretProof(userAccessToken),
     limit: '100',
   })
 
-  const response = await fetch(`${FACEBOOK_GRAPH_URL}/me/accounts?${params.toString()}`)
+  const response = await fetch(`${FACEBOOK_GRAPH_URL}/me/accounts?${params.toString()}`, {
+    headers: { Authorization: `Bearer ${userAccessToken}` },
+  })
   if (!response.ok) {
     throw new Error(`Failed to fetch Facebook Pages: ${await readFacebookApiError(response)}`)
   }
@@ -485,11 +497,12 @@ export async function getFacebookPageInfo(pageId: string, pageAccessToken: strin
   if (isBrokerEnabled()) return callBroker<Omit<FacebookPageInfo, 'accessToken'>>('facebook', 'getFacebookPageInfo', { pageId, pageAccessToken })
   const params = new URLSearchParams({
     fields: 'id,name,category,followers_count,fan_count,link,tasks,picture{url}',
-    access_token: pageAccessToken,
     appsecret_proof: getFacebookAppSecretProof(pageAccessToken),
   })
 
-  const response = await fetch(`${FACEBOOK_GRAPH_URL}/${encodeURIComponent(pageId)}?${params.toString()}`)
+  const response = await fetch(`${FACEBOOK_GRAPH_URL}/${encodeURIComponent(pageId)}?${params.toString()}`, {
+    headers: { Authorization: `Bearer ${pageAccessToken}` },
+  })
   if (!response.ok) {
     throw new Error(`Failed to fetch Facebook Page: ${await readFacebookApiError(response)}`)
   }

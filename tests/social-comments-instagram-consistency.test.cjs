@@ -320,7 +320,7 @@ test('Instagram Native reply uses the official JSON request and maps the outboun
   const reply = await api.replyToInstagramComment(token, 'comment/with space', 'media-1', 'manual reply')
   assert.deepEqual(request, {
     host: 'graph.instagram.com',
-    pathname: '/v25.0/comment%2Fwith%20space/replies',
+    pathname: '/v20.0/comment%2Fwith%20space/replies',
     method: 'POST',
     contentType: 'application/json',
     urlHasAccessToken: false,

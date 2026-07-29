@@ -29,11 +29,17 @@ export async function DELETE(_request: NextRequest) {
     const accountIds = (accounts || [])
       .map((account: { id?: unknown }) => typeof account.id === 'string' ? account.id : null)
       .filter(Boolean) as string[]
+    const webhookSubscriptions: Array<{ pageId: string; pageToken: string }> = []
+    const userTokens = new Set<string>()
+
     if (accountIds.length > 0) {
-      const { data: tokens } = await admin
+      const { data: tokens, error: tokensError } = await admin
         .from('facebook_account_tokens')
         .select('account_id, access_token, refresh_token')
         .in('account_id', accountIds)
+      if (tokensError) {
+        return NextResponse.json({ error: '读取 Facebook 授权令牌失败' }, { status: 500 })
+      }
       const pageIdByAccountId = new Map<string, string>(
         (accounts || []).flatMap((account: { id?: unknown; channel_id?: unknown }) =>
           typeof account.id === 'string' && typeof account.channel_id === 'string'
@@ -41,23 +47,24 @@ export async function DELETE(_request: NextRequest) {
             : []
         )
       )
-      await Promise.allSettled((tokens || []).map((row: {
+      for (const row of (tokens || []) as Array<{
         account_id?: unknown
         access_token?: unknown
-      }) => {
+        refresh_token?: unknown
+      }>) {
         const accountId = typeof row.account_id === 'string' ? row.account_id : ''
         const pageId = pageIdByAccountId.get(accountId)
         const pageToken = typeof row.access_token === 'string' ? row.access_token : ''
-        return pageId && pageToken
-          ? unsubscribeFacebookPageFromWebhooks(pageId, pageToken)
-          : Promise.resolve()
-      }))
-      const userTokens = new Set<string>((tokens || []).flatMap((row: { refresh_token?: unknown }) =>
-        typeof row.refresh_token === 'string' && row.refresh_token ? [row.refresh_token] : []
-      ))
-      await Promise.allSettled([...userTokens].map(revokeFacebookToken))
+        if (pageId && pageToken) webhookSubscriptions.push({ pageId, pageToken })
+        if (typeof row.refresh_token === 'string' && row.refresh_token) {
+          userTokens.add(row.refresh_token)
+        }
+      }
     }
 
+    // Delete local data transactionally before remote cleanup. Remote webhook
+    // removal or token revocation must not prevent fulfillment of a user's
+    // local deletion request when Meta is temporarily unavailable.
     const { data: deletion, error } = await admin.rpc('delete_facebook_user_data', {
       p_user_id: user.id,
     })
@@ -69,7 +76,24 @@ export async function DELETE(_request: NextRequest) {
       return NextResponse.json({ error: '删除 Facebook 数据失败' }, { status: 500 })
     }
 
-    return NextResponse.json({ success: true, deletion })
+    const remoteCleanup = await Promise.allSettled([
+      ...webhookSubscriptions.map(({ pageId, pageToken }) =>
+        unsubscribeFacebookPageFromWebhooks(pageId, pageToken)
+      ),
+      ...[...userTokens].map(revokeFacebookToken),
+    ])
+    const remoteCleanupFailed = remoteCleanup.filter((result) => result.status === 'rejected').length
+    if (remoteCleanupFailed > 0) {
+      console.warn('Facebook local data deleted but remote cleanup was incomplete:', {
+        failed_operations: remoteCleanupFailed,
+      })
+    }
+
+    return NextResponse.json({
+      success: true,
+      deletion,
+      remote_cleanup_complete: remoteCleanupFailed === 0,
+    })
   } catch (error) {
     console.error('Delete all Facebook data error:', error)
     return NextResponse.json({ error: '服务器错误' }, { status: 500 })

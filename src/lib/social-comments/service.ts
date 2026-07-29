@@ -2,6 +2,9 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { mergeActionLogMetadata } from '@/lib/social-comments/action-log'
 import {
   calculateFacebookTokenExpiration,
+  getGrantedFacebookScopes,
+  getFacebookGrantedPermissions,
+  getFacebookUserInfo,
   refreshFacebookPageAccessToken,
 } from '@/lib/facebook/oauth'
 import {
@@ -347,9 +350,14 @@ async function getFacebookToken(admin: any, userId: string, accountId: string): 
   }
 
   let accessToken = tokenRecord.access_token
-  const scopes = normalizeScopes(account.scopes)
+  let scopes = normalizeScopes(account.scopes)
   if (shouldRefreshToken(tokenRecord.access_token_expires_at || account.access_token_expires_at)) {
     const refreshed = await refreshFacebookPageAccessToken(tokenRecord.refresh_token, account.channel_id)
+    const [facebookUser, permissions] = await Promise.all([
+      getFacebookUserInfo(refreshed.user_access_token),
+      getFacebookGrantedPermissions(refreshed.user_access_token),
+    ])
+    scopes = getGrantedFacebookScopes(permissions)
     const expiresAt = calculateFacebookTokenExpiration(refreshed.expires_in)?.toISOString() || null
     accessToken = refreshed.access_token
     await Promise.all([
@@ -371,6 +379,8 @@ async function getFacebookToken(admin: any, userId: string, accountId: string): 
           subscriber_count: refreshed.page.followerCount,
           view_count: refreshed.page.fanCount,
           access_token_expires_at: expiresAt,
+          authorized_by_facebook_user_id: facebookUser.id,
+          scopes,
           status: 'active',
           updated_at: new Date().toISOString(),
         })

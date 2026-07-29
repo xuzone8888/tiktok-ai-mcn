@@ -729,8 +729,8 @@ export function PlatformAccountsPage({ config }: PlatformAccountsPageProps) {
                 <p className="mt-1 text-xs text-white/50">
                   {t(
                     isEnglish,
-                    config.dataControlsDescription || `删除全部本地 ${config.platformName} 账号、令牌、发布记录、评论缓存和操作日志。不会删除平台托管的内容。`,
-                    config.dataControlsDescriptionEn || `Delete all locally stored ${config.platformName} accounts, tokens, publishing history, cached comments, and action logs. This does not delete platform-hosted content.`,
+                    config.dataControlsDescription || '删除全部本地 YouTube 账号、令牌、发布记录、评论缓存和操作日志。不会删除 YouTube 上的视频或评论。',
+                    config.dataControlsDescriptionEn || 'Delete all local YouTube accounts, tokens, publishing history, cached comments, and action logs. This does not delete videos or comments hosted on YouTube.',
                   )}
                 </p>
               </div>

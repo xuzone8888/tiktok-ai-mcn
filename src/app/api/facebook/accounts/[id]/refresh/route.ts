@@ -4,6 +4,8 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import {
   calculateFacebookTokenExpiration,
+  getGrantedFacebookScopes,
+  getFacebookGrantedPermissions,
   getFacebookUserInfo,
   isFacebookPageWebhookEnabled,
   refreshFacebookPageAccessToken,
@@ -44,7 +46,11 @@ export async function POST(_request: NextRequest, { params }: { params: { id: st
     }
 
     const token = await refreshFacebookPageAccessToken(tokenRecord.refresh_token, account.channel_id)
-    const facebookUser = await getFacebookUserInfo(token.user_access_token)
+    const [facebookUser, permissions] = await Promise.all([
+      getFacebookUserInfo(token.user_access_token),
+      getFacebookGrantedPermissions(token.user_access_token),
+    ])
+    const scopes = getGrantedFacebookScopes(permissions)
     if (isFacebookPageWebhookEnabled()) {
       await subscribeFacebookPageToWebhooks(token.page.pageId, token.access_token)
     }
@@ -62,6 +68,7 @@ export async function POST(_request: NextRequest, { params }: { params: { id: st
         video_count: 0,
         view_count: token.page.fanCount,
         access_token_expires_at: expiresAt,
+        scopes,
         status: 'active',
         updated_at: now,
       })

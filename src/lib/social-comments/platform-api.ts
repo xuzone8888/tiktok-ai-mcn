@@ -13,7 +13,9 @@ const FACEBOOK_GRAPH_URL = `https://graph.facebook.com/${FACEBOOK_API_VERSION}`
 const FACEBOOK_PAGE_SIZE = 100
 const FACEBOOK_MAX_TOP_LEVEL_COMMENTS = 500
 const FACEBOOK_MAX_REPLIES_PER_COMMENT = 500
-const INSTAGRAM_API_VERSION = process.env.INSTAGRAM_API_VERSION || process.env.FACEBOOK_API_VERSION || 'v25.0'
+// Keep Instagram versioning independent from Facebook review changes. Setting
+// FACEBOOK_API_VERSION must never silently move Instagram Graph API traffic.
+const INSTAGRAM_API_VERSION = process.env.INSTAGRAM_API_VERSION || 'v20.0'
 const INSTAGRAM_AUTH_MODE = getInstagramAuthMode()
 const INSTAGRAM_GRAPH_URL = INSTAGRAM_AUTH_MODE === 'instagram'
   ? `https://graph.instagram.com/${INSTAGRAM_API_VERSION}`
