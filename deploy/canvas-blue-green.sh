@@ -35,10 +35,12 @@ RECONCILER_NAME="${CANVAS_RECONCILER_PM2_NAME:-stargaze-canvas-reconciler}"
 
 BUNDLE_TOOL=""
 HEALTH_PROBE=""
+RECONCILER_READY_PROBE=""
 TEMP_CONFIG=""
 RESTORE_BUNDLE=""
 SYSTEM_STATE_CHANGED=0
 CUTOVER_COMMITTED=0
+AUTO_RESTORE_SUCCEEDED=0
 CANDIDATE_STARTED=0
 
 TARGET_WEB_NAME=""
@@ -412,36 +414,7 @@ pm2_web_is_online() {
     ' "${name}" "${port}" "${cwd}"
 }
 
-pm2_worker_state() {
-  local name="$1"
-  local script="$2"
-  pm2 jlist 2>/dev/null |
-    node -e '
-      let input = "";
-      process.stdin.setEncoding("utf8");
-      process.stdin.on("data", (chunk) => { input += chunk; });
-      process.stdin.on("end", () => {
-        const [name, script] = process.argv.slice(1);
-        try {
-          const matches = JSON.parse(input).filter((entry) => entry.name === name);
-          if (matches.length === 0) {
-            process.stdout.write("absent\n");
-            return;
-          }
-          const valid = matches.length === 1 &&
-            matches[0].pm2_env?.status === "online" &&
-            matches[0].pm2_env?.exec_mode === "fork_mode" &&
-            matches[0].pm2_env?.pm_exec_path === script;
-          if (!valid) process.exit(1);
-          process.stdout.write("present\n");
-        } catch {
-          process.exit(2);
-        }
-      });
-    ' "${name}" "${script}"
-}
-
-pm2_worker_is_absent() {
+pm2_worker_is_absent_once() {
   local name="$1"
   pm2 jlist 2>/dev/null |
     node -e '
@@ -459,6 +432,65 @@ pm2_worker_is_absent() {
         }
       });
     ' "${name}"
+}
+
+pm2_worker_state() {
+  local name="$1"
+  local script="$2"
+  local pm2_state
+  local first_identity
+  local second_identity
+  pm2_state="$(pm2 jlist 2>/dev/null)" || return 1
+  if printf '%s' "${pm2_state}" |
+    node -e '
+      let input = "";
+      process.stdin.setEncoding("utf8");
+      process.stdin.on("data", (chunk) => { input += chunk; });
+      process.stdin.on("end", () => {
+        const [name] = process.argv.slice(1);
+        try {
+          const matches = JSON.parse(input).filter((entry) => entry.name === name);
+          if (matches.length === 0) {
+            process.exit(0);
+          }
+          process.exit(1);
+        } catch {
+          process.exit(2);
+        }
+      });
+    ' "${name}"; then
+    sleep 1
+    pm2_worker_is_absent_once "${name}" || return 1
+    echo "absent"
+    return 0
+  fi
+  first_identity="$(
+    printf '%s' "${pm2_state}" |
+    node "${RECONCILER_READY_PROBE}" \
+      --name "${name}" \
+      --script "${script}" \
+      --lock-file "${RECONCILER_LOCK_FILE}"
+  )" ||
+    return 1
+  [[ -n "${first_identity}" ]] || return 1
+  sleep 1
+  second_identity="$(
+    pm2 jlist 2>/dev/null |
+      node "${RECONCILER_READY_PROBE}" \
+        --name "${name}" \
+        --script "${script}" \
+        --lock-file "${RECONCILER_LOCK_FILE}"
+  )" ||
+    return 1
+  [[ "${first_identity}" == "${second_identity}" ]] || return 1
+  echo "present"
+}
+
+pm2_worker_is_absent() {
+  local name="$1"
+  pm2_worker_is_absent_once "${name}" || return 1
+  sleep 1
+  pm2_worker_is_absent_once "${name}"
 }
 
 pm2_single_worker_is_online() {
@@ -588,20 +620,18 @@ restore_nginx_from_bundle() {
 
 restore_system_from_bundle() {
   local bundle="$1"
-  local restore_status=0
   if ! restore_worker_from_bundle "${bundle}"; then
     echo "[CRITICAL] Worker restoration failed." >&2
-    restore_status=1
+    return 1
   fi
   if ! restore_nginx_from_bundle "${bundle}"; then
     echo "[CRITICAL] Nginx restoration failed." >&2
-    restore_status=1
+    return 1
   fi
   if ! pm2 save >/dev/null; then
     echo "[CRITICAL] Restored PM2 state could not be saved." >&2
-    restore_status=1
+    return 1
   fi
-  return "${restore_status}"
 }
 
 switch_nginx_to_port() {
@@ -640,10 +670,16 @@ on_exit() {
     echo "[ROLLBACK] Restoring Web and worker from ${RESTORE_BUNDLE}." >&2
     if ! restore_system_from_bundle "${RESTORE_BUNDLE}"; then
       echo "[CRITICAL] Automatic forward restoration failed; keep all processes running and restore ${RESTORE_BUNDLE} manually." >&2
+    else
+      AUTO_RESTORE_SUCCEEDED=1
     fi
   fi
 
-  if ((status != 0 && CANDIDATE_STARTED == 1)); then
+  if ((
+    status != 0 &&
+    CANDIDATE_STARTED == 1 &&
+    (SYSTEM_STATE_CHANGED == 0 || AUTO_RESTORE_SUCCEEDED == 1)
+  )); then
     pm2 stop "${CANDIDATE_NAME}" >/dev/null 2>&1 || true
   fi
   exit "${status}"
@@ -752,6 +788,7 @@ else
 fi
 BUNDLE_TOOL="${CANDIDATE_DIR}/scripts/canvas-rollback-bundle.mjs"
 HEALTH_PROBE="${CANDIDATE_DIR}/scripts/probe-canvas-internal-health.mjs"
+RECONCILER_READY_PROBE="${CANDIDATE_DIR}/scripts/probe-canvas-reconciler-readiness.mjs"
 
 echo "Canvas blue/green release plan"
 echo "  action: ${ACTION}"
@@ -785,7 +822,7 @@ fi
 assert_public_canvas_url "${PUBLIC_HEALTH_URL}" ||
   die "--public-health-url must be an exact http(s) /canvas URL without credentials, query, or fragment"
 
-for command in node npm curl nginx pm2 env grep sed head tail mktemp cp mv chmod chown mkdir date dirname bash realpath stat systemctl; do
+for command in node npm curl nginx pm2 env grep sed head tail sleep mktemp cp mv chmod chown mkdir date dirname bash realpath stat systemctl; do
   require_command "${command}"
 done
 node -e '
@@ -807,8 +844,11 @@ node -e '
   die "Rollback bundle helper is missing or untrusted"
 [[ -f "${HEALTH_PROBE}" && ! -L "${HEALTH_PROBE}" ]] ||
   die "Internal health probe is missing or untrusted"
+[[ -f "${RECONCILER_READY_PROBE}" && ! -L "${RECONCILER_READY_PROBE}" ]] ||
+  die "Reconciler readiness probe is missing or untrusted"
 node --check "${BUNDLE_TOOL}"
 node --check "${HEALTH_PROBE}"
+node --check "${RECONCILER_READY_PROBE}"
 
 [[ -f "${NGINX_CONFIG}" && ! -L "${NGINX_CONFIG}" ]] ||
   die "Nginx config must be an existing non-symlink regular file"

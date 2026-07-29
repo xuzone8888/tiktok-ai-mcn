@@ -75,6 +75,45 @@ function runNode(argumentsList, extraEnv = {}) {
   });
 }
 
+function runCommand(command, argumentsList, options = {}) {
+  return new Promise((resolvePromise, rejectPromise) => {
+    const child = spawn(command, argumentsList, {
+      cwd: options.cwd ?? root,
+      env: {
+        ...process.env,
+        ...(options.env ?? {}),
+      },
+      stdio: ["ignore", "pipe", "pipe"],
+      windowsHide: true,
+    });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk;
+      if (stdout.length > 1024 * 1024) child.kill();
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk;
+      if (stderr.length > 1024 * 1024) child.kill();
+    });
+    child.once("error", rejectPromise);
+    child.once("close", (code, signal) => {
+      resolvePromise({ code, signal, stdout, stderr });
+    });
+  });
+}
+
+function shellQuote(value) {
+  return `'${String(value).replaceAll("'", `'\"'\"'`)}'`;
+}
+
+function writeExecutable(file, source) {
+  writeFileSync(file, source, { encoding: "utf8", mode: 0o755 });
+  chmodSync(file, 0o755);
+}
+
 function writeRelease(parent, name, buildId, port) {
   const release = join(parent, name);
   mkdirSync(join(release, ".next"), { recursive: true });
@@ -686,6 +725,433 @@ function testExactEnvironmentBoundary() {
   }
 }
 
+function installerBash() {
+  if (process.platform !== "linux") return "";
+  for (const candidate of ["/usr/bin/bash", "/bin/bash"]) {
+    if (existsSync(candidate)) return candidate;
+  }
+  return "";
+}
+
+function createInstallerMockFixture(
+  name,
+  {
+    initialState,
+    probeIdentities,
+    oldFiles = false,
+    failRestore = false,
+    failDelete = false,
+  }
+) {
+  const fixture = join(temporaryRoot, `installer-${name}`);
+  const fakeBin = join(fixture, "bin");
+  const installDir = join(fixture, "install");
+  const home = join(fixture, "home");
+  const pm2Home = join(home, ".pm2");
+  const stateFile = join(fixture, "pm2-state");
+  const eventLog = join(fixture, "events.log");
+  const probeQueue = join(fixture, "probe-queue");
+  const sourceScript = join(fixture, "source-worker.mjs");
+  const sourceConfig = join(fixture, "source-ecosystem.config.cjs");
+  const envFile = join(fixture, "worker.env");
+  const lockFile = join(fixture, "worker.lock");
+  const installedScript = join(installDir, "canvas-reconciler-worker.mjs");
+  const installedConfig = join(
+    installDir,
+    "ecosystem.canvas-reconciler.config.cjs"
+  );
+  const installedSettings = join(
+    installDir,
+    "canvas-reconciler.settings.json"
+  );
+  const pm2Name = "canvas-reconciler-test";
+  const targetUrl =
+    "http://127.0.0.1:49999/api/internal/canvas/reconcile";
+  const readyProbe = resolve(root, "scripts/probe-canvas-reconciler-readiness.mjs");
+  const realCopy = existsSync("/usr/bin/cp") ? "/usr/bin/cp" : "/bin/cp";
+
+  mkdirSync(fakeBin, { recursive: true });
+  mkdirSync(pm2Home, { recursive: true });
+  writeFileSync(stateFile, `${initialState}\n`);
+  writeFileSync(eventLog, "");
+  writeFileSync(
+    probeQueue,
+    `${probeIdentities.map((identity) => `ok:${identity}`).join("\n")}\n`
+  );
+  writeFileSync(
+    sourceScript,
+    [
+      "#!/usr/bin/env node",
+      'if (process.argv.includes("--dry-run")) process.exit(0);',
+      "",
+    ].join("\n")
+  );
+  chmodSync(sourceScript, 0o755);
+  writeFileSync(sourceConfig, "module.exports = { apps: [] };\n");
+  chmodSync(sourceConfig, 0o644);
+  writeFileSync(
+    envFile,
+    `CANVAS_RECONCILE_SECRET=${"i".repeat(48)}\n`
+  );
+  chmodSync(envFile, 0o600);
+
+  const oldBytes = {
+    script: "#!/usr/bin/env node\nconsole.log('old worker');\n",
+    config: "module.exports = { apps: [{ name: 'old worker' }] };\n",
+  };
+  if (oldFiles) {
+    mkdirSync(installDir, { recursive: true });
+    writeFileSync(installedScript, oldBytes.script);
+    writeFileSync(installedConfig, oldBytes.config);
+    writeFileSync(
+      installedSettings,
+      `${JSON.stringify({
+        name: pm2Name,
+        script: installedScript,
+        envFile,
+        url: targetUrl,
+        lockFile,
+      })}\n`
+    );
+    chmodSync(installedScript, 0o755);
+    chmodSync(installedConfig, 0o644);
+    chmodSync(installedSettings, 0o600);
+  }
+
+  const onlineState = JSON.stringify([
+    {
+      name: pm2Name,
+      pid: 4242,
+      pm2_env: {
+        status: "online",
+        exec_mode: "fork_mode",
+        pm_exec_path: installedScript,
+        pm_uptime: Date.now() - 1_000,
+      },
+    },
+  ]);
+  writeExecutable(
+    join(fakeBin, "pm2"),
+    [
+      "#!/usr/bin/env bash",
+      "set -euo pipefail",
+      `STATE=${shellQuote(stateFile)}`,
+      `EVENTS=${shellQuote(eventLog)}`,
+      `ONLINE_JSON=${shellQuote(onlineState)}`,
+      `FAIL_DELETE=${failDelete ? "1" : "0"}`,
+      'case "${1:-}" in',
+      "  -v)",
+      '    printf "%s\\n" "6.0.14"',
+      "    ;;",
+      "  jlist)",
+      '    printf "%s\\n" "pm2:jlist" >> "${EVENTS}"',
+      '    current_state="absent"',
+      '    IFS= read -r current_state < "${STATE}" || true',
+      '    if [[ "${current_state}" == "online" ]]; then',
+      '      printf "%s\\n" "${ONLINE_JSON}"',
+      "    else",
+      '      printf "%s\\n" "[]"',
+      "    fi",
+      "    ;;",
+      "  startOrReload)",
+      '    printf "%s\\n" "pm2:startOrReload" >> "${EVENTS}"',
+      '    printf "%s\\n" "online" > "${STATE}"',
+      "    ;;",
+      "  delete)",
+      '    printf "%s\\n" "pm2:delete" >> "${EVENTS}"',
+      '    if [[ "${FAIL_DELETE}" == "1" ]]; then',
+      '      printf "%s\\n" "pm2:delete-failed" >> "${EVENTS}"',
+      "      exit 98",
+      "    fi",
+      '    printf "%s\\n" "absent" > "${STATE}"',
+      "    ;;",
+      "  save)",
+      '    printf "%s\\n" "pm2:save" >> "${EVENTS}"',
+      "    ;;",
+      "  *)",
+      '    printf "unexpected pm2 command: %s\\n" "${1:-missing}" >&2',
+      "    exit 90",
+      "    ;;",
+      "esac",
+      "",
+    ].join("\n")
+  );
+  writeExecutable(
+    join(fakeBin, "node"),
+    [
+      "#!/usr/bin/env bash",
+      "set -euo pipefail",
+      `REAL_NODE=${shellQuote(process.execPath)}`,
+      `READY_PROBE=${shellQuote(readyProbe)}`,
+      `QUEUE=${shellQuote(probeQueue)}`,
+      `EVENTS=${shellQuote(eventLog)}`,
+      'if [[ "${1:-}" == "${READY_PROBE}" ]]; then',
+      '  if [[ ! -s "${QUEUE}" ]]; then',
+      '    printf "%s\\n" "probe:unexpected-empty-queue" >> "${EVENTS}"',
+      '    printf "%s\\n" "mock readiness queue is empty" >&2',
+      "    exit 91",
+      "  fi",
+      '  outcome=""',
+      '  IFS= read -r outcome < "${QUEUE}" || true',
+      '  tail -n +2 -- "${QUEUE}" > "${QUEUE}.next"',
+      '  mv -f -- "${QUEUE}.next" "${QUEUE}"',
+      '  printf "probe:%s\\n" "${outcome}" >> "${EVENTS}"',
+      '  case "${outcome}" in',
+      "    ok:*)",
+      '      printf "%s\\n" "${outcome#ok:}"',
+      "      exit 0",
+      "      ;;",
+      "    *)",
+      '      printf "%s\\n" "mock readiness failure" >&2',
+      "      exit 92",
+      "      ;;",
+      "  esac",
+      "fi",
+      'exec "${REAL_NODE}" "$@"',
+      "",
+    ].join("\n")
+  );
+  writeExecutable(
+    join(fakeBin, "sleep"),
+    [
+      "#!/usr/bin/env bash",
+      "set -euo pipefail",
+      'printf "%s\\n" "sleep:${1:-missing}" >> ' + shellQuote(eventLog),
+      "",
+    ].join("\n")
+  );
+  if (failRestore) {
+    writeExecutable(
+      join(fakeBin, "cp"),
+      [
+        "#!/usr/bin/env bash",
+        "set -euo pipefail",
+        `REAL_CP=${shellQuote(realCopy)}`,
+        `EVENTS=${shellQuote(eventLog)}`,
+        'for argument in "$@"; do',
+        '  if [[ "${argument}" == *"/.canvas-reconciler-restore."* ]]; then',
+        '    printf "%s\\n" "restore-copy-fail" >> "${EVENTS}"',
+        "    exit 97",
+        "  fi",
+        "done",
+        'exec "${REAL_CP}" "$@"',
+        "",
+      ].join("\n")
+    );
+  }
+
+  return {
+    eventLog,
+    envFile,
+    fakeBin,
+    home,
+    installDir,
+    installedConfig,
+    installedScript,
+    installedSettings,
+    lockFile,
+    oldBytes,
+    pm2Home,
+    pm2Name,
+    probeQueue,
+    sourceConfig,
+    sourceScript,
+    stateFile,
+    targetUrl,
+  };
+}
+
+async function runInstallerMock(bash, fixture) {
+  return runCommand(
+    bash,
+    [
+      resolve(root, "deploy/install-canvas-reconciler.sh"),
+      "install",
+      "--execute",
+      "--env-file",
+      fixture.envFile,
+      "--url",
+      fixture.targetUrl,
+      "--install-dir",
+      fixture.installDir,
+      "--lock-file",
+      fixture.lockFile,
+      "--pm2-name",
+      fixture.pm2Name,
+      "--source-script",
+      fixture.sourceScript,
+      "--source-config",
+      fixture.sourceConfig,
+    ],
+    {
+      env: {
+        PATH: `${fixture.fakeBin}:${process.env.PATH ?? "/usr/bin:/bin"}`,
+        HOME: fixture.home,
+        PM2_HOME: fixture.pm2Home,
+        USER: "root",
+        LOGNAME: "root",
+        LANG: "C.UTF-8",
+      },
+    }
+  );
+}
+
+function eventLines(fixture) {
+  return readFileSync(fixture.eventLog, "utf8")
+    .split(/\r?\n/u)
+    .filter(Boolean);
+}
+
+async function testInstallerFailureHarness() {
+  const bash = installerBash();
+  const canRun =
+    bash &&
+    typeof process.getuid === "function" &&
+    process.getuid() === 0;
+  if (!canRun) {
+    assert(
+      process.env.CANVAS_REQUIRE_INSTALLER_DYNAMIC_TESTS !== "1",
+      "dynamic installer tests require Linux, bash, and uid 0"
+    );
+    return;
+  }
+
+  const absent = createInstallerMockFixture("absent-rollback", {
+    initialState: "absent",
+    probeIdentities: ["8100:100", "8101:101"],
+  });
+  const absentResult = await runInstallerMock(bash, absent);
+  const absentEvents = eventLines(absent);
+  assert(
+    absentResult.code !== 0,
+    "installer accepted two different post-install readiness identities"
+  );
+  assert(
+    absentResult.stderr.includes("[ROLLBACK]"),
+    "failed first install did not enter rollback"
+  );
+  assert(
+    readFileSync(absent.stateFile, "utf8").trim() === "absent",
+    "first-install rollback left a mocked PM2 process present"
+  );
+  assert(
+    absentEvents.filter((event) => event === "pm2:startOrReload").length === 1 &&
+      absentEvents.includes("pm2:delete"),
+    "first-install rollback did not delete the newly started process"
+  );
+  for (const installedFile of [
+    absent.installedScript,
+    absent.installedConfig,
+    absent.installedSettings,
+  ]) {
+    assert(
+      !existsSync(installedFile),
+      `first-install rollback retained ${installedFile}`
+    );
+  }
+
+  const failedDelete = createInstallerMockFixture(
+    "rollback-delete-failure",
+    {
+      initialState: "absent",
+      probeIdentities: ["8150:150", "8151:151"],
+      failDelete: true,
+    }
+  );
+  const failedDeleteResult = await runInstallerMock(bash, failedDelete);
+  const failedDeleteEvents = eventLines(failedDelete);
+  const firstFailedDelete = failedDeleteEvents.indexOf("pm2:delete-failed");
+  assert(
+    failedDeleteResult.code !== 0 &&
+      failedDeleteResult.stderr.includes("[CRITICAL]"),
+    "rollback PM2 delete failure was not surfaced as critical"
+  );
+  assert(
+    firstFailedDelete >= 0 &&
+      failedDeleteEvents
+        .slice(firstFailedDelete + 1)
+        .includes("pm2:jlist"),
+    "rollback did not observe that the process remained online after delete failed"
+  );
+  assert(
+    readFileSync(failedDelete.stateFile, "utf8").trim() === "online",
+    "delete-failure fixture did not retain the mocked online process"
+  );
+  assert(
+    !failedDeleteEvents.includes("pm2:save"),
+    "rollback persisted PM2 state after delete failed and the process remained online"
+  );
+
+  const failedRestore = createInstallerMockFixture("restore-failure", {
+    initialState: "online",
+    probeIdentities: [
+      "8200:200",
+      "8200:200",
+      "8300:300",
+      "8301:301",
+    ],
+    oldFiles: true,
+    failRestore: true,
+  });
+  const failedRestoreResult = await runInstallerMock(bash, failedRestore);
+  const failedRestoreEvents = eventLines(failedRestore);
+  const restoreFailureIndex = failedRestoreEvents.indexOf("restore-copy-fail");
+  assert(
+    failedRestoreResult.code !== 0 &&
+      failedRestoreResult.stderr.includes("[CRITICAL]"),
+    "old-file restoration failure was not surfaced as critical"
+  );
+  assert(
+    restoreFailureIndex >= 0,
+    "mock old-file restoration failure was not exercised"
+  );
+  assert(
+    failedRestoreEvents.filter(
+      (event) => event === "pm2:startOrReload"
+    ).length === 1 &&
+      !failedRestoreEvents
+        .slice(restoreFailureIndex)
+        .includes("pm2:startOrReload"),
+    "rollback called startOrReload after an old-file restoration failure"
+  );
+  assert(
+    readFileSync(failedRestore.stateFile, "utf8").trim() === "absent",
+    "failed old-file restoration did not fail closed by deleting the process"
+  );
+
+  const unstablePrevious = createInstallerMockFixture(
+    "unstable-previous-identity",
+    {
+      initialState: "online",
+      probeIdentities: ["8400:400", "8401:401"],
+      oldFiles: true,
+    }
+  );
+  const previousScriptBytes = readFileSync(
+    unstablePrevious.installedScript,
+    "utf8"
+  );
+  const unstableResult = await runInstallerMock(bash, unstablePrevious);
+  const unstableEvents = eventLines(unstablePrevious);
+  assert(
+    unstableResult.code !== 0 &&
+      unstableResult.stderr.includes(
+        "neither stably absent nor one healthy online process"
+      ),
+    "installer accepted a changing pre-install worker identity"
+  );
+  assert(
+    !unstableEvents.includes("pm2:startOrReload"),
+    "installer mutated PM2 after a changing pre-install worker identity"
+  );
+  assert(
+    readFileSync(unstablePrevious.installedScript, "utf8") ===
+      previousScriptBytes &&
+      readFileSync(unstablePrevious.stateFile, "utf8").trim() === "online",
+    "pre-install identity rejection changed old files or process state"
+  );
+}
+
 function testStaticContracts() {
   const migration = read("supabase/migrations/20260731_canvas_runtime_health.sql");
   for (const signature of [
@@ -793,6 +1259,11 @@ function testStaticContracts() {
     "env -i",
     "unset NODE_OPTIONS",
     "PM2 >=4.3 is required",
+    "AUTO_RESTORE_SUCCEEDED=0",
+    "AUTO_RESTORE_SUCCEEDED == 1",
+    "probe-canvas-reconciler-readiness.mjs",
+    'node "${RECONCILER_READY_PROBE}"',
+    '--lock-file "${RECONCILER_LOCK_FILE}"',
   ]) {
     assertIncludes(deploy, token, "blue/green deployer");
   }
@@ -817,6 +1288,14 @@ function testStaticContracts() {
   const ecosystem = read("deploy/ecosystem.canvas.config.cjs");
   assertIncludes(ecosystem, 'script: "scripts/start-canvas-web.mjs"', "Canvas PM2 config");
   assertIncludes(ecosystem, "CANVAS_ENV_FILE", "Canvas PM2 config");
+  const reconcilerEcosystem = read(
+    "deploy/ecosystem.canvas-reconciler.config.cjs"
+  );
+  assertIncludes(
+    reconcilerEcosystem,
+    "kill_timeout: 15_000",
+    "Canvas reconciler bounded shutdown"
+  );
   const reconcilerInstaller = read("deploy/install-canvas-reconciler.sh");
   assertIncludes(
     reconcilerInstaller,
@@ -831,9 +1310,16 @@ function testStaticContracts() {
   assertIncludes(reconcilerInstaller, "env -i", "Canvas reconciler installer");
   for (const token of [
     "LEGACY_INSTALLED_CONFIG",
+    "HAD_PROCESS=0",
+    "pm2_worker_previous_state",
     "restore_backup_atomically",
     "PM2 >=4.3 is required",
     ".XXXXXX.config.cjs",
+    "probe-canvas-reconciler-readiness.mjs",
+    'node "${READY_PROBE}"',
+    '--lock-file "${lock_file}"',
+    '[[ "${first_identity}" == "${second_identity}" ]]',
+    "elif ((HAD_PROCESS == 1)); then",
   ]) {
     assertIncludes(reconcilerInstaller, token, "Canvas reconciler installer");
   }
@@ -841,6 +1327,29 @@ function testStaticContracts() {
     reconcilerInstaller.indexOf("FILES_REPLACED=1") <
       reconcilerInstaller.indexOf('mv -f -- "${STAGE_SCRIPT}"'),
     "Canvas reconciler installer arms rollback after its first staged move"
+  );
+  assert(
+    reconcilerInstaller.indexOf("PROCESS_UPDATED=1") <
+      reconcilerInstaller.indexOf('mv -f -- "${STAGE_SCRIPT}"'),
+    "Canvas reconciler installer guards against a restart during staged moves"
+  );
+  const restoreSystem = deploy.slice(
+    deploy.indexOf("restore_system_from_bundle()"),
+    deploy.indexOf("switch_nginx_to_port()")
+  );
+  const restoreWorkerFailure = restoreSystem.indexOf(
+    'if ! restore_worker_from_bundle "${bundle}"; then'
+  );
+  const restoreNginx = restoreSystem.indexOf(
+    'if ! restore_nginx_from_bundle "${bundle}"; then'
+  );
+  assert(
+    restoreWorkerFailure >= 0 &&
+      restoreNginx > restoreWorkerFailure &&
+      restoreSystem
+        .slice(restoreWorkerFailure, restoreNginx)
+        .includes("return 1"),
+    "Canvas automatic recovery must not switch Nginx after worker restore failure"
   );
   const nginx = read("deploy/ssl/toryxai.com.conf");
   assertIncludes(
@@ -857,6 +1366,7 @@ async function main() {
     testExactEnvironmentBoundary();
     await testBundles();
     await testHealthProbe();
+    await testInstallerFailureHarness();
     console.log(
       `[OK] Canvas blue/green verifier passed ${assertions} assertions.`
     );

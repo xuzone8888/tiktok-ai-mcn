@@ -15,6 +15,7 @@ ACTION="plan"
 EXECUTE=0
 SOURCE_SCRIPT="${REPO_ROOT}/scripts/canvas-reconciler-worker.mjs"
 SOURCE_CONFIG="${REPO_ROOT}/deploy/ecosystem.canvas-reconciler.config.cjs"
+READY_PROBE="${REPO_ROOT}/scripts/probe-canvas-reconciler-readiness.mjs"
 INSTALL_DIR="${CANVAS_RECONCILER_INSTALL_DIR:-/opt/stargaze-canvas-reconciler}"
 ENV_FILE="${CANVAS_RECONCILER_ENV_FILE:-}"
 TARGET_URL="${CANVAS_RECONCILER_URL:-}"
@@ -41,6 +42,7 @@ SETTINGS_GID=""
 HAD_SCRIPT=0
 HAD_CONFIG=0
 HAD_SETTINGS=0
+HAD_PROCESS=0
 CONFIG_WAS_LEGACY=0
 FILES_REPLACED=0
 PROCESS_UPDATED=0
@@ -113,25 +115,26 @@ safe_absolute_file() {
 pm2_worker_is_online() {
   local name="$1"
   local script="$2"
-  pm2 jlist 2>/dev/null |
-    node -e '
-      let input = "";
-      process.stdin.setEncoding("utf8");
-      process.stdin.on("data", (chunk) => { input += chunk; });
-      process.stdin.on("end", () => {
-        const [name, script] = process.argv.slice(1);
-        try {
-          const matches = JSON.parse(input).filter((entry) => entry.name === name);
-          const ok = matches.length === 1 &&
-            matches[0].pm2_env?.status === "online" &&
-            matches[0].pm2_env?.exec_mode === "fork_mode" &&
-            matches[0].pm2_env?.pm_exec_path === script;
-          process.exit(ok ? 0 : 1);
-        } catch {
-          process.exit(2);
-        }
-      });
-    ' "${name}" "${script}"
+  local lock_file="$3"
+  local first_identity
+  local second_identity
+  first_identity="$(
+    pm2 jlist 2>/dev/null |
+      node "${READY_PROBE}" \
+        --name "${name}" \
+        --script "${script}" \
+        --lock-file "${lock_file}"
+  )" || return 1
+  [[ -n "${first_identity}" ]] || return 1
+  sleep 1
+  second_identity="$(
+    pm2 jlist 2>/dev/null |
+      node "${READY_PROBE}" \
+        --name "${name}" \
+        --script "${script}" \
+        --lock-file "${lock_file}"
+  )" || return 1
+  [[ "${first_identity}" == "${second_identity}" ]]
 }
 
 pm2_worker_identity_is_safe() {
@@ -156,6 +159,82 @@ pm2_worker_identity_is_safe() {
     ' "${name}" "${script}"
 }
 
+pm2_worker_is_absent_from_json() {
+  local name="$1"
+  node -e '
+    let input = "";
+    process.stdin.setEncoding("utf8");
+    process.stdin.on("data", (chunk) => { input += chunk; });
+    process.stdin.on("end", () => {
+      try {
+        const matches = JSON.parse(input).filter(
+          (entry) => entry.name === process.argv[1]
+        );
+        process.exit(matches.length === 0 ? 0 : 1);
+      } catch {
+        process.exit(2);
+      }
+    });
+  ' "${name}"
+}
+
+pm2_worker_is_absent() {
+  local name="$1"
+  pm2 jlist 2>/dev/null |
+    pm2_worker_is_absent_from_json "${name}" ||
+    return 1
+  sleep 1
+  pm2 jlist 2>/dev/null |
+    pm2_worker_is_absent_from_json "${name}"
+}
+
+pm2_delete_and_verify_absent() {
+  local name="$1"
+  pm2 delete "${name}" >/dev/null 2>&1 ||
+    pm2_worker_is_absent "${name}" ||
+    return 1
+  pm2_worker_is_absent "${name}"
+}
+
+pm2_worker_previous_state() {
+  local name="$1"
+  local script="$2"
+  local lock_file="$3"
+  local pm2_state
+  local first_identity
+  local second_identity
+
+  pm2_state="$(pm2 jlist 2>/dev/null)" || return 1
+  if printf '%s' "${pm2_state}" |
+    pm2_worker_is_absent_from_json "${name}"; then
+    sleep 1
+    pm2 jlist 2>/dev/null |
+      pm2_worker_is_absent_from_json "${name}" ||
+      return 1
+    echo "absent"
+    return 0
+  fi
+
+  first_identity="$(
+    printf '%s' "${pm2_state}" |
+      node "${READY_PROBE}" \
+        --name "${name}" \
+        --script "${script}" \
+        --lock-file "${lock_file}"
+  )" || return 1
+  [[ -n "${first_identity}" ]] || return 1
+  sleep 1
+  second_identity="$(
+    pm2 jlist 2>/dev/null |
+      node "${READY_PROBE}" \
+        --name "${name}" \
+        --script "${script}" \
+        --lock-file "${lock_file}"
+  )" || return 1
+  [[ "${first_identity}" == "${second_identity}" ]] || return 1
+  echo "online"
+}
+
 restore_backup_atomically() {
   local backup="$1"
   local destination="$2"
@@ -178,6 +257,7 @@ restore_backup_atomically() {
 restore_previous_install() {
   local restore_status=0
   local pm2_restore_config=""
+  local process_state_safe=0
 
   if ((HAD_SCRIPT == 1)); then
     restore_backup_atomically \
@@ -211,28 +291,65 @@ restore_previous_install() {
   fi
 
   if ((PROCESS_UPDATED == 1)); then
-    if ((HAD_SCRIPT == 1 && HAD_CONFIG == 1 && HAD_SETTINGS == 1)); then
-      pm2_restore_config="${PREVIOUS_CONFIG_PATH}"
-      if ((CONFIG_WAS_LEGACY == 1)); then
-        pm2_restore_config="$(
-          mktemp "${INSTALL_DIR}/.canvas-reconciler-restore.XXXXXX.config.cjs"
-        )" || return 1
-        cp -- "${PREVIOUS_CONFIG_PATH}" "${pm2_restore_config}" ||
-          restore_status=1
-        chmod 0600 "${pm2_restore_config}" || restore_status=1
-      fi
-      CANVAS_RECONCILER_SETTINGS_FILE="${INSTALLED_SETTINGS}" \
-        run_pm2_with_clean_environment \
-          "$(command -v pm2)" startOrReload "${pm2_restore_config}" \
-            --only "${PM2_NAME}" --update-env >/dev/null 2>&1 ||
+    if ((restore_status != 0)); then
+      if pm2_delete_and_verify_absent "${PM2_NAME}"; then
+        process_state_safe=1
+      else
         restore_status=1
-      if ((CONFIG_WAS_LEGACY == 1)); then
-        rm -f -- "${pm2_restore_config}" || restore_status=1
+      fi
+    elif ((HAD_PROCESS == 1)); then
+      if ((HAD_SCRIPT == 1 && HAD_CONFIG == 1 && HAD_SETTINGS == 1)); then
+        pm2_restore_config="${PREVIOUS_CONFIG_PATH}"
+        if ((CONFIG_WAS_LEGACY == 1)); then
+          pm2_restore_config="$(
+            mktemp "${INSTALL_DIR}/.canvas-reconciler-restore.XXXXXX.config.cjs"
+          )" || restore_status=1
+          if ((restore_status == 0)); then
+            cp -- "${PREVIOUS_CONFIG_PATH}" "${pm2_restore_config}" ||
+              restore_status=1
+            chmod 0600 "${pm2_restore_config}" || restore_status=1
+          fi
+        fi
+        if ((restore_status == 0)); then
+          CANVAS_RECONCILER_SETTINGS_FILE="${INSTALLED_SETTINGS}" \
+            run_pm2_with_clean_environment \
+              "$(command -v pm2)" startOrReload "${pm2_restore_config}" \
+                --only "${PM2_NAME}" --update-env >/dev/null 2>&1 ||
+            restore_status=1
+        fi
+        if ((restore_status == 0)); then
+          if pm2_worker_is_online \
+            "${PM2_NAME}" "${INSTALLED_SCRIPT}" "${LOCK_FILE}"; then
+            process_state_safe=1
+          else
+            restore_status=1
+          fi
+        fi
+        if ((CONFIG_WAS_LEGACY == 1 && -n "${pm2_restore_config}")); then
+          rm -f -- "${pm2_restore_config}" || restore_status=1
+        fi
+      else
+        restore_status=1
       fi
     else
-      pm2 delete "${PM2_NAME}" >/dev/null 2>&1 || true
+      if pm2_delete_and_verify_absent "${PM2_NAME}"; then
+        process_state_safe=1
+      else
+        restore_status=1
+      fi
     fi
-    pm2 save >/dev/null 2>&1 || restore_status=1
+    if ((restore_status != 0 && process_state_safe == 0)); then
+      if pm2_delete_and_verify_absent "${PM2_NAME}"; then
+        process_state_safe=1
+      else
+        restore_status=1
+      fi
+    fi
+    if ((process_state_safe == 1)); then
+      pm2 save >/dev/null 2>&1 || restore_status=1
+    else
+      restore_status=1
+    fi
   fi
 
   return "${restore_status}"
@@ -324,7 +441,7 @@ if [[ "${ACTION}" == "plan" ]]; then
   exit 0
 fi
 
-for command in node pm2 env cp mv chmod chown mkdir mktemp dirname rm date stat tail; do
+for command in node pm2 env cp mv chmod chown mkdir mktemp dirname rm date stat tail sleep; do
   require_command "${command}"
 done
 
@@ -339,6 +456,8 @@ safe_absolute_file "${SOURCE_SCRIPT}" ||
   die "Worker source must be an existing absolute non-symlink file"
 safe_absolute_file "${SOURCE_CONFIG}" ||
   die "PM2 config source must be an existing absolute non-symlink file"
+safe_absolute_file "${READY_PROBE}" ||
+  die "Reconciler readiness probe must be an existing absolute non-symlink file"
 safe_absolute_file "${ENV_FILE}" ||
   die "Env file must be an existing absolute non-symlink file"
 
@@ -355,6 +474,7 @@ env -i \
   --url "${TARGET_URL}" \
   --lock-file "${LOCK_FILE}"
 node --check "${SOURCE_SCRIPT}"
+node --check "${READY_PROBE}"
 
 CANVAS_RECONCILER_PM2_NAME="${PM2_NAME}" \
 CANVAS_RECONCILER_SCRIPT="${SOURCE_SCRIPT}" \
@@ -381,6 +501,15 @@ chmod 0755 -- "${INSTALL_DIR}"
 
 pm2_worker_identity_is_safe "${PM2_NAME}" "${INSTALLED_SCRIPT}" ||
   die "PM2 name is duplicated or belongs to a different executable"
+previous_process_state="$(
+  pm2_worker_previous_state "${PM2_NAME}" "${INSTALLED_SCRIPT}" "${LOCK_FILE}"
+)" ||
+  die "Existing PM2 worker is neither stably absent nor one healthy online process"
+if [[ "${previous_process_state}" == "online" ]]; then
+  HAD_PROCESS=1
+elif [[ "${previous_process_state}" != "absent" ]]; then
+  die "Existing PM2 worker snapshot returned an invalid state"
+fi
 
 timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
 if [[ -e "${INSTALLED_SCRIPT}" ]]; then
@@ -434,6 +563,10 @@ if [[ -e "${INSTALLED_SETTINGS}" ]]; then
   ' "${INSTALLED_SETTINGS}" "${PM2_NAME}" "${INSTALLED_SCRIPT}" ||
     die "Existing stable settings use a different PM2 identity"
 fi
+if ((HAD_PROCESS == 1)) &&
+   ((HAD_SCRIPT != 1 || HAD_CONFIG != 1 || HAD_SETTINGS != 1)); then
+  die "A running stable worker requires complete script, config, and settings files"
+fi
 
 STAGE_SCRIPT="$(mktemp "${INSTALL_DIR}/.canvas-reconciler.XXXXXX")"
 STAGE_CONFIG="$(mktemp "${INSTALL_DIR}/.canvas-reconciler-config.XXXXXX")"
@@ -453,17 +586,17 @@ chmod 0755 -- "${STAGE_SCRIPT}"
 chmod 0644 -- "${STAGE_CONFIG}"
 chmod 0600 -- "${STAGE_SETTINGS}"
 FILES_REPLACED=1
+PROCESS_UPDATED=1
 mv -f -- "${STAGE_SCRIPT}" "${INSTALLED_SCRIPT}"
 mv -f -- "${STAGE_CONFIG}" "${INSTALLED_CONFIG}"
 mv -f -- "${STAGE_SETTINGS}" "${INSTALLED_SETTINGS}"
 
-PROCESS_UPDATED=1
 CANVAS_RECONCILER_SETTINGS_FILE="${INSTALLED_SETTINGS}" \
   run_pm2_with_clean_environment \
     "$(command -v pm2)" startOrReload "${INSTALLED_CONFIG}" \
       --only "${PM2_NAME}" --update-env
 
-pm2_worker_is_online "${PM2_NAME}" "${INSTALLED_SCRIPT}" ||
+pm2_worker_is_online "${PM2_NAME}" "${INSTALLED_SCRIPT}" "${LOCK_FILE}" ||
   die "PM2 did not expose exactly one healthy fork-mode reconciler"
 
 if [[ -e "${LEGACY_INSTALLED_CONFIG}" ]]; then

@@ -4,9 +4,11 @@ import {
   closeSync,
   constants,
   fstatSync,
+  linkSync,
   lstatSync,
   openSync,
   readFileSync,
+  renameSync,
   statSync,
   unlinkSync,
   writeFileSync,
@@ -18,8 +20,10 @@ import { pathToFileURL } from "node:url";
 import { parseEnv } from "node:util";
 
 const RECONCILE_PATH = "/api/internal/canvas/reconcile";
+const READY_MARKER_SCHEMA = "canvas-reconciler-ready-v2";
 const MAX_ENV_FILE_BYTES = 1024 * 1024;
 const MAX_RESPONSE_BYTES = 64 * 1024;
+const MAX_READY_MARKER_BYTES = 4096;
 const DEFAULTS = Object.freeze({
   intervalMs: 15_000,
   timeoutMs: 225_000,
@@ -248,8 +252,8 @@ function normalizeLockFile(rawValue) {
   }
   const parent = statSync(dirname(filePath));
   if (!parent.isDirectory()) throw new Error("lock_parent_not_directory");
-  if (process.platform !== "win32" && (parent.mode & 0o002) !== 0) {
-    throw new Error("lock_parent_world_writable");
+  if (process.platform !== "win32" && (parent.mode & 0o022) !== 0) {
+    throw new Error("lock_parent_writable");
   }
   return filePath;
 }
@@ -370,6 +374,136 @@ function sameEntry(first, second) {
   return first.dev === second.dev && first.ino === second.ino;
 }
 
+function unlinkOwnedEntry(file, identity) {
+  try {
+    const current = lstatSync(file);
+    if (
+      current.isFile() &&
+      !current.isSymbolicLink() &&
+      sameEntry(identity, current)
+    ) {
+      unlinkSync(file);
+    }
+  } catch {
+    // Cleanup is best effort; callers remain fail-closed.
+  }
+}
+
+function readyFileForLock(lockFile) {
+  return `${lockFile}.ready`;
+}
+
+function clearStaleReadyMarker(readyFile) {
+  let entry;
+  try {
+    entry = lstatSync(readyFile);
+  } catch (error) {
+    if (error?.code === "ENOENT") return;
+    throw new Error("ready_file_unreadable");
+  }
+  if (
+    entry.isSymbolicLink() ||
+    !entry.isFile() ||
+    entry.size > MAX_READY_MARKER_BYTES ||
+    (process.platform !== "win32" && (entry.mode & 0o077) !== 0)
+  ) {
+    throw new Error("ready_file_untrusted");
+  }
+  unlinkSync(readyFile);
+}
+
+function writeReadyMarker(readyFile, lock, validityMs) {
+  const processStartTicks = linuxProcessStartTicks(process.pid);
+  if (
+    (process.platform === "linux" &&
+      (!processStartTicks || processStartTicks !== lock.processStartTicks)) ||
+    typeof lock.token !== "string" ||
+    !Number.isSafeInteger(validityMs) ||
+    validityMs <= 0
+  ) {
+    throw new Error("ready_process_identity_unavailable");
+  }
+
+  const temporary = `${readyFile}.${process.pid}.${randomUUID()}.tmp`;
+  let descriptor;
+  try {
+    descriptor = openSync(
+      temporary,
+      constants.O_CREAT |
+        constants.O_EXCL |
+        constants.O_WRONLY |
+        (constants.O_NOFOLLOW ?? 0),
+      0o600
+    );
+    const readyAt = new Date();
+    const record = {
+      schema: READY_MARKER_SCHEMA,
+      pid: process.pid,
+      processStartTicks,
+      lockToken: lock.token,
+      readyAt: readyAt.toISOString(),
+      expiresAt: new Date(readyAt.getTime() + validityMs).toISOString(),
+    };
+    writeFileSync(descriptor, `${JSON.stringify(record)}\n`, "utf8");
+    const identity = fstatSync(descriptor);
+    closeSync(descriptor);
+    descriptor = undefined;
+    renameSync(temporary, readyFile);
+    const installed = lstatSync(readyFile);
+    if (
+      !installed.isFile() ||
+      installed.isSymbolicLink() ||
+      !sameEntry(identity, installed)
+    ) {
+      throw new Error("ready_file_changed");
+    }
+    return { identity, record };
+  } catch (error) {
+    if (descriptor !== undefined) {
+      try {
+        closeSync(descriptor);
+      } catch {
+        // Best effort; the process will fail closed below.
+      }
+    }
+    try {
+      unlinkSync(temporary);
+    } catch (cleanupError) {
+      if (cleanupError?.code !== "ENOENT") {
+        safeLog("ready_file_cleanup_failed", { reason: "filesystem_error" });
+      }
+    }
+    if (
+      error instanceof Error &&
+      /^[a-z0-9_]+$/.test(error.message)
+    ) {
+      throw error;
+    }
+    throw new Error("ready_file_write_failed");
+  }
+}
+
+function removeOwnedReadyMarker(readyFile, marker) {
+  if (!marker) return true;
+  try {
+    const current = lstatSync(readyFile);
+    if (
+      current.isFile() &&
+      !current.isSymbolicLink() &&
+      sameEntry(marker.identity, current)
+    ) {
+      unlinkSync(readyFile);
+      return true;
+    }
+    safeLog("ready_file_cleanup_failed", { reason: "identity_changed" });
+    return false;
+  } catch (error) {
+    if (error?.code === "ENOENT") return true;
+    safeLog("ready_file_cleanup_failed", { reason: "filesystem_error" });
+    return false;
+  }
+}
+
 function inspectExistingLock(lockFile) {
   const before = lstatSync(lockFile);
   if (before.isSymbolicLink() || !before.isFile() || before.size > 4096) {
@@ -401,34 +535,87 @@ function inspectExistingLock(lockFile) {
 }
 
 function tryAcquireLock(lockFile) {
+  const temporary = `${lockFile}.${process.pid}.${randomUUID()}.candidate`;
   let descriptor;
   try {
     descriptor = openSync(
-      lockFile,
-      constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY,
+      temporary,
+      constants.O_CREAT |
+        constants.O_EXCL |
+        constants.O_WRONLY |
+        (constants.O_NOFOLLOW ?? 0),
       0o600
     );
-  } catch (error) {
-    if (error?.code !== "EEXIST") throw error;
-    return { acquired: false, state: inspectExistingLock(lockFile) };
+  } catch {
+    throw new Error("lock_candidate_create_failed");
   }
 
+  const createdIdentity = fstatSync(descriptor);
   const token = randomUUID();
-  writeFileSync(
-    descriptor,
-    JSON.stringify({
-      pid: process.pid,
-      token,
-      startedAt: new Date().toISOString(),
-      processStartTicks: linuxProcessStartTicks(process.pid),
-    }),
-    "utf8"
-  );
-  const identity = fstatSync(descriptor);
+  const processStartTicks = linuxProcessStartTicks(process.pid);
+  if (process.platform === "linux" && !processStartTicks) {
+    closeSync(descriptor);
+    unlinkOwnedEntry(temporary, createdIdentity);
+    throw new Error("lock_process_identity_unavailable");
+  }
+  let identity;
+  try {
+    writeFileSync(
+      descriptor,
+      JSON.stringify({
+        pid: process.pid,
+        token,
+        startedAt: new Date().toISOString(),
+        processStartTicks,
+      }),
+      "utf8"
+    );
+    identity = fstatSync(descriptor);
+  } catch {
+    closeSync(descriptor);
+    unlinkOwnedEntry(temporary, createdIdentity);
+    throw new Error("lock_file_write_failed");
+  }
+
+  try {
+    linkSync(temporary, lockFile);
+  } catch (error) {
+    closeSync(descriptor);
+    unlinkOwnedEntry(temporary, identity);
+    if (error?.code === "EEXIST") {
+      return { acquired: false, state: inspectExistingLock(lockFile) };
+    }
+    throw new Error("lock_file_install_failed");
+  }
+  try {
+    const installed = lstatSync(lockFile);
+    if (
+      !installed.isFile() ||
+      installed.isSymbolicLink() ||
+      !sameEntry(identity, installed)
+    ) {
+      throw new Error("lock_file_changed");
+    }
+    unlinkOwnedEntry(temporary, identity);
+  } catch (error) {
+    closeSync(descriptor);
+    unlinkOwnedEntry(lockFile, identity);
+    unlinkOwnedEntry(temporary, identity);
+    if (
+      error instanceof Error &&
+      /^[a-z0-9_]+$/.test(error.message)
+    ) {
+      throw error;
+    }
+    throw new Error("lock_file_install_failed");
+  }
+
   let released = false;
   return {
     acquired: true,
     state: "acquired",
+    token,
+    processStartTicks,
     release() {
       if (released) return;
       released = true;
@@ -626,11 +813,43 @@ function waitForNextCycle(delayMs, runtime) {
   });
 }
 
-function signalReady(runtime) {
-  if (runtime.ready) return;
-  runtime.ready = true;
-  if (typeof process.send === "function") process.send("ready");
-  safeLog("worker_ready", { singleton: true, target: "loopback" });
+function readinessValidityMs(configuration) {
+  const healthyJitterMs = Math.min(5_000, configuration.intervalMs / 10);
+  return Math.ceil(
+    configuration.intervalMs +
+      healthyJitterMs +
+      configuration.timeoutMs +
+      configuration.maxBackoffMs +
+      30_000
+  );
+}
+
+function recordAcceptedReadiness(
+  runtime,
+  readyFile,
+  lock,
+  validityMs
+) {
+  const marker = writeReadyMarker(readyFile, lock, validityMs);
+  try {
+    if (!runtime.ready) {
+      if (typeof process.send === "function") process.send("ready");
+      safeLog("worker_ready", { singleton: true, target: "loopback" });
+    }
+    runtime.readyMarker = marker;
+    runtime.ready = true;
+  } catch (error) {
+    removeOwnedReadyMarker(readyFile, marker);
+    throw error;
+  }
+}
+
+function clearReadinessEvidence(runtime, readyFile) {
+  if (!runtime.readyMarker) return;
+  if (!removeOwnedReadyMarker(readyFile, runtime.readyMarker)) {
+    throw new Error("ready_file_cleanup_failed");
+  }
+  runtime.readyMarker = null;
 }
 
 async function run(configuration) {
@@ -661,7 +880,10 @@ async function run(configuration) {
     wake: null,
     stopRequested: false,
     ready: false,
+    readyMarker: null,
   };
+  const readyFile = readyFileForLock(configuration.lockFile);
+  const readyValidityMs = readinessValidityMs(configuration);
   const stop = (signal) => {
     if (runtime.stopRequested) return;
     runtime.stopRequested = true;
@@ -679,10 +901,20 @@ async function run(configuration) {
   process.on("message", onMessage);
 
   try {
+    clearStaleReadyMarker(readyFile);
     let consecutiveFailures = 0;
     do {
       const outcome = await runCycle(configuration, runtime);
-      if (outcome.accepted) signalReady(runtime);
+      if (outcome.accepted) {
+        recordAcceptedReadiness(
+          runtime,
+          readyFile,
+          lock,
+          readyValidityMs
+        );
+      } else {
+        clearReadinessEvidence(runtime, readyFile);
+      }
       if (configuration.once) return outcome.healthy ? 0 : 1;
       if (runtime.stopRequested) break;
 
@@ -706,6 +938,7 @@ async function run(configuration) {
     process.off("SIGTERM", onSigterm);
     process.off("SIGINT", onSigint);
     process.off("message", onMessage);
+    removeOwnedReadyMarker(readyFile, runtime.readyMarker);
     lock.release();
     safeLog("worker_stopped", { clean: true });
   }
@@ -733,7 +966,18 @@ export async function main(argv = process.argv.slice(2)) {
   }
 }
 
-const invokedPath = process.argv[1] ? pathToFileURL(resolve(process.argv[1])).href : "";
-if (invokedPath === import.meta.url) {
+const invokedPath = process.argv[1]
+  ? pathToFileURL(resolve(process.argv[1])).href
+  : "";
+const pm2ExecPath =
+  typeof process.env.pm_exec_path === "string"
+    ? pathToFileURL(resolve(process.env.pm_exec_path)).href
+    : "";
+const invokedByPm2 =
+  process.env.NODE_APP_INSTANCE === "0" &&
+  process.env.pm_id !== undefined &&
+  typeof process.send === "function" &&
+  pm2ExecPath === import.meta.url;
+if (invokedPath === import.meta.url || invokedByPm2) {
   process.exitCode = await main();
 }

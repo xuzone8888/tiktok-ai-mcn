@@ -86,7 +86,7 @@ module.exports = {
       wait_ready: true,
       shutdown_with_message: true,
       listen_timeout: 240_000,
-      kill_timeout: 235_000,
+      kill_timeout: 15_000,
       min_uptime: "30s",
       max_restarts: 10,
       restart_delay: 5_000,
