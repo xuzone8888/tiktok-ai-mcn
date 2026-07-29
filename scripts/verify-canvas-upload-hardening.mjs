@@ -27,6 +27,14 @@ const board = readFileSync(
   new URL("../src/components/canvas/canvas-board.tsx", import.meta.url),
   "utf8"
 );
+const toolbar = readFileSync(
+  new URL("../src/components/canvas/canvas-bottom-toolbar.tsx", import.meta.url),
+  "utf8"
+);
+const chromePolicy = readFileSync(
+  new URL("../src/components/canvas/canvas-chrome-policy.ts", import.meta.url),
+  "utf8"
+);
 const checkUrlRoute = readFileSync(
   new URL("../src/app/api/upload/check-url/route.ts", import.meta.url),
   "utf8"
@@ -39,6 +47,21 @@ const safeMedia = readFileSync(
   new URL("../src/lib/safe-media-fetch.ts", import.meta.url),
   "utf8"
 );
+const cancelStart = board.indexOf("const cancelCanvasUpload = useCallback");
+const cancelEnd = board.indexOf("// 5a)", cancelStart);
+const cancelBlock =
+  cancelStart >= 0 && cancelEnd > cancelStart
+    ? board.slice(cancelStart, cancelEnd)
+    : "";
+const uploadFinallyStart = board.indexOf(".finally(() => {");
+const uploadFinallyEnd = board.indexOf(
+  "[addNode, asyncSession, interactionActive, readOnly]",
+  uploadFinallyStart
+);
+const uploadFinallyBlock =
+  uploadFinallyStart >= 0 && uploadFinallyEnd > uploadFinallyStart
+    ? board.slice(uploadFinallyStart, uploadFinallyEnd)
+    : "";
 
 let passed = 0;
 const failures = [];
@@ -240,6 +263,113 @@ ok(
   board.includes("prepareCanvasUploads") &&
     board.includes("uploadPreparedCanvasFile"),
   "board preflights one batch and schedules prepared direct uploads"
+);
+ok(
+  board.includes("const startCanvasUpload = useCallback") &&
+    (board.match(/startCanvasUpload\(files,/g) ?? []).length === 2,
+  "file picker and drag/drop call one shared upload pipeline"
+);
+ok(
+  board.includes('type="file"') &&
+    board.includes("accept={CANVAS_UPLOAD_ACCEPT}") &&
+    board.includes("multiple") &&
+    board.includes('data-canvas-upload-input=""'),
+  "board owns a hidden multi-select image/video file input"
+);
+ok(
+  board.includes('".jpg"') &&
+    board.includes('"image/jpeg"') &&
+    board.includes('"video/quicktime"') &&
+    board.includes('"video/x-msvideo"'),
+  "file picker advertises every exact format accepted by the authoritative validator"
+);
+ok(
+  board.includes('input.value = "";') &&
+    board.includes('event.currentTarget.value = "";'),
+  "picker resets before opening and immediately after a selection"
+);
+ok(
+  board.includes("center.x - MEDIA_NODE_WIDTH / 2") &&
+    board.includes("center.y - MEDIA_NODE_HEIGHT / 2"),
+  "picker imports are centered in the visible Canvas viewport"
+);
+ok(
+  board.includes("onProgress: ({ loaded }) =>") &&
+    board.includes('role="progressbar"') &&
+    board.includes("aria-valuenow={uploadProgress.percent}"),
+  "both picker and drop uploads expose live bounded progress through the shared pipeline"
+);
+ok(
+  !board.includes('role="status"') &&
+    !board.includes('aria-live="polite"') &&
+    board.includes('"正在上传素材"'),
+  "upload progress avoids high-frequency live-region announcements and uses lifecycle toasts"
+);
+ok(
+  cancelBlock.includes("uploadControllersRef.current") &&
+    cancelBlock.includes("controller.abort()") &&
+    !cancelBlock.includes("uploadBatchActiveRef.current = false") &&
+    !cancelBlock.includes("setUploading(false)") &&
+    !cancelBlock.includes("setUploadProgress(null)") &&
+    !cancelBlock.includes(".clear()"),
+  "cancel requests abort without prematurely clearing the controller set, mutex, or UI"
+);
+ok(
+  board.includes('aria-label="取消上传"') &&
+    board.includes('data-canvas-upload-cancel=""') &&
+    board.includes("onClick={cancelCanvasUpload}"),
+  "the progress card exposes a focusable cancel-upload button"
+);
+ok(
+  board.includes("function isAbortError(error: unknown)") &&
+    (board.match(/isAbortError\(error\)/g) ?? []).length === 2,
+  "worker and batch error paths explicitly silence AbortError"
+);
+ok(
+  board.includes(
+    "completed === files.length && uploaded === files.length"
+  ),
+  "100 percent requires every file to finalize and create its Canvas node"
+);
+ok(
+  board.includes("const mountedRef = useRef(false)") &&
+    board.includes("mountedRef.current = false") &&
+    board.includes("!mountedRef.current"),
+  "async progress writes are guarded by an explicit mounted lifecycle"
+);
+ok(
+  uploadFinallyBlock.includes(
+    "uploadControllersRef.current.delete(controller)"
+  ) &&
+    uploadFinallyBlock.includes("uploadBatchActiveRef.current = false") &&
+    uploadFinallyBlock.includes("if (mountedRef.current)") &&
+    uploadFinallyBlock.includes("setUploading(false)") &&
+    uploadFinallyBlock.includes("setUploadProgress(null)") &&
+    !uploadFinallyBlock.includes("asyncSession.isCurrent(token)"),
+  "one finally block releases the mutex and settles any still-mounted UI even after interaction loss"
+);
+ok(
+  !board.includes("uploadControllersRef.current.clear()"),
+  "interaction loss aborts work but leaves controller ownership to finally"
+);
+ok(
+  toolbar.includes('label="上传图片或视频"') &&
+    toolbar.includes("disabled={uploadDisabled}") &&
+    toolbar.includes("dataCanvasUploadTrigger") &&
+    toolbar.includes("data-upload-state={uploadState}"),
+  "toolbar exposes an accessible read-only/uploading-safe picker trigger"
+);
+ok(
+  toolbar.includes('aria-disabled="true"') &&
+    toolbar.includes("tabIndex={0}") &&
+    toolbar.includes("aria-hidden={disabled || undefined}") &&
+    toolbar.includes("tabIndex={disabled ? -1 : undefined}"),
+  "disabled upload reuses the keyboard-focusable tooltip wrapper contract"
+);
+ok(
+  chromePolicy.includes('{ id: "upload", label: "上传素材", enabled: true }') &&
+    chromePolicy.includes('{ id: "assets", label: "素材库", enabled: false }'),
+  "upload is a first-class action without stealing the disabled asset-library semantic"
 );
 
 ok(

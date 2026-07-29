@@ -3,10 +3,11 @@
 /**
  * 超级画布 · 底部工具栏(P0 · S5)
  *
- * 看板 7 入口(添加节点/工作流/素材库/角色库/历史记录/快捷键/教程),lucide 图标 + tooltip、
+ * 看板入口(添加节点/上传素材/工作流/素材库/角色库/历史记录/快捷键/教程),lucide 图标 + tooltip、
  * 稳定尺寸。P0 点亮「添加节点」(下拉复用 S2 的 6 类列表 NODE_TYPE_ITEMS,不复制类型定义)、
- * 「历史记录」(开 CanvasHistoryPanel,只读时禁用)与「快捷键」(开现有 ShortcutPanel,只读仍可用);
- * 其余未来入口 disabled——tooltip 仅名称,不写开发状态/操作说明。
+ * 「上传素材」(打开原生多文件选择器)、「历史记录」(开 CanvasHistoryPanel,只读时禁用)与
+ * 「快捷键」(开现有 ShortcutPanel,只读仍可用);其余未来入口 disabled——tooltip 仅名称,
+ * 不写开发状态/操作说明。
  *
  * 无障碍:disabled 的 Button 不接 pointer/focus,Radix tooltip 不可达;故 disabled 时用可 hover/
  * focus 的 span 包裹(tabIndex+role+aria-disabled),保证 tooltip 可达且键盘可聚焦;启用按钮保持原语义。
@@ -19,6 +20,7 @@ import {
   Keyboard,
   Library,
   Plus,
+  Upload,
   Users,
   Workflow,
   type LucideIcon,
@@ -47,6 +49,7 @@ import { CREATABLE_NODE_TYPE_ITEMS } from "./node-type-meta";
 
 const ICONS: Record<BottomToolbarAction, LucideIcon> = {
   "add-node": Plus,
+  upload: Upload,
   workflow: Workflow,
   assets: Library,
   characters: Users,
@@ -58,13 +61,19 @@ const ICONS: Record<BottomToolbarAction, LucideIcon> = {
 /** tooltip 包裹的图标按钮;disabled 时用可聚焦 span 包裹(tooltip 可达 + 无障碍)。 */
 function ToolbarIconButton({
   label,
+  tooltipLabel = label,
   disabled = false,
   onClick,
+  dataCanvasUploadTrigger = false,
+  uploadState,
   children,
 }: {
   label: string;
+  tooltipLabel?: string;
   disabled?: boolean;
   onClick?: () => void;
+  dataCanvasUploadTrigger?: boolean;
+  uploadState?: "idle" | "uploading";
   children: ReactNode;
 }) {
   const button = (
@@ -79,6 +88,8 @@ function ToolbarIconButton({
       aria-hidden={disabled || undefined}
       tabIndex={disabled ? -1 : undefined}
       disabled={disabled}
+      data-canvas-upload-trigger={dataCanvasUploadTrigger ? "" : undefined}
+      data-upload-state={uploadState}
       onClick={onClick}
     >
       {children}
@@ -100,20 +111,24 @@ function ToolbarIconButton({
           button
         )}
       </TooltipTrigger>
-      <TooltipContent side="top">{label}</TooltipContent>
+      <TooltipContent side="top">{tooltipLabel}</TooltipContent>
     </Tooltip>
   );
 }
 
 export function CanvasBottomToolbar({
   onCreate,
+  onUploadFiles,
   onOpenShortcuts,
   onOpenHistory,
+  uploading = false,
   disabled = false,
 }: {
   onCreate: (type: CanvasNodeType) => void;
+  onUploadFiles: () => void;
   onOpenShortcuts: () => void;
   onOpenHistory: () => void;
+  uploading?: boolean;
   disabled?: boolean;
 }) {
   return (
@@ -163,6 +178,27 @@ export function CanvasBottomToolbar({
                     ))}
                   </DropdownMenuContent>
                 </DropdownMenu>
+              );
+            }
+
+            if (entry.id === "upload") {
+              const uploadDisabled = disabled || uploading;
+              return (
+                <ToolbarIconButton
+                  key={entry.id}
+                  label="上传图片或视频"
+                  tooltipLabel={uploading ? "素材上传中" : entry.label}
+                  disabled={uploadDisabled}
+                  onClick={onUploadFiles}
+                  dataCanvasUploadTrigger
+                  uploadState={uploading ? "uploading" : "idle"}
+                >
+                  <Icon
+                    className={
+                      uploading ? "h-4 w-4 animate-pulse" : "h-4 w-4"
+                    }
+                  />
+                </ToolbarIconButton>
               );
             }
 

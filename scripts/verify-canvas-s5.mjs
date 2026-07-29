@@ -143,22 +143,23 @@ async function main() {
   console.log("② 底部工具栏 gating");
   eq(BOTTOM_TOOLBAR_ENTRIES.map((e) => e.id), [
     "add-node",
+    "upload",
     "workflow",
     "assets",
     "characters",
     "history",
     "shortcuts",
     "tutorial",
-  ], "7 入口顺序=看板");
+  ], "8 入口顺序=看板");
   eq(
     BOTTOM_TOOLBAR_ENTRIES.filter((e) => e.enabled).map((e) => e.id),
-    ["add-node", "history", "shortcuts"],
-    "P0 点亮 add-node/history/shortcuts"
+    ["add-node", "upload", "history", "shortcuts"],
+    "点亮 add-node/upload/history/shortcuts"
   );
   eq(
     BOTTOM_TOOLBAR_ENTRIES.filter((e) => !e.enabled).map((e) => e.id),
     ["workflow", "assets", "characters", "tutorial"],
-    "其余 4 入口 disabled"
+    "素材库仍保持独立 disabled 语义"
   );
   // 静态断言:disabled 按钮由可聚焦 span 包裹(disabled Button 不接 pointer/focus,否则 tooltip 不可达)。
   const toolbarSrc = readFileSync(
@@ -170,6 +171,26 @@ async function main() {
   ok(!toolbarSrc.includes('role="button"'), "外层 span 去 role=button(避免嵌套交互语义)");
   ok(toolbarSrc.includes("aria-hidden={disabled"), "内层禁用按钮 aria-hidden(名称交外层 span)");
   ok(toolbarSrc.includes("tabIndex={disabled ? -1"), "内层禁用按钮移出 tab 序(tabIndex=-1)");
+  ok(toolbarSrc.includes('label="上传图片或视频"'), "上传入口有精确无障碍名称");
+  ok(
+    toolbarSrc.includes("const uploadDisabled = disabled || uploading") &&
+      toolbarSrc.includes("disabled={uploadDisabled}"),
+    "上传入口在只读或上传中禁用"
+  );
+  ok(
+    toolbarSrc.includes(
+      'data-canvas-upload-trigger={dataCanvasUploadTrigger ? "" : undefined}'
+    ) &&
+      toolbarSrc.includes("data-upload-state={uploadState}") &&
+      toolbarSrc.includes("dataCanvasUploadTrigger"),
+    "上传入口暴露稳定的 E2E 状态标记"
+  );
+  ok(
+    toolbarSrc.includes("<ToolbarIconButton") &&
+      toolbarSrc.includes("disabled={uploadDisabled}") &&
+      toolbarSrc.includes('tooltipLabel={uploading ? "素材上传中" : entry.label}'),
+    "上传禁用态复用可聚焦 wrapper，键盘仍可到达 tooltip"
+  );
 
   // ------------------------------------------------------------------ ③
   console.log("③ 布局确定性 / 健壮性");

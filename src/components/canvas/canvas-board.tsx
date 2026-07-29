@@ -23,6 +23,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type ChangeEvent as ReactChangeEvent,
   type DragEvent as ReactDragEvent,
   type MouseEvent as ReactMouseEvent,
 } from "react";
@@ -44,6 +45,7 @@ import {
 } from "@xyflow/react";
 import { useTheme } from "next-themes";
 
+import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/use-toast";
 import {
   reconcileReactFlowEdges,
@@ -115,6 +117,26 @@ const DUPLICATE_OFFSET: CanvasPosition = { x: GRID_SIZE * 2, y: GRID_SIZE * 2 };
 // space) used to center an imported asset on its projected drop point.
 const MEDIA_NODE_WIDTH = 208;
 const MEDIA_NODE_HEIGHT = 156;
+/** Exact browser-picker filter for every image/video format accepted by upload-contract. */
+const CANVAS_UPLOAD_ACCEPT = [
+  ".jpg",
+  ".jpeg",
+  ".png",
+  ".webp",
+  ".gif",
+  ".mp4",
+  ".webm",
+  ".mov",
+  ".avi",
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+  "video/mp4",
+  "video/webm",
+  "video/quicktime",
+  "video/x-msvideo",
+].join(",");
 // Bounded 3x3 screen-space offset table (px) around the wrapper center. A
 // deterministic start slot (by fresh node count) fans repeated imports out with
 // no unbounded diagonal; every target is clamped inside the wrapper.
@@ -143,6 +165,21 @@ interface CopyDragState {
 interface PendingDelete {
   nodeIds: string[];
   edgeIds: string[];
+}
+
+interface UploadBatchProgress {
+  completed: number;
+  total: number;
+  percent: number;
+}
+
+function isAbortError(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "name" in error &&
+    error.name === "AbortError"
+  );
 }
 
 function eventClientPoint(event: MouseEvent | TouchEvent): { x: number; y: number } {
@@ -174,8 +211,10 @@ export function CanvasBoard({
   }
   const asyncSession = asyncSessionRef.current;
   asyncSession.setInteraction(interactionActive);
+  const mountedRef = useRef(false);
   const uploadControllersRef = useRef(new Set<AbortController>());
   const uploadBatchActiveRef = useRef(false);
+  const uploadInputRef = useRef<HTMLInputElement>(null);
   const setMinimapCollapsed = useCanvasStore((state) => state.setMinimapCollapsed);
   const applyNodePositionChanges = useCanvasStore(
     (state) => state.applyNodePositionChanges
@@ -204,6 +243,9 @@ export function CanvasBoard({
   const [historyOpen, setHistoryOpen] = useState(false);
   const [connectMenu, setConnectMenu] = useState<ConnectMenuState | null>(null);
   const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] =
+    useState<UploadBatchProgress | null>(null);
   const {
     canvasId: generationCanvasId,
     syncState: generationSyncState,
@@ -239,17 +281,18 @@ export function CanvasBoard({
   useEffect(() => {
     if (interactionActive) return;
     for (const controller of uploadControllersRef.current) controller.abort();
-    uploadControllersRef.current.clear();
   }, [interactionActive]);
 
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      // Invalidate authority before aborting. Any pending continuation then
+      // observes both a stale session and an unmounted UI before it can write.
+      mountedRef.current = false;
       asyncSession.invalidate();
       for (const controller of uploadControllersRef.current) controller.abort();
-      uploadControllersRef.current.clear();
-    },
-    [asyncSession]
-  );
+    };
+  }, [asyncSession]);
 
   // 整理后的 fitView:双 requestAnimationFrame 等提交(RF 依 reconcile 重排后)→ fitView。
   const scheduleFit = useCallback(() => {
@@ -696,26 +739,23 @@ export function CanvasBoard({
     return () => window.removeEventListener("keydown", handler);
   }, [interactionEnabled, readOnly, tidyCanvas]);
 
-  // 3) 拖入文件 → 上传(只取 object key)→ 建图片/视频节点
-  const onDragOver = useCallback(
-    (event: ReactDragEvent<HTMLDivElement>) => {
-      event.preventDefault();
-      if (readOnly) return;
-      event.dataTransfer.dropEffect = "copy";
-    },
-    [readOnly]
-  );
-
-  const onDrop = useCallback(
-    (event: ReactDragEvent<HTMLDivElement>) => {
-      event.preventDefault();
-      if (readOnly) return;
-      const files = Array.from(event.dataTransfer.files ?? []);
+  // 3) 文件选择与拖入共用同一批量链路:
+  // 校验 → 服务端配额预留/凭证 → 有界并发直传/进度 → 安全确认 → 建图片/视频节点。
+  const startCanvasUpload = useCallback(
+    (files: File[], base: CanvasPosition) => {
+      if (
+        !mountedRef.current ||
+        readOnly ||
+        !interactionActive ||
+        useCanvasStore.getState().readOnly
+      ) {
+        return;
+      }
       if (files.length === 0) return;
       if (uploadBatchActiveRef.current) {
         toast({
           title: "上一批文件仍在上传",
-          description: "请等待上传完成后再拖入新文件",
+          description: "请等待上传完成后再选择或拖入新文件",
           variant: "destructive",
         });
         return;
@@ -733,24 +773,66 @@ export function CanvasBoard({
         return;
       }
 
-      const base = screenToFlowPosition({ x: event.clientX, y: event.clientY });
       const controller = new AbortController();
       const token = asyncSession.capture();
       if (!token) return;
+      const totalBytes = files.reduce((total, file) => total + file.size, 0);
+      const loadedByIndex = files.map(() => 0);
+      let completed = 0;
+      let uploaded = 0;
+      let lastPublishedCompleted = -1;
+      let lastPublishedPercent = -1;
       uploadBatchActiveRef.current = true;
       uploadControllersRef.current.add(controller);
+      setUploading(true);
+      setUploadProgress({ completed: 0, total: files.length, percent: 0 });
 
-      if (files.length > 1) {
-        toast({
-          title: `正在上传 ${files.length} 个文件`,
-          description: `同时最多上传 ${CANVAS_UPLOAD_MAX_CONCURRENCY} 个`,
-        });
-      }
+      const publishProgress = () => {
+        if (
+          !mountedRef.current ||
+          controller.signal.aborted ||
+          !asyncSession.isCurrent(token)
+        ) {
+          return;
+        }
+        const loadedBytes = loadedByIndex.reduce(
+          (total, loaded) => total + loaded,
+          0
+        );
+        const transferPercent =
+          totalBytes > 0 ? Math.round((loadedBytes / totalBytes) * 100) : 0;
+        // A 100% byte transfer can still be awaiting the server's HEAD, MIME,
+        // byte-length and magic-number confirmation. Reserve 100% for a fully
+        // finalized batch so the visible status never promises too early.
+        const percent =
+          completed === files.length && uploaded === files.length
+            ? 100
+            : Math.min(99, transferPercent);
+        if (
+          completed === lastPublishedCompleted &&
+          percent === lastPublishedPercent
+        ) {
+          return;
+        }
+        lastPublishedCompleted = completed;
+        lastPublishedPercent = percent;
+        setUploadProgress({ completed, total: files.length, percent });
+      };
+
+      toast({
+        title:
+          files.length > 1
+            ? `正在上传 ${files.length} 个文件`
+            : "正在上传素材",
+        description:
+          files.length > 1
+            ? `同时最多上传 ${CANVAS_UPLOAD_MAX_CONCURRENCY} 个`
+            : files[0].name,
+      });
 
       void (async () => {
         const prepared = await prepareCanvasUploads(files, controller.signal);
         let nextIndex = 0;
-        let uploaded = 0;
         let failed = 0;
 
         const worker = async () => {
@@ -761,8 +843,16 @@ export function CanvasBoard({
             try {
               const { kind, ossKey } = await uploadPreparedCanvasFile(item, {
                 signal: controller.signal,
+                onProgress: ({ loaded }) => {
+                  loadedByIndex[index] = Math.max(
+                    loadedByIndex[index],
+                    Math.min(item.file.size, loaded)
+                  );
+                  publishProgress();
+                },
               });
               if (
+                controller.signal.aborted ||
                 !asyncSession.isCurrent(token) ||
                 useCanvasStore.getState().readOnly
               ) {
@@ -790,6 +880,7 @@ export function CanvasBoard({
             } catch (error) {
               if (
                 controller.signal.aborted ||
+                isAbortError(error) ||
                 !asyncSession.isCurrent(token)
               ) {
                 continue;
@@ -802,6 +893,9 @@ export function CanvasBoard({
                 }`,
                 variant: "destructive",
               });
+            } finally {
+              completed += 1;
+              publishProgress();
             }
           }
         };
@@ -815,22 +909,27 @@ export function CanvasBoard({
         );
 
         if (
-          files.length > 1 &&
           asyncSession.isCurrent(token) &&
-          !controller.signal.aborted
+          !controller.signal.aborted &&
+          !useCanvasStore.getState().readOnly
         ) {
-          toast({
-            title:
-              failed === 0
-                ? `${uploaded} 个文件上传完成`
-                : `已上传 ${uploaded} 个，失败 ${failed} 个`,
-            ...(failed > 0 ? { variant: "destructive" as const } : {}),
-          });
+          if (files.length === 1 && uploaded === 1) {
+            toast({ title: "素材上传完成" });
+          } else if (files.length > 1) {
+            toast({
+              title:
+                failed === 0
+                  ? `${uploaded} 个文件上传完成`
+                  : `已上传 ${uploaded} 个，失败 ${failed} 个`,
+              ...(failed > 0 ? { variant: "destructive" as const } : {}),
+            });
+          }
         }
       })()
         .catch((error) => {
           if (
             controller.signal.aborted ||
+            isAbortError(error) ||
             !asyncSession.isCurrent(token)
           ) {
             return;
@@ -845,10 +944,90 @@ export function CanvasBoard({
         .finally(() => {
           uploadControllersRef.current.delete(controller);
           uploadBatchActiveRef.current = false;
+          if (mountedRef.current) {
+            // Interaction loss invalidates the session but does not unmount the
+            // board. Mounted UI must still leave its uploading state here.
+            setUploading(false);
+            setUploadProgress(null);
+          }
         });
     },
-    [addNode, asyncSession, readOnly, screenToFlowPosition]
+    [addNode, asyncSession, interactionActive, readOnly]
   );
+
+  const onDragOver = useCallback(
+    (event: ReactDragEvent<HTMLDivElement>) => {
+      event.preventDefault();
+      if (readOnly) return;
+      event.dataTransfer.dropEffect = "copy";
+    },
+    [readOnly]
+  );
+
+  const onDrop = useCallback(
+    (event: ReactDragEvent<HTMLDivElement>) => {
+      event.preventDefault();
+      if (readOnly) return;
+      const files = Array.from(event.dataTransfer.files ?? []);
+      if (files.length === 0) return;
+      const base = screenToFlowPosition({ x: event.clientX, y: event.clientY });
+      startCanvasUpload(files, base);
+    },
+    [readOnly, screenToFlowPosition, startCanvasUpload]
+  );
+
+  const openUploadPicker = useCallback(() => {
+    if (
+      readOnly ||
+      !interactionActive ||
+      useCanvasStore.getState().readOnly
+    ) {
+      return;
+    }
+    if (uploadBatchActiveRef.current) {
+      toast({
+        title: "上一批文件仍在上传",
+        description: "请等待上传完成后再选择或拖入新文件",
+        variant: "destructive",
+      });
+      return;
+    }
+    const input = uploadInputRef.current;
+    if (!input) return;
+    // Clearing before click makes choosing the same file twice fire change in
+    // desktop and mobile browsers alike.
+    input.value = "";
+    input.click();
+  }, [interactionActive, readOnly]);
+
+  const onUploadInputChange = useCallback(
+    (event: ReactChangeEvent<HTMLInputElement>) => {
+      const files = Array.from(event.currentTarget.files ?? []);
+      // Release the FileList immediately and allow the same selection next time.
+      event.currentTarget.value = "";
+      if (files.length === 0) return;
+      const center = viewportCenterFlow();
+      if (!center) {
+        toast({
+          title: "无法定位上传素材",
+          description: "请刷新画布后重试",
+          variant: "destructive",
+        });
+        return;
+      }
+      startCanvasUpload(files, {
+        x: center.x - MEDIA_NODE_WIDTH / 2,
+        y: center.y - MEDIA_NODE_HEIGHT / 2,
+      });
+    },
+    [startCanvasUpload, viewportCenterFlow]
+  );
+
+  const cancelCanvasUpload = useCallback(() => {
+    // Abort is only a request. The promise chain owns controller removal,
+    // mutex release and mounted UI settlement in its single finally block.
+    for (const controller of uploadControllersRef.current) controller.abort();
+  }, []);
 
   // 5a) 已有节点间连线
   const onConnect = useCallback(
@@ -1019,10 +1198,23 @@ export function CanvasBoard({
       inert={interactionEnabled ? undefined : true}
       aria-busy={!interactionEnabled}
       data-canvas-interactive={interactionEnabled ? "true" : "false"}
+      data-upload-state={uploading ? "uploading" : "idle"}
       onDoubleClick={onWrapperDoubleClick}
       onDragOver={onDragOver}
       onDrop={onDrop}
     >
+      <input
+        ref={uploadInputRef}
+        type="file"
+        accept={CANVAS_UPLOAD_ACCEPT}
+        multiple
+        tabIndex={-1}
+        aria-hidden="true"
+        className="sr-only"
+        data-canvas-upload-input=""
+        data-upload-state={uploading ? "uploading" : "idle"}
+        onChange={onUploadInputChange}
+      />
       <ReactFlow
         nodes={nodesForRF}
         edges={viewEdges}
@@ -1057,11 +1249,52 @@ export function CanvasBoard({
         <CanvasToolbar onOpenShortcuts={() => setShortcutOpen(true)} />
         <CanvasBottomToolbar
           onCreate={createNodeAtCenter}
+          onUploadFiles={openUploadPicker}
           onOpenShortcuts={() => setShortcutOpen(true)}
           onOpenHistory={openHistory}
+          uploading={uploading}
           disabled={readOnly}
         />
       </ReactFlow>
+      {uploadProgress && (
+        <div
+          className="absolute bottom-16 left-1/2 z-20 w-72 max-w-[calc(100%_-_2rem)] -translate-x-1/2 rounded-lg border border-border bg-card/95 px-3 py-2 text-xs shadow-lg backdrop-blur"
+        >
+          <div className="mb-1.5 flex items-center justify-between gap-3">
+            <span className="font-medium text-foreground">正在上传素材</span>
+            <span className="tabular-nums text-muted-foreground">
+              {uploadProgress.completed}/{uploadProgress.total} ·{" "}
+              {uploadProgress.percent}%
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div
+              role="progressbar"
+              aria-label="素材上传进度"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={uploadProgress.percent}
+              className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-muted"
+            >
+              <div
+                className="h-full rounded-full bg-primary transition-[width] duration-150"
+                style={{ width: `${uploadProgress.percent}%` }}
+              />
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-7 shrink-0 px-2 text-xs"
+              aria-label="取消上传"
+              data-canvas-upload-cancel=""
+              onClick={cancelCanvasUpload}
+            >
+              取消上传
+            </Button>
+          </div>
+        </div>
+      )}
       {shouldShowEmptyState(domainNodes.length, brokenNodes.length) && (
         <CanvasEmptyState onCreate={createNodeAtCenter} disabled={readOnly} />
       )}
