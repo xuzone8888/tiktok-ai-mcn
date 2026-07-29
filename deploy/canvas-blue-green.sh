@@ -36,6 +36,7 @@ RECONCILER_NAME="${CANVAS_RECONCILER_PM2_NAME:-stargaze-canvas-reconciler}"
 BUNDLE_TOOL=""
 HEALTH_PROBE=""
 RECONCILER_READY_PROBE=""
+BROKER_TLS_PROBE=""
 TEMP_CONFIG=""
 RESTORE_BUNDLE=""
 SYSTEM_STATE_CHANGED=0
@@ -368,7 +369,8 @@ pm2_web_identity_for_port() {
           const matches = JSON.parse(input).filter((entry) =>
             entry.pm2_env?.status === "online" &&
             entry.pm2_env?.exec_mode === "fork_mode" &&
-            String(entry.pm2_env?.env?.PORT ?? entry.pm2_env?.PORT ?? "") === port
+            String(entry.pm2_env?.env?.PORT ?? entry.pm2_env?.PORT ?? "") === port &&
+            path.isAbsolute(entry.pm2_env?.env?.NODE_EXTRA_CA_CERTS ?? "")
           );
           if (matches.length !== 1) process.exit(1);
           const name = matches[0].name;
@@ -393,6 +395,7 @@ pm2_web_is_online() {
   local cwd="$3"
   pm2 jlist 2>/dev/null |
     node -e '
+      const path = require("node:path");
       let input = "";
       process.stdin.setEncoding("utf8");
       process.stdin.on("data", (chunk) => { input += chunk; });
@@ -404,7 +407,8 @@ pm2_web_is_online() {
             entry.pm2_env?.status === "online" &&
             entry.pm2_env?.exec_mode === "fork_mode" &&
             String(entry.pm2_env?.env?.PORT ?? entry.pm2_env?.PORT ?? "") === port &&
-            entry.pm2_env?.pm_cwd === cwd
+            entry.pm2_env?.pm_cwd === cwd &&
+            path.isAbsolute(entry.pm2_env?.env?.NODE_EXTRA_CA_CERTS ?? "")
           );
           process.exit(matches.length === 1 ? 0 : 1);
         } catch {
@@ -789,6 +793,7 @@ fi
 BUNDLE_TOOL="${CANDIDATE_DIR}/scripts/canvas-rollback-bundle.mjs"
 HEALTH_PROBE="${CANDIDATE_DIR}/scripts/probe-canvas-internal-health.mjs"
 RECONCILER_READY_PROBE="${CANDIDATE_DIR}/scripts/probe-canvas-reconciler-readiness.mjs"
+BROKER_TLS_PROBE="${CANDIDATE_DIR}/scripts/probe-oauth-broker-tls.mjs"
 
 echo "Canvas blue/green release plan"
 echo "  action: ${ACTION}"
@@ -966,6 +971,8 @@ fi
   die "Candidate exact-environment build runner is missing"
 [[ -f "${CANDIDATE_DIR}/scripts/check-canvas-production-env.mjs" ]] ||
   die "Canvas production preflight script is missing"
+[[ -f "${BROKER_TLS_PROBE}" && ! -L "${BROKER_TLS_PROBE}" ]] ||
+  die "OAuth broker TLS preflight script is missing or untrusted"
 [[ -f "${CANDIDATE_DIR}/deploy/install-canvas-reconciler.sh" ]] ||
   die "Canvas reconciler installer is missing"
 [[ -f "${PM2_CONFIG}" && ! -L "${PM2_CONFIG}" ]] ||
@@ -1023,7 +1030,11 @@ node --check "${CANDIDATE_DIR}/server.js"
 node --check "${CANDIDATE_DIR}/scripts/canvas-exact-env.mjs"
 node --check "${CANDIDATE_DIR}/scripts/start-canvas-web.mjs"
 node --check "${CANDIDATE_DIR}/scripts/run-canvas-build.mjs"
+node --check "${BROKER_TLS_PROBE}"
 node --check "${PM2_CONFIG}"
+node "${BROKER_TLS_PROBE}" \
+  --root "${CANDIDATE_DIR}" \
+  --env-file "${ENV_FILE}"
 CANVAS_PM2_NAME="${CANDIDATE_NAME}" \
 CANVAS_APP_DIR="${CANDIDATE_DIR}" \
 CANVAS_PORT="${CANDIDATE_PORT}" \

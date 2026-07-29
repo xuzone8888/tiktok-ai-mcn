@@ -1,5 +1,7 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
+const { lstatSync, readFileSync } = require("node:fs");
 const path = require("node:path");
+const { parseEnv } = require("node:util");
 
 const name = process.env.CANVAS_PM2_NAME || "stargaze-canvas-candidate";
 const cwd = process.env.CANVAS_APP_DIR;
@@ -22,6 +24,20 @@ if (envFile !== path.join(cwd, ".env.local")) {
   throw new Error("CANVAS_ENV_FILE must be the release's exact .env.local");
 }
 
+const envEntry = lstatSync(envFile);
+if (!envEntry.isFile() || envEntry.isSymbolicLink()) {
+  throw new Error("CANVAS_ENV_FILE must be a trusted regular file");
+}
+const releaseEnvironment = parseEnv(readFileSync(envFile, "utf8"));
+const brokerCa = releaseEnvironment.NODE_EXTRA_CA_CERTS?.trim();
+if (!brokerCa || !path.isAbsolute(brokerCa)) {
+  throw new Error("NODE_EXTRA_CA_CERTS must be an absolute path");
+}
+const brokerCaEntry = lstatSync(brokerCa);
+if (!brokerCaEntry.isFile() || brokerCaEntry.isSymbolicLink()) {
+  throw new Error("NODE_EXTRA_CA_CERTS must reference a trusted regular file");
+}
+
 module.exports = {
   apps: [
     {
@@ -41,6 +57,10 @@ module.exports = {
       env: {
         NODE_ENV: "production",
         PORT: String(port),
+        // Node consumes extra trust anchors before this bootstrap executes.
+        // Supplying the path in PM2 is therefore mandatory even though the
+        // exact release environment is installed again inside the process.
+        NODE_EXTRA_CA_CERTS: brokerCa,
       },
       autorestart: true,
       watch: false,

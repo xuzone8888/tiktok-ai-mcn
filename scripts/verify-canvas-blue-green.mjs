@@ -1262,6 +1262,7 @@ function testStaticContracts() {
     "AUTO_RESTORE_SUCCEEDED=0",
     "AUTO_RESTORE_SUCCEEDED == 1",
     "probe-canvas-reconciler-readiness.mjs",
+    "probe-oauth-broker-tls.mjs",
     'node "${RECONCILER_READY_PROBE}"',
     '--lock-file "${RECONCILER_LOCK_FILE}"',
   ]) {
@@ -1288,6 +1289,14 @@ function testStaticContracts() {
   const ecosystem = read("deploy/ecosystem.canvas.config.cjs");
   assertIncludes(ecosystem, 'script: "scripts/start-canvas-web.mjs"', "Canvas PM2 config");
   assertIncludes(ecosystem, "CANVAS_ENV_FILE", "Canvas PM2 config");
+  assertIncludes(ecosystem, "NODE_EXTRA_CA_CERTS: brokerCa", "Canvas PM2 config");
+  const brokerTlsProbe = read("scripts/probe-oauth-broker-tls.mjs");
+  assertIncludes(brokerTlsProbe, "spawnSync", "OAuth broker TLS preflight");
+  assertIncludes(
+    brokerTlsProbe,
+    "childEnvironment.NODE_EXTRA_CA_CERTS = brokerCa",
+    "OAuth broker TLS preflight"
+  );
   const reconcilerEcosystem = read(
     "deploy/ecosystem.canvas-reconciler.config.cjs"
   );

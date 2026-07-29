@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 
-import { existsSync, readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { X509Certificate } from "node:crypto";
+import { existsSync, lstatSync, readFileSync } from "node:fs";
+import { isAbsolute, resolve } from "node:path";
 import process from "node:process";
 
 import { readExactReleaseEnvironment } from "./canvas-exact-env.mjs";
@@ -200,6 +201,42 @@ for (const name of providerConfigurationNames) {
 for (const name of ["NEXT_PUBLIC_SUPABASE_URL", "ALIYUN_OSS_ENDPOINT"]) {
   if (isConfigured(name) && !isHttpsUrl(name)) {
     fail(name, "must be a valid HTTPS URL");
+  }
+}
+
+if (isConfigured("OAUTH_BROKER_URL")) {
+  if (!isHttpsUrl("OAUTH_BROKER_URL")) {
+    fail("OAUTH_BROKER_URL", "must be a valid HTTPS URL");
+  } else {
+    pass("OAUTH_BROKER_URL");
+  }
+
+  if (!isConfigured("NODE_EXTRA_CA_CERTS")) {
+    fail(
+      "NODE_EXTRA_CA_CERTS",
+      "required when the OAuth broker is enabled"
+    );
+  } else if (
+    environment.NODE_EXTRA_CA_CERTS !==
+    environment.NODE_EXTRA_CA_CERTS.trim()
+  ) {
+    fail("NODE_EXTRA_CA_CERTS", "leading or trailing whitespace is not allowed");
+  } else if (!isAbsolute(environment.NODE_EXTRA_CA_CERTS)) {
+    fail("NODE_EXTRA_CA_CERTS", "must be an absolute path");
+  } else {
+    try {
+      const caEntry = lstatSync(environment.NODE_EXTRA_CA_CERTS);
+      if (!caEntry.isFile() || caEntry.isSymbolicLink()) {
+        throw new Error("not a trusted regular file");
+      }
+      new X509Certificate(readFileSync(environment.NODE_EXTRA_CA_CERTS));
+      pass("NODE_EXTRA_CA_CERTS trust anchor");
+    } catch {
+      fail(
+        "NODE_EXTRA_CA_CERTS",
+        "must reference a readable non-symlink PEM certificate"
+      );
+    }
   }
 }
 

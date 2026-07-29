@@ -68,6 +68,7 @@ bash deploy/canvas-blue-green.sh deploy \
 - [ ] 确认活动 Nginx 文件只含一个 `proxy_pass http://127.0.0.1:<port>;` 目标；脚本遇到零个或多个目标会失败关闭。
 - [ ] 确认活动 Nginx 文件含精确的 `location ^~ /api/internal/canvas/ { return 404; }`；health、reconcile 和人工 recovery API 只能直连 loopback，公网不得代理。
 - [ ] 确认服务器上 `node`、`npm`、`pm2`、`curl`、`nginx` 可用，运行脚本的用户是当前 PM2/Nginx 所有者（现有生产拓扑为 root）。
+- [ ] 确认 release 的 `.env.local` 包含绝对路径 `NODE_EXTRA_CA_CERTS`；发布器会在切流前用独立 Node 子进程验证 Broker TLS，并确认 PM2 在 Node 启动前注入该 CA。
 
 ### 3.1 仅首发旧版 bootstrap
 
