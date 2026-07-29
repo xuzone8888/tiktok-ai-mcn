@@ -38,13 +38,29 @@ export async function processYouTubeRevocationJobs(
   for (const job of jobs || []) {
     const claimedAt = new Date().toISOString()
     const staleClaim = new Date(Date.now() - 15 * 60 * 1000).toISOString()
-    const { data: claimed, error: claimError } = await admin
+    const claimUpdate = { claimed_at: claimedAt, updated_at: claimedAt }
+    let claimResult = await admin
       .from('youtube_revocation_jobs')
-      .update({ claimed_at: claimedAt, updated_at: claimedAt })
+      .update(claimUpdate)
       .eq('id', job.id)
-      .or(`claimed_at.is.null,claimed_at.lt.${staleClaim}`)
+      .is('claimed_at', null)
       .select('id')
       .maybeSingle()
+
+    // PostgREST can generate an invalid qualified-column reference when an
+    // UPDATE combines OR filters on the target table. Keep the same atomic
+    // claim semantics with two conditional UPDATEs instead.
+    if (!claimResult.error && !claimResult.data) {
+      claimResult = await admin
+        .from('youtube_revocation_jobs')
+        .update(claimUpdate)
+        .eq('id', job.id)
+        .lt('claimed_at', staleClaim)
+        .select('id')
+        .maybeSingle()
+    }
+
+    const { data: claimed, error: claimError } = claimResult
     if (claimError) throw new Error(`Unable to claim YouTube revocation job: ${claimError.message}`)
     if (!claimed) continue
 
