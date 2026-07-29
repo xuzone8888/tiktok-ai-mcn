@@ -1,21 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+
+import { requireAdmin } from "@/lib/admin-auth";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 // ============================================================================
 // Admin API: Get User Publish Tasks
 // ============================================================================
 
-const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
-
 export async function GET(
     request: NextRequest,
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
-        const userId = params.id;
+        const auth = await requireAdmin();
+        if (auth.error) return auth.error;
+
+        const { id: userId } = await params;
+        const supabase = createAdminClient();
         const { searchParams } = new URL(request.url);
         const page = parseInt(searchParams.get("page") || "1");
         const limit = parseInt(searchParams.get("limit") || "20");

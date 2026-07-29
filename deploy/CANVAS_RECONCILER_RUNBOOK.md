@@ -43,18 +43,26 @@ cd /var/www/tiktok-ai-mcn-releases/<commit>
 node scripts/verify-canvas-reconciler-worker.mjs
 node scripts/verify-canvas-blue-green.mjs
 
-bash deploy/install-canvas-reconciler.sh validate \
+/bin/bash -p deploy/install-canvas-reconciler.sh validate \
   --env-file /etc/stargaze/canvas-reconciler.env \
   --url http://127.0.0.1:<candidate-port>/api/internal/canvas/reconcile
 ```
 
-`validate` 不写文件、不访问接口、不改变 PM2。它会校验 Node 20.12+（且生产严格
-小于 21）、env 文件权限、secret 形状、loopback URL 和 PM2 配置。
+`validate` 不写文件、不访问接口、不改变 PM2。它会校验精确 Node `24.18.0` 与
+PM2 `6.0.14`，并要求 Node、PM2 CLI、PM2 package tree、source release tree 的
+canonical 文件及从 `/` 开始的完整路径链均为 root 所有、无可逃逸符号链接且
+group/other 不可写；同时校验 env 文件权限、secret 形状、loopback URL 和 PM2 配置。
+真正安装前还必须独占部署锁，并用 existing-only RPC 探针证明 PM2 daemon 的 PID、
+Node/Daemon argv、启动环境和 RPC/PUB socket 身份；daemon 缺失时不会自动启动。
+所有 PM2 写命令都预加载受信 no-auto-start guard；daemon 在命令前瞬时退出也只会
+失败关闭，不会由 CLI 自动拉起替代进程。
+安装后从同一 RPC 连接验证 `node_version=24.18.0`、`exec_interpreter` 精确等于该
+受信 Node 绝对路径，并且 `node_args` 精确为 `["--"]`。
 
 一次性 cron 兼容模式：
 
 ```bash
-NODE_ENV=production node scripts/canvas-reconciler-worker.mjs \
+NODE_ENV=production node -- scripts/canvas-reconciler-worker.mjs \
   --once \
   --env-file /etc/stargaze/canvas-reconciler.env \
   --url http://127.0.0.1:<active-reconcile-port>/api/internal/canvas/reconcile \
@@ -69,7 +77,7 @@ NODE_ENV=production node scripts/canvas-reconciler-worker.mjs \
 生产发布必须显式提供稳定 secret 文件：
 
 ```bash
-bash deploy/canvas-blue-green.sh deploy \
+/bin/bash -p deploy/canvas-blue-green.sh deploy \
   --workdir /var/www/tiktok-ai-mcn-releases/<commit> \
   --candidate-port <unused-port> \
   --candidate-name stargaze-canvas-<short-commit> \
@@ -110,7 +118,7 @@ worker。后续发布不得再次携带此参数。
 回滚输入不再是单个 Nginx `.conf`，而是发布脚本输出的完整 bundle：
 
 ```bash
-bash deploy/canvas-blue-green.sh rollback \
+/bin/bash -p deploy/canvas-blue-green.sh rollback \
   --workdir /var/www/tiktok-ai-mcn-releases/<current-tooling-release> \
   --rollback-bundle /var/backups/stargaze-canvas/<exact-bundle> \
   --nginx-config /etc/nginx/sites-available/toryxai.com \

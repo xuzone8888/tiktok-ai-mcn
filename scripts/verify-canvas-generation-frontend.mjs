@@ -211,8 +211,18 @@ has(
 );
 has(
   downloadRoute,
-  'data.source !== "canvas" ||\n    data.status !== "completed"',
-  "download route accepts only completed Canvas outputs"
+  "!data ||",
+  "download route rejects missing generation rows"
+);
+has(
+  downloadRoute,
+  'data.source !== "canvas"',
+  "download route accepts only Canvas outputs"
+);
+has(
+  downloadRoute,
+  'data.status !== "completed"',
+  "download route accepts only completed outputs"
 );
 has(
   downloadRoute,

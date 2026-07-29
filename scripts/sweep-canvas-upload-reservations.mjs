@@ -27,7 +27,7 @@ const UPLOAD_KEY_RE =
 
 function usage() {
   return [
-    "Usage: node scripts/sweep-canvas-upload-reservations.mjs --env-file <path> [options]",
+    "Usage: node -- scripts/sweep-canvas-upload-reservations.mjs --env-file <path> [options]",
     "",
     "Required:",
     "  --env-file <path>               Non-symlink production env file",

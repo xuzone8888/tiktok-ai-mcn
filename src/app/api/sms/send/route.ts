@@ -9,11 +9,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { sendSmsVerificationCode, generateVerificationCode, isValidPhoneNumber } from '@/lib/aliyun-sms';
 
-// 使用 service role key 来操作数据库
-const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+function createSmsAdminClient() {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!supabaseUrl || !serviceRoleKey) {
+        throw new Error('Missing Supabase service-role configuration');
+    }
+    return createClient(supabaseUrl, serviceRoleKey);
+}
 
 // 速率限制：每个手机号每分钟最多1次
 const RATE_LIMIT_SECONDS = 60;
@@ -39,6 +42,8 @@ export async function POST(request: NextRequest) {
                 { status: 400 }
             );
         }
+
+        const supabase = createSmsAdminClient();
 
         // 检查速率限制
         const { data: recentCode } = await supabase

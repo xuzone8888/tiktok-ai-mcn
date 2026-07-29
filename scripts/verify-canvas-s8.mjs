@@ -893,18 +893,20 @@ async function main() {
   )].map((match) => ({ id: match[1], enabled: match[2] === "true" }));
   eq(toolbarEntries.map((entry) => entry.id), [
     "add-node",
+    "upload",
     "workflow",
     "assets",
     "characters",
     "history",
     "shortcuts",
     "tutorial",
-  ], "toolbar policy retains exactly seven ordered entries");
+  ], "toolbar policy retains exactly eight ordered entries");
   eq(toolbarEntries.filter((entry) => entry.enabled).map((entry) => entry.id), [
     "add-node",
+    "upload",
     "history",
     "shortcuts",
-  ], "toolbar enables only add-node/history/shortcuts");
+  ], "toolbar enables only add-node/upload/history/shortcuts");
   ok(toolbarSrc.includes("onOpenHistory: () => void"), "toolbar requires history callback");
   ok(toolbarSrc.includes('entry.id === "history"') && toolbarSrc.includes("? onOpenHistory"), "history icon routes to history callback");
   ok(toolbarSrc.includes('entry.id === "shortcuts" ? false : disabled'), "shortcuts retain read-only exemption while history follows disabled gate");

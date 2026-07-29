@@ -363,8 +363,7 @@ export function CreationWorkspace() {
     <div 
       ref={workspaceRef}
       onMouseMove={handleMouseMove}
-      className="creation-workspace group/workspace max-w-[1500px] mx-auto w-full relative pb-32 lg:pb-8 pt-4 lg:pt-8 px-4 lg:px-8
-      bg-gradient-to-br from-[#1C1C21]/90 via-[#0E0E11]/90 to-[#050505]/90 backdrop-blur-3xl rounded-[40px] shadow-[inset_0_1px_3px_rgba(255,255,255,0.05),0_8px_40px_rgba(0,0,0,0.6)] border border-white/5 overflow-hidden"
+      className="creation-workspace group/workspace max-w-[1500px] mx-auto w-full relative pb-32 lg:pb-8 pt-4 lg:pt-8 px-4 lg:px-8 bg-gradient-to-br from-[#1C1C21]/90 via-[#0E0E11]/90 to-[#050505]/90 backdrop-blur-3xl rounded-[40px] shadow-[inset_0_1px_3px_rgba(255,255,255,0.05),0_8px_40px_rgba(0,0,0,0.6)] border border-white/5 overflow-hidden"
     >
       
 

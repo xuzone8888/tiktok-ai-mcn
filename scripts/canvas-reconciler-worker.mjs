@@ -21,6 +21,7 @@ import { parseEnv } from "node:util";
 
 const RECONCILE_PATH = "/api/internal/canvas/reconcile";
 const READY_MARKER_SCHEMA = "canvas-reconciler-ready-v2";
+const REQUIRED_PRODUCTION_NODE_VERSION = "24.18.0";
 const MAX_ENV_FILE_BYTES = 1024 * 1024;
 const MAX_RESPONSE_BYTES = 64 * 1024;
 const MAX_READY_MARKER_BYTES = 4096;
@@ -47,7 +48,7 @@ const SAFE_ENV_NAMES = Object.freeze({
 
 function usage() {
   return [
-    "Usage: node scripts/canvas-reconciler-worker.mjs [options]",
+    "Usage: node -- scripts/canvas-reconciler-worker.mjs [options]",
     "",
     "Modes:",
     "  --once                  Run one cycle and exit (cron-safe)",
@@ -134,8 +135,10 @@ function parseArguments(argv) {
 
 function assertSupportedNode() {
   const [major, minor] = process.versions.node.split(".").map(Number);
-  const supported = major === 20 && minor >= 12;
-  if (process.env.NODE_ENV === "production" && !supported) {
+  if (
+    process.env.NODE_ENV === "production" &&
+    process.versions.node !== REQUIRED_PRODUCTION_NODE_VERSION
+  ) {
     throw new Error("unsupported_node_runtime");
   }
   if (major < 20 || (major === 20 && minor < 12)) {

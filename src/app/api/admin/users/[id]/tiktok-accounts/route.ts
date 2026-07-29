@@ -1,21 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+
+import { requireAdmin } from "@/lib/admin-auth";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 // ============================================================================
 // Admin API: Get User TikTok Accounts
 // ============================================================================
 
-const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
-
 export async function GET(
     request: NextRequest,
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
-        const userId = params.id;
+        const auth = await requireAdmin();
+        if (auth.error) return auth.error;
+
+        const { id: userId } = await params;
+        const supabase = createAdminClient();
 
         const { data, error } = await supabase
             .from("tiktok_accounts")
@@ -46,10 +47,15 @@ export async function GET(
         }
 
         // Add token status
-        const accountsWithStatus = (data || []).map(account => ({
-            ...account,
-            tokenExpired: new Date(account.token_expires_at) < new Date(),
-        }));
+        const accountsWithStatus = (data || []).map(account => {
+            const expiresAt = account.token_expires_at
+                ? Date.parse(account.token_expires_at)
+                : Number.NaN;
+            return {
+                ...account,
+                tokenExpired: !Number.isFinite(expiresAt) || expiresAt <= Date.now(),
+            };
+        });
 
         return NextResponse.json({
             accounts: accountsWithStatus,

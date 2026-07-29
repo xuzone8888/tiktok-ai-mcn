@@ -30,7 +30,7 @@ export type TransitionEffect =
 interface TransitionOption {
     value: TransitionEffect;
     label: string;
-    icon: React.ReactNode;
+    icon: React.ReactElement<{ className?: string }>;
 }
 
 export const TRANSITIONS: TransitionOption[] = [
@@ -92,7 +92,7 @@ export function TransitionPicker({ value, onChange }: TransitionPickerProps) {
                                 "transition-transform duration-300",
                                 isSelected ? "scale-110" : "group-hover:scale-110"
                             )}>
-                                {React.cloneElement(t.icon as React.ReactElement, {
+                                {React.cloneElement(t.icon, {
                                     className: cn(
                                         "h-5 w-5 transition-colors",
                                         isSelected ? "text-mermaid-cyan drop-shadow-[0_0_8px_rgba(0,242,234,0.8)]" : "text-white/40 group-hover:text-white/70"

@@ -8,11 +8,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-// 使用 service role key 来操作数据库
-const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+function createSmsAdminClient() {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!supabaseUrl || !serviceRoleKey) {
+        throw new Error('Missing Supabase service-role configuration');
+    }
+    return createClient(supabaseUrl, serviceRoleKey);
+}
 
 export async function POST(request: NextRequest) {
     try {
@@ -28,6 +31,7 @@ export async function POST(request: NextRequest) {
 
         // 格式化手机号
         const formattedPhone = phone.replace(/^\+?86/, '').replace(/\s/g, '');
+        const supabase = createSmsAdminClient();
 
         // 查找有效的验证码
         const { data: smsCode, error: findError } = await supabase

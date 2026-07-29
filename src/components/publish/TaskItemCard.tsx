@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, type ReactElement } from 'react'
 import Image from 'next/image'
 import { Clock, CheckCircle, XCircle, AlertTriangle, Trash2, Loader2, Play, Heart, MessageCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -108,7 +108,7 @@ export function TaskItemCard({ item, onDelete, onViewDetail }: TaskItemCardProps
         item.error_code ? `代码：${item.error_code}` : null,
         errorText,
     ].filter(Boolean).join('\n')
-    let statusNote: JSX.Element | null = null
+    let statusNote: ReactElement | null = null
     if (item.status === 'failed' && errorText) {
         statusNote = (
             <span

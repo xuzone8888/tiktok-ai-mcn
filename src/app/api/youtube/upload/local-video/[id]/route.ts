@@ -14,9 +14,9 @@ const UPLOAD_DIR = path.join('/private/tmp', 'stargaze-youtube-uploads')
 const MAX_FILE_SIZE = YOUTUBE_OFFICIAL_MAX_FILE_SIZE_BYTES
 
 interface RouteContext {
-  params: {
+  params: Promise<{
     id: string
-  }
+  }>
 }
 
 function getSigningSecret() {
@@ -102,7 +102,8 @@ async function writeRequestBody(request: NextRequest, filePath: string) {
 }
 
 export async function PUT(request: NextRequest, { params }: RouteContext) {
-  const id = safeId(decodeURIComponent(params.id))
+  const { id: rawId } = await params
+  const id = safeId(decodeURIComponent(rawId))
   if (!verifyRequest(request, id)) {
     return NextResponse.json({ success: false, error: '上传链接无效或已过期' }, { status: 403 })
   }
@@ -125,7 +126,8 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
 }
 
 export async function GET(request: NextRequest, { params }: RouteContext) {
-  const id = safeId(decodeURIComponent(params.id))
+  const { id: rawId } = await params
+  const id = safeId(decodeURIComponent(rawId))
   if (!verifyRequest(request, id)) {
     return NextResponse.json({ success: false, error: '视频链接无效或已过期' }, { status: 403 })
   }

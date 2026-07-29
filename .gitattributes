@@ -1,3 +1,11 @@
+# Production entrypoints must retain LF bytes on every developer platform.
+*.sh text eol=lf
+*.mjs text eol=lf
+*.cjs text eol=lf
+Dockerfile text eol=lf
+.nvmrc text eol=lf
+.npmrc text eol=lf
+
 # Remote execution artifacts are byte-locked. Store and check out their exact
 # reviewed bytes instead of applying core.autocrlf normalization.
 scripts/verify-canvas-p1-batch2.mjs -text whitespace=cr-at-eol
@@ -19,6 +27,11 @@ supabase/migrations/20260716_canvas_p1_lifecycle_foundation.sql -text whitespace
 supabase/migrations/20260717_canvas_p1_credit_boundary.sql -text whitespace=cr-at-eol
 supabase/migrations/20260718_canvas_p1_generation_api.sql -text whitespace=cr-at-eol
 supabase/migrations/20260719_canvas_p1_reconciliation.sql -text whitespace=cr-at-eol
+supabase/migrations/20260729_canvas_project_lifecycle.sql -text whitespace=cr-at-eol
+supabase/migrations/20260730_canvas_generation_recovery.sql -text whitespace=cr-at-eol
+supabase/migrations/20260731_canvas_runtime_health.sql -text whitespace=cr-at-eol
+supabase/migrations/20260801_canvas_upload_registry.sql -text whitespace=cr-at-eol
+supabase/migrations/20260802_canvas_upload_registry_ambiguity_fix.sql -text whitespace=cr-at-eol
 src/app/api/user/credits/deduct/route.ts text eol=lf
 src/app/api/user/credits/refund/route.ts text eol=lf
 src/app/api/sms/verify/route.ts text eol=lf

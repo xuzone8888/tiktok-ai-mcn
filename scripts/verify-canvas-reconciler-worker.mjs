@@ -18,6 +18,7 @@ import { spawn } from "node:child_process";
 import { computeBackoffDelay } from "./canvas-reconciler-worker.mjs";
 
 const worker = resolve("scripts/canvas-reconciler-worker.mjs");
+const workerRuntimeSource = readFileSync(worker, "utf8");
 const readinessProbe = resolve(
   "scripts/probe-canvas-reconciler-readiness.mjs"
 );
@@ -125,7 +126,7 @@ function waitForRequestCount(target, timeoutMs = 3_000) {
 
 function launch(argumentsList, options = {}) {
   const entry = options.entry ?? worker;
-  const child = spawn(process.execPath, [entry, ...argumentsList], {
+  const child = spawn(process.execPath, ["--", entry, ...argumentsList], {
     env: { ...process.env, NODE_ENV: "test", ...(options.env ?? {}) },
     stdio: ["ignore", "pipe", "pipe", "ipc"],
     windowsHide: true,
@@ -226,6 +227,15 @@ function assertNoSensitiveOutput(result) {
 }
 
 try {
+  assert.match(
+    workerRuntimeSource,
+    /REQUIRED_PRODUCTION_NODE_VERSION = "24\.18\.0"/u
+  );
+  assert.match(
+    workerRuntimeSource,
+    /process\.versions\.node !== REQUIRED_PRODUCTION_NODE_VERSION/u
+  );
+
   await new Promise((resolvePromise) =>
     server.listen(0, "127.0.0.1", resolvePromise)
   );

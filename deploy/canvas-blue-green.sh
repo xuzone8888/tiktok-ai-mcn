@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/bash -p
 #
 # Fail-closed blue/green release helper for StarGaze Canvas.
 #
@@ -8,9 +8,60 @@
 
 set -Eeuo pipefail
 IFS=$'\n\t'
-unset NODE_OPTIONS
+umask 077
 
-SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+case "$-" in
+  *p*) ;;
+  *)
+    echo "[FAIL] Deployer must run via its privileged /bin/bash -p entrypoint." >&2
+    exit 1
+    ;;
+esac
+
+declare -rx PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin"
+readonly STAT_BIN="/usr/bin/stat"
+readonly DIRNAME_BIN="/usr/bin/dirname"
+readonly REALPATH_BIN="/usr/bin/realpath"
+readonly SYSTEMCTL_BIN="/usr/bin/systemctl"
+readonly ENV_BIN="/usr/bin/env"
+readonly FLOCK_BIN="/usr/bin/flock"
+readonly READLINK_BIN="/usr/bin/readlink"
+readonly NPM_USER_CONFIG="/dev/null"
+readonly NPM_GLOBAL_CONFIG="/run/stargaze-canvas/npm-globalconfig-disabled"
+for helper in \
+  "${STAT_BIN}" "${DIRNAME_BIN}" "${REALPATH_BIN}" \
+  "${SYSTEMCTL_BIN}" "${ENV_BIN}" "${FLOCK_BIN}" "${READLINK_BIN}"; do
+  [[ -f "${helper}" && ! -L "${helper}" && -x "${helper}" ]] || {
+    echo "[FAIL] A required bootstrap helper is unavailable." >&2
+    exit 1
+  }
+done
+
+unset BASH_ENV ENV CDPATH GLOBIGNORE HOME LANG LD_AUDIT LD_LIBRARY_PATH \
+  LD_PRELOAD LOGNAME NODE_EXTRA_CA_CERTS NODE_ICU_DATA NODE_OPTIONS NODE_PATH \
+  NODE_REPL_EXTERNAL_MODULE OPENSSL_CONF PM2_HOME PM2_NODE_OPTIONS SSL_CERT_DIR \
+  SSL_CERT_FILE USER
+declare -rx BASH_ENV=""
+declare -rx ENV=""
+declare -rx HOME="/root"
+declare -rx LANG="C.UTF-8"
+declare -rx LD_AUDIT=""
+declare -rx LD_LIBRARY_PATH=""
+declare -rx LD_PRELOAD=""
+declare -rx LOGNAME="root"
+declare -rx NODE_EXTRA_CA_CERTS=""
+declare -rx NODE_ICU_DATA=""
+declare -rx NODE_OPTIONS=""
+declare -rx NODE_PATH=""
+declare -rx NODE_REPL_EXTERNAL_MODULE=""
+declare -rx OPENSSL_CONF=""
+declare -rx PM2_HOME="/root/.pm2"
+declare -rx PM2_NODE_OPTIONS=""
+declare -rx SSL_CERT_DIR=""
+declare -rx SSL_CERT_FILE=""
+declare -rx USER="root"
+
+SCRIPT_DIR="$(cd -- "$("${DIRNAME_BIN}" -- "${BASH_SOURCE[0]}")" && pwd -P)"
 REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 
 ACTION="plan"
@@ -32,11 +83,28 @@ RECONCILER_ENV_FILE="${CANVAS_RECONCILER_ENV_FILE:-}"
 RECONCILER_INSTALL_DIR="${CANVAS_RECONCILER_INSTALL_DIR:-/opt/stargaze-canvas-reconciler}"
 RECONCILER_LOCK_FILE="${CANVAS_RECONCILER_LOCK_FILE:-/run/stargaze-canvas-reconciler.lock}"
 RECONCILER_NAME="${CANVAS_RECONCILER_PM2_NAME:-stargaze-canvas-reconciler}"
+REQUIRED_NODE_VERSION="24.18.0"
+REQUIRED_NPM_VERSION="12.0.1"
+REQUIRED_PM2_VERSION="6.0.14"
+NODE_BIN=""
+NPM_CLI=""
+PM2_BIN=""
+PM2_PACKAGE_ROOT=""
+PM2_DAEMON_JS=""
+PM2_DAEMON_PROBE=""
+PM2_NO_AUTOSTART_GUARD=""
+PM2_DAEMON_TOKEN=""
+GIT_BIN=""
+CURL_BIN=""
+NGINX_BIN=""
+readonly DEPLOY_LOCK_FILE="/run/stargaze-canvas/deploy.lock"
+DEPLOY_LOCK_FD=""
 
 BUNDLE_TOOL=""
 HEALTH_PROBE=""
 RECONCILER_READY_PROBE=""
 BROKER_TLS_PROBE=""
+SUPPLY_CHAIN_CHECK=""
 TEMP_CONFIG=""
 RESTORE_BUNDLE=""
 SYSTEM_STATE_CHANGED=0
@@ -111,26 +179,314 @@ require_command() {
     die "Required command is unavailable: $1"
 }
 
+trusted_root_path_chain() {
+  local current="$1"
+  local mode
+  local uid
+  [[ "${current}" == /* ]] || return 1
+  while true; do
+    [[ -e "${current}" && ! -L "${current}" ]] || return 1
+    uid="$("${STAT_BIN}" -c '%u' -- "${current}")" || return 1
+    [[ "${uid}" == "0" ]] || return 1
+    mode="$("${STAT_BIN}" -c '%a' -- "${current}")" || return 1
+    [[ "${mode}" =~ ^[0-7]{3,4}$ ]] || return 1
+    (( (8#${mode} & 022) == 0 )) || return 1
+    [[ "${current}" == "/" ]] && break
+    current="$("${DIRNAME_BIN}" -- "${current}")" || return 1
+  done
+}
+
+resolve_trusted_root_executable() {
+  local command_name="$1"
+  local command_path
+  local command_parent
+  local resolved
+  command_path="$(command -v "${command_name}")" || return 1
+  [[ "${command_path}" == /* ]] || return 1
+  [[ -f "${command_path}" || -L "${command_path}" ]] || return 1
+  command_parent="$(
+    "${REALPATH_BIN}" -e -- "$("${DIRNAME_BIN}" -- "${command_path}")"
+  )" ||
+    return 1
+  trusted_root_path_chain "${command_parent}" || return 1
+  if [[ -L "${command_path}" ]]; then
+    [[ "$("${STAT_BIN}" -c '%u' -- "${command_path}")" == "0" ]] || return 1
+  fi
+  resolved="$("${REALPATH_BIN}" -e -- "${command_path}")" || return 1
+  [[ "${resolved}" == /* && -f "${resolved}" && ! -L "${resolved}" && -x "${resolved}" ]] ||
+    return 1
+  trusted_root_path_chain "${resolved}" || return 1
+  printf '%s' "${resolved}"
+}
+
+pin_trusted_command() {
+  local command_name="$1"
+  local resolved
+  resolved="$(resolve_trusted_root_executable "${command_name}")" || return 1
+  hash -p "${resolved}" "${command_name}" || return 1
+}
+
+prepare_trusted_root_directory() {
+  local directory="$1"
+  local expected_mode="$2"
+  local parent
+  local normalized_mode="${expected_mode#0}"
+
+  [[ "${directory}" == /* && "${directory}" != "/" ]] || return 1
+  [[ "${directory}" =~ ^/[A-Za-z0-9_./-]+$ ]] || return 1
+  if [[ -e "${directory}" || -L "${directory}" ]]; then
+    [[ -d "${directory}" && ! -L "${directory}" ]] || return 1
+    [[ "$("${REALPATH_BIN}" -e -- "${directory}")" == "${directory}" ]] ||
+      return 1
+    trusted_root_path_chain "${directory}" || return 1
+    [[ "$("${STAT_BIN}" -c '%a' -- "${directory}")" == "${normalized_mode}" ]] ||
+      return 1
+    return 0
+  fi
+
+  parent="$("${DIRNAME_BIN}" -- "${directory}")" || return 1
+  [[ -d "${parent}" && ! -L "${parent}" ]] || return 1
+  [[ "$("${REALPATH_BIN}" -e -- "${parent}")" == "${parent}" ]] || return 1
+  [[ "$("${REALPATH_BIN}" -m -- "${directory}")" == "${directory}" ]] || return 1
+  trusted_root_path_chain "${parent}" || return 1
+  mkdir --mode="${expected_mode}" -- "${directory}" || return 1
+  trusted_root_path_chain "${directory}" || return 1
+  [[ "$("${STAT_BIN}" -c '%a' -- "${directory}")" == "${normalized_mode}" ]]
+}
+
+assert_disabled_npm_config_paths() {
+  local user_config_parent
+  local global_config_parent
+
+  [[ -c "${NPM_USER_CONFIG}" && ! -L "${NPM_USER_CONFIG}" ]] || return 1
+  [[ "$("${REALPATH_BIN}" -e -- "${NPM_USER_CONFIG}")" == "${NPM_USER_CONFIG}" ]] ||
+    return 1
+  [[ "$("${STAT_BIN}" -c '%u:%g' -- "${NPM_USER_CONFIG}")" == "0:0" ]] ||
+    return 1
+  user_config_parent="$("${DIRNAME_BIN}" -- "${NPM_USER_CONFIG}")" || return 1
+  trusted_root_path_chain "${user_config_parent}" || return 1
+
+  global_config_parent="$("${DIRNAME_BIN}" -- "${NPM_GLOBAL_CONFIG}")" ||
+    return 1
+  [[ -d "${global_config_parent}" && ! -L "${global_config_parent}" ]] ||
+    return 1
+  [[ "$("${REALPATH_BIN}" -e -- "${global_config_parent}")" == \
+    "${global_config_parent}" ]] || return 1
+  [[ "$("${REALPATH_BIN}" -m -- "${NPM_GLOBAL_CONFIG}")" == \
+    "${NPM_GLOBAL_CONFIG}" ]] || return 1
+  trusted_root_path_chain "${global_config_parent}" || return 1
+  [[ ! -e "${NPM_GLOBAL_CONFIG}" && ! -L "${NPM_GLOBAL_CONFIG}" ]]
+}
+
+trusted_root_release_tree() {
+  local root="$1"
+  "${NODE_BIN}" -e '
+    const { lstatSync, readdirSync, realpathSync } = require("node:fs");
+    const { join, sep } = require("node:path");
+    const requested = process.argv[1];
+    try {
+      const root = realpathSync(requested);
+      if (root !== requested) process.exit(1);
+      const prefix = root.endsWith(sep) ? root : `${root}${sep}`;
+      const pending = [root];
+      const visited = new Set();
+      while (pending.length > 0) {
+        const current = pending.pop();
+        const entry = lstatSync(current);
+        if (entry.isSymbolicLink()) {
+          if (entry.uid !== 0) process.exit(1);
+          const target = realpathSync(current);
+          if (target !== root && !target.startsWith(prefix)) process.exit(1);
+          pending.push(target);
+          continue;
+        }
+        const identity = `${entry.dev}:${entry.ino}`;
+        if (visited.has(identity)) continue;
+        visited.add(identity);
+        if (entry.uid !== 0 || (entry.mode & 0o022) !== 0) process.exit(1);
+        if (entry.isDirectory()) {
+          for (const name of readdirSync(current)) {
+            pending.push(join(current, name));
+          }
+        } else if (!entry.isFile()) {
+          process.exit(1);
+        }
+      }
+    } catch {
+      process.exit(1);
+    }
+  ' "${root}"
+}
+
+read_trusted_pm2_version() {
+  local package_json="${PM2_PACKAGE_ROOT}/package.json"
+  [[ -n "${PM2_PACKAGE_ROOT}" ]] || return 1
+  [[ -f "${package_json}" && ! -L "${package_json}" ]] || return 1
+  trusted_root_path_chain "${package_json}" || return 1
+  "${NODE_BIN}" -e '
+    const fs = require("node:fs");
+    try {
+      const metadata = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+      if (
+        metadata.name !== "pm2" ||
+        typeof metadata.version !== "string" ||
+        !/^[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$/.test(metadata.version)
+      ) process.exit(1);
+      process.stdout.write(metadata.version);
+    } catch {
+      process.exit(1);
+    }
+  ' "${package_json}"
+}
+
 run_pm2_with_clean_environment() {
-  local pm2_home="${PM2_HOME:-${HOME:-/root}/.pm2}"
   local variable_name
   local -a pm2_environment_command=(
-    env -i
-    "PATH=${PATH:-/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin}" \
-    "HOME=${HOME:-/root}" \
-    "USER=${USER:-root}" \
-    "LOGNAME=${LOGNAME:-root}" \
-    "LANG=${LANG:-C.UTF-8}" \
-    "PM2_HOME=${pm2_home}"
+    "${ENV_BIN}" -i
+    "PATH=${PATH}"
+    "HOME=${HOME}"
+    "USER=${USER}"
+    "LOGNAME=${LOGNAME}"
+    "LANG=${LANG}"
+    "PM2_HOME=${PM2_HOME}"
+    "PM2_PROGRAMMATIC=true"
+    "PM2_NO_INTERACTION=true"
+    "STARGAZE_PM2_PACKAGE_ROOT=${PM2_PACKAGE_ROOT}"
   )
   for variable_name in \
     CANVAS_PM2_NAME CANVAS_APP_DIR CANVAS_PORT CANVAS_ENV_FILE \
-    CANVAS_RECONCILER_SETTINGS_FILE; do
+    CANVAS_NODE_BIN CANVAS_RECONCILER_SETTINGS_FILE; do
     if [[ -v "${variable_name}" && -n "${!variable_name}" ]]; then
       pm2_environment_command+=("${variable_name}=${!variable_name}")
     fi
   done
   "${pm2_environment_command[@]}" "$@"
+}
+
+run_pm2_gate_with_clean_environment() {
+  "${ENV_BIN}" -i \
+    "PATH=${PATH}" \
+    "HOME=${HOME}" \
+    "USER=${USER}" \
+    "LOGNAME=${LOGNAME}" \
+    "LANG=${LANG}" \
+    "PM2_HOME=${PM2_HOME}" \
+    "PM2_PROGRAMMATIC=true" \
+    "PM2_NO_INTERACTION=true" \
+    "$@"
+}
+
+probe_existing_pm2_daemon() {
+  local mode="$1"
+  local expected_token="${2:-}"
+  local -a arguments=(
+    --pm2-package-root "${PM2_PACKAGE_ROOT}"
+    --node-bin "${NODE_BIN}"
+    --daemon-js "${PM2_DAEMON_JS}"
+    --pm2-home "${PM2_HOME}"
+    --expected-pm2-version "${REQUIRED_PM2_VERSION}"
+    --expected-node-version "${REQUIRED_NODE_VERSION}"
+    --mode "${mode}"
+  )
+  if [[ -n "${expected_token}" ]]; then
+    arguments+=(--expected-token "${expected_token}")
+  fi
+  run_pm2_gate_with_clean_environment \
+    "${NODE_BIN}" -- "${PM2_DAEMON_PROBE}" "${arguments[@]}"
+}
+
+pm2_existing_jlist() {
+  [[ -n "${PM2_DAEMON_TOKEN}" ]] || return 1
+  probe_existing_pm2_daemon jlist "${PM2_DAEMON_TOKEN}"
+}
+
+run_trusted_pm2() {
+  local before_token
+  local after_token
+  local command_status
+
+  [[ -n "${PM2_DAEMON_TOKEN}" ]] || return 1
+  before_token="$(
+    probe_existing_pm2_daemon token "${PM2_DAEMON_TOKEN}"
+  )" || return 1
+  [[ "${before_token}" == "${PM2_DAEMON_TOKEN}" ]] || return 1
+
+  if run_pm2_with_clean_environment \
+    "${NODE_BIN}" --require "${PM2_NO_AUTOSTART_GUARD}" -- \
+    "${PM2_BIN}" "$@"; then
+    command_status=0
+  else
+    command_status=$?
+  fi
+
+  after_token="$(
+    probe_existing_pm2_daemon token "${before_token}"
+  )" || return 1
+  [[ "${after_token}" == "${before_token}" ]] || return 1
+  return "${command_status}"
+}
+
+acquire_deploy_lock() {
+  local inherited_fd="${CANVAS_DEPLOY_LOCK_FD:-}"
+  local fd_metadata
+  local fd_path
+  local lock_metadata
+  local lock_parent
+  local resolved_fd_path
+
+  lock_parent="$("${DIRNAME_BIN}" -- "${DEPLOY_LOCK_FILE}")" || return 1
+  prepare_trusted_root_directory "${lock_parent}" 0700 || return 1
+
+  if [[ -n "${inherited_fd}" ]]; then
+    [[ "${inherited_fd}" =~ ^[1-9][0-9]*$ ]] || return 1
+    fd_path="/proc/self/fd/${inherited_fd}"
+    [[ -f "${fd_path}" ]] || return 1
+    resolved_fd_path="$(
+      "${READLINK_BIN}" -f -- "${fd_path}"
+    )" || return 1
+    [[ "${resolved_fd_path}" == "${DEPLOY_LOCK_FILE}" ]] || return 1
+    [[ -f "${DEPLOY_LOCK_FILE}" && ! -L "${DEPLOY_LOCK_FILE}" ]] || return 1
+    [[ "$("${REALPATH_BIN}" -e -- "${DEPLOY_LOCK_FILE}")" == "${DEPLOY_LOCK_FILE}" ]] ||
+      return 1
+    trusted_root_path_chain "${DEPLOY_LOCK_FILE}" || return 1
+    lock_metadata="$(
+      "${STAT_BIN}" -Lc '%d:%i:%u:%g:%a:%h' -- "${DEPLOY_LOCK_FILE}"
+    )" || return 1
+    fd_metadata="$(
+      "${STAT_BIN}" -Lc '%d:%i:%u:%g:%a:%h' -- "${fd_path}"
+    )" || return 1
+    [[ "${lock_metadata}" =~ ^[0-9]+:[0-9]+:0:0:600:1$ ]] || return 1
+    [[ "${fd_metadata}" == "${lock_metadata}" ]] || return 1
+    "${FLOCK_BIN}" --exclusive --nonblock "${inherited_fd}" || return 1
+    DEPLOY_LOCK_FD="${inherited_fd}"
+  else
+    if [[ -e "${DEPLOY_LOCK_FILE}" || -L "${DEPLOY_LOCK_FILE}" ]]; then
+      [[ -f "${DEPLOY_LOCK_FILE}" && ! -L "${DEPLOY_LOCK_FILE}" ]] || return 1
+      [[ "$("${REALPATH_BIN}" -e -- "${DEPLOY_LOCK_FILE}")" == "${DEPLOY_LOCK_FILE}" ]] ||
+        return 1
+      trusted_root_path_chain "${DEPLOY_LOCK_FILE}" || return 1
+      [[ "$("${STAT_BIN}" -c '%u:%g:%a:%h' -- "${DEPLOY_LOCK_FILE}")" == "0:0:600:1" ]] ||
+        return 1
+    fi
+    exec 9>"${DEPLOY_LOCK_FILE}" || return 1
+    DEPLOY_LOCK_FD="9"
+    chmod 0600 -- "${DEPLOY_LOCK_FILE}" || return 1
+    chown 0:0 -- "${DEPLOY_LOCK_FILE}" || return 1
+    [[ "$("${STAT_BIN}" -c '%u:%g:%a:%h' -- "${DEPLOY_LOCK_FILE}")" == "0:0:600:1" ]] ||
+      return 1
+    fd_path="/proc/self/fd/${DEPLOY_LOCK_FD}"
+    [[ -f "${fd_path}" ]] || return 1
+    lock_metadata="$(
+      "${STAT_BIN}" -Lc '%d:%i:%u:%g:%a:%h' -- "${DEPLOY_LOCK_FILE}"
+    )" || return 1
+    fd_metadata="$(
+      "${STAT_BIN}" -Lc '%d:%i:%u:%g:%a:%h' -- "${fd_path}"
+    )" || return 1
+    [[ "${fd_metadata}" == "${lock_metadata}" ]] || return 1
+    "${FLOCK_BIN}" --exclusive --nonblock "${DEPLOY_LOCK_FD}" || return 1
+  fi
+
+  export CANVAS_DEPLOY_LOCK_FD="${DEPLOY_LOCK_FD}"
 }
 
 canvas_upload_sweeper_is_stopped() {
@@ -141,25 +497,25 @@ canvas_upload_sweeper_is_stopped() {
   local service_active_state
 
   timer_load_state="$(
-    systemctl show \
+    "${SYSTEMCTL_BIN}" show \
       --property=LoadState \
       --value \
       stargaze-canvas-upload-sweeper.timer 2>/dev/null
   )" || return 1
   timer_active_state="$(
-    systemctl show \
+    "${SYSTEMCTL_BIN}" show \
       --property=ActiveState \
       --value \
       stargaze-canvas-upload-sweeper.timer 2>/dev/null
   )" || return 1
   service_load_state="$(
-    systemctl show \
+    "${SYSTEMCTL_BIN}" show \
       --property=LoadState \
       --value \
       stargaze-canvas-upload-sweeper.service 2>/dev/null
   )" || return 1
   service_active_state="$(
-    systemctl show \
+    "${SYSTEMCTL_BIN}" show \
       --property=ActiveState \
       --value \
       stargaze-canvas-upload-sweeper.service 2>/dev/null
@@ -172,7 +528,7 @@ canvas_upload_sweeper_is_stopped() {
   [[ "${timer_load_state}" == "loaded" ]] || return 1
   [[ "${timer_active_state}" =~ ^(inactive|failed)$ ]] || return 1
   timer_unit_file_state="$(
-    systemctl show \
+    "${SYSTEMCTL_BIN}" show \
       --property=UnitFileState \
       --value \
       stargaze-canvas-upload-sweeper.timer 2>/dev/null
@@ -221,7 +577,7 @@ assert_single_proxy_target() {
 
 assert_internal_canvas_denied() {
   local file="$1"
-  if ! node -e '
+  if ! "${NODE_BIN}" -e '
     const fs = require("node:fs");
     const source = fs.readFileSync(process.argv[1], "utf8")
       .split(/\r?\n/)
@@ -277,12 +633,12 @@ assert_internal_canvas_denied() {
 
 assert_public_canvas_url() {
   local value="$1"
-  node -e '
+  "${NODE_BIN}" -e '
     try {
       const url = new URL(process.argv[1]);
       const valid =
         url.protocol === "https:" &&
-        ["www.toryxai.com", "toryxai.com"].includes(url.hostname) &&
+        url.hostname === "www.toryxai.com" &&
         url.port === "" &&
         url.pathname === "/canvas" &&
         !url.username &&
@@ -304,13 +660,20 @@ page_is_healthy() {
 
   for ((attempt = 1; attempt <= attempts; attempt += 1)); do
     code="$(
-      curl --silent --show-error --output /dev/null \
-        --connect-timeout 3 --max-time 10 \
-        --header 'Cache-Control: no-cache' \
-        --write-out '%{http_code}' "${url}" 2>/dev/null || true
+      "${ENV_BIN}" -i \
+        "PATH=${PATH}" \
+        "HOME=${HOME}" \
+        "USER=${USER}" \
+        "LOGNAME=${LOGNAME}" \
+        "LANG=${LANG}" \
+        "${CURL_BIN}" --disable --noproxy '*' \
+          --silent --show-error --output /dev/null \
+          --connect-timeout 3 --max-time 10 \
+          --header 'Cache-Control: no-cache' \
+          --write-out '%{http_code}' "${url}" 2>/dev/null || true
     )"
-    if [[ "${code}" =~ ^[23][0-9][0-9]$ ]]; then
-      echo "[OK] ${label} responded with HTTP ${code}"
+    if [[ "${code}" == "200" ]]; then
+      echo "[OK] ${label} responded with HTTP 200"
       return 0
     fi
     if ((attempt < attempts)); then
@@ -318,7 +681,7 @@ page_is_healthy() {
     fi
   done
 
-  echo "[FAIL] ${label} did not return HTTP 2xx/3xx" >&2
+  echo "[FAIL] ${label} did not return HTTP 200" >&2
   return 1
 }
 
@@ -327,7 +690,7 @@ probe_internal_health() {
   local env_file="$2"
   local port="$3"
   local attempts="${4:-${HEALTH_ATTEMPTS}}"
-  NODE_ENV=production node "${HEALTH_PROBE}" \
+  NODE_ENV=production "${NODE_BIN}" -- "${HEALTH_PROBE}" \
     --root "${root}" \
     --env-file "${env_file}" \
     --url "http://127.0.0.1:${port}/api/internal/canvas/health" \
@@ -337,8 +700,8 @@ probe_internal_health() {
 
 pm2_name_is_absent() {
   local name="$1"
-  pm2 jlist 2>/dev/null |
-    node -e '
+  pm2_existing_jlist 2>/dev/null |
+    "${NODE_BIN}" -e '
       let input = "";
       process.stdin.setEncoding("utf8");
       process.stdin.on("data", (chunk) => { input += chunk; });
@@ -357,8 +720,8 @@ pm2_name_is_absent() {
 
 pm2_web_identity_for_port() {
   local port="$1"
-  pm2 jlist 2>/dev/null |
-    node -e '
+  pm2_existing_jlist 2>/dev/null |
+    "${NODE_BIN}" -e '
       const path = require("node:path");
       let input = "";
       process.stdin.setEncoding("utf8");
@@ -393,14 +756,17 @@ pm2_web_is_online() {
   local name="$1"
   local port="$2"
   local cwd="$3"
-  pm2 jlist 2>/dev/null |
-    node -e '
+  local expected_node_bin="${4:-}"
+  local expected_node_version="${5:-}"
+  pm2_existing_jlist 2>/dev/null |
+    "${NODE_BIN}" -e '
       const path = require("node:path");
       let input = "";
       process.stdin.setEncoding("utf8");
       process.stdin.on("data", (chunk) => { input += chunk; });
       process.stdin.on("end", () => {
-        const [name, port, cwd] = process.argv.slice(1);
+        const [name, port, cwd, expectedNodeBin, expectedNodeVersion] =
+          process.argv.slice(1);
         try {
           const matches = JSON.parse(input).filter((entry) =>
             entry.name === name &&
@@ -408,20 +774,26 @@ pm2_web_is_online() {
             entry.pm2_env?.exec_mode === "fork_mode" &&
             String(entry.pm2_env?.env?.PORT ?? entry.pm2_env?.PORT ?? "") === port &&
             entry.pm2_env?.pm_cwd === cwd &&
-            path.isAbsolute(entry.pm2_env?.env?.NODE_EXTRA_CA_CERTS ?? "")
+            path.isAbsolute(entry.pm2_env?.env?.NODE_EXTRA_CA_CERTS ?? "") &&
+            ((!expectedNodeBin && !expectedNodeVersion) ||
+              (entry.pm2_env?.exec_interpreter === expectedNodeBin &&
+                entry.pm2_env?.node_version === expectedNodeVersion &&
+                Array.isArray(entry.pm2_env?.node_args) &&
+                JSON.stringify(entry.pm2_env.node_args) === "[\"--\"]"))
           );
           process.exit(matches.length === 1 ? 0 : 1);
         } catch {
           process.exit(2);
         }
       });
-    ' "${name}" "${port}" "${cwd}"
+    ' "${name}" "${port}" "${cwd}" \
+      "${expected_node_bin}" "${expected_node_version}"
 }
 
 pm2_worker_is_absent_once() {
   local name="$1"
-  pm2 jlist 2>/dev/null |
-    node -e '
+  pm2_existing_jlist 2>/dev/null |
+    "${NODE_BIN}" -e '
       let input = "";
       process.stdin.setEncoding("utf8");
       process.stdin.on("data", (chunk) => { input += chunk; });
@@ -438,15 +810,45 @@ pm2_worker_is_absent_once() {
     ' "${name}"
 }
 
+pm2_worker_runtime_is_exact_from_json() {
+  local name="$1"
+  local expected_node_bin="$2"
+  local expected_node_version="$3"
+  "${NODE_BIN}" -e '
+    let input = "";
+    process.stdin.setEncoding("utf8");
+    process.stdin.on("data", (chunk) => { input += chunk; });
+    process.stdin.on("end", () => {
+      const [name, expectedNodeBin, expectedNodeVersion] = process.argv.slice(1);
+      try {
+        const matches = JSON.parse(input).filter(
+          (entry) =>
+            entry.name === name &&
+            entry.pm2_env?.exec_interpreter === expectedNodeBin &&
+            entry.pm2_env?.node_version === expectedNodeVersion &&
+            Array.isArray(entry.pm2_env?.node_args) &&
+            JSON.stringify(entry.pm2_env.node_args) === "[\"--\"]"
+        );
+        process.exit(matches.length === 1 ? 0 : 1);
+      } catch {
+        process.exit(2);
+      }
+    });
+  ' "${name}" "${expected_node_bin}" "${expected_node_version}"
+}
+
 pm2_worker_state() {
   local name="$1"
   local script="$2"
+  local expected_node_bin="${3:-}"
+  local expected_node_version="${4:-}"
   local pm2_state
+  local second_pm2_state
   local first_identity
   local second_identity
-  pm2_state="$(pm2 jlist 2>/dev/null)" || return 1
+  pm2_state="$(pm2_existing_jlist 2>/dev/null)" || return 1
   if printf '%s' "${pm2_state}" |
-    node -e '
+    "${NODE_BIN}" -e '
       let input = "";
       process.stdin.setEncoding("utf8");
       process.stdin.on("data", (chunk) => { input += chunk; });
@@ -468,9 +870,17 @@ pm2_worker_state() {
     echo "absent"
     return 0
   fi
+  if [[ -n "${expected_node_bin}" || -n "${expected_node_version}" ]]; then
+    [[ -n "${expected_node_bin}" && -n "${expected_node_version}" ]] ||
+      return 1
+    printf '%s' "${pm2_state}" |
+      pm2_worker_runtime_is_exact_from_json \
+        "${name}" "${expected_node_bin}" "${expected_node_version}" ||
+      return 1
+  fi
   first_identity="$(
     printf '%s' "${pm2_state}" |
-    node "${RECONCILER_READY_PROBE}" \
+    "${NODE_BIN}" -- "${RECONCILER_READY_PROBE}" \
       --name "${name}" \
       --script "${script}" \
       --lock-file "${RECONCILER_LOCK_FILE}"
@@ -478,9 +888,16 @@ pm2_worker_state() {
     return 1
   [[ -n "${first_identity}" ]] || return 1
   sleep 1
+  second_pm2_state="$(pm2_existing_jlist 2>/dev/null)" || return 1
+  if [[ -n "${expected_node_bin}" ]]; then
+    printf '%s' "${second_pm2_state}" |
+      pm2_worker_runtime_is_exact_from_json \
+        "${name}" "${expected_node_bin}" "${expected_node_version}" ||
+      return 1
+  fi
   second_identity="$(
-    pm2 jlist 2>/dev/null |
-      node "${RECONCILER_READY_PROBE}" \
+    printf '%s' "${second_pm2_state}" |
+      "${NODE_BIN}" -- "${RECONCILER_READY_PROBE}" \
         --name "${name}" \
         --script "${script}" \
         --lock-file "${RECONCILER_LOCK_FILE}"
@@ -498,10 +915,14 @@ pm2_worker_is_absent() {
 }
 
 pm2_single_worker_is_online() {
+  local expected_node_bin="${1:-}"
+  local expected_node_version="${2:-}"
   [[ "$(
     pm2_worker_state \
       "${RECONCILER_NAME}" \
-      "${RECONCILER_INSTALL_DIR}/canvas-reconciler-worker.mjs"
+      "${RECONCILER_INSTALL_DIR}/canvas-reconciler-worker.mjs" \
+      "${expected_node_bin}" \
+      "${expected_node_version}"
   )" == "present" ]]
 }
 
@@ -517,7 +938,7 @@ verify_bundle() {
   local bundle="$1"
   local -a common
   mapfile -t common < <(bundle_common_arguments)
-  node "${BUNDLE_TOOL}" verify \
+  "${NODE_BIN}" -- "${BUNDLE_TOOL}" verify \
     --bundle-dir "${bundle}" \
     "${common[@]}"
 }
@@ -528,7 +949,7 @@ load_bundle_state() {
   local -a common fields
   mapfile -t common < <(bundle_common_arguments)
   output="$(
-    node "${BUNDLE_TOOL}" inspect \
+    "${NODE_BIN}" -- "${BUNDLE_TOOL}" inspect \
       --bundle-dir "${bundle}" \
       "${common[@]}"
   )" || return 1
@@ -555,10 +976,12 @@ create_state_bundle() {
   worker_state="$(
     pm2_worker_state \
       "${RECONCILER_NAME}" \
-      "${RECONCILER_INSTALL_DIR}/canvas-reconciler-worker.mjs"
+      "${RECONCILER_INSTALL_DIR}/canvas-reconciler-worker.mjs" \
+      "${NODE_BIN}" \
+      "${REQUIRED_NODE_VERSION}"
   )" || return 1
 
-  node "${BUNDLE_TOOL}" create \
+  "${NODE_BIN}" -- "${BUNDLE_TOOL}" create \
     --bundle-dir "${bundle}" \
     --rollback-dir "${ROLLBACK_DIR}" \
     --nginx-config "${NGINX_CONFIG}" \
@@ -583,23 +1006,24 @@ restore_worker_from_bundle() {
   load_bundle_state "${bundle}" || return 1
   expected_process_state="${TARGET_WORKER_PRESENT}"
   if [[ "${expected_process_state}" == "false" ]]; then
-    pm2 delete "${RECONCILER_NAME}" >/dev/null 2>&1 || true
+    run_trusted_pm2 delete "${RECONCILER_NAME}" >/dev/null 2>&1 || true
   fi
   mapfile -t common < <(bundle_common_arguments)
   restored_state="$(
-    node "${BUNDLE_TOOL}" restore-worker \
+    "${NODE_BIN}" -- "${BUNDLE_TOOL}" restore-worker \
       --bundle-dir "${bundle}" \
       "${common[@]}"
   )" || return 1
 
   if [[ "${restored_state}" == "present" ]]; then
     CANVAS_RECONCILER_SETTINGS_FILE="${RECONCILER_INSTALL_DIR}/canvas-reconciler.settings.json" \
-      run_pm2_with_clean_environment \
-        "$(command -v pm2)" startOrReload \
+    CANVAS_NODE_BIN="${NODE_BIN}" \
+      run_trusted_pm2 startOrReload \
         "${RECONCILER_INSTALL_DIR}/ecosystem.canvas-reconciler.config.cjs" \
         --only "${RECONCILER_NAME}" --update-env ||
       return 1
-    pm2_single_worker_is_online || return 1
+    pm2_single_worker_is_online "${NODE_BIN}" "${REQUIRED_NODE_VERSION}" ||
+      return 1
   elif [[ "${restored_state}" == "absent" ]]; then
     pm2_worker_is_absent "${RECONCILER_NAME}"
   else
@@ -612,36 +1036,35 @@ restore_nginx_from_bundle() {
   local bundle="$1"
   local -a common
   mapfile -t common < <(bundle_common_arguments)
-  node "${BUNDLE_TOOL}" restore-nginx \
+  "${NODE_BIN}" -- "${BUNDLE_TOOL}" restore-nginx \
     --bundle-dir "${bundle}" \
     "${common[@]}" ||
     return 1
   assert_single_proxy_target "${NGINX_CONFIG}" || return 1
   assert_internal_canvas_denied "${NGINX_CONFIG}" || return 1
-  nginx -t || return 1
-  nginx -s reload || return 1
+  "${NGINX_BIN}" -t || return 1
+  "${NGINX_BIN}" -s reload || return 1
 }
 
 restore_system_from_bundle() {
   local bundle="$1"
-  if ! restore_worker_from_bundle "${bundle}"; then
-    echo "[CRITICAL] Worker restoration failed." >&2
-    return 1
-  fi
+  local restore_status=0
+
   if ! restore_nginx_from_bundle "${bundle}"; then
     echo "[CRITICAL] Nginx restoration failed." >&2
-    return 1
+    restore_status=1
   fi
-  if ! pm2 save >/dev/null; then
-    echo "[CRITICAL] Restored PM2 state could not be saved." >&2
-    return 1
+  if ! restore_worker_from_bundle "${bundle}"; then
+    echo "[CRITICAL] Worker restoration failed." >&2
+    restore_status=1
   fi
+  return "${restore_status}"
 }
 
 switch_nginx_to_port() {
   local port="$1"
   local config_dir
-  config_dir="$(dirname -- "${NGINX_CONFIG}")"
+  config_dir="$("${DIRNAME_BIN}" -- "${NGINX_CONFIG}")"
   TEMP_CONFIG="$(mktemp "${config_dir}/.canvas-cutover.XXXXXX")"
   sed -E \
     "s#(proxy_pass[[:space:]]+http://127\\.0\\.0\\.1:)[0-9]+;#\\1${port};#" \
@@ -652,15 +1075,18 @@ switch_nginx_to_port() {
   assert_internal_canvas_denied "${TEMP_CONFIG}"
   [[ "$(proxy_target_port "${TEMP_CONFIG}")" == "${port}" ]] ||
     die "Generated Nginx config does not target the requested port"
+  SYSTEM_STATE_CHANGED=1
   mv -f -- "${TEMP_CONFIG}" "${NGINX_CONFIG}"
   TEMP_CONFIG=""
-  nginx -t
-  nginx -s reload
+  "${NGINX_BIN}" -t
+  "${NGINX_BIN}" -s reload
 }
 
 on_exit() {
   local status=$?
+  local candidate_cleanup_ok=1
   trap - EXIT
+  set +e
 
   if [[ -n "${TEMP_CONFIG}" && -e "${TEMP_CONFIG}" ]]; then
     rm -f -- "${TEMP_CONFIG}"
@@ -684,7 +1110,24 @@ on_exit() {
     CANDIDATE_STARTED == 1 &&
     (SYSTEM_STATE_CHANGED == 0 || AUTO_RESTORE_SUCCEEDED == 1)
   )); then
-    pm2 stop "${CANDIDATE_NAME}" >/dev/null 2>&1 || true
+    run_trusted_pm2 delete "${CANDIDATE_NAME}" >/dev/null 2>&1 ||
+      pm2_name_is_absent "${CANDIDATE_NAME}" >/dev/null 2>&1
+    if ! pm2_name_is_absent "${CANDIDATE_NAME}" >/dev/null 2>&1; then
+      echo "[CRITICAL] Failed candidate could not be deleted from PM2." >&2
+      candidate_cleanup_ok=0
+    fi
+  fi
+  if ((
+    status != 0 &&
+    candidate_cleanup_ok == 1 &&
+    (
+      (SYSTEM_STATE_CHANGED == 1 && AUTO_RESTORE_SUCCEEDED == 1) ||
+      (SYSTEM_STATE_CHANGED == 0 && CANDIDATE_STARTED == 1)
+    )
+  )); then
+    if ! run_trusted_pm2 save >/dev/null 2>&1; then
+      echo "[CRITICAL] Final restored PM2 state could not be saved." >&2
+    fi
   fi
   exit "${status}"
 }
@@ -794,6 +1237,9 @@ BUNDLE_TOOL="${CANDIDATE_DIR}/scripts/canvas-rollback-bundle.mjs"
 HEALTH_PROBE="${CANDIDATE_DIR}/scripts/probe-canvas-internal-health.mjs"
 RECONCILER_READY_PROBE="${CANDIDATE_DIR}/scripts/probe-canvas-reconciler-readiness.mjs"
 BROKER_TLS_PROBE="${CANDIDATE_DIR}/scripts/probe-oauth-broker-tls.mjs"
+SUPPLY_CHAIN_CHECK="${CANDIDATE_DIR}/scripts/verify-production-supply-chain.mjs"
+PM2_DAEMON_PROBE="${CANDIDATE_DIR}/scripts/probe-existing-pm2-daemon.mjs"
+PM2_NO_AUTOSTART_GUARD="${CANDIDATE_DIR}/scripts/pm2-existing-daemon-only.cjs"
 
 echo "Canvas blue/green release plan"
 echo "  action: ${ACTION}"
@@ -824,49 +1270,117 @@ fi
 
 ((EUID == 0)) ||
   die "Executed transitions must run as the production root PM2/Nginx owner"
-assert_public_canvas_url "${PUBLIC_HEALTH_URL}" ||
-  die "--public-health-url must be an exact http(s) /canvas URL without credentials, query, or fragment"
 
-for command in node npm curl nginx pm2 env grep sed head tail sleep mktemp cp mv chmod chown mkdir date dirname bash realpath stat systemctl; do
+for command in node npm curl nginx git pm2 grep sed head tail sleep mktemp cp mv chmod chown mkdir date rm; do
   require_command "${command}"
 done
-node -e '
-  const [major, minor] = process.versions.node.split(".").map(Number);
-  if (major !== 20 || minor < 12) process.exit(1);
-' || die "Node >=20.12 and <21 is required"
-pm2_version="$(pm2 -v | tail -n 1)"
-node -e '
-  const [major, minor] = process.argv[1].split(".").map(Number);
-  if (!Number.isInteger(major) || !Number.isInteger(minor) ||
-      major < 4 || (major === 4 && minor < 3)) process.exit(1);
-' "${pm2_version}" || die "PM2 >=4.3 is required"
+NODE_BIN="$(resolve_trusted_root_executable node)" ||
+  die "Node must resolve through a fully trusted root-owned path chain"
+NPM_CLI="$(resolve_trusted_root_executable npm)" ||
+  die "npm must resolve through a fully trusted root-owned path chain"
+PM2_BIN="$(resolve_trusted_root_executable pm2)" ||
+  die "PM2 must resolve through a fully trusted root-owned path chain"
+GIT_BIN="$(resolve_trusted_root_executable git)" ||
+  die "Git must resolve through a fully trusted root-owned path chain"
+CURL_BIN="$(resolve_trusted_root_executable curl)" ||
+  die "curl must resolve through a fully trusted root-owned path chain"
+NGINX_BIN="$(resolve_trusted_root_executable nginx)" ||
+  die "Nginx must resolve through a fully trusted root-owned path chain"
+for command in grep sed head tail sleep mktemp cp mv chmod chown mkdir date rm; do
+  pin_trusted_command "${command}" ||
+    die "${command} must resolve through a fully trusted root-owned path chain"
+done
+NODE_VERSION="$("${NODE_BIN}" -p "process.versions.node")"
+[[ "${NODE_VERSION}" == "${REQUIRED_NODE_VERSION}" ]] ||
+  die "Node ${REQUIRED_NODE_VERSION} is required"
+NPM_VERSION="$("${NODE_BIN}" -- "${NPM_CLI}" --version)"
+[[ "${NPM_VERSION}" == "${REQUIRED_NPM_VERSION}" ]] ||
+  die "npm ${REQUIRED_NPM_VERSION} is required"
+assert_public_canvas_url "${PUBLIC_HEALTH_URL}" ||
+  die "--public-health-url must be an exact http(s) /canvas URL without credentials, query, or fragment"
+PM2_PACKAGE_ROOT="$(
+  "${REALPATH_BIN}" -e -- "$("${DIRNAME_BIN}" -- "${PM2_BIN}")/.."
+)" || die "Unable to resolve the PM2 package root"
+[[ -d "${PM2_PACKAGE_ROOT}" && ! -L "${PM2_PACKAGE_ROOT}" ]] ||
+  die "PM2 package root must be a canonical non-symlink directory"
+trusted_root_path_chain "${PM2_PACKAGE_ROOT}" ||
+  die "PM2 package root must have a fully trusted root-owned path chain"
+PM2_DAEMON_JS="${PM2_PACKAGE_ROOT}/lib/Daemon.js"
+[[ -f "${PM2_DAEMON_JS}" && ! -L "${PM2_DAEMON_JS}" ]] ||
+  die "The trusted PM2 package is missing lib/Daemon.js"
+trusted_root_path_chain "${PM2_DAEMON_JS}" ||
+  die "PM2 Daemon.js must have a fully trusted root-owned path chain"
+pm2_version="$(read_trusted_pm2_version)" ||
+  die "Unable to read trusted PM2 package metadata"
+[[ "${pm2_version}" == "${REQUIRED_PM2_VERSION}" ]] ||
+  die "PM2 ${REQUIRED_PM2_VERSION} is required"
+trusted_root_release_tree "${PM2_PACKAGE_ROOT}" ||
+  die "Every PM2 package entry must be root-owned, immutable, and self-contained"
+acquire_deploy_lock ||
+  die "Another Canvas deployment is active or the deployment lock is untrusted"
+assert_disabled_npm_config_paths ||
+  die "npm user/global configuration suppression paths are not trustworthy"
 
 [[ -d "${CANDIDATE_DIR}" && ! -L "${CANDIDATE_DIR}" ]] ||
   die "Tooling/candidate workdir must be an existing non-symlink directory"
-[[ "$(realpath -e -- "${CANDIDATE_DIR}")" == "${CANDIDATE_DIR}" ]] ||
+[[ "$("${REALPATH_BIN}" -e -- "${CANDIDATE_DIR}")" == "${CANDIDATE_DIR}" ]] ||
   die "Tooling/candidate workdir must use its canonical absolute path"
+trusted_root_path_chain "${CANDIDATE_DIR}" ||
+  die "Tooling/candidate workdir must have a fully trusted root-owned path chain"
+trusted_root_release_tree "${CANDIDATE_DIR}" ||
+  die "Every candidate release entry must be root-owned, immutable, and self-contained"
 [[ -f "${BUNDLE_TOOL}" && ! -L "${BUNDLE_TOOL}" ]] ||
   die "Rollback bundle helper is missing or untrusted"
 [[ -f "${HEALTH_PROBE}" && ! -L "${HEALTH_PROBE}" ]] ||
   die "Internal health probe is missing or untrusted"
 [[ -f "${RECONCILER_READY_PROBE}" && ! -L "${RECONCILER_READY_PROBE}" ]] ||
   die "Reconciler readiness probe is missing or untrusted"
-node --check "${BUNDLE_TOOL}"
-node --check "${HEALTH_PROBE}"
-node --check "${RECONCILER_READY_PROBE}"
+[[ -f "${BROKER_TLS_PROBE}" && ! -L "${BROKER_TLS_PROBE}" ]] ||
+  die "OAuth Broker TLS probe is missing or untrusted"
+[[ -f "${SUPPLY_CHAIN_CHECK}" && ! -L "${SUPPLY_CHAIN_CHECK}" ]] ||
+  die "Production supply-chain verifier is missing or untrusted"
+[[ -f "${PM2_DAEMON_PROBE}" && ! -L "${PM2_DAEMON_PROBE}" ]] ||
+  die "Existing-PM2-daemon identity probe is missing or untrusted"
+[[ -f "${PM2_NO_AUTOSTART_GUARD}" && ! -L "${PM2_NO_AUTOSTART_GUARD}" ]] ||
+  die "PM2 no-auto-start guard is missing or untrusted"
+"${NODE_BIN}" --check "${BUNDLE_TOOL}"
+"${NODE_BIN}" --check "${HEALTH_PROBE}"
+"${NODE_BIN}" --check "${RECONCILER_READY_PROBE}"
+"${NODE_BIN}" --check "${BROKER_TLS_PROBE}"
+"${NODE_BIN}" --check "${SUPPLY_CHAIN_CHECK}"
+"${NODE_BIN}" --check "${PM2_DAEMON_PROBE}"
+"${NODE_BIN}" --check "${PM2_NO_AUTOSTART_GUARD}"
+[[ -d "${PM2_HOME}" && ! -L "${PM2_HOME}" ]] ||
+  die "An existing trusted PM2 daemon is required; PM2_HOME is absent"
+prepare_trusted_root_directory "${PM2_HOME}" 0700 ||
+  die "PM2_HOME must be /root/.pm2 with a trusted root-owned 0700 path chain"
+PM2_DAEMON_TOKEN="$(probe_existing_pm2_daemon token)" ||
+  die "Existing PM2 daemon identity validation failed; automatic daemon startup is forbidden"
+[[ -n "${PM2_DAEMON_TOKEN}" ]] ||
+  die "Existing PM2 daemon identity probe returned an empty token"
 
 [[ -f "${NGINX_CONFIG}" && ! -L "${NGINX_CONFIG}" ]] ||
   die "Nginx config must be an existing non-symlink regular file"
+[[ "$("${REALPATH_BIN}" -e -- "${NGINX_CONFIG}")" == "${NGINX_CONFIG}" ]] ||
+  die "Nginx config must use its canonical absolute path"
+trusted_root_path_chain "${NGINX_CONFIG}" ||
+  die "Nginx config must have a fully trusted root-owned path chain"
 assert_single_proxy_target "${NGINX_CONFIG}"
 assert_internal_canvas_denied "${NGINX_CONFIG}"
 
-mkdir -p -- "${ROLLBACK_DIR}"
-[[ -d "${ROLLBACK_DIR}" && ! -L "${ROLLBACK_DIR}" ]] ||
-  die "Rollback directory must be a non-symlink directory"
-chmod 0700 -- "${ROLLBACK_DIR}"
-chown root:root -- "${ROLLBACK_DIR}"
-[[ "$(realpath -e -- "${ROLLBACK_DIR}")" == "${ROLLBACK_DIR}" ]] ||
-  die "Rollback directory must use its canonical absolute path"
+prepare_trusted_root_directory "${ROLLBACK_DIR}" 0700 ||
+  die "Rollback directory must be canonical, root-owned, trusted, and mode 0700"
+prepare_trusted_root_directory "${RECONCILER_INSTALL_DIR}" 0755 ||
+  die "Reconciler install directory must be canonical, root-owned, trusted, and mode 0755"
+reconciler_lock_parent="$("${DIRNAME_BIN}" -- "${RECONCILER_LOCK_FILE}")"
+[[ -d "${reconciler_lock_parent}" && ! -L "${reconciler_lock_parent}" ]] ||
+  die "Reconciler lock parent must be an existing non-symlink directory"
+[[ "$("${REALPATH_BIN}" -e -- "${reconciler_lock_parent}")" == "${reconciler_lock_parent}" ]] ||
+  die "Reconciler lock parent must use its canonical absolute path"
+[[ "$("${REALPATH_BIN}" -m -- "${RECONCILER_LOCK_FILE}")" == "${RECONCILER_LOCK_FILE}" ]] ||
+  die "Reconciler lock path must be canonical"
+trusted_root_path_chain "${reconciler_lock_parent}" ||
+  die "Reconciler lock parent must have a fully trusted root-owned path chain"
 
 if [[ "${ACTION}" == "rollback" ]]; then
   if ! canvas_upload_sweeper_is_stopped; then
@@ -877,9 +1391,16 @@ if [[ "${ACTION}" == "rollback" ]]; then
   verify_bundle "${ROLLBACK_BUNDLE}"
   load_bundle_state "${ROLLBACK_BUNDLE}" ||
     die "Rollback bundle inspection failed"
-  pm2_web_is_online \
-    "${TARGET_WEB_NAME}" "${TARGET_WEB_PORT}" "${TARGET_WEB_ROOT}" ||
-    die "Bundled rollback Web process identity is not exactly online"
+  if [[ "${TARGET_WEB_HEALTH_CONTRACT}" == "exact" ]]; then
+    pm2_web_is_online \
+      "${TARGET_WEB_NAME}" "${TARGET_WEB_PORT}" "${TARGET_WEB_ROOT}" \
+      "${NODE_BIN}" "${REQUIRED_NODE_VERSION}" ||
+      die "Bundled rollback Web process runtime identity is not exact"
+  else
+    pm2_web_is_online \
+      "${TARGET_WEB_NAME}" "${TARGET_WEB_PORT}" "${TARGET_WEB_ROOT}" ||
+      die "Bundled legacy rollback Web process identity is not exactly online"
+  fi
   if [[ "${TARGET_WEB_HEALTH_CONTRACT}" == "exact" ]]; then
     probe_internal_health \
       "${TARGET_WEB_ROOT}" "${TARGET_WEB_ENV_FILE}" "${TARGET_WEB_PORT}" ||
@@ -908,6 +1429,10 @@ if [[ "${ACTION}" == "rollback" ]]; then
   current_name="${active_fields[0]}"
   current_root="${active_fields[1]}"
   current_env_file="${current_root}/.env.local"
+  pm2_web_is_online \
+    "${current_name}" "${current_port}" "${current_root}" \
+    "${NODE_BIN}" "${REQUIRED_NODE_VERSION}" ||
+    die "Current release cannot be captured with an exact Node runtime"
   probe_internal_health \
     "${current_root}" "${current_env_file}" "${current_port}" ||
     die "Current release cannot be captured as forward recovery"
@@ -948,13 +1473,13 @@ if [[ "${ACTION}" == "rollback" ]]; then
   page_is_healthy "${PUBLIC_HEALTH_URL}" "${HEALTH_ATTEMPTS}" "public rollback" ||
     die "Public rollback Canvas page failed"
   if [[ "${TARGET_WORKER_PRESENT}" == "true" ]]; then
-    pm2_single_worker_is_online ||
+    pm2_single_worker_is_online "${NODE_BIN}" "${REQUIRED_NODE_VERSION}" ||
       die "Rollback did not restore the bundled singleton worker"
   else
     pm2_worker_is_absent "${RECONCILER_NAME}" ||
       die "Rollback of a no-worker release did not delete the worker"
   fi
-  pm2 save
+  run_trusted_pm2 save
   CUTOVER_COMMITTED=1
   echo "[OK] Canvas Web and worker rolled back atomically to the verified bundle."
   echo "[INFO] Forward-recovery bundle: ${RESTORE_BUNDLE}"
@@ -971,6 +1496,8 @@ fi
   die "Candidate exact-environment build runner is missing"
 [[ -f "${CANDIDATE_DIR}/scripts/check-canvas-production-env.mjs" ]] ||
   die "Canvas production preflight script is missing"
+[[ -f "${SUPPLY_CHAIN_CHECK}" && ! -L "${SUPPLY_CHAIN_CHECK}" ]] ||
+  die "Production supply-chain verifier is missing or untrusted"
 [[ -f "${BROKER_TLS_PROBE}" && ! -L "${BROKER_TLS_PROBE}" ]] ||
   die "OAuth broker TLS preflight script is missing or untrusted"
 [[ -f "${CANDIDATE_DIR}/deploy/install-canvas-reconciler.sh" ]] ||
@@ -979,9 +1506,13 @@ fi
   die "Candidate PM2 config is missing or untrusted"
 [[ -f "${ENV_FILE}" && ! -L "${ENV_FILE}" ]] ||
   die "Candidate .env.local must be an existing non-symlink regular file"
-[[ "$(stat -c '%u' -- "${ENV_FILE}")" == "0" ]] ||
+[[ "$("${REALPATH_BIN}" -e -- "${ENV_FILE}")" == "${ENV_FILE}" ]] ||
+  die "Candidate .env.local must use its canonical absolute path"
+trusted_root_path_chain "${ENV_FILE}" ||
+  die "Candidate .env.local must have a fully trusted root-owned path chain"
+[[ "$("${STAT_BIN}" -c '%u' -- "${ENV_FILE}")" == "0" ]] ||
   die "Candidate .env.local must be root-owned"
-env_mode="$(stat -c '%a' -- "${ENV_FILE}")"
+env_mode="$("${STAT_BIN}" -c '%a' -- "${ENV_FILE}")"
 [[ "${env_mode}" =~ ^[0-7]{3,4}$ ]] ||
   die "Candidate .env.local permissions are invalid"
 (( (8#${env_mode} & 077) == 0 )) ||
@@ -990,6 +1521,12 @@ env_mode="$(stat -c '%a' -- "${ENV_FILE}")"
   die "--reconciler-env-file is required and must be absolute"
 [[ -f "${RECONCILER_ENV_FILE}" && ! -L "${RECONCILER_ENV_FILE}" ]] ||
   die "Reconciler env file must be an existing non-symlink regular file"
+[[ "$("${REALPATH_BIN}" -e -- "${RECONCILER_ENV_FILE}")" == "${RECONCILER_ENV_FILE}" ]] ||
+  die "Reconciler env file must use its canonical absolute path"
+trusted_root_path_chain "${RECONCILER_ENV_FILE}" ||
+  die "Reconciler env file must have a fully trusted root-owned path chain"
+[[ "$("${STAT_BIN}" -c '%a' -- "${RECONCILER_ENV_FILE}")" == "600" ]] ||
+  die "Reconciler env file must be root-only mode 0600"
 
 current_port="$(proxy_target_port "${NGINX_CONFIG}")"
 [[ "${current_port}" != "${CANDIDATE_PORT}" ]] ||
@@ -999,52 +1536,83 @@ pm2_name_is_absent "${CANDIDATE_NAME}" ||
 
 (
   cd -- "${CANDIDATE_DIR}"
-  NODE_ENV=production node scripts/check-canvas-production-env.mjs \
+  NODE_ENV=production "${NODE_BIN}" -- scripts/check-canvas-production-env.mjs \
     --root "${CANDIDATE_DIR}" \
     --env-file "${ENV_FILE}"
 )
 if ((RUN_BUILD == 1)); then
   (
     cd -- "${CANDIDATE_DIR}"
-    env -i \
-      "PATH=${PATH:-/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin}" \
-      "HOME=${HOME:-/root}" \
-      "USER=${USER:-root}" \
-      "LOGNAME=${LOGNAME:-root}" \
-      "LANG=${LANG:-C.UTF-8}" \
-      "$(command -v npm)" ci --include=dev
-    node scripts/run-canvas-build.mjs \
-      --root "${CANDIDATE_DIR}" \
-      --env-file "${ENV_FILE}"
+    "${ENV_BIN}" -i \
+      "PATH=${PATH}" \
+      "HOME=${HOME}" \
+      "USER=${USER}" \
+      "LOGNAME=${LOGNAME}" \
+      "LANG=${LANG}" \
+      "NPM_CONFIG_USERCONFIG=${NPM_USER_CONFIG}" \
+      "NPM_CONFIG_GLOBALCONFIG=${NPM_GLOBAL_CONFIG}" \
+      "${NODE_BIN}" -- "${NPM_CLI}" ci \
+        --include=dev \
+        --ignore-scripts \
+        --allow-remote=root \
+        --allow-git=none \
+        --allow-file=none \
+        --allow-directory=none
   )
 fi
 (
   cd -- "${CANDIDATE_DIR}"
-  NODE_ENV=production node scripts/check-canvas-production-env.mjs \
+  "${ENV_BIN}" -i \
+    "PATH=${PATH}" \
+    "HOME=${HOME}" \
+    "USER=${USER}" \
+    "LOGNAME=${LOGNAME}" \
+    "LANG=${LANG}" \
+    "NPM_CONFIG_USERCONFIG=${NPM_USER_CONFIG}" \
+    "NPM_CONFIG_GLOBALCONFIG=${NPM_GLOBAL_CONFIG}" \
+    "STARGAZE_NPM_CLI=${NPM_CLI}" \
+    "STARGAZE_GIT_BIN=${GIT_BIN}" \
+    "${NODE_BIN}" -- "${SUPPLY_CHAIN_CHECK}"
+)
+if ((RUN_BUILD == 1)); then
+  (
+    cd -- "${CANDIDATE_DIR}"
+    "${NODE_BIN}" -- scripts/run-canvas-build.mjs \
+      --root "${CANDIDATE_DIR}" \
+      --env-file "${ENV_FILE}"
+  )
+fi
+trusted_root_release_tree "${CANDIDATE_DIR}" ||
+  die "Build or dependency installation produced an untrusted release entry"
+(
+  cd -- "${CANDIDATE_DIR}"
+  NODE_ENV=production "${NODE_BIN}" -- scripts/check-canvas-production-env.mjs \
     --root "${CANDIDATE_DIR}" \
     --env-file "${ENV_FILE}" \
     --require-build
 )
 
-node --check "${CANDIDATE_DIR}/server.js"
-node --check "${CANDIDATE_DIR}/scripts/canvas-exact-env.mjs"
-node --check "${CANDIDATE_DIR}/scripts/start-canvas-web.mjs"
-node --check "${CANDIDATE_DIR}/scripts/run-canvas-build.mjs"
-node --check "${BROKER_TLS_PROBE}"
-node --check "${PM2_CONFIG}"
-node "${BROKER_TLS_PROBE}" \
+"${NODE_BIN}" --check "${CANDIDATE_DIR}/server.js"
+"${NODE_BIN}" --check "${CANDIDATE_DIR}/scripts/canvas-exact-env.mjs"
+"${NODE_BIN}" --check "${CANDIDATE_DIR}/scripts/start-canvas-web.mjs"
+"${NODE_BIN}" --check "${CANDIDATE_DIR}/scripts/run-canvas-build.mjs"
+"${NODE_BIN}" --check "${BROKER_TLS_PROBE}"
+"${NODE_BIN}" --check "${SUPPLY_CHAIN_CHECK}"
+"${NODE_BIN}" --check "${PM2_CONFIG}"
+"${NODE_BIN}" -- "${BROKER_TLS_PROBE}" \
   --root "${CANDIDATE_DIR}" \
   --env-file "${ENV_FILE}"
+CANDIDATE_STARTED=1
 CANVAS_PM2_NAME="${CANDIDATE_NAME}" \
 CANVAS_APP_DIR="${CANDIDATE_DIR}" \
 CANVAS_PORT="${CANDIDATE_PORT}" \
 CANVAS_ENV_FILE="${ENV_FILE}" \
-  run_pm2_with_clean_environment \
-    "$(command -v pm2)" startOrReload "${PM2_CONFIG}" \
+CANVAS_NODE_BIN="${NODE_BIN}" \
+  run_trusted_pm2 startOrReload "${PM2_CONFIG}" \
       --only "${CANDIDATE_NAME}" --update-env
-CANDIDATE_STARTED=1
 pm2_web_is_online \
-  "${CANDIDATE_NAME}" "${CANDIDATE_PORT}" "${CANDIDATE_DIR}" ||
+  "${CANDIDATE_NAME}" "${CANDIDATE_PORT}" "${CANDIDATE_DIR}" \
+  "${NODE_BIN}" "${REQUIRED_NODE_VERSION}" ||
   die "Candidate PM2 identity/status validation failed"
 
 probe_internal_health \
@@ -1091,6 +1659,11 @@ if ! probe_internal_health \
     die "Legacy active release failed its Canvas baseline"
   active_health_contract="legacy-bootstrap"
   echo "[WARN] One-time legacy bootstrap armed; rollback will restore Web and delete the newly installed worker."
+else
+  pm2_web_is_online \
+    "${active_name}" "${current_port}" "${active_root}" \
+    "${NODE_BIN}" "${REQUIRED_NODE_VERSION}" ||
+    die "Current exact-health release does not use the required Node runtime"
 fi
 
 timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
@@ -1104,25 +1677,25 @@ create_state_bundle \
   "${active_health_contract}" ||
   die "Rollback bundle creation failed; active state was not changed"
 
-SYSTEM_STATE_CHANGED=1
 switch_nginx_to_port "${CANDIDATE_PORT}"
 page_is_healthy "${PUBLIC_HEALTH_URL}" "${HEALTH_ATTEMPTS}" "public cutover" ||
   die "Public Canvas page failed after cutover"
 
-bash "${CANDIDATE_DIR}/deploy/install-canvas-reconciler.sh" install \
+CANVAS_DEPLOY_LOCK_FD="${DEPLOY_LOCK_FD}" \
+  /bin/bash -p "${CANDIDATE_DIR}/deploy/install-canvas-reconciler.sh" install \
   --execute \
   --env-file "${RECONCILER_ENV_FILE}" \
   --url "http://127.0.0.1:${CANDIDATE_PORT}/api/internal/canvas/reconcile" \
   --install-dir "${RECONCILER_INSTALL_DIR}" \
   --lock-file "${RECONCILER_LOCK_FILE}" \
   --pm2-name "${RECONCILER_NAME}"
-pm2_single_worker_is_online ||
+pm2_single_worker_is_online "${NODE_BIN}" "${REQUIRED_NODE_VERSION}" ||
   die "Cutover did not expose exactly one online singleton reconciler"
 probe_internal_health \
   "${CANDIDATE_DIR}" "${ENV_FILE}" "${CANDIDATE_PORT}" ||
   die "Post-worker candidate internal health failed"
 
-pm2 save
+run_trusted_pm2 save
 CUTOVER_COMMITTED=1
 echo "[OK] Canvas Web and singleton worker now target candidate port ${CANDIDATE_PORT}."
 echo "[INFO] Complete rollback bundle: ${RESTORE_BUNDLE}"

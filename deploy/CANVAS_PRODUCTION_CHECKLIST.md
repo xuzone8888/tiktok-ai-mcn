@@ -23,13 +23,32 @@
 
 ## 2. Node 与环境预检
 
-项目约束 Node `>=20.12 <21`，`.nvmrc` 固定 Node 20 主版本。
+生产运行时精确固定为 Node `24.18.0` LTS 与 npm `12.0.1`。蓝绿发布器会解析
+`node`/`npm`/`pm2` 的 canonical absolute path，并从 `/` 到目标文件逐级拒绝
+非 root 所有、符号链接或 group/other 可写的路径组件；发布器以该 Node 直接执行
+npm 与 PM2 CLI。版本或信任属性任一不匹配都会在任何候选
+进程、构建、Nginx 或 PM2 变更前失败关闭。所有带应用级 `--env-file` 的 Node
+入口都必须使用 `node -- <script> --env-file ...`，避免 Node 24 抢先解析并预加载
+原本只允许由应用安全读取的环境文件。
+
+执行态还要求一个已经存在、身份可证明的 PM2 `6.0.14` daemon；发布脚本绝不会因
+`jlist`、`save` 或其他命令而自动创建 daemon。`/root/.pm2` 必须是 root:root `0700`，
+`pm2.pid` 必须是 root:root `0600` 的单链接普通文件，RPC/PUB socket 必须属于同一个
+root daemon。daemon 必须由精确 Node `24.18.0` 和受信 PM2 `lib/Daemon.js` 启动，
+启动环境固定包含 `PATH`、`HOME=/root`、`USER/LOGNAME=root`、`LANG=C.UTF-8`、
+`PM2_HOME=/root/.pm2`、`PM2_PROGRAMMATIC=true`、`PM2_NO_INTERACTION=true`，并且不得
+包含 `NODE_OPTIONS`、`PM2_NODE_OPTIONS`、`LD_PRELOAD` 等注入变量。探针直接连接
+现有 RPC socket 获取 `getVersion/getReport/getMonitorData`，不会调用会自动拉起
+daemon 的 PM2 读命令；每次 PM2 写命令前后 PID、进程 start time 和 socket inode
+必须完全一致。写命令还通过受信 `--require` guard 禁用 PM2
+`Client.launchDaemon()`，因此校验与写入之间 daemon 即使退出也只会令发布失败，不会
+产生第二个 daemon。
 变量名基线见 `deploy/canvas.production.env.template`；模板中的值故意留空，只能合并到 release 目录内权限为 `0600` 的 `.env.local`，不得填写后提交。
 
 ```bash
 cd /var/www/tiktok-ai-mcn-releases/<commit>
 nvm use
-NODE_ENV=production npm run canvas:prod-check -- \
+NODE_ENV=production node -- scripts/check-canvas-production-env.mjs \
   --root "$PWD" \
   --env-file "$PWD/.env.local"
 npm run verify:canvas-blue-green
@@ -55,7 +74,7 @@ npm run verify:canvas-blue-green
 下列命令不会修改服务器：
 
 ```bash
-bash deploy/canvas-blue-green.sh deploy \
+/bin/bash -p deploy/canvas-blue-green.sh deploy \
   --workdir /var/www/tiktok-ai-mcn-releases/<commit> \
   --candidate-port <unused-port> \
   --candidate-name stargaze-canvas-<short-commit> \
@@ -67,7 +86,9 @@ bash deploy/canvas-blue-green.sh deploy \
 - [ ] 审查解析后的 workdir、端口、PM2 名称、Nginx 文件和公网健康地址。
 - [ ] 确认活动 Nginx 文件只含一个 `proxy_pass http://127.0.0.1:<port>;` 目标；脚本遇到零个或多个目标会失败关闭。
 - [ ] 确认活动 Nginx 文件含精确的 `location ^~ /api/internal/canvas/ { return 404; }`；health、reconcile 和人工 recovery API 只能直连 loopback，公网不得代理。
-- [ ] 确认服务器上 `node`、`npm`、`pm2`、`curl`、`nginx` 可用，运行脚本的用户是当前 PM2/Nginx 所有者（现有生产拓扑为 root）。
+- [ ] 确认服务器上 `node --version` 精确为 `v24.18.0`、`npm --version` 精确为 `12.0.1`，并且 `node`/`npm`/`pm2` canonical 文件及从 `/` 到各自父目录的完整路径链均为 root 所有、无符号链接且 group/other 不可写；运行脚本的用户是当前 PM2/Nginx 所有者（现有生产拓扑为 root）。
+- [ ] 确认 existing-only PM2 RPC 返回的候选 Web 与新 reconciler 中，`node_version` 精确为 `24.18.0`、`exec_interpreter` 精确等于预检解析出的受信 Node 绝对路径、`node_args` 精确为 `["--"]`；缺失、额外参数、相对路径或版本漂移均禁止切流。
+- [ ] 确认 PM2 daemon 身份探针通过，且 root-only 部署目录 `/run/stargaze-canvas`（`0700`）内的 `deploy.lock` 可独占获取；daemon 缺失、残留 socket、PID/启动时间变化或并发发布均禁止切流。
 - [ ] 确认 release 的 `.env.local` 包含绝对路径 `NODE_EXTRA_CA_CERTS`；发布器会在切流前用独立 Node 子进程验证 Broker TLS，并确认 PM2 在 Node 启动前注入该 CA。
 
 ### 3.1 仅首发旧版 bootstrap
@@ -82,7 +103,7 @@ bash deploy/canvas-blue-green.sh deploy \
 只有完成 dry-run 审查后，才在同一命令末尾加入 `--execute`：
 
 ```bash
-bash deploy/canvas-blue-green.sh deploy \
+/bin/bash -p deploy/canvas-blue-green.sh deploy \
   --workdir /var/www/tiktok-ai-mcn-releases/<commit> \
   --candidate-port <unused-port> \
   --candidate-name stargaze-canvas-<short-commit> \
@@ -94,8 +115,8 @@ bash deploy/canvas-blue-green.sh deploy \
 
 脚本按以下顺序执行：
 
-1. 校验 Node 20、生产环境变量与候选目录。
-2. 执行 `npm ci --include=dev`，再由 `scripts/run-canvas-build.mjs` 清除继承的应用变量、仅以受限 OS allowlist + release 内精确 `.env.local` 构建；禁止直接用带有 root/PM2 陈旧变量的 `npm run build`。
+1. 校验精确 Node `24.18.0`、npm `12.0.1`、PM2 `6.0.14`，以及所有生产命令、PM2 package tree、候选 release tree 从 `/` 到 canonical 文件的完整受信路径链；独占部署锁并证明现有 PM2 daemon 的进程、环境、socket 与 RPC 身份。
+2. 执行 `npm ci --include=dev --ignore-scripts --allow-remote=root --allow-git=none --allow-file=none --allow-directory=none`，随后无条件运行 `scripts/verify-production-supply-chain.mjs`；即使使用受审的 `--skip-build` 也不能跳过供应链验证。再由 `scripts/run-canvas-build.mjs` 清除继承的应用变量、仅以受限 OS allowlist + release 内精确 `.env.local` 构建；禁止直接用带有 root/PM2 陈旧变量的 `npm run build`。
 3. 再次预检，并要求 `.next/BUILD_ID` 存在。
 4. 以唯一 PM2 名称通过 `scripts/start-canvas-web.mjs` 启动候选实例；bootstrap 清除继承的 provider/Supabase/OSS/Canvas/`NODE_OPTIONS` 变量，仅以受限 OS allowlist + release 内精确 `.env.local` 重建环境，并校验名称、端口、workdir、单实例 fork 和 `online` 状态。
 5. 带 Bearer 直连 `GET /api/internal/canvas/health`，只接受 HTTP 200、精确 JSON、候选 `.next/BUILD_ID`、应用版本、DB 只读探针和 27 个必需 lifecycle/recovery/upload RPC 的签名、ACL、`SECURITY DEFINER` 与受审 `search_path` 契约；再附加检查 `/canvas`。
@@ -140,11 +161,11 @@ node scripts/canvas-additive-production-operation.mjs postflight
 直接上传在签发凭证前占用配额；未完成的 reservation 和不再引用的对象必须由定时任务收敛，否则用户最终会耗尽累计配额。该 timer 不属于 Web/worker rollback bundle，因此禁止在黄金路径和烘焙验收通过前安装。验收通过后再安装同一不可变 release 的 systemd timer：
 
 ```bash
-bash deploy/install-canvas-upload-sweeper.sh validate \
+/bin/bash -p deploy/install-canvas-upload-sweeper.sh validate \
   --release-dir "$PWD" \
   --env-file "$PWD/.env.local"
 
-bash deploy/install-canvas-upload-sweeper.sh install \
+/bin/bash -p deploy/install-canvas-upload-sweeper.sh install \
   --release-dir "$PWD" \
   --env-file "$PWD/.env.local" \
   --execute
@@ -172,7 +193,7 @@ systemctl stop stargaze-canvas-upload-sweeper.service
 蓝绿脚本会在 timer 仍 active 或 enabled 时拒绝回滚。随后先 dry-run：
 
 ```bash
-bash deploy/canvas-blue-green.sh rollback \
+/bin/bash -p deploy/canvas-blue-green.sh rollback \
   --workdir /var/www/tiktok-ai-mcn-releases/<current-tooling-release> \
   --rollback-bundle /var/backups/stargaze-canvas/<exact-bundle> \
   --nginx-config /etc/nginx/sites-available/toryxai.com \

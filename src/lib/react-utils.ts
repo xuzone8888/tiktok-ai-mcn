@@ -56,7 +56,7 @@ export function useDebouncedCallback<T extends (...args: Parameters<T>) => Retur
   callback: T,
   delay: number
 ): (...args: Parameters<T>) => void {
-  const timeoutRef = useRef<ReturnType<typeof setTimeout>>();
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const callbackRef = useRef(callback);
 
   // 保持 callback 引用最新
@@ -137,7 +137,7 @@ export function useThrottledCallback<T extends (...args: Parameters<T>) => Retur
   delay: number
 ): (...args: Parameters<T>) => void {
   const lastRun = useRef(0);
-  const timeoutRef = useRef<ReturnType<typeof setTimeout>>();
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const callbackRef = useRef(callback);
 
   useEffect(() => {
@@ -227,7 +227,7 @@ export function useStableCallback<T extends (...args: Parameters<T>) => ReturnTy
  * ```
  */
 export function usePrevious<T>(value: T): T | undefined {
-  const ref = useRef<T>();
+  const ref = useRef<T | undefined>(undefined);
 
   useEffect(() => {
     ref.current = value;

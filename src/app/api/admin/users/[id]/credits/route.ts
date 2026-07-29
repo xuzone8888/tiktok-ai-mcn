@@ -1,25 +1,45 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+
+import { requireAdmin } from "@/lib/admin-auth";
+import { createAdminClient } from "@/lib/supabase/admin";
+import type { CreditTransactionType } from "@/types/database";
 
 // ============================================================================
 // Admin API: Get User Credit Transactions
 // ============================================================================
 
-const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+const CREDIT_TRANSACTION_TYPES = new Set<CreditTransactionType>([
+    "purchase",
+    "consume",
+    "refund",
+    "bonus",
+    "expire",
+]);
+
+function isCreditTransactionType(value: string): value is CreditTransactionType {
+    return CREDIT_TRANSACTION_TYPES.has(value as CreditTransactionType);
+}
 
 export async function GET(
     request: NextRequest,
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
-        const userId = params.id;
+        const auth = await requireAdmin();
+        if (auth.error) return auth.error;
+
+        const { id: userId } = await params;
+        const supabase = createAdminClient();
         const { searchParams } = new URL(request.url);
         const page = parseInt(searchParams.get("page") || "1");
         const limit = parseInt(searchParams.get("limit") || "50");
         const type = searchParams.get("type"); // 'purchase' | 'consume' | 'refund' | 'bonus' | null
+        if (type && !isCreditTransactionType(type)) {
+            return NextResponse.json(
+                { error: "Unsupported credit transaction type" },
+                { status: 400 }
+            );
+        }
 
         // Build query
         let query = supabase
@@ -28,7 +48,7 @@ export async function GET(
             .eq("user_id", userId)
             .order("created_at", { ascending: false });
 
-        if (type) {
+        if (type && isCreditTransactionType(type)) {
             query = query.eq("type", type);
         }
 

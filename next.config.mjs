@@ -10,6 +10,9 @@ const nextConfig = {
   typescript: {
     ignoreBuildErrors: false,
   },
+  // 这些 SDK 依赖 Node 专用动态 require；交给生产 Node 原生加载，
+  // 避免 Webpack 将可选依赖误判为缺失或无法静态分析。
+  serverExternalPackages: ['ali-oss', 'wechatpay-node-v3'],
   // API 配置 - 增加请求体大小限制以支持 base64 图片
   // 图片优化
   images: {

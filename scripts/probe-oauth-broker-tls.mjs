@@ -1,6 +1,9 @@
 #!/usr/bin/env node
 
 import { spawnSync } from "node:child_process";
+import { X509Certificate } from "node:crypto";
+import { lstatSync, readFileSync, realpathSync } from "node:fs";
+import { dirname, isAbsolute } from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 
@@ -12,6 +15,30 @@ const DEFAULT_TIMEOUT_MS = 10_000;
 function fail(message) {
   console.error(`[FAIL] OAuth broker TLS preflight: ${message}`);
   process.exit(1);
+}
+
+function assertTrustedBrokerCa(filePath) {
+  if (!isAbsolute(filePath) || realpathSync(filePath) !== filePath) {
+    throw new Error("CA path is not canonical");
+  }
+  let current = filePath;
+  let leaf = true;
+  while (true) {
+    const entry = lstatSync(current);
+    if (
+      entry.isSymbolicLink() ||
+      (leaf ? !entry.isFile() : !entry.isDirectory()) ||
+      (process.platform !== "win32" &&
+        (entry.uid !== 0 || entry.gid !== 0 || (entry.mode & 0o022) !== 0))
+    ) {
+      throw new Error("CA path is not trusted");
+    }
+    const parent = dirname(current);
+    if (parent === current) break;
+    current = parent;
+    leaf = false;
+  }
+  new X509Certificate(readFileSync(filePath));
 }
 
 function parseArguments(argv) {
@@ -114,6 +141,11 @@ async function main() {
   const brokerCa = environment.NODE_EXTRA_CA_CERTS?.trim();
   if (!brokerCa) {
     fail("NODE_EXTRA_CA_CERTS is missing");
+  }
+  try {
+    assertTrustedBrokerCa(brokerCa);
+  } catch {
+    fail("NODE_EXTRA_CA_CERTS is not a trusted root-owned PEM certificate");
   }
 
   const childEnvironment = Object.create(null);

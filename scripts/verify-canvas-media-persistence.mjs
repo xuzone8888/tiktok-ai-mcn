@@ -3,7 +3,11 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
+const read = (path) =>
+  readFileSync(new URL(`../${path}`, import.meta.url), "utf8").replaceAll(
+    "\r\n",
+    "\n"
+  );
 const storage = read("src/lib/video-models/storage.ts");
 const oss = read("src/lib/oss.ts");
 const safeFetch = read("src/lib/safe-media-fetch.ts");

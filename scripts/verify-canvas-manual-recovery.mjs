@@ -639,12 +639,12 @@ await check("runbook forbids blind refunds and repeat submissions", () => {
 await check("package exposes only file-based operation and verifier commands", () => {
   assert(
     packageDocument.scripts["canvas:resolve-unknown"] ===
-      "node scripts/resolve-canvas-unknown.mjs",
+      "node -- scripts/resolve-canvas-unknown.mjs",
     "operation script is not registered"
   );
   assert(
     packageDocument.scripts["verify:canvas-manual-recovery"] ===
-      "node scripts/verify-canvas-manual-recovery.mjs",
+      "node -- scripts/verify-canvas-manual-recovery.mjs",
     "verification script is not registered"
   );
 });

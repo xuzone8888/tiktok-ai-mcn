@@ -24,9 +24,9 @@ const UPLOAD_DIR = path.join('/private/tmp', 'stargaze-instagram-uploads')
 const MAX_FILE_SIZE = INSTAGRAM_MAX_VIDEO_FILE_SIZE_BYTES
 
 interface RouteContext {
-  params: {
+  params: Promise<{
     id: string
-  }
+  }>
 }
 
 class InstagramLocalUploadValidationError extends Error {
@@ -219,7 +219,8 @@ async function getVideoFile(request: NextRequest, id: string, includeBody: boole
 }
 
 export async function PUT(request: NextRequest, { params }: RouteContext) {
-  const id = safeId(decodeURIComponent(params.id))
+  const { id: rawId } = await params
+  const id = safeId(decodeURIComponent(rawId))
   if (!verifyRequest(request, id)) {
     return NextResponse.json({ success: false, error: '上传链接无效或已过期' }, { status: 403 })
   }
@@ -293,11 +294,13 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
 }
 
 export async function GET(request: NextRequest, { params }: RouteContext) {
-  const id = safeId(decodeURIComponent(params.id))
+  const { id: rawId } = await params
+  const id = safeId(decodeURIComponent(rawId))
   return getVideoFile(request, id, true)
 }
 
 export async function HEAD(request: NextRequest, { params }: RouteContext) {
-  const id = safeId(decodeURIComponent(params.id))
+  const { id: rawId } = await params
+  const id = safeId(decodeURIComponent(rawId))
   return getVideoFile(request, id, false)
 }

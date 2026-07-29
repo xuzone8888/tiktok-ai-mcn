@@ -2,9 +2,27 @@
   "name": "tiktok-ai-mcn",
   "version": "0.1.0",
   "private": true,
+  "packageManager": "npm@12.0.1",
   "engines": {
-    "node": ">=20.12 <21",
-    "npm": ">=10 <11"
+    "node": "24.18.0",
+    "npm": "12.0.1"
+  },
+  "devEngines": {
+    "runtime": {
+      "name": "node",
+      "version": "24.18.0",
+      "onFail": "error"
+    },
+    "packageManager": {
+      "name": "npm",
+      "version": "12.0.1",
+      "onFail": "error"
+    }
+  },
+  "allowScripts": {
+    "@alicloud/openapi-core": false,
+    "fsevents": false,
+    "unrs-resolver": false
   },
   "scripts": {
     "dev": "next dev",
@@ -16,22 +34,24 @@
     "type-check": "tsc --noEmit",
     "analyze": "ANALYZE=true next build",
     "clean": "rm -rf .next node_modules/.cache",
-    "canvas:additive-operation": "node scripts/canvas-additive-production-operation.mjs",
-    "canvas:build-exact": "node scripts/run-canvas-build.mjs --root . --env-file .env.local",
-    "canvas:prod-check": "node scripts/check-canvas-production-env.mjs",
-    "canvas:resolve-unknown": "node scripts/resolve-canvas-unknown.mjs",
-    "canvas:upload-sweep": "node scripts/sweep-canvas-upload-reservations.mjs",
-    "verify:canvas-additive-production-operation": "node scripts/verify-canvas-additive-production-operation.mjs",
-    "verify:canvas-blue-green": "node scripts/verify-canvas-blue-green.mjs",
-    "verify:canvas-generation-backend": "node scripts/verify-canvas-generation-backend.mjs",
-    "verify:canvas-generation-frontend": "node scripts/verify-canvas-generation-frontend.mjs",
-    "verify:canvas-manual-recovery": "node scripts/verify-canvas-manual-recovery.mjs",
-    "verify:canvas-media-persistence": "node scripts/verify-canvas-media-persistence.mjs",
-    "verify:canvas-project-lifecycle": "node scripts/verify-canvas-project-lifecycle.mjs",
-    "verify:canvas-reconciler-worker": "node scripts/verify-canvas-reconciler-worker.mjs",
-    "verify:canvas-upload-hardening": "node scripts/verify-canvas-upload-hardening.mjs",
-    "verify:canvas-upload-registry": "node scripts/verify-canvas-upload-registry.mjs",
-    "verify:canvas-upload-sweeper-install": "node scripts/verify-canvas-upload-sweeper-install.mjs"
+    "canvas:additive-operation": "node -- scripts/canvas-additive-production-operation.mjs",
+    "canvas:build-exact": "node -- scripts/run-canvas-build.mjs --root . --env-file .env.local",
+    "canvas:prod-check": "node -- scripts/check-canvas-production-env.mjs",
+    "canvas:resolve-unknown": "node -- scripts/resolve-canvas-unknown.mjs",
+    "canvas:upload-sweep": "node -- scripts/sweep-canvas-upload-reservations.mjs",
+    "verify:canvas-additive-production-operation": "node -- scripts/verify-canvas-additive-production-operation.mjs",
+    "verify:canvas-blue-green": "node -- scripts/verify-canvas-blue-green.mjs",
+    "verify:canvas-generation-backend": "node -- scripts/verify-canvas-generation-backend.mjs",
+    "verify:canvas-generation-frontend": "node -- scripts/verify-canvas-generation-frontend.mjs",
+    "verify:canvas-manual-recovery": "node -- scripts/verify-canvas-manual-recovery.mjs",
+    "verify:canvas-media-persistence": "node -- scripts/verify-canvas-media-persistence.mjs",
+    "verify:canvas-project-lifecycle": "node -- scripts/verify-canvas-project-lifecycle.mjs",
+    "verify:canvas-reconciler-worker": "node -- scripts/verify-canvas-reconciler-worker.mjs",
+    "verify:canvas-upload-hardening": "node -- scripts/verify-canvas-upload-hardening.mjs",
+    "verify:canvas-upload-registry": "node -- scripts/verify-canvas-upload-registry.mjs",
+    "verify:canvas-upload-sweeper-install": "node -- scripts/verify-canvas-upload-sweeper-install.mjs",
+    "verify:admin-api-auth": "node -- scripts/verify-admin-api-auth.mjs",
+    "verify:production-supply-chain": "node -- scripts/verify-production-supply-chain.mjs"
   },
   "dependencies": {
     "@ai-sdk/xai": "^3.0.91",
@@ -69,35 +89,62 @@
     "jszip": "^3.10.1",
     "lucide-react": "^0.555.0",
     "nanoid": "^5.1.6",
-    "next": "14.2.33",
+    "next": "15.5.22",
     "next-themes": "^0.4.6",
     "p-limit": "^7.2.0",
     "qrcode": "^1.5.4",
-    "react": "^18",
-    "react-dom": "^18",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
     "react-dropzone": "^14.3.8",
+    "sharp": "0.35.3",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.4.0",
     "tailwindcss-animate": "^1.0.7",
     "wechatpay-node-v3": "^2.2.1",
-    "xlsx": "^0.18.5",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
     "zod": "^4.4.3",
     "zustand": "^5.0.9"
   },
   "devDependencies": {
     "@types/ali-oss": "^6.23.0",
-    "@types/node": "^20",
+    "@types/node": "24.13.3",
     "@types/pg": "^8.20.0",
     "@types/qrcode": "^1.5.6",
-    "@types/react": "^18",
-    "@types/react-dom": "^18",
+    "@types/react": "19.2.17",
+    "@types/react-dom": "19.2.3",
     "dotenv": "^17.2.3",
-    "eslint": "^8",
-    "eslint-config-next": "14.2.33",
+    "eslint": "8.57.1",
+    "eslint-config-next": "15.5.22",
     "pg": "^8.20.0",
-    "postcss": "^8",
-    "sharp": "^0.34.5",
+    "postcss": "8.5.24",
     "tailwindcss": "^3.4.1",
-    "typescript": "^5"
+    "typescript": "5.9.3"
+  },
+  "overrides": {
+    "ajv@^6": "6.14.0",
+    "anymatch": {
+      "picomatch": "2.3.2"
+    },
+    "brace-expansion": "5.0.8",
+    "flatted@^3": "3.4.2",
+    "form-data": "4.0.6",
+    "js-yaml@^4": "4.3.0",
+    "lodash": "4.18.1",
+    "micromatch": {
+      "picomatch": "2.3.2"
+    },
+    "minimatch@^3": "3.1.4",
+    "minimatch@^9": "9.0.7",
+    "postcss": "8.5.24",
+    "qs": "6.15.3",
+    "readdirp": {
+      "picomatch": "2.3.2"
+    },
+    "sharp": "0.35.3",
+    "tinyglobby": {
+      "picomatch": "4.0.5"
+    },
+    "undici": "7.29.0",
+    "ws": "8.21.1"
   }
 }

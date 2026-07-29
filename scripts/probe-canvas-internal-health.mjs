@@ -17,7 +17,7 @@ const MAX_RESPONSE_BYTES = 64 * 1024;
 
 function usage() {
   return [
-    "Usage: node scripts/probe-canvas-internal-health.mjs [options]",
+    "Usage: node -- scripts/probe-canvas-internal-health.mjs [options]",
     "",
     "Required:",
     "  --url <loopback-url>  Exact /api/internal/canvas/health endpoint.",

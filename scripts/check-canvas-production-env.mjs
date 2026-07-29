@@ -1,18 +1,24 @@
 #!/usr/bin/env node
 
 import { X509Certificate } from "node:crypto";
-import { existsSync, lstatSync, readFileSync } from "node:fs";
-import { isAbsolute, resolve } from "node:path";
+import {
+  existsSync,
+  lstatSync,
+  readFileSync,
+  realpathSync,
+} from "node:fs";
+import { dirname, isAbsolute, resolve } from "node:path";
 import process from "node:process";
 
 import { readExactReleaseEnvironment } from "./canvas-exact-env.mjs";
 
+const REQUIRED_NODE_VERSION = "24.18.0";
 const executionNodeEnv = process.env.NODE_ENV;
 let environment = Object.create(null);
 
 function usage() {
   return [
-    "Usage: node scripts/check-canvas-production-env.mjs [options]",
+    "Usage: node -- scripts/check-canvas-production-env.mjs [options]",
     "",
     "Options:",
     "  --env-file <path>  Environment file to load (default: .env.local)",
@@ -71,6 +77,29 @@ function firstConfigured(names) {
   return names.find(isConfigured);
 }
 
+function assertTrustedRootOwnedFile(filePath) {
+  if (realpathSync(filePath) !== filePath) {
+    throw new Error("path is not canonical");
+  }
+  let current = filePath;
+  let leaf = true;
+  while (true) {
+    const entry = lstatSync(current);
+    if (
+      entry.isSymbolicLink() ||
+      (leaf ? !entry.isFile() : !entry.isDirectory()) ||
+      (process.platform !== "win32" &&
+        (entry.uid !== 0 || entry.gid !== 0 || (entry.mode & 0o022) !== 0))
+    ) {
+      throw new Error("path is not trusted");
+    }
+    const parent = dirname(current);
+    if (parent === current) break;
+    current = parent;
+    leaf = false;
+  }
+}
+
 function looksLikePlaceholder(name) {
   const value = environment[name]?.trim().toLowerCase() ?? "";
   if (!value) return false;
@@ -122,11 +151,13 @@ function warn(label, detail) {
   console.warn(`[WARN] ${label}${detail ? `: ${detail}` : ""}`);
 }
 
-const nodeMajor = Number.parseInt(process.versions.node.split(".")[0], 10);
-if (nodeMajor === 20) {
-  pass("Node.js major version is 20");
+if (process.versions.node === REQUIRED_NODE_VERSION) {
+  pass(`Node.js version is exactly ${REQUIRED_NODE_VERSION}`);
 } else {
-  fail("Node.js major version", "Node 20 is required");
+  fail(
+    "Node.js runtime version",
+    `Node ${REQUIRED_NODE_VERSION} is required`
+  );
 }
 
 if (!existsSync(options.envFile)) {
@@ -225,10 +256,7 @@ if (isConfigured("OAUTH_BROKER_URL")) {
     fail("NODE_EXTRA_CA_CERTS", "must be an absolute path");
   } else {
     try {
-      const caEntry = lstatSync(environment.NODE_EXTRA_CA_CERTS);
-      if (!caEntry.isFile() || caEntry.isSymbolicLink()) {
-        throw new Error("not a trusted regular file");
-      }
+      assertTrustedRootOwnedFile(environment.NODE_EXTRA_CA_CERTS);
       new X509Certificate(readFileSync(environment.NODE_EXTRA_CA_CERTS));
       pass("NODE_EXTRA_CA_CERTS trust anchor");
     } catch {

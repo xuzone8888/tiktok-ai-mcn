@@ -96,7 +96,7 @@ function RecipeLibrary() {
     []
   )
 
-  const useRecipe = (id: string) => {
+  const openRecipe = (id: string) => {
     router.push(`/studio?recipe=${encodeURIComponent(id)}`)
   }
 
@@ -193,7 +193,7 @@ function RecipeLibrary() {
             size="sm"
             variant="outline"
             className="h-7 flex-1 gap-1 text-xs text-amber-400 hover:text-amber-300"
-            onClick={() => useRecipe(recipe.id)}
+            onClick={() => openRecipe(recipe.id)}
           >
             <Play className="h-3 w-3" />
             去使用

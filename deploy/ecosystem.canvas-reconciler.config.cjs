@@ -1,7 +1,8 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
+const fs = require("node:fs");
 const path = require("node:path");
 
-const fs = require("node:fs");
+const REQUIRED_NODE_VERSION = "24.18.0";
 const settingsFile =
   process.env.CANVAS_RECONCILER_SETTINGS_FILE ||
   path.join(__dirname, "canvas-reconciler.settings.json");
@@ -25,6 +26,26 @@ const lockFile =
   stored.lockFile ||
   process.env.CANVAS_RECONCILER_LOCK_FILE ||
   "/run/stargaze-canvas-reconciler.lock";
+const nodeBin = process.env.CANVAS_NODE_BIN;
+
+function assertTrustedRootPathChain(filePath, variable) {
+  let current = filePath;
+  while (true) {
+    const entry = fs.lstatSync(current);
+    if (
+      entry.isSymbolicLink() ||
+      (process.platform !== "win32" &&
+        (entry.uid !== 0 || (entry.mode & 0o022) !== 0))
+    ) {
+      throw new Error(
+        `${variable} and every parent must be root-owned and not group- or other-writable`
+      );
+    }
+    const parent = path.dirname(current);
+    if (parent === current) break;
+    current = parent;
+  }
+}
 
 if (!/^[A-Za-z0-9._-]+$/.test(name)) {
   throw new Error("CANVAS_RECONCILER_PM2_NAME contains unsupported characters");
@@ -38,6 +59,26 @@ for (const [variable, value] of [
   if (!value || !path.isAbsolute(value)) {
     throw new Error(`${variable} must be an absolute path`);
   }
+}
+
+if (
+  !nodeBin ||
+  !path.isAbsolute(nodeBin) ||
+  fs.realpathSync(nodeBin) !== nodeBin
+) {
+  throw new Error("CANVAS_NODE_BIN must be a canonical absolute path");
+}
+assertTrustedRootPathChain(nodeBin, "CANVAS_NODE_BIN");
+const nodeEntry = fs.lstatSync(nodeBin);
+if (
+  !nodeEntry.isFile() ||
+  nodeEntry.isSymbolicLink() ||
+  (process.platform !== "win32" &&
+    (nodeEntry.mode & 0o111) === 0)
+) {
+  throw new Error(
+    "CANVAS_NODE_BIN must reference a trusted root-owned executable file"
+  );
 }
 
 let target;
@@ -66,7 +107,10 @@ module.exports = {
       name,
       script,
       cwd: path.dirname(script),
-      interpreter: "node",
+      interpreter: nodeBin,
+      // Keep the worker's --env-file inside worker argv; Node must not preload
+      // the secret file as a process-wide CLI environment.
+      interpreter_args: ["--"],
       args: [
         "--env-file",
         envFile,
@@ -79,6 +123,7 @@ module.exports = {
       exec_mode: "fork",
       env: {
         NODE_ENV: "production",
+        CANVAS_REQUIRED_NODE_VERSION: REQUIRED_NODE_VERSION,
       },
       autorestart: true,
       watch: false,

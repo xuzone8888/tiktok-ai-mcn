@@ -6,8 +6,9 @@ import { revokeInstagramToken } from '@/lib/instagram/oauth'
 
 export const dynamic = 'force-dynamic'
 
-export async function DELETE(_request: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
+    const { id } = await params
     const supabase = await createClient()
     const { data: { user }, error: userError } = await supabase.auth.getUser()
 
@@ -18,7 +19,7 @@ export async function DELETE(_request: NextRequest, { params }: { params: { id: 
     const { data: account, error: fetchError } = await (supabase as any)
       .from('instagram_accounts')
       .select('id')
-      .eq('id', params.id)
+      .eq('id', id)
       .eq('user_id', user.id)
       .single()
 
@@ -44,7 +45,7 @@ export async function DELETE(_request: NextRequest, { params }: { params: { id: 
     const { error } = await adminSupabase
       .from('instagram_accounts')
       .delete()
-      .eq('id', params.id)
+      .eq('id', id)
 
     if (error) {
       return NextResponse.json({ error: '移除 Instagram 账号失败' }, { status: 500 })

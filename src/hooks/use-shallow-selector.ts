@@ -65,7 +65,7 @@ function shallowEqual<T>(a: T, b: T): boolean {
 export function useShallowSelector<S, T>(
   selector: (state: S) => T
 ): (state: S) => T {
-  const prevRef = useRef<T>();
+  const prevRef = useRef<T | undefined>(undefined);
 
   return useCallback(
     (state: S) => {
