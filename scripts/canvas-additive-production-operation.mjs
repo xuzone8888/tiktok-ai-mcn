@@ -25,7 +25,7 @@ export const ADDITIVE_MIGRATIONS = Object.freeze([
   }),
   Object.freeze({
     relativePath: "supabase/migrations/20260730_canvas_generation_recovery.sql",
-    sha256: "5d62b51e1fb65125e1503d937d55b9536abe8f22372ecb398d2e20ba3f8ebec7",
+    sha256: "12186f6c6701e39dc19e24f7f4b65cf03e57c06e776777ae534dd054ae6f4d13",
   }),
   Object.freeze({
     relativePath: "supabase/migrations/20260731_canvas_runtime_health.sql",

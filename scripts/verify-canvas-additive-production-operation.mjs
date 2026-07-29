@@ -23,14 +23,14 @@ const OPERATION_PATH = join(
 
 const EXPECTED_MIGRATIONS = Object.freeze([
   ["supabase/migrations/20260729_canvas_project_lifecycle.sql", "49945b1ed0f79212d035b0eb26f605359dda0e3a1a622fb9c31db94a4c277d61"],
-  ["supabase/migrations/20260730_canvas_generation_recovery.sql", "5d62b51e1fb65125e1503d937d55b9536abe8f22372ecb398d2e20ba3f8ebec7"],
+  ["supabase/migrations/20260730_canvas_generation_recovery.sql", "12186f6c6701e39dc19e24f7f4b65cf03e57c06e776777ae534dd054ae6f4d13"],
   ["supabase/migrations/20260731_canvas_runtime_health.sql", "1971ca6f4d2efa9189aa7763e67c186298da2e6a39790ff8defe8d04772efc5b"],
   ["supabase/migrations/20260801_canvas_upload_registry.sql", "5a453df313548f3db314660522c298aefa8baa8dc0a0ba3c8bfde397bd2297ba"],
 ]);
 
 const EXPECTED_OUTPUT_HASHES = Object.freeze({
   preflight: "25aedc53c9ccb2cfddf8c6cf2395e5c1b0ee03b8e08502a422ed13f480957ace",
-  migrate: "da397c4dc6e9c30be4b07adeaa4866e8df0ddf2f417a8801d8471b91586fd2e7",
+  migrate: "e04318dca3393d3810931e3150b92c48d9fea8636433b4f556d17347cf82e0d4",
   postflight: "c9143cf923894509a33fc9a570bc79527ea7b4a505364d0dcaa3eb7f8af6ae78",
 });
 

@@ -71,7 +71,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS canvas_generation_resolution_audit_once_idx
 ALTER TABLE public.canvas_generation_resolution_audit ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.canvas_generation_resolution_audit FORCE ROW LEVEL SECURITY;
 REVOKE ALL ON TABLE public.canvas_generation_resolution_audit
-    FROM PUBLIC, anon, authenticated;
+    FROM PUBLIC, anon, authenticated, service_role;
 GRANT SELECT ON TABLE public.canvas_generation_resolution_audit TO service_role;
 
 CREATE OR REPLACE FUNCTION public.reject_canvas_generation_resolution_audit_mutation_v1()
