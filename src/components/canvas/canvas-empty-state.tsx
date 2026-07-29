@@ -27,7 +27,14 @@ export function CanvasEmptyState({
   return (
     <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
       <div className="pointer-events-auto flex flex-col items-center gap-3 rounded-lg border border-border bg-card/85 px-6 py-5 text-center shadow-sm backdrop-blur">
-        <p className="text-sm text-muted-foreground">从一个起点开始</p>
+        <div className="space-y-1">
+          <p className="text-sm font-medium text-foreground">
+            从一个创作起点开始
+          </p>
+          <p className="max-w-md text-xs leading-relaxed text-muted-foreground">
+            添加商品或文本作为创作要求，连到图片节点生成视觉，再把图片连到视频节点完成成片。
+          </p>
+        </div>
         <div className="flex flex-wrap items-center justify-center gap-2">
           {guides.map(({ type, label, Icon }) => (
             <Button

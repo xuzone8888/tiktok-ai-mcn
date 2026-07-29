@@ -6,7 +6,7 @@
   "files": [
     {
       "path": "scripts/verify-canvas-p1-batch2.mjs",
-      "sha256": "2a15ade1b8ced10bc5cc9b4ee37c8cf33eaa00635dd47edaaec8932e25d7be59"
+      "sha256": "33eb07156f40ee3513e6aa8fe64c41b8877c3372bccdf1e138b73a08d38addd9"
     },
     {
       "path": "scripts/fixtures/canvas-p1/identity.mjs",
@@ -18,7 +18,7 @@
     },
     {
       "path": "scripts/fixtures/canvas-p1/batch2/callsite-allowlist.json",
-      "sha256": "4f04914303504beb61d66f09da30b84ce7f96511843db10627b70d9b8eb3c227"
+      "sha256": "6ac4791fd029103e48ad5dfb28e28db066cbbbba6e3f90aad302f628eac6c117"
     },
     {
       "path": "scripts/fixtures/canvas-p1/batch2/callsites.mjs",

@@ -48,3 +48,22 @@ export const NODE_TYPE_ITEMS: NodeTypeItem[] = NODE_TYPES.map((type) => ({
   label: LABELS[type],
   Icon: ICONS[type],
 }));
+
+/**
+ * Public creation surface for the first production release.
+ *
+ * Script and compose remain readable for documents created during the P0/P2
+ * experiments, but they are intentionally not offered as new-node actions
+ * until their real execution paths exist.  This prevents a public dead end
+ * while preserving backwards-compatible rendering.
+ */
+export const CREATABLE_NODE_TYPES: readonly CanvasNodeType[] = [
+  "text",
+  "product",
+  "image",
+  "video",
+];
+
+export const CREATABLE_NODE_TYPE_ITEMS: NodeTypeItem[] = CREATABLE_NODE_TYPES.map(
+  (type) => NODE_TYPE_ITEMS.find((item) => item.type === type)!
+);

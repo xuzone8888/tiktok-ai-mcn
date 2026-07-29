@@ -4,8 +4,8 @@
  *
  * 断言 S2「建节点五入口 + 连线」的纯逻辑与 store 契约:
  *   ① 建节点:6 类 + 默认文本、坐标/类型映射、readOnly 闸、media 只收 object key;
- *   ② 文件种类映射 canvasFileKind;
- *   ③ 上传结果只接受 OSS object key(extractUploadedObjectKey 拒 URL/dataURL);
+ *   ② 严格文件元数据契约(MIME/扩展名/大小/批量上限);
+ *   ③ 直传客户端只返回 OSS object key,不回退服务端大文件 multipart;
  *   ④ 连线约束(canAddCanvasEdge/addEdge:禁自环/悬空/重复,readOnly 闸,handle 区分);
  *   ⑤ RF 视图字段绝不泄漏进 store。
  *
@@ -82,6 +82,7 @@ async function main() {
   await loadCanvasModule("history");
   await loadCanvasModule("group-ops");
   await loadCanvasModule("rf-adapter");
+  const uploadContract = await loadCanvasModule("upload-contract");
   writeFileSync(
     join(OUT_DIR, "api-helpers-store-stub.mjs"),
     "export const CANVAS_UUID_RE=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;\n",
@@ -104,7 +105,10 @@ async function main() {
   const upload = await loadExtra(
     join(ROOT, "src", "components", "canvas", "canvas-upload.ts"),
     "canvas-upload.mjs",
-    { "@/lib/canvas/schema": "./schema.mjs" }
+    {
+      "@/lib/canvas/schema": "./schema.mjs",
+      "@/lib/canvas/upload-contract": "./upload-contract.mjs",
+    }
   );
   const tabPolicy = await loadExtra(
     join(ROOT, "src", "components", "canvas", "tab-create-policy.ts"),
@@ -113,7 +117,7 @@ async function main() {
 
   const { NODE_TYPES } = schema;
   const { useCanvasStore, canAddCanvasEdge } = storeMod;
-  const { canvasFileKind, extractUploadedObjectKey } = upload;
+  const { validateCanvasUploadFiles } = upload;
   const { shouldTabCreateNode } = tabPolicy;
   const store = () => useCanvasStore.getState();
   const hydrate = () => {
@@ -163,29 +167,90 @@ async function main() {
   ok(badId === null, "media 为签名 URL 时 addNode 返回 null(不建半节点)");
 
   // ------------------------------------------------------------------ ②
-  console.log("② 文件种类映射 canvasFileKind");
-  eq(canvasFileKind("image/png"), "image", "image/png → image");
-  eq(canvasFileKind("image/jpeg"), "image", "image/jpeg → image");
-  eq(canvasFileKind("video/mp4"), "video", "video/mp4 → video");
-  eq(canvasFileKind("application/pdf"), null, "pdf → null");
-  eq(canvasFileKind(""), null, "空类型 → null");
+  console.log("② 严格文件元数据契约");
+  eq(
+    uploadContract.validateCanvasUploadFileMetadata({
+      name: "asset.png",
+      type: "image/png",
+      size: 1024,
+    }).kind,
+    "image",
+    "PNG MIME + 扩展名 → image"
+  );
+  eq(
+    uploadContract.validateCanvasUploadFileMetadata({
+      name: "clip.mp4",
+      type: "video/mp4",
+      size: 1024,
+    }).kind,
+    "video",
+    "MP4 MIME + 扩展名 → video"
+  );
+  throws(
+    () =>
+      uploadContract.validateCanvasUploadFileMetadata({
+        name: "asset.png",
+        type: "image/jpeg",
+        size: 1024,
+      }),
+    "MIME 与扩展名不一致 → 拒"
+  );
+  throws(
+    () =>
+      uploadContract.validateCanvasUploadFileMetadata({
+        name: "document.pdf",
+        type: "application/pdf",
+        size: 1024,
+      }),
+    "PDF → 拒"
+  );
+  throws(
+    () =>
+      uploadContract.validateCanvasUploadFileMetadata({
+        name: "huge.png",
+        type: "image/png",
+        size: uploadContract.CANVAS_UPLOAD_MAX_IMAGE_BYTES + 1,
+      }),
+    "图片超过 10MB → 拒"
+  );
 
   // ------------------------------------------------------------------ ③
-  console.log("③ 上传结果只接受 OSS object key");
+  console.log("③ 直传客户端只返回 OSS object key");
   eq(
-    extractUploadedObjectKey("image", { success: true, data: { path: "studio/u/a.jpg", url: "https://cdn/a.jpg" } }),
-    "studio/u/a.jpg",
-    "image 取 data.path"
+    validateCanvasUploadFiles([
+      { name: "asset.webp", type: "image/webp", size: 1024 },
+    ]).map((item) => item.kind),
+    ["image"],
+    "客户端批量预检复用共享契约"
   );
-  eq(
-    extractUploadedObjectKey("video", { success: true, objectPath: "studio/u/v.mp4", url: "https://cdn/v.mp4" }),
-    "studio/u/v.mp4",
-    "video 取 objectPath"
+  throws(
+    () =>
+      validateCanvasUploadFiles(
+        Array.from(
+          { length: uploadContract.CANVAS_UPLOAD_MAX_FILES + 1 },
+          (_, index) => ({
+            name: `asset-${index}.png`,
+            type: "image/png",
+            size: 1024,
+          })
+        )
+      ),
+    "单批超过 10 个文件 → 拒"
   );
-  throws(() => extractUploadedObjectKey("image", { data: { path: "https://cdn/a.jpg" } }), "path 是 URL → 拒");
-  throws(() => extractUploadedObjectKey("image", { data: { path: "data:image/png;base64,AAAA" } }), "path 是 dataURL → 拒");
-  throws(() => extractUploadedObjectKey("image", { data: {} }), "缺 path → 拒");
-  throws(() => extractUploadedObjectKey("video", {}), "缺 objectPath → 拒");
+  const uploadSource = readFileSync(
+    join(ROOT, "src", "components", "canvas", "canvas-upload.ts"),
+    "utf8"
+  );
+  ok(
+    uploadSource.includes("ossKey: item.prepared.objectKey"),
+    "上传成功结果只映射 object key"
+  );
+  ok(
+    !uploadSource.includes("/api/upload/image") &&
+      !uploadSource.includes("/api/upload/video") &&
+      !uploadSource.includes("publicUrl"),
+    "不回退服务端大文件 multipart,不持久化 URL"
+  );
 
   // ------------------------------------------------------------------ ④
   console.log("④ 连线约束:禁自环/悬空/重复 + readOnly 闸 + handle 区分");

@@ -38,6 +38,11 @@ import {
   type RepairDecision,
 } from "@/lib/canvas/api-helpers";
 import { WRITER_LEASE_MS, writerActiveSinceIso } from "@/lib/canvas/writer-lock";
+import { canAccessSuperCanvas } from "@/lib/canvas/feature-access";
+import {
+  assertCanvasDocumentMediaReady,
+  CanvasMediaReadinessError,
+} from "@/lib/canvas/upload-registry";
 
 export const dynamic = "force-dynamic";
 
@@ -103,7 +108,7 @@ type CanvasGate =
   | { ok: false; response: NextResponse };
 
 type CanvasPatchGate =
-  | { ok: true; db: SupabaseClient; id: string }
+  | { ok: true; db: SupabaseClient; id: string; userId: string }
   | { ok: false; response: NextResponse };
 
 async function requireUserAndId(params: RouteParams["params"]): Promise<CanvasGate> {
@@ -125,6 +130,23 @@ async function requireUserAndId(params: RouteParams["params"]): Promise<CanvasGa
   ) {
     return { ok: false, response: errorResponse("UNAUTHENTICATED", "请先登录") };
   }
+  if (
+    !canAccessSuperCanvas({
+      id: userId,
+      email:
+        typeof claimsData?.claims?.email === "string"
+          ? claimsData.claims.email
+          : null,
+    })
+  ) {
+    return {
+      ok: false,
+      response: errorResponse(
+        "CANVAS_NOT_ENABLED",
+        "超级画布尚未对当前账号开放"
+      ),
+    };
+  }
   return {
     ok: true,
     db: supabase as unknown as SupabaseClient,
@@ -141,20 +163,39 @@ async function requirePatchAccessAndId(
     return { ok: false, response: errorResponse("INVALID_ID", "画布 ID 非法") };
   }
   const supabase = await createClient();
-  // PATCH never trusts cookie session claims for ownership. The local session read only avoids
-  // dispatching an obviously unauthenticated request; PostgREST verifies the signed access token
-  // and RLS remains the sole authorization boundary for both the read and atomic CAS update.
-  const {
-    data: { session },
-    error,
-  } = await supabase.auth.getSession();
-  if (error || !session?.access_token) {
+  // getClaims verifies the cookie JWT (normally against cached JWKS). RLS still
+  // remains the ownership boundary for both the read and atomic CAS update.
+  const { data: claimsData, error } = await supabase.auth.getClaims();
+  const userId = claimsData?.claims?.sub;
+  if (
+    error ||
+    typeof userId !== "string" ||
+    !CANVAS_UUID_RE.test(userId)
+  ) {
     return { ok: false, response: errorResponse("UNAUTHENTICATED", "请先登录") };
+  }
+  if (
+    !canAccessSuperCanvas({
+      id: userId,
+      email:
+        typeof claimsData?.claims?.email === "string"
+          ? claimsData.claims.email
+          : null,
+    })
+  ) {
+    return {
+      ok: false,
+      response: errorResponse(
+        "CANVAS_NOT_ENABLED",
+        "超级画布尚未对当前账号开放"
+      ),
+    };
   }
   return {
     ok: true,
     db: supabase as unknown as SupabaseClient,
     id: id.toLowerCase(),
+    userId: userId.toLowerCase(),
   };
 }
 
@@ -178,6 +219,18 @@ function repairErrorResponse(decision: RepairRejection) {
     return errorResponse("DOC_TOO_LARGE", decision.message);
   }
   return errorResponse("CANVAS_DOC_INVALID", decision.message, decision.details);
+}
+
+function mediaReadinessErrorResponse(error: CanvasMediaReadinessError) {
+  if (error.reason === "CANVAS_REVISION_MISMATCH") {
+    return errorResponse("REV_CONFLICT", "画布版本已变化，请重新加载后保存");
+  }
+  if (error.reason === "INTERNAL") {
+    return errorResponse("INTERNAL", "媒体对象状态暂时无法确认");
+  }
+  return errorResponse("CANVAS_DOC_INVALID", error.message, {
+    issues: [`rejected media objects: ${error.rejectedCount}`],
+  });
 }
 
 function repairSuccessResponse(
@@ -332,6 +385,20 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     }
     if (decision.kind !== "write") return repairErrorResponse(decision);
 
+    try {
+      await assertCanvasDocumentMediaReady({
+        userId,
+        canvasId: id,
+        baseRev: row.rev,
+        doc: decision.doc,
+      });
+    } catch (error) {
+      if (error instanceof CanvasMediaReadinessError) {
+        return mediaReadinessErrorResponse(error);
+      }
+      throw error;
+    }
+
     const nextRev = baseRev + 1;
     const update: Record<string, unknown> = {
       doc: decision.doc,
@@ -436,7 +503,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
   try {
     const gate = await requirePatchAccessAndId(params);
     if (!gate.ok) return gate.response;
-    const { db, id } = gate;
+    const { db, id, userId } = gate;
 
     let body: unknown;
     try {
@@ -515,6 +582,19 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
           "DOC_TOO_LARGE",
           snapshotSize.message ?? "画布文档超出 2MB 上限,已拒绝保存"
         );
+      }
+      try {
+        await assertCanvasDocumentMediaReady({
+          userId,
+          canvasId: id,
+          baseRev,
+          doc: validatedSnapshot.data,
+        });
+      } catch (error) {
+        if (error instanceof CanvasMediaReadinessError) {
+          return mediaReadinessErrorResponse(error);
+        }
+        throw error;
       }
       const nowMs = Date.now();
       const nowIso = new Date(nowMs).toISOString();
@@ -656,6 +736,19 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       }
 
       // decision.kind === "write"
+      try {
+        await assertCanvasDocumentMediaReady({
+          userId,
+          canvasId: id,
+          baseRev: row.rev,
+          doc: decision.doc,
+        });
+      } catch (error) {
+        if (error instanceof CanvasMediaReadinessError) {
+          return mediaReadinessErrorResponse(error);
+        }
+        throw error;
+      }
       const update: Record<string, unknown> = {
         doc: decision.doc,
         deps: decision.deps,

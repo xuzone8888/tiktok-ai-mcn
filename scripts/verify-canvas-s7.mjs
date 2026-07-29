@@ -1869,8 +1869,18 @@ export function CanvasHealthBanners(){
   );
   writeFileSync(join(OUT, "canvas-save-feedback-bridge.mjs"), "export function CanvasSaveFeedbackBridge(){return null}\n", "utf8");
   writeFileSync(
+    join(OUT, "canvas-generation-context.mjs"),
+    "export function CanvasGenerationProvider({children}){return children}\n",
+    "utf8"
+  );
+  writeFileSync(
+    join(OUT, "canvas-project-bar.mjs"),
+    "export function CanvasProjectBar(){return null}\n",
+    "utf8"
+  );
+  writeFileSync(
     join(OUT, "use-canvas-runtime.mjs"),
-    "export function useCanvasRuntime(){return {authIdentity:null,runtimeState:{mode:'local',interactionReady:true,issue:null},shadowRecovery:null,handleWriterSignal(){},restoreShadowSnapshot(){return false},discardShadowSnapshot(){return false}}}\n",
+    "export function useCanvasRuntime(){return {authIdentity:null,runtimeState:{mode:'local',interactionReady:true,issue:null},shadowRecovery:null,handleWriterSignal(){},getDebugState(){return {mode:'local',activeId:null,targetCanvasId:null,createId:null,baseRev:0,pending:0,inflight:false,conflicted:false,repairRequired:false,disposed:false}},restoreShadowSnapshot(){return false},discardShadowSnapshot(){return false}}}\n",
     "utf8"
   );
   writeFileSync(
@@ -1879,6 +1889,7 @@ export function CanvasHealthBanners(){
 export function useCallback(callback){return callback}
 export function useEffect(effect){effects.push(effect)}
 export function useLayoutEffect(effect){layoutEffects.push(effect)}
+export function useState(initial){return [typeof initial==="function"?initial():initial,()=>{}]}
 export function resetEffects(){effects=[];layoutEffects=[]}
 export function getEffectCount(){return effects.length}
 export function getLayoutEffectCount(){return layoutEffects.length}
@@ -2506,13 +2517,14 @@ export function getBridgeAdapterStats(){return {patchCalls:patchCalls.length,rep
     if (!critical) {
       return { runtime, runtimeChildren, pending, critical: null, board: null };
     }
-    const provider = critical.props.children;
+    const generationProvider = critical.props.children;
+    const flowProvider = generationProvider.props.children;
     return {
       runtime,
       runtimeChildren,
       pending,
       critical,
-      board: provider.props.children,
+      board: flowProvider.props.children,
     };
   }
 
@@ -2551,7 +2563,11 @@ export function getBridgeAdapterStats(){return {patchCalls:patchCalls.length,rep
     switchedRuntime.runtimeChildren[0].props.requestedCanvasId === canvasIdB,
     "runtime bootstrap begins the requested persistent identity before interaction"
   );
-  eq(switchedRuntime.runtimeChildren.length, 4, "bootstrap, feedback, banners, and Board share one runtime subtree");
+  eq(
+    switchedRuntime.runtimeChildren.length,
+    5,
+    "bootstrap, feedback, project bar, banners, and Board share one runtime subtree"
+  );
 
   const acquiredRuntime = renderRuntime(
     { canvasId: canvasIdB, status: makeWriterStatus("root_tag_b", true, "acquired"), persistent: true, canEdit: true },

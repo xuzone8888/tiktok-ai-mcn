@@ -10,12 +10,13 @@
  * This module is pure types + tiny builders (no IO, no schema runtime imports),
  * so it is safe to import from both server routes and client code.
  */
-import type { CanvasDeps, CanvasDocumentEnvelope, LoadCanvasResult } from "./schema";
 import type { CanvasPatchConflict } from "./patch";
+import type { CanvasDeps, CanvasDocumentEnvelope, LoadCanvasResult } from "./schema";
 
 /** Machine-stable error discriminants. Never renumber/rename — the shell branches on these. */
 export const CANVAS_API_ERROR_CODES = [
   "UNAUTHENTICATED", // 401 未登录
+  "CANVAS_NOT_ENABLED", // 403 超级画布尚未向当前账号开放
   "INVALID_ID", // 400 画布 id 非 UUID
   "INVALID_BODY", // 400 请求体非法(JSON 解析失败 / 顶层字段校验失败)
   "INVALID_OPS", // 400 补丁 op 数组 zod 校验失败
@@ -25,6 +26,7 @@ export const CANVAS_API_ERROR_CODES = [
   "ENTITY_CONFLICT", // 409 重叠补丁(目标实体已变化),附可诊断冲突清单
   "WRITER_LOCKED", // 409 单写者锁被他标签/他设备持有(D5),写被拒;details.writer 供只读横幅
   "CANVAS_DOC_INVALID", // 422 应用后文档校验失败 / recoveryRequired / 危险值,绝不保存
+  "PROJECT_LIMIT_REACHED", // 429 每个账号最多 100 个画布项目
   "INTERNAL", // 500 未预期错误
 ] as const;
 
@@ -33,6 +35,7 @@ export type CanvasApiErrorCode = (typeof CANVAS_API_ERROR_CODES)[number];
 /** Canonical HTTP status per error code — the single source both routes call. */
 export const CANVAS_API_ERROR_STATUS: Record<CanvasApiErrorCode, number> = {
   UNAUTHENTICATED: 401,
+  CANVAS_NOT_ENABLED: 403,
   INVALID_ID: 400,
   INVALID_BODY: 400,
   INVALID_OPS: 400,
@@ -42,6 +45,7 @@ export const CANVAS_API_ERROR_STATUS: Record<CanvasApiErrorCode, number> = {
   ENTITY_CONFLICT: 409,
   WRITER_LOCKED: 409,
   CANVAS_DOC_INVALID: 422,
+  PROJECT_LIMIT_REACHED: 429,
   INTERNAL: 500,
 };
 
@@ -110,6 +114,8 @@ export interface CanvasApiErrorDetails {
   leaseMs?: number;
   heartbeatMs?: number;
   serverNow?: string;
+  /** ENTITY_CONFLICT: destructive project actions are blocked by active generations. */
+  activeGenerations?: number;
 }
 
 export interface CanvasApiSuccessBody<T> {
@@ -136,6 +142,35 @@ export interface CanvasCreatedData {
   docBytes: number;
   createdAt: string;
   updatedAt: string;
+}
+
+/** Owner-safe row used by the "My canvases" project switcher. */
+export interface CanvasProjectSummary {
+  id: string;
+  title: string;
+  rev: number;
+  /** Historical rows may predate server-side size accounting. */
+  docBytes: number | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** GET /api/canvas owner-scoped, newest-first project list. */
+export interface CanvasProjectListData {
+  canvases: CanvasProjectSummary[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+    hasMore: boolean;
+  };
+}
+
+/** DELETE /api/canvas/[id]/metadata success payload. */
+export interface CanvasProjectDeleteData {
+  id: string;
+  deleted: true;
 }
 
 /**

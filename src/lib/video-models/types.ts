@@ -54,6 +54,11 @@ export interface VideoModelSubmitInput {
   durationSeconds?: VideoDurationSeconds;
   quality?: VideoQuality;
   mode?: VideoGenerationMode;
+  /**
+   * Canvas lifecycle submissions must never try a second provider endpoint
+   * after an ambiguous first attempt.
+   */
+  atMostOnce?: boolean;
 }
 
 export interface VideoModelStatusInput {
@@ -68,6 +73,9 @@ export interface VideoModelStatusInput {
 export interface VideoModelCompleteInput extends VideoModelStatusInput {
   status: VideoModelStatusResult;
   generationUserId?: string;
+  targetObjectKey?: string;
+  outputMetadata?: Record<string, string>;
+  signal?: AbortSignal;
 }
 
 export interface VideoModelSubmitResult {

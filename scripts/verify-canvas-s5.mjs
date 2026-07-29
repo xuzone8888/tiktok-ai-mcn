@@ -133,7 +133,11 @@ async function main() {
   ok(shouldShowEmptyState(1, 0) === false, "有节点 → 不显示");
   ok(shouldShowEmptyState(0, 1) === false, "有 broken → 不显示");
   ok(shouldShowEmptyState(3, 2) === false, "都有 → 不显示");
-  eq([...EMPTY_STATE_GUIDE_TYPES], ["text", "image", "product", "script"], "4 起点引导类型");
+  eq(
+    [...EMPTY_STATE_GUIDE_TYPES],
+    ["text", "product", "image", "video"],
+    "4 起点引导类型（商品简报→图片→视频公开生产链）"
+  );
 
   // ------------------------------------------------------------------ ②
   console.log("② 底部工具栏 gating");

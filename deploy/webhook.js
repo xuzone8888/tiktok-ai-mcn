@@ -13,15 +13,25 @@
  * - DEPLOY_COOLDOWN: 防抖动冷却时间，秒 (默认 30)
  */
 
+/* eslint-disable @typescript-eslint/no-require-imports */
 const http = require('http');
 const crypto = require('crypto');
 const { spawn } = require('child_process');
 const path = require('path');
 
 // ============ 配置 ============
-const SECRET = process.env.WEBHOOK_SECRET || 'tiktok-ai-mcn-deploy-2026';
+const SECRET = process.env.WEBHOOK_SECRET?.trim();
+if (!SECRET) {
+    console.error('[Webhook] WEBHOOK_SECRET is required; refusing to start.');
+    process.exit(1);
+}
 const PORT = parseInt(process.env.WEBHOOK_PORT, 10) || 3001;
 const COOLDOWN_SECONDS = parseInt(process.env.DEPLOY_COOLDOWN, 10) || 30;
+const MAX_BODY_BYTES = 2 * 1024 * 1024;
+// Fail closed: direct-in-place deploy.sh is a legacy escape hatch, not the
+// production release path. Only the exact string "true" enables it.
+const LEGACY_WEBHOOK_DEPLOY_ENABLED =
+    process.env.LEGACY_WEBHOOK_DEPLOY_ENABLED === 'true';
 const PROJECT_DIR = '/var/www/tiktok-ai-mcn';
 const DEPLOY_SCRIPT = path.join(PROJECT_DIR, 'deploy', 'deploy.sh');
 
@@ -61,19 +71,24 @@ function verifySignature(payload, signature) {
 
 // ============ 部署执行 ============
 function runDeploy(commitMessage) {
+    if (!LEGACY_WEBHOOK_DEPLOY_ENABLED) {
+        log('WARN', 'Legacy webhook deployment is disabled; refusing to spawn deploy.sh');
+        return false;
+    }
+
     const now = Date.now();
     const timeSinceLastDeploy = (now - lastDeployTime) / 1000;
 
     // 防抖动检查
     if (timeSinceLastDeploy < COOLDOWN_SECONDS) {
         log('INFO', `Deploy skipped (cooldown: ${COOLDOWN_SECONDS - Math.floor(timeSinceLastDeploy)}s remaining)`);
-        return;
+        return false;
     }
 
     // 防止并发部署
     if (isDeploying) {
         log('INFO', 'Deploy already in progress, skipping');
-        return;
+        return false;
     }
 
     isDeploying = true;
@@ -107,6 +122,8 @@ function runDeploy(commitMessage) {
         isDeploying = false;
         log('ERROR', 'Deployment process error', { error: err.message });
     });
+
+    return true;
 }
 
 // ============ HTTP 服务 ============
@@ -117,6 +134,7 @@ const server = http.createServer((req, res) => {
         res.end(JSON.stringify({
             status: 'ok',
             isDeploying,
+            legacyDeployEnabled: LEGACY_WEBHOOK_DEPLOY_ENABLED,
             lastDeployTime: lastDeployTime > 0 ? new Date(lastDeployTime).toISOString() : null
         }));
         return;
@@ -129,19 +147,35 @@ const server = http.createServer((req, res) => {
         return;
     }
 
-    let body = '';
+    const chunks = [];
+    let bodyBytes = 0;
+    let bodyRejected = false;
     req.on('data', (chunk) => {
-        body += chunk.toString();
+        if (bodyRejected) return;
+        bodyBytes += chunk.length;
+        if (bodyBytes > MAX_BODY_BYTES) {
+            bodyRejected = true;
+            chunks.length = 0;
+            res.writeHead(413, {
+                'Content-Type': 'text/plain',
+                'Cache-Control': 'no-store'
+            });
+            res.end('Payload Too Large');
+            return;
+        }
+        chunks.push(chunk);
     });
 
     req.on('end', () => {
+        if (bodyRejected) return;
+        const rawBody = Buffer.concat(chunks, bodyBytes);
         const signature = req.headers['x-hub-signature-256'];
         const event = req.headers['x-github-event'];
 
         log('INFO', 'Webhook received', { event, ip: req.socket.remoteAddress });
 
         // 验证签名
-        if (!verifySignature(body, signature)) {
+        if (!verifySignature(rawBody, signature)) {
             log('WARN', 'Invalid signature, rejecting request');
             res.writeHead(401, { 'Content-Type': 'text/plain' });
             res.end('Unauthorized');
@@ -159,7 +193,7 @@ const server = http.createServer((req, res) => {
         // 解析 payload
         let payload;
         try {
-            payload = JSON.parse(body);
+            payload = JSON.parse(rawBody.toString('utf8'));
         } catch (e) {
             log('ERROR', 'Failed to parse payload', { error: e.message });
             res.writeHead(400, { 'Content-Type': 'text/plain' });
@@ -173,6 +207,23 @@ const server = http.createServer((req, res) => {
             log('INFO', `Ignoring push to non-main branch: ${ref}`);
             res.writeHead(200, { 'Content-Type': 'text/plain' });
             res.end('OK - Not main branch');
+            return;
+        }
+
+        if (!LEGACY_WEBHOOK_DEPLOY_ENABLED) {
+            log(
+                'WARN',
+                'Signed main push received, but legacy automatic deployment is disabled'
+            );
+            res.writeHead(503, {
+                'Content-Type': 'application/json',
+                'Cache-Control': 'no-store'
+            });
+            res.end(JSON.stringify({
+                status: 'disabled',
+                code: 'LEGACY_DEPLOY_DISABLED',
+                message: 'Legacy automatic deployment is disabled; use the reviewed release process.'
+            }));
             return;
         }
 
@@ -199,7 +250,8 @@ server.listen(PORT, () => {
     log('INFO', `🎉 GitHub Webhook Server started`, { port: PORT });
     log('INFO', `Configuration`, {
         cooldownSeconds: COOLDOWN_SECONDS,
-        projectDir: PROJECT_DIR
+        projectDir: PROJECT_DIR,
+        legacyDeployEnabled: LEGACY_WEBHOOK_DEPLOY_ENABLED
     });
 });
 

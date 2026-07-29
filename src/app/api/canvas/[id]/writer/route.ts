@@ -21,6 +21,7 @@ import {
   writerLeaseCutoffIso,
   type StoredWriterState,
 } from "@/lib/canvas/writer-lock";
+import { canAccessSuperCanvas } from "@/lib/canvas/feature-access";
 
 export const dynamic = "force-dynamic";
 
@@ -80,6 +81,15 @@ async function requireUserAndId(params: RouteParams["params"]): Promise<WriterGa
   } = await supabase.auth.getUser();
   if (!user) {
     return { ok: false, response: errorResponse("UNAUTHENTICATED", "请先登录") };
+  }
+  if (!canAccessSuperCanvas({ id: user.id, email: user.email ?? null })) {
+    return {
+      ok: false,
+      response: errorResponse(
+        "CANVAS_NOT_ENABLED",
+        "超级画布尚未对当前账号开放"
+      ),
+    };
   }
   return { ok: true, db: supabase as unknown as SupabaseClient, id: id.toLowerCase() };
 }

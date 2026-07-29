@@ -21,7 +21,8 @@
     "  setter and the deprecated Sora POST that charged before returning 410. The active mutation",
     "  baseline is now 27 scanner-visible paths plus four exact-hash mutation tombstones, two",
     "  trigger-converted signup paths, twenty reviewed shared-boundary paths and one audit-preserving",
-    "  account-deactivation path. Thirteen lifecycle-only paths remain; the original sixteen",
+    "  account-deactivation path. Two reviewed Canvas generation-boundary paths were added for",
+    "  the production generation service and reconciler. Thirteen legacy lifecycle-only paths remain; the original sixteen",
     "  included three hidden video-credit consumers that were reclassified and converted in Group C.",
     "  The previous fourteen-path list was",
     "  hand-authored, and it was wrong in BOTH directions -- it missed at least nine active mutation paths that Codex",
@@ -39,6 +40,7 @@
     "converted_profile_init_to_auth_trigger": "The signup path creates only auth.users and relies on the reviewed on_auth_user_created -> handle_new_user -> canvas_p1_initialize_account_v1 chain for profile creation and the anchored signup grant.",
     "converted_to_shared_boundary": "The path retains its non-credit lifecycle behavior but every profile credit delta and ledger row is delegated to the reviewed atomic task boundary.",
     "converted_to_deactivation": "The hard-delete branch is absent. The legacy delete action delegates to canvas_p1_deactivate_account_v1 so profile PII is anonymized in place while ledger rows, snapshots, foreign keys and operation anchors remain intact.",
+    "canvas_p1_atomic_generation_boundary": "Canvas generation lifecycle/projection updates only. Credit consume/refund, action idempotency, provider-task binding, completion, unknown-state handling and reconciliation ownership are delegated to the reviewed Canvas P1 atomic RPC boundary.",
     "legacy_generation_lifecycle_only": "Touches only legacy generations rows (action_id IS NULL) and no credit surface. Not a credit-boundary blocker. Still reviewed and pinned so a credit mutation cannot be added here unnoticed."
   },
 
@@ -61,12 +63,13 @@
     "reviewedAt": "2026-07-27",
     "worktreeState": "current dirty P1 candidate; Phase 4 retired four unsafe mutation methods, converted two signup initializers, moved twenty paths to the atomic task boundary and replaced hard account deletion with audit-preserving deactivation",
     "originalReviewedCallsites": 39,
-    "discoveredCallsites": 27,
+    "discoveredCallsites": 29,
     "retiredMutationRoutes": 4,
     "convertedProfileInitializers": 2,
     "convertedSharedCreditPaths": 20,
     "remainingLegacyLifecycleOnly": 13,
-    "reclassifiedLegacyCreditConsumers": 3
+    "reclassifiedLegacyCreditConsumers": 3,
+    "canvasAtomicGenerationBoundaryPaths": 2
   },
 
   "retiredMutationRoutes": [
@@ -371,6 +374,18 @@
       "classes": ["generation_lifecycle_mutation"],
       "disposition": "converted_to_shared_boundary",
       "note": "Worker generation lifecycle remains visible; Quick Image and e-commerce compensation use the atomic task boundary."
+    },
+    {
+      "path": "src/lib/canvas/generation-reconciliation.ts",
+      "classes": ["generation_lifecycle_mutation"],
+      "disposition": "canvas_p1_atomic_generation_boundary",
+      "note": "The only direct write updates non-terminal progress below 100. Claims, lease release, completion, failure/refund and unknown transitions all use authority-checked Canvas P1 RPCs."
+    },
+    {
+      "path": "src/lib/canvas/generation-service.ts",
+      "classes": ["generation_lifecycle_mutation"],
+      "disposition": "canvas_p1_atomic_generation_boundary",
+      "note": "The only direct write projects a completed Canvas output onto legacy media URL columns for publishing compatibility. Begin/debit, one-time submission claim, provider-task bind, completion, failure/refund and unknown transitions all use Canvas P1 RPCs."
     },
     {
       "path": "src/lib/video-models/credits.ts",

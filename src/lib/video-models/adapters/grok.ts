@@ -18,14 +18,25 @@ export const grokAdapter: VideoModelAdapter = {
 
     const imageUrls = input.imageUrls;
     const model = "grok-imagine-1.0-video";
-    const task = await submitPlatformVideo({
-      model,
-      prompt: input.prompt,
-      size: toPlatformSize(input.aspectRatio, "720p"),
-      seconds: String(input.durationSeconds),
-      async: true,
-      ...(imageUrls.length > 0 ? { image_reference: imageUrls } : {}),
-    });
+    const task = await submitPlatformVideo(
+      {
+        model,
+        prompt: input.prompt,
+        size: toPlatformSize(input.aspectRatio, "720p"),
+        seconds: String(input.durationSeconds),
+        async: true,
+        // Provider metadata is diagnostic correlation only. The API does not
+        // document create-request idempotency or query-by-client-id, so the
+        // state machine must still treat a lost POST response as unknown.
+        metadata: {
+          client_task_id: input.clientTaskId,
+        },
+        ...(imageUrls.length > 0 ? { image_reference: imageUrls } : {}),
+      },
+      input.atMostOnce
+        ? ["/v1/videos?async=true"]
+        : ["/v1/videos?async=true", "/api/v1/generate"]
+    );
 
     return {
       taskId: task.taskId,

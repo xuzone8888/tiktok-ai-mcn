@@ -92,6 +92,15 @@ const routeContext = vm.createContext({
       };
     }
     if (specifier === "@/lib/canvas/schema") return schema;
+    if (specifier === "@/lib/canvas/feature-access") {
+      return { canAccessSuperCanvas: () => true };
+    }
+    if (specifier === "@/lib/canvas/upload-registry") {
+      return {
+        async assertCanvasDocumentMediaReady() {},
+        CanvasMediaReadinessError: class CanvasMediaReadinessError extends Error {},
+      };
+    }
     if (specifier === "@/lib/canvas/doc-limits") return docLimits;
     if (specifier === "@/lib/canvas/patch") return patchModule;
     if (specifier === "@/lib/canvas/api-types") return apiTypes;

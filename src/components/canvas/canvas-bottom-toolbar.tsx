@@ -43,7 +43,7 @@ import {
   BOTTOM_TOOLBAR_ENTRIES,
   type BottomToolbarAction,
 } from "./canvas-chrome-policy";
-import { NODE_TYPE_ITEMS } from "./node-type-meta";
+import { CREATABLE_NODE_TYPE_ITEMS } from "./node-type-meta";
 
 const ICONS: Record<BottomToolbarAction, LucideIcon> = {
   "add-node": Plus,
@@ -151,7 +151,7 @@ export function CanvasBottomToolbar({
                     <TooltipContent side="top">{entry.label}</TooltipContent>
                   </Tooltip>
                   <DropdownMenuContent side="top" align="center" className="min-w-[136px]">
-                    {NODE_TYPE_ITEMS.map(({ type, label, Icon: TypeIcon }) => (
+                    {CREATABLE_NODE_TYPE_ITEMS.map(({ type, label, Icon: TypeIcon }) => (
                       <DropdownMenuItem
                         key={type}
                         className="gap-2"

@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/tooltip";
 import type { CanvasNodeType } from "@/lib/canvas/schema";
 
-import { NODE_TYPE_ITEMS } from "./node-type-meta";
+import { CREATABLE_NODE_TYPE_ITEMS } from "./node-type-meta";
 
 export function NodePalette({
   onCreate,
@@ -38,7 +38,7 @@ export function NodePalette({
           data-sidebar-mode="icon"
           className="flex max-h-[calc(100vh-5rem)] flex-col gap-0.5 overflow-y-auto rounded-lg border border-border bg-card/90 p-1 shadow-sm backdrop-blur"
         >
-          {NODE_TYPE_ITEMS.map(({ type, label, Icon }) => (
+          {CREATABLE_NODE_TYPE_ITEMS.map(({ type, label, Icon }) => (
             <Tooltip key={type}>
               <TooltipTrigger asChild>
                 <Button

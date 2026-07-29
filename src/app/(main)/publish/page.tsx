@@ -350,8 +350,9 @@ export default function PublishPage() {
     // Calculate total tasks
     const totalTasks = selectedVideos.length * selectedAccounts.length
 
-    // Check if video URL is still accessible (using server-side API for accurate detection)
-    const checkUrlAccessible = async (url: string): Promise<boolean> => {
+    // Treat transient probe failures as "unknown". A health check must never become
+    // an implicit data-deletion path or hide otherwise usable user content.
+    const checkUrlAccessible = async (url: string): Promise<boolean | null> => {
         try {
             const response = await fetch('/api/upload/check-url', {
                 method: 'POST',
@@ -359,22 +360,15 @@ export default function PublishPage() {
                 body: JSON.stringify({ url })
             })
             const result = await response.json()
-            return result.accessible === true
+            if (!response.ok || typeof result?.accessible !== 'boolean') {
+                return null
+            }
+            if (result.accessible === true) {
+                return true
+            }
+            return result.status === 404 || result.status === 410 ? false : null
         } catch {
-            // API error, assume URL is not accessible
-            return false
-        }
-    }
-
-    // Delete expired video from database
-    const deleteExpiredTask = async (taskId: string) => {
-        try {
-            await fetch(`/api/user/tasks/${taskId}`, {
-                method: 'DELETE',
-            })
-            console.log(`[Assets] Deleted expired task: ${taskId}`)
-        } catch (error) {
-            console.error(`[Assets] Failed to delete task ${taskId}:`, error)
+            return null
         }
     }
 
@@ -392,39 +386,31 @@ export default function PublishPage() {
                 // Check URL accessibility in parallel for better performance
                 const accessibilityChecks = await Promise.all(
                     videoTasks.map(async (task: AssetItem) => {
-                        const isAccessible = await checkUrlAccessible(task.resultUrl!)
-                        return { task, isAccessible }
+                        const availability = await checkUrlAccessible(task.resultUrl!)
+                        return { task, availability }
                     })
                 )
 
-                // Separate valid and expired videos
                 const validVideos: AssetItem[] = []
-                const expiredVideos: AssetItem[] = []
+                let unavailableCount = 0
+                let unknownCount = 0
 
-                accessibilityChecks.forEach(({ task, isAccessible }) => {
-                    if (isAccessible) {
-                        validVideos.push(task)
-                    } else {
-                        expiredVideos.push(task)
+                accessibilityChecks.forEach(({ task, availability }) => {
+                    if (availability === false) {
+                        unavailableCount += 1
+                        return
                     }
+                    if (availability === null) unknownCount += 1
+                    validVideos.push(task)
                 })
 
-                // Delete expired videos from database (async, don't wait)
-                if (expiredVideos.length > 0) {
-                    console.log(`[Assets] Deleting ${expiredVideos.length} expired videos`)
+                if (unavailableCount > 0 || unknownCount > 0) {
                     toast({
-                        title: '清理过期视频',
-                        description: `正在删除 ${expiredVideos.length} 个已过期的视频...`,
+                        title: '部分素材暂不可用',
+                        description: unavailableCount > 0
+                            ? `${unavailableCount} 个素材已确认失效，已从本次列表隐藏；原始任务记录仍会保留。`
+                            : `${unknownCount} 个素材暂时无法验证，仍保留在列表中，可直接重试使用。`,
                     })
-
-                    // Delete in background
-                    Promise.all(expiredVideos.map(v => deleteExpiredTask(v.id)))
-                        .then(() => {
-                            toast({
-                                title: '清理完成',
-                                description: `已删除 ${expiredVideos.length} 个过期视频`,
-                            })
-                        })
                 }
 
                 setAssets(validVideos)

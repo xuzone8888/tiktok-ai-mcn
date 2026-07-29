@@ -1491,14 +1491,15 @@ function gateCallsites() {
   const reviewedAllowlist = loadCallsiteAllowlist();
   ok(
     reviewedAllowlist.baseline?.originalReviewedCallsites === 39 &&
-      reviewedAllowlist.baseline?.discoveredCallsites === 27 &&
+      reviewedAllowlist.baseline?.discoveredCallsites === 29 &&
       reviewedAllowlist.baseline?.retiredMutationRoutes === 4 &&
       reviewedAllowlist.baseline?.convertedProfileInitializers === 2 &&
       reviewedAllowlist.baseline?.convertedSharedCreditPaths === 20 &&
       reviewedAllowlist.baseline?.remainingLegacyLifecycleOnly === 13 &&
       reviewedAllowlist.baseline?.reclassifiedLegacyCreditConsumers === 3 &&
-      reviewedAllowlist.callsites?.length === 27,
-    "the reviewed baseline is preserved as 27 discovered mutations, 4 retired mutation methods, 2 trigger initializers, 20 shared-boundary paths and 13 remaining legacy-only paths",
+      reviewedAllowlist.baseline?.canvasAtomicGenerationBoundaryPaths === 2 &&
+      reviewedAllowlist.callsites?.length === 29,
+    "the reviewed baseline is preserved as 29 discovered mutations, including 2 Canvas atomic generation-boundary paths",
     "STATIC"
   );
 

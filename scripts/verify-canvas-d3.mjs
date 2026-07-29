@@ -207,7 +207,16 @@ const postRouteContext = vm.createContext({
     if (specifier === "@/lib/canvas/doc-limits") return docLimits;
     if (specifier === "@/lib/canvas/api-types") return apiTypes;
     if (specifier === "@/lib/canvas/api-helpers") return helpers;
+    if (specifier === "@/lib/canvas/feature-access") {
+      return { canAccessSuperCanvas: () => true };
+    }
     if (specifier === "@/lib/canvas/patch") return patch;
+    if (specifier === "@/lib/canvas/upload-registry") {
+      return {
+        async assertCanvasDocumentMediaReady() {},
+        CanvasMediaReadinessError: class CanvasMediaReadinessError extends Error {},
+      };
+    }
     throw new Error(`Unexpected POST route dependency: ${specifier}`);
   },
   console: { error() {}, log() {}, warn() {} },
@@ -334,6 +343,19 @@ function makePostClient(options = {}) {
     },
     from(source) {
       return new Query(source);
+    },
+    async rpc(name, args) {
+      calls.push({
+        operation: "rpc",
+        name,
+        args: structuredClone(args),
+      });
+      return {
+        data: Object.prototype.hasOwnProperty.call(options, "rpcData")
+          ? options.rpcData
+          : [{ created: true, canvas: makePostRow() }],
+        error: options.rpcError ?? null,
+      };
     },
   };
 }
@@ -642,6 +664,7 @@ ok(deepEqual(parseStoredDeps({ models: ["m1"] }).models, ["m1"]), "parseStoredDe
 {
   const statusByCode = {
     UNAUTHENTICATED: 401,
+    CANVAS_NOT_ENABLED: 403,
     INVALID_ID: 400,
     INVALID_BODY: 400,
     INVALID_OPS: 400,
@@ -651,6 +674,7 @@ ok(deepEqual(parseStoredDeps({ models: ["m1"] }).models, ["m1"]), "parseStoredDe
     ENTITY_CONFLICT: 409,
     WRITER_LOCKED: 409, // D5 新增共享错误码:保持 D3 错误码↔状态表一一对应断言为绿
     CANVAS_DOC_INVALID: 422,
+    PROJECT_LIMIT_REACHED: 429,
     INTERNAL: 500,
   };
   ok(CANVAS_API_ERROR_CODES.every((c) => httpStatusForCanvasError(c) === statusByCode[c]), "每个错误码映射到正确 HTTP 状态");
@@ -1099,65 +1123,61 @@ ok(!CanvasCreateRequestSchema.safeParse(null).success, "POST null 体被拒");
 ok(!CanvasCreateRequestSchema.safeParse({ foo: 1 }).success, "POST 未知顶层字段被拒");
 ok(!CanvasCreateRequestSchema.safeParse({ title: "z".repeat(201) }).success, "POST title 超长被拒");
 
-console.log("⑧a production POST 23505/readback idempotency");
+console.log("⑧a production POST atomic capped RPC + idempotency");
 ok(postTranspileErrors.length === 0, "production POST route transpiles without diagnostics");
 ok(typeof productionPost === "function", "production POST route exports executable handler");
 {
-  const client = makePostClient({ insertRow: makePostRow() });
+  const client = makePostClient();
   const response = await invokeProductionPost(client);
   eq(response.status, 201, "production POST first stable-id create returns 201");
   ok(response.body.success === true && response.body.data.id === POST_ID, "first create returns exact created id");
-  eq(client.calls.length, 1, "first create performs one insert and no readback");
-  ok(client.calls[0].values.id === POST_ID, "first create inserts the caller stable UUID");
-}
-{
-  const client = makePostClient({
-    insertRow: null,
-    insertError: { code: "23505", message: "duplicate key" },
-    readbackRow: makePostRow(),
-  });
-  const response = await invokeProductionPost(client);
-  eq(response.status, 200, "exact 23505 duplicate is adopted with 200");
-  ok(response.body.success === true && response.body.data.rev === 0, "exact duplicate returns authoritative rev=0 summary");
-  eq(client.calls.length, 2, "exact duplicate performs one insert attempt and one readback");
-  const readback = client.calls[1];
+  eq(client.calls.length, 1, "first create performs exactly one atomic RPC");
+  eq(client.calls[0].name, "create_canvas_project_v1", "first create uses the capped database boundary");
   ok(
-    readback.filters.some(({ field, value }) => field === "id" && value === POST_ID) &&
-      readback.filters.some(({ field, value }) => field === "user_id" && value === POST_USER),
-    "duplicate readback explicitly predicates both stable id and authenticated owner"
+    client.calls[0].args.p_canvas_id === POST_ID &&
+      client.calls[0].args.p_doc_bytes === POST_DOC_BYTES,
+    "create RPC carries the stable UUID and server-computed bytes"
   );
-  ok(readback.columns.includes("user_id"), "duplicate readback selects owner for defense-in-depth verification");
 }
 {
   const client = makePostClient({
-    insertRow: null,
-    insertError: { code: "23505" },
-    readbackError: { code: "XX000", message: "readback failed" },
+    rpcData: [{ created: false, canvas: makePostRow() }],
   });
   const response = await invokeProductionPost(client);
-  eq([response.status, response.body.code].join(":"), "500:INTERNAL", "23505 readback error fails INTERNAL");
+  eq(response.status, 200, "exact same-id RPC retry is adopted with 200");
+  ok(response.body.success === true && response.body.data.rev === 0, "exact duplicate returns authoritative rev=0 summary");
+  eq(client.calls.length, 1, "exact duplicate remains a single serialized RPC");
 }
 {
   const client = makePostClient({
-    insertRow: null,
-    insertError: { code: "23505" },
-    readbackRow: null,
+    rpcError: { code: "23505", message: "duplicate key" },
   });
   const response = await invokeProductionPost(client);
-  eq([response.status, response.body.code].join(":"), "409:REV_CONFLICT", "23505 null/not-owned readback conflicts");
+  eq([response.status, response.body.code].join(":"), "409:REV_CONFLICT", "cross-owner/foreign same-id collision fails closed");
 }
 {
   const client = makePostClient({
-    insertRow: null,
-    insertError: { code: "23505" },
-    // Deliberately return an other-user row even though the query has an owner predicate: the
-    // production row check itself must still fail closed if a backend/stub violates that filter.
-    readbackRow: makePostRow({ user_id: POST_OTHER_USER }),
+    rpcError: {
+      code: "54000",
+      message: "create_canvas_project_v1: project limit reached",
+    },
   });
   const response = await invokeProductionPost(client);
-  eq([response.status, response.body.code].join(":"), "409:REV_CONFLICT", "23505 other-owner readback conflicts");
+  eq(
+    [response.status, response.body.code].join(":"),
+    "429:PROJECT_LIMIT_REACHED",
+    "database project cap maps to stable 429"
+  );
+}
+{
+  const client = makePostClient({
+    rpcError: { code: "XX000", message: "database unavailable" },
+  });
+  const response = await invokeProductionPost(client);
+  eq([response.status, response.body.code].join(":"), "500:INTERNAL", "unexpected create RPC failure is INTERNAL");
 }
 for (const [label, overrides] of [
+  ["other owner", { user_id: POST_OTHER_USER }],
   ["rev>0", { rev: 1 }],
   ["title mismatch", { title: `${POST_TITLE} changed` }],
   ["schema mismatch", { schema_version: CANVAS_SCHEMA_VERSION + 1 }],
@@ -1166,16 +1186,19 @@ for (const [label, overrides] of [
   ["doc_bytes mismatch", { doc_bytes: POST_DOC_BYTES + 1 }],
 ]) {
   const client = makePostClient({
-    insertRow: null,
-    insertError: { code: "23505" },
-    readbackRow: makePostRow(overrides),
+    rpcData: [{ created: false, canvas: makePostRow(overrides) }],
   });
   const response = await invokeProductionPost(client);
   eq(
     [response.status, response.body.code].join(":"),
     "409:REV_CONFLICT",
-    `23505 ${label} readback conflicts`
+    `same-id ${label} RPC result conflicts`
   );
+}
+{
+  const client = makePostClient({ rpcData: [] });
+  const response = await invokeProductionPost(client);
+  eq([response.status, response.body.code].join(":"), "500:INTERNAL", "empty create RPC result fails closed");
 }
 
 // PATCH 顶层第一阶段:严格 known-key + title≤200;ops 结构留第二阶段(INVALID_OPS)。

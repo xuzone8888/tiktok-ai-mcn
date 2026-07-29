@@ -31,16 +31,27 @@ interface NodeShellProps {
   Icon: LucideIcon;
   selected?: boolean;
   children?: ReactNode;
+  wide?: boolean;
+  deleteDisabledReason?: string | null;
 }
 
-export function NodeShell({ nodeId, label, Icon, selected, children }: NodeShellProps) {
+export function NodeShell({
+  nodeId,
+  label,
+  Icon,
+  selected,
+  children,
+  wide = false,
+  deleteDisabledReason = null,
+}: NodeShellProps) {
   const readOnly = useCanvasReadOnly();
   const removeNode = useCanvasStore((state) => state.removeNode);
 
   return (
     <div
       className={cn(
-        "w-[208px] rounded-lg border bg-card/95 text-card-foreground shadow-sm backdrop-blur transition-colors",
+        wide ? "w-[304px]" : "w-[208px]",
+        "rounded-lg border bg-card/95 text-card-foreground shadow-sm backdrop-blur transition-colors",
         selected ? "border-ring ring-1 ring-ring" : "border-border"
       )}
     >
@@ -60,7 +71,8 @@ export function NodeShell({ nodeId, label, Icon, selected, children }: NodeShell
               type="button"
               className="nodrag nopan rounded p-1 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:pointer-events-none disabled:opacity-40"
               aria-label={`删除${label}节点`}
-              disabled={readOnly}
+              title={deleteDisabledReason ?? undefined}
+              disabled={readOnly || Boolean(deleteDisabledReason)}
             >
               <Trash2 className="h-3.5 w-3.5" />
             </button>
@@ -69,13 +81,16 @@ export function NodeShell({ nodeId, label, Icon, selected, children }: NodeShell
             <AlertDialogHeader>
               <AlertDialogTitle>删除该节点?</AlertDialogTitle>
               <AlertDialogDescription>
-                将同时移除该节点及相关连线,确认继续?
+                {deleteDisabledReason
+                  ? deleteDisabledReason
+                  : "将同时移除该节点及相关连线，确认继续？"}
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel>取消</AlertDialogCancel>
               <AlertDialogAction
                 className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                disabled={readOnly || Boolean(deleteDisabledReason)}
                 onClick={() => removeNode(nodeId)}
               >
                 删除

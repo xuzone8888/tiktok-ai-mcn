@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * 超级画布 · 图片/视频节点(P0 · S3 空壳 + S6 媒体降级)
+ * 超级画布 · 图片/视频生成节点 + 媒体降级
  *
  * 媒体降级铁律(CHECKLIST #45):
  *   ① 节点默认只展示 **poster 缩略图**(图片=自身;视频=posterKey,无则占位不解码);
@@ -28,6 +28,11 @@ import {
   peekMediaUrl,
   resolveMediaUrl,
 } from "../media-url-cache";
+import { useCanvasGeneration } from "../canvas-generation-context";
+import {
+  GenerationControls,
+  generationDeleteBlockReason,
+} from "./generation-controls";
 import { NodeShell } from "./node-shell";
 
 type MediaKind = "image" | "video";
@@ -184,6 +189,17 @@ function ImageNodeImpl({ id, data, selected }: NodeProps<CanvasReactFlowNode>) {
   const [epoch, setEpoch] = useState(0);
   const resolveKey = !lowZoom && isOssObjectKey(posterKey) ? (posterKey as string) : null;
   const poster = useResolvedMediaUrl(resolveKey, epoch);
+  const {
+    canvasId,
+    generationByNodeId,
+    syncState,
+    unresolvedActionByNodeId,
+  } = useCanvasGeneration();
+  const generation = generationByNodeId.get(id);
+  const deleteDisabledReason = generationDeleteBlockReason(generation, {
+    syncState: canvasId === null ? undefined : syncState,
+    unresolvedActionId: unresolvedActionByNodeId.get(id),
+  });
 
   let body: ReactNode;
   if (!isOssObjectKey(ossKey)) {
@@ -216,8 +232,23 @@ function ImageNodeImpl({ id, data, selected }: NodeProps<CanvasReactFlowNode>) {
   }
 
   return (
-    <NodeShell nodeId={id} label="图片" Icon={ImageIcon} selected={selected}>
+    <NodeShell
+      nodeId={id}
+      label="图片"
+      Icon={ImageIcon}
+      selected={selected}
+      wide={Boolean(selected && !lowZoom)}
+      deleteDisabledReason={deleteDisabledReason}
+    >
       {body}
+      {selected && !lowZoom && (
+        <GenerationControls
+          nodeId={id}
+          kind="image"
+          data={data}
+          mediaUrl={poster.status === "resolved" ? poster.url : null}
+        />
+      )}
     </NodeShell>
   );
 }
@@ -243,6 +274,17 @@ function VideoNodeImpl({ id, data, selected }: NodeProps<CanvasReactFlowNode>) {
   const poster = useResolvedMediaUrl(posterResolveKey, epoch);
   const videoResolveKey = active ? (ossKey as string) : null;
   const video = useResolvedMediaUrl(videoResolveKey, epoch);
+  const {
+    canvasId,
+    generationByNodeId,
+    syncState,
+    unresolvedActionByNodeId,
+  } = useCanvasGeneration();
+  const generation = generationByNodeId.get(id);
+  const deleteDisabledReason = generationDeleteBlockReason(generation, {
+    syncState: canvasId === null ? undefined : syncState,
+    unresolvedActionId: unresolvedActionByNodeId.get(id),
+  });
 
   let body: ReactNode;
   if (!hasVideo) {
@@ -313,8 +355,23 @@ function VideoNodeImpl({ id, data, selected }: NodeProps<CanvasReactFlowNode>) {
   }
 
   return (
-    <NodeShell nodeId={id} label="视频" Icon={Video} selected={selected}>
+    <NodeShell
+      nodeId={id}
+      label="视频"
+      Icon={Video}
+      selected={selected}
+      wide={Boolean(selected && !lowZoom)}
+      deleteDisabledReason={deleteDisabledReason}
+    >
       {body}
+      {selected && !lowZoom && (
+        <GenerationControls
+          nodeId={id}
+          kind="video"
+          data={data}
+          mediaUrl={video.status === "resolved" ? video.url : null}
+        />
+      )}
     </NodeShell>
   );
 }

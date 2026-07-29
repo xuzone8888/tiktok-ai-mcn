@@ -38,11 +38,11 @@ check(
   "preflight operation hash is frozen"
 );
 check(
-  digest(migrate) === "6b096c1050ffb45bdac146f2006f654b30cf2074dc9fc691eb104822484f94b2",
+  digest(migrate) === "edb602e91e058b1c27f8a6153bdf3e499b3af2636ddf08b4b5b98575c9eea196",
   "migration operation hash is frozen"
 );
 check(
-  digest(postflight) === "33157df0ab209573d4cd396dbdef2112e22ec29f7d9d5249c956ef3eee57b89f",
+  digest(postflight) === "e62a7db40fcea603bf98df8f71d2aaca5fe837dfab6af0e94926e408adbd17aa",
   "postflight operation hash is frozen"
 );
 
@@ -129,6 +129,11 @@ check(
   "complete pre-apply guard runs before tenant-trigger DDL"
 );
 check(postGuardIndex < migrate.lastIndexOf("COMMIT;"), "post-apply guard runs before COMMIT");
+check(
+  migrate.includes("SELECT user_id, operation_anchor") &&
+    migrate.includes("GROUP BY user_id, operation_anchor"),
+  "migration guard detects operation-anchor duplicates within each user"
+);
 
 for (const frozen of FROZEN_FILES) {
   check(
@@ -149,8 +154,18 @@ check(!/^COMMIT;$/m.test(postflight), "postflight has no commit");
 check(
   postflight.includes("'negative_credit_profiles'") &&
     postflight.includes("'duplicate_operation_anchors'") &&
-    postflight.includes("'submission_unknown_generations'"),
+    postflight.includes("'unknown_submission_generations'"),
   "postflight reports the ledger/reconciliation safety counts"
+);
+check(
+  postflight.includes("provider_submission_state = 'unknown'") &&
+    !postflight.includes("provider_submission_state = 'submission_unknown'"),
+  "postflight uses the real provider submission-state enum"
+);
+check(
+  postflight.includes("SELECT user_id, operation_anchor") &&
+    postflight.includes("GROUP BY user_id, operation_anchor"),
+  "postflight detects operation-anchor duplicates within each user"
 );
 check(
   postflight.includes("on_auth_user_created_create_tenant") &&

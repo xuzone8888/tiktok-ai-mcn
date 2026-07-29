@@ -23,6 +23,7 @@ import {
   resolveCanvasAuthSnapshot,
   subscribeCanvasRuntimeStore,
   type CanvasRuntime,
+  type CanvasRuntimeDebugState,
   type CanvasRuntimeWriterSignal,
   type CanvasShadowRecoveryNotice,
   type CanvasRuntimeUiState,
@@ -119,6 +120,15 @@ export interface CanvasRuntimeView {
   runtimeState: CanvasRuntimeUiState;
   shadowRecovery: CanvasShadowRecoveryNotice | null;
   handleWriterSignal(signal: CanvasRuntimeWriterSignal): void;
+  /**
+   * Read the transport fence at the instant a paid action is about to start.
+   *
+   * Generation callers must require a persisted session with no pending or
+   * in-flight document patch, then submit this exact `baseRev` together with
+   * the active writer tag.  Returning a snapshot function (instead of copying
+   * the revision into React state) keeps the fence synchronous with Runtime.
+   */
+  getDebugState(): CanvasRuntimeDebugState;
   restoreShadowSnapshot(): boolean;
   discardShadowSnapshot(): boolean;
 }
@@ -252,6 +262,23 @@ export function useCanvasRuntime(canvasId?: string | null): CanvasRuntimeView {
     []
   );
 
+  const getDebugState = useCallback((): CanvasRuntimeDebugState => {
+    const runtime = runtimeRef.current;
+    if (runtime) return runtime.getDebugState();
+    return {
+      mode: "idle",
+      activeId: null,
+      targetCanvasId: null,
+      createId: null,
+      baseRev: 0,
+      pending: 0,
+      inflight: false,
+      conflicted: false,
+      repairRequired: false,
+      disposed: true,
+    };
+  }, []);
+
   const restoreShadowSnapshot = useCallback(() => {
     const runtime = runtimeRef.current;
     if (!runtime) return false;
@@ -278,6 +305,7 @@ export function useCanvasRuntime(canvasId?: string | null): CanvasRuntimeView {
     runtimeState,
     shadowRecovery,
     handleWriterSignal,
+    getDebugState,
     restoreShadowSnapshot,
     discardShadowSnapshot,
   };

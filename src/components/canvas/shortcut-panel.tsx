@@ -56,7 +56,7 @@ export function ShortcutPanel({
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>快捷键</DialogTitle>
-          <DialogDescription>P0 画布骨架 · 仅列已生效按键</DialogDescription>
+          <DialogDescription>超级画布 · 仅列当前已生效按键</DialogDescription>
         </DialogHeader>
         <div className="max-h-[70vh] space-y-4 overflow-auto">
           <ShortcutList title="视图 · View" rows={CANVAS_VIEW_SHORTCUTS} />

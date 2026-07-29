@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { createClient } from "@/lib/supabase/server";
+import { canAccessSuperCanvas } from "@/lib/canvas/feature-access";
 import {
   buildHistorySourceKeysetFilter,
   getHistoryTrustedOssHosts,
@@ -172,6 +173,18 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     } = await supabase.auth.getUser();
     if (authError || !user) {
       return json({ success: false, error: { code: "UNAUTHENTICATED", message: "Authentication required" } }, 401);
+    }
+    if (!canAccessSuperCanvas({ id: user.id, email: user.email ?? null })) {
+      return json(
+        {
+          success: false,
+          error: {
+            code: "CANVAS_NOT_ENABLED",
+            message: "Super Canvas is not enabled for this account",
+          },
+        },
+        403
+      );
     }
 
     const url = new URL(request.url);

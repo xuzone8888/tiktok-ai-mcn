@@ -12,12 +12,12 @@ export function shouldShowEmptyState(nodeCount: number, brokenCount: number): bo
   return nodeCount === 0 && brokenCount === 0;
 }
 
-/** 空态 4 起点引导(明确为起点,非完整工作流):文本 / 图片 / 商品 / 脚本。 */
+/** 可发布 P1 起点:提示词、商品信息、图片与视频。 */
 export const EMPTY_STATE_GUIDE_TYPES: readonly CanvasNodeType[] = [
   "text",
-  "image",
   "product",
-  "script",
+  "image",
+  "video",
 ];
 
 export type BottomToolbarAction =

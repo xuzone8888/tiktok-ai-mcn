@@ -69,7 +69,7 @@ export const FROZEN_EVIDENCE = Object.freeze([
   }),
   Object.freeze({
     relativePath: "scripts/fixtures/canvas-p1/batch2/remote-preflight-locks.json",
-    sha256: "d8427bd23f812ca4de2e0ae76d35567d832183260a76c6125cc873a04b5778e9",
+    sha256: "4aefc421f1a783dcac07c63115b7c7c31d10d1d0677e14b69a6ac9e36c429031",
   }),
 ]);
 
@@ -244,17 +244,17 @@ function readOnlySummaryTail({ state }) {
   const postApply = state === "postapply";
   const postApplyFields = postApply
     ? `,
-    'submission_unknown_generations',
+    'unknown_submission_generations',
         (SELECT count(*) FROM public.generations
-          WHERE provider_submission_state = 'submission_unknown'),
+          WHERE provider_submission_state = 'unknown'),
     'negative_credit_profiles',
         (SELECT count(*) FROM public.profiles WHERE credits < 0),
     'duplicate_operation_anchors',
         (SELECT count(*) FROM (
-            SELECT operation_anchor
+            SELECT user_id, operation_anchor
               FROM public.credit_transactions
              WHERE operation_anchor IS NOT NULL
-             GROUP BY operation_anchor
+             GROUP BY user_id, operation_anchor
             HAVING count(*) > 1
         ) duplicate_anchors)`
     : "";
@@ -330,7 +330,7 @@ export function buildReadOnlyOperation(state = "preapply") {
   return `${expectedCatalogCtes(manifest.sections)}${readOnlySummaryTail({ state })}`;
 }
 
-function transactionGuard(state) {
+export function buildCatalogTransactionGuard(state) {
   const manifest = productionManifest(state);
   const extraDeclarations =
     state === "preapply"
@@ -380,10 +380,10 @@ function transactionGuard(state) {
     SELECT count(*)
       INTO duplicate_anchor_count
       FROM (
-        SELECT operation_anchor
+        SELECT user_id, operation_anchor
           FROM public.credit_transactions
          WHERE operation_anchor IS NOT NULL
-         GROUP BY operation_anchor
+         GROUP BY user_id, operation_anchor
         HAVING count(*) > 1
       ) duplicate_anchors;
     IF duplicate_anchor_count <> 0 THEN
@@ -425,7 +425,7 @@ SET LOCAL lock_timeout = '5s';
 SET LOCAL statement_timeout = '15min';
 SELECT pg_advisory_xact_lock(hashtextextended('canvas-p1-production-20260728', 0));
 
-${transactionGuard("preapply")}
+${buildCatalogTransactionGuard("preapply")}
 
 -- The production-only tenant trigger has been proven byte-for-byte by the
 -- pre-apply catalog guard. Drop it only inside this still-uncommitted batch so
@@ -441,7 +441,7 @@ CREATE TRIGGER on_auth_user_created_create_tenant
     FOR EACH ROW
     EXECUTE FUNCTION public.auto_create_tenant_for_user();
 
-${transactionGuard("postapply")}
+${buildCatalogTransactionGuard("postapply")}
 
 COMMIT;
 `;

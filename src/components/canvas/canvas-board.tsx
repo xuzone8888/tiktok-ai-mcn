@@ -77,11 +77,12 @@ import {
   shouldSuppressCanvasNodeChanges,
 } from "./canvas-command-shortcuts";
 import { CanvasBatchDeleteDialog } from "./canvas-batch-delete-dialog";
-import { CanvasAsyncSession, runGuardedCanvasTask } from "./canvas-async-session";
+import { CanvasAsyncSession } from "./canvas-async-session";
 import { CanvasBottomToolbar } from "./canvas-bottom-toolbar";
 import { shouldShowEmptyState } from "./canvas-chrome-policy";
 import { CanvasHistoryPanel } from "./canvas-history-panel";
 import { CanvasEmptyState } from "./canvas-empty-state";
+import { useCanvasGeneration } from "./canvas-generation-context";
 import { layoutCanvasNodes } from "./canvas-layout";
 import { CanvasToolbar } from "./canvas-toolbar";
 import { canvasNodeTypes } from "./node-registry";
@@ -90,7 +91,13 @@ import { NodePalette } from "./node-palette";
 import { projectGroupFrames } from "./group-frame";
 import { ShortcutPanel } from "./shortcut-panel";
 import { shouldExpandMinimap } from "./canvas-responsive";
-import { uploadCanvasFile } from "./canvas-upload";
+import { generationDeleteBlockReason } from "./nodes/generation-controls";
+import {
+  CANVAS_UPLOAD_MAX_CONCURRENCY,
+  prepareCanvasUploads,
+  uploadPreparedCanvasFile,
+  validateCanvasUploadFiles,
+} from "./canvas-upload";
 import { useCanvasShortcuts } from "./use-canvas-shortcuts";
 import { useCanvasCommandShortcuts } from "./use-canvas-command-shortcuts";
 import { useViewportSize } from "./use-viewport-size";
@@ -168,6 +175,7 @@ export function CanvasBoard({
   const asyncSession = asyncSessionRef.current;
   asyncSession.setInteraction(interactionActive);
   const uploadControllersRef = useRef(new Set<AbortController>());
+  const uploadBatchActiveRef = useRef(false);
   const setMinimapCollapsed = useCanvasStore((state) => state.setMinimapCollapsed);
   const applyNodePositionChanges = useCanvasStore(
     (state) => state.applyNodePositionChanges
@@ -196,6 +204,12 @@ export function CanvasBoard({
   const [historyOpen, setHistoryOpen] = useState(false);
   const [connectMenu, setConnectMenu] = useState<ConnectMenuState | null>(null);
   const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
+  const {
+    canvasId: generationCanvasId,
+    syncState: generationSyncState,
+    unresolvedActionByNodeId,
+    generationByNodeId,
+  } = useCanvasGeneration();
 
   // 本地 ephemeral 视图态(承载 selected/dragging/measured 等,永不回流领域)。
   // viewNodes = 领域投影 + brokenNodes 的 __broken 投影;__group 组框在**渲染时**派生(见 nodesForRF),
@@ -316,6 +330,40 @@ export function CanvasBoard({
     (): string[] => viewEdgesRef.current.filter((edge) => edge.selected).map((edge) => edge.id),
     []
   );
+  const generationProtectionReason = useCallback(
+    (nodeIds: readonly string[]): string | null => {
+      const nodesById = new Map(
+        useCanvasStore.getState().nodes.map((node) => [node.id, node])
+      );
+      for (const nodeId of nodeIds) {
+        const node = nodesById.get(nodeId);
+        if (!node || (node.type !== "image" && node.type !== "video")) continue;
+        const reason = generationDeleteBlockReason(
+          generationByNodeId.get(nodeId),
+          {
+            syncState:
+              generationCanvasId === null ? undefined : generationSyncState,
+            unresolvedActionId: unresolvedActionByNodeId.get(nodeId),
+          }
+        );
+        if (reason) return reason;
+      }
+      return null;
+    },
+    [
+      generationByNodeId,
+      generationCanvasId,
+      generationSyncState,
+      unresolvedActionByNodeId,
+    ]
+  );
+  const allGenerationProtectedNodeIds = useMemo(
+    () =>
+      domainNodes
+        .filter((node) => node.type === "image" || node.type === "video")
+        .map((node) => node.id),
+    [domainNodes]
+  );
 
   // ---------------------------------------------------------------- S4 命令
   const handleGroup = useCallback(
@@ -336,16 +384,44 @@ export function CanvasBoard({
     if (readOnly) return false;
     const ids = getSelectedDomainNodeIds();
     if (ids.length === 0) return false;
+    const protectedReason = generationProtectionReason(ids);
+    if (protectedReason) {
+      toast({
+        title: "当前节点暂不可复制",
+        description: protectedReason,
+        variant: "destructive",
+      });
+      return true;
+    }
     return duplicateNodes(ids, { withEdges: true, offset: DUPLICATE_OFFSET }) !== null;
-  }, [duplicateNodes, getSelectedDomainNodeIds, readOnly]);
+  }, [
+    duplicateNodes,
+    generationProtectionReason,
+    getSelectedDomainNodeIds,
+    readOnly,
+  ]);
   const handleDelete = useCallback(() => {
     if (readOnly) return false;
     const nodeIds = getSelectedDomainNodeIds();
     const edgeIds = getSelectedEdgeIds();
     if (nodeIds.length === 0 && edgeIds.length === 0) return false;
+    const protectedReason = generationProtectionReason(nodeIds);
+    if (protectedReason) {
+      toast({
+        title: "当前所选暂不可删除",
+        description: protectedReason,
+        variant: "destructive",
+      });
+      return true;
+    }
     setPendingDelete({ nodeIds, edgeIds }); // 一次批量二确认
     return true;
-  }, [getSelectedDomainNodeIds, getSelectedEdgeIds, readOnly]);
+  }, [
+    generationProtectionReason,
+    getSelectedDomainNodeIds,
+    getSelectedEdgeIds,
+    readOnly,
+  ]);
   const handleZoomIn = useCallback(() => {
     void zoomIn({ duration: 200 });
   }, [zoomIn]);
@@ -362,8 +438,36 @@ export function CanvasBoard({
       onConnect: handleConnect,
       onDuplicate: handleDuplicate,
       onDelete: handleDelete,
-      onUndo: () => !readOnly && undo(),
-      onRedo: () => !readOnly && redo(),
+      onUndo: () => {
+        if (readOnly) return false;
+        const protectedReason = generationProtectionReason(
+          allGenerationProtectedNodeIds
+        );
+        if (protectedReason) {
+          toast({
+            title: "任务核对期间暂不可撤销",
+            description: protectedReason,
+            variant: "destructive",
+          });
+          return true;
+        }
+        return undo();
+      },
+      onRedo: () => {
+        if (readOnly) return false;
+        const protectedReason = generationProtectionReason(
+          allGenerationProtectedNodeIds
+        );
+        if (protectedReason) {
+          toast({
+            title: "任务核对期间暂不可重做",
+            description: protectedReason,
+            variant: "destructive",
+          });
+          return true;
+        }
+        return redo();
+      },
       onZoomIn: handleZoomIn,
       onZoomOut: handleZoomOut,
     },
@@ -371,10 +475,27 @@ export function CanvasBoard({
 
   const confirmBatchDelete = useCallback(() => {
     if (!readOnly && pendingDelete) {
+      const protectedReason = generationProtectionReason(
+        pendingDelete.nodeIds
+      );
+      if (protectedReason) {
+        toast({
+          title: "删除已取消",
+          description: protectedReason,
+          variant: "destructive",
+        });
+        setPendingDelete(null);
+        return;
+      }
       removeEntities(pendingDelete.nodeIds, pendingDelete.edgeIds);
     }
     setPendingDelete(null);
-  }, [pendingDelete, readOnly, removeEntities]);
+  }, [
+    generationProtectionReason,
+    pendingDelete,
+    readOnly,
+    removeEntities,
+  ]);
 
   // ---------------------------------------------------------------- S2
   const createNodeAt = useCallback(
@@ -578,8 +699,8 @@ export function CanvasBoard({
   // 3) 拖入文件 → 上传(只取 object key)→ 建图片/视频节点
   const onDragOver = useCallback(
     (event: ReactDragEvent<HTMLDivElement>) => {
-      if (readOnly) return;
       event.preventDefault();
+      if (readOnly) return;
       event.dataTransfer.dropEffect = "copy";
     },
     [readOnly]
@@ -587,38 +708,144 @@ export function CanvasBoard({
 
   const onDrop = useCallback(
     (event: ReactDragEvent<HTMLDivElement>) => {
-      if (readOnly) return;
       event.preventDefault();
+      if (readOnly) return;
       const files = Array.from(event.dataTransfer.files ?? []);
       if (files.length === 0) return;
+      if (uploadBatchActiveRef.current) {
+        toast({
+          title: "上一批文件仍在上传",
+          description: "请等待上传完成后再拖入新文件",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      try {
+        validateCanvasUploadFiles(files);
+      } catch (error) {
+        toast({
+          title: "无法上传这批文件",
+          description:
+            error instanceof Error ? error.message : "文件信息不符合上传要求",
+          variant: "destructive",
+        });
+        return;
+      }
+
       const base = screenToFlowPosition({ x: event.clientX, y: event.clientY });
-      files.forEach((file, index) => {
-        const position = { x: base.x + index * 24, y: base.y + index * 24 };
-        const controller = new AbortController();
-        uploadControllersRef.current.add(controller);
-        void runGuardedCanvasTask(
-          asyncSession,
-          uploadCanvasFile(file, controller.signal),
-          {
-            onSuccess: ({ kind, ossKey }) => {
-            const id = addNode({ type: kind, position, data: { media: { ossKey } } });
-            if (!id) {
-              toast({ title: "建节点失败", description: file.name, variant: "destructive" });
-            }
-            },
-            onError: (error) => {
-              const message = error instanceof Error ? error.message : "上传失败";
+      const controller = new AbortController();
+      const token = asyncSession.capture();
+      if (!token) return;
+      uploadBatchActiveRef.current = true;
+      uploadControllersRef.current.add(controller);
+
+      if (files.length > 1) {
+        toast({
+          title: `正在上传 ${files.length} 个文件`,
+          description: `同时最多上传 ${CANVAS_UPLOAD_MAX_CONCURRENCY} 个`,
+        });
+      }
+
+      void (async () => {
+        const prepared = await prepareCanvasUploads(files, controller.signal);
+        let nextIndex = 0;
+        let uploaded = 0;
+        let failed = 0;
+
+        const worker = async () => {
+          while (nextIndex < prepared.length) {
+            const index = nextIndex;
+            nextIndex += 1;
+            const item = prepared[index];
+            try {
+              const { kind, ossKey } = await uploadPreparedCanvasFile(item, {
+                signal: controller.signal,
+              });
+              if (
+                !asyncSession.isCurrent(token) ||
+                useCanvasStore.getState().readOnly
+              ) {
+                continue;
+              }
+              const position = {
+                x: base.x + index * 24,
+                y: base.y + index * 24,
+              };
+              const id = addNode({
+                type: kind,
+                position,
+                data: { media: { ossKey } },
+              });
+              if (id) {
+                uploaded += 1;
+              } else {
+                failed += 1;
+                toast({
+                  title: "文件已上传，但创建节点失败",
+                  description: item.file.name,
+                  variant: "destructive",
+                });
+              }
+            } catch (error) {
+              if (
+                controller.signal.aborted ||
+                !asyncSession.isCurrent(token)
+              ) {
+                continue;
+              }
+              failed += 1;
               toast({
                 title: "上传失败",
-                description: `${file.name}:${message}`,
+                description: `${item.file.name}：${
+                  error instanceof Error ? error.message : "请稍后重试"
+                }`,
                 variant: "destructive",
               });
-            },
+            }
           }
-        ).finally(() => {
+        };
+
+        const workerCount = Math.min(
+          CANVAS_UPLOAD_MAX_CONCURRENCY,
+          prepared.length
+        );
+        await Promise.all(
+          Array.from({ length: workerCount }, () => worker())
+        );
+
+        if (
+          files.length > 1 &&
+          asyncSession.isCurrent(token) &&
+          !controller.signal.aborted
+        ) {
+          toast({
+            title:
+              failed === 0
+                ? `${uploaded} 个文件上传完成`
+                : `已上传 ${uploaded} 个，失败 ${failed} 个`,
+            ...(failed > 0 ? { variant: "destructive" as const } : {}),
+          });
+        }
+      })()
+        .catch((error) => {
+          if (
+            controller.signal.aborted ||
+            !asyncSession.isCurrent(token)
+          ) {
+            return;
+          }
+          toast({
+            title: "无法开始上传",
+            description:
+              error instanceof Error ? error.message : "请检查网络后重试",
+            variant: "destructive",
+          });
+        })
+        .finally(() => {
           uploadControllersRef.current.delete(controller);
+          uploadBatchActiveRef.current = false;
         });
-      });
     },
     [addNode, asyncSession, readOnly, screenToFlowPosition]
   );

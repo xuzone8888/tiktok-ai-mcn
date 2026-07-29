@@ -1,0 +1,775 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import {
+  AlertCircle,
+  CheckCircle2,
+  Coins,
+  Download,
+  ExternalLink,
+  Loader2,
+  RefreshCw,
+  Sparkles,
+} from "lucide-react";
+
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Button } from "@/components/ui/button";
+import { toast } from "@/hooks/use-toast";
+import type { CanvasNodeData } from "@/lib/canvas/schema";
+import {
+  VIDEO_MODEL_OPTIONS,
+  getVideoModelCatalogEntry,
+} from "@/lib/video-models/catalog";
+import type {
+  VideoAspectRatio,
+  VideoDurationSeconds,
+  VideoGenerationMode,
+  VideoModelId,
+  VideoQuality,
+} from "@/lib/video-models/types";
+import {
+  useCanvasEdges,
+  useCanvasNodes,
+  useCanvasReadOnly,
+  useCanvasStore,
+} from "@/stores/canvas-store";
+
+import {
+  ENABLED_CANVAS_VIDEO_MODELS,
+  getCanvasImageDraftConfig,
+  getCanvasVideoDraftConfig,
+  useCanvasGeneration,
+  type CanvasGenerationEstimate,
+  type CanvasGenerationView,
+  type CanvasImageDraftConfig,
+  type CanvasVideoDraftConfig,
+} from "../canvas-generation-context";
+
+const IMAGE_ASPECTS: Array<{
+  value: CanvasImageDraftConfig["aspectRatio"];
+  label: string;
+}> = [
+  { value: "9:16", label: "竖屏 9:16" },
+  { value: "16:9", label: "横屏 16:9" },
+  { value: "1:1", label: "方图 1:1" },
+  { value: "4:3", label: "横图 4:3" },
+  { value: "3:4", label: "竖图 3:4" },
+  { value: "auto", label: "自动" },
+];
+
+const ENABLED_VIDEO_MODEL_OPTIONS = VIDEO_MODEL_OPTIONS.filter((option) =>
+  ENABLED_CANVAS_VIDEO_MODELS.includes(option.id)
+);
+
+const STATUS_COPY: Record<
+  CanvasGenerationView["status"],
+  { label: string; className: string }
+> = {
+  pending: {
+    label: "排队中",
+    className: "bg-amber-500/15 text-amber-700 dark:text-amber-300",
+  },
+  processing: {
+    label: "生成中",
+    className: "bg-sky-500/15 text-sky-700 dark:text-sky-300",
+  },
+  completed: {
+    label: "已完成",
+    className: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300",
+  },
+  failed: {
+    label: "失败",
+    className: "bg-destructive/10 text-destructive",
+  },
+  unknown: {
+    label: "等待核对",
+    className: "bg-orange-500/15 text-orange-700 dark:text-orange-300",
+  },
+};
+
+function userFacingGenerationError(code: string | null): string {
+  if (!code) return "生成服务未能完成本次任务";
+  const normalized = code.toLowerCase();
+  if (normalized.includes("provider_rejected")) {
+    return "生成服务拒绝了本次参数，请调整提示词或规格后重试";
+  }
+  if (
+    normalized.includes("terminal_failure") ||
+    normalized.includes("provider_failed")
+  ) {
+    return "上游生成任务失败，可调整参数后重新生成";
+  }
+  if (
+    normalized.includes("timeout") ||
+    normalized.includes("network") ||
+    normalized.includes("transport")
+  ) {
+    return "上游网络异常，系统已完成核对后结束任务";
+  }
+  if (
+    normalized.includes("object_not_found") ||
+    normalized.includes("object_identity_mismatch") ||
+    normalized.includes("object_proof")
+  ) {
+    return "生成产物校验未通过，系统未把异常文件交付给你";
+  }
+  if (normalized.includes("planned_output")) {
+    return "生成产物存储初始化失败";
+  }
+  return "生成任务未完成；如需协助，请提供下方任务号";
+}
+
+function SelectField({
+  label,
+  value,
+  disabled,
+  onChange,
+  children,
+}: {
+  label: string;
+  value: string;
+  disabled: boolean;
+  onChange(value: string): void;
+  children: React.ReactNode;
+}) {
+  return (
+    <label className="min-w-0 flex-1 text-[10px] text-muted-foreground">
+      <span className="mb-1 block">{label}</span>
+      <select
+        className="nodrag nopan nowheel h-7 w-full rounded border border-border bg-background px-1.5 text-[11px] text-foreground outline-none focus:border-ring disabled:opacity-50"
+        value={value}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.value)}
+      >
+        {children}
+      </select>
+    </label>
+  );
+}
+
+function updateParams(nodeId: string, key: string, value: unknown): void {
+  const state = useCanvasStore.getState();
+  const data = state.nodes.find((candidate) => candidate.id === nodeId)?.data;
+  if (!data) return;
+  const params =
+    data.params && typeof data.params === "object" && !Array.isArray(data.params)
+      ? { ...data.params }
+      : {};
+  params[key] = value;
+  if (state.updateNodeData(nodeId, { params })) state.commitTextEdit();
+}
+
+function downloadMedia(generationId: string, filename: string): void {
+  if (!/^[0-9a-f-]{36}$/i.test(generationId)) {
+    throw new Error("生成记录编号未通过安全校验");
+  }
+
+  // The owner-authenticated endpoint issues a short-lived OSS URL with an
+  // attachment disposition, so large media never enters renderer/server heap.
+  const anchor = document.createElement("a");
+  anchor.href = `/api/canvas/generations/${generationId}/download`;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+}
+
+function GenerationStatus({
+  generation,
+}: {
+  generation: CanvasGenerationView | undefined;
+}) {
+  if (!generation) return null;
+  const copy = STATUS_COPY[generation.status];
+  return (
+    <div
+      className="space-y-1.5 rounded border border-border/70 bg-muted/30 p-2"
+      aria-live="polite"
+    >
+      <div className="flex items-center justify-between gap-2">
+        <span
+          className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${copy.className}`}
+        >
+          {generation.status === "pending" || generation.status === "processing" ? (
+            <Loader2 className="h-3 w-3 animate-spin" />
+          ) : generation.status === "completed" ? (
+            <CheckCircle2 className="h-3 w-3" />
+          ) : (
+            <AlertCircle className="h-3 w-3" />
+          )}
+          {copy.label}
+        </span>
+        <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
+          <Coins className="h-3 w-3" />
+          {generation.creditCost} 积分
+        </span>
+      </div>
+      {(generation.status === "pending" || generation.status === "processing") && (
+        <div
+          className="h-1 overflow-hidden rounded-full bg-muted"
+          aria-label={`生成进度 ${generation.progress}%`}
+          role="progressbar"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={generation.progress}
+        >
+          <div
+            className="h-full rounded-full bg-primary transition-[width]"
+            style={{ width: `${Math.max(4, generation.progress)}%` }}
+          />
+        </div>
+      )}
+      {generation.status === "failed" && (
+        <p className="text-[10px] leading-relaxed text-destructive">
+          {userFacingGenerationError(generation.errorCode)}
+          {generation.refundedCredits > 0
+            ? ` · 已退 ${generation.refundedCredits} 积分`
+            : ""}
+          <span className="block text-[9px] opacity-80">
+            任务号：{generation.generationId.slice(0, 8)}
+          </span>
+        </p>
+      )}
+      {generation.status === "unknown" && (
+        <p className="text-[10px] leading-relaxed text-orange-700 dark:text-orange-300">
+          上游是否接单暂不确定，为防重复扣费已停止重提。任务号：
+          {generation.generationId.slice(0, 8)}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function ImageSettings({
+  nodeId,
+  data,
+  disabled,
+}: {
+  nodeId: string;
+  data: CanvasNodeData;
+  disabled: boolean;
+}) {
+  const config = getCanvasImageDraftConfig(data);
+  const patch = (next: CanvasImageDraftConfig) =>
+    updateParams(nodeId, "canvasImage", next);
+  return (
+    <div className="flex gap-2">
+      <SelectField
+        label="清晰度"
+        value={config.resolution}
+        disabled={disabled}
+        onChange={(resolution) =>
+          patch({
+            ...config,
+            resolution: resolution as CanvasImageDraftConfig["resolution"],
+          })
+        }
+      >
+        <option value="1k">1K</option>
+        <option value="2k">2K</option>
+        <option value="4k">4K</option>
+      </SelectField>
+      <SelectField
+        label="画幅"
+        value={config.aspectRatio}
+        disabled={disabled}
+        onChange={(aspectRatio) =>
+          patch({
+            ...config,
+            aspectRatio: aspectRatio as CanvasImageDraftConfig["aspectRatio"],
+          })
+        }
+      >
+        {IMAGE_ASPECTS.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </SelectField>
+    </div>
+  );
+}
+
+function compatibleVideoConfig(
+  model: VideoModelId,
+  previous: CanvasVideoDraftConfig
+): CanvasVideoDraftConfig {
+  const catalog = getVideoModelCatalogEntry(model);
+  return {
+    model,
+    durationSeconds: catalog.supportedDurations.includes(previous.durationSeconds)
+      ? previous.durationSeconds
+      : catalog.supportedDurations[0],
+    quality: catalog.supportedQualities.includes(previous.quality)
+      ? previous.quality
+      : catalog.supportedQualities[0],
+    aspectRatio: catalog.supportedAspectRatios.includes(previous.aspectRatio)
+      ? previous.aspectRatio
+      : catalog.supportedAspectRatios[0],
+    mode: catalog.supportedModes.includes(previous.mode)
+      ? previous.mode
+      : catalog.supportedModes[0],
+  };
+}
+
+function VideoSettings({
+  nodeId,
+  data,
+  disabled,
+  incomingImageCount,
+}: {
+  nodeId: string;
+  data: CanvasNodeData;
+  disabled: boolean;
+  incomingImageCount: number;
+}) {
+  const config = getCanvasVideoDraftConfig(data);
+  const catalog = getVideoModelCatalogEntry(config.model);
+  const patch = (next: CanvasVideoDraftConfig) =>
+    updateParams(nodeId, "canvasVideo", next);
+  return (
+    <div className="space-y-2">
+      <div className="flex gap-2">
+        <SelectField
+          label="模型"
+          value={config.model}
+          disabled={disabled}
+          onChange={(model) =>
+            patch(compatibleVideoConfig(model as VideoModelId, config))
+          }
+        >
+          {ENABLED_VIDEO_MODEL_OPTIONS.map((option) => (
+            <option key={option.id} value={option.id}>
+              {option.label}
+            </option>
+          ))}
+        </SelectField>
+        <SelectField
+          label="模式"
+          value={config.mode}
+          disabled={disabled}
+          onChange={(mode) =>
+            patch({ ...config, mode: mode as VideoGenerationMode })
+          }
+        >
+          {catalog.supportedModes.includes("prompt_to_video") && (
+            <option value="prompt_to_video">文生视频</option>
+          )}
+          {catalog.supportedModes.includes("image_to_video") && (
+            <option value="image_to_video">
+              图生视频{incomingImageCount ? ` (${incomingImageCount})` : ""}
+            </option>
+          )}
+        </SelectField>
+      </div>
+      <div className="flex gap-2">
+        <SelectField
+          label="时长"
+          value={String(config.durationSeconds)}
+          disabled={disabled}
+          onChange={(duration) =>
+            patch({
+              ...config,
+              durationSeconds: Number(duration) as VideoDurationSeconds,
+            })
+          }
+        >
+          {catalog.supportedDurations.map((duration) => (
+            <option key={duration} value={duration}>
+              {duration} 秒
+            </option>
+          ))}
+        </SelectField>
+        <SelectField
+          label="质量"
+          value={config.quality}
+          disabled={disabled}
+          onChange={(quality) =>
+            patch({ ...config, quality: quality as VideoQuality })
+          }
+        >
+          {catalog.supportedQualities.map((quality) => (
+            <option key={quality} value={quality}>
+              {quality === "hd" ? "高清" : "标准"}
+            </option>
+          ))}
+        </SelectField>
+        <SelectField
+          label="画幅"
+          value={config.aspectRatio}
+          disabled={disabled}
+          onChange={(aspectRatio) =>
+            patch({ ...config, aspectRatio: aspectRatio as VideoAspectRatio })
+          }
+        >
+          {catalog.supportedAspectRatios.map((aspect) => (
+            <option key={aspect} value={aspect}>
+              {aspect}
+            </option>
+          ))}
+        </SelectField>
+      </div>
+    </div>
+  );
+}
+
+export interface GenerationControlsProps {
+  nodeId: string;
+  kind: "image" | "video";
+  data: CanvasNodeData;
+  mediaUrl?: string | null;
+}
+
+export function GenerationControls({
+  nodeId,
+  kind,
+  data,
+  mediaUrl,
+}: GenerationControlsProps) {
+  const readOnly = useCanvasReadOnly();
+  const nodes = useCanvasNodes();
+  const edges = useCanvasEdges();
+  const {
+    enabled,
+    syncState,
+    syncError,
+    submittingNodeIds,
+    unresolvedActionByNodeId,
+    generationByNodeId,
+    submitNode,
+    refresh,
+    estimate,
+  } = useCanvasGeneration();
+  const [estimateValue, setEstimateValue] =
+    useState<CanvasGenerationEstimate | null>(null);
+  const [estimateError, setEstimateError] = useState<string | null>(null);
+  const [estimateEpoch, setEstimateEpoch] = useState(0);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const generation = generationByNodeId.get(nodeId);
+  const unresolvedActionId = unresolvedActionByNodeId.get(nodeId) ?? null;
+  const submitting = submittingNodeIds.has(nodeId);
+  const active =
+    generation?.status === "pending" || generation?.status === "processing";
+  const uncertain = generation?.status === "unknown";
+  const settingsDisabled =
+    readOnly ||
+    !enabled ||
+    submitting ||
+    active ||
+    uncertain ||
+    unresolvedActionId !== null;
+
+  const incoming = useMemo(() => {
+    const ids = edges
+      .filter((edge) => edge.target === nodeId)
+      .map((edge) => edge.source);
+    const idSet = new Set(ids);
+    return nodes.filter((node) => idSet.has(node.id));
+  }, [edges, nodeId, nodes]);
+  const incomingImageCount = incoming.filter(
+    (node) => node.type === "image" && Boolean(node.data.media?.ossKey)
+  ).length;
+  const config =
+    kind === "image"
+      ? getCanvasImageDraftConfig(data)
+      : getCanvasVideoDraftConfig(data);
+  const configKey = JSON.stringify(config);
+
+  useEffect(() => {
+    setEstimateValue(null);
+    setEstimateError(null);
+    if (!enabled || syncState !== "ready" || unresolvedActionId !== null) {
+      return;
+    }
+    let cancelled = false;
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      estimate(kind, config, controller.signal)
+        .then((value) => {
+          if (!cancelled) {
+            setEstimateValue(value);
+            setEstimateError(value ? null : "暂时无法预估");
+          }
+        })
+        .catch((error: unknown) => {
+          if (
+            !cancelled &&
+            (error as { name?: string })?.name !== "AbortError"
+          ) {
+            setEstimateValue(null);
+            setEstimateError(
+              error instanceof Error ? error.message : "积分预估失败"
+            );
+          }
+        });
+    }, 250);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+      controller.abort();
+    };
+    // configKey is the stable semantic dependency; `config` is reconstructed
+    // from persisted node data on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    configKey,
+    enabled,
+    estimate,
+    estimateEpoch,
+    kind,
+    syncState,
+    unresolvedActionId,
+  ]);
+
+  const onGenerate = () => {
+    if (syncState === "error") {
+      void refresh();
+      return;
+    }
+    if (unresolvedActionId) {
+      void submitNode(nodeId);
+      return;
+    }
+    if (!estimateValue) {
+      toast({
+        title: "尚未取得可靠报价",
+        description: "请先重新预估积分，再确认生成。",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (estimateValue?.needsConfirmation) {
+      setConfirmOpen(true);
+      return;
+    }
+    void submitNode(nodeId);
+  };
+  const filename = `${kind === "image" ? "canvas-image" : "canvas-video"}-${
+    generation?.generationId.slice(0, 8) ?? nodeId
+  }.${kind === "image" ? "jpg" : "mp4"}`;
+  const actionDisabled =
+    readOnly ||
+    !enabled ||
+    submitting ||
+    active ||
+    uncertain ||
+    syncState === "idle" ||
+    syncState === "loading" ||
+    (syncState === "ready" &&
+      unresolvedActionId === null &&
+      estimateValue === null);
+
+  return (
+    <div className="nodrag nopan nowheel mt-2 space-y-2 border-t border-border/60 pt-2">
+      <textarea
+        className="nodrag nopan nowheel block w-full resize-none rounded border border-border bg-background/70 px-2 py-1.5 text-[11px] leading-relaxed text-foreground outline-none focus:border-ring"
+        rows={3}
+        maxLength={2000}
+        value={typeof data.title === "string" ? data.title : ""}
+        placeholder={
+          incoming.some((node) => node.type === "text" || node.type === "product")
+            ? "可补充当前节点要求；相连文本与商品简报会自动加入"
+            : "描述主体、场景、镜头、风格和限制…"
+        }
+        readOnly={settingsDisabled}
+        aria-label={`${kind === "image" ? "图片" : "视频"}生成提示词`}
+        onChange={(event) =>
+          useCanvasStore
+            .getState()
+            .updateNodeData(nodeId, { title: event.target.value })
+        }
+        onBlur={() => useCanvasStore.getState().commitTextEdit()}
+      />
+
+      {kind === "image" ? (
+        <ImageSettings
+          nodeId={nodeId}
+          data={data}
+          disabled={settingsDisabled}
+        />
+      ) : (
+        <VideoSettings
+          nodeId={nodeId}
+          data={data}
+          disabled={settingsDisabled}
+          incomingImageCount={incomingImageCount}
+        />
+      )}
+
+      <GenerationStatus generation={generation} />
+
+      {unresolvedActionId && (
+        <div
+          className="rounded border border-orange-500/30 bg-orange-500/10 p-2 text-[10px] leading-relaxed text-orange-700 dark:text-orange-300"
+          role="status"
+        >
+          本次提交的响应尚未确认。系统将复用任务{" "}
+          {unresolvedActionId.slice(0, 8)} 核对与恢复，不会创建新的计费任务。
+        </div>
+      )}
+
+      <div className="flex items-center justify-between gap-2">
+        <div className="min-w-0 text-[10px]">
+          <span
+            className={
+              estimateError || syncState === "error"
+                ? "text-destructive"
+                : "text-muted-foreground"
+            }
+            title={estimateError ?? syncError ?? undefined}
+          >
+            {syncState === "loading"
+              ? "正在同步任务状态…"
+              : syncState === "error"
+                ? syncError || "任务状态同步失败"
+                : unresolvedActionId
+                  ? "等待幂等核对"
+                  : estimateValue
+                    ? `预计 ${estimateValue.cost} 积分 · 余额 ${estimateValue.balance}`
+                    : estimateError || "正在预估积分…"}
+          </span>
+          {syncState === "ready" &&
+            unresolvedActionId === null &&
+            estimateError && (
+              <button
+                type="button"
+                className="ml-1 underline underline-offset-2"
+                onClick={() => setEstimateEpoch((value) => value + 1)}
+              >
+                重新预估
+              </button>
+            )}
+        </div>
+        <Button
+          type="button"
+          size="sm"
+          className="h-7 gap-1 px-2 text-[11px]"
+          disabled={actionDisabled}
+          onClick={onGenerate}
+        >
+          {submitting || active ? (
+            <Loader2 className="h-3 w-3 animate-spin" />
+          ) : unresolvedActionId || generation?.status === "failed" ? (
+            <RefreshCw className="h-3 w-3" />
+          ) : (
+            <Sparkles className="h-3 w-3" />
+          )}
+          {syncState === "error"
+            ? "重试同步"
+            : submitting
+            ? "提交中"
+            : active
+              ? "生成中"
+              : unresolvedActionId
+                ? "核对并恢复"
+              : generation?.status === "failed"
+                ? "重新生成"
+                : generation?.status === "completed"
+                  ? "生成新版本"
+                  : "开始生成"}
+        </Button>
+      </div>
+
+      {generation?.status === "completed" && mediaUrl && (
+        <div className="flex items-center gap-1.5">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-7 flex-1 gap-1 px-2 text-[11px]"
+            onClick={() => {
+              try {
+                downloadMedia(generation.generationId, filename);
+              } catch (error) {
+                toast({
+                  title: "下载失败",
+                  description:
+                    error instanceof Error ? error.message : "请稍后重试",
+                  variant: "destructive",
+                });
+              }
+            }}
+          >
+            <Download className="h-3 w-3" />
+            下载
+          </Button>
+          {kind === "video" && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-7 flex-1 gap-1 px-2 text-[11px]"
+              onClick={() => window.open("/publish", "_blank", "noopener,noreferrer")}
+            >
+              <ExternalLink className="h-3 w-3" />
+              去发布
+            </Button>
+          )}
+        </div>
+      )}
+
+      {generation?.status === "completed" && (
+        <p className="text-[9px] leading-relaxed text-muted-foreground">
+          AI 生成内容 · 对外发布时请遵循平台的 AIGC 标注规则。
+        </p>
+      )}
+
+      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>确认本次积分消耗</AlertDialogTitle>
+            <AlertDialogDescription>
+              本次预计消耗 {estimateValue?.cost ?? 0} 积分，当前余额{" "}
+              {estimateValue?.balance ?? 0}。任务提交后只有明确失败才会自动退款。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>返回调整</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setConfirmOpen(false);
+                void submitNode(nodeId);
+              }}
+            >
+              确认生成
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}
+
+export function generationDeleteBlockReason(
+  generation: CanvasGenerationView | undefined,
+  options?: {
+    syncState?: "idle" | "loading" | "ready" | "error";
+    unresolvedActionId?: string | null;
+  }
+): string | null {
+  if (options?.syncState !== undefined && options.syncState !== "ready") {
+    return options.syncState === "error"
+      ? "任务状态同步失败，为防误删潜在产物暂不可删除"
+      : "正在同步任务状态，完成后才能删除节点";
+  }
+  if (options?.unresolvedActionId) {
+    return "提交结果正在幂等核对，为防丢失潜在产物暂不可删除";
+  }
+  if (!generation) return null;
+  if (generation.status === "pending" || generation.status === "processing") {
+    return "任务生成中，完成或明确失败后才能删除节点";
+  }
+  if (generation.status === "unknown") {
+    return "上游状态待核对，为防丢失潜在产物暂不可删除";
+  }
+  return null;
+}

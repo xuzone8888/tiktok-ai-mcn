@@ -12,11 +12,12 @@
  */
 import "@xyflow/react/dist/style.css";
 
-import { useCallback, useEffect, useLayoutEffect } from "react";
+import { useCallback, useEffect, useLayoutEffect, useState } from "react";
 import { ReactFlowProvider } from "@xyflow/react";
 
 import type { CanvasErrorMonitor } from "@/lib/canvas/canvas-monitoring";
 import type {
+  CanvasRuntimeDebugState,
   CanvasRuntimeUiState,
   CanvasRuntimeWriterSignal,
   CanvasShadowRecoveryNotice,
@@ -25,14 +26,20 @@ import { normalizeCanvasId } from "@/lib/canvas/canvas-writer-lifecycle";
 import { useCanvasStore } from "@/stores/canvas-store";
 
 import { CanvasBoard } from "./canvas-board";
+import { CanvasGenerationProvider } from "./canvas-generation-context";
 import { CanvasErrorBoundary } from "./canvas-error-boundary";
 import { CanvasHealthBanners } from "./canvas-health-banners";
+import {
+  CanvasProjectBar,
+  type CanvasProjectNavigationTarget,
+} from "./canvas-project-bar";
 import { CanvasSaveFeedbackBridge } from "./canvas-save-feedback-bridge";
 import { useCanvasRuntime } from "./use-canvas-runtime";
 import { useCanvasWriterLock } from "./use-canvas-writer-lock";
 
 export interface CanvasRootProps {
   canvasId?: string | null;
+  currentTitle?: string | null;
   onRecover?: () => boolean | void | Promise<boolean | void>;
   onReload?: () => void;
   monitor?: Pick<CanvasErrorMonitor, "capture">;
@@ -40,10 +47,12 @@ export interface CanvasRootProps {
 
 interface CanvasRuntimeInnerProps {
   canvasId?: string | null;
+  currentTitle?: string | null;
   authIdentity?: string | null;
   runtimeState?: CanvasRuntimeUiState;
   shadowRecovery?: CanvasShadowRecoveryNotice | null;
   onWriterSignal?: (signal: CanvasRuntimeWriterSignal) => void;
+  getRuntimeDebugState?: () => CanvasRuntimeDebugState;
   onRestoreShadow?: () => boolean;
   onDiscardShadow?: () => boolean;
 }
@@ -54,6 +63,54 @@ interface CanvasSessionBootstrapProps {
   writerCanvasId: string | null;
   writerCanEdit: boolean;
   documentIdentityReady: boolean;
+}
+
+function CanvasSaveStateBadge({
+  getRuntimeDebugState,
+}: {
+  getRuntimeDebugState?: () => CanvasRuntimeDebugState;
+}) {
+  const [debug, setDebug] = useState<CanvasRuntimeDebugState | null>(() =>
+    getRuntimeDebugState ? getRuntimeDebugState() : null
+  );
+
+  useEffect(() => {
+    if (!getRuntimeDebugState) return;
+    const sync = () => setDebug(getRuntimeDebugState());
+    sync();
+    const timer = globalThis.setInterval(sync, 500);
+    return () => globalThis.clearInterval(timer);
+  }, [getRuntimeDebugState]);
+
+  let label = "正在连接";
+  let tone = "text-muted-foreground";
+  if (debug?.conflicted || debug?.mode === "failed") {
+    label = "保存已暂停";
+    tone = "text-destructive";
+  } else if (
+    debug?.mode === "creating" ||
+    debug?.mode === "loading" ||
+    debug?.mode === "repairing" ||
+    debug?.inflight ||
+    (debug?.pending ?? 0) > 0
+  ) {
+    label = "保存中…";
+  } else if (debug?.mode === "persisted") {
+    label = "已保存";
+    tone = "text-emerald-600 dark:text-emerald-400";
+  } else if (debug?.mode === "local") {
+    label = "首次编辑后自动保存";
+  }
+
+  return (
+    <span
+      className={`hidden shrink-0 rounded-full border border-border bg-card/90 px-2.5 py-1 text-[11px] shadow-sm sm:inline-flex ${tone}`}
+      aria-live="polite"
+      data-canvas-save-state={debug?.mode ?? "idle"}
+    >
+      {label}
+    </span>
+  );
 }
 
 function CanvasSessionBootstrap({
@@ -86,10 +143,12 @@ function CanvasSessionBootstrap({
 
 export function CanvasRuntimeInner({
   canvasId,
+  currentTitle,
   authIdentity,
   runtimeState = { mode: "local", interactionReady: true, issue: null },
   shadowRecovery = null,
   onWriterSignal,
+  getRuntimeDebugState,
   onRestoreShadow,
   onDiscardShadow,
 }: CanvasRuntimeInnerProps) {
@@ -138,6 +197,39 @@ export function CanvasRuntimeInner({
     runtimeState.interactionReady &&
     shadowRecovery === null;
 
+  const waitForSafeNavigation = useCallback(async (
+    target: CanvasProjectNavigationTarget
+  ) => {
+    if (
+      (target.kind === "rename" || target.kind === "delete") &&
+      requestedCanvasId !== null &&
+      !writerAcquired
+    ) {
+      throw new Error("当前标签页为只读，取得画布编辑权后才能修改项目");
+    }
+    if (!getRuntimeDebugState) return true;
+    const deadline = Date.now() + 8_000;
+    while (Date.now() < deadline) {
+      const debug = getRuntimeDebugState();
+      if (
+        debug.mode === "failed" ||
+        debug.conflicted ||
+        debug.repairRequired
+      ) {
+        throw new Error("画布保存已暂停，请先处理顶部提示后再离开");
+      }
+      if (
+        (debug.mode === "persisted" || debug.mode === "local") &&
+        !debug.inflight &&
+        debug.pending === 0
+      ) {
+        return true;
+      }
+      await new Promise((resolve) => globalThis.setTimeout(resolve, 100));
+    }
+    throw new Error("画布仍在保存，请稍后再离开");
+  }, [getRuntimeDebugState, requestedCanvasId, writerAcquired]);
+
   if (authIdentity === undefined) {
     return (
       <div
@@ -176,6 +268,17 @@ export function CanvasRuntimeInner({
     <div className="flex h-full w-full min-h-0 flex-col overflow-hidden" data-canvas-root>
       {bootstrap}
       <CanvasSaveFeedbackBridge />
+      <div className="relative z-40 flex min-h-12 shrink-0 items-center justify-between gap-2 border-b border-border/70 bg-background/85 px-2 py-1 backdrop-blur">
+        <CanvasProjectBar
+          canvasId={requestedCanvasId}
+          currentTitle={currentTitle}
+          mutationDisabled={
+            requestedCanvasId !== null && !writerAcquired
+          }
+          beforeNavigate={waitForSafeNavigation}
+        />
+        <CanvasSaveStateBadge getRuntimeDebugState={getRuntimeDebugState} />
+      </div>
       <CanvasHealthBanners
         persistent={writer.persistent}
         writerStatus={writer.status}
@@ -190,9 +293,30 @@ export function CanvasRuntimeInner({
         inert={interactionEnabled ? undefined : true}
         aria-busy={!runtimeState.interactionReady}
       >
-        <ReactFlowProvider>
-          <CanvasBoard interactionEnabled={interactionEnabled} />
-        </ReactFlowProvider>
+        <CanvasGenerationProvider
+          canvasId={requestedCanvasId}
+          writerTag={writerTag}
+          enabled={writerAcquired && runtimeState.interactionReady && shadowRecovery === null}
+          getRuntimeDebugState={
+            getRuntimeDebugState ??
+            (() => ({
+              mode: "idle",
+              activeId: null,
+              targetCanvasId: null,
+              createId: null,
+              baseRev: 0,
+              pending: 0,
+              inflight: false,
+              conflicted: false,
+              repairRequired: false,
+              disposed: true,
+            }))
+          }
+        >
+          <ReactFlowProvider>
+            <CanvasBoard interactionEnabled={interactionEnabled} />
+          </ReactFlowProvider>
+        </CanvasGenerationProvider>
       </div>
     </div>
   );
@@ -222,7 +346,13 @@ export function recoverCanvasRuntimeState(canvasId?: string | null): boolean {
   return false;
 }
 
-export function CanvasRoot({ canvasId, onRecover, onReload, monitor }: CanvasRootProps) {
+export function CanvasRoot({
+  canvasId,
+  currentTitle,
+  onRecover,
+  onReload,
+  monitor,
+}: CanvasRootProps) {
   // Mounted ABOVE the error boundary so the create-adoption remount (key flips local→uuid)
   // preserves the coordinator, its offline queue, and any in-flight transport.
   const runtime = useCanvasRuntime(canvasId);
@@ -244,10 +374,12 @@ export function CanvasRoot({ canvasId, onRecover, onReload, monitor }: CanvasRoo
     >
       <CanvasRuntimeInner
         canvasId={canvasId}
+        currentTitle={currentTitle}
         authIdentity={runtime.authIdentity}
         runtimeState={runtime.runtimeState}
         shadowRecovery={runtime.shadowRecovery}
         onWriterSignal={runtime.handleWriterSignal}
+        getRuntimeDebugState={runtime.getDebugState}
         onRestoreShadow={runtime.restoreShadowSnapshot}
         onDiscardShadow={runtime.discardShadowSnapshot}
       />

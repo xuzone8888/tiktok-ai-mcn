@@ -608,6 +608,9 @@ const routeContext = vm.createContext({
       };
     }
     if (specifier === "@/lib/supabase/server") return { createClient: async () => activeClient };
+    if (specifier === "@/lib/canvas/feature-access") {
+      return { canAccessSuperCanvas: () => true };
+    }
     if (specifier === "@/lib/canvas/history-assets") return history;
     if (specifier === "@supabase/supabase-js") return {};
     throw new Error(`Unexpected route dependency: ${specifier}`);

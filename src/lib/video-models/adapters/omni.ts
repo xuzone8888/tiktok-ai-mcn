@@ -22,7 +22,9 @@ export const omniAdapter: VideoModelAdapter = {
         seconds: "10",
         input_reference: JSON.stringify(imageUrls),
       },
-      ["/v1/videos?async=true", "/api/v1/generate"]
+      input.atMostOnce
+        ? ["/v1/videos?async=true"]
+        : ["/v1/videos?async=true", "/api/v1/generate"]
     );
 
     return {

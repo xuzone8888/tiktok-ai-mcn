@@ -205,7 +205,11 @@ export async function platformRequest(options: PlatformRequestOptions): Promise<
     if (!response.ok) {
       const record = asRecord(data);
       const message = pickString(record.error?.message, record.message, record.msg, record.detail);
-      throw new Error(message || `平台请求失败 (HTTP ${response.status})`);
+      throw new Error(
+        message
+          ? `${message} (HTTP ${response.status})`
+          : `平台请求失败 (HTTP ${response.status})`
+      );
     }
 
     return data;
@@ -303,7 +307,11 @@ export async function submitPlatformVideoMultipart(params: {
       if (!response.ok) {
         const record = asRecord(data);
         const message = pickString(record.error?.message, record.message, record.msg, record.detail);
-        throw new Error(message || `平台请求失败 (HTTP ${response.status})`);
+        throw new Error(
+          message
+            ? `${message} (HTTP ${response.status})`
+            : `平台请求失败 (HTTP ${response.status})`
+        );
       }
 
       const task = normalizePlatformVideoTask(data);

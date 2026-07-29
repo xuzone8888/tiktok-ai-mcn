@@ -1,6 +1,10 @@
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
 import { querySeedanceTask, submitSeedanceTask, getSeedanceParams, needsUpscaling } from "@/lib/seedance-api";
-import { upscaleVideo, getUpscaleTarget } from "@/lib/video-upscale";
-import { generateMediaPath, uploadVideoBuffer } from "@/lib/oss";
+import { upscaleVideoFile, getUpscaleTarget } from "@/lib/video-upscale";
+import { transferVideoToOss } from "../storage";
 import type { VideoModelAdapter, VideoQuality } from "../types";
 
 export function resolveSeedanceModel(input: {
@@ -87,37 +91,50 @@ export const seedanceAdapter: VideoModelAdapter = {
 
     const model = resolveSeedanceModel(input);
     const ratio = input.aspectRatio || "9:16";
-    const response = await fetch(input.status.videoUrl, { cache: "no-store" });
-    if (!response.ok) {
-      throw new Error(`Seedance 源视频下载失败: HTTP ${response.status}`);
-    }
-
-    let videoBuffer = Buffer.from(new Uint8Array(await response.arrayBuffer()));
-    if (needsUpscaling(model)) {
-      const target = getUpscaleTarget(ratio);
-      const upscaleResult = await upscaleVideo({
-        inputBuffer: videoBuffer,
-        targetWidth: target.width,
-        targetHeight: target.height,
-        taskId: input.taskId,
-      });
-      if (upscaleResult.success) {
-        videoBuffer = Buffer.from(upscaleResult.outputBuffer);
-      }
-    }
-
-    const ossPath = generateMediaPath(
-      "quick-gen",
-      input.generationUserId || input.userId || "unknown",
-      `seedance-${input.taskId}.mp4`
-    );
-    const ossUrl = await uploadVideoBuffer(videoBuffer, ossPath, "video/mp4");
+    const shouldUpscale = needsUpscaling(model);
+    let upscaled = false;
+    const ossUrl = await transferVideoToOss({
+      taskId: input.taskId,
+      modelType: "seedance",
+      videoUrl: input.status.videoUrl,
+      userId: input.generationUserId || input.userId,
+      targetObjectKey: input.targetObjectKey,
+      outputMetadata: input.outputMetadata,
+      signal: input.signal,
+      prepareFile: shouldUpscale
+        ? async ({ filePath, signal }) => {
+            const directory = await mkdtemp(
+              join(tmpdir(), "stargaze-seedance-upscale-")
+            );
+            const outputPath = join(directory, "upscaled.mp4");
+            const target = getUpscaleTarget(ratio);
+            const result = await upscaleVideoFile({
+              inputPath: filePath,
+              outputPath,
+              targetWidth: target.width,
+              targetHeight: target.height,
+              taskId: input.taskId,
+              signal,
+            });
+            if (!result.success) {
+              await rm(directory, { recursive: true, force: true });
+              return { filePath };
+            }
+            upscaled = true;
+            return {
+              filePath: outputPath,
+              cleanup: () =>
+                rm(directory, { recursive: true, force: true }),
+            };
+          }
+        : undefined,
+    });
 
     return {
       videoUrl: ossUrl,
       metadata: {
         seedance_model: model,
-        upscaled: needsUpscaling(model),
+        upscaled,
       },
     };
   },
