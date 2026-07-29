@@ -8,6 +8,9 @@ const read = (path) =>
 const migration = read(
   "supabase/migrations/20260801_canvas_upload_registry.sql"
 );
+const ambiguityFix = read(
+  "supabase/migrations/20260802_canvas_upload_registry_ambiguity_fix.sql"
+);
 const credentials = read(
   "src/app/api/canvas/uploads/credentials/route.ts"
 );
@@ -26,6 +29,80 @@ function ok(condition, label) {
   else failures.push(label);
 }
 
+function returnsTableFunctions(sql) {
+  const starts = [
+    ...sql.matchAll(/CREATE OR REPLACE FUNCTION\s+public\.(\w+)/g),
+  ];
+  const functions = new Map();
+  starts.forEach((match, index) => {
+    const source = sql.slice(
+      match.index,
+      starts[index + 1]?.index ?? sql.length
+    );
+    const returns = source.match(
+      /RETURNS TABLE\s*\(([\s\S]*?)\)\s*LANGUAGE plpgsql/
+    );
+    const body = source.match(/AS \$\$([\s\S]*?)\$\$;/);
+    if (!returns || !body) return;
+    functions.set(match[1], {
+      definition: source.slice(0, source.indexOf("$$;", source.indexOf("AS $$")) + 3),
+      outputs: [
+        ...returns[1].matchAll(/^\s*(\w+)\s+/gm),
+      ].map((output) => output[1]),
+      body: body[1],
+    });
+  });
+  return functions;
+}
+
+function stripSqlNoise(body) {
+  return body
+    .replace(/--[^\r\n]*/g, "")
+    .replace(/'(?:''|[^'])*'/g, "''")
+    .replace(
+      /INSERT\s+INTO\s+[A-Za-z0-9_."]+\s*\([^)]*\)(?=\s*(?:VALUES|SELECT))/gi,
+      "INSERT_TARGET_COLUMNS"
+    );
+}
+
+function outputReferenceConflicts(functions) {
+  const conflicts = [];
+  for (const [functionName, fn] of functions) {
+    const body = stripSqlNoise(fn.body);
+    for (const output of fn.outputs) {
+      const reference = new RegExp(`(?<![\\w.])${output}(?![\\w])`, "g");
+      for (const match of body.matchAll(reference)) {
+        const after = body.slice(match.index + output.length);
+        const statement = body.slice(
+          Math.max(
+            body.lastIndexOf(";", match.index) + 1,
+            body.lastIndexOf("BEGIN", match.index) + "BEGIN".length
+          ),
+          match.index
+        );
+        // UPDATE SET targets are grammar-resolved column positions, not
+        // expression references. A bare output name anywhere else is unsafe.
+        const setTarget =
+          /^\s*=/.test(after) &&
+          /\bUPDATE\b[\s\S]*\bSET\b/i.test(statement) &&
+          !/\bWHERE\b/i.test(statement.slice(statement.search(/\bSET\b/i)));
+        if (!setTarget) conflicts.push(`${functionName}.${output}`);
+      }
+    }
+  }
+  return conflicts;
+}
+
+function normalizedDefinition(definition) {
+  return definition
+    .replace(/--[^\r\n]*/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+const registryFunctions = returnsTableFunctions(migration);
+const repairFunctions = returnsTableFunctions(ambiguityFix);
+
 ok(
   !/^\s*(BEGIN|COMMIT)\s*;/im.test(migration),
   "migration has no transaction boundary and can be embedded atomically"
@@ -34,6 +111,55 @@ ok(
   !migration.includes("SET search_path = pg_catalog, public") &&
     (migration.match(/SET search_path = ''/g)?.length ?? 0) === 8,
   "all registry functions use an empty search path"
+);
+ok(
+  JSON.stringify([...registryFunctions.keys()]) ===
+    JSON.stringify([
+      "reserve_canvas_uploads_v1",
+      "finalize_canvas_upload_v1",
+      "sweep_expired_canvas_uploads_v1",
+      "mark_canvas_upload_orphans_v1",
+      "claim_canvas_upload_purge_v1",
+    ]),
+  "audit covers every PL/pgSQL RETURNS TABLE function in the registry migration"
+);
+ok(
+  JSON.stringify(outputReferenceConflicts(registryFunctions)) ===
+    JSON.stringify(["reserve_canvas_uploads_v1.expires_at"]),
+  "audit identifies expires_at as the only unsafe output-name column reference"
+);
+ok(
+  [...repairFunctions.keys()].join(",") === "reserve_canvas_uploads_v1",
+  "forward migration replaces only the affected reservation RPC"
+);
+const effectiveFunctions = new Map(registryFunctions);
+for (const [name, fn] of repairFunctions) effectiveFunctions.set(name, fn);
+ok(
+  outputReferenceConflicts(effectiveFunctions).length === 0,
+  "effective RETURNS TABLE definitions contain no output-name ambiguity"
+);
+const originalReserve = registryFunctions.get("reserve_canvas_uploads_v1");
+const repairedReserve = repairFunctions.get("reserve_canvas_uploads_v1");
+const repairedWithoutQualification = repairedReserve?.definition
+  .replace(
+    "public.canvas_upload_reservations AS reservation",
+    "public.canvas_upload_reservations"
+  )
+  .replaceAll("reservation.user_id", "user_id")
+  .replaceAll("reservation.status", "status")
+  .replaceAll("reservation.expires_at", "expires_at");
+ok(
+  Boolean(originalReserve && repairedWithoutQualification) &&
+    normalizedDefinition(originalReserve.definition) ===
+      normalizedDefinition(repairedWithoutQualification),
+  "forward replacement is byte-semantically identical after removing the exact qualification repair"
+);
+ok(
+  !/^\s*(BEGIN|COMMIT)\s*;/im.test(ambiguityFix) &&
+    ambiguityFix.includes("UPDATE public.canvas_upload_reservations AS reservation") &&
+    ambiguityFix.includes("AND reservation.expires_at <= v_now") &&
+    ambiguityFix.trimEnd().endsWith("NOTIFY pgrst, 'reload schema';"),
+  "forward migration is embeddable, qualified, and refreshes the RPC schema cache"
 );
 
 for (const table of [

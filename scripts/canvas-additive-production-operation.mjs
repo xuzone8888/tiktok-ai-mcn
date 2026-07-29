@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Reviewable production operation sheet for the four post-P1 Canvas
+ * Reviewable production operation sheet for the five post-P1 Canvas
  * migrations. This generator is offline: it reads hash-pinned SQL and emits
  * preflight, migrate, or postflight SQL without connecting to a database.
  */
@@ -34,6 +34,10 @@ export const ADDITIVE_MIGRATIONS = Object.freeze([
   Object.freeze({
     relativePath: "supabase/migrations/20260801_canvas_upload_registry.sql",
     sha256: "5a453df313548f3db314660522c298aefa8baa8dc0a0ba3c8bfde397bd2297ba",
+  }),
+  Object.freeze({
+    relativePath: "supabase/migrations/20260802_canvas_upload_registry_ambiguity_fix.sql",
+    sha256: "6ad1cefe0e04ad7f77eaa8976d770fbc5f9c75011c453a952bb4b8338d949783",
   }),
 ]);
 
