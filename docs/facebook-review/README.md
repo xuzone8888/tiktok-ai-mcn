@@ -1,6 +1,6 @@
 # Facebook App Review package
 
-Last audited: 2026-07-28  
+Last audited: 2026-07-29
 Meta app: `StarGaze ls` (`1029912406155776`)  
 Implementation branch: `codex/facebook-app-review`
 
@@ -95,14 +95,9 @@ Complete these in order after the branch is deployed:
 
 - The app is published/live.
 - The company has confirmed the irreversible **technology provider** designation in Meta. The Review section now exposes Testing, Verification, and App Review.
-- The business portfolio `StarGaze` (`1717744712985897`) is eligible for business verification but is still **unverified**. Access verification remains blocked until business verification is completed.
-- The business-verification flow has been started and classified as:
-  - country/region: China;
-  - organization type: private company;
-  - legal name: `武汉观星文化传媒有限公司`;
-  - public/alternate name: `Star Gaze`.
-  No verification request has been submitted. The next required fields must match the supporting document exactly: street address, city, province/region, and postal code. The optional USCC/USCI/TIN/BRN/NOC registration number is currently blank.
-- Meta accepts a utility bill, bank statement, or business license to prove the organization's address and phone number. Use a document that shows the same legal name and address entered in the form.
+- The business portfolio `StarGaze` (`1717744712985897`) is **verified**. Meta shows an initial verification date of July 28, 2026.
+- Access verification was submitted on July 29, 2026 and is **under review**. Meta states that it will review the submission within five days and contact the business if more information is required.
+- The submitted access-verification answers identify Star Gaze as a SaaS platform, state that it does not manage multiple business portfolios, and use `https://toryxai.com` as the company website. The Platform Data explanation limits use to customer-authorized Facebook Page connection, publishing, Page/content display, comment reading, and manual replies, and states that Platform Data is not sold or used for unrelated advertising.
 - A Website platform has been added and saved with `https://www.toryxai.com/`. This removed the “no platform” blocker from Reviewer Instructions.
 - The application is still ineligible for submission because the required 1024×1024 app icon is missing. The repository's existing approved-size candidate is `public/images/toryx_logo_icon_new.png`; upload must be completed through the native file picker.
 - The current App Review draft has been narrowed to the Facebook-only scope: the six Page permissions in this package plus the default `public_profile`. Five Instagram permissions and `business_management` were removed from this submission only, not from the app.
@@ -131,8 +126,8 @@ Complete these in order after the branch is deployed:
 - [ ] Deauthorization and data-deletion callbacks configured and tested
 - [ ] Existing test Page reconnected/refreshed
 - [ ] Six permissions confirmed in Business Login configuration
-- [ ] Complete business verification with the exact registered address/postal code and accepted proof document
-- [ ] Complete access verification after business verification
+- [x] Complete business verification with the exact registered address/postal code and accepted proof document
+- [ ] Access verification submitted; wait for Meta approval or a request for additional information
 - [ ] Upload the required 1024×1024 Meta app icon
 - [ ] Reviewer test credentials and Page role prepared
 - [ ] Confirm all Data Handling answers with the company, including processors and government-request history/procedures
