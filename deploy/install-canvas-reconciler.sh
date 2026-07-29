@@ -14,7 +14,7 @@ REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 ACTION="plan"
 EXECUTE=0
 SOURCE_SCRIPT="${REPO_ROOT}/scripts/canvas-reconciler-worker.mjs"
-SOURCE_CONFIG="${REPO_ROOT}/deploy/ecosystem.canvas-reconciler.cjs"
+SOURCE_CONFIG="${REPO_ROOT}/deploy/ecosystem.canvas-reconciler.config.cjs"
 INSTALL_DIR="${CANVAS_RECONCILER_INSTALL_DIR:-/opt/stargaze-canvas-reconciler}"
 ENV_FILE="${CANVAS_RECONCILER_ENV_FILE:-}"
 TARGET_URL="${CANVAS_RECONCILER_URL:-}"
@@ -23,15 +23,30 @@ PM2_NAME="${CANVAS_RECONCILER_PM2_NAME:-stargaze-canvas-reconciler}"
 
 INSTALLED_SCRIPT=""
 INSTALLED_CONFIG=""
+LEGACY_INSTALLED_CONFIG=""
 INSTALLED_SETTINGS=""
+PREVIOUS_CONFIG_PATH=""
 BACKUP_SCRIPT=""
 BACKUP_CONFIG=""
 BACKUP_SETTINGS=""
+SCRIPT_MODE=""
+SCRIPT_UID=""
+SCRIPT_GID=""
+CONFIG_MODE=""
+CONFIG_UID=""
+CONFIG_GID=""
+SETTINGS_MODE=""
+SETTINGS_UID=""
+SETTINGS_GID=""
 HAD_SCRIPT=0
 HAD_CONFIG=0
 HAD_SETTINGS=0
+CONFIG_WAS_LEGACY=0
 FILES_REPLACED=0
 PROCESS_UPDATED=0
+STAGE_SCRIPT=""
+STAGE_CONFIG=""
+STAGE_SETTINGS=""
 
 usage() {
   cat <<'USAGE'
@@ -141,23 +156,55 @@ pm2_worker_identity_is_safe() {
     ' "${name}" "${script}"
 }
 
+restore_backup_atomically() {
+  local backup="$1"
+  local destination="$2"
+  local mode="$3"
+  local uid="$4"
+  local gid="$5"
+  local temporary
+
+  temporary="$(mktemp "${INSTALL_DIR}/.canvas-reconciler-restore.XXXXXX")" ||
+    return 1
+  if ! cp -- "${backup}" "${temporary}" ||
+     ! chmod "${mode}" "${temporary}" ||
+     ! chown "${uid}:${gid}" "${temporary}" ||
+     ! mv -f -- "${temporary}" "${destination}"; then
+    rm -f -- "${temporary}" >/dev/null 2>&1 || true
+    return 1
+  fi
+}
+
 restore_previous_install() {
   local restore_status=0
+  local pm2_restore_config=""
 
   if ((HAD_SCRIPT == 1)); then
-    cp --preserve=mode,ownership,timestamps -- "${BACKUP_SCRIPT}" "${INSTALLED_SCRIPT}" ||
+    restore_backup_atomically \
+      "${BACKUP_SCRIPT}" "${INSTALLED_SCRIPT}" \
+      "${SCRIPT_MODE}" "${SCRIPT_UID}" "${SCRIPT_GID}" ||
       restore_status=1
   else
     rm -f -- "${INSTALLED_SCRIPT}" || restore_status=1
   fi
   if ((HAD_CONFIG == 1)); then
-    cp --preserve=mode,ownership,timestamps -- "${BACKUP_CONFIG}" "${INSTALLED_CONFIG}" ||
+    restore_backup_atomically \
+      "${BACKUP_CONFIG}" "${PREVIOUS_CONFIG_PATH}" \
+      "${CONFIG_MODE}" "${CONFIG_UID}" "${CONFIG_GID}" ||
       restore_status=1
+    if ((CONFIG_WAS_LEGACY == 1)); then
+      rm -f -- "${INSTALLED_CONFIG}" || restore_status=1
+    else
+      rm -f -- "${LEGACY_INSTALLED_CONFIG}" || restore_status=1
+    fi
   else
-    rm -f -- "${INSTALLED_CONFIG}" || restore_status=1
+    rm -f -- "${INSTALLED_CONFIG}" "${LEGACY_INSTALLED_CONFIG}" ||
+      restore_status=1
   fi
   if ((HAD_SETTINGS == 1)); then
-    cp --preserve=mode,ownership,timestamps -- "${BACKUP_SETTINGS}" "${INSTALLED_SETTINGS}" ||
+    restore_backup_atomically \
+      "${BACKUP_SETTINGS}" "${INSTALLED_SETTINGS}" \
+      "${SETTINGS_MODE}" "${SETTINGS_UID}" "${SETTINGS_GID}" ||
       restore_status=1
   else
     rm -f -- "${INSTALLED_SETTINGS}" || restore_status=1
@@ -165,11 +212,23 @@ restore_previous_install() {
 
   if ((PROCESS_UPDATED == 1)); then
     if ((HAD_SCRIPT == 1 && HAD_CONFIG == 1 && HAD_SETTINGS == 1)); then
+      pm2_restore_config="${PREVIOUS_CONFIG_PATH}"
+      if ((CONFIG_WAS_LEGACY == 1)); then
+        pm2_restore_config="$(
+          mktemp "${INSTALL_DIR}/.canvas-reconciler-restore.XXXXXX.config.cjs"
+        )" || return 1
+        cp -- "${PREVIOUS_CONFIG_PATH}" "${pm2_restore_config}" ||
+          restore_status=1
+        chmod 0600 "${pm2_restore_config}" || restore_status=1
+      fi
       CANVAS_RECONCILER_SETTINGS_FILE="${INSTALLED_SETTINGS}" \
         run_pm2_with_clean_environment \
-          "$(command -v pm2)" startOrReload "${INSTALLED_CONFIG}" \
+          "$(command -v pm2)" startOrReload "${pm2_restore_config}" \
             --only "${PM2_NAME}" --update-env >/dev/null 2>&1 ||
         restore_status=1
+      if ((CONFIG_WAS_LEGACY == 1)); then
+        rm -f -- "${pm2_restore_config}" || restore_status=1
+      fi
     else
       pm2 delete "${PM2_NAME}" >/dev/null 2>&1 || true
     fi
@@ -189,6 +248,12 @@ on_exit() {
       echo "[CRITICAL] Worker restoration failed; PM2 requires operator attention." >&2
     fi
   fi
+  for staged_file in \
+    "${STAGE_SCRIPT}" "${STAGE_CONFIG}" "${STAGE_SETTINGS}"; do
+    if [[ -n "${staged_file}" && -e "${staged_file}" ]]; then
+      rm -f -- "${staged_file}" >/dev/null 2>&1 || true
+    fi
+  done
   exit "${status}"
 }
 
@@ -241,7 +306,8 @@ done
 [[ -n "${TARGET_URL}" ]] || die "--url is required"
 
 INSTALLED_SCRIPT="${INSTALL_DIR}/canvas-reconciler-worker.mjs"
-INSTALLED_CONFIG="${INSTALL_DIR}/ecosystem.canvas-reconciler.cjs"
+INSTALLED_CONFIG="${INSTALL_DIR}/ecosystem.canvas-reconciler.config.cjs"
+LEGACY_INSTALLED_CONFIG="${INSTALL_DIR}/ecosystem.canvas-reconciler.cjs"
 INSTALLED_SETTINGS="${INSTALL_DIR}/canvas-reconciler.settings.json"
 
 echo "Canvas reconciler singleton plan"
@@ -258,9 +324,16 @@ if [[ "${ACTION}" == "plan" ]]; then
   exit 0
 fi
 
-for command in node pm2 env cp mv chmod mkdir mktemp dirname rm date; do
+for command in node pm2 env cp mv chmod chown mkdir mktemp dirname rm date stat tail; do
   require_command "${command}"
 done
+
+pm2_version="$(pm2 -v | tail -n 1)"
+node -e '
+  const [major, minor] = process.argv[1].split(".").map(Number);
+  if (!Number.isInteger(major) || !Number.isInteger(minor) ||
+      major < 4 || (major === 4 && minor < 3)) process.exit(1);
+' "${pm2_version}" || die "PM2 >=4.3 is required"
 
 safe_absolute_file "${SOURCE_SCRIPT}" ||
   die "Worker source must be an existing absolute non-symlink file"
@@ -314,22 +387,40 @@ if [[ -e "${INSTALLED_SCRIPT}" ]]; then
   [[ -f "${INSTALLED_SCRIPT}" && ! -L "${INSTALLED_SCRIPT}" ]] ||
     die "Installed worker path is not a trusted regular file"
   HAD_SCRIPT=1
+  SCRIPT_MODE="$(stat -c '%a' -- "${INSTALLED_SCRIPT}")"
+  SCRIPT_UID="$(stat -c '%u' -- "${INSTALLED_SCRIPT}")"
+  SCRIPT_GID="$(stat -c '%g' -- "${INSTALLED_SCRIPT}")"
   BACKUP_SCRIPT="$(mktemp "${INSTALL_DIR}/canvas-reconciler-worker.${timestamp}.XXXXXX.bak")"
   cp --preserve=mode,ownership,timestamps -- "${INSTALLED_SCRIPT}" "${BACKUP_SCRIPT}"
   chmod 0600 -- "${BACKUP_SCRIPT}"
 fi
+if [[ -e "${INSTALLED_CONFIG}" && -e "${LEGACY_INSTALLED_CONFIG}" ]]; then
+  die "Both current and legacy PM2 config files exist; refusing ambiguous upgrade"
+fi
 if [[ -e "${INSTALLED_CONFIG}" ]]; then
-  [[ -f "${INSTALLED_CONFIG}" && ! -L "${INSTALLED_CONFIG}" ]] ||
+  PREVIOUS_CONFIG_PATH="${INSTALLED_CONFIG}"
+elif [[ -e "${LEGACY_INSTALLED_CONFIG}" ]]; then
+  PREVIOUS_CONFIG_PATH="${LEGACY_INSTALLED_CONFIG}"
+  CONFIG_WAS_LEGACY=1
+fi
+if [[ -n "${PREVIOUS_CONFIG_PATH}" ]]; then
+  [[ -f "${PREVIOUS_CONFIG_PATH}" && ! -L "${PREVIOUS_CONFIG_PATH}" ]] ||
     die "Installed PM2 config path is not a trusted regular file"
   HAD_CONFIG=1
+  CONFIG_MODE="$(stat -c '%a' -- "${PREVIOUS_CONFIG_PATH}")"
+  CONFIG_UID="$(stat -c '%u' -- "${PREVIOUS_CONFIG_PATH}")"
+  CONFIG_GID="$(stat -c '%g' -- "${PREVIOUS_CONFIG_PATH}")"
   BACKUP_CONFIG="$(mktemp "${INSTALL_DIR}/ecosystem.canvas-reconciler.${timestamp}.XXXXXX.bak")"
-  cp --preserve=mode,ownership,timestamps -- "${INSTALLED_CONFIG}" "${BACKUP_CONFIG}"
+  cp --preserve=mode,ownership,timestamps -- "${PREVIOUS_CONFIG_PATH}" "${BACKUP_CONFIG}"
   chmod 0600 -- "${BACKUP_CONFIG}"
 fi
 if [[ -e "${INSTALLED_SETTINGS}" ]]; then
   [[ -f "${INSTALLED_SETTINGS}" && ! -L "${INSTALLED_SETTINGS}" ]] ||
     die "Installed settings path is not a trusted regular file"
   HAD_SETTINGS=1
+  SETTINGS_MODE="$(stat -c '%a' -- "${INSTALLED_SETTINGS}")"
+  SETTINGS_UID="$(stat -c '%u' -- "${INSTALLED_SETTINGS}")"
+  SETTINGS_GID="$(stat -c '%g' -- "${INSTALLED_SETTINGS}")"
   BACKUP_SETTINGS="$(mktemp "${INSTALL_DIR}/canvas-reconciler-settings.${timestamp}.XXXXXX.bak")"
   cp --preserve=mode,ownership,timestamps -- "${INSTALLED_SETTINGS}" "${BACKUP_SETTINGS}"
   chmod 0600 -- "${BACKUP_SETTINGS}"
@@ -344,11 +435,11 @@ if [[ -e "${INSTALLED_SETTINGS}" ]]; then
     die "Existing stable settings use a different PM2 identity"
 fi
 
-stage_script="$(mktemp "${INSTALL_DIR}/.canvas-reconciler.XXXXXX")"
-stage_config="$(mktemp "${INSTALL_DIR}/.canvas-reconciler-config.XXXXXX")"
-stage_settings="$(mktemp "${INSTALL_DIR}/.canvas-reconciler-settings.XXXXXX")"
-cp -- "${SOURCE_SCRIPT}" "${stage_script}"
-cp -- "${SOURCE_CONFIG}" "${stage_config}"
+STAGE_SCRIPT="$(mktemp "${INSTALL_DIR}/.canvas-reconciler.XXXXXX")"
+STAGE_CONFIG="$(mktemp "${INSTALL_DIR}/.canvas-reconciler-config.XXXXXX")"
+STAGE_SETTINGS="$(mktemp "${INSTALL_DIR}/.canvas-reconciler-settings.XXXXXX")"
+cp -- "${SOURCE_SCRIPT}" "${STAGE_SCRIPT}"
+cp -- "${SOURCE_CONFIG}" "${STAGE_CONFIG}"
 node -e '
   const fs = require("node:fs");
   const [file, name, script, envFile, url, lockFile] = process.argv.slice(1);
@@ -357,14 +448,14 @@ node -e '
     `${JSON.stringify({ name, script, envFile, url, lockFile })}\n`,
     { encoding: "utf8", mode: 0o600 }
   );
-' "${stage_settings}" "${PM2_NAME}" "${INSTALLED_SCRIPT}" "${ENV_FILE}" "${TARGET_URL}" "${LOCK_FILE}"
-chmod 0755 -- "${stage_script}"
-chmod 0644 -- "${stage_config}"
-chmod 0600 -- "${stage_settings}"
-mv -f -- "${stage_script}" "${INSTALLED_SCRIPT}"
-mv -f -- "${stage_config}" "${INSTALLED_CONFIG}"
-mv -f -- "${stage_settings}" "${INSTALLED_SETTINGS}"
+' "${STAGE_SETTINGS}" "${PM2_NAME}" "${INSTALLED_SCRIPT}" "${ENV_FILE}" "${TARGET_URL}" "${LOCK_FILE}"
+chmod 0755 -- "${STAGE_SCRIPT}"
+chmod 0644 -- "${STAGE_CONFIG}"
+chmod 0600 -- "${STAGE_SETTINGS}"
 FILES_REPLACED=1
+mv -f -- "${STAGE_SCRIPT}" "${INSTALLED_SCRIPT}"
+mv -f -- "${STAGE_CONFIG}" "${INSTALLED_CONFIG}"
+mv -f -- "${STAGE_SETTINGS}" "${INSTALLED_SETTINGS}"
 
 PROCESS_UPDATED=1
 CANVAS_RECONCILER_SETTINGS_FILE="${INSTALLED_SETTINGS}" \
@@ -374,6 +465,12 @@ CANVAS_RECONCILER_SETTINGS_FILE="${INSTALLED_SETTINGS}" \
 
 pm2_worker_is_online "${PM2_NAME}" "${INSTALLED_SCRIPT}" ||
   die "PM2 did not expose exactly one healthy fork-mode reconciler"
+
+if [[ -e "${LEGACY_INSTALLED_CONFIG}" ]]; then
+  [[ -f "${LEGACY_INSTALLED_CONFIG}" && ! -L "${LEGACY_INSTALLED_CONFIG}" ]] ||
+    die "Legacy PM2 config path is not a trusted regular file"
+  rm -f -- "${LEGACY_INSTALLED_CONFIG}"
+fi
 
 pm2 save
 FILES_REPLACED=0

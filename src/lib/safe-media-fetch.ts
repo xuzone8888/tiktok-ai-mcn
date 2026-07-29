@@ -63,6 +63,22 @@ export interface ExternalMediaProbeResult {
   headers: IncomingHttpHeaders;
 }
 
+/**
+ * A publishing asset probe needs evidence that the target represents
+ * retrievable content, not merely that the server accepted a request.
+ *
+ * - 200 is the normal representation response.
+ * - 203 still carries a representation, albeit one transformed by a proxy.
+ * - 206 is valid for providers that honor a caller-supplied Range header.
+ *
+ * Other 2xx statuses describe creation/acceptance, deliberately have no
+ * content (204/205), or belong to protocols such as WebDAV. Treating those as
+ * an available publishing asset creates false positives.
+ */
+function isAccessibleMediaProbeStatus(status: number): boolean {
+  return status === 200 || status === 203 || status === 206;
+}
+
 function normalizeHostname(hostname: string): string {
   return hostname
     .toLowerCase()
@@ -573,7 +589,7 @@ export async function probeExternalMediaUrl(
 
     result.response.resume();
     return {
-      accessible: true,
+      accessible: isAccessibleMediaProbeStatus(status),
       status,
       finalUrl: current.toString(),
       headers: result.response.headers,

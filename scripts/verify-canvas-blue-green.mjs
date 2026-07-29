@@ -137,7 +137,7 @@ async function testBundles() {
   );
   const installedConfig = join(
     workerInstallDir,
-    "ecosystem.canvas-reconciler.cjs"
+    "ecosystem.canvas-reconciler.config.cjs"
   );
   const installedSettings = join(
     workerInstallDir,
@@ -291,6 +291,139 @@ async function testBundles() {
     "worker settings URL was not restored"
   );
 
+  const legacyWorkerInstallDir = join(temporaryRoot, "legacy-worker");
+  const legacyWorker = {
+    name: worker.name,
+    installDir: legacyWorkerInstallDir,
+  };
+  const legacyRelease = writeRelease(
+    temporaryRoot,
+    "release-legacy-worker",
+    "build-legacy-worker",
+    4103
+  );
+  mkdirSync(legacyWorkerInstallDir);
+  const legacyInstalledScript = join(
+    legacyWorkerInstallDir,
+    "canvas-reconciler-worker.mjs"
+  );
+  const legacyInstalledConfig = join(
+    legacyWorkerInstallDir,
+    "ecosystem.canvas-reconciler.cjs"
+  );
+  const currentInstalledConfig = join(
+    legacyWorkerInstallDir,
+    "ecosystem.canvas-reconciler.config.cjs"
+  );
+  const legacyInstalledSettings = join(
+    legacyWorkerInstallDir,
+    "canvas-reconciler.settings.json"
+  );
+  writeFileSync(legacyInstalledScript, "console.log('legacy worker');\n");
+  writeFileSync(legacyInstalledConfig, "module.exports = { apps: ['legacy'] };\n");
+  writeFileSync(
+    legacyInstalledSettings,
+    `${JSON.stringify({
+      name: legacyWorker.name,
+      script: legacyInstalledScript,
+      envFile: workerEnv,
+      url: "http://127.0.0.1:4103/api/internal/canvas/reconcile",
+      lockFile: join(temporaryRoot, "legacy-worker.lock"),
+    })}\n`
+  );
+  chmodSync(legacyInstalledScript, 0o755);
+  chmodSync(legacyInstalledConfig, 0o644);
+  chmodSync(legacyInstalledSettings, 0o600);
+
+  const legacyWorkerBundle = join(rollbackDir, "legacy-worker-present-bundle");
+  const createLegacyWorker = await runNode(
+    [
+      bundleTool,
+      "create",
+      "--bundle-dir",
+      legacyWorkerBundle,
+      "--rollback-dir",
+      rollbackDir,
+      "--nginx-config",
+      legacyRelease.nginx,
+      "--web-name",
+      "canvas-legacy-worker",
+      "--web-port",
+      String(legacyRelease.port),
+      "--web-root",
+      legacyRelease.release,
+      "--web-env-file",
+      legacyRelease.envFile,
+      "--web-health-contract",
+      "exact",
+      "--worker-name",
+      legacyWorker.name,
+      "--worker-install-dir",
+      legacyWorker.installDir,
+      "--worker-process-present",
+      "true",
+      "--allow-non-root-test",
+    ],
+    { NODE_ENV: "test" }
+  );
+  assert(
+    createLegacyWorker.code === 0,
+    `legacy worker bundle create failed: ${createLegacyWorker.stderr}`
+  );
+  const legacyManifest = JSON.parse(
+    readFileSync(join(legacyWorkerBundle, "manifest.json"), "utf8")
+  );
+  assert(
+    legacyManifest.worker.files.config.bundleFile ===
+      "worker/ecosystem.canvas-reconciler.cjs",
+    "legacy v1 worker bundle filename was not preserved"
+  );
+  const verifyLegacyWorker = await runNode(
+    [
+      bundleTool,
+      "verify",
+      ...commonBundleArguments(
+        rollbackDir,
+        legacyWorkerBundle,
+        legacyRelease.nginx,
+        legacyWorker
+      ),
+    ],
+    { NODE_ENV: "test" }
+  );
+  assert(
+    verifyLegacyWorker.code === 0,
+    `legacy worker bundle verify failed: ${verifyLegacyWorker.stderr}`
+  );
+  writeFileSync(legacyInstalledConfig, "module.exports = { broken: true };\n");
+  const restoreLegacyWorker = await runNode(
+    [
+      bundleTool,
+      "restore-worker",
+      ...commonBundleArguments(
+        rollbackDir,
+        legacyWorkerBundle,
+        legacyRelease.nginx,
+        legacyWorker
+      ),
+    ],
+    { NODE_ENV: "test" }
+  );
+  assert(
+    restoreLegacyWorker.code === 0,
+    `legacy worker restore failed: ${restoreLegacyWorker.stderr}`
+  );
+  assert(
+    existsSync(currentInstalledConfig) &&
+      readFileSync(currentInstalledConfig, "utf8") ===
+        "module.exports = { apps: ['legacy'] };\n",
+    "legacy worker config was not normalized to the PM2-compatible filename"
+  );
+  assert(
+    !existsSync(legacyInstalledConfig),
+    "legacy worker config filename remained after normalization"
+  );
+
   writeFileSync(join(presentBundle, "nginx.conf"), "tampered\n");
   const rejectTamper = await runNode(
     [
@@ -379,6 +512,7 @@ async function testBundles() {
   for (const file of [
     "canvas-reconciler-worker.mjs",
     "ecosystem.canvas-reconciler.cjs",
+    "ecosystem.canvas-reconciler.config.cjs",
     "canvas-reconciler.settings.json",
   ]) {
     writeFileSync(join(absentInstallDir, file), "new release state\n");
@@ -401,6 +535,7 @@ async function testBundles() {
   for (const file of [
     "canvas-reconciler-worker.mjs",
     "ecosystem.canvas-reconciler.cjs",
+    "ecosystem.canvas-reconciler.config.cjs",
     "canvas-reconciler.settings.json",
   ]) {
     assert(
@@ -643,6 +778,7 @@ function testStaticContracts() {
     "/api/internal/canvas/",
     "scripts/run-canvas-build.mjs",
     "scripts/start-canvas-web.mjs",
+    "ecosystem.canvas.config.cjs",
     'CANVAS_ENV_FILE="${ENV_FILE}"',
     "Stop the Canvas upload sweeper service and disable its timer before rollback",
     "stargaze-canvas-upload-sweeper.service",
@@ -656,6 +792,7 @@ function testStaticContracts() {
     "run_pm2_with_clean_environment",
     "env -i",
     "unset NODE_OPTIONS",
+    "PM2 >=4.3 is required",
   ]) {
     assertIncludes(deploy, token, "blue/green deployer");
   }
@@ -677,16 +814,34 @@ function testStaticContracts() {
   const webBootstrap = read("scripts/start-canvas-web.mjs");
   assertIncludes(webBootstrap, "installExactProcessEnvironment", "exact Web bootstrap");
   assertIncludes(webBootstrap, "await import(pathToFileURL", "exact Web bootstrap IPC boundary");
-  const ecosystem = read("deploy/ecosystem.canvas.cjs");
+  const ecosystem = read("deploy/ecosystem.canvas.config.cjs");
   assertIncludes(ecosystem, 'script: "scripts/start-canvas-web.mjs"', "Canvas PM2 config");
   assertIncludes(ecosystem, "CANVAS_ENV_FILE", "Canvas PM2 config");
   const reconcilerInstaller = read("deploy/install-canvas-reconciler.sh");
+  assertIncludes(
+    reconcilerInstaller,
+    "ecosystem.canvas-reconciler.config.cjs",
+    "Canvas reconciler PM2 config"
+  );
   assertIncludes(
     reconcilerInstaller,
     "run_pm2_with_clean_environment",
     "Canvas reconciler installer"
   );
   assertIncludes(reconcilerInstaller, "env -i", "Canvas reconciler installer");
+  for (const token of [
+    "LEGACY_INSTALLED_CONFIG",
+    "restore_backup_atomically",
+    "PM2 >=4.3 is required",
+    ".XXXXXX.config.cjs",
+  ]) {
+    assertIncludes(reconcilerInstaller, token, "Canvas reconciler installer");
+  }
+  assert(
+    reconcilerInstaller.indexOf("FILES_REPLACED=1") <
+      reconcilerInstaller.indexOf('mv -f -- "${STAGE_SCRIPT}"'),
+    "Canvas reconciler installer arms rollback after its first staged move"
+  );
   const nginx = read("deploy/ssl/toryxai.com.conf");
   assertIncludes(
     nginx,

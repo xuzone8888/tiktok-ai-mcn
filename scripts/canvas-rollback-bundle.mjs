@@ -21,20 +21,58 @@ import process from "node:process";
 
 const SCHEMA_VERSION = "canvas-rollback-bundle-v1";
 const MAX_METADATA_BYTES = 128 * 1024;
+const LEGACY_WORKER_CONFIG_INSTALLED_NAME =
+  "ecosystem.canvas-reconciler.cjs";
+const LEGACY_WORKER_CONFIG_BUNDLE_NAME =
+  `worker/${LEGACY_WORKER_CONFIG_INSTALLED_NAME}`;
 const WORKER_FILE_DEFINITIONS = {
   script: {
     installedName: "canvas-reconciler-worker.mjs",
     bundleName: "worker/canvas-reconciler-worker.mjs",
+    legacyInstalledNames: [],
+    acceptedBundleNames: ["worker/canvas-reconciler-worker.mjs"],
   },
   config: {
-    installedName: "ecosystem.canvas-reconciler.cjs",
-    bundleName: "worker/ecosystem.canvas-reconciler.cjs",
+    installedName: "ecosystem.canvas-reconciler.config.cjs",
+    bundleName: "worker/ecosystem.canvas-reconciler.config.cjs",
+    legacyInstalledNames: [LEGACY_WORKER_CONFIG_INSTALLED_NAME],
+    acceptedBundleNames: [
+      "worker/ecosystem.canvas-reconciler.config.cjs",
+      LEGACY_WORKER_CONFIG_BUNDLE_NAME,
+    ],
   },
   settings: {
     installedName: "canvas-reconciler.settings.json",
     bundleName: "worker/canvas-reconciler.settings.json",
+    legacyInstalledNames: [],
+    acceptedBundleNames: ["worker/canvas-reconciler.settings.json"],
   },
 };
+
+function findInstalledWorkerFile(workerInstallDir, kind, definition) {
+  const candidates = [
+    definition.installedName,
+    ...definition.legacyInstalledNames,
+  ]
+    .map((installedName) => ({
+      installedName,
+      source: join(workerInstallDir, installedName),
+    }))
+    .filter(({ source }) => existsSync(source));
+  if (candidates.length > 1) {
+    fail(`installed worker ${kind} has both current and legacy files`);
+  }
+  if (candidates.length === 0) return null;
+
+  const candidate = candidates[0];
+  return {
+    ...candidate,
+    bundleName:
+      candidate.installedName === definition.installedName
+        ? definition.bundleName
+        : `worker/${candidate.installedName}`,
+  };
+}
 
 function usage() {
   return [
@@ -428,20 +466,28 @@ function createBundle(options) {
   const workerFiles = {};
   let settings = null;
   for (const [kind, definition] of Object.entries(WORKER_FILE_DEFINITIONS)) {
-    const source = join(workerInstallDir, definition.installedName);
-    if (!existsSync(source)) {
+    const installed = findInstalledWorkerFile(
+      workerInstallDir,
+      kind,
+      definition
+    );
+    if (!installed) {
       workerFiles[kind] = { present: false, metadata: null };
       continue;
     }
-    const entry = assertRegularFile(source, `installed worker ${kind}`);
+    const entry = assertRegularFile(
+      installed.source,
+      `installed worker ${kind}`
+    );
     workerFiles[kind] = {
       present: true,
       metadata: captureMetadata(entry),
-      source,
+      source: installed.source,
+      bundleName: installed.bundleName,
     };
     if (kind === "settings") {
       settings = validateWorkerSettings(
-        readJson(source, "installed worker settings"),
+        readJson(installed.source, "installed worker settings"),
         { name: workerName, installDir: workerInstallDir, webPort }
       );
     }
@@ -464,7 +510,7 @@ function createBundle(options) {
     if (!entry.present) continue;
     const destination = join(
       bundleDir,
-      WORKER_FILE_DEFINITIONS[kind].bundleName
+      entry.bundleName
     );
     copyFileSync(entry.source, destination);
     chmodSync(destination, 0o600);
@@ -500,7 +546,7 @@ function createBundle(options) {
             present: entry.present,
             metadata: entry.metadata,
             bundleFile: entry.present
-              ? WORKER_FILE_DEFINITIONS[kind].bundleName
+              ? entry.bundleName
               : null,
           },
         ])
@@ -647,7 +693,7 @@ function validateManifest(value, options) {
         file.metadata,
         `manifest worker ${kind} metadata`
       );
-      if (file.bundleFile !== definition.bundleName) {
+      if (!definition.acceptedBundleNames.includes(file.bundleFile)) {
         fail(`manifest worker ${kind} bundle path is invalid`);
       }
     } else if (file.metadata !== null || file.bundleFile !== null) {
@@ -786,7 +832,7 @@ function verifyBundle(options, { quiet = false } = {}) {
   if (manifest.worker.files.settings.present) {
     const settings = validateWorkerSettings(
       readJson(
-        join(bundleDir, WORKER_FILE_DEFINITIONS.settings.bundleName),
+        join(bundleDir, manifest.worker.files.settings.bundleFile),
         "bundled worker settings"
       ),
       {
@@ -859,12 +905,33 @@ function restoreWorker(options) {
         file.metadata,
         rootEnforced
       );
-    } else if (existsSync(destination)) {
-      const entry = lstatSync(destination);
-      if (entry.isDirectory()) {
-        fail(`worker ${kind} target unexpectedly became a directory`);
+    } else {
+      for (const installedName of [
+        definition.installedName,
+        ...definition.legacyInstalledNames,
+      ]) {
+        const absentDestination = join(worker.installDir, installedName);
+        if (!existsSync(absentDestination)) continue;
+        const entry = lstatSync(absentDestination);
+        if (entry.isDirectory()) {
+          fail(`worker ${kind} target unexpectedly became a directory`);
+        }
+        unlinkSync(absentDestination);
       }
-      unlinkSync(destination);
+      continue;
+    }
+
+    // A v1 bundle created before PM2's required `.config.cjs` suffix can
+    // carry the legacy config filename. Restore its verified bytes to the
+    // current filename, then remove only the obsolete sibling.
+    for (const legacyInstalledName of definition.legacyInstalledNames) {
+      const legacyDestination = join(worker.installDir, legacyInstalledName);
+      if (!existsSync(legacyDestination)) continue;
+      const entry = lstatSync(legacyDestination);
+      if (entry.isDirectory()) {
+        fail(`worker ${kind} legacy target unexpectedly became a directory`);
+      }
+      unlinkSync(legacyDestination);
     }
   }
   console.log(worker.processPresent ? "present" : "absent");

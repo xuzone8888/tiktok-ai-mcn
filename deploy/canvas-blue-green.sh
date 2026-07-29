@@ -560,7 +560,7 @@ restore_worker_from_bundle() {
     CANVAS_RECONCILER_SETTINGS_FILE="${RECONCILER_INSTALL_DIR}/canvas-reconciler.settings.json" \
       run_pm2_with_clean_environment \
         "$(command -v pm2)" startOrReload \
-        "${RECONCILER_INSTALL_DIR}/ecosystem.canvas-reconciler.cjs" \
+        "${RECONCILER_INSTALL_DIR}/ecosystem.canvas-reconciler.config.cjs" \
         --only "${RECONCILER_NAME}" --update-env ||
       return 1
     pm2_single_worker_is_online || return 1
@@ -746,7 +746,7 @@ if [[ "${ACTION}" == "deploy" && "${ENV_FILE}" != "${EXPECTED_ENV_FILE}" ]]; the
   die "--env-file must equal the candidate release's exact .env.local"
 fi
 if [[ -z "${PM2_CONFIG}" ]]; then
-  PM2_CONFIG="${CANDIDATE_DIR}/deploy/ecosystem.canvas.cjs"
+  PM2_CONFIG="${CANDIDATE_DIR}/deploy/ecosystem.canvas.config.cjs"
 else
   PM2_CONFIG="$(absolute_from_workdir "${PM2_CONFIG}")"
 fi
@@ -785,13 +785,19 @@ fi
 assert_public_canvas_url "${PUBLIC_HEALTH_URL}" ||
   die "--public-health-url must be an exact http(s) /canvas URL without credentials, query, or fragment"
 
-for command in node npm curl nginx pm2 env grep sed head mktemp cp mv chmod chown mkdir date dirname bash realpath stat systemctl; do
+for command in node npm curl nginx pm2 env grep sed head tail mktemp cp mv chmod chown mkdir date dirname bash realpath stat systemctl; do
   require_command "${command}"
 done
 node -e '
   const [major, minor] = process.versions.node.split(".").map(Number);
   if (major !== 20 || minor < 12) process.exit(1);
 ' || die "Node >=20.12 and <21 is required"
+pm2_version="$(pm2 -v | tail -n 1)"
+node -e '
+  const [major, minor] = process.argv[1].split(".").map(Number);
+  if (!Number.isInteger(major) || !Number.isInteger(minor) ||
+      major < 4 || (major === 4 && minor < 3)) process.exit(1);
+' "${pm2_version}" || die "PM2 >=4.3 is required"
 
 [[ -d "${CANDIDATE_DIR}" && ! -L "${CANDIDATE_DIR}" ]] ||
   die "Tooling/candidate workdir must be an existing non-symlink directory"
