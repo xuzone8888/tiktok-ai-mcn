@@ -4,6 +4,11 @@ import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import {
+  getSafeAuthRedirect,
+  hasSupabasePkceCallback,
+  restoreSupabasePkceCallback,
+} from "@/lib/supabase/auth-callback";
 import ReflectiveInput from "@/components/ui/ReflectiveInput";
 import { Button } from "@/components/ui/button";
 import { Mail, Lock, Smartphone, ArrowRight, Loader2, KeyRound, Fingerprint, Sparkles, Globe, Zap } from "lucide-react";
@@ -19,7 +24,7 @@ function LoginPageContent() {
   const { lang } = useLang();
 
   // 获取重定向目标
-  const redirectTo = searchParams.get('redirect') || '/models';
+  const redirectTo = getSafeAuthRedirect(searchParams.get("redirect"));
 
   // 登录方式: password (邮箱登录) | phone (手机登录)
   const [loginMethod, setLoginMethod] = useState<"password" | "phone">("password");
@@ -44,6 +49,45 @@ function LoginPageContent() {
   // 处理 URL hash 中的 auth token（从 Supabase magic link 回调）
   useEffect(() => {
     const handleAuthCallback = async () => {
+      const search = window.location.search;
+      if (hasSupabasePkceCallback(search)) {
+        try {
+          const supabase = createClient();
+          const result = await restoreSupabasePkceCallback(supabase.auth, search);
+
+          if (result.error || !result.session) {
+            console.error("Failed to restore PKCE auth session");
+            toast({
+              variant: "destructive",
+              title: lang === "en" ? "Sign In Failed" : "登录失败",
+              description: lang === "en"
+                ? "Session setup failed, please try again"
+                : "Session 设置失败，请重试",
+            });
+            window.history.replaceState(null, "", window.location.pathname);
+            return;
+          }
+
+          toast({
+            title: lang === "en" ? "🎉 Signed In!" : "🎉 登录成功！",
+            description: lang === "en" ? "Redirecting..." : "正在跳转到控制台...",
+          });
+          window.location.replace(redirectTo);
+          return;
+        } catch {
+          console.error("PKCE auth callback failed");
+          toast({
+            variant: "destructive",
+            title: lang === "en" ? "Sign In Failed" : "登录失败",
+            description: lang === "en"
+              ? "Session setup failed, please try again"
+              : "Session 设置失败，请重试",
+          });
+          window.history.replaceState(null, "", window.location.pathname);
+          return;
+        }
+      }
+
       const hash = window.location.hash;
       if (hash && hash.includes('access_token')) {
         console.log("Detected auth callback with tokens in URL hash");
@@ -86,8 +130,8 @@ function LoginPageContent() {
       }
     };
 
-    handleAuthCallback();
-  }, [toast]);
+    void handleAuthCallback();
+  }, [lang, redirectTo, toast]);
 
 
   // 密码登录处理

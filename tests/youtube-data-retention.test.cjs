@@ -1,13 +1,17 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
 const test = require('node:test')
+const vm = require('node:vm')
+const ts = require('typescript')
 
 function read(relativePath) {
   return fs.readFileSync(path.join(process.cwd(), relativePath), 'utf8')
 }
 
 const migration = read('supabase/migrations/20260723120000_youtube_data_retention_cleanup.sql')
+const claimCompatibilityMigration = read('supabase/migrations/20260729120000_youtube_revocation_claim_fencing_compat.sql')
 const accountRoute = read('src/app/api/youtube/accounts/[id]/route.ts')
 const dataRoute = read('src/app/api/youtube/data/route.ts')
 const retentionRoute = read('src/app/api/youtube/data-retention/route.ts')
@@ -25,6 +29,64 @@ const reviewScript = read('docs/youtube-comments-review-script.md')
 const acceptanceChecklist = read('docs/youtube-comments-acceptance-checklist.md')
 const cronSetup = read('scripts/cron_setup.sh')
 const retentionRunner = read('run-youtube-data-retention.sh')
+const registerPage = read('src/app/auth/register/page.tsx')
+const loginPage = read('src/app/auth/login/page.tsx')
+const authCallback = read('src/lib/supabase/auth-callback.ts')
+
+function loadAccountDeleteRoute({ createClient, createAdminClient, processYouTubeRevocationJobs }) {
+  const filename = path.join(process.cwd(), 'src/app/api/youtube/accounts/[id]/route.ts')
+  const compiled = ts.transpileModule(accountRoute, {
+    compilerOptions: {
+      module: ts.ModuleKind.CommonJS,
+      target: ts.ScriptTarget.ES2020,
+    },
+    fileName: filename,
+  }).outputText
+  const routeModule = { exports: {} }
+  const dependencyMocks = {
+    'next/server': {
+      NextResponse: {
+        json(body, init = {}) {
+          return new Response(JSON.stringify(body), {
+            headers: { 'content-type': 'application/json' },
+            status: init.status || 200,
+          })
+        },
+      },
+    },
+    '@/lib/supabase/admin': { createAdminClient },
+    '@/lib/supabase/server': { createClient },
+    '@/lib/youtube/data-governance': { processYouTubeRevocationJobs },
+  }
+  const localRequire = (specifier) => {
+    if (Object.hasOwn(dependencyMocks, specifier)) return dependencyMocks[specifier]
+    return require(specifier)
+  }
+  const wrapper = vm.runInThisContext(
+    `(function (exports, require, module, __filename, __dirname) { ${compiled}\n})`,
+    { filename },
+  )
+  wrapper(routeModule.exports, localRequire, routeModule, filename, path.dirname(filename))
+  return routeModule.exports.DELETE
+}
+
+function loadAuthCallbackModule() {
+  const filename = path.join(process.cwd(), 'src/lib/supabase/auth-callback.ts')
+  const compiled = ts.transpileModule(authCallback, {
+    compilerOptions: {
+      module: ts.ModuleKind.CommonJS,
+      target: ts.ScriptTarget.ES2020,
+    },
+    fileName: filename,
+  }).outputText
+  const callbackModule = { exports: {} }
+  const wrapper = vm.runInThisContext(
+    `(function (exports, require, module, __filename, __dirname) { ${compiled}\n})`,
+    { filename },
+  )
+  wrapper(callbackModule.exports, require, callbackModule, filename, path.dirname(filename))
+  return callbackModule.exports
+}
 
 test('keeps YouTube governance tables and functions service-role-only', () => {
   assert.match(migration, /ALTER TABLE public\.youtube_revocation_jobs ENABLE ROW LEVEL SECURITY/)
@@ -58,6 +120,201 @@ test('uses a durable revocation queue as the local deletion commit point', () =>
   assert.doesNotMatch(governance, /\.or\(`claimed_at/)
   assert.match(governance, /last_error_code === 'revoked'/)
   assert.match(governance, /\.delete\(\)[\s\S]*\.from\('youtube_revocation_jobs'\)|\.from\('youtube_revocation_jobs'\)[\s\S]*\.delete\(\)/)
+})
+
+test('keeps an already-completed disconnect successful when immediate revocation processing fails', () => {
+  assert.match(
+    claimCompatibilityMigration,
+    /ALTER TABLE public\.youtube_revocation_jobs\s+ADD COLUMN IF NOT EXISTS claimed_at TIMESTAMPTZ/,
+  )
+  assert.match(
+    accountRoute,
+    /try \{[\s\S]*processYouTubeRevocationJobs[\s\S]*\} catch \(revocationError\) \{[\s\S]*deferred: 1/,
+  )
+  assert.match(accountRoute, /return NextResponse\.json\(\{ success: true, deletion, revocation \}\)/)
+})
+
+test('returns HTTP 200 and leaves the durable job queued when the immediate processor throws', async () => {
+  const queuedJobs = new Map()
+  const accountFilters = []
+  const processorCalls = []
+  let processorAttempts = 0
+  const accountQuery = {
+    select() {
+      return this
+    },
+    eq(column, value) {
+      accountFilters.push([column, value])
+      return this
+    },
+    async single() {
+      return { data: { id: 'account-1' }, error: null }
+    },
+  }
+  const userClient = {
+    auth: {
+      async getUser() {
+        return { data: { user: { id: 'user-1' } }, error: null }
+      },
+    },
+    from(table) {
+      assert.equal(table, 'youtube_accounts')
+      return accountQuery
+    },
+  }
+  const adminClient = {
+    async rpc(name, args) {
+      assert.equal(name, 'queue_youtube_account_deletion')
+      queuedJobs.set('revocation-job-1', {
+        accountId: args.p_account_id,
+        userId: args.p_user_id,
+      })
+      return {
+        data: { revocation_job_id: 'revocation-job-1', deleted_account_id: args.p_account_id },
+        error: null,
+      }
+    },
+  }
+  const processQueuedRevocation = async (...args) => {
+    processorCalls.push(args)
+    processorAttempts += 1
+    if (processorAttempts === 1) {
+      throw new Error('controlled provider 503')
+    }
+    queuedJobs.delete(args[1].jobId)
+    return { attempted: 1, completed: 1, deferred: 0 }
+  }
+  const DELETE = loadAccountDeleteRoute({
+    createClient: async () => userClient,
+    createAdminClient: () => adminClient,
+    processYouTubeRevocationJobs: processQueuedRevocation,
+  })
+  const loggedErrors = []
+  const originalConsoleError = console.error
+  console.error = (...args) => loggedErrors.push(args)
+  let response
+  try {
+    response = await DELETE(new Request('https://www.toryxai.com/api/youtube/accounts/account-1', {
+      method: 'DELETE',
+    }), { params: { id: 'account-1' } })
+  } finally {
+    console.error = originalConsoleError
+  }
+
+  assert.equal(response.status, 200)
+  assert.deepEqual(await response.json(), {
+    success: true,
+    deletion: {
+      revocation_job_id: 'revocation-job-1',
+      deleted_account_id: 'account-1',
+    },
+    revocation: { attempted: 0, completed: 0, deferred: 1 },
+  })
+  assert.deepEqual(accountFilters, [
+    ['id', 'account-1'],
+    ['user_id', 'user-1'],
+  ])
+  assert.equal(processorCalls.length, 1)
+  assert.equal(processorCalls[0][0], adminClient)
+  assert.deepEqual(processorCalls[0][1], { jobId: 'revocation-job-1', limit: 1 })
+  assert.deepEqual(queuedJobs.get('revocation-job-1'), {
+    accountId: 'account-1',
+    userId: 'user-1',
+  })
+  assert.equal(loggedErrors.length, 1)
+
+  const retry = await processQueuedRevocation(adminClient, {
+    jobId: 'revocation-job-1',
+    limit: 1,
+  })
+  assert.deepEqual(retry, { attempted: 1, completed: 1, deferred: 0 })
+  assert.equal(processorCalls.length, 2)
+  assert.equal(queuedJobs.has('revocation-job-1'), false)
+})
+
+test('sends signup confirmations to a login page that restores PKCE or hash sessions', () => {
+  assert.match(registerPage, /emailRedirectTo: `\$\{window\.location\.origin\}\/auth\/login`/)
+  assert.match(loginPage, /hasSupabasePkceCallback\(search\)/)
+  assert.match(loginPage, /restoreSupabasePkceCallback\(supabase\.auth, search\)/)
+  assert.match(loginPage, /const hash = window\.location\.hash/)
+  assert.match(loginPage, /params\.get\('access_token'\)/)
+  assert.match(loginPage, /params\.get\('refresh_token'\)/)
+  assert.match(loginPage, /supabase\.auth\.setSession\(\{\s+access_token: accessToken,\s+refresh_token: refreshToken,/)
+})
+
+test('awaits the browser PKCE exchange before reading the restored session', async () => {
+  const { restoreSupabasePkceCallback } = loadAuthCallbackModule()
+  const calls = []
+  const expectedSession = { access_token: 'controlled-session' }
+  const result = await restoreSupabasePkceCallback({
+    async initialize() {
+      calls.push('initialize')
+      return { error: null }
+    },
+    async getSession() {
+      calls.push('getSession')
+      return { data: { session: expectedSession }, error: null }
+    },
+  }, '?code=controlled-auth-code')
+
+  assert.deepEqual(calls, ['initialize', 'getSession'])
+  assert.equal(result.handled, true)
+  assert.equal(result.session, expectedSession)
+  assert.equal(result.error, null)
+})
+
+test('does not initialize auth when the callback has no PKCE code', async () => {
+  const { restoreSupabasePkceCallback } = loadAuthCallbackModule()
+  let initialized = false
+  const result = await restoreSupabasePkceCallback({
+    async initialize() {
+      initialized = true
+      return { error: null }
+    },
+    async getSession() {
+      throw new Error('getSession must not run without a PKCE code')
+    },
+  }, '?redirect=%2Fmodels')
+
+  assert.equal(initialized, false)
+  assert.deepEqual(result, { handled: false, session: null, error: null })
+})
+
+test('only permits same-site paths as post-auth redirects', () => {
+  const { getSafeAuthRedirect } = loadAuthCallbackModule()
+  const productionOrigin = 'https://www.toryxai.com'
+  assert.equal(getSafeAuthRedirect('/canvas?project=controlled#node'), '/canvas?project=controlled#node')
+  assert.equal(getSafeAuthRedirect(null), '/models')
+  assert.equal(getSafeAuthRedirect('https://attacker.invalid'), '/models')
+  assert.equal(getSafeAuthRedirect('//attacker.invalid'), '/models')
+  assert.equal(getSafeAuthRedirect('/\\attacker.invalid'), '/models')
+  for (const value of [
+    '/..//attacker.invalid',
+    '/a/..//attacker.invalid',
+    '/.//attacker.invalid',
+    '/%2e%2e//attacker.invalid',
+    '/%2e//attacker.invalid',
+  ]) {
+    const redirect = getSafeAuthRedirect(value)
+    assert.equal(redirect, '/models')
+    assert.equal(new URL(redirect, productionOrigin).origin, productionOrigin)
+  }
+  for (const encoded of ['%09', '%0a', '%0d']) {
+    const decoded = new URLSearchParams(`redirect=/${encoded}/attacker.invalid`).get('redirect')
+    const redirect = getSafeAuthRedirect(decoded)
+    assert.equal(redirect, '/models')
+    assert.equal(new URL(redirect, productionOrigin).origin, productionOrigin)
+  }
+
+  const atoms = ['.', '..', '%2e', '%2e%2e', 'a', 'attacker.invalid', '\\attacker.invalid']
+  for (const left of atoms) {
+    for (const separator of ['/', '//', '///']) {
+      for (const right of atoms) {
+        const redirect = getSafeAuthRedirect(`/${left}${separator}${right}`)
+        assert.equal(new URL(redirect, productionOrigin).origin, productionOrigin)
+      }
+    }
+  }
 })
 
 test('deletes all local YouTube data through an authenticated user control', () => {
