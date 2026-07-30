@@ -1283,6 +1283,8 @@ function testStaticContracts() {
   const buildRunner = read("scripts/run-canvas-build.mjs");
   assertIncludes(buildRunner, "exactProcessEnvironment", "exact build runner");
   assertIncludes(buildRunner, 'process.execPath, [nextCli, "build"]', "exact build runner");
+  const nextConfig = read("next.config.mjs");
+  assertIncludes(nextConfig, "cpus: 1", "Next production build worker cap");
   const webBootstrap = read("scripts/start-canvas-web.mjs");
   assertIncludes(webBootstrap, "installExactProcessEnvironment", "exact Web bootstrap");
   assertIncludes(webBootstrap, "await import(pathToFileURL", "exact Web bootstrap IPC boundary");
@@ -1369,9 +1371,21 @@ function testStaticContracts() {
   assertIncludes(nginx, "return 404;", "production Nginx internal-route deny");
 }
 
+async function testNextBuildConfig() {
+  const configUrl = new URL("../next.config.mjs", import.meta.url);
+  configUrl.searchParams.set("verify", String(Date.now()));
+  const { default: config } = await import(configUrl.href);
+
+  assert(
+    config.experimental?.cpus === 1,
+    "Next production build worker cap must resolve to one"
+  );
+}
+
 async function main() {
   try {
     testStaticContracts();
+    await testNextBuildConfig();
     testExactEnvironmentBoundary();
     await testBundles();
     await testHealthProbe();

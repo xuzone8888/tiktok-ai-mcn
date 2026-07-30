@@ -80,6 +80,9 @@ const nextConfig = {
   compress: true,
   // 实验性功能
   experimental: {
+    // Keep production builds within the 2 vCPU / 4 GiB deployment host.
+    // This only limits Next.js build workers; it does not change Web runtime concurrency.
+    cpus: 1,
     // 优化服务器组件 - 添加更多常用包
     optimizePackageImports: [
       'lucide-react',
