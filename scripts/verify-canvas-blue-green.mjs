@@ -1230,6 +1230,27 @@ function testStaticContracts() {
   assertIncludes(authentication, "CANVAS_RECOVERY_APPROVER_SECRET", "internal auth");
   assertIncludes(authentication, "timingSafeEqual", "internal auth");
 
+  const macWorker = read("mac-ffmpeg-worker/server.js");
+  for (const token of [
+    "/^[0-9a-f]{64}$/",
+    "/^Bearer ([0-9a-f]{64})$/",
+    "crypto.timingSafeEqual",
+    "app.use('/api', authMiddleware)",
+    "app.use('/health', authMiddleware)",
+    "app.listen(PORT, '127.0.0.1'",
+  ]) {
+    assertIncludes(macWorker, token, "Mac FFmpeg Worker authentication");
+  }
+  assert(
+    !macWorker.includes("if (!AUTH_TOKEN) return next()"),
+    "Mac FFmpeg Worker retained its unauthenticated development bypass"
+  );
+  assert(
+    macWorker.indexOf("app.use('/api', authMiddleware)") <
+      macWorker.indexOf("app.use('/api', express.json"),
+    "Mac FFmpeg Worker must authenticate before parsing request bodies"
+  );
+
   const deploy = read("deploy/canvas-blue-green.sh");
   for (const token of [
     'EXPECTED_ENV_FILE="${CANDIDATE_DIR}/.env.local"',
@@ -1419,35 +1440,47 @@ async function testNextBuildConfig() {
   const preflightRoot = join(temporaryRoot, "build-id-preflight");
   mkdirSync(join(preflightRoot, ".next"), { recursive: true });
   const preflightEnv = join(preflightRoot, ".env.local");
-  writeFileSync(
-    preflightEnv,
-    [
-      "NEXT_PUBLIC_SUPABASE_URL=https://project.supabase.test",
-      "NEXT_PUBLIC_SUPABASE_ANON_KEY=anon-key",
-      "SUPABASE_SERVICE_ROLE_KEY=service-role-key",
-      "ALIYUN_OSS_REGION=oss-cn-beijing",
-      "ALIYUN_OSS_ACCESS_KEY_ID=access-key-id",
-      "ALIYUN_OSS_ACCESS_KEY_SECRET=access-key-secret",
-      "ALIYUN_OSS_BUCKET=canvas-test-bucket",
-      "ALIYUN_OSS_ENDPOINT=https://oss.test.invalid",
-      "ALIYUN_OSS_CUSTOM_DOMAIN=media.test.invalid",
-      `CANVAS_RECONCILE_SECRET=${"r".repeat(48)}`,
-      `CANVAS_RECOVERY_ADMIN_SECRET=${"a".repeat(48)}`,
-      `CANVAS_RECOVERY_APPROVER_SECRET=${"p".repeat(48)}`,
-      "CANVAS_RECOVERY_OPERATOR_LABEL=operator.test",
-      "CANVAS_RECOVERY_APPROVER_LABEL=approver.test",
-      "CANVAS_PUBLIC_ENABLED=false",
-      "NEXT_PUBLIC_CANVAS_ENABLED=true",
-      "CANVAS_VIDEO_MODELS=grok",
-      "NEXT_PUBLIC_CANVAS_VIDEO_MODELS=grok",
-      "CANVAS_ACCESS_USER_IDS=11111111-1111-4111-8111-111111111111",
-      "VIDEO_PLATFORM_IMAGE_API_KEY=image-key",
-      "VIDEO_PLATFORM_IMAGE_BASE_URL=https://image.test.invalid",
-      "VIDEO_PLATFORM_API_KEY=video-key",
-      "VIDEO_PLATFORM_BASE_URL=https://video.test.invalid",
-      "",
-    ].join("\n")
-  );
+  const workerToken = "c".repeat(64);
+  const preflightEnvironment = {
+    NEXT_PUBLIC_SUPABASE_URL: "https://project.supabase.test",
+    NEXT_PUBLIC_SUPABASE_ANON_KEY: "anon-key",
+    SUPABASE_SERVICE_ROLE_KEY: "service-role-key",
+    ALIYUN_OSS_REGION: "oss-cn-beijing",
+    ALIYUN_OSS_ACCESS_KEY_ID: "access-key-id",
+    ALIYUN_OSS_ACCESS_KEY_SECRET: "access-key-secret",
+    ALIYUN_OSS_BUCKET: "canvas-test-bucket",
+    ALIYUN_OSS_ENDPOINT: "https://oss.test.invalid",
+    ALIYUN_OSS_CUSTOM_DOMAIN: "media.test.invalid",
+    CANVAS_RECONCILE_SECRET: "r".repeat(48),
+    CANVAS_RECOVERY_ADMIN_SECRET: "a".repeat(48),
+    CANVAS_RECOVERY_APPROVER_SECRET: "p".repeat(48),
+    CANVAS_RECOVERY_OPERATOR_LABEL: "operator.test",
+    CANVAS_RECOVERY_APPROVER_LABEL: "approver.test",
+    CANVAS_PUBLIC_ENABLED: "false",
+    NEXT_PUBLIC_CANVAS_ENABLED: "true",
+    NEXT_PUBLIC_ENABLE_DECONSTRUCT: "1",
+    CANVAS_VIDEO_MODELS: "grok",
+    NEXT_PUBLIC_CANVAS_VIDEO_MODELS: "grok",
+    CANVAS_ACCESS_USER_IDS: "11111111-1111-4111-8111-111111111111",
+    VIDEO_PLATFORM_IMAGE_API_KEY: "image-key",
+    VIDEO_PLATFORM_IMAGE_BASE_URL: "https://image.test.invalid",
+    VIDEO_PLATFORM_API_KEY: "video-key",
+    VIDEO_PLATFORM_BASE_URL: "https://video.test.invalid",
+    MAC_WORKER_URL: "http://127.0.0.1:9091",
+    MAC_WORKER_TOKEN: workerToken,
+  };
+  const writePreflightEnvironment = (overrides = {}, omitted = []) => {
+    const omittedNames = new Set(omitted);
+    const entries = { ...preflightEnvironment, ...overrides };
+    writeFileSync(
+      preflightEnv,
+      `${Object.entries(entries)
+        .filter(([name]) => !omittedNames.has(name))
+        .map(([name, value]) => `${name}=${value}`)
+        .join("\n")}\n`
+    );
+  };
+  writePreflightEnvironment();
   chmodSync(preflightEnv, 0o600);
   writeFileSync(join(preflightRoot, ".next", "BUILD_ID"), `${releaseCommit}\n`);
 
@@ -1464,11 +1497,140 @@ async function testNextBuildConfig() {
   ];
   const matchingBuild = await runNode(checkerArguments, { NODE_ENV: "production" });
   assert(
-    matchingBuild.stdout.includes(
+    matchingBuild.code === 0 &&
+      matchingBuild.stdout.includes(
       "[OK] Next.js BUILD_ID matches the immutable release commit"
     ) && !matchingBuild.stderr.includes("[FAIL] Next.js BUILD_ID"),
     "production preflight rejected the exact immutable build ID contract"
   );
+  assert(
+    !`${matchingBuild.stdout}\n${matchingBuild.stderr}`.includes(workerToken),
+    "production preflight printed the synthetic Worker token"
+  );
+
+  const invalidWorkerFixtures = [
+    {
+      label: "missing Worker URL",
+      omitted: ["MAC_WORKER_URL"],
+      expectedFailure: "MAC_WORKER_URL",
+    },
+    {
+      label: "missing Worker token",
+      omitted: ["MAC_WORKER_TOKEN"],
+      expectedFailure: "MAC_WORKER_TOKEN",
+    },
+    {
+      label: "weak Worker token",
+      overrides: { MAC_WORKER_TOKEN: "weak-worker-token" },
+      expectedFailure: "MAC_WORKER_TOKEN",
+    },
+    {
+      label: "non-loopback Worker URL",
+      overrides: { MAC_WORKER_URL: "http://0.0.0.0:9091" },
+      expectedFailure: "MAC_WORKER_URL",
+    },
+    {
+      label: "localhost Worker URL",
+      overrides: { MAC_WORKER_URL: "http://localhost:9091" },
+      expectedFailure: "MAC_WORKER_URL",
+    },
+    {
+      label: "Worker URL path",
+      overrides: { MAC_WORKER_URL: "http://127.0.0.1:9091/api" },
+      expectedFailure: "MAC_WORKER_URL",
+    },
+    {
+      label: "Worker URL query",
+      overrides: { MAC_WORKER_URL: "http://127.0.0.1:9091?mode=test" },
+      expectedFailure: "MAC_WORKER_URL",
+    },
+    {
+      label: "Worker URL fragment",
+      overrides: { MAC_WORKER_URL: '"http://127.0.0.1:9091#health"' },
+      expectedFailure: "MAC_WORKER_URL",
+    },
+    {
+      label: "Worker URL userinfo",
+      overrides: { MAC_WORKER_URL: "http://user@127.0.0.1:9091" },
+      expectedFailure: "MAC_WORKER_URL",
+    },
+    {
+      label: "Worker URL trailing slash",
+      overrides: { MAC_WORKER_URL: "http://127.0.0.1:9091/" },
+      expectedFailure: "MAC_WORKER_URL",
+    },
+    {
+      label: "Worker URL zero port",
+      overrides: { MAC_WORKER_URL: "http://127.0.0.1:0" },
+      expectedFailure: "MAC_WORKER_URL",
+    },
+    {
+      label: "Worker URL non-canonical port",
+      overrides: { MAC_WORKER_URL: "http://127.0.0.1:09091" },
+      expectedFailure: "MAC_WORKER_URL",
+    },
+    {
+      label: "Worker URL out-of-range port",
+      overrides: { MAC_WORKER_URL: "http://127.0.0.1:65536" },
+      expectedFailure: "MAC_WORKER_URL",
+    },
+    {
+      label: "Worker token reused as Canvas secret",
+      overrides: { CANVAS_RECONCILE_SECRET: workerToken },
+      expectedFailure: "MAC worker secret isolation",
+    },
+  ];
+
+  for (const fixture of invalidWorkerFixtures) {
+    writePreflightEnvironment(fixture.overrides, fixture.omitted);
+    const result = await runNode(checkerArguments, { NODE_ENV: "production" });
+    const combinedOutput = `${result.stdout}\n${result.stderr}`;
+    assert(
+      result.code !== 0 &&
+        result.stderr.includes(`[FAIL] ${fixture.expectedFailure}`),
+      `production preflight accepted ${fixture.label}`
+    );
+    assert(
+      !combinedOutput.includes(workerToken) &&
+        !combinedOutput.includes("weak-worker-token"),
+      `production preflight printed a Worker token for ${fixture.label}`
+    );
+  }
+  writePreflightEnvironment();
+
+  const invalidDeconstructFixtures = [
+    {
+      label: "missing deconstruct flag",
+      omitted: ["NEXT_PUBLIC_ENABLE_DECONSTRUCT"],
+    },
+    {
+      label: "boolean deconstruct flag",
+      overrides: { NEXT_PUBLIC_ENABLE_DECONSTRUCT: "true" },
+    },
+    {
+      label: "numeric deconstruct flag outside the contract",
+      overrides: { NEXT_PUBLIC_ENABLE_DECONSTRUCT: "2" },
+    },
+    {
+      label: "deconstruct flag with leading whitespace",
+      overrides: { NEXT_PUBLIC_ENABLE_DECONSTRUCT: '" 1"' },
+    },
+    {
+      label: "deconstruct flag with trailing whitespace",
+      overrides: { NEXT_PUBLIC_ENABLE_DECONSTRUCT: '"1 "' },
+    },
+  ];
+
+  for (const fixture of invalidDeconstructFixtures) {
+    writePreflightEnvironment(fixture.overrides, fixture.omitted);
+    const result = await runNode(checkerArguments, { NODE_ENV: "production" });
+    assert(
+      result.code !== 0 &&
+        result.stderr.includes("[FAIL] NEXT_PUBLIC_ENABLE_DECONSTRUCT"),
+      `production preflight accepted ${fixture.label}`
+    );
+  }
+  writePreflightEnvironment();
 
   const mismatchedBuild = await runNode(
     checkerArguments.slice(0, -1).concat("b".repeat(40)),

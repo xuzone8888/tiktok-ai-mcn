@@ -114,6 +114,14 @@ function isHttpsUrl(name) {
   }
 }
 
+function isCanonicalMacWorkerUrl(value) {
+  if (typeof value !== "string") return false;
+  const match = /^http:\/\/127\.0\.0\.1:([1-9][0-9]{0,4})$/.exec(value);
+  if (!match) return false;
+  const port = Number.parseInt(match[1], 10);
+  return port >= 1 && port <= 65535 && String(port) === match[1];
+}
+
 let options;
 try {
   options = parseArguments(process.argv.slice(2));
@@ -178,6 +186,7 @@ const requiredNames = [
   "CANVAS_RECOVERY_APPROVER_LABEL",
   "CANVAS_PUBLIC_ENABLED",
   "NEXT_PUBLIC_CANVAS_ENABLED",
+  "NEXT_PUBLIC_ENABLE_DECONSTRUCT",
   "CANVAS_VIDEO_MODELS",
   "NEXT_PUBLIC_CANVAS_VIDEO_MODELS",
 ];
@@ -292,6 +301,48 @@ if (
     "Canvas internal secrets",
     "reconcile, recovery operator, and recovery approver secrets must be pairwise distinct"
   );
+}
+
+if (
+  isConfigured("NEXT_PUBLIC_ENABLE_DECONSTRUCT") &&
+  !/^[01]$/.test(environment.NEXT_PUBLIC_ENABLE_DECONSTRUCT)
+) {
+  fail("NEXT_PUBLIC_ENABLE_DECONSTRUCT", "must be exactly 0 or 1");
+} else if (isConfigured("NEXT_PUBLIC_ENABLE_DECONSTRUCT")) {
+  pass("NEXT_PUBLIC_ENABLE_DECONSTRUCT format");
+}
+
+if (!isConfigured("MAC_WORKER_URL")) {
+  fail("MAC_WORKER_URL", "missing");
+} else if (environment.MAC_WORKER_URL !== environment.MAC_WORKER_URL.trim()) {
+  fail("MAC_WORKER_URL", "leading or trailing whitespace is not allowed");
+} else if (!isCanonicalMacWorkerUrl(environment.MAC_WORKER_URL)) {
+  fail(
+    "MAC_WORKER_URL",
+    "must be canonical http://127.0.0.1:<port> with port 1-65535"
+  );
+} else {
+  pass("MAC_WORKER_URL loopback boundary");
+}
+
+if (!isConfigured("MAC_WORKER_TOKEN")) {
+  fail("MAC_WORKER_TOKEN", "missing");
+} else if (!/^[0-9a-f]{64}$/.test(environment.MAC_WORKER_TOKEN)) {
+  fail("MAC_WORKER_TOKEN", "must be exactly 64 lowercase hexadecimal characters");
+} else {
+  pass("MAC_WORKER_TOKEN format");
+  if (
+    privilegedSecrets.some(
+      (name) => environment[name] === environment.MAC_WORKER_TOKEN
+    )
+  ) {
+    fail(
+      "MAC worker secret isolation",
+      "the Worker token must not equal a Canvas privileged secret"
+    );
+  } else {
+    pass("MAC worker secret isolation");
+  }
 }
 
 const recoveryLabelPattern = /^[A-Za-z0-9._@-]{3,48}$/;

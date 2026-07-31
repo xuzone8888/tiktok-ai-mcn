@@ -1,17 +1,27 @@
 #!/bin/bash
+set -euo pipefail
+
+WORKER_TOKEN="${WORKER_AUTH_TOKEN:-}"
+unset WORKER_AUTH_TOKEN
+if [[ ! "$WORKER_TOKEN" =~ ^[0-9a-f]{64}$ ]]; then
+  echo "WORKER_AUTH_TOKEN is missing or invalid" >&2
+  exit 2
+fi
+
 echo "=== Step 1: Health Check ==="
-curl -s http://127.0.0.1:9091/health
+printf 'Authorization: Bearer %s\n' "$WORKER_TOKEN" |
+  curl -fsS -H @- http://127.0.0.1:9091/health
 echo ""
 echo ""
 echo "=== Step 2: Render Request to Mac Worker ==="
 echo "Using picsum.photos test images (3 random 1080x1920 images)"
 START=$(date +%s)
 
-RESULT=$(curl -s -w "\n%{http_code}" --max-time 120 \
+RESULT=$(printf 'Authorization: Bearer %s\n' "$WORKER_TOKEN" | curl -sS -w "\n%{http_code}" --max-time 120 \
   http://127.0.0.1:9091/api/render \
   -X POST \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer toryxai-ffmpeg-worker-2026" \
+  -H @- \
   -d '{"images":["https://picsum.photos/1080/1920.jpg","https://picsum.photos/1080/1920.jpg","https://picsum.photos/1080/1920.jpg"],"aspectRatio":"9:16","durationPerImage":2,"transition":"fade","bgm":"random"}')
 
 END=$(date +%s)
