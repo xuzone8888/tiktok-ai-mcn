@@ -1,7 +1,21 @@
 const isProduction = process.env.NODE_ENV === 'production';
 
+function resolveCanvasBuildId() {
+  const candidate = process.env.CANVAS_RELEASE_COMMIT;
+  if (candidate === undefined) return null;
+  if (!/^[0-9a-f]{40}$/.test(candidate)) {
+    throw new Error(
+      'CANVAS_RELEASE_COMMIT must be an exact lowercase 40-character Git commit',
+    );
+  }
+  return candidate;
+}
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Controlled production builds bind Next's BUILD_ID to the immutable source
+  // commit. Ordinary local builds keep Next.js's default generated ID.
+  generateBuildId: async () => resolveCanvasBuildId(),
   // ESLint 配置 - 暂时跳过以确保构建成功
   eslint: {
     ignoreDuringBuilds: true,

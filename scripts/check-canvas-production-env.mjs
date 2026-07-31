@@ -18,6 +18,7 @@ function usage() {
     "  --env-file <path>  Environment file to load (default: .env.local)",
     "  --root <path>      Release root used for build checks (default: cwd)",
     "  --require-build    Require a non-empty .next/BUILD_ID",
+    "  --expected-build-id <id>  Require BUILD_ID to equal a Git commit",
     "  --help             Show this help",
     "",
     "The checker prints variable names and readiness results only. It never",
@@ -30,6 +31,7 @@ function parseArguments(argv) {
     envFile: ".env.local",
     root: process.cwd(),
     requireBuild: false,
+    expectedBuildId: null,
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -42,23 +44,39 @@ function parseArguments(argv) {
       options.requireBuild = true;
       continue;
     }
-    if (argument === "--env-file" || argument === "--root") {
+    if (
+      argument === "--env-file" ||
+      argument === "--root" ||
+      argument === "--expected-build-id"
+    ) {
       const value = argv[index + 1];
       if (!value || value.startsWith("--")) {
-        throw new Error(`${argument} requires a path`);
+        throw new Error(`${argument} requires a value`);
       }
       if (argument === "--env-file") options.envFile = value;
-      else options.root = value;
+      else if (argument === "--root") options.root = value;
+      else options.expectedBuildId = value;
       index += 1;
       continue;
     }
     throw new Error(`Unknown argument at position ${index + 1}`);
   }
 
+  if (
+    options.expectedBuildId !== null &&
+    !/^[0-9a-f]{40}$/.test(options.expectedBuildId)
+  ) {
+    throw new Error("--expected-build-id must be a lowercase 40-character Git commit");
+  }
+  if (options.expectedBuildId !== null && !options.requireBuild) {
+    throw new Error("--expected-build-id requires --require-build");
+  }
+
   return {
     envFile: resolve(options.root, options.envFile),
     root: resolve(options.root),
     requireBuild: options.requireBuild,
+    expectedBuildId: options.expectedBuildId,
   };
 }
 
@@ -454,8 +472,19 @@ if (options.requireBuild) {
     fail("Next.js production build", ".next/BUILD_ID is missing");
   } else {
     try {
-      if (readFileSync(buildIdPath, "utf8").trim()) {
+      const buildId = readFileSync(buildIdPath, "utf8").trim();
+      if (buildId) {
         pass("Next.js production build");
+        if (options.expectedBuildId !== null) {
+          if (buildId === options.expectedBuildId) {
+            pass("Next.js BUILD_ID matches the immutable release commit");
+          } else {
+            fail(
+              "Next.js BUILD_ID",
+              "does not match the immutable release commit"
+            );
+          }
+        }
       } else {
         fail("Next.js production build", ".next/BUILD_ID is empty");
       }

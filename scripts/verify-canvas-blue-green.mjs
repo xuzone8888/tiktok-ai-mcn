@@ -1233,6 +1233,8 @@ function testStaticContracts() {
   const deploy = read("deploy/canvas-blue-green.sh");
   for (const token of [
     'EXPECTED_ENV_FILE="${CANDIDATE_DIR}/.env.local"',
+    'EXPECTED_BUILD_ID="$(basename -- "${CANDIDATE_DIR}")"',
+    '--expected-build-id "${EXPECTED_BUILD_ID}"',
     "--allow-legacy-active",
     "legacy-bootstrap",
     "/api/internal/canvas/health",
@@ -1379,6 +1381,121 @@ async function testNextBuildConfig() {
   assert(
     config.experimental?.cpus === 1,
     "Next production build worker cap must resolve to one"
+  );
+
+  const previousReleaseCommit = process.env.CANVAS_RELEASE_COMMIT;
+  const releaseCommit = "a".repeat(40);
+  try {
+    delete process.env.CANVAS_RELEASE_COMMIT;
+    assert(
+      (await config.generateBuildId()) === null,
+      "ordinary builds must retain the Next.js generated BUILD_ID fallback"
+    );
+
+    process.env.CANVAS_RELEASE_COMMIT = releaseCommit;
+    assert(
+      (await config.generateBuildId()) === releaseCommit,
+      "controlled builds must use the exact immutable release commit"
+    );
+
+    for (const invalid of ["a".repeat(39), "A".repeat(40), ` ${releaseCommit}`]) {
+      process.env.CANVAS_RELEASE_COMMIT = invalid;
+      let rejected = false;
+      try {
+        await config.generateBuildId();
+      } catch {
+        rejected = true;
+      }
+      assert(rejected, "invalid controlled BUILD_ID input must fail closed");
+    }
+  } finally {
+    if (previousReleaseCommit === undefined) {
+      delete process.env.CANVAS_RELEASE_COMMIT;
+    } else {
+      process.env.CANVAS_RELEASE_COMMIT = previousReleaseCommit;
+    }
+  }
+
+  const preflightRoot = join(temporaryRoot, "build-id-preflight");
+  mkdirSync(join(preflightRoot, ".next"), { recursive: true });
+  const preflightEnv = join(preflightRoot, ".env.local");
+  writeFileSync(
+    preflightEnv,
+    [
+      "NEXT_PUBLIC_SUPABASE_URL=https://project.supabase.test",
+      "NEXT_PUBLIC_SUPABASE_ANON_KEY=anon-key",
+      "SUPABASE_SERVICE_ROLE_KEY=service-role-key",
+      "ALIYUN_OSS_REGION=oss-cn-beijing",
+      "ALIYUN_OSS_ACCESS_KEY_ID=access-key-id",
+      "ALIYUN_OSS_ACCESS_KEY_SECRET=access-key-secret",
+      "ALIYUN_OSS_BUCKET=canvas-test-bucket",
+      "ALIYUN_OSS_ENDPOINT=https://oss.test.invalid",
+      "ALIYUN_OSS_CUSTOM_DOMAIN=media.test.invalid",
+      `CANVAS_RECONCILE_SECRET=${"r".repeat(48)}`,
+      `CANVAS_RECOVERY_ADMIN_SECRET=${"a".repeat(48)}`,
+      `CANVAS_RECOVERY_APPROVER_SECRET=${"p".repeat(48)}`,
+      "CANVAS_RECOVERY_OPERATOR_LABEL=operator.test",
+      "CANVAS_RECOVERY_APPROVER_LABEL=approver.test",
+      "CANVAS_PUBLIC_ENABLED=false",
+      "NEXT_PUBLIC_CANVAS_ENABLED=true",
+      "CANVAS_VIDEO_MODELS=grok",
+      "NEXT_PUBLIC_CANVAS_VIDEO_MODELS=grok",
+      "CANVAS_ACCESS_USER_IDS=11111111-1111-4111-8111-111111111111",
+      "VIDEO_PLATFORM_IMAGE_API_KEY=image-key",
+      "VIDEO_PLATFORM_IMAGE_BASE_URL=https://image.test.invalid",
+      "VIDEO_PLATFORM_API_KEY=video-key",
+      "VIDEO_PLATFORM_BASE_URL=https://video.test.invalid",
+      "",
+    ].join("\n")
+  );
+  chmodSync(preflightEnv, 0o600);
+  writeFileSync(join(preflightRoot, ".next", "BUILD_ID"), `${releaseCommit}\n`);
+
+  const checker = resolve("scripts/check-canvas-production-env.mjs");
+  const checkerArguments = [
+    checker,
+    "--root",
+    preflightRoot,
+    "--env-file",
+    preflightEnv,
+    "--require-build",
+    "--expected-build-id",
+    releaseCommit,
+  ];
+  const matchingBuild = await runNode(checkerArguments, { NODE_ENV: "production" });
+  assert(
+    matchingBuild.stdout.includes(
+      "[OK] Next.js BUILD_ID matches the immutable release commit"
+    ) && !matchingBuild.stderr.includes("[FAIL] Next.js BUILD_ID"),
+    "production preflight rejected the exact immutable build ID contract"
+  );
+
+  const mismatchedBuild = await runNode(
+    checkerArguments.slice(0, -1).concat("b".repeat(40)),
+    { NODE_ENV: "production" }
+  );
+  assert(
+    mismatchedBuild.code !== 0 &&
+      mismatchedBuild.stderr.includes("[FAIL] Next.js BUILD_ID"),
+    "production preflight accepted a BUILD_ID from another commit"
+  );
+
+  const invalidExpectedBuild = await runNode(
+    checkerArguments.slice(0, -1).concat("not-a-commit"),
+    { NODE_ENV: "production" }
+  );
+  assert(
+    invalidExpectedBuild.code !== 0,
+    "production preflight accepted an invalid expected BUILD_ID"
+  );
+
+  const missingRequireBuild = await runNode(
+    checkerArguments.filter((argument) => argument !== "--require-build"),
+    { NODE_ENV: "production" }
+  );
+  assert(
+    missingRequireBuild.code !== 0,
+    "production preflight accepted expected BUILD_ID without --require-build"
   );
 }
 
