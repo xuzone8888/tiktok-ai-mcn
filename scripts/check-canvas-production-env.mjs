@@ -1,7 +1,15 @@
 #!/usr/bin/env node
 
 import { X509Certificate } from "node:crypto";
-import { existsSync, lstatSync, readFileSync } from "node:fs";
+import {
+  closeSync,
+  constants,
+  existsSync,
+  fstatSync,
+  lstatSync,
+  openSync,
+  readFileSync,
+} from "node:fs";
 import { isAbsolute, resolve } from "node:path";
 import process from "node:process";
 
@@ -120,6 +128,42 @@ function isCanonicalMacWorkerUrl(value) {
   if (!match) return false;
   const port = Number.parseInt(match[1], 10);
   return port >= 1 && port <= 65535 && String(port) === match[1];
+}
+
+function sameFile(left, right) {
+  return (
+    left.dev === right.dev &&
+    left.ino === right.ino &&
+    left.size === right.size &&
+    left.mode === right.mode &&
+    left.uid === right.uid &&
+    left.nlink === right.nlink
+  );
+}
+
+function readTrustedBuildId(pathname) {
+  const before = lstatSync(pathname);
+  if (
+    !before.isFile() ||
+    before.isSymbolicLink() ||
+    before.nlink !== 1 ||
+    before.size < 1 ||
+    before.size > 128
+  ) {
+    throw new Error("untrusted BUILD_ID file");
+  }
+  const noFollow =
+    process.platform === "win32" ? 0 : (constants.O_NOFOLLOW ?? 0);
+  const descriptor = openSync(pathname, constants.O_RDONLY | noFollow);
+  try {
+    const opened = fstatSync(descriptor);
+    if (!opened.isFile() || !sameFile(before, opened)) {
+      throw new Error("BUILD_ID changed during validation");
+    }
+    return readFileSync(descriptor, "utf8").trim();
+  } finally {
+    closeSync(descriptor);
+  }
 }
 
 let options;
@@ -523,7 +567,7 @@ if (options.requireBuild) {
     fail("Next.js production build", ".next/BUILD_ID is missing");
   } else {
     try {
-      const buildId = readFileSync(buildIdPath, "utf8").trim();
+      const buildId = readTrustedBuildId(buildIdPath);
       if (buildId) {
         pass("Next.js production build");
         if (options.expectedBuildId !== null) {

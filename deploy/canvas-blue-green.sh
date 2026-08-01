@@ -1018,7 +1018,8 @@ if ((RUN_BUILD == 1)); then
       "$(command -v npm)" ci --include=dev
     node scripts/run-canvas-build.mjs \
       --root "${CANDIDATE_DIR}" \
-      --env-file "${ENV_FILE}"
+      --env-file "${ENV_FILE}" \
+      --release-commit "${EXPECTED_BUILD_ID}"
   )
 fi
 (

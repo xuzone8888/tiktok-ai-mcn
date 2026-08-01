@@ -3,14 +3,15 @@
 import {
   chmodSync,
   existsSync,
+  linkSync,
   mkdtempSync,
   mkdirSync,
   readFileSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { createServer } from "node:http";
-import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { spawn } from "node:child_process";
 import process from "node:process";
@@ -21,8 +22,10 @@ import {
 } from "./canvas-exact-env.mjs";
 
 const root = resolve(".");
+const verifierTemporaryParent = join(root, ".temp");
+mkdirSync(verifierTemporaryParent, { recursive: true });
 const temporaryRoot = mkdtempSync(
-  join(resolve(tmpdir()), "canvas-blue-green-verifier-")
+  join(verifierTemporaryParent, "canvas-blue-green-verifier-")
 );
 const bundleTool = resolve("scripts/canvas-rollback-bundle.mjs");
 const healthProbe = resolve("scripts/probe-canvas-internal-health.mjs");
@@ -1256,6 +1259,7 @@ function testStaticContracts() {
     'EXPECTED_ENV_FILE="${CANDIDATE_DIR}/.env.local"',
     'EXPECTED_BUILD_ID="$(basename -- "${CANDIDATE_DIR}")"',
     '--expected-build-id "${EXPECTED_BUILD_ID}"',
+    '--release-commit "${EXPECTED_BUILD_ID}"',
     "--allow-legacy-active",
     "legacy-bootstrap",
     "/api/internal/canvas/health",
@@ -1306,6 +1310,16 @@ function testStaticContracts() {
   const buildRunner = read("scripts/run-canvas-build.mjs");
   assertIncludes(buildRunner, "exactProcessEnvironment", "exact build runner");
   assertIncludes(buildRunner, 'process.execPath, [nextCli, "build"]', "exact build runner");
+  assertIncludes(buildRunner, 'argument === "--release-commit"', "exact build runner");
+  assertIncludes(
+    buildRunner,
+    'Object.hasOwn(exactEnvironment.values, "CANVAS_RELEASE_COMMIT")',
+    "exact build runner"
+  );
+  assertIncludes(buildRunner, "additions.CANVAS_RELEASE_COMMIT", "exact build runner");
+  const productionChecker = read("scripts/check-canvas-production-env.mjs");
+  assertIncludes(productionChecker, "readTrustedBuildId", "production build preflight");
+  assertIncludes(productionChecker, "O_NOFOLLOW", "production build preflight");
   const nextConfig = read("next.config.mjs");
   assertIncludes(nextConfig, "cpus: 1", "Next production build worker cap");
   const webBootstrap = read("scripts/start-canvas-web.mjs");
@@ -1392,6 +1406,94 @@ function testStaticContracts() {
     "production Nginx internal-route deny"
   );
   assertIncludes(nginx, "return 404;", "production Nginx internal-route deny");
+}
+
+async function testExactBuildRunnerCommitBoundary() {
+  const buildRoot = join(temporaryRoot, "exact-build-runner");
+  const nextCli = join(buildRoot, "node_modules", "next", "dist", "bin", "next");
+  const envFile = join(buildRoot, ".env.local");
+  const observation = join(buildRoot, ".build-runner-observed.json");
+  const releaseCommit = "d".repeat(40);
+  const staleCommit = "e".repeat(40);
+  mkdirSync(join(buildRoot, "node_modules", "next", "dist", "bin"), {
+    recursive: true,
+  });
+  writeFileSync(
+    nextCli,
+    [
+      'const { writeFileSync } = require("node:fs");',
+      'const { join } = require("node:path");',
+      'if (process.argv[2] !== "build") process.exit(12);',
+      "writeFileSync(join(process.cwd(), '.build-runner-observed.json'), JSON.stringify({",
+      "  releaseCommit: process.env.CANVAS_RELEASE_COMMIT ?? null,",
+      "  nodeEnv: process.env.NODE_ENV ?? null,",
+      "  fileSentinel: process.env.CANVAS_BUILD_FILE_SENTINEL ?? null,",
+      "  ambientSentinel: process.env.CANVAS_BUILD_AMBIENT_SENTINEL ?? null,",
+      "}));",
+      "",
+    ].join("\n")
+  );
+  writeFileSync(
+    envFile,
+    `CANVAS_RELEASE_COMMIT=${staleCommit}\nCANVAS_BUILD_FILE_SENTINEL=from-file\n`
+  );
+  chmodSync(envFile, 0o600);
+
+  const runner = resolve("scripts/run-canvas-build.mjs");
+  const baseArguments = [
+    runner,
+    "--root",
+    buildRoot,
+    "--env-file",
+    envFile,
+  ];
+  const staleControlled = await runNode(
+    baseArguments.concat("--release-commit", releaseCommit)
+  );
+  const staleOrdinary = await runNode(baseArguments);
+  assert(
+    staleControlled.code !== 0 && staleOrdinary.code !== 0,
+    "exact build runner accepted a release commit stored in .env.local"
+  );
+  writeFileSync(envFile, "CANVAS_BUILD_FILE_SENTINEL=from-file\n");
+  chmodSync(envFile, 0o600);
+
+  const controlled = await runNode(
+    baseArguments.concat("--release-commit", releaseCommit),
+    {
+      CANVAS_RELEASE_COMMIT: "f".repeat(40),
+      CANVAS_BUILD_AMBIENT_SENTINEL: "must-not-cross",
+    }
+  );
+  assert(
+    controlled.code === 0,
+    `exact build runner rejected a valid release commit: ${controlled.stderr.trim()}`
+  );
+  const controlledEnvironment = JSON.parse(readFileSync(observation, "utf8"));
+  assert(
+    controlledEnvironment.releaseCommit === releaseCommit &&
+      controlledEnvironment.nodeEnv === "production" &&
+      controlledEnvironment.fileSentinel === "from-file" &&
+      controlledEnvironment.ambientSentinel === null,
+    "exact build runner did not isolate and inject the reviewed release commit"
+  );
+
+  const ordinary = await runNode(baseArguments, {
+    CANVAS_RELEASE_COMMIT: "f".repeat(40),
+  });
+  assert(ordinary.code === 0, "ordinary exact build runner invocation failed");
+  const ordinaryEnvironment = JSON.parse(readFileSync(observation, "utf8"));
+  assert(
+    ordinaryEnvironment.releaseCommit === null,
+    "ordinary exact build inherited a stale release commit"
+  );
+
+  for (const invalid of ["a".repeat(39), "A".repeat(40), ` ${releaseCommit}`]) {
+    const rejected = await runNode(
+      baseArguments.concat("--release-commit", invalid)
+    );
+    assert(rejected.code !== 0, "exact build runner accepted an invalid release commit");
+  }
 }
 
 async function testNextBuildConfig() {
@@ -1507,6 +1609,52 @@ async function testNextBuildConfig() {
     !`${matchingBuild.stdout}\n${matchingBuild.stderr}`.includes(workerToken),
     "production preflight printed the synthetic Worker token"
   );
+
+  const buildIdPath = join(preflightRoot, ".next", "BUILD_ID");
+  const linkedBuildId = join(preflightRoot, ".next", "BUILD_ID.link-target");
+  writeFileSync(linkedBuildId, `${releaseCommit}\n`);
+  rmSync(buildIdPath);
+  linkSync(linkedBuildId, buildIdPath);
+  const hardlinkedBuild = await runNode(checkerArguments, {
+    NODE_ENV: "production",
+  });
+  assert(
+    hardlinkedBuild.code !== 0 &&
+      hardlinkedBuild.stderr.includes("[FAIL] Next.js production build"),
+    "production preflight accepted a hard-linked BUILD_ID"
+  );
+  rmSync(buildIdPath);
+  rmSync(linkedBuildId);
+  writeFileSync(buildIdPath, `${releaseCommit}\n`);
+
+  const symlinkTarget = join(preflightRoot, ".next", "BUILD_ID.symlink-target");
+  writeFileSync(symlinkTarget, `${releaseCommit}\n`);
+  rmSync(buildIdPath);
+  let symlinkCreated = false;
+  try {
+    symlinkSync(symlinkTarget, buildIdPath, "file");
+    symlinkCreated = true;
+  } catch (error) {
+    if (
+      process.platform !== "win32" ||
+      !["EACCES", "EPERM", "UNKNOWN"].includes(error?.code)
+    ) {
+      throw error;
+    }
+  }
+  if (symlinkCreated) {
+    const symlinkedBuild = await runNode(checkerArguments, {
+      NODE_ENV: "production",
+    });
+    assert(
+      symlinkedBuild.code !== 0 &&
+        symlinkedBuild.stderr.includes("[FAIL] Next.js production build"),
+      "production preflight accepted a symbolic-link BUILD_ID"
+    );
+    rmSync(buildIdPath);
+  }
+  rmSync(symlinkTarget);
+  writeFileSync(buildIdPath, `${releaseCommit}\n`);
 
   const invalidWorkerFixtures = [
     {
@@ -1664,6 +1812,7 @@ async function testNextBuildConfig() {
 async function main() {
   try {
     testStaticContracts();
+    await testExactBuildRunnerCommitBoundary();
     await testNextBuildConfig();
     testExactEnvironmentBoundary();
     await testBundles();
@@ -1674,9 +1823,9 @@ async function main() {
     );
   } finally {
     const resolvedTemporaryRoot = resolve(temporaryRoot);
-    const resolvedSystemTemporaryRoot = resolve(tmpdir());
+    const resolvedTemporaryParent = resolve(verifierTemporaryParent);
     const relation = resolvedTemporaryRoot.startsWith(
-      `${resolvedSystemTemporaryRoot}${process.platform === "win32" ? "\\" : "/"}`
+      `${resolvedTemporaryParent}${process.platform === "win32" ? "\\" : "/"}`
     );
     if (relation) rmSync(resolvedTemporaryRoot, { recursive: true, force: true });
   }

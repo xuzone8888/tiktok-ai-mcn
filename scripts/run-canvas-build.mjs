@@ -20,15 +20,23 @@ function parseArguments(argv) {
     }
     if (argument === "--root") options.root = value;
     else if (argument === "--env-file") options.envFile = value;
+    else if (argument === "--release-commit") options.releaseCommit = value;
     else throw new Error("unsupported build argument");
     index += 1;
   }
   if (!options.root || !options.envFile) {
     throw new Error("incomplete build arguments");
   }
+  if (
+    options.releaseCommit !== undefined &&
+    !/^[0-9a-f]{40}$/.test(options.releaseCommit)
+  ) {
+    throw new Error("release commit must be an exact lowercase Git commit");
+  }
   return {
     root: resolve(options.root),
     envFile: resolve(options.envFile),
+    releaseCommit: options.releaseCommit ?? null,
   };
 }
 
@@ -38,6 +46,11 @@ async function main() {
     options.root,
     options.envFile
   );
+  if (Object.hasOwn(exactEnvironment.values, "CANVAS_RELEASE_COMMIT")) {
+    throw new Error(
+      "CANVAS_RELEASE_COMMIT is controller-only and must not be stored in .env.local"
+    );
+  }
   const nextCli = join(
     exactEnvironment.root,
     "node_modules",
@@ -51,11 +64,15 @@ async function main() {
     throw new Error("untrusted Next.js build entrypoint");
   }
 
+  // Only the release controller may opt in to a commit-bound BUILD_ID.
+  const additions = { NODE_ENV: "production" };
+  if (options.releaseCommit !== null) {
+    additions.CANVAS_RELEASE_COMMIT = options.releaseCommit;
+  }
+
   const child = spawn(process.execPath, [nextCli, "build"], {
     cwd: exactEnvironment.root,
-    env: exactProcessEnvironment(exactEnvironment.values, {
-      NODE_ENV: "production",
-    }),
+    env: exactProcessEnvironment(exactEnvironment.values, additions),
     shell: false,
     stdio: "inherit",
     windowsHide: true,
@@ -76,7 +93,9 @@ async function main() {
   }
 }
 
-main().catch(() => {
-  console.error("[Canvas build] Exact-environment production build failed.");
+main().catch((error) => {
+  const reason =
+    error instanceof Error ? error.message : "unknown controlled build failure";
+  console.error(`[Canvas build] Exact-environment production build failed: ${reason}`);
   process.exit(1);
 });
