@@ -232,52 +232,62 @@ test('returns HTTP 200 and leaves the durable job queued when the immediate proc
   assert.equal(queuedJobs.has('revocation-job-1'), false)
 })
 
-test('sends signup confirmations to a login page that restores PKCE or hash sessions', () => {
+test('sends signup confirmations to a login page with one strict callback restorer', () => {
   assert.match(registerPage, /emailRedirectTo: `\$\{window\.location\.origin\}\/auth\/login`/)
-  assert.match(loginPage, /hasSupabasePkceCallback\(search\)/)
-  assert.match(loginPage, /restoreSupabasePkceCallback\(supabase\.auth, search\)/)
+  assert.match(loginPage, /restoreSupabaseAuthCallback\(/)
+  assert.match(loginPage, /\(scrubbedPath\) => window\.history\.replaceState\(window\.history\.state, "", scrubbedPath\)/)
   assert.match(loginPage, /const hash = window\.location\.hash/)
-  assert.match(loginPage, /params\.get\('access_token'\)/)
-  assert.match(loginPage, /params\.get\('refresh_token'\)/)
-  assert.match(loginPage, /supabase\.auth\.setSession\(\{\s+access_token: accessToken,\s+refresh_token: refreshToken,/)
+  assert.match(authCallback, /exchangeCodeForSession\(parsed\.code\)/)
+  assert.match(authCallback, /verifyOtp\(\{ token_hash: parsed\.tokenHash, type: parsed\.type \}\)/)
+  assert.match(authCallback, /setSession\(\{\s+access_token: parsed\.accessToken,\s+refresh_token: parsed\.refreshToken,/)
 })
 
-test('awaits the browser PKCE exchange before reading the restored session', async () => {
-  const { restoreSupabasePkceCallback } = loadAuthCallbackModule()
+test('scrubs PKCE parameters before creating the client and accepts only the exchanged session', async () => {
+  const { restoreSupabaseAuthCallback } = loadAuthCallbackModule()
   const calls = []
   const expectedSession = { access_token: 'controlled-session' }
-  const result = await restoreSupabasePkceCallback({
-    async initialize() {
-      calls.push('initialize')
-      return { error: null }
+  const result = await restoreSupabaseAuthCallback(
+    () => {
+      calls.push('create-client')
+      return {
+        async exchangeCodeForSession(code) {
+          calls.push(`exchange:${code}`)
+          return { data: { session: expectedSession }, error: null }
+        },
+      }
     },
-    async getSession() {
-      calls.push('getSession')
-      return { data: { session: expectedSession }, error: null }
-    },
-  }, '?code=controlled-auth-code')
+    '?code=controlled-auth-code&redirect=%2Fcanvas',
+    '',
+    '/auth/login',
+    (path) => calls.push(`scrub:${path}`),
+  )
 
-  assert.deepEqual(calls, ['initialize', 'getSession'])
+  assert.deepEqual(calls, [
+    'scrub:/auth/login?redirect=%2Fcanvas',
+    'create-client',
+    'exchange:controlled-auth-code',
+  ])
   assert.equal(result.handled, true)
   assert.equal(result.session, expectedSession)
   assert.equal(result.error, null)
 })
 
-test('does not initialize auth when the callback has no PKCE code', async () => {
-  const { restoreSupabasePkceCallback } = loadAuthCallbackModule()
-  let initialized = false
-  const result = await restoreSupabasePkceCallback({
-    async initialize() {
-      initialized = true
-      return { error: null }
+test('does not create an auth client when no callback is present', async () => {
+  const { restoreSupabaseAuthCallback } = loadAuthCallbackModule()
+  let created = false
+  const result = await restoreSupabaseAuthCallback(
+    () => {
+      created = true
+      throw new Error('client must not be created')
     },
-    async getSession() {
-      throw new Error('getSession must not run without a PKCE code')
-    },
-  }, '?redirect=%2Fmodels')
+    '?redirect=%2Fmodels',
+    '#section',
+    '/auth/login',
+    () => { throw new Error('ordinary URLs must not be scrubbed') },
+  )
 
-  assert.equal(initialized, false)
-  assert.deepEqual(result, { handled: false, session: null, error: null })
+  assert.equal(created, false)
+  assert.deepEqual(result, { handled: false, session: null, error: null, scrubbedPath: null })
 })
 
 test('only permits same-site paths as post-auth redirects', () => {
