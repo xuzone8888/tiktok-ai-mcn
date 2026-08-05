@@ -422,7 +422,7 @@ test('YouTube and Facebook reply request formats remain unchanged', async () => 
   const facebook = requests[1]
   const facebookBody = facebook.init.body
   assert.equal(facebook.url.host, 'graph.facebook.com')
-  assert.equal(facebook.url.pathname, '/v25.0/facebook-parent/comments')
+  assert.equal(facebook.url.pathname, '/v20.0/facebook-parent/comments')
   assert.equal(facebook.init.method, 'POST')
   assert.equal(facebook.headers.get('Content-Type'), 'application/x-www-form-urlencoded')
   assert.equal(facebookBody instanceof URLSearchParams, true)

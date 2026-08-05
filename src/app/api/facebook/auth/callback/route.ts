@@ -89,6 +89,8 @@ export async function GET(request: NextRequest) {
   const state = searchParams.get('state')
   const error = searchParams.get('error')
   const errorDescription = searchParams.get('error_description')
+  const errorCode = searchParams.get('error_code')
+  const errorReason = searchParams.get('error_reason')
   const redirectOrigin = getAppRedirectOrigin(request)
 
   if ((!code && !error) || !state) {
@@ -108,23 +110,35 @@ export async function GET(request: NextRequest) {
       return redirectToAccounts(redirectOrigin, { error: 'Facebook 授权状态无效或已过期' })
     }
 
+    if (authState.status === 'failed' && authState.error_message) {
+      return redirectToAccounts(redirectOrigin, {
+        error: `Facebook 授权失败：${authState.error_message}`,
+      })
+    }
+
     if (authState.status !== 'pending') {
       return redirectToAccounts(redirectOrigin, { error: 'Facebook 授权状态已使用或无效，请重新绑定' })
     }
 
     if (error) {
+      const metaErrorDetails = [
+        errorDescription || error,
+        errorCode ? `Meta 错误码 ${errorCode}` : null,
+        errorReason ? `原因 ${errorReason}` : null,
+      ].filter(Boolean).join('；')
+
       await supabase
         .from('facebook_auth_states')
         .update({
           status: 'failed',
           error_code: error,
-          error_message: errorDescription || error,
+          error_message: metaErrorDetails,
           code_verifier: null,
           completed_at: new Date().toISOString(),
         })
         .eq('state', state)
 
-      return redirectToAccounts(redirectOrigin, { error: errorDescription || error })
+      return redirectToAccounts(redirectOrigin, { error: metaErrorDetails })
     }
 
     if (new Date(authState.expires_at).getTime() <= Date.now()) {

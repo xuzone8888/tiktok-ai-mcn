@@ -2,7 +2,7 @@ import crypto from 'crypto'
 
 import { callBroker, isBrokerEnabled } from '@/lib/oauth-broker/client'
 
-const FACEBOOK_API_VERSION = process.env.FACEBOOK_API_VERSION || 'v25.0'
+const FACEBOOK_API_VERSION = process.env.FACEBOOK_API_VERSION || 'v20.0'
 const FACEBOOK_AUTH_URL = `https://www.facebook.com/${FACEBOOK_API_VERSION}/dialog/oauth`
 const FACEBOOK_GRAPH_URL = `https://graph.facebook.com/${FACEBOOK_API_VERSION}`
 
