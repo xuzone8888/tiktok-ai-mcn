@@ -4,7 +4,12 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import {
   calculateFacebookTokenExpiration,
+  getGrantedFacebookScopes,
+  getFacebookGrantedPermissions,
+  getFacebookUserInfo,
+  isFacebookPageWebhookEnabled,
   refreshFacebookPageAccessToken,
+  subscribeFacebookPageToWebhooks,
 } from '@/lib/facebook/oauth'
 
 export const dynamic = 'force-dynamic'
@@ -41,12 +46,21 @@ export async function POST(_request: NextRequest, { params }: { params: { id: st
     }
 
     const token = await refreshFacebookPageAccessToken(tokenRecord.refresh_token, account.channel_id)
+    const [facebookUser, permissions] = await Promise.all([
+      getFacebookUserInfo(token.user_access_token),
+      getFacebookGrantedPermissions(token.user_access_token),
+    ])
+    const scopes = getGrantedFacebookScopes(permissions)
+    if (isFacebookPageWebhookEnabled()) {
+      await subscribeFacebookPageToWebhooks(token.page.pageId, token.access_token)
+    }
     const expiresAt = calculateFacebookTokenExpiration(token.expires_in)?.toISOString() || null
     const now = new Date().toISOString()
 
     const { error } = await adminSupabase
       .from('facebook_accounts')
       .update({
+        authorized_by_facebook_user_id: facebookUser.id,
         channel_title: token.page.name,
         channel_handle: token.page.category,
         thumbnail_url: token.page.thumbnailUrl,
@@ -54,6 +68,7 @@ export async function POST(_request: NextRequest, { params }: { params: { id: st
         video_count: 0,
         view_count: token.page.fanCount,
         access_token_expires_at: expiresAt,
+        scopes,
         status: 'active',
         updated_at: now,
       })
