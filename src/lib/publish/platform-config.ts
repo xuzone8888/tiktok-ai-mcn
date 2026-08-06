@@ -40,6 +40,21 @@ export interface PlatformPublishConfig {
   bindButtonTextEn?: string
   statsVideoLabel: string
   statsVideoLabelEn?: string
+  requiredCommentScopes?: string[]
+  disconnectConfirmation?: string
+  disconnectConfirmationEn?: string
+  requireLegalConsent?: boolean
+  legalConsentText?: string
+  legalConsentTextEn?: string
+  deleteAllDataEndpoint?: string
+  dataControlsTitle?: string
+  dataControlsTitleEn?: string
+  dataControlsDescription?: string
+  dataControlsDescriptionEn?: string
+  deleteAllDataLabel?: string
+  deleteAllDataLabelEn?: string
+  deleteAllDataConfirmation?: string
+  deleteAllDataConfirmationEn?: string
   maxTitleLength: number
   maxDescriptionLength: number
   maxTagsLength: number
@@ -116,6 +131,24 @@ export const META_PLATFORM_CONFIGS: Record<MetaPublishPlatform, Omit<PlatformPub
     bindButtonTextEn: 'Connect Facebook Page',
     statsVideoLabel: '视频',
     statsVideoLabelEn: 'Videos',
+    requiredCommentScopes: [
+      'pages_read_user_content',
+      'pages_manage_engagement',
+    ],
+    requireLegalConsent: true,
+    legalConsentText: '绑定 Facebook 前，我已阅读并同意当前隐私政策与服务条款，并授权 Star Gaze 按所述方式处理 Facebook Page 数据。',
+    legalConsentTextEn: 'Before connecting Facebook, I have read and accept the current Privacy Policy and Terms, and authorize Star Gaze to process Facebook Page data as described.',
+    disconnectConfirmation: '解绑将移除此 Page 的 webhook 订阅，并删除它在 Star Gaze 中的账号令牌、评论缓存和关联发布记录。其他已绑定 Page 不受影响；Facebook 上已发布的内容不会被删除。是否继续？',
+    disconnectConfirmationEn: 'Disconnecting removes this Page’s webhook subscription and deletes its tokens, cached comments, and related publishing history from Star Gaze. Other connected Pages are not affected, and Facebook-hosted content is not deleted. Continue?',
+    deleteAllDataEndpoint: '/api/facebook/data',
+    dataControlsTitle: 'Facebook 数据控制',
+    dataControlsTitleEn: 'Facebook data controls',
+    dataControlsDescription: '删除全部本地 Facebook Page 绑定、令牌、发布记录、评论缓存和操作日志。不会删除 Facebook 上已发布的视频、帖子、评论或回复。',
+    dataControlsDescriptionEn: 'Delete all locally stored Facebook Page bindings, tokens, publishing history, cached comments, and action logs. This does not delete videos, posts, comments, or replies hosted on Facebook.',
+    deleteAllDataLabel: '删除全部 Facebook 数据',
+    deleteAllDataLabelEn: 'Delete all Facebook data',
+    deleteAllDataConfirmation: '这会永久删除你在 Star Gaze 中的全部 Facebook Page 绑定、令牌、发布记录、评论缓存和操作日志，并尝试撤销 Facebook 授权。Facebook 上已发布的内容不会被删除。此操作不可恢复，是否继续？',
+    deleteAllDataConfirmationEn: 'This permanently deletes all your Facebook Page bindings, tokens, publishing history, cached comments, and action logs from Star Gaze and attempts to revoke Facebook authorization. Content hosted on Facebook will not be deleted. Continue?',
     maxTitleLength: 255,
     maxDescriptionLength: 63206,
     maxTagsLength: 500,

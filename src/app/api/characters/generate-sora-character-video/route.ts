@@ -9,6 +9,7 @@
  */
 
 import { NextResponse } from "next/server";
+import { applyTaskCreditDelta } from "@/lib/credits/atomic-task-credit";
 import { submitSora2 } from "@/lib/suchuang-api";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -70,13 +71,22 @@ export async function POST(request: Request) {
       );
     }
 
-    const { error: deductError } = await supabase
-      .from("profiles")
-      .update({ credits: profile.credits - SORA2_CHARACTER_VIDEO_COST })
-      .eq("id", user.id);
-
-    if (deductError) {
-      console.error("[Sora2-CharVideo] Failed to deduct credits:", deductError);
+    const billingTaskId = crypto.randomUUID();
+    let chargeResult;
+    try {
+      chargeResult = await applyTaskCreditDelta({
+        supabase,
+        userId: user.id,
+        entryKind: "consume",
+        amount: -SORA2_CHARACTER_VIDEO_COST,
+        scope: "character-video",
+        taskId: billingTaskId,
+        operation: "consume",
+        pricingVersion: "character-sora2-video-v1",
+        description: "Sora2 角色出场视频生成",
+      });
+    } catch (error) {
+      console.error("[Sora2-CharVideo] Failed to deduct credits:", error);
       return NextResponse.json(
         { success: false, error: "扣除积分失败" },
         { status: 500 }
@@ -86,8 +96,8 @@ export async function POST(request: Request) {
     console.log("[Sora2-CharVideo] Credits deducted:", {
       userId: user.id,
       cost: SORA2_CHARACTER_VIDEO_COST,
-      before: profile.credits,
-      after: profile.credits - SORA2_CHARACTER_VIDEO_COST,
+      before: chargeResult.balanceBefore,
+      after: chargeResult.balanceAfter,
     });
 
     // 提交 Sora2 视频生成（line3 无印科技，10 秒）
@@ -104,12 +114,18 @@ export async function POST(request: Request) {
     );
 
     if (!result.success) {
-      // 退还积分
       try {
-        await supabase
-          .from("profiles")
-          .update({ credits: profile.credits })
-          .eq("id", user.id);
+        await applyTaskCreditDelta({
+          supabase,
+          userId: user.id,
+          entryKind: "refund",
+          amount: SORA2_CHARACTER_VIDEO_COST,
+          scope: "character-video",
+          taskId: billingTaskId,
+          operation: "refund",
+          pricingVersion: "character-sora2-video-v1",
+          description: "Sora2 角色出场视频提交失败退款",
+        });
         console.log("[Sora2-CharVideo] Credits refunded due to submit failure");
       } catch (refundErr) {
         console.error("[Sora2-CharVideo] Failed to refund credits:", refundErr);
@@ -122,6 +138,49 @@ export async function POST(request: Request) {
     }
 
     console.log("[Sora2-CharVideo] Task submitted:", result.taskId);
+
+    const { error: generationError } = await supabase.from("generations").insert({
+      id: billingTaskId,
+      user_id: user.id,
+      task_id: result.taskId,
+      type: "video",
+      generation_type: "video",
+      source: "character_create",
+      prompt: finalPrompt,
+      model: "sora2-character-video",
+      duration: 10,
+      aspect_ratio: aspectRatio,
+      quality: "standard",
+      status: "processing",
+      progress: 0,
+      credit_cost: SORA2_CHARACTER_VIDEO_COST,
+      credits_used: SORA2_CHARACTER_VIDEO_COST,
+      credits_refunded: 0,
+      metadata: {
+        billing_task_id: billingTaskId,
+        billing_scope: "character-video",
+      },
+      created_at: new Date().toISOString(),
+    } as any);
+
+    if (generationError) {
+      console.error("[Sora2-CharVideo] Failed to persist task:", generationError);
+      await applyTaskCreditDelta({
+        supabase,
+        userId: user.id,
+        entryKind: "refund",
+        amount: SORA2_CHARACTER_VIDEO_COST,
+        scope: "character-video",
+        taskId: billingTaskId,
+        operation: "refund",
+        pricingVersion: "character-sora2-video-v1",
+        description: "Sora2 角色出场视频任务记录失败退款",
+      });
+      return NextResponse.json(
+        { success: false, error: "任务记录失败，积分已退还" },
+        { status: 500 }
+      );
+    }
 
     return NextResponse.json({
       success: true,

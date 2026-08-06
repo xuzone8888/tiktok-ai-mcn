@@ -21,6 +21,13 @@ import { useAiGenStore, type AiGenTask } from "@/stores/ai-gen-store";
 import { useAssemblyStore, type AssemblyTask } from "@/stores/assembly-store";
 import { useToast } from "@/hooks/use-toast";
 import { getCharacterReferenceMaxImages, mergeCharacterReferenceImages } from "@/lib/video-models/character-reference";
+import {
+  preflightBatchVideoSubmission,
+  resolvePersistedVideoTaskRecovery,
+  resolveQuickGenVideoStatusSelection,
+  resolveQuickGenVideoTaskSelection,
+  type ResolvedVideoStatusSelection,
+} from "@/lib/video-models/client-preflight";
 import { getCharacterAssetReferenceUrls } from "@/lib/character-assets";
 import { Video, Image as ImageIcon, Sparkles, Palette, ExternalLink } from "lucide-react";
 
@@ -88,22 +95,25 @@ function useVideoTaskExecutor(resolveCurrentUserId: ResolveCurrentUserId) {
       const isPromptMode = task.mode === "prompt_to_video";
 
       // 轮询上游直到终态(正常提交与刷新恢复两条路径共用)
-      const pollVideoUntilDone = async (upstreamTaskId: string) => {
-        const isSeedanceBatch = taskModelType === "seedance";
-        const maxAttempts = taskModelType === "happyhorse"
-          ? (taskDuration === 12 ? 144 : 80)
+      const pollVideoUntilDone = async (
+        upstreamTaskId: string,
+        statusSelection: ResolvedVideoStatusSelection
+      ) => {
+        const isSeedanceBatch = statusSelection.modelType === "seedance";
+        const maxAttempts = statusSelection.modelType === "happyhorse"
+          ? (statusSelection.durationSeconds === 12 ? 144 : 80)
           : isSeedanceBatch
             ? 60
-            : taskModelType === "sora2-pro"
+            : statusSelection.modelType === "sora2-pro"
               ? 140
               : 90;
-        const pollInterval = isSeedanceBatch ? 5000 : taskModelType === "happyhorse" ? 7500 : 10000;
+        const pollInterval = isSeedanceBatch ? 5000 : statusSelection.modelType === "happyhorse" ? 7500 : 10000;
 
         for (let i = 0; i < maxAttempts; i++) {
           await new Promise(r => setTimeout(r, pollInterval));
           updateTaskStatus(taskId, "generating_video", { currentStep: 4, progress: Math.min(80 + Math.floor(i / 2), 98) });
 
-          const statusRes = await fetch(`/api/video-batch/models/status?modelType=${encodeURIComponent(taskModelType)}&taskId=${encodeURIComponent(upstreamTaskId)}&aspectRatio=${encodeURIComponent(taskAspectRatio)}&durationSeconds=${taskDuration}&quality=${encodeURIComponent(taskQuality)}`);
+          const statusRes = await fetch(`/api/video-batch/models/status?modelType=${encodeURIComponent(statusSelection.modelType)}&taskId=${encodeURIComponent(upstreamTaskId)}&aspectRatio=${encodeURIComponent(taskAspectRatio)}&durationSeconds=${statusSelection.durationSeconds}&quality=${encodeURIComponent(statusSelection.quality)}`);
           const statusText = await statusRes.text();
           let statusData;
           try {
@@ -139,11 +149,30 @@ function useVideoTaskExecutor(resolveCurrentUserId: ResolveCurrentUserId) {
         throw new Error("视频生成任务超时");
       };
 
-      // 刷新恢复:上游任务号已持久化的任务直接续轮询,绝不重复提交(防双扣费)
-      if (task.soraTaskId) {
+      const persistedUpstreamTaskId: unknown = task.soraTaskId;
+      const videoTaskRecovery = resolvePersistedVideoTaskRecovery({
+        upstreamTaskId: persistedUpstreamTaskId,
+        modelType: taskModelType,
+        duration: taskDuration,
+        quality: taskQuality,
+        aspectRatio: taskAspectRatio,
+      });
+
+      // 刷新恢复:只有经状态合约确认的上游任务才续轮询,绝不重复提交(防双扣费)
+      if (videoTaskRecovery.ok && videoTaskRecovery.mode === "status") {
+        const upstreamTaskId = (persistedUpstreamTaskId as string).trim();
         updateTaskStatus(taskId, "generating_video", { currentStep: 4, progress: 80 });
-        await pollVideoUntilDone(task.soraTaskId);
+        await pollVideoUntilDone(upstreamTaskId, videoTaskRecovery.value);
         return;
+      }
+      const hasRejectedUpstreamTaskId = persistedUpstreamTaskId !== undefined
+        && persistedUpstreamTaskId !== null
+        && (typeof persistedUpstreamTaskId !== "string" || persistedUpstreamTaskId.trim().length > 0);
+      if (hasRejectedUpstreamTaskId) {
+        const message = videoTaskRecovery.ok
+          ? "已保存的上游视频任务无法进入状态恢复"
+          : videoTaskRecovery.error.message;
+        throw new RangeError(message);
       }
 
       console.log("[VideoTaskExecutor] Task AI model config:", {
@@ -410,15 +439,30 @@ function useVideoTaskExecutor(resolveCurrentUserId: ResolveCurrentUserId) {
         ...(mainGridImageUrl ? [mainGridImageUrl] : []),
       ]);
 
+      const submissionContract = preflightBatchVideoSubmission({
+        modelType: task.modelType,
+        durationSeconds: task.duration,
+        quality: task.quality,
+        aspectRatio: task.aspectRatio,
+        mode: isPromptMode ? "prompt_to_video" : "image_to_video",
+        referenceImageCount: unifiedImageUrls.length,
+      });
+      if (!submissionContract.ok) {
+        throw new RangeError(
+          `视频任务配置无效（${submissionContract.error.field}）：${submissionContract.error.message}。请检查任务配置后重试。`
+        );
+      }
+      const validatedSubmission = submissionContract.value;
+
       const videoRes = await fetch("/api/video-batch/models/submit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           prompt: finalVideoPrompt,
-          aspectRatio: taskAspectRatio,
-          durationSeconds: taskDuration,
-          quality: taskQuality,
-          modelType: taskModelType,
+          aspectRatio: validatedSubmission.aspectRatio,
+          durationSeconds: validatedSubmission.durationSeconds,
+          quality: validatedSubmission.quality,
+          modelType: validatedSubmission.modelType,
           imageUrls: unifiedImageUrls,
           clientTaskId: taskId,
           userId,
@@ -454,7 +498,11 @@ function useVideoTaskExecutor(resolveCurrentUserId: ResolveCurrentUserId) {
       const upstreamTaskId = videoResult.data.taskId;
       // 上游任务号立即持久化(刷新恢复锚点:重启后续轮询而非重复提交)
       updateTaskStatus(taskId, "generating_video", { currentStep: 4, progress: 80, soraTaskId: upstreamTaskId });
-      await pollVideoUntilDone(upstreamTaskId);
+      await pollVideoUntilDone(upstreamTaskId, {
+        modelType: validatedSubmission.modelType,
+        durationSeconds: validatedSubmission.durationSeconds,
+        quality: validatedSubmission.quality,
+      });
 
     } catch (error) {
       console.error("[VideoTask] Error:", error);
@@ -785,18 +833,8 @@ function useQuickGenTaskExecutor(resolveCurrentUserId: ResolveCurrentUserId) {
         if (activeTask.status === "idle") {
           const userId = await resolveCurrentUserId();
           // 新任务，调用 API
+          const { modelType, quality } = resolveQuickGenVideoTaskSelection(activeTask);
           updateTaskStatus(activeTask.id, "generating", { progress: 10 });
-
-          const modelName = activeTask.model || "";
-          const modelType =
-            modelName.startsWith("seedance") ? "seedance" :
-            modelName.startsWith("happyhorse") ? "happyhorse" :
-            modelName.includes("sora2-pro") ? "sora2-pro" :
-            modelName.includes("grok") ? "grok" :
-            modelName.includes("veo") ? "veo" :
-            modelName.includes("omni") ? "omni" :
-            "sora2";
-          const quality = modelName.includes("pro") || activeTask.quality === "hd" ? "hd" : "standard";
 
           const response = await fetch("/api/video-batch/models/submit", {
             method: "POST",
@@ -839,26 +877,21 @@ function useQuickGenTaskExecutor(resolveCurrentUserId: ResolveCurrentUserId) {
         const task = useQuickGenStore.getState().videoTasks.find(t => t.id === taskIdToRun);
         if (!task || !task.taskId) return;
 
-        const taskModelName = task.model || "";
-        const statusModelType =
-          taskModelName.startsWith("seedance") ? "seedance" :
-          taskModelName.startsWith("happyhorse") ? "happyhorse" :
-          taskModelName.includes("sora2-pro") ? "sora2-pro" :
-          taskModelName.includes("grok") ? "grok" :
-          taskModelName.includes("veo") ? "veo" :
-          taskModelName.includes("omni") ? "omni" :
-          "sora2";
-        const statusQuality = taskModelName.includes("pro") || task.quality === "hd" ? "hd" : "standard";
+        const {
+          modelType: statusModelType,
+          durationSeconds: statusDurationSeconds,
+          quality: statusQuality,
+        } = resolveQuickGenVideoStatusSelection(task);
         const isSeedanceModel = statusModelType === "seedance";
         const isHappyHorseModel = statusModelType === "happyhorse";
-        const maxAttempts = isHappyHorseModel ? (task.duration === 12 ? 144 : 80) : isSeedanceModel ? 60 : (statusModelType === "sora2-pro" ? 120 : 90);
+        const maxAttempts = isHappyHorseModel ? (statusDurationSeconds === 12 ? 144 : 80) : isSeedanceModel ? 60 : (statusModelType === "sora2-pro" ? 120 : 90);
         const pollInterval = isSeedanceModel ? 5000 : isHappyHorseModel ? 7500 : 10000;
 
         for (let i = 0; i < maxAttempts; i++) {
           await new Promise(r => setTimeout(r, pollInterval));
           updateTaskStatus(task.id, "polling", { progress: Math.min(20 + i * 2, 90) });
 
-          const statusRes = await fetch(`/api/video-batch/models/status?modelType=${encodeURIComponent(statusModelType)}&taskId=${encodeURIComponent(task.taskId)}&aspectRatio=${encodeURIComponent(task.aspectRatio)}&durationSeconds=${task.duration}&quality=${encodeURIComponent(statusQuality)}`);
+          const statusRes = await fetch(`/api/video-batch/models/status?modelType=${encodeURIComponent(statusModelType)}&taskId=${encodeURIComponent(task.taskId)}&aspectRatio=${encodeURIComponent(task.aspectRatio)}&durationSeconds=${statusDurationSeconds}&quality=${encodeURIComponent(statusQuality)}`);
 
           const statusText = await statusRes.text();
           let statusData;

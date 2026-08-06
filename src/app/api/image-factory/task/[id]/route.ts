@@ -5,6 +5,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { applyTaskCreditDelta } from "@/lib/credits/atomic-task-credit";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createServerClient } from "@/lib/supabase/server";
 import { queryNanoBananaResult } from "@/lib/suchuang-api";
@@ -185,6 +186,11 @@ function getMetadataNumber(metadata: Record<string, unknown>, key: string): numb
   return typeof value === "number" && Number.isFinite(value) ? value : 0;
 }
 
+function getBillingAttempt(metadata: Record<string, unknown>): number {
+  const value = getMetadataNumber(metadata, "billing_attempt");
+  return Number.isSafeInteger(value) && value > 0 ? value : 1;
+}
+
 async function reconcileNanoFailureRefund(
   adminClient: ReturnType<typeof createAdminClient>,
   userId: string,
@@ -192,6 +198,7 @@ async function reconcileNanoFailureRefund(
     id: string;
     user_id: string;
     status: string;
+    mode: string;
     output_items: unknown;
     metadata: unknown;
     credits_charged?: boolean | null;
@@ -218,7 +225,9 @@ async function reconcileNanoFailureRefund(
     userId,
     task.id,
     refundPlan.amount,
-    `电商图片旧 NanoBanana 失败按比例退款 (${failedCount}/${totalCount}, ${task.id})`
+    `电商图片旧 NanoBanana 失败按比例退款 (${failedCount}/${totalCount}, ${task.id})`,
+    `refund-a${refundPlan.billingAttempt}-f${failedCount}-of-${totalCount}`,
+    refundPlan.pricingVersion
   );
 
   if (!refunded) {
@@ -249,29 +258,46 @@ async function reconcileNanoFailureRefund(
 async function getNanoFailureRefundPlan(
   adminClient: ReturnType<typeof createAdminClient>,
   taskId: string,
-  task: { metadata: unknown; credits_charged?: boolean | null; credits_cost?: number | null },
+  task: {
+    mode: string;
+    metadata: unknown;
+    credits_charged?: boolean | null;
+    credits_cost?: number | null;
+  },
   failedCount: number,
   totalCount: number
-): Promise<{ amount: number; metadata: Record<string, unknown> }> {
+): Promise<{
+  amount: number;
+  metadata: Record<string, unknown>;
+  billingAttempt: number;
+  pricingVersion: string;
+}> {
   const metadata = getTaskMetadata(task.metadata);
+  const billingAttempt = getBillingAttempt(metadata);
+  const pricingVersion = `ecom-image-${task.mode}-attempt-${billingAttempt}-v1`;
 
   if (!task.credits_charged || failedCount <= 0 || totalCount <= 0) {
-    return { amount: 0, metadata };
+    return { amount: 0, metadata, billingAttempt, pricingVersion };
   }
 
   const creditsCost = Number(task.credits_cost || 0);
   if (creditsCost <= 0) {
-    return { amount: 0, metadata };
+    return { amount: 0, metadata, billingAttempt, pricingVersion };
   }
 
   const alreadyRefundedFailedCount = getMetadataNumber(metadata, "nano_failed_refund_count");
   const alreadyRefundedAmount = Math.max(
     getMetadataNumber(metadata, "nano_failed_refund_amount"),
-    await getRecordedNanoFailureRefundAmount(adminClient, taskId)
+    await getRecordedNanoFailureRefundAmount(
+      adminClient,
+      taskId,
+      pricingVersion,
+      billingAttempt === 1
+    )
   );
 
   if (failedCount <= alreadyRefundedFailedCount) {
-    return { amount: 0, metadata };
+    return { amount: 0, metadata, billingAttempt, pricingVersion };
   }
 
   const targetRefundAmount = failedCount === totalCount
@@ -280,11 +306,13 @@ async function getNanoFailureRefundPlan(
   const amount = Math.max(0, targetRefundAmount - alreadyRefundedAmount);
 
   if (amount <= 0) {
-    return { amount: 0, metadata };
+    return { amount: 0, metadata, billingAttempt, pricingVersion };
   }
 
   return {
     amount,
+    billingAttempt,
+    pricingVersion,
     metadata: {
       ...metadata,
       nano_failed_refund_count: failedCount,
@@ -296,21 +324,40 @@ async function getNanoFailureRefundPlan(
 
 async function getRecordedNanoFailureRefundAmount(
   adminClient: ReturnType<typeof createAdminClient>,
-  taskId: string
+  taskId: string,
+  pricingVersion: string,
+  includeLegacy: boolean
 ): Promise<number> {
-  const { data, error } = await adminClient
+  const taskScopedResult = await (adminClient as any)
+    .from("credit_transactions")
+    .select("amount")
+    .eq("task_id", taskId)
+    .eq("entry_kind", "refund")
+    .eq("pricing_version", pricingVersion);
+  if (taskScopedResult.error) {
+    console.error(
+      "[Task Status] Failed to read refund transactions:",
+      taskScopedResult.error
+    );
+    return 0;
+  }
+
+  const taskScopedAmount = ((taskScopedResult.data || []) as Array<{ amount?: number }>)
+    .reduce((sum, row) => sum + Math.max(0, Number(row.amount || 0)), 0);
+  if (!includeLegacy) return taskScopedAmount;
+
+  const legacyResult = await adminClient
     .from("credit_transactions")
     .select("amount, description")
     .eq("reference_type", "ecom_image_task")
     .eq("reference_id", taskId)
     .eq("type", "refund");
-
-  if (error || !data) {
-    console.error("[Task Status] Failed to read refund transactions:", error);
-    return 0;
+  if (legacyResult.error) {
+    console.error("[Task Status] Failed to read legacy refund transactions:", legacyResult.error);
+    return taskScopedAmount;
   }
 
-  return data.reduce((sum, row) => {
+  const legacyAmount = (legacyResult.data || []).reduce((sum, row) => {
     const transaction = row as { amount?: number; description?: string | null };
     if (!transaction.description?.includes("旧 NanoBanana 失败按比例退款")) {
       return sum;
@@ -318,6 +365,8 @@ async function getRecordedNanoFailureRefundAmount(
 
     return sum + Math.max(0, transaction.amount || 0);
   }, 0);
+
+  return legacyAmount + taskScopedAmount;
 }
 
 async function refundEcomTaskCredits(
@@ -325,46 +374,27 @@ async function refundEcomTaskCredits(
   userId: string,
   taskId: string,
   amount: number,
-  description: string
+  description: string,
+  operation: string,
+  pricingVersion: string
 ): Promise<boolean> {
   if (amount <= 0) return true;
 
-  const { data: profile } = await adminClient
-    .from("profiles")
-    .select("credits")
-    .eq("id", userId)
-    .single();
-
-  if (!profile) return false;
-
-  const currentCredits = (profile as { credits: number }).credits;
-  const newBalance = currentCredits + amount;
-  const { data: updatedProfile, error: refundError } = await adminClient
-    .from("profiles")
-    .update({ credits: newBalance })
-    .eq("id", userId)
-    .eq("credits", currentCredits)
-    .select("credits")
-    .single();
-
-  if (refundError || !updatedProfile) {
-    console.error("[Task Status] Failed to refund credits:", refundError);
+  try {
+    await applyTaskCreditDelta({
+      supabase: adminClient,
+      userId,
+      entryKind: "refund",
+      amount,
+      scope: "ecom-image",
+      taskId,
+      operation,
+      pricingVersion,
+      description,
+    });
+  } catch (error) {
+    console.error("[Task Status] Failed to refund credits:", error);
     return false;
-  }
-
-  const transactionError = await adminClient.from("credit_transactions").insert({
-    user_id: userId,
-    amount,
-    type: "refund",
-    description,
-    reference_type: "ecom_image_task",
-    reference_id: taskId,
-    balance_before: currentCredits,
-    balance_after: newBalance,
-  });
-
-  if (transactionError.error) {
-    console.error("[Task Status] Failed to record refund transaction:", transactionError.error);
   }
 
   return true;

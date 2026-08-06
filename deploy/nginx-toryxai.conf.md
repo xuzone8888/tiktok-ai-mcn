@@ -30,6 +30,10 @@ server {
 
     # 代理到 Next.js 应用
     location / {
+        # Supabase session refreshes can return several Set-Cookie headers.
+        proxy_buffer_size 32k;
+        proxy_buffers 8 32k;
+        proxy_busy_buffers_size 64k;
         proxy_pass http://localhost:3000;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;

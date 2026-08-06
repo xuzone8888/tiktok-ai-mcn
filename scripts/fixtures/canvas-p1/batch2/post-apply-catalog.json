@@ -1,0 +1,3818 @@
+{
+  "target_expectations": [
+    {
+      "name": "canvases",
+      "present": true,
+      "relkind": "r"
+    },
+    {
+      "name": "credit_transactions",
+      "present": true,
+      "relkind": "r"
+    },
+    {
+      "name": "generation_quota_buckets",
+      "present": true,
+      "relkind": "r"
+    },
+    {
+      "name": "generations",
+      "present": true,
+      "relkind": "r"
+    },
+    {
+      "name": "profiles",
+      "present": true,
+      "relkind": "r"
+    }
+  ],
+  "columns": [
+    {
+      "table": "profiles",
+      "ordinal": 1,
+      "name": "id",
+      "type": "uuid",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "profiles",
+      "ordinal": 2,
+      "name": "email",
+      "type": "text",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "profiles",
+      "ordinal": 3,
+      "name": "name",
+      "type": "text",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "profiles",
+      "ordinal": 4,
+      "name": "avatar_url",
+      "type": "text",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "profiles",
+      "ordinal": 5,
+      "name": "role",
+      "type": "user_role",
+      "not_null": true,
+      "default": "'user'::user_role"
+    },
+    {
+      "table": "profiles",
+      "ordinal": 6,
+      "name": "credits",
+      "type": "integer",
+      "not_null": true,
+      "default": "100"
+    },
+    {
+      "table": "profiles",
+      "ordinal": 7,
+      "name": "status",
+      "type": "text",
+      "not_null": false,
+      "default": "'active'::text"
+    },
+    {
+      "table": "profiles",
+      "ordinal": 8,
+      "name": "banned_at",
+      "type": "timestamp with time zone",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "profiles",
+      "ordinal": 9,
+      "name": "banned_reason",
+      "type": "text",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "profiles",
+      "ordinal": 10,
+      "name": "created_at",
+      "type": "timestamp with time zone",
+      "not_null": true,
+      "default": "now()"
+    },
+    {
+      "table": "profiles",
+      "ordinal": 11,
+      "name": "updated_at",
+      "type": "timestamp with time zone",
+      "not_null": false,
+      "default": "now()"
+    },
+    {
+      "table": "profiles",
+      "ordinal": 12,
+      "name": "phone",
+      "type": "character varying(20)",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "generations",
+      "ordinal": 1,
+      "name": "id",
+      "type": "uuid",
+      "not_null": true,
+      "default": "gen_random_uuid()"
+    },
+    {
+      "table": "generations",
+      "ordinal": 2,
+      "name": "user_id",
+      "type": "uuid",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "generations",
+      "ordinal": 3,
+      "name": "task_id",
+      "type": "text",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "generations",
+      "ordinal": 4,
+      "name": "type",
+      "type": "text",
+      "not_null": false,
+      "default": "'video'::text"
+    },
+    {
+      "table": "generations",
+      "ordinal": 5,
+      "name": "source",
+      "type": "text",
+      "not_null": false,
+      "default": "'quick_gen'::text"
+    },
+    {
+      "table": "generations",
+      "ordinal": 6,
+      "name": "prompt",
+      "type": "text",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "generations",
+      "ordinal": 7,
+      "name": "model",
+      "type": "text",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "generations",
+      "ordinal": 8,
+      "name": "duration",
+      "type": "integer",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "generations",
+      "ordinal": 9,
+      "name": "aspect_ratio",
+      "type": "text",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "generations",
+      "ordinal": 10,
+      "name": "quality",
+      "type": "text",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "generations",
+      "ordinal": 11,
+      "name": "source_image_url",
+      "type": "text",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "generations",
+      "ordinal": 12,
+      "name": "status",
+      "type": "text",
+      "not_null": false,
+      "default": "'pending'::text"
+    },
+    {
+      "table": "generations",
+      "ordinal": 13,
+      "name": "result_url",
+      "type": "text",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "generations",
+      "ordinal": 14,
+      "name": "video_url",
+      "type": "text",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "generations",
+      "ordinal": 15,
+      "name": "image_url",
+      "type": "text",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "generations",
+      "ordinal": 16,
+      "name": "thumbnail_url",
+      "type": "text",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "generations",
+      "ordinal": 17,
+      "name": "error_message",
+      "type": "text",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "generations",
+      "ordinal": 18,
+      "name": "credit_cost",
+      "type": "integer",
+      "not_null": false,
+      "default": "0"
+    },
+    {
+      "table": "generations",
+      "ordinal": 19,
+      "name": "use_pro",
+      "type": "boolean",
+      "not_null": false,
+      "default": "false"
+    },
+    {
+      "table": "generations",
+      "ordinal": 20,
+      "name": "metadata",
+      "type": "jsonb",
+      "not_null": false,
+      "default": "'{}'::jsonb"
+    },
+    {
+      "table": "generations",
+      "ordinal": 21,
+      "name": "created_at",
+      "type": "timestamp with time zone",
+      "not_null": false,
+      "default": "now()"
+    },
+    {
+      "table": "generations",
+      "ordinal": 22,
+      "name": "completed_at",
+      "type": "timestamp with time zone",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "generations",
+      "ordinal": 23,
+      "name": "group_name",
+      "type": "character varying(255)",
+      "not_null": false,
+      "default": "'默认'::character varying"
+    },
+    {
+      "table": "generations",
+      "ordinal": 24,
+      "name": "generation_type",
+      "type": "text",
+      "not_null": false,
+      "default": "'video'::text"
+    },
+    {
+      "table": "generations",
+      "ordinal": 25,
+      "name": "output_url",
+      "type": "text",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "generations",
+      "ordinal": 26,
+      "name": "progress",
+      "type": "integer",
+      "not_null": false,
+      "default": "0"
+    },
+    {
+      "table": "generations",
+      "ordinal": 27,
+      "name": "credits_used",
+      "type": "integer",
+      "not_null": false,
+      "default": "0"
+    },
+    {
+      "table": "generations",
+      "ordinal": 28,
+      "name": "credits_refunded",
+      "type": "integer",
+      "not_null": false,
+      "default": "0"
+    },
+    {
+      "table": "generations",
+      "ordinal": 29,
+      "name": "started_at",
+      "type": "timestamp with time zone",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "generations",
+      "ordinal": 30,
+      "name": "resolution",
+      "type": "text",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "generations",
+      "ordinal": 31,
+      "name": "library_status",
+      "type": "text",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "generations",
+      "ordinal": 32,
+      "name": "batch_id",
+      "type": "uuid",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "generations",
+      "ordinal": 33,
+      "name": "spec",
+      "type": "jsonb",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "generations",
+      "ordinal": 34,
+      "name": "action_id",
+      "type": "uuid",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "generations",
+      "ordinal": 35,
+      "name": "canvas_id",
+      "type": "uuid",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "generations",
+      "ordinal": 36,
+      "name": "canvas_id_snapshot",
+      "type": "uuid",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "generations",
+      "ordinal": 37,
+      "name": "canvas_node_id",
+      "type": "text",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "generations",
+      "ordinal": 38,
+      "name": "canvas_rev",
+      "type": "bigint",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "generations",
+      "ordinal": 39,
+      "name": "writer_tag",
+      "type": "text",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "generations",
+      "ordinal": 40,
+      "name": "request_fingerprint",
+      "type": "text",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "generations",
+      "ordinal": 41,
+      "name": "fingerprint_version",
+      "type": "text",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "generations",
+      "ordinal": 42,
+      "name": "pricing_version",
+      "type": "text",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "generations",
+      "ordinal": 43,
+      "name": "billing_mode",
+      "type": "text",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "generations",
+      "ordinal": 44,
+      "name": "output_text",
+      "type": "text",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "generations",
+      "ordinal": 45,
+      "name": "planned_output_oss_key",
+      "type": "text",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "generations",
+      "ordinal": 46,
+      "name": "output_oss_key",
+      "type": "text",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "generations",
+      "ordinal": 47,
+      "name": "updated_at",
+      "type": "timestamp with time zone",
+      "not_null": true,
+      "default": "now()"
+    },
+    {
+      "table": "generations",
+      "ordinal": 48,
+      "name": "provider_submission_state",
+      "type": "text",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "generations",
+      "ordinal": 49,
+      "name": "submission_token_hash",
+      "type": "bytea",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "generations",
+      "ordinal": 50,
+      "name": "submission_started_at",
+      "type": "timestamp with time zone",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "generations",
+      "ordinal": 51,
+      "name": "reconcile_profile_version",
+      "type": "text",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "generations",
+      "ordinal": 52,
+      "name": "reconcile_interval_ms",
+      "type": "integer",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "generations",
+      "ordinal": 53,
+      "name": "reconcile_owner",
+      "type": "uuid",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "generations",
+      "ordinal": 54,
+      "name": "reconcile_lease_token",
+      "type": "uuid",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "generations",
+      "ordinal": 55,
+      "name": "reconcile_lease_expires_at",
+      "type": "timestamp with time zone",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "generations",
+      "ordinal": 56,
+      "name": "next_reconcile_at",
+      "type": "timestamp with time zone",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "generations",
+      "ordinal": 57,
+      "name": "reconcile_attempt_count",
+      "type": "integer",
+      "not_null": true,
+      "default": "0"
+    },
+    {
+      "table": "generations",
+      "ordinal": 58,
+      "name": "last_reconcile_error_code",
+      "type": "text",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "canvases",
+      "ordinal": 1,
+      "name": "id",
+      "type": "uuid",
+      "not_null": true,
+      "default": "gen_random_uuid()"
+    },
+    {
+      "table": "canvases",
+      "ordinal": 2,
+      "name": "user_id",
+      "type": "uuid",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "canvases",
+      "ordinal": 3,
+      "name": "title",
+      "type": "text",
+      "not_null": true,
+      "default": "'未命名画布'::text"
+    },
+    {
+      "table": "canvases",
+      "ordinal": 4,
+      "name": "schema_version",
+      "type": "integer",
+      "not_null": true,
+      "default": "1"
+    },
+    {
+      "table": "canvases",
+      "ordinal": 5,
+      "name": "doc",
+      "type": "jsonb",
+      "not_null": true,
+      "default": "'{\"edges\": [], \"nodes\": [], \"groups\": []}'::jsonb"
+    },
+    {
+      "table": "canvases",
+      "ordinal": 6,
+      "name": "deps",
+      "type": "jsonb",
+      "not_null": true,
+      "default": "'{\"assets\": [], \"models\": [], \"voices\": [], \"recipes\": [], \"characters\": []}'::jsonb"
+    },
+    {
+      "table": "canvases",
+      "ordinal": 7,
+      "name": "rev",
+      "type": "bigint",
+      "not_null": true,
+      "default": "0"
+    },
+    {
+      "table": "canvases",
+      "ordinal": 8,
+      "name": "writer_tag",
+      "type": "text",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "canvases",
+      "ordinal": 9,
+      "name": "writer_heartbeat_at",
+      "type": "timestamp with time zone",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "canvases",
+      "ordinal": 10,
+      "name": "doc_bytes",
+      "type": "integer",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "canvases",
+      "ordinal": 11,
+      "name": "share_slug",
+      "type": "text",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "canvases",
+      "ordinal": 12,
+      "name": "status",
+      "type": "text",
+      "not_null": true,
+      "default": "'active'::text"
+    },
+    {
+      "table": "canvases",
+      "ordinal": 13,
+      "name": "created_at",
+      "type": "timestamp with time zone",
+      "not_null": true,
+      "default": "now()"
+    },
+    {
+      "table": "canvases",
+      "ordinal": 14,
+      "name": "updated_at",
+      "type": "timestamp with time zone",
+      "not_null": true,
+      "default": "now()"
+    },
+    {
+      "table": "credit_transactions",
+      "ordinal": 1,
+      "name": "id",
+      "type": "uuid",
+      "not_null": true,
+      "default": "uuid_generate_v4()"
+    },
+    {
+      "table": "credit_transactions",
+      "ordinal": 2,
+      "name": "user_id",
+      "type": "uuid",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "credit_transactions",
+      "ordinal": 3,
+      "name": "amount",
+      "type": "integer",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "credit_transactions",
+      "ordinal": 4,
+      "name": "type",
+      "type": "text",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "credit_transactions",
+      "ordinal": 5,
+      "name": "description",
+      "type": "text",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "credit_transactions",
+      "ordinal": 6,
+      "name": "reference_id",
+      "type": "uuid",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "credit_transactions",
+      "ordinal": 7,
+      "name": "reference_type",
+      "type": "text",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "credit_transactions",
+      "ordinal": 8,
+      "name": "balance_before",
+      "type": "integer",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "credit_transactions",
+      "ordinal": 9,
+      "name": "balance_after",
+      "type": "integer",
+      "not_null": true,
+      "default": null
+    },
+    {
+      "table": "credit_transactions",
+      "ordinal": 10,
+      "name": "created_at",
+      "type": "timestamp with time zone",
+      "not_null": true,
+      "default": "now()"
+    },
+    {
+      "table": "credit_transactions",
+      "ordinal": 11,
+      "name": "created_by",
+      "type": "uuid",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "credit_transactions",
+      "ordinal": 12,
+      "name": "metadata",
+      "type": "jsonb",
+      "not_null": false,
+      "default": "'{}'::jsonb"
+    },
+    {
+      "table": "credit_transactions",
+      "ordinal": 13,
+      "name": "entry_kind",
+      "type": "text",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "credit_transactions",
+      "ordinal": 14,
+      "name": "generation_id",
+      "type": "uuid",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "credit_transactions",
+      "ordinal": 15,
+      "name": "action_id",
+      "type": "uuid",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "credit_transactions",
+      "ordinal": 16,
+      "name": "canvas_id",
+      "type": "uuid",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "credit_transactions",
+      "ordinal": 17,
+      "name": "canvas_id_snapshot",
+      "type": "uuid",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "credit_transactions",
+      "ordinal": 18,
+      "name": "canvas_node_id",
+      "type": "text",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "credit_transactions",
+      "ordinal": 19,
+      "name": "task_id",
+      "type": "text",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "credit_transactions",
+      "ordinal": 20,
+      "name": "batch_id",
+      "type": "uuid",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "credit_transactions",
+      "ordinal": 21,
+      "name": "pricing_version",
+      "type": "text",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "credit_transactions",
+      "ordinal": 22,
+      "name": "operation_anchor",
+      "type": "text",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "credit_transactions",
+      "ordinal": 23,
+      "name": "quota_key",
+      "type": "text",
+      "not_null": false,
+      "default": null
+    },
+    {
+      "table": "credit_transactions",
+      "ordinal": 24,
+      "name": "quota_window_start",
+      "type": "timestamp with time zone",
+      "not_null": false,
+      "default": null
+    }
+  ],
+  "constraints": [
+    {
+      "table": "profiles",
+      "name": "profiles_email_key",
+      "type": "u",
+      "validated": true,
+      "definition": "UNIQUE (email)"
+    },
+    {
+      "table": "profiles",
+      "name": "profiles_id_fkey",
+      "type": "f",
+      "validated": true,
+      "definition": "FOREIGN KEY (id) REFERENCES auth.users(id) ON DELETE CASCADE"
+    },
+    {
+      "table": "profiles",
+      "name": "profiles_pkey",
+      "type": "p",
+      "validated": true,
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table": "profiles",
+      "name": "profiles_status_check",
+      "type": "c",
+      "validated": true,
+      "definition": "CHECK (status = ANY (ARRAY['active'::text, 'suspended'::text, 'banned'::text]))"
+    },
+    {
+      "table": "generations",
+      "name": "gen_action_billing_mode",
+      "type": "c",
+      "validated": true,
+      "definition": "CHECK (action_id IS NULL OR (billing_mode = ANY (ARRAY['debit'::text, 'free_quota'::text])))"
+    },
+    {
+      "table": "generations",
+      "name": "gen_action_bound_has_task",
+      "type": "c",
+      "validated": true,
+      "definition": "CHECK (action_id IS NULL OR provider_submission_state <> 'bound'::text OR status = 'completed'::text OR task_id IS NOT NULL)"
+    },
+    {
+      "table": "generations",
+      "name": "gen_action_completed_has_output",
+      "type": "c",
+      "validated": true,
+      "definition": "CHECK (action_id IS NULL OR status <> 'completed'::text OR\nCASE\n    WHEN type = 'text'::text THEN output_text IS NOT NULL\n    ELSE output_oss_key IS NOT NULL\nEND)"
+    },
+    {
+      "table": "generations",
+      "name": "gen_action_credit_nonnegative",
+      "type": "c",
+      "validated": true,
+      "definition": "CHECK (action_id IS NULL OR credit_cost IS NOT NULL AND credit_cost >= 0)"
+    },
+    {
+      "table": "generations",
+      "name": "gen_action_fingerprint_version",
+      "type": "c",
+      "validated": true,
+      "definition": "CHECK (action_id IS NULL OR fingerprint_version = 'canvas-generation-v1'::text)"
+    },
+    {
+      "table": "generations",
+      "name": "gen_action_free_quota_zero_cost",
+      "type": "c",
+      "validated": true,
+      "definition": "CHECK (action_id IS NULL OR billing_mode <> 'free_quota'::text OR credit_cost = 0)"
+    },
+    {
+      "table": "generations",
+      "name": "gen_action_identity_required",
+      "type": "c",
+      "validated": true,
+      "definition": "CHECK (action_id IS NULL OR canvas_id_snapshot IS NOT NULL AND canvas_node_id IS NOT NULL AND canvas_rev IS NOT NULL AND writer_tag IS NOT NULL AND request_fingerprint IS NOT NULL AND pricing_version IS NOT NULL AND user_id IS NOT NULL)"
+    },
+    {
+      "table": "generations",
+      "name": "gen_action_kind_canonical",
+      "type": "c",
+      "validated": true,
+      "definition": "CHECK (action_id IS NULL OR (type = ANY (ARRAY['video'::text, 'image'::text, 'text'::text])) AND generation_type = type)"
+    },
+    {
+      "table": "generations",
+      "name": "gen_action_kind_profile_shape",
+      "type": "c",
+      "validated": true,
+      "definition": "CHECK (action_id IS NULL OR\nCASE\n    WHEN type = 'text'::text THEN reconcile_profile_version IS NULL AND reconcile_interval_ms IS NULL AND next_reconcile_at IS NULL AND reconcile_owner IS NULL AND reconcile_lease_token IS NULL AND reconcile_lease_expires_at IS NULL\n    ELSE reconcile_profile_version IS NOT NULL AND reconcile_interval_ms IS NOT NULL AND reconcile_interval_ms > 0\nEND)"
+    },
+    {
+      "table": "generations",
+      "name": "gen_action_not_started_is_clean",
+      "type": "c",
+      "validated": true,
+      "definition": "CHECK (action_id IS NULL OR provider_submission_state <> 'not_started'::text OR task_id IS NULL AND submission_token_hash IS NULL AND submission_started_at IS NULL)"
+    },
+    {
+      "table": "generations",
+      "name": "gen_action_output_shape",
+      "type": "c",
+      "validated": true,
+      "definition": "CHECK (action_id IS NULL OR\nCASE\n    WHEN type = 'text'::text THEN output_oss_key IS NULL\n    ELSE output_text IS NULL AND (output_oss_key IS NULL OR output_oss_key = planned_output_oss_key)\nEND)"
+    },
+    {
+      "table": "generations",
+      "name": "gen_action_planned_key_shape",
+      "type": "c",
+      "validated": true,
+      "definition": "CHECK (action_id IS NULL OR\nCASE\n    WHEN type = 'text'::text THEN planned_output_oss_key IS NULL\n    ELSE planned_output_oss_key IS NOT NULL\nEND)"
+    },
+    {
+      "table": "generations",
+      "name": "gen_action_refund_bounded",
+      "type": "c",
+      "validated": true,
+      "definition": "CHECK (action_id IS NULL OR credits_refunded IS NOT NULL AND credits_refunded >= 0 AND credits_refunded <= credit_cost)"
+    },
+    {
+      "table": "generations",
+      "name": "gen_action_source_canvas",
+      "type": "c",
+      "validated": true,
+      "definition": "CHECK (action_id IS NULL OR source = 'canvas'::text)"
+    },
+    {
+      "table": "generations",
+      "name": "gen_action_status_canonical",
+      "type": "c",
+      "validated": true,
+      "definition": "CHECK (action_id IS NULL OR (status = ANY (ARRAY['pending'::text, 'processing'::text, 'completed'::text, 'failed'::text])))"
+    },
+    {
+      "table": "generations",
+      "name": "gen_action_submission_state",
+      "type": "c",
+      "validated": true,
+      "definition": "CHECK (action_id IS NULL OR (provider_submission_state = ANY (ARRAY['not_started'::text, 'submitting'::text, 'bound'::text, 'unknown'::text])))"
+    },
+    {
+      "table": "generations",
+      "name": "gen_reconcile_attempts_nonnegative",
+      "type": "c",
+      "validated": true,
+      "definition": "CHECK (reconcile_attempt_count >= 0)"
+    },
+    {
+      "table": "generations",
+      "name": "gen_reconcile_lease_all_or_none",
+      "type": "c",
+      "validated": true,
+      "definition": "CHECK (reconcile_owner IS NULL AND reconcile_lease_token IS NULL AND reconcile_lease_expires_at IS NULL OR reconcile_owner IS NOT NULL AND reconcile_lease_token IS NOT NULL AND reconcile_lease_expires_at IS NOT NULL)"
+    },
+    {
+      "table": "generations",
+      "name": "gen_reconcile_profile_all_or_none",
+      "type": "c",
+      "validated": true,
+      "definition": "CHECK (reconcile_profile_version IS NULL AND reconcile_interval_ms IS NULL OR reconcile_profile_version IS NOT NULL AND reconcile_interval_ms IS NOT NULL AND reconcile_interval_ms > 0)"
+    },
+    {
+      "table": "generations",
+      "name": "generations_canvas_id_fkey",
+      "type": "f",
+      "validated": true,
+      "definition": "FOREIGN KEY (canvas_id) REFERENCES canvases(id) ON DELETE SET NULL"
+    },
+    {
+      "table": "generations",
+      "name": "generations_pkey",
+      "type": "p",
+      "validated": true,
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table": "generations",
+      "name": "generations_user_id_fkey",
+      "type": "f",
+      "validated": true,
+      "definition": "FOREIGN KEY (user_id) REFERENCES profiles(id)"
+    },
+    {
+      "table": "generations",
+      "name": "valid_library_status",
+      "type": "c",
+      "validated": true,
+      "definition": "CHECK (library_status IS NULL OR (library_status = ANY (ARRAY['draft'::text, 'ready'::text, 'published'::text])))"
+    },
+    {
+      "table": "generations",
+      "name": "valid_source",
+      "type": "c",
+      "validated": false,
+      "definition": "CHECK ((source = ANY (ARRAY['quick_gen'::text, 'batch_image'::text, 'image_factory'::text, 'pro_studio'::text, 'link_video'::text, 'viral_clone'::text, 'ecom_factory'::text, 'studio'::text, 'slideshow'::text, 'photo_post'::text, 'canvas'::text])) OR source ~~ 'batch_video%'::text) NOT VALID"
+    },
+    {
+      "table": "canvases",
+      "name": "canvases_pkey",
+      "type": "p",
+      "validated": true,
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table": "canvases",
+      "name": "canvases_share_slug_key",
+      "type": "u",
+      "validated": true,
+      "definition": "UNIQUE (share_slug)"
+    },
+    {
+      "table": "canvases",
+      "name": "canvases_status_check",
+      "type": "c",
+      "validated": true,
+      "definition": "CHECK (status = ANY (ARRAY['active'::text, 'archived'::text]))"
+    },
+    {
+      "table": "canvases",
+      "name": "canvases_user_id_fkey",
+      "type": "f",
+      "validated": true,
+      "definition": "FOREIGN KEY (user_id) REFERENCES profiles(id) ON DELETE CASCADE"
+    },
+    {
+      "table": "credit_transactions",
+      "name": "credit_transactions_canvas_id_fkey",
+      "type": "f",
+      "validated": true,
+      "definition": "FOREIGN KEY (canvas_id) REFERENCES canvases(id) ON DELETE SET NULL"
+    },
+    {
+      "table": "credit_transactions",
+      "name": "credit_transactions_created_by_fkey",
+      "type": "f",
+      "validated": true,
+      "definition": "FOREIGN KEY (created_by) REFERENCES profiles(id)"
+    },
+    {
+      "table": "credit_transactions",
+      "name": "credit_transactions_generation_id_fkey",
+      "type": "f",
+      "validated": true,
+      "definition": "FOREIGN KEY (generation_id) REFERENCES generations(id) ON DELETE RESTRICT"
+    },
+    {
+      "table": "credit_transactions",
+      "name": "credit_transactions_pkey",
+      "type": "p",
+      "validated": true,
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table": "credit_transactions",
+      "name": "credit_transactions_type_check",
+      "type": "c",
+      "validated": true,
+      "definition": "CHECK (type = ANY (ARRAY['purchase'::text, 'usage'::text, 'refund'::text, 'bonus'::text, 'admin_adjustment'::text]))"
+    },
+    {
+      "table": "credit_transactions",
+      "name": "credit_transactions_user_id_fkey",
+      "type": "f",
+      "validated": true,
+      "definition": "FOREIGN KEY (user_id) REFERENCES profiles(id) ON DELETE CASCADE"
+    },
+    {
+      "table": "credit_transactions",
+      "name": "ct_action_identity_required",
+      "type": "c",
+      "validated": true,
+      "definition": "CHECK (entry_kind IS NULL OR entry_kind = 'grant'::text OR generation_id IS NOT NULL AND action_id IS NOT NULL AND canvas_id_snapshot IS NOT NULL AND canvas_node_id IS NOT NULL OR generation_id IS NULL AND action_id IS NULL AND canvas_id_snapshot IS NULL AND canvas_node_id IS NULL AND task_id IS NOT NULL AND length(btrim(task_id)) > 0)"
+    },
+    {
+      "table": "credit_transactions",
+      "name": "ct_balance_delta_consistent",
+      "type": "c",
+      "validated": true,
+      "definition": "CHECK (entry_kind IS NULL OR balance_after = (balance_before + amount))"
+    },
+    {
+      "table": "credit_transactions",
+      "name": "ct_balance_nonnegative",
+      "type": "c",
+      "validated": true,
+      "definition": "CHECK (entry_kind IS NULL OR balance_before >= 0 AND balance_after >= 0)"
+    },
+    {
+      "table": "credit_transactions",
+      "name": "ct_entry_kind_canonical",
+      "type": "c",
+      "validated": true,
+      "definition": "CHECK (entry_kind IS NULL OR (entry_kind = ANY (ARRAY['consume'::text, 'refund'::text, 'free_usage'::text, 'grant'::text])))"
+    },
+    {
+      "table": "credit_transactions",
+      "name": "ct_entry_kind_type_amount_map",
+      "type": "c",
+      "validated": true,
+      "definition": "CHECK (entry_kind IS NULL OR entry_kind = 'consume'::text AND type = 'usage'::text AND amount < 0 OR entry_kind = 'free_usage'::text AND type = 'usage'::text AND amount = 0 OR entry_kind = 'refund'::text AND type = 'refund'::text AND amount > 0 OR entry_kind = 'grant'::text AND type = 'bonus'::text AND amount > 0)"
+    },
+    {
+      "table": "credit_transactions",
+      "name": "ct_entry_requires_anchor",
+      "type": "c",
+      "validated": true,
+      "definition": "CHECK (entry_kind IS NULL OR operation_anchor IS NOT NULL AND length(btrim(operation_anchor)) > 0)"
+    },
+    {
+      "table": "credit_transactions",
+      "name": "ct_free_usage_quota_identity",
+      "type": "c",
+      "validated": true,
+      "definition": "CHECK (entry_kind IS NULL OR\nCASE\n    WHEN entry_kind = 'free_usage'::text THEN quota_key IS NOT NULL AND quota_window_start IS NOT NULL\n    ELSE quota_key IS NULL AND quota_window_start IS NULL\nEND)"
+    },
+    {
+      "table": "credit_transactions",
+      "name": "ct_grant_has_no_generation",
+      "type": "c",
+      "validated": true,
+      "definition": "CHECK (entry_kind IS NULL OR entry_kind <> 'grant'::text OR generation_id IS NULL AND action_id IS NULL)"
+    }
+  ],
+  "indexes": [
+    {
+      "table": "profiles",
+      "name": "profiles_email_key",
+      "unique": true,
+      "primary": false,
+      "definition": "CREATE UNIQUE INDEX profiles_email_key ON public.profiles USING btree (email)"
+    },
+    {
+      "table": "profiles",
+      "name": "profiles_pkey",
+      "unique": true,
+      "primary": true,
+      "definition": "CREATE UNIQUE INDEX profiles_pkey ON public.profiles USING btree (id)"
+    },
+    {
+      "table": "profiles",
+      "name": "idx_profiles_email",
+      "unique": false,
+      "primary": false,
+      "definition": "CREATE INDEX idx_profiles_email ON public.profiles USING btree (email)"
+    },
+    {
+      "table": "profiles",
+      "name": "idx_profiles_role",
+      "unique": false,
+      "primary": false,
+      "definition": "CREATE INDEX idx_profiles_role ON public.profiles USING btree (role)"
+    },
+    {
+      "table": "generations",
+      "name": "generations_pkey",
+      "unique": true,
+      "primary": true,
+      "definition": "CREATE UNIQUE INDEX generations_pkey ON public.generations USING btree (id)"
+    },
+    {
+      "table": "generations",
+      "name": "idx_generations_batch_id",
+      "unique": false,
+      "primary": false,
+      "definition": "CREATE INDEX idx_generations_batch_id ON public.generations USING btree (batch_id) WHERE (batch_id IS NOT NULL)"
+    },
+    {
+      "table": "generations",
+      "name": "idx_generations_group_name",
+      "unique": false,
+      "primary": false,
+      "definition": "CREATE INDEX idx_generations_group_name ON public.generations USING btree (user_id, group_name)"
+    },
+    {
+      "table": "generations",
+      "name": "idx_generations_library_status",
+      "unique": false,
+      "primary": false,
+      "definition": "CREATE INDEX idx_generations_library_status ON public.generations USING btree (user_id, library_status) WHERE (library_status IS NOT NULL)"
+    },
+    {
+      "table": "generations",
+      "name": "idx_generations_task_id",
+      "unique": false,
+      "primary": false,
+      "definition": "CREATE INDEX idx_generations_task_id ON public.generations USING btree (task_id)"
+    },
+    {
+      "table": "generations",
+      "name": "generations_user_action_uniq",
+      "unique": true,
+      "primary": false,
+      "definition": "CREATE UNIQUE INDEX generations_user_action_uniq ON public.generations USING btree (user_id, action_id) WHERE (action_id IS NOT NULL)"
+    },
+    {
+      "table": "generations",
+      "name": "generations_canvas_node_action_idx",
+      "unique": false,
+      "primary": false,
+      "definition": "CREATE INDEX generations_canvas_node_action_idx ON public.generations USING btree (canvas_id, canvas_node_id, action_id) WHERE (action_id IS NOT NULL)"
+    },
+    {
+      "table": "generations",
+      "name": "generations_reconcile_due_idx",
+      "unique": false,
+      "primary": false,
+      "definition": "CREATE INDEX generations_reconcile_due_idx ON public.generations USING btree (next_reconcile_at) WHERE ((action_id IS NOT NULL) AND (status = ANY (ARRAY['pending'::text, 'processing'::text])))"
+    },
+    {
+      "table": "generations",
+      "name": "generations_submitting_started_idx",
+      "unique": false,
+      "primary": false,
+      "definition": "CREATE INDEX generations_submitting_started_idx ON public.generations USING btree (submission_started_at) WHERE ((action_id IS NOT NULL) AND (provider_submission_state = 'submitting'::text))"
+    },
+    {
+      "table": "canvases",
+      "name": "canvases_pkey",
+      "unique": true,
+      "primary": true,
+      "definition": "CREATE UNIQUE INDEX canvases_pkey ON public.canvases USING btree (id)"
+    },
+    {
+      "table": "canvases",
+      "name": "canvases_share_slug_key",
+      "unique": true,
+      "primary": false,
+      "definition": "CREATE UNIQUE INDEX canvases_share_slug_key ON public.canvases USING btree (share_slug)"
+    },
+    {
+      "table": "canvases",
+      "name": "idx_canvases_user_updated",
+      "unique": false,
+      "primary": false,
+      "definition": "CREATE INDEX idx_canvases_user_updated ON public.canvases USING btree (user_id, updated_at DESC)"
+    },
+    {
+      "table": "credit_transactions",
+      "name": "credit_transactions_pkey",
+      "unique": true,
+      "primary": true,
+      "definition": "CREATE UNIQUE INDEX credit_transactions_pkey ON public.credit_transactions USING btree (id)"
+    },
+    {
+      "table": "credit_transactions",
+      "name": "idx_credit_transactions_type",
+      "unique": false,
+      "primary": false,
+      "definition": "CREATE INDEX idx_credit_transactions_type ON public.credit_transactions USING btree (type)"
+    },
+    {
+      "table": "credit_transactions",
+      "name": "idx_credit_transactions_user_id",
+      "unique": false,
+      "primary": false,
+      "definition": "CREATE INDEX idx_credit_transactions_user_id ON public.credit_transactions USING btree (user_id)"
+    },
+    {
+      "table": "credit_transactions",
+      "name": "credit_transactions_user_anchor_uniq",
+      "unique": true,
+      "primary": false,
+      "definition": "CREATE UNIQUE INDEX credit_transactions_user_anchor_uniq ON public.credit_transactions USING btree (user_id, operation_anchor) WHERE (operation_anchor IS NOT NULL)"
+    },
+    {
+      "table": "credit_transactions",
+      "name": "credit_transactions_consume_anchor_uniq",
+      "unique": true,
+      "primary": false,
+      "definition": "CREATE UNIQUE INDEX credit_transactions_consume_anchor_uniq ON public.credit_transactions USING btree (generation_id) WHERE ((generation_id IS NOT NULL) AND (entry_kind = ANY (ARRAY['consume'::text, 'free_usage'::text])))"
+    },
+    {
+      "table": "credit_transactions",
+      "name": "credit_transactions_refund_anchor_uniq",
+      "unique": true,
+      "primary": false,
+      "definition": "CREATE UNIQUE INDEX credit_transactions_refund_anchor_uniq ON public.credit_transactions USING btree (generation_id) WHERE ((generation_id IS NOT NULL) AND (entry_kind = 'refund'::text))"
+    },
+    {
+      "table": "credit_transactions",
+      "name": "credit_transactions_quota_usage_uniq",
+      "unique": true,
+      "primary": false,
+      "definition": "CREATE UNIQUE INDEX credit_transactions_quota_usage_uniq ON public.credit_transactions USING btree (user_id, quota_key, quota_window_start, generation_id) WHERE (entry_kind = 'free_usage'::text)"
+    },
+    {
+      "table": "credit_transactions",
+      "name": "credit_transactions_generation_idx",
+      "unique": false,
+      "primary": false,
+      "definition": "CREATE INDEX credit_transactions_generation_idx ON public.credit_transactions USING btree (generation_id) WHERE (generation_id IS NOT NULL)"
+    }
+  ],
+  "relations": [
+    {
+      "name": "profiles",
+      "kind": "r",
+      "owner": "postgres",
+      "rls_enabled": true,
+      "rls_forced": false
+    },
+    {
+      "name": "generations",
+      "kind": "r",
+      "owner": "postgres",
+      "rls_enabled": true,
+      "rls_forced": false
+    },
+    {
+      "name": "canvases",
+      "kind": "r",
+      "owner": "postgres",
+      "rls_enabled": true,
+      "rls_forced": false
+    },
+    {
+      "name": "credit_transactions",
+      "kind": "r",
+      "owner": "postgres",
+      "rls_enabled": true,
+      "rls_forced": false
+    }
+  ],
+  "policies": [
+    {
+      "table": "profiles",
+      "name": "Users can view own profile",
+      "command": "r",
+      "permissive": true,
+      "roles": [
+        "PUBLIC"
+      ],
+      "has_using": true,
+      "has_check": false,
+      "using_is_literal_true": false
+    },
+    {
+      "table": "profiles",
+      "name": "profiles_update_own_selfservice",
+      "command": "w",
+      "permissive": true,
+      "roles": [
+        "authenticated"
+      ],
+      "has_using": true,
+      "has_check": true,
+      "using_is_literal_true": false
+    },
+    {
+      "table": "generations",
+      "name": "generations_select_own",
+      "command": "r",
+      "permissive": true,
+      "roles": [
+        "authenticated"
+      ],
+      "has_using": true,
+      "has_check": false,
+      "using_is_literal_true": false
+    },
+    {
+      "table": "generations",
+      "name": "generations_service_role_all",
+      "command": "*",
+      "permissive": true,
+      "roles": [
+        "service_role"
+      ],
+      "has_using": true,
+      "has_check": true,
+      "using_is_literal_true": true
+    },
+    {
+      "table": "canvases",
+      "name": "canvases_delete_own",
+      "command": "d",
+      "permissive": true,
+      "roles": [
+        "PUBLIC"
+      ],
+      "has_using": true,
+      "has_check": false,
+      "using_is_literal_true": false
+    },
+    {
+      "table": "canvases",
+      "name": "canvases_insert_own",
+      "command": "a",
+      "permissive": true,
+      "roles": [
+        "PUBLIC"
+      ],
+      "has_using": false,
+      "has_check": true,
+      "using_is_literal_true": false
+    },
+    {
+      "table": "canvases",
+      "name": "canvases_select_own",
+      "command": "r",
+      "permissive": true,
+      "roles": [
+        "PUBLIC"
+      ],
+      "has_using": true,
+      "has_check": false,
+      "using_is_literal_true": false
+    },
+    {
+      "table": "canvases",
+      "name": "canvases_update_own",
+      "command": "w",
+      "permissive": true,
+      "roles": [
+        "PUBLIC"
+      ],
+      "has_using": true,
+      "has_check": true,
+      "using_is_literal_true": false
+    },
+    {
+      "table": "credit_transactions",
+      "name": "Admins can view all transactions",
+      "command": "r",
+      "permissive": true,
+      "roles": [
+        "PUBLIC"
+      ],
+      "has_using": true,
+      "has_check": false,
+      "using_is_literal_true": false
+    },
+    {
+      "table": "credit_transactions",
+      "name": "Users can view own transactions",
+      "command": "r",
+      "permissive": true,
+      "roles": [
+        "PUBLIC"
+      ],
+      "has_using": true,
+      "has_check": false,
+      "using_is_literal_true": false
+    }
+  ],
+  "relation_acl": [
+    {
+      "table": "profiles",
+      "grantee": "postgres",
+      "privilege": "INSERT"
+    },
+    {
+      "table": "profiles",
+      "grantee": "postgres",
+      "privilege": "SELECT"
+    },
+    {
+      "table": "profiles",
+      "grantee": "postgres",
+      "privilege": "UPDATE"
+    },
+    {
+      "table": "profiles",
+      "grantee": "postgres",
+      "privilege": "DELETE"
+    },
+    {
+      "table": "profiles",
+      "grantee": "postgres",
+      "privilege": "TRUNCATE"
+    },
+    {
+      "table": "profiles",
+      "grantee": "postgres",
+      "privilege": "REFERENCES"
+    },
+    {
+      "table": "profiles",
+      "grantee": "postgres",
+      "privilege": "TRIGGER"
+    },
+    {
+      "table": "profiles",
+      "grantee": "postgres",
+      "privilege": "MAINTAIN"
+    },
+    {
+      "table": "profiles",
+      "grantee": "service_role",
+      "privilege": "INSERT"
+    },
+    {
+      "table": "profiles",
+      "grantee": "service_role",
+      "privilege": "SELECT"
+    },
+    {
+      "table": "profiles",
+      "grantee": "service_role",
+      "privilege": "UPDATE"
+    },
+    {
+      "table": "profiles",
+      "grantee": "service_role",
+      "privilege": "DELETE"
+    },
+    {
+      "table": "profiles",
+      "grantee": "service_role",
+      "privilege": "TRUNCATE"
+    },
+    {
+      "table": "profiles",
+      "grantee": "service_role",
+      "privilege": "REFERENCES"
+    },
+    {
+      "table": "profiles",
+      "grantee": "service_role",
+      "privilege": "TRIGGER"
+    },
+    {
+      "table": "profiles",
+      "grantee": "service_role",
+      "privilege": "MAINTAIN"
+    },
+    {
+      "table": "profiles",
+      "grantee": "authenticated",
+      "privilege": "SELECT"
+    },
+    {
+      "table": "generations",
+      "grantee": "postgres",
+      "privilege": "INSERT"
+    },
+    {
+      "table": "generations",
+      "grantee": "postgres",
+      "privilege": "SELECT"
+    },
+    {
+      "table": "generations",
+      "grantee": "postgres",
+      "privilege": "UPDATE"
+    },
+    {
+      "table": "generations",
+      "grantee": "postgres",
+      "privilege": "DELETE"
+    },
+    {
+      "table": "generations",
+      "grantee": "postgres",
+      "privilege": "TRUNCATE"
+    },
+    {
+      "table": "generations",
+      "grantee": "postgres",
+      "privilege": "REFERENCES"
+    },
+    {
+      "table": "generations",
+      "grantee": "postgres",
+      "privilege": "TRIGGER"
+    },
+    {
+      "table": "generations",
+      "grantee": "postgres",
+      "privilege": "MAINTAIN"
+    },
+    {
+      "table": "generations",
+      "grantee": "service_role",
+      "privilege": "INSERT"
+    },
+    {
+      "table": "generations",
+      "grantee": "service_role",
+      "privilege": "SELECT"
+    },
+    {
+      "table": "generations",
+      "grantee": "service_role",
+      "privilege": "UPDATE"
+    },
+    {
+      "table": "generations",
+      "grantee": "service_role",
+      "privilege": "DELETE"
+    },
+    {
+      "table": "generations",
+      "grantee": "service_role",
+      "privilege": "TRUNCATE"
+    },
+    {
+      "table": "generations",
+      "grantee": "service_role",
+      "privilege": "REFERENCES"
+    },
+    {
+      "table": "generations",
+      "grantee": "service_role",
+      "privilege": "TRIGGER"
+    },
+    {
+      "table": "generations",
+      "grantee": "service_role",
+      "privilege": "MAINTAIN"
+    },
+    {
+      "table": "canvases",
+      "grantee": "postgres",
+      "privilege": "INSERT"
+    },
+    {
+      "table": "canvases",
+      "grantee": "postgres",
+      "privilege": "SELECT"
+    },
+    {
+      "table": "canvases",
+      "grantee": "postgres",
+      "privilege": "UPDATE"
+    },
+    {
+      "table": "canvases",
+      "grantee": "postgres",
+      "privilege": "DELETE"
+    },
+    {
+      "table": "canvases",
+      "grantee": "postgres",
+      "privilege": "TRUNCATE"
+    },
+    {
+      "table": "canvases",
+      "grantee": "postgres",
+      "privilege": "REFERENCES"
+    },
+    {
+      "table": "canvases",
+      "grantee": "postgres",
+      "privilege": "TRIGGER"
+    },
+    {
+      "table": "canvases",
+      "grantee": "postgres",
+      "privilege": "MAINTAIN"
+    },
+    {
+      "table": "canvases",
+      "grantee": "anon",
+      "privilege": "INSERT"
+    },
+    {
+      "table": "canvases",
+      "grantee": "anon",
+      "privilege": "SELECT"
+    },
+    {
+      "table": "canvases",
+      "grantee": "anon",
+      "privilege": "UPDATE"
+    },
+    {
+      "table": "canvases",
+      "grantee": "anon",
+      "privilege": "DELETE"
+    },
+    {
+      "table": "canvases",
+      "grantee": "anon",
+      "privilege": "TRUNCATE"
+    },
+    {
+      "table": "canvases",
+      "grantee": "anon",
+      "privilege": "REFERENCES"
+    },
+    {
+      "table": "canvases",
+      "grantee": "anon",
+      "privilege": "TRIGGER"
+    },
+    {
+      "table": "canvases",
+      "grantee": "anon",
+      "privilege": "MAINTAIN"
+    },
+    {
+      "table": "canvases",
+      "grantee": "authenticated",
+      "privilege": "INSERT"
+    },
+    {
+      "table": "canvases",
+      "grantee": "authenticated",
+      "privilege": "SELECT"
+    },
+    {
+      "table": "canvases",
+      "grantee": "authenticated",
+      "privilege": "UPDATE"
+    },
+    {
+      "table": "canvases",
+      "grantee": "authenticated",
+      "privilege": "DELETE"
+    },
+    {
+      "table": "canvases",
+      "grantee": "authenticated",
+      "privilege": "TRUNCATE"
+    },
+    {
+      "table": "canvases",
+      "grantee": "authenticated",
+      "privilege": "REFERENCES"
+    },
+    {
+      "table": "canvases",
+      "grantee": "authenticated",
+      "privilege": "TRIGGER"
+    },
+    {
+      "table": "canvases",
+      "grantee": "authenticated",
+      "privilege": "MAINTAIN"
+    },
+    {
+      "table": "canvases",
+      "grantee": "service_role",
+      "privilege": "INSERT"
+    },
+    {
+      "table": "canvases",
+      "grantee": "service_role",
+      "privilege": "SELECT"
+    },
+    {
+      "table": "canvases",
+      "grantee": "service_role",
+      "privilege": "UPDATE"
+    },
+    {
+      "table": "canvases",
+      "grantee": "service_role",
+      "privilege": "DELETE"
+    },
+    {
+      "table": "canvases",
+      "grantee": "service_role",
+      "privilege": "TRUNCATE"
+    },
+    {
+      "table": "canvases",
+      "grantee": "service_role",
+      "privilege": "REFERENCES"
+    },
+    {
+      "table": "canvases",
+      "grantee": "service_role",
+      "privilege": "TRIGGER"
+    },
+    {
+      "table": "canvases",
+      "grantee": "service_role",
+      "privilege": "MAINTAIN"
+    },
+    {
+      "table": "credit_transactions",
+      "grantee": "postgres",
+      "privilege": "INSERT"
+    },
+    {
+      "table": "credit_transactions",
+      "grantee": "postgres",
+      "privilege": "SELECT"
+    },
+    {
+      "table": "credit_transactions",
+      "grantee": "postgres",
+      "privilege": "UPDATE"
+    },
+    {
+      "table": "credit_transactions",
+      "grantee": "postgres",
+      "privilege": "DELETE"
+    },
+    {
+      "table": "credit_transactions",
+      "grantee": "postgres",
+      "privilege": "TRUNCATE"
+    },
+    {
+      "table": "credit_transactions",
+      "grantee": "postgres",
+      "privilege": "REFERENCES"
+    },
+    {
+      "table": "credit_transactions",
+      "grantee": "postgres",
+      "privilege": "TRIGGER"
+    },
+    {
+      "table": "credit_transactions",
+      "grantee": "postgres",
+      "privilege": "MAINTAIN"
+    },
+    {
+      "table": "credit_transactions",
+      "grantee": "service_role",
+      "privilege": "INSERT"
+    },
+    {
+      "table": "credit_transactions",
+      "grantee": "service_role",
+      "privilege": "SELECT"
+    },
+    {
+      "table": "credit_transactions",
+      "grantee": "service_role",
+      "privilege": "UPDATE"
+    },
+    {
+      "table": "credit_transactions",
+      "grantee": "service_role",
+      "privilege": "DELETE"
+    },
+    {
+      "table": "credit_transactions",
+      "grantee": "service_role",
+      "privilege": "TRUNCATE"
+    },
+    {
+      "table": "credit_transactions",
+      "grantee": "service_role",
+      "privilege": "REFERENCES"
+    },
+    {
+      "table": "credit_transactions",
+      "grantee": "service_role",
+      "privilege": "TRIGGER"
+    },
+    {
+      "table": "credit_transactions",
+      "grantee": "service_role",
+      "privilege": "MAINTAIN"
+    },
+    {
+      "table": "credit_transactions",
+      "grantee": "authenticated",
+      "privilege": "SELECT"
+    }
+  ],
+  "column_acl": [
+    {
+      "table": "generations",
+      "column": "action_id",
+      "acl_is_null": false,
+      "acl_is_empty": false,
+      "grants": [
+        {
+          "grantee": "authenticated",
+          "privilege": "SELECT"
+        }
+      ]
+    },
+    {
+      "table": "generations",
+      "column": "aspect_ratio",
+      "acl_is_null": false,
+      "acl_is_empty": false,
+      "grants": [
+        {
+          "grantee": "authenticated",
+          "privilege": "SELECT"
+        }
+      ]
+    },
+    {
+      "table": "generations",
+      "column": "batch_id",
+      "acl_is_null": false,
+      "acl_is_empty": false,
+      "grants": [
+        {
+          "grantee": "authenticated",
+          "privilege": "SELECT"
+        }
+      ]
+    },
+    {
+      "table": "generations",
+      "column": "billing_mode",
+      "acl_is_null": false,
+      "acl_is_empty": false,
+      "grants": [
+        {
+          "grantee": "authenticated",
+          "privilege": "SELECT"
+        }
+      ]
+    },
+    {
+      "table": "generations",
+      "column": "canvas_id",
+      "acl_is_null": false,
+      "acl_is_empty": false,
+      "grants": [
+        {
+          "grantee": "authenticated",
+          "privilege": "SELECT"
+        }
+      ]
+    },
+    {
+      "table": "generations",
+      "column": "canvas_node_id",
+      "acl_is_null": false,
+      "acl_is_empty": false,
+      "grants": [
+        {
+          "grantee": "authenticated",
+          "privilege": "SELECT"
+        }
+      ]
+    },
+    {
+      "table": "generations",
+      "column": "completed_at",
+      "acl_is_null": false,
+      "acl_is_empty": false,
+      "grants": [
+        {
+          "grantee": "authenticated",
+          "privilege": "SELECT"
+        }
+      ]
+    },
+    {
+      "table": "generations",
+      "column": "created_at",
+      "acl_is_null": false,
+      "acl_is_empty": false,
+      "grants": [
+        {
+          "grantee": "authenticated",
+          "privilege": "SELECT"
+        }
+      ]
+    },
+    {
+      "table": "generations",
+      "column": "credit_cost",
+      "acl_is_null": false,
+      "acl_is_empty": false,
+      "grants": [
+        {
+          "grantee": "authenticated",
+          "privilege": "SELECT"
+        }
+      ]
+    },
+    {
+      "table": "generations",
+      "column": "credits_refunded",
+      "acl_is_null": false,
+      "acl_is_empty": false,
+      "grants": [
+        {
+          "grantee": "authenticated",
+          "privilege": "SELECT"
+        }
+      ]
+    },
+    {
+      "table": "generations",
+      "column": "credits_used",
+      "acl_is_null": false,
+      "acl_is_empty": false,
+      "grants": [
+        {
+          "grantee": "authenticated",
+          "privilege": "SELECT"
+        }
+      ]
+    },
+    {
+      "table": "generations",
+      "column": "duration",
+      "acl_is_null": false,
+      "acl_is_empty": false,
+      "grants": [
+        {
+          "grantee": "authenticated",
+          "privilege": "SELECT"
+        }
+      ]
+    },
+    {
+      "table": "generations",
+      "column": "error_message",
+      "acl_is_null": false,
+      "acl_is_empty": false,
+      "grants": [
+        {
+          "grantee": "authenticated",
+          "privilege": "SELECT"
+        }
+      ]
+    },
+    {
+      "table": "generations",
+      "column": "generation_type",
+      "acl_is_null": false,
+      "acl_is_empty": false,
+      "grants": [
+        {
+          "grantee": "authenticated",
+          "privilege": "SELECT"
+        }
+      ]
+    },
+    {
+      "table": "generations",
+      "column": "group_name",
+      "acl_is_null": false,
+      "acl_is_empty": false,
+      "grants": [
+        {
+          "grantee": "authenticated",
+          "privilege": "SELECT"
+        }
+      ]
+    },
+    {
+      "table": "generations",
+      "column": "id",
+      "acl_is_null": false,
+      "acl_is_empty": false,
+      "grants": [
+        {
+          "grantee": "authenticated",
+          "privilege": "SELECT"
+        }
+      ]
+    },
+    {
+      "table": "generations",
+      "column": "image_url",
+      "acl_is_null": false,
+      "acl_is_empty": false,
+      "grants": [
+        {
+          "grantee": "authenticated",
+          "privilege": "SELECT"
+        }
+      ]
+    },
+    {
+      "table": "generations",
+      "column": "library_status",
+      "acl_is_null": false,
+      "acl_is_empty": false,
+      "grants": [
+        {
+          "grantee": "authenticated",
+          "privilege": "SELECT"
+        }
+      ]
+    },
+    {
+      "table": "generations",
+      "column": "metadata",
+      "acl_is_null": false,
+      "acl_is_empty": false,
+      "grants": [
+        {
+          "grantee": "authenticated",
+          "privilege": "SELECT"
+        }
+      ]
+    },
+    {
+      "table": "generations",
+      "column": "model",
+      "acl_is_null": false,
+      "acl_is_empty": false,
+      "grants": [
+        {
+          "grantee": "authenticated",
+          "privilege": "SELECT"
+        }
+      ]
+    },
+    {
+      "table": "generations",
+      "column": "output_oss_key",
+      "acl_is_null": false,
+      "acl_is_empty": false,
+      "grants": [
+        {
+          "grantee": "authenticated",
+          "privilege": "SELECT"
+        }
+      ]
+    },
+    {
+      "table": "generations",
+      "column": "output_text",
+      "acl_is_null": false,
+      "acl_is_empty": false,
+      "grants": [
+        {
+          "grantee": "authenticated",
+          "privilege": "SELECT"
+        }
+      ]
+    },
+    {
+      "table": "generations",
+      "column": "output_url",
+      "acl_is_null": false,
+      "acl_is_empty": false,
+      "grants": [
+        {
+          "grantee": "authenticated",
+          "privilege": "SELECT"
+        }
+      ]
+    },
+    {
+      "table": "generations",
+      "column": "pricing_version",
+      "acl_is_null": false,
+      "acl_is_empty": false,
+      "grants": [
+        {
+          "grantee": "authenticated",
+          "privilege": "SELECT"
+        }
+      ]
+    },
+    {
+      "table": "generations",
+      "column": "progress",
+      "acl_is_null": false,
+      "acl_is_empty": false,
+      "grants": [
+        {
+          "grantee": "authenticated",
+          "privilege": "SELECT"
+        }
+      ]
+    },
+    {
+      "table": "generations",
+      "column": "prompt",
+      "acl_is_null": false,
+      "acl_is_empty": false,
+      "grants": [
+        {
+          "grantee": "authenticated",
+          "privilege": "SELECT"
+        }
+      ]
+    },
+    {
+      "table": "generations",
+      "column": "provider_submission_state",
+      "acl_is_null": false,
+      "acl_is_empty": false,
+      "grants": [
+        {
+          "grantee": "authenticated",
+          "privilege": "SELECT"
+        }
+      ]
+    },
+    {
+      "table": "generations",
+      "column": "quality",
+      "acl_is_null": false,
+      "acl_is_empty": false,
+      "grants": [
+        {
+          "grantee": "authenticated",
+          "privilege": "SELECT"
+        }
+      ]
+    },
+    {
+      "table": "generations",
+      "column": "resolution",
+      "acl_is_null": false,
+      "acl_is_empty": false,
+      "grants": [
+        {
+          "grantee": "authenticated",
+          "privilege": "SELECT"
+        }
+      ]
+    },
+    {
+      "table": "generations",
+      "column": "result_url",
+      "acl_is_null": false,
+      "acl_is_empty": false,
+      "grants": [
+        {
+          "grantee": "authenticated",
+          "privilege": "SELECT"
+        }
+      ]
+    },
+    {
+      "table": "generations",
+      "column": "source",
+      "acl_is_null": false,
+      "acl_is_empty": false,
+      "grants": [
+        {
+          "grantee": "authenticated",
+          "privilege": "SELECT"
+        }
+      ]
+    },
+    {
+      "table": "generations",
+      "column": "source_image_url",
+      "acl_is_null": false,
+      "acl_is_empty": false,
+      "grants": [
+        {
+          "grantee": "authenticated",
+          "privilege": "SELECT"
+        }
+      ]
+    },
+    {
+      "table": "generations",
+      "column": "spec",
+      "acl_is_null": false,
+      "acl_is_empty": false,
+      "grants": [
+        {
+          "grantee": "authenticated",
+          "privilege": "SELECT"
+        }
+      ]
+    },
+    {
+      "table": "generations",
+      "column": "started_at",
+      "acl_is_null": false,
+      "acl_is_empty": false,
+      "grants": [
+        {
+          "grantee": "authenticated",
+          "privilege": "SELECT"
+        }
+      ]
+    },
+    {
+      "table": "generations",
+      "column": "status",
+      "acl_is_null": false,
+      "acl_is_empty": false,
+      "grants": [
+        {
+          "grantee": "authenticated",
+          "privilege": "SELECT"
+        }
+      ]
+    },
+    {
+      "table": "generations",
+      "column": "task_id",
+      "acl_is_null": false,
+      "acl_is_empty": false,
+      "grants": [
+        {
+          "grantee": "authenticated",
+          "privilege": "SELECT"
+        }
+      ]
+    },
+    {
+      "table": "generations",
+      "column": "thumbnail_url",
+      "acl_is_null": false,
+      "acl_is_empty": false,
+      "grants": [
+        {
+          "grantee": "authenticated",
+          "privilege": "SELECT"
+        }
+      ]
+    },
+    {
+      "table": "generations",
+      "column": "type",
+      "acl_is_null": false,
+      "acl_is_empty": false,
+      "grants": [
+        {
+          "grantee": "authenticated",
+          "privilege": "SELECT"
+        }
+      ]
+    },
+    {
+      "table": "generations",
+      "column": "updated_at",
+      "acl_is_null": false,
+      "acl_is_empty": false,
+      "grants": [
+        {
+          "grantee": "authenticated",
+          "privilege": "SELECT"
+        }
+      ]
+    },
+    {
+      "table": "generations",
+      "column": "use_pro",
+      "acl_is_null": false,
+      "acl_is_empty": false,
+      "grants": [
+        {
+          "grantee": "authenticated",
+          "privilege": "SELECT"
+        }
+      ]
+    },
+    {
+      "table": "generations",
+      "column": "user_id",
+      "acl_is_null": false,
+      "acl_is_empty": false,
+      "grants": [
+        {
+          "grantee": "authenticated",
+          "privilege": "SELECT"
+        }
+      ]
+    },
+    {
+      "table": "generations",
+      "column": "video_url",
+      "acl_is_null": false,
+      "acl_is_empty": false,
+      "grants": [
+        {
+          "grantee": "authenticated",
+          "privilege": "SELECT"
+        }
+      ]
+    },
+    {
+      "table": "profiles",
+      "column": "avatar_url",
+      "acl_is_null": false,
+      "acl_is_empty": false,
+      "grants": [
+        {
+          "grantee": "authenticated",
+          "privilege": "UPDATE"
+        }
+      ]
+    },
+    {
+      "table": "profiles",
+      "column": "name",
+      "acl_is_null": false,
+      "acl_is_empty": false,
+      "grants": [
+        {
+          "grantee": "authenticated",
+          "privilege": "UPDATE"
+        }
+      ]
+    },
+    {
+      "table": "profiles",
+      "column": "phone",
+      "acl_is_null": false,
+      "acl_is_empty": false,
+      "grants": [
+        {
+          "grantee": "authenticated",
+          "privilege": "UPDATE"
+        }
+      ]
+    }
+  ],
+  "default_acl": [
+    {
+      "owner": "postgres",
+      "schema": "public",
+      "object_type": "S",
+      "grantee": "postgres",
+      "privilege": "SELECT"
+    },
+    {
+      "owner": "postgres",
+      "schema": "public",
+      "object_type": "S",
+      "grantee": "postgres",
+      "privilege": "UPDATE"
+    },
+    {
+      "owner": "postgres",
+      "schema": "public",
+      "object_type": "S",
+      "grantee": "postgres",
+      "privilege": "USAGE"
+    },
+    {
+      "owner": "postgres",
+      "schema": "public",
+      "object_type": "S",
+      "grantee": "anon",
+      "privilege": "SELECT"
+    },
+    {
+      "owner": "postgres",
+      "schema": "public",
+      "object_type": "S",
+      "grantee": "anon",
+      "privilege": "UPDATE"
+    },
+    {
+      "owner": "postgres",
+      "schema": "public",
+      "object_type": "S",
+      "grantee": "anon",
+      "privilege": "USAGE"
+    },
+    {
+      "owner": "postgres",
+      "schema": "public",
+      "object_type": "S",
+      "grantee": "authenticated",
+      "privilege": "SELECT"
+    },
+    {
+      "owner": "postgres",
+      "schema": "public",
+      "object_type": "S",
+      "grantee": "authenticated",
+      "privilege": "UPDATE"
+    },
+    {
+      "owner": "postgres",
+      "schema": "public",
+      "object_type": "S",
+      "grantee": "authenticated",
+      "privilege": "USAGE"
+    },
+    {
+      "owner": "postgres",
+      "schema": "public",
+      "object_type": "S",
+      "grantee": "service_role",
+      "privilege": "SELECT"
+    },
+    {
+      "owner": "postgres",
+      "schema": "public",
+      "object_type": "S",
+      "grantee": "service_role",
+      "privilege": "UPDATE"
+    },
+    {
+      "owner": "postgres",
+      "schema": "public",
+      "object_type": "S",
+      "grantee": "service_role",
+      "privilege": "USAGE"
+    },
+    {
+      "owner": "postgres",
+      "schema": "public",
+      "object_type": "f",
+      "grantee": "postgres",
+      "privilege": "EXECUTE"
+    },
+    {
+      "owner": "postgres",
+      "schema": "public",
+      "object_type": "f",
+      "grantee": "anon",
+      "privilege": "EXECUTE"
+    },
+    {
+      "owner": "postgres",
+      "schema": "public",
+      "object_type": "f",
+      "grantee": "authenticated",
+      "privilege": "EXECUTE"
+    },
+    {
+      "owner": "postgres",
+      "schema": "public",
+      "object_type": "f",
+      "grantee": "service_role",
+      "privilege": "EXECUTE"
+    },
+    {
+      "owner": "postgres",
+      "schema": "public",
+      "object_type": "r",
+      "grantee": "postgres",
+      "privilege": "INSERT"
+    },
+    {
+      "owner": "postgres",
+      "schema": "public",
+      "object_type": "r",
+      "grantee": "postgres",
+      "privilege": "SELECT"
+    },
+    {
+      "owner": "postgres",
+      "schema": "public",
+      "object_type": "r",
+      "grantee": "postgres",
+      "privilege": "UPDATE"
+    },
+    {
+      "owner": "postgres",
+      "schema": "public",
+      "object_type": "r",
+      "grantee": "postgres",
+      "privilege": "DELETE"
+    },
+    {
+      "owner": "postgres",
+      "schema": "public",
+      "object_type": "r",
+      "grantee": "postgres",
+      "privilege": "TRUNCATE"
+    },
+    {
+      "owner": "postgres",
+      "schema": "public",
+      "object_type": "r",
+      "grantee": "postgres",
+      "privilege": "REFERENCES"
+    },
+    {
+      "owner": "postgres",
+      "schema": "public",
+      "object_type": "r",
+      "grantee": "postgres",
+      "privilege": "TRIGGER"
+    },
+    {
+      "owner": "postgres",
+      "schema": "public",
+      "object_type": "r",
+      "grantee": "postgres",
+      "privilege": "MAINTAIN"
+    },
+    {
+      "owner": "postgres",
+      "schema": "public",
+      "object_type": "r",
+      "grantee": "anon",
+      "privilege": "INSERT"
+    },
+    {
+      "owner": "postgres",
+      "schema": "public",
+      "object_type": "r",
+      "grantee": "anon",
+      "privilege": "SELECT"
+    },
+    {
+      "owner": "postgres",
+      "schema": "public",
+      "object_type": "r",
+      "grantee": "anon",
+      "privilege": "UPDATE"
+    },
+    {
+      "owner": "postgres",
+      "schema": "public",
+      "object_type": "r",
+      "grantee": "anon",
+      "privilege": "DELETE"
+    },
+    {
+      "owner": "postgres",
+      "schema": "public",
+      "object_type": "r",
+      "grantee": "anon",
+      "privilege": "TRUNCATE"
+    },
+    {
+      "owner": "postgres",
+      "schema": "public",
+      "object_type": "r",
+      "grantee": "anon",
+      "privilege": "REFERENCES"
+    },
+    {
+      "owner": "postgres",
+      "schema": "public",
+      "object_type": "r",
+      "grantee": "anon",
+      "privilege": "TRIGGER"
+    },
+    {
+      "owner": "postgres",
+      "schema": "public",
+      "object_type": "r",
+      "grantee": "anon",
+      "privilege": "MAINTAIN"
+    },
+    {
+      "owner": "postgres",
+      "schema": "public",
+      "object_type": "r",
+      "grantee": "authenticated",
+      "privilege": "INSERT"
+    },
+    {
+      "owner": "postgres",
+      "schema": "public",
+      "object_type": "r",
+      "grantee": "authenticated",
+      "privilege": "SELECT"
+    },
+    {
+      "owner": "postgres",
+      "schema": "public",
+      "object_type": "r",
+      "grantee": "authenticated",
+      "privilege": "UPDATE"
+    },
+    {
+      "owner": "postgres",
+      "schema": "public",
+      "object_type": "r",
+      "grantee": "authenticated",
+      "privilege": "DELETE"
+    },
+    {
+      "owner": "postgres",
+      "schema": "public",
+      "object_type": "r",
+      "grantee": "authenticated",
+      "privilege": "TRUNCATE"
+    },
+    {
+      "owner": "postgres",
+      "schema": "public",
+      "object_type": "r",
+      "grantee": "authenticated",
+      "privilege": "REFERENCES"
+    },
+    {
+      "owner": "postgres",
+      "schema": "public",
+      "object_type": "r",
+      "grantee": "authenticated",
+      "privilege": "TRIGGER"
+    },
+    {
+      "owner": "postgres",
+      "schema": "public",
+      "object_type": "r",
+      "grantee": "authenticated",
+      "privilege": "MAINTAIN"
+    },
+    {
+      "owner": "postgres",
+      "schema": "public",
+      "object_type": "r",
+      "grantee": "service_role",
+      "privilege": "INSERT"
+    },
+    {
+      "owner": "postgres",
+      "schema": "public",
+      "object_type": "r",
+      "grantee": "service_role",
+      "privilege": "SELECT"
+    },
+    {
+      "owner": "postgres",
+      "schema": "public",
+      "object_type": "r",
+      "grantee": "service_role",
+      "privilege": "UPDATE"
+    },
+    {
+      "owner": "postgres",
+      "schema": "public",
+      "object_type": "r",
+      "grantee": "service_role",
+      "privilege": "DELETE"
+    },
+    {
+      "owner": "postgres",
+      "schema": "public",
+      "object_type": "r",
+      "grantee": "service_role",
+      "privilege": "TRUNCATE"
+    },
+    {
+      "owner": "postgres",
+      "schema": "public",
+      "object_type": "r",
+      "grantee": "service_role",
+      "privilege": "REFERENCES"
+    },
+    {
+      "owner": "postgres",
+      "schema": "public",
+      "object_type": "r",
+      "grantee": "service_role",
+      "privilege": "TRIGGER"
+    },
+    {
+      "owner": "postgres",
+      "schema": "public",
+      "object_type": "r",
+      "grantee": "service_role",
+      "privilege": "MAINTAIN"
+    }
+  ],
+  "incoming_foreign_keys": [
+    {
+      "source_table": "admin_audit_logs",
+      "target_table": "profiles",
+      "name": "admin_audit_logs_admin_id_fkey",
+      "definition": "FOREIGN KEY (admin_id) REFERENCES profiles(id) ON DELETE RESTRICT"
+    },
+    {
+      "source_table": "admin_audit_logs",
+      "target_table": "profiles",
+      "name": "admin_audit_logs_target_user_id_fkey",
+      "definition": "FOREIGN KEY (target_user_id) REFERENCES profiles(id) ON DELETE SET NULL"
+    },
+    {
+      "source_table": "blueprints",
+      "target_table": "profiles",
+      "name": "blueprints_user_id_fkey",
+      "definition": "FOREIGN KEY (user_id) REFERENCES profiles(id) ON DELETE CASCADE"
+    },
+    {
+      "source_table": "canvases",
+      "target_table": "profiles",
+      "name": "canvases_user_id_fkey",
+      "definition": "FOREIGN KEY (user_id) REFERENCES profiles(id) ON DELETE CASCADE"
+    },
+    {
+      "source_table": "contracts",
+      "target_table": "profiles",
+      "name": "contracts_user_id_fkey",
+      "definition": "FOREIGN KEY (user_id) REFERENCES profiles(id) ON DELETE CASCADE"
+    },
+    {
+      "source_table": "credit_transactions",
+      "target_table": "profiles",
+      "name": "credit_transactions_created_by_fkey",
+      "definition": "FOREIGN KEY (created_by) REFERENCES profiles(id)"
+    },
+    {
+      "source_table": "credit_transactions",
+      "target_table": "profiles",
+      "name": "credit_transactions_user_id_fkey",
+      "definition": "FOREIGN KEY (user_id) REFERENCES profiles(id) ON DELETE CASCADE"
+    },
+    {
+      "source_table": "generations",
+      "target_table": "profiles",
+      "name": "generations_user_id_fkey",
+      "definition": "FOREIGN KEY (user_id) REFERENCES profiles(id)"
+    },
+    {
+      "source_table": "quick_gen_history",
+      "target_table": "profiles",
+      "name": "quick_gen_history_user_id_fkey",
+      "definition": "FOREIGN KEY (user_id) REFERENCES profiles(id) ON DELETE CASCADE"
+    },
+    {
+      "source_table": "recipes",
+      "target_table": "profiles",
+      "name": "recipes_user_id_fkey",
+      "definition": "FOREIGN KEY (user_id) REFERENCES profiles(id) ON DELETE CASCADE"
+    },
+    {
+      "source_table": "system_settings",
+      "target_table": "profiles",
+      "name": "system_settings_updated_by_fkey",
+      "definition": "FOREIGN KEY (updated_by) REFERENCES profiles(id)"
+    },
+    {
+      "source_table": "generations",
+      "target_table": "canvases",
+      "name": "generations_canvas_id_fkey",
+      "definition": "FOREIGN KEY (canvas_id) REFERENCES canvases(id) ON DELETE SET NULL"
+    },
+    {
+      "source_table": "credit_transactions",
+      "target_table": "generations",
+      "name": "credit_transactions_generation_id_fkey",
+      "definition": "FOREIGN KEY (generation_id) REFERENCES generations(id) ON DELETE RESTRICT"
+    },
+    {
+      "source_table": "credit_transactions",
+      "target_table": "canvases",
+      "name": "credit_transactions_canvas_id_fkey",
+      "definition": "FOREIGN KEY (canvas_id) REFERENCES canvases(id) ON DELETE SET NULL"
+    },
+    {
+      "source_table": "generation_quota_buckets",
+      "target_table": "profiles",
+      "name": "generation_quota_buckets_user_id_fkey",
+      "definition": "FOREIGN KEY (user_id) REFERENCES profiles(id) ON DELETE CASCADE"
+    }
+  ],
+  "profile_key_columns": [
+    {
+      "column": "id",
+      "primary_or_unique": true,
+      "referenced_by_foreign_key": true
+    },
+    {
+      "column": "email",
+      "primary_or_unique": true,
+      "referenced_by_foreign_key": false
+    },
+    {
+      "column": "name",
+      "primary_or_unique": false,
+      "referenced_by_foreign_key": false
+    },
+    {
+      "column": "avatar_url",
+      "primary_or_unique": false,
+      "referenced_by_foreign_key": false
+    },
+    {
+      "column": "role",
+      "primary_or_unique": false,
+      "referenced_by_foreign_key": false
+    },
+    {
+      "column": "credits",
+      "primary_or_unique": false,
+      "referenced_by_foreign_key": false
+    },
+    {
+      "column": "status",
+      "primary_or_unique": false,
+      "referenced_by_foreign_key": false
+    },
+    {
+      "column": "banned_at",
+      "primary_or_unique": false,
+      "referenced_by_foreign_key": false
+    },
+    {
+      "column": "banned_reason",
+      "primary_or_unique": false,
+      "referenced_by_foreign_key": false
+    },
+    {
+      "column": "created_at",
+      "primary_or_unique": false,
+      "referenced_by_foreign_key": false
+    },
+    {
+      "column": "updated_at",
+      "primary_or_unique": false,
+      "referenced_by_foreign_key": false
+    },
+    {
+      "column": "phone",
+      "primary_or_unique": false,
+      "referenced_by_foreign_key": false
+    }
+  ],
+  "triggers": [
+    {
+      "table": "profiles",
+      "name": "update_profiles_updated_at",
+      "function": "update_updated_at_column()",
+      "enabled": "O"
+    },
+    {
+      "table": "generations",
+      "name": "canvas_p1_generations_touch_updated_at",
+      "function": "canvas_p1_touch_updated_at()",
+      "enabled": "O"
+    },
+    {
+      "table": "credit_transactions",
+      "name": "canvas_p1_credit_transactions_append_only",
+      "function": "canvas_p1_ledger_append_only()",
+      "enabled": "O"
+    }
+  ],
+  "trigger_functions": [
+    {
+      "schema": "public",
+      "name": "canvas_p1_ledger_append_only",
+      "owner": "postgres",
+      "language": "plpgsql",
+      "security_definer": true,
+      "config": "search_path=pg_catalog, public",
+      "acl_is_null": false,
+      "acl_is_empty": false,
+      "grants": [
+        {
+          "grantee": "postgres",
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "privilege": "EXECUTE"
+        }
+      ]
+    },
+    {
+      "schema": "public",
+      "name": "canvas_p1_touch_updated_at",
+      "owner": "postgres",
+      "language": "plpgsql",
+      "security_definer": false,
+      "config": "search_path=pg_catalog, public",
+      "acl_is_null": false,
+      "acl_is_empty": false,
+      "grants": [
+        {
+          "grantee": "postgres",
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "privilege": "EXECUTE"
+        }
+      ]
+    },
+    {
+      "schema": "public",
+      "name": "update_updated_at_column",
+      "owner": "postgres",
+      "language": "plpgsql",
+      "security_definer": false,
+      "config": "<none>",
+      "acl_is_null": false,
+      "acl_is_empty": false,
+      "grants": [
+        {
+          "grantee": "PUBLIC",
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "anon",
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "authenticated",
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "postgres",
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "privilege": "EXECUTE"
+        }
+      ]
+    }
+  ],
+  "lifecycle_routines": [
+    {
+      "identity": "public.abandon_canvas_generation_v1(p_user_id uuid, p_action_id uuid)",
+      "kind": "f",
+      "owner": "postgres",
+      "language": "plpgsql",
+      "security_definer": true,
+      "volatility": "v",
+      "config": "search_path=\"\"",
+      "acl_is_null": false,
+      "acl_is_empty": false,
+      "grants": [
+        {
+          "grantee": "postgres",
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "privilege": "EXECUTE"
+        }
+      ]
+    },
+    {
+      "identity": "public.begin_canvas_generation_v1(p_user_id uuid, p_canvas_id uuid, p_canvas_node_id text, p_action_id uuid, p_observed_rev bigint, p_observed_writer_tag text, p_kind text, p_request_fingerprint text, p_fingerprint_version text, p_pricing_version text, p_billing_mode text, p_credit_cost integer, p_prompt text, p_model text, p_duration integer, p_aspect_ratio text, p_quality text, p_resolution text, p_reconcile_profile_version text, p_reconcile_interval_ms integer, p_spec jsonb)",
+      "kind": "f",
+      "owner": "postgres",
+      "language": "plpgsql",
+      "security_definer": true,
+      "volatility": "v",
+      "config": "search_path=\"\"",
+      "acl_is_null": false,
+      "acl_is_empty": false,
+      "grants": [
+        {
+          "grantee": "postgres",
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "privilege": "EXECUTE"
+        }
+      ]
+    },
+    {
+      "identity": "public.bind_canvas_generation_task_v1(p_user_id uuid, p_generation_id uuid, p_authority jsonb, p_task_id text)",
+      "kind": "f",
+      "owner": "postgres",
+      "language": "plpgsql",
+      "security_definer": true,
+      "volatility": "v",
+      "config": "search_path=\"\"",
+      "acl_is_null": false,
+      "acl_is_empty": false,
+      "grants": [
+        {
+          "grantee": "postgres",
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "privilege": "EXECUTE"
+        }
+      ]
+    },
+    {
+      "identity": "public.canvas_p1_apply_credit_delta_v1(p_user_id uuid, p_entry_kind text, p_amount integer, p_operation_anchor text, p_generation_id uuid, p_action_id uuid, p_canvas_id uuid, p_canvas_id_snapshot uuid, p_canvas_node_id text, p_task_id text, p_batch_id uuid, p_pricing_version text, p_quota_key text, p_quota_window_start timestamp with time zone, p_description text)",
+      "kind": "f",
+      "owner": "postgres",
+      "language": "plpgsql",
+      "security_definer": true,
+      "volatility": "v",
+      "config": "search_path=\"\"",
+      "acl_is_null": false,
+      "acl_is_empty": false,
+      "grants": [
+        {
+          "grantee": "postgres",
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "privilege": "EXECUTE"
+        }
+      ]
+    },
+    {
+      "identity": "public.canvas_p1_assert_anchor_identity_v1(p_existing credit_transactions, p_user_id uuid, p_entry_kind text, p_amount integer, p_operation_anchor text, p_generation_id uuid, p_action_id uuid, p_canvas_id_snapshot uuid, p_canvas_node_id text, p_task_id text, p_batch_id uuid, p_pricing_version text, p_quota_key text, p_quota_window_start timestamp with time zone)",
+      "kind": "f",
+      "owner": "postgres",
+      "language": "plpgsql",
+      "security_definer": true,
+      "volatility": "i",
+      "config": "search_path=\"\"",
+      "acl_is_null": false,
+      "acl_is_empty": false,
+      "grants": [
+        {
+          "grantee": "postgres",
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "privilege": "EXECUTE"
+        }
+      ]
+    },
+    {
+      "identity": "public.canvas_p1_assert_canvas_fence_v1(p_user_id uuid, p_canvas_id uuid, p_observed_rev bigint, p_observed_writer_tag text)",
+      "kind": "f",
+      "owner": "postgres",
+      "language": "plpgsql",
+      "security_definer": true,
+      "volatility": "v",
+      "config": "search_path=\"\"",
+      "acl_is_null": false,
+      "acl_is_empty": false,
+      "grants": [
+        {
+          "grantee": "postgres",
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "privilege": "EXECUTE"
+        }
+      ]
+    },
+    {
+      "identity": "public.canvas_p1_deactivate_account_v1(p_user_id uuid, p_reason text)",
+      "kind": "f",
+      "owner": "postgres",
+      "language": "plpgsql",
+      "security_definer": true,
+      "volatility": "v",
+      "config": "search_path=\"\"",
+      "acl_is_null": false,
+      "acl_is_empty": false,
+      "grants": [
+        {
+          "grantee": "postgres",
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "privilege": "EXECUTE"
+        }
+      ]
+    },
+    {
+      "identity": "public.canvas_p1_hash_bearer_v1(p_token text)",
+      "kind": "f",
+      "owner": "postgres",
+      "language": "sql",
+      "security_definer": true,
+      "volatility": "i",
+      "config": "search_path=\"\"",
+      "acl_is_null": false,
+      "acl_is_empty": false,
+      "grants": [
+        {
+          "grantee": "postgres",
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "privilege": "EXECUTE"
+        }
+      ]
+    },
+    {
+      "identity": "public.canvas_p1_initialize_account_v1(p_user_id uuid, p_email text, p_name text)",
+      "kind": "f",
+      "owner": "postgres",
+      "language": "plpgsql",
+      "security_definer": true,
+      "volatility": "v",
+      "config": "search_path=\"\"",
+      "acl_is_null": false,
+      "acl_is_empty": false,
+      "grants": [
+        {
+          "grantee": "postgres",
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "privilege": "EXECUTE"
+        }
+      ]
+    },
+    {
+      "identity": "public.canvas_p1_ledger_append_only()",
+      "kind": "f",
+      "owner": "postgres",
+      "language": "plpgsql",
+      "security_definer": true,
+      "volatility": "v",
+      "config": "search_path=pg_catalog, public",
+      "acl_is_null": false,
+      "acl_is_empty": false,
+      "grants": [
+        {
+          "grantee": "postgres",
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "privilege": "EXECUTE"
+        }
+      ]
+    },
+    {
+      "identity": "public.canvas_p1_new_bearer_token_v1()",
+      "kind": "f",
+      "owner": "postgres",
+      "language": "sql",
+      "security_definer": true,
+      "volatility": "v",
+      "config": "search_path=\"\"",
+      "acl_is_null": false,
+      "acl_is_empty": false,
+      "grants": [
+        {
+          "grantee": "postgres",
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "privilege": "EXECUTE"
+        }
+      ]
+    },
+    {
+      "identity": "public.canvas_p1_parse_authority_v1(p_authority jsonb)",
+      "kind": "f",
+      "owner": "postgres",
+      "language": "plpgsql",
+      "security_definer": true,
+      "volatility": "i",
+      "config": "search_path=\"\"",
+      "acl_is_null": false,
+      "acl_is_empty": false,
+      "grants": [
+        {
+          "grantee": "postgres",
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "privilege": "EXECUTE"
+        }
+      ]
+    },
+    {
+      "identity": "public.canvas_p1_touch_updated_at()",
+      "kind": "f",
+      "owner": "postgres",
+      "language": "plpgsql",
+      "security_definer": false,
+      "volatility": "v",
+      "config": "search_path=pg_catalog, public",
+      "acl_is_null": false,
+      "acl_is_empty": false,
+      "grants": [
+        {
+          "grantee": "postgres",
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "privilege": "EXECUTE"
+        }
+      ]
+    },
+    {
+      "identity": "public.claim_canvas_generation_reconciliation_v1(p_worker_id uuid, p_limit integer, p_lease_seconds integer)",
+      "kind": "f",
+      "owner": "postgres",
+      "language": "plpgsql",
+      "security_definer": true,
+      "volatility": "v",
+      "config": "search_path=\"\"",
+      "acl_is_null": false,
+      "acl_is_empty": false,
+      "grants": [
+        {
+          "grantee": "postgres",
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "privilege": "EXECUTE"
+        }
+      ]
+    },
+    {
+      "identity": "public.claim_canvas_generation_submission_v1(p_user_id uuid, p_canvas_id uuid, p_canvas_node_id text, p_action_id uuid, p_observed_rev bigint, p_observed_writer_tag text, p_request_fingerprint text)",
+      "kind": "f",
+      "owner": "postgres",
+      "language": "plpgsql",
+      "security_definer": true,
+      "volatility": "v",
+      "config": "search_path=\"\"",
+      "acl_is_null": false,
+      "acl_is_empty": false,
+      "grants": [
+        {
+          "grantee": "postgres",
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "privilege": "EXECUTE"
+        }
+      ]
+    },
+    {
+      "identity": "public.claim_canvas_gpt_image_direct_media_recovery_v1(p_worker_id uuid, p_limit integer, p_lease_seconds integer)",
+      "kind": "f",
+      "owner": "postgres",
+      "language": "plpgsql",
+      "security_definer": true,
+      "volatility": "v",
+      "config": "search_path=\"\"",
+      "acl_is_null": false,
+      "acl_is_empty": false,
+      "grants": [
+        {
+          "grantee": "postgres",
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "privilege": "EXECUTE"
+        }
+      ]
+    },
+    {
+      "identity": "public.complete_canvas_generation_v1(p_user_id uuid, p_generation_id uuid, p_authority jsonb, p_output_text text, p_output_oss_key text, p_media_metadata jsonb)",
+      "kind": "f",
+      "owner": "postgres",
+      "language": "plpgsql",
+      "security_definer": true,
+      "volatility": "v",
+      "config": "search_path=\"\"",
+      "acl_is_null": false,
+      "acl_is_empty": false,
+      "grants": [
+        {
+          "grantee": "postgres",
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "privilege": "EXECUTE"
+        }
+      ]
+    },
+    {
+      "identity": "public.fail_canvas_generation_v1(p_user_id uuid, p_generation_id uuid, p_authority jsonb, p_error_code text)",
+      "kind": "f",
+      "owner": "postgres",
+      "language": "plpgsql",
+      "security_definer": true,
+      "volatility": "v",
+      "config": "search_path=\"\"",
+      "acl_is_null": false,
+      "acl_is_empty": false,
+      "grants": [
+        {
+          "grantee": "postgres",
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "privilege": "EXECUTE"
+        }
+      ]
+    },
+    {
+      "identity": "public.lookup_canvas_generation_v1(p_user_id uuid, p_canvas_id uuid, p_canvas_node_id text, p_action_id uuid)",
+      "kind": "f",
+      "owner": "postgres",
+      "language": "sql",
+      "security_definer": true,
+      "volatility": "s",
+      "config": "search_path=\"\"",
+      "acl_is_null": false,
+      "acl_is_empty": false,
+      "grants": [
+        {
+          "grantee": "postgres",
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "privilege": "EXECUTE"
+        }
+      ]
+    },
+    {
+      "identity": "public.mark_canvas_generation_unknown_v1(p_user_id uuid, p_generation_id uuid, p_authority jsonb, p_error_code text)",
+      "kind": "f",
+      "owner": "postgres",
+      "language": "plpgsql",
+      "security_definer": true,
+      "volatility": "v",
+      "config": "search_path=\"\"",
+      "acl_is_null": false,
+      "acl_is_empty": false,
+      "grants": [
+        {
+          "grantee": "postgres",
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "privilege": "EXECUTE"
+        }
+      ]
+    },
+    {
+      "identity": "public.release_canvas_generation_reconciliation_v1(p_generation_id uuid, p_authority jsonb)",
+      "kind": "f",
+      "owner": "postgres",
+      "language": "plpgsql",
+      "security_definer": true,
+      "volatility": "v",
+      "config": "search_path=\"\"",
+      "acl_is_null": false,
+      "acl_is_empty": false,
+      "grants": [
+        {
+          "grantee": "postgres",
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "privilege": "EXECUTE"
+        }
+      ]
+    },
+    {
+      "identity": "public.release_canvas_gpt_image_direct_media_recovery_v1(p_generation_id uuid, p_authority jsonb, p_manual_audit boolean, p_error_code text)",
+      "kind": "f",
+      "owner": "postgres",
+      "language": "plpgsql",
+      "security_definer": true,
+      "volatility": "v",
+      "config": "search_path=\"\"",
+      "acl_is_null": false,
+      "acl_is_empty": false,
+      "grants": [
+        {
+          "grantee": "postgres",
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "privilege": "EXECUTE"
+        }
+      ]
+    },
+    {
+      "identity": "public.replay_canvas_generation_bind_v1(p_user_id uuid, p_generation_id uuid, p_action_id uuid, p_canvas_id uuid, p_canvas_node_id text, p_request_fingerprint text, p_task_id text)",
+      "kind": "f",
+      "owner": "postgres",
+      "language": "plpgsql",
+      "security_definer": true,
+      "volatility": "s",
+      "config": "search_path=\"\"",
+      "acl_is_null": false,
+      "acl_is_empty": false,
+      "grants": [
+        {
+          "grantee": "postgres",
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "privilege": "EXECUTE"
+        }
+      ]
+    },
+    {
+      "identity": "public.replay_canvas_generation_completion_v1(p_user_id uuid, p_generation_id uuid, p_action_id uuid, p_canvas_id uuid, p_canvas_node_id text, p_request_fingerprint text)",
+      "kind": "f",
+      "owner": "postgres",
+      "language": "plpgsql",
+      "security_definer": true,
+      "volatility": "s",
+      "config": "search_path=\"\"",
+      "acl_is_null": false,
+      "acl_is_empty": false,
+      "grants": [
+        {
+          "grantee": "postgres",
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "privilege": "EXECUTE"
+        }
+      ]
+    },
+    {
+      "identity": "public.sweep_stale_canvas_text_submission_unknown_v1(p_limit integer)",
+      "kind": "f",
+      "owner": "postgres",
+      "language": "plpgsql",
+      "security_definer": true,
+      "volatility": "v",
+      "config": "search_path=\"\"",
+      "acl_is_null": false,
+      "acl_is_empty": false,
+      "grants": [
+        {
+          "grantee": "postgres",
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "privilege": "EXECUTE"
+        }
+      ]
+    }
+  ],
+  "auth_signup_trigger": {
+    "present": true,
+    "name": "on_auth_user_created",
+    "table": "auth.users",
+    "function": "public.handle_new_user()",
+    "enabled": "O",
+    "for_each_row": true,
+    "timing": "AFTER",
+    "on_insert": true
+  },
+  "auth_user_triggers": [
+    {
+      "name": "on_auth_user_created",
+      "function": "public.handle_new_user()",
+      "enabled": "O",
+      "for_each_row": true,
+      "timing": "AFTER",
+      "event_insert": true,
+      "event_delete": false,
+      "event_update": false,
+      "event_truncate": false
+    }
+  ],
+  "handle_new_user": {
+    "present": true,
+    "kind": "f",
+    "owner": "postgres",
+    "language": "plpgsql",
+    "security_definer": true,
+    "returns_trigger": true,
+    "config": "search_path=\"\""
+  },
+  "quota_bucket_shape": {
+    "present": true,
+    "owner": "postgres",
+    "rls_enabled": true,
+    "rls_forced": false,
+    "acl_is_null": false,
+    "acl_is_empty": false,
+    "grants": [
+      {
+        "grantee": "postgres",
+        "privilege": "DELETE"
+      },
+      {
+        "grantee": "postgres",
+        "privilege": "INSERT"
+      },
+      {
+        "grantee": "postgres",
+        "privilege": "MAINTAIN"
+      },
+      {
+        "grantee": "postgres",
+        "privilege": "REFERENCES"
+      },
+      {
+        "grantee": "postgres",
+        "privilege": "SELECT"
+      },
+      {
+        "grantee": "postgres",
+        "privilege": "TRIGGER"
+      },
+      {
+        "grantee": "postgres",
+        "privilege": "TRUNCATE"
+      },
+      {
+        "grantee": "postgres",
+        "privilege": "UPDATE"
+      },
+      {
+        "grantee": "service_role",
+        "privilege": "DELETE"
+      },
+      {
+        "grantee": "service_role",
+        "privilege": "INSERT"
+      },
+      {
+        "grantee": "service_role",
+        "privilege": "MAINTAIN"
+      },
+      {
+        "grantee": "service_role",
+        "privilege": "REFERENCES"
+      },
+      {
+        "grantee": "service_role",
+        "privilege": "SELECT"
+      },
+      {
+        "grantee": "service_role",
+        "privilege": "TRIGGER"
+      },
+      {
+        "grantee": "service_role",
+        "privilege": "TRUNCATE"
+      },
+      {
+        "grantee": "service_role",
+        "privilege": "UPDATE"
+      }
+    ],
+    "policy_count": 0,
+    "columns": [
+      {
+        "ordinal": 1,
+        "name": "user_id",
+        "type": "uuid",
+        "not_null": true,
+        "default": null
+      },
+      {
+        "ordinal": 2,
+        "name": "quota_key",
+        "type": "text",
+        "not_null": true,
+        "default": null
+      },
+      {
+        "ordinal": 3,
+        "name": "window_start",
+        "type": "timestamp with time zone",
+        "not_null": true,
+        "default": null
+      },
+      {
+        "ordinal": 4,
+        "name": "quota_limit",
+        "type": "integer",
+        "not_null": true,
+        "default": null
+      },
+      {
+        "ordinal": 5,
+        "name": "used",
+        "type": "integer",
+        "not_null": true,
+        "default": "0"
+      },
+      {
+        "ordinal": 6,
+        "name": "created_at",
+        "type": "timestamp with time zone",
+        "not_null": true,
+        "default": "now()"
+      },
+      {
+        "ordinal": 7,
+        "name": "updated_at",
+        "type": "timestamp with time zone",
+        "not_null": true,
+        "default": "now()"
+      }
+    ],
+    "constraints": [
+      {
+        "name": "generation_quota_buckets_key_nonblank",
+        "type": "c",
+        "validated": true,
+        "definition": "CHECK (length(btrim(quota_key)) > 0)"
+      },
+      {
+        "name": "generation_quota_buckets_limit_positive",
+        "type": "c",
+        "validated": true,
+        "definition": "CHECK (quota_limit > 0)"
+      },
+      {
+        "name": "generation_quota_buckets_pkey",
+        "type": "p",
+        "validated": true,
+        "definition": "PRIMARY KEY (user_id, quota_key, window_start)"
+      },
+      {
+        "name": "generation_quota_buckets_used_range",
+        "type": "c",
+        "validated": true,
+        "definition": "CHECK (used >= 0 AND used <= quota_limit)"
+      },
+      {
+        "name": "generation_quota_buckets_user_id_fkey",
+        "type": "f",
+        "validated": true,
+        "definition": "FOREIGN KEY (user_id) REFERENCES profiles(id) ON DELETE CASCADE"
+      },
+      {
+        "name": "generation_quota_buckets_v1_limit_pinned",
+        "type": "c",
+        "validated": true,
+        "definition": "CHECK (quota_key <> 'canvas-deepseek-v1'::text OR quota_limit = 20)"
+      },
+      {
+        "name": "generation_quota_buckets_window_utc_day",
+        "type": "c",
+        "validated": true,
+        "definition": "CHECK (window_start = (date_trunc('day'::text, (window_start AT TIME ZONE 'UTC'::text)) AT TIME ZONE 'UTC'::text))"
+      }
+    ],
+    "indexes": [
+      {
+        "name": "generation_quota_buckets_pkey",
+        "unique": true,
+        "primary": true,
+        "definition": "CREATE UNIQUE INDEX generation_quota_buckets_pkey ON public.generation_quota_buckets USING btree (user_id, quota_key, window_start)"
+      }
+    ]
+  }
+}

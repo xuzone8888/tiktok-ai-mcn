@@ -30,13 +30,19 @@ import {
 import { useRouter } from "next/navigation"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
+import SocialCommentsClient from "@/components/social-comments/SocialCommentsClient"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import SocialCommentsClient from "@/components/social-comments/SocialCommentsClient"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { useLang } from "@/contexts/LangContext"
+import { usePersistedPublishTab, type PublishPageTab } from "@/hooks/use-persisted-publish-tab"
 import { useToast } from "@/hooks/use-toast"
+import {
+  buildPublishAssetPageUrl,
+  mergePublishAssetPages,
+  parsePublishAssetPage,
+} from "@/lib/publish/asset-pagination"
 import { cn } from "@/lib/utils"
 import {
   getUtf8ByteLength,
@@ -62,7 +68,7 @@ import {
   type YouTubeSelectedVideo,
 } from "@/types/youtube-publish"
 
-type TabType = "create" | "tasks" | "comments"
+type TabType = PublishPageTab
 type VideoSourceType = "upload" | "asset"
 type AccountSelectionMode = "accounts" | "groups"
 type MetadataContentMode = "same" | "different"
@@ -339,17 +345,23 @@ async function requestYouTubeUploadCredentials(file: File, isEnglish = false) {
   return localData.data as { uploadUrl: string; publicUrl: string }
 }
 
-async function checkVideoUrlAccessible(url: string) {
+async function checkVideoUrlAccessible(
+  url: string,
+  signal?: AbortSignal
+): Promise<boolean | null> {
   try {
     const response = await fetch("/api/upload/check-url", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ url }),
+      signal,
     })
     const data = await response.json().catch(() => null)
-    return data?.accessible === true
+    if (!response.ok || typeof data?.accessible !== "boolean") return null
+    if (data.accessible === true) return true
+    return data.status === 404 || data.status === 410 ? false : null
   } catch {
-    return false
+    return null
   }
 }
 
@@ -640,8 +652,10 @@ export default function YouTubePublishClient({ showCommentManagement, enableYouT
   const { lang } = useLang()
   const isEnglish = lang === "en"
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const assetRequestInFlightRef = useRef(false)
+  const assetRequestAbortRef = useRef<AbortController | null>(null)
 
-  const [activeTab, setActiveTab] = useState<TabType>("create")
+  const [activeTab, setActiveTab] = usePersistedPublishTab(showCommentManagement)
   const effectiveActiveTab = showCommentManagement || activeTab !== "comments" ? activeTab : "create"
   const [videoSource, setVideoSource] = useState<VideoSourceType>("upload")
   const [accounts, setAccounts] = useState<YouTubeAccount[]>([])
@@ -654,6 +668,9 @@ export default function YouTubePublishClient({ showCommentManagement, enableYouT
   const [showAssetModal, setShowAssetModal] = useState(false)
   const [assets, setAssets] = useState<YouTubeAssetItem[]>([])
   const [loadingAssets, setLoadingAssets] = useState(false)
+  const [loadingMoreAssets, setLoadingMoreAssets] = useState(false)
+  const [nextAssetCursor, setNextAssetCursor] = useState<string | null>(null)
+  const [hasMoreAssets, setHasMoreAssets] = useState(false)
   const [selectedAssetIds, setSelectedAssetIds] = useState<string[]>([])
   const [transferringAssets, setTransferringAssets] = useState<Set<string>>(new Set())
   const [batchTransfer, setBatchTransfer] = useState({
@@ -868,25 +885,54 @@ export default function YouTubePublishClient({ showCommentManagement, enableYouT
     if (fileInputRef.current) fileInputRef.current.value = ""
   }
 
-  const fetchAssets = useCallback(async () => {
-    setLoadingAssets(true)
+  const fetchAssets = useCallback(async (cursor: string | null = null) => {
+    const isLoadingMore = cursor !== null
+    if (isLoadingMore && assetRequestInFlightRef.current) return
+    if (!isLoadingMore) {
+      assetRequestAbortRef.current?.abort()
+      setLoadingMoreAssets(false)
+    }
+
+    const controller = new AbortController()
+    assetRequestAbortRef.current = controller
+    assetRequestInFlightRef.current = true
+    if (isLoadingMore) setLoadingMoreAssets(true)
+    else setLoadingAssets(true)
+
     try {
-      const response = await fetch("/api/user/tasks?type=video&status=completed&limit=50")
+      const response = await fetch(buildPublishAssetPageUrl(cursor), {
+        signal: controller.signal,
+      })
       const data = await response.json().catch(() => null)
       if (!response.ok) throw new Error(data?.error || t(isEnglish, "加载视频制作区失败", "Failed to load videos from the creation workspace"))
 
-      const tasks = (data?.data?.tasks || data?.tasks || []) as YouTubeAssetItem[]
-      const videoTasks = tasks.filter((task) => task.type === "video" && task.resultUrl)
+      const page = parsePublishAssetPage<YouTubeAssetItem>(data, cursor)
+      const videoTasks = page.assets.filter((task) => task.type === "video" && task.resultUrl)
       const checks = await Promise.all(
         videoTasks.map(async (task) => ({
           task,
-          accessible: await checkVideoUrlAccessible(task.resultUrl!),
+          accessible: await checkVideoUrlAccessible(
+            task.resultUrl!,
+            controller.signal
+          ),
         }))
       )
 
-      const validAssets = checks.filter(({ accessible }) => accessible).map(({ task }) => task)
-      const expiredCount = checks.length - validAssets.length
-      setAssets(validAssets)
+      if (assetRequestAbortRef.current !== controller) return
+
+      const validAssets = checks
+        .filter(({ accessible }) => accessible !== false)
+        .map(({ task }) => task)
+      const expiredCount = checks.filter(({ accessible }) => accessible === false).length
+      const unknownCount = checks.filter(({ accessible }) => accessible === null).length
+      if (!isLoadingMore) setSelectedAssetIds([])
+      setAssets((current) => (
+        isLoadingMore
+          ? mergePublishAssetPages(current, validAssets)
+          : validAssets
+      ))
+      setNextAssetCursor(page.nextCursor)
+      setHasMoreAssets(page.hasMore)
 
       if (expiredCount > 0) {
         toast({
@@ -897,8 +943,18 @@ export default function YouTubePublishClient({ showCommentManagement, enableYouT
             `${expiredCount} creation workspace video links are no longer accessible`
           ),
         })
+      } else if (unknownCount > 0) {
+        toast({
+          title: t(isEnglish, "部分素材暂未验证", "Some videos could not be verified"),
+          description: t(
+            isEnglish,
+            `${unknownCount} 个视频暂时无法验证，仍保留在列表中，可直接重试使用`,
+            `${unknownCount} videos could not be verified temporarily and remain available for retry`
+          ),
+        })
       }
     } catch (error) {
+      if (controller.signal.aborted || assetRequestAbortRef.current !== controller) return
       toast({
         title: t(isEnglish, "加载失败", "Load failed"),
         description: error instanceof Error
@@ -907,14 +963,19 @@ export default function YouTubePublishClient({ showCommentManagement, enableYouT
         variant: "destructive",
       })
     } finally {
-      setLoadingAssets(false)
+      if (assetRequestAbortRef.current === controller) {
+        assetRequestAbortRef.current = null
+        assetRequestInFlightRef.current = false
+        if (isLoadingMore) setLoadingMoreAssets(false)
+        else setLoadingAssets(false)
+      }
     }
   }, [isEnglish, toast])
 
   const openAssetSelector = useCallback(() => {
     setSelectedAssetIds([])
     setShowAssetModal(true)
-    fetchAssets()
+    fetchAssets(null)
   }, [fetchAssets])
 
   const transferSingleAsset = async (asset: YouTubeAssetItem, retryCount = 0): Promise<{ success: boolean; error?: string }> => {
@@ -1410,6 +1471,7 @@ export default function YouTubePublishClient({ showCommentManagement, enableYouT
             platformLock="youtube"
             embedded
             autoSyncEnabled={enableYouTubeAutoSync}
+            initialSyncEnabled
           />
         ) : (
           <div className="space-y-6">
@@ -2404,8 +2466,13 @@ export default function YouTubePublishClient({ showCommentManagement, enableYouT
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <Button variant="titanium-outline" size="sm" onClick={fetchAssets} disabled={loadingAssets || batchTransfer.isTransferring}>
-                  <RefreshCw className={cn("h-4 w-4", loadingAssets && "animate-spin")} />
+                <Button
+                  variant="titanium-outline"
+                  size="sm"
+                  onClick={() => fetchAssets(null)}
+                  disabled={loadingAssets || loadingMoreAssets || batchTransfer.isTransferring}
+                >
+                  <RefreshCw className={cn("h-4 w-4", (loadingAssets || loadingMoreAssets) && "animate-spin")} />
                   {t(isEnglish, "刷新", "Refresh")}
                 </Button>
                 <Button
@@ -2434,11 +2501,15 @@ export default function YouTubePublishClient({ showCommentManagement, enableYouT
                   <FileVideo className="mb-3 h-12 w-12 text-white/25" />
                   <div className="font-medium text-white/70">{t(isEnglish, "暂无可选视频", "No selectable videos")}</div>
                   <div className="mt-1 text-sm text-white/35">
-                    {t(isEnglish, "视频制作区完成的视频会出现在这里", "Completed videos from the creation workspace will appear here")}
+                    {hasMoreAssets
+                      ? t(isEnglish, "本页素材不可用，可继续加载更早的视频", "This page has no usable videos. You can load older videos.")
+                      : t(isEnglish, "视频制作区完成的视频会出现在这里", "Completed videos from the creation workspace will appear here")}
                   </div>
-                  <Button variant="titanium-outline" className="mt-5" onClick={() => router.push("/assets")}>
-                    {t(isEnglish, "查看素材", "View Assets")}
-                  </Button>
+                  {!hasMoreAssets && (
+                    <Button variant="titanium-outline" className="mt-5" onClick={() => router.push("/assets")}>
+                      {t(isEnglish, "查看素材", "View Assets")}
+                    </Button>
+                  )}
                 </div>
               ) : (
                 <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
@@ -2517,6 +2588,19 @@ export default function YouTubePublishClient({ showCommentManagement, enableYouT
                       </button>
                     )
                   })}
+                </div>
+              )}
+              {!loadingAssets && hasMoreAssets && (
+                <div className="flex justify-center border-t border-white/10 pt-4 mt-4">
+                  <Button
+                    variant="titanium-outline"
+                    size="sm"
+                    onClick={() => fetchAssets(nextAssetCursor)}
+                    disabled={loadingMoreAssets || batchTransfer.isTransferring || !nextAssetCursor}
+                  >
+                    {loadingMoreAssets && <Loader2 className="h-4 w-4 animate-spin" />}
+                    {t(isEnglish, "加载更多", "Load more")}
+                  </Button>
                 </div>
               )}
             </div>

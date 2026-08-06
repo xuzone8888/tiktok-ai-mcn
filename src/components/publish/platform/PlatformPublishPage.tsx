@@ -40,7 +40,7 @@ import {
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
-import { useLang } from '@/contexts/LangContext'
+import SocialCommentsClient from '@/components/social-comments/SocialCommentsClient'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -58,9 +58,15 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
+import { useLang } from '@/contexts/LangContext'
+import { usePersistedPublishTab, type PublishPageTab } from '@/hooks/use-persisted-publish-tab'
 import { useToast } from '@/hooks/use-toast'
-import SocialCommentsClient from '@/components/social-comments/SocialCommentsClient'
 import { getInstagramPublishReconciliationDisplay } from '@/lib/instagram/publish-display'
+import {
+  buildPublishAssetPageUrl,
+  mergePublishAssetPages,
+  parsePublishAssetPage,
+} from '@/lib/publish/asset-pagination'
 import type { PlatformPrivacyStatus, PlatformPublishConfig } from '@/lib/publish/platform-config'
 import {
   getAcceptedVideoExtensions,
@@ -85,7 +91,7 @@ const DEFAULT_MAX_FILE_SIZE = 4 * 1024 * 1024 * 1024
 const DEFAULT_MAX_FILE_SIZE_LABEL = '4GB'
 const MAX_VIDEOS = 40
 
-type TabType = 'create' | 'tasks' | 'comments'
+type TabType = PublishPageTab
 type VideoSourceType = 'upload' | 'asset'
 type PublishMode = 'now' | 'scheduled'
 type IntervalMode = '0' | '3' | '5' | '10' | '30' | '60' | '120' | '360' | '720' | '1440' | 'custom'
@@ -866,8 +872,10 @@ export function PlatformPublishPage({
   const { toast } = useToast()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const privacyDropdownRef = useRef<HTMLDivElement>(null)
+  const assetRequestInFlightRef = useRef(false)
+  const assetRequestAbortRef = useRef<AbortController | null>(null)
 
-  const [activeTab, setActiveTab] = useState<TabType>('create')
+  const [activeTab, setActiveTab] = usePersistedPublishTab(showCommentManagement)
   const [videoSource, setVideoSource] = useState<VideoSourceType>('upload')
   const [selectedVideos, setSelectedVideos] = useState<SelectedVideo[]>([])
   const [selectedAccounts, setSelectedAccounts] = useState<string[]>([])
@@ -894,6 +902,9 @@ export function PlatformPublishPage({
   const [assetDialogOpen, setAssetDialogOpen] = useState(false)
   const [assets, setAssets] = useState<AssetItem[]>([])
   const [loadingAssets, setLoadingAssets] = useState(false)
+  const [loadingMoreAssets, setLoadingMoreAssets] = useState(false)
+  const [nextAssetCursor, setNextAssetCursor] = useState<string | null>(null)
+  const [hasMoreAssets, setHasMoreAssets] = useState(false)
   const [selectedAssetIds, setSelectedAssetIds] = useState<string[]>([])
   const [transferringAssets, setTransferringAssets] = useState(false)
   const [showTitleAssistant, setShowTitleAssistant] = useState(false)
@@ -1178,33 +1189,88 @@ export function PlatformPublishPage({
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
-  async function checkUrlAccessible(url: string) {
+  async function checkUrlAccessible(
+    url: string,
+    signal?: AbortSignal
+  ): Promise<boolean | null> {
     try {
       const response = await fetch('/api/upload/check-url', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url }),
+        signal,
       })
       const result = await response.json().catch(() => null)
-      return result?.accessible === true
+      if (!response.ok || typeof result?.accessible !== 'boolean') return null
+      if (result.accessible === true) return true
+      return result.status === 404 || result.status === 410 ? false : null
     } catch {
-      return false
+      return null
     }
   }
 
-  async function fetchAssets() {
-    setLoadingAssets(true)
+  async function fetchAssets(cursor: string | null = null) {
+    const isLoadingMore = cursor !== null
+    if (isLoadingMore && assetRequestInFlightRef.current) return
+    if (!isLoadingMore) {
+      assetRequestAbortRef.current?.abort()
+      setLoadingMoreAssets(false)
+    }
+
+    const controller = new AbortController()
+    assetRequestAbortRef.current = controller
+    assetRequestInFlightRef.current = true
+    if (isLoadingMore) setLoadingMoreAssets(true)
+    else setLoadingAssets(true)
+
     try {
-      const response = await fetch('/api/user/tasks?type=video&status=completed&limit=50')
+      const response = await fetch(buildPublishAssetPageUrl(cursor), {
+        signal: controller.signal,
+      })
       const result = await response.json().catch(() => null)
-      const tasks = result?.data?.tasks || result?.tasks || []
-      const videoTasks = tasks.filter((task: AssetItem) => task.type === 'video' && task.resultUrl)
+      if (!response.ok) {
+        throw new Error(localizeApiMessage(result?.error, isEnglish, 'Unable to load the creation workspace'))
+      }
+
+      const page = parsePublishAssetPage<AssetItem>(result, cursor)
+      const videoTasks = page.assets.filter((task) => task.type === 'video' && task.resultUrl)
       const checked = await Promise.all(videoTasks.map(async (task: AssetItem) => ({
         task,
-        accessible: await checkUrlAccessible(task.resultUrl!),
+        accessible: await checkUrlAccessible(task.resultUrl!, controller.signal),
       })))
-      setAssets(checked.filter((item) => item.accessible).map((item) => item.task))
+      if (assetRequestAbortRef.current !== controller) return
+
+      const validAssets = checked
+        .filter((item) => item.accessible !== false)
+        .map((item) => item.task)
+      const unavailableCount = checked.filter((item) => item.accessible === false).length
+      const unknownCount = checked.filter((item) => item.accessible === null).length
+      if (!isLoadingMore) setSelectedAssetIds([])
+      setAssets((current) => (
+        isLoadingMore
+          ? mergePublishAssetPages(current, validAssets)
+          : validAssets
+      ))
+      setNextAssetCursor(page.nextCursor)
+      setHasMoreAssets(page.hasMore)
+      if (unavailableCount > 0 || unknownCount > 0) {
+        toast({
+          title: uiText(isEnglish, '部分素材暂不可用', 'Some videos may be unavailable'),
+          description: unavailableCount > 0
+            ? uiText(
+              isEnglish,
+              `${unavailableCount} 个素材已确认失效，已从本次列表隐藏；原始任务记录仍会保留。`,
+              `${unavailableCount} videos are confirmed unavailable and hidden from this list; their task records remain.`
+            )
+            : uiText(
+              isEnglish,
+              `${unknownCount} 个素材暂时无法验证，仍保留在列表中，可直接重试使用。`,
+              `${unknownCount} videos could not be verified temporarily and remain available for retry.`
+            ),
+        })
+      }
     } catch (error) {
+      if (controller.signal.aborted || assetRequestAbortRef.current !== controller) return
       toast({
         title: uiText(isEnglish, '加载失败', 'Load failed'),
         description: error instanceof Error
@@ -1213,14 +1279,19 @@ export function PlatformPublishPage({
         variant: 'destructive',
       })
     } finally {
-      setLoadingAssets(false)
+      if (assetRequestAbortRef.current === controller) {
+        assetRequestAbortRef.current = null
+        assetRequestInFlightRef.current = false
+        if (isLoadingMore) setLoadingMoreAssets(false)
+        else setLoadingAssets(false)
+      }
     }
   }
 
   async function openAssetSelector() {
     setSelectedAssetIds([])
     setAssetDialogOpen(true)
-    await fetchAssets()
+    await fetchAssets(null)
   }
 
   function toggleAssetSelection(assetId: string) {
@@ -1696,6 +1767,7 @@ export function PlatformPublishPage({
         <SocialCommentsClient
           platformLock={config.platform}
           embedded
+          initialSyncEnabled={config.platform === 'facebook'}
           instagramReplyEnabled={instagramReplyEnabled}
         />
       ) : (
@@ -2714,8 +2786,13 @@ export function PlatformPublishPage({
           </DialogHeader>
           <div className="flex items-center justify-between gap-3 text-sm text-white/50">
             <span>{uiText(isEnglish, `已选择 ${selectedAssetIds.length} 个视频`, `${selectedAssetIds.length} videos selected`)}</span>
-            <Button variant="mermaid-ghost" size="sm" onClick={fetchAssets} disabled={loadingAssets || transferringAssets}>
-              <RefreshCw className={cn('h-3.5 w-3.5', loadingAssets && 'animate-spin')} />
+            <Button
+              variant="mermaid-ghost"
+              size="sm"
+              onClick={() => fetchAssets(null)}
+              disabled={loadingAssets || loadingMoreAssets || transferringAssets}
+            >
+              <RefreshCw className={cn('h-3.5 w-3.5', (loadingAssets || loadingMoreAssets) && 'animate-spin')} />
               {uiText(isEnglish, '刷新', 'Refresh')}
             </Button>
           </div>
@@ -2761,6 +2838,19 @@ export function PlatformPublishPage({
                   </button>
                 )
               })}
+            </div>
+          )}
+          {!loadingAssets && hasMoreAssets && (
+            <div className="flex justify-center border-t border-white/10 pt-3">
+              <Button
+                variant="titanium-outline"
+                size="sm"
+                onClick={() => fetchAssets(nextAssetCursor)}
+                disabled={loadingMoreAssets || transferringAssets || !nextAssetCursor}
+              >
+                {loadingMoreAssets && <Loader2 className="h-4 w-4 animate-spin" />}
+                {uiText(isEnglish, '加载更多', 'Load more')}
+              </Button>
             </div>
           )}
           <DialogFooter>

@@ -1,6 +1,7 @@
 import { getFacebookAppSecretProof } from '@/lib/facebook/oauth'
 import { instagramGraphHeaders } from '@/lib/instagram/graph-auth'
 import { getInstagramAuthMode } from '@/lib/instagram/oauth'
+import { BrokerTransportError, callBroker, isBrokerEnabled } from '@/lib/oauth-broker/client'
 import type { ExternalSocialComment, SocialCommentListResult, SocialPlatform } from '@/lib/social-comments/types'
 
 const YOUTUBE_COMMENT_THREADS_URL = 'https://www.googleapis.com/youtube/v3/commentThreads'
@@ -12,13 +13,16 @@ const FACEBOOK_GRAPH_URL = `https://graph.facebook.com/${FACEBOOK_API_VERSION}`
 const FACEBOOK_PAGE_SIZE = 100
 const FACEBOOK_MAX_TOP_LEVEL_COMMENTS = 500
 const FACEBOOK_MAX_REPLIES_PER_COMMENT = 500
-const INSTAGRAM_API_VERSION = process.env.INSTAGRAM_API_VERSION || process.env.FACEBOOK_API_VERSION || 'v20.0'
+// Keep Instagram versioning independent from Facebook review changes. Setting
+// FACEBOOK_API_VERSION must never silently move Instagram Graph API traffic.
+const INSTAGRAM_API_VERSION = process.env.INSTAGRAM_API_VERSION || 'v20.0'
 const INSTAGRAM_AUTH_MODE = getInstagramAuthMode()
 const INSTAGRAM_GRAPH_URL = INSTAGRAM_AUTH_MODE === 'instagram'
   ? `https://graph.instagram.com/${INSTAGRAM_API_VERSION}`
   : `https://graph.facebook.com/${INSTAGRAM_API_VERSION}`
 const INSTAGRAM_PAGE_SIZE = 50
 const INSTAGRAM_NATIVE_COMMENT_FIELDS = 'from,text'
+const INSTAGRAM_NATIVE_REPLY_FIELDS = 'from,text'
 const INSTAGRAM_FACEBOOK_COMMENT_FIELDS = 'id,text,from{id,username},timestamp,like_count,hidden,replies{id,text,from{id,username},timestamp,like_count,hidden}'
 const INSTAGRAM_FACEBOOK_REPLY_FIELDS = 'id,text,from{id,username},timestamp,like_count,hidden'
 export const INSTAGRAM_COMMENT_SYNC_LIMITS = {
@@ -51,6 +55,46 @@ export class SocialCommentUnsupportedError extends SocialCommentApiError {
   }
 }
 
+const COMMENT_BROKER_TIMEOUT_MS = 60_000
+
+async function callCommentBroker<T>(
+  platform: Exclude<SocialPlatform, 'tiktok'>,
+  op: string,
+  args: Record<string, unknown>
+): Promise<T> {
+  try {
+    return await callBroker<T>(platform, op, args, { timeoutMs: COMMENT_BROKER_TIMEOUT_MS })
+  } catch (error) {
+    if (error instanceof BrokerTransportError) {
+      throw new SocialCommentApiError(
+        platform,
+        'provider_unreachable',
+        `${platform} comment service is temporarily unreachable through the overseas gateway.`,
+        503,
+        true
+      )
+    }
+
+    const brokerError = error && typeof error === 'object'
+      ? error as {
+          code?: unknown
+          httpStatus?: unknown
+          retryable?: unknown
+          retryAfter?: unknown
+        }
+      : null
+    const httpStatus = typeof brokerError?.httpStatus === 'number' ? brokerError.httpStatus : 500
+    throw new SocialCommentApiError(
+      platform,
+      typeof brokerError?.code === 'string' && brokerError.code ? brokerError.code : 'provider_error',
+      error instanceof Error ? error.message : `${platform} comment request failed.`,
+      httpStatus,
+      brokerError?.retryable === true,
+      typeof brokerError?.retryAfter === 'string' ? brokerError.retryAfter : null
+    )
+  }
+}
+
 export interface CommentTokenContext {
   accessToken: string
   accountExternalId: string
@@ -61,11 +105,32 @@ export interface InstagramCommentListResult {
   comments: ExternalSocialComment[]
   metadata: {
     provider_raw_count: number
+    provider_reported_comment_count: number | null
+    provider_visibility_mismatch: boolean
     mapped_count: number
     top_level_pagination_complete: boolean
     replies_fetched: boolean
     truncated: boolean
     thread_completeness: SocialCommentListResult['thread_completeness']
+  }
+}
+
+async function readInstagramReportedCommentCount(
+  token: CommentTokenContext,
+  externalContentId: string
+): Promise<number | null> {
+  const params = new URLSearchParams({ fields: 'comments_count' })
+  try {
+    const response = await fetch(`${INSTAGRAM_GRAPH_URL}/${encodeURIComponent(externalContentId)}?${params.toString()}`, {
+      cache: 'no-store',
+      headers: instagramGraphHeaders(token.accessToken),
+    })
+    if (!response.ok) return null
+    const data = await readJson(response)
+    const count = Number(data?.comments_count)
+    return Number.isFinite(count) && count >= 0 ? Math.floor(count) : null
+  } catch {
+    return null
   }
 }
 
@@ -77,7 +142,7 @@ type CommentScopeRequirement = {
 
 export const COMMENT_SCOPE_REQUIREMENTS: Record<Exclude<SocialPlatform, 'tiktok' | 'instagram'>, CommentScopeRequirement> = {
   youtube: {
-    read: ['https://www.googleapis.com/auth/youtube.readonly'],
+    read: ['https://www.googleapis.com/auth/youtube.force-ssl'],
     reply: ['https://www.googleapis.com/auth/youtube.force-ssl'],
   },
   facebook: {
@@ -281,6 +346,9 @@ export async function listYouTubeComments(
   token: CommentTokenContext,
   externalContentId: string
 ): Promise<SocialCommentListResult> {
+  if (isBrokerEnabled()) {
+    return callCommentBroker<SocialCommentListResult>('youtube', 'listYouTubeComments', { token, externalContentId })
+  }
   const comments: ExternalSocialComment[] = []
   let pageToken: string | null = null
   let topLevelCount = 0
@@ -372,6 +440,13 @@ export async function replyToYouTubeComment(
   parentExternalCommentId: string,
   message: string
 ): Promise<ExternalSocialComment> {
+  if (isBrokerEnabled()) {
+    return callCommentBroker<ExternalSocialComment>('youtube', 'replyToYouTubeComment', {
+      token,
+      parentExternalCommentId,
+      message,
+    })
+  }
   const params = new URLSearchParams({ part: 'snippet' })
   const response = await fetch(`${YOUTUBE_COMMENTS_URL}?${params.toString()}`, {
     method: 'POST',
@@ -440,7 +515,8 @@ async function listRemainingInstagramReplies(
   externalContentId: string,
   parentExternalCommentId: string,
   embeddedReplies: any[],
-  repliesEdge: any
+  repliesEdge: any,
+  options: { fetchFirstPage?: boolean; fields?: string } = {}
 ): Promise<{ comments: ExternalSocialComment[]; truncated: boolean }> {
   const comments: ExternalSocialComment[] = []
   const seen = new Set<string>()
@@ -462,19 +538,20 @@ async function listRemainingInstagramReplies(
   let after = readMetaAfterCursor(repliesEdge)
   let truncated = comments.length >= INSTAGRAM_COMMENT_SYNC_LIMITS.repliesPerComment && hasNext
   const seenCursors = new Set<string>()
+  let fetchFirstPage = options.fetchFirstPage === true
 
-  while (hasNext && !truncated) {
-    if (!after || seenCursors.has(after)) {
+  while ((fetchFirstPage || hasNext) && !truncated) {
+    if (!fetchFirstPage && (!after || seenCursors.has(after))) {
       truncated = true
       break
     }
-    seenCursors.add(after)
+    if (!fetchFirstPage && after) seenCursors.add(after)
 
     const params = new URLSearchParams({
-      fields: INSTAGRAM_FACEBOOK_REPLY_FIELDS,
+      fields: options.fields || INSTAGRAM_FACEBOOK_REPLY_FIELDS,
       limit: String(INSTAGRAM_PAGE_SIZE),
-      after,
     })
+    if (!fetchFirstPage && after) params.set('after', after)
     const response = await fetch(`${INSTAGRAM_GRAPH_URL}/${encodeURIComponent(parentExternalCommentId)}/replies?${params.toString()}`, {
       cache: 'no-store',
       headers: instagramGraphHeaders(token.accessToken),
@@ -486,6 +563,7 @@ async function listRemainingInstagramReplies(
     }
 
     const data = await readJson(response)
+    fetchFirstPage = false
     const pageReplies = Array.isArray(data?.data) ? data.data : []
     for (let index = 0; index < pageReplies.length; index += 1) {
       if (!append(pageReplies[index])) {
@@ -516,7 +594,10 @@ export async function listInstagramComments(
   token: CommentTokenContext,
   externalContentId: string
 ): Promise<InstagramCommentListResult> {
-  const fetchReplies = INSTAGRAM_AUTH_MODE !== 'instagram'
+  if (isBrokerEnabled()) {
+    return callCommentBroker<InstagramCommentListResult>('instagram', 'listInstagramComments', { token, externalContentId })
+  }
+  let repliesFetched = true
   const comments: ExternalSocialComment[] = []
   const topLevelComments: ExternalSocialComment[] = []
   const seenTopLevelComments = new Set<string>()
@@ -526,10 +607,11 @@ export async function listInstagramComments(
   let topLevelCount = 0
   let topLevelTruncated = false
   const seenCursors = new Set<string>()
+  const providerReportedCommentCount = await readInstagramReportedCommentCount(token, externalContentId)
 
   do {
     const params = new URLSearchParams({
-      fields: fetchReplies ? INSTAGRAM_FACEBOOK_COMMENT_FIELDS : INSTAGRAM_NATIVE_COMMENT_FIELDS,
+      fields: INSTAGRAM_AUTH_MODE === 'instagram' ? INSTAGRAM_NATIVE_COMMENT_FIELDS : INSTAGRAM_FACEBOOK_COMMENT_FIELDS,
       limit: String(INSTAGRAM_PAGE_SIZE),
     })
     if (after) params.set('after', after)
@@ -561,24 +643,37 @@ export async function listInstagramComments(
       topLevelCount += 1
       mappedCount += 1
 
-      if (!fetchReplies) {
-        topLevelComments.push(mapped)
-        comments.push(mapped)
-        continue
-      }
-
       const embeddedReplies = Array.isArray(comment?.replies?.data) ? comment.replies.data : []
-      const replies = await listRemainingInstagramReplies(
-        token,
-        externalContentId,
-        mapped.external_comment_id,
-        embeddedReplies,
-        comment?.replies
-      )
+      let replies: { comments: ExternalSocialComment[]; truncated: boolean }
+      try {
+        replies = await listRemainingInstagramReplies(
+          token,
+          externalContentId,
+          mapped.external_comment_id,
+          embeddedReplies,
+          comment?.replies,
+          {
+            fetchFirstPage: INSTAGRAM_AUTH_MODE === 'instagram',
+            fields: INSTAGRAM_AUTH_MODE === 'instagram' ? INSTAGRAM_NATIVE_REPLY_FIELDS : INSTAGRAM_FACEBOOK_REPLY_FIELDS,
+          }
+        )
+      } catch (error) {
+        if (
+          INSTAGRAM_AUTH_MODE === 'instagram'
+          && error instanceof SocialCommentApiError
+          && (error.httpStatus === 400 || error.httpStatus === 403)
+        ) {
+          repliesFetched = false
+          replies = { comments: [], truncated: false }
+        } else {
+          throw error
+        }
+      }
       mapped.reply_count = Math.max(mapped.reply_count, replies.comments.length)
       mapped.metadata = {
         ...(mapped.metadata || {}),
-        pagination_complete: !replies.truncated,
+        pagination_complete: repliesFetched && !replies.truncated,
+        replies_fetched: repliesFetched,
         truncated: replies.truncated,
         reply_limit: INSTAGRAM_COMMENT_SYNC_LIMITS.repliesPerComment,
       }
@@ -602,12 +697,12 @@ export async function listInstagramComments(
   } while (after)
 
   for (const comment of topLevelComments) {
-    const replyTruncated = fetchReplies && comment.metadata?.truncated === true
+    const replyTruncated = repliesFetched && comment.metadata?.truncated === true
     comment.metadata = {
       ...(comment.metadata || {}),
-      pagination_complete: fetchReplies && !topLevelTruncated && !replyTruncated,
+      pagination_complete: repliesFetched && !topLevelTruncated && !replyTruncated,
       top_level_pagination_complete: !topLevelTruncated,
-      replies_fetched: fetchReplies,
+      replies_fetched: repliesFetched,
       truncated: topLevelTruncated || replyTruncated,
       top_level_limit: INSTAGRAM_COMMENT_SYNC_LIMITS.topLevel,
       provider_raw_count: providerRawCount,
@@ -615,19 +710,27 @@ export async function listInstagramComments(
     }
   }
 
+  const providerVisibilityMismatch = providerRawCount === 0
+    && typeof providerReportedCommentCount === 'number'
+    && providerReportedCommentCount > 0
+  let threadCompleteness: 'complete' | 'incomplete' | 'truncated' = 'complete'
+  if (topLevelTruncated || topLevelComments.some((comment) => comment.metadata?.truncated === true)) {
+    threadCompleteness = 'truncated'
+  } else if (!repliesFetched || providerVisibilityMismatch) {
+    threadCompleteness = 'incomplete'
+  }
+
   return {
     comments,
     metadata: {
       provider_raw_count: providerRawCount,
+      provider_reported_comment_count: providerReportedCommentCount,
+      provider_visibility_mismatch: providerVisibilityMismatch,
       mapped_count: mappedCount,
       top_level_pagination_complete: !topLevelTruncated,
-      replies_fetched: fetchReplies,
+      replies_fetched: repliesFetched,
       truncated: topLevelTruncated || topLevelComments.some((comment) => comment.metadata?.truncated === true),
-      thread_completeness: topLevelTruncated || topLevelComments.some((comment) => comment.metadata?.truncated === true)
-        ? 'truncated'
-        : !fetchReplies
-          ? 'incomplete'
-          : 'complete',
+      thread_completeness: threadCompleteness,
     },
   }
 }
@@ -638,6 +741,14 @@ export async function replyToInstagramComment(
   externalContentId: string,
   message: string
 ): Promise<ExternalSocialComment> {
+  if (isBrokerEnabled()) {
+    return callCommentBroker<ExternalSocialComment>('instagram', 'replyToInstagramComment', {
+      token,
+      parentExternalCommentId,
+      externalContentId,
+      message,
+    })
+  }
   const response = await fetch(`${INSTAGRAM_GRAPH_URL}/${encodeURIComponent(parentExternalCommentId)}/replies`, {
     method: 'POST',
     cache: 'no-store',
@@ -779,6 +890,9 @@ export async function listFacebookComments(
   token: CommentTokenContext,
   externalContentId: string
 ): Promise<ExternalSocialComment[]> {
+  if (isBrokerEnabled()) {
+    return callCommentBroker<ExternalSocialComment[]>('facebook', 'listFacebookComments', { token, externalContentId })
+  }
   const comments: ExternalSocialComment[] = []
   let topLevelCount = 0
   let after: string | null = null
@@ -834,6 +948,14 @@ export async function replyToFacebookComment(
   externalContentId: string,
   message: string
 ): Promise<ExternalSocialComment> {
+  if (isBrokerEnabled()) {
+    return callCommentBroker<ExternalSocialComment>('facebook', 'replyToFacebookComment', {
+      token,
+      parentExternalCommentId,
+      externalContentId,
+      message,
+    })
+  }
   const accessToken = token.accessToken
   const body = new URLSearchParams({
     message,

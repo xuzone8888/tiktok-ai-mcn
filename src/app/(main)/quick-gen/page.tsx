@@ -86,7 +86,7 @@ import {
   type SourceType,
   type ProcessingType,
   type ImageProcessAction,
-  type VideoModel,
+  type VideoModelPricingKey,
   type VideoAspectRatio,
   type ImageAspectRatio,
   type ImageResolution,
@@ -95,7 +95,10 @@ import {
   type CanvasState,
   type DisplayModel,
   type NanoTier,
-  VIDEO_MODEL_PRICING,
+  DEFAULT_QUICK_GEN_VIDEO_MODEL,
+  QUICK_GEN_VIDEO_PRICING,
+  getVideoModelPricingEntries,
+  isVideoModelPricingKey,
   GEMINI_ACTION_PRICING,
   IMAGE_ASPECT_OPTIONS,
   IMAGE_RESOLUTION_OPTIONS,
@@ -181,7 +184,7 @@ export default function QuickGeneratorPage() {
   // ================================================================
   const [prompt, setPrompt] = useState("");
   const [isEnhancingPrompt, setIsEnhancingPrompt] = useState(false);
-  const [videoModel, setVideoModel] = useState<VideoModel>("sora2-15s");
+  const [videoModel, setVideoModel] = useState<VideoModelPricingKey>(DEFAULT_QUICK_GEN_VIDEO_MODEL);
   const [videoAspectRatio, setVideoAspectRatio] = useState<VideoAspectRatio>("9:16");
   const [useAiModel, setUseAiModel] = useState(false);
   const [aiCastMode, setAiCastMode] = useState<AiCastMode>("auto");
@@ -418,6 +421,8 @@ export default function QuickGeneratorPage() {
 
   // 加载历史配置到当前表单
   const loadHistoryConfig = useCallback((item: typeof historyList[0]) => {
+    let historySelectionWarning: string | null = null;
+
     // 切换到对应模式
     if (item.mode === "image") {
       setOutputMode("image");
@@ -445,7 +450,16 @@ export default function QuickGeneratorPage() {
       // [封装] 视频模式暂时关闭，不对用户开放
       // setOutputMode("video");
       setOutputMode("image");
-      if (item.video_model) setVideoModel(item.video_model as VideoModel);
+      if (item.video_model) {
+        if (isVideoModelPricingKey(item.video_model)) {
+          setVideoModel(item.video_model);
+        } else {
+          setVideoModel(DEFAULT_QUICK_GEN_VIDEO_MODEL);
+          historySelectionWarning = t
+            ? `The saved video configuration “${item.video_model}” is no longer supported. Sora2 12s was selected as a fallback; review the configuration before generating.`
+            : `历史视频配置“${item.video_model}”已不受支持。已回退选择 Sora2 12秒，请检查配置后再生成。`;
+        }
+      }
       if (item.video_aspect_ratio) setVideoAspectRatio(item.video_aspect_ratio as VideoAspectRatio);
       if (item.video_use_ai_model !== undefined) setUseAiModel(item.video_use_ai_model);
       if (item.video_ai_model_id) {
@@ -471,12 +485,18 @@ export default function QuickGeneratorPage() {
     // 关闭历史面板
     setShowHistoryPanel(false);
 
-    toast({
-      title: t ? "✅ Config loaded" : "✅ 配置已加载",
-      description: t
-        ? `Loaded ${item.mode === "image" ? "image" : "video"} config from history`
-        : `已从历史记录加载 ${item.mode === "image" ? "图片" : "视频"} 配置`,
-    });
+    toast(historySelectionWarning
+      ? {
+          variant: "destructive",
+          title: t ? "⚠️ Video configuration requires review" : "⚠️ 视频配置需要检查",
+          description: historySelectionWarning,
+        }
+      : {
+          title: t ? "✅ Config loaded" : "✅ 配置已加载",
+          description: t
+            ? `Loaded ${item.mode === "image" ? "image" : "video"} config from history`
+            : `已从历史记录加载 ${item.mode === "image" ? "图片" : "视频"} 配置`,
+        });
   }, [toast, t]);
 
   // 获取用户积分和 userId
@@ -1241,7 +1261,7 @@ export default function QuickGeneratorPage() {
       // ============================================
       try {
         // 从配置获取 API 时长
-        const modelConfig = VIDEO_MODEL_PRICING[videoModel];
+        const modelConfig = QUICK_GEN_VIDEO_PRICING[videoModel];
         const apiDuration = modelConfig.apiDuration;
         const costCredits = modelConfig.credits;
 
@@ -1634,7 +1654,7 @@ export default function QuickGeneratorPage() {
                     <Label className="text-xs text-muted-foreground mb-2 block">{t ? "Model & Duration" : "模型 & 时长"}</Label>
                     <div className="space-y-1.5">
                       {/* Sora2 模型 */}
-                      {(Object.entries(VIDEO_MODEL_PRICING) as [VideoModel, typeof VIDEO_MODEL_PRICING[VideoModel]][])
+                      {getVideoModelPricingEntries()
                         .filter(([key]) => key.startsWith("sora2"))
                         .map(([key, value]) => (
                         <Button key={key} variant="outline" size="sm" onClick={() => setVideoModel(key)}
@@ -1649,7 +1669,7 @@ export default function QuickGeneratorPage() {
                         <span className="text-[10px] text-orange-400/80 font-medium tracking-wider">🔥 SEEDANCE 2.0</span>
                         <div className="h-px flex-1 bg-gradient-to-l from-orange-500/30 to-transparent" />
                       </div>
-                      {(Object.entries(VIDEO_MODEL_PRICING) as [VideoModel, typeof VIDEO_MODEL_PRICING[VideoModel]][])
+                      {getVideoModelPricingEntries()
                         .filter(([key]) => key.startsWith("seedance"))
                         .map(([key, value]) => (
                         <Button key={key} variant="outline" size="sm" onClick={() => setVideoModel(key)}

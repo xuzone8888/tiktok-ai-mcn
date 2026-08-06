@@ -42,8 +42,8 @@ export function AssetLibraryModal({
         currentBatch: []
     })
 
-    // 检查 URL 是否可访问
-    const checkUrlAccessible = async (url: string): Promise<boolean> => {
+    // 短暂的探测失败属于未知状态，不能据此删除或隐藏用户资产。
+    const checkUrlAccessible = async (url: string): Promise<boolean | null> => {
         try {
             const response = await fetch('/api/upload/check-url', {
                 method: 'POST',
@@ -51,18 +51,15 @@ export function AssetLibraryModal({
                 body: JSON.stringify({ url })
             })
             const result = await response.json()
-            return result.accessible === true
+            if (!response.ok || typeof result?.accessible !== 'boolean') {
+                return null
+            }
+            if (result.accessible === true) {
+                return true
+            }
+            return result.status === 404 || result.status === 410 ? false : null
         } catch {
-            return false
-        }
-    }
-
-    // 删除过期任务
-    const deleteExpiredTask = async (taskId: string) => {
-        try {
-            await fetch(`/api/user/tasks/${taskId}`, { method: 'DELETE' })
-        } catch (error) {
-            console.error('Failed to delete expired task:', error)
+            return null
         }
     }
 
@@ -80,29 +77,29 @@ export function AssetLibraryModal({
                 const accessibilityChecks = await Promise.all(
                     videoTasks.map(async (task: AssetItem) => ({
                         task,
-                        isAccessible: await checkUrlAccessible(task.resultUrl!)
+                        availability: await checkUrlAccessible(task.resultUrl!)
                     }))
                 )
 
                 const validVideos: AssetItem[] = []
-                const expiredVideos: AssetItem[] = []
+                let unavailableCount = 0
+                let unknownCount = 0
 
-                accessibilityChecks.forEach(({ task, isAccessible }) => {
-                    if (isAccessible) {
-                        validVideos.push(task)
-                    } else {
-                        expiredVideos.push(task)
+                accessibilityChecks.forEach(({ task, availability }) => {
+                    if (availability === false) {
+                        unavailableCount += 1
+                        return
                     }
+                    if (availability === null) unknownCount += 1
+                    validVideos.push(task)
                 })
 
-                // 清理过期视频
-                if (expiredVideos.length > 0) {
+                if (unavailableCount > 0 || unknownCount > 0) {
                     toast({
-                        title: '清理过期视频',
-                        description: `正在删除 ${expiredVideos.length} 个已过期的视频...`,
-                    })
-                    Promise.all(expiredVideos.map(v => deleteExpiredTask(v.id))).then(() => {
-                        toast({ title: '清理完成', description: `已删除 ${expiredVideos.length} 个过期视频` })
+                        title: '部分素材暂不可用',
+                        description: unavailableCount > 0
+                            ? `${unavailableCount} 个素材已确认失效，已从本次列表隐藏；原始任务记录仍会保留。`
+                            : `${unknownCount} 个素材暂时无法验证，仍保留在列表中，可直接重试使用。`,
                     })
                 }
 

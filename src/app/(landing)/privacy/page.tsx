@@ -3,7 +3,7 @@
 import Link from "next/link";
 import ReflectiveCard from "@/components/ui/ReflectiveCard";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Sparkles, Shield, Globe, FileText, Eye, Database, Share2, Lock, UserCheck, Cookie, Users, RefreshCw, Phone, BookOpen, Server, Key, Settings, ExternalLink, ShoppingBag, Cpu } from "lucide-react";
+import { ArrowLeft, Sparkles, Shield, Globe, FileText, Eye, Database, Share2, Lock, UserCheck, Cookie, Users, RefreshCw, Phone, BookOpen, Server, Key, Settings, ExternalLink, ShoppingBag, Cpu, Youtube } from "lucide-react";
 import { useLang } from "@/contexts/LangContext";
 
 export default function PrivacyPage() {
@@ -39,8 +39,8 @@ export default function PrivacyPage() {
         <div className="container max-w-4xl mx-auto px-6">
           <div className="mb-12">
             <h1 className="text-4xl font-bold mb-4">{lang === "en" ? "Privacy Policy - Wuhan Guanxing Cultural Media Co., Ltd. (Star Gaze)" : "隐私政策 - 武汉观星文化传媒有限公司 (Star Gaze)"}</h1>
-            <p className="text-gray-400">{lang === "en" ? "Updated Date: April 13, 2026" : "更新日期：2026年4月13日"}</p>
-            <p className="text-gray-400">{lang === "en" ? "Effective Date: April 13, 2026" : "生效日期：2026年4月13日"}</p>
+            <p className="text-gray-400">{lang === "en" ? "Updated Date: July 23, 2026" : "更新日期：2026年7月23日"}</p>
+            <p className="text-gray-400">{lang === "en" ? "Effective Date: July 23, 2026" : "生效日期：2026年7月23日"}</p>
           </div>
 
           <div className="space-y-6 text-gray-300">
@@ -50,7 +50,7 @@ export default function PrivacyPage() {
                 <div className="p-3 rounded-lg bg-cyan-500/10 text-cyan-400 shrink-0"><FileText className="h-6 w-6" /></div>
                 <div>
                   <h2 className="text-xl font-bold text-white mb-3">{lang === "en" ? "Introduction" : "引言"}</h2>
-                  <p className="leading-relaxed font-semibold text-white/80 mb-4">{lang === "en" ? 'This Privacy Policy explains how Wuhan Guanxing Cultural Media Co., Ltd. ("Company", "we", "us"), operating under the brand name Star Gaze, collects, uses, stores, and protects personal information when users access our website, services, and TikTok-related integrations.' : '本隐私政策说明武汉观星文化传媒有限公司（以下简称"本公司"）作为 Star Gaze 品牌运营方，在用户访问本网站、使用本服务及相关 TikTok 集成能力时，如何收集、使用、存储和保护个人信息。'}</p>
+                  <p className="leading-relaxed font-semibold text-white/80 mb-4">{lang === "en" ? 'This Privacy Policy explains how Wuhan Guanxing Cultural Media Co., Ltd. ("Company", "we", "us"), operating under the brand name Star Gaze, collects, uses, stores, and protects personal information when users access our website, services, and integrations with TikTok, Facebook, YouTube, and other supported platforms.' : '本隐私政策说明武汉观星文化传媒有限公司（以下简称"本公司"）作为 Star Gaze 品牌运营方，在用户访问本网站、使用本服务及 TikTok、Facebook、YouTube 和其他受支持平台的集成能力时，如何收集、使用、存储和保护个人信息。'}</p>
                   <p className="leading-relaxed">{lang === "en" ? '"Star Gaze" refers to the client application labeled "Star Gaze" and the official website, as well as the Software Development Kit (SDK) and Application Programming Interface (API) for third-party websites and applications, legally owned and operated by Wuhan Guanxing Cultural Media Co., Ltd. and its affiliates (hereinafter referred to as "we").' : '"Star Gaze"是指武汉观星文化传媒有限公司及其关联方（以下简称"我们"）依法拥有并运营的标注名称为"Star Gaze"的客户端应用程序及官方网站，以及为第三方网站和应用程序提供的软件开发工具包（SDK）和应用程序编程接口（API）。'}</p>
                   <p className="leading-relaxed mt-3">{lang === "en" ? 'As the operator of Star Gaze, we are fully aware of the importance of personal information to you, and we will protect your personal information and privacy security in accordance with laws and regulations. We have formulated this Privacy Policy and specially prompt you: We hope you carefully read and understand this Privacy Policy before using Star Gaze and related services so as to make appropriate choices.' : '作为 Star Gaze 的运营者，我们充分意识到个人信息对您的重要性，我们将依法保护您的个人信息和隐私安全。我们特制定本隐私政策并特别提示您：希望您在使用 Star Gaze 及相关服务前仔细阅读并理解本隐私政策，以做出适当的选择。'}</p>
                 </div>
@@ -136,7 +136,7 @@ export default function PrivacyPage() {
                   <h2 className="text-xl font-bold text-white mb-3">{lang === "en" ? "3. Managing Your Personal Information" : "三、管理您的个人信息"}</h2>
                   <p className="leading-relaxed">{lang === "en" ? 'We guarantee your rights to query, copy, correct, supplement, delete, withdraw consent, and cancel your account regarding personal information.' : '我们保障您对个人信息的查询、复制、更正、补充、删除、撤回同意和注销账户的权利。'}</p>
                   <p className="leading-relaxed mt-3">{lang === "en" ? 'You can manage your personal information through the settings function in the application or by contacting customer service.' : '您可以通过应用程序中的设置功能或联系客服来管理您的个人信息。'}</p>
-                  <p className="leading-relaxed mt-3">{lang === "en" ? 'For account cancellation, you can find the cancellation entrance in "Settings - Account Security". After cancellation, we will delete or anonymize your relevant data.' : '对于账户注销，您可以在"设置 - 账户安全"中找到注销入口。注销后，我们将删除或匿名化您的相关数据。'}</p>
+                  <p className="leading-relaxed mt-3">{lang === "en" ? 'Where an in-product account cancellation control is available, you may use it to submit a cancellation request. You may also contact toryxai@outlook.com. After identity verification, we will delete or anonymize relevant data subject to applicable law and the service-specific periods stated in this Policy.' : '如产品内提供账户注销入口，您可以通过该入口提交注销请求；也可以联系 toryxai@outlook.com。完成身份核验后，我们将根据适用法律及本政策所述各项服务期限删除或匿名化相关数据。'}</p>
                   <p className="leading-relaxed mt-3">{lang === "en" ? '3.4 TikTok Authorization Revocation: You may revoke Star Gaze\'s access to your TikTok account at any time through your TikTok account settings. Once authorization is revoked, we will delete all associated TikTok data (including access tokens and user identifiers) within 30 days.' : '3.4 TikTok 授权撤回：您可以随时通过 TikTok 账户设置撤回 Star Gaze 对您 TikTok 账户的访问授权。授权撤回后，我们将在 30 天内删除所有相关的 TikTok 数据（包括访问令牌和用户标识符）。'}</p>
                 </div>
               </div>
@@ -260,12 +260,72 @@ export default function PrivacyPage() {
               </div>
             </ReflectiveCard>
 
+            {/* Facebook Platform Data */}
+            <ReflectiveCard className="!rounded-xl">
+              <div className="flex items-start gap-4 p-6">
+                <div className="p-3 rounded-lg bg-blue-500/10 text-blue-400 shrink-0"><Share2 className="h-6 w-6" /></div>
+                <div>
+                  <h2 className="text-xl font-bold text-white mb-3">{lang === "en" ? "Facebook Platform Data" : "Facebook 平台数据"}</h2>
+                  <p className="leading-relaxed">{lang === "en" ? "With your authorization, Star Gaze uses Meta Platform APIs to connect Facebook Pages you manage, display Page information, publish or schedule Page videos and posts, synchronize Page comments through API calls and webhooks, and send replies that you initiate or confirm. We do not request or store your Facebook password." : "在您授权后，Star Gaze 使用 Meta 平台 API 绑定您管理的 Facebook Page、展示 Page 信息、发布或预约发布 Page 视频与帖子、通过 API 调用和 webhook 同步 Page 评论，以及发送由您主动发起或确认的回复。我们不会请求或存储您的 Facebook 密码。"}</p>
+
+                  <h3 className="text-lg font-medium text-white mt-4 mb-2">{lang === "en" ? "Data We Process" : "我们处理的数据"}</h3>
+                  <p className="leading-relaxed">{lang === "en" ? "Depending on the features you use, we may process the Facebook user ID that granted authorization; OAuth access tokens, granted permissions, expiration and authorization status; Page ID, name, category, profile image, link, tasks and aggregate Page statistics; video or post source, title, description, schedule, Facebook content IDs, watch URLs and publishing status; Page comments and replies, their identifiers, text, author display information supplied by Facebook, timestamps, counts and permalinks; and account-linkage, synchronization, webhook receipt, action, diagnostic and security records." : "根据您使用的功能，我们可能处理授予授权的 Facebook 用户 ID；OAuth 访问令牌、已授予权限、到期时间及授权状态；Page ID、名称、类别、头像、链接、任务权限及汇总统计；视频或帖子来源、标题、描述、预约时间、Facebook 内容 ID、观看链接及发布状态；Page 评论与回复的标识、正文、Facebook 提供的作者展示信息、时间、数量及永久链接；以及账号绑定、同步、webhook 接收、操作、诊断和安全记录。"}</p>
+
+                  <h3 className="text-lg font-medium text-white mt-4 mb-2">{lang === "en" ? "Purpose, Permissions, and Sharing" : "目的、权限与共享"}</h3>
+                  <p className="leading-relaxed">{lang === "en" ? "We request only the Facebook Page permissions needed to list Pages you manage, maintain webhook subscriptions, read Page and Page-content information, publish Page content, read user comments on Page content, and submit Page comment replies. We use Facebook Platform Data only to provide the features you select, maintain synchronization, prevent duplicate actions, secure and troubleshoot the service, provide support, and comply with law and Meta requirements." : "我们仅请求用于列出您管理的 Page、维护 webhook 订阅、读取 Page 与 Page 内容信息、发布 Page 内容、读取 Page 内容下的用户评论及提交 Page 评论回复所需的 Facebook Page 权限。我们仅将 Facebook 平台数据用于提供您选择的功能、维护同步、防止重复操作、保护与排查服务、提供支持，以及遵守法律和 Meta 要求。"}</p>
+                  <p className="leading-relaxed mt-3">{lang === "en" ? "We do not sell Facebook Platform Data or use it for unrelated advertising, surveillance, or training general-purpose AI models. Infrastructure, database, security, monitoring, and support providers receive only the information reasonably necessary to provide their services and are subject to appropriate confidentiality and security obligations." : "我们不会出售 Facebook 平台数据，也不会将其用于无关广告、监控或训练通用人工智能模型。基础设施、数据库、安全、监控及支持服务提供商仅接收履行其服务所合理需要的信息，并受到适当的保密和安全义务约束。"}</p>
+
+                  <h3 className="text-lg font-medium text-white mt-4 mb-2">{lang === "en" ? "Retention, Revocation, and Deletion" : "保留、撤权与删除"}</h3>
+                  <p className="leading-relaxed">{lang === "en" ? "We retain Facebook tokens and Platform Data only while reasonably necessary to provide actively authorized features, maintain security and diagnostics, or satisfy legal requirements. When authorization is revoked, Meta sends a deauthorization or deletion request, or you use a Star Gaze deletion control, we stop the affected access and delete the associated Facebook Page bindings, tokens, cached comments, publishing records, and applicable logs under our control." : "我们仅在提供持续获得授权的功能、维护安全与诊断或履行法律要求所合理需要的期间内保留 Facebook 令牌和平台数据。当授权被撤销、Meta 发送取消授权或删除请求，或您使用 Star Gaze 的删除功能时，我们会停止相关访问，并删除由我们控制的关联 Facebook Page 绑定、令牌、评论缓存、发布记录及适用日志。"}</p>
+                  <p className="leading-relaxed mt-3">{lang === "en" ? "You may disconnect one Page or use “Delete all Facebook data” in Facebook Account Management, revoke access in Facebook Apps and Websites settings, follow the confirmation link returned by Meta’s data-deletion callback, or contact toryxai@outlook.com. Deleting data stored by Star Gaze does not delete videos, posts, comments, replies, or other content hosted by Facebook; Facebook-hosted content must be managed through Facebook or another authorized client that supports the relevant deletion action." : "您可以在 Facebook 账号管理中解绑单个 Page 或使用“删除全部 Facebook 数据”，通过 Facebook“应用和网站”设置撤销访问，使用 Meta 数据删除回调返回的确认链接，或联系 toryxai@outlook.com。删除 Star Gaze 保存的数据不会删除 Facebook 平台保存的视频、帖子、评论、回复或其他内容；Facebook 平台内容必须通过 Facebook 或其他支持相应删除操作的授权客户端进行管理。"}</p>
+
+                  <div className="flex flex-wrap gap-x-4 gap-y-2 mt-3 text-sm">
+                    <Link href="https://developers.facebook.com/terms/" target="_blank" className="text-cyan-400 hover:underline">{lang === "en" ? "Meta Platform Terms" : "Meta 平台条款"}</Link>
+                    <Link href="https://www.facebook.com/privacy/policy/" target="_blank" className="text-cyan-400 hover:underline">{lang === "en" ? "Meta Privacy Policy" : "Meta 隐私政策"}</Link>
+                    <Link href="https://www.facebook.com/settings?tab=applications" target="_blank" className="text-cyan-400 hover:underline">{lang === "en" ? "Facebook Apps and Websites settings" : "Facebook 应用和网站设置"}</Link>
+                  </div>
+                </div>
+              </div>
+            </ReflectiveCard>
+
+            {/* 10. YouTube API Services and Google User Data */}
+            <ReflectiveCard className="!rounded-xl">
+              <div className="flex items-start gap-4 p-6">
+                <div className="p-3 rounded-lg bg-red-500/10 text-red-400 shrink-0"><Youtube className="h-6 w-6" /></div>
+                <div>
+                  <h2 className="text-xl font-bold text-white mb-3">{lang === "en" ? "10. YouTube API Services and Google User Data" : "十、YouTube API 服务与 Google 用户数据"}</h2>
+                  <p className="leading-relaxed">{lang === "en" ? 'Star Gaze uses YouTube API Services to connect and identify a channel, display channel information, upload and schedule videos, manage publishing metadata and visibility, synchronize comments, translate comments when requested, and send replies initiated or confirmed by the user. We do not request or store your Google or YouTube password.' : 'Star Gaze 使用 YouTube API 服务绑定并识别频道、展示频道信息、上传和定时发布视频、管理发布元数据与可见性、同步评论、按请求翻译评论，以及发送由用户主动发起或确认的回复。我们不会请求或存储您的 Google 或 YouTube 密码。'}</p>
+
+                  <h3 className="text-lg font-medium text-white mt-4 mb-2">{lang === "en" ? "10.1 Data We Process" : "10.1 我们处理的数据"}</h3>
+                  <p className="leading-relaxed">{lang === "en" ? 'Depending on the features you use, we may process OAuth access and refresh tokens, granted scopes and expiration data; channel ID, title, handle, thumbnail and channel statistics; video files or source URLs, titles, descriptions, tags, categories, audience and synthetic-media settings, visibility, schedules, YouTube video IDs, watch URLs and publishing status; comments, replies, comment and thread identifiers, text, author display information supplied by YouTube, timestamps, counts and permalinks; and account linkage, synchronization, action, diagnostic and security records.' : '根据您使用的功能，我们可能处理 OAuth 访问令牌与刷新令牌、已授予权限和到期信息；频道 ID、名称、账号标识、缩略图及频道统计；视频文件或来源地址、标题、描述、标签、分类、受众与合成媒体设置、可见性、定时信息、YouTube 视频 ID、观看链接及发布状态；评论、回复、评论与评论串标识、正文、YouTube 提供的作者展示信息、时间、数量及永久链接；以及账号绑定、同步、操作、诊断和安全记录。'}</p>
+                  <p className="leading-relaxed mt-3">{lang === "en" ? 'We request youtube.force-ssl because YouTube provides no narrower scope for user-initiated comment replies. We use it only for the visible channel, publishing, comment-reading, and user-confirmed reply features described in this Policy.' : '我们请求 youtube.force-ssl，是因为 YouTube 没有支持用户主动回复评论的更窄权限。我们仅将其用于本政策所述的频道、发布、评论读取和用户确认回复等可见功能。'}</p>
+
+                  <h3 className="text-lg font-medium text-white mt-4 mb-2">{lang === "en" ? "10.2 Use and Sharing" : "10.2 使用与共享"}</h3>
+                  <p className="leading-relaxed">{lang === "en" ? 'We use YouTube and Google user data only to provide the features you select, maintain synchronization, prevent duplicate actions, secure and troubleshoot the service, provide support, and comply with law and platform requirements. We do not sell this data or use it for unrelated advertising, surveillance, or training general-purpose AI models.' : '我们仅将 YouTube 与 Google 用户数据用于提供您选择的功能、维护同步、防止重复操作、保护与排查服务、提供支持，以及遵守法律和平台要求。我们不会出售该数据，也不会将其用于无关广告、监控或训练通用人工智能模型。'}</p>
+                  <p className="leading-relaxed mt-3">{lang === "en" ? 'When you expressly request comment translation, the relevant text may be sent over an encrypted connection to our configured translation processor solely to return the requested translation. Infrastructure, database, security, monitoring, support and translation providers receive only the information reasonably necessary to provide their services and are subject to appropriate confidentiality and security obligations.' : '当您明确请求评论翻译时，相关文本可能通过加密连接发送至我们配置的翻译处理服务，其唯一目的为返回所请求的译文。基础设施、数据库、安全、监控、支持及翻译服务提供商仅接收履行其服务所合理需要的信息，并受到适当的保密和安全义务约束。'}</p>
+
+                  <h3 className="text-lg font-medium text-white mt-4 mb-2">{lang === "en" ? "10.3 Retention, Revocation, and Deletion" : "10.3 保留、撤权与删除"}</h3>
+                  <p className="leading-relaxed">{lang === "en" ? 'We retain OAuth tokens only while reasonably necessary to provide features authorized by an active user. Except where YouTube policies allow a different period, cached YouTube API data is refreshed or deleted within 30 calendar days. If we can no longer verify valid authorization, we stop access and delete or refresh affected YouTube API data no later than 30 calendar days unless applicable law requires retention.' : '我们仅在为持续获得授权的用户提供相关功能所合理需要的期间内保留 OAuth 令牌。除 YouTube 政策允许其他期限外，缓存的 YouTube API 数据将在 30 个自然日内刷新或删除。当我们无法继续确认授权有效时，将停止访问，并在不超过 30 个自然日内删除或刷新受影响的 YouTube API 数据，适用法律要求保留的除外。'}</p>
+                  <p className="leading-relaxed mt-3">{lang === "en" ? 'You may disconnect one YouTube account or use the “Delete all YouTube data” control in YouTube Account Management, or revoke access through Google Account third-party connections. Local account data is deleted transactionally. If Google is temporarily unavailable, the refresh token is retained in a service-role-only revocation queue solely to retry revocation and is deleted immediately after success or no later than seven (7) calendar days. You may also request deletion at toryxai@outlook.com. After reasonable identity verification, YouTube-related user data under our control will be deleted as soon as possible and no later than seven (7) calendar days, unless retention is legally required.' : '您可以在 YouTube 账号管理中解绑单个账号或使用“删除全部 YouTube 数据”功能，也可以通过 Google 账号第三方连接页面撤销访问。本地账号数据通过事务删除。如 Google 暂时不可用，刷新令牌将仅为重试撤权而暂存于仅服务角色可访问的队列中，并在撤权成功后立即删除或最迟不超过七（7）个自然日删除。您也可以通过 toryxai@outlook.com 请求删除数据。在合理核验身份后，我们将尽快删除由我们控制的 YouTube 相关用户数据，且最迟不超过七（7）个自然日，法律要求保留的除外。'}</p>
+                  <p className="leading-relaxed mt-3">{lang === "en" ? 'Deleting data stored by Star Gaze does not delete videos, comments, replies or other data stored by YouTube. YouTube-hosted data must be managed through YouTube or another authorized client that supports the relevant deletion action.' : '删除 Star Gaze 保存的数据不会删除 YouTube 平台保存的视频、评论、回复或其他数据。YouTube 平台数据必须通过 YouTube 或其他支持相应删除操作的授权客户端进行管理。'}</p>
+
+                  <h3 className="text-lg font-medium text-white mt-4 mb-2">{lang === "en" ? "10.4 Google Policies and Limited Use" : "10.4 Google 政策与有限使用"}</h3>
+                  <p className="leading-relaxed">{lang === "en" ? 'Star Gaze’s use and transfer of information received from Google APIs will adhere to the Google API Services User Data Policy, including the Limited Use requirements.' : 'Star Gaze 对从 Google API 获取的信息的使用及传输，将遵守 Google API 服务用户数据政策，包括其中的有限使用（Limited Use）要求。'}</p>
+                  <div className="flex flex-wrap gap-x-4 gap-y-2 mt-3 text-sm">
+                    <Link href="https://developers.google.com/terms/api-services-user-data-policy" target="_blank" className="text-cyan-400 hover:underline">{lang === "en" ? "Google API Services User Data Policy" : "Google API 服务用户数据政策"}</Link>
+                    <Link href="https://policies.google.com/privacy" target="_blank" className="text-cyan-400 hover:underline">{lang === "en" ? "Google Privacy Policy" : "Google 隐私政策"}</Link>
+                    <Link href="https://security.google.com/settings/security/permissions" target="_blank" className="text-cyan-400 hover:underline">{lang === "en" ? "Google Account third-party connections" : "Google 账号第三方连接"}</Link>
+                  </div>
+                </div>
+              </div>
+            </ReflectiveCard>
+
             {/* 11. Third-Party Services */}
             <ReflectiveCard className="!rounded-xl">
               <div className="flex items-start gap-4 p-6">
                 <div className="p-3 rounded-lg bg-emerald-500/10 text-emerald-400 shrink-0"><ExternalLink className="h-6 w-6" /></div>
                 <div>
-                  <h2 className="text-xl font-bold text-white mb-3">{lang === "en" ? "10. Third-Party Services" : "十、第三方服务"}</h2>
+                  <h2 className="text-xl font-bold text-white mb-3">{lang === "en" ? "11. Third-Party Services" : "十一、第三方服务"}</h2>
                   <p className="leading-relaxed">{lang === "en" ? 'When Star Gaze integrates third-party services, it will follow the data policies of relevant platforms.' : '当 Star Gaze 集成第三方服务时，将遵循相关平台的数据政策。'}</p>
                   <ul className="list-disc pl-6 space-y-2 mt-3 text-gray-300">
                     <li>{lang === "en" ? "TikTok: " : "TikTok："}<Link href="https://www.tiktok.com/legal/privacy-policy?lang=en" target="_blank" className="text-cyan-400 hover:underline">{lang === "en" ? "TikTok Privacy Policy" : "TikTok 隐私政策"}</Link></li>
@@ -273,17 +333,19 @@ export default function PrivacyPage() {
                     <li>{lang === "en" ? "TikTok Shop Developer: " : "TikTok Shop 开发者："}<Link href="https://partner.tiktokshop.com/docv2/page/6507ead7b99d5302be949ba9" target="_blank" className="text-cyan-400 hover:underline">{lang === "en" ? "TikTok Shop Developer Terms" : "TikTok Shop 开发者条款"}</Link></li>
                     <li>{lang === "en" ? "Google/YouTube: " : "Google/YouTube："}<Link href="https://www.google.com/policies/privacy" target="_blank" className="text-cyan-400 hover:underline">{lang === "en" ? "Google Privacy Policy" : "Google 隐私政策"}</Link></li>
                     <li>{lang === "en" ? "To revoke Google/YouTube authorization: " : "撤销 Google/YouTube 授权："}<Link href="https://security.google.com/settings/security/permissions" target="_blank" className="text-cyan-400 hover:underline">{lang === "en" ? "Google Security Settings" : "Google 安全设置"}</Link></li>
+                    <li>{lang === "en" ? "Meta/Facebook: " : "Meta/Facebook："}<Link href="https://www.facebook.com/privacy/policy/" target="_blank" className="text-cyan-400 hover:underline">{lang === "en" ? "Meta Privacy Policy" : "Meta 隐私政策"}</Link></li>
+                    <li>{lang === "en" ? "To revoke Facebook authorization: " : "撤销 Facebook 授权："}<Link href="https://www.facebook.com/settings?tab=applications" target="_blank" className="text-cyan-400 hover:underline">{lang === "en" ? "Facebook Apps and Websites settings" : "Facebook 应用和网站设置"}</Link></li>
                   </ul>
                 </div>
               </div>
             </ReflectiveCard>
 
-            {/* 11. Contact Us */}
+            {/* 12. Contact Us */}
             <ReflectiveCard className="!rounded-xl">
               <div className="flex items-start gap-4 p-6">
                 <div className="p-3 rounded-lg bg-teal-500/10 text-teal-400 shrink-0"><Phone className="h-6 w-6" /></div>
                 <div>
-                  <h2 className="text-xl font-bold text-white mb-3">{lang === "en" ? "11. Contact Us" : "十一、联系我们"}</h2>
+                  <h2 className="text-xl font-bold text-white mb-3">{lang === "en" ? "12. Contact Us" : "十二、联系我们"}</h2>
                   <p className="leading-relaxed">{lang === "en" ? 'If you have questions, suggestions, or complaints about personal information protection, data deletion requests, or any privacy-related matters, you can contact us:' : '如您对个人信息保护、数据删除请求或任何隐私相关事项有疑问、建议或投诉，可以联系我们：'}</p>
                   <div className="grid sm:grid-cols-2 gap-4 mt-4">
                     <div>

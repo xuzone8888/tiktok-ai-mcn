@@ -19,6 +19,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 
 import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
 import { useLang } from '@/contexts/LangContext'
@@ -62,6 +70,20 @@ export interface PlatformAccountsConfig {
   statsVideoLabelEn?: string
   icon?: ReactNode
   requiredCommentScopes?: string[]
+  disconnectConfirmation?: string
+  disconnectConfirmationEn?: string
+  requireLegalConsent?: boolean
+  legalConsentText?: string
+  legalConsentTextEn?: string
+  deleteAllDataEndpoint?: string
+  dataControlsTitle?: string
+  dataControlsTitleEn?: string
+  dataControlsDescription?: string
+  dataControlsDescriptionEn?: string
+  deleteAllDataLabel?: string
+  deleteAllDataLabelEn?: string
+  deleteAllDataConfirmation?: string
+  deleteAllDataConfirmationEn?: string
 }
 
 interface PlatformAccountsPageProps {
@@ -213,7 +235,7 @@ function StatusBadge({ account, isEnglish }: { account: PlatformAccount; isEngli
 
 export function PlatformAccountsPage({ config }: PlatformAccountsPageProps) {
   const router = useRouter()
-  const { lang } = useLang()
+  const { lang, isReady: languageReady } = useLang()
   const isEnglish = lang === 'en'
   const pageTitle = isEnglish
     ? config.accountsPageTitleEn || `${config.platformName} Account Management`
@@ -229,6 +251,9 @@ export function PlatformAccountsPage({ config }: PlatformAccountsPageProps) {
   const [accounts, setAccounts] = useState<PlatformAccount[]>([])
   const [loading, setLoading] = useState(true)
   const [binding, setBinding] = useState(false)
+  const [legalAccepted, setLegalAccepted] = useState(false)
+  const [legalDialogOpen, setLegalDialogOpen] = useState(false)
+  const [deletingAllData, setDeletingAllData] = useState(false)
   const [busyAccountId, setBusyAccountId] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [sortBy, setSortBy] = useState<SortOption>('followers_desc')
@@ -272,6 +297,8 @@ export function PlatformAccountsPage({ config }: PlatformAccountsPageProps) {
   }, [fetchAccounts])
 
   useEffect(() => {
+    if (!languageReady) return
+
     const params = new URLSearchParams(window.location.search)
     const success = params.get('success')
     const error = params.get('error')
@@ -301,7 +328,7 @@ export function PlatformAccountsPage({ config }: PlatformAccountsPageProps) {
       })
       window.history.replaceState({}, '', `${config.routeBase}/accounts`)
     }
-  }, [config.platformName, config.routeBase, isEnglish, toast])
+  }, [config.platformName, config.routeBase, isEnglish, languageReady, toast])
 
   const overview = useMemo(() => ({
     total: accounts.length,
@@ -322,7 +349,7 @@ export function PlatformAccountsPage({ config }: PlatformAccountsPageProps) {
     return sortAccounts(filtered, sortBy)
   }, [accounts, filterBy, search, sortBy])
 
-  const startBinding = async () => {
+  const beginBinding = async () => {
     if (bindingInFlightRef.current) return
 
     bindingInFlightRef.current = true
@@ -341,6 +368,22 @@ export function PlatformAccountsPage({ config }: PlatformAccountsPageProps) {
       })
       setBinding(false)
     }
+  }
+
+  const startBinding = () => {
+    if (bindingInFlightRef.current) return
+    if (config.requireLegalConsent) {
+      setLegalAccepted(false)
+      setLegalDialogOpen(true)
+      return
+    }
+    void beginBinding()
+  }
+
+  const confirmLegalConsentAndBind = () => {
+    if (!legalAccepted || bindingInFlightRef.current) return
+    setLegalDialogOpen(false)
+    void beginBinding()
   }
 
   const refreshAccount = async (accountId: string) => {
@@ -362,7 +405,12 @@ export function PlatformAccountsPage({ config }: PlatformAccountsPageProps) {
   }
 
   const removeAccount = async (accountId: string) => {
-    if (!window.confirm(t(isEnglish, `确定解绑这个 ${config.platformName} 账号吗？`, `Disconnect this ${config.platformName} account?`))) return
+    const confirmation = t(
+      isEnglish,
+      config.disconnectConfirmation || `确定解绑这个 ${config.platformName} 账号吗？`,
+      config.disconnectConfirmationEn || `Disconnect this ${config.platformName} account?`,
+    )
+    if (!window.confirm(confirmation)) return
     setBusyAccountId(accountId)
     try {
       const response = await fetch(`${config.apiBase}/accounts/${accountId}`, { method: 'DELETE' })
@@ -377,6 +425,35 @@ export function PlatformAccountsPage({ config }: PlatformAccountsPageProps) {
       })
     } finally {
       setBusyAccountId(null)
+    }
+  }
+
+  const deleteAllPlatformData = async () => {
+    if (!config.deleteAllDataEndpoint) return
+    const confirmation = t(
+      isEnglish,
+      config.deleteAllDataConfirmation || `确定删除所有本地 ${config.platformName} 数据吗？`,
+      config.deleteAllDataConfirmationEn || `Delete all locally stored ${config.platformName} data?`,
+    )
+    if (!window.confirm(confirmation)) return
+
+    setDeletingAllData(true)
+    try {
+      const response = await fetch(config.deleteAllDataEndpoint, { method: 'DELETE' })
+      if (!response.ok) throw new Error(await readApiError(response, t(isEnglish, '删除失败', 'Deletion failed')))
+      toast({
+        title: t(isEnglish, `${config.platformName} 数据已删除`, `${config.platformName} data deleted`),
+        description: t(isEnglish, '本地数据已删除；平台托管的视频和评论不会被删除。', 'Local data was deleted; platform-hosted videos and comments were not deleted.'),
+      })
+      await fetchAccounts()
+    } catch (error) {
+      toast({
+        title: t(isEnglish, '删除失败', 'Deletion failed'),
+        description: error instanceof Error ? localizeError(error.message, isEnglish, 'Please try again later') : t(isEnglish, '请稍后重试', 'Please try again later'),
+        variant: 'destructive',
+      })
+    } finally {
+      setDeletingAllData(false)
     }
   }
 
@@ -432,6 +509,75 @@ export function PlatformAccountsPage({ config }: PlatformAccountsPageProps) {
               </div>
             </div>
           </section>
+        )}
+
+        {config.requireLegalConsent && (
+          <Dialog
+            open={legalDialogOpen}
+            onOpenChange={(open) => {
+              if (binding) return
+              setLegalDialogOpen(open)
+              if (!open) setLegalAccepted(false)
+            }}
+          >
+            <DialogContent className="border-white/10 bg-zinc-950 text-white sm:max-w-lg">
+              <DialogHeader>
+                <DialogTitle>
+                  {t(isEnglish, `连接 ${config.platformName} 前请确认`, `Before connecting ${config.platformName}`)}
+                </DialogTitle>
+                <DialogDescription className="text-white/60">
+                  {t(
+                    isEnglish,
+                    `Star Gaze 将跳转至 ${config.platformName} 完成账号授权。继续前，请阅读并确认以下政策。`,
+                    `Star Gaze will redirect you to ${config.platformName} to authorize your account. Review and confirm the policies below before continuing.`,
+                  )}
+                </DialogDescription>
+              </DialogHeader>
+
+              <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-white/10 bg-white/[0.04] p-4 text-sm text-white/75">
+                <input
+                  type="checkbox"
+                  checked={legalAccepted}
+                  onChange={(event) => setLegalAccepted(event.target.checked)}
+                  className="mt-1 h-4 w-4 shrink-0"
+                />
+                <span>
+                  {t(
+                    isEnglish,
+                    config.legalConsentText || '我已阅读并同意当前隐私政策和服务条款。',
+                    config.legalConsentTextEn || 'I have read and accept the current Privacy Policy and Terms of Service.',
+                  )}{' '}
+                  <a href="/privacy" target="_blank" rel="noreferrer" className="text-cyan-300 underline">
+                    {t(isEnglish, '隐私政策', 'Privacy Policy')}
+                  </a>
+                  {' · '}
+                  <a href="/terms" target="_blank" rel="noreferrer" className="text-cyan-300 underline">
+                    {t(isEnglish, '服务条款', 'Terms of Service')}
+                  </a>
+                </span>
+              </label>
+
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="titanium-outline"
+                  disabled={binding}
+                  onClick={() => setLegalDialogOpen(false)}
+                >
+                  {t(isEnglish, '取消', 'Cancel')}
+                </Button>
+                <Button
+                  type="button"
+                  variant="mermaid"
+                  disabled={!legalAccepted || binding}
+                  onClick={confirmLegalConsentAndBind}
+                >
+                  {binding ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />}
+                  {t(isEnglish, '同意并继续', 'Agree and continue')}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         )}
 
         {accountsMissingCommentScopes.length > 0 && (
@@ -566,6 +712,37 @@ export function PlatformAccountsPage({ config }: PlatformAccountsPageProps) {
                 {t(isEnglish, '没有匹配的账号', 'No matching accounts')}
               </div>
             )}
+          </section>
+        )}
+
+        {config.deleteAllDataEndpoint && (
+          <section className="rounded-xl border border-rose-400/20 bg-rose-400/[0.04] p-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="text-sm font-semibold text-white">
+                  {t(
+                    isEnglish,
+                    config.dataControlsTitle || `${config.platformName} 数据控制`,
+                    config.dataControlsTitleEn || `${config.platformName} data controls`,
+                  )}
+                </h2>
+                <p className="mt-1 text-xs text-white/50">
+                  {t(
+                    isEnglish,
+                    config.dataControlsDescription || '删除全部本地 YouTube 账号、令牌、发布记录、评论缓存和操作日志。不会删除 YouTube 上的视频或评论。',
+                    config.dataControlsDescriptionEn || 'Delete all local YouTube accounts, tokens, publishing history, cached comments, and action logs. This does not delete videos or comments hosted on YouTube.',
+                  )}
+                </p>
+              </div>
+              <Button variant="destructive" onClick={deleteAllPlatformData} disabled={deletingAllData}>
+                {deletingAllData ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                {t(
+                  isEnglish,
+                  config.deleteAllDataLabel || '删除全部 YouTube 数据',
+                  config.deleteAllDataLabelEn || 'Delete all YouTube data',
+                )}
+              </Button>
+            </div>
           </section>
         )}
       </div>

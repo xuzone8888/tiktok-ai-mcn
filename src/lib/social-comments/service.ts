@@ -2,6 +2,9 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { mergeActionLogMetadata } from '@/lib/social-comments/action-log'
 import {
   calculateFacebookTokenExpiration,
+  getGrantedFacebookScopes,
+  getFacebookGrantedPermissions,
+  getFacebookUserInfo,
   refreshFacebookPageAccessToken,
 } from '@/lib/facebook/oauth'
 import {
@@ -10,6 +13,7 @@ import {
 } from '@/lib/instagram/oauth'
 import {
   calculateYouTubeTokenExpiration,
+  isYouTubeAuthorizationRevokedError,
   refreshYouTubeAccessToken,
   scopesToArray as youtubeScopesToArray,
 } from '@/lib/youtube/oauth'
@@ -268,8 +272,23 @@ async function getYouTubeToken(admin: any, userId: string, accountId: string): P
   let accessToken = tokenRecord.access_token
   let scopes = normalizeScopes(account.scopes)
   if (shouldRefreshToken(tokenRecord.access_token_expires_at || account.access_token_expires_at)) {
-    const refreshed = await refreshYouTubeAccessToken(tokenRecord.refresh_token)
+    let refreshed
+    try {
+      refreshed = await refreshYouTubeAccessToken(tokenRecord.refresh_token)
+    } catch (refreshError) {
+      if (isYouTubeAuthorizationRevokedError(refreshError)) {
+        const { error: invalidationError } = await admin.rpc('mark_youtube_authorization_invalid', {
+          p_user_id: userId,
+          p_account_id: accountId,
+        })
+        if (invalidationError) {
+          throw new Error(`Unable to record invalid YouTube authorization: ${invalidationError.message}`)
+        }
+      }
+      throw refreshError
+    }
     const expiresAt = calculateYouTubeTokenExpiration(refreshed.expires_in).toISOString()
+    const verifiedAt = new Date().toISOString()
     accessToken = refreshed.access_token
     scopes = refreshed.scope ? youtubeScopesToArray(refreshed.scope) : scopes
     await Promise.all([
@@ -278,7 +297,7 @@ async function getYouTubeToken(admin: any, userId: string, accountId: string): P
         .update({
           access_token: accessToken,
           access_token_expires_at: expiresAt,
-          updated_at: new Date().toISOString(),
+          updated_at: verifiedAt,
         })
         .eq('account_id', accountId),
       admin
@@ -287,7 +306,9 @@ async function getYouTubeToken(admin: any, userId: string, accountId: string): P
           access_token_expires_at: expiresAt,
           scopes,
           status: 'active',
-          updated_at: new Date().toISOString(),
+          last_authorization_verified_at: verifiedAt,
+          authorization_invalidated_at: null,
+          updated_at: verifiedAt,
         })
         .eq('id', accountId),
     ])
@@ -329,9 +350,14 @@ async function getFacebookToken(admin: any, userId: string, accountId: string): 
   }
 
   let accessToken = tokenRecord.access_token
-  const scopes = normalizeScopes(account.scopes)
+  let scopes = normalizeScopes(account.scopes)
   if (shouldRefreshToken(tokenRecord.access_token_expires_at || account.access_token_expires_at)) {
     const refreshed = await refreshFacebookPageAccessToken(tokenRecord.refresh_token, account.channel_id)
+    const [facebookUser, permissions] = await Promise.all([
+      getFacebookUserInfo(refreshed.user_access_token),
+      getFacebookGrantedPermissions(refreshed.user_access_token),
+    ])
+    scopes = getGrantedFacebookScopes(permissions)
     const expiresAt = calculateFacebookTokenExpiration(refreshed.expires_in)?.toISOString() || null
     accessToken = refreshed.access_token
     await Promise.all([
@@ -353,6 +379,8 @@ async function getFacebookToken(admin: any, userId: string, accountId: string): 
           subscriber_count: refreshed.page.followerCount,
           view_count: refreshed.page.fanCount,
           access_token_expires_at: expiresAt,
+          authorized_by_facebook_user_id: facebookUser.id,
+          scopes,
           status: 'active',
           updated_at: new Date().toISOString(),
         })
@@ -1260,10 +1288,14 @@ export async function syncSocialComments(userId: string, target: CommentSyncTarg
       threadCompleteness = result.metadata.thread_completeness
       syncMetadata = {
         ...syncMetadata,
-        pagination_complete: result.metadata.top_level_pagination_complete && result.metadata.replies_fetched,
+        pagination_complete: result.metadata.top_level_pagination_complete
+          && result.metadata.replies_fetched
+          && !result.metadata.provider_visibility_mismatch,
         top_level_pagination_complete: result.metadata.top_level_pagination_complete,
         replies_fetched: result.metadata.replies_fetched,
         provider_raw_count: result.metadata.provider_raw_count,
+        provider_reported_comment_count: result.metadata.provider_reported_comment_count,
+        provider_visibility_mismatch: result.metadata.provider_visibility_mismatch,
         mapped_count: result.metadata.mapped_count,
         top_level_limit: INSTAGRAM_COMMENT_SYNC_LIMITS.topLevel,
         reply_limit_per_comment: result.metadata.replies_fetched
@@ -1303,6 +1335,14 @@ export async function syncSocialComments(userId: string, target: CommentSyncTarg
       thread_completeness: threadCompleteness,
       replies_fetched: repliesFetched,
       truncated,
+      provider_reported_comment_count: target.platform === 'instagram'
+        ? typeof syncMetadata.provider_reported_comment_count === 'number'
+          ? syncMetadata.provider_reported_comment_count
+          : null
+        : undefined,
+      provider_visibility_mismatch: target.platform === 'instagram'
+        ? syncMetadata.provider_visibility_mismatch === true
+        : undefined,
     }
 
     const commentsToSave = target.platform === 'instagram'
@@ -1328,6 +1368,14 @@ export async function syncSocialComments(userId: string, target: CommentSyncTarg
       thread_completeness: threadCompleteness,
       replies_fetched: repliesFetched,
       truncated,
+      provider_reported_comment_count: target.platform === 'instagram'
+        ? typeof syncMetadata.provider_reported_comment_count === 'number'
+          ? syncMetadata.provider_reported_comment_count
+          : null
+        : undefined,
+      provider_visibility_mismatch: target.platform === 'instagram'
+        ? syncMetadata.provider_visibility_mismatch === true
+        : undefined,
     }
   } catch (error) {
     const mapped = mapApiError(error, 'Comment sync failed.')

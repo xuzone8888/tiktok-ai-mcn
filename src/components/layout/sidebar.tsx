@@ -23,6 +23,7 @@ import {
   Share2,
   Instagram,
   Loader2,
+  Network,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -36,6 +37,9 @@ import { useToast } from "@/hooks/use-toast";
 import { useLang } from "@/contexts/LangContext";
 
 const CURRENT_YEAR = new Date().getFullYear();
+const SHOW_SUPER_CANVAS =
+  process.env.NEXT_PUBLIC_CANVAS_ENABLED === "true" ||
+  process.env.NODE_ENV !== "production";
 
 // ============================================================================
 // Types
@@ -81,6 +85,18 @@ function getNavGroups(
           description: t ? "Unified creation workspace" : "统一创作工作台",
           beta: true,
         },
+        ...(SHOW_SUPER_CANVAS
+          ? [
+              {
+                title: t ? "Super Canvas" : "超级画布",
+                href: "/canvas",
+                icon: Network,
+                description: t
+                  ? "Infinite canvas workspace"
+                  : "无限画布创作空间",
+              },
+            ]
+          : []),
         {
           title: t ? "Dashboard" : "数据总览",
           href: "/dashboard",

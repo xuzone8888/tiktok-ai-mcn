@@ -42,15 +42,35 @@ function jsonResponse(value, init = {}) {
   })
 }
 
-function loadPlatformApi(fetch, authMode = 'instagram') {
+function loadPlatformApi(fetch, authMode = 'instagram', reportedCommentCount = 0) {
   const graphAuth = loadTypeScriptModule('src/lib/instagram/graph-auth.ts')
+  class BrokerTransportError extends Error {}
+  const providerFetch = async (input, init) => {
+    const url = new URL(String(input))
+    if (!url.pathname.endsWith('/comments') && url.searchParams.get('fields') === 'comments_count') {
+      return jsonResponse({ comments_count: reportedCommentCount })
+    }
+    if (
+      authMode === 'instagram'
+      && url.pathname.endsWith('/replies')
+      && (!init?.method || init.method === 'GET')
+    ) {
+      return jsonResponse({ error: { code: 200, message: 'Reply reads unavailable in this fixture' } }, { status: 403 })
+    }
+    return fetch(input, init)
+  }
   return loadTypeScriptModule(
     'src/lib/social-comments/platform-api.ts',
-    { fetch },
+    { fetch: providerFetch },
     {
       '@/lib/facebook/oauth': { getFacebookAppSecretProof: () => 'proof' },
       '@/lib/instagram/graph-auth': graphAuth,
       '@/lib/instagram/oauth': { getInstagramAuthMode: () => authMode },
+      '@/lib/oauth-broker/client': {
+        BrokerTransportError,
+        callBroker: async () => { throw new Error('broker must remain disabled in provider unit tests') },
+        isBrokerEnabled: () => false,
+      },
     }
   )
 }
@@ -211,6 +231,17 @@ test('Instagram Native maps the official id/from/text shape and reports raw vers
   assert.equal(result.comments[0].remote_created_at, null)
   assert.equal(result.metadata.provider_raw_count, 2)
   assert.equal(result.metadata.mapped_count, 1)
+})
+
+test('Instagram reports a visibility mismatch when Meta counts comments but returns no rows', async () => {
+  const api = loadPlatformApi(async () => jsonResponse({ data: [] }), 'instagram', 1)
+
+  const result = await api.listInstagramComments(token, 'media-1')
+  assert.equal(result.comments.length, 0)
+  assert.equal(result.metadata.provider_reported_comment_count, 1)
+  assert.equal(result.metadata.provider_raw_count, 0)
+  assert.equal(result.metadata.provider_visibility_mismatch, true)
+  assert.equal(result.metadata.thread_completeness, 'incomplete')
 })
 
 test('Instagram Facebook mode preserves expanded fields and embedded reply behavior', async () => {
@@ -730,6 +761,23 @@ test('Instagram sync omits account-authored comments from inbound persistence', 
   assert.match(service, /mapped_count: result\.metadata\.mapped_count/)
   assert.match(service, /top_level_pagination_complete: result\.metadata\.top_level_pagination_complete/)
   assert.match(service, /replies_fetched: result\.metadata\.replies_fetched/)
+})
+
+test('Instagram single-target sync returns provider visibility metadata to the API client', () => {
+  const service = fs.readFileSync(path.join(process.cwd(), 'src/lib/social-comments/service.ts'), 'utf8')
+  const route = fs.readFileSync(path.join(process.cwd(), 'src/app/api/social-comments/sync/route.ts'), 'utf8')
+  const client = fs.readFileSync(path.join(process.cwd(), 'src/components/social-comments/SocialCommentsClient.tsx'), 'utf8')
+  const savedResultStart = service.indexOf('const saved = await upsertComments')
+  const savedResultEnd = service.indexOf('} catch (error)', savedResultStart)
+  assert.notEqual(savedResultStart, -1)
+  assert.notEqual(savedResultEnd, -1)
+  const savedResult = service.slice(savedResultStart, savedResultEnd)
+
+  assert.match(savedResult, /provider_reported_comment_count:/)
+  assert.match(savedResult, /provider_visibility_mismatch:/)
+  assert.match(route, /NextResponse\.json\(\{ \.\.\.result, mode: 'single' \}\)/)
+  assert.match(client, /data\.provider_reported_comment_count/)
+  assert.match(client, /data\.provider_visibility_mismatch === true/)
 })
 
 test('action log completion merges initial and terminal metadata without secrets', () => {

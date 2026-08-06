@@ -1,5 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/admin'
-import { refreshYouTubeAccessToken } from '@/lib/youtube/oauth'
+import { isYouTubeAuthorizationRevokedError, refreshYouTubeAccessToken } from '@/lib/youtube/oauth'
 import { uploadYouTubeVideoFromUrl } from '@/lib/youtube/publish'
 
 const MAX_ITEMS_PER_RUN = 20
@@ -30,6 +30,7 @@ interface YouTubePublishItem {
 
 interface YouTubeAccountToken {
   account_id: string
+  user_id: string
   access_token: string
   refresh_token: string
   access_token_expires_at: string | null
@@ -252,7 +253,7 @@ async function updateTasksToProcessing(supabase: any, taskIds: string[]) {
 async function getAccounts(supabase: any, accountIds: string[]): Promise<Map<string, YouTubeAccountToken>> {
   const { data: activeAccounts, error: accountsError } = await supabase
     .from('youtube_accounts')
-    .select('id')
+    .select('id, user_id')
     .in('id', accountIds)
     .eq('status', 'active')
 
@@ -261,6 +262,9 @@ async function getAccounts(supabase: any, accountIds: string[]): Promise<Map<str
   }
 
   const activeAccountIds = (activeAccounts || []).map((account: { id: string }) => account.id)
+  const accountOwners = new Map(
+    (activeAccounts || []).map((account: { id: string; user_id: string }) => [account.id, account.user_id])
+  )
   if (activeAccountIds.length === 0) {
     return new Map()
   }
@@ -276,7 +280,8 @@ async function getAccounts(supabase: any, accountIds: string[]): Promise<Map<str
 
   const accounts = new Map<string, YouTubeAccountToken>()
   for (const token of tokens || []) {
-    accounts.set(token.account_id, token)
+    const userId = accountOwners.get(token.account_id)
+    if (userId) accounts.set(token.account_id, { ...token, user_id: userId })
   }
   return accounts
 }
@@ -286,7 +291,21 @@ async function getValidAccessToken(supabase: any, account: YouTubeAccountToken):
     return account.access_token
   }
 
-  const refreshed = await refreshYouTubeAccessToken(account.refresh_token)
+  let refreshed
+  try {
+    refreshed = await refreshYouTubeAccessToken(account.refresh_token)
+  } catch (refreshError) {
+    if (isYouTubeAuthorizationRevokedError(refreshError)) {
+      const { error: invalidationError } = await supabase.rpc('mark_youtube_authorization_invalid', {
+        p_user_id: account.user_id,
+        p_account_id: account.account_id,
+      })
+      if (invalidationError) {
+        throw new Error(`Unable to record invalid YouTube authorization: ${invalidationError.message}`)
+      }
+    }
+    throw refreshError
+  }
   const expiresAt = new Date(Date.now() + refreshed.expires_in * 1000).toISOString()
   const scopes = refreshed.scope ? refreshed.scope.split(/\s+/).filter(Boolean) : undefined
   const now = new Date().toISOString()
@@ -310,6 +329,8 @@ async function getValidAccessToken(supabase: any, account: YouTubeAccountToken):
       access_token_expires_at: expiresAt,
       ...(scopes ? { scopes } : {}),
       status: 'active',
+      last_authorization_verified_at: now,
+      authorization_invalidated_at: null,
       updated_at: now,
     })
     .eq('id', account.account_id)

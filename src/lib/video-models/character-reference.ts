@@ -45,13 +45,12 @@ export function getCharacterReferenceMaxImages(modelType: string): number {
   return CHARACTER_REFERENCE_MATRIX[modelId]?.maxImages || getVideoModelImageLimit(modelId);
 }
 
-export function mergeCharacterReferenceImages(
+/** Collect every valid, unique reference so the server contract can reject overflow. */
+export function collectCharacterReferenceImagesStrict(
   modelType: string,
   characterRefUrl: string | null | undefined,
   uploadedImageUrls: Array<string | null | undefined>
 ): string[] {
-  const modelId = resolveModelId(modelType);
-  const limit = modelId ? getVideoModelImageLimit(modelId) : 1;
   const candidates = [
     ...(supportsCharacterReferenceImage(modelType) ? [characterRefUrl] : []),
     ...uploadedImageUrls,
@@ -65,8 +64,22 @@ export function mergeCharacterReferenceImages(
     if (!url || seen.has(url)) continue;
     seen.add(url);
     normalized.push(url);
-    if (normalized.length >= limit) break;
   }
 
   return normalized;
+}
+
+/** Legacy client merge keeps its historical model-specific truncation behavior. */
+export function mergeCharacterReferenceImages(
+  modelType: string,
+  characterRefUrl: string | null | undefined,
+  uploadedImageUrls: Array<string | null | undefined>
+): string[] {
+  const modelId = resolveModelId(modelType);
+  const maxImages = modelId ? getVideoModelImageLimit(modelId) : 1;
+  return collectCharacterReferenceImagesStrict(
+    modelType,
+    characterRefUrl,
+    uploadedImageUrls
+  ).slice(0, maxImages);
 }

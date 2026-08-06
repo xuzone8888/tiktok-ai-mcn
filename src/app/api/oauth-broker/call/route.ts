@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 
 import * as facebookOAuth from '@/lib/facebook/oauth'
 import * as instagramOAuth from '@/lib/instagram/oauth'
+import * as socialComments from '@/lib/social-comments/platform-api'
 import * as youtubeOAuth from '@/lib/youtube/oauth'
 
 export const dynamic = 'force-dynamic'
@@ -26,17 +27,24 @@ const OPS: Record<BrokerPlatform, Record<string, { fn: BrokerFn; params: string[
     exchangeFacebookCodeForToken: { fn: facebookOAuth.exchangeFacebookCodeForToken as BrokerFn, params: ['code', 'codeVerifier'] },
     exchangeForLongLivedUserToken: { fn: facebookOAuth.exchangeForLongLivedUserToken as BrokerFn, params: ['accessToken'] },
     getMyFacebookPages: { fn: facebookOAuth.getMyFacebookPages as BrokerFn, params: ['userAccessToken'] },
+    getFacebookUserInfo: { fn: facebookOAuth.getFacebookUserInfo as BrokerFn, params: ['userAccessToken'] },
     getFacebookPageInfo: { fn: facebookOAuth.getFacebookPageInfo as BrokerFn, params: ['pageId', 'pageAccessToken'] },
+    subscribeFacebookPageToWebhooks: { fn: facebookOAuth.subscribeFacebookPageToWebhooks as BrokerFn, params: ['pageId', 'pageAccessToken'] },
+    unsubscribeFacebookPageFromWebhooks: { fn: facebookOAuth.unsubscribeFacebookPageFromWebhooks as BrokerFn, params: ['pageId', 'pageAccessToken'] },
     refreshFacebookPageAccessToken: { fn: facebookOAuth.refreshFacebookPageAccessToken as BrokerFn, params: ['userAccessToken', 'pageId'] },
     revokeFacebookToken: { fn: facebookOAuth.revokeFacebookToken as BrokerFn, params: ['token'] },
     getFacebookGrantedPermissions: { fn: facebookOAuth.getFacebookGrantedPermissions as BrokerFn, params: ['userAccessToken'] },
     debugFacebookUserToken: { fn: facebookOAuth.debugFacebookUserToken as BrokerFn, params: ['userAccessToken'] },
+    listFacebookComments: { fn: socialComments.listFacebookComments as BrokerFn, params: ['token', 'externalContentId'] },
+    replyToFacebookComment: { fn: socialComments.replyToFacebookComment as BrokerFn, params: ['token', 'parentExternalCommentId', 'externalContentId', 'message'] },
   },
   youtube: {
     exchangeYouTubeCodeForToken: { fn: youtubeOAuth.exchangeYouTubeCodeForToken as BrokerFn, params: ['code', 'codeVerifier'] },
     refreshYouTubeAccessToken: { fn: youtubeOAuth.refreshYouTubeAccessToken as BrokerFn, params: ['refreshToken'] },
     revokeYouTubeToken: { fn: youtubeOAuth.revokeYouTubeToken as BrokerFn, params: ['token'] },
     getMyYouTubeChannel: { fn: youtubeOAuth.getMyYouTubeChannel as BrokerFn, params: ['accessToken'] },
+    listYouTubeComments: { fn: socialComments.listYouTubeComments as BrokerFn, params: ['token', 'externalContentId'] },
+    replyToYouTubeComment: { fn: socialComments.replyToYouTubeComment as BrokerFn, params: ['token', 'parentExternalCommentId', 'message'] },
   },
   instagram: {
     exchangeInstagramCodeForToken: { fn: instagramOAuth.exchangeInstagramCodeForToken as BrokerFn, params: ['code', 'codeVerifier'] },
@@ -46,6 +54,8 @@ const OPS: Record<BrokerPlatform, Record<string, { fn: BrokerFn; params: string[
     revokeInstagramToken: { fn: instagramOAuth.revokeInstagramToken as BrokerFn, params: ['token'] },
     getInstagramGrantedPermissions: { fn: instagramOAuth.getInstagramGrantedPermissions as BrokerFn, params: ['userAccessToken'] },
     debugInstagramUserToken: { fn: instagramOAuth.debugInstagramUserToken as BrokerFn, params: ['userAccessToken'] },
+    listInstagramComments: { fn: socialComments.listInstagramComments as BrokerFn, params: ['token', 'externalContentId'] },
+    replyToInstagramComment: { fn: socialComments.replyToInstagramComment as BrokerFn, params: ['token', 'parentExternalCommentId', 'externalContentId', 'message'] },
   },
 }
 
@@ -81,14 +91,31 @@ export async function POST(request: NextRequest) {
     const result = await entry.fn(...callArgs)
     return NextResponse.json({ ok: true, result })
   } catch (err) {
+    const providerError = err && typeof err === 'object'
+      ? err as {
+          code?: unknown
+          httpStatus?: unknown
+          retryable?: unknown
+          retryAfter?: unknown
+        }
+      : null
     const httpStatus =
-      err && typeof err === 'object' && typeof (err as { httpStatus?: unknown }).httpStatus === 'number'
-        ? (err as { httpStatus: number }).httpStatus
+      typeof providerError?.httpStatus === 'number'
+        ? providerError.httpStatus
         : null
     // 只记 platform/op/httpStatus，绝不记 token/code/secret/body/message。
     console.error(`[oauth-broker] ${String(platform)}:${String(op)} failed httpStatus=${httpStatus}`)
     return NextResponse.json(
-      { ok: false, error: err instanceof Error ? err.message : 'oauth broker call failed', httpStatus },
+      {
+        ok: false,
+        error: err instanceof Error ? err.message : 'oauth broker call failed',
+        httpStatus,
+        code: typeof providerError?.code === 'string' ? providerError.code : null,
+        retryable: providerError?.retryable === true,
+        retryAfter: typeof providerError?.retryAfter === 'string' || providerError?.retryAfter === null
+          ? providerError.retryAfter
+          : null,
+      },
       { status: 200 },
     )
   }

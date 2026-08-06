@@ -1,0 +1,397 @@
+{
+  "__README__": [
+    "FROZEN reviewed inventory of every mutation callsite the deterministic scanner",
+    "(callsites.mjs) discovers. It is the BASELINE a change is diffed against, not a claim that",
+    "these callsites are safe -- every one of them is an unconverted Batch 3 blocker unless its",
+    "disposition says otherwise.",
+    "",
+    "The guard fails on ADDITIONS (an unreviewed callsite appeared) and on REMOVALS (an entry is no",
+    "longer found, so it was converted, renamed or moved). Both directions force a human decision.",
+    "",
+    "SCOPE: this correction window INVENTORIES only. Editing these callsites is Batch 3 and is",
+    "explicitly out of scope here.",
+    "",
+    "HOW THIS BASELINE WAS PRODUCED",
+    "  Not hand-written. Emitted by scanRepository() over the authoritative P1 worktree at",
+    "  claude/canvas-p1-generation@8bb58dba12d38f3984ba8d07935325bd1c09ea4d, including the current",
+    "  reviewed dirty P1 candidate. The Phase 2 rescan found the original 39 paths/classes,",
+    "  then each entry retained its reviewed disposition. Phase 4 Batch 1 deliberately retired",
+    "  the two unsafe deduct/refund routes; Batch 2 removed profile initialization from browser",
+    "  and SMS signup. Phase 4 Batch 3A then retired the temporary admin absolute-balance",
+    "  setter and the deprecated Sora POST that charged before returning 410. The active mutation",
+    "  baseline is now 27 scanner-visible paths plus four exact-hash mutation tombstones, two",
+    "  trigger-converted signup paths, twenty reviewed shared-boundary paths and one audit-preserving",
+    "  account-deactivation path. Two reviewed Canvas generation-boundary paths were added for",
+    "  the production generation service and reconciler. Thirteen legacy lifecycle-only paths remain; the original sixteen",
+    "  included three hidden video-credit consumers that were reclassified and converted in Group C.",
+    "  The previous fourteen-path list was",
+    "  hand-authored, and it was wrong in BOTH directions -- it missed at least nine active mutation paths that Codex",
+    "  found independently (all nine are present below), and it carried two READ-ONLY routes",
+    "  (src/app/api/admin/users/[id]/route.ts and .../[id]/credits/route.ts, both `.select(` only)",
+    "  as if they were unconverted mutations."
+  ],
+
+  "__dispositionLegend__": {
+    "batch3_convert_to_shared_boundary": "Mutates profiles.credits and/or the ledger outside canvas_p1_apply_credit_delta_v1. Batch 3 must route it through the shared atomic delta-plus-ledger boundary with a stable server-derived operation anchor, without changing its pricing or provider behaviour.",
+    "batch3_convert_to_deactivation": "Performs a destructive hard delete that the anchored-ledger trigger will now REJECT. Batch 3 must convert it to the reviewed audit-preserving deactivation/anonymization path (canvas_p1_deactivate_account_v1) before release.",
+    "batch3_make_unreachable": "Unauthenticated or otherwise unsafe mutation surface the frozen contract requires to be removed or made unreachable before P1 release.",
+    "retired_unreachable": "The unsafe mutation implementation is absent. The retained route is an exact-hash compatibility tombstone that unconditionally returns HTTP 410 and has no request parsing, admin client, database or provider capability.",
+    "batch3_convert_profile_init": "Creates a profile and/or issues signup credits outside the verified auth-event initializer. Must be converted so the only initialization path is canvas_p1_initialize_account_v1, which now backs the live handle_new_user() trigger.",
+    "converted_profile_init_to_auth_trigger": "The signup path creates only auth.users and relies on the reviewed on_auth_user_created -> handle_new_user -> canvas_p1_initialize_account_v1 chain for profile creation and the anchored signup grant.",
+    "converted_to_shared_boundary": "The path retains its non-credit lifecycle behavior but every profile credit delta and ledger row is delegated to the reviewed atomic task boundary.",
+    "converted_to_deactivation": "The hard-delete branch is absent. The legacy delete action delegates to canvas_p1_deactivate_account_v1 so profile PII is anonymized in place while ledger rows, snapshots, foreign keys and operation anchors remain intact.",
+    "canvas_p1_atomic_generation_boundary": "Canvas generation lifecycle/projection updates only. Credit consume/refund, action idempotency, provider-task binding, completion, unknown-state handling and reconciliation ownership are delegated to the reviewed Canvas P1 atomic RPC boundary.",
+    "legacy_generation_lifecycle_only": "Touches only legacy generations rows (action_id IS NULL) and no credit surface. Not a credit-boundary blocker. Still reviewed and pinned so a credit mutation cannot be added here unnoticed."
+  },
+
+  "__knownScannerLimitations__": [
+    "Conservative LEXICAL scan, not AST/type-aware. It matches a `.from('<table>')` reference and a",
+    "mutating method within a 600-character window.",
+    "",
+    "It CANNOT see: a dynamically built table name (`from(tbl)`), a wrapper/helper that hides the",
+    "client, raw fetch against PostgREST, or SQL inside an .rpc() body. It cannot prove a matched",
+    "site executes, nor that an unmatched file is safe.",
+    "",
+    "It is a CHANGE DETECTOR over a reviewed baseline. It must never be cited as proof that the",
+    "conversion surface is complete; that proof is Batch 3's exhaustive audit plus the runtime",
+    "boundary."
+  ],
+
+  "baseline": {
+    "branch": "claude/canvas-p1-generation",
+    "head": "8bb58dba12d38f3984ba8d07935325bd1c09ea4d",
+    "reviewedAt": "2026-07-27",
+    "worktreeState": "current dirty P1 candidate; Phase 4 retired four unsafe mutation methods, converted two signup initializers, moved twenty paths to the atomic task boundary and replaced hard account deletion with audit-preserving deactivation",
+    "originalReviewedCallsites": 39,
+    "discoveredCallsites": 29,
+    "retiredMutationRoutes": 4,
+    "convertedProfileInitializers": 2,
+    "convertedSharedCreditPaths": 20,
+    "remainingLegacyLifecycleOnly": 13,
+    "reclassifiedLegacyCreditConsumers": 3,
+    "canvasAtomicGenerationBoundaryPaths": 2
+  },
+
+  "retiredMutationRoutes": [
+    {
+      "path": "src/app/api/user/credits/deduct/route.ts",
+      "methods": ["POST"],
+      "status": 410,
+      "sha256": "81d0f3c2fb8e74dfa4a6af5d0862793b245e5aefbd86bc1104b2d48cb5f0418a",
+      "disposition": "retired_unreachable",
+      "note": "Former unauthenticated arbitrary-user debit surface. Exact tombstone has no mutation capability."
+    },
+    {
+      "path": "src/app/api/user/credits/refund/route.ts",
+      "methods": ["POST"],
+      "status": 410,
+      "sha256": "9fc4298104d8ebe3fa1f6cb85e1d1df68bfde1c9ca59c78462556f639e9d667a",
+      "disposition": "retired_unreachable",
+      "note": "Former unauthenticated arbitrary-user refund surface. Exact tombstone has no mutation capability."
+    },
+    {
+      "path": "src/app/api/admin/set-credits/route.ts",
+      "methods": ["POST"],
+      "status": 410,
+      "sha256": "d301ec0923bd5ae692151c14d7a1ea4a6142bf56665fdc96d17714c7c3e4b48b",
+      "disposition": "retired_unreachable",
+      "note": "Former temporary absolute-balance debug surface. Exact tombstone has no authentication, request parsing, admin client or mutation capability."
+    },
+    {
+      "path": "src/app/api/sora/generate/route.ts",
+      "methods": ["POST"],
+      "readOnlyHandlers": ["GET"],
+      "status": 410,
+      "sha256": "896b839be4aadb10f2d20a3d75b020e1a17e1d971147734b3406bd45c7647be7",
+      "disposition": "retired_unreachable",
+      "note": "Deprecated POST previously debited before always returning 410. POST is now an unconditional tombstone; the exact-hash GET retains read-only pricing and authenticated balance display."
+    }
+  ],
+
+  "convertedProfileInitializers": [
+    {
+      "path": "src/app/api/sms/verify/route.ts",
+      "authCreation": "supabase.auth.admin.createUser",
+      "disposition": "converted_profile_init_to_auth_trigger",
+      "note": "Admin createUser inserts auth.users; the reviewed database trigger synchronously creates the profile and anchored 100-credit grant. SMS display name is carried in user_metadata.name."
+    },
+    {
+      "path": "src/app/auth/register/page.tsx",
+      "authCreation": "supabase.auth.signUp",
+      "disposition": "converted_profile_init_to_auth_trigger",
+      "note": "Browser signup creates only the auth identity. The browser has no profile insert, credit literal, initializer RPC or service-role capability."
+    }
+  ],
+
+  "convertedSharedCreditPaths": [
+    {
+      "path": "src/lib/video-models/credits.ts",
+      "role": "shared_video_credit_wrapper",
+      "disposition": "converted_to_shared_boundary"
+    },
+    {
+      "path": "src/app/api/video-batch/models/submit/route.ts",
+      "role": "video_submit_wrapper_consumer",
+      "disposition": "converted_to_shared_boundary"
+    },
+    {
+      "path": "src/app/api/video-batch/models/status/route.ts",
+      "role": "video_status_wrapper_consumer",
+      "disposition": "converted_to_shared_boundary"
+    },
+    {
+      "path": "src/app/api/video-batch/generate-slideshow/route.ts",
+      "role": "direct_atomic_consumer",
+      "disposition": "converted_to_shared_boundary"
+    },
+    {
+      "path": "src/app/api/studio/assembly/scene/route.ts",
+      "role": "direct_atomic_consumer",
+      "disposition": "converted_to_shared_boundary"
+    },
+    {
+      "path": "src/app/api/characters/generate/route.ts",
+      "role": "direct_atomic_consumer",
+      "disposition": "converted_to_shared_boundary"
+    },
+    {
+      "path": "src/app/api/characters/generate-sora-character-video/route.ts",
+      "role": "direct_atomic_consumer",
+      "disposition": "converted_to_shared_boundary"
+    },
+    {
+      "path": "src/app/api/generate/route.ts",
+      "role": "direct_atomic_consumer",
+      "disposition": "converted_to_shared_boundary"
+    },
+    {
+      "path": "src/app/api/generate/video/route.ts",
+      "role": "direct_atomic_consumer",
+      "disposition": "converted_to_shared_boundary"
+    },
+    {
+      "path": "src/app/api/generations/route.ts",
+      "role": "direct_atomic_consumer",
+      "disposition": "converted_to_shared_boundary"
+    },
+    {
+      "path": "src/app/api/seedance/submit/route.ts",
+      "role": "direct_atomic_consumer",
+      "disposition": "converted_to_shared_boundary"
+    },
+    {
+      "path": "src/app/api/seedance/status/route.ts",
+      "role": "direct_atomic_consumer",
+      "disposition": "converted_to_shared_boundary"
+    },
+    {
+      "path": "src/app/api/video-batch/happyhorse-status/[taskId]/route.ts",
+      "role": "direct_atomic_consumer",
+      "disposition": "converted_to_shared_boundary"
+    },
+    {
+      "path": "src/app/api/video-batch/sora-status/[taskId]/route.ts",
+      "role": "direct_atomic_consumer",
+      "disposition": "converted_to_shared_boundary"
+    },
+    {
+      "path": "src/app/api/generate/image/route.ts",
+      "role": "direct_atomic_consumer",
+      "disposition": "converted_to_shared_boundary"
+    },
+    {
+      "path": "src/app/api/image-factory/generate-images/route.ts",
+      "role": "direct_atomic_consumer",
+      "disposition": "converted_to_shared_boundary"
+    },
+    {
+      "path": "src/app/api/image-factory/task/[id]/route.ts",
+      "role": "direct_atomic_consumer",
+      "disposition": "converted_to_shared_boundary"
+    },
+    {
+      "path": "src/lib/image-generation-worker.ts",
+      "role": "direct_atomic_consumer",
+      "disposition": "converted_to_shared_boundary"
+    },
+    {
+      "path": "src/app/api/contracts/route.ts",
+      "role": "direct_atomic_consumer",
+      "disposition": "converted_to_shared_boundary"
+    },
+    {
+      "path": "src/lib/actions/contracts.ts",
+      "role": "direct_atomic_consumer",
+      "disposition": "converted_to_shared_boundary"
+    }
+  ],
+
+  "callsites": [
+    {
+      "path": "src/app/api/admin/cleanup-tasks/route.ts",
+      "classes": ["destructive_admin", "generation_lifecycle_mutation"],
+      "disposition": "legacy_generation_lifecycle_only",
+      "note": "Deletes legacy generation rows only. Any row carrying a ledger anchor is already protected by credit_transactions_generation_id_fkey ON DELETE RESTRICT, so a Canvas action row cannot be deleted here."
+    },
+    {
+      "path": "src/app/api/admin/users/route.ts",
+      "classes": [
+        "ledger_mutation",
+        "profile_credit_mutation"
+      ],
+      "disposition": "converted_to_deactivation",
+      "note": "The legacy delete action now invokes canvas_p1_deactivate_account_v1 and performs no table/auth hard delete. The route remains scanner-visible only because its separately reviewed legacy admin recharge/deduct/grant actions still contain direct profile and ledger mutations."
+    },
+    {
+      "path": "src/app/api/characters/generate-sora-character-video/route.ts",
+      "classes": ["generation_lifecycle_mutation"],
+      "disposition": "converted_to_shared_boundary",
+      "note": "Atomic character-video billing plus a persisted generation row for ownership and terminal refund recovery."
+    },
+    {
+      "path": "src/app/api/generate/image/route.ts",
+      "classes": ["generation_lifecycle_mutation"],
+      "disposition": "converted_to_shared_boundary",
+      "note": "Quick Image retains generation lifecycle only; its server-generated generation UUID binds atomic consume and full refund."
+    },
+    {
+      "path": "src/app/api/generate/video/route.ts",
+      "classes": ["generation_lifecycle_mutation"],
+      "disposition": "converted_to_shared_boundary",
+      "note": "Authenticated owner-scoped lifecycle; consume, submit/insert failure and terminal refund use the atomic task boundary."
+    },
+    {
+      "path": "src/app/api/generations/route.ts",
+      "classes": ["generation_lifecycle_mutation"],
+      "disposition": "converted_to_shared_boundary",
+      "note": "Server-generated generation UUID binds consume and insert-failure refund."
+    },
+    {
+      "path": "src/app/api/seedance/status/route.ts",
+      "classes": ["generation_lifecycle_mutation"],
+      "disposition": "converted_to_shared_boundary",
+      "note": "Owner is proven before provider polling; terminal refund uses the persisted generation UUID."
+    },
+    {
+      "path": "src/app/api/seedance/submit/route.ts",
+      "classes": ["generation_lifecycle_mutation"],
+      "disposition": "converted_to_shared_boundary",
+      "note": "Authenticated user replaces request userId; server generation UUID binds consume and all submission/insert refunds."
+    },
+    {
+      "path": "src/app/api/studio/ai-gen/stitch/route.ts",
+      "classes": ["generation_lifecycle_mutation"],
+      "disposition": "legacy_generation_lifecycle_only"
+    },
+    {
+      "path": "src/app/api/studio/library/route.ts",
+      "classes": ["generation_lifecycle_mutation"],
+      "disposition": "legacy_generation_lifecycle_only"
+    },
+    {
+      "path": "src/app/api/studio/photo-post/publish/route.ts",
+      "classes": ["generation_lifecycle_mutation"],
+      "disposition": "legacy_generation_lifecycle_only"
+    },
+    {
+      "path": "src/app/api/studio/photo-post/route.ts",
+      "classes": ["generation_lifecycle_mutation"],
+      "disposition": "legacy_generation_lifecycle_only"
+    },
+    {
+      "path": "src/app/api/user/tasks/[id]/route.ts",
+      "classes": ["destructive_admin", "generation_lifecycle_mutation"],
+      "disposition": "legacy_generation_lifecycle_only",
+      "note": "Owner-scoped legacy task delete. A Canvas action row with a ledger anchor is protected by ON DELETE RESTRICT."
+    },
+    {
+      "path": "src/app/api/user/tasks/refresh/route.ts",
+      "classes": ["generation_lifecycle_mutation"],
+      "disposition": "legacy_generation_lifecycle_only"
+    },
+    {
+      "path": "src/app/api/video-batch/generate-grok-video/route.ts",
+      "classes": ["generation_lifecycle_mutation"],
+      "disposition": "legacy_generation_lifecycle_only"
+    },
+    {
+      "path": "src/app/api/video-batch/generate-happyhorse-video/route.ts",
+      "classes": ["generation_lifecycle_mutation"],
+      "disposition": "legacy_generation_lifecycle_only"
+    },
+    {
+      "path": "src/app/api/video-batch/generate-slideshow/route.ts",
+      "classes": ["generation_lifecycle_mutation"],
+      "disposition": "converted_to_shared_boundary",
+      "note": "Generation lifecycle remains visible to the lexical scanner; delivered-video charging now uses the atomic task boundary."
+    },
+    {
+      "path": "src/app/api/video-batch/generate-sora-video/route.ts",
+      "classes": ["generation_lifecycle_mutation"],
+      "disposition": "legacy_generation_lifecycle_only"
+    },
+    {
+      "path": "src/app/api/video-batch/generate-veo-video/route.ts",
+      "classes": ["generation_lifecycle_mutation"],
+      "disposition": "legacy_generation_lifecycle_only"
+    },
+    {
+      "path": "src/app/api/video-batch/grok-status/[taskId]/route.ts",
+      "classes": ["generation_lifecycle_mutation"],
+      "disposition": "legacy_generation_lifecycle_only"
+    },
+    {
+      "path": "src/app/api/video-batch/happyhorse-status/[taskId]/route.ts",
+      "classes": ["generation_lifecycle_mutation"],
+      "disposition": "converted_to_shared_boundary",
+      "note": "Owner is proven before provider polling and the failed generation UUID anchors the refund."
+    },
+    {
+      "path": "src/app/api/video-batch/models/status/route.ts",
+      "classes": ["generation_lifecycle_mutation"],
+      "disposition": "converted_to_shared_boundary",
+      "note": "Generation lifecycle remains visible; failure refund flows through the reviewed shared video wrapper."
+    },
+    {
+      "path": "src/app/api/video-batch/models/submit/route.ts",
+      "classes": ["generation_lifecycle_mutation"],
+      "disposition": "converted_to_shared_boundary",
+      "note": "Generation lifecycle remains visible; consume and insert-failure refund flow through the reviewed shared video wrapper."
+    },
+    {
+      "path": "src/app/api/video-batch/sora-status/[taskId]/route.ts",
+      "classes": ["generation_lifecycle_mutation"],
+      "disposition": "converted_to_shared_boundary",
+      "note": "Owner is proven before provider polling; character-video billing scope is recovered from persisted metadata."
+    },
+    {
+      "path": "src/app/api/video-batch/veo-status/[taskId]/route.ts",
+      "classes": ["generation_lifecycle_mutation"],
+      "disposition": "legacy_generation_lifecycle_only"
+    },
+    {
+      "path": "src/lib/image-generation-worker.ts",
+      "classes": ["generation_lifecycle_mutation"],
+      "disposition": "converted_to_shared_boundary",
+      "note": "Worker generation lifecycle remains visible; Quick Image and e-commerce compensation use the atomic task boundary."
+    },
+    {
+      "path": "src/lib/canvas/generation-reconciliation.ts",
+      "classes": ["generation_lifecycle_mutation"],
+      "disposition": "canvas_p1_atomic_generation_boundary",
+      "note": "The only direct write updates non-terminal progress below 100. Claims, lease release, completion, failure/refund and unknown transitions all use authority-checked Canvas P1 RPCs."
+    },
+    {
+      "path": "src/lib/canvas/generation-service.ts",
+      "classes": ["generation_lifecycle_mutation"],
+      "disposition": "canvas_p1_atomic_generation_boundary",
+      "note": "The only direct write projects a completed Canvas output onto legacy media URL columns for publishing compatibility. Begin/debit, one-time submission claim, provider-task bind, completion, failure/refund and unknown transitions all use Canvas P1 RPCs."
+    },
+    {
+      "path": "src/lib/video-models/credits.ts",
+      "classes": ["generation_lifecycle_mutation"],
+      "disposition": "converted_to_shared_boundary",
+      "note": "Only generation failure-state updates remain direct. All credit deltas and ledger rows use applyTaskCreditDelta."
+    }
+  ]
+}

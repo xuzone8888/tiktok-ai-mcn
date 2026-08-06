@@ -43,6 +43,8 @@ export interface SocialCommentSyncCompleteness {
   thread_completeness: SocialCommentThreadCompleteness
   replies_fetched: boolean
   truncated: boolean
+  provider_reported_comment_count?: number | null
+  provider_visibility_mismatch?: boolean
 }
 
 export interface SocialCommentListResult extends SocialCommentSyncCompleteness {

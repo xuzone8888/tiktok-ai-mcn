@@ -1,82 +1,78 @@
-/**
- * URL Accessibility Check API
- *
- * Server-side URL reachability check (avoids client-side no-cors opaque response issues)
- * Returns accurate HTTP status codes.
- *
- * POST /api/upload/check-url
- * Body: { url: string }
- * Returns: { accessible: boolean, status?: number, reason?: string }
- */
+import { NextRequest, NextResponse } from "next/server";
 
-import { NextRequest, NextResponse } from "next/server"
+import { isOwnedObjectKey } from "@/lib/canvas/media-ownership";
+import { extractObjectPath, isOSSUrl } from "@/lib/oss";
+import {
+  ExternalMediaFetchError,
+  probeExternalMediaUrl,
+} from "@/lib/safe-media-fetch";
+import { createClient } from "@/lib/supabase/server";
 
-export const runtime = 'nodejs'
-export const maxDuration = 10 // 10 seconds timeout
+export const runtime = "nodejs";
+export const maxDuration = 10;
+export const dynamic = "force-dynamic";
+
+function inaccessible(reason: string, status = 0, httpStatus = 200) {
+  return NextResponse.json(
+    { accessible: false, status, reason },
+    { status: httpStatus }
+  );
+}
 
 export async function POST(request: NextRequest) {
-    try {
-        const body = await request.json()
-        const { url } = body
+  const supabase = await createClient();
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser();
+  if (authError || !user) {
+    return inaccessible("Authentication required", 0, 401);
+  }
 
-        if (!url) {
-            return NextResponse.json(
-                { accessible: false, reason: "Missing URL parameter" },
-                { status: 400 }
-            )
-        }
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return inaccessible("Invalid JSON body", 0, 400);
+  }
+  if (
+    !body ||
+    typeof body !== "object" ||
+    Array.isArray(body) ||
+    Object.keys(body).some((key) => key !== "url") ||
+    typeof (body as { url?: unknown }).url !== "string"
+  ) {
+    return inaccessible("Invalid URL parameter", 0, 400);
+  }
+  const url = (body as { url: string }).url;
+  if (url.length < 1 || url.length > 4096 || url !== url.trim()) {
+    return inaccessible("Invalid URL parameter", 0, 400);
+  }
 
-        // Validate URL format
-        try {
-            new URL(url)
-        } catch {
-            return NextResponse.json(
-                { accessible: false, reason: "Invalid URL format" },
-                { status: 400 }
-            )
-        }
-
-        // Perform HEAD request to check accessibility
-        const controller = new AbortController()
-        const timeoutId = setTimeout(() => controller.abort(), 8000) // 8s timeout
-
-        try {
-            const response = await fetch(url, {
-                method: 'HEAD',
-                signal: controller.signal,
-                headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                },
-            })
-            clearTimeout(timeoutId)
-
-            const accessible = response.ok // 200-299
-
-            return NextResponse.json({
-                accessible,
-                status: response.status,
-                reason: accessible ? undefined : `HTTP ${response.status}`,
-            })
-        } catch (fetchError) {
-            clearTimeout(timeoutId)
-
-            // Network error or timeout
-            const reason = fetchError instanceof Error && fetchError.name === 'AbortError'
-                ? 'Request timed out'
-                : 'Network error'
-
-            return NextResponse.json({
-                accessible: false,
-                status: 0,
-                reason,
-            })
-        }
-
-    } catch (error) {
-        console.error('[Check URL] Error:', error)
-        return NextResponse.json(
-            { accessible: false, reason: "Check failed" },
-            { status: 500 }
-        )
+  // Do not turn this endpoint into a cross-account OSS existence oracle.
+  if (isOSSUrl(url)) {
+    const objectKey = extractObjectPath(url);
+    if (!objectKey || !isOwnedObjectKey(objectKey, user.id)) {
+      return inaccessible("Media does not belong to this account", 0, 403);
     }
+  }
+
+  try {
+    const result = await probeExternalMediaUrl(url, { timeoutMs: 8_000 });
+    return NextResponse.json({
+      accessible: result.accessible,
+      status: result.status,
+    });
+  } catch (error) {
+    if (error instanceof ExternalMediaFetchError) {
+      return inaccessible(
+        error.statusCode
+          ? `HTTP ${error.statusCode}`
+          : "URL is unavailable or not permitted",
+        error.statusCode ?? 0
+      );
+    }
+    console.error("[Check URL] safe probe failed");
+    return inaccessible("Check failed", 0, 500);
+  }
 }

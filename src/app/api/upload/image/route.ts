@@ -11,30 +11,20 @@ import {
   generateImagePath,
   isOSSConfigured
 } from "@/lib/oss";
-import { createAdminClient } from "@/lib/supabase/admin";
-
-// 从用户 session 获取 userId（如果有的话）
-async function getUserId(request: Request): Promise<string> {
-  try {
-    // 尝试从 cookie 获取 session
-    const supabase = createAdminClient();
-    const authHeader = request.headers.get('authorization');
-    if (authHeader?.startsWith('Bearer ')) {
-      const token = authHeader.slice(7);
-      const { data } = await supabase.auth.getUser(token);
-      if (data.user?.id) {
-        return data.user.id;
-      }
-    }
-  } catch {
-    // 忽略错误，使用默认 ID
-  }
-  // 默认用户 ID（未登录时使用）
-  return 'anonymous';
-}
+import { createClient } from "@/lib/supabase/server";
 
 export async function POST(request: Request) {
   try {
+    const supabase = await createClient();
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      return NextResponse.json(
+        { success: false, error: "Authentication required. Please log in first." },
+        { status: 401 }
+      );
+    }
+
     const formData = await request.formData();
     const file = formData.get("file") as File;
 
@@ -72,11 +62,8 @@ export async function POST(request: Request) {
       );
     }
 
-    // 获取用户 ID
-    const userId = await getUserId(request);
-
     // 生成 OSS 路径
-    const objectPath = generateImagePath(userId, file.name);
+    const objectPath = generateImagePath(user.id, file.name);
 
     // 上传到阿里云 OSS
     const arrayBuffer = await file.arrayBuffer();

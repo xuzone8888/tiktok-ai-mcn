@@ -61,6 +61,11 @@ import {
     DialogTitle,
     DialogFooter, // Make sure to export Footer if available, otherwise just use div
 } from "@/components/ui/dialog"
+import {
+    buildPublishAssetPageUrl,
+    mergePublishAssetPages,
+    parsePublishAssetPage,
+} from '@/lib/publish/asset-pagination'
 
 // TikTok supported video formats
 const TIKTOK_VIDEO_FORMATS = ['.mp4', '.webm', '.mov']
@@ -145,6 +150,8 @@ export default function PublishPage() {
     const router = useRouter()
     const { toast } = useToast()
     const fileInputRef = useRef<HTMLInputElement>(null)
+    const assetRequestInFlightRef = useRef(false)
+    const assetRequestAbortRef = useRef<AbortController | null>(null)
 
     // Tab state
     const [activeTab, setActiveTab] = useState<TabType>('create')
@@ -182,6 +189,9 @@ export default function PublishPage() {
     const [showAssetModal, setShowAssetModal] = useState(false)
     const [assets, setAssets] = useState<AssetItem[]>([])
     const [loadingAssets, setLoadingAssets] = useState(false)
+    const [loadingMoreAssets, setLoadingMoreAssets] = useState(false)
+    const [nextAssetCursor, setNextAssetCursor] = useState<string | null>(null)
+    const [hasMoreAssets, setHasMoreAssets] = useState(false)
     const [selectedAssetIds, setSelectedAssetIds] = useState<string[]>([])  // Multi-select in asset library
 
     // Batch transfer state (for controlled concurrency)
@@ -350,96 +360,119 @@ export default function PublishPage() {
     // Calculate total tasks
     const totalTasks = selectedVideos.length * selectedAccounts.length
 
-    // Check if video URL is still accessible (using server-side API for accurate detection)
-    const checkUrlAccessible = async (url: string): Promise<boolean> => {
+    // Treat transient probe failures as "unknown". A health check must never become
+    // an implicit data-deletion path or hide otherwise usable user content.
+    const checkUrlAccessible = async (
+        url: string,
+        signal?: AbortSignal
+    ): Promise<boolean | null> => {
         try {
             const response = await fetch('/api/upload/check-url', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ url })
+                body: JSON.stringify({ url }),
+                signal,
             })
             const result = await response.json()
-            return result.accessible === true
+            if (!response.ok || typeof result?.accessible !== 'boolean') {
+                return null
+            }
+            if (result.accessible === true) {
+                return true
+            }
+            return result.status === 404 || result.status === 410 ? false : null
         } catch {
-            // API error, assume URL is not accessible
-            return false
-        }
-    }
-
-    // Delete expired video from database
-    const deleteExpiredTask = async (taskId: string) => {
-        try {
-            await fetch(`/api/user/tasks/${taskId}`, {
-                method: 'DELETE',
-            })
-            console.log(`[Assets] Deleted expired task: ${taskId}`)
-        } catch (error) {
-            console.error(`[Assets] Failed to delete task ${taskId}:`, error)
+            return null
         }
     }
 
     // Fetch assets from delivery order (成品交付单)
-    const fetchAssets = useCallback(async () => {
-        setLoadingAssets(true)
+    const fetchAssets = useCallback(async (cursor: string | null = null) => {
+        const isLoadingMore = cursor !== null
+        if (isLoadingMore && assetRequestInFlightRef.current) return
+        if (!isLoadingMore) {
+            assetRequestAbortRef.current?.abort()
+            setLoadingMoreAssets(false)
+        }
+
+        const controller = new AbortController()
+        assetRequestAbortRef.current = controller
+        assetRequestInFlightRef.current = true
+        if (isLoadingMore) setLoadingMoreAssets(true)
+        else setLoadingAssets(true)
+
         try {
-            const response = await fetch('/api/user/tasks?type=video&status=completed&limit=50')
-            if (response.ok) {
-                const result = await response.json()
-                // API returns { success: true, data: { tasks: [...] } }
-                const tasks = result.data?.tasks || result.tasks || []
-                const videoTasks = tasks.filter((t: AssetItem) => t.type === 'video' && t.resultUrl)
-
-                // Check URL accessibility in parallel for better performance
-                const accessibilityChecks = await Promise.all(
-                    videoTasks.map(async (task: AssetItem) => {
-                        const isAccessible = await checkUrlAccessible(task.resultUrl!)
-                        return { task, isAccessible }
-                    })
-                )
-
-                // Separate valid and expired videos
-                const validVideos: AssetItem[] = []
-                const expiredVideos: AssetItem[] = []
-
-                accessibilityChecks.forEach(({ task, isAccessible }) => {
-                    if (isAccessible) {
-                        validVideos.push(task)
-                    } else {
-                        expiredVideos.push(task)
-                    }
-                })
-
-                // Delete expired videos from database (async, don't wait)
-                if (expiredVideos.length > 0) {
-                    console.log(`[Assets] Deleting ${expiredVideos.length} expired videos`)
-                    toast({
-                        title: '清理过期视频',
-                        description: `正在删除 ${expiredVideos.length} 个已过期的视频...`,
-                    })
-
-                    // Delete in background
-                    Promise.all(expiredVideos.map(v => deleteExpiredTask(v.id)))
-                        .then(() => {
-                            toast({
-                                title: '清理完成',
-                                description: `已删除 ${expiredVideos.length} 个过期视频`,
-                            })
-                        })
-                }
-
-                setAssets(validVideos)
+            const response = await fetch(buildPublishAssetPageUrl(cursor), {
+                signal: controller.signal,
+            })
+            const result = await response.json().catch(() => null)
+            if (!response.ok) {
+                throw new Error(result?.error || 'Failed to load videos from the creation workspace')
             }
+
+            const page = parsePublishAssetPage<AssetItem>(result, cursor)
+            const videoTasks = page.assets.filter((task) => task.type === 'video' && task.resultUrl)
+
+            // Check URL accessibility in parallel for better performance
+            const accessibilityChecks = await Promise.all(
+                videoTasks.map(async (task) => {
+                    const availability = await checkUrlAccessible(
+                        task.resultUrl!,
+                        controller.signal
+                    )
+                    return { task, availability }
+                })
+            )
+
+            if (assetRequestAbortRef.current !== controller) return
+
+            const validVideos: AssetItem[] = []
+            let unavailableCount = 0
+            let unknownCount = 0
+
+            accessibilityChecks.forEach(({ task, availability }) => {
+                if (availability === false) {
+                    unavailableCount += 1
+                    return
+                }
+                if (availability === null) unknownCount += 1
+                validVideos.push(task)
+            })
+
+            if (unavailableCount > 0 || unknownCount > 0) {
+                toast({
+                    title: '部分素材暂不可用',
+                    description: unavailableCount > 0
+                        ? `${unavailableCount} 个素材已确认失效，已从本次列表隐藏；原始任务记录仍会保留。`
+                        : `${unknownCount} 个素材暂时无法验证，仍保留在列表中，可直接重试使用。`,
+                })
+            }
+
+            if (!isLoadingMore) setSelectedAssetIds([])
+            setAssets((current) => (
+                isLoadingMore
+                    ? mergePublishAssetPages(current, validVideos)
+                    : validVideos
+            ))
+            setNextAssetCursor(page.nextCursor)
+            setHasMoreAssets(page.hasMore)
         } catch (error) {
+            if (controller.signal.aborted || assetRequestAbortRef.current !== controller) return
             console.error('Failed to fetch assets:', error)
         } finally {
-            setLoadingAssets(false)
+            if (assetRequestAbortRef.current === controller) {
+                assetRequestAbortRef.current = null
+                assetRequestInFlightRef.current = false
+                if (isLoadingMore) setLoadingMoreAssets(false)
+                else setLoadingAssets(false)
+            }
         }
     }, [toast])
 
     // Open asset selector modal
     const openAssetSelector = () => {
         setShowAssetModal(true)
-        fetchAssets()
+        fetchAssets(null)
     }
 
     // Add video from asset library - transfer to OSS first for permanent storage
@@ -2678,16 +2711,20 @@ export default function PublishPage() {
                                             <Video className="w-10 h-10 text-gray-600" />
                                         </div>
                                         <p className="text-gray-300 font-medium mb-1">暂无可选视频</p>
-                                        <p className="text-sm text-gray-500">前往「素材生成视频」创建你的第一条视频</p>
-                                        <button
-                                            onClick={() => {
-                                                setShowAssetModal(false)
-                                                router.push('/quick-gen')
-                                            }}
-                                            className="mt-4 px-4 py-2 bg-gradient-to-r from-cyan-500 to-pink-500 rounded-lg font-medium hover:opacity-90 transition-opacity"
-                                        >
-                                            去生成视频
-                                        </button>
+                                        <p className="text-sm text-gray-500">
+                                            {hasMoreAssets ? '本页素材不可用，可继续加载更早的视频' : '前往「素材生成视频」创建你的第一条视频'}
+                                        </p>
+                                        {!hasMoreAssets && (
+                                            <button
+                                                onClick={() => {
+                                                    setShowAssetModal(false)
+                                                    router.push('/quick-gen')
+                                                }}
+                                                className="mt-4 px-4 py-2 bg-gradient-to-r from-cyan-500 to-pink-500 rounded-lg font-medium hover:opacity-90 transition-opacity"
+                                            >
+                                                去生成视频
+                                            </button>
+                                        )}
                                     </div>
                                 ) : (
                                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
@@ -2786,6 +2823,19 @@ export default function PublishPage() {
                                                 </button>
                                             )
                                         })}
+                                    </div>
+                                )}
+                                {!loadingAssets && hasMoreAssets && (
+                                    <div className="flex justify-center pt-5">
+                                        <button
+                                            type="button"
+                                            onClick={() => fetchAssets(nextAssetCursor)}
+                                            disabled={loadingMoreAssets || batchTransfer.isTransferring || !nextAssetCursor}
+                                            className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm text-gray-200 transition-colors hover:border-cyan-500/40 hover:text-cyan-300 disabled:cursor-not-allowed disabled:opacity-50"
+                                        >
+                                            {loadingMoreAssets && <Loader2 className="h-4 w-4 animate-spin" />}
+                                            加载更多
+                                        </button>
                                     </div>
                                 )}
                             </div>

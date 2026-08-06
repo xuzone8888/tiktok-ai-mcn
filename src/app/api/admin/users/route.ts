@@ -2,7 +2,7 @@
  * Admin API - 用户管理
  * 
  * GET /api/admin/users - 获取用户列表
- * POST /api/admin/users - 用户操作 (充值/扣除/封禁/解封)
+ * POST /api/admin/users - 用户操作 (充值/扣除/停用/封禁/解封)
  * 
  * 关键特性：
  * - 积分操作使用真实数据库
@@ -400,66 +400,72 @@ export async function POST(request: Request) {
       }
 
       // ============================================
-      // 删除用户 (Delete)
-      // 从数据库中删除用户（用于测试）
+      // 停用用户 (legacy action name: Delete)
+      // 审计保留：匿名化 profile，但保留积分流水、生成快照与外键身份。
       // ============================================
       case "delete": {
-        // 检查是否尝试删除管理员
+        // 检查是否尝试停用管理员
         if (isAdmin(targetUser.role)) {
           return NextResponse.json(
-            { success: false, error: "无法删除管理员账户" },
+            { success: false, error: "无法停用管理员账户" },
             { status: 403 }
           );
         }
 
-        // 检查是否尝试删除自己
+        // 检查是否尝试停用自己
         if (targetUserId === currentUser.id) {
           return NextResponse.json(
-            { success: false, error: "无法删除自己的账户" },
+            { success: false, error: "无法停用自己的账户" },
             { status: 403 }
           );
         }
 
-        // 删除用户的相关数据（按顺序删除以避免外键约束）
-        // 1. 删除用户的合约
-        await supabase.from("contracts").delete().eq("user_id", targetUserId);
+        const deactivationReason =
+          typeof reason === "string" && reason.trim()
+            ? reason.trim()
+            : "管理员停用账户";
+        const { data: deactivationData, error: deactivationError } =
+          await (supabase as any).rpc("canvas_p1_deactivate_account_v1", {
+            p_user_id: targetUserId,
+            p_reason: deactivationReason,
+          });
 
-        // 2. 删除用户的生成记录
-        await supabase.from("generations").delete().eq("user_id", targetUserId);
-
-        // 3. 删除用户的积分交易记录
-        await supabase.from("credit_transactions").delete().eq("user_id", targetUserId);
-
-        // 4. 删除用户的 profile
-        const { error: deleteProfileError } = await supabase
-          .from("profiles")
-          .delete()
-          .eq("id", targetUserId);
-
-        if (deleteProfileError) {
-          console.error("[Admin API] Delete profile error:", deleteProfileError);
+        if (deactivationError) {
+          console.error("[Admin API] Deactivate account error:", deactivationError);
           return NextResponse.json(
-            { success: false, error: "删除用户资料失败" },
+            { success: false, error: "停用用户失败" },
             { status: 500 }
           );
         }
 
-        // 5. 尝试删除 auth.users 中的用户（需要 service role）
-        try {
-          const { error: deleteAuthError } = await supabase.auth.admin.deleteUser(targetUserId);
-          if (deleteAuthError) {
-            console.error("[Admin API] Delete auth user error:", deleteAuthError);
-            // 继续执行，不阻塞（profile 已删除）
-          }
-        } catch (authErr) {
-          console.error("[Admin API] Delete auth user exception:", authErr);
+        const deactivation = Array.isArray(deactivationData)
+          ? deactivationData[0]
+          : deactivationData;
+        const retainedLedgerRows = Number(deactivation?.retained_ledger_rows);
+        if (
+          deactivation?.user_id !== targetUserId ||
+          deactivation?.status !== "banned" ||
+          typeof deactivation?.anonymized !== "boolean" ||
+          !Number.isSafeInteger(retainedLedgerRows) ||
+          retainedLedgerRows < 0
+        ) {
+          console.error("[Admin API] Invalid deactivation result:", deactivation);
+          return NextResponse.json(
+            { success: false, error: "停用用户返回了无效结果" },
+            { status: 500 }
+          );
         }
 
-        console.log(`[Admin API] User deleted: ${targetUser.email} (by ${adminProfile.email})`);
+        console.log(`[Admin API] User deactivated: ${targetUserId} (by ${adminProfile.id})`);
 
         result = {
           action: "delete",
+          effect: "deactivated",
           deleted_user: targetUser.email,
+          deactivated_user_id: targetUserId,
+          status: deactivation.status,
+          anonymized: deactivation.anonymized,
+          retained_ledger_rows: retainedLedgerRows,
           timestamp: new Date().toISOString(),
         };
         break;
