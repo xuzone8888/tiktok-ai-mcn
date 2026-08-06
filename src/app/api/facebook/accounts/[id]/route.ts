@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
-import { revokeFacebookToken } from '@/lib/facebook/oauth'
+import { unsubscribeFacebookPageFromWebhooks } from '@/lib/facebook/oauth'
 
 export const dynamic = 'force-dynamic'
 
@@ -17,7 +17,7 @@ export async function DELETE(_request: NextRequest, { params }: { params: { id: 
 
     const { data: account, error: fetchError } = await (supabase as any)
       .from('facebook_accounts')
-      .select('id')
+      .select('id, channel_id')
       .eq('id', params.id)
       .eq('user_id', user.id)
       .single()
@@ -29,16 +29,16 @@ export async function DELETE(_request: NextRequest, { params }: { params: { id: 
     const adminSupabase = createAdminClient() as any
     const { data: tokenRecord } = await adminSupabase
       .from('facebook_account_tokens')
-      .select('refresh_token')
+      .select('access_token')
       .eq('account_id', account.id)
       .maybeSingle()
 
     try {
-      if (tokenRecord?.refresh_token) {
-        await revokeFacebookToken(tokenRecord.refresh_token)
+      if (tokenRecord?.access_token) {
+        await unsubscribeFacebookPageFromWebhooks(account.channel_id, tokenRecord.access_token)
       }
     } catch (error) {
-      console.warn('Failed to revoke Facebook token, removing local binding anyway:', error)
+      console.warn('Failed to remove Facebook Page webhook subscription, removing local binding anyway:', error)
     }
 
     const { error } = await adminSupabase

@@ -50,7 +50,7 @@ export default function PrivacyPage() {
                 <div className="p-3 rounded-lg bg-cyan-500/10 text-cyan-400 shrink-0"><FileText className="h-6 w-6" /></div>
                 <div>
                   <h2 className="text-xl font-bold text-white mb-3">{lang === "en" ? "Introduction" : "引言"}</h2>
-                  <p className="leading-relaxed font-semibold text-white/80 mb-4">{lang === "en" ? 'This Privacy Policy explains how Wuhan Guanxing Cultural Media Co., Ltd. ("Company", "we", "us"), operating under the brand name Star Gaze, collects, uses, stores, and protects personal information when users access our website, services, and integrations with TikTok, YouTube, and other supported platforms.' : '本隐私政策说明武汉观星文化传媒有限公司（以下简称"本公司"）作为 Star Gaze 品牌运营方，在用户访问本网站、使用本服务及 TikTok、YouTube 和其他受支持平台的集成能力时，如何收集、使用、存储和保护个人信息。'}</p>
+                  <p className="leading-relaxed font-semibold text-white/80 mb-4">{lang === "en" ? 'This Privacy Policy explains how Wuhan Guanxing Cultural Media Co., Ltd. ("Company", "we", "us"), operating under the brand name Star Gaze, collects, uses, stores, and protects personal information when users access our website, services, and integrations with TikTok, Facebook, YouTube, and other supported platforms.' : '本隐私政策说明武汉观星文化传媒有限公司（以下简称"本公司"）作为 Star Gaze 品牌运营方，在用户访问本网站、使用本服务及 TikTok、Facebook、YouTube 和其他受支持平台的集成能力时，如何收集、使用、存储和保护个人信息。'}</p>
                   <p className="leading-relaxed">{lang === "en" ? '"Star Gaze" refers to the client application labeled "Star Gaze" and the official website, as well as the Software Development Kit (SDK) and Application Programming Interface (API) for third-party websites and applications, legally owned and operated by Wuhan Guanxing Cultural Media Co., Ltd. and its affiliates (hereinafter referred to as "we").' : '"Star Gaze"是指武汉观星文化传媒有限公司及其关联方（以下简称"我们"）依法拥有并运营的标注名称为"Star Gaze"的客户端应用程序及官方网站，以及为第三方网站和应用程序提供的软件开发工具包（SDK）和应用程序编程接口（API）。'}</p>
                   <p className="leading-relaxed mt-3">{lang === "en" ? 'As the operator of Star Gaze, we are fully aware of the importance of personal information to you, and we will protect your personal information and privacy security in accordance with laws and regulations. We have formulated this Privacy Policy and specially prompt you: We hope you carefully read and understand this Privacy Policy before using Star Gaze and related services so as to make appropriate choices.' : '作为 Star Gaze 的运营者，我们充分意识到个人信息对您的重要性，我们将依法保护您的个人信息和隐私安全。我们特制定本隐私政策并特别提示您：希望您在使用 Star Gaze 及相关服务前仔细阅读并理解本隐私政策，以做出适当的选择。'}</p>
                 </div>
@@ -260,6 +260,34 @@ export default function PrivacyPage() {
               </div>
             </ReflectiveCard>
 
+            {/* Facebook Platform Data */}
+            <ReflectiveCard className="!rounded-xl">
+              <div className="flex items-start gap-4 p-6">
+                <div className="p-3 rounded-lg bg-blue-500/10 text-blue-400 shrink-0"><Share2 className="h-6 w-6" /></div>
+                <div>
+                  <h2 className="text-xl font-bold text-white mb-3">{lang === "en" ? "Facebook Platform Data" : "Facebook 平台数据"}</h2>
+                  <p className="leading-relaxed">{lang === "en" ? "With your authorization, Star Gaze uses Meta Platform APIs to connect Facebook Pages you manage, display Page information, publish or schedule Page videos and posts, synchronize Page comments through API calls and webhooks, and send replies that you initiate or confirm. We do not request or store your Facebook password." : "在您授权后，Star Gaze 使用 Meta 平台 API 绑定您管理的 Facebook Page、展示 Page 信息、发布或预约发布 Page 视频与帖子、通过 API 调用和 webhook 同步 Page 评论，以及发送由您主动发起或确认的回复。我们不会请求或存储您的 Facebook 密码。"}</p>
+
+                  <h3 className="text-lg font-medium text-white mt-4 mb-2">{lang === "en" ? "Data We Process" : "我们处理的数据"}</h3>
+                  <p className="leading-relaxed">{lang === "en" ? "Depending on the features you use, we may process the Facebook user ID that granted authorization; OAuth access tokens, granted permissions, expiration and authorization status; Page ID, name, category, profile image, link, tasks and aggregate Page statistics; video or post source, title, description, schedule, Facebook content IDs, watch URLs and publishing status; Page comments and replies, their identifiers, text, author display information supplied by Facebook, timestamps, counts and permalinks; and account-linkage, synchronization, webhook receipt, action, diagnostic and security records." : "根据您使用的功能，我们可能处理授予授权的 Facebook 用户 ID；OAuth 访问令牌、已授予权限、到期时间及授权状态；Page ID、名称、类别、头像、链接、任务权限及汇总统计；视频或帖子来源、标题、描述、预约时间、Facebook 内容 ID、观看链接及发布状态；Page 评论与回复的标识、正文、Facebook 提供的作者展示信息、时间、数量及永久链接；以及账号绑定、同步、webhook 接收、操作、诊断和安全记录。"}</p>
+
+                  <h3 className="text-lg font-medium text-white mt-4 mb-2">{lang === "en" ? "Purpose, Permissions, and Sharing" : "目的、权限与共享"}</h3>
+                  <p className="leading-relaxed">{lang === "en" ? "We request only the Facebook Page permissions needed to list Pages you manage, maintain webhook subscriptions, read Page and Page-content information, publish Page content, read user comments on Page content, and submit Page comment replies. We use Facebook Platform Data only to provide the features you select, maintain synchronization, prevent duplicate actions, secure and troubleshoot the service, provide support, and comply with law and Meta requirements." : "我们仅请求用于列出您管理的 Page、维护 webhook 订阅、读取 Page 与 Page 内容信息、发布 Page 内容、读取 Page 内容下的用户评论及提交 Page 评论回复所需的 Facebook Page 权限。我们仅将 Facebook 平台数据用于提供您选择的功能、维护同步、防止重复操作、保护与排查服务、提供支持，以及遵守法律和 Meta 要求。"}</p>
+                  <p className="leading-relaxed mt-3">{lang === "en" ? "We do not sell Facebook Platform Data or use it for unrelated advertising, surveillance, or training general-purpose AI models. Infrastructure, database, security, monitoring, and support providers receive only the information reasonably necessary to provide their services and are subject to appropriate confidentiality and security obligations." : "我们不会出售 Facebook 平台数据，也不会将其用于无关广告、监控或训练通用人工智能模型。基础设施、数据库、安全、监控及支持服务提供商仅接收履行其服务所合理需要的信息，并受到适当的保密和安全义务约束。"}</p>
+
+                  <h3 className="text-lg font-medium text-white mt-4 mb-2">{lang === "en" ? "Retention, Revocation, and Deletion" : "保留、撤权与删除"}</h3>
+                  <p className="leading-relaxed">{lang === "en" ? "We retain Facebook tokens and Platform Data only while reasonably necessary to provide actively authorized features, maintain security and diagnostics, or satisfy legal requirements. When authorization is revoked, Meta sends a deauthorization or deletion request, or you use a Star Gaze deletion control, we stop the affected access and delete the associated Facebook Page bindings, tokens, cached comments, publishing records, and applicable logs under our control." : "我们仅在提供持续获得授权的功能、维护安全与诊断或履行法律要求所合理需要的期间内保留 Facebook 令牌和平台数据。当授权被撤销、Meta 发送取消授权或删除请求，或您使用 Star Gaze 的删除功能时，我们会停止相关访问，并删除由我们控制的关联 Facebook Page 绑定、令牌、评论缓存、发布记录及适用日志。"}</p>
+                  <p className="leading-relaxed mt-3">{lang === "en" ? "You may disconnect one Page or use “Delete all Facebook data” in Facebook Account Management, revoke access in Facebook Apps and Websites settings, follow the confirmation link returned by Meta’s data-deletion callback, or contact toryxai@outlook.com. Deleting data stored by Star Gaze does not delete videos, posts, comments, replies, or other content hosted by Facebook; Facebook-hosted content must be managed through Facebook or another authorized client that supports the relevant deletion action." : "您可以在 Facebook 账号管理中解绑单个 Page 或使用“删除全部 Facebook 数据”，通过 Facebook“应用和网站”设置撤销访问，使用 Meta 数据删除回调返回的确认链接，或联系 toryxai@outlook.com。删除 Star Gaze 保存的数据不会删除 Facebook 平台保存的视频、帖子、评论、回复或其他内容；Facebook 平台内容必须通过 Facebook 或其他支持相应删除操作的授权客户端进行管理。"}</p>
+
+                  <div className="flex flex-wrap gap-x-4 gap-y-2 mt-3 text-sm">
+                    <Link href="https://developers.facebook.com/terms/" target="_blank" className="text-cyan-400 hover:underline">{lang === "en" ? "Meta Platform Terms" : "Meta 平台条款"}</Link>
+                    <Link href="https://www.facebook.com/privacy/policy/" target="_blank" className="text-cyan-400 hover:underline">{lang === "en" ? "Meta Privacy Policy" : "Meta 隐私政策"}</Link>
+                    <Link href="https://www.facebook.com/settings?tab=applications" target="_blank" className="text-cyan-400 hover:underline">{lang === "en" ? "Facebook Apps and Websites settings" : "Facebook 应用和网站设置"}</Link>
+                  </div>
+                </div>
+              </div>
+            </ReflectiveCard>
+
             {/* 10. YouTube API Services and Google User Data */}
             <ReflectiveCard className="!rounded-xl">
               <div className="flex items-start gap-4 p-6">
@@ -305,6 +333,8 @@ export default function PrivacyPage() {
                     <li>{lang === "en" ? "TikTok Shop Developer: " : "TikTok Shop 开发者："}<Link href="https://partner.tiktokshop.com/docv2/page/6507ead7b99d5302be949ba9" target="_blank" className="text-cyan-400 hover:underline">{lang === "en" ? "TikTok Shop Developer Terms" : "TikTok Shop 开发者条款"}</Link></li>
                     <li>{lang === "en" ? "Google/YouTube: " : "Google/YouTube："}<Link href="https://www.google.com/policies/privacy" target="_blank" className="text-cyan-400 hover:underline">{lang === "en" ? "Google Privacy Policy" : "Google 隐私政策"}</Link></li>
                     <li>{lang === "en" ? "To revoke Google/YouTube authorization: " : "撤销 Google/YouTube 授权："}<Link href="https://security.google.com/settings/security/permissions" target="_blank" className="text-cyan-400 hover:underline">{lang === "en" ? "Google Security Settings" : "Google 安全设置"}</Link></li>
+                    <li>{lang === "en" ? "Meta/Facebook: " : "Meta/Facebook："}<Link href="https://www.facebook.com/privacy/policy/" target="_blank" className="text-cyan-400 hover:underline">{lang === "en" ? "Meta Privacy Policy" : "Meta 隐私政策"}</Link></li>
+                    <li>{lang === "en" ? "To revoke Facebook authorization: " : "撤销 Facebook 授权："}<Link href="https://www.facebook.com/settings?tab=applications" target="_blank" className="text-cyan-400 hover:underline">{lang === "en" ? "Facebook Apps and Websites settings" : "Facebook 应用和网站设置"}</Link></li>
                   </ul>
                 </div>
               </div>
