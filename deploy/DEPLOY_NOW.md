@@ -55,25 +55,25 @@ cd /var/www/tiktok-ai-mcn
 nano .env.local
 ```
 
-**从 Vercel 获取环境变量值**:
+**从安全来源获取环境变量值**:
 
-1. 打开 Vercel 环境变量页面（已在浏览器中打开）
-2. 点击每个变量旁边的 "Click to reveal" 查看值
-3. 复制到 `.env.local` 文件
+1. 打开团队密码管理器或受限的生产配置备份
+2. 在对应服务控制台逐项核对
+3. 仅把确认后的值写入服务器 `.env.local`
 
 **环境变量模板**:
 
 ```bash
 # Supabase 配置
-NEXT_PUBLIC_SUPABASE_URL=从Vercel获取
-NEXT_PUBLIC_SUPABASE_ANON_KEY=从Vercel获取
-SUPABASE_SERVICE_ROLE_KEY=从Vercel获取
+NEXT_PUBLIC_SUPABASE_URL=从安全来源获取
+NEXT_PUBLIC_SUPABASE_ANON_KEY=从安全来源获取
+SUPABASE_SERVICE_ROLE_KEY=从安全来源获取
 
 # API 密钥
-DOUBAO_API_KEY=从Vercel获取
-DOUBAO_ENDPOINT_ID=从Vercel获取
-SORA2_API_KEY=从Vercel获取
-SUCHUANG_API_KEY=从Vercel获取
+DOUBAO_API_KEY=从安全来源获取
+DOUBAO_ENDPOINT_ID=从安全来源获取
+SORA2_API_KEY=从安全来源获取
+SUCHUANG_API_KEY=从安全来源获取
 
 # 应用 URL（使用服务器 IP）
 NEXT_PUBLIC_APP_URL=http://123.56.75.68:3000

@@ -44,12 +44,12 @@ nano .env.local
 
 **复制以下内容并填入实际值**：
 ```bash
-# Supabase 配置（从 Vercel 环境变量中获取）
+# Supabase 配置（从 Supabase 控制台或密码管理器获取）
 NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
 SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
 
-# API 密钥（从 Vercel 环境变量中获取）
+# API 密钥（从对应服务控制台或密码管理器获取）
 DOUBAO_API_KEY=your_doubao_key
 DOUBAO_ENDPOINT_ID=your_endpoint_id
 SORA2_API_KEY=your_sora2_key

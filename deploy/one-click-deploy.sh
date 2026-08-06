@@ -101,7 +101,7 @@ if [ ! -f ".env.local" ]; then
 # ==========================================
 # 阿里云服务器环境变量配置
 # ==========================================
-# 请从 Vercel 环境变量页面获取实际值并替换
+# 请从密码管理器或对应服务控制台获取实际值并替换
 
 # Supabase 配置
 NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
@@ -126,7 +126,7 @@ EOF
     echo -e "${YELLOW}⚠️  请编辑 .env.local 文件并填入实际值:${NC}"
     echo "  nano .env.local"
     echo ""
-    echo -e "${YELLOW}从 Vercel 环境变量页面获取所有值并替换模板中的占位符${NC}"
+    echo -e "${YELLOW}从安全来源获取所有值并替换模板中的占位符${NC}"
     echo ""
     read -p "是否已配置环境变量? (y/n) " -n 1 -r
     echo

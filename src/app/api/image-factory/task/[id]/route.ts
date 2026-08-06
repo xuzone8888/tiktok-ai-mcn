@@ -11,7 +11,7 @@ import { createServerClient } from "@/lib/supabase/server";
 import { queryNanoBananaResult } from "@/lib/suchuang-api";
 import type { OutputItem, EcomTaskStatus } from "@/types/ecom-image";
 
-// Vercel 函数配置
+// Route runtime configuration
 export const maxDuration = 30;
 
 export async function GET(

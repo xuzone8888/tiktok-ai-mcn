@@ -40,8 +40,8 @@ if curl -s http://127.0.0.1:9222/json/version > /dev/null 2>&1; then
     echo "✅ Chrome DevTools 已成功启动！"
     echo ""
     echo "现在可以："
-    echo "  1. 在Chrome中登录Vercel"
-    echo "  2. 告诉我，我会使用浏览器工具检查部署状态"
+    echo "  1. 在Chrome中登录阿里云生产站点"
+    echo "  2. 告诉我，我会使用浏览器工具检查线上状态"
     echo ""
     echo "要停止Chrome，运行: kill $CHROME_PID"
 else

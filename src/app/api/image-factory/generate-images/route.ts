@@ -26,7 +26,7 @@ import type {
 } from "@/types/ecom-image";
 import { FIVE_PACK_TYPES } from "@/types/ecom-image";
 
-// Vercel 函数配置
+// Route runtime configuration
 export const maxDuration = 180;
 
 const ECOM_IMAGE_CONCURRENCY = 2;

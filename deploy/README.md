@@ -148,7 +148,7 @@ PM2 进程管理配置文件，包含：
 
 ## ⚙️ 环境变量配置
 
-必需的环境变量（从 Vercel 获取）:
+必需的环境变量（从对应服务控制台或密码管理器获取）:
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 - `SUPABASE_SERVICE_ROLE_KEY`
@@ -195,7 +195,6 @@ pm2 restart tiktok-ai-mcn
 - **快速开始**: `QUICK_START.md`
 - **详细清单**: `DEPLOYMENT_CHECKLIST.md`
 - **完整指南**: `../ALIYUN_DEPLOYMENT_GUIDE.md`
-- **Vercel 检查报告**: `../VERCEL_CONSISTENCY_REPORT.md`
 
 ---
 

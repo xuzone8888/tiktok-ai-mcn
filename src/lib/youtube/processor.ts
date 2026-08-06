@@ -77,7 +77,7 @@ function isLocalVideoUrl(videoUrl: string) {
 }
 
 function isRemoteRuntime() {
-  return process.env.NODE_ENV === 'production' || Boolean(process.env.VERCEL || process.env.VERCEL_ENV)
+  return process.env.NODE_ENV === 'production'
 }
 
 function shouldSkipForCurrentRuntime(item: YouTubePublishItem) {
