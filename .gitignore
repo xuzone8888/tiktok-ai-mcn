@@ -47,6 +47,7 @@ next-env.d.ts
 
 # temp / test files
 .temp/
+.tmp/
 test-slideshow/
 *.mp4
 nohup.out
