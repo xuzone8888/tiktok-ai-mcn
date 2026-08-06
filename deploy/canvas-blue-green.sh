@@ -963,6 +963,9 @@ fi
 
 [[ -f "${CANDIDATE_DIR}/package.json" ]] ||
   die "Candidate package.json is missing"
+EXPECTED_BUILD_ID="$(basename -- "${CANDIDATE_DIR}")"
+[[ "${EXPECTED_BUILD_ID}" =~ ^[0-9a-f]{40}$ ]] ||
+  die "Candidate release directory must be named with its exact Git commit"
 [[ -f "${CANDIDATE_DIR}/server.js" ]] ||
   die "Candidate server.js is missing"
 [[ -f "${CANDIDATE_DIR}/scripts/start-canvas-web.mjs" ]] ||
@@ -1015,7 +1018,8 @@ if ((RUN_BUILD == 1)); then
       "$(command -v npm)" ci --include=dev
     node scripts/run-canvas-build.mjs \
       --root "${CANDIDATE_DIR}" \
-      --env-file "${ENV_FILE}"
+      --env-file "${ENV_FILE}" \
+      --release-commit "${EXPECTED_BUILD_ID}"
   )
 fi
 (
@@ -1023,7 +1027,8 @@ fi
   NODE_ENV=production node scripts/check-canvas-production-env.mjs \
     --root "${CANDIDATE_DIR}" \
     --env-file "${ENV_FILE}" \
-    --require-build
+    --require-build \
+    --expected-build-id "${EXPECTED_BUILD_ID}"
 )
 
 node --check "${CANDIDATE_DIR}/server.js"

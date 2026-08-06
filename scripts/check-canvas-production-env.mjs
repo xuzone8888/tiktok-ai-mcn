@@ -1,7 +1,15 @@
 #!/usr/bin/env node
 
 import { X509Certificate } from "node:crypto";
-import { existsSync, lstatSync, readFileSync } from "node:fs";
+import {
+  closeSync,
+  constants,
+  existsSync,
+  fstatSync,
+  lstatSync,
+  openSync,
+  readFileSync,
+} from "node:fs";
 import { isAbsolute, resolve } from "node:path";
 import process from "node:process";
 
@@ -18,6 +26,7 @@ function usage() {
     "  --env-file <path>  Environment file to load (default: .env.local)",
     "  --root <path>      Release root used for build checks (default: cwd)",
     "  --require-build    Require a non-empty .next/BUILD_ID",
+    "  --expected-build-id <id>  Require BUILD_ID to equal a Git commit",
     "  --help             Show this help",
     "",
     "The checker prints variable names and readiness results only. It never",
@@ -30,6 +39,7 @@ function parseArguments(argv) {
     envFile: ".env.local",
     root: process.cwd(),
     requireBuild: false,
+    expectedBuildId: null,
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -42,23 +52,39 @@ function parseArguments(argv) {
       options.requireBuild = true;
       continue;
     }
-    if (argument === "--env-file" || argument === "--root") {
+    if (
+      argument === "--env-file" ||
+      argument === "--root" ||
+      argument === "--expected-build-id"
+    ) {
       const value = argv[index + 1];
       if (!value || value.startsWith("--")) {
-        throw new Error(`${argument} requires a path`);
+        throw new Error(`${argument} requires a value`);
       }
       if (argument === "--env-file") options.envFile = value;
-      else options.root = value;
+      else if (argument === "--root") options.root = value;
+      else options.expectedBuildId = value;
       index += 1;
       continue;
     }
     throw new Error(`Unknown argument at position ${index + 1}`);
   }
 
+  if (
+    options.expectedBuildId !== null &&
+    !/^[0-9a-f]{40}$/.test(options.expectedBuildId)
+  ) {
+    throw new Error("--expected-build-id must be a lowercase 40-character Git commit");
+  }
+  if (options.expectedBuildId !== null && !options.requireBuild) {
+    throw new Error("--expected-build-id requires --require-build");
+  }
+
   return {
     envFile: resolve(options.root, options.envFile),
     root: resolve(options.root),
     requireBuild: options.requireBuild,
+    expectedBuildId: options.expectedBuildId,
   };
 }
 
@@ -93,6 +119,50 @@ function isHttpsUrl(name) {
     return new URL(value).protocol === "https:";
   } catch {
     return false;
+  }
+}
+
+function isCanonicalMacWorkerUrl(value) {
+  if (typeof value !== "string") return false;
+  const match = /^http:\/\/127\.0\.0\.1:([1-9][0-9]{0,4})$/.exec(value);
+  if (!match) return false;
+  const port = Number.parseInt(match[1], 10);
+  return port >= 1 && port <= 65535 && String(port) === match[1];
+}
+
+function sameFile(left, right) {
+  return (
+    left.dev === right.dev &&
+    left.ino === right.ino &&
+    left.size === right.size &&
+    left.mode === right.mode &&
+    left.uid === right.uid &&
+    left.nlink === right.nlink
+  );
+}
+
+function readTrustedBuildId(pathname) {
+  const before = lstatSync(pathname);
+  if (
+    !before.isFile() ||
+    before.isSymbolicLink() ||
+    before.nlink !== 1 ||
+    before.size < 1 ||
+    before.size > 128
+  ) {
+    throw new Error("untrusted BUILD_ID file");
+  }
+  const noFollow =
+    process.platform === "win32" ? 0 : (constants.O_NOFOLLOW ?? 0);
+  const descriptor = openSync(pathname, constants.O_RDONLY | noFollow);
+  try {
+    const opened = fstatSync(descriptor);
+    if (!opened.isFile() || !sameFile(before, opened)) {
+      throw new Error("BUILD_ID changed during validation");
+    }
+    return readFileSync(descriptor, "utf8").trim();
+  } finally {
+    closeSync(descriptor);
   }
 }
 
@@ -160,6 +230,7 @@ const requiredNames = [
   "CANVAS_RECOVERY_APPROVER_LABEL",
   "CANVAS_PUBLIC_ENABLED",
   "NEXT_PUBLIC_CANVAS_ENABLED",
+  "NEXT_PUBLIC_ENABLE_DECONSTRUCT",
   "CANVAS_VIDEO_MODELS",
   "NEXT_PUBLIC_CANVAS_VIDEO_MODELS",
 ];
@@ -274,6 +345,48 @@ if (
     "Canvas internal secrets",
     "reconcile, recovery operator, and recovery approver secrets must be pairwise distinct"
   );
+}
+
+if (
+  isConfigured("NEXT_PUBLIC_ENABLE_DECONSTRUCT") &&
+  !/^[01]$/.test(environment.NEXT_PUBLIC_ENABLE_DECONSTRUCT)
+) {
+  fail("NEXT_PUBLIC_ENABLE_DECONSTRUCT", "must be exactly 0 or 1");
+} else if (isConfigured("NEXT_PUBLIC_ENABLE_DECONSTRUCT")) {
+  pass("NEXT_PUBLIC_ENABLE_DECONSTRUCT format");
+}
+
+if (!isConfigured("MAC_WORKER_URL")) {
+  fail("MAC_WORKER_URL", "missing");
+} else if (environment.MAC_WORKER_URL !== environment.MAC_WORKER_URL.trim()) {
+  fail("MAC_WORKER_URL", "leading or trailing whitespace is not allowed");
+} else if (!isCanonicalMacWorkerUrl(environment.MAC_WORKER_URL)) {
+  fail(
+    "MAC_WORKER_URL",
+    "must be canonical http://127.0.0.1:<port> with port 1-65535"
+  );
+} else {
+  pass("MAC_WORKER_URL loopback boundary");
+}
+
+if (!isConfigured("MAC_WORKER_TOKEN")) {
+  fail("MAC_WORKER_TOKEN", "missing");
+} else if (!/^[0-9a-f]{64}$/.test(environment.MAC_WORKER_TOKEN)) {
+  fail("MAC_WORKER_TOKEN", "must be exactly 64 lowercase hexadecimal characters");
+} else {
+  pass("MAC_WORKER_TOKEN format");
+  if (
+    privilegedSecrets.some(
+      (name) => environment[name] === environment.MAC_WORKER_TOKEN
+    )
+  ) {
+    fail(
+      "MAC worker secret isolation",
+      "the Worker token must not equal a Canvas privileged secret"
+    );
+  } else {
+    pass("MAC worker secret isolation");
+  }
 }
 
 const recoveryLabelPattern = /^[A-Za-z0-9._@-]{3,48}$/;
@@ -454,8 +567,19 @@ if (options.requireBuild) {
     fail("Next.js production build", ".next/BUILD_ID is missing");
   } else {
     try {
-      if (readFileSync(buildIdPath, "utf8").trim()) {
+      const buildId = readTrustedBuildId(buildIdPath);
+      if (buildId) {
         pass("Next.js production build");
+        if (options.expectedBuildId !== null) {
+          if (buildId === options.expectedBuildId) {
+            pass("Next.js BUILD_ID matches the immutable release commit");
+          } else {
+            fail(
+              "Next.js BUILD_ID",
+              "does not match the immutable release commit"
+            );
+          }
+        }
       } else {
         fail("Next.js production build", ".next/BUILD_ID is empty");
       }

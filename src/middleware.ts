@@ -42,7 +42,10 @@ const PROTECTED_ROUTES = [
   "/admin",
 ];
 
-const AUTH_ENTRY_ROUTES = ["/", "/auth/login", "/auth/register"];
+// The login page is always a public callback sink. Middleware cannot see URL
+// fragments, so redirecting an already-authenticated request here would drop
+// legacy #access_token callbacks before the client can restore them.
+const AUTH_ENTRY_ROUTES = ["/", "/auth/register"];
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;

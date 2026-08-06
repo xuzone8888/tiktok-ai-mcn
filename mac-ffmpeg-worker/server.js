@@ -7,24 +7,30 @@
 
 require('dotenv').config();
 
+const crypto = require('crypto');
+const AUTH_TOKEN = process.env.WORKER_AUTH_TOKEN || '';
+if (!/^[0-9a-f]{64}$/.test(AUTH_TOKEN)) {
+    console.error('[Worker] Refusing to start: WORKER_AUTH_TOKEN must be exactly 64 lowercase hexadecimal characters');
+    process.exit(1);
+}
+const AUTH_TOKEN_BUFFER = Buffer.from(AUTH_TOKEN, 'ascii');
+delete process.env.WORKER_AUTH_TOKEN;
+
 const express = require('express');
 const { spawn } = require('child_process');
 const fs = require('fs');
 const fsp = fs.promises;
 const path = require('path');
-const crypto = require('crypto');
 const { mergeVoiceover } = require('./merge-audio');
 const { uploadToOSS } = require('./oss-upload');
 const { stitchVideos, probeMedia, downloadVideo } = require('./stitch');
 
 const app = express();
-app.use(express.json({ limit: '50mb' })); // 配音 base64 约 160KB/个，50MB 绰绰有余
 
 // ========================================
 // 配置
 // ========================================
 const PORT = process.env.WORKER_PORT || 9090;
-const AUTH_TOKEN = process.env.WORKER_AUTH_TOKEN || '';
 const PROJECT_ROOT = path.resolve(__dirname, '..'); // 项目根目录 (tiktok-ai-mcn/)
 const PYTHON_SCRIPT = path.join(PROJECT_ROOT, 'scripts', 'ffmpeg-slideshow.py');
 const MUSIC_DIR = path.join(PROJECT_ROOT, 'public', 'music');
@@ -47,14 +53,25 @@ console.log(`[Worker] Python: ${PYTHON_CMD}, Script: ${PYTHON_SCRIPT}`);
 // 鉴权中间件
 // ========================================
 function authMiddleware(req, res, next) {
-    if (!AUTH_TOKEN) return next(); // 开发模式无 Token 时跳过
-    const token = req.headers.authorization?.replace('Bearer ', '');
-    if (token !== AUTH_TOKEN) {
+    const authorization = req.headers.authorization;
+    const match = typeof authorization === 'string'
+        ? /^Bearer ([0-9a-f]{64})$/.exec(authorization)
+        : null;
+    if (!match) {
+        return res.status(401).json({ error: 'Unauthorized' });
+    }
+    const presentedToken = Buffer.from(match[1], 'ascii');
+    if (
+        presentedToken.length !== AUTH_TOKEN_BUFFER.length ||
+        !crypto.timingSafeEqual(presentedToken, AUTH_TOKEN_BUFFER)
+    ) {
         return res.status(401).json({ error: 'Unauthorized' });
     }
     next();
 }
 app.use('/api', authMiddleware);
+app.use('/health', authMiddleware);
+app.use('/api', express.json({ limit: '50mb' })); // 配音 base64 约 160KB/个，50MB 绰绰有余
 
 // ========================================
 // GET /health — 健康检查
@@ -405,12 +422,12 @@ function cleanup(dir) {
 // ========================================
 // 启动
 // ========================================
-app.listen(PORT, () => {
+app.listen(PORT, '127.0.0.1', () => {
     console.log(`\n========================================`);
     console.log(`  FFmpeg Worker running on port ${PORT}`);
     console.log(`  Python: ${PYTHON_CMD}`);
     console.log(`  Script: ${PYTHON_SCRIPT}`);
     console.log(`  Music:  ${MUSIC_DIR}`);
-    console.log(`  Auth:   ${AUTH_TOKEN ? 'ENABLED' : 'DISABLED (dev mode)'}`);
+    console.log(`  Auth:   REQUIRED`);
     console.log(`========================================\n`);
 });

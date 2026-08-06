@@ -3,14 +3,15 @@
 import {
   chmodSync,
   existsSync,
+  linkSync,
   mkdtempSync,
   mkdirSync,
   readFileSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { createServer } from "node:http";
-import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { spawn } from "node:child_process";
 import process from "node:process";
@@ -21,8 +22,10 @@ import {
 } from "./canvas-exact-env.mjs";
 
 const root = resolve(".");
+const verifierTemporaryParent = join(root, ".temp");
+mkdirSync(verifierTemporaryParent, { recursive: true });
 const temporaryRoot = mkdtempSync(
-  join(resolve(tmpdir()), "canvas-blue-green-verifier-")
+  join(verifierTemporaryParent, "canvas-blue-green-verifier-")
 );
 const bundleTool = resolve("scripts/canvas-rollback-bundle.mjs");
 const healthProbe = resolve("scripts/probe-canvas-internal-health.mjs");
@@ -1230,9 +1233,33 @@ function testStaticContracts() {
   assertIncludes(authentication, "CANVAS_RECOVERY_APPROVER_SECRET", "internal auth");
   assertIncludes(authentication, "timingSafeEqual", "internal auth");
 
+  const macWorker = read("mac-ffmpeg-worker/server.js");
+  for (const token of [
+    "/^[0-9a-f]{64}$/",
+    "/^Bearer ([0-9a-f]{64})$/",
+    "crypto.timingSafeEqual",
+    "app.use('/api', authMiddleware)",
+    "app.use('/health', authMiddleware)",
+    "app.listen(PORT, '127.0.0.1'",
+  ]) {
+    assertIncludes(macWorker, token, "Mac FFmpeg Worker authentication");
+  }
+  assert(
+    !macWorker.includes("if (!AUTH_TOKEN) return next()"),
+    "Mac FFmpeg Worker retained its unauthenticated development bypass"
+  );
+  assert(
+    macWorker.indexOf("app.use('/api', authMiddleware)") <
+      macWorker.indexOf("app.use('/api', express.json"),
+    "Mac FFmpeg Worker must authenticate before parsing request bodies"
+  );
+
   const deploy = read("deploy/canvas-blue-green.sh");
   for (const token of [
     'EXPECTED_ENV_FILE="${CANDIDATE_DIR}/.env.local"',
+    'EXPECTED_BUILD_ID="$(basename -- "${CANDIDATE_DIR}")"',
+    '--expected-build-id "${EXPECTED_BUILD_ID}"',
+    '--release-commit "${EXPECTED_BUILD_ID}"',
     "--allow-legacy-active",
     "legacy-bootstrap",
     "/api/internal/canvas/health",
@@ -1283,6 +1310,16 @@ function testStaticContracts() {
   const buildRunner = read("scripts/run-canvas-build.mjs");
   assertIncludes(buildRunner, "exactProcessEnvironment", "exact build runner");
   assertIncludes(buildRunner, 'process.execPath, [nextCli, "build"]', "exact build runner");
+  assertIncludes(buildRunner, 'argument === "--release-commit"', "exact build runner");
+  assertIncludes(
+    buildRunner,
+    'Object.hasOwn(exactEnvironment.values, "CANVAS_RELEASE_COMMIT")',
+    "exact build runner"
+  );
+  assertIncludes(buildRunner, "additions.CANVAS_RELEASE_COMMIT", "exact build runner");
+  const productionChecker = read("scripts/check-canvas-production-env.mjs");
+  assertIncludes(productionChecker, "readTrustedBuildId", "production build preflight");
+  assertIncludes(productionChecker, "O_NOFOLLOW", "production build preflight");
   const nextConfig = read("next.config.mjs");
   assertIncludes(nextConfig, "cpus: 1", "Next production build worker cap");
   const webBootstrap = read("scripts/start-canvas-web.mjs");
@@ -1371,6 +1408,94 @@ function testStaticContracts() {
   assertIncludes(nginx, "return 404;", "production Nginx internal-route deny");
 }
 
+async function testExactBuildRunnerCommitBoundary() {
+  const buildRoot = join(temporaryRoot, "exact-build-runner");
+  const nextCli = join(buildRoot, "node_modules", "next", "dist", "bin", "next");
+  const envFile = join(buildRoot, ".env.local");
+  const observation = join(buildRoot, ".build-runner-observed.json");
+  const releaseCommit = "d".repeat(40);
+  const staleCommit = "e".repeat(40);
+  mkdirSync(join(buildRoot, "node_modules", "next", "dist", "bin"), {
+    recursive: true,
+  });
+  writeFileSync(
+    nextCli,
+    [
+      'const { writeFileSync } = require("node:fs");',
+      'const { join } = require("node:path");',
+      'if (process.argv[2] !== "build") process.exit(12);',
+      "writeFileSync(join(process.cwd(), '.build-runner-observed.json'), JSON.stringify({",
+      "  releaseCommit: process.env.CANVAS_RELEASE_COMMIT ?? null,",
+      "  nodeEnv: process.env.NODE_ENV ?? null,",
+      "  fileSentinel: process.env.CANVAS_BUILD_FILE_SENTINEL ?? null,",
+      "  ambientSentinel: process.env.CANVAS_BUILD_AMBIENT_SENTINEL ?? null,",
+      "}));",
+      "",
+    ].join("\n")
+  );
+  writeFileSync(
+    envFile,
+    `CANVAS_RELEASE_COMMIT=${staleCommit}\nCANVAS_BUILD_FILE_SENTINEL=from-file\n`
+  );
+  chmodSync(envFile, 0o600);
+
+  const runner = resolve("scripts/run-canvas-build.mjs");
+  const baseArguments = [
+    runner,
+    "--root",
+    buildRoot,
+    "--env-file",
+    envFile,
+  ];
+  const staleControlled = await runNode(
+    baseArguments.concat("--release-commit", releaseCommit)
+  );
+  const staleOrdinary = await runNode(baseArguments);
+  assert(
+    staleControlled.code !== 0 && staleOrdinary.code !== 0,
+    "exact build runner accepted a release commit stored in .env.local"
+  );
+  writeFileSync(envFile, "CANVAS_BUILD_FILE_SENTINEL=from-file\n");
+  chmodSync(envFile, 0o600);
+
+  const controlled = await runNode(
+    baseArguments.concat("--release-commit", releaseCommit),
+    {
+      CANVAS_RELEASE_COMMIT: "f".repeat(40),
+      CANVAS_BUILD_AMBIENT_SENTINEL: "must-not-cross",
+    }
+  );
+  assert(
+    controlled.code === 0,
+    `exact build runner rejected a valid release commit: ${controlled.stderr.trim()}`
+  );
+  const controlledEnvironment = JSON.parse(readFileSync(observation, "utf8"));
+  assert(
+    controlledEnvironment.releaseCommit === releaseCommit &&
+      controlledEnvironment.nodeEnv === "production" &&
+      controlledEnvironment.fileSentinel === "from-file" &&
+      controlledEnvironment.ambientSentinel === null,
+    "exact build runner did not isolate and inject the reviewed release commit"
+  );
+
+  const ordinary = await runNode(baseArguments, {
+    CANVAS_RELEASE_COMMIT: "f".repeat(40),
+  });
+  assert(ordinary.code === 0, "ordinary exact build runner invocation failed");
+  const ordinaryEnvironment = JSON.parse(readFileSync(observation, "utf8"));
+  assert(
+    ordinaryEnvironment.releaseCommit === null,
+    "ordinary exact build inherited a stale release commit"
+  );
+
+  for (const invalid of ["a".repeat(39), "A".repeat(40), ` ${releaseCommit}`]) {
+    const rejected = await runNode(
+      baseArguments.concat("--release-commit", invalid)
+    );
+    assert(rejected.code !== 0, "exact build runner accepted an invalid release commit");
+  }
+}
+
 async function testNextBuildConfig() {
   const configUrl = new URL("../next.config.mjs", import.meta.url);
   configUrl.searchParams.set("verify", String(Date.now()));
@@ -1380,11 +1505,314 @@ async function testNextBuildConfig() {
     config.experimental?.cpus === 1,
     "Next production build worker cap must resolve to one"
   );
+
+  const previousReleaseCommit = process.env.CANVAS_RELEASE_COMMIT;
+  const releaseCommit = "a".repeat(40);
+  try {
+    delete process.env.CANVAS_RELEASE_COMMIT;
+    assert(
+      (await config.generateBuildId()) === null,
+      "ordinary builds must retain the Next.js generated BUILD_ID fallback"
+    );
+
+    process.env.CANVAS_RELEASE_COMMIT = releaseCommit;
+    assert(
+      (await config.generateBuildId()) === releaseCommit,
+      "controlled builds must use the exact immutable release commit"
+    );
+
+    for (const invalid of ["a".repeat(39), "A".repeat(40), ` ${releaseCommit}`]) {
+      process.env.CANVAS_RELEASE_COMMIT = invalid;
+      let rejected = false;
+      try {
+        await config.generateBuildId();
+      } catch {
+        rejected = true;
+      }
+      assert(rejected, "invalid controlled BUILD_ID input must fail closed");
+    }
+  } finally {
+    if (previousReleaseCommit === undefined) {
+      delete process.env.CANVAS_RELEASE_COMMIT;
+    } else {
+      process.env.CANVAS_RELEASE_COMMIT = previousReleaseCommit;
+    }
+  }
+
+  const preflightRoot = join(temporaryRoot, "build-id-preflight");
+  mkdirSync(join(preflightRoot, ".next"), { recursive: true });
+  const preflightEnv = join(preflightRoot, ".env.local");
+  const workerToken = "c".repeat(64);
+  const preflightEnvironment = {
+    NEXT_PUBLIC_SUPABASE_URL: "https://project.supabase.test",
+    NEXT_PUBLIC_SUPABASE_ANON_KEY: "anon-key",
+    SUPABASE_SERVICE_ROLE_KEY: "service-role-key",
+    ALIYUN_OSS_REGION: "oss-cn-beijing",
+    ALIYUN_OSS_ACCESS_KEY_ID: "access-key-id",
+    ALIYUN_OSS_ACCESS_KEY_SECRET: "access-key-secret",
+    ALIYUN_OSS_BUCKET: "canvas-test-bucket",
+    ALIYUN_OSS_ENDPOINT: "https://oss.test.invalid",
+    ALIYUN_OSS_CUSTOM_DOMAIN: "media.test.invalid",
+    CANVAS_RECONCILE_SECRET: "r".repeat(48),
+    CANVAS_RECOVERY_ADMIN_SECRET: "a".repeat(48),
+    CANVAS_RECOVERY_APPROVER_SECRET: "p".repeat(48),
+    CANVAS_RECOVERY_OPERATOR_LABEL: "operator.test",
+    CANVAS_RECOVERY_APPROVER_LABEL: "approver.test",
+    CANVAS_PUBLIC_ENABLED: "false",
+    NEXT_PUBLIC_CANVAS_ENABLED: "true",
+    NEXT_PUBLIC_ENABLE_DECONSTRUCT: "1",
+    CANVAS_VIDEO_MODELS: "grok",
+    NEXT_PUBLIC_CANVAS_VIDEO_MODELS: "grok",
+    CANVAS_ACCESS_USER_IDS: "11111111-1111-4111-8111-111111111111",
+    VIDEO_PLATFORM_IMAGE_API_KEY: "image-key",
+    VIDEO_PLATFORM_IMAGE_BASE_URL: "https://image.test.invalid",
+    VIDEO_PLATFORM_API_KEY: "video-key",
+    VIDEO_PLATFORM_BASE_URL: "https://video.test.invalid",
+    MAC_WORKER_URL: "http://127.0.0.1:9091",
+    MAC_WORKER_TOKEN: workerToken,
+  };
+  const writePreflightEnvironment = (overrides = {}, omitted = []) => {
+    const omittedNames = new Set(omitted);
+    const entries = { ...preflightEnvironment, ...overrides };
+    writeFileSync(
+      preflightEnv,
+      `${Object.entries(entries)
+        .filter(([name]) => !omittedNames.has(name))
+        .map(([name, value]) => `${name}=${value}`)
+        .join("\n")}\n`
+    );
+  };
+  writePreflightEnvironment();
+  chmodSync(preflightEnv, 0o600);
+  writeFileSync(join(preflightRoot, ".next", "BUILD_ID"), `${releaseCommit}\n`);
+
+  const checker = resolve("scripts/check-canvas-production-env.mjs");
+  const checkerArguments = [
+    checker,
+    "--root",
+    preflightRoot,
+    "--env-file",
+    preflightEnv,
+    "--require-build",
+    "--expected-build-id",
+    releaseCommit,
+  ];
+  const matchingBuild = await runNode(checkerArguments, { NODE_ENV: "production" });
+  assert(
+    matchingBuild.code === 0 &&
+      matchingBuild.stdout.includes(
+      "[OK] Next.js BUILD_ID matches the immutable release commit"
+    ) && !matchingBuild.stderr.includes("[FAIL] Next.js BUILD_ID"),
+    "production preflight rejected the exact immutable build ID contract"
+  );
+  assert(
+    !`${matchingBuild.stdout}\n${matchingBuild.stderr}`.includes(workerToken),
+    "production preflight printed the synthetic Worker token"
+  );
+
+  const buildIdPath = join(preflightRoot, ".next", "BUILD_ID");
+  const linkedBuildId = join(preflightRoot, ".next", "BUILD_ID.link-target");
+  writeFileSync(linkedBuildId, `${releaseCommit}\n`);
+  rmSync(buildIdPath);
+  linkSync(linkedBuildId, buildIdPath);
+  const hardlinkedBuild = await runNode(checkerArguments, {
+    NODE_ENV: "production",
+  });
+  assert(
+    hardlinkedBuild.code !== 0 &&
+      hardlinkedBuild.stderr.includes("[FAIL] Next.js production build"),
+    "production preflight accepted a hard-linked BUILD_ID"
+  );
+  rmSync(buildIdPath);
+  rmSync(linkedBuildId);
+  writeFileSync(buildIdPath, `${releaseCommit}\n`);
+
+  const symlinkTarget = join(preflightRoot, ".next", "BUILD_ID.symlink-target");
+  writeFileSync(symlinkTarget, `${releaseCommit}\n`);
+  rmSync(buildIdPath);
+  let symlinkCreated = false;
+  try {
+    symlinkSync(symlinkTarget, buildIdPath, "file");
+    symlinkCreated = true;
+  } catch (error) {
+    if (
+      process.platform !== "win32" ||
+      !["EACCES", "EPERM", "UNKNOWN"].includes(error?.code)
+    ) {
+      throw error;
+    }
+  }
+  if (symlinkCreated) {
+    const symlinkedBuild = await runNode(checkerArguments, {
+      NODE_ENV: "production",
+    });
+    assert(
+      symlinkedBuild.code !== 0 &&
+        symlinkedBuild.stderr.includes("[FAIL] Next.js production build"),
+      "production preflight accepted a symbolic-link BUILD_ID"
+    );
+    rmSync(buildIdPath);
+  }
+  rmSync(symlinkTarget);
+  writeFileSync(buildIdPath, `${releaseCommit}\n`);
+
+  const invalidWorkerFixtures = [
+    {
+      label: "missing Worker URL",
+      omitted: ["MAC_WORKER_URL"],
+      expectedFailure: "MAC_WORKER_URL",
+    },
+    {
+      label: "missing Worker token",
+      omitted: ["MAC_WORKER_TOKEN"],
+      expectedFailure: "MAC_WORKER_TOKEN",
+    },
+    {
+      label: "weak Worker token",
+      overrides: { MAC_WORKER_TOKEN: "weak-worker-token" },
+      expectedFailure: "MAC_WORKER_TOKEN",
+    },
+    {
+      label: "non-loopback Worker URL",
+      overrides: { MAC_WORKER_URL: "http://0.0.0.0:9091" },
+      expectedFailure: "MAC_WORKER_URL",
+    },
+    {
+      label: "localhost Worker URL",
+      overrides: { MAC_WORKER_URL: "http://localhost:9091" },
+      expectedFailure: "MAC_WORKER_URL",
+    },
+    {
+      label: "Worker URL path",
+      overrides: { MAC_WORKER_URL: "http://127.0.0.1:9091/api" },
+      expectedFailure: "MAC_WORKER_URL",
+    },
+    {
+      label: "Worker URL query",
+      overrides: { MAC_WORKER_URL: "http://127.0.0.1:9091?mode=test" },
+      expectedFailure: "MAC_WORKER_URL",
+    },
+    {
+      label: "Worker URL fragment",
+      overrides: { MAC_WORKER_URL: '"http://127.0.0.1:9091#health"' },
+      expectedFailure: "MAC_WORKER_URL",
+    },
+    {
+      label: "Worker URL userinfo",
+      overrides: { MAC_WORKER_URL: "http://user@127.0.0.1:9091" },
+      expectedFailure: "MAC_WORKER_URL",
+    },
+    {
+      label: "Worker URL trailing slash",
+      overrides: { MAC_WORKER_URL: "http://127.0.0.1:9091/" },
+      expectedFailure: "MAC_WORKER_URL",
+    },
+    {
+      label: "Worker URL zero port",
+      overrides: { MAC_WORKER_URL: "http://127.0.0.1:0" },
+      expectedFailure: "MAC_WORKER_URL",
+    },
+    {
+      label: "Worker URL non-canonical port",
+      overrides: { MAC_WORKER_URL: "http://127.0.0.1:09091" },
+      expectedFailure: "MAC_WORKER_URL",
+    },
+    {
+      label: "Worker URL out-of-range port",
+      overrides: { MAC_WORKER_URL: "http://127.0.0.1:65536" },
+      expectedFailure: "MAC_WORKER_URL",
+    },
+    {
+      label: "Worker token reused as Canvas secret",
+      overrides: { CANVAS_RECONCILE_SECRET: workerToken },
+      expectedFailure: "MAC worker secret isolation",
+    },
+  ];
+
+  for (const fixture of invalidWorkerFixtures) {
+    writePreflightEnvironment(fixture.overrides, fixture.omitted);
+    const result = await runNode(checkerArguments, { NODE_ENV: "production" });
+    const combinedOutput = `${result.stdout}\n${result.stderr}`;
+    assert(
+      result.code !== 0 &&
+        result.stderr.includes(`[FAIL] ${fixture.expectedFailure}`),
+      `production preflight accepted ${fixture.label}`
+    );
+    assert(
+      !combinedOutput.includes(workerToken) &&
+        !combinedOutput.includes("weak-worker-token"),
+      `production preflight printed a Worker token for ${fixture.label}`
+    );
+  }
+  writePreflightEnvironment();
+
+  const invalidDeconstructFixtures = [
+    {
+      label: "missing deconstruct flag",
+      omitted: ["NEXT_PUBLIC_ENABLE_DECONSTRUCT"],
+    },
+    {
+      label: "boolean deconstruct flag",
+      overrides: { NEXT_PUBLIC_ENABLE_DECONSTRUCT: "true" },
+    },
+    {
+      label: "numeric deconstruct flag outside the contract",
+      overrides: { NEXT_PUBLIC_ENABLE_DECONSTRUCT: "2" },
+    },
+    {
+      label: "deconstruct flag with leading whitespace",
+      overrides: { NEXT_PUBLIC_ENABLE_DECONSTRUCT: '" 1"' },
+    },
+    {
+      label: "deconstruct flag with trailing whitespace",
+      overrides: { NEXT_PUBLIC_ENABLE_DECONSTRUCT: '"1 "' },
+    },
+  ];
+
+  for (const fixture of invalidDeconstructFixtures) {
+    writePreflightEnvironment(fixture.overrides, fixture.omitted);
+    const result = await runNode(checkerArguments, { NODE_ENV: "production" });
+    assert(
+      result.code !== 0 &&
+        result.stderr.includes("[FAIL] NEXT_PUBLIC_ENABLE_DECONSTRUCT"),
+      `production preflight accepted ${fixture.label}`
+    );
+  }
+  writePreflightEnvironment();
+
+  const mismatchedBuild = await runNode(
+    checkerArguments.slice(0, -1).concat("b".repeat(40)),
+    { NODE_ENV: "production" }
+  );
+  assert(
+    mismatchedBuild.code !== 0 &&
+      mismatchedBuild.stderr.includes("[FAIL] Next.js BUILD_ID"),
+    "production preflight accepted a BUILD_ID from another commit"
+  );
+
+  const invalidExpectedBuild = await runNode(
+    checkerArguments.slice(0, -1).concat("not-a-commit"),
+    { NODE_ENV: "production" }
+  );
+  assert(
+    invalidExpectedBuild.code !== 0,
+    "production preflight accepted an invalid expected BUILD_ID"
+  );
+
+  const missingRequireBuild = await runNode(
+    checkerArguments.filter((argument) => argument !== "--require-build"),
+    { NODE_ENV: "production" }
+  );
+  assert(
+    missingRequireBuild.code !== 0,
+    "production preflight accepted expected BUILD_ID without --require-build"
+  );
 }
 
 async function main() {
   try {
     testStaticContracts();
+    await testExactBuildRunnerCommitBoundary();
     await testNextBuildConfig();
     testExactEnvironmentBoundary();
     await testBundles();
@@ -1395,9 +1823,9 @@ async function main() {
     );
   } finally {
     const resolvedTemporaryRoot = resolve(temporaryRoot);
-    const resolvedSystemTemporaryRoot = resolve(tmpdir());
+    const resolvedTemporaryParent = resolve(verifierTemporaryParent);
     const relation = resolvedTemporaryRoot.startsWith(
-      `${resolvedSystemTemporaryRoot}${process.platform === "win32" ? "\\" : "/"}`
+      `${resolvedTemporaryParent}${process.platform === "win32" ? "\\" : "/"}`
     );
     if (relation) rmSync(resolvedTemporaryRoot, { recursive: true, force: true });
   }
