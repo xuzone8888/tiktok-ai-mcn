@@ -1,5 +1,6 @@
-import type { AdminSupabaseClient, VideoModelId } from "./types";
+import { applyTaskCreditDelta } from "@/lib/credits/atomic-task-credit";
 import type { Json } from "@/types/database";
+import type { AdminSupabaseClient, VideoModelId } from "./types";
 
 interface CreditCheckResult {
   ok: boolean;
@@ -15,14 +16,15 @@ interface GenerationForRefund {
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
-    ? value as Record<string, unknown>
+    ? (value as Record<string, unknown>)
     : {};
 }
 
 function getMissingSchemaColumn(error: unknown): string | null {
-  const message = typeof (error as { message?: unknown })?.message === "string"
-    ? (error as { message: string }).message
-    : "";
+  const message =
+    typeof (error as { message?: unknown })?.message === "string"
+      ? (error as { message: string }).message
+      : "";
 
   return (
     message.match(/Could not find the '([^']+)' column/)?.[1] ||
@@ -44,102 +46,6 @@ async function hasRefundTransaction(
     .maybeSingle();
 
   return Boolean(data);
-}
-
-export async function insertCreditTransaction(
-  supabase: AdminSupabaseClient,
-  params: {
-    userId: string;
-    type: "consume" | "refund";
-    amount: number;
-    balanceBefore: number;
-    balanceAfter: number;
-    taskId: string;
-    description: string;
-    metadata?: Record<string, unknown>;
-  }
-) {
-  const candidateTypes = params.type === "consume" ? ["usage", "consume"] : ["refund"];
-  let lastError: unknown;
-
-  for (const type of candidateTypes) {
-    const payload = {
-      user_id: params.userId,
-      type,
-      amount: params.amount,
-      balance_before: params.balanceBefore,
-      balance_after: params.balanceAfter,
-      reference_type: "generation",
-      reference_id: null,
-      description: `${params.description} [task:${params.taskId}]`,
-    };
-
-    const { error } = await supabase.from("credit_transactions").insert({
-      ...payload,
-      metadata: {
-        ...(params.metadata || {}),
-        task_id: params.taskId,
-      } as Json,
-    });
-
-    if (!error) return;
-    if (error.code === "PGRST204" && error.message?.includes("metadata")) {
-      const retry = await supabase.from("credit_transactions").insert(payload);
-      if (!retry.error) return;
-      lastError = retry.error;
-      continue;
-    }
-    lastError = error;
-  }
-
-  throw lastError instanceof Error ? lastError : new Error("写入积分流水失败");
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-export async function adjustProfileCredits(params: {
-  supabase: AdminSupabaseClient;
-  userId: string;
-  delta: number;
-  insufficientError?: string;
-}): Promise<{ before: number; after: number }> {
-  const { supabase, userId, delta, insufficientError } = params;
-
-  for (let attempt = 1; attempt <= 5; attempt += 1) {
-    const { data: profile, error: profileError } = await supabase
-      .from("profiles")
-      .select("credits")
-      .eq("id", userId)
-      .single();
-
-    if (profileError || !profile) {
-      throw new Error("用户未找到");
-    }
-
-    const before = profile.credits;
-    const after = before + delta;
-    if (after < 0) {
-      throw new Error(insufficientError || "积分不足");
-    }
-
-    const { data: updated, error: updateError } = await supabase
-      .from("profiles")
-      .update({ credits: after })
-      .eq("id", userId)
-      .eq("credits", before)
-      .select("credits")
-      .maybeSingle();
-
-    if (!updateError && updated) {
-      return { before, after };
-    }
-
-    await sleep(80 * attempt);
-  }
-
-  throw new Error("积分更新冲突，请重试");
 }
 
 async function updateGenerationForRefund(params: {
@@ -170,7 +76,10 @@ async function updateGenerationForRefund(params: {
 
     lastError = result.error;
     const missingColumn = getMissingSchemaColumn(result.error);
-    if (missingColumn && Object.prototype.hasOwnProperty.call(candidate, missingColumn)) {
+    if (
+      missingColumn &&
+      Object.prototype.hasOwnProperty.call(candidate, missingColumn)
+    ) {
       const { [missingColumn]: _removed, ...nextCandidate } = candidate;
       candidate = nextCandidate;
       continue;
@@ -216,38 +125,27 @@ export async function deductVideoCredits(params: {
   creditCost: number;
   clientTaskId: string;
 }) {
-  const { supabase, userId, taskId, modelType, creditCost, clientTaskId } = params;
-  const { before, after } = await adjustProfileCredits({
-    supabase,
+  const { supabase, userId, taskId, modelType, creditCost, clientTaskId } =
+    params;
+  const charge = await applyTaskCreditDelta({
+    supabase: supabase as any,
     userId,
-    delta: -creditCost,
-    insufficientError: "积分不足",
+    entryKind: "consume",
+    amount: -creditCost,
+    scope: "video-model",
+    taskId,
+    operation: "consume",
+    pricingVersion: `video-model-${modelType}-v1`,
+    description: `素材生成视频 ${modelType} 扣费 (${taskId}) [task:${taskId}]`,
   });
 
-  try {
-    await insertCreditTransaction(supabase, {
-      userId,
-      type: "consume",
-      amount: -creditCost,
-      balanceBefore: before,
-      balanceAfter: after,
-      taskId,
-      description: `素材生成视频 ${modelType} 扣费 (${taskId})`,
-      metadata: {
-        model_type: modelType,
-        client_task_id: clientTaskId,
-      },
-    });
-  } catch (transactionError) {
-    await adjustProfileCredits({
-      supabase,
-      userId,
-      delta: creditCost,
-    });
-    throw transactionError;
-  }
-
-  return { before, after, deducted: creditCost };
+  return {
+    before: charge.balanceBefore,
+    after: charge.balanceAfter,
+    deducted: creditCost,
+    applied: charge.applied,
+    clientTaskId,
+  };
 }
 
 export async function refundVideoCreditsDirect(params: {
@@ -259,50 +157,29 @@ export async function refundVideoCreditsDirect(params: {
   reason: string;
   metadata?: Record<string, unknown>;
 }): Promise<{ refunded: boolean; amount?: number }> {
-  const { supabase, userId, taskId, modelType, amount, reason, metadata } = params;
+  const { supabase, userId, taskId, modelType, amount } = params;
   if (amount <= 0) return { refunded: false };
 
   if (await hasRefundTransaction(supabase, taskId)) {
     return { refunded: false };
   }
 
-  let adjusted: { before: number; after: number };
   try {
-    adjusted = await adjustProfileCredits({
-      supabase,
+    const refund = await applyTaskCreditDelta({
+      supabase: supabase as any,
       userId,
-      delta: amount,
+      entryKind: "refund",
+      amount,
+      scope: "video-model",
+      taskId,
+      operation: "refund",
+      pricingVersion: `video-model-${modelType}-v1`,
+      description: `素材生成视频 ${modelType} 失败退款 (${taskId}) [task:${taskId}]`,
     });
+    return { refunded: refund.applied, amount };
   } catch {
     return { refunded: false };
   }
-
-  try {
-    await insertCreditTransaction(supabase, {
-      userId,
-      type: "refund",
-      amount,
-      balanceBefore: adjusted.before,
-      balanceAfter: adjusted.after,
-      taskId,
-      description: `素材生成视频 ${modelType} 失败退款 (${taskId})`,
-      metadata: {
-        ...(metadata || {}),
-        model_type: modelType,
-        reason,
-        direct_refund: true,
-      },
-    });
-  } catch (transactionError) {
-    await adjustProfileCredits({
-      supabase,
-      userId,
-      delta: -amount,
-    });
-    throw transactionError;
-  }
-
-  return { refunded: true, amount };
 }
 
 export async function refundVideoCreditsOnce(params: {
@@ -317,17 +194,18 @@ export async function refundVideoCreditsOnce(params: {
     return { refunded: false };
   }
 
-  const { data: updated, error: updateError } = await updateGenerationForRefund({
-    supabase,
-    taskId,
-    payload: {
-      status: "failed",
-      error_message: reason,
-      credits_refunded: 0,
-    },
-    onlyProcessing: true,
-    select: "user_id, credit_cost, metadata",
-  });
+  const { data: updated, error: updateError } =
+    await updateGenerationForRefund({
+      supabase,
+      taskId,
+      payload: {
+        status: "failed",
+        error_message: reason,
+        credits_refunded: 0,
+      },
+      onlyProcessing: true,
+      select: "user_id, credit_cost, metadata",
+    });
 
   if (updateError || !updated) {
     return { refunded: false };
@@ -339,42 +217,28 @@ export async function refundVideoCreditsOnce(params: {
     return { refunded: false };
   }
 
-  let adjusted: { before: number; after: number };
   try {
-    adjusted = await adjustProfileCredits({
-      supabase,
+    const refund = await applyTaskCreditDelta({
+      supabase: supabase as any,
       userId: generation.user_id,
-      delta: amount,
-    });
-  } catch {
-    return { refunded: false };
-  }
-
-  try {
-    await insertCreditTransaction(supabase, {
-      userId: generation.user_id,
-      type: "refund",
+      entryKind: "refund",
       amount,
-      balanceBefore: adjusted.before,
-      balanceAfter: adjusted.after,
+      scope: "video-model",
       taskId,
-      description: `素材生成视频 ${modelType} 失败退款 (${taskId})`,
-      metadata: {
-        model_type: modelType,
-        reason,
-        refunded_once: true,
-      },
+      operation: "refund",
+      pricingVersion: `video-model-${modelType}-v1`,
+      description: `素材生成视频 ${modelType} 失败退款 (${taskId}) [task:${taskId}]`,
     });
+    if (!refund.applied) return { refunded: false };
   } catch (transactionError) {
-    await adjustProfileCredits({
-      supabase,
-      userId: generation.user_id,
-      delta: -amount,
-    });
     await updateGenerationForRefund({
       supabase,
       taskId,
-      payload: { status: "processing", error_message: null, credits_refunded: 0 },
+      payload: {
+        status: "processing",
+        error_message: null,
+        credits_refunded: 0,
+      },
       onlyFailed: true,
     });
     throw transactionError;

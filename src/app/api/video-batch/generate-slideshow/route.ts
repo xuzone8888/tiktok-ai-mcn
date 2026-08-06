@@ -14,7 +14,7 @@ import {
     getPresetMusicList,
 } from '@/lib/ffmpeg-slideshow';
 import { uploadBuffer } from '@/lib/oss';
-import { adjustProfileCredits, insertCreditTransaction } from '@/lib/video-models/credits';
+import { applyTaskCreditDelta } from '@/lib/credits/atomic-task-credit';
 import { generateCaptions, generateTextOverlays, CaptionStyle, CaptionMode } from '@/lib/deepseek-api';
 import { textToSpeechWithTimestamps, WordTimestamp } from '@/lib/elevenlabs-api';
 import { doubaoTextToSpeechWithTimestamps } from '@/lib/doubao-tts-api';
@@ -848,20 +848,17 @@ export async function POST(req: NextRequest) {
         if (actualCredits > 0) {
             const adminSupabase = createAdminClient();
             try {
-                const { before, after } = await adjustProfileCredits({
+                const creditTaskId = clientTaskIds?.[0] ?? `slideshow:${crypto.randomUUID()}`;
+                await applyTaskCreditDelta({
                     supabase: adminSupabase,
                     userId: user.id,
-                    delta: -actualCredits,
-                });
-                await insertCreditTransaction(adminSupabase, {
-                    userId: user.id,
-                    type: 'consume',
+                    entryKind: 'consume',
                     amount: -actualCredits,
-                    balanceBefore: before,
-                    balanceAfter: after,
-                    taskId: clientTaskIds?.[0] ?? `slideshow-${Date.now()}`,
+                    scope: 'slideshow',
+                    taskId: creditTaskId,
+                    operation: 'consume',
+                    pricingVersion: 'slideshow-v1',
                     description: `幻灯片成片 - ${successCount}个视频`,
-                    metadata: { reference_type: 'slideshow_batch', video_count: successCount },
                 });
             } catch (chargeError) {
                 // 成片已交付,扣费失败必须响亮记录供人工对账(绝不再静默)

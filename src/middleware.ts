@@ -29,6 +29,7 @@ const PUBLIC_ROUTES = [
 // 需要登录的路由
 const PROTECTED_ROUTES = [
   "/dashboard",
+  "/canvas",
   "/assets",
   "/models",
   "/team",

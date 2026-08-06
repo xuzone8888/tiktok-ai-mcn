@@ -75,20 +75,6 @@ export default function RegisterPage() {
       if (error) throw error;
 
       if (data.user) {
-        const { error: profileError } = await supabase
-          .from("profiles")
-          .insert({
-            id: data.user.id,
-            email: data.user.email!,
-            name,
-            role: "user",
-            credits: 100,
-          } as any);
-
-        if (profileError) {
-          console.error("Profile creation error:", profileError);
-        }
-
         setIsSuccess(true);
         toast({
           title: lang === "en" ? "🎉 Registration Successful!" : "🎉 注册成功！",

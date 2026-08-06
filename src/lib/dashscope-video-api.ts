@@ -119,7 +119,13 @@ export async function submitHappyHorseVideo(
     }
 
     if (!response.ok) {
-      return { success: false, error: pickErrorMessage(data) || `DashScope HTTP ${response.status}` };
+      const message = pickErrorMessage(data);
+      return {
+        success: false,
+        error: message
+          ? `${message} (HTTP ${response.status})`
+          : `DashScope HTTP ${response.status}`,
+      };
     }
 
     const taskId = data.output?.task_id || data.task_id;

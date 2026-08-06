@@ -13,10 +13,12 @@
  */
 
 import { NextResponse } from "next/server";
+import { applyTaskCreditDelta } from "@/lib/credits/atomic-task-credit";
 import { querySeedanceTask, needsUpscaling } from "@/lib/seedance-api";
 import { upscaleVideo, getUpscaleTarget } from "@/lib/video-upscale";
 import { uploadVideoBuffer, generateMediaPath, getPublicUrl } from "@/lib/oss";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
 
 export async function GET(request: Request) {
   try {
@@ -32,6 +34,30 @@ export async function GET(request: Request) {
       );
     }
 
+    const authClient = await createClient();
+    const {
+      data: { user },
+    } = await authClient.auth.getUser();
+    if (!user) {
+      return NextResponse.json(
+        { success: false, error: "请先登录" },
+        { status: 401 }
+      );
+    }
+    const ownershipClient = createAdminClient();
+    const { data: ownedGeneration } = await ownershipClient
+      .from("generations")
+      .select("id")
+      .eq("task_id", taskId)
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (!ownedGeneration) {
+      return NextResponse.json(
+        { success: false, error: "任务不存在或无权查看" },
+        { status: 404 }
+      );
+    }
+
     console.log("[Seedance Status] Querying:", { taskId, model, ratio });
 
     // ============================================
@@ -41,7 +67,7 @@ export async function GET(request: Request) {
 
     if (result.status === 'failed') {
       // 任务失败 → 原子退款
-      await handleTaskFailure(taskId, result.error);
+      await handleTaskFailure(taskId, user.id, result.error);
 
       return NextResponse.json({
         success: true,
@@ -59,11 +85,12 @@ export async function GET(request: Request) {
         taskId,
         result.videoUrl,
         model,
-        ratio
+        ratio,
+        user.id
       );
 
       // 更新 generations 表
-      await updateGenerationCompleted(taskId, finalUrl);
+      await updateGenerationCompleted(taskId, user.id, finalUrl);
 
       return NextResponse.json({
         success: true,
@@ -107,20 +134,11 @@ async function processCompletedVideo(
   taskId: string,
   sourceVideoUrl: string,
   model: string,
-  ratio: '9:16' | '16:9'
+  ratio: '9:16' | '16:9',
+  userId: string
 ): Promise<string> {
   
   console.log("[Seedance Status] Processing video:", { taskId, model, ratio, needsUpscaling: needsUpscaling(model) });
-
-  // 获取 userId（从 generations 表）
-  const supabase = createAdminClient();
-  const { data: generation } = await supabase
-    .from("generations")
-    .select("user_id")
-    .eq("task_id", taskId)
-    .single();
-
-  const userId = generation?.user_id || "unknown";
 
   // 下载源视频
   console.log("[Seedance Status] Downloading source video...");
@@ -171,7 +189,7 @@ async function processCompletedVideo(
 /**
  * 更新 generations 表为已完成
  */
-async function updateGenerationCompleted(taskId: string, videoUrl: string): Promise<void> {
+async function updateGenerationCompleted(taskId: string, userId: string, videoUrl: string): Promise<void> {
   try {
     const supabase = createAdminClient();
     await supabase
@@ -183,6 +201,7 @@ async function updateGenerationCompleted(taskId: string, videoUrl: string): Prom
         completed_at: new Date().toISOString(),
       })
       .eq("task_id", taskId)
+      .eq("user_id", userId)
       .eq("status", "processing"); // 乐观锁
 
     console.log("[Seedance Status] Generation updated to completed:", taskId);
@@ -195,15 +214,16 @@ async function updateGenerationCompleted(taskId: string, videoUrl: string): Prom
  * 处理任务失败：原子退款 + 记录流水
  * 使用乐观锁防止并发重复退款
  */
-async function handleTaskFailure(taskId: string, errorMessage?: string): Promise<void> {
+async function handleTaskFailure(taskId: string, userId: string, errorMessage?: string): Promise<void> {
   try {
     const supabase = createAdminClient();
 
     // 查询 generation 记录
     const { data: generation } = await supabase
       .from("generations")
-      .select("user_id, status, credit_cost")
+      .select("id, user_id, status, credit_cost")
       .eq("task_id", taskId)
+      .eq("user_id", userId)
       .single();
 
     if (!generation || generation.status !== "processing") {
@@ -219,8 +239,9 @@ async function handleTaskFailure(taskId: string, errorMessage?: string): Promise
         error_message: errorMessage || "生成失败",
       })
       .eq("task_id", taskId)
+      .eq("user_id", userId)
       .eq("status", "processing") // 乐观锁
-      .select()
+      .select("id, user_id, credit_cost")
       .single();
 
     if (!updateResult || updateError) {
@@ -228,35 +249,23 @@ async function handleTaskFailure(taskId: string, errorMessage?: string): Promise
       return;
     }
 
-    // 退还积分
     const refundAmount = generation.credit_cost || 233; // 默认最低积分
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("credits")
-      .eq("id", generation.user_id)
-      .single();
+    await applyTaskCreditDelta({
+      supabase,
+      userId: generation.user_id,
+      entryKind: "refund",
+      amount: refundAmount,
+      scope: "seedance",
+      taskId: generation.id,
+      operation: "refund",
+      pricingVersion: "seedance-refund-v1",
+      description: `Seedance 2.0 生成失败自动退款 (${taskId})`,
+    });
 
-    if (profile) {
-      await supabase
-        .from("profiles")
-        .update({ credits: profile.credits + refundAmount })
-        .eq("id", generation.user_id);
-
-      // 记录退款流水
-      await supabase.from("credit_transactions").insert({
-        user_id: generation.user_id,
-        amount: refundAmount,
-        type: "refund",
-        description: `Seedance 2.0 生成失败自动退款 (${taskId})`,
-        balance_before: profile.credits,
-        balance_after: profile.credits + refundAmount,
-      });
-
-      console.log("[Seedance Status] Credits refunded:", {
-        userId: generation.user_id,
-        refund: refundAmount,
-      });
-    }
+    console.log("[Seedance Status] Credits refunded:", {
+      userId: generation.user_id,
+      refund: refundAmount,
+    });
   } catch (error) {
     console.error("[Seedance Status] Refund error:", error);
   }

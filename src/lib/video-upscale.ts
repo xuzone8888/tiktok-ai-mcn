@@ -8,13 +8,14 @@
  * 包含并发控制（MAX_CONCURRENT=3）防止 CPU 过载
  */
 
-import { exec } from 'child_process';
+import { exec, execFile } from 'child_process';
 import { promisify } from 'util';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 
 const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 // ============================================================================
 // 配置
@@ -53,6 +54,20 @@ export interface UpscaleResult {
   /** 是否成功 */
   success: boolean;
   /** 错误信息 */
+  error?: string;
+}
+
+export interface UpscaleFileOptions {
+  inputPath: string;
+  outputPath: string;
+  targetWidth: number;
+  targetHeight: number;
+  taskId: string;
+  signal?: AbortSignal;
+}
+
+export interface UpscaleFileResult {
+  success: boolean;
   error?: string;
 }
 
@@ -122,6 +137,64 @@ export function getUpscaleTarget(ratio: '9:16' | '16:9'): { width: number; heigh
 }
 
 /**
+ * File-to-file variant used by the Canvas reconciler. It keeps large media out
+ * of the Node heap and uses execFile argument boundaries instead of a shell.
+ */
+export async function upscaleVideoFile(
+  options: UpscaleFileOptions
+): Promise<UpscaleFileResult> {
+  const {
+    inputPath,
+    outputPath,
+    targetWidth,
+    targetHeight,
+    taskId,
+    signal,
+  } = options;
+  let acquired = false;
+
+  try {
+    await acquireSlot();
+    acquired = true;
+    await execFileAsync(
+      'ffmpeg',
+      [
+        '-y',
+        '-i',
+        inputPath,
+        '-vf',
+        `scale=${targetWidth}:${targetHeight}:flags=lanczos,unsharp=3:3:0.5:3:3:0.3`,
+        '-c:v',
+        'libx264',
+        '-crf',
+        '17',
+        '-preset',
+        'medium',
+        '-pix_fmt',
+        'yuv420p',
+        '-c:a',
+        'copy',
+        outputPath,
+      ],
+      {
+        timeout: 120_000,
+        windowsHide: true,
+        signal,
+      }
+    );
+    return { success: true };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`[FFmpeg] Task ${taskId}: file upscale failed`, {
+      message,
+    });
+    return { success: false, error: message };
+  } finally {
+    if (acquired) releaseSlot();
+  }
+}
+
+/**
  * FFmpeg 超分视频
  * 
  * 480p → 1080p：使用 lanczos 缩放 + unsharp 锐化
@@ -132,6 +205,7 @@ export function getUpscaleTarget(ratio: '9:16' | '16:9'): { width: number; heigh
  */
 export async function upscaleVideo(options: UpscaleOptions): Promise<UpscaleResult> {
   const { inputBuffer, targetWidth, targetHeight, taskId } = options;
+  let acquired = false;
 
   // 临时文件路径
   const tmpDir = os.tmpdir();
@@ -142,6 +216,7 @@ export async function upscaleVideo(options: UpscaleOptions): Promise<UpscaleResu
     // 获取并发槽位
     console.log(`[FFmpeg] Task ${taskId}: waiting for slot (running: ${runningCount}/${MAX_CONCURRENT}, queued: ${waitQueue.length})`);
     await acquireSlot();
+    acquired = true;
     console.log(`[FFmpeg] Task ${taskId}: slot acquired, starting upscale`);
 
     // 写入临时文件
@@ -203,7 +278,9 @@ export async function upscaleVideo(options: UpscaleOptions): Promise<UpscaleResu
     }
 
     // 释放槽位
-    releaseSlot();
-    console.log(`[FFmpeg] Task ${taskId}: slot released (running: ${runningCount}/${MAX_CONCURRENT})`);
+    if (acquired) {
+      releaseSlot();
+      console.log(`[FFmpeg] Task ${taskId}: slot released (running: ${runningCount}/${MAX_CONCURRENT})`);
+    }
   }
 }

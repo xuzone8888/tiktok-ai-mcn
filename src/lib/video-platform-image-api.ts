@@ -11,13 +11,18 @@
  * preserve the reference subject.
  */
 
-import { generateMediaPath, uploadImageBuffer } from "@/lib/oss";
+import {
+  generateMediaPath,
+  uploadImageBuffer,
+  type OssUserMetadata,
+} from "@/lib/oss";
 import {
   fetchImageReferenceUrl,
   ImageReferenceUrlError,
   MAX_REFERENCE_IMAGE_BYTES,
   validateImageReferenceUrl,
 } from "@/lib/image-reference-url";
+import { fetchExternalMediaBuffer } from "@/lib/safe-media-fetch";
 import {
   DEFAULT_IMAGE_RESOLUTION,
   type ImageAspectRatio,
@@ -30,6 +35,17 @@ export interface VideoPlatformImageParams {
   sourceImageUrls?: string[];
   resolution?: ImageResolution;
   aspectRatio?: ImageAspectRatio | string;
+  /** Server-derived idempotency anchor used by Canvas generation. */
+  outputObjectKey?: string;
+  /** Server-stamped identity proof persisted as OSS user metadata. */
+  outputMetadata?: OssUserMetadata;
+}
+
+export interface VideoPlatformImageOutputTarget {
+  outputObjectKey?: string;
+  outputMetadata?: OssUserMetadata;
+  /** Reconciliation may use a shorter poll deadline than initial submission. */
+  requestTimeoutMs?: number;
 }
 
 export interface VideoPlatformImageResult {
@@ -437,8 +453,12 @@ function parseDataUrlImage(dataUrl: string): { buffer: Buffer; contentType: stri
   };
 }
 
-async function fetchVideoPlatformImage(url: string, init: RequestInit): Promise<Response> {
-  const timeoutMs = getVideoPlatformRequestTimeoutMs();
+async function fetchVideoPlatformImage(
+  url: string,
+  init: RequestInit,
+  timeoutOverrideMs?: number
+): Promise<Response> {
+  const timeoutMs = timeoutOverrideMs ?? getVideoPlatformRequestTimeoutMs();
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
@@ -461,19 +481,14 @@ async function downloadGeneratedImage(url: string): Promise<{ buffer: Buffer; co
   const dataUrlImage = parseDataUrlImage(url);
   if (dataUrlImage) return dataUrlImage;
 
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`生成图片下载失败 (${response.status})`);
-  }
-
-  const arrayBuffer = await response.arrayBuffer();
-  if (arrayBuffer.byteLength > MAX_GENERATED_IMAGE_BYTES) {
-    throw new Error("生成图片超过 80MB 限制");
-  }
-
-  const buffer = Buffer.from(arrayBuffer);
+  const downloaded = await fetchExternalMediaBuffer(url, {
+    maxBytes: MAX_GENERATED_IMAGE_BYTES,
+    timeoutMs: 90_000,
+  });
+  const buffer = downloaded.buffer;
   const detected = detectImageType(buffer);
-  const contentType = response.headers.get("content-type") || detected?.contentType || "image/jpeg";
+  const contentType =
+    downloaded.contentType || detected?.contentType || "image/jpeg";
   if (!contentType.toLowerCase().startsWith("image/") && !detected) {
     throw new Error("生成图片不是有效图片");
   }
@@ -514,18 +529,28 @@ async function downloadReferenceImage(url: string): Promise<{ buffer: Buffer; co
     : { buffer, contentType: detected.contentType, ext: detected.ext };
 }
 
-async function uploadVideoPlatformImageFromUrl(url: string, model: string): Promise<string> {
+async function uploadVideoPlatformImageFromUrl(
+  url: string,
+  model: string,
+  target: VideoPlatformImageOutputTarget = {}
+): Promise<string> {
   const image = await downloadGeneratedImage(url);
-  const objectPath = generateMediaPath(
-    "images",
-    getVideoPlatformImageOssPrefix(),
-    `${model}-${Date.now()}.${image.ext}`
-  );
+  const objectPath = target.outputObjectKey || generateMediaPath(
+      "images",
+      getVideoPlatformImageOssPrefix(),
+      `${model}-${Date.now()}.${image.ext}`
+    );
 
-  return uploadImageBuffer(image.buffer, objectPath, image.contentType);
+  return uploadImageBuffer(image.buffer, objectPath, image.contentType, {
+    metadata: target.outputMetadata,
+  });
 }
 
-async function uploadVideoPlatformImageFromBase64(b64Json: string, model: string): Promise<string> {
+async function uploadVideoPlatformImageFromBase64(
+  b64Json: string,
+  model: string,
+  target: VideoPlatformImageOutputTarget = {}
+): Promise<string> {
   const buffer = Buffer.from(b64Json, "base64");
   if (buffer.byteLength > MAX_GENERATED_IMAGE_BYTES) {
     throw new Error("生成图片超过 80MB 限制");
@@ -536,13 +561,15 @@ async function uploadVideoPlatformImageFromBase64(b64Json: string, model: string
     throw new Error("生成图片不是有效图片");
   }
 
-  const objectPath = generateMediaPath(
-    "images",
-    getVideoPlatformImageOssPrefix(),
-    `${model}-${Date.now()}.${detected.ext}`
-  );
+  const objectPath = target.outputObjectKey || generateMediaPath(
+      "images",
+      getVideoPlatformImageOssPrefix(),
+      `${model}-${Date.now()}.${detected.ext}`
+    );
 
-  return uploadImageBuffer(buffer, objectPath, detected.contentType);
+  return uploadImageBuffer(buffer, objectPath, detected.contentType, {
+    metadata: target.outputMetadata,
+  });
 }
 
 function getBaseResultMetadata(
@@ -734,7 +761,7 @@ export async function submitVideoPlatformImage(
 
     const upstreamImageUrl = extractImageUrl(data);
     if (upstreamImageUrl) {
-      const imageUrl = await uploadVideoPlatformImageFromUrl(upstreamImageUrl, model);
+      const imageUrl = await uploadVideoPlatformImageFromUrl(upstreamImageUrl, model, params);
       return {
         success: true,
         status: "completed",
@@ -748,7 +775,7 @@ export async function submitVideoPlatformImage(
 
     const b64Json = extractB64Json(data);
     if (b64Json) {
-      const imageUrl = await uploadVideoPlatformImageFromBase64(b64Json, model);
+      const imageUrl = await uploadVideoPlatformImageFromBase64(b64Json, model, params);
       return {
         success: true,
         status: "completed",
@@ -790,7 +817,11 @@ export async function submitVideoPlatformImage(
       status: "failed",
       error: errorMessage,
       ...baseMetadata,
-      upstreamCallCount: error instanceof VideoPlatformReferenceImageError ? 0 : 1,
+      upstreamCallCount:
+        error instanceof VideoPlatformReferenceImageError ||
+        error instanceof ImageReferenceUrlError
+          ? 0
+          : 1,
       upstreamResponseType: "failed",
       statusCode,
       upstreamStatus: statusCode,
@@ -802,7 +833,8 @@ export async function submitVideoPlatformImage(
 export async function queryVideoPlatformImageTask(
   taskId: string,
   resolution: ImageResolution = DEFAULT_IMAGE_RESOLUTION,
-  aspectRatio: ImageAspectRatio | string = "auto"
+  aspectRatio: ImageAspectRatio | string = "auto",
+  target: VideoPlatformImageOutputTarget = {}
 ): Promise<VideoPlatformImageResult> {
   const baseMetadata = getBaseResultMetadata(resolution, aspectRatio, false, 0, "/v1/images/{taskId}");
 
@@ -815,12 +847,16 @@ export async function queryVideoPlatformImageTask(
       taskId,
     });
 
-    const response = await fetchVideoPlatformImage(getVideoPlatformApiUrl(`/images/${encodeURIComponent(taskId)}`), {
-      method: "GET",
-      headers: {
-        "Authorization": `Bearer ${apiKey}`,
+    const response = await fetchVideoPlatformImage(
+      getVideoPlatformApiUrl(`/images/${encodeURIComponent(taskId)}`),
+      {
+        method: "GET",
+        headers: {
+          "Authorization": `Bearer ${apiKey}`,
+        },
       },
-    });
+      target.requestTimeoutMs
+    );
 
     const data = await response.json().catch(() => null);
     if (!response.ok) {
@@ -841,7 +877,7 @@ export async function queryVideoPlatformImageTask(
 
     const upstreamImageUrl = extractImageUrl(data);
     if (upstreamImageUrl) {
-      const imageUrl = await uploadVideoPlatformImageFromUrl(upstreamImageUrl, model);
+      const imageUrl = await uploadVideoPlatformImageFromUrl(upstreamImageUrl, model, target);
       return {
         success: true,
         status: "completed",
@@ -856,7 +892,7 @@ export async function queryVideoPlatformImageTask(
 
     const b64Json = extractB64Json(data);
     if (b64Json) {
-      const imageUrl = await uploadVideoPlatformImageFromBase64(b64Json, model);
+      const imageUrl = await uploadVideoPlatformImageFromBase64(b64Json, model, target);
       return {
         success: true,
         status: "completed",

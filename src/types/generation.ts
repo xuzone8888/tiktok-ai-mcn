@@ -376,8 +376,6 @@ export const NEW_VIDEO_MODELS: VideoModel[] = [
   "happyhorse-5s", "happyhorse-12s",
 ];
 
-// --- @deprecated 旧视频配置，迁移期间保留 ---
-
 export interface VideoModelPricing {
   label: string;
   duration: string;
@@ -387,39 +385,22 @@ export interface VideoModelPricing {
   apiModel: string;
 }
 
-/** @deprecated 使用 VIDEO_MODEL_CONFIG 替代 */
-export const VIDEO_MODEL_PRICING: Record<string, VideoModelPricing> = {
-  "sora2-10s": { 
-    label: "Sora2 标清 10秒", 
-    duration: "10秒", 
-    credits: 20, 
-    apiDuration: 10,
+export const QUICK_GEN_VIDEO_PRICING: Record<string, VideoModelPricing> = {
+  "sora2-12s": {
+    label: "Sora2 标准 12秒",
+    duration: "12秒",
+    credits: 20,
+    apiDuration: 12,
     quality: "standard",
-    apiModel: "sora2-portrait",
+    apiModel: "sora2",
   },
-  "sora2-15s": { 
-    label: "Sora2 标清 15秒", 
-    duration: "15秒", 
-    credits: 20, 
-    apiDuration: 15,
-    quality: "standard",
-    apiModel: "sora2-portrait-15s",
-  },
-  "sora2-pro-15s-hd": { 
-    label: "Sora2 Pro 15秒高清", 
-    duration: "15秒", 
-    credits: 320, 
-    apiDuration: 15,
+  "sora2-pro-12s-hd": {
+    label: "Sora2 Pro 高清 12秒",
+    duration: "12秒",
+    credits: 350,
+    apiDuration: 12,
     quality: "hd",
-    apiModel: "sora2-pro-portrait-hd-15s",
-  },
-  "sora2-pro-25s": { 
-    label: "Sora2 Pro 25秒标清", 
-    duration: "25秒", 
-    credits: 320, 
-    apiDuration: 25,
-    quality: "standard",
-    apiModel: "sora2-pro-portrait-25s",
+    apiModel: "sora2-pro",
   },
   // Seedance 2.0 (Quick Gen 模型选择器使用)
   "seedance-5s": {
@@ -471,6 +452,71 @@ export const VIDEO_MODEL_PRICING: Record<string, VideoModelPricing> = {
     apiModel: "happyhorse-1.0-t2v",
   },
 };
+
+/** Legacy shared pricing used by generation-client and the legacy batch store. */
+export const VIDEO_MODEL_PRICING: Record<string, VideoModelPricing> = {
+  "sora2-10s": {
+    label: "Sora2 标清 10秒",
+    duration: "10秒",
+    credits: 20,
+    apiDuration: 10,
+    quality: "standard",
+    apiModel: "sora2-portrait",
+  },
+  "sora2-15s": {
+    label: "Sora2 标清 15秒",
+    duration: "15秒",
+    credits: 20,
+    apiDuration: 15,
+    quality: "standard",
+    apiModel: "sora2-portrait-15s",
+  },
+  "sora2-pro-15s-hd": {
+    label: "Sora2 Pro 15秒高清",
+    duration: "15秒",
+    credits: 320,
+    apiDuration: 15,
+    quality: "hd",
+    apiModel: "sora2-pro-portrait-hd-15s",
+  },
+  "sora2-pro-25s": {
+    label: "Sora2 Pro 25秒标清",
+    duration: "25秒",
+    credits: 320,
+    apiDuration: 25,
+    quality: "standard",
+    apiModel: "sora2-pro-portrait-25s",
+  },
+  "seedance-5s": QUICK_GEN_VIDEO_PRICING["seedance-5s"],
+  "seedance-10s": QUICK_GEN_VIDEO_PRICING["seedance-10s"],
+  "seedance-5s-pro": QUICK_GEN_VIDEO_PRICING["seedance-5s-pro"],
+  "seedance-10s-pro": QUICK_GEN_VIDEO_PRICING["seedance-10s-pro"],
+  "happyhorse-5s": QUICK_GEN_VIDEO_PRICING["happyhorse-5s"],
+  "happyhorse-12s": QUICK_GEN_VIDEO_PRICING["happyhorse-12s"],
+};
+
+export type VideoModelPricingKey =
+  | "sora2-12s"
+  | "sora2-pro-12s-hd"
+  | "seedance-5s"
+  | "seedance-10s"
+  | "seedance-5s-pro"
+  | "seedance-10s-pro"
+  | "happyhorse-5s"
+  | "happyhorse-12s";
+
+export const DEFAULT_QUICK_GEN_VIDEO_MODEL: VideoModelPricingKey = "sora2-12s";
+
+export function isVideoModelPricingKey(value: unknown): value is VideoModelPricingKey {
+  return typeof value === "string"
+    && Object.prototype.hasOwnProperty.call(QUICK_GEN_VIDEO_PRICING, value);
+}
+
+export function getVideoModelPricingEntries(): [VideoModelPricingKey, VideoModelPricing][] {
+  return Object.entries(QUICK_GEN_VIDEO_PRICING).filter(
+    (entry): entry is [VideoModelPricingKey, VideoModelPricing] => isVideoModelPricingKey(entry[0])
+  );
+}
 
 // ============================================================================
 // 图片生成配置 (新版)
@@ -868,8 +914,18 @@ export const IMAGE_RESOLUTION_OPTIONS: ResolutionOption[] = [
 /**
  * 计算视频生成费用
  */
-export function calculateVideoCost(model: VideoModel): number {
-  return VIDEO_MODEL_PRICING[model].credits;
+export function calculateVideoCost(model: VideoModelPricingKey | VideoModel): number {
+  if (isVideoModelPricingKey(model)) {
+    return QUICK_GEN_VIDEO_PRICING[model].credits;
+  }
+
+  const legacyPricing = VIDEO_MODEL_PRICING[model];
+  if (legacyPricing) return legacyPricing.credits;
+
+  const configuredModel = VIDEO_MODEL_CONFIG[model];
+  if (configuredModel) return configuredModel.credits;
+
+  throw new RangeError(`Unsupported video model pricing: ${model}`);
 }
 
 /**
@@ -914,7 +970,7 @@ export function calculateEnhancementCost(
  */
 export function calculateTotalCost(params: {
   outputMode: OutputMode;
-  videoModel?: VideoModel;
+  videoModel?: VideoModelPricingKey | VideoModel;
   imageTier?: NanoTier;
   imageResolution?: ImageResolution;
   isProImage?: boolean;
@@ -950,9 +1006,19 @@ export const IMAGE_ESTIMATED_TIME = {
 /**
  * 获取视频生成预估时间
  */
-export function getVideoEstimatedTime(model: VideoModel): string {
-  const duration = VIDEO_MODEL_PRICING[model].apiDuration;
-  return VIDEO_ESTIMATED_TIME[duration] || "5-6 minutes";
+export function getVideoEstimatedTime(model: VideoModelPricingKey | VideoModel): string {
+  if (isVideoModelPricingKey(model)) {
+    return VIDEO_ESTIMATED_TIME[QUICK_GEN_VIDEO_PRICING[model].apiDuration] || "5-6 minutes";
+  }
+  const legacyPricing: VideoModelPricing | undefined = VIDEO_MODEL_PRICING[model];
+  if (legacyPricing) {
+    return VIDEO_ESTIMATED_TIME[legacyPricing.apiDuration] || "5-6 minutes";
+  }
+  const configuredModel = VIDEO_MODEL_CONFIG[model];
+  if (configuredModel) {
+    return VIDEO_ESTIMATED_TIME[configuredModel.duration] || "5-6 minutes";
+  }
+  throw new RangeError(`Unsupported video model estimate: ${model}`);
 }
 
 /**

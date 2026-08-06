@@ -76,6 +76,7 @@ export async function POST(request: NextRequest) {
                 user_metadata: {
                     phone: formattedPhone,
                     login_method: 'sms',
+                    name: `用户${formattedPhone.slice(-4)}`,
                 },
             });
 
@@ -89,22 +90,6 @@ export async function POST(request: NextRequest) {
 
             userId = newUser.user.id;
             isNewUser = true;
-
-            // 创建用户 profile
-            const { error: profileError } = await supabase
-                .from('profiles')
-                .insert({
-                    id: userId,
-                    email: fakeEmail,
-                    name: `用户${formattedPhone.slice(-4)}`,
-                    role: 'user',
-                    credits: 100, // 新用户赠送积分
-                    phone: formattedPhone,
-                });
-
-            if (profileError) {
-                console.error('[SMS Verify] 创建profile失败:', profileError);
-            }
         }
 
         // 直接生成 session（不用 magic link，更直接可靠）

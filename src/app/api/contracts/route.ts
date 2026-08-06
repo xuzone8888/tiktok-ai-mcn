@@ -1,33 +1,383 @@
 import { NextRequest, NextResponse } from "next/server";
+import {
+  applyTaskCreditDelta,
+  type AppliedTaskCreditDelta,
+} from "@/lib/credits/atomic-task-credit";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import type { Json } from "@/types/database";
 
-function buildContractTransactionMetadata(params: {
-  contractId: string;
-  modelId: string;
-  modelName?: string | null;
+type ContractAdminClient = ReturnType<typeof createAdminClient>;
+type ContractBillingStage = "create" | "renew";
+
+function getContractPricingVersion(
+  stage: ContractBillingStage,
+  rentalPeriod: string
+): string {
+  return `contract-${stage}-${rentalPeriod}-v1`;
+}
+
+async function consumeBuyerCredits(params: {
+  supabase: ContractAdminClient;
+  userId: string;
+  taskId: string;
+  stage: ContractBillingStage;
   rentalPeriod: string;
-  isCommunityCharacter: boolean;
-}): Json {
-  return {
-    contract_id: params.contractId,
-    model_id: params.modelId,
-    model_name: params.modelName || null,
-    rental_period: params.rentalPeriod,
-    source: params.isCommunityCharacter ? "community_character" : "official_character",
-  };
+  price: number;
+  description: string;
+}): Promise<AppliedTaskCreditDelta> {
+  return applyTaskCreditDelta({
+    supabase: params.supabase,
+    userId: params.userId,
+    entryKind: "consume",
+    amount: -params.price,
+    scope: "contract",
+    taskId: params.taskId,
+    operation: "buyer-consume",
+    pricingVersion: getContractPricingVersion(params.stage, params.rentalPeriod),
+    description: params.description,
+  });
 }
 
 async function refundBuyerCredits(params: {
-  supabase: ReturnType<typeof createAdminClient>;
+  supabase: ContractAdminClient;
   userId: string;
-  credits: number;
+  taskId: string;
+  stage: ContractBillingStage;
+  rentalPeriod: string;
+  price: number;
+  description: string;
 }) {
+  return applyTaskCreditDelta({
+    supabase: params.supabase,
+    userId: params.userId,
+    entryKind: "refund",
+    amount: params.price,
+    scope: "contract",
+    taskId: params.taskId,
+    operation: "buyer-refund",
+    pricingVersion: getContractPricingVersion(params.stage, params.rentalPeriod),
+    description: params.description,
+  });
+}
+
+async function grantCreatorRevenue(params: {
+  supabase: ContractAdminClient;
+  creatorId: string;
+  taskId: string;
+  stage: ContractBillingStage;
+  rentalPeriod: string;
+  price: number;
+  description: string;
+}) {
+  return applyTaskCreditDelta({
+    supabase: params.supabase,
+    userId: params.creatorId,
+    entryKind: "grant",
+    amount: params.price,
+    scope: "contract",
+    taskId: params.taskId,
+    operation: "creator-grant",
+    pricingVersion: getContractPricingVersion(params.stage, params.rentalPeriod),
+    description: params.description,
+  });
+}
+
+function getContractMetadata(metadata: unknown): Record<string, unknown> {
+  return metadata && typeof metadata === "object" && !Array.isArray(metadata)
+    ? { ...(metadata as Record<string, unknown>) }
+    : {};
+}
+
+function getRenewalBillingState(metadata: unknown): Record<string, unknown> | null {
+  const state = getContractMetadata(metadata).canvas_p1_contract_billing;
+  return state && typeof state === "object" && !Array.isArray(state)
+    ? state as Record<string, unknown>
+    : null;
+}
+
+function buildRenewalStageKey(params: {
+  contractId: string;
+  oldEndDate: string;
+  creditsPaid: number;
+  rentalPeriod: string;
+  targetEndDate: string;
+}): string {
+  return [
+    params.contractId,
+    "renew",
+    params.oldEndDate,
+    params.creditsPaid,
+    params.rentalPeriod,
+    params.targetEndDate,
+  ].join(":");
+}
+
+async function hasContractTaskRefund(
+  supabase: ContractAdminClient,
+  userId: string,
+  taskId: string
+): Promise<boolean> {
+  const { data, error } = await (supabase as any)
+    .from("credit_transactions")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("task_id", taskId)
+    .eq("entry_kind", "refund")
+    .limit(1);
+
+  if (error) {
+    throw new Error(error.message || "续约退款状态读取失败");
+  }
+  return Boolean(data?.length);
+}
+
+async function claimRenewalBillingTask(params: {
+  supabase: ContractAdminClient;
+  contract: Record<string, any>;
+  userId: string;
+  rentalPeriod: string;
+  price: number;
+  targetEndDate: string;
+}): Promise<{ contract: Record<string, any>; taskId: string; stageKey: string }> {
+  const stageKey = buildRenewalStageKey({
+    contractId: params.contract.id,
+    oldEndDate: params.contract.end_date,
+    creditsPaid: params.contract.credits_paid,
+    rentalPeriod: params.rentalPeriod,
+    targetEndDate: params.targetEndDate,
+  });
+  const metadata = getContractMetadata(params.contract.metadata);
+  const existing = getRenewalBillingState(metadata);
+  const existingTaskId =
+    existing?.kind === "renew" &&
+    existing.stage_key === stageKey &&
+    existing.status === "pending" &&
+    typeof existing.task_id === "string"
+      ? existing.task_id
+      : null;
+
+  if (
+    existingTaskId &&
+    !(await hasContractTaskRefund(params.supabase, params.userId, existingTaskId))
+  ) {
+    return { contract: params.contract, taskId: existingTaskId, stageKey };
+  }
+
+  const taskId = `contract:${params.contract.id}:renew:${crypto.randomUUID()}`;
+  const now = new Date().toISOString();
+  const nextMetadata = {
+    ...metadata,
+    canvas_p1_contract_billing: {
+      kind: "renew",
+      stage_key: stageKey,
+      task_id: taskId,
+      status: "pending",
+      price: params.price,
+      rental_period: params.rentalPeriod,
+      from_end_date: params.contract.end_date,
+      target_end_date: params.targetEndDate,
+      claimed_at: now,
+    },
+  };
+  const { data: claimed, error } = await params.supabase
+    .from("contracts")
+    .update({ metadata: nextMetadata as any, updated_at: now } as any)
+    .eq("id", params.contract.id)
+    .eq("user_id", params.userId)
+    .eq("end_date", params.contract.end_date)
+    .eq("credits_paid", params.contract.credits_paid)
+    .eq("updated_at", params.contract.updated_at)
+    .select("*")
+    .single();
+
+  if (error || !claimed) {
+    throw new Error("续约任务已被其他请求更新，请重试");
+  }
+
+  return {
+    contract: claimed as Record<string, any>,
+    taskId,
+    stageKey,
+  };
+}
+
+async function markRenewalBillingRefunded(params: {
+  supabase: ContractAdminClient;
+  contractId: string;
+  userId: string;
+  taskId: string;
+}) {
+  const { data: current } = await params.supabase
+    .from("contracts")
+    .select("metadata, updated_at")
+    .eq("id", params.contractId)
+    .eq("user_id", params.userId)
+    .single();
+  if (!current) return;
+
+  const metadata = getContractMetadata(current.metadata);
+  const state = getRenewalBillingState(metadata);
+  if (state?.task_id !== params.taskId) return;
+
   await params.supabase
-    .from("profiles")
-    .update({ credits: params.credits })
-    .eq("id", params.userId);
+    .from("contracts")
+    .update({
+      metadata: {
+        ...metadata,
+        canvas_p1_contract_billing: {
+          ...state,
+          status: "refunded",
+          refunded_at: new Date().toISOString(),
+        },
+      } as any,
+      updated_at: new Date().toISOString(),
+    } as any)
+    .eq("id", params.contractId)
+    .eq("user_id", params.userId)
+    .eq("updated_at", current.updated_at);
+}
+
+async function renewContractWithAtomicCredits(params: {
+  supabase: ContractAdminClient;
+  contract: Record<string, any>;
+  userId: string;
+  modelName: string;
+  rentalPeriod: string;
+  price: number;
+  targetEndDate: string;
+  activateContract: boolean;
+  isCommunityCharacter: boolean;
+  creatorId: string | null | undefined;
+}): Promise<{
+  taskId: string;
+  balanceAfter: number;
+  newEndDate: string;
+}> {
+  const claim = await claimRenewalBillingTask({
+    supabase: params.supabase,
+    contract: params.contract,
+    userId: params.userId,
+    rentalPeriod: params.rentalPeriod,
+    price: params.price,
+    targetEndDate: params.targetEndDate,
+  });
+  const charge = await consumeBuyerCredits({
+    supabase: params.supabase,
+    userId: params.userId,
+    taskId: claim.taskId,
+    stage: "renew",
+    rentalPeriod: params.rentalPeriod,
+    price: params.price,
+    description: `续约角色 ${params.modelName} (${params.rentalPeriod})`,
+  });
+
+  const claimedMetadata = getContractMetadata(claim.contract.metadata);
+  const claimedState = getRenewalBillingState(claimedMetadata);
+  if (
+    claimedState?.task_id !== claim.taskId ||
+    claimedState.stage_key !== claim.stageKey
+  ) {
+    await refundBuyerCredits({
+      supabase: params.supabase,
+      userId: params.userId,
+      taskId: claim.taskId,
+      stage: "renew",
+      rentalPeriod: params.rentalPeriod,
+      price: params.price,
+      description: `续约角色 ${params.modelName} 任务状态异常退款`,
+    });
+    throw new Error("续约任务状态不一致，积分已退还");
+  }
+
+  const appliedAt = new Date().toISOString();
+  const nextCreditsPaid = Number(claim.contract.credits_paid) + params.price;
+  const updateValues: Record<string, unknown> = {
+    end_date: params.targetEndDate,
+    credits_paid: nextCreditsPaid,
+    metadata: {
+      ...claimedMetadata,
+      canvas_p1_contract_billing: {
+        ...claimedState,
+        status: "applied",
+        applied_at: appliedAt,
+      },
+    },
+    updated_at: appliedAt,
+  };
+  if (params.activateContract) {
+    updateValues.status = "active";
+  }
+
+  const { data: updated, error: updateError } = await params.supabase
+    .from("contracts")
+    .update(updateValues as any)
+    .eq("id", claim.contract.id)
+    .eq("user_id", params.userId)
+    .eq("end_date", claim.contract.end_date)
+    .eq("credits_paid", claim.contract.credits_paid)
+    .eq("updated_at", claim.contract.updated_at)
+    .select("id")
+    .maybeSingle();
+
+  if (updateError || !updated) {
+    const { data: current } = await params.supabase
+      .from("contracts")
+      .select("end_date, credits_paid, metadata")
+      .eq("id", claim.contract.id)
+      .eq("user_id", params.userId)
+      .single();
+    const currentState = getRenewalBillingState(current?.metadata);
+    const alreadyApplied =
+      current?.end_date === params.targetEndDate &&
+      Number(current?.credits_paid) === nextCreditsPaid &&
+      currentState?.task_id === claim.taskId &&
+      currentState.status === "applied";
+
+    if (!alreadyApplied) {
+      await refundBuyerCredits({
+        supabase: params.supabase,
+        userId: params.userId,
+        taskId: claim.taskId,
+        stage: "renew",
+        rentalPeriod: params.rentalPeriod,
+        price: params.price,
+        description: `续约角色 ${params.modelName} 失败退款`,
+      });
+      await markRenewalBillingRefunded({
+        supabase: params.supabase,
+        contractId: claim.contract.id,
+        userId: params.userId,
+        taskId: claim.taskId,
+      });
+      throw new Error(updateError?.message || "续约写入冲突，积分已退还");
+    }
+  }
+
+  if (
+    params.isCommunityCharacter &&
+    params.creatorId &&
+    params.creatorId !== params.userId
+  ) {
+    try {
+      await grantCreatorRevenue({
+        supabase: params.supabase,
+        creatorId: params.creatorId,
+        taskId: claim.taskId,
+        stage: "renew",
+        rentalPeriod: params.rentalPeriod,
+        price: params.price,
+        description: `角色 ${params.modelName} 续约收益`,
+      });
+    } catch (error) {
+      console.error("[Contracts API] Renew creator grant failed:", error);
+    }
+  }
+
+  return {
+    taskId: claim.taskId,
+    balanceAfter: charge.balanceAfter,
+    newEndDate: params.targetEndDate,
+  };
 }
 
 // GET: 获取用户合约
@@ -242,21 +592,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const buyerBalanceAfter = profile.credits - price;
-
-    // 扣除聊用者积分
-    const { error: deductError } = await adminSupabase
-      .from("profiles")
-      .update({ credits: buyerBalanceAfter })
-      .eq("id", user.id);
-
-    if (deductError) {
-      return NextResponse.json(
-        { success: false, error: "扣除积分失败" },
-        { status: 500 }
-      );
-    }
-
     // 计算结束日期
     const startDate = new Date();
     const endDate = new Date();
@@ -286,115 +621,25 @@ export async function POST(request: NextRequest) {
 
     // 如果是续约，更新现有合约
     if (action === "renew" && existingContract) {
-      const { error: updateError } = await adminSupabase
-        .from("contracts")
-        .update({
-          end_date: endDate.toISOString(),
-          credits_paid: existingContract.credits_paid + price,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", existingContract.id);
-
-      if (updateError) {
-        // 退还积分
-        await adminSupabase
-          .from("profiles")
-          .update({ credits: profile.credits })
-          .eq("id", user.id);
-
-        return NextResponse.json(
-          { success: false, error: "续约失败" },
-          { status: 500 }
-        );
-      }
-
-      const transactionMetadata = buildContractTransactionMetadata({
-        contractId: existingContract.id,
-        modelId: model_id,
+      const renewal = await renewContractWithAtomicCredits({
+        supabase: adminSupabase,
+        contract: existingContract as Record<string, any>,
+        userId: user.id,
         modelName: model.name,
         rentalPeriod: rental_period,
+        price,
+        targetEndDate: endDate.toISOString(),
+        activateContract: false,
         isCommunityCharacter,
+        creatorId,
       });
-
-      const { error: buyerTxError } = await adminSupabase
-        .from("credit_transactions")
-        .insert({
-          user_id: user.id,
-          type: "consume",
-          amount: -price,
-          balance_before: profile.credits,
-          balance_after: buyerBalanceAfter,
-          reference_type: "contract",
-          reference_id: existingContract.id,
-          description: `续约角色 ${model.name} (${rental_period})`,
-          metadata: transactionMetadata,
-        });
-
-      if (buyerTxError) {
-        console.error("[Contracts API] Failed to log POST renew buyer transaction:", buyerTxError);
-        await adminSupabase
-          .from("contracts")
-          .update({
-            end_date: existingContract.end_date,
-            credits_paid: existingContract.credits_paid,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", existingContract.id);
-        await refundBuyerCredits({
-          supabase: adminSupabase,
-          userId: user.id,
-          credits: profile.credits,
-        });
-        return NextResponse.json(
-          { success: false, error: "积分流水写入失败，已回滚续约" },
-          { status: 500 }
-        );
-      }
-
-      if (isCommunityCharacter && creatorId && creatorId !== user.id) {
-        const { data: creatorProfile } = await adminSupabase
-          .from("profiles")
-          .select("credits")
-          .eq("id", creatorId)
-          .single();
-
-        if (creatorProfile) {
-          const creatorBalanceAfter = creatorProfile.credits + price;
-          const { error: revenueError } = await adminSupabase
-            .from("profiles")
-            .update({ credits: creatorBalanceAfter })
-            .eq("id", creatorId);
-
-          if (revenueError) {
-            console.error("[Contracts API] POST renew revenue transfer failed:", revenueError);
-          } else {
-            const { error: creatorTxError } = await adminSupabase
-              .from("credit_transactions")
-              .insert({
-                user_id: creatorId,
-                type: "bonus",
-                amount: price,
-                balance_before: creatorProfile.credits,
-                balance_after: creatorBalanceAfter,
-                reference_type: "contract",
-                reference_id: existingContract.id,
-                description: `角色 ${model.name} 续约收益`,
-                metadata: transactionMetadata,
-              });
-
-            if (creatorTxError) {
-              console.error("[Contracts API] Failed to log POST renew creator transaction:", creatorTxError);
-            }
-          }
-        }
-      }
 
       return NextResponse.json({
         success: true,
         message: "续约成功",
         contract_id: existingContract.id,
-        new_end_date: endDate.toISOString(),
-        new_balance: buyerBalanceAfter,
+        new_end_date: renewal.newEndDate,
+        new_balance: renewal.balanceAfter,
       });
     }
 
@@ -414,10 +659,23 @@ export async function POST(request: NextRequest) {
       console.log("[Contracts API] Expired old contracts:", expiredCount);
     }
 
+    const newContractId = crypto.randomUUID();
+    const contractTaskId = `contract:${newContractId}:create`;
+    const charge = await consumeBuyerCredits({
+      supabase: adminSupabase,
+      userId: user.id,
+      taskId: contractTaskId,
+      stage: "create",
+      rentalPeriod: rental_period,
+      price,
+      description: `签约角色 ${model.name} (${rental_period})`,
+    });
+
     // 创建新合约
     const { data: newContract, error: createError } = await adminSupabase
       .from("contracts")
       .insert({
+        id: newContractId,
         user_id: user.id,
         model_id: model_id,
         rental_period,
@@ -433,12 +691,15 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (createError) {
-      // 退还积分
-      await adminSupabase
-        .from("profiles")
-        .update({ credits: profile.credits })
-        .eq("id", user.id);
-
+      await refundBuyerCredits({
+        supabase: adminSupabase,
+        userId: user.id,
+        taskId: contractTaskId,
+        stage: "create",
+        rentalPeriod: rental_period,
+        price,
+        description: `签约角色 ${model.name} 失败退款`,
+      });
       console.error("[Contracts API] Create error:", createError);
       return NextResponse.json(
         { success: false, error: "创建合约失败" },
@@ -446,81 +707,20 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const transactionMetadata = buildContractTransactionMetadata({
-      contractId: newContract.id,
-      modelId: model_id,
-      modelName: model.name,
-      rentalPeriod: rental_period,
-      isCommunityCharacter,
-    });
-
-    const { error: buyerTxError } = await adminSupabase
-      .from("credit_transactions")
-      .insert({
-        user_id: user.id,
-        type: "consume",
-        amount: -price,
-        balance_before: profile.credits,
-        balance_after: buyerBalanceAfter,
-        reference_type: "contract",
-        reference_id: newContract.id,
-        description: `签约角色 ${model.name} (${rental_period})`,
-        metadata: transactionMetadata,
-      });
-
-    if (buyerTxError) {
-      console.error("[Contracts API] Failed to log buyer transaction:", buyerTxError);
-      await adminSupabase
-        .from("contracts")
-        .delete()
-        .eq("id", newContract.id);
-      await refundBuyerCredits({
-        supabase: adminSupabase,
-        userId: user.id,
-        credits: profile.credits,
-      });
-      return NextResponse.json(
-        { success: false, error: "积分流水写入失败，已回滚签约" },
-        { status: 500 }
-      );
-    }
-
     // 社区角色积分分成：合约创建成功后，100% 归创作者。
     if (isCommunityCharacter && creatorId && creatorId !== user.id) {
-      const { data: creatorProfile } = await adminSupabase
-        .from("profiles")
-        .select("credits")
-        .eq("id", creatorId)
-        .single();
-
-      if (creatorProfile) {
-        const creatorBalanceAfter = creatorProfile.credits + price;
-        const { error: revenueError } = await adminSupabase
-          .from("profiles")
-          .update({ credits: creatorBalanceAfter })
-          .eq("id", creatorId);
-
-        if (revenueError) {
-          console.error("[Contracts API] Revenue transfer failed:", revenueError);
-        } else {
-          const { error: creatorTxError } = await adminSupabase
-            .from("credit_transactions")
-            .insert({
-              user_id: creatorId,
-              type: "bonus",
-              amount: price,
-              balance_before: creatorProfile.credits,
-              balance_after: creatorBalanceAfter,
-              reference_type: "contract",
-              reference_id: newContract.id,
-              description: `角色 ${model.name} 被签约收益`,
-              metadata: transactionMetadata,
-            });
-
-          if (creatorTxError) {
-            console.error("[Contracts API] Failed to log creator transaction:", creatorTxError);
-          }
-        }
+      try {
+        await grantCreatorRevenue({
+          supabase: adminSupabase,
+          creatorId,
+          taskId: contractTaskId,
+          stage: "create",
+          rentalPeriod: rental_period,
+          price,
+          description: `角色 ${model.name} 被签约收益`,
+        });
+      } catch (error) {
+        console.error("[Contracts API] Creator grant failed:", error);
       }
     }
 
@@ -535,7 +735,7 @@ export async function POST(request: NextRequest) {
       success: true,
       message: "签约成功",
       contract: newContract,
-      new_balance: buyerBalanceAfter,
+      new_balance: charge.balanceAfter,
     });
   } catch (error) {
     console.error("[Contracts API] Error creating contract:", error);
@@ -640,21 +840,6 @@ export async function PUT(request: NextRequest) {
       );
     }
 
-    const buyerBalanceAfter = profile.credits - price;
-
-    // 扣除积分
-    const { error: deductError } = await adminSupabase
-      .from("profiles")
-      .update({ credits: buyerBalanceAfter })
-      .eq("id", user.id);
-
-    if (deductError) {
-      return NextResponse.json(
-        { success: false, error: "扣除积分失败" },
-        { status: 500 }
-      );
-    }
-
     // 计算新的结束日期（从当前结束日期开始累加）
     const currentEndDate = new Date(contract.end_date);
     const newEndDate = new Date(Math.max(currentEndDate.getTime(), Date.now()));
@@ -674,117 +859,24 @@ export async function PUT(request: NextRequest) {
         break;
     }
 
-    // 更新合约
-    const { error: updateError } = await adminSupabase
-      .from("contracts")
-      .update({
-        end_date: newEndDate.toISOString(),
-        status: "active",
-        credits_paid: contract.credits_paid + price,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", contract_id);
-
-    if (updateError) {
-      // 退还积分
-      await adminSupabase
-        .from("profiles")
-        .update({ credits: profile.credits })
-        .eq("id", user.id);
-
-      return NextResponse.json(
-        { success: false, error: "续约失败" },
-        { status: 500 }
-      );
-    }
-
-    const transactionMetadata = buildContractTransactionMetadata({
-      contractId: contract_id,
-      modelId: model.id,
+    const renewal = await renewContractWithAtomicCredits({
+      supabase: adminSupabase,
+      contract: contract as Record<string, any>,
+      userId: user.id,
       modelName: model.name,
       rentalPeriod: rental_period,
+      price,
+      targetEndDate: newEndDate.toISOString(),
+      activateContract: true,
       isCommunityCharacter,
+      creatorId,
     });
-
-    const { error: buyerTxError } = await adminSupabase
-      .from("credit_transactions")
-      .insert({
-        user_id: user.id,
-        type: "consume",
-        amount: -price,
-        balance_before: profile.credits,
-        balance_after: buyerBalanceAfter,
-        reference_type: "contract",
-        reference_id: contract_id,
-        description: `续约角色 ${model.name} (${rental_period})`,
-        metadata: transactionMetadata,
-      });
-
-    if (buyerTxError) {
-      console.error("[Contracts API] Failed to log renew buyer transaction:", buyerTxError);
-      await adminSupabase
-        .from("contracts")
-        .update({
-          end_date: contract.end_date,
-          status: contract.status,
-          credits_paid: contract.credits_paid,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", contract_id);
-      await refundBuyerCredits({
-        supabase: adminSupabase,
-        userId: user.id,
-        credits: profile.credits,
-      });
-      return NextResponse.json(
-        { success: false, error: "积分流水写入失败，已回滚续约" },
-        { status: 500 }
-      );
-    }
-
-    if (isCommunityCharacter && creatorId && creatorId !== user.id) {
-      const { data: creatorProfile } = await adminSupabase
-        .from("profiles")
-        .select("credits")
-        .eq("id", creatorId)
-        .single();
-
-      if (creatorProfile) {
-        const creatorBalanceAfter = creatorProfile.credits + price;
-        const { error: revenueError } = await adminSupabase
-          .from("profiles")
-          .update({ credits: creatorBalanceAfter })
-          .eq("id", creatorId);
-
-        if (revenueError) {
-          console.error("[Contracts API] Renew revenue transfer failed:", revenueError);
-        } else {
-          const { error: creatorTxError } = await adminSupabase
-            .from("credit_transactions")
-            .insert({
-              user_id: creatorId,
-              type: "bonus",
-              amount: price,
-              balance_before: creatorProfile.credits,
-              balance_after: creatorBalanceAfter,
-              reference_type: "contract",
-              reference_id: contract_id,
-              description: `角色 ${model.name} 续约收益`,
-              metadata: transactionMetadata,
-            });
-
-          if (creatorTxError) {
-            console.error("[Contracts API] Failed to log renew creator transaction:", creatorTxError);
-          }
-        }
-      }
-    }
 
     return NextResponse.json({
       success: true,
       message: "续约成功",
-      new_end_date: newEndDate.toISOString(),
-      new_balance: buyerBalanceAfter,
+      new_end_date: renewal.newEndDate,
+      new_balance: renewal.balanceAfter,
     });
   } catch (error) {
     console.error("[Contracts API] Error renewing contract:", error);

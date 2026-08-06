@@ -3,6 +3,7 @@
 // ============================================================================
 
 import { NextResponse } from "next/server";
+import { applyTaskCreditDelta } from "@/lib/credits/atomic-task-credit";
 import type { TaskStatus, VideoDuration, AspectRatio } from "@/types/database";
 import { assemblePrompt, validateUserPrompt } from "@/lib/prompt-assembler";
 import { createClient } from "@/lib/supabase/server";
@@ -32,6 +33,7 @@ interface TaskRecord {
   started_at: string;
   completed_at: string | null;
   is_auto_download: boolean;
+  credit_cost: number;
 }
 
 // ============================================================================
@@ -149,13 +151,21 @@ export async function POST(request: Request) {
     // 扣除积分
     // ============================================
     const adminSupabase = createAdminClient();
-    const { error: deductError } = await adminSupabase
-      .from("profiles")
-      .update({ credits: profile.credits - credits })
-      .eq("id", user.id);
-
-    if (deductError) {
-      console.error("[Generate API] Failed to deduct credits:", deductError);
+    let chargeResult;
+    try {
+      chargeResult = await applyTaskCreditDelta({
+        supabase: adminSupabase,
+        userId: user.id,
+        entryKind: "consume",
+        amount: -credits,
+        scope: "legacy-generate",
+        taskId,
+        operation: "consume",
+        pricingVersion: "legacy-generate-v1",
+        description: `旧版内存视频任务扣费 (${taskId})`,
+      });
+    } catch (error) {
+      console.error("[Generate API] Failed to deduct credits:", error);
       return NextResponse.json(
         { success: false, error: "扣除积分失败" },
         { status: 500 }
@@ -173,6 +183,7 @@ export async function POST(request: Request) {
       started_at: new Date().toISOString(),
       completed_at: null,
       is_auto_download: isAutoDownload || false,
+      credit_cost: credits,
     };
 
     taskStore.set(taskId, task);
@@ -193,7 +204,7 @@ export async function POST(request: Request) {
         taskId,
         status: "queued",
         credits_deducted: credits,
-        credits_remaining: profile.credits - credits,
+        credits_remaining: chargeResult.balanceAfter,
         model_used: promptResult.model_used,
         trigger_word_injected: promptResult.trigger_word_injected,
       },
@@ -267,18 +278,17 @@ async function simulateTaskProcessing(
       } else {
         // 失败 - 退还积分
         const adminSupabase = createAdminClient();
-        const { data: profile } = await adminSupabase
-          .from("profiles")
-          .select("credits")
-          .eq("id", userId)
-          .single();
-
-        if (profile) {
-          await adminSupabase
-            .from("profiles")
-            .update({ credits: profile.credits + credits })
-            .eq("id", userId);
-        }
+        await applyTaskCreditDelta({
+          supabase: adminSupabase,
+          userId,
+          entryKind: "refund",
+          amount: credits,
+          scope: "legacy-generate",
+          taskId,
+          operation: "refund",
+          pricingVersion: "legacy-generate-v1",
+          description: `旧版内存视频任务失败退款 (${taskId})`,
+        });
 
         taskStore.set(taskId, {
           ...currentTask,
@@ -335,20 +345,19 @@ export async function DELETE(request: Request) {
     }
 
     // 退还积分
-    const refundCredits = 50;
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("credits")
-      .eq("id", user.id)
-      .single();
-
-    if (profile) {
-      const adminSupabase = createAdminClient();
-      await adminSupabase
-        .from("profiles")
-        .update({ credits: profile.credits + refundCredits })
-        .eq("id", user.id);
-    }
+    const refundCredits = task.credit_cost;
+    const adminSupabase = createAdminClient();
+    await applyTaskCreditDelta({
+      supabase: adminSupabase,
+      userId: user.id,
+      entryKind: "refund",
+      amount: refundCredits,
+      scope: "legacy-generate",
+      taskId,
+      operation: "refund",
+      pricingVersion: "legacy-generate-v1",
+      description: `旧版内存视频任务取消退款 (${taskId})`,
+    });
 
     taskStore.set(taskId, {
       ...task,
