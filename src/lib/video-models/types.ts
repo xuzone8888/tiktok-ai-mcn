@@ -15,15 +15,25 @@ export type VideoModelId = (typeof VIDEO_MODEL_IDS)[number];
 export type VideoAspectRatio = "9:16" | "16:9";
 export type UnifiedVideoStatus = "processing" | "completed" | "failed";
 export type VideoQuality = "standard" | "hd";
+export type VideoDurationSeconds = 5 | 8 | 10 | 12 | 15;
+export type VideoGenerationMode = "image_to_video" | "prompt_to_video";
+export type VideoReferenceRole = "generic" | "first_frame" | "last_frame";
+export type VideoNativeAudioCapability = "always" | "unknown";
 
 export interface VideoModelCatalogEntry {
   id: VideoModelId;
   label: string;
   provider: "video-platform" | "volcengine" | "dashscope";
-  durationSeconds: number;
+  durationSeconds: VideoDurationSeconds;
   qualityLabel: string;
   resolution: string;
-  supportedAspectRatios: VideoAspectRatio[];
+  supportedDurations: readonly [VideoDurationSeconds, ...VideoDurationSeconds[]];
+  supportedQualities: readonly [VideoQuality, ...VideoQuality[]];
+  supportedAspectRatios: readonly [VideoAspectRatio, ...VideoAspectRatio[]];
+  supportedModes: readonly [VideoGenerationMode, ...VideoGenerationMode[]];
+  referenceRoles: readonly [VideoReferenceRole, ...VideoReferenceRole[]];
+  nativeAudio: VideoNativeAudioCapability;
+  supportsCancel: boolean;
   maxImages: number;
   supportsNoImage: boolean;
   requiresOssTransfer: boolean;
@@ -41,9 +51,14 @@ export interface VideoModelSubmitInput {
   clientTaskId: string;
   groupName: string;
   userId: string;
-  durationSeconds?: number;
+  durationSeconds?: VideoDurationSeconds;
   quality?: VideoQuality;
-  mode?: "image_to_video" | "prompt_to_video";
+  mode?: VideoGenerationMode;
+  /**
+   * Canvas lifecycle submissions must never try a second provider endpoint
+   * after an ambiguous first attempt.
+   */
+  atMostOnce?: boolean;
 }
 
 export interface VideoModelStatusInput {
@@ -58,6 +73,9 @@ export interface VideoModelStatusInput {
 export interface VideoModelCompleteInput extends VideoModelStatusInput {
   status: VideoModelStatusResult;
   generationUserId?: string;
+  targetObjectKey?: string;
+  outputMetadata?: Record<string, string>;
+  signal?: AbortSignal;
 }
 
 export interface VideoModelSubmitResult {

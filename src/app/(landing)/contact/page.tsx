@@ -3,8 +3,10 @@
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Sparkles, Mail, MapPin, Globe, Clock, Shield } from "lucide-react";
+import { useLang } from "@/contexts/LangContext";
 
 export default function ContactPage() {
+    const { lang } = useLang();
     return (
         <div className="min-h-screen bg-[#0a0a0f] text-white">
             {/* 背景装饰 */}
@@ -25,7 +27,7 @@ export default function ContactPage() {
                         <Link href="/">
                             <Button variant="ghost" className="text-gray-300 hover:text-white">
                                 <ArrowLeft className="h-4 w-4 mr-2" />
-                                返回首页
+                                {lang === "en" ? "Back to Home" : "返回首页"}
                             </Button>
                         </Link>
                     </nav>
@@ -35,9 +37,11 @@ export default function ContactPage() {
             {/* 内容 */}
             <main className="relative z-10 py-20 px-6">
                 <div className="container max-w-4xl mx-auto">
-                    <h1 className="text-4xl font-bold mb-4 text-center">联系我们</h1>
+                    <h1 className="text-4xl font-bold mb-4 text-center">{lang === "en" ? "Contact Us" : "联系我们"}</h1>
                     <p className="text-gray-400 text-center mb-16 max-w-2xl mx-auto">
-                        无论是商务合作、技术支持还是一般咨询，我们随时为您提供帮助
+                        {lang === "en"
+                            ? "Whether it's business partnerships, technical support, or general questions, we're here to help."
+                            : "无论是商务合作、技术支持还是一般咨询，我们随时为您提供帮助"}
                     </p>
 
                     <div className="grid md:grid-cols-2 gap-6">
@@ -46,15 +50,15 @@ export default function ContactPage() {
                             <div className="w-12 h-12 rounded-xl bg-white/10 flex items-center justify-center mb-6 text-white">
                                 <Mail className="h-6 w-6" />
                             </div>
-                            <h3 className="text-xl font-bold mb-2">邮件联系</h3>
-                            <p className="text-gray-400 text-sm mb-6">通常在 24 小时内回复</p>
+                            <h3 className="text-xl font-bold mb-2">{lang === "en" ? "Email Us" : "邮件联系"}</h3>
+                            <p className="text-gray-400 text-sm mb-6">{lang === "en" ? "We usually reply within 24 hours" : "通常在 24 小时内回复"}</p>
                             <div className="space-y-4">
                                 <div>
-                                    <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">商务合作</div>
+                                    <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">{lang === "en" ? "Business Inquiries" : "商务合作"}</div>
                                     <div className="text-lg font-mono text-white select-all">toryxai@outlook.com</div>
                                 </div>
                                 <div>
-                                    <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">客户支持</div>
+                                    <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">{lang === "en" ? "Customer Support" : "客户支持"}</div>
                                     <div className="text-lg font-mono text-white select-all">toryxai@outlook.com</div>
                                 </div>
                             </div>
@@ -65,17 +69,26 @@ export default function ContactPage() {
                             <div className="w-12 h-12 rounded-xl bg-white/10 flex items-center justify-center mb-6 text-white">
                                 <MapPin className="h-6 w-6" />
                             </div>
-                            <h3 className="text-xl font-bold mb-2">公司地址</h3>
-                            <p className="text-gray-400 text-sm mb-6">欢迎莅临指导</p>
+                            <h3 className="text-xl font-bold mb-2">{lang === "en" ? "Our Address" : "公司地址"}</h3>
+                            <p className="text-gray-400 text-sm mb-6">{lang === "en" ? "Visitors are always welcome" : "欢迎莅临指导"}</p>
                             <div className="space-y-4 text-gray-300">
                                 <p className="leading-relaxed">
-                                    <strong>武汉观星文化传媒有限公司</strong><br />
-                                    中国湖北省武汉市<br />
-                                    光谷科技港 2 栋
+                                    <strong>{lang === "en" ? "Wuhan Guanxing Cultural Media Co., Ltd." : "武汉观星文化传媒有限公司"}</strong><br />
+                                    {lang === "en" ? (
+                                        <>
+                                            Building 2, Optics Valley Tech Port<br />
+                                            Wuhan, Hubei, China
+                                        </>
+                                    ) : (
+                                        <>
+                                            中国湖北省武汉市<br />
+                                            光谷科技港 2 栋
+                                        </>
+                                    )}
                                 </p>
                                 <div className="flex items-center gap-2 text-sm text-gray-500 pt-2 border-t border-white/10">
                                     <Clock className="h-4 w-4" />
-                                    <span>工作日 9:30 - 18:30 (UTC+8)</span>
+                                    <span>{lang === "en" ? "Weekdays 9:30 - 18:30 (UTC+8)" : "工作日 9:30 - 18:30 (UTC+8)"}</span>
                                 </div>
                             </div>
                         </div>
@@ -87,16 +100,16 @@ export default function ContactPage() {
                                     <Globe className="h-6 w-6" />
                                 </div>
                                 <div>
-                                    <h3 className="text-lg font-bold">有其他问题？</h3>
-                                    <p className="text-gray-400 text-sm">欢迎通过邮件联系我们，我们通常在 24 小时内回复</p>
+                                    <h3 className="text-lg font-bold">{lang === "en" ? "Have other questions?" : "有其他问题？"}</h3>
+                                    <p className="text-gray-400 text-sm">{lang === "en" ? "Feel free to email us — we usually reply within 24 hours." : "欢迎通过邮件联系我们，我们通常在 24 小时内回复"}</p>
                                 </div>
                             </div>
                             <div className="flex gap-4">
                                 <Link href="/feedback">
-                                    <Button variant="outline" className="border-white/20 hover:bg-white/10">提交反馈</Button>
+                                    <Button variant="outline" className="border-white/20 hover:bg-white/10">{lang === "en" ? "Submit Feedback" : "提交反馈"}</Button>
                                 </Link>
                                 <Link href="/help">
-                                    <Button variant="outline" className="border-white/20 hover:bg-white/10">帮助中心</Button>
+                                    <Button variant="outline" className="border-white/20 hover:bg-white/10">{lang === "en" ? "Help Center" : "帮助中心"}</Button>
                                 </Link>
                             </div>
                         </div>
@@ -112,9 +125,9 @@ export default function ContactPage() {
                             © {new Date().getFullYear()} Star Gaze by Wuhan Guanxing Cultural Media Co., Ltd. All Rights Reserved.
                         </div>
                         <div className="flex items-center gap-6 text-gray-500 text-sm">
-                            <Link href="/terms" className="hover:text-white transition-colors">服务条款</Link>
-                            <Link href="/privacy" className="hover:text-white transition-colors">隐私政策</Link>
-                            <Link href="/legal" className="hover:text-white transition-colors">法律声明</Link>
+                            <Link href="/terms" className="hover:text-white transition-colors">{lang === "en" ? "Terms of Service" : "服务条款"}</Link>
+                            <Link href="/privacy" className="hover:text-white transition-colors">{lang === "en" ? "Privacy Policy" : "隐私政策"}</Link>
+                            <Link href="/legal" className="hover:text-white transition-colors">{lang === "en" ? "Legal Notice" : "法律声明"}</Link>
                             <Link href="https://beian.miit.gov.cn/" target="_blank" className="hover:text-white transition-colors flex items-center gap-1">
                                 <Shield className="h-4 w-4" />
                                 鄂ICP备2023007484号

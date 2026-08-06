@@ -1,9 +1,10 @@
-import { Sidebar, Header, type HeaderUser } from "@/components/layout";
+import { Sidebar, Header, MainContentFrame, type HeaderUser } from "@/components/layout";
 import { BackgroundTaskManager } from "@/components/background-task-manager";
 import { DownloadWidget } from "@/components/download-widget";
 import { ForgeStatusFloat } from "@/components/forge-status-float";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { isImageFactoryUiEnabled } from "@/lib/feature-flags";
 import type { UserRole } from "@/lib/admin";
 
 async function getInitialHeaderUser(): Promise<HeaderUser | null> {
@@ -49,22 +50,18 @@ export default async function MainLayout({
   children: React.ReactNode;
 }) {
   const initialUser = await getInitialHeaderUser();
+  const showImageFactory = isImageFactoryUiEnabled();
 
   return (
     <div className="flex min-h-screen h-screen overflow-hidden bg-titanium-grid relative selection:bg-white/20">
       {/* JCUI 1.0: 已移除旧版彩色渐变光球，使用干净的钛空银网格背景 */}
 
-      <Sidebar />
+      <Sidebar showImageFactory={showImageFactory} />
       <div className="flex flex-1 flex-col overflow-hidden relative z-10">
         <Header initialUser={initialUser} />
         <main className="flex-1 overflow-y-auto relative">
-          {/* Content container */}
-          <div className="container mx-auto p-6 pb-20 min-h-full">
-            {children}
-          </div>
-
-          {/* Bottom fade gradient - 底部渐变淡出 */}
-          <div className="fixed bottom-0 left-[var(--sidebar-width,280px)] right-0 h-32 bg-gradient-to-t from-background via-background/80 to-transparent pointer-events-none z-10" />
+          {/* 按路由豁免 container/渐变(S0.5):普通路由 DOM 与原实现一致,/studio 全屏 */}
+          <MainContentFrame>{children}</MainContentFrame>
         </main>
       </div>
       {/* 后台任务管理器 - 处理视频/图片批量任务 */}

@@ -180,10 +180,12 @@ export default function HeroSection() {
                         >
                             {(() => {
                                 const Icon = carousel[currentScenario].icon;
+                                const open = lang === "en" ? "“" : "「";
+                                const close = lang === "en" ? "”" : "」";
                                 return (
                                     <span className="text-gray-500 text-sm inline-flex items-center gap-1.5">
                                         <Icon className="w-4 h-4" />
-                                        「{carousel[currentScenario].text}」
+                                        {open}{carousel[currentScenario].text}{close}
                                     </span>
                                 );
                             })()}

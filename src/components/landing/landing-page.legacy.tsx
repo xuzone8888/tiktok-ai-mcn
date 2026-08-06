@@ -450,7 +450,7 @@ export default function LandingPage() {
               <h4 className="text-white font-semibold mb-5">产品功能</h4>
               <ul className="space-y-3 text-sm text-gray-500">
                 <li><Link href="/quick-gen" className="hover:text-white transition-colors">快速视频生成</Link></li>
-                <li><Link href="/pro-studio/video-batch" className="hover:text-white transition-colors">批量视频制作</Link></li>
+                <li><Link href="/studio" className="hover:text-white transition-colors">创作工作台</Link></li>
                 <li><Link href="/models" className="hover:text-white transition-colors">AI 模特管理</Link></li>
               </ul>
             </div>

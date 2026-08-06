@@ -34,6 +34,8 @@ yarn-error.log*
 .env*.local
 .env.local*
 .env
+*.env
+worker.env
 !.env.example
 
 # vercel
@@ -51,3 +53,4 @@ nohup.out
 __pycache__/
 # Template preview videos (served from OSS CDN)
 public/videos/templates/
+.env*

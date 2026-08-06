@@ -4,19 +4,17 @@ import { useState, useEffect, Suspense, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import {
+  getSafeAuthRedirect,
+  hasSupabasePkceCallback,
+  restoreSupabasePkceCallback,
+} from "@/lib/supabase/auth-callback";
 import ReflectiveInput from "@/components/ui/ReflectiveInput";
 import { Button } from "@/components/ui/button";
 import { Mail, Lock, Smartphone, ArrowRight, Loader2, KeyRound, Fingerprint, Sparkles, Globe, Zap } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useLang } from "@/contexts/LangContext";
 import { LangToggle } from "@/components/ui/LangToggle";
-
-function getSafeRedirectPath(value: string | null) {
-  if (!value || !value.startsWith("/") || value.startsWith("//")) return "/models";
-  if (value === "/auth/login" || value.startsWith("/auth/login?")) return "/models";
-  if (value === "/auth/register" || value.startsWith("/auth/register?")) return "/models";
-  return value;
-}
 
 // 包装组件以支持 useSearchParams
 function LoginPageContent() {
@@ -26,10 +24,18 @@ function LoginPageContent() {
   const { lang } = useLang();
 
   // 获取重定向目标
-  const redirectTo = getSafeRedirectPath(searchParams.get('redirect'));
+  const redirectTo = getSafeAuthRedirect(searchParams.get("redirect"));
 
   // 登录方式: password (邮箱登录) | phone (手机登录)
   const [loginMethod, setLoginMethod] = useState<"password" | "phone">("password");
+
+  // 手机验证码登录仅限中国大陆号码；英文模式强制回落到邮箱密码登录，
+  // 防止用户在中文下切到「验证码登录」再切英文后仍停留在手机表单（Tab 已隐藏但表单体未随之关闭）。
+  useEffect(() => {
+    if (lang === "en" && loginMethod === "phone") {
+      setLoginMethod("password");
+    }
+  }, [lang, loginMethod]);
 
   // 表单状态
   const [email, setEmail] = useState("");
@@ -68,6 +74,45 @@ function LoginPageContent() {
   // 处理 URL hash 中的 auth token（从 Supabase magic link 回调）
   useEffect(() => {
     const handleAuthCallback = async () => {
+      const search = window.location.search;
+      if (hasSupabasePkceCallback(search)) {
+        try {
+          const supabase = createClient();
+          const result = await restoreSupabasePkceCallback(supabase.auth, search);
+
+          if (result.error || !result.session) {
+            console.error("Failed to restore PKCE auth session");
+            toast({
+              variant: "destructive",
+              title: lang === "en" ? "Sign In Failed" : "登录失败",
+              description: lang === "en"
+                ? "Session setup failed, please try again"
+                : "Session 设置失败，请重试",
+            });
+            window.history.replaceState(null, "", window.location.pathname);
+            return;
+          }
+
+          toast({
+            title: lang === "en" ? "🎉 Signed In!" : "🎉 登录成功！",
+            description: lang === "en" ? "Redirecting..." : "正在跳转到控制台...",
+          });
+          window.location.replace(redirectTo);
+          return;
+        } catch {
+          console.error("PKCE auth callback failed");
+          toast({
+            variant: "destructive",
+            title: lang === "en" ? "Sign In Failed" : "登录失败",
+            description: lang === "en"
+              ? "Session setup failed, please try again"
+              : "Session 设置失败，请重试",
+          });
+          window.history.replaceState(null, "", window.location.pathname);
+          return;
+        }
+      }
+
       const hash = window.location.hash;
       if (hash && hash.includes('access_token')) {
         console.log("Detected auth callback with tokens in URL hash");
@@ -110,8 +155,8 @@ function LoginPageContent() {
       }
     };
 
-    handleAuthCallback();
-  }, [completeLoginRedirect, lang, toast]);
+    void handleAuthCallback();
+  }, [completeLoginRedirect, lang, redirectTo, toast]);
 
 
   // 密码登录处理
@@ -487,27 +532,29 @@ function LoginPageContent() {
             <div className="flex-1 h-px bg-white/5" />
           </div>
 
-          {/* 药丸式 Tab 切换 */}
-          <div className="grid grid-cols-2 gap-1 mb-8 p-1 bg-black/40 rounded-xl relative">
-            <button
-              type="button"
-              onClick={() => setLoginMethod("password")}
-              className={`py-2.5 text-sm font-medium rounded-lg transition-all duration-300 z-10 ${
-                loginMethod === "password" ? "text-white bg-white/10 shadow-sm" : "text-white/40 hover:text-white/70 hover:bg-white/5"
-              }`}
-            >
-              {lang === "en" ? "Password" : "密码登录"}
-            </button>
-            <button
-              type="button"
-              onClick={() => setLoginMethod("phone")}
-              className={`py-2.5 text-sm font-medium rounded-lg transition-all duration-300 z-10 ${
-                loginMethod === "phone" ? "text-white bg-white/10 shadow-sm" : "text-white/40 hover:text-white/70 hover:bg-white/5"
-              }`}
-            >
-              {lang === "en" ? "Verification Code" : "验证码登录"}
-            </button>
-          </div>
+          {/* 药丸式 Tab 切换 — 手机验证码登录仅限中国大陆号码，英文模式下隐藏，只保留邮箱密码/Google 登录 */}
+          {lang !== "en" && (
+            <div className="grid grid-cols-2 gap-1 mb-8 p-1 bg-black/40 rounded-xl relative">
+              <button
+                type="button"
+                onClick={() => setLoginMethod("password")}
+                className={`py-2.5 text-sm font-medium rounded-lg transition-all duration-300 z-10 ${
+                  loginMethod === "password" ? "text-white bg-white/10 shadow-sm" : "text-white/40 hover:text-white/70 hover:bg-white/5"
+                }`}
+              >
+                密码登录
+              </button>
+              <button
+                type="button"
+                onClick={() => setLoginMethod("phone")}
+                className={`py-2.5 text-sm font-medium rounded-lg transition-all duration-300 z-10 ${
+                  loginMethod === "phone" ? "text-white bg-white/10 shadow-sm" : "text-white/40 hover:text-white/70 hover:bg-white/5"
+                }`}
+              >
+                验证码登录
+              </button>
+            </div>
+          )}
 
           {/* 表单主体 */}
           <form onSubmit={handleSubmit}>

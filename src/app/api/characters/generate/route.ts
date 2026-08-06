@@ -13,6 +13,7 @@ import { NextResponse } from "next/server";
 import sharp from "sharp";
 
 import { callDoubaoAPI } from "@/lib/doubao-api-client";
+import { applyTaskCreditDelta } from "@/lib/credits/atomic-task-credit";
 import { generateMediaPath, uploadImageBuffer } from "@/lib/oss";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -225,59 +226,31 @@ export async function POST(request: Request) {
       );
     }
 
-    // 乐观锁扣费（带重试）
-    let deductSuccess = false;
-    let deductAttempts = 0;
-    let deductedFromCredits = currentCredits;
-    const maxAttempts = 3;
-
-    while (!deductSuccess && deductAttempts < maxAttempts) {
-      deductAttempts++;
-
-      const { data: latestProfile } = await supabase
-        .from("profiles")
-        .select("credits")
-        .eq("id", user.id)
-        .single();
-
-      const latestCredits =
-        (latestProfile as unknown as { credits: number })?.credits || 0;
-
-      if (latestCredits < BOARD_GENERATE_CREDITS) {
-        return NextResponse.json(
-          {
-            success: false,
-            error: `积分不足！需要 ${BOARD_GENERATE_CREDITS} 积分，当前余额 ${latestCredits}`,
-          },
-          { status: 400 }
-        );
-      }
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error: deductError } = await (supabase as any)
-        .from("profiles")
-        .update({ credits: latestCredits - BOARD_GENERATE_CREDITS })
-        .eq("id", user.id)
-        .eq("credits", latestCredits); // 乐观锁
-
-      if (!deductError) {
-        deductedFromCredits = latestCredits;
-        deductSuccess = true;
-      } else if (deductAttempts < maxAttempts) {
-        console.log(
-          `[Character Generate] Credits deduct retry ${deductAttempts}/${maxAttempts}`
-        );
-        await new Promise((r) => setTimeout(r, 100 * deductAttempts));
-      }
-    }
-
-    if (!deductSuccess) {
-      console.error(
-        "[Character Generate] Failed to deduct credits after retries"
-      );
+    const creditTaskId = crypto.randomUUID();
+    let chargeResult;
+    try {
+      chargeResult = await applyTaskCreditDelta({
+        supabase,
+        userId: user.id,
+        entryKind: "consume",
+        amount: -BOARD_GENERATE_CREDITS,
+        scope: "character-board",
+        taskId: creditTaskId,
+        operation: "consume",
+        pricingVersion: "character-board-v1",
+        description: "角色完整设定板生成",
+      });
+    } catch (error) {
+      console.error("[Character Generate] Failed to deduct credits:", error);
+      const message = error instanceof Error ? error.message : "";
       return NextResponse.json(
-        { success: false, error: "扣费失败，请重试" },
-        { status: 500 }
+        {
+          success: false,
+          error: message.includes("insufficient credits")
+            ? "积分不足，请刷新余额后重试"
+            : "扣费失败，请重试",
+        },
+        { status: message.includes("insufficient credits") ? 400 : 500 }
       );
     }
 
@@ -288,8 +261,8 @@ export async function POST(request: Request) {
     console.log("[Character Generate] Generating character board via GPTImage2:", {
       userId: user.id,
       cost: BOARD_GENERATE_CREDITS,
-      before: deductedFromCredits,
-      after: deductedFromCredits - BOARD_GENERATE_CREDITS,
+      before: chargeResult.balanceBefore,
+      after: chargeResult.balanceAfter,
       promptLength: boardPrompt.length,
       promptPreview: englishPrompt.substring(0, 80),
       hasSourceImage: !!sourceImageUrl,
@@ -311,21 +284,17 @@ export async function POST(request: Request) {
 
     if (!boardResult.success || !boardResult.imageUrl) {
       console.error("[Character Generate] Character board failed, refunding", BOARD_GENERATE_CREDITS);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: latestProfile } = await (supabase as any)
-        .from("profiles")
-        .select("credits")
-        .eq("id", user.id)
-        .single();
-
-      const latestCredits = (latestProfile as { credits?: number } | null)?.credits;
-      if (typeof latestCredits === "number") {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await (supabase as any)
-          .from("profiles")
-          .update({ credits: latestCredits + BOARD_GENERATE_CREDITS })
-          .eq("id", user.id);
-      }
+      await applyTaskCreditDelta({
+        supabase,
+        userId: user.id,
+        entryKind: "refund",
+        amount: BOARD_GENERATE_CREDITS,
+        scope: "character-board",
+        taskId: creditTaskId,
+        operation: "refund",
+        pricingVersion: "character-board-v1",
+        description: "角色完整设定板生成失败退款",
+      });
 
       return NextResponse.json(
         {

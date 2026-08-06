@@ -15,6 +15,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { mergeVoiceover } = require('./merge-audio');
 const { uploadToOSS } = require('./oss-upload');
+const { stitchVideos, probeMedia, downloadVideo } = require('./stitch');
 
 const app = express();
 app.use(express.json({ limit: '50mb' })); // 配音 base64 约 160KB/个，50MB 绰绰有余
@@ -98,6 +99,7 @@ app.post('/api/render', async (req, res) => {
             durationPerImage = 2,
             transition = 'fade',
             voiceover = null,  // { base64, duration, timestamps } | null
+            kenburns = false,  // ken-burns 运镜(S0.4)
         } = req.body;
 
         if (!images || !Array.isArray(images) || images.length === 0) {
@@ -156,6 +158,7 @@ app.post('/api/render', async (req, res) => {
             '--transition', transition,
         ];
 
+        if (kenburns) args.push('--kenburns');
         if (musicPath) args.push('--music', musicPath);
         if (subtitle && subtitle.text) {
             // 注入 durationPerImage, 确保 Python 计算 TextOverlay 时间正确
@@ -212,6 +215,98 @@ app.post('/api/render', async (req, res) => {
     } finally {
         activeRenders--;
         log(`Done (${activeRenders}/${MAX_CONCURRENT_RENDERS} active)`);
+    }
+});
+
+// ========================================
+// POST /api/stitch — 多段视频拼接(S0.4)
+// 输入: { videos: string[](URL, 按顺序), aspectRatio?, loudnorm?, transition? }
+// 输出: { success, videoUrl, durationSec, warning? }
+// MVP 仅硬切;transition='crossfade' 降级为 cut 并返回 warning。
+// ========================================
+let activeStitches = 0;
+const MAX_CONCURRENT_STITCHES = 2;
+
+app.post('/api/stitch', async (req, res) => {
+    const startTime = Date.now();
+    const taskId = crypto.randomUUID().slice(0, 8);
+    const log = (msg) => console.log(`[Stitch ${taskId}] ${msg}`);
+
+    if (activeStitches >= MAX_CONCURRENT_STITCHES) {
+        log(`Rejected: ${activeStitches}/${MAX_CONCURRENT_STITCHES} stitches active`);
+        return res.status(503).json({ error: 'Worker busy', activeStitches });
+    }
+    activeStitches++;
+
+    const workDir = path.join(TEMP_DIR, `stitch_${taskId}`);
+    try {
+        const { videos, aspectRatio = '9:16', loudnorm = true, transition = 'cut' } = req.body;
+        if (!videos || !Array.isArray(videos) || videos.length < 2) {
+            return res.status(400).json({ error: 'videos requires >= 2 URLs' });
+        }
+        if (videos.length > 30) {
+            return res.status(400).json({ error: 'videos exceeds max 30 segments' });
+        }
+        const warning = transition === 'crossfade'
+            ? 'crossfade not implemented yet, fell back to cut'
+            : undefined;
+
+        log(`Start: ${videos.length} segments, ${aspectRatio}, loudnorm=${loudnorm}`);
+        fs.mkdirSync(workDir, { recursive: true });
+
+        // 1. 下载全部片段(顺序即拼接顺序)
+        const localPaths = [];
+        for (let i = 0; i < videos.length; i++) {
+            const dest = path.join(workDir, `seg_${String(i).padStart(3, '0')}.mp4`);
+            const bytes = await downloadVideo(videos[i], dest);
+            log(`Downloaded seg ${i}: ${(bytes / 1024 / 1024).toFixed(1)}MB`);
+            localPaths.push(dest);
+        }
+
+        // 2. 拼接
+        const outputPath = path.join(workDir, 'stitched.mp4');
+        const { durationSec } = await stitchVideos(localPaths, outputPath, { aspectRatio, loudnorm });
+        log(`Stitch done in ${((Date.now() - startTime) / 1000).toFixed(1)}s`);
+
+        // 3. 上传 OSS
+        const videoBuffer = await fsp.readFile(outputPath);
+        const ossKey = `videos/stitch/worker/${taskId}-${Date.now()}.mp4`;
+        const videoUrl = await uploadToOSS(videoBuffer, ossKey, 'video/mp4');
+        log(`Upload done: ${videoUrl}`);
+
+        cleanup(workDir);
+        res.json({
+            success: true,
+            videoUrl,
+            durationSec: Math.round(durationSec * 10) / 10,
+            elapsed: parseFloat(((Date.now() - startTime) / 1000).toFixed(1)),
+            ...(warning ? { warning } : {}),
+        });
+    } catch (error) {
+        cleanup(workDir);
+        console.error(`[Stitch ${taskId}] Error:`, error);
+        res.status(500).json({ error: error.message });
+    } finally {
+        activeStitches--;
+        log(`Done (${activeStitches}/${MAX_CONCURRENT_STITCHES} active)`);
+    }
+});
+
+// ========================================
+// POST /api/probe — 媒体探测(S0.4)
+// 输入: { url } 输出: { durationSec, width, height, videoCodec, fps, hasAudio, ... }
+// ========================================
+app.post('/api/probe', async (req, res) => {
+    try {
+        const { url } = req.body;
+        if (!url || typeof url !== 'string' || !/^https?:\/\//.test(url)) {
+            return res.status(400).json({ error: 'url (http/https) is required' });
+        }
+        const info = await probeMedia(url);
+        res.json({ success: true, ...info });
+    } catch (error) {
+        console.error('[Probe] Error:', error.message);
+        res.status(500).json({ error: error.message });
     }
 });
 

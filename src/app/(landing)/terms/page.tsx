@@ -3,7 +3,7 @@
 import Link from "next/link";
 import ReflectiveCard from "@/components/ui/ReflectiveCard";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Sparkles, Shield, Globe, FileText, Users, UserCheck, AlertTriangle, BookOpen, Scale, Gavel, RefreshCw, Phone, CreditCard, Megaphone, Receipt, ShieldX, Layers, Baby, MoreHorizontal, Youtube, DollarSign } from "lucide-react";
+import { ArrowLeft, Sparkles, Shield, Globe, FileText, Users, UserCheck, AlertTriangle, BookOpen, Scale, Gavel, RefreshCw, Phone, CreditCard, Megaphone, Receipt, ShieldX, Layers, Baby, MoreHorizontal, Youtube, DollarSign, Share2 } from "lucide-react";
 import { useLang } from "@/contexts/LangContext";
 
 export default function TermsPage() {
@@ -39,8 +39,8 @@ export default function TermsPage() {
         <div className="container max-w-4xl mx-auto px-6">
           <div className="mb-12">
             <h1 className="text-4xl font-bold mb-4">{lang === "en" ? "Terms of Service - Wuhan Guanxing Cultural Media Co., Ltd. (Star Gaze)" : "服务条款 - 武汉观星文化传媒有限公司 (Star Gaze)"}</h1>
-            <p className="text-gray-400">{lang === "en" ? "Last Updated: July 1, 2026" : "最后更新日期：2026年7月1日"}</p>
-            <p className="text-gray-400">{lang === "en" ? "Effective Date: July 1, 2026" : "生效日期：2026年7月1日"}</p>
+            <p className="text-gray-400">{lang === "en" ? "Last Updated: July 23, 2026" : "最后更新日期：2026年7月23日"}</p>
+            <p className="text-gray-400">{lang === "en" ? "Effective Date: July 23, 2026" : "生效日期：2026年7月23日"}</p>
           </div>
 
           <div className="space-y-8 text-gray-300">
@@ -333,6 +333,51 @@ export default function TermsPage() {
                   <p className="leading-loose">{lang === "en" ? '19.1 Star Gaze stores and processes user data on infrastructure located in the United States. Platform-related data, including OAuth tokens, account identifiers, publishing metadata, and WhatsApp Inbox contact and message records for enabled integrations, may be stored and processed on US-based servers.' : '19.1 Star Gaze 将用户数据存储并处理于位于美国的基础设施上。平台相关数据，包括 OAuth 令牌、账号标识符、发布元数据，以及已启用集成中的 WhatsApp Inbox 联系人和消息记录，可能存储并处理于美国服务器上。'}</p>
                   <p className="leading-loose mt-3">{lang === "en" ? '19.2 All data transmission between systems is encrypted using TLS 1.2 or above. We apply appropriate safeguards to protect data handled through our services.' : '19.2 系统之间的所有数据传输均使用 TLS 1.2 及以上协议加密。我们对通过本服务处理的数据采取适当的安全保护措施。'}</p>
                   <p className="leading-loose mt-3">{lang === "en" ? '19.3 By using Star Gaze, you consent to the transfer and processing of your data as described in this section and in our Privacy Policy.' : '19.3 使用 Star Gaze 即表示您同意按照本条款和我们的隐私政策中描述的方式传输和处理您的数据。'}</p>
+                </div>
+              </div>
+            </ReflectiveCard>
+
+            {/* 20. YouTube Platform Integration Terms */}
+            <ReflectiveCard className="!rounded-xl">
+              <div className="flex items-start gap-4 p-6">
+                <div className="p-3 rounded-lg bg-red-500/10 text-red-400 shrink-0"><Youtube className="h-6 w-6" /></div>
+                <div>
+                  <h2 className="text-xl font-bold text-white mb-3">{lang === "en" ? "20. YouTube Platform Integration Terms" : "二十、YouTube 平台集成条款"}</h2>
+                  <p className="leading-loose">{lang === "en" ? '20.1 Service Description: Subject to availability and your authorization, Star Gaze uses YouTube API Services to connect a channel, display channel information, upload and schedule videos, select metadata and visibility, synchronize comments, translate comments at your request, and submit replies that you initiate or confirm.' : '20.1 服务说明：在相关功能可用且您已完成授权的前提下，Star Gaze 使用 YouTube API 服务绑定频道、展示频道信息、上传和定时发布视频、选择元数据与可见性、同步评论、按您的请求翻译评论，以及提交由您主动发起或确认的回复。'}</p>
+                  <p className="leading-loose mt-3">{lang === "en" ? '20.2 YouTube Terms: By accessing or using YouTube API Services through Star Gaze, you also agree to be bound by the YouTube Terms of Service. Your use is additionally subject to applicable YouTube and Google policies.' : '20.2 YouTube 条款：当您通过 Star Gaze 访问或使用 YouTube API 服务时，即表示您同时同意受 YouTube 服务条款约束。您的使用还应遵守适用的 YouTube 与 Google 政策。'}</p>
+                  <p className="leading-loose mt-2"><Link href="https://www.youtube.com/t/terms" target="_blank" className="text-cyan-400 hover:underline">YouTube Terms of Service</Link></p>
+                  <p className="leading-loose mt-3">{lang === "en" ? '20.3 Authorization: You represent that you own or are lawfully authorized to manage every Google account and YouTube channel you connect. Star Gaze requests the youtube.force-ssl permission because YouTube provides no narrower scope for user-initiated comment replies. Although that scope can technically permit broad actions, Star Gaze uses it only for the visible channel, publishing, comment-reading, and user-confirmed reply features described here and in our Privacy Policy.' : '20.3 授权：您声明并保证，您拥有或有权合法管理所绑定的每个 Google 账号和 YouTube 频道。Star Gaze 请求 youtube.force-ssl 权限，是因为 YouTube 没有支持用户主动回复评论的更窄权限。尽管该权限在技术上可支持较广泛操作，Star Gaze 仅将其用于本条款及隐私政策所述的频道、发布、评论读取和用户确认回复等可见功能。'}</p>
+                  <p className="leading-loose mt-3">{lang === "en" ? '20.4 User Control: You retain final control over the selected channel, video, title, description, tags, category, audience and synthetic-media settings, privacy status, publication time, and reply text. A video publication or comment reply is submitted only after you initiate or confirm it. You must review translated text before using it in a reply.' : '20.4 用户控制：您对所选频道、视频、标题、描述、标签、分类、受众与合成媒体设置、可见性、发布时间及回复文本保留最终控制权。视频发布或评论回复仅在您主动发起或确认后提交。您必须在使用翻译文本回复前自行审核。'}</p>
+                  <p className="leading-loose mt-3">{lang === "en" ? '20.5 User Responsibility: You are responsible for the legality, accuracy, rights, licenses, disclosures, and platform compliance of all content and replies submitted through Star Gaze. You must comply with applicable law, the YouTube Terms of Service, YouTube Community Guidelines, copyright and publicity rights, and rules for advertising, commercial content, and synthetic or altered media.' : '20.5 用户责任：您对通过 Star Gaze 提交的所有内容与回复的合法性、准确性、权利许可、披露及平台合规性负责。您必须遵守适用法律、YouTube 服务条款、YouTube 社区准则、著作权与肖像权规则，以及广告、商业内容和合成或修改媒体的相关规定。'}</p>
+                  <p className="leading-loose mt-3">{lang === "en" ? '20.6 Platform Decisions: YouTube independently controls processing, moderation, availability, visibility, monetization, removal, and other treatment of content. Star Gaze does not guarantee that a video or reply will be accepted, displayed, made public, recommended, monetized, or retained. An API project that has not completed a required YouTube compliance audit may be restricted by YouTube, including private-only uploads.' : '20.6 平台决定：YouTube 独立决定内容的处理、审核、可用性、可见性、商业化、删除及其他处置方式。Star Gaze 不保证视频或回复一定会被接受、展示、公开、推荐、商业化或保留。尚未完成 YouTube 要求的合规审计的 API 项目可能受到限制，包括上传内容仅限私密可见。'}</p>
+                  <p className="leading-loose mt-3">{lang === "en" ? '20.7 Privacy, Revocation, and Deletion: Our handling of YouTube and Google user data is described in the Star Gaze Privacy Policy. You may disconnect one account, use the “Delete all YouTube data” control, or revoke access through Google Account settings. Local deletion is completed independently of Google availability; if a remote revocation attempt is temporarily unsuccessful, Star Gaze retries it for no more than seven calendar days. Disconnecting Star Gaze or deleting locally stored data does not delete content stored by YouTube; YouTube-hosted content must be managed through YouTube or another authorized client that supports deletion.' : '20.7 隐私、撤权与删除：我们对 YouTube 与 Google 用户数据的处理方式详见 Star Gaze 隐私政策。您可以解绑单个账号、使用“删除全部 YouTube 数据”功能，或通过 Google 账号设置撤销访问。本地删除不依赖 Google 是否可用；如远程撤权暂时失败，Star Gaze 将在不超过七个自然日的期限内重试。解绑 Star Gaze 或删除本地保存的数据不会删除 YouTube 平台保存的内容；YouTube 平台内容必须通过 YouTube 或其他支持删除的授权客户端进行管理。'}</p>
+                  <div className="flex flex-wrap gap-x-4 gap-y-2 mt-3 text-sm">
+                    <Link href="/privacy" className="text-cyan-400 hover:underline">{lang === "en" ? "Star Gaze Privacy Policy" : "Star Gaze 隐私政策"}</Link>
+                    <Link href="https://security.google.com/settings/security/permissions" target="_blank" className="text-cyan-400 hover:underline">{lang === "en" ? "Google Account third-party connections" : "Google 账号第三方连接"}</Link>
+                    <Link href="https://policies.google.com/privacy" target="_blank" className="text-cyan-400 hover:underline">{lang === "en" ? "Google Privacy Policy" : "Google 隐私政策"}</Link>
+                  </div>
+                </div>
+              </div>
+            </ReflectiveCard>
+
+            {/* 21. Facebook Platform Integration Terms */}
+            <ReflectiveCard className="!rounded-xl">
+              <div className="flex items-start gap-4 p-6">
+                <div className="p-3 rounded-lg bg-blue-500/10 text-blue-400 shrink-0"><Share2 className="h-6 w-6" /></div>
+                <div>
+                  <h2 className="text-xl font-bold text-white mb-3">{lang === "en" ? "21. Facebook Platform Integration Terms" : "二十一、Facebook 平台集成条款"}</h2>
+                  <p className="leading-loose">{lang === "en" ? "21.1 Service Description: Subject to availability and your authorization, Star Gaze uses Meta Platform APIs to connect Facebook Pages you manage, display Page information, publish or schedule Page videos and posts, synchronize Page comments through API calls and webhooks, and submit replies that you initiate or confirm." : "21.1 服务说明：在相关功能可用且您已完成授权的前提下，Star Gaze 使用 Meta 平台 API 绑定您管理的 Facebook Page、展示 Page 信息、发布或预约发布 Page 视频与帖子、通过 API 调用和 webhook 同步 Page 评论，以及提交由您主动发起或确认的回复。"}</p>
+                  <p className="leading-loose mt-3">{lang === "en" ? "21.2 Meta Terms: By accessing Facebook features through Star Gaze, you agree to comply with applicable Meta terms, policies, Page rules, community standards, and developer requirements." : "21.2 Meta 条款：当您通过 Star Gaze 使用 Facebook 功能时，您同意遵守适用的 Meta 条款、政策、Page 规则、社群守则及开发者要求。"}</p>
+                  <p className="leading-loose mt-3">{lang === "en" ? "21.3 Authorization: You represent that you own or are lawfully authorized to manage every Facebook Page you connect. You decide which available Pages to connect. Star Gaze requests Page permissions only for the visible Page listing, metadata and webhook subscription, content reading, publishing, comment reading, and user-confirmed reply features described here and in our Privacy Policy." : "21.3 授权：您声明并保证，您拥有或有权合法管理所绑定的每个 Facebook Page。您自行决定绑定哪些可用 Page。Star Gaze 仅为本条款及隐私政策所述的可见 Page 列表、元数据与 webhook 订阅、内容读取、发布、评论读取及用户确认回复功能请求 Page 权限。"}</p>
+                  <p className="leading-loose mt-3">{lang === "en" ? "21.4 User Control: You retain final control over the selected Page, source media, text, publication timing, and reply text. Star Gaze submits a publication or reply only after you initiate or confirm the action. You are responsible for reviewing content before submission." : "21.4 用户控制：您对所选 Page、源媒体、文本、发布时间及回复文本保留最终控制权。Star Gaze 仅在您主动发起或确认操作后提交发布或回复。您有责任在提交前审核内容。"}</p>
+                  <p className="leading-loose mt-3">{lang === "en" ? "21.5 User Responsibility: You are responsible for the legality, accuracy, rights, licenses, disclosures, and platform compliance of all content and replies submitted through Star Gaze, including compliance with copyright, publicity, advertising, commercial-content, and synthetic-media requirements." : "21.5 用户责任：您对通过 Star Gaze 提交的所有内容与回复的合法性、准确性、权利许可、披露及平台合规性负责，包括遵守著作权、肖像权、广告、商业内容及合成媒体相关要求。"}</p>
+                  <p className="leading-loose mt-3">{lang === "en" ? "21.6 Platform Decisions: Meta independently controls processing, moderation, availability, visibility, recommendation, monetization, removal, and other treatment of Facebook content. Star Gaze does not guarantee that a publication or reply will be accepted, displayed, recommended, monetized, or retained." : "21.6 平台决定：Meta 独立决定 Facebook 内容的处理、审核、可用性、可见性、推荐、商业化、删除及其他处置方式。Star Gaze 不保证发布内容或回复一定会被接受、展示、推荐、商业化或保留。"}</p>
+                  <p className="leading-loose mt-3">{lang === "en" ? "21.7 Privacy, Revocation, and Deletion: Our handling of Facebook Platform Data is described in the Star Gaze Privacy Policy. You may disconnect one Page, use “Delete all Facebook data,” revoke access through Facebook Apps and Websites settings, use Meta’s data-deletion mechanism, or contact us. Deleting locally stored data does not delete content hosted by Facebook." : "21.7 隐私、撤权与删除：我们对 Facebook 平台数据的处理方式详见 Star Gaze 隐私政策。您可以解绑单个 Page、使用“删除全部 Facebook 数据”、通过 Facebook“应用和网站”设置撤销访问、使用 Meta 的数据删除机制，或联系我们。删除本地保存的数据不会删除 Facebook 平台托管的内容。"}</p>
+                  <div className="flex flex-wrap gap-x-4 gap-y-2 mt-3 text-sm">
+                    <Link href="/privacy" className="text-cyan-400 hover:underline">{lang === "en" ? "Star Gaze Privacy Policy" : "Star Gaze 隐私政策"}</Link>
+                    <Link href="https://developers.facebook.com/terms/" target="_blank" className="text-cyan-400 hover:underline">{lang === "en" ? "Meta Platform Terms" : "Meta 平台条款"}</Link>
+                    <Link href="https://www.facebook.com/settings?tab=applications" target="_blank" className="text-cyan-400 hover:underline">{lang === "en" ? "Facebook Apps and Websites settings" : "Facebook 应用和网站设置"}</Link>
+                  </div>
                 </div>
               </div>
             </ReflectiveCard>

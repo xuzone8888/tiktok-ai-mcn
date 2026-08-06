@@ -90,7 +90,7 @@ export async function GET(request: NextRequest) {
 
     const { data: existingAccount } = await supabase
       .from('youtube_accounts')
-      .select('id')
+      .select('id, scopes')
       .eq('user_id', authState.user_id)
       .eq('channel_id', channel.channelId)
       .maybeSingle()
@@ -115,6 +115,11 @@ export async function GET(request: NextRequest) {
 
     const now = new Date().toISOString()
     const expiresAt = calculateYouTubeTokenExpiration(token.expires_in).toISOString()
+    const grantedScopes = token.scope
+      ? scopesToArray(token.scope)
+      : Array.isArray(existingAccount?.scopes)
+        ? existingAccount.scopes.map(String).filter(Boolean)
+        : []
     const { data: savedAccount, error: upsertError } = await supabase
       .from('youtube_accounts')
       .upsert({
@@ -127,8 +132,10 @@ export async function GET(request: NextRequest) {
         video_count: channel.videoCount,
         view_count: channel.viewCount,
         access_token_expires_at: expiresAt,
-        scopes: scopesToArray(token.scope),
+        scopes: grantedScopes,
         status: 'active',
+        last_authorization_verified_at: now,
+        authorization_invalidated_at: null,
         updated_at: now,
       }, {
         onConflict: 'user_id,channel_id',

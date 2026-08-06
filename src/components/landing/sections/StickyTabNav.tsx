@@ -165,7 +165,7 @@ export default function StickyTabNav() {
             <section
                 id="character-engine"
                 ref={setSectionRef("character-engine")}
-                aria-label="角色引擎"
+                aria-label={lang === "en" ? "Character Engine" : "角色引擎"}
                 className="scroll-mt-[120px]"
             >
                 <ModelWallSection />
@@ -176,7 +176,7 @@ export default function StickyTabNav() {
             <section
                 id="content-creation"
                 ref={setSectionRef("content-creation")}
-                aria-label="内容创作"
+                aria-label={lang === "en" ? "Content Creation" : "内容创作"}
                 className="scroll-mt-[120px]"
             >
                 <GenerationEngineSection />
@@ -188,7 +188,7 @@ export default function StickyTabNav() {
             <section
                 id="efficiency-compliance"
                 ref={setSectionRef("efficiency-compliance")}
-                aria-label="效率与合规"
+                aria-label={lang === "en" ? "Efficiency & Compliance" : "效率与合规"}
                 className="scroll-mt-[120px]"
             >
                 <LiveStatsSection />

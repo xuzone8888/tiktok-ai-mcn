@@ -369,6 +369,7 @@ async function publishItem(
       .from('facebook_publish_task_items')
       .update({
         facebook_video_id: upload.videoId,
+        facebook_post_id: upload.postId,
         facebook_watch_url: upload.watchUrl,
         updated_at: new Date().toISOString(),
       })

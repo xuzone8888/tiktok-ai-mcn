@@ -22,12 +22,17 @@ export const soraAdapter: VideoModelAdapter = {
   async submit(input) {
     const model = getSoraModel(input);
     const imageUrls = input.imageUrls.slice(0, 1);
-    const task = await submitPlatformVideo({
-      model,
-      prompt: input.prompt,
-      generate_audio: true,
-      ...(imageUrls.length > 0 ? { reference_images: imageUrls } : {}),
-    });
+    const task = await submitPlatformVideo(
+      {
+        model,
+        prompt: input.prompt,
+        generate_audio: true,
+        ...(imageUrls.length > 0 ? { reference_images: imageUrls } : {}),
+      },
+      input.atMostOnce
+        ? ["/v1/videos?async=true"]
+        : ["/v1/videos?async=true", "/api/v1/generate"]
+    );
 
     return {
       taskId: task.taskId,

@@ -1,52 +1,61 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
-import { getVideoModelCreditCost, isVideoModelId } from "@/lib/video-models/catalog";
-import { mergeCharacterReferenceImages } from "@/lib/video-models/character-reference";
+import { getVideoModelCreditCost } from "@/lib/video-models/catalog";
+import { collectCharacterReferenceImagesStrict } from "@/lib/video-models/character-reference";
+import {
+  parseVideoModelContract,
+  resolveLegacyVideoModelSelection,
+} from "@/lib/video-models/contract";
 import { checkVideoCredits, deductVideoCredits, refundVideoCreditsDirect } from "@/lib/video-models/credits";
 import { getRegisteredVideoModel } from "@/lib/video-models/registry";
-import type { VideoAspectRatio, VideoModelId, VideoQuality } from "@/lib/video-models/types";
+import type { VideoModelId } from "@/lib/video-models/types";
 
 export const maxDuration = 120;
 export const dynamic = "force-dynamic";
 
-interface SubmitRequestBody {
-  modelType?: string;
-  prompt?: string;
-  aiVideoPrompt?: string;
-  aspectRatio?: VideoAspectRatio;
-  imageUrls?: string[];
-  referenceImageUrls?: string[];
-  mainGridImageUrl?: string;
-  characterRefUrl?: string;
-  characterReferenceImages?: string[];
-  characterId?: string;
-  characterName?: string;
-  characterAsset?: unknown;
-  firstFrameUrl?: string;
-  lastFrameUrl?: string;
-  clientTaskId?: string;
-  taskId?: string;
-  groupName?: string;
-  userId?: string;
-  durationSeconds?: number;
-  quality?: VideoQuality;
-  mode?: "image_to_video" | "prompt_to_video";
+type SubmitRequestBody = Record<string, unknown>;
+
+interface SanitizedCharacterAsset {
+  id: string;
+  name: string;
+  description: string | null;
+  avatar_url: string | null;
+  reference_sheet_url: string | null;
+  reference_images: string[];
+  preview_video_url: string | null;
+  category: string | null;
+  tags: string[];
+  source: "user_created" | "official";
+  ownership: string | null;
+  publish_price: number | null;
+  reference_status: string | null;
 }
 
-function normalizeModelType(raw: string | undefined, quality?: VideoQuality): {
-  modelType: VideoModelId | null;
-  quality?: VideoQuality;
-} {
-  if (!raw) return { modelType: null, quality };
-  if (raw === "veo3-fast" || raw === "veo3-std" || raw === "veo3-4k") {
-    return { modelType: "veo", quality: raw === "veo3-4k" ? "hd" : quality };
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function normalizeBatchId(value: unknown): string | null {
+  return typeof value === "string" && UUID_PATTERN.test(value.trim()) ? value.trim() : null;
+}
+
+function asSubmitRequestBody(value: unknown): SubmitRequestBody | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? Object.fromEntries(Object.entries(value))
+    : null;
+}
+
+function normalizeOptionalString(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  return trimmed || undefined;
+}
+
+function firstNonEmptyString(...values: unknown[]): string {
+  for (const value of values) {
+    const normalized = normalizeOptionalString(value);
+    if (normalized) return normalized;
   }
-  if (raw === "seedance-pro") {
-    return { modelType: "seedance", quality: "hd" };
-  }
-  if (isVideoModelId(raw)) return { modelType: raw, quality };
-  return { modelType: null, quality };
+  return "";
 }
 
 function normalizeStringArray(value: unknown): string[] {
@@ -55,9 +64,9 @@ function normalizeStringArray(value: unknown): string[] {
     : [];
 }
 
-function sanitizeCharacterAsset(value: unknown): Record<string, unknown> | null {
+function sanitizeCharacterAsset(value: unknown): SanitizedCharacterAsset | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  const record = value as Record<string, unknown>;
+  const record = Object.fromEntries(Object.entries(value));
   if (typeof record.id !== "string" || typeof record.name !== "string") return null;
 
   return {
@@ -79,7 +88,7 @@ function sanitizeCharacterAsset(value: unknown): Record<string, unknown> | null 
 
 function getCharacterReferenceImages(
   explicitReferenceImages: string[],
-  characterAsset: Record<string, unknown> | null
+  characterAsset: SanitizedCharacterAsset | null
 ): string[] {
   if (explicitReferenceImages.length > 0) return explicitReferenceImages;
   if (!characterAsset) return [];
@@ -102,14 +111,21 @@ function normalizeImageUrls(
     ...normalizeStringArray(body.referenceImageUrls),
   ];
 
-  if (modelType === "veo" && body.firstFrameUrl) {
-    uploadedUrls.unshift(body.firstFrameUrl);
-    if (body.lastFrameUrl) uploadedUrls.push(body.lastFrameUrl);
+  if (modelType === "veo") {
+    const firstFrameUrl = normalizeOptionalString(body.firstFrameUrl);
+    const lastFrameUrl = normalizeOptionalString(body.lastFrameUrl);
+    if (firstFrameUrl) uploadedUrls.unshift(firstFrameUrl);
+    if (lastFrameUrl) uploadedUrls.push(lastFrameUrl);
   }
 
-  if (body.mainGridImageUrl) uploadedUrls.push(body.mainGridImageUrl);
+  const mainGridImageUrl = normalizeOptionalString(body.mainGridImageUrl);
+  if (mainGridImageUrl) uploadedUrls.push(mainGridImageUrl);
 
-  return mergeCharacterReferenceImages(modelType, body.characterRefUrl || characterReferenceImages[0], uploadedUrls);
+  return collectCharacterReferenceImagesStrict(
+    modelType,
+    normalizeOptionalString(body.characterRefUrl) || characterReferenceImages[0],
+    uploadedUrls
+  );
 }
 
 function getMissingSchemaColumn(error: unknown): string | null {
@@ -182,7 +198,14 @@ export async function POST(request: NextRequest) {
   let resolvedModelType: VideoModelId | undefined;
 
   try {
-    const body = (await request.json()) as SubmitRequestBody;
+    const body = asSubmitRequestBody(await request.json());
+    if (!body) {
+      return NextResponse.json(
+        { success: false, error: "请求体必须是 JSON 对象" },
+        { status: 400 }
+      );
+    }
+
     const authSupabase = await createClient();
     const { data: { user } } = await authSupabase.auth.getUser();
 
@@ -193,32 +216,33 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (body.userId && body.userId !== user.id) {
+    const requestedUserId = normalizeOptionalString(body.userId);
+    if (requestedUserId !== undefined && requestedUserId !== user.id) {
       return NextResponse.json(
         { success: false, error: "用户身份不匹配" },
         { status: 403 }
       );
     }
 
-    const normalized = normalizeModelType(body.modelType, body.quality);
-    const modelType = normalized.modelType;
-    resolvedModelType = modelType || undefined;
-
-    if (!modelType) {
+    const selection = resolveLegacyVideoModelSelection(body.modelType, body.quality);
+    if (!selection.ok) {
       return NextResponse.json(
-        { success: false, error: `无效的视频模型: ${body.modelType || ""}` },
+        {
+          success: false,
+          error: selection.error.message,
+          code: selection.error.code,
+          field: selection.error.field,
+        },
         { status: 400 }
       );
     }
+    const { modelType, qualityInput } = selection.value;
+    resolvedModelType = modelType;
 
-    const model = getRegisteredVideoModel(modelType);
-    const prompt = (body.prompt || body.aiVideoPrompt || "").trim();
-    const aspectRatio = body.aspectRatio || "9:16";
-    const clientTaskId = body.clientTaskId || body.taskId || `vbt-${Date.now()}`;
-    const groupName = (body.groupName || "默认").trim() || "默认";
+    const prompt = firstNonEmptyString(body.prompt, body.aiVideoPrompt);
+    const clientTaskId = firstNonEmptyString(body.clientTaskId, body.taskId) || `vbt-${Date.now()}`;
+    const groupName = normalizeOptionalString(body.groupName) || "默认";
     const userId = user.id;
-    const quality = normalized.quality || body.quality || "standard";
-    const durationSeconds = body.durationSeconds || model.durationSeconds;
     const sanitizedCharacterAsset = sanitizeCharacterAsset(body.characterAsset);
     const characterReferenceImages = getCharacterReferenceImages(
       normalizeStringArray(body.characterReferenceImages),
@@ -232,27 +256,28 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!model.supportedAspectRatios.includes(aspectRatio)) {
-      return NextResponse.json(
-        { success: false, error: `${model.label} 不支持比例 ${aspectRatio}` },
-        { status: 400 }
-      );
-    }
-
     const imageUrls = normalizeImageUrls(body, modelType, characterReferenceImages);
-    if (!model.supportsNoImage && imageUrls.length === 0) {
+    const contract = parseVideoModelContract(modelType, {
+      durationSeconds: body.durationSeconds,
+      quality: qualityInput,
+      aspectRatio: body.aspectRatio,
+      mode: body.mode,
+      referenceImageCount: imageUrls.length,
+    });
+    if (!contract.ok) {
       return NextResponse.json(
-        { success: false, error: `${model.label} 需要至少 1 张图片` },
+        {
+          success: false,
+          error: contract.error.message,
+          code: contract.error.code,
+          field: contract.error.field,
+        },
         { status: 400 }
       );
     }
-    if (imageUrls.length > model.maxImages) {
-      return NextResponse.json(
-        { success: false, error: `${model.label} 最多支持 ${model.maxImages} 张图片` },
-        { status: 400 }
-      );
-    }
+    const { aspectRatio, durationSeconds, quality, mode } = contract.value;
 
+    const model = getRegisteredVideoModel(modelType);
     const creditCost = getVideoModelCreditCost(modelType, durationSeconds, quality);
     const supabase = createAdminClient();
     const creditCheck = await checkVideoCredits(supabase, userId, creditCost);
@@ -273,7 +298,7 @@ export async function POST(request: NextRequest) {
       userId,
       durationSeconds,
       quality,
-      mode: body.mode || (imageUrls.length > 0 ? "image_to_video" : "prompt_to_video"),
+      mode,
     });
     upstreamTaskId = submitResult.taskId;
 
@@ -288,9 +313,11 @@ export async function POST(request: NextRequest) {
 
     const now = new Date().toISOString();
     const generationSource = imageUrls.length > 0 ? "batch_video" : "batch_video_prompt";
+    const batchId = normalizeBatchId(body.batchId);
     const generationInsert = {
       user_id: userId,
       task_id: upstreamTaskId,
+      ...(batchId ? { batch_id: batchId } : {}),
       type: "video",
       generation_type: "video",
       source: generationSource,
@@ -312,11 +339,12 @@ export async function POST(request: NextRequest) {
       group_name: groupName,
       metadata: {
         model_type: modelType,
+        mode,
         client_task_id: clientTaskId,
         reference_image_urls: imageUrls,
         reference_image_count: imageUrls.length,
-        character_id: body.characterId || sanitizedCharacterAsset?.id || null,
-        character_name: body.characterName || sanitizedCharacterAsset?.name || null,
+        character_id: normalizeOptionalString(body.characterId) || sanitizedCharacterAsset?.id || null,
+        character_name: normalizeOptionalString(body.characterName) || sanitizedCharacterAsset?.name || null,
         character_reference_images: characterReferenceImages,
         character_asset: sanitizedCharacterAsset,
         billing: {

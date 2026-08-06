@@ -11,6 +11,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { IMAGE_FACTORY_UPGRADING_MESSAGE, isImageFactoryEnabled } from "@/lib/feature-flags";
+import { getInstagramWebhookAcceptanceDecision } from "@/lib/instagram/webhook-acceptance";
 
 // 公开路由（不需要登录）
 const PUBLIC_ROUTES = [
@@ -29,6 +30,7 @@ const PUBLIC_ROUTES = [
 // 需要登录的路由
 const PROTECTED_ROUTES = [
   "/dashboard",
+  "/canvas",
   "/assets",
   "/models",
   "/team",
@@ -61,13 +63,22 @@ function getSafeInternalRedirect(req: NextRequest) {
 }
 
 export async function middleware(req: NextRequest) {
+  const { pathname } = req.nextUrl;
+  const webhookAcceptanceDecision = getInstagramWebhookAcceptanceDecision(
+    process.env.INSTAGRAM_WEBHOOK_ACCEPTANCE_ONLY,
+    pathname
+  );
+
+  if (webhookAcceptanceDecision === "not_found") {
+    return new NextResponse(null, { status: 404 });
+  }
+
   let res = NextResponse.next({
     request: {
       headers: req.headers,
     },
   });
 
-  const { pathname } = req.nextUrl;
   const redirectTarget = `${pathname}${req.nextUrl.search}`;
 
   if (pathname.startsWith("/api/image-factory") && !isImageFactoryEnabled()) {
@@ -183,7 +194,10 @@ export async function middleware(req: NextRequest) {
     // ============================================
     // 5. Admin 路由保护
     // ============================================
-    if (pathname.startsWith("/admin")) {
+    if (
+      pathname.startsWith("/admin") &&
+      pathname !== "/admin/debug/instagram/health"
+    ) {
       // 从数据库获取用户角色 (使用 profiles 表)
       const { data: profile } = await supabase
         .from("profiles")

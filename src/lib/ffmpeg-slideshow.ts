@@ -158,6 +158,7 @@ export interface SlideshowOptions {
     aspectRatio: '9:16' | '16:9';
     durationPerImage: number;      // 每张图片时长(秒)
     transition: string;            // 转场效果 (支持 xfade 所有效果)
+    kenburns?: boolean;            // ken-burns 运镜(静帧变动态,四种运镜按图序轮换)
     musicPath?: string;            // 音乐文件路径
     subtitle?: SubtitleConfig | null;  // 字幕配置 (可选)
     originalImageIndices?: number[];   // 批量生成时的原始图片索引 (用于 textOverlay 重映射)
@@ -298,6 +299,7 @@ async function callMacWorker(options: SlideshowOptions): Promise<SlideshowResult
         aspectRatio,
         durationPerImage,
         transition,
+        kenburns: options.kenburns ?? false,
     };
 
     // 配音数据：Buffer → base64
@@ -396,6 +398,10 @@ export async function generateSlideshow(options: SlideshowOptions): Promise<Slid
             '--duration', String(durationPerImage),
             '--transition', transition,
         ];
+
+        if (options.kenburns) {
+            args.push('--kenburns');
+        }
 
         if (musicPath) {
             args.push('--music', musicPath);

@@ -12,6 +12,12 @@
  *   - avatars/{userId}/ - User avatars (if needed)
  */
 
+import {
+    normalizeOssUserMetadata,
+    type OssUserMetadata,
+} from './oss-metadata'
+export type { OssUserMetadata } from './oss-metadata'
+
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const OSS = require('ali-oss')
 
@@ -31,6 +37,16 @@ const CUSTOM_DOMAIN = process.env.ALIYUN_OSS_CUSTOM_DOMAIN || 'media.toryxai.com
 
 // Supported media types
 export type MediaType = 'video' | 'image' | 'audio'
+
+export interface OssUploadOptions {
+    /** Aliyun OSS user metadata (SDK adds the x-oss-meta- prefix). */
+    metadata?: OssUserMetadata
+}
+
+export interface OssStreamUploadOptions extends OssUploadOptions {
+    /** Cancels the source stream when the caller's operation deadline expires. */
+    signal?: AbortSignal
+}
 
 export type StorageFolder =
     | 'videos'
@@ -116,6 +132,40 @@ export function getPublicUrl(objectPath: string): string {
 }
 
 /**
+ * Create a short-lived, forced-download URL. Callers must authorize ownership
+ * before invoking this helper; the URL itself is a bearer capability.
+ */
+export function getSignedDownloadUrl(
+    objectPath: string,
+    filename: string,
+    expiresSeconds: number = 120
+): string {
+    if (
+        !objectPath ||
+        objectPath.startsWith('/') ||
+        objectPath.includes('\\') ||
+        objectPath.split('/').some((part) => !part || part === '.' || part === '..')
+    ) {
+        throw new Error('Invalid OSS object path')
+    }
+    if (
+        !/^[A-Za-z0-9][A-Za-z0-9._-]{0,119}$/.test(filename) ||
+        expiresSeconds < 30 ||
+        expiresSeconds > 300
+    ) {
+        throw new Error('Invalid signed download parameters')
+    }
+
+    const client = createOSSClient()
+    return client.signatureUrl(objectPath, {
+        expires: expiresSeconds,
+        response: {
+            'content-disposition': `attachment; filename="${filename}"`,
+        },
+    })
+}
+
+/**
  * Upload any buffer to OSS
  * @param buffer - File buffer
  * @param objectPath - OSS object path
@@ -125,7 +175,8 @@ export function getPublicUrl(objectPath: string): string {
 export async function uploadBuffer(
     buffer: Buffer | ArrayBuffer | Uint8Array,
     objectPath: string,
-    contentType: string
+    contentType: string,
+    options: OssUploadOptions = {}
 ): Promise<string> {
     const client = createOSSClient()
 
@@ -146,6 +197,7 @@ export async function uploadBuffer(
             'Content-Disposition': 'inline',  // Allow media to play in browser, not download
             'Cache-Control': 'max-age=31536000', // Cache for 1 year
         },
+        meta: options.metadata,
     })
 
     if (!result.name) {
@@ -165,9 +217,10 @@ export async function uploadBuffer(
 export async function uploadVideoBuffer(
     buffer: Buffer | ArrayBuffer | Uint8Array,
     objectPath: string,
-    contentType: string = 'video/mp4'
+    contentType: string = 'video/mp4',
+    options: OssUploadOptions = {}
 ): Promise<string> {
-    return uploadBuffer(buffer, objectPath, contentType)
+    return uploadBuffer(buffer, objectPath, contentType, options)
 }
 
 /**
@@ -180,9 +233,10 @@ export async function uploadVideoBuffer(
 export async function uploadImageBuffer(
     buffer: Buffer | ArrayBuffer | Uint8Array,
     objectPath: string,
-    contentType: string = 'image/jpeg'
+    contentType: string = 'image/jpeg',
+    options: OssUploadOptions = {}
 ): Promise<string> {
-    return uploadBuffer(buffer, objectPath, contentType)
+    return uploadBuffer(buffer, objectPath, contentType, options)
 }
 
 /**
@@ -195,16 +249,40 @@ export async function uploadImageBuffer(
 export async function uploadVideoStream(
     stream: NodeJS.ReadableStream,
     objectPath: string,
-    contentType: string = 'video/mp4'
+    contentType: string = 'video/mp4',
+    options: OssStreamUploadOptions = {}
 ): Promise<string> {
     const client = createOSSClient()
 
-    const result = await client.putStream(objectPath, stream, {
-        headers: {
-            'Content-Type': contentType,
-            'Cache-Control': 'max-age=31536000',
-        },
-    })
+    const destroyableStream = stream as NodeJS.ReadableStream & {
+        destroy?: (error?: Error) => void
+    }
+    const abortError = () => {
+        const reason = options.signal?.reason
+        return reason instanceof Error
+            ? reason
+            : new Error('OSS stream upload aborted')
+    }
+    const abortUpload = () => destroyableStream.destroy?.(abortError())
+
+    if (options.signal?.aborted) {
+        throw abortError()
+    }
+    options.signal?.addEventListener('abort', abortUpload, { once: true })
+
+    let result: { name?: string }
+    try {
+        result = await client.putStream(objectPath, stream, {
+            headers: {
+                'Content-Type': contentType,
+                'Content-Disposition': 'inline',
+                'Cache-Control': 'max-age=31536000',
+            },
+            meta: options.metadata,
+        })
+    } finally {
+        options.signal?.removeEventListener('abort', abortUpload)
+    }
 
     if (!result.name) {
         throw new Error('Failed to upload video stream to OSS')
@@ -253,6 +331,27 @@ export async function videoExists(objectPath: string): Promise<boolean> {
 }
 
 /**
+ * Check if file exists in OSS — strict variant for idempotency anchors.
+ * Only a definite 404/NoSuchKey means "not exists"; any other error
+ * (network timeout, throttling 5xx, credential 403) is rethrown so the
+ * caller fails the request instead of mistaking a transient fault for a
+ * cache miss (which would re-run charged work).
+ */
+export async function fileExistsStrict(objectPath: string): Promise<boolean> {
+    const client = createOSSClient()
+    try {
+        await client.head(objectPath)
+        return true
+    } catch (err) {
+        const e = err as { status?: number; code?: string }
+        if (e?.status === 404 || e?.code === 'NoSuchKey' || e?.code === 'NoSuchKeyError') {
+            return false
+        }
+        throw err
+    }
+}
+
+/**
  * Get file metadata from OSS
  * @param objectPath - OSS object path
  */
@@ -260,6 +359,7 @@ export async function getFileMetadata(objectPath: string): Promise<{
     size: number
     contentType: string
     lastModified: Date
+    metadata: OssUserMetadata
 } | null> {
     const client = createOSSClient()
     try {
@@ -268,9 +368,48 @@ export async function getFileMetadata(objectPath: string): Promise<{
             size: parseInt(result.res.headers['content-length'] || '0'),
             contentType: result.res.headers['content-type'] || 'application/octet-stream',
             lastModified: new Date(result.res.headers['last-modified'] || Date.now()),
+            metadata: normalizeOssUserMetadata(result.meta),
         }
     } catch {
         return null
+    }
+}
+
+/**
+ * Strict metadata lookup for lifecycle reconciliation. A definite 404 returns
+ * null; transport/auth/throttling failures are rethrown so callers reschedule
+ * instead of treating an uncertain HEAD as proof of absence.
+ */
+export async function getFileMetadataStrict(
+    objectPath: string,
+    options: { timeoutMs?: number } = {}
+): Promise<{
+    size: number
+    contentType: string
+    lastModified: Date
+    metadata: OssUserMetadata
+} | null> {
+    const client = createOSSClient()
+    try {
+        const result = await client.head(objectPath, {
+            timeout: Math.max(1_000, Math.min(60_000, options.timeoutMs ?? 30_000)),
+        })
+        return {
+            size: parseInt(result.res.headers['content-length'] || '0'),
+            contentType: result.res.headers['content-type'] || 'application/octet-stream',
+            lastModified: new Date(result.res.headers['last-modified'] || Date.now()),
+            metadata: normalizeOssUserMetadata(result.meta),
+        }
+    } catch (err) {
+        const error = err as { status?: number; code?: string }
+        if (
+            error?.status === 404 ||
+            error?.code === 'NoSuchKey' ||
+            error?.code === 'NoSuchKeyError'
+        ) {
+            return null
+        }
+        throw err
     }
 }
 
@@ -282,6 +421,7 @@ export async function getVideoMetadata(objectPath: string): Promise<{
     size: number
     contentType: string
     lastModified: Date
+    metadata: OssUserMetadata
 } | null> {
     return getFileMetadata(objectPath)
 }
@@ -382,5 +522,6 @@ export default {
     fileExists,
     videoExists,
     getFileMetadata,
+    getFileMetadataStrict,
     getVideoMetadata,
 }

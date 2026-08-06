@@ -1,8 +1,15 @@
 import crypto from 'crypto'
 
 import { NextRequest, NextResponse } from 'next/server'
+import {
+  createInstagramWebhookCommentStore,
+  InstagramWebhookPayloadError,
+  processInstagramCommentWebhook,
+} from '@/lib/instagram/webhook-comments'
 
 export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs'
+const MAX_INSTAGRAM_WEBHOOK_BODY_BYTES = 1024 * 1024
 
 function getInstagramWebhookVerifyToken() {
   return process.env.INSTAGRAM_WEBHOOK_VERIFY_TOKEN || process.env.META_WEBHOOK_VERIFY_TOKEN || ''
@@ -23,12 +30,43 @@ function getMetaAppSecret() {
 
 // 校验 Meta 的 X-Hub-Signature-256（对原始请求体做 HMAC-SHA256，密钥为 App Secret）。
 // fail-closed：缺密钥或签名不匹配一律拒绝，避免任何人伪造 webhook 事件。
-function verifyMetaSignature(rawBody: string, signatureHeader: string | null, appSecret: string): boolean {
+function verifyMetaSignature(rawBody: Buffer, signatureHeader: string | null, appSecret: string): boolean {
   if (!appSecret || !signatureHeader) return false
-  const expected = `sha256=${crypto.createHmac('sha256', appSecret).update(rawBody, 'utf8').digest('hex')}`
+  const expected = `sha256=${crypto.createHmac('sha256', appSecret).update(rawBody).digest('hex')}`
   const provided = Buffer.from(signatureHeader)
   const computed = Buffer.from(expected)
   return provided.length === computed.length && crypto.timingSafeEqual(provided, computed)
+}
+
+async function readRawBodyWithinLimit(request: NextRequest): Promise<Buffer | null> {
+  if (!request.body) return Buffer.alloc(0)
+
+  const reader = request.body.getReader()
+  const chunks: Buffer[] = []
+  let totalBytes = 0
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      if (!value || value.byteLength === 0) continue
+
+      totalBytes += value.byteLength
+      if (totalBytes > MAX_INSTAGRAM_WEBHOOK_BODY_BYTES) {
+        try {
+          await reader.cancel()
+        } catch {
+          // The response is already fail-closed as oversized.
+        }
+        return null
+      }
+      chunks.push(Buffer.from(value))
+    }
+  } finally {
+    reader.releaseLock()
+  }
+
+  return Buffer.concat(chunks, totalBytes)
 }
 
 export async function GET(request: NextRequest) {
@@ -49,24 +87,76 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const rawBody = await request.text()
+  const contentLength = request.headers.get('content-length')
+  if (contentLength !== null) {
+    const parsedLength = Number(contentLength)
+    if (!Number.isInteger(parsedLength) || parsedLength < 0 || parsedLength > MAX_INSTAGRAM_WEBHOOK_BODY_BYTES) {
+      return NextResponse.json(
+        { error: 'Instagram webhook payload too large', code: 'payload_too_large' },
+        { status: 413 }
+      )
+    }
+  }
+
+  let rawBody: Buffer | null
+  try {
+    rawBody = await readRawBodyWithinLimit(request)
+  } catch {
+    return NextResponse.json(
+      { error: 'Invalid Instagram webhook payload', code: 'invalid_webhook_body' },
+      { status: 400 }
+    )
+  }
+  if (!rawBody) {
+    return NextResponse.json(
+      { error: 'Instagram webhook payload too large', code: 'payload_too_large' },
+      { status: 413 }
+    )
+  }
   const signature = request.headers.get('x-hub-signature-256')
 
   if (!verifyMetaSignature(rawBody, signature, getMetaAppSecret())) {
     return NextResponse.json({ error: 'Invalid signature' }, { status: 401 })
   }
 
-  let body: any = null
+  let rawText: string
   try {
-    body = JSON.parse(rawBody)
+    rawText = new TextDecoder('utf-8', { fatal: true }).decode(rawBody)
   } catch {
-    body = null
+    return NextResponse.json(
+      { error: 'Invalid Instagram webhook payload', code: 'invalid_webhook_encoding' },
+      { status: 400 }
+    )
   }
 
-  console.info('Instagram webhook received:', {
-    object: body?.object || null,
-    entryCount: Array.isArray(body?.entry) ? body.entry.length : 0,
-  })
+  let body: any = null
+  try {
+    body = JSON.parse(rawText)
+  } catch {
+    return NextResponse.json(
+      { error: 'Invalid Instagram webhook payload', code: 'invalid_webhook_json' },
+      { status: 400 }
+    )
+  }
 
-  return NextResponse.json({ received: true })
+  try {
+    const metadata = await processInstagramCommentWebhook(body, createInstagramWebhookCommentStore())
+    console.info('Instagram webhook processed', metadata)
+    return NextResponse.json({ received: true, metadata })
+  } catch (error) {
+    if (error instanceof InstagramWebhookPayloadError) {
+      return NextResponse.json(
+        { error: 'Invalid Instagram webhook payload', code: error.code },
+        { status: 400 }
+      )
+    }
+    console.error('Instagram webhook processing failed', {
+      code: 'instagram_webhook_persistence_failed',
+      error_count: 1,
+    })
+    return NextResponse.json(
+      { error: 'Instagram webhook processing failed', code: 'webhook_processing_failed' },
+      { status: 500 }
+    )
+  }
 }
