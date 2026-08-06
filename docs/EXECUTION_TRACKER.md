@@ -261,3 +261,50 @@
 - 上传:`/api/upload/image`(FormData→OSS)
 - TTS:`src/lib/elevenlabs-api.ts`(词级时间戳)+ `src/lib/doubao-tts-api.ts`
 - Slideshow 渲染:`scripts/ffmpeg-slideshow.py`(1593 行)+ worker `/api/render` + `src/app/api/video-batch/generate-slideshow/route.ts`(1019 行)
+
+## 2026-08-06 收官记录:Facebook 审核合规上线 + 分支拓扑归位 + 生产蓝绿发布
+
+### 一、代码合流
+- **PR #20** `codex/facebook-app-review` → `main`(merge commit `30d0686`)。同事开发的 Facebook v20 应用审核合规:26 文件 +1264/−41,含 `/api/facebook/data-deletion`、`/api/facebook/deauthorize` 两个 Meta 回调端点、`src/lib/facebook/signed-request.ts` 验签模块、`/facebook-data-deletion` 公开说明页。
+  - 合并前逐文件核对:与 `codex/super-canvas-production` **零文件重叠**(比对了 main 上全部 57 个 facebook/social-comments 文件)。
+  - 独立复跑测试 47 项通过;安全审查确认验签用 HMAC-SHA256 + `timingSafeEqual` 恒定时间比较 + 算法白名单 + 过期校验。
+- **画布线归位**:`main` 合入 `codex/super-canvas-production`(merge commit `e77d4df`)。此前画布线显示"落后 main 4 个提交"是**假象**——那 4 个提交的内容早已用 cherry-pick 重放进去(逐行验证 60 行新增一行不缺),本次合并**内容中性**(合并后树与合并前完全相同,仅带进 PR #20 的 26 个文件)。合并后画布线成为 main 的**真超集**(0 落后 / 86 领先)。
+  - 唯一冲突文件 `tests/youtube-data-retention.test.cjs`,取画布线版本(它是 main 的严格超集,15 个测试含 main 全部 10 个)。
+
+### 二、防护措施
+- `main` 开启分支保护:禁强推、禁删分支、`enforce_admins=true`,**不要求 PR**(直推仍可用)。此前完全无保护。仓库无 GitHub Actions,这是唯一的结构性防线。
+- 回滚锚点 tag:`baseline-main-20260806`(`95f6634`,FB 合入前)、`baseline-main-fb-20260806`(`30d0686`,FB 合入后)。
+- **部署祖先门**(建议纳入发布流程):`git merge-base --is-ancestor origin/main HEAD`,不通过禁止部署,可堵死"用落后分支的产物覆盖线上"。
+
+### 三、生产库迁移(经 Supabase SQL Editor 执行并验证)
+- 项目 `hfabrifuvujpdzarlbky`(org `xuzone888` Pro / Tiktok Ai / 分支 main PRODUCTION)。与生产服务器 `.env.local` 的 URL 一致,已确认非测试库。
+- 执行 `20260728_facebook_review_compliance.sql` + `20260729120000_youtube_revocation_claim_fencing_compat.sql`(后者本已落库,重跑为无害空操作)。
+- 执行前后对照(经服务端 PostgREST 实查,非看 UI):
+  - `facebook_accounts.authorized_by_facebook_user_id`:缺失 42703 → 存在
+  - `facebook_data_deletion_requests` 表:缺失 PGRST205 → 存在
+  - `delete_facebook_user_data` / `delete_facebook_authorization_data`:已登记(查 OpenAPI 规格确认,**未调用**)
+- Supabase 弹出的"破坏性操作"警告为**误报**:11 条 `DELETE FROM` 全在 `CREATE OR REPLACE FUNCTION` 函数体内,是定义函数而非删数据;全文无 DROP/TRUNCATE。
+- 迁移前已验证函数依赖的 7 张表/列全部存在(plpgsql 建函数时不做名称解析,缺表要到运行时才炸)。
+
+### 四、生产发布(蓝绿)
+- 用画布线自带的 `deploy/canvas-blue-green.sh deploy --execute`(fail-closed),`--skip-build` 复用预先构建的产物。
+- 构建:新建 release 目录 `/var/www/tiktok-ai-mcn-releases/e77d4df.../`,复用 node_modules(依赖零变化),`npm run canvas:build-exact` 约 18 分钟,BUILD_ID `GNQzhWWVJtdflinAIrpN3`,静态页 143/143。构建全程线上进程未重启。
+- 切换:nginx `toryxai.com` 的 `proxy_pass` 3007 → **3010**,reconciler worker 同步改指 3010。旧进程 `stargaze-runtime-guard-fea0bcb`(3007)**保留在线**作回滚目标。
+- 验证(公网全链路实测):首页 `buildId` = `GNQzhWWVJtdflinAIrpN3`;伪造 signed_request 被 `invalid_signed_request_signature` 拒;`/facebook-data-deletion` 200;`/api/internal/canvas/` 仍 404(画布灰度封锁未被打开)。
+- 反向证明:旧端口 3007 对同一路由返回 404 且 `buildId` = `MFfDdFqAI0hhTCdQUs_Jr`,确证切换真实生效。
+
+### 五、纠正的两个长期误判(重要)
+1. **线上真实服务路径不是 `/var/www/tiktok-ai-mcn`**。该目录(端口 3000)是早期遗留,不接公网流量,改它对线上零影响。真实链路 = nginx `location /` 转发的端口 → 对应 pm2 进程的 `cwd`(在 `/var/www/tiktok-ai-mcn-releases/<完整sha>/`)。`deploy/*.sh` 里那些 `git pull origin main` 已**不是**实际发布路径,不要据此判断线上版本。
+2. **本机构建卡内存不卡磁盘**。磁盘 40G 用 23G;瓶颈是内存(总 3.4G / 可用约 2.1G),已有 2G swap。画布线 `next.config.mjs` 的 `cpus: 1` 即为此写("Keep production builds within the 2 vCPU / 4 GiB deployment host"),配合后本机构建可行,无需依赖国外服务器。
+
+### 六、遗留事项
+- **`/var/www/tiktok-ai-mcn` 不可整目录删除**:线上进程的 `NODE_EXTRA_CA_CERTS` 指向 `/var/www/tiktok-ai-mcn/certs/broker-ca.crt`,删除会破坏 broker 信任链。
+- 服务器 5 个 release 目录共约 8.5G,磁盘余量 14G,待观察期后清理(详见 `WORKSPACE_CLEANUP_TASK.md`)。
+- PR #19(`codex/canvas-r4-deterministic-build-id`,DRAFT)未合并——本次刻意不合,避免在发布当口更换构建工具本身。其分支所在 worktree 有 275 个未提交文件待处理。
+- Supabase 最近备份为发布前 2 天,本次改动了库结构,建议补一次手动备份。
+
+### 五、同日后续（补记于 2026-08-06 晚）
+
+- **画布线已归位 `main`**：PR #21 合并，merge commit `5f946de`。快进、零冲突、内容中性；线上 `e77d4df` 已进 `main` 历史。`codex/super-canvas-production` 退役，**后续所有分支从 `main` 开、回 `main` 合**。
+- **PR #19 基线已从画布线改为 `main`**；其 275 个「未提交文件」经核实全为 `.tmp/` 下未追踪构建产物，源码已全部提交，不存在在险工作。
+- **服务器 release 清理已完成**：删除 `23f8b747`/`52fd6c7d`/`8b83ac7a` 三个，磁盘余量 14G → 19G，仅保留线上 `e77d4df` 与回滚目标 `fea0bcbe`。上文提到的 `WORKSPACE_CLEANUP_TASK.md` 为一次性任务书，已随任务完成删除。
