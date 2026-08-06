@@ -31,7 +31,7 @@
 1. **单一部署**：只有阿里云一个生产实例，没有第二个对外站点
 2. **蓝绿发布**：新版本先在另一个端口起进程，验证通过后切 nginx 转发，旧进程保留作回滚目标
 3. **release 目录**：每次发布在 `/var/www/tiktok-ai-mcn-releases/<完整commit>/` 下建独立目录
-4. **手工发布**：GitHub webhook 的自动部署开关 `LEGACY_WEBHOOK_DEPLOY_ENABLED` 为 `false`，**推 main 不会自动上线**，发布全程手工
+4. **手工发布**：**推 main 不会自动上线**，发布全程手工。注意这是靠一个环境变量开关（`LEGACY_WEBHOOK_DEPLOY_ENABLED=false`）实现的——webhook 本身仍在活跃接收 GitHub 推送，**开关一旦打开就会恢复自动部署**。详见下方「关于自动部署」
 
 ---
 
@@ -230,49 +230,40 @@ sudo certbot --nginx -d your-aliyun-domain.com
 
 ---
 
-## 🔄 持续部署方案
+## 🔄 发布流程
 
-### 方案 1: 手动部署
+> **⚠️ 本节原有的两个「方案」已废弃，务必不要照做。**
+>
+> 旧文档写的是「在服务器上 `git pull` + `npm run build` + `pm2 restart`」以及一份「用 GitHub Actions 推 main 自动部署」的模板。这两种做法在当前架构下**都是错的**：
+>
+> 1. 它们操作的是 `/var/www/tiktok-ai-mcn`（端口 3000 的**遗留实例**），**那不是线上服务**。线上是 `/var/www/tiktok-ai-mcn-releases/<commit>/` 下的蓝绿 release。
+> 2. 直接 `pm2 restart` 是**原地覆盖**，一旦新版有问题**没有回滚余地**。
+> 3. 在服务器上 `npm run build` 会**卡内存**（可用内存约 2.1G，不够构建）。
+> 4. 自动部署会**绕过人工审核**——本项目刻意关掉了这条路（见下）。
 
-```bash
-# 在服务器上执行
-cd /var/www/tiktok-ai-mcn
-git pull origin main
-npm install
-npm run build
-pm2 restart tiktok-ai-mcn
-```
+### 当前发布方式：手工蓝绿
 
-### 方案 2: 使用 GitHub Actions 自动部署
+用画布线自带的 `deploy/canvas-blue-green.sh`：
 
-创建 `.github/workflows/deploy-aliyun.yml`:
+1. **建新 release 目录**：`/var/www/tiktok-ai-mcn-releases/<完整commit>/`，不覆盖任何现有目录
+2. **在新端口起进程**：旧进程继续服务，线上不受影响
+3. **验证新端口**：健康检查通过后才动 nginx
+4. **切 nginx 的 `proxy_pass`** 到新端口，`nginx -s reload`
+5. **旧进程和旧 release 目录保留**，作为回滚目标
 
-```yaml
-name: Deploy to Aliyun
+回滚 = 把 nginx 切回旧端口。**所以旧 release 目录在确认稳定前不要删。**
 
-on:
-  push:
-    branches: [ main ]
+### ⚠️ 关于自动部署（重要）
 
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      
-      - name: Deploy to Aliyun
-        uses: appleboy/ssh-action@master
-        with:
-          host: ${{ secrets.ALIYUN_HOST }}
-          username: ${{ secrets.ALIYUN_USER }}
-          key: ${{ secrets.ALIYUN_SSH_KEY }}
-          script: |
-            cd /var/www/tiktok-ai-mcn
-            git pull origin main
-            npm install
-            npm run build
-            pm2 restart tiktok-ai-mcn
-```
+**当前状态：GitHub push 到 main 不会自动上线。** 但这不是"功能不存在"，而是"功能被一个开关关着"：
+
+- GitHub 仓库上的 webhook **仍然是活跃的**，指向 `http://<服务器IP>:3001`，每次 push 都会送达
+- 服务器上的 webhook 服务收到 main push 后，会检查环境变量 `LEGACY_WEBHOOK_DEPLOY_ENABLED`
+- 该变量当前为 **`false`**，于是返回 503 并拒绝部署（`runDeploy` 内部还有第二道同样的检查）
+
+**谁把这个变量改成 `true` 并重启 webhook 进程，推 main 就会立刻自动部署生产。**
+
+这条路是被刻意关掉的（代码注释称其为 "legacy escape hatch"），原因就是上面列的四点。**除非经过明确评审，不要打开它，也不要新建 GitHub Actions 做同样的事**（仓库当前没有任何 workflow，这是有意为之）。
 
 ---
 
@@ -365,7 +356,7 @@ pm2 logs tiktok-ai-mcn --lines 100
 - 蓝绿发布：新版起在另一端口，验证通过再切 nginx，旧进程留作回滚
 
 **发布纪律**:
-- **发布是手工的**。推 main 不会自动上线（webhook 自动部署开关为 `false`）
+- **发布是手工的**。推 main 不会自动上线——但这靠的是 `LEGACY_WEBHOOK_DEPLOY_ENABLED=false` 这个开关，webhook 本身仍活跃，**开关打开即恢复自动部署，不要随手开**
 - 切换版本靠改 nginx 的 `proxy_pass` 端口，不靠改 DNS
 - **旧 release 目录不要急着删**——它是回滚的唯一依据，确认新版稳定后再清
 - 数据库迁移需在 Supabase 控制台手工执行，**合并 PR ≠ 功能生效**
