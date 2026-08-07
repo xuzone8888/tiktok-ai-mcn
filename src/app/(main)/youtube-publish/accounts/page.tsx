@@ -1,5 +1,6 @@
-import { Youtube } from "lucide-react"
+import Link from "next/link"
 
+import { YouTubeBrandIcon } from "@/components/brand/YouTubeBrandIcon"
 import { PlatformAccountsPage } from "@/components/publish/platform/PlatformAccountsPage"
 
 const YOUTUBE_ACCOUNT_CONFIG = {
@@ -18,7 +19,11 @@ const YOUTUBE_ACCOUNT_CONFIG = {
   bindButtonTextEn: "Connect YouTube channel",
   statsVideoLabel: "视频",
   statsVideoLabelEn: "Videos",
-  icon: <Youtube className="h-6 w-6 text-red-300" />,
+  icon: (
+    <Link href="/youtube-publish/accounts" aria-label="YouTube Account Management">
+      <YouTubeBrandIcon className="h-12 w-14" />
+    </Link>
+  ),
   requiredCommentScopes: [
     "https://www.googleapis.com/auth/youtube.force-ssl",
   ],

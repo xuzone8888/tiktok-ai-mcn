@@ -12,9 +12,9 @@ import {
   RefreshCw,
   Send,
   Share2,
-  Youtube,
 } from "lucide-react"
 
+import { YouTubeBrandIcon } from "@/components/brand/YouTubeBrandIcon"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -265,7 +265,7 @@ const PLATFORM_STYLES: Record<ConcretePlatform, string> = {
 }
 
 function PlatformIcon({ platform, className }: { platform: Platform; className?: string }) {
-  if (platform === "youtube") return <Youtube className={className} />
+  if (platform === "youtube") return <YouTubeBrandIcon className={className} />
   if (platform === "tiktok") return <Music2 className={className} />
   if (platform === "instagram") return <Instagram className={className} />
   if (platform === "facebook") return <Share2 className={className} />
@@ -1331,7 +1331,7 @@ export default function SocialCommentsClient({
                   const active = account.id === accountId
                   return (
                     <button key={account.id} type="button" onClick={() => changeAccount(account.id)} className={cn("flex min-w-[210px] items-center gap-3 rounded-lg border px-3 py-3 text-left transition-colors xl:min-w-0 xl:w-full", active ? "border-cyan-300/35 bg-cyan-400/10" : "border-white/10 bg-white/[0.025] hover:bg-white/[0.06]")}>
-                      {account.avatar_url ? <img src={account.avatar_url} alt="" className="h-10 w-10 shrink-0 rounded-full object-cover" /> : <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/10"><PlatformIcon platform={account.platform} className="h-4 w-4" /></div>}
+                      {account.avatar_url ? <img src={account.avatar_url} alt="" className="h-10 w-10 shrink-0 rounded-full object-cover" /> : <div className={cn("flex shrink-0 items-center justify-center rounded-full bg-white/10", account.platform === "youtube" ? "h-12 w-12" : "h-10 w-10")}><PlatformIcon platform={account.platform} className={account.platform === "youtube" ? "h-10 w-12" : "h-4 w-4"} /></div>}
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-sm font-medium text-white/85">{account.name}</span>
                         <span className="block truncate text-xs text-white/40">{account.handle || PLATFORM_LABELS[account.platform]}</span>
@@ -1466,7 +1466,7 @@ export default function SocialCommentsClient({
               ) : (
                 <div className="space-y-4 p-4">
                   <article className="overflow-hidden rounded-lg border border-white/10 bg-white/[0.025]">
-                    {selectedDetailContent?.preview_url ? <video controls preload="none" poster={selectedDetailContent.thumbnail_url || undefined} src={selectedDetailContent.preview_url} className="aspect-video w-full bg-black object-contain" /> : selectedDetailContent?.thumbnail_url ? <img src={selectedDetailContent.thumbnail_url} alt="" className="aspect-video w-full bg-black object-contain" /> : <div className="flex aspect-video items-center justify-center bg-black/50 text-sm text-white/30"><PlatformIcon platform={selectedComment.platform} className="h-8 w-8" /></div>}
+                    {selectedDetailContent?.preview_url ? <video controls preload="none" poster={selectedDetailContent.thumbnail_url || undefined} src={selectedDetailContent.preview_url} className="aspect-video w-full bg-black object-contain" /> : selectedDetailContent?.thumbnail_url ? <img src={selectedDetailContent.thumbnail_url} alt="" className="aspect-video w-full bg-black object-contain" /> : <div className="flex aspect-video items-center justify-center bg-black/50 text-sm text-white/30">{selectedComment.platform === "youtube" ? <a href={selectedDetailContent?.url || "https://www.youtube.com"} target="_blank" rel="noreferrer" aria-label={TEXT.openOnYouTube[lang]}><PlatformIcon platform="youtube" className="h-10 w-12" /></a> : <PlatformIcon platform={selectedComment.platform} className="h-8 w-8" />}</div>}
                     <div className="p-3">
                       <div className="text-sm font-medium text-white/80">{selectedDetailContent?.title || selectedComment.external_content_id}</div>
                       <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-white/40"><span>{formatDate(selectedDetailContent?.published_at || null, lang)}</span>{selectedDetailContent?.url ? <a href={selectedDetailContent.url} target="_blank" rel="noreferrer" className="hover:text-white hover:underline">{selectedComment.platform === "youtube" ? TEXT.openOnYouTube[lang] : selectedComment.platform === "facebook" ? TEXT.openOnFacebook[lang] : TEXT.openOnInstagram[lang]}</a> : null}</div>

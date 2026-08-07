@@ -1,9 +1,11 @@
 "use client";
 
+import { ArrowLeft, Sparkles, Shield, Globe, FileText, Eye, Database, Share2, Lock, UserCheck, Cookie, Users, RefreshCw, Phone, BookOpen, Server, Key, Settings, ExternalLink, ShoppingBag, Cpu } from "lucide-react";
 import Link from "next/link";
-import ReflectiveCard from "@/components/ui/ReflectiveCard";
+
+import { YouTubeBrandIcon } from "@/components/brand/YouTubeBrandIcon";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Sparkles, Shield, Globe, FileText, Eye, Database, Share2, Lock, UserCheck, Cookie, Users, RefreshCw, Phone, BookOpen, Server, Key, Settings, ExternalLink, ShoppingBag, Cpu, Youtube } from "lucide-react";
+import ReflectiveCard from "@/components/ui/ReflectiveCard";
 import { useLang } from "@/contexts/LangContext";
 
 export default function PrivacyPage() {
@@ -291,7 +293,7 @@ export default function PrivacyPage() {
             {/* 10. YouTube API Services and Google User Data */}
             <ReflectiveCard className="!rounded-xl">
               <div className="flex items-start gap-4 p-6">
-                <div className="p-3 rounded-lg bg-red-500/10 text-red-400 shrink-0"><Youtube className="h-6 w-6" /></div>
+                <Link href="https://www.youtube.com" target="_blank" rel="noreferrer" aria-label="YouTube" className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-white/[0.04]"><YouTubeBrandIcon compact className="h-[38px] w-11" /></Link>
                 <div>
                   <h2 className="text-xl font-bold text-white mb-3">{lang === "en" ? "10. YouTube API Services and Google User Data" : "十、YouTube API 服务与 Google 用户数据"}</h2>
                   <p className="leading-relaxed">{lang === "en" ? 'Star Gaze uses YouTube API Services to connect and identify a channel, display channel information, upload and schedule videos, manage publishing metadata and visibility, synchronize comments, translate comments when requested, and send replies initiated or confirmed by the user. We do not request or store your Google or YouTube password.' : 'Star Gaze 使用 YouTube API 服务绑定并识别频道、展示频道信息、上传和定时发布视频、管理发布元数据与可见性、同步评论、按请求翻译评论，以及发送由用户主动发起或确认的回复。我们不会请求或存储您的 Google 或 YouTube 密码。'}</p>
