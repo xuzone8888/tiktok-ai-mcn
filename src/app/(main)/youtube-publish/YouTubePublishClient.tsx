@@ -25,11 +25,12 @@ import {
   Upload,
   Users,
   X,
-  Youtube,
 } from "lucide-react"
+import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
+import { YouTubeBrandIcon } from "@/components/brand/YouTubeBrandIcon"
 import SocialCommentsClient from "@/components/social-comments/SocialCommentsClient"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -1401,18 +1402,22 @@ export default function YouTubePublishClient({ showCommentManagement, enableYouT
     <div className="min-h-full text-white">
       <div className="mx-auto max-w-7xl space-y-6 p-6 pb-40">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-          <div>
-            <h1 className="flex items-center gap-3 text-2xl font-bold tracking-tight md:text-3xl">
-              <div className="h-8 w-1.5 rounded-full bg-gradient-to-b from-mermaid-lime to-mermaid-cyan shadow-[0_0_10px_rgba(0,242,234,0.5)]" />
-              <span className="text-white drop-shadow-lg">
-                {isEnglish ? "YouTube Video Management" : "YouTube 视频管理"}
-              </span>
-            </h1>
-            <p className="ml-[19px] mt-1 max-w-xl text-white/60">
-              {isEnglish
-                ? "Manage YouTube video publishing, scheduled releases, and task history."
-                : "管理 YouTube 视频发布、预约发布和任务历史。"}
-            </p>
+          <div className="flex items-start gap-3">
+            <Link href="/youtube-publish" aria-label={isEnglish ? "YouTube Video Management" : "YouTube 视频管理"}>
+              <YouTubeBrandIcon className="h-12 w-14 md:h-14 md:w-16" />
+            </Link>
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight md:text-3xl">
+                <span className="text-white drop-shadow-lg">
+                  {isEnglish ? "YouTube Video Management" : "YouTube 视频管理"}
+                </span>
+              </h1>
+              <p className="mt-1 max-w-xl text-white/60">
+                {isEnglish
+                  ? "Manage YouTube video publishing, scheduled releases, and task history."
+                  : "管理 YouTube 视频发布、预约发布和任务历史。"}
+              </p>
+            </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
@@ -1746,7 +1751,14 @@ export default function YouTubePublishClient({ showCommentManagement, enableYouT
                   </div>
                 ) : accounts.length === 0 ? (
                   <div className="rounded-lg border border-dashed border-white/15 bg-black/20 p-8 text-center">
-                    <Youtube className="mx-auto mb-3 h-10 w-10 text-cyan-300/70" />
+                    <button
+                      type="button"
+                      onClick={() => router.push("/youtube-publish/accounts")}
+                      aria-label={isEnglish ? "Open YouTube Account Management" : "打开 YouTube 账号管理"}
+                      className="mx-auto mb-3 block"
+                    >
+                      <YouTubeBrandIcon className="h-10 w-12" />
+                    </button>
                     <div className="text-white/70">
                       {isEnglish ? "No available YouTube accounts" : "暂无可用 YouTube 账号"}
                     </div>

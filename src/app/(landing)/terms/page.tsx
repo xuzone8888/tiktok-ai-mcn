@@ -1,9 +1,11 @@
 "use client";
 
+import { ArrowLeft, Sparkles, Shield, Globe, FileText, Users, UserCheck, AlertTriangle, BookOpen, Scale, Gavel, RefreshCw, Phone, CreditCard, Megaphone, Receipt, ShieldX, Layers, Baby, MoreHorizontal, Music2, DollarSign, Share2 } from "lucide-react";
 import Link from "next/link";
-import ReflectiveCard from "@/components/ui/ReflectiveCard";
+
+import { YouTubeBrandIcon } from "@/components/brand/YouTubeBrandIcon";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Sparkles, Shield, Globe, FileText, Users, UserCheck, AlertTriangle, BookOpen, Scale, Gavel, RefreshCw, Phone, CreditCard, Megaphone, Receipt, ShieldX, Layers, Baby, MoreHorizontal, Youtube, DollarSign, Share2 } from "lucide-react";
+import ReflectiveCard from "@/components/ui/ReflectiveCard";
 import { useLang } from "@/contexts/LangContext";
 
 export default function TermsPage() {
@@ -275,7 +277,7 @@ export default function TermsPage() {
             {/* 16. TikTok Platform Integration Terms */}
             <ReflectiveCard className="!rounded-xl">
               <div className="flex items-start gap-4 p-6">
-                <div className="p-3 rounded-lg bg-fuchsia-500/10 text-fuchsia-400 shrink-0"><Youtube className="h-6 w-6" /></div>
+                <div className="p-3 rounded-lg bg-fuchsia-500/10 text-fuchsia-400 shrink-0"><Music2 className="h-6 w-6" /></div>
                 <div>
                   <h2 className="text-xl font-bold text-white mb-3">{lang === "en" ? "16. TikTok Platform Integration Terms" : "十六、TikTok 平台集成条款"}</h2>
                   <p className="leading-loose mb-3 text-sm bg-white/5 rounded-lg p-3 border border-white/10">{lang === "en" ? 'Note: Star Gaze is registered as "Wuhan Guanxing Cultural Media" on TikTok for Developers (Content Posting API), and used under the TikTok Shop service provider account name "Star Gaze".' : '说明：Star Gaze 在 TikTok for Developers（内容发布 API）的注册应用名称为 "Wuhan Guanxing Cultural Media"，在 TikTok Shop 的服务商账户名称为 "Star Gaze"。'}</p>
@@ -339,7 +341,7 @@ export default function TermsPage() {
             {/* 20. YouTube Platform Integration Terms */}
             <ReflectiveCard className="!rounded-xl">
               <div className="flex items-start gap-4 p-6">
-                <div className="p-3 rounded-lg bg-red-500/10 text-red-400 shrink-0"><Youtube className="h-6 w-6" /></div>
+                <Link href="https://www.youtube.com/t/terms" target="_blank" rel="noreferrer" aria-label="YouTube Terms of Service" className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-white/[0.04]"><YouTubeBrandIcon compact className="h-[38px] w-11" /></Link>
                 <div>
                   <h2 className="text-xl font-bold text-white mb-3">{lang === "en" ? "20. YouTube Platform Integration Terms" : "二十、YouTube 平台集成条款"}</h2>
                   <p className="leading-loose">{lang === "en" ? '20.1 Service Description: Subject to availability and your authorization, Star Gaze uses YouTube API Services to connect a channel, display channel information, upload and schedule videos, select metadata and visibility, synchronize comments, translate comments at your request, and submit replies that you initiate or confirm.' : '20.1 服务说明：在相关功能可用且您已完成授权的前提下，Star Gaze 使用 YouTube API 服务绑定频道、展示频道信息、上传和定时发布视频、选择元数据与可见性、同步评论、按您的请求翻译评论，以及提交由您主动发起或确认的回复。'}</p>

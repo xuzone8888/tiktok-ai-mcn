@@ -1,8 +1,5 @@
 "use client";
 
-import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import { cn } from "@/lib/utils";
 import {
   LayoutDashboard,
   Package,
@@ -19,13 +16,16 @@ import {
   CreditCard,
   LayoutTemplate,
   ShoppingBag,
-  Youtube,
   Share2,
   Instagram,
   Loader2,
   Network,
 } from "lucide-react";
+import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+
+import { YouTubeBrandIcon } from "@/components/brand/YouTubeBrandIcon";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
@@ -33,8 +33,9 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useToast } from "@/hooks/use-toast";
 import { useLang } from "@/contexts/LangContext";
+import { useToast } from "@/hooks/use-toast";
+import { cn } from "@/lib/utils";
 
 const CURRENT_YEAR = new Date().getFullYear();
 const SHOW_SUPER_CANVAS =
@@ -52,7 +53,7 @@ interface SidebarProps {
 interface NavItem {
   title: string;
   href: string;
-  icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
+  icon: React.ComponentType<{ className?: string }>;
   description?: string;
   comingSoon?: boolean;
   comingSoonMessage?: string;
@@ -195,14 +196,14 @@ function getNavGroups(
         {
           title: t ? "YouTube Account Management" : "YouTube 账号管理",
           href: "/youtube-publish/accounts",
-          icon: Youtube,
+          icon: YouTubeBrandIcon,
           description: t ? "Manage YouTube channels" : "管理 YouTube 发布频道",
           beta: true,
         },
         {
           title: t ? "YouTube Video Management" : "YouTube 视频管理",
           href: "/youtube-publish",
-          icon: Youtube,
+          icon: YouTubeBrandIcon,
           description: t ? "Manage and publish YouTube videos" : "管理并发布 YouTube 视频",
           beta: true,
         },
@@ -312,8 +313,16 @@ export function Sidebar({
   // Render single nav item
   const renderNavItem = (item: NavItem, isActive: boolean) => {
     const Icon = item.icon;
+    const isYouTubeBrandIcon = Icon === YouTubeBrandIcon;
     const isComingSoon = item.comingSoon;
     const isNavigating = pendingHref === item.href && !isActive;
+    let renderedIcon = <Icon className="h-4 w-4 transition-transform duration-300 group-hover:scale-110" />;
+
+    if (isNavigating) {
+      renderedIcon = <Loader2 className="h-4 w-4 animate-spin text-mermaid-cyan" />;
+    } else if (isYouTubeBrandIcon) {
+      renderedIcon = <YouTubeBrandIcon compact className="h-[38px] w-11" />;
+    }
 
     // Coming Soon items — not clickable, soft display
     if (isComingSoon) {
@@ -401,17 +410,19 @@ export function Sidebar({
 
         <div
           className={cn(
-            "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-all duration-300",
-            isActive
-              ? "bg-mermaid-cyan/20 text-mermaid-cyan shadow-[0_0_10px_rgba(0,242,234,0.2)]"
-              : "bg-white/[0.04] group-hover:bg-white/[0.1] text-white/70"
+            "flex shrink-0 items-center justify-center rounded-lg",
+            isYouTubeBrandIcon
+              ? "h-8 w-8 bg-[#18181b]"
+              : cn(
+                  "h-8 w-8",
+                  "transition-all duration-300",
+                  isActive
+                    ? "bg-mermaid-cyan/20 text-mermaid-cyan shadow-[0_0_10px_rgba(0,242,234,0.2)]"
+                    : "bg-white/[0.04] group-hover:bg-white/[0.1] text-white/70"
+                )
           )}
         >
-          {isNavigating ? (
-            <Loader2 className="h-4 w-4 animate-spin text-mermaid-cyan" />
-          ) : (
-            <Icon className="h-4 w-4 transition-transform duration-300 group-hover:scale-110" />
-          )}
+          {renderedIcon}
         </div>
 
         {!collapsed && (
