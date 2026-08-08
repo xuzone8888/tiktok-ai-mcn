@@ -1,12 +1,27 @@
 # 超级画布 P1 加速上线执行方案
 
-> 状态：`PHASE_4_COMPLETE_OFFLINE_GREEN`
+> ## ⚠️ 本文件已过期(2026-08-08 标注) —— 历史归档,勿据此判断现状
+>
+> 下方的状态标记 `PHASE_4_COMPLETE_OFFLINE_GREEN` 与 Phase 5 / Phase 6 的空 checkbox **与生产事实不符**。
+> 2026-08-08 经 Supabase dashboard 与生产机逐项核对:**11 个画布迁移在生产库 100% 已执行**,
+> `canvases` 表有 7 行真实数据,`/canvas` 已上线并以 canary 灰度运行(白名单 1 人)。
+> 也就是说 **Phase 6「生产迁移+上线」早已发生**,只是当时没人回来勾这些框。
+>
+> 下方提到的权威工作树 `canvas-p1-generation` 与分支 `claude/canvas-p1-generation` **均已删除**。
+>
+> **当前状态以 [EXECUTION_TRACKER.md](./EXECUTION_TRACKER.md)「当前状态」和 [../CLAUDE.md](../CLAUDE.md) 为准。**
+> 本文件保留仅为记录 P1 的执行方法与验收设计,其中 Phase 5 的**真人功能验收**确实仍未做,
+> 已转为 P0 看板的 R1/R2 任务继续跟踪。
+
+---
+
+> 状态：`PHASE_4_COMPLETE_OFFLINE_GREEN`(⚠️ 见上方过期声明)
 >
 > 版本：2026-07-27 v1
 >
-> 权威工作树：`E:\StarGaze\.claude\worktrees\canvas-p1-generation`
+> 权威工作树：`E:\StarGaze\.claude\worktrees\canvas-p1-generation`(⚠️ 已删除)
 >
-> 权威分支：`claude/canvas-p1-generation`
+> 权威分支：`claude/canvas-p1-generation`(⚠️ 已删除)
 >
 > 制定时 HEAD：`8bb58dba12d38f3984ba8d07935325bd1c09ea4d`
 >
