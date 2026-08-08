@@ -1,5 +1,8 @@
 # Remote execution artifacts are byte-locked. Store and check out their exact
 # reviewed bytes instead of applying core.autocrlf normalization.
+# scripts 顶层 .mjs(验收链 verifier/运维脚本)含 \n 敏感断言与多行模板,一律按 LF 检出;
+# 本行须置于下方 -text 字节锁之前——同名属性后行获胜,冻结文件仍按精确字节检出。
+scripts/*.mjs text eol=lf
 scripts/verify-canvas-p1-batch2.mjs -text whitespace=cr-at-eol
 scripts/fixtures/canvas-p1/identity.mjs -text whitespace=cr-at-eol
 scripts/fixtures/canvas-p1/expected-catalog.json -text whitespace=cr-at-eol
@@ -19,9 +22,16 @@ supabase/migrations/20260716_canvas_p1_lifecycle_foundation.sql -text whitespace
 supabase/migrations/20260717_canvas_p1_credit_boundary.sql -text whitespace=cr-at-eol
 supabase/migrations/20260718_canvas_p1_generation_api.sql -text whitespace=cr-at-eol
 supabase/migrations/20260719_canvas_p1_reconciliation.sql -text whitespace=cr-at-eol
+supabase/migrations/20260729_canvas_project_lifecycle.sql -text whitespace=cr-at-eol
+supabase/migrations/20260730_canvas_generation_recovery.sql -text whitespace=cr-at-eol
+supabase/migrations/20260731_canvas_runtime_health.sql -text whitespace=cr-at-eol
+supabase/migrations/20260801_canvas_upload_registry.sql -text whitespace=cr-at-eol
+supabase/migrations/20260802_canvas_upload_registry_ambiguity_fix.sql -text whitespace=cr-at-eol
 src/app/api/user/credits/deduct/route.ts text eol=lf
 src/app/api/user/credits/refund/route.ts text eol=lf
 src/app/api/sms/verify/route.ts text eol=lf
 src/app/auth/register/page.tsx text eol=lf
 src/app/api/admin/set-credits/route.ts text eol=lf
 src/app/api/sora/generate/route.ts text eol=lf
+src/lib/canvas/generation-reconciliation.ts text eol=lf
+src/app/api/canvas/generations/\[generationId\]/download/route.ts text eol=lf
