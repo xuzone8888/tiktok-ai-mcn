@@ -1,21 +1,93 @@
-# 交接：R2 收尾 · 2026-08-08 状态与后续清单
+# 交接：R2 已收口 · 2026-08-09 状态与后续清单
 
 > **本文件纳入 git 跟踪**（前几份 `HANDOFF_*.md` 在仓库根、未跟踪、已过期，可删）。
 > 新窗口开工顺序：`CLAUDE.md` → `docs/EXECUTION_TRACKER.md`「当前状态」→ **本文件** → `docs/SUPER_CANVAS_P0_BOARD.md`（R2 走查表 + R2-Q1~Q4 问题区）。
-> 所有断言均为 2026-08-08 生产实测。**动手前先跑第零步重新核对。**
+> **动手前先跑第零步重新核对**（第零步里的 sha 与端口已按本轮发版更新）。
+>
+> ⚠️ **下面「§零～§九」是 2026-08-08 白天写的,其中若干条已被当晚的收口推翻。以本节(§负一)为准,正文只当背景读。**
 
 ---
 
-> ## 🆕 2026-08-08 晚 · 本文件写完之后又发生了什么(先读这段,下面正文有几处已被更新)
->
-> 1. **画布视频链路首次在生产成功出片**:happyhorse 图生视频 `a40b3114`,`pending→processing→completed` 约 2 分钟,450 积分实扣零退款,余额 18914→**18464**。§3.4 表里的「主线④ 须用 happyhorse 重跑」与「主线⑤ 依赖④」**都已通过**;预算也已由用户批到 4000。
-> 2. **主线⑦ 商品节点从「未测」改判为「功能缺失」**:生产枚举其渲染面只有删除按钮 + 商品简报 textarea,`input[type=file]`=0、`img`=0 —— 没有上传图、没有卖点卡。**别再当测试任务派。**
-> 3. **R2-Q3 已裁决并已实现**(补「仅移除」+「返回」;「取消并退款」按 catalog 的 `supportsCancel=false` 明示不可用),连同 #180/#181 参数胶囊折叠、#188 Ctrl+Enter、#189 dock 底部一起落地。tsc/build/29 个 verifier 全绿 —— 但**尚未发版**,三选一弹窗没在真实 running 节点上目视过。
-> 4. **R2-Q4 重核完毕(含逐项对抗反驳)**:60 项 = implemented **15** / partial **30** / missing **15**。3 项翻案为已实现(#71/#224/#260);**反过来,上一轮列为「已做到」的 #184 费用汇总条、#185 拦截式确认其实是 partial**,#185 的实现方向与规格相反。CHECKLIST 的 8+1 项改判**只写成提案,未落笔**。
-> 5. **旅程 B 仍一步未走**;走查在测试画布 `047fb5dd` 里留了 3 个空节点(2 商品 + 1 图片,均在 x=992,y=688)待清理。
-> 6. 细节一律以 `docs/SUPER_CANVAS_P0_BOARD.md` 的「R2 第二轮补跑」表与「R2-Q4 复核第二轮」小节为准。
+## 负一、当前真实状态（2026-08-09，R2 已全部收口）
 
-## 零、一句话现状
+**线上版本 `d16620f34f09d2418cdb805b068aae61d2a55e3d`，端口 3013**（2026-08-08 二次发版，`DEPLOY_RC=0`）。
+回滚包 `canvas-rollback-20260808T152332Z-port-3012-934510`；上一版 `abc29ac`/3012 仍在线待回滚。
+main = `74fbee3`（PR #29/#30/#31/#32 全部已合；代码面等于线上跑的 `d16620f`，#32 是纯文档）。
+
+### 已经做完、别再重做的
+
+| 事项 | 证据 |
+|---|---|
+| **画布视频链路已在生产跑通** | happyhorse `a40b3114`：`pending→processing→completed` 约 2 分钟，`bound`+真 task_id，450 积分实扣零退款。**「视频从未成功过」这条已翻篇** |
+| **R2-Q3 完整收口** | running 期间删除按钮 `disabled=false`（旧版恒 true）→ 三选一（「取消并退款」按 `supportsCancel=false` 禁用并明示 /「仅移除节点」/「返回」）→ 点仅移除后节点从视图与文档双双移除，**任务照常跑到 completed、零退款，历史资产 3 张变 4 张** |
+| **#188 / #180 / #181 / #189 已上线并实测** | Ctrl+Enter 真实按键触发拦截式确认；参数胶囊 5→4+「更多参数（1）」；面板在 ≤1366 时 dock 底部且不压工具条 |
+| **1366×768 全流程走查通过，卡点 0** | 实测视口 CSS 1352×586。侧栏图标态、小地图收起、dock 底部、留 14px 间隙、胶囊折叠全过 |
+| **资金①②⑤ 全过** | ⑤ 已含 450 视频档重跑：7 笔 consume↔7 笔 generation 1:1、链式无断点、Σcost=485=B0−终余额、零 refund |
+| **R2-Q1 / R2-Q2** | 均已裁决并落地（happyhorse 名单 / 图片 unknown 恢复迁移已在生产执行） |
+
+### 三条必须记住的更正（前一版本文写错了）
+
+1. **旅程 B 不是 R2 的欠账**。总纲 §二写明它「**P2 可走通**」，整条链依赖脚本节点/资产装配/批量/合成；代码侧 `CREATABLE_NODE_TYPES` **刻意排除 script 与 compose**。CHECKLIST #262 的「P1 **起**」是走查纪律的起始期。
+2. **商品节点是功能缺失，不是没测**。生产渲染面只有删除按钮 + 商品简报 textarea，`input[type=file]`=0、`img`=0 —— 没有上传图、没有卖点卡。**别再当测试任务派。**
+3. **#184 费用汇总条、#185 拦截式确认此前被误记为「已做到」，其实是 partial**；而且 **#185 的实现方向与规格相反**（代码是 `cost>0` 每次付费都弹，规格是「仅限余额<预估×1.2 或单次>5000⚡」）。
+
+### R2-Q4 的准确口径（取代「约 23 项没实现」）
+
+60 项（#262 是零代码流程项，不计入）= **implemented 15 / partial 30 / missing 15**。
+3 项翻案为已实现：#71 整图编辑、#224 billing_mode、#260 失败退款。
+完整分档清单、每项的工作量档位/依赖/风险、以及「便宜活」排序，全在 P0 看板「**R2-Q4 复核第二轮**」小节。
+
+---
+
+## 负二、新窗口该做什么（按顺序）
+
+### ① 先拿用户裁决（不定这些，后面无从谈起）
+
+- **#185 拦截式确认**：实现方向与规格相反，改的是资金确认边界。
+- **#253 / #51①**：已 bound 到厂商 task 的行要不要加超时判死自动退款（有误退真实成功任务的风险；DB 明文 RAISE 禁止对 unknown 自动退款）。
+- **#237 grant 首个用例**：涉发放金额，且前置教程 #211 入口硬关。
+- **资金③（退款恰好一条）与资金④（并发双扣直击）的结案口径**：两者结构性无法在生产直击（③ 已裁决不做取消入口 + 画布零失败；④ 与「不得程序化触发扣费」冲突）。**建议以库级唯一锚点 + 实弹脚本 R44/R42 作为等价验收结案**，请用户拍板。
+
+### ② CHECKLIST 8+1 项改判落笔（用户已授权走「混合路线」）
+
+建议 **延 P2** 的 8 项（外部条件不具备，非工时问题）：#93 视频五模式、#101 视频比例 7 种、#102 视频清晰度 P 档、#105 视频生成数量、#112 视频空态快捷首帧/首尾帧、#79 图片生成数量、#80 图片模型清单、#76 图片画质低/标准/高。
+建议**只改措辞不改裁决**的 1 项：#103「时长滑杆」→「时长选择（按模型能力渲染离散档位）」，改完即算已实现。
+
+> ⚠️ 改 CHECKLIST 必须连带更新**两张统计表 + CLAUDE.md 的期次表**，然后跑 `node scripts/canvas-checklist-reconcile.mjs` 至绿。做就一次做完，别留半改状态。
+
+### ③ R2-Q4 补齐批次（便宜活优先，约 4-6 人日，一行不碰资金链路）
+
+看板里已按「改动量/收益」排好序，前几名：#44+#72+#94 引用区缩略图带序号（三项共用一块 UI，一次改动关掉三个缺口）、#84 全屏预览、#186 灰置控件 tooltip 指引、#51②③ 回前台触发 + 常态手动刷新、#187 参数人话文案、#64 入库+推为参考。
+
+**顺手一并修**：停靠位的 `max-h-[55%]` 误用了 inline 判定阈值 `GENERATION_PANEL_MAX_HEIGHT_RATIO`，应在 `canvas-responsive.ts` 另立 `GENERATION_DOCK_MAX_HEIGHT_RATIO` 并配单测（现状：586px 视口下算出 294px，比视频面板 389px 还矮，逼出一次滚动；非阻断）。
+
+### ④ 之后才谈扩灰度
+
+白名单 2 → 3-5 真实用户观察 3-7 天 → `CANVAS_PUBLIC_ENABLED=true`。
+
+---
+
+## 负三、发版流程新增的两条（务必照做）
+
+1. **蓝绿切流会打断写者租约心跳**，正在编辑的标签页立刻掉进「写者心跳异常→只读」保护态。这是单写者锁 fail-closed 的**正确行为**，约 30 秒后新会话自动接管；但**发版公告必须提示用户刷新页面**。
+2. **服务器 `git fetch` 打不通 GitHub**（阿里云→GitHub 常年 GnuTLS 断流，本轮实测失败）。可靠做法：本地 `git bundle create rel.bundle <老sha>..origin/main`（增量，本轮只有 64KB）→ `ssh 'cat > /root/rel.bundle'` 传上去 → 服务器 `git fetch /root/rel.bundle 'refs/remotes/origin/main:refs/heads/<tmp>'` → `git checkout -f <sha>`。
+   另：release 目录**别从零 `cp -a`**（1.7G，本轮一次被 ssh 断连掐死），用 `rsync -a --exclude .next` 从上一个 release 目录同步（`.next` 占 689M，不该带），且必须 `setsid nohup` 脱离终端跑。
+
+## 负四、浏览器走查环境的坑（本轮新踩）
+
+- **Chrome 窗口最大化时 `resize_window` / `chrome.windows.update` 完全无效**（`outerWidth/outerHeight` 报 0），必须**人工先把窗口从最大化还原**。
+- **页面 reload 会把窗口重新最大化** → 顺序必须是「先导航 → 再 resize → 之后不 reload」。
+- 窗口压小后**截图与 CSS 是 1:1**，不用再做坐标换算；反之最大化时要换算，且**视口尺寸一变，之前算的坐标立刻作废**（本轮因此连续点空数次）。
+- **禁用 `zoom` 动作**代替缩放：会留下改不回来的 CDP 视口覆盖。
+
+## 负五、残留物
+
+- 测试画布 `047fb5dd` 里还有 **2 个空商品节点**（`node_v3hNjrCWBTz3` / `node_KSK8Zcdoj9f2`），走查误建、无产物未扣费，随手删即可。
+- 卡住的积分仍是 3 笔共 15 分（2 视频 + 1 图片），**用户裁决一律先不动**。
+- **余额 18459**；本轮走查共花 455（视频 450 + 图片 5），用户授权额度 4000。
+- 生产 release 目录已有 5 个，磁盘余 **11G**，每个约 1.1-1.7G ——**再发 2 次前必须先清最老的**（`fea0bcbe` / `e77d4df5`），清理前确认对应 pm2 进程已下线。
+
+## 零、一句话现状（2026-08-08 白天写，已被上面推翻，保留备查）
 
 **安全缺口全部堵完并已发版实测生效；计费/对账/状态机/并发那一整层是真做到了。但 2026-08-08 全量复核推翻了「P1 已 100% 完成」——生成器面板比 CHECKLIST 承诺的薄一大截，61 项里约 23 项「标了做但没实现」（R2-Q4）。R2 走查主线旅程 A 还有 5 步没跑完，商品节点整条链路完全没碰，旅程 B 一步没走。扩灰度的前置条件远未满足。**
 
@@ -30,10 +102,12 @@ cd /e/StarGaze && git fetch origin --prune --no-tags && git rev-parse --short or
 ```
 
 ```bash
-ssh root@123.56.75.68 'R=/var/www/tiktok-ai-mcn-releases/abc29ac3d807fe9bb1e95b204da436f066bdd9f4; curl -s -o /dev/null -w "site HTTP %{http_code}\n" https://toryxai.com/; grep -oE "proxy_pass http://127.0.0.1:[0-9]+" /etc/nginx/sites-available/toryxai.com | tail -1; grep -E "^VIDEO_PLATFORM_IMAGE_BASE_URL=|^CANVAS_VIDEO_MODELS=|^NEXT_PUBLIC_CANVAS_VIDEO_MODELS=" $R/.env.local; pm2 list | grep -E "abc29ac|reconciler"'
+ssh root@123.56.75.68 'R=/var/www/tiktok-ai-mcn-releases/d16620f34f09d2418cdb805b068aae61d2a55e3d; curl -s -o /dev/null -w "site HTTP %{http_code}\n" https://toryxai.com/; curl -s -o /dev/null -w "/canvas(anon) %{http_code}\n" https://toryxai.com/canvas; grep -oE "proxy_pass http://127.0.0.1:[0-9]+" /etc/nginx/sites-available/toryxai.com | tail -1; grep -E "^VIDEO_PLATFORM_IMAGE_BASE_URL=|^CANVAS_VIDEO_MODELS=|^NEXT_PUBLIC_CANVAS_VIDEO_MODELS=" $R/.env.local; pm2 list | grep -E "d16620f|reconciler"; df -h /var/www | tail -1'
 ```
 
-**预期**：站点 200；nginx→**3012**；`VIDEO_PLATFORM_IMAGE_BASE_URL=https://api.hellobabygo.com`（**若不是，图片生成又坏了，先修**）；两个 `CANVAS_VIDEO_MODELS=happyhorse`；`stargaze-canvas-abc29ac` 与 reconciler 均 online。
+**预期**（2026-08-08 二次发版后）：站点 200；`/canvas` 未登录 **307**；nginx→**3013**；`VIDEO_PLATFORM_IMAGE_BASE_URL=https://api.hellobabygo.com`（**若不是，图片生成又坏了，先修**）；两个 `CANVAS_VIDEO_MODELS=happyhorse`；`stargaze-canvas-d16620f` 与 reconciler 均 online；磁盘余约 11G。
+
+> 旧值备查：上一版是 `abc29ac…`/3012，仍在线待回滚，**别把它当成当前线上**。
 
 **与预期不符 → 停下核对，不要按本文档继续。**
 
