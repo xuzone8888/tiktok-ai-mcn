@@ -93,7 +93,13 @@ import { NodePalette } from "./node-palette";
 import { projectGroupFrames } from "./group-frame";
 import { ShortcutPanel } from "./shortcut-panel";
 import { shouldExpandMinimap } from "./canvas-responsive";
-import { generationDeleteBlockReason } from "./nodes/generation-controls";
+import { CanvasDockHostProvider } from "./canvas-dock-context";
+import {
+  GENERATION_CANCEL_UNSUPPORTED_REASON,
+  generationCancelUnsupportedReason,
+  generationDeleteBlockReason,
+  generationDeleteDisposition,
+} from "./nodes/generation-controls";
 import {
   CANVAS_UPLOAD_MAX_CONCURRENCY,
   prepareCanvasUploads,
@@ -165,6 +171,10 @@ interface CopyDragState {
 interface PendingDelete {
   nodeIds: string[];
   edgeIds: string[];
+  /** 所选中处于 running、只能「仅移除」的节点数(CHECKLIST #251);0 = 普通删除。 */
+  detachCount: number;
+  /** 非 null = 这批 running 节点都撤不了单,弹窗里明示「取消并退款」不可用。 */
+  detachCancelUnsupportedReason: string | null;
 }
 
 interface UploadBatchProgress {
@@ -236,6 +246,9 @@ export function CanvasBoard({
   const { resolvedTheme } = useTheme();
   const { width: viewportWidth } = useViewportSize();
   const wrapperRef = useRef<HTMLDivElement>(null);
+  // #189 生成面板底部停靠位。用 state 而非 ref:面板要在宿主挂载后才能 portal 过去,
+  // ref 变化不触发重渲会让首个被选中的节点永远停在 inline。
+  const [dockHost, setDockHost] = useState<HTMLDivElement | null>(null);
   const fitRafRef = useRef<number | null>(null);
   // 记录上一次小地图自动展开阈值状态,仅在跨越阈值时干预(不覆盖用户手动开关)。
   const minimapWideRef = useRef<boolean | null>(null);
@@ -400,6 +413,56 @@ export function CanvasBoard({
       unresolvedActionByNodeId,
     ]
   );
+  /**
+   * 批量删除的处置计划(CHECKLIST #251)。返回 null = 这批里有「状态未定」的节点,
+   * 整批不可删(由 `generationProtectionReason` 给出具体文案);否则返回其中
+   * 只能「仅移除」的 running 节点及其撤单能力。
+   *
+   * 注意与 `generationProtectionReason` 分工:后者把 running 也算阻断,继续供
+   * 复制/撤销/重做复用 —— 那些动作没有「仅移除」语义,不能在任务跑着时放行。
+   */
+  const generationDetachPlan = useCallback(
+    (
+      nodeIds: readonly string[]
+    ): { detachIds: string[]; cancelUnsupportedReason: string | null } | null => {
+      const nodesById = new Map(
+        useCanvasStore.getState().nodes.map((node) => [node.id, node])
+      );
+      const detachIds: string[] = [];
+      let everyDetachUncancellable = true;
+      for (const nodeId of nodeIds) {
+        const node = nodesById.get(nodeId);
+        if (!node || (node.type !== "image" && node.type !== "video")) continue;
+        const disposition = generationDeleteDisposition(
+          generationByNodeId.get(nodeId),
+          {
+            syncState:
+              generationCanvasId === null ? undefined : generationSyncState,
+            unresolvedActionId: unresolvedActionByNodeId.get(nodeId),
+          }
+        );
+        if (!disposition) continue;
+        if (disposition.kind === "blocked") return null;
+        detachIds.push(nodeId);
+        if (generationCancelUnsupportedReason(node.type, node.data) === null) {
+          everyDetachUncancellable = false;
+        }
+      }
+      return {
+        detachIds,
+        cancelUnsupportedReason:
+          detachIds.length > 0 && everyDetachUncancellable
+            ? GENERATION_CANCEL_UNSUPPORTED_REASON
+            : null,
+      };
+    },
+    [
+      generationByNodeId,
+      generationCanvasId,
+      generationSyncState,
+      unresolvedActionByNodeId,
+    ]
+  );
   const allGenerationProtectedNodeIds = useMemo(
     () =>
       domainNodes
@@ -448,18 +511,26 @@ export function CanvasBoard({
     const nodeIds = getSelectedDomainNodeIds();
     const edgeIds = getSelectedEdgeIds();
     if (nodeIds.length === 0 && edgeIds.length === 0) return false;
-    const protectedReason = generationProtectionReason(nodeIds);
-    if (protectedReason) {
+    const plan = generationDetachPlan(nodeIds);
+    if (plan === null) {
+      // 这批含「状态未定」的节点:连仅移除都不安全,沿用原禁删文案。
+      const protectedReason = generationProtectionReason(nodeIds);
       toast({
         title: "当前所选暂不可删除",
-        description: protectedReason,
+        description: protectedReason ?? "任务状态待核对，暂不可删除",
         variant: "destructive",
       });
       return true;
     }
-    setPendingDelete({ nodeIds, edgeIds }); // 一次批量二确认
+    setPendingDelete({
+      nodeIds,
+      edgeIds,
+      detachCount: plan.detachIds.length,
+      detachCancelUnsupportedReason: plan.cancelUnsupportedReason,
+    }); // 一次批量二确认
     return true;
   }, [
+    generationDetachPlan,
     generationProtectionReason,
     getSelectedDomainNodeIds,
     getSelectedEdgeIds,
@@ -518,13 +589,15 @@ export function CanvasBoard({
 
   const confirmBatchDelete = useCallback(() => {
     if (!readOnly && pendingDelete) {
-      const protectedReason = generationProtectionReason(
-        pendingDelete.nodeIds
-      );
-      if (protectedReason) {
+      // 弹窗开着期间状态可能变化,确认时按同一分类复检:running 仍走「仅移除」,
+      // 一旦退化成「状态未定」立即撤销本次删除。
+      if (generationDetachPlan(pendingDelete.nodeIds) === null) {
+        const protectedReason = generationProtectionReason(
+          pendingDelete.nodeIds
+        );
         toast({
           title: "删除已取消",
-          description: protectedReason,
+          description: protectedReason ?? "任务状态待核对，删除已取消",
           variant: "destructive",
         });
         setPendingDelete(null);
@@ -534,6 +607,7 @@ export function CanvasBoard({
     }
     setPendingDelete(null);
   }, [
+    generationDetachPlan,
     generationProtectionReason,
     pendingDelete,
     readOnly,
@@ -1203,6 +1277,7 @@ export function CanvasBoard({
       onDragOver={onDragOver}
       onDrop={onDrop}
     >
+      <CanvasDockHostProvider host={dockHost}>
       <input
         ref={uploadInputRef}
         type="file"
@@ -1310,6 +1385,10 @@ export function CanvasBoard({
         open={pendingDelete !== null}
         nodeCount={pendingDelete?.nodeIds.length ?? 0}
         edgeCount={pendingDelete?.edgeIds.length ?? 0}
+        detachCount={pendingDelete?.detachCount ?? 0}
+        detachCancelUnsupportedReason={
+          pendingDelete?.detachCancelUnsupportedReason ?? null
+        }
         onConfirm={confirmBatchDelete}
         onOpenChange={(open) => {
           if (!open) setPendingDelete(null);
@@ -1324,6 +1403,14 @@ export function CanvasBoard({
         interactionEnabled={interactionActive}
         onAddAsset={handleAddHistoryAsset}
       />
+      {/* #189 生成面板底部停靠位。宿主本体 pointer-events-none,只有真正 portal 进来的
+          面板恢复 pointer-events,避免空停靠位吃掉画布底部的点击与框选。 */}
+      <div
+        ref={setDockHost}
+        data-canvas-generation-dock=""
+        className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex max-h-[55%] flex-col items-center gap-2 overflow-y-auto p-3"
+      />
+      </CanvasDockHostProvider>
     </div>
   );
 }

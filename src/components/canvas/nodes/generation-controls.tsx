@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   AlertCircle,
   CheckCircle2,
@@ -53,7 +54,31 @@ import {
   type CanvasImageDraftConfig,
   type CanvasVideoDraftConfig,
 } from "../canvas-generation-context";
+import { useCanvasDockHost } from "../canvas-dock-context";
+import {
+  planCapsuleCollapse,
+  resolveGenerationPanelDock,
+} from "../canvas-responsive";
+import { useViewportSize } from "../use-viewport-size";
 
+/**
+ * 图片画幅枚举(CHECKLIST #78「比例 13 种」)。
+ *
+ * **这 6 项是真实能力边界,不要照着 schema 往上加。** 三层枚举当前不齐:
+ *   - 面板(本数组)6 项;
+ *   - 客户端类型 `CanvasImageDraftConfig["aspectRatio"]` 与服务端
+ *     `ImageGenerationConfigSchema.aspectRatio` 各 11 项;
+ *   - **上游 `getVideoPlatformImageSize` 的 sizeMap 每档只有这 6 个 key**
+ *     (src/lib/video-platform-image-api.ts:214-241)。
+ *
+ * 关键:该函数末行是 `sizeMap[resolution]?.[ratio] || sizeMap[resolution]?.auto || null`,
+ * 多出来的 5 项(3:2/2:3/5:4/4:5/21:9)**不会报错,而是静默回落成 auto 尺寸** ——
+ * 用户选了 21:9、按全价扣了分,拿回来的却是自动画幅的图。所以把面板扩到 11 项
+ * 等于制造「付费得到错画幅」的静默缺陷,比少列几项更糟。
+ *
+ * 要真正补齐,必须先给 sizeMap 补这几档的像素尺寸并确认 gpt-image-2 接受,
+ * 而那是 quick-gen / image-factory 共用的链路,不属画布单方改动(见 P0 看板 R2-Q4)。
+ */
 const IMAGE_ASPECTS: Array<{
   value: CanvasImageDraftConfig["aspectRatio"];
   label: string;
@@ -153,6 +178,50 @@ function SelectField({
         {children}
       </select>
     </label>
+  );
+}
+
+interface ParamCapsule {
+  key: string;
+  node: React.ReactNode;
+}
+
+/**
+ * 参数胶囊行(CHECKLIST #180 参数胶囊 / #181 ≥5 折叠「更多」)。
+ *
+ * 胶囊数达到阈值时按 `planCapsuleCollapse` 的计划只直接展开前 N 个,其余收进「更多」——
+ * 1366×768 条款,避免参数行把节点撑出视口。折叠策略是 `canvas-responsive.ts` 的纯函数
+ * (S6 已离线单测),此处只负责消费,不在组件里另立阈值。
+ */
+function ParamCapsules({ capsules }: { capsules: ParamCapsule[] }) {
+  const [expanded, setExpanded] = useState(false);
+  const plan = planCapsuleCollapse(capsules.length);
+  const collapsedNow = plan.collapsed && !expanded;
+  const visible = collapsedNow ? capsules.slice(0, plan.visibleCount) : capsules;
+
+  return (
+    <div className="space-y-1.5">
+      <div className="flex flex-wrap gap-2">
+        {visible.map((capsule) => (
+          <div
+            key={capsule.key}
+            className="flex min-w-[84px] flex-1 basis-[calc(50%-0.25rem)]"
+          >
+            {capsule.node}
+          </div>
+        ))}
+      </div>
+      {plan.collapsed && (
+        <button
+          type="button"
+          className="nodrag nopan text-[10px] text-muted-foreground underline underline-offset-2 hover:text-foreground"
+          aria-expanded={expanded}
+          onClick={() => setExpanded((value) => !value)}
+        >
+          {collapsedNow ? `更多参数（${plan.overflowCount}）` : "收起参数"}
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -262,40 +331,54 @@ function ImageSettings({
   const patch = (next: CanvasImageDraftConfig) =>
     updateParams(nodeId, "canvasImage", next);
   return (
-    <div className="flex gap-2">
-      <SelectField
-        label="清晰度"
-        value={config.resolution}
-        disabled={disabled}
-        onChange={(resolution) =>
-          patch({
-            ...config,
-            resolution: resolution as CanvasImageDraftConfig["resolution"],
-          })
-        }
-      >
-        <option value="1k">1K</option>
-        <option value="2k">2K</option>
-        <option value="4k">4K</option>
-      </SelectField>
-      <SelectField
-        label="画幅"
-        value={config.aspectRatio}
-        disabled={disabled}
-        onChange={(aspectRatio) =>
-          patch({
-            ...config,
-            aspectRatio: aspectRatio as CanvasImageDraftConfig["aspectRatio"],
-          })
-        }
-      >
-        {IMAGE_ASPECTS.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </SelectField>
-    </div>
+    <ParamCapsules
+      capsules={[
+        {
+          key: "resolution",
+          node: (
+            <SelectField
+              label="清晰度"
+              value={config.resolution}
+              disabled={disabled}
+              onChange={(resolution) =>
+                patch({
+                  ...config,
+                  resolution:
+                    resolution as CanvasImageDraftConfig["resolution"],
+                })
+              }
+            >
+              <option value="1k">1K</option>
+              <option value="2k">2K</option>
+              <option value="4k">4K</option>
+            </SelectField>
+          ),
+        },
+        {
+          key: "aspectRatio",
+          node: (
+            <SelectField
+              label="画幅"
+              value={config.aspectRatio}
+              disabled={disabled}
+              onChange={(aspectRatio) =>
+                patch({
+                  ...config,
+                  aspectRatio:
+                    aspectRatio as CanvasImageDraftConfig["aspectRatio"],
+                })
+              }
+            >
+              {IMAGE_ASPECTS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </SelectField>
+          ),
+        },
+      ]}
+    />
   );
 }
 
@@ -337,88 +420,114 @@ function VideoSettings({
   const patch = (next: CanvasVideoDraftConfig) =>
     updateParams(nodeId, "canvasVideo", next);
   return (
-    <div className="space-y-2">
-      <div className="flex gap-2">
-        <SelectField
-          label="模型"
-          value={config.model}
-          disabled={disabled}
-          onChange={(model) =>
-            patch(compatibleVideoConfig(model as VideoModelId, config))
-          }
-        >
-          {ENABLED_VIDEO_MODEL_OPTIONS.map((option) => (
-            <option key={option.id} value={option.id}>
-              {option.label}
-            </option>
-          ))}
-        </SelectField>
-        <SelectField
-          label="模式"
-          value={config.mode}
-          disabled={disabled}
-          onChange={(mode) =>
-            patch({ ...config, mode: mode as VideoGenerationMode })
-          }
-        >
-          {catalog.supportedModes.includes("prompt_to_video") && (
-            <option value="prompt_to_video">文生视频</option>
-          )}
-          {catalog.supportedModes.includes("image_to_video") && (
-            <option value="image_to_video">
-              图生视频{incomingImageCount ? ` (${incomingImageCount})` : ""}
-            </option>
-          )}
-        </SelectField>
-      </div>
-      <div className="flex gap-2">
-        <SelectField
-          label="时长"
-          value={String(config.durationSeconds)}
-          disabled={disabled}
-          onChange={(duration) =>
-            patch({
-              ...config,
-              durationSeconds: Number(duration) as VideoDurationSeconds,
-            })
-          }
-        >
-          {catalog.supportedDurations.map((duration) => (
-            <option key={duration} value={duration}>
-              {duration} 秒
-            </option>
-          ))}
-        </SelectField>
-        <SelectField
-          label="质量"
-          value={config.quality}
-          disabled={disabled}
-          onChange={(quality) =>
-            patch({ ...config, quality: quality as VideoQuality })
-          }
-        >
-          {catalog.supportedQualities.map((quality) => (
-            <option key={quality} value={quality}>
-              {quality === "hd" ? "高清" : "标准"}
-            </option>
-          ))}
-        </SelectField>
-        <SelectField
-          label="画幅"
-          value={config.aspectRatio}
-          disabled={disabled}
-          onChange={(aspectRatio) =>
-            patch({ ...config, aspectRatio: aspectRatio as VideoAspectRatio })
-          }
-        >
-          {catalog.supportedAspectRatios.map((aspect) => (
-            <option key={aspect} value={aspect}>
-              {aspect}
-            </option>
-          ))}
-        </SelectField>
-      </div>
-    </div>
+    <ParamCapsules
+      capsules={[
+        {
+          key: "model",
+          node: (
+            <SelectField
+              label="模型"
+              value={config.model}
+              disabled={disabled}
+              onChange={(model) =>
+                patch(compatibleVideoConfig(model as VideoModelId, config))
+              }
+            >
+              {ENABLED_VIDEO_MODEL_OPTIONS.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.label}
+                </option>
+              ))}
+            </SelectField>
+          ),
+        },
+        {
+          key: "mode",
+          node: (
+            <SelectField
+              label="模式"
+              value={config.mode}
+              disabled={disabled}
+              onChange={(mode) =>
+                patch({ ...config, mode: mode as VideoGenerationMode })
+              }
+            >
+              {catalog.supportedModes.includes("prompt_to_video") && (
+                <option value="prompt_to_video">文生视频</option>
+              )}
+              {catalog.supportedModes.includes("image_to_video") && (
+                <option value="image_to_video">
+                  图生视频{incomingImageCount ? ` (${incomingImageCount})` : ""}
+                </option>
+              )}
+            </SelectField>
+          ),
+        },
+        {
+          key: "duration",
+          node: (
+            <SelectField
+              label="时长"
+              value={String(config.durationSeconds)}
+              disabled={disabled}
+              onChange={(duration) =>
+                patch({
+                  ...config,
+                  durationSeconds: Number(duration) as VideoDurationSeconds,
+                })
+              }
+            >
+              {catalog.supportedDurations.map((duration) => (
+                <option key={duration} value={duration}>
+                  {duration} 秒
+                </option>
+              ))}
+            </SelectField>
+          ),
+        },
+        {
+          key: "quality",
+          node: (
+            <SelectField
+              label="质量"
+              value={config.quality}
+              disabled={disabled}
+              onChange={(quality) =>
+                patch({ ...config, quality: quality as VideoQuality })
+              }
+            >
+              {catalog.supportedQualities.map((quality) => (
+                <option key={quality} value={quality}>
+                  {quality === "hd" ? "高清" : "标准"}
+                </option>
+              ))}
+            </SelectField>
+          ),
+        },
+        {
+          key: "aspectRatio",
+          node: (
+            <SelectField
+              label="画幅"
+              value={config.aspectRatio}
+              disabled={disabled}
+              onChange={(aspectRatio) =>
+                patch({
+                  ...config,
+                  aspectRatio: aspectRatio as VideoAspectRatio,
+                })
+              }
+            >
+              {catalog.supportedAspectRatios.map((aspect) => (
+                <option key={aspect} value={aspect}>
+                  {aspect}
+                </option>
+              ))}
+            </SelectField>
+          ),
+        },
+      ]}
+    />
   );
 }
 
@@ -438,6 +547,12 @@ export function GenerationControls({
   const readOnly = useCanvasReadOnly();
   const nodes = useCanvasNodes();
   const edges = useCanvasEdges();
+  const dockHost = useCanvasDockHost();
+  const { width: viewportWidth, height: viewportHeight } = useViewportSize();
+  const panelRef = useRef<HTMLDivElement>(null);
+  // 只在 inline 形态下记录高度:dock 后面板换了容器、宽度不同,高度会变,
+  // 拿 dock 态的高度回去做 dock 判定会形成 inline↔bottom 的抖动环。
+  const [inlinePanelHeight, setInlinePanelHeight] = useState(0);
   const {
     enabled,
     syncState,
@@ -568,8 +683,57 @@ export function GenerationControls({
       unresolvedActionId === null &&
       estimateValue === null);
 
-  return (
-    <div className="nodrag nopan nowheel mt-2 space-y-2 border-t border-border/60 pt-2">
+  /**
+   * 面板停靠决策(CHECKLIST #189)。窄屏(≤1366)、或面板高超过视口 55% → dock 底部;
+   * 判定本体是 `canvas-responsive.ts` 的纯函数(S6 已离线单测),这里只负责喂参数与渲染。
+   * 视口尺寸尚未测出(SSR / 首帧 width=0)时保持 inline,避免水合瞬间闪一下底栏。
+   */
+  const dock =
+    viewportWidth > 0
+      ? resolveGenerationPanelDock({
+          viewportWidth,
+          viewportHeight,
+          panelHeight: inlinePanelHeight,
+        })
+      : "inline";
+  const docked = dock === "bottom" && dockHost !== null;
+
+  useEffect(() => {
+    const element = panelRef.current;
+    if (!element || docked) return;
+    if (typeof ResizeObserver === "undefined") {
+      setInlinePanelHeight(element.getBoundingClientRect().height);
+      return;
+    }
+    const observer = new ResizeObserver((entries) => {
+      const height = entries[0]?.contentRect.height;
+      if (typeof height === "number" && height > 0) setInlinePanelHeight(height);
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [docked]);
+
+  const panel = (
+    <div
+      ref={panelRef}
+      data-generation-panel-dock={docked ? "bottom" : "inline"}
+      role={docked ? "region" : undefined}
+      aria-label={
+        docked
+          ? `${kind === "image" ? "图片" : "视频"}节点生成参数`
+          : undefined
+      }
+      className={
+        docked
+          ? "nodrag nopan nowheel pointer-events-auto w-full max-w-[560px] space-y-2 rounded-lg border border-border bg-card/95 p-3 shadow-lg backdrop-blur"
+          : "nodrag nopan nowheel mt-2 space-y-2 border-t border-border/60 pt-2"
+      }
+    >
+      {docked && (
+        <p className="text-[10px] font-medium text-muted-foreground">
+          {kind === "image" ? "图片" : "视频"}节点 · 生成参数（窗口较窄，面板已停靠底部）
+        </p>
+      )}
       <textarea
         className="nodrag nopan nowheel block w-full resize-none rounded border border-border bg-background/70 px-2 py-1.5 text-[11px] leading-relaxed text-foreground outline-none focus:border-ring"
         rows={3}
@@ -582,12 +746,24 @@ export function GenerationControls({
         }
         readOnly={settingsDisabled}
         aria-label={`${kind === "image" ? "图片" : "视频"}生成提示词`}
+        aria-keyshortcuts="Control+Enter Meta+Enter"
+        title="Ctrl+Enter（Mac 为 ⌘+Enter）发送"
         onChange={(event) =>
           useCanvasStore
             .getState()
             .updateNodeData(nodeId, { title: event.target.value })
         }
         onBlur={() => useCanvasStore.getState().commitTextEdit()}
+        onKeyDown={(event) => {
+          // CHECKLIST #188 发送快捷键。走与按钮同一个 onGenerate,因此防重复提交、
+          // 报价未就绪拦截、超阈值拦截式确认三道闸一并复用,不另开提交路径。
+          if (event.key !== "Enter" || !(event.ctrlKey || event.metaKey)) return;
+          event.preventDefault();
+          event.stopPropagation();
+          if (actionDisabled) return;
+          useCanvasStore.getState().commitTextEdit();
+          onGenerate();
+        }}
       />
 
       {kind === "image" ? (
@@ -747,8 +923,98 @@ export function GenerationControls({
       </AlertDialog>
     </div>
   );
+
+  return docked && dockHost ? createPortal(panel, dockHost) : panel;
 }
 
+/**
+ * 未终态节点的删除处置文案。`generationDeleteBlockReason` 与
+ * `generationDeleteDisposition` 共用同一组常量,避免两处漂移。
+ */
+const DELETE_REASON_SYNC_ERROR = "任务状态同步失败，为防误删潜在产物暂不可删除";
+const DELETE_REASON_SYNC_PENDING = "正在同步任务状态，完成后才能删除节点";
+const DELETE_REASON_UNRESOLVED = "提交结果正在幂等核对，为防丢失潜在产物暂不可删除";
+const DELETE_REASON_RUNNING = "任务生成中，完成或明确失败后才能删除节点";
+const DELETE_REASON_UNKNOWN = "上游状态待核对，为防丢失潜在产物暂不可删除";
+
+/**
+ * 「取消并退款」不可用的原因(CHECKLIST #251 自带逃逸口「网关不支持取消则明示」)。
+ * 依据是能力矩阵:`VIDEO_MODEL_CATALOG` 七个模型当前 `supportsCancel` 全为 false,
+ * 图片直连链路同样没有撤单接口。**将来某模型支持撤单时,不能只放开这行文案 ——
+ * 必须先实现真正的取消动作与幂等退款,再让 `generationCancelUnsupportedReason` 返回 null。**
+ */
+export const GENERATION_CANCEL_UNSUPPORTED_REASON =
+  "上游网关不支持撤单：任务一经提交即由服务端对账车道接管，无法中途取消，因此也不会退款。";
+
+/** 「仅移除」的后果说明(任务继续、产物进历史)。 */
+export const GENERATION_DETACH_EXPLAINER =
+  "仅把节点从画布移除。任务会继续跑完，产物照常进入「历史资产」，本次积分按已提交的任务照常结算。";
+
+/**
+ * 该节点当前是否可撤单。返回 null = 可撤单(届时需另行实现取消动作)。
+ * 视频取节点已选模型的 catalog 能力;图片直连链路恒不可撤单。
+ */
+export function generationCancelUnsupportedReason(
+  kind: "image" | "video",
+  data: CanvasNodeData
+): string | null {
+  if (kind === "video") {
+    const { model } = getCanvasVideoDraftConfig(data);
+    if (getVideoModelCatalogEntry(model).supportsCancel) return null;
+  }
+  return GENERATION_CANCEL_UNSUPPORTED_REASON;
+}
+
+/**
+ * 删除未终态节点的处置分类(CHECKLIST #251「删除 running 节点三选一」)。
+ *
+ * - `blocked`:状态本身还不确定 —— 同步未就绪 / 本地幂等核对中 / 上游 unknown。
+ *   这三种情况下节点是**恢复动作的唯一入口**(「核对并恢复」按钮,以及 unknown 行等人工裁决时
+ *   的现场线索),移除它会让用户失去追回产物与积分的抓手,故连「仅移除」都不给,维持禁用。
+ * - `detach`:任务确实在跑(pending/processing)。服务端对账车道从不回写 `canvases.doc`,
+ *   移除节点不影响任务收敛;产物落 `generations` 后经历史资产面板(源含 generations)照常可见。
+ *   故按 #251 提供「仅移除(任务继续、产物进历史)」。
+ * - `null`:无在途任务,走普通删除。
+ */
+export type GenerationDeleteDisposition =
+  | { kind: "blocked"; reason: string }
+  | { kind: "detach"; reason: string };
+
+export function generationDeleteDisposition(
+  generation: CanvasGenerationView | undefined,
+  options?: {
+    syncState?: "idle" | "loading" | "ready" | "error";
+    unresolvedActionId?: string | null;
+  }
+): GenerationDeleteDisposition | null {
+  if (options?.syncState !== undefined && options.syncState !== "ready") {
+    return {
+      kind: "blocked",
+      reason:
+        options.syncState === "error"
+          ? DELETE_REASON_SYNC_ERROR
+          : DELETE_REASON_SYNC_PENDING,
+    };
+  }
+  if (options?.unresolvedActionId) {
+    return { kind: "blocked", reason: DELETE_REASON_UNRESOLVED };
+  }
+  if (!generation) return null;
+  if (generation.status === "pending" || generation.status === "processing") {
+    return { kind: "detach", reason: DELETE_REASON_RUNNING };
+  }
+  if (generation.status === "unknown") {
+    return { kind: "blocked", reason: DELETE_REASON_UNKNOWN };
+  }
+  return null;
+}
+
+/**
+ * 「该节点此刻完全不可动」的原因。与 `generationDeleteDisposition` 的区别:
+ * 本函数把 running 也算作阻断,供**复制/撤销/重做**等没有「仅移除」语义的守卫复用
+ * (那些动作会改动在途节点的身份或位置,不能在任务跑着时放行)。
+ * 删除路径请改用 `generationDeleteDisposition`。
+ */
 export function generationDeleteBlockReason(
   generation: CanvasGenerationView | undefined,
   options?: {
@@ -756,20 +1022,5 @@ export function generationDeleteBlockReason(
     unresolvedActionId?: string | null;
   }
 ): string | null {
-  if (options?.syncState !== undefined && options.syncState !== "ready") {
-    return options.syncState === "error"
-      ? "任务状态同步失败，为防误删潜在产物暂不可删除"
-      : "正在同步任务状态，完成后才能删除节点";
-  }
-  if (options?.unresolvedActionId) {
-    return "提交结果正在幂等核对，为防丢失潜在产物暂不可删除";
-  }
-  if (!generation) return null;
-  if (generation.status === "pending" || generation.status === "processing") {
-    return "任务生成中，完成或明确失败后才能删除节点";
-  }
-  if (generation.status === "unknown") {
-    return "上游状态待核对，为防丢失潜在产物暂不可删除";
-  }
-  return null;
+  return generationDeleteDisposition(generation, options)?.reason ?? null;
 }
