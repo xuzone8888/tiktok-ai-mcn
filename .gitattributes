@@ -27,6 +27,7 @@ supabase/migrations/20260730_canvas_generation_recovery.sql -text whitespace=cr-
 supabase/migrations/20260731_canvas_runtime_health.sql -text whitespace=cr-at-eol
 supabase/migrations/20260801_canvas_upload_registry.sql -text whitespace=cr-at-eol
 supabase/migrations/20260802_canvas_upload_registry_ambiguity_fix.sql -text whitespace=cr-at-eol
+supabase/migrations/20260808_canvas_image_unknown_resolution.sql -text whitespace=cr-at-eol
 src/app/api/user/credits/deduct/route.ts text eol=lf
 src/app/api/user/credits/refund/route.ts text eol=lf
 src/app/api/sms/verify/route.ts text eol=lf
