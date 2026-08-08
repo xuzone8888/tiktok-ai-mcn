@@ -11,6 +11,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { generateAiVideoPrompt } from "@/lib/doubao-api";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
 
 // ============================================================================
 // 请求/响应类型
@@ -36,7 +37,24 @@ interface RequestBody {
 export async function POST(request: NextRequest) {
   try {
     const body: RequestBody = await request.json();
-    const { talkingScript, taskId, userId, modelId, customPrompts } = body;
+    const { talkingScript, taskId, userId: requestedUserId, modelId, customPrompts } = body;
+
+    // 身份以登录态为准，忽略请求体伪造的 userId（沿用 models/submit 范式）
+    // 合约查询必须绑定登录用户，否则可用任意 userId+modelId 读出他人模特触发词
+    const authClient = await createClient();
+    const { data: { user } } = await authClient.auth.getUser();
+    if (!user) {
+      return NextResponse.json(
+        { success: false, error: "请先登录" },
+        { status: 401 }
+      );
+    }
+    if (requestedUserId && requestedUserId !== user.id) {
+      return NextResponse.json(
+        { success: false, error: "用户身份不匹配" },
+        { status: 403 }
+      );
+    }
 
     // 参数校验
     if (!talkingScript || talkingScript.trim().length === 0) {
@@ -57,15 +75,15 @@ export async function POST(request: NextRequest) {
     let verifiedTriggerWord: string | undefined = body.modelTriggerWord;
     let modelName: string | undefined;
 
-    // 如果提供了 userId 和 modelId，从数据库验证并获取触发词
-    if (userId && modelId) {
+    // 如果提供了 modelId，从数据库验证并获取触发词
+    if (modelId) {
       const supabase = createAdminClient();
-      
+
       // 验证用户是否有该模特的有效合约
       const { data: contract } = await supabase
         .from("contracts")
         .select("id, model_id, ai_models!inner(id, name, trigger_word)")
-        .eq("user_id", userId)
+        .eq("user_id", user.id)
         .eq("model_id", modelId)
         .eq("status", "active")
         .gt("end_date", new Date().toISOString())
@@ -83,7 +101,7 @@ export async function POST(request: NextRequest) {
           });
         }
       } else {
-        console.warn("[Video Batch] No valid contract found for user:", userId, "model:", modelId);
+        console.warn("[Video Batch] No valid contract found for user:", user.id, "model:", modelId);
         // 合约无效时，清除前端传入的触发词
         verifiedTriggerWord = undefined;
       }

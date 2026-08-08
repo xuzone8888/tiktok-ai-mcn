@@ -11,6 +11,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { queryVeoResult } from "@/lib/gaorui-veo-api";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
 import { transferVeoVideoToOSS, isOSSPermanentUrl } from "@/lib/transfer-veo-to-oss";
 
 export const maxDuration = 120; // 转存可能需要额外时间
@@ -29,6 +30,18 @@ export async function GET(
       );
     }
 
+    // 归属校验：只有任务所属用户能查询与推进状态（沿用 sora-status/happyhorse-status 范式）
+    const authClient = await createClient();
+    const {
+      data: { user },
+    } = await authClient.auth.getUser();
+    if (!user) {
+      return NextResponse.json(
+        { success: false, error: "请先登录" },
+        { status: 401 }
+      );
+    }
+
     console.log("[VEO3 Status] Querying task:", taskId);
 
     // 先检查数据库是否已有 OSS URL（之前已转存过）
@@ -37,7 +50,15 @@ export async function GET(
       .from("generations")
       .select("status, result_url, video_url, user_id")
       .eq("task_id", taskId)
-      .single();
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    if (!existingGen) {
+      return NextResponse.json(
+        { success: false, error: "任务不存在或无权查看" },
+        { status: 404 }
+      );
+    }
 
     // 如果数据库已有完成记录且 URL 已是 OSS，直接返回
     if (existingGen?.status === "completed" && existingGen?.result_url && isOSSPermanentUrl(existingGen.result_url)) {
@@ -84,6 +105,7 @@ export async function GET(
             status: "transferring",
           })
           .eq("task_id", taskId)
+          .eq("user_id", user.id)
           .eq("status", "processing") // 乐观锁：只有 processing 状态才能转
           .select("user_id")
           .single();
@@ -116,7 +138,8 @@ export async function GET(
               video_url: finalVideoUrl,
               completed_at: new Date().toISOString(),
             })
-            .eq("task_id", taskId);
+            .eq("task_id", taskId)
+            .eq("user_id", user.id);
         } else {
           // 未获得锁（可能其他请求在转存，或状态已是 completed/transferring）
           console.log("[VEO3 Status] Lock not acquired, checking existing result...");
@@ -127,7 +150,8 @@ export async function GET(
             .from("generations")
             .select("result_url, status")
             .eq("task_id", taskId)
-            .single();
+            .eq("user_id", user.id)
+            .maybeSingle();
 
           if (updatedGen?.result_url && isOSSPermanentUrl(updatedGen.result_url)) {
             finalVideoUrl = updatedGen.result_url;
@@ -153,7 +177,8 @@ export async function GET(
               result_url: task.videoUrl,
               completed_at: new Date().toISOString(),
             })
-            .eq("task_id", taskId);
+            .eq("task_id", taskId)
+            .eq("user_id", user.id);
           console.log("[VEO3 Status] Updated DB record to completed:", taskId);
         } catch (dbError) {
           console.error("[VEO3 Status] DB update error:", dbError);
@@ -178,7 +203,8 @@ export async function GET(
             status: "failed",
             error_message: task.errorMessage || "生成失败",
           })
-          .eq("task_id", taskId);
+          .eq("task_id", taskId)
+          .eq("user_id", user.id);
 
         if (updateError) {
           console.error("[VEO3 Status] Failed to update failed status:", updateError);

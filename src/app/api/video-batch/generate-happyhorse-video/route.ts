@@ -7,6 +7,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { submitHappyHorseVideo } from "@/lib/dashscope-video-api";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
 
 export const maxDuration = 60;
 
@@ -34,11 +35,27 @@ export async function POST(request: NextRequest) {
       durationSeconds = 5,
       imageUrls = [],
       taskId,
-      userId,
+      userId: requestedUserId,
       creditCost = 0,
       mode = "prompt_to_video",
       groupName,
     } = body;
+
+    // 身份以登录态为准，忽略请求体伪造的 userId（沿用 models/submit 范式）
+    const authClient = await createClient();
+    const { data: { user } } = await authClient.auth.getUser();
+    if (!user) {
+      return NextResponse.json(
+        { success: false, error: "请先登录" },
+        { status: 401 }
+      );
+    }
+    if (requestedUserId && requestedUserId !== user.id) {
+      return NextResponse.json(
+        { success: false, error: "用户身份不匹配" },
+        { status: 403 }
+      );
+    }
 
     if (!aiVideoPrompt || aiVideoPrompt.trim().length < 3) {
       return NextResponse.json(
@@ -80,7 +97,7 @@ export async function POST(request: NextRequest) {
       aspectRatio,
       durationSeconds,
       referenceImageCount: referenceImageUrls.length,
-      userId: userId || "(not provided)",
+      userId: user.id,
       creditCost,
       promptLength: aiVideoPrompt.length,
     });
@@ -102,42 +119,40 @@ export async function POST(request: NextRequest) {
 
     const happyHorseTaskId = submitResult.taskId;
 
-    if (userId) {
-      try {
-        const supabase = createAdminClient();
-        const { error: insertError } = await supabase.from("generations").insert({
-          user_id: userId,
-          task_id: happyHorseTaskId,
-          type: "video",
-          source: mode === "prompt_to_video" ? "batch_video_prompt_happyhorse" : "batch_video_happyhorse",
-          prompt: aiVideoPrompt.trim(),
-          model: submitResult.model || "happyhorse-1.0-t2v",
-          duration: happyHorseDuration,
-          aspect_ratio: aspectRatio,
-          quality: "standard",
-          source_image_url: referenceImageUrls[0] || null,
-          status: "processing",
-          result_url: null,
-          video_url: null,
-          credit_cost: creditCost,
-          group_name: groupName || "默认",
-          use_pro: false,
-          metadata: {
-            provider: "dashscope",
-            request_id: submitResult.requestId,
-            resolution: "720P",
-            reference_image_urls: referenceImageUrls,
-            reference_image_count: referenceImageUrls.length,
-          },
-          created_at: new Date().toISOString(),
-        });
+    try {
+      const supabase = createAdminClient();
+      const { error: insertError } = await supabase.from("generations").insert({
+        user_id: user.id,
+        task_id: happyHorseTaskId,
+        type: "video",
+        source: mode === "prompt_to_video" ? "batch_video_prompt_happyhorse" : "batch_video_happyhorse",
+        prompt: aiVideoPrompt.trim(),
+        model: submitResult.model || "happyhorse-1.0-t2v",
+        duration: happyHorseDuration,
+        aspect_ratio: aspectRatio,
+        quality: "standard",
+        source_image_url: referenceImageUrls[0] || null,
+        status: "processing",
+        result_url: null,
+        video_url: null,
+        credit_cost: creditCost,
+        group_name: groupName || "默认",
+        use_pro: false,
+        metadata: {
+          provider: "dashscope",
+          request_id: submitResult.requestId,
+          resolution: "720P",
+          reference_image_urls: referenceImageUrls,
+          reference_image_count: referenceImageUrls.length,
+        },
+        created_at: new Date().toISOString(),
+      });
 
-        if (insertError) {
-          console.error("[HappyHorse Batch] Failed to create DB record:", insertError);
-        }
-      } catch (dbError) {
-        console.error("[HappyHorse Batch] DB error:", dbError);
+      if (insertError) {
+        console.error("[HappyHorse Batch] Failed to create DB record:", insertError);
       }
+    } catch (dbError) {
+      console.error("[HappyHorse Batch] DB error:", dbError);
     }
 
     return NextResponse.json({
