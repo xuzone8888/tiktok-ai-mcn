@@ -2,15 +2,16 @@
 
 StarGaze 是一个 AI 视频创作平台(Next.js + Supabase + 阿里云 OSS,生产站 toryxai.com)。当前主战场:**超级画布的 P1 验收收尾**——对标 liblib.tv LibTV 的无限画布节点编排,一套「分镜→资产装配→逐镜图→图生视频→配音→合成」中台 + 两种起点(**电商带货**=商品节点起 / **剧情创作**=剧本节点起,覆盖漫剧/短剧/推文)。
 
-> **P0 与 P1 的工程、迁移、上线都已完成**,画布正在生产以 canary 灰度运行(白名单 1 人)。当前唯一在做的事:补 P0 看板挂着的 **R1/R2 真人验收与性能实测**,验收通过后再扩灰度。**P2 尚未开工,未经用户裁决不要自行启动。**
+> **P0 与 P1 的工程、迁移、上线都已完成**,画布正在生产以 canary 灰度运行(白名单 2 人,视频模型 `happyhorse`)。当前唯一在做的事:**R2 收口**——R1 已全过,R2 走查过了资金硬门与并发/租约类的项,但主线旅程 A 还有 5 步没跑完(商品节点整条链路完全没碰),并查出 3 个真实缺陷(R2-Q1/Q2/Q3)。**扩灰度的前置条件尚未满足。P2 尚未开工,未经用户裁决不要自行启动。**
 
 ## 新窗口恢复协议(30 秒弄清现状)
 
 1. 读本文件(你正在读)。
 2. 读 [docs/EXECUTION_TRACKER.md](./docs/EXECUTION_TRACKER.md) 的「当前状态」—— 执行状态唯一事实源。
-3. 读 [docs/SUPER_CANVAS_P0_BOARD.md](./docs/SUPER_CANVAS_P0_BOARD.md) —— D1-D6/S1-S8 已全部合流,**只剩 R1/R2 待认领**,当前任务就在那里。
-4. 每完成一个任务:更新看板状态 → 更新 EXECUTION_TRACKER「当前状态」→ commit。
-5. 需要背景细节才去翻(按需,不必全读):
+3. 读 **[docs/HANDOFF_R2_NEXT.md](./docs/HANDOFF_R2_NEXT.md)** —— **待办清单 + 三个缺陷速查 + 浏览器走查踩坑技巧。新窗口的实际入口就是这份,先读它再动手。**
+4. 读 [docs/SUPER_CANVAS_P0_BOARD.md](./docs/SUPER_CANVAS_P0_BOARD.md) —— D1-D6/S1-S8 已全部合流;R1 完成明细、R2 走查逐项结果、R2-Q1/Q2/Q3 三个缺陷都在这里。
+5. 每完成一个任务:更新看板状态 → 更新 EXECUTION_TRACKER「当前状态」→ commit。
+6. 需要背景细节才去翻(按需,不必全读):
    - [docs/SUPER_CANVAS_MASTER_PLAN.md](./docs/SUPER_CANVAS_MASTER_PLAN.md) —— 总纲:范围/ADR/分期/验收(裁决层)
    - [docs/SUPER_CANVAS_CHECKLIST.md](./docs/SUPER_CANVAS_CHECKLIST.md) —— **220 项功能点唯一事实源**(做/裁/延×期次×复用件);任何「这个功能做不做/几期做」的问题答案都在这
    - [docs/SUPER_CANVAS_DATA_MODEL.md](./docs/SUPER_CANVAS_DATA_MODEL.md) —— 表结构 DDL/字段映射/注入链(实现层,断言全经代码实证)
