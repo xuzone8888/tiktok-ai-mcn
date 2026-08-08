@@ -4,10 +4,39 @@
 
 ## 规划文档(只读,不要重新讨论已裁决的事)
 - [PRODUCT_STRATEGY_2026H2.md](./PRODUCT_STRATEGY_2026H2.md) — 总战略/定位/路线图
-- [STUDIO_REDESIGN_PLAN.md](./STUDIO_REDESIGN_PLAN.md) — Studio 统一创作界面(omnibox+批次流)
-- [BLUEPRINT_PIPELINE_PLAN.md](./BLUEPRINT_PIPELINE_PLAN.md) — 蓝图管线重构(裁决版,含 S0-S4 总排期)
+- [SUPER_CANVAS_MASTER_PLAN.md](./SUPER_CANVAS_MASTER_PLAN.md) — 超级画布总纲(**当前方向**,裁决层)
+- [SUPER_CANVAS_CHECKLIST.md](./SUPER_CANVAS_CHECKLIST.md) — 220 项功能点唯一事实源(做/裁/延×期次)
+- [STUDIO_REDESIGN_PLAN.md](./STUDIO_REDESIGN_PLAN.md) — Studio 统一创作界面(omnibox+批次流,已交付)
+- [BLUEPRINT_PIPELINE_PLAN.md](./BLUEPRINT_PIPELINE_PLAN.md) — 蓝图管线重构(S0-S4 排期,S0/S1 已交付)
 
-## 当前状态
+## 当前状态(2026-08-08)
+
+- **方向**:超级画布(2026-07-12 用户裁决取代此前的 Studio/BLUEPRINT 主线)
+- **阶段**:**P1 验收收尾**(2026-08-08 用户裁决:先验收 P1 再扩灰度)
+- **P0(画布骨架,48 功能点)**:✅ D1-D6、S1-S8 全部合流并上线
+- **P1(生成接入,61 功能点)**:✅ 工程 + 数据库迁移 + 生产上线全部完成;⚠️ **仅剩 P0 看板的 R1/R2 真人验收与性能实测未做**
+- **P2(55)/ P3(11)/ P4(1)**:未开工,无看板;**P2 待用户裁决后才开**
+
+**2026-08-08 生产实测证据**(经 Supabase dashboard 与生产机逐项核对):
+
+- **11 个画布迁移在生产库 100% 已执行**——探针逐个命中:`canvases` / `canvas_generation_resolution_audit` / `canvas_upload_reservations` 等 5 张表、40 个 canvas 函数、`generations` 上 4 个 canvas 列、1 条 service_role 策略、`reserve_canvas_uploads_v1` 源码 10020 字符
+- **`canvases` 表 7 行真实数据**——画布已被实际使用
+- `/canvas` 公网 307(硬鉴权正常);`stargaze-canvas-reconciler` 常驻在线
+- 灰度:`NEXT_PUBLIC_CANVAS_ENABLED=true`、`CANVAS_PUBLIC_ENABLED=false`、白名单 **1 人**、`CANVAS_VIDEO_MODELS=grok`
+- 线上版本 `a24a4e308cf50e2bfb5d2b0f1a5e850380d7cd3b`(2026-08-07 蓝绿发布,端口 3011)
+
+> ⚠️ **已知过期文档,勿被误导**:`SUPER_CANVAS_P1_ACCELERATED_EXECUTION_PLAN.md` 顶部仍写 `PHASE_4_COMPLETE_OFFLINE_GREEN`、Phase 5/6 checkbox 全空——**与生产事实不符**,Phase 6「生产迁移+上线」早已发生。以本节为准。
+
+**下一步**:①做 R1(验收脚本+性能实测)与 R2(真人走查),用白名单账号实走生成链路;②验收通过后再定扩灰度范围;③P2 等用户裁决。
+
+**工作区**:`.claude/worktrees/canvas-p1-acceptance`(分支 `codex/canvas-p1-acceptance`)。P0 期的三窗分工已退役,详见 CLAUDE.md。
+
+---
+
+## 前史:Studio / BLUEPRINT 主线执行记录(2026-07-02,已交付,保留备查)
+
+> 以下内容记录的是 2026-07-12 转向超级画布**之前**的 S0/S1 工作,均已完成。**不是当前状态**,续接工作请看上一节。
+
 - **阶段**:S0 打底(总排期见 BLUEPRINT 文档 §七)
 - **已完成**:
   - S0.0 commit 0169ccc + tag pre-demolition
