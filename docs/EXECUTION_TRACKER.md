@@ -26,12 +26,20 @@
 - **11 个画布迁移在生产库 100% 已执行**——探针逐个命中:`canvases` / `canvas_generation_resolution_audit` / `canvas_upload_reservations` 等 5 张表、40 个 canvas 函数、`generations` 上 4 个 canvas 列、1 条 service_role 策略、`reserve_canvas_uploads_v1` 源码 10020 字符
 - **`canvases` 表 7 行真实数据**——画布已被实际使用
 - `/canvas` 公网 307(硬鉴权正常);`stargaze-canvas-reconciler` 常驻在线
-- 灰度:`NEXT_PUBLIC_CANVAS_ENABLED=true`、`CANVAS_PUBLIC_ENABLED=false`、白名单 **1 人**、`CANVAS_VIDEO_MODELS=grok`
-- 线上版本 `a24a4e308cf50e2bfb5d2b0f1a5e850380d7cd3b`(2026-08-07 蓝绿发布,端口 3011)
+- 灰度:`NEXT_PUBLIC_CANVAS_ENABLED=true`、`CANVAS_PUBLIC_ENABLED=false`、白名单 **2 人**、`CANVAS_VIDEO_MODELS=happyhorse`(2026-08-08 起;grok 因厂商无通道被摘出名单,代码保留,见 P0 看板 R2-Q1)
+- 线上版本 **`abc29ac3d807fe9bb1e95b204da436f066bdd9f4`**(2026-08-08 蓝绿发布,端口 **3012**;上一版 `a24a4e30…`/3011 仍在线待回滚)
 
 > ⚠️ **已知过期文档,勿被误导**:`SUPER_CANVAS_P1_ACCELERATED_EXECUTION_PLAN.md` 顶部仍写 `PHASE_4_COMPLETE_OFFLINE_GREEN`、Phase 5/6 checkbox 全空——**与生产事实不符**,Phase 6「生产迁移+上线」早已发生。以本节为准。
 
-**下一步**:①**发版**(卡在用户人工动作上:分支 `codex/canvas-p1-acceptance` 领先 origin/main 5 个提交,含 9 个接口的鉴权修复;生产 release 是从 origin 拉 sha 的 git 检出,故须用户先 push+合 main,AI 不 push 是铁律。合完由本窗蓝绿发布,并在新 release 的 `.env.local` 把两个 `CANVAS_VIDEO_MODELS` 改为 `happyhorse`);②发版后补测 happyhorse 视频链路,R2 剩余两项(资金③退款、资金④并发直击)随之定性;③R2-Q2 图片 unknown 恢复面缺口待裁决;④全过后按阶梯扩灰度(白名单 1→3-5 真实用户观察 3-7 天→CANVAS_PUBLIC_ENABLED=true);⑤P2 五批方案已获用户认可,待 R2 收口后开工(P2-1 批量与积分底座起步,开工前建 P2 看板+扩机器守卫;场景/道具落表方案与音频开关价目两项前置裁决届时提请)。
+**✅ 2026-08-08 已发版**(PR #28 合入 main → `abc29ac`,蓝绿切到端口 3012):
+
+- 安全修复上线并实测生效:**15 个原零鉴权路由在生产全部返回 401**(11 个 video-batch + 4 个 admin 读接口);同一管理员登录态下管理后台用户详情页四个板块全部 200 且渲染真实数据——**读得到、匿名读不到,零回归**
+- **happyhorse 已在生产生效**:视频节点模型下拉只剩 `HappyHorse`,时长选项随之从 grok 的 10/15 秒变为 5/12 秒(进一步佐证「选项少」是能力矩阵的正确投影),价目显示 5 秒 450 积分与 `catalog.ts` 一致。**未点生成**(450 积分超出本轮授权额度)
+- 回归全过:站点 200、`/canvas` 未登录 307、图片生成实测出图(新生成 `bebca173`,5 积分,产物落 `media.toryxai.com`)
+- 回滚包 `canvas-rollback-20260808T115215Z-port-3011-915446`;上一版 `a24a4e30…`/3011 仍在线;发版脚本存档 `/var/backups/stargaze-canvas/deploy-abc29ac-20260808T115215Z.sh`
+- ⚠️ **发版踩坑(下次照做)**:手工 build 必须带 `CANVAS_RELEASE_COMMIT=<40 位 sha>`,否则 `next.config.mjs` 的 `generateBuildId` 落回随机值,蓝绿脚本的 `BUILD_ID 必须等于 release commit` 门会 FAIL(fail-closed,生产未受影响)。另:预检会对「名单不含 grok」报 2 条 WARN,是预期的,不阻断
+
+**下一步**:①R2 剩余两项(资金③退款、资金④并发直击)——退款路径仍需一次真实失败才能验;②R2-Q2 图片 unknown 恢复面缺口待裁决;③卡住的 3 笔 15 积分待裁决;④全过后按阶梯扩灰度(白名单 2→3-5 真实用户观察 3-7 天→CANVAS_PUBLIC_ENABLED=true);⑤P2 五批方案已获用户认可,待 R2 收口后开工(P2-1 批量与积分底座起步,开工前建 P2 看板+扩机器守卫;场景/道具落表方案与音频开关价目两项前置裁决届时提请)。
 
 **工作区**:`.claude/worktrees/canvas-p1-acceptance`(分支 `codex/canvas-p1-acceptance`)。P0 期的三窗分工已退役,详见 CLAUDE.md。
 
