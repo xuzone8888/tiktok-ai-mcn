@@ -2,14 +2,14 @@
 
 StarGaze 是一个 AI 视频创作平台(Next.js + Supabase + 阿里云 OSS,生产站 toryxai.com)。当前主战场:**超级画布的 P1 验收收尾**——对标 liblib.tv LibTV 的无限画布节点编排,一套「分镜→资产装配→逐镜图→图生视频→配音→合成」中台 + 两种起点(**电商带货**=商品节点起 / **剧情创作**=剧本节点起,覆盖漫剧/短剧/推文)。
 
-> **P0 与 P1 的工程、迁移、上线都已完成**,画布正在生产以 canary 灰度运行(白名单 2 人,视频模型 `happyhorse`)。当前唯一在做的事:**R2 收口**——R1 已全过,R2 走查过了资金硬门与并发/租约类的项,但主线旅程 A 还有 5 步没跑完(商品节点整条链路完全没碰),并查出 3 个真实缺陷(R2-Q1/Q2/Q3)。**扩灰度的前置条件尚未满足。P2 尚未开工,未经用户裁决不要自行启动。**
+> **P0 已完成并上线;P1 的工程/迁移/上线也已完成,但「P1 功能全部做到」这个说法已被 2026-08-08 全量复核推翻**——计费/对账/状态机/安全那一层是真做到了,**但生成器面板比 CHECKLIST 承诺的薄一大截,61 项里约 23 项「标了做但没实现」(R2-Q4)**。画布在生产以 canary 灰度运行(白名单 2 人,视频模型 `happyhorse`)。当前在做的事:**R2 收口 + 四个缺陷 R2-Q1~Q4 的裁决与补齐**。**扩灰度前置条件远未满足。P2 尚未开工,未经用户裁决不要自行启动。**
 
 ## 新窗口恢复协议(30 秒弄清现状)
 
 1. 读本文件(你正在读)。
 2. 读 [docs/EXECUTION_TRACKER.md](./docs/EXECUTION_TRACKER.md) 的「当前状态」—— 执行状态唯一事实源。
-3. 读 **[docs/HANDOFF_R2_NEXT.md](./docs/HANDOFF_R2_NEXT.md)** —— **待办清单 + 三个缺陷速查 + 浏览器走查踩坑技巧。新窗口的实际入口就是这份,先读它再动手。**
-4. 读 [docs/SUPER_CANVAS_P0_BOARD.md](./docs/SUPER_CANVAS_P0_BOARD.md) —— D1-D6/S1-S8 已全部合流;R1 完成明细、R2 走查逐项结果、R2-Q1/Q2/Q3 三个缺陷都在这里。
+3. 读 **[docs/HANDOFF_R2_NEXT.md](./docs/HANDOFF_R2_NEXT.md)** —— **待办清单 + 四个缺陷速查 + 浏览器走查踩坑技巧。新窗口的实际入口就是这份,先读它再动手。**
+4. 读 [docs/SUPER_CANVAS_P0_BOARD.md](./docs/SUPER_CANVAS_P0_BOARD.md) —— D1-D6/S1-S8 已全部合流;R1 完成明细、R2 走查逐项结果、R2-Q1~Q4 四个缺陷都在这里。
 5. 每完成一个任务:更新看板状态 → 更新 EXECUTION_TRACKER「当前状态」→ commit。
 6. 需要背景细节才去翻(按需,不必全读):
    - [docs/SUPER_CANVAS_MASTER_PLAN.md](./docs/SUPER_CANVAS_MASTER_PLAN.md) —— 总纲:范围/ADR/分期/验收(裁决层)
@@ -63,7 +63,7 @@ StarGaze 是一个 AI 视频创作平台(Next.js + Supabase + 阿里云 OSS,生�
 | 期 | 功能点 | 状态 |
 |---|---|---|
 | P0 画布骨架 | 48 | ✅ D1-D6/S1-S8 全部合流并上线 |
-| P1 生成接入 | 61 | ✅ 工程 + 数据库迁移 + 生产上线**全部完成**;⚠️ 只剩 R1/R2 真人验收未做 |
+| P1 生成接入 | 61 | ⚠️ 工程/迁移/上线完成,但**功能面约 23 项未实现**(见 P0 看板 R2-Q4);R1 全过,R2 未收口 |
 | P2 | 55 | 未开工,无看板 |
 | P3 / P4 | 11 / 1 | 未开工 |
 
@@ -74,14 +74,17 @@ StarGaze 是一个 AI 视频创作平台(Next.js + Supabase + 阿里云 OSS,生�
 - **11 个画布迁移在生产库 100% 已执行**(逐个探针核对:5 张 canvas 表、40 个 canvas 函数、`generations` 上 4 个 canvas 列、1 条 service_role 策略)
 - **`canvases` 表有 7 行真实数据**——画布不只是部署了,是被真正用过的
 - `/canvas` 公网返回 307(硬鉴权门正常);`stargaze-canvas-reconciler` 常驻在线
-- 灰度开关:`NEXT_PUBLIC_CANVAS_ENABLED=true`(前端入口开)、`CANVAS_PUBLIC_ENABLED=false`、`CANVAS_ACCESS_USER_IDS` **白名单仅 1 人**、`CANVAS_VIDEO_MODELS=grok`
+- 灰度开关:`NEXT_PUBLIC_CANVAS_ENABLED=true`(前端入口开)、`CANVAS_PUBLIC_ENABLED=false`、`CANVAS_ACCESS_USER_IDS` **白名单 2 人**、`CANVAS_VIDEO_MODELS=happyhorse`(grok 因厂商无通道被摘出,代码保留,见 R2-Q1)
+- 线上版本 `abc29ac3d807…`(2026-08-08 蓝绿发布,端口 3012);12 个画布迁移已在生产执行(第 12 个是 2026-08-08 的图片 unknown 恢复)
 
 > ⚠️ **文档陷阱(已知,勿被误导)**:`docs/SUPER_CANVAS_P1_ACCELERATED_EXECUTION_PLAN.md` 顶部状态仍写 `PHASE_4_COMPLETE_OFFLINE_GREEN`、Phase 5/6 的 checkbox 全空,**那是过期的**——Phase 6「生产迁移+上线」实际早已发生。以本节和生产实测为准。
 
-**下一步**(2026-08-08 用户裁决:先验收 P1 再扩灰度):
+**下一步**(详见 [docs/HANDOFF_R2_NEXT.md](./docs/HANDOFF_R2_NEXT.md) §三):
 
-1. 做 P0 看板的 **R1**(验收脚本 + 性能实测)与 **R2**(真人走查),用白名单账号实走一遍生成链路
-2. 验收通过后再决定把 `CANVAS_ACCESS_USER_IDS` 扩到更多人 / 是否翻 `CANVAS_PUBLIC_ENABLED`
-3. **P2 待用户裁决后才开**,不要自行启动
+1. **R2-Q4 裁决**(头号议题):P1 那约 23 项是补齐还是改判「裁/延」——不定这个,后面都无从谈起
+2. **R2-Q3 裁决**:删除 running 三选一补齐还是改判;它不定,资金③退款就没有触发入口
+3. 补跑 R2 剩余走查:视频状态流转须改用 happyhorse(**450 积分/次,须先要授权**)、商品节点全链路、旅程 B
+4. 以上全过后才谈扩灰度(白名单 2→3-5 观察 3-7 天→`CANVAS_PUBLIC_ENABLED=true`)
+5. **P2 待用户裁决后才开**,不要自行启动
 
 **参照物**:LibTV 参照画布 spaceId=2614745(用户已充值;上面留有实测成片与视频故事节点)。
