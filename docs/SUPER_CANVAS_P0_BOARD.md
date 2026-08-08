@@ -346,6 +346,8 @@
       说明文「仅把节点从画布移除。任务会继续跑完，产物照常进入「历史资产」，本次积分按已提交的任务照常结算。」
     - 点「仅移除节点」后:节点从视图与**持久化文档双双移除**(doc rev 57,`node_QoEyEO20T-Mn` 不再在 `doc.nodes`),无报错;
       **而任务在节点消失后仍 `processing` 并继续收敛**(`ea6f9014-604d-454d-8c73-2fc81b7f046d`,扣 5 分、余额 18464→18459、`operation_anchor` 唯一)——「任务继续」这半在生产得证。
+    - **「产物进历史」这半同样得证**:该笔在节点已不存在的情况下于约 7 分钟后跑到 `status=completed`、`credits_refunded=0`;`GET /api/canvas/history?type=image` 从**基线 3 张变为 4 张**,新增项正是 `generations:ea6f9014-…:0001-output-url`(`source=generations`,带真实 objectKey)。`generations.canvas_node_id` 仍指向已移除的 `node_QoEyEO20T-Mn` —— 正是 detach 语义:**行保留引用,文档不再有该节点**,将来要追溯也找得到。
+    - ⇒ **CHECKLIST #251 在生产完整收口**(交付形态为用户裁决的「仅移除 + 返回 + 网关不支持取消则明示」)。
   - **资金③ 退款仍无用户侧触发入口**:本轮交付的是「仅移除」,不产生退款。CHECKLIST #260 的验收仍要靠一次真实失败,或等「取消并退款」具备条件。
 
 - **P0-Q1 · ✅ 已裁决(2026-07-12,技术负责人)**:体积双闸统一为 **>512KB 软告警(建议拆画布,不拒存)/ >2MB 硬拒存并提示**。理由:告警必须早于硬闸,且不妨碍 200 节点 P0 目标。**已落地**:CHECKLIST #29(A 组,改「>512KB 软告警建议拆画布」)/#47(G 组,改「>2MB 硬拒存并提示」)文字与备注、本看板覆盖表(#29→D1+S7、#47→D1+D3+S7)、D1/D3/S7 任务明细、总纲 §五/§七、DATA_MODEL §六 均已同步。**分工**:D3 实施 2MB 硬拒(POST/PATCH >2MB 返 400);S7 实施 512KB 软告警横幅 + 2MB 拒存 toast;D1 只提供两个阈值契约。**待 data 后续 commit 同步(非审核窗改)**:`src/lib/canvas/doc-limits.ts` 常量按裁决翻转(`HARD_LIMIT=2MB`、`WARN_LIMIT=512KB`;f838476 原实现是 hard=512KB/warn=2MB 反的,导致告警分支死代码)+ 迁移文件 `doc_bytes` 注释同步;供 D2 复审时一并核。
