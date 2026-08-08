@@ -1403,12 +1403,16 @@ export function CanvasBoard({
         interactionEnabled={interactionActive}
         onAddAsset={handleAddHistoryAsset}
       />
-      {/* #189 生成面板底部停靠位。宿主本体 pointer-events-none,只有真正 portal 进来的
-          面板恢复 pointer-events,避免空停靠位吃掉画布底部的点击与框选。 */}
+      {/* #189 生成面板底部停靠位。两条约束:
+          ① 宿主本体 pointer-events-none,只有真正 portal 进来的面板恢复 pointer-events,
+             避免空停靠位吃掉画布底部的点击与框选;
+          ② **必须让开底部工具条**——工具条是 React Flow 的 `<Panel position="bottom-center">`
+             (内层 z-index 5),而本宿主是 `<ReactFlow>` 的兄弟节点、z-20,贴 bottom-0 会把
+             「添加节点/上传/历史记录」整条盖住。故留出 bottom-16 的让位高度。 */}
       <div
         ref={setDockHost}
         data-canvas-generation-dock=""
-        className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex max-h-[55%] flex-col items-center gap-2 overflow-y-auto p-3"
+        className="pointer-events-none absolute inset-x-0 bottom-16 z-20 flex max-h-[55%] flex-col items-center gap-2 overflow-y-auto px-3"
       />
       </CanvasDockHostProvider>
     </div>
