@@ -9,6 +9,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { submitSora2, getSora2ModelName } from "@/lib/suchuang-api";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
 
 // ============================================================================
 // 请求/响应类型
@@ -43,11 +44,27 @@ export async function POST(request: NextRequest) {
       quality = "standard",
       modelType = "sora2",
       taskId,
-      userId,
+      userId: requestedUserId,
       creditCost = 0,
       mode = "image_to_video",
       groupName,
     } = body;
+
+    // 身份以登录态为准，忽略请求体伪造的 userId（沿用 models/submit 范式）
+    const authClient = await createClient();
+    const { data: { user } } = await authClient.auth.getUser();
+    if (!user) {
+      return NextResponse.json(
+        { success: false, error: "请先登录" },
+        { status: 401 }
+      );
+    }
+    if (requestedUserId && requestedUserId !== user.id) {
+      return NextResponse.json(
+        { success: false, error: "用户身份不匹配" },
+        { status: 403 }
+      );
+    }
 
     const isPromptMode = mode === "prompt_to_video";
 
@@ -91,7 +108,7 @@ export async function POST(request: NextRequest) {
       durationSeconds,
       quality,
       promptLength: aiVideoPrompt.length,
-      userId: userId || "(not provided)",
+      userId: user.id,
       creditCost,
       hasMainImage: !!mainGridImageUrl,
       mode,
@@ -119,46 +136,42 @@ export async function POST(request: NextRequest) {
     console.log("[Video Batch] Sora task submitted (async):", soraTaskId);
 
     // 立即在数据库中创建 processing 状态的记录
-    if (userId) {
-      try {
-        const supabase = createAdminClient();
-        const { data: insertedData, error: insertError } = await supabase
-          .from("generations")
-          .insert({
-            user_id: userId,
-            task_id: soraTaskId,
-            type: "video",
-            source: isPromptMode ? "batch_video_prompt" : "batch_video",
-            prompt: aiVideoPrompt,
-            model: sora2Model,
-            duration: durationSeconds,
-            aspect_ratio: aspectRatio,
-            quality: quality,
-            source_image_url: mainGridImageUrl || null, // 纯提示词模式下为空
-            status: "processing",  // 初始状态为处理中
-            credit_cost: creditCost,
-            use_pro: isPro,
-            group_name: groupName || "默认",
-            created_at: new Date().toISOString(),
-          })
-          .select()
-          .single();
+    try {
+      const supabase = createAdminClient();
+      const { data: insertedData, error: insertError } = await supabase
+        .from("generations")
+        .insert({
+          user_id: user.id,
+          task_id: soraTaskId,
+          type: "video",
+          source: isPromptMode ? "batch_video_prompt" : "batch_video",
+          prompt: aiVideoPrompt,
+          model: sora2Model,
+          duration: durationSeconds,
+          aspect_ratio: aspectRatio,
+          quality: quality,
+          source_image_url: mainGridImageUrl || null, // 纯提示词模式下为空
+          status: "processing",  // 初始状态为处理中
+          credit_cost: creditCost,
+          use_pro: isPro,
+          group_name: groupName || "默认",
+          created_at: new Date().toISOString(),
+        })
+        .select()
+        .single();
 
-        if (insertError) {
-          console.error("[Video Batch] Failed to create DB record:", insertError);
-        } else {
-          console.log("[Video Batch] Created processing record in DB:", {
-            id: insertedData?.id,
-            taskId: soraTaskId,
-            userId: userId,
-          });
-        }
-      } catch (dbError) {
-        console.error("[Video Batch] Failed to create DB record (exception):", dbError);
-        // 不阻塞返回，继续返回成功
+      if (insertError) {
+        console.error("[Video Batch] Failed to create DB record:", insertError);
+      } else {
+        console.log("[Video Batch] Created processing record in DB:", {
+          id: insertedData?.id,
+          taskId: soraTaskId,
+          userId: user.id,
+        });
       }
-    } else {
-      console.warn("[Video Batch] No userId provided, skipping DB record creation for task:", soraTaskId);
+    } catch (dbError) {
+      console.error("[Video Batch] Failed to create DB record (exception):", dbError);
+      // 不阻塞返回，继续返回成功
     }
 
     // 立即返回任务 ID，不等待完成

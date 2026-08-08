@@ -11,6 +11,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@/lib/supabase/server";
 
 // ============================================================================
 // 请求类型
@@ -36,12 +37,22 @@ interface RequestBody {
 // 内部 API 调用
 // ============================================================================
 
-async function callGenerateTalkingScript(images: string[], taskId: string): Promise<string> {
+// 各子接口均已挂登录态鉴权，服务端→服务端调用必须原样转发调用者的 Cookie，
+// 否则本流水线会在第一步就拿到 401。
+function internalHeaders(cookieHeader: string): HeadersInit {
+  return { "Content-Type": "application/json", cookie: cookieHeader };
+}
+
+async function callGenerateTalkingScript(
+  images: string[],
+  taskId: string,
+  cookieHeader: string
+): Promise<string> {
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-  
+
   const response = await fetch(`${baseUrl}/api/video-batch/generate-talking-script`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: internalHeaders(cookieHeader),
     body: JSON.stringify({ images, taskId }),
   });
 
@@ -60,12 +71,16 @@ async function callGenerateTalkingScript(images: string[], taskId: string): Prom
   return result.data.script;
 }
 
-async function callGenerateAiVideoPrompt(talkingScript: string, taskId: string): Promise<string> {
+async function callGenerateAiVideoPrompt(
+  talkingScript: string,
+  taskId: string,
+  cookieHeader: string
+): Promise<string> {
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-  
+
   const response = await fetch(`${baseUrl}/api/video-batch/generate-ai-video-prompt`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: internalHeaders(cookieHeader),
     body: JSON.stringify({ talkingScript, taskId }),
   });
 
@@ -89,6 +104,7 @@ async function callGenerateSoraVideo(
   mainGridImageUrl: string, 
   aspectRatio: string,
   taskId: string,
+  cookieHeader: string,
   options: {
     durationSeconds?: number;
     quality?: string;
@@ -98,10 +114,10 @@ async function callGenerateSoraVideo(
 ): Promise<{ soraTaskId: string; videoUrl: string }> {
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
   const { durationSeconds = 15, quality = "standard", userId, creditCost = 0 } = options;
-  
+
   const response = await fetch(`${baseUrl}/api/video-batch/generate-sora-video`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: internalHeaders(cookieHeader),
     body: JSON.stringify({ 
       aiVideoPrompt, 
       mainGridImageUrl, 
@@ -139,7 +155,24 @@ async function callGenerateSoraVideo(
 export async function POST(request: NextRequest) {
   try {
     const body: RequestBody = await request.json();
-    const { taskId, images, aspectRatio, userId, durationSeconds = 15, quality = "standard", creditCost = 0 } = body;
+    const { taskId, images, aspectRatio, userId: requestedUserId, durationSeconds = 15, quality = "standard", creditCost = 0 } = body;
+
+    // 身份以登录态为准，忽略请求体伪造的 userId（沿用 models/submit 范式）
+    const authClient = await createClient();
+    const { data: { user } } = await authClient.auth.getUser();
+    if (!user) {
+      return NextResponse.json(
+        { success: false, error: "请先登录" },
+        { status: 401 }
+      );
+    }
+    if (requestedUserId && requestedUserId !== user.id) {
+      return NextResponse.json(
+        { success: false, error: "用户身份不匹配" },
+        { status: 403 }
+      );
+    }
+    const cookieHeader = request.headers.get("cookie") || "";
 
     // 参数校验
     if (!taskId) {
@@ -169,7 +202,7 @@ export async function POST(request: NextRequest) {
       taskId,
       imageCount: images.length,
       aspectRatio,
-      userId,
+      userId: user.id,
     });
 
     // ========================================
@@ -177,14 +210,14 @@ export async function POST(request: NextRequest) {
     // ========================================
     console.log("[Video Batch Pipeline] Step 1: Generating talking script...");
     const imageUrls = images.map((img) => img.url);
-    const talkingScript = await callGenerateTalkingScript(imageUrls, taskId);
+    const talkingScript = await callGenerateTalkingScript(imageUrls, taskId, cookieHeader);
     console.log("[Video Batch Pipeline] Step 1 completed, script length:", talkingScript.length);
 
     // ========================================
     // Step 2: 生成 AI 视频提示词
     // ========================================
     console.log("[Video Batch Pipeline] Step 2: Generating AI video prompt...");
-    const aiVideoPrompt = await callGenerateAiVideoPrompt(talkingScript, taskId);
+    const aiVideoPrompt = await callGenerateAiVideoPrompt(talkingScript, taskId, cookieHeader);
     console.log("[Video Batch Pipeline] Step 2 completed, prompt length:", aiVideoPrompt.length);
 
     // ========================================
@@ -196,7 +229,8 @@ export async function POST(request: NextRequest) {
       mainGridImage.url,
       aspectRatio,
       taskId,
-      { durationSeconds, quality, userId, creditCost }
+      cookieHeader,
+      { durationSeconds, quality, userId: user.id, creditCost }
     );
     console.log("[Video Batch Pipeline] Step 3 completed, video URL:", videoUrl);
 

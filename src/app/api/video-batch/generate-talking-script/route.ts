@@ -8,6 +8,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { generateTalkingScript } from "@/lib/doubao-api";
+import { createClient } from "@/lib/supabase/server";
 
 // ============================================================================
 // 请求/响应类型
@@ -31,6 +32,16 @@ export async function POST(request: NextRequest) {
   try {
     const body: RequestBody = await request.json();
     const { images, taskId, customPrompts } = body;
+
+    // 登录态校验：本接口会消耗豆包厂商额度，不能对未登录者敞开
+    const authClient = await createClient();
+    const { data: { user } } = await authClient.auth.getUser();
+    if (!user) {
+      return NextResponse.json(
+        { success: false, error: "请先登录" },
+        { status: 401 }
+      );
+    }
 
     // 参数校验
     if (!images || images.length === 0) {

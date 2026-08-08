@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { requireAdmin } from "@/lib/admin-auth";
 
 // ============================================================================
 // Admin API: Get User Publish Tasks
@@ -15,6 +16,9 @@ export async function GET(
     { params }: { params: { id: string } }
 ) {
     try {
+        const auth = await requireAdmin();
+        if (auth.error) return auth.error;
+
         const userId = params.id;
         const { searchParams } = new URL(request.url);
         const page = parseInt(searchParams.get("page") || "1");
