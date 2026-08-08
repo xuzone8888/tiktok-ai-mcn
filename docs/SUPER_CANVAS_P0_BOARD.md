@@ -130,6 +130,22 @@
 - **R2 合流 + 对抗审查 + 真人走查**
   - 写入分支转「待审」→ 本窗口 merge → `npx tsc --noEmit` + `npm run build` → 大改动跑对抗审查 workflow 修实锤 → 更新看板状态与 tracker「当前状态」
   - P0 收口:真人 1366×768 全流程走查,卡点(停留>60s 无操作)>2 不算完成
+  - **R2 生产走查进展(2026-08-08,生产 toryxai.com,白名单账号,真实扣费)**:
+
+    | 项 | 结果 | 证据 |
+    |---|---|---|
+    | 灰度白名单 / 价目表 / 非白名单模型拦截 / 伪造金额 / 查询参数白名单 | ✅ | 上一轮已过 |
+    | 资金① 狂点防重复 | ✅ | 上一轮:点「开始生成」×5→0 请求;「确认生成」×5→1 请求扣 1 次 |
+    | **资金② 预估=实扣** | ✅ | 图片切 2K:面板「预计 10 积分」= `generations.credit_cost=10` = 账本 `-10` = 余额 18939→18929,三者相等 |
+    | **资金⑤ 当日对账差异 0** | ✅ | 4 笔生成 ↔ 4 条账本 1:1;链式连续 18949→18924 无断点;每条 `balance_before+amount=balance_after`;`operation_anchor` 全唯一;B0−终余额=25=Σcost−Σrefunded |
+    | **双标签只读横幅** | ✅ | tab B 出现「此画布已在另一个标签页编辑,当前标签页保持只读。」逐字符匹配 |
+    | **关标签对账恢复 + 写者租约接管** | ✅ | 提交后硬关写者标签页,任务在无前端期间自行收敛 `completed` 且产出真实 `result_url`;tab B 只读横幅消失、工具栏恢复,接管写者租约 |
+    | **删除 running 节点** | ✅ | 未决节点删除按钮 `disabled=true`、title「上游状态待核对,为防丢失潜在产物暂不可删除」;同画布空闲视频节点删除按钮 `disabled=false`,形成对照 |
+    | **视频生成** | ❌ **厂商无通道,见 R2-Q1** | grok 两次独立提交(图生/文生)全部落 unknown |
+    | 资金③ 退款恰好一条 | ⚠️ 未能触发 | 画布生产至今**零失败**(全部 4 笔:2 completed + 2 unknown);unknown 按设计不算失败、不退款,故退款路径在生产从未被走过 |
+    | 资金④ 双标签不双扣 | ⚠️ 间接证据充分,未做并发直击 | 三重结构性证据:①每笔生成恰好一条 consume 且 `operation_anchor` 唯一(唯一索引即防双扣栅栏)②第二标签页强制只读,结构上无法并发提交 ③UI 实测幂等栅栏文案「系统将复用任务 …,不会创建新的计费任务」。并发 POST 直击需程序化触发扣费端点,与「不得程序化触发扣费」的执行约束冲突,未做 |
+
+    - **模型能力矩阵实测(定性总纲 §2.4 待定三项)**:仅开 grok 时下拉实际为——模型[Grok]、模式[文生视频/图生视频]、时长[10 秒/15 秒]、质量[标准]、画幅[9:16/16:9]。模式 2 项、画幅 2 项、质量 1 项是 **grok 能力边界的正确投影,非功能缺失**。
 
 ## P0 明确不做(防scope蔓延,开发时别顺手加)
 生成器面板/积分预估/费用条(P1)、任何生成提交(P1)、脚本节点向导(P2)、资产装配(P2)、分享(P3)、合成(P3)。空态只渲染建节点引导。
@@ -153,6 +169,21 @@
 ## 待裁决问题区(P0 开工前/相应任务前必须裁决,勿擅改 CHECKLIST)
 
 > 规则:写入窗遇「必须裁决才能做下去」的问题,写此处,等审核窗+技术负责人(必要时用户)裁决;裁决前**不擅改 CHECKLIST 功能取舍**(铁律#10)。
+
+- **R2-Q1 · 🔴 生产缺陷:画布视频生成自上线起 100% 不可用,且每次尝试永久吞掉积分**(2026-08-08 实测,待修)
+  - **现象**:grok 两次独立提交(图生视频 + 文生视频)全部 `status=pending / provider_submission_state=unknown / task_id=null`,`last_reconcile_error_code=video_submission_outcome_unknown`,各扣 5 积分,不出片、不退款。
+  - **根因(直接打厂商接口复现两次)**:画布 grok 走 `platform-client` → `VIDEO_PLATFORM_BASE_URL`,生产值为 `https://api.hellobabygo.com`;该站对 `grok-imagine-1.0-video` 返回 `503 model_not_found: No available channel for model grok-imagine-1.0-video under group grok1.6`。**不是画布代码缺陷,是厂商侧没有该模型通道**。
+  - **不是上轮图片修复引入的**:`.env.local.bak-imgfix-20260808` 证明 `VIDEO_PLATFORM_BASE_URL` 改动前**已经是** hellobabygo(那次只改了 `VIDEO_PLATFORM_IMAGE_BASE_URL`)。与「生产总共 4 笔画布生成、全是图片、零视频成功」互证:视频链路从未通过。
+  - **为什么钱回不来**:`claim_canvas_generation_reconciliation_v1` 写死 `AND g.provider_submission_state <> 'unknown'`(注释亦言明"Excludes every unknown row"),unknown 视频行**不被任何对账车道认领**;`fail_canvas_generation_v1` 亦显式禁止对 unknown 行失败/退款("Uncertainty is never resolved by failing/refunding")。唯一出口是双人复核的 `resolve_canvas_video_unknown_v1`,须人工执行。
+  - **✅ 已裁决(2026-08-08,用户)**:画布视频名单**只留 happyhorse**(经 DashScope 探测确认可用);**grok 的适配器/目录/路由/价目一律原样保留不删**,等更换 API 供应商后再放回名单。落地方式=生产 `.env.local` 的 `CANVAS_VIDEO_MODELS` 与 `NEXT_PUBLIC_CANVAS_VIDEO_MODELS` 改为 `happyhorse`(后者构建期烘焙,须随发版一起改),**零代码改动**。
+  - ⚠️ happyhorse 5 秒 450 积分 / 12 秒 1080 积分,是 grok 标价的 90 倍;确认弹窗会如实显示,但灰度扩人前需留意。
+
+- **R2-Q2 · 🔴 P1 缺口:图片侧 unknown 行会被停放等人工裁决,可图片侧根本没有人工裁决工具**(2026-08-08 实测,待裁决)
+  - **现象**:生产存在一笔 `9848fcb4-…` 图片生成,`pending/unknown/task_id=null`、`last_reconcile_error_code=direct_image_object_not_found`、`next_reconcile_at=NULL`、扣 5 未退,任何机制都动不了它。
+  - **机制**:`release_canvas_gpt_image_direct_media_recovery_v1` 在 `attempt_count>=20` 时以 `p_manual_audit=true` 调用,把 `next_reconcile_at` 置 NULL —— 设计上就是**停放等人工裁决**。但唯一的人工裁决 RPC `resolve_canvas_video_unknown_v1` 硬性要求 `v_gen.type = 'video'`,图片行必然 `check_violation`,端点返回 409 `RESOLUTION_REJECTED`。
+  - **即:图片 unknown 是一条没有出口的路**。这不是配置问题,是恢复面缺一块。
+  - **候选修法**:新增迁移把该 RPC(或新增同族 `resolve_canvas_image_unknown_v1`)扩到 `type='image'`,复用同一审计表与双人复核头。属 SECURITY DEFINER 且动账,须用户裁决后再写;生产执行照铁律=用户经 Supabase dashboard。
+  - **当前处置(2026-08-08 用户裁决)**:**三笔卡住的积分(2 笔视频 + 1 笔图片,共 15 分)一律先不动**,只留书面结论与证据,待用户另行处置。
 
 - **P0-Q1 · ✅ 已裁决(2026-07-12,技术负责人)**:体积双闸统一为 **>512KB 软告警(建议拆画布,不拒存)/ >2MB 硬拒存并提示**。理由:告警必须早于硬闸,且不妨碍 200 节点 P0 目标。**已落地**:CHECKLIST #29(A 组,改「>512KB 软告警建议拆画布」)/#47(G 组,改「>2MB 硬拒存并提示」)文字与备注、本看板覆盖表(#29→D1+S7、#47→D1+D3+S7)、D1/D3/S7 任务明细、总纲 §五/§七、DATA_MODEL §六 均已同步。**分工**:D3 实施 2MB 硬拒(POST/PATCH >2MB 返 400);S7 实施 512KB 软告警横幅 + 2MB 拒存 toast;D1 只提供两个阈值契约。**待 data 后续 commit 同步(非审核窗改)**:`src/lib/canvas/doc-limits.ts` 常量按裁决翻转(`HARD_LIMIT=2MB`、`WARN_LIMIT=512KB`;f838476 原实现是 hard=512KB/warn=2MB 反的,导致告警分支死代码)+ 迁移文件 `doc_bytes` 注释同步;供 D2 复审时一并核。
 
