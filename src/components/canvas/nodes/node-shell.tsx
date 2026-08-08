@@ -25,6 +25,22 @@ import {
 import { cn } from "@/lib/utils";
 import { useCanvasReadOnly, useCanvasStore } from "@/stores/canvas-store";
 
+import { GenerationDeleteChoices } from "./generation-delete-choices";
+
+/**
+ * 在途任务的「仅移除」描述(CHECKLIST #251)。给出它 = 删除按钮**可点**,
+ * 但弹窗改成三选一;与 `deleteDisabledReason`(彻底禁用)互斥,由调用方按
+ * `generationDeleteDisposition` 的分类二选一传入。
+ */
+export interface NodeDeleteDetach {
+  /** 当前状态一句话(例:任务生成中…)。 */
+  reason: string;
+  /** 「仅移除」的后果说明。 */
+  explainer: string;
+  /** 非 null = 网关不支持撤单,「取消并退款」禁用并明示。 */
+  cancelUnsupportedReason: string | null;
+}
+
 interface NodeShellProps {
   nodeId: string;
   label: string;
@@ -33,6 +49,7 @@ interface NodeShellProps {
   children?: ReactNode;
   wide?: boolean;
   deleteDisabledReason?: string | null;
+  deleteDetach?: NodeDeleteDetach | null;
 }
 
 export function NodeShell({
@@ -43,6 +60,7 @@ export function NodeShell({
   children,
   wide = false,
   deleteDisabledReason = null,
+  deleteDetach = null,
 }: NodeShellProps) {
   const readOnly = useCanvasReadOnly();
   const removeNode = useCanvasStore((state) => state.removeNode);
@@ -71,7 +89,7 @@ export function NodeShell({
               type="button"
               className="nodrag nopan rounded p-1 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:pointer-events-none disabled:opacity-40"
               aria-label={`删除${label}节点`}
-              title={deleteDisabledReason ?? undefined}
+              title={deleteDisabledReason ?? deleteDetach?.reason ?? undefined}
               disabled={readOnly || Boolean(deleteDisabledReason)}
             >
               <Trash2 className="h-3.5 w-3.5" />
@@ -79,23 +97,35 @@ export function NodeShell({
           </AlertDialogTrigger>
           <AlertDialogContent className="nodrag">
             <AlertDialogHeader>
-              <AlertDialogTitle>删除该节点?</AlertDialogTitle>
+              <AlertDialogTitle>
+                {deleteDetach ? "任务生成中，如何处理该节点？" : "删除该节点?"}
+              </AlertDialogTitle>
               <AlertDialogDescription>
-                {deleteDisabledReason
-                  ? deleteDisabledReason
-                  : "将同时移除该节点及相关连线，确认继续？"}
+                {deleteDetach
+                  ? `${deleteDetach.reason}。${deleteDetach.explainer}`
+                  : deleteDisabledReason
+                    ? deleteDisabledReason
+                    : "将同时移除该节点及相关连线，确认继续？"}
               </AlertDialogDescription>
             </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>取消</AlertDialogCancel>
-              <AlertDialogAction
-                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                disabled={readOnly || Boolean(deleteDisabledReason)}
-                onClick={() => removeNode(nodeId)}
-              >
-                删除
-              </AlertDialogAction>
-            </AlertDialogFooter>
+            {deleteDetach ? (
+              <GenerationDeleteChoices
+                cancelUnsupportedReason={deleteDetach.cancelUnsupportedReason}
+                detachLabel="仅移除节点"
+                onDetach={() => removeNode(nodeId)}
+              />
+            ) : (
+              <AlertDialogFooter>
+                <AlertDialogCancel>取消</AlertDialogCancel>
+                <AlertDialogAction
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  disabled={readOnly || Boolean(deleteDisabledReason)}
+                  onClick={() => removeNode(nodeId)}
+                >
+                  删除
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            )}
           </AlertDialogContent>
         </AlertDialog>
       </div>

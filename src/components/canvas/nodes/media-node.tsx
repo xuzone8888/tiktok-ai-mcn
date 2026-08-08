@@ -30,12 +30,45 @@ import {
 } from "../media-url-cache";
 import { useCanvasGeneration } from "../canvas-generation-context";
 import {
+  GENERATION_DETACH_EXPLAINER,
   GenerationControls,
-  generationDeleteBlockReason,
+  generationCancelUnsupportedReason,
+  generationDeleteDisposition,
 } from "./generation-controls";
-import { NodeShell } from "./node-shell";
+import { NodeShell, type NodeDeleteDetach } from "./node-shell";
 
 type MediaKind = "image" | "video";
+
+/**
+ * 把删除处置分类摊成 NodeShell 的两个互斥入参(CHECKLIST #251):
+ * `blocked` → 禁用删除按钮(状态未定,节点是恢复入口);
+ * `detach`  → 按钮可点,弹窗走「取消并退款(明示不可用)/仅移除/返回」三选一。
+ */
+function mediaDeleteProps(
+  kind: MediaKind,
+  data: NodeProps<CanvasReactFlowNode>["data"],
+  generation: Parameters<typeof generationDeleteDisposition>[0],
+  options: NonNullable<Parameters<typeof generationDeleteDisposition>[1]>
+): {
+  deleteDisabledReason: string | null;
+  deleteDetach: NodeDeleteDetach | null;
+} {
+  const disposition = generationDeleteDisposition(generation, options);
+  if (disposition?.kind === "detach") {
+    return {
+      deleteDisabledReason: null,
+      deleteDetach: {
+        reason: disposition.reason,
+        explainer: GENERATION_DETACH_EXPLAINER,
+        cancelUnsupportedReason: generationCancelUnsupportedReason(kind, data),
+      },
+    };
+  }
+  return {
+    deleteDisabledReason: disposition?.reason ?? null,
+    deleteDetach: null,
+  };
+}
 
 interface MediaUrlState {
   status: "idle" | "pending" | "resolved" | "error";
@@ -196,10 +229,15 @@ function ImageNodeImpl({ id, data, selected }: NodeProps<CanvasReactFlowNode>) {
     unresolvedActionByNodeId,
   } = useCanvasGeneration();
   const generation = generationByNodeId.get(id);
-  const deleteDisabledReason = generationDeleteBlockReason(generation, {
-    syncState: canvasId === null ? undefined : syncState,
-    unresolvedActionId: unresolvedActionByNodeId.get(id),
-  });
+  const { deleteDisabledReason, deleteDetach } = mediaDeleteProps(
+    "image",
+    data,
+    generation,
+    {
+      syncState: canvasId === null ? undefined : syncState,
+      unresolvedActionId: unresolvedActionByNodeId.get(id),
+    }
+  );
 
   let body: ReactNode;
   if (!isOssObjectKey(ossKey)) {
@@ -239,6 +277,7 @@ function ImageNodeImpl({ id, data, selected }: NodeProps<CanvasReactFlowNode>) {
       selected={selected}
       wide={Boolean(selected && !lowZoom)}
       deleteDisabledReason={deleteDisabledReason}
+      deleteDetach={deleteDetach}
     >
       {body}
       {selected && !lowZoom && (
@@ -281,10 +320,15 @@ function VideoNodeImpl({ id, data, selected }: NodeProps<CanvasReactFlowNode>) {
     unresolvedActionByNodeId,
   } = useCanvasGeneration();
   const generation = generationByNodeId.get(id);
-  const deleteDisabledReason = generationDeleteBlockReason(generation, {
-    syncState: canvasId === null ? undefined : syncState,
-    unresolvedActionId: unresolvedActionByNodeId.get(id),
-  });
+  const { deleteDisabledReason, deleteDetach } = mediaDeleteProps(
+    "video",
+    data,
+    generation,
+    {
+      syncState: canvasId === null ? undefined : syncState,
+      unresolvedActionId: unresolvedActionByNodeId.get(id),
+    }
+  );
 
   let body: ReactNode;
   if (!hasVideo) {
@@ -362,6 +406,7 @@ function VideoNodeImpl({ id, data, selected }: NodeProps<CanvasReactFlowNode>) {
       selected={selected}
       wide={Boolean(selected && !lowZoom)}
       deleteDisabledReason={deleteDisabledReason}
+      deleteDetach={deleteDetach}
     >
       {body}
       {selected && !lowZoom && (
