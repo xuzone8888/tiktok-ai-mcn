@@ -1,6 +1,7 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { mergeActionLogMetadata } from '@/lib/social-comments/action-log'
 import {
+  assertFacebookRequiredPageScopes,
   calculateFacebookTokenExpiration,
   getGrantedFacebookScopes,
   getFacebookGrantedPermissions,
@@ -357,6 +358,7 @@ async function getFacebookToken(admin: any, userId: string, accountId: string): 
       getFacebookUserInfo(refreshed.user_access_token),
       getFacebookGrantedPermissions(refreshed.user_access_token),
     ])
+    assertFacebookRequiredPageScopes(permissions)
     scopes = getGrantedFacebookScopes(permissions)
     const expiresAt = calculateFacebookTokenExpiration(refreshed.expires_in)?.toISOString() || null
     accessToken = refreshed.access_token

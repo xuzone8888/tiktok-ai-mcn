@@ -2,7 +2,7 @@ import crypto from 'crypto'
 
 import { callBroker, isBrokerEnabled } from '@/lib/oauth-broker/client'
 
-const FACEBOOK_API_VERSION = process.env.FACEBOOK_API_VERSION || 'v20.0'
+const FACEBOOK_API_VERSION = process.env.FACEBOOK_API_VERSION || 'v25.0'
 const FACEBOOK_AUTH_URL = `https://www.facebook.com/${FACEBOOK_API_VERSION}/dialog/oauth`
 const FACEBOOK_GRAPH_URL = `https://graph.facebook.com/${FACEBOOK_API_VERSION}`
 
@@ -71,6 +71,29 @@ export const FACEBOOK_PAGE_SCOPES = [
   'pages_manage_posts',
   'pages_manage_engagement',
 ]
+
+export function getMissingFacebookPageScopes(
+  permissions: FacebookPermissionInfo[],
+): string[] {
+  const granted = new Set(
+    permissions
+      .filter((entry) => entry.status === 'granted')
+      .map((entry) => entry.permission.trim())
+      .filter(Boolean),
+  )
+  return FACEBOOK_PAGE_SCOPES.filter((scope) => !granted.has(scope))
+}
+
+export function assertFacebookRequiredPageScopes(
+  permissions: FacebookPermissionInfo[],
+): void {
+  const missing = getMissingFacebookPageScopes(permissions)
+  if (missing.length > 0) {
+    throw new Error(
+      `Facebook Page authorization is missing required permissions: ${missing.join(', ')}. Please reconnect and grant all requested Page permissions.`,
+    )
+  }
+}
 export function hasFacebookPagePublishPermission(tasks: string[] | null | undefined): boolean {
   return Array.isArray(tasks) && tasks.some((task) => FACEBOOK_PAGE_PUBLISH_TASKS.has(task))
 }

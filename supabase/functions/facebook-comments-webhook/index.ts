@@ -45,7 +45,6 @@ export function createPostgrestFacebookWebhookDatabase(
         .select('id,user_id,channel_id')
         .eq('channel_id', accountExternalId)
         .eq('status', 'active')
-        .limit(2)
       const rows = normalizeRows<FacebookAccountRecord>(data, (row) => {
         const id = requiredText(row, 'id')
         const userId = requiredText(row, 'user_id')

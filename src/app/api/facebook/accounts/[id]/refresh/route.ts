@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import {
+  assertFacebookRequiredPageScopes,
   calculateFacebookTokenExpiration,
   getGrantedFacebookScopes,
   getFacebookGrantedPermissions,
@@ -51,6 +52,7 @@ export async function POST(_request: NextRequest, { params }: { params: { id: st
       getFacebookGrantedPermissions(token.user_access_token),
     ])
     const scopes = getGrantedFacebookScopes(permissions)
+    assertFacebookRequiredPageScopes(permissions)
     if (isFacebookPageWebhookEnabled()) {
       await subscribeFacebookPageToWebhooks(token.page.pageId, token.access_token)
     }
