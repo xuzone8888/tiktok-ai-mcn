@@ -40,25 +40,36 @@ main = `3dee031`（PR #34/#35 已合），代码面等于线上。**这两批都
 
 ## 负二、新窗口该做什么
 
-### ① 🔴 清三笔卡住的积分（建议在扩灰度之前做）
+### ① ✅ 三笔卡住的积分已结清（2026-08-09）
 
-生产有 3 笔 `pending`/`unknown` 行，共 15 积分：
-
-| id | 类型 | 错误码 |
+| id | 类型 | 结果 |
 |---|---|---|
-| `329a5399-f50f-420d-9ce1-b95f3e8c82fa` | video | `video_submission_outcome_unknown` |
+| `9848fcb4-4bad-46e3-bf47-3acc8fe7ce34` | image | `pending/unknown → failed`，退 5 |
+| `329a5399-f50f-420d-9ce1-b95f3e8c82fa` | video | 同上 |
 | `02e20c34-8fc6-45b4-8bee-f4b50deb73dd` | video | 同上 |
-| `9848fcb4-4bad-46e3-bf47-3acc8fe7ce34` | image | `direct_image_object_not_found` |
 
-**三笔 `task_id` 全是 `null`——厂商从头到尾没接过单**，所以走 `verified_no_task_refund` 退款是事实正确的。
+余额 18459 → **18474**（+15）。**生产已无 `pending` 行。**
+`provider_submission_state` 仍留 `unknown` 是设计如此——它记录「当时确实不知道」，裁决只改状态与退款，不篡改历史。
 
-> **做这件事的理由不是那 15 积分**（余额 18459，可忽略），而是：**R2-Q2 那个「让人工裁决 RPC 支持图片行」的迁移，在生产执行了却从没真的跑过一次图片行**。`9848fcb4` 是唯一一笔图片 unknown。宁可现在用自家 5 积分的测试数据发现问题，也不要等扩灰度后真实用户卡住时才发现。
+> **最大收获不是那 15 积分**：`9848fcb4` 是唯一一笔图片 unknown，**R2-Q2 那个「让人工裁决 RPC 支持图片行」的迁移至此才第一次在真实图片行上跑通**（此前只是在生产执行了 DDL，从没被调用过）。
 
-工具：`scripts/resolve-canvas-unknown.mjs`（要 loopback URL + root 权限密钥文件 + 审批单号 + `--execute`，有审计痕迹的正式操作）。服务器上有只读探针 `/root/r2probe.sh`（用法 `balance|gens N|ledger N`）。
+**操作方式（下次照做）**：`scripts/resolve-canvas-unknown.mjs`
+```
+node scripts/resolve-canvas-unknown.mjs \
+  --url http://127.0.0.1:<线上端口>/api/internal/canvas/resolve-unknown \
+  --env-file ./.env.local --request-file /root/<req>.json [--execute]
+```
+- **`--url` 必须是完整端点路径**（只给 `http://127.0.0.1:<port>` 会被拒：「must be the exact numeric-loopback HTTP recovery endpoint」）；
+- 请求文件须 root 独占 `0600`，字段＝`resolutionId`(uuid) / `generationId` / `resolution`（`verified_no_task_refund` 时 `taskId` 必须为 `null`）/ `approvalTicket` / `providerEvidence`(8-1700 字，写清「为什么断定厂商没接单」)；
+- 不带 `--execute` 是干跑校验，先跑它；
+- 端点要 `CANVAS_RECOVERY_ADMIN_SECRET` 与 `CANVAS_RECOVERY_APPROVER_SECRET` **两个不同**的密钥（代码显式校验不相等＝双人复核）。生产已配好（各 64 位）。
+- ⚠️ **但这两个密钥同在服务器一个 `.env.local` 里**，有 root 就两个都拿得到 —— **双人复核在当前部署下是名义上的**。真要这道控制生效，得把 approver 密钥挪到另一个人/另一处保管。
 
-### ② 删测试画布 `047fb5dd` 里的 2 个空商品节点
+只读探针：`/root/r2probe.sh`（`balance|gens N|ledger N`）。
 
-`node_v3hNjrCWBTz3` / `node_KSK8Zcdoj9f2`，无产物未扣费，走查误建。留着只会让下次回归多两个干扰项。
+### ② ✅ 测试画布 `047fb5dd` 的 2 个空商品节点已删（rev 59 → 61）
+
+现只剩 `node_Fdwjog578y-E`（图片，有成品图）→ `node_vgRTVmF9kJi-`（视频，有成片）一条链，是干净的回归夹具。
 
 ### ③ ✅ 已对所有人开放（2026-08-09 用户裁决：跳过灰度阶梯）
 
@@ -87,7 +98,38 @@ main = `3dee031`（PR #34/#35 已合），代码面等于线上。**这两批都
 | 78 | 图片比例 13 种 | 面板 6 种。**曾扩到 11 项又撤回**——上游 `sizeMap` 每档只有 6 个 key，多出的会静默回落 auto 却按全价扣费。要补必须先给 sizeMap 补像素尺寸，那是 quick-gen/image-factory 共用链路 |
 
 > ⚠️ 这张表是「R2-Q4 逐项复核结论」与「今天补齐清单」交叉得出的，**不是今天重新逐项核过**。
-> 动手前建议按 R2-Q4 的三重交叉（面板渲染面枚举 + 特征串全仓 grep + 生产 UI 实测）重核一遍，别直接照抄。
+> 动手前**第一件事就是按 R2-Q4 的三重交叉重核一遍**（面板渲染面枚举 + 特征串全仓 grep + 生产 UI 实测），别直接照抄——今天已经有过「文档说某处有某物、实际没有」的先例。
+
+### ③-c P1 收尾的建议批次（按依赖与承载面分组，不是按工时）
+
+**批 0 · 先重核（半天，必须先做）**
+用三重交叉把上面 8 项逐个再验一遍，产出「确实缺 / 其实有 / 判据变了」三分。**其中至少两项我预判会有变化**：#78 图片比例受上游 sizeMap 限制、#85 受「画布够不着 `/api/generate/image`」限制，这两条的性质更接近「外部条件不具备」而非「没做」。
+
+**批 1 · 节点级工具条承载面 + 两件工具（#82 裁剪 / #83 整图重生成）**
+`NodeToolbar` 全仓 0 命中 —— #81/#82/#83/#85 四项都以它为前提，**必须先建承载面**，这也是 R2-Q4 判定的两个「跨切片结构性问题」之一。
+先做能自足的两件：**#83 整图重生成**＝复用画布已有的生图链路（最省）；**#82 裁剪**＝纯前端。
+
+**批 2 · 🔴 需用户裁决后才能做(#81 高清 / #85 nine_grid)**
+两者都要用 `/api/generate/image` 里现成的 `upscale` / `nine_grid` 分支，**但画布对该路由引用数为 0**（画布只调 6 组 `/api/canvas/*`）。要接通只有两条路，都触及 ADR：
+- ① 在画布的 `generation-intent` 里扩 mode 枚举并让 `/api/canvas/generations` 转发 —— 属「参数扩展」还是「fork 执行链路」需裁决；
+- ② 让画布直调 `/api/generate/image` —— 与「零 fork、执行留现有链路」的铁律 1 冲突更小，但会绕开画布自己的计费/对账链路，**这条我倾向否决**。
+⚠️ CHECKLIST #85 的备注写着「复用现成 nine_grid 分支，纯 UI 露出 S」——**那个工作量估计是错的**，R2-Q4 已指出。
+
+**批 3 · 轻量前端（#43 dirty 角标 / #92 图片空态快捷）**
+#43 ＝节点存上游 `generationId` 快照、与当前值比对即知（CHECKLIST 自己写的做法）；#92 ＝空态多两个按钮。两项都不碰资金链路。
+
+**批 4 · #182 @引用素材（@节点 / @历史）**
+要一个提及选择器（M）。**引用区（#44）已经做好了「已引用」这一半**，#182 是「怎么加引用」那一半，两者应共用同一份数据源与序号语义，别各写一套。
+
+**批 5 · #67 商品节点轻量版（最大一块，双轨起点之一）**
+现状只有删除按钮 + 一个 textarea。要补「上传图 + 卖点卡」。复用件：`src/lib/studio/product-vision.ts` + `blueprints.product` jsonb（CHECKLIST 已指明）。**建议单独一批做，别和别的混**——它是电商轨的入口，做砸了用户第一步就卡住。
+
+**批 6 · #211 交互式教程**
+`canvas-chrome-policy.ts` 里 `enabled:false`，本体不存在。注意 **#237「教程完成奖励积分」已改判延 P2**，所以这一批只做教程本体，不做发奖。
+
+**🔴 单独提请裁决：#78 图片比例 13 种**
+面板 6 种。曾扩到 11 项**又撤回**——上游 `getVideoPlatformImageSize` 的 `sizeMap` 每档只有 6 个 key，末行 `sizeMap[r]?.[ratio] || sizeMap[r]?.auto || null` 会让多出来的档位**静默回落 auto 却按全价扣费**。要真补必须先给 sizeMap 补像素尺寸并确认 gpt-image-2 接受，而那是 **quick-gen / image-factory 共用链路，不属画布单方改动**。
+**建议：要么排期改上游，要么按「外部条件不具备」改判延 P2**（与今天那 8 项同一判据）。这条须用户拍板，AI 不擅改。
 
 ### ④ 已知但**不修**的一项
 
