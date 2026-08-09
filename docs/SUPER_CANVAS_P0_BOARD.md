@@ -359,7 +359,7 @@
   > 零命中,只有汇总数(15/30/15)与 8+1 提案。唯一幸存记录是 HANDOFF 里那 6 行摘要。
   > 下表按它重建,**每项均已重新代码实证**,HANDOFF 的失准表述已一并更正。
 
-  **进度(2026-08-09)**:1-4 已落地过闸,5-6 待做。
+  **进度(2026-08-09)**:✅ **6/6 全部落地过闸,尚未发版。**
 
   | 序 | 项 | 状态 | commit |
   |---|---|---|---|
@@ -367,12 +367,29 @@
   | 2 | #187 参数人话文案 + 悬停示例 | ✅ | `17e87c5` |
   | 3 | #186 灰置控件解锁指引 | ✅ | `e6bfe41` |
   | 4 | #84 产物全屏预览 | ✅ | `fab0ebf` |
-  | 5 | #44+#72+#94 引用区缩略图带序号 | ⏳ 待做(M) | — |
-  | 6 | #64 入库 + 推为参考 | ⏳ 待做(M,唯一有服务端面) | — |
+  | 5 | #44+#72+#94 引用区缩略图带序号 | ✅ | `f4bd9a2` |
+  | 6 | #64 入库 + 推为参考 | ✅ | `5b53a95` |
 
-  闸门累计:`verify-canvas-generation-frontend` 由 49 → **99**(新增 50 条);
+  闸门累计:`verify-canvas-generation-frontend` 由 49 → **122**(新增 73 条);
   `verify-canvas-generation-backend` 46 → **61**;`verify-canvas-s6` 138 → **141**;
-  `runtime` 544、`intent` 122 无回归;每项均过 `tsc --noEmit` 与 `npm run build`(exit 0)。
+  `runtime` 544 / `intent` 122 / `s3` / `s4` / `schema` 无回归;
+  每项均过 `tsc --noEmit` 与 `npm run build`(exit 0)。
+
+  **补齐过程中查出并修掉的两个真缺陷**(不在原清单里,是做的时候撞见的):
+
+  1. **面板与提交路径的上游排序本来就不一致**。提交 `generationInputNodes` 按**连线顺序**,
+     面板 `incoming` 是 `nodes.filter(idSet.has)` 即**节点数组顺序**。此前只用来算数量(与序无关)
+     所以没暴露;引用区一按序号渲染,UI 的「图2」就可能是请求里的第 1 张参考图——用户照错编号
+     写提示词、按全价扣分、拿回不对的图,**静默且要花钱才发现**。已抽成唯一真相源
+     `generation-input-order.ts`,两条路径共用,verifier 钉住「两边同源」。
+  2. **`/api/studio/library` 的 `updated` 数的是 `task_id` 而不是行**。画布同步完成的图片
+     `task_id` 恒为 null,入库明明成功却回 `updated: 0`,客户端据此报失败。已改为数行。
+
+  **#64 的服务端选型**:`/api/studio/library` 原按 `task_id` 匹配,而画布直连图片
+  `task_id` 恒为 null(`bindProviderTask` 只在 `status==="processing" && platformTaskId` 时才调),
+  故该端点原样对画布不可用。按铁律 1(零 fork、允许参数扩展)**扩现有端点**新增 `generationIds`
+  二选一匹配键,而非新建画布专用路由——属主校验 / completed 闸 / published 守卫那几道闸
+  只该有一份,复制一份迟早漂移。四道闸原样不动并由 verifier 逐条钉住。
 
   | 序 | 项 | 现状(2026-08-09 代码实证) | 档位 | 依赖 / 风险 |
   |---|---|---|---|---|

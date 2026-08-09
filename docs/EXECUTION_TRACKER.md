@@ -21,8 +21,10 @@
   - **第零步生产核对全绿**:站点 200、`/canvas` 匿名 307、nginx→3013、两个 `CANVAS_VIDEO_MODELS=happyhorse`、`VIDEO_PLATFORM_IMAGE_BASE_URL=https://api.hellobabygo.com`、`stargaze-canvas-d16620f` 与 reconciler 均 online、磁盘余 12G
   - ⚠️ **交接文档一处失准已更正**:HANDOFF 称「完整分档清单/工作量档位/便宜活排序全在 P0 看板 R2-Q4」——**看板全文无此表**(`#44`/`#72`/`#84`/`#186`/`#187`/`#64` 零命中),仅有汇总数与 8+1 提案。分档表未落盘,按 HANDOFF 幸存摘要重建后已补进看板
   - ⚠️ **停靠位 `max-h` 成因更正**:`canvas-board.tsx:1415` 是硬编码 `max-h-[55%]`,**并未引用** `GENERATION_PANEL_MAX_HEIGHT_RATIO`——是重复魔数而非「常量误用」;修法不变(另立 `GENERATION_DOCK_MAX_HEIGHT_RATIO` 并由它驱动样式 + 单测)
-  - **R2-Q4 补齐批次已完成 4/6**(按重建后的排序做):#51②③ 回前台触发+常态手动刷新(`258ab2e`)、#187 参数人话文案+悬停示例(`17e87c5`)、#186 灰置控件解锁指引(`e6bfe41`)、#84 产物全屏预览(`fab0ebf`);另 #185 阈值改造(`70d2ded`)、停靠位常量(`1f9d887`)。**待做 2 项(均 M 档)**:#44+#72+#94 引用区缩略图带序号、#64 入库+推为参考(本批唯一有服务端面)
-  - **闸门累计**:`generation-frontend` 49→**99**、`generation-backend` 46→**61**、`s6` 138→**141**;`runtime` 544 / `intent` 122 无回归;每项均过 `tsc --noEmit` + `npm run build`(exit 0)。**尚未发版**——补齐批次全部做完后再一起蓝绿
+  - ✅ **R2-Q4 补齐批次 6/6 全部完成**(按重建后的排序):#51②③ 回前台触发+常态手动刷新(`258ab2e`)、#187 参数人话文案+悬停示例(`17e87c5`)、#186 灰置控件解锁指引(`e6bfe41`)、#84 产物全屏预览(`fab0ebf`)、#44+#72+#94 引用区缩略图带序号(`f4bd9a2`)、#64 入库+推为参考(`5b53a95`);另 #185 阈值改造(`70d2ded`)、停靠位常量(`1f9d887`)
+  - **补齐过程中撞见并修掉两个真缺陷**(不在原清单里):①**面板与提交路径的上游排序不一致**——提交按连线序、面板按节点数组序,此前只算数量所以没暴露,引用区一按序号渲染就会让 UI 的「图2」指向请求里的第 1 张参考图(静默、要花钱才发现);已抽成唯一真相源 `generation-input-order.ts` 两边共用。②**`/api/studio/library` 的 `updated` 数的是 `task_id` 而非行**,画布图片 `task_id` 恒为 null,入库成功却回 0
+  - **闸门累计**:`generation-frontend` 49→**122**(新增 73 条)、`generation-backend` 46→**61**、`s6` 138→**141**;`runtime` 544 / `intent` 122 / `s3` / `s4` / `schema` 无回归;每项均过 `tsc --noEmit` + `npm run build`(exit 0)
+  - 🔴 **尚未发版**。下一步=蓝绿发布(手工 build 必须带 `CANVAS_RELEASE_COMMIT=<40位sha>`,否则 BUILD_ID 门 FAIL),发版后做一轮生产 UI 复验,再谈扩灰度
 - **P0(画布骨架,48 功能点)**:✅ D1-D6、S1-S8 全部合流并上线
 - 🆕 **2026-08-08 晚 · R2 第二轮**(详见 P0 看板「R2 第二轮补跑」表与「R2-Q4 复核第二轮」):
   - **画布视频链路首次在生产跑通** —— happyhorse 图生视频 `a40b3114`:`pending→processing→completed` 约 2 分钟,`provider_submission_state=bound` + 真 task_id,450 积分实扣、零退款,余额 18914→18464 与预估分毫不差。R2-Q1 的「名单只留 happyhorse」裁决就此闭环验证。走查卡主线③④⑤ 全部通过(「去发布」按铁律未点)
