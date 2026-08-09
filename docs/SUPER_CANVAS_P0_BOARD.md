@@ -351,6 +351,26 @@
     - **P1 由 61 降为 52**(8 项 B 组 + 1 项 F 组离开「做」)。CLAUDE.md 期次表、EXECUTION_TRACKER 已同步。
     - 落笔前逐项代码实证(不是照抄提案):`VideoGenerationMode` 仅 2 值 / 七模型 `supportedModes` 全 2 个 / `first_frame`+`last_frame` 零引用;`VideoAspectRatio` 仅 `9:16`+`16:9`;`VideoQuality` 仅 `standard`+`hd`(无 P 档维度);`generation-intent.ts:140` 硬钉 `z.literal("gpt-image-2")`;`canvas-chrome-policy.ts:49` 教程 `enabled:false`;全仓仅 3 个 sweep 且都只管未 bound 行、`maxPollMs` 在画布侧零消费。
 
+  ### ✅ R2-Q4 补齐批次的生产 UI 复验(2026-08-09,线上 `33ba71d`,前台可见标签)
+
+  | 项 | 实测结果 |
+  |---|---|
+  | #84 全屏预览 | 打开→`enter` 动画事件齐全;**Close 按钮与真实 Escape 按键都能关**;关闭后元素卸载、`body{pointer-events}` 恢复 `auto`、`data-scroll-locked` 清空;视频 `readyState 4`、720×1280、时长 5.2s、渲染 1126×668 |
+  | #44 + #72 + #94 引用区 | 「引用区 · 1 张参考图(提示词里可用「图1」指代第一张)」+ 缩略图**真加载**(`naturalWidth 948`)+ `title="图1(连线顺序第 1 张)"`;**「推为参考」新建的下游节点立刻显示图1**,与 #64 闭环 |
+  | #187 人话文案 | 模型/模式/时长/质量四项,`label.title`、`select.title`、`aria-description` 三处齐全,文案与源码逐字一致 |
+  | #186 解锁指引 | 只读分支显示「当前标签页是只读态…」+ 两条自助步骤,与页面实际状态吻合 |
+  | #51③ 刷新状态 | 只读态正确不渲染;取得写权后出现 |
+  | #64 入库 | 点击后按钮变「已入库」并禁用。**这就是服务端真的改了行**——客户端在 `updated=0` 时会抛错弹失败 toast,没有触发;且走的是新增的 `generationIds` 匹配键(画布图片 `task_id` 恒为 null,旧 `taskIds` 路径匹配不到) |
+  | #64 推为参考 | 新建视频节点 + 自动连线 `图片→新视频`,**持久化** rev 57→58、doc 节点 4→5 |
+  | #250 删除二次确认 | 清理测试节点时顺带验到:弹「删除该节点?」+ 取消/删除;确认后 doc 与 DOM 双双移除,rev→59 |
+  | 停靠位 `max-h` | 1352×642 下 `style.maxHeight="75%"`,确认由 `GENERATION_DOCK_MAX_HEIGHT_RATIO` 驱动而非旧的硬编码 |
+
+  **仍在的非阻断摩擦**:1352×642 下视频面板 `scrollHeight 485 > clientHeight 419`,**溢出 66px 需滚一次**,且「下载/全屏/去发布」整行落在被切掉的部分。比改造前(389 vs 294,溢出 95px)有改善但未消除。继续抬高比例会让停靠位吃掉大半画布,**不再调**,记为已知摩擦。
+
+  🔴 **复验期间踩到的最大坑(已写进 §七 自检)**:最初在 **hidden 标签页**里做验证,Chrome 停发 `rAF` → CSS 动画被创建、`getAnimations()` 报 `running` 却永不推进、**永不派发 `animationend`** → Radix `Presence` 不卸载 → `body{pointer-events:none}` 常驻。现象与「点一次全屏预览就把画布点死」**完全一致**,两次「干净复现」后差点建议回滚一个完全正常的功能。同一原因也让 `<video>` 卡在 `readyState 0`,当时被误记成既有的播放停滞。**动画/媒体类结论出手前必须先查可见性。**
+
+  **本次复验产生的真实副作用(已知悉)**:图片生成 `bebca173` 的 `library_status` 被置为 `ready`(这正是入库该做的事);测试画布 `047fb5dd` rev 57→59(建了一个节点又删掉,**净文档内容与复验前一致**)。
+
   ### 🔴 #185 收口:发版后审计查出 18 条存活问题,已整改(2026-08-09 下午)
 
   **起因**:#185 发版(`33ba71d`)后自查撞见「Ctrl+Enter 零确认扣 450」,判断「偶然撞见=可能还有」,遂做全量审计(4 视角并行找 + 每条另派复核者**尽力推翻**,推不翻才算数)。**存活 18 条**,其中四条比 Ctrl+Enter 严重:
