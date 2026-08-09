@@ -7,6 +7,7 @@
  * callsites. It has no credentials, browser, database, or network dependency.
  */
 import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -41,6 +42,25 @@ function has(source, fragment, label) {
 
 function lacks(source, fragment, label) {
   ok(!source.includes(fragment), label);
+}
+
+/**
+ * 无依赖纯模块的离线载入(仅剥类型,不做类型检查——那是 `tsc --noEmit` 的活)。
+ * 只用于本文件里**零 import** 的策略模块;有依赖的走 scripts/canvas-build.mjs。
+ */
+const requireFromHere = createRequire(import.meta.url);
+async function loadPureModule(relPath) {
+  const ts = requireFromHere("typescript");
+  const { outputText } = ts.transpileModule(read(relPath), {
+    compilerOptions: {
+      module: ts.ModuleKind.ESNext,
+      target: ts.ScriptTarget.ES2020,
+    },
+    fileName: relPath,
+  });
+  return import(
+    `data:text/javascript;base64,${Buffer.from(outputText).toString("base64")}`
+  );
 }
 
 console.log("1. Polling authority and cross-canvas isolation");
@@ -322,6 +342,99 @@ has(
   controls,
   'aria-description={hint}',
   "#187 hint is exposed to assistive tech without overriding the parameter name"
+);
+
+console.log(
+  "\nN+2. CHECKLIST #186 — disabled controls explain why and how to unlock"
+);
+const { resolveGenerationLockHint } = await loadPureModule(
+  "src/components/canvas/nodes/generation-lock-hints.ts"
+);
+const baseLock = {
+  readOnly: false,
+  enabled: true,
+  submitting: false,
+  active: false,
+  uncertain: false,
+  reconciling: false,
+  syncState: "ready",
+  kind: "image",
+  incomingImageCount: 0,
+};
+const lock = (patch) => resolveGenerationLockHint({ ...baseLock, ...patch });
+ok(lock({}) === null, "#186 a ready image node reports no lock");
+ok(
+  lock({ kind: "video", videoMode: "prompt_to_video" }) === null,
+  "#186 prompt-to-video needs no upstream image"
+);
+ok(
+  lock({ kind: "video", videoMode: "image_to_video" })?.kind ===
+    "missing_upstream_image",
+  "#186 image-to-video without an upstream image is explained BEFORE submitting"
+);
+ok(
+  lock({ kind: "video", videoMode: "image_to_video", incomingImageCount: 1 }) ===
+    null,
+  "#186 connecting one image clears that lock"
+);
+// 优先级:最硬的原因先讲,免得用户按「去连张图」照做后发现还是不能点。
+ok(
+  lock({ readOnly: true, kind: "video", videoMode: "image_to_video" })?.kind ===
+    "read_only",
+  "#186 read-only outranks the missing-image hint"
+);
+ok(
+  lock({ active: true, kind: "video", videoMode: "image_to_video" })?.kind ===
+    "running",
+  "#186 a running task outranks the missing-image hint"
+);
+ok(
+  lock({ uncertain: true })?.kind === "uncertain",
+  "#186 unknown upstream state is explained"
+);
+ok(
+  lock({ reconciling: true })?.kind === "reconciling",
+  "#186 pending idempotency check is explained"
+);
+ok(
+  lock({ syncState: "loading" })?.kind === "syncing",
+  "#186 in-flight sync is explained"
+);
+ok(
+  lock({ enabled: false })?.kind === "feature_disabled",
+  "#186 gray-release gating is explained"
+);
+for (const patch of [
+  {},
+  { readOnly: true },
+  { enabled: false },
+  { submitting: true },
+  { active: true },
+  { uncertain: true },
+  { reconciling: true },
+  { syncState: "loading" },
+  { kind: "video", videoMode: "image_to_video" },
+]) {
+  const hint = lock(patch);
+  if (!hint) continue;
+  ok(
+    typeof hint.reason === "string" && hint.reason.length > 0,
+    `#186 lock "${hint.kind}" states a reason`
+  );
+  ok(
+    Array.isArray(hint.steps),
+    `#186 lock "${hint.kind}" carries a (possibly empty) step list`
+  );
+}
+has(
+  controls,
+  "为什么现在不能生成？",
+  "#186 the panel exposes a clickable unlock guide"
+);
+has(
+  controls,
+  "resolveGenerationLockHint",
+  "#186 the panel derives the guide from the shared pure resolver, not ad-hoc strings"
 );
 
 if (failed.length > 0) {

@@ -59,6 +59,7 @@ import {
   generationParamHint,
   type GenerationParamHintKey,
 } from "./generation-param-copy";
+import { resolveGenerationLockHint } from "./generation-lock-hints";
 import {
   planCapsuleCollapse,
   resolveGenerationPanelDock,
@@ -604,6 +605,8 @@ export function GenerationControls({
   const [confirmOpen, setConfirmOpen] = useState(false);
   /** 手动刷新在途(CHECKLIST #51③);只驱动按钮的禁用与转圈,不参与任何闸门。 */
   const [manualRefreshing, setManualRefreshing] = useState(false);
+  /** 「如何解锁」指引是否展开(CHECKLIST #186)。 */
+  const [lockHintOpen, setLockHintOpen] = useState(false);
   const generation = generationByNodeId.get(nodeId);
   const unresolvedActionId = unresolvedActionByNodeId.get(nodeId) ?? null;
   const submitting = submittingNodeIds.has(nodeId);
@@ -633,6 +636,29 @@ export function GenerationControls({
       ? getCanvasImageDraftConfig(data)
       : getCanvasVideoDraftConfig(data);
   const configKey = JSON.stringify(config);
+
+  /**
+   * 灰置原因与解锁步骤(CHECKLIST #186)。判定本体是 `generation-lock-hints.ts` 的纯函数
+   * (可离线穷举状态组合),这里只喂参数。
+   *
+   * 注意「图生视频缺上游图」这一条:此前它只在**提交后**由 buildIntent 抛错才被用户看到,
+   * 等于让人先点了才知道不行。现在同一个条件在事前就讲清楚,并给出三条可自助的出路。
+   */
+  const lockHint = resolveGenerationLockHint({
+    readOnly,
+    enabled,
+    submitting,
+    active,
+    uncertain,
+    reconciling: unresolvedActionId !== null,
+    syncState,
+    kind,
+    videoMode:
+      kind === "video"
+        ? (config as CanvasVideoDraftConfig).mode
+        : undefined,
+    incomingImageCount,
+  });
 
   useEffect(() => {
     setEstimateValue(null);
@@ -939,6 +965,39 @@ export function GenerationControls({
                   : "开始生成"}
         </Button>
       </div>
+
+      {/* 灰置控件的「如何解锁」指引(CHECKLIST #186)。
+          刻意做成**点击展开**而非常显:常显会把面板挤满,而缺前置条件本身是少数情形。
+          但入口必须常在 —— 用户盯着一个灰按钮时,得有个地方可点。 */}
+      {lockHint && (
+        <div className="text-[10px] leading-relaxed">
+          <button
+            type="button"
+            className="nodrag nopan inline-flex items-center gap-0.5 text-muted-foreground underline underline-offset-2 hover:text-foreground"
+            aria-expanded={lockHintOpen}
+            onClick={() => setLockHintOpen((value) => !value)}
+          >
+            <AlertCircle className="h-2.5 w-2.5" />
+            {lockHintOpen ? "收起说明" : "为什么现在不能生成？"}
+          </button>
+          {lockHintOpen && (
+            <div className="mt-1 rounded border border-border bg-muted/40 p-1.5">
+              <p className="text-muted-foreground">{lockHint.reason}</p>
+              {lockHint.steps.length > 0 ? (
+                <ul className="mt-1 list-disc space-y-0.5 pl-3.5 text-muted-foreground">
+                  {lockHint.steps.map((step) => (
+                    <li key={step}>{step}</li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="mt-1 text-muted-foreground opacity-80">
+                  这一条没有可自助解除的操作，稍等即可。
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {generation?.status === "completed" && mediaUrl && (
         <div className="flex items-center gap-1.5">
