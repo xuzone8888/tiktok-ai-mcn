@@ -492,6 +492,108 @@
 
 - **P0-Q1 · ✅ 已裁决(2026-07-12,技术负责人)**:体积双闸统一为 **>512KB 软告警(建议拆画布,不拒存)/ >2MB 硬拒存并提示**。理由:告警必须早于硬闸,且不妨碍 200 节点 P0 目标。**已落地**:CHECKLIST #29(A 组,改「>512KB 软告警建议拆画布」)/#47(G 组,改「>2MB 硬拒存并提示」)文字与备注、本看板覆盖表(#29→D1+S7、#47→D1+D3+S7)、D1/D3/S7 任务明细、总纲 §五/§七、DATA_MODEL §六 均已同步。**分工**:D3 实施 2MB 硬拒(POST/PATCH >2MB 返 400);S7 实施 512KB 软告警横幅 + 2MB 拒存 toast;D1 只提供两个阈值契约。**待 data 后续 commit 同步(非审核窗改)**:`src/lib/canvas/doc-limits.ts` 常量按裁决翻转(`HARD_LIMIT=2MB`、`WARN_LIMIT=512KB`;f838476 原实现是 hard=512KB/warn=2MB 反的,导致告警分支死代码)+ 迁移文件 `doc_bytes` 注释同步;供 D2 复审时一并核。
 
+- **P1-Q1 · 🔴 待用户裁决(2026-08-09 提请)· #81 高清 / #85 nine_grid 怎么接 `/api/generate/image`**
+
+  **事实**(批 0 实证):`/api/generate/image` 里 `VALID_IMAGE_MODES` 确含 `upscale`/`nine_grid`(`route.ts:35`),
+  分支代码完整;但**画布对该路由引用数为 0**——画布全部 API 出口只有 `/api/canvas/*`、`/api/studio/library`、`/api/storage/media-url`。
+  两条接法都触及 ADR,**AI 不擅自选**:
+
+  | 方案 | 做法 | 代价 |
+  |---|---|---|
+  | **① 画布侧扩 mode,由 `/api/canvas/generations` 转发**(**建议采纳**) | 在 `generation-intent.ts` 的 `ImageGenerationConfigSchema` 加 `mode: "generate"\|"upscale"\|"nine_grid"`,画布网关内部转发到现成分支 | 计费/对账/状态机**全部仍走画布自己那套**(已生产验证的那套);代价=需为两个新 mode 定价并进 `generation-pricing.ts`,且 `upscale`/`nine_grid` 强制要求源图(`route.ts:346`),intent 校验须相应收紧。**争议点=这算「参数扩展」还是「fork 执行链路」,须裁决** |
+  | ② 画布直调 `/api/generate/image` | 前端直接打该路由 | **绕开画布自己的计费/对账/退款链路**——那套是 #185/#253 收口的落点。一旦绕开,画布上的扣费将不进 `canvas_generation_*` 对账车道。**我倾向否决** |
+
+  **建议**:采纳 ①,并把「新 mode 必须先有价目」写成硬前置(触铁律 9,调价须用户裁决)。
+  ⚠️ CHECKLIST #85 备注「复用现成 nine_grid 分支,纯 UI 露出 S」的工作量估计**是错的**(R2-Q4 已指出,批 0 复证)。
+
+- **P1-Q2 · 🔴 待用户裁决(2026-08-09 提请)· #78 图片比例:先收窄 schema,还是排期改上游?**
+
+  **批 0 查出的新事实**(比 HANDOFF 记载更严重):面板 6 项 = 上游 `sizeMap` 的 6 个 key,是对的;
+  **但共用 zod 仍收 11 项,且 `21:9`/`5:4`/`3:2` 已随 canvas chunk 发到生产**。
+  末行 `sizeMap[r]?.[ratio] || sizeMap[r]?.auto || null` 决定了越界档位**不报错、静默回落 auto、按全价扣费**。
+  ⇒ 当前唯一防线是面板那个 6 项数组;**schema 层没有守卫,而画布已对所有登录用户开放**。
+
+  这是**两个独立决定**,请分别拍板:
+
+  | | 问题 | 选项 |
+  |---|---|---|
+  | **Q2-a** | 那 5 个够不着的档位要不要**先从 schema 收窄掉**? | **(建议)收窄到 6 项**——纯防御、零成本、与面板对齐,消灭「付费得到错画幅」的结构性可能 / 维持现状(承认 schema 比能力宽) |
+  | **Q2-b** | #78 本体怎么办? | **(建议)改判「延 P2 · 外部条件不具备」**——与 2026-08-09 那 8 项同一判据 / 排期改上游 `getVideoPlatformImageSize` 补像素尺寸(**那是 quick-gen / image-factory 共用链路,不属画布单方改动**,且须确认 gpt-image-2 接受这些尺寸) |
+
+  ⚠️ 若选「改判延 P2」,须同步 CHECKLIST 第 78 行并跑 `node scripts/canvas-checklist-reconcile.mjs` 至绿(P1 将由 52 降为 51)。
+
+## P1 收尾 · 批 0:8 项缺口三重交叉重核(2026-08-09,状态=已完成)
+
+> **为什么重核**:HANDOFF §负二③-b 那张缺口表自陈是「R2-Q4 复核结论 × 补齐清单**交叉推导**」得来,不是逐项实证。
+> 本节是按 R2-Q4 三重交叉(**渲染面枚举 + 特征串全仓 grep + 生产实证**)重跑一遍的结果,**结论以本节为准**。
+>
+> **第三重交叉本轮改用「生产已发布 bundle 字符串探针」而非浏览器 UI 实测**,理由与效力见本节末「方法学说明」。
+
+### 结论三分
+
+| 分类 | 项 |
+|---|---|
+| **确实缺** | #43 / #67 / #82 / #83 / #92 / #182 / #211(7 行 7 项) |
+| **其实有** | **0 项** —— 8 行里没有任何一项是「已经做了但被误记为缺」。这点上交接文档是准的 |
+| **判据变了** | **#81+#82+#83 的「必须先建 NodeToolbar」前提不成立**;**#78 比文档写的更严重**;**#182 不需要扩契约**;**#67 的前置件全部现成且零扣费**(详见下) |
+
+### 逐项证据
+
+| # | 判定 | 证据(渲染面 / grep / 生产 bundle) |
+|---|---|---|
+| **43** dirty 角标 | **确实缺** | 源码 `输入已更新`=0、`upstreamGeneration`=0;全仓仅 2 处 `dirty`,均在 `src/lib/canvas/shadow.ts:1628/1664` 的**离线队列注释**里,与上下游传播无关。生产 bundle `输入已更新` MISSING |
+| **67** 商品节点 | **确实缺** | `reference-nodes.tsx:62-91` `ProductNode` 全部渲染面 = 一个 `textarea`(商品简报)+ 一行说明 + NodeShell 的删除按钮。无 `input[type=file]`、无 `img`、无卖点卡。与 R2 生产枚举一致 |
+| **78** 图片比例 13 种 | **判据变了(加重)** | 见下「#78 的新事实」 |
+| **81** 高清 | **确实缺(且受阻)** | 画布 API 出口枚举完毕:`/api/canvas/*`、`/api/studio/library`、`/api/storage/media-url` —— **`/api/generate/image` 引用数 0 得证**。生产 bundle 里 `高清放大` 只出现在 quick-gen / image-batch chunk,**canvas chunk 无命中** |
+| **82** 裁剪 | **确实缺** | 源码唯一 `裁剪` 命中是 `generation-controls.tsx:1329` 的一句注释,原文即「裁剪/编辑不在 P1 范围」——**注释与 CHECKLIST(做/P1)自相矛盾**,取 CHECKLIST 为准。生产 bundle `裁剪` MISSING(注释被压缩剥离,自洽) |
+| **83** 整图重生成 | **确实缺** | `整图`=0;`重生成` 唯一命中亦为注释。生产 bundle MISSING |
+| **85** nine_grid | **确实缺(且受阻)** | 同 #81。生产 bundle `九宫格` 仅在 quick-gen / image-batch chunk |
+| **92** 空态快捷 | **确实缺(需拆项)** | `media-node.tsx:164-177` `MediaEmpty` = 虚线框 + 图标 + 「暂无图片」纯静态,零按钮。生产 bundle `图生图` MISSING。**注意**:该项的「图片高清」半边与 #81 同一受阻源 |
+| **182** @引用素材 | **确实缺(判据变了)** | `提及`/`mention`/`@引用` 在画布内 0;提示词 `textarea`(`generation-controls.tsx:969`)无 `@` 处理。生产 bundle `@节点`/`@历史` 均 MISSING |
+| **211** 交互式教程 | **确实缺** | `canvas-chrome-policy.ts:49` = `{ id:"tutorial", label:"教程", enabled:false }`,底部工具栏渲染成**灰置按钮**,本体不存在。生产 bundle 里 `教程` 命中即该标签,自洽 |
+
+### 四条改变排期判据的新事实
+
+1. **#81/#82/#83「共缺一个承载面、必须打包做」——前提不成立。**
+   `NodeToolbar` 全仓 0 命中属实(React Flow 该组件从未引入),`NodeShell` 头部确实只有删除按钮。
+   **但生成器面板里早已有一条产物动作行**:`generation-controls.tsx:1197-1315` = 下载 / 全屏 / 去发布 / **入库** / **推为参考**(#64/#84 本轮刚落的)。
+   #82 裁剪与 #83 整图重生成**都是产物动作**,挂这条现成行上即可,**不必先建 NodeToolbar**。
+   ⇒ 批 1 由「结构性打包四项」降为「在现成行上加两件工具」,且 #81/#85 的受阻与 #82/#83 **解耦**。
+   ⚠️ **代价**:该行所在面板在 1352×642 已溢出停靠位 66px(§负二④ 已决定不再抬比例)。**再加按钮会加剧溢出,批 1 必须同时处理这条行的横向密度**(收成图标按钮 / 溢出折叠),否则等于把已知摩擦变成阻断。
+
+2. **#78 比文档写的更严重 —— 缺的不只是「扩到 13」,而是 schema 层没有守卫。**
+   面板 `IMAGE_ASPECTS` 6 项与上游 `getVideoPlatformImageSize` 的 `sizeMap` 每档 6 个 key **完全对齐**
+   (`src/lib/video-platform-image-api.ts:211-242` 实读:`auto/1:1/16:9/9:16/4:3/3:4`,末行 `sizeMap[r]?.[ratio] || sizeMap[r]?.auto || null`)。
+   **但客户端与服务端共用的 zod(`generation-intent.ts:142-155`、`generation-api-types.ts:53-66`)仍各收 11 项**,
+   且 `21:9` / `5:4` / `3:2` **确实打进了生产 canvas chunk**。
+   ⇒ **「付费得到错画幅」的唯一防线是面板那个 6 项数组,schema 层是敞开的。** 画布现已对所有登录用户开放。
+   这把 #78 从「要不要扩到 13」拆成了**两个不同的决定**,详见待裁决问题区 **P1-Q2**。
+
+3. **#182 不需要扩契约。**
+   intent 的 `referenceNodeIds` 只收**节点 id**(图片 `.max(1)`、视频不限),`@历史` 表面上无处安放;
+   但 **#64「推为参考」已经实现了「历史资产 → 建节点 → 连线」这条路**(`generation-controls.tsx:1284-1315`),
+   `@历史` 复用它即可,**不必动 intent 契约**。序号语义须共用 `generation-input-order.ts`(#44 已立的唯一真相源)。
+   ⇒ #182 由 CHECKLIST 的「新建 M(提及选择器)」降为「选择器 UI + 复用 #64 机制」。
+
+4. **#67 的前置件全部现成,且不碰资金链路。**
+   - 持久化槽位**已在 schema 里**:`CanvasNodeDataSchema.media`(`ossKey`/`posterKey`)对**所有**节点类型开放,`refs.assetId`+`refs.assetTable`(`ai_models`|`canvas_assets`)成对约束已就位 —— **无需 schema 迁移**;
+   - 上传链路现成:`src/components/canvas/canvas-upload.ts`(`prepareCanvasUploads`/`uploadCanvasFile`);
+   - 卖点卡现成:`src/lib/studio/product-vision.ts`(`analyzeProductImages`/`normalizeCard`/`ProductCard`);
+   - 出口 `/api/studio/analyze-product`(51 行)**已登录鉴权(无登录 401)、零积分扣费、不写 `generations`** —— 与 #81/#85 要够的 `/api/generate/image` **性质完全不同**(后者是计费路由)。
+   ⇒ **#67 不需要裁决**,也不触及铁律 1;它是「UI + 接线」工作量,不是契约变更。
+
+### 方法学说明(第三重交叉为何用 bundle 探针而非浏览器 UI)
+
+- 本轮浏览器首条自检即返回 **`{visibilityState:"hidden", hasFocus:false, raf:"NO-FRAME"}`**(§七第一条那个坑),
+  且会话为匿名(`/canvas` → `/auth/login?redirect=%2Fcanvas`)。按 §七,`NO-FRAME` 下动画/媒体结论一律作废。
+- 改用**生产已发布 bundle 字符串探针**:`.next/BUILD_ID` 实读 = `3dee031f00d1c7c5931c3911f845337140b54cf0`
+  **= origin/main = 本工作区 HEAD**,故所审源码即所跑代码;再对
+  `.next/static/chunks/app/(canvas)/canvas/page-8ea6ac7151d7eaa9.js` 做正负对照 grep
+  (正对照 `引用区`/`推为参考`/`填写商品名称`/`竖屏 9:16` 全部 PRESENT,证明探针有效)。
+- **对「某功能不存在」这类断言,bundle 探针强于 UI 截图**:截图可能漏掉 hover / 折叠态元素,
+  而字符串在整个 chunk 里 0 命中则该 UI 不可能渲染。**但它证明不了「存在的东西真能用」**——
+  批 1 起的交付物仍须补前台可见标签下的真实 UI 复验。
+
 ## 合流顺序建议
 D1→D2(schema.ts 落地)→ S1/S3 与 D3-D6 并行 → S2/S4/S5 → S6/S7/S8 → R1 全量跑 → R2 收口(含上「跨目录归属项」两条)。
 
