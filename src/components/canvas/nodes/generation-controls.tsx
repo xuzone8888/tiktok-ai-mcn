@@ -668,6 +668,32 @@ export function GenerationControls({
     }
     void submitNode(nodeId);
   };
+  /**
+   * 拦截式确认文案(CHECKLIST #185)。规格只在两种情形下拦截,弹窗必须讲清是哪一种——
+   * 否则用户看到「有时弹有时不弹」会以为是 bug。`indeterminate` 是报价/余额读不出的
+   * fail-closed 兜底,不谎称原因。
+   */
+  const confirmCopy = ((): { title: string; lead: string } => {
+    switch (estimateValue?.confirmationReason ?? null) {
+      case "low_balance":
+        return {
+          title: "余额可能不够，确认继续？",
+          lead: "当前余额已接近本次预估，扣费可能失败。",
+        };
+      case "high_cost":
+        return {
+          title: "本次为大额消耗，确认继续？",
+          lead: "本次单次消耗超过大额阈值。",
+        };
+      case "indeterminate":
+        return {
+          title: "报价未取到可靠数值，确认继续？",
+          lead: "本次预估或余额读取异常，已按最保守方式拦下。",
+        };
+      default:
+        return { title: "确认本次积分消耗", lead: "" };
+    }
+  })();
   const filename = `${kind === "image" ? "canvas-image" : "canvas-video"}-${
     generation?.generationId.slice(0, 8) ?? nodeId
   }.${kind === "image" ? "jpg" : "mp4"}`;
@@ -902,9 +928,9 @@ export function GenerationControls({
       <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>确认本次积分消耗</AlertDialogTitle>
+            <AlertDialogTitle>{confirmCopy.title}</AlertDialogTitle>
             <AlertDialogDescription>
-              本次预计消耗 {estimateValue?.cost ?? 0} 积分，当前余额{" "}
+              {confirmCopy.lead}本次预计消耗 {estimateValue?.cost ?? 0} 积分，当前余额{" "}
               {estimateValue?.balance ?? 0}。任务提交后只有明确失败才会自动退款。
             </AlertDialogDescription>
           </AlertDialogHeader>

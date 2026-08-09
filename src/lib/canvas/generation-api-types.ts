@@ -193,6 +193,10 @@ export const CanvasGenerationEstimateSchema = z.strictObject({
   pricingVersion: z.string().min(1),
   balance: z.number().int().min(0),
   needsConfirmation: z.boolean(),
+  /** 拦截原因(CHECKLIST #185);不拦时为 null。仅用于文案分支,不参与任何金额计算。 */
+  confirmationReason: z
+    .enum(["low_balance", "high_cost", "indeterminate"])
+    .nullable(),
 });
 export type CanvasGenerationEstimate = z.infer<
   typeof CanvasGenerationEstimateSchema

@@ -74,12 +74,19 @@ export interface CanvasGenerationView {
   completedAt: string | null;
 }
 
+export type CanvasConfirmationReason =
+  | "low_balance"
+  | "high_cost"
+  | "indeterminate";
+
 export interface CanvasGenerationEstimate {
   kind: "text" | "image" | "video";
   cost: number;
   pricingVersion: string;
   balance: number;
   needsConfirmation: boolean;
+  /** 拦截原因(CHECKLIST #185);不拦或服务端未回传时为 null,仅驱动文案。 */
+  confirmationReason: CanvasConfirmationReason | null;
 }
 
 export interface CanvasImageDraftConfig {
@@ -1225,12 +1232,22 @@ export function CanvasGenerationProvider({
       ) {
         return null;
       }
+      // 拦截原因只驱动文案,不参与金额或闸门判定,故按「读不出就当 null」处理:
+      // 老服务端(未回传该字段)配新前端时,弹窗退回通用文案,拦不拦仍由
+      // needsConfirmation 决定 —— 不因为一个文案字段缺失就改变资金确认行为。
+      const reason = estimateValue.confirmationReason;
       return {
         kind: estimateValue.kind,
         cost: estimateValue.cost as number,
         pricingVersion: String(estimateValue.pricingVersion),
         balance: estimateValue.balance as number,
         needsConfirmation: estimateValue.needsConfirmation,
+        confirmationReason:
+          reason === "low_balance" ||
+          reason === "high_cost" ||
+          reason === "indeterminate"
+            ? reason
+            : null,
       };
     },
     []

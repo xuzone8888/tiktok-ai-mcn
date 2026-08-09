@@ -32,6 +32,8 @@ import {
 import {
   estimateCanvasGeneration,
   estimateCanvasGenerationSelection,
+  resolveCanvasConfirmationTrigger,
+  type CanvasConfirmationTrigger,
 } from "./generation-pricing";
 import {
   CanvasVideoModelPolicyConfigurationError,
@@ -1111,6 +1113,7 @@ export async function getCanvasGenerationEstimate(input: {
   pricingVersion: string;
   balance: number;
   needsConfirmation: boolean;
+  confirmationReason: CanvasConfirmationTrigger | null;
 }> {
   assertCanvasVideoModelEnabled(input.request);
   const pricing = estimateCanvasGenerationSelection(input.request);
@@ -1128,15 +1131,24 @@ export async function getCanvasGenerationEstimate(input: {
       404
     );
   }
-  const balance = Number((data as { credits?: unknown }).credits ?? 0);
+  const rawBalance = Number((data as { credits?: unknown }).credits ?? 0);
+  const balance = Number.isFinite(rawBalance)
+    ? Math.max(0, Math.floor(rawBalance))
+    : 0;
+  // CHECKLIST #185:只在「余额<预估×1.2 或单次>5000⚡」时拦截,不再每次付费都弹。
+  // 判定用规范化后的 balance(与 UI 显示的同一个数),避免弹窗说的余额与判定依据不一致。
+  // 余额不足仍由 begin_canvas_generation_v1 原子拒绝,本字段只影响「要不要多问一句」。
+  const confirmationReason = resolveCanvasConfirmationTrigger({
+    cost: pricing.cost,
+    balance,
+  });
   return {
     kind: pricing.kind,
     cost: pricing.cost,
     pricingVersion: pricing.pricingVersion,
-    balance: Number.isFinite(balance) ? Math.max(0, Math.floor(balance)) : 0,
-    // The UI should explicitly confirm any paid action. Insufficient balance is
-    // still rejected atomically by begin_canvas_generation_v1.
-    needsConfirmation: pricing.cost > 0,
+    balance,
+    needsConfirmation: confirmationReason !== null,
+    confirmationReason,
   };
 }
 
