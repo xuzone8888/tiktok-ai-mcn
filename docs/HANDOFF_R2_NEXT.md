@@ -1,134 +1,83 @@
-# 交接：R2 已收口 · 2026-08-09 状态与后续清单
+# 交接：R2 + R2-Q4 + #185 收口全部完成 · 2026-08-09 状态
 
-> **本文件纳入 git 跟踪**（前几份 `HANDOFF_*.md` 在仓库根、未跟踪、已过期，可删）。
-> 新窗口开工顺序：`CLAUDE.md` → `docs/EXECUTION_TRACKER.md`「当前状态」→ **本文件** → `docs/SUPER_CANVAS_P0_BOARD.md`（R2 走查表 + R2-Q1~Q4 问题区）。
-> **动手前先跑第零步重新核对**（第零步里的 sha 与端口已按本轮发版更新）。
+> **新窗口开工顺序**：`CLAUDE.md` → `docs/EXECUTION_TRACKER.md`「当前状态」→ **本文件 §负一/§负二** → `docs/SUPER_CANVAS_P0_BOARD.md`。
+> **动手前先跑 §一 第零步核对**（sha 与端口已按本轮发版更新）。
 >
-> ⚠️ **下面「§零～§九」是 2026-08-08 白天写的,其中若干条已被当晚的收口推翻。以本节(§负一)为准,正文只当背景读。**
+> ⚠️ **§零～§九 是 2026-08-08 写的，多条已被后续推翻，只当背景读。以 §负一/§负二 为准。**
 
 ---
 
-## 负一、当前真实状态（2026-08-09 下午，R2-Q4 补齐批次已发版）
+## 负一、当前真实状态（2026-08-09 晚）
 
-**线上版本 `33ba71d0d2a333b16ea4ba2b664cd61ced436ddb`，端口 3014**（2026-08-09 发版，`DEPLOY_RC=0`，
-BUILD_ID 门通过）。回滚包 `canvas-rollback-20260809T050329Z-port-3013-991403`；
-`d16620f`/3013 与 `abc29ac`/3012 两个回滚位仍在线。main = `33ba71d`（PR #34 已合）。
+**线上 `3dee031f00d1c7c5931c3911f845337140b54cf0`，端口 3015**（`DEPLOY_RC=0`，BUILD_ID 门通过）。
+回滚包 `canvas-rollback-20260809T071016Z-port-3014-1002117`；`33ba71d`/3014 与 `d16620f`/3013 两个回滚位在线。
+`abc29ac`/3012 已 `pm2 stop`（腾内存用，release 目录还在，`pm2 start` 即可复活）。
+main = `3dee031`（PR #34/#35 已合），代码面等于线上。**这两批都零迁移**，没有待你在 Supabase 手工执行的 SQL。
 
-**已在公网证实新代码真在跑**（不是只看进程起没起）：拉 `https://toryxai.com/_next/static/chunks/app/(canvas)/canvas/page-4f99d207765a7c83.js`（HTTP 200，317KB），
-其中「为什么现在不能生成」「引用区」「推为参考」「刷新状态」「余额可能不够」「本次为大额消耗」
-六个本批新字符串全部命中。
+### 今天做完的三件大事
 
-⚠️ **本次发版打挂过整站约 15 分钟（构建 OOM），根因与下次发版的前置动作见「负三之零」，务必先读。**
+1. **四项裁决落笔 + CHECKLIST 改判**：9 项延 P2、#103 改措辞。`220(做 167/裁 31/延 22)`、`P0=48 P1=52 P2=55 P3=11 P4=1`。**P1 由 61 降为 52。**
+2. **R2-Q4 补齐批次 6/6**：#51②③ 回前台触发+手动刷新、#187 参数人话文案、#186 灰置控件解锁指引、#84 全屏预览、#44+#72+#94 引用区缩略图带序号、#64 入库+推为参考。另修停靠位 `max-h` 常量。
+3. **#185 误扣费全量审计与收口**（存活 18 条，见 P0 看板「#185 收口」小节）。用户两项裁决：
+   - **`high_cost` 阈值 5000 → 1000** —— 原值物理不可达（画布单次天花板 1080），双阈值曾塌缩成单条低余额规则；
+   - **自动恢复只重放服务端确有其行的 intent**，未绑定的改弹窗询问 + 配「放弃这次提交」出口；
+   - 另**裁决：恒显费用条不做**，「不可取消不退款」改挂生成按钮 `title`。
+   - 新增正交纯模块 `src/lib/canvas/generation-consent.ts`（出处闸），verifier 穷举证明它**永不削弱 #185**。
 
-<details><summary>上一版状态（2026-08-08，保留备查）</summary>
+### 闸门与生产验证
 
-**线上版本 `d16620f34f09d2418cdb805b068aae61d2a55e3d`，端口 3013**（2026-08-08 二次发版，`DEPLOY_RC=0`）。
-回滚包 `canvas-rollback-20260808T152332Z-port-3012-934510`；上一版 `abc29ac`/3012 仍在线待回滚。
-main = `74fbee3`（PR #29/#30/#31/#32 全部已合；代码面等于线上跑的 `d16620f`，#32 是纯文档）。
+`generation-backend` 46→**88**、`generation-frontend` 49→**136**、`s6` 138→**141**；`runtime` 544 / `intent` 122 / `s3` / `s4` / `schema` 无回归；`tsc` / `build` / `reconcile` 全绿。
 
-</details>
+生产实测（**全部零扣费**）：#84 全屏预览（开/Close/真实 Escape/卸载/视频 `readyState 4` 真播放）、#44 引用区（缩略图真加载，推为参考建的新节点立刻显示图1）、#187、#186、#51③、#64 入库（服务端确实更新，走新增的 `generationIds` 匹配键）、#64 推为参考（持久化 rev+1）、#250 删除二次确认；阈值 1000 生效（**1080 拦 / 450 不拦 / 图片 5 分不拦**）；Ctrl+Enter 弹确认**且不提交**；IME 组字期无反应。
 
-### 已经做完、别再重做的
+### 三条别再重做 / 别再判错的
 
-| 事项 | 证据 |
-|---|---|
-| **画布视频链路已在生产跑通** | happyhorse `a40b3114`：`pending→processing→completed` 约 2 分钟，`bound`+真 task_id，450 积分实扣零退款。**「视频从未成功过」这条已翻篇** |
-| **R2-Q3 完整收口** | running 期间删除按钮 `disabled=false`（旧版恒 true）→ 三选一（「取消并退款」按 `supportsCancel=false` 禁用并明示 /「仅移除节点」/「返回」）→ 点仅移除后节点从视图与文档双双移除，**任务照常跑到 completed、零退款，历史资产 3 张变 4 张** |
-| **#188 / #180 / #181 / #189 已上线并实测** | Ctrl+Enter 真实按键触发拦截式确认；参数胶囊 5→4+「更多参数（1）」；面板在 ≤1366 时 dock 底部且不压工具条 |
-| **1366×768 全流程走查通过，卡点 0** | 实测视口 CSS 1352×586。侧栏图标态、小地图收起、dock 底部、留 14px 间隙、胶囊折叠全过 |
-| **资金①②⑤ 全过** | ⑤ 已含 450 视频档重跑：7 笔 consume↔7 笔 generation 1:1、链式无断点、Σcost=485=B0−终余额、零 refund |
-| **R2-Q1 / R2-Q2** | 均已裁决并落地（happyhorse 名单 / 图片 unknown 恢复迁移已在生产执行） |
-
-### 三条必须记住的更正（前一版本文写错了）
-
-1. **旅程 B 不是 R2 的欠账**。总纲 §二写明它「**P2 可走通**」，整条链依赖脚本节点/资产装配/批量/合成；代码侧 `CREATABLE_NODE_TYPES` **刻意排除 script 与 compose**。CHECKLIST #262 的「P1 **起**」是走查纪律的起始期。
-2. **商品节点是功能缺失，不是没测**。生产渲染面只有删除按钮 + 商品简报 textarea，`input[type=file]`=0、`img`=0 —— 没有上传图、没有卖点卡。**别再当测试任务派。**
-3. **#184 费用汇总条、#185 拦截式确认此前被误记为「已做到」，其实是 partial**；而且 **#185 的实现方向曾与规格相反**（代码是 `cost>0` 每次付费都弹）。
-   > ⚠️ **本条第二句已过期**：#185 已于 `70d2ded` 按规格改为双阈值并发版；2026-08-09 二次裁决又把 `5000` 下调为 **`1000`**（原值在画布物理不可达），并新增正交的**出处闸**。**读到这里不要再去「修」一个已经改好的东西。** 现状以 §负一 与 P0 看板「#185 收口」小节为准。
-
-### R2-Q4 的准确口径（取代「约 23 项没实现」）
-
-60 项（#262 是零代码流程项，不计入）= **implemented 15 / partial 30 / missing 15**。
-3 项翻案为已实现：#71 整图编辑、#224 billing_mode、#260 失败退款。
-
-> ⚠️ **本段原写「完整分档清单、每项工作量档位/依赖/风险、便宜活排序，全在 P0 看板 R2-Q4 复核第二轮小节」
-> —— 2026-08-09 核实为失准**：看板当时全文对 `#44`/`#72`/`#84`/`#94`/`#186`/`#187`/`#64` 零命中，
-> 只有汇总数与 8+1 提案，那张分档表**从未落盘**。现已按 §负二③ 幸存的 6 行摘要重建、逐项重新代码实证，
-> 并首次写进 P0 看板「**R2-Q4 补齐批次:便宜活排序**」小节（重建时把 #44+#72+#94 从第 1 位调到第 5 位，
-> 理由写在该表下方）。**教训与 §零 那条同源：本项目文档会说「某处有某物」，先验后信。**
+1. **#84 全屏预览没有缺陷。** 曾被判成「点一次就把画布点死」的阻断级问题，**那是在 hidden 标签页里验证造成的假象**（详见 §七 第一条）。前台标签下开关都正常。
+2. **商品节点是功能缺失，不是没测**：渲染面只有删除按钮 + 商品简报 textarea，`input[type=file]`=0、`img`=0。属 P2。
+3. **旅程 B 不是 R2 欠账**，总纲写明它 P2 才走通；`CREATABLE_NODE_TYPES` 刻意排除 script 与 compose。
 
 ---
 
-## 负二、新窗口该做什么（按顺序）
+## 负二、新窗口该做什么
 
-### ① ✅ 已完成（2026-08-09 取得四项裁决）
+### ① 🔴 清三笔卡住的积分（建议在扩灰度之前做）
 
-- **#185**：按原规格改代码（双阈值），不改规格 → 已落地 `70d2ded`
-- **#253 / #51①**：已 bound 行不做自动判死退款，该半延 P2，P1 内改运维告警口径 → 已落笔
-- **#237**：随 #211 教程一起延 P2 → 已落笔
-- **资金③④**：等价验收结案 → 已落笔
+生产有 3 笔 `pending`/`unknown` 行，共 15 积分：
 
-<details><summary>原文（提问时的四个议题，保留备查）</summary>
-
-- **#185 拦截式确认**：实现方向与规格相反，改的是资金确认边界。
-- **#253 / #51①**：已 bound 到厂商 task 的行要不要加超时判死自动退款（有误退真实成功任务的风险；DB 明文 RAISE 禁止对 unknown 自动退款）。
-- **#237 grant 首个用例**：涉发放金额，且前置教程 #211 入口硬关。
-- **资金③（退款恰好一条）与资金④（并发双扣直击）的结案口径**：两者结构性无法在生产直击（③ 已裁决不做取消入口 + 画布零失败；④ 与「不得程序化触发扣费」冲突）。**建议以库级唯一锚点 + 实弹脚本 R44/R42 作为等价验收结案**，请用户拍板。
-
-</details>
-
-### ② ✅ 已完成：CHECKLIST 8+1 项改判落笔（`a4ab093`）
-
-8 项延 P2：#93 / #101 / #102 / #105 / #112 / #79 / #80 / #76。
-#103 只改措辞：「时长滑杆」→「时长选择（按模型能力渲染离散档位）」，改完即算已实现。
-另按裁决追加：#237 延 P2、#253 行文收窄为「未 bound 行」、#185 备注裁决。
-
-连带两张统计表 + CLAUDE.md 期次表；`canvas-checklist-reconcile.mjs` 绿：
-`220（做 167 / 裁 31 / 延 22）`、`P0=48 P1=52 P2=55 P3=11 P4=1`。**P1 由 61 降为 52。**
-
-### ③ ✅ R2-Q4 补齐批次已完成 6/6（尚未发版）
-
-| 序 | 项 | commit |
+| id | 类型 | 错误码 |
 |---|---|---|
-| 1 | #51②③ 回前台触发 + 常态手动刷新 | `258ab2e` |
-| 2 | #187 参数人话文案 + 悬停示例 | `17e87c5` |
-| 3 | #186 灰置控件解锁指引 | `e6bfe41` |
-| 4 | #84 产物全屏预览 | `fab0ebf` |
-| 5 | #44+#72+#94 引用区缩略图带序号 | `f4bd9a2` |
-| 6 | #64 入库 + 推为参考 | `5b53a95` |
+| `329a5399-f50f-420d-9ce1-b95f3e8c82fa` | video | `video_submission_outcome_unknown` |
+| `02e20c34-8fc6-45b4-8bee-f4b50deb73dd` | video | 同上 |
+| `9848fcb4-4bad-46e3-bf47-3acc8fe7ce34` | image | `direct_image_object_not_found` |
 
-另:#185 阈值改造 `70d2ded`、停靠位常量 `1f9d887`。
-闸门累计 `generation-frontend` 49→**122**、`generation-backend` 46→**61**、`s6` 138→**141**，
-`runtime`/`intent`/`s3`/`s4`/`schema` 无回归，逐项过 `tsc` + `build`（exit 0）。
+**三笔 `task_id` 全是 `null`——厂商从头到尾没接过单**，所以走 `verified_no_task_refund` 退款是事实正确的。
 
-**做的过程中撞见并修掉两个真缺陷**（详见 P0 看板）：面板与提交路径的上游排序不一致（会让
-「图N」指错参考图）、`/api/studio/library` 的 `updated` 数 task_id 而非行（画布入库成功却回 0）。
+> **做这件事的理由不是那 15 积分**（余额 18459，可忽略），而是：**R2-Q2 那个「让人工裁决 RPC 支持图片行」的迁移，在生产执行了却从没真的跑过一次图片行**。`9848fcb4` 是唯一一笔图片 unknown。宁可现在用自家 5 积分的测试数据发现问题，也不要等扩灰度后真实用户卡住时才发现。
 
-**🔴 下一步是发版**：手工 build 必须带 `CANVAS_RELEASE_COMMIT=<40位sha>`，否则 BUILD_ID 门 FAIL；
-release 目录已 5 个、磁盘余 12G，**再发 2 次前先清最老的**（`fea0bcbe` / `e77d4df5`，
-清理前确认对应 pm2 进程已下线）。发版公告须提示用户刷新页面（蓝绿切流会打断写者租约心跳）。
+工具：`scripts/resolve-canvas-unknown.mjs`（要 loopback URL + root 权限密钥文件 + 审批单号 + `--execute`，有审计痕迹的正式操作）。服务器上有只读探针 `/root/r2probe.sh`（用法 `balance|gens N|ledger N`）。
 
-<details><summary>原文（批次开工时的排序说明，保留备查）</summary>
+### ② 删测试画布 `047fb5dd` 里的 2 个空商品节点
 
-### ③ R2-Q4 补齐批次（进行中）
+`node_v3hNjrCWBTz3` / `node_KSK8Zcdoj9f2`，无产物未扣费，走查误建。留着只会让下次回归多两个干扰项。
 
-**排序表已首次落进 P0 看板「R2-Q4 补齐批次:便宜活排序」小节**（含每项现状实证 / 档位 / 依赖风险）。
-现行顺序：**① #51②③ 回前台触发+常态手动刷新（XS，修真实故障）→ ② #187 参数人话文案 →
-③ #186 灰置控件解锁指引 → ④ #84 全屏预览 → ⑤ #44+#72+#94 引用区缩略图带序号（M）→
-⑥ #64 入库+推为参考（M，唯一有服务端面）**。
+### ③ 然后才是扩灰度
 
-⚠️ 本批**原计划「一行不碰资金链路」，但 #185 裁决为改代码后已不成立**——#185 动的正是资金确认边界，
-故单独 commit、单独验（`70d2ded`）。
+阶梯：**白名单 2 → 3-5 人观察 3-7 天 → `CANVAS_PUBLIC_ENABLED=true`**。
+做法＝改生产 `.env.local` 的 `CANVAS_ACCESS_USER_IDS`（现为两个 uuid）并重启 pm2 进程；**这一步动真实用户面，必须用户点头并给 user id**。
 
-**顺手项已完成（`1f9d887`）**：停靠位高度上限另立 `GENERATION_DOCK_MAX_HEIGHT_RATIO=0.75`。
-⚠️ 成因描述更正：`canvas-board.tsx:1415` 原是**硬编码 `max-h-[55%]`**，并未引用
-`GENERATION_PANEL_MAX_HEIGHT_RATIO`——是重复魔数，不是「误用常量」。
+⚠️ 扩灰度前提醒用户：画布**每点一次生成就真扣钱且退不了**（七模型 `supportsCancel` 全 false）。happyhorse 5 秒 450 分 / 12 秒 1080 分。
 
-</details>
+### ④ 已知但**不修**的一项
 
-### ④ 之后才谈扩灰度
+1352×642 下视频面板 `scrollHeight 485 > clientHeight 419`，**溢出 66px 需在停靠位内滚一次**，「下载/全屏/去发布」整行落在切掉的部分。比改造前（389 vs 294，溢出 95px）有改善。继续抬 `GENERATION_DOCK_MAX_HEIGHT_RATIO` 会让停靠位吃掉大半画布，**已决定不再调**，记为已知摩擦。
 
-白名单 2 → 3-5 真实用户观察 3-7 天 → `CANVAS_PUBLIC_ENABLED=true`。
+### ⑤ 唯一没在生产实测的功能：「放弃这次提交」
+
+需要一个**未绑定** intent，而那要求提交处于**歧义**态（可能已送达）。「模拟断网」造不出来——代码把「确定没发出去」正确判为 definitive 并直接清掉 intent（这是对的行为）。造真歧义有真扣费风险，故未做。现有保障＝前后端 verifier 断言 + 代码复核。**下次真出现未绑定 intent 时优先目视这一项。**
+
+### ⑥ P2（55 功能点）
+
+五批方案已获用户认可（底座→脚本节点→资产一致性→批量闭环→收尾）。开工前置＝建 P2 看板 + 扩机器守卫；场景/道具落表方案与音频开关价目两项裁决届时提请。**未经用户裁决不要自行启动。**
 
 ---
 
@@ -205,12 +154,16 @@ cd /e/StarGaze && git fetch origin --prune --no-tags && git rev-parse --short or
 ```
 
 ```bash
-ssh root@123.56.75.68 'R=/var/www/tiktok-ai-mcn-releases/d16620f34f09d2418cdb805b068aae61d2a55e3d; curl -s -o /dev/null -w "site HTTP %{http_code}\n" https://toryxai.com/; curl -s -o /dev/null -w "/canvas(anon) %{http_code}\n" https://toryxai.com/canvas; grep -oE "proxy_pass http://127.0.0.1:[0-9]+" /etc/nginx/sites-available/toryxai.com | tail -1; grep -E "^VIDEO_PLATFORM_IMAGE_BASE_URL=|^CANVAS_VIDEO_MODELS=|^NEXT_PUBLIC_CANVAS_VIDEO_MODELS=" $R/.env.local; pm2 list | grep -E "d16620f|reconciler"; df -h /var/www | tail -1'
+ssh root@123.56.75.68 'R=/var/www/tiktok-ai-mcn-releases/3dee031f00d1c7c5931c3911f845337140b54cf0; curl -s -o /dev/null -w "site HTTP %{http_code}\n" https://toryxai.com/; curl -s -o /dev/null -w "/canvas(anon) %{http_code}\n" https://toryxai.com/canvas; grep -oE "proxy_pass http://127.0.0.1:[0-9]+" /etc/nginx/sites-available/toryxai.com | tail -1; grep -E "^VIDEO_PLATFORM_IMAGE_BASE_URL=|^CANVAS_VIDEO_MODELS=|^CANVAS_PUBLIC_ENABLED=|^CANVAS_ACCESS_USER_IDS=" $R/.env.local; pm2 list | grep -E "3dee031|reconciler"; free -m | head -2; df -h /var/www | tail -1'
 ```
 
-**预期**（2026-08-08 二次发版后）：站点 200；`/canvas` 未登录 **307**；nginx→**3013**；`VIDEO_PLATFORM_IMAGE_BASE_URL=https://api.hellobabygo.com`（**若不是，图片生成又坏了，先修**）；两个 `CANVAS_VIDEO_MODELS=happyhorse`；`stargaze-canvas-d16620f` 与 reconciler 均 online；磁盘余约 11G。
+**预期**（2026-08-09 二次发版后）：站点 200；`/canvas` 未登录 **307**；nginx→**3015**；
+`VIDEO_PLATFORM_IMAGE_BASE_URL=https://api.hellobabygo.com`（**若不是，图片生成又坏了，先修**）；
+`CANVAS_VIDEO_MODELS=happyhorse`；`CANVAS_PUBLIC_ENABLED=false` 且 `CANVAS_ACCESS_USER_IDS` 为 **2 个 uuid**；
+`stargaze-canvas-3dee031` 与 reconciler 均 online；内存 available ≈1.8-2.0G；磁盘余约 7.7G。
 
-> 旧值备查：上一版是 `abc29ac…`/3012，仍在线待回滚，**别把它当成当前线上**。
+> 回滚位备查：`33ba71d`/3014、`d16620f`/3013 仍 online；`abc29ac`/3012 已 `pm2 stop`（腾内存，目录还在，`pm2 start` 可复活）。**这三个都不是当前线上。**
+> ⚠️ **磁盘只剩 7.7G、每个 release 约 1.7G：下次发版前先清最老的 release 目录**（清前确认对应 pm2 进程已 stop）。
 
 **与预期不符 → 停下核对，不要按本文档继续。**
 
