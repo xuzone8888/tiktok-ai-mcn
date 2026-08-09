@@ -7,6 +7,7 @@
  * callsites. It has no credentials, browser, database, or network dependency.
  */
 import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -41,6 +42,25 @@ function has(source, fragment, label) {
 
 function lacks(source, fragment, label) {
   ok(!source.includes(fragment), label);
+}
+
+/**
+ * 无依赖纯模块的离线载入(仅剥类型,不做类型检查——那是 `tsc --noEmit` 的活)。
+ * 只用于本文件里**零 import** 的策略模块;有依赖的走 scripts/canvas-build.mjs。
+ */
+const requireFromHere = createRequire(import.meta.url);
+async function loadPureModule(relPath) {
+  const ts = requireFromHere("typescript");
+  const { outputText } = ts.transpileModule(read(relPath), {
+    compilerOptions: {
+      module: ts.ModuleKind.ESNext,
+      target: ts.ScriptTarget.ES2020,
+    },
+    fileName: relPath,
+  });
+  return import(
+    `data:text/javascript;base64,${Buffer.from(outputText).toString("base64")}`
+  );
 }
 
 console.log("1. Polling authority and cross-canvas isolation");
@@ -252,6 +272,313 @@ has(
   page,
   '.select("title")',
   "loads the authoritative title even for projects beyond list page one"
+);
+
+console.log(
+  "\nN. CHECKLIST #51②③ — reconciliation triggers: load / foreground / manual"
+);
+// 加载与轮询本就有;缺的是「回前台」与「常态手动刷新」,这两条在 2026-08-09 前全仓 0 命中。
+has(
+  context,
+  'document.addEventListener("visibilitychange", run)',
+  "#51② returning to foreground reconciles immediately"
+);
+has(
+  context,
+  'window.addEventListener("focus", run)',
+  "#51② window refocus also reconciles (Chrome skips visibilitychange on app switch)"
+);
+has(
+  context,
+  "VISIBILITY_REFRESH_THROTTLE_MS",
+  "#51② foreground refetch is throttled so rapid tab switching cannot hammer the API"
+);
+ok(
+  /document\.removeEventListener\("visibilitychange", run\)[\s\S]{0,160}window\.removeEventListener\("focus", run\)/.test(
+    context
+  ),
+  "#51② both foreground listeners are torn down"
+);
+has(controls, "刷新状态", "#51③ panel exposes an always-available manual refresh");
+ok(
+  /disabled=\{manualRefreshing \|\| syncState === "loading"\}/.test(controls),
+  "#51③ manual refresh cannot stack on an in-flight sync"
+);
+ok(
+  /\{!readOnly && enabled && \(\s*<button/.test(controls),
+  "#51③ manual refresh is hidden in read-only mode (it must not issue requests there)"
+);
+
+console.log(
+  "\nN+1. CHECKLIST #187 — every parameter carries one-line plain-language copy"
+);
+const paramCopy = read("src/components/canvas/nodes/generation-param-copy.ts");
+const selectFieldCount = (controls.match(/<SelectField\b/g) || []).length;
+const hintKeyUses = [...controls.matchAll(/hintKey="([^"]+)"/g)].map((m) => m[1]);
+ok(
+  selectFieldCount > 0 && hintKeyUses.length === selectFieldCount,
+  `#187 every rendered <SelectField> declares a hintKey (${hintKeyUses.length}/${selectFieldCount})`
+);
+const registeredHints = [...paramCopy.matchAll(/"([a-z]+\.[A-Za-z]+)":/g)].map(
+  (m) => m[1]
+);
+for (const key of hintKeyUses) {
+  ok(
+    registeredHints.includes(key),
+    `#187 hint copy exists for parameter "${key}"`
+  );
+}
+ok(
+  new Set(hintKeyUses).size === hintKeyUses.length,
+  "#187 no two parameters share the same hint key"
+);
+// 文案纪律:价目由 generation-pricing.ts 决定、能力档位由 VIDEO_MODEL_CATALOG 决定,
+// 都会变;写死在静态文案里等于埋一条迟早说谎的话。
+ok(
+  !/\d+\s*积分/.test(paramCopy),
+  "#187 hint copy never hardcodes credit amounts (pricing drifts; the live estimate line is authoritative)"
+);
+has(
+  controls,
+  'aria-description={hint}',
+  "#187 hint is exposed to assistive tech without overriding the parameter name"
+);
+
+console.log(
+  "\nN+2. CHECKLIST #186 — disabled controls explain why and how to unlock"
+);
+const { resolveGenerationLockHint } = await loadPureModule(
+  "src/components/canvas/nodes/generation-lock-hints.ts"
+);
+const baseLock = {
+  readOnly: false,
+  enabled: true,
+  submitting: false,
+  active: false,
+  uncertain: false,
+  reconciling: false,
+  syncState: "ready",
+  kind: "image",
+  incomingImageCount: 0,
+};
+const lock = (patch) => resolveGenerationLockHint({ ...baseLock, ...patch });
+ok(lock({}) === null, "#186 a ready image node reports no lock");
+ok(
+  lock({ kind: "video", videoMode: "prompt_to_video" }) === null,
+  "#186 prompt-to-video needs no upstream image"
+);
+ok(
+  lock({ kind: "video", videoMode: "image_to_video" })?.kind ===
+    "missing_upstream_image",
+  "#186 image-to-video without an upstream image is explained BEFORE submitting"
+);
+ok(
+  lock({ kind: "video", videoMode: "image_to_video", incomingImageCount: 1 }) ===
+    null,
+  "#186 connecting one image clears that lock"
+);
+// 优先级:最硬的原因先讲,免得用户按「去连张图」照做后发现还是不能点。
+ok(
+  lock({ readOnly: true, kind: "video", videoMode: "image_to_video" })?.kind ===
+    "read_only",
+  "#186 read-only outranks the missing-image hint"
+);
+ok(
+  lock({ active: true, kind: "video", videoMode: "image_to_video" })?.kind ===
+    "running",
+  "#186 a running task outranks the missing-image hint"
+);
+ok(
+  lock({ uncertain: true })?.kind === "uncertain",
+  "#186 unknown upstream state is explained"
+);
+ok(
+  lock({ reconciling: true })?.kind === "reconciling",
+  "#186 pending idempotency check is explained"
+);
+ok(
+  lock({ syncState: "loading" })?.kind === "syncing",
+  "#186 in-flight sync is explained"
+);
+ok(
+  lock({ enabled: false })?.kind === "feature_disabled",
+  "#186 gray-release gating is explained"
+);
+for (const patch of [
+  {},
+  { readOnly: true },
+  { enabled: false },
+  { submitting: true },
+  { active: true },
+  { uncertain: true },
+  { reconciling: true },
+  { syncState: "loading" },
+  { kind: "video", videoMode: "image_to_video" },
+]) {
+  const hint = lock(patch);
+  if (!hint) continue;
+  ok(
+    typeof hint.reason === "string" && hint.reason.length > 0,
+    `#186 lock "${hint.kind}" states a reason`
+  );
+  ok(
+    Array.isArray(hint.steps),
+    `#186 lock "${hint.kind}" carries a (possibly empty) step list`
+  );
+}
+has(
+  controls,
+  "为什么现在不能生成？",
+  "#186 the panel exposes a clickable unlock guide"
+);
+has(
+  controls,
+  "resolveGenerationLockHint",
+  "#186 the panel derives the guide from the shared pure resolver, not ad-hoc strings"
+);
+
+console.log("\nN+3. CHECKLIST #84 — node-level fullscreen preview of the artifact");
+has(controls, "全屏", "#84 completed artifacts expose a fullscreen action");
+has(
+  controls,
+  "setPreviewOpen(true)",
+  "#84 the fullscreen action opens the preview dialog"
+);
+ok(
+  /\{previewOpen && mediaUrl \?/.test(controls),
+  "#84 preview media mounts only while open (a closed dialog must not hold a <video>)"
+);
+// ADR5 红线:签名 URL 是瞬态的。预览允许**读** mediaUrl,绝不允许把它写回节点/持久层。
+ok(
+  !/updateParams\([^)]*mediaUrl/.test(controls) &&
+    !/ossKey:\s*mediaUrl/.test(controls),
+  "#84 the preview never persists the transient signed URL back into the document"
+);
+
+console.log(
+  "\nN+4. CHECKLIST #44/#72/#94 — reference strip: numbered upstream thumbnails"
+);
+const { orderGenerationInputNodes, collectImageReferences } =
+  await loadPureModule("src/components/canvas/generation-input-order.ts");
+const img = (id, key) => ({ id, type: "image", data: { media: { ossKey: key } } });
+const txt = (id) => ({ id, type: "text", data: {} });
+const edge = (source, target) => ({ source, target });
+// 顺序以 edges 为准,不是 nodes 数组序 —— 这正是修掉的那个不一致。
+{
+  const nodes = [img("a", "k-a"), img("b", "k-b"), img("c", "k-c")];
+  const edges = [edge("c", "t"), edge("a", "t"), edge("b", "x")];
+  const ordered = orderGenerationInputNodes(nodes, edges, "t");
+  ok(
+    ordered.map((n) => n.id).join(",") === "c,a",
+    "#44 upstream order follows edge order, not node-array order"
+  );
+  const refs = collectImageReferences(ordered);
+  ok(
+    refs.map((r) => `${r.label}:${r.ossKey}`).join(",") === "图1:k-c,图2:k-a",
+    "#44 reference labels are assigned in that same edge order"
+  );
+}
+{
+  // 同一上游连多条边只算一次,且按首次出现定位。
+  const nodes = [img("a", "k-a"), img("b", "k-b")];
+  const edges = [edge("b", "t"), edge("a", "t"), edge("b", "t")];
+  const ordered = orderGenerationInputNodes(nodes, edges, "t");
+  ok(
+    ordered.map((n) => n.id).join(",") === "b,a",
+    "#44 duplicate edges from one source collapse to its first position"
+  );
+}
+{
+  // 空图片节点不占编号 —— 与提交路径的 imageInputNodes 判据逐字一致
+  // (空节点在提交时另有专门报错,若在这里占了号,UI 的「图2」就会是请求里的「图1」)。
+  const nodes = [img("a", ""), img("b", "k-b"), txt("c")];
+  const edges = [edge("a", "t"), edge("b", "t"), edge("c", "t")];
+  const refs = collectImageReferences(
+    orderGenerationInputNodes(nodes, edges, "t")
+  );
+  ok(
+    refs.length === 1 && refs[0].label === "图1" && refs[0].ossKey === "k-b",
+    "#44 empty image nodes and non-image nodes never consume a reference number"
+  );
+}
+ok(
+  orderGenerationInputNodes([], [], "t").length === 0,
+  "#44 no upstream yields no references"
+);
+// 两条消费路径必须共用同一个排序器,否则序号会重新分叉。
+has(
+  context,
+  "orderGenerationInputNodes(state.nodes, state.edges, targetNodeId)",
+  "#44 the submit path consumes the shared ordering helper"
+);
+has(
+  controls,
+  "orderGenerationInputNodes(nodes, edges, nodeId)",
+  "#44 the panel consumes the very same ordering helper"
+);
+lacks(
+  controls,
+  "nodes.filter((node) => idSet.has(node.id))",
+  "#44 the old node-array-order derivation is gone from the panel"
+);
+const strip = read("src/components/canvas/nodes/generation-reference-strip.tsx");
+has(strip, "resolveMediaUrl", "#72/#94 thumbnails resolve object keys to transient URLs");
+ok(
+  !/updateParams|ossKey:\s*url|useCanvasStore/.test(strip),
+  "#72/#94 the strip never writes the transient signed URL back into the document (ADR5)"
+);
+has(strip, "reference.label", "#44 each thumbnail renders its ordinal label");
+
+console.log("\nN+5. CHECKLIST #64 — artifact actions: archive to library / push as reference");
+const libraryRoute = read("src/app/api/studio/library/route.ts");
+has(
+  controls,
+  '"/api/studio/library"',
+  "#64 archiving reuses the existing Studio endpoint instead of a canvas-only fork"
+);
+ok(
+  /generationIds: \[generationId\]/.test(controls),
+  "#64 canvas archives by generationId — canvas direct images have task_id = null"
+);
+has(
+  libraryRoute,
+  'update.in("id", generationIds)',
+  "#64 the endpoint accepts generationId as an alternative match key"
+);
+has(
+  libraryRoute,
+  'taskIds 与 generationIds 只能二选一',
+  "#64 mixing both match keys is rejected rather than silently double-counted"
+);
+ok(
+  /updated: updatedGenerationIds\.length/.test(libraryRoute),
+  "#64 `updated` counts rows, not task_ids (canvas rows would otherwise report 0 on success)"
+);
+// 四道闸必须仍在,扩参数不等于放松校验。
+has(libraryRoute, '.eq("user_id", user.id)', "#64 ownership guard intact");
+has(libraryRoute, '.eq("status", "completed")', "#64 completed-only guard intact");
+has(
+  libraryRoute,
+  '.neq("library_status", "published")',
+  "#64 published-state guard intact"
+);
+ok(
+  /if \(!body\.data\?\.updated\)/.test(controls),
+  "#64 a zero-row update surfaces as a failure, not a fake success"
+);
+has(
+  controls,
+  "推为参考",
+  "#64 completed image artifacts can be pushed as a downstream reference"
+);
+has(
+  controls,
+  "addNodeAndEdge",
+  "#64 push-as-reference goes through the store's atomic node+edge op (undoable)"
+);
+ok(
+  /generation\?\.status === "completed" && !readOnly/.test(controls),
+  "#64 side-effecting artifact actions are hidden in read-only mode"
 );
 
 if (failed.length > 0) {

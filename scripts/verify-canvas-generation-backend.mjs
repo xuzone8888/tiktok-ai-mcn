@@ -215,6 +215,95 @@ equal(
   "settlement and estimate share the same 2K price source"
 );
 
+// ---- CHECKLIST #185:拦截式确认仅限「余额<预估×1.2 或单次>5000⚡」 ----
+// 2026-08-09 用户裁决:按原规格改代码。此前是 needsConfirmation: cost > 0(每次付费都弹)。
+// 两个阈值就是资金确认边界,改动须用户裁决,故在此钉死。
+equal(
+  pricing.CANVAS_CONFIRMATION_LOW_BALANCE_MULTIPLIER,
+  1.2,
+  "#185 low-balance multiplier pinned to spec value 1.2"
+);
+equal(
+  pricing.CANVAS_CONFIRMATION_HIGH_COST_THRESHOLD,
+  5000,
+  "#185 high-cost threshold pinned to spec value 5000"
+);
+const trigger = (cost, balance) =>
+  pricing.resolveCanvasConfirmationTrigger({ cost, balance });
+equal(trigger(0, 0), null, "#185 free action never intercepts");
+equal(trigger(-5, 100), null, "#185 non-positive cost never intercepts");
+equal(
+  trigger(450, 18459),
+  null,
+  "#185 routine paid action (450 of 18459) no longer intercepts — the point of the change"
+);
+equal(
+  trigger(450, 540),
+  null,
+  "#185 balance exactly at cost x1.2 is not below it, so no intercept"
+);
+equal(
+  trigger(450, 539),
+  "low_balance",
+  "#185 balance one credit under cost x1.2 intercepts"
+);
+equal(trigger(450, 0), "low_balance", "#185 zero balance intercepts");
+equal(
+  trigger(5000, 1_000_000),
+  null,
+  "#185 cost exactly at threshold is not above it, so no intercept"
+);
+equal(
+  trigger(5001, 1_000_000),
+  "high_cost",
+  "#185 cost one credit over threshold intercepts"
+);
+equal(
+  trigger(6000, 100),
+  "low_balance",
+  "#185 when both triggers fire, low balance wins the copy (more urgent fact)"
+);
+equal(
+  trigger(Number.NaN, 100),
+  "indeterminate",
+  "#185 unreadable cost fails closed"
+);
+equal(
+  trigger(100, Number.POSITIVE_INFINITY),
+  "indeterminate",
+  "#185 unreadable balance fails closed"
+);
+ok(
+  api.CanvasGenerationEstimateSchema.safeParse({
+    kind: "video",
+    cost: 450,
+    pricingVersion: pricing.CANVAS_GENERATION_PRICING_VERSION,
+    balance: 18459,
+    needsConfirmation: false,
+    confirmationReason: null,
+  }).success,
+  "#185 estimate DTO carries confirmationReason"
+);
+ok(
+  !api.CanvasGenerationEstimateSchema.safeParse({
+    kind: "video",
+    cost: 450,
+    pricingVersion: pricing.CANVAS_GENERATION_PRICING_VERSION,
+    balance: 18459,
+    needsConfirmation: false,
+    confirmationReason: "whatever",
+  }).success,
+  "#185 estimate DTO rejects unknown confirmation reason"
+);
+ok(
+  !/needsConfirmation:\s*pricing\.cost\s*>\s*0/.test(generationServiceSource),
+  "#185 the old always-confirm implementation is gone"
+);
+ok(
+  /resolveCanvasConfirmationTrigger\(/.test(generationServiceSource),
+  "#185 estimate endpoint routes confirmation through the shared threshold helper"
+);
+
 equal(
   modelPolicy.parseCanvasVideoModelAllowlist(undefined),
   ["grok"],

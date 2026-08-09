@@ -92,7 +92,10 @@ import { ConnectNodeMenu } from "./connect-menu";
 import { NodePalette } from "./node-palette";
 import { projectGroupFrames } from "./group-frame";
 import { ShortcutPanel } from "./shortcut-panel";
-import { shouldExpandMinimap } from "./canvas-responsive";
+import {
+  generationDockMaxHeight,
+  shouldExpandMinimap,
+} from "./canvas-responsive";
 import { CanvasDockHostProvider } from "./canvas-dock-context";
 import {
   GENERATION_CANCEL_UNSUPPORTED_REASON,
@@ -1412,7 +1415,11 @@ export function CanvasBoard({
       <div
         ref={setDockHost}
         data-canvas-generation-dock=""
-        className="pointer-events-none absolute inset-x-0 bottom-16 z-20 flex max-h-[55%] flex-col items-center gap-2 overflow-y-auto px-3"
+        className="pointer-events-none absolute inset-x-0 bottom-16 z-20 flex flex-col items-center gap-2 overflow-y-auto px-3"
+        /* 高度上限走 `canvas-responsive.ts` 的 GENERATION_DOCK_MAX_HEIGHT_RATIO,
+           不再硬编码 `max-h-[55%]` —— 那个 55% 与 inline↔dock 的判定阈值同数不同义,
+           照它卡高度会让每个 dock 下来的面板必定再滚动一次(见该常量注释)。 */
+        style={{ maxHeight: generationDockMaxHeight() }}
       />
       </CanvasDockHostProvider>
     </div>

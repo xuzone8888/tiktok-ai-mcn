@@ -34,6 +34,28 @@ export const CAPSULE_VISIBLE_WHEN_COLLAPSED = 4;
 /** 生成面板 inline 悬挂允许占用的最大视口高比例;超出则 dock 底部。 */
 export const GENERATION_PANEL_MAX_HEIGHT_RATIO = 0.55;
 
+/**
+ * 停靠位(dock 之后的底部容器)自身可见高的上限比例。
+ *
+ * **与 `GENERATION_PANEL_MAX_HEIGHT_RATIO` 是两件事,不要再合用一个数**:
+ *  - `GENERATION_PANEL_MAX_HEIGHT_RATIO` = inline↔dock 的**判定阈值**,问「面板还能不能挂在节点下方」;
+ *  - 本常量 = **停靠位能露多高**,问「dock 之后看得见多少」。
+ *
+ * 取同一个数会自相矛盾:一个因为高过 55% 才被 dock 下去的面板,落进同样卡 55% 的停靠位后
+ * 必然仍旧超出,于是每次 dock 都白白逼出一次滚动。2026-08-08 的 1366×768 走查实测正是如此
+ * ——视口 586px 时停靠位可见高 294px,而视频面板高 389px。
+ *
+ * 0.75 的取法:让 586px 这一最小走查视口下的停靠位(容器约 534px)算出约 400px,刚好容下
+ * 实测最高的视频面板 389px。更大的视口上 `max-height` 根本不会生效(面板本身更矮),
+ * 所以这个数只在窄屏起作用,不会在大屏上让停靠位吃掉画布。
+ */
+export const GENERATION_DOCK_MAX_HEIGHT_RATIO = 0.75;
+
+/** 停靠位 `max-height` 的 CSS 值。Tailwind 任意值必须是编译期字面量,故走 inline style。 */
+export function generationDockMaxHeight(): string {
+  return `${GENERATION_DOCK_MAX_HEIGHT_RATIO * 100}%`;
+}
+
 /** 视口是否紧凑(窄屏)。非有限宽按紧凑处理(fail-safe 到更保守布局)。 */
 export function isCompactViewport(width: number): boolean {
   return !Number.isFinite(width) || width <= COMPACT_MAX_WIDTH;

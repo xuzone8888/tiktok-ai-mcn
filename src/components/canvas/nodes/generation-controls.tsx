@@ -9,6 +9,7 @@ import {
   Download,
   ExternalLink,
   Loader2,
+  Maximize2,
   RefreshCw,
   Sparkles,
 } from "lucide-react";
@@ -24,6 +25,13 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { toast } from "@/hooks/use-toast";
 import type { CanvasNodeData } from "@/lib/canvas/schema";
 import {
@@ -55,6 +63,16 @@ import {
   type CanvasVideoDraftConfig,
 } from "../canvas-generation-context";
 import { useCanvasDockHost } from "../canvas-dock-context";
+import {
+  generationParamHint,
+  type GenerationParamHintKey,
+} from "./generation-param-copy";
+import { resolveGenerationLockHint } from "./generation-lock-hints";
+import { GenerationReferenceStrip } from "./generation-reference-strip";
+import {
+  collectImageReferences,
+  orderGenerationInputNodes,
+} from "../generation-input-order";
 import {
   planCapsuleCollapse,
   resolveGenerationPanelDock,
@@ -155,24 +173,46 @@ function userFacingGenerationError(code: string | null): string {
 
 function SelectField({
   label,
+  hintKey,
   value,
   disabled,
   onChange,
   children,
 }: {
   label: string;
+  /** 人话文案的 key(CHECKLIST #187);文案本体在 `generation-param-copy.ts`。 */
+  hintKey: GenerationParamHintKey;
   value: string;
   disabled: boolean;
   onChange(value: string): void;
   children: React.ReactNode;
 }) {
+  const hint = generationParamHint(hintKey);
   return (
-    <label className="min-w-0 flex-1 text-[10px] text-muted-foreground">
-      <span className="mb-1 block">{label}</span>
+    <label
+      className="min-w-0 flex-1 text-[10px] text-muted-foreground"
+      /* #187 悬停示例:挂在 label 上,标题与控件悬停都能读到。
+         无障碍走 aria-description(不是 aria-label —— 那会顶掉参数名本身)。 */
+      title={hint}
+    >
+      <span className="mb-1 block">
+        {label}
+        {hint ? (
+          <span
+            aria-hidden="true"
+            className="ml-0.5 cursor-help opacity-60"
+            title={hint}
+          >
+            ⓘ
+          </span>
+        ) : null}
+      </span>
       <select
         className="nodrag nopan nowheel h-7 w-full rounded border border-border bg-background px-1.5 text-[11px] text-foreground outline-none focus:border-ring disabled:opacity-50"
         value={value}
         disabled={disabled}
+        title={hint}
+        aria-description={hint}
         onChange={(event) => onChange(event.target.value)}
       >
         {children}
@@ -235,6 +275,40 @@ function updateParams(nodeId: string, key: string, value: unknown): void {
       : {};
   params[key] = value;
   if (state.updateNodeData(nodeId, { params })) state.commitTextEdit();
+}
+
+/** 「推为参考」新建节点的横向偏移;够远不压住源节点,又还在同屏视野内。 */
+const PUSH_AS_REFERENCE_OFFSET_X = 360;
+
+/**
+ * 入库(CHECKLIST #64)。**按 generationId 匹配,不按 taskId** ——
+ * 画布直连图片走同步完成路径,`bindProviderTask` 不会被调用,`task_id` 恒为 null,
+ * 按 taskId 匹配一行都命中不到(详见 /api/studio/library 的头注释)。
+ *
+ * 复用 Studio 既有端点而非另起画布专用路由(铁律1 零 fork):属主校验 / completed 闸 /
+ * published 守卫那四道闸只该有一份,复制一份迟早漂移。
+ */
+async function archiveToLibrary(generationId: string): Promise<void> {
+  const response = await fetch("/api/studio/library", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      generationIds: [generationId],
+      libraryStatus: "ready",
+    }),
+  });
+  const body = (await response.json().catch(() => null)) as {
+    success?: boolean;
+    error?: string;
+    data?: { updated?: number };
+  } | null;
+  if (!response.ok || body?.success !== true) {
+    throw new Error(body?.error || "入库失败");
+  }
+  // updated=0 表示一行都没命中(未完成 / 非本人 / 已是 published),不能当成功报。
+  if (!body.data?.updated) {
+    throw new Error("没有可入库的产物：任务未完成或已发布");
+  }
 }
 
 function downloadMedia(generationId: string, filename: string): void {
@@ -338,6 +412,7 @@ function ImageSettings({
           node: (
             <SelectField
               label="清晰度"
+              hintKey="image.resolution"
               value={config.resolution}
               disabled={disabled}
               onChange={(resolution) =>
@@ -359,6 +434,7 @@ function ImageSettings({
           node: (
             <SelectField
               label="画幅"
+              hintKey="image.aspectRatio"
               value={config.aspectRatio}
               disabled={disabled}
               onChange={(aspectRatio) =>
@@ -427,6 +503,7 @@ function VideoSettings({
           node: (
             <SelectField
               label="模型"
+              hintKey="video.model"
               value={config.model}
               disabled={disabled}
               onChange={(model) =>
@@ -446,6 +523,7 @@ function VideoSettings({
           node: (
             <SelectField
               label="模式"
+              hintKey="video.mode"
               value={config.mode}
               disabled={disabled}
               onChange={(mode) =>
@@ -468,6 +546,7 @@ function VideoSettings({
           node: (
             <SelectField
               label="时长"
+              hintKey="video.duration"
               value={String(config.durationSeconds)}
               disabled={disabled}
               onChange={(duration) =>
@@ -490,6 +569,7 @@ function VideoSettings({
           node: (
             <SelectField
               label="质量"
+              hintKey="video.quality"
               value={config.quality}
               disabled={disabled}
               onChange={(quality) =>
@@ -509,6 +589,7 @@ function VideoSettings({
           node: (
             <SelectField
               label="画幅"
+              hintKey="video.aspectRatio"
               value={config.aspectRatio}
               disabled={disabled}
               onChange={(aspectRatio) =>
@@ -569,6 +650,15 @@ export function GenerationControls({
   const [estimateError, setEstimateError] = useState<string | null>(null);
   const [estimateEpoch, setEstimateEpoch] = useState(0);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  /** 手动刷新在途(CHECKLIST #51③);只驱动按钮的禁用与转圈,不参与任何闸门。 */
+  const [manualRefreshing, setManualRefreshing] = useState(false);
+  /** 「如何解锁」指引是否展开(CHECKLIST #186)。 */
+  const [lockHintOpen, setLockHintOpen] = useState(false);
+  /** 产物全屏预览(CHECKLIST #84)。 */
+  const [previewOpen, setPreviewOpen] = useState(false);
+  /** 入库在途 / 已入库(CHECKLIST #64);权威在 generations.library_status,这里只做乐观标记。 */
+  const [archiving, setArchiving] = useState(false);
+  const [archived, setArchived] = useState(false);
   const generation = generationByNodeId.get(nodeId);
   const unresolvedActionId = unresolvedActionByNodeId.get(nodeId) ?? null;
   const submitting = submittingNodeIds.has(nodeId);
@@ -583,21 +673,50 @@ export function GenerationControls({
     uncertain ||
     unresolvedActionId !== null;
 
-  const incoming = useMemo(() => {
-    const ids = edges
-      .filter((edge) => edge.target === nodeId)
-      .map((edge) => edge.source);
-    const idSet = new Set(ids);
-    return nodes.filter((node) => idSet.has(node.id));
-  }, [edges, nodeId, nodes]);
-  const incomingImageCount = incoming.filter(
-    (node) => node.type === "image" && Boolean(node.data.media?.ossKey)
-  ).length;
+  /**
+   * 上游输入。**必须与提交路径同序** —— 两边共用 `orderGenerationInputNodes`。
+   * 此前这里是 `nodes.filter(idSet.has)`(节点数组序),而提交走的是连线序;只用来算数量时
+   * 看不出差别,但引用区一按序号渲染,「图N」就会指错请求里的第 N 张参考图。
+   */
+  const incoming = useMemo(
+    () => orderGenerationInputNodes(nodes, edges, nodeId),
+    [edges, nodeId, nodes]
+  );
+  const imageReferences = useMemo(
+    () => collectImageReferences(incoming),
+    [incoming]
+  );
+  /** 本节点位置,供「推为参考」把新节点摆在右侧(CHECKLIST #64)。取不到就交给 store 默认。 */
+  const selfPosition = nodes.find((node) => node.id === nodeId)?.position ?? null;
+  const incomingImageCount = imageReferences.length;
   const config =
     kind === "image"
       ? getCanvasImageDraftConfig(data)
       : getCanvasVideoDraftConfig(data);
   const configKey = JSON.stringify(config);
+
+  /**
+   * 灰置原因与解锁步骤(CHECKLIST #186)。判定本体是 `generation-lock-hints.ts` 的纯函数
+   * (可离线穷举状态组合),这里只喂参数。
+   *
+   * 注意「图生视频缺上游图」这一条:此前它只在**提交后**由 buildIntent 抛错才被用户看到,
+   * 等于让人先点了才知道不行。现在同一个条件在事前就讲清楚,并给出三条可自助的出路。
+   */
+  const lockHint = resolveGenerationLockHint({
+    readOnly,
+    enabled,
+    submitting,
+    active,
+    uncertain,
+    reconciling: unresolvedActionId !== null,
+    syncState,
+    kind,
+    videoMode:
+      kind === "video"
+        ? (config as CanvasVideoDraftConfig).mode
+        : undefined,
+    incomingImageCount,
+  });
 
   useEffect(() => {
     setEstimateValue(null);
@@ -668,6 +787,32 @@ export function GenerationControls({
     }
     void submitNode(nodeId);
   };
+  /**
+   * 拦截式确认文案(CHECKLIST #185)。规格只在两种情形下拦截,弹窗必须讲清是哪一种——
+   * 否则用户看到「有时弹有时不弹」会以为是 bug。`indeterminate` 是报价/余额读不出的
+   * fail-closed 兜底,不谎称原因。
+   */
+  const confirmCopy = ((): { title: string; lead: string } => {
+    switch (estimateValue?.confirmationReason ?? null) {
+      case "low_balance":
+        return {
+          title: "余额可能不够，确认继续？",
+          lead: "当前余额已接近本次预估，扣费可能失败。",
+        };
+      case "high_cost":
+        return {
+          title: "本次为大额消耗，确认继续？",
+          lead: "本次单次消耗超过大额阈值。",
+        };
+      case "indeterminate":
+        return {
+          title: "报价未取到可靠数值，确认继续？",
+          lead: "本次预估或余额读取异常，已按最保守方式拦下。",
+        };
+      default:
+        return { title: "确认本次积分消耗", lead: "" };
+    }
+  })();
   const filename = `${kind === "image" ? "canvas-image" : "canvas-video"}-${
     generation?.generationId.slice(0, 8) ?? nodeId
   }.${kind === "image" ? "jpg" : "mp4"}`;
@@ -766,6 +911,10 @@ export function GenerationControls({
         }}
       />
 
+      {/* 引用区(CHECKLIST #44 / #72 / #94)。紧贴提示词下方,因为提示词里写「与图1保持一致」
+          时需要照着这里的序号写 —— 两者离得越近越不容易写错。 */}
+      <GenerationReferenceStrip references={imageReferences} />
+
       {kind === "image" ? (
         <ImageSettings
           nodeId={nodeId}
@@ -824,6 +973,30 @@ export function GenerationControls({
                 重新预估
               </button>
             )}
+          {/* 常态手动刷新(CHECKLIST #51③)。刻意**不**只在出错时出现:自动触发(加载/轮询/回前台)
+              都是隐式的,用户对着一个转圈的节点时需要一个「我现在就要重新核对」的抓手。
+              只读态不给,它不该产生任何请求。 */}
+          {!readOnly && enabled && (
+            <button
+              type="button"
+              className="ml-1 inline-flex items-center gap-0.5 underline underline-offset-2 disabled:no-underline disabled:opacity-50"
+              disabled={manualRefreshing || syncState === "loading"}
+              title="立即向服务端重新核对本画布的任务状态(加载与回前台会自动核对，这里是手动补一次)"
+              onClick={() => {
+                setManualRefreshing(true);
+                void refresh()
+                  .catch(() => {
+                    // 失败已由状态区的 syncError 呈现,这里不再叠一个 toast。
+                  })
+                  .finally(() => setManualRefreshing(false));
+              }}
+            >
+              <RefreshCw
+                className={`h-2.5 w-2.5 ${manualRefreshing ? "animate-spin" : ""}`}
+              />
+              刷新状态
+            </button>
+          )}
         </div>
         <Button
           type="button"
@@ -855,6 +1028,39 @@ export function GenerationControls({
         </Button>
       </div>
 
+      {/* 灰置控件的「如何解锁」指引(CHECKLIST #186)。
+          刻意做成**点击展开**而非常显:常显会把面板挤满,而缺前置条件本身是少数情形。
+          但入口必须常在 —— 用户盯着一个灰按钮时,得有个地方可点。 */}
+      {lockHint && (
+        <div className="text-[10px] leading-relaxed">
+          <button
+            type="button"
+            className="nodrag nopan inline-flex items-center gap-0.5 text-muted-foreground underline underline-offset-2 hover:text-foreground"
+            aria-expanded={lockHintOpen}
+            onClick={() => setLockHintOpen((value) => !value)}
+          >
+            <AlertCircle className="h-2.5 w-2.5" />
+            {lockHintOpen ? "收起说明" : "为什么现在不能生成？"}
+          </button>
+          {lockHintOpen && (
+            <div className="mt-1 rounded border border-border bg-muted/40 p-1.5">
+              <p className="text-muted-foreground">{lockHint.reason}</p>
+              {lockHint.steps.length > 0 ? (
+                <ul className="mt-1 list-disc space-y-0.5 pl-3.5 text-muted-foreground">
+                  {lockHint.steps.map((step) => (
+                    <li key={step}>{step}</li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="mt-1 text-muted-foreground opacity-80">
+                  这一条没有可自助解除的操作，稍等即可。
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       {generation?.status === "completed" && mediaUrl && (
         <div className="flex items-center gap-1.5">
           <Button
@@ -878,6 +1084,19 @@ export function GenerationControls({
             <Download className="h-3 w-3" />
             下载
           </Button>
+          {/* 全屏预览(CHECKLIST #84)。节点上的产物缩略图受节点尺寸与 zoom 限制,
+              细节根本看不清 —— 而「这张图到底行不行」是决定要不要重生成(再花一次钱)的
+              唯一依据。用签名 URL 直接放大展示,不下载、不落盘。 */}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-7 flex-1 gap-1 px-2 text-[11px]"
+            onClick={() => setPreviewOpen(true)}
+          >
+            <Maximize2 className="h-3 w-3" />
+            全屏
+          </Button>
           {kind === "video" && (
             <Button
               type="button"
@@ -893,18 +1112,133 @@ export function GenerationControls({
         </div>
       )}
 
+      {/* 入库 / 推为参考(CHECKLIST #64「产物动作:下载/入库/推为参考」的后两项)。
+          只读态不给:两者都会产生副作用(一个写库、一个改文档)。 */}
+      {generation?.status === "completed" && !readOnly && (
+        <div className="flex items-center gap-1.5">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-7 flex-1 gap-1 px-2 text-[11px]"
+            disabled={archiving || archived}
+            title="把本次产物标记进内容库，之后可在内容库里找到它"
+            onClick={() => {
+              setArchiving(true);
+              void archiveToLibrary(generation.generationId)
+                .then(() => {
+                  setArchived(true);
+                  toast({ title: "已入库", description: "可在内容库中找到本次产物" });
+                })
+                .catch((error: unknown) => {
+                  toast({
+                    title: "入库失败",
+                    description:
+                      error instanceof Error ? error.message : "请稍后重试",
+                    variant: "destructive",
+                  });
+                })
+                .finally(() => setArchiving(false));
+            }}
+          >
+            {archiving ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              <CheckCircle2 className="h-3 w-3" />
+            )}
+            {archived ? "已入库" : "入库"}
+          </Button>
+          {kind === "image" && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-7 flex-1 gap-1 px-2 text-[11px]"
+              title="以本图为参考新建一个视频节点，并自动连好线"
+              onClick={() => {
+                const created = useCanvasStore.getState().addNodeAndEdge({
+                  node: {
+                    type: "video",
+                    position: selfPosition
+                      ? {
+                          x: selfPosition.x + PUSH_AS_REFERENCE_OFFSET_X,
+                          y: selfPosition.y,
+                        }
+                      : undefined,
+                    data: { title: "以图生视频" },
+                  },
+                  fromNodeId: nodeId,
+                  fromHandleId: null,
+                  fromHandleType: "source",
+                });
+                if (!created) {
+                  toast({
+                    title: "无法新建节点",
+                    description: "画布当前不可写入，或已达节点上限",
+                    variant: "destructive",
+                  });
+                  return;
+                }
+                toast({
+                  title: "已推为参考",
+                  description: "已新建视频节点并连好线，本图即它的图1",
+                });
+              }}
+            >
+              <Sparkles className="h-3 w-3" />
+              推为参考
+            </Button>
+          )}
+        </div>
+      )}
+
       {generation?.status === "completed" && (
         <p className="text-[9px] leading-relaxed text-muted-foreground">
           AI 生成内容 · 对外发布时请遵循平台的 AIGC 标注规则。
         </p>
       )}
 
+      {/* 全屏预览弹层(CHECKLIST #84)。
+          - 只吃 `mediaUrl`(渲染层解析出的**瞬态**签名 URL),不碰 object key、不写回节点;
+          - 视频给原生 controls,图片不给交互 —— 预览就是预览,裁剪/编辑不在 P1 范围;
+          - 关掉即卸载 <video>,不占用「同屏活跃视频 ≤6」的配额(那是节点上的策略)。 */}
+      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+        <DialogContent className="max-w-[min(92vw,72rem)] p-3">
+          <DialogHeader>
+            <DialogTitle className="text-sm">
+              {kind === "image" ? "图片" : "视频"}产物预览
+            </DialogTitle>
+            <DialogDescription className="text-[11px]">
+              任务号 {generation?.generationId.slice(0, 8) ?? "—"} · AI 生成内容，
+              对外发布时请遵循平台的 AIGC 标注规则。
+            </DialogDescription>
+          </DialogHeader>
+          {previewOpen && mediaUrl ? (
+            kind === "image" ? (
+              // eslint-disable-next-line @next/next/no-img-element -- 签名 URL 是瞬态的，不能进 next/image 的优化缓存
+              <img
+                src={mediaUrl}
+                alt="生成产物全屏预览"
+                className="max-h-[72vh] w-full object-contain"
+              />
+            ) : (
+              <video
+                src={mediaUrl}
+                controls
+                playsInline
+                className="max-h-[72vh] w-full object-contain"
+              />
+            )
+          ) : null}
+        </DialogContent>
+      </Dialog>
+
       <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>确认本次积分消耗</AlertDialogTitle>
+            <AlertDialogTitle>{confirmCopy.title}</AlertDialogTitle>
             <AlertDialogDescription>
-              本次预计消耗 {estimateValue?.cost ?? 0} 积分，当前余额{" "}
+              {confirmCopy.lead}本次预计消耗 {estimateValue?.cost ?? 0} 积分，当前余额{" "}
               {estimateValue?.balance ?? 0}。任务提交后只有明确失败才会自动退款。
             </AlertDialogDescription>
           </AlertDialogHeader>
