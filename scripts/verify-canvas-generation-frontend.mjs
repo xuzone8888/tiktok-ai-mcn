@@ -529,6 +529,58 @@ ok(
 );
 has(strip, "reference.label", "#44 each thumbnail renders its ordinal label");
 
+console.log("\nN+5. CHECKLIST #64 — artifact actions: archive to library / push as reference");
+const libraryRoute = read("src/app/api/studio/library/route.ts");
+has(
+  controls,
+  '"/api/studio/library"',
+  "#64 archiving reuses the existing Studio endpoint instead of a canvas-only fork"
+);
+ok(
+  /generationIds: \[generationId\]/.test(controls),
+  "#64 canvas archives by generationId — canvas direct images have task_id = null"
+);
+has(
+  libraryRoute,
+  'update.in("id", generationIds)',
+  "#64 the endpoint accepts generationId as an alternative match key"
+);
+has(
+  libraryRoute,
+  'taskIds 与 generationIds 只能二选一',
+  "#64 mixing both match keys is rejected rather than silently double-counted"
+);
+ok(
+  /updated: updatedGenerationIds\.length/.test(libraryRoute),
+  "#64 `updated` counts rows, not task_ids (canvas rows would otherwise report 0 on success)"
+);
+// 四道闸必须仍在,扩参数不等于放松校验。
+has(libraryRoute, '.eq("user_id", user.id)', "#64 ownership guard intact");
+has(libraryRoute, '.eq("status", "completed")', "#64 completed-only guard intact");
+has(
+  libraryRoute,
+  '.neq("library_status", "published")',
+  "#64 published-state guard intact"
+);
+ok(
+  /if \(!body\.data\?\.updated\)/.test(controls),
+  "#64 a zero-row update surfaces as a failure, not a fake success"
+);
+has(
+  controls,
+  "推为参考",
+  "#64 completed image artifacts can be pushed as a downstream reference"
+);
+has(
+  controls,
+  "addNodeAndEdge",
+  "#64 push-as-reference goes through the store's atomic node+edge op (undoable)"
+);
+ok(
+  /generation\?\.status === "completed" && !readOnly/.test(controls),
+  "#64 side-effecting artifact actions are hidden in read-only mode"
+);
+
 if (failed.length > 0) {
   console.error(`\n${failed.length} frontend invariant(s) failed:`);
   for (const label of failed) console.error(`  - ${label}`);

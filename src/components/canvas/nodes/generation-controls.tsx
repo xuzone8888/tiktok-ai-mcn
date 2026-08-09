@@ -277,6 +277,40 @@ function updateParams(nodeId: string, key: string, value: unknown): void {
   if (state.updateNodeData(nodeId, { params })) state.commitTextEdit();
 }
 
+/** 「推为参考」新建节点的横向偏移;够远不压住源节点,又还在同屏视野内。 */
+const PUSH_AS_REFERENCE_OFFSET_X = 360;
+
+/**
+ * 入库(CHECKLIST #64)。**按 generationId 匹配,不按 taskId** ——
+ * 画布直连图片走同步完成路径,`bindProviderTask` 不会被调用,`task_id` 恒为 null,
+ * 按 taskId 匹配一行都命中不到(详见 /api/studio/library 的头注释)。
+ *
+ * 复用 Studio 既有端点而非另起画布专用路由(铁律1 零 fork):属主校验 / completed 闸 /
+ * published 守卫那四道闸只该有一份,复制一份迟早漂移。
+ */
+async function archiveToLibrary(generationId: string): Promise<void> {
+  const response = await fetch("/api/studio/library", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      generationIds: [generationId],
+      libraryStatus: "ready",
+    }),
+  });
+  const body = (await response.json().catch(() => null)) as {
+    success?: boolean;
+    error?: string;
+    data?: { updated?: number };
+  } | null;
+  if (!response.ok || body?.success !== true) {
+    throw new Error(body?.error || "入库失败");
+  }
+  // updated=0 表示一行都没命中(未完成 / 非本人 / 已是 published),不能当成功报。
+  if (!body.data?.updated) {
+    throw new Error("没有可入库的产物：任务未完成或已发布");
+  }
+}
+
 function downloadMedia(generationId: string, filename: string): void {
   if (!/^[0-9a-f-]{36}$/i.test(generationId)) {
     throw new Error("生成记录编号未通过安全校验");
@@ -622,6 +656,9 @@ export function GenerationControls({
   const [lockHintOpen, setLockHintOpen] = useState(false);
   /** 产物全屏预览(CHECKLIST #84)。 */
   const [previewOpen, setPreviewOpen] = useState(false);
+  /** 入库在途 / 已入库(CHECKLIST #64);权威在 generations.library_status,这里只做乐观标记。 */
+  const [archiving, setArchiving] = useState(false);
+  const [archived, setArchived] = useState(false);
   const generation = generationByNodeId.get(nodeId);
   const unresolvedActionId = unresolvedActionByNodeId.get(nodeId) ?? null;
   const submitting = submittingNodeIds.has(nodeId);
@@ -649,6 +686,8 @@ export function GenerationControls({
     () => collectImageReferences(incoming),
     [incoming]
   );
+  /** 本节点位置,供「推为参考」把新节点摆在右侧(CHECKLIST #64)。取不到就交给 store 默认。 */
+  const selfPosition = nodes.find((node) => node.id === nodeId)?.position ?? null;
   const incomingImageCount = imageReferences.length;
   const config =
     kind === "image"
@@ -1068,6 +1107,86 @@ export function GenerationControls({
             >
               <ExternalLink className="h-3 w-3" />
               去发布
+            </Button>
+          )}
+        </div>
+      )}
+
+      {/* 入库 / 推为参考(CHECKLIST #64「产物动作:下载/入库/推为参考」的后两项)。
+          只读态不给:两者都会产生副作用(一个写库、一个改文档)。 */}
+      {generation?.status === "completed" && !readOnly && (
+        <div className="flex items-center gap-1.5">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-7 flex-1 gap-1 px-2 text-[11px]"
+            disabled={archiving || archived}
+            title="把本次产物标记进内容库，之后可在内容库里找到它"
+            onClick={() => {
+              setArchiving(true);
+              void archiveToLibrary(generation.generationId)
+                .then(() => {
+                  setArchived(true);
+                  toast({ title: "已入库", description: "可在内容库中找到本次产物" });
+                })
+                .catch((error: unknown) => {
+                  toast({
+                    title: "入库失败",
+                    description:
+                      error instanceof Error ? error.message : "请稍后重试",
+                    variant: "destructive",
+                  });
+                })
+                .finally(() => setArchiving(false));
+            }}
+          >
+            {archiving ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              <CheckCircle2 className="h-3 w-3" />
+            )}
+            {archived ? "已入库" : "入库"}
+          </Button>
+          {kind === "image" && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-7 flex-1 gap-1 px-2 text-[11px]"
+              title="以本图为参考新建一个视频节点，并自动连好线"
+              onClick={() => {
+                const created = useCanvasStore.getState().addNodeAndEdge({
+                  node: {
+                    type: "video",
+                    position: selfPosition
+                      ? {
+                          x: selfPosition.x + PUSH_AS_REFERENCE_OFFSET_X,
+                          y: selfPosition.y,
+                        }
+                      : undefined,
+                    data: { title: "以图生视频" },
+                  },
+                  fromNodeId: nodeId,
+                  fromHandleId: null,
+                  fromHandleType: "source",
+                });
+                if (!created) {
+                  toast({
+                    title: "无法新建节点",
+                    description: "画布当前不可写入，或已达节点上限",
+                    variant: "destructive",
+                  });
+                  return;
+                }
+                toast({
+                  title: "已推为参考",
+                  description: "已新建视频节点并连好线，本图即它的图1",
+                });
+              }}
+            >
+              <Sparkles className="h-3 w-3" />
+              推为参考
             </Button>
           )}
         </div>
