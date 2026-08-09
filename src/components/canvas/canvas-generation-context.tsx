@@ -13,10 +13,12 @@ import {
 
 import { toast } from "@/hooks/use-toast";
 import {
+  CANVAS_IMAGE_ASPECT_RATIOS,
   CanvasGenerationIntentV1Schema,
   computeCanvasGenerationTextSha256,
   normalizeCanvasGenerationText,
   type CanvasGenerationIntentV1,
+  type CanvasImageAspectRatio,
 } from "@/lib/canvas/generation-intent";
 import type { CanvasRuntimeDebugState } from "@/lib/canvas/canvas-runtime";
 import type { CanvasNode, CanvasNodeData } from "@/lib/canvas/schema";
@@ -104,18 +106,8 @@ export interface CanvasGenerationEstimate {
 
 export interface CanvasImageDraftConfig {
   resolution: "1k" | "2k" | "4k";
-  aspectRatio:
-    | "auto"
-    | "1:1"
-    | "16:9"
-    | "9:16"
-    | "4:3"
-    | "3:4"
-    | "3:2"
-    | "2:3"
-    | "5:4"
-    | "4:5"
-    | "21:9";
+  /** 画幅取值与服务端 intent 同源,见 `CANVAS_IMAGE_ASPECT_RATIOS`(CHECKLIST #78)。 */
+  aspectRatio: CanvasImageAspectRatio;
 }
 
 export interface CanvasVideoDraftConfig {
@@ -358,19 +350,9 @@ export function getCanvasImageDraftConfig(data: CanvasNodeData): CanvasImageDraf
     raw?.resolution === "2k" || raw?.resolution === "4k"
       ? raw.resolution
       : "1k";
-  const aspectValues: CanvasImageDraftConfig["aspectRatio"][] = [
-    "auto",
-    "1:1",
-    "16:9",
-    "9:16",
-    "4:3",
-    "3:4",
-    "3:2",
-    "2:3",
-    "5:4",
-    "4:5",
-    "21:9",
-  ];
+  // 白名单与 intent/估价 schema 同源;存量文档若带已下线的档位,这里会落回默认值而不是原样透传。
+  const aspectValues: readonly CanvasImageDraftConfig["aspectRatio"][] =
+    CANVAS_IMAGE_ASPECT_RATIOS;
   const aspectRatio = aspectValues.includes(
     raw?.aspectRatio as CanvasImageDraftConfig["aspectRatio"]
   )

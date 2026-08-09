@@ -85,34 +85,34 @@ import {
 import { useViewportSize } from "../use-viewport-size";
 
 /**
- * 图片画幅枚举(CHECKLIST #78「比例 13 种」)。
+ * 图片画幅选项(CHECKLIST #78)。
  *
- * **这 6 项是真实能力边界,不要照着 schema 往上加。** 三层枚举当前不齐:
- *   - 面板(本数组)6 项;
- *   - 客户端类型 `CanvasImageDraftConfig["aspectRatio"]` 与服务端
- *     `ImageGenerationConfigSchema.aspectRatio` 各 11 项;
- *   - **上游 `getVideoPlatformImageSize` 的 sizeMap 每档只有这 6 个 key**
- *     (src/lib/video-platform-image-api.ts:214-241)。
+ * **枚举本身不在这里定义**——取值唯一真相源是 `CANVAS_IMAGE_ASPECT_RATIOS`
+ * (`src/lib/canvas/generation-intent.ts`),intent schema / 估价 schema / 客户端草稿类型
+ * 与本数组四处同源。本文件只负责给每个取值配中文标签与**展示顺序**
+ * (竖屏优先,与画布主要用于短视频素材的实际用法一致)。
  *
- * 关键:该函数末行是 `sizeMap[resolution]?.[ratio] || sizeMap[resolution]?.auto || null`,
- * 多出来的 5 项(3:2/2:3/5:4/4:5/21:9)**不会报错,而是静默回落成 auto 尺寸** ——
- * 用户选了 21:9、按全价扣了分,拿回来的却是自动画幅的图。所以把面板扩到 11 项
- * 等于制造「付费得到错画幅」的静默缺陷,比少列几项更糟。
- *
- * 要真正补齐,必须先给 sizeMap 补这几档的像素尺寸并确认 gpt-image-2 接受,
- * 而那是 quick-gen / image-factory 共用的链路,不属画布单方改动(见 P0 看板 R2-Q4)。
+ * 2026-08-09 之前面板 6 项、两处 schema 各 11 项,靠这个数组单点防住
+ * 「选了上游够不着的档位 → 静默回落 auto → 按全价扣费」;现已按 P1-Q2a 收窄到同一集合,
+ * 下面那行 `satisfies` 是机器守卫:标签表漏配任一取值都会在 tsc 阶段红,drift 不会再静默发生。
  */
+const IMAGE_ASPECT_LABELS = {
+  "9:16": "竖屏 9:16",
+  "16:9": "横屏 16:9",
+  "1:1": "方图 1:1",
+  "4:3": "横图 4:3",
+  "3:4": "竖图 3:4",
+  auto: "自动",
+} satisfies Record<CanvasImageDraftConfig["aspectRatio"], string>;
+
 const IMAGE_ASPECTS: Array<{
   value: CanvasImageDraftConfig["aspectRatio"];
   label: string;
-}> = [
-  { value: "9:16", label: "竖屏 9:16" },
-  { value: "16:9", label: "横屏 16:9" },
-  { value: "1:1", label: "方图 1:1" },
-  { value: "4:3", label: "横图 4:3" },
-  { value: "3:4", label: "竖图 3:4" },
-  { value: "auto", label: "自动" },
-];
+}> = (
+  ["9:16", "16:9", "1:1", "4:3", "3:4", "auto"] satisfies Array<
+    CanvasImageDraftConfig["aspectRatio"]
+  >
+).map((value) => ({ value, label: IMAGE_ASPECT_LABELS[value] }));
 
 const ENABLED_VIDEO_MODEL_OPTIONS = VIDEO_MODEL_OPTIONS.filter((option) =>
   ENABLED_CANVAS_VIDEO_MODELS.includes(option.id)

@@ -136,22 +136,38 @@ const TextGenerationConfigSchema = z.strictObject({
   model: z.literal("deepseek-chat"),
 });
 
+/**
+ * 画布图片画幅枚举(CHECKLIST #78)· **唯一真相源,三处共用**
+ * (本 schema / `generation-api-types` 的估价 schema / 面板 `IMAGE_ASPECTS` 与客户端草稿类型)。
+ *
+ * **这 6 项是上游的真实能力边界,不要往上加。** 上游
+ * `getVideoPlatformImageSize`(`src/lib/video-platform-image-api.ts:211-242`)的 `sizeMap`
+ * 每个分辨率档**只有这 6 个 key**,而其末行是
+ * `sizeMap[resolution]?.[ratio] || sizeMap[resolution]?.auto || null` ——
+ * 传入 map 里没有的档位**不报错,而是静默回落成 auto 尺寸**。
+ *
+ * 2026-08-09 之前本枚举收 11 项(多出 3:2/2:3/5:4/4:5/21:9),面板只给 6 项,
+ * 于是「用户选了 21:9、按全价扣分、拿回自动画幅的图」这条路**在契约层是敞开的**,
+ * 唯一防线只是面板那个数组。画布已对所有登录用户开放,故按用户裁决(P1-Q2a)收窄到 6 项,
+ * 让契约与真实能力一致。收窄前已扫生产全部 8 个画布文档:越界档位**零命中**,不会打坏存量。
+ *
+ * 要真正补齐 #78 的 13 种,必须先给上游 `sizeMap` 补像素尺寸并确认 gpt-image-2 接受 ——
+ * 那是 quick-gen / image-factory 共用链路,不属画布单方改动;#78 已按 P1-Q2b 改判延 P2。
+ */
+export const CANVAS_IMAGE_ASPECT_RATIOS = [
+  "auto",
+  "1:1",
+  "16:9",
+  "9:16",
+  "4:3",
+  "3:4",
+] as const;
+export type CanvasImageAspectRatio = (typeof CANVAS_IMAGE_ASPECT_RATIOS)[number];
+
 const ImageGenerationConfigSchema = z.strictObject({
   model: z.literal("gpt-image-2"),
   resolution: z.enum(["1k", "2k", "4k"]),
-  aspectRatio: z.enum([
-    "auto",
-    "1:1",
-    "16:9",
-    "9:16",
-    "4:3",
-    "3:4",
-    "3:2",
-    "2:3",
-    "5:4",
-    "4:5",
-    "21:9",
-  ]),
+  aspectRatio: z.enum(CANVAS_IMAGE_ASPECT_RATIOS),
   referenceNodeIds: z.array(CanvasIntentNodeIdSchema).max(1),
 });
 

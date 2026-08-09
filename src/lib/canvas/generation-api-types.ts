@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import {
+  CANVAS_IMAGE_ASPECT_RATIOS,
   CanvasGenerationIntentV1Schema,
   type CanvasGenerationIntentV1,
 } from "./generation-intent";
@@ -50,19 +51,9 @@ export type CanvasGenerationCreateRequest = z.infer<
 
 const CanvasImageEstimateConfigSchema = z.strictObject({
   resolution: z.enum(["1k", "2k", "4k"]),
-  aspectRatio: z.enum([
-    "auto",
-    "1:1",
-    "16:9",
-    "9:16",
-    "4:3",
-    "3:4",
-    "3:2",
-    "2:3",
-    "5:4",
-    "4:5",
-    "21:9",
-  ]),
+  // 画幅枚举与 intent 同源(见 generation-intent.ts 的 CANVAS_IMAGE_ASPECT_RATIOS);
+  // 估价与提交必须收同一个集合,否则会出现「估得出价、提交被拒」或反之。
+  aspectRatio: z.enum(CANVAS_IMAGE_ASPECT_RATIOS),
 });
 
 const CanvasVideoEstimateConfigSchema = z.strictObject({

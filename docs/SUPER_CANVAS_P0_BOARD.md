@@ -492,7 +492,30 @@
 
 - **P0-Q1 · ✅ 已裁决(2026-07-12,技术负责人)**:体积双闸统一为 **>512KB 软告警(建议拆画布,不拒存)/ >2MB 硬拒存并提示**。理由:告警必须早于硬闸,且不妨碍 200 节点 P0 目标。**已落地**:CHECKLIST #29(A 组,改「>512KB 软告警建议拆画布」)/#47(G 组,改「>2MB 硬拒存并提示」)文字与备注、本看板覆盖表(#29→D1+S7、#47→D1+D3+S7)、D1/D3/S7 任务明细、总纲 §五/§七、DATA_MODEL §六 均已同步。**分工**:D3 实施 2MB 硬拒(POST/PATCH >2MB 返 400);S7 实施 512KB 软告警横幅 + 2MB 拒存 toast;D1 只提供两个阈值契约。**待 data 后续 commit 同步(非审核窗改)**:`src/lib/canvas/doc-limits.ts` 常量按裁决翻转(`HARD_LIMIT=2MB`、`WARN_LIMIT=512KB`;f838476 原实现是 hard=512KB/warn=2MB 反的,导致告警分支死代码)+ 迁移文件 `doc_bytes` 注释同步;供 D2 复审时一并核。
 
-- **P1-Q1 · 🔴 待用户裁决(2026-08-09 提请)· #81 高清 / #85 nine_grid 怎么接 `/api/generate/image`**
+- **P1-Q1 · ✅ 已裁决(2026-08-09,用户授权 AI 判定)· 采纳方案①,并且工作量比提请时估的小得多**
+
+  用户答复「你来判定」。裁决=**方案①(画布侧扩 mode,`/api/canvas/generations` 走自己的链路)**,否决方案②。
+  **裁决后又做了一轮实证,推翻了提请时对成本的估计**,记在这里防下个窗口按旧估算排期:
+
+  1. **画布与主图片路由本来就调同一个上游**:`generation-service.ts:768` 调 `submitVideoPlatformImage`,
+     与 `/api/generate/image` 同一个 `src/lib/video-platform-image-api.ts`。所谓「画布够不着现成分支」,
+     够不着的是 **route.ts 里那段编排**,不是上游能力。
+  2. **`upscale`/`nine_grid` 两个「分支」的实质极薄**,通读 `route.ts:69-78 / 282-296 / 346-394` 后确认只有四件事:
+     ①用户没填提示词时套一段**固定英文模板**(`getOpenAIEditPrompt`,10 行纯函数,无外部依赖);
+     ②强制要求至少一张源图;③`4k` + `nine_grid` + 多参考图时只取第 1 张(稳定性);④taskId 前缀。
+  3. **🔴 最关键:这两个 mode 没有独立价目,不触铁律 9。**
+     主路由用 `getNewImageCost(model, resolution)`,画布用 `getImageResolutionCost(intent.config.resolution)`,
+     **两者同族且都只是 `f(resolution)`,压根没有 mode 这一项**。
+     `IMAGE_ENHANCEMENT_PRICING`(`upscale_2k/upscale_4k/nine_grid` 各 10)标着 `@deprecated`,
+     **全仓引用数 0,是死常量**。⇒ **接入无需定价、无需调价、无需用户再裁决价目**。
+
+  ⇒ 落地范围收敛为:`ImageGenerationConfigSchema` 加 `mode` 枚举(默认 `generate`,保持存量文档兼容)+
+  把那段模板与「必须有源图」的校验抽成画布可复用的纯函数 + 面板露出两个入口。
+  **计费/对账/退款/状态机全部原样走画布已生产验证的那套,零改动。**
+  ⚠️ 因此 CHECKLIST #85 备注「纯 UI 露出 S」**方向是对的、只是漏了 mode 契约那一层**;
+  R2-Q4 判它「工作量估计是错的」是基于「画布够不着上游」这个前提,该前提经本轮实证**不成立**。
+
+- **P1-Q1(原提请全文,保留备查)· #81 高清 / #85 nine_grid 怎么接 `/api/generate/image`**
 
   **事实**(批 0 实证):`/api/generate/image` 里 `VALID_IMAGE_MODES` 确含 `upscale`/`nine_grid`(`route.ts:35`),
   分支代码完整;但**画布对该路由引用数为 0**——画布全部 API 出口只有 `/api/canvas/*`、`/api/studio/library`、`/api/storage/media-url`。
@@ -506,7 +529,20 @@
   **建议**:采纳 ①,并把「新 mode 必须先有价目」写成硬前置(触铁律 9,调价须用户裁决)。
   ⚠️ CHECKLIST #85 备注「复用现成 nine_grid 分支,纯 UI 露出 S」的工作量估计**是错的**(R2-Q4 已指出,批 0 复证)。
 
-- **P1-Q2 · 🔴 待用户裁决(2026-08-09 提请)· #78 图片比例:先收窄 schema,还是排期改上游?**
+- **P1-Q2 · ✅ 已裁决并已落地(2026-08-09,用户)· Q2-a 收窄 schema / Q2-b #78 改判延 P2**
+
+  - **Q2-a=收窄到 6 项(已落地)**。落地前先扫了生产**全部 8 个** `canvases.doc`:
+    `21:9`/`5:4`/`4:5`/`3:2`/`2:3` **全部零命中**,故收窄不会把任何存量节点打成「损坏节点」。
+    实现上没有原地改四份字面量,而是**抽成唯一真相源** `CANVAS_IMAGE_ASPECT_RATIOS`
+    (`src/lib/canvas/generation-intent.ts`),intent schema / 估价 schema / 客户端草稿类型 /
+    面板标签表四处全部由它派生 —— **当初就是因为四处各写各的才漂移成 6 vs 11**。
+    机器守卫两道:①`generation-intent` verifier 双向断言(6 个支持值全过、8 个越界值全拒);
+    ②`generation-frontend` verifier 断言四处同源且面板集合与常量**完全相等**(tsc 的 `satisfies`
+    只能保证「列的都合法」,保证不了「一个不漏」)。闸门 `intent 122→137`、`frontend 136→149`。
+  - **Q2-b=#78 改判「延 P2 · 外部条件不具备」(已落笔)**。CHECKLIST 第 78 行改 `延/P2` 并补裁决理由;
+    两张统计表 + CLAUDE.md 期次表同步;`reconcile` 绿:`220(做 166/裁 31/延 23)`、**P1 由 52 降为 51**。
+
+- **P1-Q2(原提请全文,保留备查)· #78 图片比例:先收窄 schema,还是排期改上游?**
 
   **批 0 查出的新事实**(比 HANDOFF 记载更严重):面板 6 项 = 上游 `sizeMap` 的 6 个 key,是对的;
   **但共用 zod 仍收 11 项,且 `21:9`/`5:4`/`3:2` 已随 canvas chunk 发到生产**。

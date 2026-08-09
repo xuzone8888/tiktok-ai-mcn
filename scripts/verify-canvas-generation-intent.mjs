@@ -149,7 +149,9 @@ const imageRaw = {
   config: {
     model: "gpt-image-2",
     resolution: "2k",
-    aspectRatio: "4:5",
+    // 2026-08-09(P1-Q2a)前这里写的是 "4:5" —— 那是上游 sizeMap 够不着、会静默回落 auto
+    // 却按全价扣费的档位之一。枚举收窄后它必须被拒,故夹具改用真实支持的 "3:4"。
+    aspectRatio: "3:4",
     referenceNodeIds: ["image-a"],
   },
 };
@@ -288,6 +290,38 @@ throws(() => intent.canonicalizeCanvasJson(Number.POSITIVE_INFINITY), "JCS rejec
 throws(() => intent.canonicalizeCanvasJson("\ud800"), "JCS rejects lone surrogates");
 
 ok(intent.CanvasGenerationIntentV1Schema.safeParse(imageRaw).success, "exact GPT Image 2 intent passes");
+
+/*
+ * 画幅枚举必须与上游 getVideoPlatformImageSize 的 sizeMap 能力**逐值相等**(CHECKLIST #78 / P1-Q2a)。
+ *
+ * 这不是风格检查:该函数末行是 `sizeMap[r]?.[ratio] || sizeMap[r]?.auto || null`,
+ * 传入 map 里没有的档位不报错而是静默回落 auto —— 用户按全价付了钱、拿回错画幅的图,
+ * 且这条路只有 schema 能堵(面板数组只防住老实用面板的人)。
+ * 故此处双向断言:6 个支持值必须全过,5 个已下线值必须全拒。任一方向漏了都会红。
+ */
+const SUPPORTED_ASPECTS = ["auto", "1:1", "16:9", "9:16", "4:3", "3:4"];
+const REJECTED_ASPECTS = ["3:2", "2:3", "5:4", "4:5", "21:9", "1:2", "2:1", "9:21"];
+eq(
+  JSON.stringify([...intent.CANVAS_IMAGE_ASPECT_RATIOS]),
+  JSON.stringify(SUPPORTED_ASPECTS),
+  "CANVAS_IMAGE_ASPECT_RATIOS is the exact upstream sizeMap key set"
+);
+for (const ratio of SUPPORTED_ASPECTS) {
+  const candidate = clone(imageRaw);
+  candidate.config.aspectRatio = ratio;
+  ok(
+    intent.CanvasGenerationIntentV1Schema.safeParse(candidate).success,
+    `image aspectRatio ${ratio} is accepted (upstream sizeMap has it)`
+  );
+}
+for (const ratio of REJECTED_ASPECTS) {
+  const candidate = clone(imageRaw);
+  candidate.config.aspectRatio = ratio;
+  ok(
+    !intent.CanvasGenerationIntentV1Schema.safeParse(candidate).success,
+    `image aspectRatio ${ratio} is rejected (would silently fall back to auto yet bill full price)`
+  );
+}
 ok(intent.CanvasGenerationIntentV1Schema.safeParse(videoRaw).success, "exact video intent passes");
 const parsedImage = intent.CanvasGenerationIntentV1Schema.parse(imageRaw);
 ok(

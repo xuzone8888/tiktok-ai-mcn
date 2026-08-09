@@ -650,6 +650,65 @@ ok(
   );
 }
 
+/*
+ * 画幅三处同源(CHECKLIST #78 / P1-Q2a)。
+ *
+ * 面板、客户端草稿类型、intent schema 曾各写各的(面板 6、另两处各 11),而它们的差集
+ * 正好是上游 sizeMap 够不着、会静默回落 auto 却按全价扣费的档位。tsc 的 `satisfies`
+ * 只能保证面板列的每一项**合法**,保证不了**一项不漏**;这里补上「数量与集合都相等」那一半。
+ */
+{
+  const intentSrc = read("src/lib/canvas/generation-intent.ts");
+  const apiTypes = read("src/lib/canvas/generation-api-types.ts");
+  const declared = intentSrc.match(
+    /export const CANVAS_IMAGE_ASPECT_RATIOS = \[([\s\S]*?)\] as const;/
+  );
+  ok(Boolean(declared), "image aspect ratios are declared in one named const");
+  const declaredValues = declared
+    ? [...declared[1].matchAll(/"([^"]+)"/g)].map((m) => m[1])
+    : [];
+  ok(
+    declaredValues.length === 6,
+    "canvas image aspect ratios stay at the 6 upstream sizeMap keys"
+  );
+  ok(
+    /aspectRatio: z\.enum\(CANVAS_IMAGE_ASPECT_RATIOS\)/.test(intentSrc),
+    "intent schema derives aspectRatio from the shared const (no parallel literal)"
+  );
+  ok(
+    /aspectRatio: z\.enum\(CANVAS_IMAGE_ASPECT_RATIOS\)/.test(apiTypes),
+    "estimate schema derives aspectRatio from the shared const (estimate and submit agree)"
+  );
+  ok(
+    /aspectRatio: CanvasImageAspectRatio;/.test(context),
+    "client draft type derives aspectRatio from the shared const"
+  );
+  ok(
+    /aspectValues: readonly CanvasImageDraftConfig\["aspectRatio"\]\[\] =\s*\n?\s*CANVAS_IMAGE_ASPECT_RATIOS;/.test(
+      context
+    ),
+    "stored-doc allow-list derives from the shared const"
+  );
+  const panel = controls.match(
+    /\(\s*\[([^\]]*)\] satisfies Array<\s*CanvasImageDraftConfig\["aspectRatio"\]\s*>\s*\)/
+  );
+  ok(Boolean(panel), "panel renders aspect options from one greppable ordered list");
+  const panelValues = panel
+    ? [...panel[1].matchAll(/"([^"]+)"/g)].map((m) => m[1])
+    : [];
+  ok(
+    panelValues.length === declaredValues.length &&
+      [...panelValues].sort().join(",") === [...declaredValues].sort().join(","),
+    "panel offers exactly the supported aspect ratios (no silent-fallback options, none missing)"
+  );
+  for (const dead of ["3:2", "2:3", "5:4", "4:5", "21:9"]) {
+    ok(
+      !declaredValues.includes(dead) && !panelValues.includes(dead),
+      `aspect ratio ${dead} stays out of canvas (upstream sizeMap has no pixel size for it)`
+    );
+  }
+}
+
 if (failed.length > 0) {
   console.error(`\n${failed.length} frontend invariant(s) failed:`);
   for (const label of failed) console.error(`  - ${label}`);
