@@ -143,6 +143,9 @@ async function main() {
     shouldExpandMinimap,
     resolveGenerationPanelDock,
     planCapsuleCollapse,
+    generationDockMaxHeight,
+    GENERATION_DOCK_MAX_HEIGHT_RATIO,
+    GENERATION_PANEL_MAX_HEIGHT_RATIO,
     LOW_ZOOM_MEDIA_THRESHOLD,
     COMPACT_MAX_WIDTH,
   } = responsive;
@@ -408,6 +411,17 @@ async function main() {
     resolveGenerationPanelDock({ viewportWidth: Number.NaN, viewportHeight: 1080, panelHeight: 100 }),
     "bottom",
     "非有限视口 → 保守 dock 底部"
+  );
+  // 停靠位可见高上限:与 inline↔dock 判定阈值是两件事,合用一个数会让每次 dock 都必定再滚一次。
+  ok(
+    GENERATION_DOCK_MAX_HEIGHT_RATIO > GENERATION_PANEL_MAX_HEIGHT_RATIO,
+    "停靠位高度上限必须严格大于 inline 判定阈值,否则 dock 之后必然仍超出"
+  );
+  eq(generationDockMaxHeight(), "75%", "停靠位 max-height 由常量驱动,不再硬编码");
+  // 1366×768 走查实测:视口 CSS 586px、容器约 534px、视频面板 389px。
+  ok(
+    534 * GENERATION_DOCK_MAX_HEIGHT_RATIO >= 389,
+    "最小走查视口下停靠位须容得下实测最高的视频面板(389px),不逼出滚动"
   );
   eq(planCapsuleCollapse(4), { collapsed: false, visibleCount: 4, overflowCount: 0 }, "4 胶囊不折叠");
   eq(planCapsuleCollapse(5), { collapsed: true, visibleCount: 4, overflowCount: 1 }, "5 胶囊折叠(阈值)");
