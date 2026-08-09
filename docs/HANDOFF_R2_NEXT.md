@@ -340,6 +340,20 @@ CHECKLIST #251 明列为 **做/P1**，但**根本没实现**（只有禁用按�
 - **节点重叠**：选中的节点会渲染在上层并挡住其它节点。先点空白处取消选中，再点目标节点。
 - **扣费按钮必须用 `computer` 真实点击**，不要用 JS `btn.click()`（权限分类器会拦程序化触发扣费）。
 - 浏览器工具不支持 `ctrl+0`（被当作浏览器缩放拦截），用画布自己的「适应视图」按钮。
+- 🔴 **开工第一件事:先查 `document.visibilityState` 与 `requestAnimationFrame` 是否真的在跑。**
+  后台/被遮挡的标签页里 Chrome 会停掉渲染,`rAF` 一帧都不发,于是 **CSS 动画被创建、
+  `getAnimations()` 报 `playState:"running"`,却永远不推进、永不派发 `animationend`**。
+  2026-08-09 因此误判过一次:Radix Dialog 关闭时 `data-state` 已变 `closed`,但元素等不到
+  `animationend` 就不卸载,`body{pointer-events:none}` 一直挂着 —— 现象与「点一次全屏预览
+  就把画布点死」一模一样,我据此差点建议回滚一个**完全正常**的功能。
+  一句话自检:
+  ```js
+  ({v:document.visibilityState, f:document.hasFocus(),
+    raf: await new Promise(r=>{const t=setTimeout(()=>r('NO-FRAME'),1200);requestAnimationFrame(()=>{clearTimeout(t);r('ok')})})})
+  ```
+  `NO-FRAME` = **任何动画/媒体相关的结论一律作废**(媒体加载同样被节流,`<video>` 会卡在
+  `readyState 0`)。DOM/布局层的断言不受影响(`getBoundingClientRect`、文本、图片 `naturalWidth` 都正常)。
+  `tabs_create_mcp` 并不能让它变可见——**整个 Chrome 窗口必须在前台**,这一步得请用户配合。
 - 后台（hidden）标签页会暂停渲染与尺寸测量，测帧率/连线前必须让标签**前台可见**。
 - `Page.captureScreenshot` 偶发 30s 超时，**重试一次即可**，不是页面挂了。
 
