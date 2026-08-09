@@ -40,25 +40,36 @@ main = `3dee031`（PR #34/#35 已合），代码面等于线上。**这两批都
 
 ## 负二、新窗口该做什么
 
-### ① 🔴 清三笔卡住的积分（建议在扩灰度之前做）
+### ① ✅ 三笔卡住的积分已结清（2026-08-09）
 
-生产有 3 笔 `pending`/`unknown` 行，共 15 积分：
-
-| id | 类型 | 错误码 |
+| id | 类型 | 结果 |
 |---|---|---|
-| `329a5399-f50f-420d-9ce1-b95f3e8c82fa` | video | `video_submission_outcome_unknown` |
+| `9848fcb4-4bad-46e3-bf47-3acc8fe7ce34` | image | `pending/unknown → failed`，退 5 |
+| `329a5399-f50f-420d-9ce1-b95f3e8c82fa` | video | 同上 |
 | `02e20c34-8fc6-45b4-8bee-f4b50deb73dd` | video | 同上 |
-| `9848fcb4-4bad-46e3-bf47-3acc8fe7ce34` | image | `direct_image_object_not_found` |
 
-**三笔 `task_id` 全是 `null`——厂商从头到尾没接过单**，所以走 `verified_no_task_refund` 退款是事实正确的。
+余额 18459 → **18474**（+15）。**生产已无 `pending` 行。**
+`provider_submission_state` 仍留 `unknown` 是设计如此——它记录「当时确实不知道」，裁决只改状态与退款，不篡改历史。
 
-> **做这件事的理由不是那 15 积分**（余额 18459，可忽略），而是：**R2-Q2 那个「让人工裁决 RPC 支持图片行」的迁移，在生产执行了却从没真的跑过一次图片行**。`9848fcb4` 是唯一一笔图片 unknown。宁可现在用自家 5 积分的测试数据发现问题，也不要等扩灰度后真实用户卡住时才发现。
+> **最大收获不是那 15 积分**：`9848fcb4` 是唯一一笔图片 unknown，**R2-Q2 那个「让人工裁决 RPC 支持图片行」的迁移至此才第一次在真实图片行上跑通**（此前只是在生产执行了 DDL，从没被调用过）。
 
-工具：`scripts/resolve-canvas-unknown.mjs`（要 loopback URL + root 权限密钥文件 + 审批单号 + `--execute`，有审计痕迹的正式操作）。服务器上有只读探针 `/root/r2probe.sh`（用法 `balance|gens N|ledger N`）。
+**操作方式（下次照做）**：`scripts/resolve-canvas-unknown.mjs`
+```
+node scripts/resolve-canvas-unknown.mjs \
+  --url http://127.0.0.1:<线上端口>/api/internal/canvas/resolve-unknown \
+  --env-file ./.env.local --request-file /root/<req>.json [--execute]
+```
+- **`--url` 必须是完整端点路径**（只给 `http://127.0.0.1:<port>` 会被拒：「must be the exact numeric-loopback HTTP recovery endpoint」）；
+- 请求文件须 root 独占 `0600`，字段＝`resolutionId`(uuid) / `generationId` / `resolution`（`verified_no_task_refund` 时 `taskId` 必须为 `null`）/ `approvalTicket` / `providerEvidence`(8-1700 字，写清「为什么断定厂商没接单」)；
+- 不带 `--execute` 是干跑校验，先跑它；
+- 端点要 `CANVAS_RECOVERY_ADMIN_SECRET` 与 `CANVAS_RECOVERY_APPROVER_SECRET` **两个不同**的密钥（代码显式校验不相等＝双人复核）。生产已配好（各 64 位）。
+- ⚠️ **但这两个密钥同在服务器一个 `.env.local` 里**，有 root 就两个都拿得到 —— **双人复核在当前部署下是名义上的**。真要这道控制生效，得把 approver 密钥挪到另一个人/另一处保管。
 
-### ② 删测试画布 `047fb5dd` 里的 2 个空商品节点
+只读探针：`/root/r2probe.sh`（`balance|gens N|ledger N`）。
 
-`node_v3hNjrCWBTz3` / `node_KSK8Zcdoj9f2`，无产物未扣费，走查误建。留着只会让下次回归多两个干扰项。
+### ② ✅ 测试画布 `047fb5dd` 的 2 个空商品节点已删（rev 59 → 61）
+
+现只剩 `node_Fdwjog578y-E`（图片，有成品图）→ `node_vgRTVmF9kJi-`（视频，有成片）一条链，是干净的回归夹具。
 
 ### ③ ✅ 已对所有人开放（2026-08-09 用户裁决：跳过灰度阶梯）
 
