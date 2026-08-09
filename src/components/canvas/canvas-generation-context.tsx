@@ -37,6 +37,17 @@ const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const ACTIVE_POLL_MS = 5_000;
 const IDLE_POLL_MS = 30_000;
+/**
+ * 回前台重取的节流窗口(CHECKLIST #51②)。
+ *
+ * 为什么必须有这条触发:浏览器对后台标签的 `setTimeout` 有重度节流(Chrome 后台标签
+ * 最慢可掉到 1 次/分钟),上面那个 5s/30s 的轮询在后台形同停摆 —— 用户切回来时看到的
+ * 是一个还在转圈的节点,而服务端早已终态。轮询周期到点前的这段空窗就是「切后台→空转」。
+ *
+ * 为什么要节流:频繁 Alt+Tab 会把每次可见都变成一次全量拉取。1.5s 足够覆盖误触,
+ * 又远短于任何人「切回来看一眼」的心理等待。
+ */
+const VISIBILITY_REFRESH_THROTTLE_MS = 1_500;
 const SAVE_FENCE_TIMEOUT_MS = 20_000;
 const GENERATION_LIST_LIMIT = 100;
 
@@ -917,6 +928,36 @@ export function CanvasGenerationProvider({
       if (timer) clearTimeout(timer);
     };
   }, [canvasId, refresh]);
+
+  /**
+   * 回前台立即重取(CHECKLIST #51②「触发=加载/回前台/手动刷新」的第二条)。
+   *
+   * 上面的轮询在后台标签被浏览器节流到近乎停摆,所以「切回来」这个时刻必须自己补一次拉取,
+   * 不能等下一个 tick。同时监听 `visibilitychange` 与 `focus`:前者管标签切换,后者管
+   * 「窗口失焦但标签仍 visible」(切到别的应用再切回来时 Chrome 不发 visibilitychange)。
+   *
+   * 只在 `enabled` 且有 canvasId 时挂;失败静默 —— 与轮询同一口径,提交路径自己报错。
+   */
+  useEffect(() => {
+    if (!enabled || !canvasId) return;
+    if (typeof document === "undefined" || typeof window === "undefined") return;
+    let lastRunAt = 0;
+    const run = () => {
+      if (document.visibilityState !== "visible") return;
+      const now = Date.now();
+      if (now - lastRunAt < VISIBILITY_REFRESH_THROTTLE_MS) return;
+      lastRunAt = now;
+      void refresh().catch(() => {
+        // 与轮询同口径:回前台重取失败是瞬态的,不打断用户。
+      });
+    };
+    document.addEventListener("visibilitychange", run);
+    window.addEventListener("focus", run);
+    return () => {
+      document.removeEventListener("visibilitychange", run);
+      window.removeEventListener("focus", run);
+    };
+  }, [canvasId, enabled, refresh]);
 
   const waitForFence = useCallback(async () => {
     const started = Date.now();

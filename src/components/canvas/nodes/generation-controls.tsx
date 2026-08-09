@@ -569,6 +569,8 @@ export function GenerationControls({
   const [estimateError, setEstimateError] = useState<string | null>(null);
   const [estimateEpoch, setEstimateEpoch] = useState(0);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  /** 手动刷新在途(CHECKLIST #51③);只驱动按钮的禁用与转圈,不参与任何闸门。 */
+  const [manualRefreshing, setManualRefreshing] = useState(false);
   const generation = generationByNodeId.get(nodeId);
   const unresolvedActionId = unresolvedActionByNodeId.get(nodeId) ?? null;
   const submitting = submittingNodeIds.has(nodeId);
@@ -850,6 +852,30 @@ export function GenerationControls({
                 重新预估
               </button>
             )}
+          {/* 常态手动刷新(CHECKLIST #51③)。刻意**不**只在出错时出现:自动触发(加载/轮询/回前台)
+              都是隐式的,用户对着一个转圈的节点时需要一个「我现在就要重新核对」的抓手。
+              只读态不给,它不该产生任何请求。 */}
+          {!readOnly && enabled && (
+            <button
+              type="button"
+              className="ml-1 inline-flex items-center gap-0.5 underline underline-offset-2 disabled:no-underline disabled:opacity-50"
+              disabled={manualRefreshing || syncState === "loading"}
+              title="立即向服务端重新核对本画布的任务状态(加载与回前台会自动核对，这里是手动补一次)"
+              onClick={() => {
+                setManualRefreshing(true);
+                void refresh()
+                  .catch(() => {
+                    // 失败已由状态区的 syncError 呈现,这里不再叠一个 toast。
+                  })
+                  .finally(() => setManualRefreshing(false));
+              }}
+            >
+              <RefreshCw
+                className={`h-2.5 w-2.5 ${manualRefreshing ? "animate-spin" : ""}`}
+              />
+              刷新状态
+            </button>
+          )}
         </div>
         <Button
           type="button"

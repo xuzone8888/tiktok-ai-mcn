@@ -254,6 +254,41 @@ has(
   "loads the authoritative title even for projects beyond list page one"
 );
 
+console.log(
+  "\nN. CHECKLIST #51②③ — reconciliation triggers: load / foreground / manual"
+);
+// 加载与轮询本就有;缺的是「回前台」与「常态手动刷新」,这两条在 2026-08-09 前全仓 0 命中。
+has(
+  context,
+  'document.addEventListener("visibilitychange", run)',
+  "#51② returning to foreground reconciles immediately"
+);
+has(
+  context,
+  'window.addEventListener("focus", run)',
+  "#51② window refocus also reconciles (Chrome skips visibilitychange on app switch)"
+);
+has(
+  context,
+  "VISIBILITY_REFRESH_THROTTLE_MS",
+  "#51② foreground refetch is throttled so rapid tab switching cannot hammer the API"
+);
+ok(
+  /document\.removeEventListener\("visibilitychange", run\)[\s\S]{0,160}window\.removeEventListener\("focus", run\)/.test(
+    context
+  ),
+  "#51② both foreground listeners are torn down"
+);
+has(controls, "刷新状态", "#51③ panel exposes an always-available manual refresh");
+ok(
+  /disabled=\{manualRefreshing \|\| syncState === "loading"\}/.test(controls),
+  "#51③ manual refresh cannot stack on an in-flight sync"
+);
+ok(
+  /\{!readOnly && enabled && \(\s*<button/.test(controls),
+  "#51③ manual refresh is hidden in read-only mode (it must not issue requests there)"
+);
+
 if (failed.length > 0) {
   console.error(`\n${failed.length} frontend invariant(s) failed:`);
   for (const label of failed) console.error(`  - ${label}`);
