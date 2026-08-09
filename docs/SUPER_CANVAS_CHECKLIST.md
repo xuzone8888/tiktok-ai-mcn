@@ -69,7 +69,7 @@
 | 图片节点:文生图 | 对标 | 做 | P1 | 复用 /api/generate/image + gpt-image-2 | |
 | 图片节点:垫图/图生图 | 对标 | 做 | P1 | 同上 | |
 | 图片节点:指令式整图编辑(如「将背景改为雪夜」) | 对标 | 做 | P1 | 同上 | 区别于已裁的「指令式局部重绘+标记」 |
-| 图片 chip:+参考 | 对标 | 做 | P1 | 复用 reference-cache.ts | 即 @ 引用参考图 |
+| 图片 chip:+参考 | 对标 | 做 | P1 | 复用 generation-input-order.ts + canvas-store.addNodeAndEdge + CanvasHistoryPanel(**原写「复用 reference-cache.ts」是笔误,2026-08-09 更正**:那是商品链接解析缓存(product_link_cache 血统、按 url_hash 存 ProductCard、唯一消费者 /api/studio/parse-reference),与画布参考图无关) | 即 @ 引用参考图。**2026-08-09 与 #182 同批落地**:「已引用」半边由 #44 引用区承载,「怎么加」半边=引用区的「+」瓦片 + 提示词里输入 @ 唤起的提及浮层 |
 | 图片 chip:标记 | 对标 | 裁 | — | — | 与指令式局部重绘绑定同裁,半残功能不留 |
 | 图片 chip:风格 | 对标 | 裁 | — | — | 风格广场已裁;风格走提示词文本+全局风格标签(C 组) |
 | 图片 chip:聚焦 | 对标 | 延 | P2 评估 | — | 四轮新发现的第 4 chip,语义待实测(疑似聚焦参考图区域),测明后定裁做 |
@@ -91,7 +91,7 @@
 | 图片工具条:扩图/擦除/抠图 | 对标 | 裁 | — | — | 默认裁判据(不在双旅程关键路径);见建议调整④ |
 | 图片空态快捷:图生图/图片高清 | 对标 | 延 | P2 | 新建 S | 节点内空态,区别于画布级四快捷位。**2026-08-09 用户裁决延 P2**(P1-Q4):①规格里「图片高清」那一半随 #81 延 P2 后**已无可指向的功能**,照做即 no-op 按钮;②「图生图」那一半经实证是**纯发现性、零新能力** —— 选中空图片节点时生成面板本就完整可用(渲染面板不看 media),而画布的「图生图」本质就是连一个上游图片节点,快捷位唯一说得通的动作是「一次性拿到一张图并建成本节点上游」(且绝不能建空的上游节点,那会把可提交节点变成必报错节点);③承载面本身可疑:空态分支排在低 zoom 分支之前,按字面塞进 MediaEmpty 会在 zoom<0.4 下也渲染可点按钮,与低 zoom 降级取向相冲。真正值得补的发现性提示更该落在**引用区 0 张时的空位**(有图之后依然成立),那已属改规格,留 P2 一并复议 |
 | 视频节点:五模式(文生视频/全能参考/图生视频/首尾帧/图片参考) | 对标 | 延 | P2 | 复用 /api/video-batch/models/submit 网关 | 枚举完整;按能力矩阵渲染(模型支持啥显啥,不照抄五 tab),按上游图灰置。**2026-08-09 用户裁决延 P2**(R2-Q4):`src/lib/video-models/types.ts` 的 `VideoGenerationMode` 只有 `image_to_video`/`prompt_to_video` 两值,七个模型 `supportedModes` 全声明这两个;`referenceRoles` 的 `first_frame`/`last_frame` 是零引用死字段——能力矩阵本身没有另三个模式 |
-| 视频 chip:+参考 | 对标 | 做 | P1 | 复用 reference-cache.ts | |
+| 视频 chip:+参考 | 对标 | 做 | P1 | 复用 generation-input-order.ts + canvas-store.addNodeAndEdge + CanvasHistoryPanel(**原写「复用 reference-cache.ts」是笔误,2026-08-09 更正**:那是商品链接解析缓存(product_link_cache 血统、按 url_hash 存 ProductCard、唯一消费者 /api/studio/parse-reference),与画布参考图无关) | **2026-08-09 与 #182 同批落地**,与图片侧共用同一个提及浮层;张数上限按模型 maxImages,文生视频模式下图片候选整体灰置 |
 | 视频 chip:标记 | 对标 | 裁 | — | — | 同图片标记,绑定裁 |
 | 特效库(社区素材市场) | 对标 | 裁 | — | — | 明裁 |
 | 特效作视频参数(预设 chips→提示词注入) | 对标 | 做 | P2 | 新建 S(与运镜 chips 同构) | 总纲 §五「特效/运镜进参数」 |

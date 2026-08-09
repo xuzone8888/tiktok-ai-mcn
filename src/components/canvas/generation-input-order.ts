@@ -245,3 +245,33 @@ export function collectImageReferences(
   }
   return refs;
 }
+
+/**
+ * 「连上这个节点之后,编号会变成什么样」(CHECKLIST #182 @引用素材)。
+ *
+ * **@ 选择器必须用它取编号,绝对不许自己数。** 理由是这个文件头部记的那件事:
+ * 新边一律 append 到 `edges` 末尾,所以 @ 进来的图**必然拿最大的 N**;
+ * 而选择器里的候选是按自己的列表顺序排的 —— 已有上游 a 时 @ 了 b,
+ * 若按列表序编号就会插成「图1」,实际却是图2。
+ * 那就是「用户照着错编号写提示词、按全价扣分、拿回不对的图」,**要花钱才发现**。
+ *
+ * 实现上刻意**复用** `orderGenerationInputNodes` + `collectImageReferences`,
+ * 不复制其中任何一行 —— `图${n}` 这个串在全仓只能有一处产地。
+ */
+export function previewImageReferencesAfterConnect<
+  N extends HasImagePayload,
+  E extends HasEndpoints
+>(
+  nodes: readonly N[],
+  edges: readonly E[],
+  targetNodeId: string,
+  newSourceId: string
+): GenerationImageReference[] {
+  const projected = [
+    ...edges,
+    { source: newSourceId, target: targetNodeId } as unknown as E,
+  ];
+  return collectImageReferences(
+    orderGenerationInputNodes(nodes, projected, targetNodeId)
+  );
+}

@@ -871,6 +871,221 @@ ok(
   );
 }
 
+/*
+ * CHECKLIST #182 @引用素材(@节点 / @历史)。
+ *
+ * 全批的资金防线只压在**一件事**上:@ 展示与插入的「图N」必须与请求里真正的第 N 张一致。
+ * 其余失败模式在现有链路里都是结构性零扣费(超限在 fetch 之前抛、输入/提示词不一致在
+ * 扣费边界之前 409、报价与引用数无关),唯独编号错位会让用户**照着错编号写提示词、
+ * 按全价扣分、拿回不对的图**,而且要花钱才发现。
+ */
+{
+  const order = await loadPureModule(
+    "src/components/canvas/generation-input-order.ts"
+  );
+  const mention = await loadPureModule(
+    "src/components/canvas/nodes/generation-mention-policy.ts"
+  );
+
+  const imgNode = (id, ossKey) => ({
+    id,
+    type: "image",
+    data: { media: { ossKey } },
+  });
+  const edge = (source, target) => ({ source, target });
+
+  // —— A. 编号一致性:预测 == 事实 ——
+  {
+    const nodes = [imgNode("a", "k1"), imgNode("b", "k2"), { id: "t", type: "image", data: {} }];
+    const edges = [edge("a", "t")];
+    const predicted = order.previewImageReferencesAfterConnect(nodes, edges, "t", "b");
+    const actual = order.collectImageReferences(
+      order.orderGenerationInputNodes(nodes, [...edges, edge("b", "t")], "t")
+    );
+    ok(
+      JSON.stringify(predicted) === JSON.stringify(actual),
+      "#182 predicted numbering equals what actually happens after connecting (no parallel numbering)"
+    );
+    // 新边一律 append ⇒ 后连的必然拿最大的 N。这条证伪「按候选列表下标编号」。
+    ok(
+      predicted.find((r) => r.nodeId === "b")?.label === "图2",
+      "#182 a newly mentioned image takes the LAST index, not the picker's list position"
+    );
+  }
+  {
+    // 空图片节点不占号(与提交路径判据同源)。
+    const nodes = [imgNode("a", "k1"), { id: "empty", type: "image", data: {} }];
+    const predicted = order.previewImageReferencesAfterConnect(
+      nodes, [edge("a", "t")], "t", "empty"
+    );
+    ok(predicted.length === 1, "#182 an empty image node never takes a 图N slot");
+  }
+  {
+    // 文本节点不占图片编号。
+    const nodes = [imgNode("a", "k1"), { id: "txt", type: "text", data: { title: "x" } }];
+    const predicted = order.previewImageReferencesAfterConnect(
+      nodes, [edge("a", "t")], "t", "txt"
+    );
+    ok(
+      predicted.length === 1 && predicted[0].label === "图1",
+      "#182 mentioning a text node does not shift image numbering"
+    );
+  }
+
+  // —— B. 候选可选性必须在选取之前判定(#186 纪律) ——
+  const baseCandidateInput = {
+    nodes: [imgNode("a", "k1"), imgNode("b", "k2"), { id: "txt", type: "text", data: { title: "hi" } }],
+    connectedNodeIds: [],
+    targetNodeId: "t",
+    targetKind: "image",
+    referenceLimit: 1,
+    incomingImageCount: 0,
+  };
+  {
+    const list = mention.resolveMentionCandidates(baseCandidateInput);
+    ok(list.length === 3, "#182 candidates list text/product/image only");
+    ok(list.every((c) => !c.disabled), "#182 nothing is disabled when a slot is free");
+  }
+  {
+    const full = mention.resolveMentionCandidates({
+      ...baseCandidateInput,
+      connectedNodeIds: ["a"],
+      incomingImageCount: 1,
+    });
+    ok(
+      full.find((c) => c.nodeId === "a")?.disabled === true,
+      "#182 an already-connected node is disabled"
+    );
+    ok(
+      full.find((c) => c.nodeId === "b")?.disabled === true &&
+        Boolean(full.find((c) => c.nodeId === "b")?.reason),
+      "#182 over the reference limit is disabled BEFORE picking, with a stated reason (not thrown after the spend dialog)"
+    );
+    ok(
+      full.find((c) => c.nodeId === "txt")?.disabled === false,
+      "#182 text nodes stay pickable when the image slot is full (they do not consume it)"
+    );
+  }
+  {
+    const emptyImg = mention.resolveMentionCandidates({
+      ...baseCandidateInput,
+      nodes: [{ id: "e", type: "image", data: {} }],
+    });
+    ok(emptyImg[0].disabled === true, "#182 an image node with no artifact is disabled");
+  }
+  {
+    const promptVideo = mention.resolveMentionCandidates({
+      ...baseCandidateInput,
+      targetKind: "video",
+      videoMode: "prompt_to_video",
+      referenceLimit: 0,
+    });
+    ok(
+      promptVideo.find((c) => c.nodeId === "a")?.disabled === true,
+      "#182 prompt-to-video disables image candidates (connecting one throws at submit)"
+    );
+  }
+  {
+    const self = mention.resolveMentionCandidates({
+      ...baseCandidateInput,
+      nodes: [{ id: "t", type: "image", data: { media: { ossKey: "k" } } }],
+      targetNodeId: "t",
+    });
+    ok(self.length === 0, "#182 a node never offers itself (self-loop)");
+  }
+  {
+    const vid = mention.resolveMentionCandidates({
+      ...baseCandidateInput,
+      nodes: [{ id: "v", type: "video", data: { media: { ossKey: "k" } } }],
+    });
+    ok(vid.length === 0, "#182 video nodes are not offered as generation inputs");
+  }
+
+  // —— C. 弹层开着按 Enter 绝不能变成一次付费提交 ——
+  {
+    const actions = ["insert", "navigate", "close", "passthrough"];
+    for (const key of ["Enter", "Tab", "Escape", "ArrowDown", "ArrowUp", "a", "@"]) {
+      const got = mention.decideMentionKey({
+        key, ctrlKey: false, metaKey: false, composing: false, popupOpen: true,
+      });
+      ok(actions.includes(got), `#182 mention key "${key}" resolves to a non-submitting action`);
+    }
+    ok(
+      mention.decideMentionKey({ key: "Enter", ctrlKey: false, metaKey: false, composing: false, popupOpen: true }) === "insert",
+      "#182 Enter with the popup open selects a candidate"
+    );
+    ok(
+      mention.decideMentionKey({ key: "Enter", ctrlKey: true, metaKey: false, composing: false, popupOpen: true }) === "passthrough",
+      "#182 Ctrl+Enter still reaches the submit path (the popup never swallows it)"
+    );
+    ok(
+      mention.decideMentionKey({ key: "Enter", ctrlKey: false, metaKey: false, composing: true, popupOpen: true }) === "passthrough",
+      "#182 IME composition is never intercepted"
+    );
+    ok(
+      mention.isMentionTriggerKey({ key: "＠", ctrlKey: false, metaKey: false, composing: false }) === true,
+      "#182 the full-width ＠ also opens the picker (what most Chinese IMEs emit)"
+    );
+    ok(
+      mention.isMentionTriggerKey({ key: "@", ctrlKey: false, metaKey: false, composing: true }) === false,
+      "#182 @ during IME composition does not open the picker"
+    );
+  }
+
+  // —— D. 插入必须吃掉触发用的 @(提示词逐字送厂商,留下孤立 @ 就是让用户为它付钱) ——
+  {
+    const withAt = mention.applyMentionInsert({
+      text: "主体是猫 @", caret: 6, triggerIndex: 5, label: "图1",
+    });
+    ok(
+      !withAt.text.includes("@") && withAt.text.includes("图1"),
+      "#182 the trigger @ is consumed by the insert, never shipped to the provider"
+    );
+    const noTrigger = mention.applyMentionInsert({
+      text: "主体是猫", caret: 4, triggerIndex: -1, label: "图1",
+    });
+    ok(
+      noTrigger.text === "主体是猫 图1",
+      "#182 inserting from the + tile adds the label without deleting anything"
+    );
+  }
+
+  // —— E. 结构守卫:编号只能有一处产地 ——
+  {
+    const mentionMenu = read("src/components/canvas/nodes/generation-mention-menu.tsx");
+    const policy = read("src/components/canvas/nodes/generation-mention-policy.ts");
+    for (const [name, src] of [
+      ["controls", controls], ["mention menu", mentionMenu], ["mention policy", policy],
+    ]) {
+      ok(!/图\$\{/.test(src), `#182 ${name} never builds a 图N label itself (single source of truth)`);
+    }
+    ok(
+      /previewImageReferencesAfterConnect\(/.test(controls),
+      "#182 the inserted label comes from the shared preview helper"
+    );
+    ok(
+      /addEdge\(\{/.test(controls),
+      "#182 a mention creates a real edge (text alone would reference nothing yet still bill)"
+    );
+    ok(
+      /item\.type !== "image"/.test(controls),
+      "#182 @history refuses video assets up front (a video upstream only errors after the spend dialog)"
+    );
+    ok(
+      /fromHandleType: "target"/.test(controls),
+      "#182 @history builds the node UPSTREAM of the generating node"
+    );
+    ok(
+      /createPortal\(/.test(mentionMenu) && /role="listbox"/.test(mentionMenu),
+      "#182 the picker portals out of the React Flow transform and is a listbox (canvas shortcuts yield to it)"
+    );
+    ok(
+      (policy.match(/^import /gm) || []).length === 0,
+      "#182 mention policy stays import-free so it can be exhaustively verified offline"
+    );
+  }
+}
+
 if (failed.length > 0) {
   console.error(`\n${failed.length} frontend invariant(s) failed:`);
   for (const label of failed) console.error(`  - ${label}`);
