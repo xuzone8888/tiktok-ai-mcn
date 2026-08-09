@@ -6,6 +6,7 @@ import {
   AlertCircle,
   CheckCircle2,
   Coins,
+  Crop,
   Download,
   ExternalLink,
   Loader2,
@@ -73,7 +74,10 @@ import {
   type CanvasConsentReason,
   type CanvasGenerateSource,
 } from "@/lib/canvas/generation-consent";
+import { GenerationCropDialog } from "./generation-crop-dialog";
 import { GenerationReferenceStrip } from "./generation-reference-strip";
+import { uploadCanvasFile } from "../canvas-upload";
+import { CANVAS_UPLOAD_MAX_IMAGE_BYTES } from "@/lib/canvas/upload-contract";
 import {
   collectImageReferences,
   orderGenerationInputNodes,
@@ -284,6 +288,13 @@ function updateParams(nodeId: string, key: string, value: unknown): void {
 
 /** 「推为参考」新建节点的横向偏移;够远不压住源节点,又还在同屏视野内。 */
 const PUSH_AS_REFERENCE_OFFSET_X = 360;
+
+/**
+ * 裁剪结果节点的纵向偏移(CHECKLIST #82)。
+ * 与「推为参考」共用横向偏移,但**再往下错开一格** —— 否则同一张图先推参考、再裁剪,
+ * 两个新节点会精确重叠,用户只看得见后建的那个。
+ */
+const CROP_RESULT_OFFSET_Y = 220;
 
 /**
  * 提交不可逆的事前告知。与 `GENERATION_CANCEL_UNSUPPORTED_REASON`(事后想删时才出现)成对:
@@ -683,6 +694,9 @@ export function GenerationControls({
   /** 入库在途 / 已入库(CHECKLIST #64);权威在 generations.library_status,这里只做乐观标记。 */
   const [archiving, setArchiving] = useState(false);
   const [archived, setArchived] = useState(false);
+  /** 裁剪弹层与其上传在途(CHECKLIST #82)。裁剪本身零扣费,这里只防重复落节点。 */
+  const [cropOpen, setCropOpen] = useState(false);
+  const [cropUploading, setCropUploading] = useState(false);
   const generation = generationByNodeId.get(nodeId);
   const unresolvedActionId = unresolvedActionByNodeId.get(nodeId) ?? null;
   const submitting = submittingNodeIds.has(nodeId);
@@ -1223,6 +1237,26 @@ export function GenerationControls({
             <Maximize2 className="h-3 w-3" />
             全屏
           </Button>
+          {/* 裁剪(CHECKLIST #82)。刻意挂在这条**现成的产物动作行**上,而不是新建一条
+              React Flow `NodeToolbar`:
+              ①裁剪就是一个产物动作,与下载/全屏同类,没有理由另起一层承载面;
+              ②这条行所在的面板在 1352×642 已溢出停靠位 66px(见 P0 看板已知摩擦),
+                新增一整行会把溢出再推大约 34px,而挂进本行是**零高度增量**
+                (视频侧本来就是 3 个按钮,图片侧此前只有 2 个)。
+              只读态不给:裁剪的结果要落成新节点,那是写操作。 */}
+          {kind === "image" && !readOnly && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-7 flex-1 gap-1 px-2 text-[11px]"
+              title="在浏览器里裁掉多余的边，结果作为新的图片节点放到画布上。不消耗积分"
+              onClick={() => setCropOpen(true)}
+            >
+              <Crop className="h-3 w-3" />
+              裁剪
+            </Button>
+          )}
           {kind === "video" && (
             <Button
               type="button"
@@ -1358,6 +1392,76 @@ export function GenerationControls({
           ) : null}
         </DialogContent>
       </Dialog>
+
+      {/* 裁剪弹层(CHECKLIST #82)。
+          - 只吃瞬态签名 URL,与全屏预览同一个来源;
+          - 裁剪结果**走画布已有的上传链路**(`uploadCanvasFile` → `/api/canvas/uploads/*`),
+            与拖文件进画布是同一条路,因此配额、体积上限、object key 归属校验全部自动生效;
+          - 落成**独立的新节点、不连线**:画布里 A→B 的边语义是「A 是 B 的生成参考图」,
+            而裁剪产物并不是由原图“生成”的,连上去会让用户一按生成就把原图当参考送进去。 */}
+      <GenerationCropDialog
+        open={cropOpen}
+        onOpenChange={(open) => {
+          if (cropUploading) return;
+          setCropOpen(open);
+        }}
+        mediaUrl={mediaUrl}
+        busy={cropUploading}
+        onConfirm={(blob) => {
+          if (blob.size > CANVAS_UPLOAD_MAX_IMAGE_BYTES) {
+            toast({
+              title: "裁剪结果过大",
+              description: `单张图片上限 ${Math.round(
+                CANVAS_UPLOAD_MAX_IMAGE_BYTES / (1024 * 1024)
+              )}MB，请选小一点的区域`,
+              variant: "destructive",
+            });
+            return;
+          }
+          const file = new File(
+            [blob],
+            `crop-${(generation?.generationId ?? nodeId).slice(0, 8)}-${Date.now()}.jpg`,
+            { type: "image/jpeg" }
+          );
+          setCropUploading(true);
+          void uploadCanvasFile(file)
+            .then(({ ossKey }) => {
+              const created = useCanvasStore.getState().addNode({
+                type: "image",
+                position: selfPosition
+                  ? {
+                      x: selfPosition.x + PUSH_AS_REFERENCE_OFFSET_X,
+                      y: selfPosition.y + CROP_RESULT_OFFSET_Y,
+                    }
+                  : undefined,
+                data: { title: "裁剪结果", media: { ossKey } },
+              });
+              if (!created) {
+                // 图已经在 OSS 上了,不能假装没事发生 —— 明说文件在、节点没建成。
+                toast({
+                  title: "已裁剪，但新建节点失败",
+                  description: "画布当前不可写入，或已达节点上限",
+                  variant: "destructive",
+                });
+                return;
+              }
+              setCropOpen(false);
+              toast({
+                title: "已裁剪",
+                description: "裁剪结果已作为新的图片节点放到画布上",
+              });
+            })
+            .catch((error: unknown) => {
+              toast({
+                title: "裁剪结果上传失败",
+                description:
+                  error instanceof Error ? error.message : "请稍后重试",
+                variant: "destructive",
+              });
+            })
+            .finally(() => setCropUploading(false));
+        }}
+      />
 
       <AlertDialog
         open={confirmSnapshot !== null}

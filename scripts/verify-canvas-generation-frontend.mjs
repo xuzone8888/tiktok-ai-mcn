@@ -709,6 +709,90 @@ ok(
   }
 }
 
+/*
+ * CHECKLIST #82 裁剪 —— 必须是**纯前端零扣费**,且结果走画布已有的上传链路。
+ *
+ * 这里守的不是样式,是三条会真出事的边界:
+ *  ①裁剪弹层不得出现任何生成/估价端点(一旦误接就成了「点裁剪扣一次钱」);
+ *  ②`crossOrigin` 不能丢 —— 产物在 OSS 跨域,丢了会污染 canvas 让 toBlob 抛 SecurityError,
+ *    而那是运行时才炸、离线闸门看不见的;
+ *  ③结果落节点必须**不连线** —— 画布的边语义是「上游是下游的生成参考图」,
+ *    把裁剪产物连回原图会让用户一按生成就把原图当参考送进去(要花钱才发现)。
+ */
+{
+  const crop = read("src/components/canvas/nodes/generation-crop-dialog.tsx");
+  ok(
+    !/\/api\/canvas\/generations/.test(crop) && !/estimate/.test(crop),
+    "crop dialog never touches a generation or estimate endpoint (stays free)"
+  );
+  ok(
+    /crossOrigin="anonymous"/.test(crop),
+    "crop source image is loaded with CORS so the canvas is not tainted"
+  );
+  ok(
+    /canvas\.toBlob\(/.test(crop) && /"image\/jpeg"/.test(crop),
+    "crop exports JPEG (canvas upload contract allows it and it stays under the size cap)"
+  );
+  ok(
+    /naturalWidth/.test(crop) && /naturalHeight/.test(crop),
+    "crop maps the selection back to natural pixels, not displayed pixels"
+  );
+  has(controls, "<GenerationCropDialog", "crop dialog is mounted from the panel");
+  has(
+    controls,
+    "uploadCanvasFile(file)",
+    "crop result reuses the canvas upload chain (quota/size/ownership checks apply)"
+  );
+  ok(
+    /CANVAS_UPLOAD_MAX_IMAGE_BYTES/.test(controls),
+    "crop result is size-checked before upload is attempted"
+  );
+  // 下面两条对着**裁剪回调这一段**断言,而不是全文件 —— 全文件里 addNodeAndEdge 本来就有
+  // (「推为参考」用它),对全文件做否定断言会永远为真,等于没守。
+  const cropHandler = (() => {
+    const start = controls.indexOf("onConfirm={(blob) => {");
+    ok(start > -1, "crop confirm handler is greppable");
+    return start > -1 ? controls.slice(start, start + 2400) : "";
+  })();
+  ok(
+    /title: "裁剪结果",\s*media: \{ ossKey \}/.test(cropHandler),
+    "crop result becomes an image node carrying only an OSS object key"
+  );
+  ok(
+    /\.addNode\(\{/.test(cropHandler) && !/addNodeAndEdge/.test(cropHandler),
+    "crop result is a standalone node (an edge would mean 'use the source as a reference image')"
+  );
+  ok(
+    /kind === "image" && !readOnly && \(\s*<Button/.test(
+      controls.slice(controls.indexOf("CHECKLIST #82"))
+    ),
+    "crop is offered only for writable image artifacts"
+  );
+}
+
+/*
+ * CHECKLIST #83 整图重生成 —— **已由主生成按钮承载**,不要再加第二个入口。
+ *
+ * 2026-08-09 批 0 曾把本项误判为「确实缺」,原因是按 `整图`/`重生成`/`regenerate` 去 grep,
+ * 而实际落在界面上的字是**「生成新版本」**。这里把它钉死,免得下个窗口重复误判、
+ * 或是新加一条绕开 #185 同意闸的重生成路径。
+ */
+{
+  has(controls, '"生成新版本"', "completed artifacts expose whole-image regeneration");
+  const disabledBlock = controls.slice(
+    controls.indexOf("const actionDisabled ="),
+    controls.indexOf("const actionDisabled =") + 400
+  );
+  ok(
+    !/completed/.test(disabledBlock),
+    "regeneration stays enabled after a run completes (that is what makes #83 reachable)"
+  );
+  ok(
+    /onClick=\{\(\) => onGenerate\("button"\)\}/.test(controls),
+    "regeneration goes through the shared onGenerate path (so #185 consent and the price gates apply)"
+  );
+}
+
 if (failed.length > 0) {
   console.error(`\n${failed.length} frontend invariant(s) failed:`);
   for (const label of failed) console.error(`  - ${label}`);
