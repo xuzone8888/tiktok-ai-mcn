@@ -437,6 +437,24 @@ has(
   "#186 the panel derives the guide from the shared pure resolver, not ad-hoc strings"
 );
 
+console.log("\nN+3. CHECKLIST #84 — node-level fullscreen preview of the artifact");
+has(controls, "全屏", "#84 completed artifacts expose a fullscreen action");
+has(
+  controls,
+  "setPreviewOpen(true)",
+  "#84 the fullscreen action opens the preview dialog"
+);
+ok(
+  /\{previewOpen && mediaUrl \?/.test(controls),
+  "#84 preview media mounts only while open (a closed dialog must not hold a <video>)"
+);
+// ADR5 红线:签名 URL 是瞬态的。预览允许**读** mediaUrl,绝不允许把它写回节点/持久层。
+ok(
+  !/updateParams\([^)]*mediaUrl/.test(controls) &&
+    !/ossKey:\s*mediaUrl/.test(controls),
+  "#84 the preview never persists the transient signed URL back into the document"
+);
+
 if (failed.length > 0) {
   console.error(`\n${failed.length} frontend invariant(s) failed:`);
   for (const label of failed) console.error(`  - ${label}`);

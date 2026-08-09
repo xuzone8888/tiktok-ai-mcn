@@ -9,6 +9,7 @@ import {
   Download,
   ExternalLink,
   Loader2,
+  Maximize2,
   RefreshCw,
   Sparkles,
 } from "lucide-react";
@@ -24,6 +25,13 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { toast } from "@/hooks/use-toast";
 import type { CanvasNodeData } from "@/lib/canvas/schema";
 import {
@@ -607,6 +615,8 @@ export function GenerationControls({
   const [manualRefreshing, setManualRefreshing] = useState(false);
   /** 「如何解锁」指引是否展开(CHECKLIST #186)。 */
   const [lockHintOpen, setLockHintOpen] = useState(false);
+  /** 产物全屏预览(CHECKLIST #84)。 */
+  const [previewOpen, setPreviewOpen] = useState(false);
   const generation = generationByNodeId.get(nodeId);
   const unresolvedActionId = unresolvedActionByNodeId.get(nodeId) ?? null;
   const submitting = submittingNodeIds.has(nodeId);
@@ -1022,6 +1032,19 @@ export function GenerationControls({
             <Download className="h-3 w-3" />
             下载
           </Button>
+          {/* 全屏预览(CHECKLIST #84)。节点上的产物缩略图受节点尺寸与 zoom 限制,
+              细节根本看不清 —— 而「这张图到底行不行」是决定要不要重生成(再花一次钱)的
+              唯一依据。用签名 URL 直接放大展示,不下载、不落盘。 */}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-7 flex-1 gap-1 px-2 text-[11px]"
+            onClick={() => setPreviewOpen(true)}
+          >
+            <Maximize2 className="h-3 w-3" />
+            全屏
+          </Button>
           {kind === "video" && (
             <Button
               type="button"
@@ -1042,6 +1065,41 @@ export function GenerationControls({
           AI 生成内容 · 对外发布时请遵循平台的 AIGC 标注规则。
         </p>
       )}
+
+      {/* 全屏预览弹层(CHECKLIST #84)。
+          - 只吃 `mediaUrl`(渲染层解析出的**瞬态**签名 URL),不碰 object key、不写回节点;
+          - 视频给原生 controls,图片不给交互 —— 预览就是预览,裁剪/编辑不在 P1 范围;
+          - 关掉即卸载 <video>,不占用「同屏活跃视频 ≤6」的配额(那是节点上的策略)。 */}
+      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+        <DialogContent className="max-w-[min(92vw,72rem)] p-3">
+          <DialogHeader>
+            <DialogTitle className="text-sm">
+              {kind === "image" ? "图片" : "视频"}产物预览
+            </DialogTitle>
+            <DialogDescription className="text-[11px]">
+              任务号 {generation?.generationId.slice(0, 8) ?? "—"} · AI 生成内容，
+              对外发布时请遵循平台的 AIGC 标注规则。
+            </DialogDescription>
+          </DialogHeader>
+          {previewOpen && mediaUrl ? (
+            kind === "image" ? (
+              // eslint-disable-next-line @next/next/no-img-element -- 签名 URL 是瞬态的，不能进 next/image 的优化缓存
+              <img
+                src={mediaUrl}
+                alt="生成产物全屏预览"
+                className="max-h-[72vh] w-full object-contain"
+              />
+            ) : (
+              <video
+                src={mediaUrl}
+                controls
+                playsInline
+                className="max-h-[72vh] w-full object-contain"
+              />
+            )
+          ) : null}
+        </DialogContent>
+      </Dialog>
 
       <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <AlertDialogContent>
