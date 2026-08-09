@@ -455,6 +455,80 @@ ok(
   "#84 the preview never persists the transient signed URL back into the document"
 );
 
+console.log(
+  "\nN+4. CHECKLIST #44/#72/#94 — reference strip: numbered upstream thumbnails"
+);
+const { orderGenerationInputNodes, collectImageReferences } =
+  await loadPureModule("src/components/canvas/generation-input-order.ts");
+const img = (id, key) => ({ id, type: "image", data: { media: { ossKey: key } } });
+const txt = (id) => ({ id, type: "text", data: {} });
+const edge = (source, target) => ({ source, target });
+// 顺序以 edges 为准,不是 nodes 数组序 —— 这正是修掉的那个不一致。
+{
+  const nodes = [img("a", "k-a"), img("b", "k-b"), img("c", "k-c")];
+  const edges = [edge("c", "t"), edge("a", "t"), edge("b", "x")];
+  const ordered = orderGenerationInputNodes(nodes, edges, "t");
+  ok(
+    ordered.map((n) => n.id).join(",") === "c,a",
+    "#44 upstream order follows edge order, not node-array order"
+  );
+  const refs = collectImageReferences(ordered);
+  ok(
+    refs.map((r) => `${r.label}:${r.ossKey}`).join(",") === "图1:k-c,图2:k-a",
+    "#44 reference labels are assigned in that same edge order"
+  );
+}
+{
+  // 同一上游连多条边只算一次,且按首次出现定位。
+  const nodes = [img("a", "k-a"), img("b", "k-b")];
+  const edges = [edge("b", "t"), edge("a", "t"), edge("b", "t")];
+  const ordered = orderGenerationInputNodes(nodes, edges, "t");
+  ok(
+    ordered.map((n) => n.id).join(",") === "b,a",
+    "#44 duplicate edges from one source collapse to its first position"
+  );
+}
+{
+  // 空图片节点不占编号 —— 与提交路径的 imageInputNodes 判据逐字一致
+  // (空节点在提交时另有专门报错,若在这里占了号,UI 的「图2」就会是请求里的「图1」)。
+  const nodes = [img("a", ""), img("b", "k-b"), txt("c")];
+  const edges = [edge("a", "t"), edge("b", "t"), edge("c", "t")];
+  const refs = collectImageReferences(
+    orderGenerationInputNodes(nodes, edges, "t")
+  );
+  ok(
+    refs.length === 1 && refs[0].label === "图1" && refs[0].ossKey === "k-b",
+    "#44 empty image nodes and non-image nodes never consume a reference number"
+  );
+}
+ok(
+  orderGenerationInputNodes([], [], "t").length === 0,
+  "#44 no upstream yields no references"
+);
+// 两条消费路径必须共用同一个排序器,否则序号会重新分叉。
+has(
+  context,
+  "orderGenerationInputNodes(state.nodes, state.edges, targetNodeId)",
+  "#44 the submit path consumes the shared ordering helper"
+);
+has(
+  controls,
+  "orderGenerationInputNodes(nodes, edges, nodeId)",
+  "#44 the panel consumes the very same ordering helper"
+);
+lacks(
+  controls,
+  "nodes.filter((node) => idSet.has(node.id))",
+  "#44 the old node-array-order derivation is gone from the panel"
+);
+const strip = read("src/components/canvas/nodes/generation-reference-strip.tsx");
+has(strip, "resolveMediaUrl", "#72/#94 thumbnails resolve object keys to transient URLs");
+ok(
+  !/updateParams|ossKey:\s*url|useCanvasStore/.test(strip),
+  "#72/#94 the strip never writes the transient signed URL back into the document (ADR5)"
+);
+has(strip, "reference.label", "#44 each thumbnail renders its ordinal label");
+
 if (failed.length > 0) {
   console.error(`\n${failed.length} frontend invariant(s) failed:`);
   for (const label of failed) console.error(`  - ${label}`);

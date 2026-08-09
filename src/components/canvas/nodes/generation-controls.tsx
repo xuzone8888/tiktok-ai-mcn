@@ -68,6 +68,11 @@ import {
   type GenerationParamHintKey,
 } from "./generation-param-copy";
 import { resolveGenerationLockHint } from "./generation-lock-hints";
+import { GenerationReferenceStrip } from "./generation-reference-strip";
+import {
+  collectImageReferences,
+  orderGenerationInputNodes,
+} from "../generation-input-order";
 import {
   planCapsuleCollapse,
   resolveGenerationPanelDock,
@@ -631,16 +636,20 @@ export function GenerationControls({
     uncertain ||
     unresolvedActionId !== null;
 
-  const incoming = useMemo(() => {
-    const ids = edges
-      .filter((edge) => edge.target === nodeId)
-      .map((edge) => edge.source);
-    const idSet = new Set(ids);
-    return nodes.filter((node) => idSet.has(node.id));
-  }, [edges, nodeId, nodes]);
-  const incomingImageCount = incoming.filter(
-    (node) => node.type === "image" && Boolean(node.data.media?.ossKey)
-  ).length;
+  /**
+   * 上游输入。**必须与提交路径同序** —— 两边共用 `orderGenerationInputNodes`。
+   * 此前这里是 `nodes.filter(idSet.has)`(节点数组序),而提交走的是连线序;只用来算数量时
+   * 看不出差别,但引用区一按序号渲染,「图N」就会指错请求里的第 N 张参考图。
+   */
+  const incoming = useMemo(
+    () => orderGenerationInputNodes(nodes, edges, nodeId),
+    [edges, nodeId, nodes]
+  );
+  const imageReferences = useMemo(
+    () => collectImageReferences(incoming),
+    [incoming]
+  );
+  const incomingImageCount = imageReferences.length;
   const config =
     kind === "image"
       ? getCanvasImageDraftConfig(data)
@@ -862,6 +871,10 @@ export function GenerationControls({
           onGenerate();
         }}
       />
+
+      {/* 引用区(CHECKLIST #44 / #72 / #94)。紧贴提示词下方,因为提示词里写「与图1保持一致」
+          时需要照着这里的序号写 —— 两者离得越近越不容易写错。 */}
+      <GenerationReferenceStrip references={imageReferences} />
 
       {kind === "image" ? (
         <ImageSettings

@@ -33,6 +33,8 @@ import type {
 } from "@/lib/video-models/types";
 import { useCanvasStore } from "@/stores/canvas-store";
 
+import { orderGenerationInputNodes } from "./generation-input-order";
+
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const ACTIVE_POLL_MS = 5_000;
@@ -405,21 +407,14 @@ export function getCanvasVideoDraftConfig(data: CanvasNodeData): CanvasVideoDraf
   return { model, durationSeconds, quality, aspectRatio, mode };
 }
 
+/**
+ * 提交路径的上游取数。排序逻辑已抽到 `generation-input-order.ts`,与生成面板的引用区共用
+ * 同一份实现 —— 两边顺序必须逐字一致,否则面板上的「图N」会指错请求里的第 N 张参考图
+ * (详见该模块头部)。
+ */
 function generationInputNodes(targetNodeId: string): CanvasNode[] {
   const state = useCanvasStore.getState();
-  const byId = new Map(state.nodes.map((node) => [node.id, node]));
-  const sourceIds = state.edges
-    .filter((edge) => edge.target === targetNodeId)
-    .map((edge) => edge.source);
-  const seen = new Set<string>();
-  return sourceIds
-    .filter((id) => {
-      if (seen.has(id)) return false;
-      seen.add(id);
-      return true;
-    })
-    .map((id) => byId.get(id))
-    .filter((node): node is CanvasNode => Boolean(node));
+  return orderGenerationInputNodes(state.nodes, state.edges, targetNodeId);
 }
 
 function normalizedPrompt(target: CanvasNode, inputs: readonly CanvasNode[]): string {
