@@ -76,8 +76,10 @@ StarGaze 是一个 AI 视频创作平台(Next.js + Supabase + 阿里云 OSS,生�
 - **`canvases` 表有 7 行真实数据**——画布不只是部署了,是被真正用过的
 - `/canvas` 公网返回 307(硬鉴权门正常);`stargaze-canvas-reconciler` 常驻在线
 - 灰度开关:`NEXT_PUBLIC_CANVAS_ENABLED=true`(前端入口开)、`CANVAS_PUBLIC_ENABLED=false`、`CANVAS_ACCESS_USER_IDS` **白名单 2 人**、`CANVAS_VIDEO_MODELS=happyhorse`(grok 因厂商无通道被摘出,代码保留,见 R2-Q1)
-- 线上版本 **`d16620f34f09…`(2026-08-08 二次蓝绿发布,端口 3013,`DEPLOY_RC=0`)**;上一版 `abc29ac…`/3012 仍在线待回滚,**别把它当成当前线上**。12 个画布迁移已在生产执行(第 12 个是 2026-08-08 的图片 unknown 恢复)
-- 2026-08-09 复核第零步全绿:站点 200、`/canvas` 匿名 307、nginx→3013、两个 `CANVAS_VIDEO_MODELS=happyhorse`、`stargaze-canvas-d16620f` 与 reconciler 均 online、磁盘余 12G
+- 线上版本 **`33ba71d0d2a3…`(2026-08-09 蓝绿发布,端口 **3014**,`DEPLOY_RC=0`,BUILD_ID 门通过)**;回滚包 `canvas-rollback-20260809T050329Z-port-3013-991403`,`d16620f`/3013 与 `abc29ac`/3012 两个回滚位仍在线,**别把它们当成当前线上**。12 个画布迁移已在生产执行(第 12 个是 2026-08-08 的图片 unknown 恢复);**本批零迁移**
+- 发版后核对全绿:站点 200、`/canvas` 匿名 307、nginx→3014、`BUILD_ID` = release commit、`VIDEO_PLATFORM_IMAGE_BASE_URL=https://api.hellobabygo.com`、两个 `CANVAS_VIDEO_MODELS=happyhorse`、`CANVAS_PUBLIC_ENABLED=false`(灰度未动)、磁盘余 9.4G、内存 available 2033MB
+- **新代码已在公网证实真在跑**:拉画布 chunk(HTTP 200/317KB),本批六个新字符串全部命中——不是只看进程起没起
+- 🔴 **2026-08-09 发版打挂过整站约 15 分钟(构建 OOM)**。根因=release pm2 进程只加不减(9 个共 1263MB)+ `vm.swappiness=0` 使 2G swap 形同虚设。**下次发版必须先 `pm2 stop` 3 代以前的 release 进程、确认 `free -m` available ≥ 2000MB 再开构建**(用 `stop` 不用 `delete`,回滚仍可秒起)。发版脚本「构建失败则在任何流量变更前 abort」这条设计救了场,别动它。详见 HANDOFF「负三之零」
 
 > ⚠️ **文档陷阱(已知,勿被误导)**:`docs/SUPER_CANVAS_P1_ACCELERATED_EXECUTION_PLAN.md` 顶部状态仍写 `PHASE_4_COMPLETE_OFFLINE_GREEN`、Phase 5/6 的 checkbox 全空,**那是过期的**——Phase 6「生产迁移+上线」实际早已发生。以本节和生产实测为准。
 
@@ -86,7 +88,7 @@ StarGaze 是一个 AI 视频创作平台(Next.js + Supabase + 阿里云 OSS,生�
 1. ✅ **四项裁决已于 2026-08-09 取得**(#185 按规格改代码 / #253 已 bound 行不做自动判死改判延 P2 / #237 随教程延 P2 / 资金③④ 等价验收结案)
 2. ✅ **CHECKLIST 8+1 项改判已落笔**,reconcile 绿(做 167/裁 31/延 22;P1=52)
 3. ✅ **R2-Q4 补齐批次 6/6 已过闸**(#51②③ / #187 / #186 / #84 / #44+#72+#94 / #64),另 #185 阈值改造与停靠位 max-h 常量
-4. 🔴 **下一步=蓝绿发版**(手工 build 必须带 `CANVAS_RELEASE_COMMIT=<40位sha>`,否则 BUILD_ID 门 FAIL;再发 2 次前先清最老的 release,现磁盘余 12G),发版后做一轮生产 UI 复验,**再**谈扩灰度(白名单 2→3-5 观察 3-7 天→`CANVAS_PUBLIC_ENABLED=true`)
+4. ✅ **已发版**(`33ba71d`/3014,`DEPLOY_RC=0`);🔴 **下一步=生产 UI 复验**(零成本项:引用区序号/全屏预览/解锁指引/人话文案/刷新状态;「入库」需一笔已完成产物,用现有的、不新生成),复验过了**再**谈扩灰度(白名单 2→3-5 观察 3-7 天→`CANVAS_PUBLIC_ENABLED=true`)
 5. **P2 待用户裁决后才开**,不要自行启动
 
 **参照物**:LibTV 参照画布 spaceId=2614745(用户已充值;上面留有实测成片与视频故事节点)。

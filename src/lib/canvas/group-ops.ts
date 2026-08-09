@@ -160,6 +160,28 @@ function cloneNodeData(data: CanvasNodeData): CanvasNodeData | null {
 }
 
 /**
+ * 复制节点时剥掉待恢复的生成意图(2026-08-09 R2-Q4 审计)。
+ *
+ * `params.generation` 存的是**一次具体提交**的 intent(含 actionId)。它随 structuredClone
+ * 一起进副本后,副本会被 `deriveUnresolvedActions` 当成「也有一笔待恢复的提交」——
+ * 于是复制一个提交失败的节点,就凭空多出一个会被自动恢复/引导用户重提的付费候选。
+ * 意图属于原节点那一次动作,不属于副本。
+ *
+ * **只剥 `generation`,保留 `refs`**:refs 指向已有产物,剥掉会让副本不显示原图/原片;
+ * 而没有 intent 时 `deriveUnresolvedActions` 走 `if (!intent) continue`,根本不会去读 refs。
+ *
+ * 具名导出是为了可 grep、可断言,并供将来的粘贴/导入路径复用。
+ */
+export function stripGenerationIntent(
+  params: Record<string, unknown>
+): Record<string, unknown> {
+  if (!Object.prototype.hasOwnProperty.call(params, "generation")) return params;
+  const next = { ...params };
+  delete next.generation;
+  return next;
+}
+
+/**
  * 复制所选节点(+可选内部连线)。副本用 D2 工厂造新 id、`group_id` 置空、data 经 structuredClone
  * **深拷解耦**后再经 schema 归一(拒 RF 视图字段/危险值);任一节点 data 不可安全克隆 → 整体返回
  * null(原子失败,不产半个副本)。落点:优先 positionsById[id],否则 原位+offset,再否则 原位+(24,24)。
@@ -203,7 +225,9 @@ export function planDuplicate(
         groupId: null,
         data: {
           ...(clonedData.title !== undefined ? { title: clonedData.title } : {}),
-          ...(clonedData.params !== undefined ? { params: clonedData.params } : {}),
+          ...(clonedData.params !== undefined
+            ? { params: stripGenerationIntent(clonedData.params) }
+            : {}),
           ...(clonedData.media !== undefined ? { media: clonedData.media } : {}),
           refs: clonedData.refs,
         },

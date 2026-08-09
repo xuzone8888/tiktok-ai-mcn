@@ -8,11 +8,25 @@
 
 ---
 
-## 负一、当前真实状态（2026-08-09，R2 已全部收口）
+## 负一、当前真实状态（2026-08-09 下午，R2-Q4 补齐批次已发版）
+
+**线上版本 `33ba71d0d2a333b16ea4ba2b664cd61ced436ddb`，端口 3014**（2026-08-09 发版，`DEPLOY_RC=0`，
+BUILD_ID 门通过）。回滚包 `canvas-rollback-20260809T050329Z-port-3013-991403`；
+`d16620f`/3013 与 `abc29ac`/3012 两个回滚位仍在线。main = `33ba71d`（PR #34 已合）。
+
+**已在公网证实新代码真在跑**（不是只看进程起没起）：拉 `https://toryxai.com/_next/static/chunks/app/(canvas)/canvas/page-4f99d207765a7c83.js`（HTTP 200，317KB），
+其中「为什么现在不能生成」「引用区」「推为参考」「刷新状态」「余额可能不够」「本次为大额消耗」
+六个本批新字符串全部命中。
+
+⚠️ **本次发版打挂过整站约 15 分钟（构建 OOM），根因与下次发版的前置动作见「负三之零」，务必先读。**
+
+<details><summary>上一版状态（2026-08-08，保留备查）</summary>
 
 **线上版本 `d16620f34f09d2418cdb805b068aae61d2a55e3d`，端口 3013**（2026-08-08 二次发版，`DEPLOY_RC=0`）。
 回滚包 `canvas-rollback-20260808T152332Z-port-3012-934510`；上一版 `abc29ac`/3012 仍在线待回滚。
 main = `74fbee3`（PR #29/#30/#31/#32 全部已合；代码面等于线上跑的 `d16620f`，#32 是纯文档）。
+
+</details>
 
 ### 已经做完、别再重做的
 
@@ -29,7 +43,8 @@ main = `74fbee3`（PR #29/#30/#31/#32 全部已合；代码面等于线上跑的
 
 1. **旅程 B 不是 R2 的欠账**。总纲 §二写明它「**P2 可走通**」，整条链依赖脚本节点/资产装配/批量/合成；代码侧 `CREATABLE_NODE_TYPES` **刻意排除 script 与 compose**。CHECKLIST #262 的「P1 **起**」是走查纪律的起始期。
 2. **商品节点是功能缺失，不是没测**。生产渲染面只有删除按钮 + 商品简报 textarea，`input[type=file]`=0、`img`=0 —— 没有上传图、没有卖点卡。**别再当测试任务派。**
-3. **#184 费用汇总条、#185 拦截式确认此前被误记为「已做到」，其实是 partial**；而且 **#185 的实现方向与规格相反**（代码是 `cost>0` 每次付费都弹，规格是「仅限余额<预估×1.2 或单次>5000⚡」）。
+3. **#184 费用汇总条、#185 拦截式确认此前被误记为「已做到」，其实是 partial**；而且 **#185 的实现方向曾与规格相反**（代码是 `cost>0` 每次付费都弹）。
+   > ⚠️ **本条第二句已过期**：#185 已于 `70d2ded` 按规格改为双阈值并发版；2026-08-09 二次裁决又把 `5000` 下调为 **`1000`**（原值在画布物理不可达），并新增正交的**出处闸**。**读到这里不要再去「修」一个已经改好的东西。** 现状以 §负一 与 P0 看板「#185 收口」小节为准。
 
 ### R2-Q4 的准确口径（取代「约 23 项没实现」）
 
@@ -114,6 +129,44 @@ release 目录已 5 个、磁盘余 12G，**再发 2 次前先清最老的**（`
 ### ④ 之后才谈扩灰度
 
 白名单 2 → 3-5 真实用户观察 3-7 天 → `CANVAS_PUBLIC_ENABLED=true`。
+
+---
+
+## 负三之零、🔴 2026-08-09 发版事故：构建 OOM 把整站打挂约 15 分钟（发版前必读）
+
+**发生了什么**：按既有流程在生产机跑 `npm run build`（`NODE_OPTIONS=--max-old-space-size=2048`，
+与前两次成功发版**完全相同**的参数），约 10 分钟后**整站 `toryxai.com` 无响应、SSH 连不进**
+（banner exchange 超时），load average 冲到 110。构建最终被 OOM killer `SIGKILL`。
+
+**为什么这次挂、前两次没挂**——两个原因叠加：
+
+1. **release pm2 进程只加不减**。每发一版就多一个常驻 web 进程（110-260MB）。事故时机器上 9 个
+   pm2 进程共约 **1263MB**，而上次成功构建时只有约 1007MB。**3.4G 的机器，2GB 堆的构建
+   + 1.26GB 常驻 = 必爆。**
+2. **`vm.swappiness = 0`**。机器有 2GB swap 且**全程 0 使用**——这个设置下内核宁可 OOM-kill
+   也不换页，swap 等于不存在。
+
+**不幸中的万幸**：发版脚本的构建失败分支在**任何流量变更之前** `exit 1`。**没有发生蓝绿切换，
+nginx 全程指着旧版**，内存一放出来站点自己就回来了，不需要回滚。**这条设计救了场，别去动它。**
+
+**下次发版必须先做（前置，不是可选）**：
+
+```bash
+pm2 stop <3 代以前的 stargaze-canvas-* 进程>
+free -m   # 确认 available ≥ 2000MB 再开构建
+```
+
+- **用 `pm2 stop` 不要 `pm2 delete`**——release 目录还在，真要回滚 `pm2 start <name>` 几秒拉起来，
+  停着不占内存。
+- 本轮停了 `stargaze-runtime-guard-fea0bcb`(3007)、`stargaze-canvas-e77d4df`(3010)、
+  `stargaze-canvas-a24a4e3`(3011)，释放 **423MB**，available 1664 → 2036MB，重跑一次过。
+- ⚠️ **`stargaze-runtime-guard-fea0bcb` 名字有误导**：它不是监控守卫，就是第 4 代画布 release 的
+  web 进程（`start-canvas-web.mjs --port 3007`）。nginx 对 3007/3010/3011 零引用。
+- ⚠️ **别动**：`stargaze-canvas-<线上sha>`、`stargaze-canvas-reconciler`、`tiktok-ai-mcn`(3000，
+  非画布主应用)、`okspeak-proxy`(8788)。
+- **前一版交接把「清理老 release」写成磁盘问题——那是错的**。磁盘从来不紧张（事故时余 10G），
+  **真正的紧箍咒是内存**；按磁盘算余量会得出「还能再发两次」的错误结论。
+- 想更稳可另行提请用户裁决临时调高 `vm.swappiness`（属系统设置，AI 不擅自改）。
 
 ---
 
@@ -287,6 +340,20 @@ CHECKLIST #251 明列为 **做/P1**，但**根本没实现**（只有禁用按�
 - **节点重叠**：选中的节点会渲染在上层并挡住其它节点。先点空白处取消选中，再点目标节点。
 - **扣费按钮必须用 `computer` 真实点击**，不要用 JS `btn.click()`（权限分类器会拦程序化触发扣费）。
 - 浏览器工具不支持 `ctrl+0`（被当作浏览器缩放拦截），用画布自己的「适应视图」按钮。
+- 🔴 **开工第一件事:先查 `document.visibilityState` 与 `requestAnimationFrame` 是否真的在跑。**
+  后台/被遮挡的标签页里 Chrome 会停掉渲染,`rAF` 一帧都不发,于是 **CSS 动画被创建、
+  `getAnimations()` 报 `playState:"running"`,却永远不推进、永不派发 `animationend`**。
+  2026-08-09 因此误判过一次:Radix Dialog 关闭时 `data-state` 已变 `closed`,但元素等不到
+  `animationend` 就不卸载,`body{pointer-events:none}` 一直挂着 —— 现象与「点一次全屏预览
+  就把画布点死」一模一样,我据此差点建议回滚一个**完全正常**的功能。
+  一句话自检:
+  ```js
+  ({v:document.visibilityState, f:document.hasFocus(),
+    raf: await new Promise(r=>{const t=setTimeout(()=>r('NO-FRAME'),1200);requestAnimationFrame(()=>{clearTimeout(t);r('ok')})})})
+  ```
+  `NO-FRAME` = **任何动画/媒体相关的结论一律作废**(媒体加载同样被节流,`<video>` 会卡在
+  `readyState 0`)。DOM/布局层的断言不受影响(`getBoundingClientRect`、文本、图片 `naturalWidth` 都正常)。
+  `tabs_create_mcp` 并不能让它变可见——**整个 Chrome 窗口必须在前台**,这一步得请用户配合。
 - 后台（hidden）标签页会暂停渲染与尺寸测量，测帧率/连线前必须让标签**前台可见**。
 - `Page.captureScreenshot` 偶发 30s 超时，**重试一次即可**，不是页面挂了。
 

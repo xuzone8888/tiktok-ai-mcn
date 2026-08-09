@@ -68,6 +68,11 @@ import {
   type GenerationParamHintKey,
 } from "./generation-param-copy";
 import { resolveGenerationLockHint } from "./generation-lock-hints";
+import {
+  resolveCanvasGenerateConsent,
+  type CanvasConsentReason,
+  type CanvasGenerateSource,
+} from "@/lib/canvas/generation-consent";
 import { GenerationReferenceStrip } from "./generation-reference-strip";
 import {
   collectImageReferences,
@@ -279,6 +284,15 @@ function updateParams(nodeId: string, key: string, value: unknown): void {
 
 /** 「推为参考」新建节点的横向偏移;够远不压住源节点,又还在同屏视野内。 */
 const PUSH_AS_REFERENCE_OFFSET_X = 360;
+
+/**
+ * 提交不可逆的事前告知。与 `GENERATION_CANCEL_UNSUPPORTED_REASON`(事后想删时才出现)成对:
+ * 那一条是「你现在删不掉」,这一条是「你按下去之前就该知道删不掉」。
+ * 七个模型 `supportsCancel` 全为 false,所以它当前总是适用;将来有可撤单模型时按调用点的
+ * `generationCancelUnsupportedReason(...)` 判空自动退场。
+ */
+const GENERATION_IRREVERSIBLE_NOTICE =
+  "任务一经提交即由服务端对账车道接管，无法中途取消，只有明确失败才会自动退款。";
 
 /**
  * 入库(CHECKLIST #64)。**按 generationId 匹配,不按 taskId** ——
@@ -642,6 +656,7 @@ export function GenerationControls({
     unresolvedActionByNodeId,
     generationByNodeId,
     submitNode,
+    discardUnresolved,
     refresh,
     estimate,
   } = useCanvasGeneration();
@@ -649,7 +664,16 @@ export function GenerationControls({
     useState<CanvasGenerationEstimate | null>(null);
   const [estimateError, setEstimateError] = useState<string | null>(null);
   const [estimateEpoch, setEstimateEpoch] = useState(0);
-  const [confirmOpen, setConfirmOpen] = useState(false);
+  /**
+   * 确认弹窗的**定格快照**(2026-08-09 审计发现)。此前是一个布尔 `confirmOpen` + 直接读活的
+   * `estimateValue`:弹窗开着时一次后台同步失败就会把 estimateValue 置 null,正在征求资金
+   * 同意的弹窗当场变成「预计 0 积分，当前余额 0」。金额必须在打开那一刻定住。
+   */
+  const [confirmSnapshot, setConfirmSnapshot] = useState<{
+    reason: CanvasConsentReason;
+    cost: number | null;
+    balance: number | null;
+  } | null>(null);
   /** 手动刷新在途(CHECKLIST #51③);只驱动按钮的禁用与转圈,不参与任何闸门。 */
   const [manualRefreshing, setManualRefreshing] = useState(false);
   /** 「如何解锁」指引是否展开(CHECKLIST #186)。 */
@@ -764,12 +788,49 @@ export function GenerationControls({
     unresolvedActionId,
   ]);
 
-  const onGenerate = () => {
+  /**
+   * 停靠位里区分本面板属于哪个节点(CHECKLIST #189 的多选补丁)。
+   * 优先用用户自己写的提示词摘录——那是他最认得出的东西;为空时退回节点 id 后缀。
+   */
+  const dockedNodeLabel = (() => {
+    const title = typeof data.title === "string" ? data.title.trim() : "";
+    if (title) {
+      return title.length > 14 ? `${title.slice(0, 14)}…` : title;
+    }
+    return `未命名 ${nodeId.slice(-4)}`;
+  })();
+
+  /** 这次未解决的 intent 服务端是否确有其行。绑定=幂等重放不扣费;未绑定=提交会首次扣费。 */
+  const unresolvedIsBound =
+    unresolvedActionId !== null && generation?.actionId === unresolvedActionId;
+
+  /**
+   * 唯一的付费提交入口(2026-08-09 R2-Q4 审计后改造)。
+   *
+   * `source` 不是装饰:金额闸(#185 双阈值)回答「这笔钱大不大」,出处闸回答「这一下是不是
+   * 用户真要花的」。两条正交,判定本体在 `generation-consent.ts`(纯函数,可离线穷举),
+   * 这里只负责喂参数与执行。**新增任何能触发付费的入口,都必须经过这个函数并显式传 source。**
+   */
+  const onGenerate = (source: CanvasGenerateSource) => {
     if (syncState === "error") {
       void refresh();
       return;
     }
+    // 未解决的 intent 走恢复语义:已绑定=幂等重放(放行),未绑定=会真的 INSERT 扣费(必须问)。
     if (unresolvedActionId) {
+      const gate = resolveCanvasGenerateConsent({
+        source: unresolvedIsBound ? "recovery_bound" : "recovery_unbound",
+        cost: estimateValue?.cost ?? 0,
+        thresholdTrigger: null,
+      });
+      if (gate.decision === "confirm") {
+        setConfirmSnapshot({
+          reason: gate.reason,
+          cost: estimateValue?.cost ?? null,
+          balance: estimateValue?.balance ?? null,
+        });
+        return;
+      }
       void submitNode(nodeId);
       return;
     }
@@ -781,19 +842,39 @@ export function GenerationControls({
       });
       return;
     }
-    if (estimateValue?.needsConfirmation) {
-      setConfirmOpen(true);
+    const gate = resolveCanvasGenerateConsent({
+      source,
+      cost: estimateValue.cost,
+      thresholdTrigger: estimateValue.confirmationReason,
+    });
+    if (gate.decision === "confirm") {
+      // 打开瞬间把金额定格:弹窗开着时后台同步一失败,活对象会退化成「预计 0 积分,余额 0」,
+      // 而这偏偏是最需要金额准确的那一次。
+      setConfirmSnapshot({
+        reason: gate.reason,
+        cost: estimateValue.cost,
+        balance: estimateValue.balance,
+      });
       return;
     }
     void submitNode(nodeId);
   };
   /**
-   * 拦截式确认文案(CHECKLIST #185)。规格只在两种情形下拦截,弹窗必须讲清是哪一种——
-   * 否则用户看到「有时弹有时不弹」会以为是 bug。`indeterminate` 是报价/余额读不出的
-   * fail-closed 兜底,不谎称原因。
+   * 拦截式确认文案。弹窗必须讲清**这一次**为什么弹——否则用户看到「有时弹有时不弹」
+   * 会以为是 bug。原因来自确认快照(定格值),不读活对象。
    */
   const confirmCopy = ((): { title: string; lead: string } => {
-    switch (estimateValue?.confirmationReason ?? null) {
+    switch (confirmSnapshot?.reason ?? null) {
+      case "keyboard_shortcut":
+        return {
+          title: "用快捷键发送，确认花费？",
+          lead: "Ctrl+Enter 在输入框里很容易误触，所以这一次多问一句。",
+        };
+      case "unbound_recovery":
+        return {
+          title: "这次提交此前没有到达服务端，重新提交？",
+          lead: "上次提交没能确认送达，服务端查不到这笔任务——现在提交会是一次全新的扣费，不是恢复。",
+        };
       case "low_balance":
         return {
           title: "余额可能不够，确认继续？",
@@ -862,10 +943,14 @@ export function GenerationControls({
     <div
       ref={panelRef}
       data-generation-panel-dock={docked ? "bottom" : "inline"}
+      /* 停靠位是所有选中节点共用的一个容器:多选两个媒体节点时会并排出现两个面板。
+         没有节点标识的话它们外观完全一致(标题相同、空提示词时连内容都一样),
+         点错一个就是在错误的节点上花钱。故给出 data-node-id 锚点 + 标题里的节点标识。 */
+      data-node-id={nodeId}
       role={docked ? "region" : undefined}
       aria-label={
         docked
-          ? `${kind === "image" ? "图片" : "视频"}节点生成参数`
+          ? `${kind === "image" ? "图片" : "视频"}节点生成参数 · ${dockedNodeLabel}`
           : undefined
       }
       className={
@@ -876,7 +961,9 @@ export function GenerationControls({
     >
       {docked && (
         <p className="text-[10px] font-medium text-muted-foreground">
-          {kind === "image" ? "图片" : "视频"}节点 · 生成参数（窗口较窄，面板已停靠底部）
+          {kind === "image" ? "图片" : "视频"}节点 ·{" "}
+          <span className="text-foreground">{dockedNodeLabel}</span> ·
+          生成参数（窗口较窄，面板已停靠底部）
         </p>
       )}
       <textarea
@@ -901,13 +988,19 @@ export function GenerationControls({
         onBlur={() => useCanvasStore.getState().commitTextEdit()}
         onKeyDown={(event) => {
           // CHECKLIST #188 发送快捷键。走与按钮同一个 onGenerate,因此防重复提交、
-          // 报价未就绪拦截、超阈值拦截式确认三道闸一并复用,不另开提交路径。
+          // 报价未就绪拦截、金额阈值三道闸一并复用,不另开提交路径;`shortcut` 这个 source
+          // 会再多要一次确认(见 generation-consent.ts:输入框里 Ctrl+Enter 极易误触)。
           if (event.key !== "Enter" || !(event.ctrlKey || event.metaKey)) return;
+          // 输入法组字期间的 Enter 是「上屏候选词」,不是「发送」。必须在 preventDefault
+          // 之前早退,否则中文用户选词会被吞掉,甚至直接触发一次付费提交。
+          // keyCode 229 是 Safari/旧版在 compositionend 之后仍会报的兼容分支
+          // (与 use-canvas-command-shortcuts.ts / omnibox.tsx 同一处置)。
+          if (event.nativeEvent.isComposing || event.keyCode === 229) return;
           event.preventDefault();
           event.stopPropagation();
           if (actionDisabled) return;
           useCanvasStore.getState().commitTextEdit();
-          onGenerate();
+          onGenerate("shortcut");
         }}
       />
 
@@ -932,13 +1025,37 @@ export function GenerationControls({
 
       <GenerationStatus generation={generation} />
 
+      {/* 未解决的提交。**必须分绑定/未绑定两说** —— 旧文案对两种情形一律讲
+          「不会创建新的计费任务」,而未绑定时那是假的:服务端根本没有这一行,再提交就是
+          一次全新的 INSERT + 扣费。假承诺比不承诺更伤。 */}
       {unresolvedActionId && (
         <div
-          className="rounded border border-orange-500/30 bg-orange-500/10 p-2 text-[10px] leading-relaxed text-orange-700 dark:text-orange-300"
+          className="space-y-1.5 rounded border border-orange-500/30 bg-orange-500/10 p-2 text-[10px] leading-relaxed text-orange-700 dark:text-orange-300"
           role="status"
         >
-          本次提交的响应尚未确认。系统将复用任务{" "}
-          {unresolvedActionId.slice(0, 8)} 核对与恢复，不会创建新的计费任务。
+          {unresolvedIsBound ? (
+            <p>
+              本次提交的响应尚未确认，但服务端已收到任务{" "}
+              {unresolvedActionId.slice(0, 8)}。系统会复用它核对与恢复，
+              <strong>不会创建新的计费任务</strong>。
+            </p>
+          ) : (
+            <>
+              <p>
+                上次提交没能确认送达，<strong>服务端目前查不到这笔任务</strong>
+                （本地记录 {unresolvedActionId.slice(0, 8)}）。
+                此时再提交会是一次<strong>全新的扣费</strong>，不是恢复。
+              </p>
+              <button
+                type="button"
+                className="nodrag nopan underline underline-offset-2 hover:no-underline"
+                title="只清掉本地这条待恢复记录。服务端本来就没有这一行，所以没有可退的款，也没有要取消的任务。"
+                onClick={() => discardUnresolved(nodeId)}
+              >
+                放弃这次提交
+              </button>
+            </>
+          )}
         </div>
       )}
 
@@ -1003,7 +1120,16 @@ export function GenerationControls({
           size="sm"
           className="h-7 gap-1 px-2 text-[11px]"
           disabled={actionDisabled}
-          onClick={onGenerate}
+          /* 「提交后不可取消、不退款」此前只出现在弹窗里;#185 之后弹窗大多数时候不弹,
+             这句唯一的事前风险告知就没了落脚点。挂 title 而非常显条(用户裁决:恒显不需要),
+             并按 generationCancelUnsupportedReason 是否非空来挂 —— 将来若有可撤单的模型,
+             这句话会自动退场,不会变成谎话。 */
+          title={
+            generationCancelUnsupportedReason(kind, data)
+              ? GENERATION_IRREVERSIBLE_NOTICE
+              : undefined
+          }
+          onClick={() => onGenerate("button")}
         >
           {submitting || active ? (
             <Loader2 className="h-3 w-3 animate-spin" />
@@ -1233,20 +1359,41 @@ export function GenerationControls({
         </DialogContent>
       </Dialog>
 
-      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+      <AlertDialog
+        open={confirmSnapshot !== null}
+        onOpenChange={(open) => {
+          if (!open) setConfirmSnapshot(null);
+        }}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>{confirmCopy.title}</AlertDialogTitle>
             <AlertDialogDescription>
-              {confirmCopy.lead}本次预计消耗 {estimateValue?.cost ?? 0} 积分，当前余额{" "}
-              {estimateValue?.balance ?? 0}。任务提交后只有明确失败才会自动退款。
+              {confirmCopy.lead}本次预计消耗 {confirmSnapshot?.cost ?? 0} 积分，当前余额{" "}
+              {confirmSnapshot?.balance ?? 0}。{GENERATION_IRREVERSIBLE_NOTICE}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>返回调整</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => {
-                setConfirmOpen(false);
+                // 报价在弹窗开着期间变了(改参数/换模型/余额变动)→ 不能拿旧数字当同意凭据。
+                // 关掉并要求重新确认,而不是按用户没看过的价扣费。
+                const snapshot = confirmSnapshot;
+                setConfirmSnapshot(null);
+                if (
+                  snapshot &&
+                  snapshot.cost !== null &&
+                  estimateValue &&
+                  estimateValue.cost !== snapshot.cost
+                ) {
+                  toast({
+                    title: "报价已变化",
+                    description: `本次预估已从 ${snapshot.cost} 变为 ${estimateValue.cost} 积分，请重新确认。`,
+                    variant: "destructive",
+                  });
+                  return;
+                }
                 void submitNode(nodeId);
               }}
             >

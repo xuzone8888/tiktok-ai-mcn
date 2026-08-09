@@ -165,6 +165,8 @@ interface CanvasGenerationContextValue {
   unresolvedActionByNodeId: ReadonlyMap<string, string>;
   generationByNodeId: ReadonlyMap<string, CanvasGenerationView>;
   submitNode(nodeId: string): Promise<CanvasGenerationView | null>;
+  /** 放弃一次**未绑定**的提交(仅清本地 intent;服务端本就没有该行)。 */
+  discardUnresolved(nodeId: string): void;
   refresh(): Promise<void>;
   estimate(
     kind: "image" | "video",
@@ -1223,17 +1225,55 @@ export function CanvasGenerationProvider({
     ]
   );
 
+  /**
+   * 自动幂等恢复。**只重放服务端确有其行的 intent**(2026-08-09 用户裁决)。
+   *
+   * 改前的缺陷:本 effect 对「服务端已有该 action(重放不扣费)」与「服务端查无此 action
+   * (提交会 INSERT + 首次扣费)」一视同仁。于是这条链成立 ——
+   * 用户提交时断网 → `definitive=false`,intent 留在画布文档,toast 承诺「不会新建任务或
+   * 重复扣费」→ 用户关标签走人,此刻服务端一行都没有、一分没扣 → **下次打开这张画布,
+   * 本 effect 零点击自动提交,`begin_canvas_generation_v1` 找不到该 action_id 就 INSERT 并
+   * 扣 450**(happyhorse 5s;12s 是 1080)。断网期间误触了 N 个节点,下次开画布就是 N×450 连扣。
+   *
+   * 判据用 `generationByNodeIdRef`(它与 `deriveUnresolvedActions` 消费的是同一份 latest 映射),
+   * 零新增状态。未绑定的 intent 交给用户在面板上明确处置:要么「核对并恢复」(走确认),
+   * 要么「放弃这次提交」(`discardUnresolved`)。
+   *
+   * ⚠️ 这道过滤**必须**与「放弃这次提交」出口同时存在:未绑定 intent 会让删除按钮被
+   * `DELETE_REASON_UNRESOLVED` 拦住,若又不给放弃入口,该节点就既提交不了又删不掉,
+   * 唯一出路是花钱——那等于把一次误触变成强制消费。
+   */
   useEffect(() => {
     if (!enabled || syncState !== "ready") return;
     const candidate = Array.from(unresolvedActionByNodeId.entries()).find(
       ([nodeId, actionId]) =>
         !submittingNodeIdsRef.current.has(nodeId) &&
-        !automaticRecoveryAttemptedRef.current.has(actionId)
+        !automaticRecoveryAttemptedRef.current.has(actionId) &&
+        generationByNodeIdRef.current.get(nodeId)?.actionId === actionId
     );
     if (!candidate) return;
     automaticRecoveryAttemptedRef.current.add(candidate[1]);
     void submitNode(candidate[0]);
   }, [enabled, submitNode, syncState, unresolvedActionByNodeId]);
+
+  /**
+   * 放弃一次未绑定的提交(2026-08-09 用户裁决,与上面的过滤配套)。
+   *
+   * 只清本地:把 intent 从画布文档移除并退出 unresolved 映射。**不碰服务端** —— 未绑定
+   * 意味着服务端本来就没有这一行,没有可退的款,也没有可取消的任务。
+   */
+  const discardUnresolved = useCallback(
+    (nodeId: string) => {
+      const actionId = unresolvedActionByNodeIdRef.current.get(nodeId);
+      if (!actionId) return;
+      clearPersistedGenerationIntent(nodeId, actionId);
+      const next = new Map(unresolvedActionByNodeIdRef.current);
+      next.delete(nodeId);
+      publishUnresolved(next);
+      automaticRecoveryAttemptedRef.current.delete(actionId);
+    },
+    [publishUnresolved]
+  );
 
   const estimate = useCallback(
     async (
@@ -1299,6 +1339,7 @@ export function CanvasGenerationProvider({
       unresolvedActionByNodeId,
       generationByNodeId,
       submitNode,
+      discardUnresolved,
       refresh,
       estimate,
     }),
@@ -1311,6 +1352,7 @@ export function CanvasGenerationProvider({
       unresolvedActionByNodeId,
       generationByNodeId,
       submitNode,
+      discardUnresolved,
       refresh,
       estimate,
     ]
