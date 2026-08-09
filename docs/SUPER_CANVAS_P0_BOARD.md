@@ -341,7 +341,7 @@
 
   | 议题 | 裁决 | 落地方式 |
   |---|---|---|
-  | **#185 拦截式确认** | **按原规格改代码,不改规格** —— 实现双阈值「余额<预估×1.2 或单次>5000⚡」 | ⏳ 待落地(R2-Q4 补齐批次):阈值常量与纯函数落 `src/lib/canvas/generation-pricing.ts`,`getCanvasGenerationEstimate` 消费;弹窗文案区分两种触发原因。**属资金确认边界改动,单独 commit 单独验** |
+  | **#185 拦截式确认** | **按原规格改代码,不改规格** —— 实现双阈值「余额<预估×1.2 或单次>5000⚡」 | ✅ **已落地(`70d2ded`)**:阈值常量 `CANVAS_CONFIRMATION_LOW_BALANCE_MULTIPLIER=1.2` / `CANVAS_CONFIRMATION_HIGH_COST_THRESHOLD=5000` 与纯函数 `resolveCanvasConfirmationTrigger` 落 `generation-pricing.ts`,`getCanvasGenerationEstimate` 消费;新增 `confirmationReason`(low_balance/high_cost/indeterminate)贯穿 DTO→context→弹窗。边界刻意不含等号(余额恰等 cost×1.2 不拦、cost 恰 5000 不拦),与规格逐字一致;两条同时命中按 low_balance 提示。非有限报价/余额 → indeterminate 兜底拦下。**闸门**:backend verifier 61/61(新增 15 条,含阈值钉死与边界±1)、frontend 49/49、intent 122/122、runtime 544/544、tsc 绿、build 绿 |
   | **#253 / #51①** | **已 bound 行不做自动判死退款,该半延 P2**;P1 内改为运维告警口径 | CHECKLIST #253 行文改为「**未 bound 行**超时判死触发幂等退款」+ 备注记裁决。判据:厂商慢任务与真失败在我方不可区分,自动退款会「退了钱又出了片」;且 `fail_canvas_generation_v1` 已明文 RAISE 禁止对 unknown 自动退款,绕过它=绕过该设计 |
   | **#237 grant 首用例** | **随 #211 交互式教程一起延 P2** | CHECKLIST #237 改判延 P2。grant 类型与件套④ 流水列**保持不动**,教程落地即可直接接 |
   | **资金③④ 结案口径** | **接受等价验收结案** | ③ = 库级 `canvas-refund:<id>` 唯一锚点(4 个迁移里一致)+ 实弹脚本 R44;④ = 唯一锚点索引 + 第二标签强制只读 + 幂等栅栏 UI 三重结构性证据。两者在生产**结构性无直击路径**(③ 已裁决不做取消入口且生产零失败;④ 需程序化触发扣费,与执行约束正面冲突) |
@@ -350,6 +350,34 @@
     - 机器守卫绿:`功能行总数 220(做 167 / 裁 31 / 延 22)`、`做·期次分布 P0=48 P1=52 P2=55 P3=11 P4=1`、P0 键 48 与看板一一对应。
     - **P1 由 61 降为 52**(8 项 B 组 + 1 项 F 组离开「做」)。CLAUDE.md 期次表、EXECUTION_TRACKER 已同步。
     - 落笔前逐项代码实证(不是照抄提案):`VideoGenerationMode` 仅 2 值 / 七模型 `supportedModes` 全 2 个 / `first_frame`+`last_frame` 零引用;`VideoAspectRatio` 仅 `9:16`+`16:9`;`VideoQuality` 仅 `standard`+`hd`(无 P 档维度);`generation-intent.ts:140` 硬钉 `z.literal("gpt-image-2")`;`canvas-chrome-policy.ts:49` 教程 `enabled:false`;全仓仅 3 个 sweep 且都只管未 bound 行、`maxPollMs` 在画布侧零消费。
+
+  ### R2-Q4 补齐批次:便宜活排序(2026-08-09 重建并首次落盘)
+
+  > ⚠️ **这张表此前从未落盘,不是「本轮才写」而是「本轮才发现它不存在」**。交接文档
+  > `HANDOFF_R2_NEXT.md` §负一/§负二③ 称「完整分档清单、每项工作量档位/依赖/风险、便宜活排序
+  > 全在本小节」——**实为失准**:本看板全文对 `#44`/`#72`/`#84`/`#94`/`#186`/`#187`/`#64`
+  > 零命中,只有汇总数(15/30/15)与 8+1 提案。唯一幸存记录是 HANDOFF 里那 6 行摘要。
+  > 下表按它重建,**每项均已重新代码实证**,HANDOFF 的失准表述已一并更正。
+
+  | 序 | 项 | 现状(2026-08-09 代码实证) | 档位 | 依赖 / 风险 |
+  |---|---|---|---|---|
+  | 1 | **#51②③ 回前台触发 + 常态手动刷新** | `visibilitychange` 全仓只出现在 `writer-lock.ts`(单写者锁,与对账无关),对账侧零监听;`refresh` 在 `canvas-generation-context.tsx` **已存在**,但只在 syncState 陈旧时被动调用一次,**既没接可见性、也没有按钮** | **XS** | 无依赖,纯前端接线,不碰资金链路。**功能价值最高**——标签页切后台会让节点空转,是真实可见的用户侧故障 |
+  | 2 | **#187 参数人话文案 + 悬停示例** | 全仓 0 命中 | **S** | 无依赖。纯文案 + `title`;要逐个参数写,面广但每处极浅 |
+  | 3 | **#186 灰置控件「如何解锁」指引** | 全仓 0 命中(「如何解锁」/「创建图片节点」/「从历史选择」皆无) | **S** | 需一个 tooltip/popover 承载面;灰置原因代码里已有(按上游图灰置),接出来即可 |
+  | 4 | **#84 图片产物全屏预览** | 下载有(`generation-controls.tsx:893` `downloadMedia`),**全屏 0 命中** | **S** | 复用既有 dialog + `media-url-cache.ts` 签名 URL 解析,零后端新增 |
+  | 5 | **#44 + #72 + #94 引用区缩略图带序号** | 「引用区」全仓 0,只有连线数量校验的报错文案;计数已在(模式显示「图生视频 (1)」) | **M** | 三项共用一块 UI,一次改动关三个缺口。需在面板内解析上游产物 object key→签名 URL 并按连线序编号 |
+  | 6 | **#64 入库 + 推为参考** | 下载有;**入库 / 推为参考 0 命中** | **M** | 「入库」要写 `generations.library_status`,**是本批唯一有服务端面的项**,故排最后 |
+
+  **与 HANDOFF 摘要的一处排序差异(有意为之)**:HANDOFF 把 #44+#72+#94 排第一,理由是「一次关三个缺口」。
+  重建时改排第 5——它是本批唯一需要在面板内做媒体解析的项(M 档),而 #51②③ 只是把**已经存在的**
+  `refresh` 接上可见性事件(XS 档)且修的是真实故障。按「改动量/收益」排,**先做 XS 且修故障的,
+  再做 M 且补展示的**;三项共用 UI 的收益不变,只是次序靠后。
+
+  **停靠位 `max-h`(顺手项)已完成(`1f9d887`)**:新增 `GENERATION_DOCK_MAX_HEIGHT_RATIO=0.75`
+  与 `generationDockMaxHeight()`,样式由常量驱动。**成因更正**:`canvas-board.tsx:1415` 原是硬编码
+  `max-h-[55%]`,**并未引用** `GENERATION_PANEL_MAX_HEIGHT_RATIO`——是重复魔数而非「误用常量」,
+  但同数即同病(因高过 55% 才 dock 的面板,落进同样卡 55% 的停靠位后必然仍超出)。
+  S6 verifier 补三条断言,141 通过 0 失败。
 
 - **R2-Q3 · 🔴 P1 功能缺失:「删除 running 节点三选一」根本没实现**(2026-08-08 实测,待裁决)
   - **CHECKLIST 第 251 行**明列为**做 / P1**:「删除 running 节点三选一(取消并退款 / 仅移除[任务继续产物进历史] / 返回);网关不支持取消则明示」。
