@@ -31,6 +31,10 @@ async function loadStandaloneTypeScript(relativePath) {
 const api = await loadCanvasModule("generation-api-types");
 const pricing = await loadCanvasModule("generation-pricing");
 const modelPolicy = await loadCanvasModule("generation-model-policy");
+const consent = await loadCanvasModule("generation-consent");
+// catalog.ts 有相对依赖(./types),必须走能物化依赖闭包的 loadCanvasModule,
+// loadStandaloneTypeScript 只转译单文件、解析不了 "./types"。
+const catalog = await loadCanvasModule("../video-models/catalog");
 const safeMedia = await loadStandaloneTypeScript(
   "../src/lib/safe-media-fetch.ts"
 );
@@ -225,9 +229,37 @@ equal(
 );
 equal(
   pricing.CANVAS_CONFIRMATION_HIGH_COST_THRESHOLD,
-  5000,
-  "#185 high-cost threshold pinned to spec value 5000"
+  1000,
+  "#185 high-cost threshold pinned to the 2026-08-09 ruling (5000 -> 1000)"
 );
+// 5000 曾是画布价目天花板(1080)的 4.6 倍 —— 那条臂在任何输入下都不返回,「双阈值」
+// 实际塌缩成单条低余额规则。这道守卫穷举整个视频目录的 supportedDurations x
+// supportedQualities(getVideoModelCreditCost 对不支持的组合抛 RangeError,所以只能迭代
+// 已声明的数组),证明阈值确实落在价目带内、high_cost 真的可达。
+{
+  let ceiling = 0;
+  for (const id of Object.keys(catalog.VIDEO_MODEL_CATALOG)) {
+    const entry = catalog.VIDEO_MODEL_CATALOG[id];
+    for (const duration of entry.supportedDurations) {
+      for (const quality of entry.supportedQualities) {
+        const cost = catalog.getVideoModelCreditCost(id, duration, quality);
+        if (cost > ceiling) ceiling = cost;
+      }
+    }
+  }
+  for (const resolution of ["1k", "2k", "4k"]) {
+    const cost = pricing.estimateCanvasGenerationSelection({
+      kind: "image",
+      config: { resolution, aspectRatio: "auto" },
+    }).cost;
+    if (cost > ceiling) ceiling = cost;
+  }
+  equal(ceiling, 1080, "#185 canvas single-action price ceiling is happyhorse 12s = 1080");
+  ok(
+    pricing.CANVAS_CONFIRMATION_HIGH_COST_THRESHOLD < ceiling,
+    `#185 high-cost threshold (${pricing.CANVAS_CONFIRMATION_HIGH_COST_THRESHOLD}) must sit BELOW the price ceiling (${ceiling}); otherwise the arm is dead code`
+  );
+}
 const trigger = (cost, balance) =>
   pricing.resolveCanvasConfirmationTrigger({ cost, balance });
 equal(trigger(0, 0), null, "#185 free action never intercepts");
@@ -249,17 +281,20 @@ equal(
 );
 equal(trigger(450, 0), "low_balance", "#185 zero balance intercepts");
 equal(
-  trigger(5000, 1_000_000),
+  trigger(1000, 1_000_000),
   null,
   "#185 cost exactly at threshold is not above it, so no intercept"
 );
 equal(
-  trigger(5001, 1_000_000),
+  trigger(1001, 1_000_000),
   "high_cost",
   "#185 cost one credit over threshold intercepts"
 );
+// 生产实价:happyhorse 5s=450 不拦、12s=1080 拦。这两条是阈值下调后的实际效果。
+equal(trigger(450, 18459), null, "#185 happyhorse 5s (450) stays one-click for a healthy balance");
+equal(trigger(1080, 18459), "high_cost", "#185 happyhorse 12s (1080) now asks — the point of the 5000->1000 ruling");
 equal(
-  trigger(6000, 100),
+  trigger(1200, 100),
   "low_balance",
   "#185 when both triggers fire, low balance wins the copy (more urgent fact)"
 );
@@ -303,6 +338,122 @@ ok(
   /resolveCanvasConfirmationTrigger\(/.test(generationServiceSource),
   "#185 estimate endpoint routes confirmation through the shared threshold helper"
 );
+
+// ---- 出处闸(2026-08-09 R2-Q4 审计):金额轴之外的第二条轴 ----
+// 金额闸答「这笔钱大不大」,出处闸答「这一下是不是用户真要花的」。下面这组穷举同时
+// 证明两件事:①出处闸堵住了误扣费路径;②它**永远不会削弱 #185**。
+{
+  const gate = (source, cost, thresholdTrigger) =>
+    consent.resolveCanvasGenerateConsent({ source, cost, thresholdTrigger });
+  const TRIGGERS = [null, "low_balance", "high_cost", "indeterminate"];
+
+  // ① #185 优先级:只要金额闸说要拦,任何 source 都必须拦(含 button)。
+  for (const source of ["button", "shortcut"]) {
+    for (const t of TRIGGERS) {
+      if (t === null) continue;
+      const g = gate(source, 450, t);
+      equal(
+        [g.decision, g.reason],
+        ["confirm", t],
+        `consent: ${source} + ${t} must confirm with the threshold's own reason (#185 never weakened)`
+      );
+    }
+  }
+  // ② 这条是「#185 没被回退」的机器证明:鼠标点击 + 金额未越阈 = 一次点击直发。
+  equal(
+    gate("button", 450, null),
+    { decision: "allow" },
+    "consent: deliberate button click under threshold stays one-click — the ruling's intended effect"
+  );
+  // ③ 快捷键是弱证据,必须多问一句。
+  equal(
+    gate("shortcut", 450, null),
+    { decision: "confirm", reason: "keyboard_shortcut" },
+    "consent: Ctrl+Enter always confirms — a text box makes it far too easy to misfire"
+  );
+  // ④ 免费动作不打扰。
+  equal(gate("shortcut", 0, null), { decision: "allow" }, "consent: free action never confirms");
+  // ⑤ indeterminate 不能被 cost<=0 遮蔽 —— resolveCanvasConfirmationTrigger 在余额读不出时
+  //    会先返回 indeterminate 再看 cost,若出处闸先按 cost<=0 放行就把 #185 的兜底臂吃掉了。
+  equal(
+    gate("button", 0, "indeterminate"),
+    { decision: "confirm", reason: "indeterminate" },
+    "consent: threshold is evaluated BEFORE the free-action shortcut, so indeterminate is not shadowed"
+  );
+  // ⑥ 恢复语义:已绑定=幂等重放放行;未绑定=会真的 INSERT 扣费,必须问。
+  equal(
+    gate("recovery_bound", 450, null),
+    { decision: "allow" },
+    "consent: bound recovery replays idempotently and must not nag"
+  );
+  equal(
+    gate("recovery_unbound", 450, null),
+    { decision: "confirm", reason: "unbound_recovery" },
+    "consent: unbound recovery would be a FIRST charge, not a replay — always confirm"
+  );
+  equal(
+    gate("recovery_bound", 999999, "high_cost"),
+    { decision: "allow" },
+    "consent: bound recovery outranks the amount axis (replay creates no new charge)"
+  );
+}
+const contextSource = readFileSync(
+  new URL("../src/components/canvas/canvas-generation-context.tsx", import.meta.url),
+  "utf8"
+);
+ok(
+  /generationByNodeIdRef\.current\.get\(nodeId\)\?\.actionId === actionId/.test(
+    contextSource
+  ),
+  "auto-recovery only replays intents the server actually has (no zero-click first charge)"
+);
+ok(
+  /discardUnresolved/.test(contextSource),
+  "an unbound intent can be discarded — otherwise the node is neither submittable nor deletable"
+);
+{
+  const controlsSource = readFileSync(
+    new URL("../src/components/canvas/nodes/generation-controls.tsx", import.meta.url),
+    "utf8"
+  );
+  // 旧文案对绑定/未绑定一视同仁地说「不会创建新的计费任务」——未绑定时那是假的。
+  // 现在这句只许出现一次(绑定分支),并且未绑定分支必须讲明会是一次全新扣费。
+  // 断言渲染态的那一处(带 <strong> 标签),不是注释里复述这句话的那一处。
+  equal(
+    (controlsSource.match(/<strong>不会创建新的计费任务<\/strong>/g) || []).length,
+    1,
+    "the 'no new billable task' promise is rendered exactly once (the bound branch, where it is true)"
+  );
+  ok(
+    /unresolvedIsBound \? \(/.test(controlsSource),
+    "the unresolved notice branches on whether the server actually has the row"
+  );
+  ok(
+    /全新的扣费/.test(controlsSource),
+    "the unbound branch says plainly that re-submitting is a fresh charge"
+  );
+  ok(
+    /放弃这次提交/.test(controlsSource),
+    "the unbound branch offers a zero-cost way out"
+  );
+  ok(
+    /event\.nativeEvent\.isComposing \|\| event\.keyCode === 229/.test(controlsSource),
+    "Ctrl+Enter early-returns during IME composition (picking a candidate must not spend)"
+  );
+  ok(
+    /onClick=\{\(\) => onGenerate\("button"\)\}/.test(controlsSource),
+    "the generate button passes an explicit source (it used to pass the MouseEvent)"
+  );
+  ok(
+    /onGenerate\("shortcut"\)/.test(controlsSource),
+    "Ctrl+Enter routes through the same funnel with the weaker source"
+  );
+  equal(
+    (controlsSource.match(/const onGenerate = /g) || []).length,
+    1,
+    "there is exactly one paid-submission funnel"
+  );
+}
 
 equal(
   modelPolicy.parseCanvasVideoModelAllowlist(undefined),

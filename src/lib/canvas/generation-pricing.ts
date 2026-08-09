@@ -18,10 +18,32 @@ export const CANVAS_GENERATION_PRICING_VERSION =
  * 调整这两个数字等于调整资金确认边界,**须用户裁决**,不得随手改。
  */
 export const CANVAS_CONFIRMATION_LOW_BALANCE_MULTIPLIER = 1.2;
-export const CANVAS_CONFIRMATION_HIGH_COST_THRESHOLD = 5000;
+/**
+ * 大额单次阈值。**2026-08-09 用户裁决由 5000 下调为 1000。**
+ *
+ * 下调的原因是原值在本产品上物理不可达:画布单次成本的天花板是 happyhorse 12 秒 = 1080
+ * (次高 seedance hd 10 秒 = 994,图片 1K/2K/4K = 5/10/15),5000 是天花板的 4.6 倍,
+ * 于是 `cost > 5000` 这条臂**在任何输入下都不返回**,「双阈值」实际塌缩成
+ * 「余额 < 预估×1.2」单条 —— 生产余额 18459、单次 450 时,要连做约 40 次零确认生成、
+ * 花掉约 18000 积分,弹窗才会第一次出现。
+ *
+ * 1000 这个数同时与主站 `omnibox.tsx` 的 `CONFIRM_CREDITS_THRESHOLD` 对齐(此前画布反而
+ * 比主站宽 5 倍,而画布恰恰是 `supportsCancel` 全 false、提交即不可退的那条链路)。
+ *
+ * `verify-canvas-generation-backend.mjs` 有一道守卫穷举整个视频目录的
+ * `supportedDurations × supportedQualities`,断言本阈值**低于**价目天花板 —— 即证明这条臂
+ * 真的可达。将来若上调阈值或下调价目导致它重新变成死支路,那道守卫会红。
+ */
+export const CANVAS_CONFIRMATION_HIGH_COST_THRESHOLD = 1000;
 
 /**
- * 拦截原因。`indeterminate` 是 fail-closed 兜底:报价或余额读不出可信数值时宁可拦。
+ * 拦截原因。
+ *
+ * `indeterminate` 是**兜底而非主防线**:三道规整叠在本函数前面(服务端把 balance 兜成 0、
+ * cost 越界直接 throw、客户端把非整数报价整体判 null),所以真实调用链上它几乎不返回。
+ * 报价读不出时真正生效的保护是另一条:`estimateValue === null` → `actionDisabled` →
+ * 按钮灰置且 Ctrl+Enter 早退。留着它是为了「万一上游校验被放宽」时仍然 fail-closed,
+ * **不要因为它看起来不可达就删掉**。
  */
 export type CanvasConfirmationTrigger =
   | "low_balance"

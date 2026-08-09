@@ -581,6 +581,75 @@ ok(
   "#64 side-effecting artifact actions are hidden in read-only mode"
 );
 
+console.log(
+  "\nN+6. 出处闸与资金披露（2026-08-09 审计:此前客户端这一半零断言，删掉那个 if 也全绿）"
+);
+// 服务端只返回 needsConfirmation 这个布尔;真正把它变成一道闸的是组件里那一行判断。
+// 之前 122 条断言里没有任何一条守着它 —— 把它删掉 tsc/build/前后端 verifier 全绿。
+ok(
+  /resolveCanvasGenerateConsent\(\{/.test(controls),
+  "the client routes every paid submit through the shared consent gate"
+);
+ok(
+  /if \(gate\.decision === "confirm"\)/.test(controls),
+  "a 'confirm' verdict actually opens the dialog instead of submitting"
+);
+ok(
+  /thresholdTrigger: estimateValue\.confirmationReason/.test(controls),
+  "#185's server verdict is fed into the gate verbatim (client never re-derives it)"
+);
+// 确认弹窗必须用定格快照:开着时后台同步一失败,活对象会退化成「预计 0 积分、余额 0」,
+// 而那恰好是最需要金额准确的那一次。
+ok(
+  /const \[confirmSnapshot, setConfirmSnapshot\]/.test(controls),
+  "the confirm dialog freezes cost/balance when it opens"
+);
+lacks(controls, "const [confirmOpen", "the old live-reading boolean is gone");
+ok(
+  /confirmSnapshot\?\.cost \?\? 0/.test(controls),
+  "the dialog renders the frozen amount, not the live one"
+);
+ok(
+  /estimateValue\.cost !== snapshot\.cost/.test(controls),
+  "confirming re-checks the quote; a changed price is refused rather than charged silently"
+);
+// 「提交后不可取消、不退款」在弹窗不弹的路径上曾完全消失。
+ok(
+  /GENERATION_IRREVERSIBLE_NOTICE/.test(controls),
+  "the irreversibility notice exists as a shared constant"
+);
+ok(
+  /generationCancelUnsupportedReason\(kind, data\)\s*\?\s*GENERATION_IRREVERSIBLE_NOTICE/.test(
+    controls
+  ),
+  "the notice is gated on the model actually being uncancellable, so it retires itself"
+);
+// ≤1366 多选时两个面板外观完全一致 —— 点错就是在错的节点上花钱。
+ok(
+  /data-node-id=\{nodeId\}/.test(controls),
+  "each docked panel carries a node anchor"
+);
+ok(
+  /dockedNodeLabel/.test(controls),
+  "the docked title identifies which node the panel belongs to"
+);
+// 复制节点不得把待恢复的付费意图一起复制过去。
+{
+  const groupOps = read("src/lib/canvas/group-ops.ts");
+  ok(
+    /export function stripGenerationIntent/.test(groupOps),
+    "duplicate path exposes a named intent-stripper (greppable/testable)"
+  );
+  ok(
+    /params: stripGenerationIntent\(clonedData\.params\)/.test(groupOps),
+    "duplicated nodes do not inherit a pending paid intent"
+  );
+  ok(
+    !/delete next\.refs/.test(groupOps),
+    "refs survive duplication (stripping them would hide the copied artifact)"
+  );
+}
+
 if (failed.length > 0) {
   console.error(`\n${failed.length} frontend invariant(s) failed:`);
   for (const label of failed) console.error(`  - ${label}`);

@@ -351,6 +351,23 @@
     - **P1 由 61 降为 52**(8 项 B 组 + 1 项 F 组离开「做」)。CLAUDE.md 期次表、EXECUTION_TRACKER 已同步。
     - 落笔前逐项代码实证(不是照抄提案):`VideoGenerationMode` 仅 2 值 / 七模型 `supportedModes` 全 2 个 / `first_frame`+`last_frame` 零引用;`VideoAspectRatio` 仅 `9:16`+`16:9`;`VideoQuality` 仅 `standard`+`hd`(无 P 档维度);`generation-intent.ts:140` 硬钉 `z.literal("gpt-image-2")`;`canvas-chrome-policy.ts:49` 教程 `enabled:false`;全仓仅 3 个 sweep 且都只管未 bound 行、`maxPollMs` 在画布侧零消费。
 
+  ### 🔴 #185 收口:发版后审计查出 18 条存活问题,已整改(2026-08-09 下午)
+
+  **起因**:#185 发版(`33ba71d`)后自查撞见「Ctrl+Enter 零确认扣 450」,判断「偶然撞见=可能还有」,遂做全量审计(4 视角并行找 + 每条另派复核者**尽力推翻**,推不翻才算数)。**存活 18 条**,其中四条比 Ctrl+Enter 严重:
+
+  | 问题 | 后果 | 处置 |
+  |---|---|---|
+  | **`high_cost=5000` 物理不可达** | 画布单次天花板 1080(happyhorse 12s),5000 是它的 4.6 倍 → 那条臂**任何输入都不返回**,「双阈值」塌缩成单条 `余额<预估×1.2`。生产余额 18459/单次 450 → 要连做**约 40 次零确认生成、花约 18000 积分**弹窗才首次出现 | **用户裁决:5000 → 1000**;backend verifier 加全目录价目天花板守卫,防它再变死支路 |
+  | **自动恢复零点击扣费** | 提交时断网 → intent 留在文档、toast 承诺「不会新建任务或重复扣费」→ 下次打开画布,effect **零点击**自动重提 → 服务端查无此 actionId → INSERT + 扣 450。误触 N 个节点=下次开画布 N×450 连扣 | **用户裁决:只重放服务端确有其行的 intent**;未绑定的改为弹窗询问,并**必须**配「放弃这次提交」出口(否则节点既提交不了又删不掉,唯一出路是花钱——这个连带陷阱是评审抬出来的) |
+  | **「提交后不可取消、不退款」提交前完全看不到** | 这句话原本只活在弹窗里;弹窗不弹后,事前告知归零 | 挂生成按钮 `title`(**用户裁决:恒显费用条不做**),按 `supportsCancel` 判空自动退场 |
+  | **主站 >1000 二确认,画布放宽到 >5000** | 而画布恰是 `supportsCancel` 全 false、不可退款那条 | 随阈值下调到 1000 一并对齐 |
+
+  另外整改:**前端闸门此前对 #185 客户端那半零覆盖**(删掉那个 `if` 全绿)、确认弹窗读活对象导致同步失败时显示「预计 0 积分、余额 0」、IME 组字期 Enter、复制节点连 `params.generation` 一起复制出付费候选、≤1366 多选时两个同名面板点错节点扣费。
+
+  **落地形态**:新增正交纯模块 `src/lib/canvas/generation-consent.ts` —— 金额轴(#185 双阈值)答「这笔钱大不大」,出处轴答「这一下是不是用户真要花的」。判定顺序里 `thresholdTrigger` **必须**先于 `cost<=0`(否则 `indeterminate` 会被 `cost===0` 遮蔽),backend verifier 用 `{button,shortcut}×{null,low_balance,high_cost,indeterminate}` 穷举证明**出处闸永不削弱 #185**,并有一条 `button + 阈值未越 + cost>0 ⇒ allow` 作为「#185 没被回退」的机器证明。
+
+  **闸门**:`generation-backend` 61→**88**、`generation-frontend` 122→**136**;`runtime` 544 / `intent` 122 / `s3` / `s4` / `s6` / `schema` 无回归;`tsc` 绿、`build` 绿(exit 0)。
+
   ### R2-Q4 补齐批次:便宜活排序(2026-08-09 重建并首次落盘)
 
   > ⚠️ **这张表此前从未落盘,不是「本轮才写」而是「本轮才发现它不存在」**。交接文档
