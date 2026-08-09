@@ -289,6 +289,41 @@ ok(
   "#51③ manual refresh is hidden in read-only mode (it must not issue requests there)"
 );
 
+console.log(
+  "\nN+1. CHECKLIST #187 — every parameter carries one-line plain-language copy"
+);
+const paramCopy = read("src/components/canvas/nodes/generation-param-copy.ts");
+const selectFieldCount = (controls.match(/<SelectField\b/g) || []).length;
+const hintKeyUses = [...controls.matchAll(/hintKey="([^"]+)"/g)].map((m) => m[1]);
+ok(
+  selectFieldCount > 0 && hintKeyUses.length === selectFieldCount,
+  `#187 every rendered <SelectField> declares a hintKey (${hintKeyUses.length}/${selectFieldCount})`
+);
+const registeredHints = [...paramCopy.matchAll(/"([a-z]+\.[A-Za-z]+)":/g)].map(
+  (m) => m[1]
+);
+for (const key of hintKeyUses) {
+  ok(
+    registeredHints.includes(key),
+    `#187 hint copy exists for parameter "${key}"`
+  );
+}
+ok(
+  new Set(hintKeyUses).size === hintKeyUses.length,
+  "#187 no two parameters share the same hint key"
+);
+// 文案纪律:价目由 generation-pricing.ts 决定、能力档位由 VIDEO_MODEL_CATALOG 决定,
+// 都会变;写死在静态文案里等于埋一条迟早说谎的话。
+ok(
+  !/\d+\s*积分/.test(paramCopy),
+  "#187 hint copy never hardcodes credit amounts (pricing drifts; the live estimate line is authoritative)"
+);
+has(
+  controls,
+  'aria-description={hint}',
+  "#187 hint is exposed to assistive tech without overriding the parameter name"
+);
+
 if (failed.length > 0) {
   console.error(`\n${failed.length} frontend invariant(s) failed:`);
   for (const label of failed) console.error(`  - ${label}`);

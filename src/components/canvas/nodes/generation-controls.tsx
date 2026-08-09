@@ -56,6 +56,10 @@ import {
 } from "../canvas-generation-context";
 import { useCanvasDockHost } from "../canvas-dock-context";
 import {
+  generationParamHint,
+  type GenerationParamHintKey,
+} from "./generation-param-copy";
+import {
   planCapsuleCollapse,
   resolveGenerationPanelDock,
 } from "../canvas-responsive";
@@ -155,24 +159,46 @@ function userFacingGenerationError(code: string | null): string {
 
 function SelectField({
   label,
+  hintKey,
   value,
   disabled,
   onChange,
   children,
 }: {
   label: string;
+  /** 人话文案的 key(CHECKLIST #187);文案本体在 `generation-param-copy.ts`。 */
+  hintKey: GenerationParamHintKey;
   value: string;
   disabled: boolean;
   onChange(value: string): void;
   children: React.ReactNode;
 }) {
+  const hint = generationParamHint(hintKey);
   return (
-    <label className="min-w-0 flex-1 text-[10px] text-muted-foreground">
-      <span className="mb-1 block">{label}</span>
+    <label
+      className="min-w-0 flex-1 text-[10px] text-muted-foreground"
+      /* #187 悬停示例:挂在 label 上,标题与控件悬停都能读到。
+         无障碍走 aria-description(不是 aria-label —— 那会顶掉参数名本身)。 */
+      title={hint}
+    >
+      <span className="mb-1 block">
+        {label}
+        {hint ? (
+          <span
+            aria-hidden="true"
+            className="ml-0.5 cursor-help opacity-60"
+            title={hint}
+          >
+            ⓘ
+          </span>
+        ) : null}
+      </span>
       <select
         className="nodrag nopan nowheel h-7 w-full rounded border border-border bg-background px-1.5 text-[11px] text-foreground outline-none focus:border-ring disabled:opacity-50"
         value={value}
         disabled={disabled}
+        title={hint}
+        aria-description={hint}
         onChange={(event) => onChange(event.target.value)}
       >
         {children}
@@ -338,6 +364,7 @@ function ImageSettings({
           node: (
             <SelectField
               label="清晰度"
+              hintKey="image.resolution"
               value={config.resolution}
               disabled={disabled}
               onChange={(resolution) =>
@@ -359,6 +386,7 @@ function ImageSettings({
           node: (
             <SelectField
               label="画幅"
+              hintKey="image.aspectRatio"
               value={config.aspectRatio}
               disabled={disabled}
               onChange={(aspectRatio) =>
@@ -427,6 +455,7 @@ function VideoSettings({
           node: (
             <SelectField
               label="模型"
+              hintKey="video.model"
               value={config.model}
               disabled={disabled}
               onChange={(model) =>
@@ -446,6 +475,7 @@ function VideoSettings({
           node: (
             <SelectField
               label="模式"
+              hintKey="video.mode"
               value={config.mode}
               disabled={disabled}
               onChange={(mode) =>
@@ -468,6 +498,7 @@ function VideoSettings({
           node: (
             <SelectField
               label="时长"
+              hintKey="video.duration"
               value={String(config.durationSeconds)}
               disabled={disabled}
               onChange={(duration) =>
@@ -490,6 +521,7 @@ function VideoSettings({
           node: (
             <SelectField
               label="质量"
+              hintKey="video.quality"
               value={config.quality}
               disabled={disabled}
               onChange={(quality) =>
@@ -509,6 +541,7 @@ function VideoSettings({
           node: (
             <SelectField
               label="画幅"
+              hintKey="video.aspectRatio"
               value={config.aspectRatio}
               disabled={disabled}
               onChange={(aspectRatio) =>
