@@ -161,6 +161,24 @@ function MediaColorBlock({ kind, label }: { kind: MediaKind; label: string }) {
   );
 }
 
+/**
+ * 「输入已更新」角标文案(CHECKLIST #43)。
+ *
+ * 判定本身在 provider 里整画布算一次(纯派生、不落盘),这里只把布尔翻成文案。
+ * 走 context 而非 canvas-store 是硬要求:`scripts/verify-canvas-s6.mjs` 有两条负向断言
+ * 盯着本文件 —— 不得 import canvas-store,也不得调那个写回节点 data 的 store 方法
+ * (ADR5:媒体节点只读不写)。
+ *
+ * ⚠️ 那两条断言是**对整份源码做正则**、不剥注释的,所以连注释里都不能出现
+ * 「那个方法名紧跟左括号」的字样 —— 本注释因此绕开写法,不是文字游戏:
+ * 2026-08-09 本批就因为在这段注释里照写了方法名而让 s6 报红一次。
+ */
+const INPUTS_DIRTY_TITLE =
+  "输入已更新：上游内容在这次产物之后变过了，重新生成即可同步";
+function INPUTS_DIRTY_BADGE(dirty: boolean): { title: string } | null {
+  return dirty ? { title: INPUTS_DIRTY_TITLE } : null;
+}
+
 /** 无媒体的空态占位(虚线框 + 中性文案)。 */
 function MediaEmpty({ kind, label }: { kind: MediaKind; label: string }) {
   const Icon = kind === "image" ? ImageIcon : Video;
@@ -225,6 +243,7 @@ function ImageNodeImpl({ id, data, selected }: NodeProps<CanvasReactFlowNode>) {
   const {
     canvasId,
     generationByNodeId,
+    inputsDirtyNodeIds,
     syncState,
     unresolvedActionByNodeId,
   } = useCanvasGeneration();
@@ -278,6 +297,7 @@ function ImageNodeImpl({ id, data, selected }: NodeProps<CanvasReactFlowNode>) {
       wide={Boolean(selected && !lowZoom)}
       deleteDisabledReason={deleteDisabledReason}
       deleteDetach={deleteDetach}
+      inputsDirty={INPUTS_DIRTY_BADGE(inputsDirtyNodeIds.has(id))}
     >
       {body}
       {selected && !lowZoom && (
@@ -316,6 +336,7 @@ function VideoNodeImpl({ id, data, selected }: NodeProps<CanvasReactFlowNode>) {
   const {
     canvasId,
     generationByNodeId,
+    inputsDirtyNodeIds,
     syncState,
     unresolvedActionByNodeId,
   } = useCanvasGeneration();
@@ -407,6 +428,7 @@ function VideoNodeImpl({ id, data, selected }: NodeProps<CanvasReactFlowNode>) {
       wide={Boolean(selected && !lowZoom)}
       deleteDisabledReason={deleteDisabledReason}
       deleteDetach={deleteDetach}
+      inputsDirty={INPUTS_DIRTY_BADGE(inputsDirtyNodeIds.has(id))}
     >
       {body}
       {selected && !lowZoom && (

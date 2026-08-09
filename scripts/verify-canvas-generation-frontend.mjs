@@ -793,6 +793,84 @@ ok(
   );
 }
 
+/*
+ * CHECKLIST #43 「输入已更新」dirty 角标。
+ *
+ * 判定是纯函数,所以这里**真跑穷举**而不是读字符串。守两类东西:
+ *  ①比对口径 —— CHECKLIST 备注写的「只存/只比 generationId」是不完备的,
+ *    上传图/裁剪图/推参考来的图 refs.generationId 恒为 null,只比它会完全看不见换图;
+ *  ②架构决定 —— #43 必须**纯派生、零文档写入**。自动写文档要过写者租约、
+ *    会往 undo 栈插一条用户没做过的步骤、并在只读态静默失败(角标永不亮)。
+ *    第 10 条那个计数断言就是把这件事钉死,防下个窗口改回落盘式。
+ */
+{
+  const order = await loadPureModule(
+    "src/components/canvas/generation-input-order.ts"
+  );
+  const cmp = order.compareGenerationInputSnapshots;
+  ok(typeof cmp === "function", "#43 dirty comparison is a pure exported function");
+
+  const img = (nodeId, ossKey, generationId) => ({
+    kind: "image",
+    nodeId,
+    ossKey,
+    ...(generationId ? { generationId } : {}),
+  });
+  const txt = (nodeId, sha) => ({ kind: "text", nodeId, textSha256: sha });
+
+  ok(cmp(null, [img("a", "k1")]).dirty === false, "#43 missing snapshot is never dirty (existing production docs must not all light up)");
+  ok(cmp([img("a", "k1")], null).dirty === false, "#43 unresolvable current inputs are not dirty");
+  ok(cmp([], []).dirty === false, "#43 no inputs on either side is not dirty");
+  ok(cmp([img("a", "k1")], [img("a", "k1")]).dirty === false, "#43 identical inputs are not dirty (dragging or editing this node must not light it)");
+
+  const regenerated = cmp([img("a", "k1", "u1")], [img("a", "k2", "u2")]);
+  ok(regenerated.dirty && regenerated.reasons.includes("regenerated"), "#43 upstream re-generated is dirty");
+
+  // 这一条专门证伪「只比 generationId」:两侧都没有 generationId,只有 ossKey 变了。
+  const replaced = cmp([img("a", "k1")], [img("a", "k2")]);
+  ok(replaced.dirty && replaced.reasons.includes("replaced"), "#43 upstream image swapped without any generationId is still dirty (uploads/crops have no generationId)");
+
+  const textChanged = cmp([txt("t", "sha1")], [txt("t", "sha2")]);
+  ok(textChanged.dirty && textChanged.reasons.includes("text_changed"), "#43 upstream text edit is dirty");
+
+  ok(cmp([img("a", "k1")], [img("a", "k1"), img("b", "k2")]).reasons.includes("added"), "#43 newly connected upstream is dirty");
+  ok(cmp([img("a", "k1"), img("b", "k2")], [img("a", "k1")]).reasons.includes("removed"), "#43 disconnected upstream is dirty");
+
+  const reordered = cmp([img("a", "k1"), img("b", "k2")], [img("b", "k2"), img("a", "k1")]);
+  ok(reordered.dirty && reordered.reasons.includes("reordered"), "#43 reordered upstream is dirty (order decides what 图1/图2 means in the prompt)");
+
+  // 对账把同一份产物重新登记一次(key 不变、generationId 补上)不该点亮角标。
+  ok(cmp([img("a", "k1")], [img("a", "k1", "u1")]).dirty === false, "#43 re-stamping the same artifact is not a content change");
+
+  const many = cmp([img("a", "k1"), img("a2", "k9")], [img("a", "k2"), img("a2", "k9")]);
+  ok(many.reasons.length === new Set(many.reasons).size, "#43 reasons are de-duplicated");
+  ok(many.changedNodeIds.every((id) => ["a", "a2"].includes(id)), "#43 changedNodeIds only names known upstream nodes");
+
+  // 架构 tripwire:#43 不得引入任何新的文档写入。
+  const writes = (context.match(/state\.updateNodeData\(/g) || []).length;
+  ok(
+    writes === 3,
+    `#43 stays purely derived: generation context still performs exactly 3 document writes (found ${writes}); a 4th means someone made the badge persist state`
+  );
+  has(context, "inputsDirtyNodeIds", "dirty node set is exposed on the generation context");
+  ok(
+    /data-node-inputs="dirty"/.test(nodeShell),
+    "#43 badge exposes a stable walkthrough hook"
+  );
+  ok(
+    /<span className="sr-only">\{inputsDirty\.title\}<\/span>/.test(nodeShell),
+    "#43 badge is announced to screen readers, not colour-only"
+  );
+  // 判据必须是 **import 形式**,不能是裸串 —— 注释里提到这个模块名是正当的
+  // (本文件的注释就在解释为什么不能 import 它),用裸串会把说明文字也算成违规。
+  // 这与 verify-canvas-s6.mjs 的 importsSpec 判据保持一致。
+  ok(
+    /inputsDirtyNodeIds/.test(mediaNode) &&
+      !/\bfrom\s+['"][^'"]*canvas-store/.test(mediaNode),
+    "#43 badge reaches media nodes through the generation context, never the store (ADR5)"
+  );
+}
+
 if (failed.length > 0) {
   console.error(`\n${failed.length} frontend invariant(s) failed:`);
   for (const label of failed) console.error(`  - ${label}`);

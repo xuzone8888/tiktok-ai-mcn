@@ -9,7 +9,7 @@
  */
 import { type ReactNode } from "react";
 import { Handle, Position } from "@xyflow/react";
-import { Trash2, type LucideIcon } from "lucide-react";
+import { AlertCircle, Trash2, type LucideIcon } from "lucide-react";
 
 import {
   AlertDialog,
@@ -50,6 +50,8 @@ interface NodeShellProps {
   wide?: boolean;
   deleteDisabledReason?: string | null;
   deleteDetach?: NodeDeleteDetach | null;
+  /** 「输入已更新」角标(CHECKLIST #43);null=不显示。文案由调用方给,便于按原因分化。 */
+  inputsDirty?: { title: string } | null;
 }
 
 export function NodeShell({
@@ -61,6 +63,7 @@ export function NodeShell({
   wide = false,
   deleteDisabledReason = null,
   deleteDetach = null,
+  inputsDirty = null,
 }: NodeShellProps) {
   const readOnly = useCanvasReadOnly();
   const removeNode = useCanvasStore((state) => state.removeNode);
@@ -83,6 +86,23 @@ export function NodeShell({
           <Icon className="h-3.5 w-3.5 text-muted-foreground" />
           {label}
         </span>
+        {/* 「输入已更新」角标(CHECKLIST #43)。
+            挂在头部行而不是正文:头部是唯一「所有节点类型、所有媒体状态、所有 zoom 档位
+            都一定渲染」的横条 —— 放正文要在图片与视频各自的多个分支里重复写,
+            新增分支必漏改,还会盖住 poster。
+            做成 icon-only 是被 208px 头部的横向余量逼出来的;它不解码任何媒体,
+            所以低 zoom 下继续显示是安全的(低 zoom 降级的目的是不解码媒体)。
+            纯提示、不可点,因此不需要 nodrag/nopan。 */}
+        {inputsDirty && (
+          <span
+            className="ml-auto mr-1 inline-flex shrink-0 items-center text-amber-600 dark:text-amber-400"
+            data-node-inputs="dirty"
+            title={inputsDirty.title}
+          >
+            <AlertCircle className="h-3.5 w-3.5" />
+            <span className="sr-only">{inputsDirty.title}</span>
+          </span>
+        )}
         <AlertDialog>
           <AlertDialogTrigger asChild>
             <button
