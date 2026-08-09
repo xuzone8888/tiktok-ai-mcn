@@ -1549,7 +1549,12 @@ export function GenerationControls({
                           y: selfPosition.y,
                         }
                       : undefined,
-                    data: { title: "以图生视频" },
+                    // 🔴 **不写 title**(#64 遗留,已随 3dee031 上生产)。`data.title` 是提示词本体:
+                    // 服务端 `generation-service.ts` 的权威提示词就是
+                    // `[targetNode.data.title, ...上游文本节点.title]`。写「以图生视频」
+                    // 等于给新视频节点预置了一句用户没写过的提示词,一按生成就以这五个字
+                    // 当提示词跑一次 450 积分的视频。留空走 placeholder,由用户自己写。
+                    data: {},
                   },
                   fromNodeId: nodeId,
                   fromHandleId: null,
@@ -1658,7 +1663,12 @@ export function GenerationControls({
                       y: selfPosition.y + CROP_RESULT_OFFSET_Y,
                     }
                   : undefined,
-                data: { title: "裁剪结果", media: { ossKey } },
+                // 🔴 **不写 title**。图片节点的 `data.title` 不是显示标题,它就是提示词本体
+                // (见本文件提示词 textarea 的 `value={data.title}` 与 @引用插字处那句
+                // 「提示词就是 node.data.title,逐字送厂商」)。往这里写「裁剪结果」会让新节点
+                // 带着这四个字当提示词开局,用户一按生成就把它逐字送给厂商——那是付费调用。
+                // 与拖文件进画布 / 上传 / 素材库建节点保持一致:只给 media,提示词留空走 placeholder。
+                data: { media: { ossKey } },
               });
               if (!created) {
                 // 图已经在 OSS 上了,不能假装没事发生 —— 明说文件在、节点没建成。
@@ -1750,7 +1760,10 @@ export function GenerationControls({
                     y: selfPosition.y,
                   }
                 : undefined,
-              data: { title: "引用素材", media },
+              // 同 #82 裁剪那处:`data.title` 是逐字送厂商的提示词,不是标签。
+              // 这个节点还是**上游**,用户更不会去清它,留「引用素材」在里面等于埋了一句
+              // 谁也没写过的提示词。只给 media。
+              data: { media },
             },
             fromNodeId: nodeId,
             fromHandleId: null,
