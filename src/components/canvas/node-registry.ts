@@ -13,9 +13,12 @@ import type { CanvasNodeType } from "@/lib/canvas/schema";
 import { GROUP_FRAME_TYPE } from "./group-frame";
 import { BrokenNode } from "./nodes/broken-node";
 import { GroupFrameNode } from "./nodes/group-frame-node";
-// 图片/视频节点(S6 媒体降级 + object key→URL 解析)独立于 media-node;其余引用型节点在 reference-nodes。
+// 图片/视频节点(S6 媒体降级 + object key→URL 解析)独立于 media-node;
+// 商品节点(#67 上传图/卖点卡,自带低 zoom 降级)独立于 product-node;
+// 脚本/合成只做旧文档兼容读取,留在 reference-nodes。
 import { ImageNode, VideoNode } from "./nodes/media-node";
-import { ComposeNode, ProductNode, ScriptNode } from "./nodes/reference-nodes";
+import { ProductNode } from "./nodes/product-node";
+import { ComposeNode, ScriptNode } from "./nodes/reference-nodes";
 import { TextNode } from "./nodes/text-node";
 
 // satisfies:强制 6 类白名单全覆盖(缺一即编译错),值为合法 RF 节点组件。
