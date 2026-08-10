@@ -1,29 +1,46 @@
-# 交接：P1 收尾 · 批 0-4 全部完成、缺陷甲已在生产关闭 · 2026-08-10 状态
+# 交接：P1 收尾 · 批 5 已过离线闸门、**待 UI 复验** · 2026-08-10 晚状态
 
-> **这份是新窗口的实际入口。** 开工顺序：`CLAUDE.md` → **本文件** → `docs/SUPER_CANVAS_P0_BOARD.md` 相应小节。
+> **这份是新窗口的实际入口。** 开工顺序：`CLAUDE.md` → **本文件** → `docs/SUPER_CANVAS_P0_BOARD.md` 「批 5」节。
 > `docs/HANDOFF_R2_NEXT.md` 是 2026-08-09 那轮的交接，**只当背景读**；与本文件冲突的以本文件为准。
+> （§七 画布点击/渲染踩坑 与 §负三 发版前置 仍然有效、必读。）
 
 ---
 
 ## 零、开工第一条命令
 
 ```bash
-cd E:/StarGaze/.claude/worktrees/stargaze-canvas-p1-finish-d06ab1 && git log --oneline -3 && node scripts/canvas-checklist-reconcile.mjs && npx tsc --noEmit && echo TSC_OK
+cd E:/StarGaze/.claude/worktrees/stargaze-canvas-p1-finish-d06ab1 && git log --oneline -3 && node scripts/canvas-checklist-reconcile.mjs && npx tsc --noEmit && echo TSC_OK && node scripts/verify-canvas-p1-batch5.mjs 2>&1 | tail -3
 ```
 
 工作区 `E:\StarGaze\.claude\worktrees\stargaze-canvas-p1-finish-d06ab1`，分支 `claude/stargaze-canvas-p1-finish-d06ab1`，
-**已 push 到 origin 作备份、未合并、未发版**（用户裁决：未复验不合入，剩余批次做完再一起合）。
-⚠️ 本行原写「未 push」，2026-08-10 现场核对为**已推**（`origin/claude/stargaze-canvas-p1-finish-d06ab1` = `971675e`）。
-领先量以 `git rev-list --count origin/main..HEAD` 现查为准——**别信任何文档里写死的数字，包括这一份**。
+**已 push 到 origin 作备份（`f8e7c33`）、未合并、未发版**（用户裁决：未复验不合入）。
+
+🔴 **本分支现在既领先也落后 main**：`git rev-list --count origin/main..HEAD` = 22、
+`git rev-list --count HEAD..origin/main` = **5**（Facebook 那批已合进 main，见下）。
+**合批 5/批 6 之前必须先把 origin/main 合进来。** 那 5 个 commit 不碰画布，预计无冲突。
+⚠️ 领先/落后量一律现查，**别信任何文档里写死的数字，包括这一份**。
 
 ---
 
 ## 一、当前真实状态
 
-### 线上
+### 🆕 线上已经变了：不再是 `3dee031`/3015
 
-**线上仍是 `3dee031f00d1c7c5931c3911f845337140b54cf0`，端口 3015 —— 本轮没有发版。**
-本分支的全部 commit **一个都还没上生产**。回滚位 `33ba71d`/3014、`d16620f`/3013 仍在线。
+**线上现在是 `273d083d77a83e340f6be668f22930fb2f75ae9f`，端口 3016**
+（2026-08-10 发的 **Facebook Graph v25 + App Review 准备**，与画布无关）。
+`3dee031`/3015 仍在线作回滚位；`33ba71d`/3014 与 `d16620f`/3013 已 `pm2 stop`（腾内存，`pm2 start` 秒起）。
+
+**那次发版的完整记录在 [`docs/RELEASE_20260810_FACEBOOK_V25.md`](./RELEASE_20260810_FACEBOOK_V25.md)**
+（PR #39，纯文档）。**它不是画布工作，但有三条会影响你的判断**：
+
+1. **画布「推为参考」的资金缺陷仍在线**——`generation-controls.tsx` 里 `data: { title: "以图生视频" }`，
+   而权威提示词就是 `data.title` ⇒ 建出的视频节点带着用户没写过的提示词，一按生成 450 积分。
+   修复在**本分支**上，**要等批 5/批 6 一起发版才生效**。
+2. 线上那次发版**没有**带上 Supabase Edge Function（发版流程结构上碰不到它），也**没有**带画布代码。
+3. 发版纪律有四处修正（bundle 源必须写死 `origin/main`、BUILD_ID 门不校验工作树内容所以 checkout 后必须回读 sha、
+   手工 build 拿不到内存优势、`NEXT_PUBLIC_*` 是构建期烘焙）——**下次发画布版直接照那份记录做，别照
+   `SUPER_CANVAS_P1_RELEASE_RUNBOOK.md`**（那是 2026-07-28 的历史档案，连 `canvas-blue-green` 都 0 命中）。
+   当前权威：命令看 `deploy/CANVAS_PRODUCTION_CHECKLIST.md`，坑与前置看 `HANDOFF_R2_NEXT.md`。
 
 ### 生产库
 
@@ -41,50 +58,107 @@ cd E:/StarGaze/.claude/worktrees/stargaze-canvas-p1-finish-d06ab1 && git log --o
 | 批 2 | #81/#85 深挖 → 改判延 P2 | ✅（裁决 P1-Q3） |
 | 批 3 | #43 dirty 角标（#92 改判延 P2） | ⚠️ 判据 8 的 replaced 分支未实测，见 §四 |
 | 批 4 | #182 @引用素材 + #72/#94 | ⚠️ #24 未实测，见 §四 |
-| **批 5** | **#67 商品节点（方案 A，含视觉卖点解析）** | 🔴 **未开工 —— 你的第一件事** |
-| **批 6** | **#211 教程本体（不做发奖，#237 已延 P2）** | 🔴 未开工 |
+| **批 5** | **#67 商品节点（方案 A）+ #169 前半** | ✅ **离线闸门全过**（`ae7d16d` / `0566ebc` / `f8e7c33`）· 🔴 **10 条 UI 判据未验 —— 你的第一件事** |
+| **批 6** | **#211 教程本体（不做发奖，#237 已延 P2）** | 🔴 未开工。**用户裁决：批 5 验过了再开批 6** |
 
 **P1 = 48 项**（reconcile 权威输出：`220(做 163/裁 31/延 26)`、`P0=48 P1=48 P2=55 P3=11 P4=1`）。
 ⚠️ 别沿用旧文档里的「P1=52」——那是 #78/#81/#85/#92 改判延 P2 之前的数。**以 `node scripts/canvas-checklist-reconcile.mjs` 现算为准。**
 做完批 5、批 6 即 P1 收尾完成。
 
+### 批 5 交付了什么（细节在 P0 看板「批 5」节，含四项裁决全文）
+
+- **四项用户裁决**：①卖点卡走**手动「插入到简报」**才进提示词；②图片上限 **9**；
+  ③**商品主图可作下游参考图**（CHECKLIST #169 前半提前到 P1，#169 期次未改、统计数不变）；
+  ④卖点卡**只落 `params.product`**，不双写 `blueprints.product`。
+- **零迁移、零 schema 版本 bump、`data` 顶层零新增字段**（顶层加字段=回滚炸弹：旧版本读到会把整节点
+  判 broken → recoveryRequired → 全画布自动保存停摆）。
+- 卖点卡形状**结构上没有 `images` 字段** —— 把「只存 object key」变成机器闸。
+  此前这条路上**零守卫**：`unsafeStringReason` 只拦 dataURL 与带签名参数的 URL，而
+  `resolveMediaUrl` 产出的是**无 query 的公有 URL**，会被放行。
+- **参考图判据收成唯一出口** `src/lib/canvas/generation-image-input.ts`，客户端提交 / 服务端权威重算 /
+  引用区编号 / #43 角标四处共用。`incomingImageCount` 由 `collectImageReferences` 派生 ⇒
+  限张闸与 lock-hint「参考图过多」**自动跟上**，一处都不用单独改。
+- 🔴 **顺带修掉 #43 一个真 bug（未发版，尚未影响生产）**：dirty 重算按连线顺序**交错**排，
+  而提交路径是 `[...textInputs, ...imageSnapshots]`（文本全在前）⇒ 上游图片节点连得比文本早时
+  判 `reordered`、**角标永久常亮**。#43 落地时因造不出前置（判据 8 只做一半）而没暴露。
+- **新增** `scripts/verify-canvas-p1-batch5.mjs`（41 条）+ `npm run verify:canvas-p1-batch5`。
+
+### 🔴 这批里最值钱的一条教训（verifier 差点是张空合格证）
+
+「画布对**计费类**路由引用为 0」这条断言，初版按 SQL 写法扫计费路由
+（`credits: newCredits` / `update({ credits` 等），扫到 7 个、看着挺像样 ——
+**却漏掉了 `/api/generate/image`**，画布图片生成最主要的计费入口，
+因为它是经 `@/lib/credits/atomic-task-credit` 的 `scope:"quick-image"` 扣的，源码里没有那些字面量。
+
+改为主判据「**import 了 `@/lib/credits`**」后扫到 18 个，并加了**扫描器自证**：钉住
+`/api/generate/image`、`/api/generate/video`、`/api/video-batch/models/submit` 三个必检路由，
+任一掉出扫描面即判红。**光断言「扫到 >0 个」挡不住正则腐烂 —— 以后写这类守卫都要带自证。**
+
 ---
 
 ## 二、新窗口该做什么
 
-### ① 批 5：#67 商品节点（用户已裁决方案 A）
+### ① 🔴 第一件事：批 5 的 UI 复验（**用户裁决：验过了才开批 6**）
 
-**范围**＝上传图 → 调 `/api/studio/analyze-product` 出卖点卡 → 存进节点。约束见 P0 看板「待裁决问题区 · P1-Q5」，**已裁决，别重开**。
+代码已落地、离线闸门全过，但**一条 UI 判据都没验**。10 条判据在
+`docs/SUPER_CANVAS_P0_BOARD.md` 的「批 5 · 待复验」表里，逐条回填结果。
 
-前置件批 0 已实证全部现成、且不碰资金链路：
-- 持久化槽位已在 schema 里（`CanvasNodeDataSchema.media` 对所有节点类型开放，`refs.assetId`+`refs.assetTable` 成对约束就位）—— **无需 schema 迁移**
-- 上传链路现成：`src/components/canvas/canvas-upload.ts`
-- 卖点卡现成：`src/lib/studio/product-vision.ts`
-- 出口 `/api/studio/analyze-product`（51 行）已登录鉴权、零积分扣费、不写 `generations`
+**前置（两条都要）**：
 
-⚠️ **开工时守住两条**：
-1. 该路由对用户零扣费但**对我方有厂商成本**（豆包视觉 70s / Qwen 35s 降级）。必须防重复触发，「重新解析」要显式入口，不能每次渲染都跑。
-2. **不是第一次跨出 `/api/canvas/*`** —— #64「入库」已经在调 `/api/studio/library`（`generation-controls.tsx:348`，已随 `3dee031` 上生产），analyze-product 是第二处。所以别把 verifier 基线写成「非 `/api/canvas/*` 引用数为 0」，一跑就红。
-   正确的断言是：**画布对「计费类」路由的引用数保持为 0**。analyze-product 不计费、不写 generations、不进对账车道，所以不触铁律 1。
+1. **dev 用 3000，别用 3100。** 本工作区 `.claude/launch.json` 只有 `canvas-dev`（`autoPort: true`）。
+   3100 是已退役的兄弟工作区 `canvas-p1-acceptance` 的**旧代码**，连上去等于验错东西。
+   核对办法（别只看端口）：
+   ```bash
+   powershell.exe -NoProfile -Command "Get-CimInstance Win32_Process -Filter \"Name='node.exe'\" | Select-Object ProcessId,CommandLine | Format-Table -AutoSize"
+   ```
+   看 3000 那个进程的 `CommandLine` 里是不是 `stargaze-canvas-p1-finish-d06ab1`。
+2. **登录必须用户本人做，AI 不能代输密码。** 2026-08-10 用户已用
+   `.temp/test-account-auth.mjs set-password` 重设过测试号密码（**密码只有用户知道，没有记在任何地方**）。
+   测试号 `claude-publish-test@stargaze-test.com` / uuid `2cca16b7-2751-4afb-8369-e516b82a3a9c`，
+   **余额约 15,095 分**（用户 2026-08-10 充的），视频 450/次也跑得起。
+   忘了密码就再跑一次那个脚本重设（它有 uuid+邮箱双向核对的安全闸，改不到真实用户）。
 
-🔴 **商品节点现状是真功能缺失，不是没测到**：生产枚举其渲染面只有「删除按钮 + 商品简报 textarea」，`input[type=file]`=0、`img`=0。
+**这 10 条里第 4 条最关键，别跳**：
 
-⚠️ **批 5 开工前必读一条**（2026-08-10 对抗审查副产品）：
-`scenes[].visual` **经常就是一个图片 URL**，与同对象里的 `slot.asset_ref` 同值
-（`/api/studio/blueprints/route.ts:55` 建 scene 时 `visual: url` 与 `slot.asset_ref: url` 写的是同一个商品图）。
-`history-assets.ts:622` 那句注释「scenes.visual is descriptive copy, never a media carrier」**与代码不符**。
-当前安全性来自「值恰好重合」，不是来自「visual 不含媒体」。**批 5 若打算从蓝图 scenes 直接建商品节点，这条重合关系必须重新验一次。**
+> 🔴 **服务端日志必须出现 `[Doubao] Image converted to base64`。**
+> 不出现 = 9 张图**静默退化成 qwen 单图**。机制：`imageUrlToBase64` 在 fetch 失败 / content-type 非
+> `image/*` / 字节 <100 / 任何异常（含 10s abort）时**返回原始 URL**（`src/lib/doubao-api.ts:392-435`），
+> 而 `analyzeWithDoubao` 的过滤器只放行 `data:` 或含 `supabase.co` 的串
+> （`src/lib/studio/product-vision.ts:164-175`）⇒ `media.toryxai.com` 的图转换失败即被整批丢弃，
+> `parts.length===0` 就 `return null`，**豆包一次都没调**，随后 qwen 兜底只喂 `imageUrls[0]`。
+> **全程只有 `console.error`，用户侧看不出任何异常** —— 付了时间拿到质量更差的卡还不知道。
+> 本机到 `media.toryxai.com` 实测可达（HTTP 403 = OSS 拒绝列桶，正常），
+> 且画布在生产能正常渲染图片 ⇒ 对象是公有可读的，**理论上应该成功，但必须看日志坐实**。
 
-### ② 批 6：#211 教程本体
+⚠️ **数渲染面时的头号误判源**：生成器面板只在「节点 **selected** 且 **zoom ≥ 0.4**」时渲染。
+商品节点的上传/解析控件同样在 `selected && !lowZoom` 门后（这是本批新加的降级层）。
+不满足这两条就去数 `input[type=file]`/`img`，会把**已实现**误判成缺失。
 
-只做教程本体，**不做发奖**（#237 已随裁决延 P2）。开关位置：**`src/components/canvas/canvas-chrome-policy.ts:49`**
-（不是 `src/lib/canvas/`），当前 `{ id: "tutorial", label: "教程", enabled: false }`。
+### ② 批 6：#211 教程本体（**批 5 验完再开**）
+
+规格原文（CHECKLIST:211）：「交互式教程双版本（**电商版 P1**／漫剧版 P2，**跟手走完最短链**）+完成奖励小额积分」
+⇒ P1 **只做电商版**；**发奖不做**（#237 已延 P2）。
+
+- **开关**：`src/components/canvas/canvas-chrome-policy.ts:49`（**不是** `src/lib/canvas/`），
+  当前 `{ id: "tutorial", label: "教程", enabled: false }`。消费点在
+  `canvas-bottom-toolbar.tsx:138-210`（`!entry.enabled` 即禁用）。
+- **"最短链"就是 CHECKLIST:41 空态快捷位②「商品图→带货视频」**，也就是批 5 刚做出来的起点：
+  商品节点（上传图→解析卖点→插入简报）→ 连图片节点 → 生成逐镜图 → 连视频节点 → 图生视频。
+- **承载面可复用的现成形状**：`src/components/canvas/shortcut-panel.tsx`（底部工具栏开面板的先例）。
+- ⚠️ **教程只引导、绝不代替用户点生成** —— 那两步要花钱（图片 5 分 / 视频 450 分）。
+- 📌 上一个窗口对形态的建议（**未经用户确认，开工前先问**）：按「跟手」字面做成**读画布真实状态推进**
+  （检测到「商品节点已有主图」就自动过第一步），而不是只能点「下一步」的静态说明。
+  用户也可能想要更轻的图文说明或更重的高亮遮罩强引导 —— **这属于形态取舍，先问再做，别做完再改。**
 
 ### ③ 全部完成后才合并进 main
 
 用户裁决：未复验不合入。合前跑 `tsc` / `npm run build` / `reconcile` / PGlite 用例至绿，
-**再跑一遍 `scripts/verify-canvas-*.mjs` 全家桶** —— 当前基线是 **32 个脚本、已知红 2 个**
+**再跑一遍 `scripts/verify-canvas-*.mjs` 全家桶** —— 🆕 当前基线是 **33 个脚本、已知红 2 个**
 （`blue-green` 需 Node 20、`p1-fixture` 需本机 PG，未改动的树上同样失败）。红第三个就是真回归。
+（32→33 是批 5 新增的 `verify-canvas-p1-batch5.mjs`。）
+
+🆕 **合之前还要先把 `origin/main` 合进来**——本分支落后 5 个 commit（Facebook 那批）。
+现查：`git rev-list --count HEAD..origin/main`。那批不碰画布，预计无冲突，但别跳过。
 
 🔴 **合并顺手清远端分支时，这两个分支绝对不能删**：
 
