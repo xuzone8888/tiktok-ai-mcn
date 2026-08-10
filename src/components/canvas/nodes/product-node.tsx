@@ -88,6 +88,15 @@ const PRODUCT_IMAGE_ACCEPT = Array.from(
 const EMPTY_PRODUCT: CanvasProductState = { extraImageKeys: [] };
 
 /**
+ * 图 key 集合的**顺序无关**指纹,用于「这组图解析过了没有」的判定。
+ * 分隔符取 `|` —— OSS object key 只允许 `folder/userId/name` 三段的受限字符集
+ * (见 `src/lib/canvas/media-ownership.ts`),不会含它,所以不同集合不会撞同一指纹。
+ */
+function imageKeyFingerprint(keys: readonly string[]): string {
+  return [...keys].sort().join("|");
+}
+
+/**
  * `ProductCard`(上游形状)→ `CanvasProductCard`(画布持久化形状)。
  *
  * 三件事一个都不能少,顺序也不能换:
@@ -193,10 +202,10 @@ export const ProductNode = memo(function ProductNode({
   );
   const card = product.card ?? null;
   const analyzedFingerprint = useMemo(
-    () => [...(product.analyzedImageKeys ?? [])].sort().join(" "),
+    () => imageKeyFingerprint(product.analyzedImageKeys ?? []),
     [product.analyzedImageKeys]
   );
-  const currentFingerprint = useMemo(() => [...imageKeys].sort().join(" "), [imageKeys]);
+  const currentFingerprint = useMemo(() => imageKeyFingerprint(imageKeys), [imageKeys]);
   const alreadyAnalyzed = Boolean(card) && currentFingerprint === analyzedFingerprint;
 
   /**

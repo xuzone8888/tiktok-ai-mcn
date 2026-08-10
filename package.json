@@ -27,6 +27,7 @@
     "verify:canvas-generation-frontend": "node scripts/verify-canvas-generation-frontend.mjs",
     "verify:canvas-manual-recovery": "node scripts/verify-canvas-manual-recovery.mjs",
     "verify:canvas-media-persistence": "node scripts/verify-canvas-media-persistence.mjs",
+    "verify:canvas-p1-batch5": "node scripts/verify-canvas-p1-batch5.mjs",
     "verify:canvas-project-lifecycle": "node scripts/verify-canvas-project-lifecycle.mjs",
     "verify:canvas-reconciler-worker": "node scripts/verify-canvas-reconciler-worker.mjs",
     "verify:canvas-upload-hardening": "node scripts/verify-canvas-upload-hardening.mjs",

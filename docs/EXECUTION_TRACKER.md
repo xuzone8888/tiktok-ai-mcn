@@ -12,8 +12,33 @@
 ## 当前状态(2026-08-10 更新)
 
 - **方向**:超级画布(2026-07-12 用户裁决取代此前的 Studio/BLUEPRINT 主线)
-- **阶段**:🆕 **P1 收尾 · 批 0-4 已完成,剩批 5(#67 商品节点)与批 6(#211 教程)**
+- **阶段**:🆕 **P1 收尾 · 批 0-5 已完成(批 5 待 UI 复验),剩批 6(#211 教程)**
   (R2/R2-Q4/#185 收口均已于 2026-08-09 完成并上线)
+
+### 🆕 2026-08-10 晚 · 批 5(#67 商品节点)离线闸门已过,待 UI 复验
+
+- **四项裁决(用户)**:①卖点卡走**手动「插入到简报」**才进提示词;②图片上限 **9**;
+  ③**商品主图可作下游参考图**(CHECKLIST #169 的前半提前到 P1,#169 期次未改、统计数不变);
+  ④卖点卡**只落 `params.product`**,不双写 `blueprints.product`。
+- **交付**:`ae7d16d`(契约 + 付费判据)、`0566ebc`(组件本体)、本批 verifier。
+  `params.product` 挂 `card`/`extraImageKeys`/`analyzedImageKeys`,**零迁移、零 schema 版本 bump、
+  `data` 顶层零新增字段**(顶层加字段=回滚炸弹)。卖点卡形状**结构上无 `images` 字段**,
+  把「只存 key」变成机器闸(此前这条路上零守卫:公有 URL 能通过 `unsafeStringReason`)。
+- **参考图判据收成唯一出口** `src/lib/canvas/generation-image-input.ts`,客户端提交/服务端权威重算/
+  引用区编号/#43 角标四处共用;`incomingImageCount` 由 `collectImageReferences` 派生 ⇒
+  限张闸与 lock-hint 自动跟上。
+- 🔴 **顺带修掉 #43 一个真 bug(未发版)**:dirty 重算按连线顺序交错排,而提交路径是「文本全在前」
+  ⇒ 上游图片节点连得比文本早时判 `reordered`、**角标永久常亮**。#43 落地时因造不出前置(判据 8 只做一半)而没暴露。
+- **新增** `scripts/verify-canvas-p1-batch5.mjs`(41 条)+ `verify:canvas-p1-batch5`。
+  🔴 **它自己被修正过一次**:「画布对计费类路由引用为 0」初版按 SQL 写法扫,扫到 7 个却**漏了
+  `/api/generate/image`**(它经 `@/lib/credits/atomic-task-credit` 扣费,源码无那些字面量)。
+  改为主判据「import 了 `@/lib/credits`」后扫到 18 个,并加扫描器自证钉住 3 个必检路由。
+  **教训:光断言「扫到 >0 个」挡不住正则腐烂。**
+- **闸门**:`tsc` 绿、`npm run build` 绿、`reconcile` 绿、`verify-canvas-*` **31/33**
+  (红的仍是已知两个:`blue-green` 需 Node 20、`p1-fixture` 需本机 PG)。
+- **待办**:批 5 的 10 条 UI 判据(见 P0 看板),**其中第 4 条最关键** ——
+  服务端日志要出现 `[Doubao] Image converted to base64`,否则 9 张图是静默退化成 qwen 单图。
+  之后做批 6(#211 教程本体,不做发奖)。
 
 ### 🆕 2026-08-10 · P1 收尾批 0-4 收口 + 两个生产缺陷关闭
 

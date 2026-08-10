@@ -1223,7 +1223,7 @@
 三批都通过 → 才可以谈合入 main(用户裁决:**未复验不合入**)。
 任一条不通过 → 记进本节并停下,不要绕过。
 
-## P1 收尾 · 批 5:#67 商品节点(方案 A)· 状态=**进行中**(2026-08-10 认领)
+## P1 收尾 · 批 5:#67 商品节点(方案 A)· 状态=**待审**(离线闸门已过,**未做 UI 复验**)
 
 裁决依据见「待裁决问题区 · P1-Q5」(已裁决方案 A,**不重开**)。
 **范围** = 节点内上传商品图 → 调 `POST /api/studio/analyze-product` 出视觉卖点卡 → 卖点卡持久化进节点。
@@ -1239,6 +1239,67 @@
 | 5 | 若打算从蓝图 `scenes` 建商品节点:`scenes[].visual` 与 `slot.asset_ref` 的**同值重合关系必须重验**(`history-assets.ts:622` 注释与代码不符,当前安全性靠值恰好相同) | HANDOFF_P1_FINISH §二① |
 
 **复验前提提醒**:商品节点渲染面要数 `input[type=file]`/`img`,而**生成器面板只在「节点 selected 且 zoom ≥ 0.4」时渲染** —— 不满足这两条会把已实现误判成缺失。
+
+### 四项裁决(2026-08-10,用户)
+
+| | 问题 | 裁决 |
+|---|---|---|
+| Q1 | 卖点卡要不要真的抵达厂商 | **手动「插入到简报」** —— 卡片是结构化编辑器,用户勾选后点一下才写进 `data.title`。守住既有取向「非用户文本不擅自写进提示词」(`generation-controls.tsx` 已两次为此拒绝同类写法) |
+| Q2 | 单图还是多图 | **多图,上限 9**(与 `analyze-product` 的 `slice(0,9)` 齐平) |
+| Q3 | 商品图能否作下游参考图 | **含,但只含主图**。这半条原属 CHECKLIST #169(P2),经裁决提前到 P1;#169 剩余部分仍留 P2,期次未改 |
+| Q4 | 卖点卡是否双写 `blueprints.product` | **不双写**,只落 `params.product`(AI 决策,用户授权)。双写不会让卡片更准,只会引入真相源分歧;画布商品节点也没有 blueprintId 来源 |
+
+### 已落地(`ae7d16d` 契约层 + `0566ebc` 组件本体 + 本批 verifier)
+
+- **schema**:`CanvasProductCardSchema` / `CanvasProductStateSchema` 挂 `params.product`(`card` / `extraImageKeys` / `analyzedImageKeys`)。**零迁移、零版本 bump、`data` 顶层零新增字段** —— 顶层加字段会让旧版本把整节点判 broken → recoveryRequired → 全画布自动保存停摆,是回滚炸弹。
+  🔴 **卖点卡形状里结构上没有 `images` 字段**:上游 `ProductCard.images` 装 http URL,而 `unsafeStringReason` 只拦 dataURL 与带签名参数的 URL,**公有 URL 会被放行** ⇒「只存 key」在这条路上原本零机器守卫,删掉字段后 `strictObject` 直接拒。
+- **组件**:`src/components/canvas/nodes/product-node.tsx`(从 reference-nodes 迁出)。上传 ≤9 张、显式「解析卖点」、卖点勾选、「插入到简报」(块首带标记,再插入是**整块替换**而非追加第二份 —— 那段是逐字送厂商并计费的)、**自带低 zoom 降级**(此前商品节点完全没有这层)、写按钮 `disabled={readOnly || busy}` 且**检查 `updateNodeData` 返回值**再 toast。
+- **参考图判据收成唯一出口** `src/lib/canvas/generation-image-input.ts`,四处共用。`incomingImageCount` 由 `collectImageReferences` 派生 ⇒ **限张闸、lock-hint「参考图过多」、引用区缩略图自动跟上**,一处都不用单独改。
+- **新增 verifier** `scripts/verify-canvas-p1-batch5.mjs`(41 条判据)+ npm script `verify:canvas-p1-batch5`。
+
+### 🔴 顺带修掉 #43 一个真 bug(未发版,尚未影响生产)
+
+dirty 重算按**连线顺序交错**排,而提交路径是 `[...textInputs, ...imageSnapshots]`(文本全在前)。
+只要上游里图片节点连得比文本节点早,两边顺序就不同 → `compareGenerationInputSnapshots` 判 `reordered`
+→ **角标永久常亮**。#43 落地时没暴露,因为它要求「持久化快照里已含图片输入」,
+而那个前置当时造不出来(厂商连续失败,判据 8 只做到一半),属真空窗。
+
+### 实现中踩到并已修的两处(自查,非外部报告)
+
+1. **`normalizeCard` 留下值为 `undefined` 的 own 键**(`price`/`category`/卖点 `evidence`),画布持久化层对这种键一律判否 ⇒ `updateNodeData` **静默返回 false**,卡片写不进去、不报错、不提示,丢掉的是一次几十秒的厂商调用结果。修法=写入前过 `JSON.parse(JSON.stringify(...))`。
+2. **我自己写出的 2 个 NUL 字节**:本想写 `.join(" ")`,实际落成字面 NUL,导致整个文件被工具判为**二进制**(`grep` 直接跳过)—— 而本批 verifier 正是靠源码文本断言的,这会让它扫不到这个文件。已抽成具名 `imageKeyFingerprint()` 并用 `|` 分隔,彻底消掉内联 join。
+
+### 🔴 verifier 自身的一次修正(值得记:差点做出一张空的合格证)
+
+「画布对计费类路由引用为 0」这条,初版按 SQL 写法扫计费路由(`credits: newCredits` / `update({ credits` 等),
+扫到 7 个、看着挺像样 —— **却漏掉了 `/api/generate/image`**,画布图片生成最主要的计费入口,
+因为它是经 `@/lib/credits/atomic-task-credit` 的 `scope:"quick-image"` 扣的,源码里没有那些字面量。
+**改为主判据「import 了 `@/lib/credits`」后扫到 18 个**,并加了扫描器自证:
+钉住 `/api/generate/image`、`/api/generate/video`、`/api/video-batch/models/submit` 三个必检路由,
+任一掉出扫描面即判红。**光断言「扫到 >0 个」挡不住正则腐烂。**
+
+### 已知缺口(就地记账,非阻断)
+
+**@ 候选的超限判定**:商品节点带主图后会占参考图额度,但 `generation-mention-policy.ts` 被
+`verify-canvas-generation-frontend.mjs` 的「#182 mention policy stays import-free」**硬断言**守着零 import,
+引入共用判据会破掉那条刻意设立的离线穷举前提。**已回退该处改动。**
+后果:@ 一个带图商品节点进已满目标,会在**提交时**被硬闸拦下(客户端 pre-submit throw,零扣费、文案明确),
+而不是在候选里就灰掉。正解=让调用方(已持有共用判据)算好「是否占图额度」经入参传进来,属独立小改。
+
+### 待复验(需登录本地 dev,**未做**)
+
+| # | 判据 | 备注 |
+|---|---|---|
+| 1 | 商品节点渲染面出现 `input[type=file]` 与缩略图 `img` | 必须在 **selected 且 zoom ≥ 0.4** 下数,否则误判 |
+| 2 | 上传 9 张后第 10 张被拒并有明确文案 | 零扣费 |
+| 3 | 点「解析卖点」出卡,卖点 4-6 条、目标人群 2-4 个 | 零积分,但有厂商成本 |
+| 4 | 🔴 服务端日志出现 `[Doubao] Image converted to base64` | **决定 9 张图是真用上了还是静默退化成 qwen 单图** —— 转换失败会原样返回 http URL,而过滤器只认 `data:`/`supabase.co`,于是 `parts=0` → 豆包一次都没调 |
+| 5 | 同一组图再点=「重新解析」,且需用户明确再花一次 | 防重两层生效 |
+| 6 | 勾选后「插入到简报」写进 textarea;再插入是整块替换而非追加 | 那段逐字送厂商 |
+| 7 | 低 zoom(<0.4)下缩略图与控件整体消失,只留简报 | |
+| 8 | 只读态下所有写按钮置灰 | |
+| 9 | 商品主图作为下游图片节点的参考图出现在引用区、编号正确 | #169 前半 |
+| 10 | 换商品主图后下游 #43 角标点亮 | 验共用判据接进了快照 |
 
 ## 合流顺序建议
 D1→D2(schema.ts 落地)→ S1/S3 与 D3-D6 并行 → S2/S4/S5 → S6/S7/S8 → R1 全量跑 → R2 收口(含上「跨目录归属项」两条)。
