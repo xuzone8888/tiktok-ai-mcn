@@ -4,13 +4,16 @@ StarGaze 是一个 AI 视频创作平台(Next.js + Supabase + 阿里云 OSS,生�
 
 > **P0 / R2 / R2-Q4 补齐 / #185 误扣费收口 均已完成并上线**(线上 `3dee031`/端口 **3015**),**2026-08-09 起画布已对所有登录用户开放**(用户裁决:网站用户少,跳过灰度阶梯)。安全面——计费、对账、状态机、并发、鉴权、误扣费——已全部收口并生产验证。
 >
-> 🔴 **但 P1 没做完**:52 项里 **#67 商品节点(双轨起点之一,整条链缺失)、#81/#82/#83 图片工具条、#85 nine_grid、#43 dirty 角标、#92 图片空态快捷、#182 @引用素材、#211 交互式教程、#78 图片比例 13 种** 既没改判也没补齐 —— **而且现在人人可见**。详见 HANDOFF §负二③-b。**P2 尚未开工,未经用户裁决不要自行启动。**
+> 🔴 **P1 收尾进行中(2026-08-10)**:批 0-4 已完成并前台实测(#82 裁剪 / #43 dirty 角标 / #182 @引用素材 落地;#78/#81/#85/#92 已裁决改判延 P2)。**剩 批 5 = #67 商品节点、批 6 = #211 教程本体**。
+> 这些工作在分支 `claude/stargaze-canvas-p1-finish-d06ab1`,**领先 main 16 个 commit、未 push 未合并、未发版** —— 线上仍是 `3dee031`。
+> 详见 **[docs/HANDOFF_P1_FINISH.md](./docs/HANDOFF_P1_FINISH.md)**。**P2 尚未开工,未经用户裁决不要自行启动。**
 
 ## 新窗口恢复协议(30 秒弄清现状)
 
 1. 读本文件(你正在读)。
 2. 读 [docs/EXECUTION_TRACKER.md](./docs/EXECUTION_TRACKER.md) 的「当前状态」—— 执行状态唯一事实源。
-3. 读 **[docs/HANDOFF_R2_NEXT.md](./docs/HANDOFF_R2_NEXT.md)** —— **待办清单 + 四个缺陷速查 + 浏览器走查踩坑技巧。新窗口的实际入口就是这份,先读它再动手。**
+3. 读 **[docs/HANDOFF_P1_FINISH.md](./docs/HANDOFF_P1_FINISH.md)** —— **新窗口的实际入口,先读它再动手**(2026-08-10;待办 + 已铺好的环境 + 浏览器踩坑 + 遗留问题清单)。
+   - [docs/HANDOFF_R2_NEXT.md](./docs/HANDOFF_R2_NEXT.md) 是 2026-08-09 那轮的交接,**只当背景读**;两者冲突时以 P1_FINISH 为准。
 4. 读 [docs/SUPER_CANVAS_P0_BOARD.md](./docs/SUPER_CANVAS_P0_BOARD.md) —— D1-D6/S1-S8 已全部合流;R1 完成明细、R2 走查逐项结果、R2-Q1~Q4 四个缺陷都在这里。
 5. 每完成一个任务:更新看板状态 → 更新 EXECUTION_TRACKER「当前状态」→ commit。
 6. 需要背景细节才去翻(按需,不必全读):
@@ -56,10 +59,23 @@ StarGaze 是一个 AI 视频创作平台(Next.js + Supabase + 阿里云 OSS,生�
 - 执行引擎 BTM(浏览器内编排器):`src/components/background-task-manager.tsx`
 - 蓝图:`blueprints` 表(20260702 迁移)+ `src/components/studio-shell/blueprint-drawer.tsx`(P2 脚本节点复用它,不重写)
 - 角色资产:`ai_models` 表(020/20260313/20260314 迁移)+ `src/components/character-picker.tsx`
-- 现有验收惯例:`.temp/canvas-p{n}-verify.mjs`;dev 起 3100 端口
+- 现有验收惯例:`.temp/canvas-p{n}-verify.mjs`;⚠️ **dev 别用 3100** —— 那是已退役的兄弟工作区 `canvas-p1-acceptance` 的旧代码,连上去等于验错东西。P1 收尾工作区用 **3000**
+- 迁移本地验收:`node scripts/verify-canvas-readiness-migration.mjs`(PGlite 真 Postgres,需先 `npm i --no-save @electric-sql/pglite`)
 - 环境:`.env.local` 各 worktree 一份(git-ignored);node_modules 各 worktree 独立 npm install
 
-## 当前状态(2026-08-08,经生产库与生产机实测核对)
+## 当前状态(2026-08-10 更新;生产机数据仍为 2026-08-08 实测)
+
+> 🆕 **2026-08-10 变化摘要**(细节见 [docs/HANDOFF_P1_FINISH.md](./docs/HANDOFF_P1_FINISH.md)):
+> - **P1 批 0-4 全部完成并前台实测**;剩批 5(#67 商品节点)、批 6(#211 教程)
+> - **生产库多了一次 DDL**:迁移 `20260810_canvas_media_readiness_history_assets.sql` 已执行
+>   (放行历史面板给得出的素材,关闭「加一张蓝图/幻灯片素材就 422 + 粘性保存暂停」缺陷)。
+>   ⇒ 生产已执行的画布迁移由 12 个变为 **13 个**。**线上代码未变,仍是 `3dee031`/3015。**
+> - 🔴 **本地 dev 现在能真正出图**:此前所有窗口以为「厂商凭证过期」是**误判**,真因是本地
+>   `.env.local` 整块缺失 `VIDEO_PLATFORM_*`(12 个键)。已从生产 release 取回。
+> - 🔴 **「本地没法预演迁移」这个长期前提已被打破**:新增 `scripts/verify-canvas-readiness-migration.mjs`
+>   用 PGlite 起真 Postgres 跑迁移原文 + 16 条正反用例,不连生产、不需凭证。
+> - 🔴 **线上现存一个已修但未发版的缺陷**:「推为参考」建出的视频节点带着「以图生视频」当提示词
+>   (`data.title` 就是逐字送厂商的提示词),一按生成 450 积分。修复在本分支,**发版才生效**。
 
 **期次进度**(功能点数来自 CHECKLIST 机器统计):
 
@@ -86,7 +102,10 @@ StarGaze 是一个 AI 视频创作平台(Next.js + Supabase + 阿里云 OSS,生�
 
 > ⚠️ **文档陷阱(已知,勿被误导)**:`docs/SUPER_CANVAS_P1_ACCELERATED_EXECUTION_PLAN.md` 顶部状态仍写 `PHASE_4_COMPLETE_OFFLINE_GREEN`、Phase 5/6 的 checkbox 全空,**那是过期的**——Phase 6「生产迁移+上线」实际早已发生。以本节和生产实测为准。
 
-**下一步**(详见 [docs/HANDOFF_R2_NEXT.md](./docs/HANDOFF_R2_NEXT.md) §负二):
+**下一步**(详见 [docs/HANDOFF_P1_FINISH.md](./docs/HANDOFF_P1_FINISH.md) §二):
+**批 5 = #67 商品节点(方案 A 已裁决)→ 批 6 = #211 教程本体 → 全绿后合 main → 发版。**
+
+以下 1-6 是 2026-08-09 那轮的收口记录,保留备查:
 
 1. ✅ **四项裁决已于 2026-08-09 取得**(#185 按规格改代码 / #253 已 bound 行不做自动判死改判延 P2 / #237 随教程延 P2 / 资金③④ 等价验收结案)
 2. ✅ **CHECKLIST 8+1 项改判已落笔**,后又加 #78(P1-Q2b),reconcile 绿(做 163/裁 31/延 26;P1=48)
