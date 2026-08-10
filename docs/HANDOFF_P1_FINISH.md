@@ -12,7 +12,8 @@ cd E:/StarGaze/.claude/worktrees/stargaze-canvas-p1-finish-d06ab1 && git log --o
 ```
 
 工作区 `E:\StarGaze\.claude\worktrees\stargaze-canvas-p1-finish-d06ab1`，分支 `claude/stargaze-canvas-p1-finish-d06ab1`，
-**未 push、未合并、未发版**（用户裁决：未复验不合入，剩余批次做完再一起合）。
+**已 push 到 origin 作备份、未合并、未发版**（用户裁决：未复验不合入，剩余批次做完再一起合）。
+⚠️ 本行原写「未 push」，2026-08-10 现场核对为**已推**（`origin/claude/stargaze-canvas-p1-finish-d06ab1` = `971675e`）。
 领先量以 `git rev-list --count origin/main..HEAD` 现查为准——**别信任何文档里写死的数字，包括这一份**。
 
 ---
@@ -76,7 +77,8 @@ cd E:/StarGaze/.claude/worktrees/stargaze-canvas-p1-finish-d06ab1 && git log --o
 
 ### ② 批 6：#211 教程本体
 
-只做教程本体，**不做发奖**（#237 已随裁决延 P2）。开关位置：`canvas-chrome-policy.ts:49` 当前 `enabled:false`。
+只做教程本体，**不做发奖**（#237 已随裁决延 P2）。开关位置：**`src/components/canvas/canvas-chrome-policy.ts:49`**
+（不是 `src/lib/canvas/`），当前 `{ id: "tutorial", label: "教程", enabled: false }`。
 
 ### ③ 全部完成后才合并进 main
 
