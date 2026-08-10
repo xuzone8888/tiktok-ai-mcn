@@ -78,8 +78,8 @@ Deno.test('ignores non-add and non-comment feed changes', () => {
 Deno.test('maps an owned published Facebook comment into shared cache shape', async () => {
   let saved: FacebookWebhookCommentRow | null = null
   const store: FacebookWebhookCommentStore = {
-    async findActiveAccount() {
-      return { id: FIXTURE.accountId, userId: FIXTURE.userId, externalId: FIXTURE.pageId }
+    async findActiveAccounts() {
+      return [{ id: FIXTURE.accountId, userId: FIXTURE.userId, externalId: FIXTURE.pageId }]
     },
     async findPublishedContent(_userId, _accountId, candidates) {
       assert(candidates.includes(FIXTURE.postId))
@@ -105,6 +105,34 @@ Deno.test('maps an owned published Facebook comment into shared cache shape', as
   assertEquals(savedRow.externalContentId, FIXTURE.videoId)
   assertEquals(savedRow.direction, 'inbound')
   assertEquals(savedRow.parentExternalCommentId, null)
+})
+
+Deno.test('maps one Page webhook event to every active local Page binding', async () => {
+  const saved: FacebookWebhookCommentRow[] = []
+  const store: FacebookWebhookCommentStore = {
+    async findActiveAccounts() {
+      return [
+        { id: 'account-a', userId: 'user-a', externalId: FIXTURE.pageId },
+        { id: 'account-b', userId: 'user-b', externalId: FIXTURE.pageId },
+      ]
+    },
+    async findPublishedContent(userId, accountId) {
+      return {
+        id: `${accountId}-item`,
+        externalId: `${userId}-video`,
+      }
+    },
+    async upsertComment(row) {
+      saved.push(row)
+      return 'saved'
+    },
+  }
+
+  const result = await processFacebookCommentWebhook(payload(), store)
+  assertEquals(result.saved_count, 2)
+  assertEquals(result.ignored_count, 0)
+  assertEquals(saved.map((row) => row.userId), ['user-a', 'user-b'])
+  assertEquals(saved.map((row) => row.accountId), ['account-a', 'account-b'])
 })
 
 Deno.test('verifies GET challenge and rejects unsigned POST', async () => {

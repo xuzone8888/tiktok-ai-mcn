@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import {
+  assertFacebookRequiredPageScopes,
   calculateFacebookTokenExpiration,
   debugFacebookUserToken,
   exchangeFacebookCodeForToken,
@@ -166,6 +167,7 @@ export async function GET(request: NextRequest) {
       getMyFacebookPages(longLivedToken.access_token),
       getFacebookGrantedPermissions(longLivedToken.access_token),
     ])
+    assertFacebookRequiredPageScopes(permissions)
 
     if (pages.length === 0) {
       const tokenDebug = await debugFacebookUserToken(longLivedToken.access_token).catch(() => null)

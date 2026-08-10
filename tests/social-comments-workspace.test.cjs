@@ -11,6 +11,10 @@ const service = fs.readFileSync(path.join(root, 'src/lib/social-comments/service
 const types = fs.readFileSync(path.join(root, 'src/lib/social-comments/types.ts'), 'utf8')
 const youtubeClient = fs.readFileSync(path.join(root, 'src/app/(main)/youtube-publish/YouTubePublishClient.tsx'), 'utf8')
 const youtubeCommentsPage = fs.readFileSync(path.join(root, 'src/app/(main)/youtube-publish/comments/page.tsx'), 'utf8')
+const facebookCommentsPage = fs.readFileSync(path.join(root, 'src/app/(main)/facebook-publish/comments/page.tsx'), 'utf8')
+const accountsRoute = fs.readFileSync(path.join(root, 'src/app/api/social-comments/accounts/route.ts'), 'utf8')
+const facebookBootstrapRoute = fs.readFileSync(path.join(root, 'src/app/api/social-comments/facebook-bootstrap/route.ts'), 'utf8')
+const platformPublishPage = fs.readFileSync(path.join(root, 'src/components/publish/platform/PlatformPublishPage.tsx'), 'utf8')
 const guardSource = fs.readFileSync(path.join(root, 'src/components/social-comments/workspace-request-guard.ts'), 'utf8')
 const guardModule = new Module('workspace-request-guard')
 guardModule._compile(ts.transpileModule(guardSource, {
@@ -136,6 +140,37 @@ test('YouTube comment surfaces sync recent content once when opened', () => {
   assert.match(client, /initialSyncAttemptedTargets\.current\.has\(initialSyncTargetKey\)/)
   assert.match(client, /selectedPlatformCapabilities\?\.recent_sync/)
   assert.match(client, /idempotencyKey = `initial:\$\{syncPlatform\}:\$\{accountId\}:/)
+})
+
+test('Facebook comment reads use the v25-compatible video object instead of a singular status id', () => {
+  const configStart = service.indexOf('facebook: {', service.indexOf('const PLATFORM_CONTENT_CONFIG'))
+  const configEnd = service.indexOf('\n  },', configStart)
+  const facebookConfig = service.slice(configStart, configEnd)
+  assert.match(facebookConfig, /externalIdKey: 'facebook_video_id'/)
+  assert.doesNotMatch(facebookConfig, /commentContentIdKey: 'facebook_post_id'/)
+  assert.match(service, /listFacebookComments\(token, content\.provider_comment_content_id\)/)
+})
+
+test('Facebook comment management renders cached originals before background sync and translation', () => {
+  assert.match(facebookCommentsPage, /platformLock="facebook"/)
+  assert.match(facebookCommentsPage, /backgroundInitialSync/)
+  assert.match(facebookCommentsPage, /initialSyncDelayMs=\{5000\}/)
+  assert.match(facebookCommentsPage, /translationStartDelayMs=\{800\}/)
+  assert.match(platformPublishPage, /backgroundInitialSync=\{config\.platform === 'facebook'\}/)
+  assert.match(platformPublishPage, /initialSyncDelayMs=\{config\.platform === 'facebook' \? 5000 : 0\}/)
+  assert.match(platformPublishPage, /initialAccounts=\{facebookCommentAccounts\}/)
+  assert.match(platformPublishPage, /translationStartDelayMs=\{config\.platform === 'facebook' \? 800 : 0\}/)
+  assert.match(client, /platform: platformLock/)
+  assert.match(accountsRoute, /requestedPlatform[\s\S]*\[requestedPlatform\]/)
+  assert.match(client, /if \(!state \|\| state\.sourceText !== comment\.message\) return null/)
+  assert.match(client, /window\.setTimeout\(startTranslation, translationStartDelayMs\)/)
+  assert.match(client, /source !== "initial" \|\| !backgroundInitialSync/)
+  assert.match(client, /isFacebookLocked && workspaceGuardRef\.current\.currentKey\(\) !== visibleWorkspaceKey/)
+  assert.match(client, /\/api\/social-comments\/facebook-bootstrap/)
+  assert.match(client, /commentsCacheRef\.current\.set\(`facebook:\$\{account\.id\}`/)
+  assert.match(facebookBootstrapRoute, /Promise\.all\(\[/)
+  assert.match(facebookBootstrapRoute, /getSocialCommentAccounts\(user\.id, \['facebook'\]\)/)
+  assert.match(facebookBootstrapRoute, /getSavedSocialComments\(user\.id/)
 })
 
 test('saved comments remain ordered newest first after automatic sync', () => {

@@ -49,7 +49,7 @@ export interface OwnedFacebookContent {
 }
 
 export interface FacebookWebhookCommentStore {
-  findActiveAccount(accountExternalId: string): Promise<OwnedFacebookAccount | null>
+  findActiveAccounts(accountExternalId: string): Promise<OwnedFacebookAccount[]>
   findPublishedContent(
     userId: string,
     accountId: string,
@@ -224,15 +224,17 @@ export function createFacebookWebhookCommentStore(
   database: FacebookWebhookDatabase,
 ): FacebookWebhookCommentStore {
   return {
-    async findActiveAccount(accountExternalId) {
+    async findActiveAccounts(accountExternalId) {
       const result = await database.findActiveAccounts(accountExternalId)
       if (result.error) throw new FacebookWebhookDatabaseError('account_lookup_failed')
       if (!Array.isArray(result.data)) {
         throw new FacebookWebhookDatabaseError('account_lookup_invalid_result')
       }
-      if (result.data.length !== 1) return null
-      const row = result.data[0]
-      return { id: row.id, userId: row.user_id, externalId: row.channel_id }
+      return result.data.map((row) => ({
+        id: row.id,
+        userId: row.user_id,
+        externalId: row.channel_id,
+      }))
     },
 
     async findPublishedContent(userId, accountId, candidates) {
@@ -302,38 +304,40 @@ export async function processFacebookCommentWebhook(
   let duplicateCount = parsed.duplicateCount
 
   for (const event of parsed.events) {
-    const account = await store.findActiveAccount(event.accountExternalId)
-    if (!account) {
+    const accounts = await store.findActiveAccounts(event.accountExternalId)
+    if (accounts.length === 0) {
       ignoredCount += 1
       continue
     }
-    const content = await store.findPublishedContent(
-      account.userId,
-      account.id,
-      event.contentCandidates,
-    )
-    if (!content) {
-      ignoredCount += 1
-      continue
+    for (const account of accounts) {
+      const content = await store.findPublishedContent(
+        account.userId,
+        account.id,
+        event.contentCandidates,
+      )
+      if (!content) {
+        ignoredCount += 1
+        continue
+      }
+      const isFromAccount = Boolean(event.authorId && event.authorId === account.externalId)
+      const persistence = await store.upsertComment({
+        userId: account.userId,
+        accountId: account.id,
+        taskItemId: content.id,
+        accountExternalId: account.externalId,
+        externalContentId: content.externalId,
+        externalCommentId: event.commentExternalId,
+        authorId: event.authorId,
+        authorName: event.authorName,
+        message: event.message,
+        direction: isFromAccount ? 'outbound' : 'inbound',
+        isFromAccount,
+        createdAt: event.createdAt,
+        parentExternalCommentId: event.parentExternalCommentId,
+      })
+      if (persistence === 'duplicate') duplicateCount += 1
+      else savedCount += 1
     }
-    const isFromAccount = Boolean(event.authorId && event.authorId === account.externalId)
-    const persistence = await store.upsertComment({
-      userId: account.userId,
-      accountId: account.id,
-      taskItemId: content.id,
-      accountExternalId: account.externalId,
-      externalContentId: content.externalId,
-      externalCommentId: event.commentExternalId,
-      authorId: event.authorId,
-      authorName: event.authorName,
-      message: event.message,
-      direction: isFromAccount ? 'outbound' : 'inbound',
-      isFromAccount,
-      createdAt: event.createdAt,
-      parentExternalCommentId: event.parentExternalCommentId,
-    })
-    if (persistence === 'duplicate') duplicateCount += 1
-    else savedCount += 1
   }
 
   return {
