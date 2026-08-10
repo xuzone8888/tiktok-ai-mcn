@@ -185,8 +185,16 @@ export async function assertCanvasDocumentMediaReady(input: {
 }
 
 /**
- * Generation has no legacy exception: every connected media input must still
- * resolve to a ready owner upload or a completed owner generation output.
+ * 生成输入**没有**「存量文档」那条豁免:这里传 `canvasId: null / baseRev: null`,
+ * 于是 RPC 里的 `v_existing_keys` 恒为空数组,那条分支对生成输入永远不可达。
+ * 也就是说文档里能存下的老 key,不等于能拿来当付费生成的输入。
+ *
+ * ⚠️ 但从 20260810 起,「历史面板给得出的素材」(自己的蓝图引用的 key、
+ * 自己已完成生成的 URL 列换算出的 key)对**两条通道一视同仁**地放行 ——
+ * 这是有意的:#23「从历史记录选一张图」建出来的就是上游节点,
+ * 若它能进文档却不能当生成输入,用户会在点生成时撞第二种错。
+ * 代价是这类 key 未经服务端 HEAD 证实对象真实存在,可能走到扣费后才由厂商侧失败退款。
+ * 详见该迁移文件抬头。
  */
 export async function assertCanvasInputKeysReady(input: {
   userId: string;
