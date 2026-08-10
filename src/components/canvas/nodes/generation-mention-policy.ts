@@ -106,6 +106,15 @@ export function resolveMentionCandidates(
     if (isConnected) {
       disabled = true;
       reason = "已经连进这个节点了";
+      // ⚠️ **已知缺口(批 5 记账,非阻断)**:商品节点带主图后同样占一张参考图额度
+      // (判据见 `src/lib/canvas/generation-image-input.ts`),但这里**没有**对它做
+      // 超限/模式判定 —— 用户 @ 一个带图商品节点进已满的目标,会在**提交时**被硬闸拦下
+      // (客户端 pre-submit throw,零扣费、文案明确),而不是在候选里就灰掉。
+      // 不在此处修的原因:本模块被 `verify-canvas-generation-frontend.mjs` 用
+      // 「#182 mention policy stays import-free」硬断言守着零 import,
+      // 引入共用判据会破掉那条刻意设立的离线穷举前提。
+      // 正解是把「是否占图额度」由调用方(已持有共用判据)算好、经入参传进来,
+      // 属独立小改,不混进批 5。
     } else if (type === "image") {
       const ossKey = node.data?.media?.ossKey;
       if (typeof ossKey !== "string" || ossKey.length === 0) {

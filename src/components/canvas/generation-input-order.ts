@@ -22,6 +22,8 @@
  * 更贴近用户心智里的「第一张图」。
  */
 
+import { isCanvasImageInputNode } from "@/lib/canvas/generation-image-input";
+
 interface HasId {
   id: string;
 }
@@ -229,15 +231,16 @@ interface HasImagePayload extends HasId {
 /**
  * 从**已排好序**的上游节点里挑出可用作参考图的那些,并编号。
  *
- * 只收 `type === "image"` 且 `media.ossKey` 非空的节点 —— 与提交路径的
- * `imageInputNodes` 判据逐字一致(空图片节点在提交时会被单独报错,不该占用编号)。
+ * 判据走唯一出口 `isCanvasImageInputNode`(图片节点 + 商品节点主图)——
+ * 与提交路径的 `imageInputNodes`、服务端权威重算、#43 角标重算共用同一份实现,
+ * 四处漂移的后果见该模块抬头。空图片节点在提交时会被单独报错,不该占用编号。
  */
 export function collectImageReferences(
   orderedInputs: readonly HasImagePayload[]
 ): GenerationImageReference[] {
   const refs: GenerationImageReference[] = [];
   for (const node of orderedInputs) {
-    if (node.type !== "image") continue;
+    if (!isCanvasImageInputNode(node)) continue;
     const ossKey = node.data?.media?.ossKey;
     if (typeof ossKey !== "string" || ossKey.length === 0) continue;
     const index = refs.length + 1;

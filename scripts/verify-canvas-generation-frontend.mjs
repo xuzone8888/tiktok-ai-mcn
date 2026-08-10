@@ -45,23 +45,62 @@ function lacks(source, fragment, label) {
 }
 
 /**
- * 无依赖纯模块的离线载入(仅剥类型,不做类型检查——那是 `tsc --noEmit` 的活)。
- * 只用于本文件里**零 import** 的策略模块;有依赖的走 scripts/canvas-build.mjs。
+ * 纯模块的离线载入(仅剥类型,不做类型检查——那是 `tsc --noEmit` 的活)。
+ *
+ * 模块体以 `data:` URL 动态 import,而 **`data:` 基址不是层级 URL** ——
+ * 所以模块体里任何 import(别名、相对路径都一样)都会 `ERR_UNSUPPORTED_RESOLVE_REQUEST`。
+ *
+ * `deps` 就是为此开的口子:把依赖模块**一起从真实源码转译**、剥掉 `export ` 变成本地声明、
+ * 拼成前缀,再把模块体里对应的 import 语句删掉。这样被测的仍是仓库里那份真源码,
+ * 不是脚本里手抄的副本 —— 判据只能有一处产地(见
+ * `src/lib/canvas/generation-image-input.ts` 抬头),不允许为了让脚本跑起来而复制它。
+ * 依赖自身仍必须是零 import 的纯模块。
  */
 const requireFromHere = createRequire(import.meta.url);
-async function loadPureModule(relPath) {
+async function loadPureModule(relPath, deps = []) {
   const ts = requireFromHere("typescript");
-  const { outputText } = ts.transpileModule(read(relPath), {
-    compilerOptions: {
-      module: ts.ModuleKind.ESNext,
-      target: ts.ScriptTarget.ES2020,
-    },
-    fileName: relPath,
-  });
+  const transpile = (path) =>
+    ts.transpileModule(read(path), {
+      compilerOptions: {
+        module: ts.ModuleKind.ESNext,
+        target: ts.ScriptTarget.ES2020,
+      },
+      fileName: path,
+    }).outputText;
+
+  let body = transpile(relPath);
+  let preamble = "";
+  for (const dep of deps) {
+    preamble += `${transpile(dep.path).replace(/^export /gm, "")}\n`;
+    const escaped = dep.specifier.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const importLine = new RegExp(
+      `^import\\s+\\{[^}]*\\}\\s+from\\s+["']${escaped}["'];?[ \\t]*$`,
+      "m"
+    );
+    if (!importLine.test(body)) {
+      throw new Error(
+        `loadPureModule: ${relPath} 里找不到对 ${dep.specifier} 的 import,deps 配置已过期`
+      );
+    }
+    body = body.replace(importLine, "");
+  }
+
   return import(
-    `data:text/javascript;base64,${Buffer.from(outputText).toString("base64")}`
+    `data:text/javascript;base64,${Buffer.from(preamble + body).toString("base64")}`
   );
 }
+
+/**
+ * `generation-input-order.ts` 的唯一依赖:参考图判据。
+ * 判据本身必须只有一处产地(客户端提交 / 服务端权威重算 / 引用区编号 / #43 角标四处共用),
+ * 所以这里内联真源码而不是在脚本里手抄一份。
+ */
+const INPUT_ORDER_DEPS = [
+  {
+    specifier: "@/lib/canvas/generation-image-input",
+    path: "src/lib/canvas/generation-image-input.ts",
+  },
+];
 
 console.log("1. Polling authority and cross-canvas isolation");
 has(context, "GENERATION_LIST_LIMIT = 100", "uses the maximum bounded list size");
@@ -459,7 +498,10 @@ console.log(
   "\nN+4. CHECKLIST #44/#72/#94 — reference strip: numbered upstream thumbnails"
 );
 const { orderGenerationInputNodes, collectImageReferences } =
-  await loadPureModule("src/components/canvas/generation-input-order.ts");
+  await loadPureModule(
+    "src/components/canvas/generation-input-order.ts",
+    INPUT_ORDER_DEPS
+  );
 const img = (id, key) => ({ id, type: "image", data: { media: { ossKey: key } } });
 const txt = (id) => ({ id, type: "text", data: {} });
 const edge = (source, target) => ({ source, target });
@@ -818,7 +860,8 @@ ok(
  */
 {
   const order = await loadPureModule(
-    "src/components/canvas/generation-input-order.ts"
+    "src/components/canvas/generation-input-order.ts",
+    INPUT_ORDER_DEPS
   );
   const cmp = order.compareGenerationInputSnapshots;
   ok(typeof cmp === "function", "#43 dirty comparison is a pure exported function");
@@ -894,7 +937,8 @@ ok(
  */
 {
   const order = await loadPureModule(
-    "src/components/canvas/generation-input-order.ts"
+    "src/components/canvas/generation-input-order.ts",
+    INPUT_ORDER_DEPS
   );
   const mention = await loadPureModule(
     "src/components/canvas/nodes/generation-mention-policy.ts"

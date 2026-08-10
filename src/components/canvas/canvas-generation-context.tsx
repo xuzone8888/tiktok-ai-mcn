@@ -35,6 +35,8 @@ import type {
 } from "@/lib/video-models/types";
 import { useCanvasStore } from "@/stores/canvas-store";
 
+import { isCanvasImageInputNode } from "@/lib/canvas/generation-image-input";
+
 import {
   compareGenerationInputSnapshots,
   orderGenerationInputNodes,
@@ -459,22 +461,32 @@ function recomputeGenerationInputs(
   const target = state.nodes.find((node) => node.id === nodeId);
   if (!target || (target.type !== "image" && target.type !== "video")) return null;
   const incoming = orderGenerationInputNodes(state.nodes, state.edges, nodeId);
-  const snapshots: ReturnType<typeof inputTextSnapshot>[] = [];
+  // 🔴 **分组顺序必须与提交路径逐字一致:先全部文本、再全部图片。**
+  // 提交路径写的是 `inputs: [...textInputs, ...imageSnapshots]`(见下方三个 kind 分支),
+  // 而 `orderGenerationInputNodes` 返回的是**纯连线顺序**(不按类型分组)。
+  // 本函数原来照连线顺序交错 push —— 于是只要上游里图片节点连得比文本节点早,
+  // 持久化快照(文本在前)与重算值(交错)顺序就不同,
+  // `compareGenerationInputSnapshots` 判成 `reordered`,**角标永久常亮**。
+  // 这条在 #43 落地时没暴露:它要求「持久化快照里已含图片输入」,
+  // 而那个前置当时造不出来(厂商连续失败,判据 8 只做到一半),属真空窗。
+  const textSnapshots: ReturnType<typeof inputTextSnapshot>[] = [];
+  const imageSnapshots: ReturnType<typeof inputTextSnapshot>[] = [];
   for (const node of incoming) {
     if (node.type === "text" || node.type === "product") {
       if (typeof node.data.title === "string" && node.data.title.trim()) {
-        snapshots.push(inputTextSnapshot(node));
+        textSnapshots.push(inputTextSnapshot(node));
       }
-      continue;
     }
-    if (node.type === "image") {
+    // 商品节点可以**同时**贡献文本与主图,所以这里不是 else-if ——
+    // 提交路径的 textInputs / imageInputNodes 也是两个独立 filter,同样会各收一次。
+    if (isCanvasImageInputNode(node)) {
       const snapshot = inputImageSnapshot(node);
       if (snapshot) {
-        snapshots.push(snapshot as unknown as ReturnType<typeof inputTextSnapshot>);
+        imageSnapshots.push(snapshot as unknown as ReturnType<typeof inputTextSnapshot>);
       }
     }
   }
-  return snapshots;
+  return [...textSnapshots, ...imageSnapshots];
 }
 
 /**
@@ -538,9 +550,8 @@ function buildGenerationIntent(nodeId: string): CanvasGenerationIntentV1 {
     .filter((node) => node.type === "text" || node.type === "product")
     .filter((node) => typeof node.data.title === "string" && node.data.title.trim())
     .map(inputTextSnapshot);
-  const imageInputNodes = incoming.filter(
-    (node) => node.type === "image" && Boolean(node.data.media?.ossKey)
-  );
+  // 参考图判据走唯一出口(含商品节点主图);服务端权威重算用的是同一个函数。
+  const imageInputNodes = incoming.filter((node) => isCanvasImageInputNode(node));
   const prompt = normalizedPrompt(target, incoming);
   if (Array.from(prompt).length < 2) {
     throw new Error("请在当前节点或相连的文本/商品节点中填写至少 2 个字的提示词");
