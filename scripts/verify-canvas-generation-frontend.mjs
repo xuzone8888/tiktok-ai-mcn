@@ -755,8 +755,21 @@ ok(
     return start > -1 ? controls.slice(start, start + 2400) : "";
   })();
   ok(
-    /title: "裁剪结果",\s*media: \{ ossKey \}/.test(cropHandler),
+    /data: \{ media: \{ ossKey \} \}/.test(cropHandler),
     "crop result becomes an image node carrying only an OSS object key"
+  );
+  // 🔴 **反向断言,别改回去。** 本条曾要求 `title: "裁剪结果"`,2026-08-10 实测发现
+  // 图片/视频节点**没有「显示标题」这回事** —— `data.title` 就是提示词 textarea 的
+  // value,也是逐字送厂商的那段文本。写进去等于给新节点预填一句谁也没写过的提示词,
+  // 用户一按生成就照着它花钱。所以这里断言的是**新节点载荷里不许出现 title**。
+  // 只盯 addNode 那一段:回调里还有四个 `toast({ title: … })` 是正常的用户提示。
+  const cropAddNodePayload = (() => {
+    const start = cropHandler.indexOf(".addNode({");
+    return start > -1 ? cropHandler.slice(start, start + 420) : "";
+  })();
+  ok(
+    cropAddNodePayload.length > 0 && !/title:/.test(cropAddNodePayload),
+    "crop result must NOT prefill data.title — that field IS the vendor prompt, not a label"
   );
   ok(
     /\.addNode\(\{/.test(cropHandler) && !/addNodeAndEdge/.test(cropHandler),

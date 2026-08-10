@@ -20,8 +20,8 @@
 > **新窗口入口改为 [HANDOFF_P1_FINISH.md](./HANDOFF_P1_FINISH.md)**;HANDOFF_R2_NEXT.md 降为背景。
 
 - **工作区/分支**:`E:\StarGaze\.claude\worktrees\stargaze-canvas-p1-finish-d06ab1` /
-  `claude/stargaze-canvas-p1-finish-d06ab1`,**领先 origin/main 16 个 commit,未 push 未合并未发版**。
-  线上仍是 `3dee031`/3015 —— 这 16 个 commit 一个都没上生产。
+  `claude/stargaze-canvas-p1-finish-d06ab1`,**未 push、未合并、未发版**(领先量以 `git rev-list --count origin/main..HEAD` 现查为准)。
+  线上仍是 `3dee031`/3015 —— 本分支的 commit 一个都没上生产。
 - **期次数以机器守卫为准**:`220(做 163 / 裁 31 / 延 26)`、`P0=48 **P1=48** P2=55 P3=11 P4=1`。
   ⚠️ 旧文档里的「P1=52」是 #78/#81/#85/#92 改判延 P2 之前的数,**已作废**。
 - **批 0-4 交付**:#82 裁剪(6/6 判据全过)、#43 dirty 角标(判据 7/9/10 过)、#182 @引用素材
@@ -32,11 +32,15 @@
 - 🔑 **打破了「本地没法预演迁移」这个前提**:新增 `scripts/verify-canvas-readiness-migration.mjs`,
   用 PGlite 起真 Postgres、按生产列结构建 schema、执行迁移原文、跑 16 条正反用例,**不连生产不需凭证**。
   以后画布这类迁移都该先过它。(PGlite 用 `npm i --no-save` 装,重装依赖后会消失)
-- ✅ **两个影响生产的既有缺陷已关闭**:
+- **两个影响生产的既有缺陷**:✅ **甲已在生产关闭**;🔴 **乙已修但在生产仍是原样,且发版也修不好**(见下):
   - **甲(保存闸)**:历史面板素材加进画布 ⇒ 422 + **粘性**保存暂停。迁移
     `20260810_canvas_media_readiness_history_assets.sql` **已于 2026-08-10 在 Supabase dashboard 执行**
     (用户授权,`Success. No rows returned`,含 DO 后置断言)。⇒ 生产已执行画布迁移由 12 个变 **13 个**。
-  - **乙(快图 worker)**:两处查询加 `.or(source.is.null,source.neq.canvas)`,不再认领画布生成。
+  - 🔴 **乙(快图 worker)**:两处查询加 `.or(source.is.null,source.neq.canvas)`,**但只在本分支、未发版**;
+    且**合 main + 蓝绿发版也修不好** —— 它的执行体是 crontab 每分钟打的
+    `/var/www/tiktok-ai-mcn/run-image-worker.sh` → `127.0.0.1:3000`(**老应用目录**),而蓝绿只建新 release
+    目录 + 新端口 + 切 nginx,老目录一行不动。收口办法二选一(须用户裁决):更新老目录代码并重启
+    pm2 `tiktok-ai-mcn`,或把 `WORKER_URL` 指到当前 release 端口。详见 HANDOFF_P1_FINISH §四 A2。
 - 🔴 **执行生产 DDL 前的对抗审查推翻了初版的承重前提**(这条最值得记):
   初版只放行蓝图,并断言「generations 已在白名单」。**该断言是错的** —— 闸门分支③只比 `output_oss_key`,
   而该列**只有画布自己的行会写**;历史面板却从 `output_url/result_url/video_url/image_url` 换算 key。
@@ -75,7 +79,7 @@
   - **商品节点确证为功能缺失**:生产枚举其渲染面只有「删除按钮 + 商品简报 textarea」,`input[type=file]`=0、`img`=0 —— 主线⑦ 的「传图 → 卖点卡」两段**在生产上不存在**,不是没测到
   - **#189 面板超视口生产实锤**:2048×983 下「开始生成」落在视口外,只能手动平移画布才够得着
   - **P1 实现面重核(六切片核查 + 逐项对抗反驳)**:60 项 = implemented **15** / partial **30** / missing **15**;3 项被推翻应记为已实现(#71 整图编辑 / #224 billing_mode / #260 失败退款),但**反过来,上一轮列为「已做到」的 #184 费用汇总条与 #185 拦截式确认其实是 partial** —— #185 的实现方向与规格相反(每次付费都弹 vs 仅超阈值弹)
-  - **已补齐并过闸**:#180/#181 参数胶囊与折叠、#188 Ctrl+Enter、#189 dock 底部、#251 删除 running 三选一(「仅移除」+「返回」;「取消并退款」按 catalog 的 `supportsCancel=false` 明示不可用)。`tsc` 绿、`build` 绿、31 verifier 29 绿(未过 2 个是 blue-green 需 Node20、p1-fixture 需本机 PG,**未改动的树上同样失败**)
+  - **已补齐并过闸**:#180/#181 参数胶囊与折叠、#188 Ctrl+Enter、#189 dock 底部、#251 删除 running 三选一(「仅移除」+「返回」;「取消并退款」按 catalog 的 `supportsCancel=false` 明示不可用)。`tsc` 绿、`build` 绿、31 verifier 29 绿(未过 2 个是 blue-green 需 Node20、p1-fixture 需本机 PG,**未改动的树上同样失败**)。🆕 **2026-08-10 更正:现为 32 个脚本、已知红 2 个**;期间 generation-frontend 曾因断言没跟代码改而红过,已改断言并加负控
 - 🆕 **2026-08-08 晚二次发版 + R2 收口(以此为准)**:
   - **已发版**:main `d16620f34f09d2418cdb805b068aae61d2a55e3d` → 蓝绿切到端口 **3013**,`DEPLOY_RC=0`,BUILD_ID 门通过;回滚包 `canvas-rollback-20260808T152332Z-port-3012-934510`,旧版 abc29ac/3012 仍在线
   - **发版前拦下一个阻断**:停靠位贴 `bottom-0` 会盖住底部工具条(工具条是 React Flow `<Panel position="bottom-center">`,内层 z-index 5;停靠位是兄弟节点 z-20)。实测工具条高 42px、顶边距视口底 50px,改 `bottom-16` 后留 14px 间隙
@@ -84,7 +88,9 @@
   - **⚠️ 发版流程新增项**:蓝绿切流会打断写者租约心跳,正在编辑的标签页立刻进「只读」保护态(单写者锁 fail-closed 的正确行为)——**发版公告须提示用户刷新**;约 30 秒后新会话自动接管
   - ⚠️ 仍欠:CHECKLIST 的 8+1 项改判只写成提案未落笔;#185/#253/#237 三项资金设计取舍待用户裁决;停靠位 `max-h` 语义误用待下一批修
 - ⚠️ (已过期,保留对照)上一条曾记:代码**未发版**(三选一弹窗只过离线闸、未在真实 running 节点上目视);**旅程 B 一步未走**(后经核对为误记,旅程 B 属 P2)
-- **P1(生成接入,**2026-08-09 改判后 52 功能点**;改判前 61)**:⚠️ **「全部完成」这个说法已被 2026-08-08 全量复核推翻**——生成器面板比 CHECKLIST 承诺的薄一大截,当时口径为**61 项里约 23 项「标了做但没实现」**(后经第二轮重核收敛为 60 项 = implemented 15/partial 30/missing 15,再经 2026-08-09 用户裁决把 9 项改判延 P2)(图片模型选择器/生成数量/画质/13 种比例/工具条/全屏预览、视频五模式只有 2 个/7 种比例缺 21:9/清晰度档位/时长滑杆/生成数量、参数胶囊与 dock 底部机制落了但零引用没接线、@引用素材、Ctrl+Enter、如何解锁指引、dirty 角标、交互式教程、删除三选一)。详见 P0 看板 **R2-Q4**。计费/对账/状态机/安全那部分是真做到了。;工程 + 数据库迁移 + 生产上线已完成;✅ **R1** 已于 2026-08-08 完成(31 verifier 30 绿+Node20 补齐 blue-green、tsc/build 绿、性能四预算全过,详见 P0 看板 R1 明细);🟡 **R2 真人走查已跑掉大半**——8 项通过、2 项受阻、1 项查出生产缺陷,详见 P0 看板「R2 生产走查进展」表
+- **P1(生成接入,**现为 48 功能点**;以 `node scripts/canvas-checklist-reconcile.mjs` 现算为准。52 是 #78/#81/#85/#92 改判延 P2 之前的旧数,61 是更早的)**:
+  🆕 **2026-08-10 更新**:下面这段缺口清单是 2026-08-08 复核口径,其中 **#182 @引用素材 / #43 dirty 角标 / #82·#83 工具条 / #84 全屏预览 已交付**,**#78 13 种比例 / #81 高清 / #85 nine_grid / #92 空态快捷 已改判延 P2** —— **真正剩下的只有 #67(批 5)与 #211(批 6)**。别照下面这段排活。
+  ⚠️ **「全部完成」这个说法已被 2026-08-08 全量复核推翻**——生成器面板比 CHECKLIST 承诺的薄一大截,当时口径为**61 项里约 23 项「标了做但没实现」**(后经第二轮重核收敛为 60 项 = implemented 15/partial 30/missing 15,再经 2026-08-09 用户裁决把 9 项改判延 P2)(图片模型选择器/生成数量/画质/13 种比例/工具条/全屏预览、视频五模式只有 2 个/7 种比例缺 21:9/清晰度档位/时长滑杆/生成数量、参数胶囊与 dock 底部机制落了但零引用没接线、@引用素材、Ctrl+Enter、如何解锁指引、dirty 角标、交互式教程、删除三选一)。详见 P0 看板 **R2-Q4**。计费/对账/状态机/安全那部分是真做到了。;工程 + 数据库迁移 + 生产上线已完成;✅ **R1** 已于 2026-08-08 完成(31 verifier 30 绿+Node20 补齐 blue-green、tsc/build 绿、性能四预算全过,详见 P0 看板 R1 明细);🟡 **R2 真人走查已跑掉大半**——8 项通过、2 项受阻、1 项查出生产缺陷,详见 P0 看板「R2 生产走查进展」表
 - 🔴 **R2 查出两个必须先处理的问题**(详见 P0 看板待裁决问题区):
   - **R2-Q1 画布视频生成自上线起 100% 不可用**:厂商 hellobabygo 对 `grok-imagine-1.0-video` 返回 503「无可用通道」(直接打厂商接口复现两次);每次提交扣 5 积分后落 unknown,既不出片也永不退款(unknown 被所有对账车道无条件排除)。**已裁决**:视频名单只留 happyhorse,grok 接口代码全部保留待换 API 后复用
   - **R2-Q2 图片侧 unknown 无出口**:图片车道跑满 20 次重试后停放等人工裁决,但人工裁决 RPC 硬性只认 `type='video'`,图片行必然被拒。恢复面缺一块,待裁决
@@ -93,11 +99,11 @@
 
 **2026-08-08 生产实测证据**(经 Supabase dashboard 与生产机逐项核对):
 
-- **11 个画布迁移在生产库 100% 已执行**——探针逐个命中:`canvases` / `canvas_generation_resolution_audit` / `canvas_upload_reservations` 等 5 张表、40 个 canvas 函数、`generations` 上 4 个 canvas 列、1 条 service_role 策略、`reserve_canvas_uploads_v1` 源码 10020 字符
+- ⚠️(**2026-08-08 探针时点**)**11 个画布迁移在生产库 100% 已执行** —— 之后又执行了 `20260808_canvas_image_unknown_resolution`(当日稍晚)与 `20260810_canvas_media_readiness_history_assets`(2026-08-10),**当前口径 13 个**——探针逐个命中:`canvases` / `canvas_generation_resolution_audit` / `canvas_upload_reservations` 等 5 张表、40 个 canvas 函数、`generations` 上 4 个 canvas 列、1 条 service_role 策略、`reserve_canvas_uploads_v1` 源码 10020 字符
 - **`canvases` 表 7 行真实数据**——画布已被实际使用
 - `/canvas` 公网 307(硬鉴权正常);`stargaze-canvas-reconciler` 常驻在线
-- 灰度:`NEXT_PUBLIC_CANVAS_ENABLED=true`、`CANVAS_PUBLIC_ENABLED=false`、白名单 **2 人**、`CANVAS_VIDEO_MODELS=happyhorse`(2026-08-08 起;grok 因厂商无通道被摘出名单,代码保留,见 P0 看板 R2-Q1)
-- 线上版本 **`abc29ac3d807fe9bb1e95b204da436f066bdd9f4`**(2026-08-08 蓝绿发布,端口 **3012**;上一版 `a24a4e30…`/3011 仍在线待回滚)
+- ⚠️(**2026-08-08 快照,已被 08-09 变更取代**)灰度:`NEXT_PUBLIC_CANVAS_ENABLED=true`、`CANVAS_PUBLIC_ENABLED=false`、白名单 **2 人** —— **现状是 `CANVAS_PUBLIC_ENABLED=true`,已对所有登录用户开放**、`CANVAS_VIDEO_MODELS=happyhorse`(2026-08-08 起;grok 因厂商无通道被摘出名单,代码保留,见 P0 看板 R2-Q1)
+- ⚠️(**2026-08-08 快照**)线上版本 `abc29ac3d807…`/3012 —— **现状是 `3dee031`/3015**;`33ba71d`/3014、`d16620f`/3013 是回滚位,`abc29ac`/3012 已 `pm2 stop`
 
 > ⚠️ **已知过期文档,勿被误导**:`SUPER_CANVAS_P1_ACCELERATED_EXECUTION_PLAN.md` 顶部仍写 `PHASE_4_COMPLETE_OFFLINE_GREEN`、Phase 5/6 checkbox 全空——**与生产事实不符**,Phase 6「生产迁移+上线」早已发生。以本节为准。
 
@@ -109,11 +115,16 @@
 - 回滚包 `canvas-rollback-20260808T115215Z-port-3011-915446`;上一版 `a24a4e30…`/3011 仍在线;发版脚本存档 `/var/backups/stargaze-canvas/deploy-abc29ac-20260808T115215Z.sh`
 - ⚠️ **发版踩坑(下次照做)**:手工 build 必须带 `CANVAS_RELEASE_COMMIT=<40 位 sha>`,否则 `next.config.mjs` 的 `generateBuildId` 落回随机值,蓝绿脚本的 `BUILD_ID 必须等于 release commit` 门会 FAIL(fail-closed,生产未受影响)。另:预检会对「名单不含 grok」报 2 条 WARN,是预期的,不阻断
 
+⚠️ **已过期(保留对照,2026-08-09 口径)** —— 其中 R2-Q4 补齐已 6/6 完成并发版、灰度阶梯已被用户裁决跳过(现 `CANVAS_PUBLIC_ENABLED=true` 全量开放)、3 笔卡单已于 2026-08-09 结清。
+**现行下一步见本节顶部 2026-08-10 区块与 [HANDOFF_P1_FINISH.md](./HANDOFF_P1_FINISH.md) §二:批 5 #67 商品节点 → 批 6 #211 教程本体 → 全绿后合 main → 发版。**
+
 **下一步(2026-08-09 起)**:①**R2-Q4 补齐批次**——#185 阈值改造(资金边界,单独 commit 单独验)+ 便宜活(#44/#72/#94 引用区缩略图带序号、#84 全屏预览、#186 灰置控件解锁指引、#51②③ 回前台触发+常态手动刷新、#187 参数人话文案、#64 入库+推为参考)+ 停靠位 `max-h` 常量;②补齐批次过闸(tsc/build/verifier)后发版;③之后才按阶梯扩灰度(白名单 2→3-5 真实用户观察 3-7 天→CANVAS_PUBLIC_ENABLED=true);④卡住的 3 笔 15 积分仍按用户裁决不动;⑤P2 五批方案已获用户认可,**待用户裁决后才开**(P2-1 批量与积分底座起步,开工前建 P2 看板+扩机器守卫;场景/道具落表方案与音频开关价目两项前置裁决届时提请)。
 
 > ⚠️ 已过期(保留对照):上一版「下一步」写的是「R2 剩余两项/R2-Q2 待裁决/R2 收口后开 P2」——R2 已于 2026-08-08 晚全部收口,R2-Q2 已裁决并在生产执行迁移,资金③④ 已于 2026-08-09 以等价验收结案。
 
-**工作区**:`.claude/worktrees/canvas-p1-acceptance`(分支 `codex/canvas-p1-acceptance`)。P0 期的三窗分工已退役,详见 CLAUDE.md。
+**工作区**:🆕 `.claude/worktrees/stargaze-canvas-p1-finish-d06ab1`(分支 `claude/stargaze-canvas-p1-finish-d06ab1`),dev 用 **3000**。
+⚠️ `.claude/worktrees/canvas-p1-acceptance`(`codex/canvas-p1-acceptance`)是**上一轮的旧代码树**,已随 PR #37 合并退役,本轮全部 commit 都不在里面;它的 dev 常占 **3100**,连上去等于验错东西。**别在它上面开工。**
+P0 期的三窗分工已退役,详见 CLAUDE.md。
 
 ---
 
