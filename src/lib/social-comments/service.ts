@@ -146,7 +146,6 @@ const PLATFORM_CONTENT_CONFIG: Record<SocialPlatform, PlatformContentConfig> = {
     taskTable: 'facebook_publish_tasks',
     itemTable: 'facebook_publish_task_items',
     externalIdKey: 'facebook_video_id',
-    commentContentIdKey: 'facebook_post_id',
     urlKey: 'facebook_watch_url',
     previewKey: 'video_url',
   },

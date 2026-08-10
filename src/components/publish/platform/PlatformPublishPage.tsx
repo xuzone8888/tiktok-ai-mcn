@@ -41,6 +41,7 @@ import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import SocialCommentsClient from '@/components/social-comments/SocialCommentsClient'
+import type { SocialAccountSummary } from '@/lib/social-comments/types'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -110,6 +111,7 @@ interface PlatformAccount {
   view_count: number
   status: string
   access_token_expires_at: string | null
+  scopes?: string[]
 }
 
 interface SelectedVideo {
@@ -921,6 +923,33 @@ export function PlatformPublishPage({
     [accounts, selectedAccounts]
   )
   const activeAccounts = useMemo(() => accounts.filter(isAccountAuthorized), [accounts])
+  const facebookCommentAccounts = useMemo<SocialAccountSummary[] | undefined>(() => {
+    if (config.platform !== 'facebook') return undefined
+    return accounts.map((account) => {
+      const scopes = Array.isArray(account.scopes) ? account.scopes : []
+      const canRead = ['pages_read_engagement', 'pages_read_user_content'].every((scope) => scopes.includes(scope))
+      const canReply = canRead && scopes.includes('pages_manage_engagement')
+      const commentCapability = account.status !== 'active'
+        ? 'needs_reconnect'
+        : canReply
+          ? 'ready'
+          : canRead
+            ? 'read_only'
+            : 'needs_reconnect'
+      return {
+        id: account.id,
+        platform: 'facebook',
+        external_id: account.channel_id,
+        name: account.channel_title,
+        handle: account.channel_handle,
+        avatar_url: account.thumbnail_url,
+        status: account.status,
+        scopes,
+        needs_reconnect_for_comments: commentCapability === 'needs_reconnect',
+        comment_capability: commentCapability,
+      }
+    })
+  }, [accounts, config.platform])
   const actualInterval = intervalMode === 'custom' ? customInterval : Number(intervalMode)
   const privacyOption = config.privacyOptions.find((option) => option.value === privacyStatus)
   const PrivacyIcon = getPrivacyIcon(privacyStatus)
@@ -1767,7 +1796,11 @@ export function PlatformPublishPage({
         <SocialCommentsClient
           platformLock={config.platform}
           embedded
+          initialAccounts={facebookCommentAccounts}
           initialSyncEnabled={config.platform === 'facebook'}
+          backgroundInitialSync={config.platform === 'facebook'}
+          initialSyncDelayMs={config.platform === 'facebook' ? 5000 : 0}
+          translationStartDelayMs={config.platform === 'facebook' ? 800 : 0}
           instagramReplyEnabled={instagramReplyEnabled}
         />
       ) : (

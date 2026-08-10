@@ -43,8 +43,12 @@ type SocialComment = SavedSocialComment
 interface SocialCommentsClientProps {
   platformLock?: ConcretePlatform
   embedded?: boolean
+  initialAccounts?: AccountSummary[]
   autoSyncEnabled?: boolean
   initialSyncEnabled?: boolean
+  backgroundInitialSync?: boolean
+  initialSyncDelayMs?: number
+  translationStartDelayMs?: number
   instagramReplyEnabled?: boolean
 }
 
@@ -399,7 +403,8 @@ function CommentTranslationLine({
   className?: string
 }) {
   const state = translations[`${lang}:${comment.id}`]
-  if (!state || state.sourceText !== comment.message || state.status === 'loading') {
+  if (!state || state.sourceText !== comment.message) return null
+  if (state.status === 'loading') {
     return <p className={cn("mt-1 text-xs text-cyan-100/35", className)}>{TEXT.translating[lang]}</p>
   }
   if (state.status === 'same_language') return null
@@ -417,8 +422,12 @@ function CommentTranslationLine({
 export default function SocialCommentsClient({
   platformLock,
   embedded = false,
+  initialAccounts = [],
   autoSyncEnabled = false,
   initialSyncEnabled = false,
+  backgroundInitialSync = false,
+  initialSyncDelayMs = 0,
+  translationStartDelayMs = 0,
   instagramReplyEnabled = false,
 }: SocialCommentsClientProps) {
   const { lang } = useLang()
@@ -441,9 +450,9 @@ export default function SocialCommentsClient({
   const syncRequestTokenRef = useRef<symbol | null>(null)
   const autoSyncRequestTokenRef = useRef<symbol | null>(null)
   const [platform, setPlatform] = useState<Platform>(platformLock || "all")
-  const [accountId, setAccountId] = useState("all")
+  const [accountId, setAccountId] = useState(() => initialAccounts[0]?.id || "all")
   const [contentId, setContentId] = useState("all")
-  const [accounts, setAccounts] = useState<AccountSummary[]>([])
+  const [accounts, setAccounts] = useState<AccountSummary[]>(initialAccounts)
   const [content, setContent] = useState<ContentItem[]>([])
   const [comments, setComments] = useState<SocialComment[]>([])
   const [selectedCommentId, setSelectedCommentId] = useState<string | null>(null)
@@ -454,7 +463,7 @@ export default function SocialCommentsClient({
   const [syncCompleteness, setSyncCompleteness] = useState<SocialCommentSyncCompleteness | null>(null)
   const [totalComments, setTotalComments] = useState<number | null>(null)
   const [loadedComments, setLoadedComments] = useState(0)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(initialAccounts.length === 0)
   const [contentLoading, setContentLoading] = useState(false)
   const [commentsLoading, setCommentsLoading] = useState(false)
   const [accountsError, setAccountsError] = useState<LoadErrorState | null>(null)
@@ -472,6 +481,9 @@ export default function SocialCommentsClient({
   const [batchDraft, setBatchDraft] = useState("")
   const [batchReplying, setBatchReplying] = useState(false)
   const [translations, setTranslations] = useState<Record<string, TranslationUiState>>({})
+  const [facebookBootstrapComplete, setFacebookBootstrapComplete] = useState(!isFacebookLocked)
+  const activeAccountIdRef = useRef(accountId)
+  activeAccountIdRef.current = accountId
 
   const requestHeaders = useMemo(() => ({ "x-toryx-lang": lang }), [lang])
 
@@ -483,6 +495,14 @@ export default function SocialCommentsClient({
     return accounts.find((account) => account.id === accountId) || null
   }, [accounts, accountId])
   const selectedPlatform = platformLock || (platform === "all" ? selectedAccount?.platform : platform)
+  const visibleWorkspaceKey = `${selectedPlatform || platform}:${accountId}`
+
+  // Facebook's embedded workspace can receive a preloaded Page and begin its
+  // comment request on the first render. Register that visible target before
+  // effects run so a fast response cannot be mistaken for stale workspace data.
+  if (isFacebookLocked && workspaceGuardRef.current.currentKey() !== visibleWorkspaceKey) {
+    workspaceGuardRef.current.activate(visibleWorkspaceKey)
+  }
 
   const selectedContent = useMemo(() => {
     return content.find((item) => item.id === contentId) || null
@@ -557,17 +577,6 @@ export default function SocialCommentsClient({
     let cancelled = false
     const byId = new Map(pending.map((comment) => [comment.id, comment]))
     const chunks = chunkTranslationIds(pending.map((comment) => comment.id), 30)
-    setTranslations((current) => {
-      const next = { ...current }
-      for (const comment of pending) {
-        next[`${lang}:${comment.id}`] = {
-          sourceText: comment.message,
-          status: 'loading',
-          translatedText: null,
-        }
-      }
-      return next
-    })
 
     const translateChunk = async (commentIds: string[]) => {
       try {
@@ -610,7 +619,18 @@ export default function SocialCommentsClient({
       }
     }
 
-    void (async () => {
+    const startTranslation = () => void (async () => {
+      setTranslations((current) => {
+        const next = { ...current }
+        for (const comment of pending) {
+          next[`${lang}:${comment.id}`] = {
+            sourceText: comment.message,
+            status: 'loading',
+            translatedText: null,
+          }
+        }
+        return next
+      })
       let nextIndex = 0
       const worker = async () => {
         while (!cancelled) {
@@ -622,16 +642,51 @@ export default function SocialCommentsClient({
       await Promise.all([worker(), worker()])
     })()
 
-    return () => { cancelled = true }
+    const timer = window.setTimeout(startTranslation, translationStartDelayMs)
+
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
     // The signature intentionally tracks source-text changes without depending on the mutable translation cache.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lang, requestHeaders, translationCandidateSignature])
+  }, [lang, requestHeaders, translationCandidateSignature, translationStartDelayMs])
 
   const loadAccounts = useCallback(async () => {
     setLoading(true)
     setAccountsError(null)
     try {
-      const data = await fetch("/api/social-comments/accounts", { headers: requestHeaders }).then(readJson)
+      if (isFacebookLocked) {
+        const data = await fetch('/api/social-comments/facebook-bootstrap', { headers: requestHeaders }).then(readJson) as {
+          accounts?: AccountSummary[]
+          comments?: SocialComment[]
+        }
+        const nextAccounts = data.accounts || []
+        const allComments = data.comments || []
+        setAccounts(nextAccounts)
+        for (const account of nextAccounts) {
+          const accountComments = allComments.filter((comment) => comment.account_id === account.id)
+          commentsCacheRef.current.set(`facebook:${account.id}`, {
+            comments: accountComments,
+            total: accountComments.length,
+            loaded: accountComments.length,
+          })
+        }
+        const first = nextAccounts[0]
+        if (first) {
+          const firstComments = commentsCacheRef.current.get(`facebook:${first.id}`)
+          workspaceGuardRef.current.activate(`facebook:${first.id}`)
+          setAccountId(first.id)
+          setComments(firstComments?.comments || [])
+          setTotalComments(firstComments?.total ?? 0)
+          setLoadedComments(firstComments?.loaded || 0)
+          setCommentsLoading(false)
+        }
+        setFacebookBootstrapComplete(true)
+        return
+      }
+      const accountQuery = buildQuery({ platform: platformLock })
+      const data = await fetch(`/api/social-comments/accounts${accountQuery ? `?${accountQuery}` : ""}`, { headers: requestHeaders }).then(readJson)
       const nextAccounts: AccountSummary[] = data.accounts || []
       setAccounts(nextAccounts)
       if (platformLock) {
@@ -649,7 +704,7 @@ export default function SocialCommentsClient({
     } finally {
       setLoading(false)
     }
-  }, [isInstagramLocked, lang, requestHeaders, toast])
+  }, [isFacebookLocked, isInstagramLocked, lang, platformLock, requestHeaders, toast])
 
   const loadContent = useCallback(async ({ silent = false }: { silent?: boolean } = {}) => {
     const key = `${selectedPlatform || platform}:${accountId}`
@@ -703,8 +758,15 @@ export default function SocialCommentsClient({
     }
     const controller = new AbortController()
     if (!backgroundOnly) commentsAbortRef.current.set(key, controller)
-    const canWriteVisible = () => workspaceGuardRef.current.currentKey() === key
-      && (!visibleToken || workspaceGuardRef.current.isActive(visibleToken))
+    const canWriteVisible = () => (
+      workspaceGuardRef.current.currentKey() === key
+        && (!visibleToken || workspaceGuardRef.current.isActive(visibleToken))
+    ) || (
+      isFacebookLocked
+        && targetPlatform === "facebook"
+        && activeAccountIdRef.current === targetAccountId
+        && !visibleToken
+    )
     if (!silent && canWriteVisible()) setCommentsLoading(true)
     if (canWriteVisible()) setCommentsError(null)
     try {
@@ -741,7 +803,7 @@ export default function SocialCommentsClient({
     } finally {
       if (!backgroundOnly && seq === commentsSeqRef.current.get(key) && !controller.signal.aborted && canWriteVisible()) setCommentsLoading(false)
     }
-  }, [accountId, lang, platform, requestHeaders, selectedPlatform, toast])
+  }, [accountId, isFacebookLocked, lang, platform, requestHeaders, selectedPlatform, toast])
 
   const loadDetailComments = useCallback(async (comment: SocialComment, { silent = false, visibleToken }: { silent?: boolean; visibleToken?: WorkspaceRequestToken } = {}) => {
     const seq = ++detailSeqRef.current
@@ -774,8 +836,14 @@ export default function SocialCommentsClient({
   }, [loadAccounts])
 
   useEffect(() => {
-    workspaceGuardRef.current.activate(`${selectedPlatform || platform}:${accountId}`)
-  }, [accountId, platform, selectedPlatform])
+    if (initialAccounts.length === 0) return
+    setAccounts((current) => current.length > 0 ? current : initialAccounts)
+    setAccountId((current) => current === "all" ? initialAccounts[0].id : current)
+  }, [initialAccounts])
+
+  useEffect(() => {
+    workspaceGuardRef.current.activate(visibleWorkspaceKey)
+  }, [visibleWorkspaceKey])
 
   useEffect(() => {
     if (accountId === "all") {
@@ -783,12 +851,32 @@ export default function SocialCommentsClient({
       setComments([])
       return
     }
-    void loadContent({ silent: contentCacheRef.current.has(`${selectedPlatform || platform}:${accountId}`) })
-  }, [loadContent])
+    const run = () => void loadContent({ silent: contentCacheRef.current.has(`${selectedPlatform || platform}:${accountId}`) })
+    if (!isFacebookLocked) {
+      run()
+      return
+    }
+    if (!facebookBootstrapComplete) return
+    const timer = window.setTimeout(run, 1200)
+    return () => window.clearTimeout(timer)
+  }, [accountId, facebookBootstrapComplete, isFacebookLocked, loadContent, platform, selectedPlatform])
 
   useEffect(() => {
-    if (accountId !== "all") void loadComments({ silent: commentsCacheRef.current.has(`${selectedPlatform || platform}:${accountId}`) })
-  }, [loadComments])
+    if (accountId === "all" || !selectedAccount) return
+    const cacheKey = `${selectedPlatform || platform}:${accountId}`
+    const cached = commentsCacheRef.current.get(cacheKey)
+    if (isFacebookLocked) {
+      if (!facebookBootstrapComplete) return
+      if (cached) {
+        setComments(cached.comments)
+        setTotalComments(cached.total)
+        setLoadedComments(cached.loaded)
+        setCommentsLoading(false)
+        return
+      }
+    }
+    void loadComments({ silent: Boolean(cached) })
+  }, [accountId, facebookBootstrapComplete, isFacebookLocked, loadComments, platform, selectedAccount?.id, selectedPlatform])
 
   useEffect(() => () => {
     contentAbortRef.current?.abort()
@@ -891,7 +979,8 @@ export default function SocialCommentsClient({
     const syncTarget = { platform: syncPlatform, accountId }
     const requestToken = Symbol("social-comment-sync")
     syncRequestTokenRef.current = requestToken
-    setSyncing(true)
+    const showGlobalSyncing = source !== "initial" || !backgroundInitialSync
+    if (showGlobalSyncing) setSyncing(true)
     try {
       let idempotencyKey: string | undefined
       if (isAuto && selectedContent?.id) {
@@ -971,10 +1060,10 @@ export default function SocialCommentsClient({
     } finally {
       if (syncRequestTokenRef.current === requestToken && workspaceGuardRef.current.isActive(workspaceToken)) {
         syncRequestTokenRef.current = null
-        setSyncing(false)
+        if (showGlobalSyncing) setSyncing(false)
       }
     }
-  }, [accountId, canSyncSelectedAccount, lang, loadComments, requestHeaders, selectedAccount, selectedContent?.id, selectedPlatformCapabilities?.requires_explicit_content, toast])
+  }, [accountId, backgroundInitialSync, canSyncSelectedAccount, lang, loadComments, requestHeaders, selectedAccount, selectedContent?.id, selectedPlatformCapabilities?.requires_explicit_content, toast])
 
   const initialSyncTargetKey = initialSyncEnabled
     && selectedAccount
@@ -986,9 +1075,14 @@ export default function SocialCommentsClient({
 
   useEffect(() => {
     if (!initialSyncTargetKey || initialSyncAttemptedTargets.current.has(initialSyncTargetKey)) return
-    initialSyncAttemptedTargets.current.add(initialSyncTargetKey)
-    void syncComments({ source: "initial" })
-  }, [initialSyncTargetKey, syncComments])
+    const runInitialSync = () => {
+      if (initialSyncAttemptedTargets.current.has(initialSyncTargetKey)) return
+      initialSyncAttemptedTargets.current.add(initialSyncTargetKey)
+      void syncComments({ source: "initial" })
+    }
+    const timer = window.setTimeout(runInitialSync, initialSyncDelayMs)
+    return () => window.clearTimeout(timer)
+  }, [initialSyncDelayMs, initialSyncTargetKey, syncComments])
 
   useEffect(() => {
     setAutoSyncError(null)
