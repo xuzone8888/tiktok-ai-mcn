@@ -68,6 +68,7 @@ export interface PlatformAccountsConfig {
   bindButtonTextEn?: string
   statsVideoLabel: string
   statsVideoLabelEn?: string
+  preferChannelTitle?: boolean
   icon?: ReactNode
   requiredCommentScopes?: string[]
   disconnectConfirmation?: string
@@ -153,8 +154,10 @@ function requiresReauthorization(account: PlatformAccount) {
   return !isAccountAuthorized(account)
 }
 
-function getAccountName(account: PlatformAccount) {
-  return account.channel_handle || account.channel_title || account.channel_id
+function getAccountName(account: PlatformAccount, preferChannelTitle = false) {
+  return preferChannelTitle
+    ? account.channel_title || account.channel_handle || account.channel_id
+    : account.channel_handle || account.channel_title || account.channel_id
 }
 
 function getInitial(account: PlatformAccount) {
@@ -686,7 +689,9 @@ export function PlatformAccountsPage({ config }: PlatformAccountsPageProps) {
                   <div className="flex items-start gap-3 pr-14">
                     <AccountAvatar account={account} />
                     <div className="min-w-0">
-                      <h3 className="truncate text-base font-bold text-white">{getAccountName(account)}</h3>
+                      <h3 className="truncate text-base font-bold text-white">
+                        {getAccountName(account, config.preferChannelTitle)}
+                      </h3>
                       <p className="mt-1 truncate text-sm text-white/45">{account.channel_id}</p>
                       <div className="mt-2">
                         <StatusBadge account={account} isEnglish={isEnglish} />

@@ -40,6 +40,7 @@ export interface PlatformPublishConfig {
   bindButtonTextEn?: string
   statsVideoLabel: string
   statsVideoLabelEn?: string
+  preferChannelTitle?: boolean
   requiredCommentScopes?: string[]
   disconnectConfirmation?: string
   disconnectConfirmationEn?: string
@@ -131,6 +132,9 @@ export const META_PLATFORM_CONFIGS: Record<MetaPublishPlatform, Omit<PlatformPub
     bindButtonTextEn: 'Connect Facebook Page',
     statsVideoLabel: '视频',
     statsVideoLabelEn: 'Videos',
+    // Meta localizes Page categories (stored as channel_handle). Use the Page's
+    // actual title as the account-card name so UI language does not leak into it.
+    preferChannelTitle: true,
     requiredCommentScopes: [
       'pages_read_user_content',
       'pages_manage_engagement',
