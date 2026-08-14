@@ -52,3 +52,7 @@ __pycache__/
 # Template preview videos (served from OSS CDN)
 public/videos/templates/
 .env*
+# 例外:.env.example 只有键名、没有任何值,是新人上手的唯一凭据清单来源,必须进版本库。
+# ⚠️ 第 39 行本来就有同样一条,但被上面第 54 行的 `.env*` 重新盖掉了 —— gitignore 取最后命中,
+# 所以这条必须留在 `.env*` 之后。真正带值的 .env / .env.local 仍被 `.env*` 挡着。
+!.env.example
