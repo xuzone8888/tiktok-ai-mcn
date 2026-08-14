@@ -69,6 +69,7 @@ export interface PlatformAccountsConfig {
   statsVideoLabel: string
   statsVideoLabelEn?: string
   icon?: ReactNode
+  automaticallyRefreshesAccessTokens?: boolean
   requiredCommentScopes?: string[]
   disconnectConfirmation?: string
   disconnectConfirmationEn?: string
@@ -137,20 +138,22 @@ function isTokenExpiringSoon(expiresAt: string | null) {
   return daysUntilExpiry < 30
 }
 
-function isAccountAuthorized(account: PlatformAccount) {
-  return account.status === 'active' && !isExpired(account.access_token_expires_at)
+function isAccountAuthorized(account: PlatformAccount, automaticallyRefreshesAccessTokens = false) {
+  return account.status === 'active' && (automaticallyRefreshesAccessTokens || !isExpired(account.access_token_expires_at))
 }
 
-function isAccountExpiringSoon(account: PlatformAccount) {
+function isAccountExpiringSoon(account: PlatformAccount, automaticallyRefreshesAccessTokens = false) {
+  if (automaticallyRefreshesAccessTokens) return false
   return isAccountAuthorized(account) && isTokenExpiringSoon(account.access_token_expires_at)
 }
 
-function isAccountStableAuthorized(account: PlatformAccount) {
-  return isAccountAuthorized(account) && !isAccountExpiringSoon(account)
+function isAccountStableAuthorized(account: PlatformAccount, automaticallyRefreshesAccessTokens = false) {
+  return isAccountAuthorized(account, automaticallyRefreshesAccessTokens)
+    && !isAccountExpiringSoon(account, automaticallyRefreshesAccessTokens)
 }
 
-function requiresReauthorization(account: PlatformAccount) {
-  return !isAccountAuthorized(account)
+function requiresReauthorization(account: PlatformAccount, automaticallyRefreshesAccessTokens = false) {
+  return !isAccountAuthorized(account, automaticallyRefreshesAccessTokens)
 }
 
 function getAccountName(account: PlatformAccount) {
@@ -166,14 +169,14 @@ async function readApiError(response: Response, fallback: string) {
   return typeof data?.error === 'string' ? data.error : fallback
 }
 
-function matchesFilter(account: PlatformAccount, filter: FilterOption) {
+function matchesFilter(account: PlatformAccount, filter: FilterOption, automaticallyRefreshesAccessTokens = false) {
   switch (filter) {
     case 'active':
-      return isAccountStableAuthorized(account)
+      return isAccountStableAuthorized(account, automaticallyRefreshesAccessTokens)
     case 'expiring':
-      return isAccountExpiringSoon(account)
+      return isAccountExpiringSoon(account, automaticallyRefreshesAccessTokens)
     case 'expired':
-      return requiresReauthorization(account)
+      return requiresReauthorization(account, automaticallyRefreshesAccessTokens)
     default:
       return true
   }
@@ -206,8 +209,8 @@ function AccountAvatar({ account }: { account: PlatformAccount }) {
   )
 }
 
-function StatusBadge({ account, isEnglish }: { account: PlatformAccount; isEnglish: boolean }) {
-  if (requiresReauthorization(account)) {
+function StatusBadge({ account, isEnglish, automaticallyRefreshesAccessTokens = false }: { account: PlatformAccount; isEnglish: boolean; automaticallyRefreshesAccessTokens?: boolean }) {
+  if (requiresReauthorization(account, automaticallyRefreshesAccessTokens)) {
     return (
       <span className="inline-flex items-center gap-1 rounded-full bg-red-500/10 px-2 py-0.5 text-xs text-red-300">
         <AlertCircle className="h-3 w-3" />
@@ -216,7 +219,7 @@ function StatusBadge({ account, isEnglish }: { account: PlatformAccount; isEngli
     )
   }
 
-  if (isAccountExpiringSoon(account)) {
+  if (isAccountExpiringSoon(account, automaticallyRefreshesAccessTokens)) {
     return (
       <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2 py-0.5 text-xs text-amber-300">
         <AlertCircle className="h-3 w-3" />
@@ -247,6 +250,7 @@ export function PlatformAccountsPage({ config }: PlatformAccountsPageProps) {
   const emptyAccountDescription = isEnglish ? config.emptyAccountDescriptionEn || `Connect a ${config.platformName} account to publish videos.` : config.emptyAccountDescription
   const bindButtonText = isEnglish ? config.bindButtonTextEn || `Connect ${config.platformName} account` : config.bindButtonText
   const statsVideoLabel = isEnglish ? config.statsVideoLabelEn || 'Videos' : config.statsVideoLabel
+  const automaticallyRefreshesAccessTokens = config.automaticallyRefreshesAccessTokens || false
   const { toast } = useToast()
   const [accounts, setAccounts] = useState<PlatformAccount[]>([])
   const [loading, setLoading] = useState(true)
@@ -332,22 +336,22 @@ export function PlatformAccountsPage({ config }: PlatformAccountsPageProps) {
 
   const overview = useMemo(() => ({
     total: accounts.length,
-    active: accounts.filter(isAccountStableAuthorized).length,
-    expiring: accounts.filter(isAccountExpiringSoon).length,
-    expired: accounts.filter(requiresReauthorization).length,
-  }), [accounts])
+    active: accounts.filter((account) => isAccountStableAuthorized(account, automaticallyRefreshesAccessTokens)).length,
+    expiring: accounts.filter((account) => isAccountExpiringSoon(account, automaticallyRefreshesAccessTokens)).length,
+    expired: accounts.filter((account) => requiresReauthorization(account, automaticallyRefreshesAccessTokens)).length,
+  }), [accounts, automaticallyRefreshesAccessTokens])
 
   const filteredAccounts = useMemo(() => {
     const query = search.trim().toLowerCase()
     const filtered = accounts.filter((account) => {
-      if (!matchesFilter(account, filterBy)) return false
+      if (!matchesFilter(account, filterBy, automaticallyRefreshesAccessTokens)) return false
       if (!query) return true
       return [account.channel_title, account.channel_handle, account.channel_id]
         .filter(Boolean)
         .some((value) => value!.toLowerCase().includes(query))
     })
     return sortAccounts(filtered, sortBy)
-  }, [accounts, filterBy, search, sortBy])
+  }, [accounts, automaticallyRefreshesAccessTokens, filterBy, search, sortBy])
 
   const beginBinding = async () => {
     if (bindingInFlightRef.current) return
@@ -689,7 +693,11 @@ export function PlatformAccountsPage({ config }: PlatformAccountsPageProps) {
                       <h3 className="truncate text-base font-bold text-white">{getAccountName(account)}</h3>
                       <p className="mt-1 truncate text-sm text-white/45">{account.channel_id}</p>
                       <div className="mt-2">
-                        <StatusBadge account={account} isEnglish={isEnglish} />
+                        <StatusBadge
+                          account={account}
+                          isEnglish={isEnglish}
+                          automaticallyRefreshesAccessTokens={automaticallyRefreshesAccessTokens}
+                        />
                         {missingCommentScopes.length > 0 && (
                           <span className="ml-2 inline-flex rounded-full bg-amber-500/10 px-2 py-0.5 text-xs text-amber-300">
                             {t(isEnglish, '评论权限缺失', 'Comment permissions missing')}

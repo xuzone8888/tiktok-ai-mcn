@@ -19,6 +19,7 @@ const YOUTUBE_ACCOUNT_CONFIG = {
   bindButtonTextEn: "Connect YouTube channel",
   statsVideoLabel: "视频",
   statsVideoLabelEn: "Videos",
+  automaticallyRefreshesAccessTokens: true,
   icon: (
     <Link href="/youtube-publish/accounts" aria-label="YouTube Account Management">
       <YouTubeBrandIcon className="h-12 w-14" />
