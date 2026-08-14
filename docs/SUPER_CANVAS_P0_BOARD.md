@@ -1223,7 +1223,7 @@
 三批都通过 → 才可以谈合入 main(用户裁决:**未复验不合入**)。
 任一条不通过 → 记进本节并停下,不要绕过。
 
-## P1 收尾 · 批 5:#67 商品节点(方案 A)· 状态=**待审**(离线闸门已过,**未做 UI 复验**)
+## P1 收尾 · 批 5:#67 商品节点(方案 A)· 状态=**待审**(离线闸门已过;**UI 复验 9/10 通过,查出并修掉 2 个缺陷**)
 
 裁决依据见「待裁决问题区 · P1-Q5」(已裁决方案 A,**不重开**)。
 **范围** = 节点内上传商品图 → 调 `POST /api/studio/analyze-product` 出视觉卖点卡 → 卖点卡持久化进节点。
@@ -1238,7 +1238,15 @@
 | 4 | 承载面须沿用「只读态 / zoom<0.4 降级」的既有取向,不得造出低 zoom 下仍可点的按钮 | 批 3 #92 第 3 条疑虑 |
 | 5 | 若打算从蓝图 `scenes` 建商品节点:`scenes[].visual` 与 `slot.asset_ref` 的**同值重合关系必须重验**(`history-assets.ts:622` 注释与代码不符,当前安全性靠值恰好相同) | HANDOFF_P1_FINISH §二① |
 
-**复验前提提醒**:商品节点渲染面要数 `input[type=file]`/`img`,而**生成器面板只在「节点 selected 且 zoom ≥ 0.4」时渲染** —— 不满足这两条会把已实现误判成缺失。
+**复验前提提醒(2026-08-14 实证更正)**:商品节点的渲染门**只有 `lowZoom` 一个**
+(`product-node.tsx:472` 的 `{lowZoom ? ... : ...}`),上传/解析控件**与缩略图**都在 `!lowZoom` 分支里,
+**与 `selected` 无关**;`selected` 只决定节点宽度(`wide={Boolean(selected && !lowZoom)}`,:457)。
+唯一要守住的前提是 **zoom ≥ 0.4**。原先「selected 且 zoom ≥ 0.4」的写法**对商品节点是错的** ——
+它会让人把「没选中所以数不到」当成正常,从而放过真缺陷。(生成器面板确实是双条件,别把两者混为一谈。)
+
+> 🔴 另一条踩坑:复验前先确认 `document.visibilityState === "visible"` 且 rAF 真在跑。
+> 后台标签页 rAF 停发 → 动画永不结束 → 正常弹层看起来像「点死画布」。本轮开工时实测
+> `rafFired: false`,把 Chrome 切到前台后才变 `visible` / rAF 1ms 内回调。
 
 ### 四项裁决(2026-08-10,用户)
 
@@ -1255,7 +1263,7 @@
   🔴 **卖点卡形状里结构上没有 `images` 字段**:上游 `ProductCard.images` 装 http URL,而 `unsafeStringReason` 只拦 dataURL 与带签名参数的 URL,**公有 URL 会被放行** ⇒「只存 key」在这条路上原本零机器守卫,删掉字段后 `strictObject` 直接拒。
 - **组件**:`src/components/canvas/nodes/product-node.tsx`(从 reference-nodes 迁出)。上传 ≤9 张、显式「解析卖点」、卖点勾选、「插入到简报」(块首带标记,再插入是**整块替换**而非追加第二份 —— 那段是逐字送厂商并计费的)、**自带低 zoom 降级**(此前商品节点完全没有这层)、写按钮 `disabled={readOnly || busy}` 且**检查 `updateNodeData` 返回值**再 toast。
 - **参考图判据收成唯一出口** `src/lib/canvas/generation-image-input.ts`,四处共用。`incomingImageCount` 由 `collectImageReferences` 派生 ⇒ **限张闸、lock-hint「参考图过多」、引用区缩略图自动跟上**,一处都不用单独改。
-- **新增 verifier** `scripts/verify-canvas-p1-batch5.mjs`(41 条判据)+ npm script `verify:canvas-p1-batch5`。
+- **新增 verifier** `scripts/verify-canvas-p1-batch5.mjs`(**49 条判据**:落地时 41 条,2026-08-14 修完缺陷甲/乙后 +8 条回归闸)+ npm script `verify:canvas-p1-batch5`。
 
 ### 🔴 顺带修掉 #43 一个真 bug(未发版,尚未影响生产)
 
@@ -1286,20 +1294,107 @@ dirty 重算按**连线顺序交错**排,而提交路径是 `[...textInputs, ...
 后果:@ 一个带图商品节点进已满目标,会在**提交时**被硬闸拦下(客户端 pre-submit throw,零扣费、文案明确),
 而不是在候选里就灰掉。正解=让调用方(已持有共用判据)算好「是否占图额度」经入参传进来,属独立小改。
 
-### 待复验(需登录本地 dev,**未做**)
+### UI 复验结果(2026-08-13 判据 1-9 / 2026-08-14 缺陷修复后补验;本地 dev + 真生产 Supabase)
 
-| # | 判据 | 备注 |
-|---|---|---|
-| 1 | 商品节点渲染面出现 `input[type=file]` 与缩略图 `img` | 必须在 **selected 且 zoom ≥ 0.4** 下数,否则误判 |
-| 2 | 上传 9 张后第 10 张被拒并有明确文案 | 零扣费 |
-| 3 | 点「解析卖点」出卡,卖点 4-6 条、目标人群 2-4 个 | 零积分,但有厂商成本 |
-| 4 | 🔴 服务端日志出现 `[Doubao] Image converted to base64` | **决定 9 张图是真用上了还是静默退化成 qwen 单图** —— 转换失败会原样返回 http URL,而过滤器只认 `data:`/`supabase.co`,于是 `parts=0` → 豆包一次都没调 |
-| 5 | 同一组图再点=「重新解析」,且需用户明确再花一次 | 防重两层生效 |
-| 6 | 勾选后「插入到简报」写进 textarea;再插入是整块替换而非追加 | 那段逐字送厂商 |
-| 7 | 低 zoom(<0.4)下缩略图与控件整体消失,只留简报 | |
-| 8 | 只读态下所有写按钮置灰 | |
-| 9 | 商品主图作为下游图片节点的参考图出现在引用区、编号正确 | #169 前半 |
-| 10 | 换商品主图后下游 #43 角标点亮 | 验共用判据接进了快照 |
+| # | 判据 | 结果 | 实证 |
+|---|---|---|---|
+| 1 | 商品节点渲染面出现 `input[type=file]` 与缩略图 `img` | ✅ | 门只有 lowZoom,与 selected 无关(本轮更正了文档) |
+| 2 | 上传 9 张后第 10 张被拒并有明确文案 | ✅ | 弹「商品图已满 / 最多 9 张,先移除一张再加。」 |
+| 3 | 点「解析卖点」出卡 | ✅ | 6 条卖点 / 4 个人群;模型准确读出图上中文 |
+| 4 | 🔴 服务端日志出现 `[Doubao] Image converted to base64` | ✅ | 9 次转换 + 9 次成功 + `[Doubao API] Success`,**9 张真进豆包,没静默退化成 qwen 单图** |
+| 5 | 同一组图再点=「重新解析」,且需用户明确再花一次 | ✅(**修复后**) | 原为死路(缺陷甲)。修后实测 `POST /api/studio/analyze-product` 由 1 次变 2 次(服务端两条 200:37456ms / 20461ms),`Converting image to base64` 4 次=2 图×2 轮,且第二次产出的卡片标题与第一次不同(不是缓存) |
+| 6 | 「插入到简报」整块替换而非追加 | ✅ | 【商品卖点】块数恒为 1;取消勾选后卖点数随之变化 |
+| 7 | 低 zoom(<0.4)整体降级 | ✅ | zoom=0.395 时缩略图/file input/复选框/按钮全为 0,只留 textarea |
+| 8 | 只读态下所有写按钮置灰 | ✅ | 13/13 按钮禁用、6/6 复选框禁用、textarea readOnly |
+| 9 | 商品主图作为下游参考图、编号正确 | ✅ | 引用区「1 张参考图(提示词里可用「图1」指代第一张)」;9 张里只引用主图(符合 Q3);服务端 `referenceCountUsed: 1` |
+| 10 | 换商品主图后下游 #43 角标点亮 | ⚠️ **前置被厂商挡住,未能端到端点亮**(详见下节) | 链路 4 环已证 3 环 |
+
+### 🔴 缺陷甲:「重新解析」是死路(已修)
+
+**现象**:按钮在「解析卖点 / 重新解析」间切标签但绑同一个 `handleAnalyze`,点「重新解析」只弹提示、
+不发请求。实测全程只有 1 次 `POST /api/studio/analyze-product`。
+
+**根因**:`handleAnalyze` 开头 `if (alreadyAnalyzed) { toast(...); return; }` 是**无条件硬返回**,
+没有任何 force 通路(全文件 `force`/`forceAnalyze`/`handleReanalyze` 命中 0)。
+更糟的是那句文案写着「想强制重跑就点『重新解析』」——**指路去点的正是刚刚拒绝他的那个按钮**,
+自我循环。而按钮 `title` 早就写着「点这里强制重跑(会再花一次厂商调用)」:**UI 承诺了一个从未实现的行为**。
+
+**修法**(2026-08-09 用户裁决:批准可以再花一次):`handleAnalyze(options?: { force?: boolean })`,
+按钮传 `{ force: alreadyAnalyzed }` —— 标签是「重新解析」时即带 force 绕过指纹闸。
+指纹闸对不带 force 的调用**照旧生效**(它挡的是刷新/重挂后的无意重跑,那才是白花钱的地方);
+「失败不写指纹」与「用户零扣费」两条口径均未动。拒绝文案改为不再指向按钮。
+
+### 🔴 缺陷乙:移除商品图完全不可用(已修;比甲严重,是拦路石)
+
+**现象**:点缩略图垃圾桶必弹「移除商品图失败 / 画布当前不可写入(只读、或写者锁不在本标签页)」,
+张数从不递减;删主图、删非主图都失败。**但同一时刻同一张画布上,上传图/建节点/拖拽/连线/改简报全部成功**
+—— 写入通道是通的,错误文案是误导的。后果:图传上去删不掉,9 张满了之后永远加不了新图。
+
+**根因(实证,非推断)**:`handleRemoveImage` 作废防重指纹时写的是 `analyzedImageKeys: undefined`。
+zod 对「present 但值为 undefined」的**可选键会原样保留成 own 键**(v4 实测:parse 后
+`Reflect.ownKeys` 仍含该键),而持久化层 `isPersistableJsonValue`(`history.ts:113`)对
+**值为 undefined 的 own 键一律判否** → `cloneCanvasEntity` 返回 null → `updateNodeData` **静默返回 false**。
+这与文件头「坑 1」是同一个陷阱:当时只为卖点卡(`normalizeCard` 的 `price`/`category`)修了,
+`handleRemoveImage` 漏掉了。**最小复现**(zod 4.4.3 实测):对 `CanvasProductStateSchema` 传
+`{...product, analyzedImageKeys: undefined}`,parse 之后 `Reflect.ownKeys` 仍是
+`[card, extraImageKeys, analyzedImageKeys]` → 判否;把该键**整个删掉**再 parse 只剩两键 → 判过。
+这个差别现由 verifier 的 `lacks(productNode, "analyzedImageKeys: undefined")` 长期守住。
+
+> ❌ 已排除的错误假设:不是「安全检查 `inspectUnsafeCanvasValue` 拦下的」——
+> `schema.ts:519` 对非对象值直接 return,不 push issue。三条拒绝路径里命中的是第三条(clone)。
+
+**第二处同类缺陷(修甲之后才会暴露)**:删掉最后一张图时要清空 `data.media`,而
+`updateNodeData` 是 `{...node.data, ...patch}` **浅合并 —— 传 `media: undefined` 永远删不掉键**,
+只会再造一个 own undefined 键,同样静默失败。全仓库找不到任何删键通道(`updateNodeData` 是唯一入口)。
+
+**修法**:
+1. `updateNodeData` 增开 `options.unset` **删键通道**(`canvas-store.ts`),在 `CanvasNodeDataSchema.parse`
+   **之前**删键(parse 之后再删已经晚了);类型 `CanvasNodeDataUnsettableKey` 落在 `schema.ts`(类型唯一契约)。
+   **刻意不**把 patch 里的 undefined 解释成删除:`params`/`generation` 有「absent-or-strict」的 fail-closed 守卫,
+   把误传的 undefined 当成「删掉计费意图」远比拒绝这次写入危险。**这是扩展既有原语,不是 fork。**
+2. `handleRemoveImage` 用解构把 `analyzedImageKeys` 摘掉;清主图走 `unset: ["media"]`。
+3. 顺带修掉误导文案:按 `readOnly` / `未 hydrate 或写者锁不在本页` / `补丁没过校验` **三条真实路径分流**
+   —— 原文案把第三条报成第一条,正是它让人去查了半天写者锁。
+
+**复验(修复后实测,三种删法全过且无报错 toast)**:删非主图 3/9→2/9;删主图 2/9→1/9 且「主」角标转移;
+删最后一张 1/9→0/9(走的正是新的 `unset` 删键通道)。
+
+**新增 8 条离线回归闸**(`verify-canvas-p1-batch5.mjs` 41 条 → **49 条**),含:
+禁止 `analyzedImageKeys: undefined` 复活、必须用解构摘键、必须走 `unset.push("media")`、
+store 必须在 parse 前删键、旧的误导文案不得再出现、以及缺陷甲的 force 三条。
+
+### 判据 10 未竟部分:被厂商通道挡住(非本仓库缺陷)
+
+`computeInputsDirtyNodeIds`(`canvas-generation-context.tsx:498`)要求**两个**前置:
+① 该节点已有产物 `data.media.ossKey`;② 有持久化的生成意图。没有产物就不判 dirty——
+这是刻意设计(「对着一个还没生成过的节点说『输入已更新』只会让人困惑」),**不是 bug**。
+
+四环链路已证三环:
+1. ✅ 持久化快照里**确实含商品主图**:实测该图片节点 `params.generation.inputs` =
+   `[{kind:"image", nodeId:"node_yFBbkd4h-HSh", ossKey:".../5de7b4d6-...png"}]`,与商品节点当时的
+   `data.media.ossKey` 逐字一致。**「持久化快照里已含图片输入」这个前置从此不再是真空窗**
+   (它正是上文 #43 排序 bug 当年没能暴露的原因)。
+2. ✅ 换主图后两边**确实不同**:删掉第 1 张后商品主图变成 `...dde6f3759325.png`,
+   而快照仍是 `...c52e2e64dd07.png`。
+3. ✅ 比较函数对这一形状**确实判 dirty**:`compareGenerationInputSnapshots` 同 nodeId、同 kind、
+   仅 ossKey 变、两侧都无 generationId → `replaced`。这条**已有真函数离线覆盖**且为绿
+   (`verify-canvas-generation-frontend.mjs`:"#43 upstream image swapped without any generationId is still dirty")。
+4. ⚠️ **未证**:角标真的渲染出来。缺的只有「产物」这一个前置。
+
+**为什么拿不到产物**:图片生成模型在代码里**硬编码为 `gpt-image-2`**
+(`/api/generate/image/route.ts:341`「当前图片生成模型固定为 gpt-image-2」),而中转商此刻回的是
+`No available channel for model gpt-image-2`(生成记录 `errorCode: image_provider_terminal_failure`)。
+连试 **4 次**全失败(前 3 次连着试,第 4 次隔约 1 小时重启 dev 后再试,报同一个错
+—— 说明不是一时抖动),**没有可切换的备用图片模型**。与 R2-Q1「grok 因厂商无通道被摘出」
+是同一类外部故障。
+
+> 💰 **计费口径顺带得到验证(意外收获)**:4 次提交各扣 5 分、各**全额退 5 分**,
+> 余额回到 15095,**净扣费 0**。厂商终局失败下的退款链路在本地 dev + 生产库上跑通了 **4/4**
+> —— 这本身是一条此前没实测过的资金安全证据(#185 那批只验了拦截,没验厂商终局失败的退款)。
+
+**结论**:判据 10 留作**唯一未闭合项**,前置=厂商恢复 `gpt-image-2` 通道。
+复现步骤(通道恢复后 5 分钟即可收口):商品节点传 2 张图 → 连图片节点 → 生成成功一次 →
+删掉商品第 1 张 → 图片节点应出现「输入已更新」。
 
 ## 合流顺序建议
 D1→D2(schema.ts 落地)→ S1/S3 与 D3-D6 并行 → S2/S4/S5 → S6/S7/S8 → R1 全量跑 → R2 收口(含上「跨目录归属项」两条)。

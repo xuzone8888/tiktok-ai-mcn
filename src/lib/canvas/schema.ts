@@ -205,6 +205,12 @@ export const CanvasNodeDataSchema = z
   .default(() => ({ refs: createCanvasRefs() }));
 export type CanvasNodeData = z.infer<typeof CanvasNodeDataSchema>;
 
+/**
+ * `data` 上允许**删除**的可选键(store `updateNodeData` 的 `options.unset` 通道用)。
+ * `refs` 不在其列 —— 它有 `.default`,删了也会被立刻补回来,列进来只会给人「能删」的错觉。
+ */
+export type CanvasNodeDataUnsettableKey = "title" | "params" | "media";
+
 export const CanvasNodeSchema = z.strictObject({
   id: CanvasIdSchema,
   type: z.enum(CANVAS_NODE_TYPES),

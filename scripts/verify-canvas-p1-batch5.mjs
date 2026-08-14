@@ -34,6 +34,7 @@ const imageInput = read("src/lib/canvas/generation-image-input.ts");
 const service = read("src/lib/canvas/generation-service.ts");
 const context = read("src/components/canvas/canvas-generation-context.tsx");
 const inputOrder = read("src/components/canvas/generation-input-order.ts");
+const canvasStore = read("src/stores/canvas-store.ts");
 
 let passed = 0;
 const failed = [];
@@ -85,9 +86,45 @@ ok(
   countOf(productNode, "analyzedImageKeys: [...imageKeys].sort()") === 1,
   "防重指纹只在解析成功后写一次(失败也写会把这组图永久钉死在「已解析」)"
 );
+lacks(
+  productNode,
+  "analyzedImageKeys: undefined",
+  "🔴 作废指纹必须**删键**而不是写 undefined —— 值为 undefined 的 own 键会让整次写入静默失败(2026-08-14 缺陷乙:移除商品图在所有画布上全线不可用)"
+);
+has(
+  productNode,
+  "...productWithoutFingerprint",
+  "移除图时用解构把 analyzedImageKeys 摘掉(缺陷乙的正解)"
+);
+has(productNode, 'unset.push("media")', "清空主图走 store 的 unset 删键通道(写 media: undefined 同样会被静默丢弃)");
+has(
+  canvasStore,
+  "for (const key of unsetKeys) delete merged[key];",
+  "store 在 schema.parse **之前**删键(parse 会把 present-undefined 的可选键原样保留成 own 键,之后再删就晚了)"
+);
+lacks(
+  productNode,
+  "画布当前不可写入(只读、或写者锁不在本标签页),这次改动没有保存。",
+  "写入失败文案不再把「校验拒绝」误报成「只读/写者锁」(2026-08-14 就是被这句带着查了半天锁)"
+);
+has(productNode, "state.sessionCanvasId !== state.hydratedCanvasId", "失败文案按三条真实失败路径分流");
 
 console.log("\n4. 解析必须显式点击触发(该路由对用户零扣费,但对我方有厂商成本)");
-has(productNode, "onClick={() => void handleAnalyze()}", "解析挂在 onClick 上");
+has(
+  productNode,
+  "onClick={() => void handleAnalyze({ force: alreadyAnalyzed })}",
+  "解析挂在 onClick 上,且「重新解析」带 force 进去(2026-08-14 缺陷甲:不带 force 会被指纹闸硬 return,按钮是死路)"
+);
+has(
+  productNode,
+  "if (alreadyAnalyzed && !options?.force) {",
+  "指纹闸只挡不带 force 的调用(挡的是刷新/重挂后的无意重跑,不是用户明确点的重跑)"
+);
+lacks(
+  productNode,
+  "想强制重跑就点「重新解析」",
+  "拒绝文案不再指路去点「重新解析」—— 那个按钮就是本分支的调用方,会绕成死循环(缺陷甲)"
+);
 ok(
   !/useEffect\([^)]*handleAnalyze/s.test(productNode),
   "没有任何 useEffect 触发 handleAnalyze(effect 触发正是「切节点回来又跑一次」的成因)"

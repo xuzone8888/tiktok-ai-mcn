@@ -15,6 +15,10 @@
  *    `updateNodeData` **静默返回 false**:卡片写不进去、不抛异常、不提示,
  *    而丢掉的是一次几十秒的厂商调用结果。所以必须先过 `JSON.parse(JSON.stringify(...))`。
  *    见 `toCanvasProductCard`。
+ *    ⚠️ 这条**不只针对卖点卡**:任何写进 data 的对象都不许带值为 undefined 的 own 键。
+ *    2026-08-14 「移除商品图」全线不可用,就是 `handleRemoveImage` 作废指纹时写了
+ *    `undefined` 而不是删键。要**移除**一个可选键(比如清空 `media`),唯一正确的办法是
+ *    store `updateNodeData` 的 `options.unset` 删键通道 —— 浅展开永远删不掉键。
  *
  * 2. **`card.images` 是 http URL,绝不能落盘。** 铁律「画布文档只存 OSS object key」在这条路上
  *    原本没有机器守卫(`unsafeStringReason` 只拦 dataURL 与带签名参数的 URL,而
@@ -33,6 +37,8 @@
  *    防重两层:`analyzedImageKeys`(持久,管跨刷新/切画布/组件重挂)+ `busy`(管同一挂载周期连点)。
  *    ⚠️ 商品节点**没有** selected/zoom 条件卸载(ReactFlow 也没开 onlyRenderVisibleElements),
  *    所以组件级 ref 在本会话内是可靠的;丢失只发生在切画布/刷新/删节点。
+ *    指纹闸只挡**不带 force** 的调用。「重新解析」按钮带 `force: true`(2026-08-09 用户裁决:
+ *    批准同一组图可以再花一次厂商调用);此前它不带 force,被指纹闸硬 return,按钮点了没反应。
  */
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useStore, type NodeProps } from "@xyflow/react";
@@ -48,6 +54,7 @@ import {
 import { toast } from "@/hooks/use-toast";
 import type { CanvasReactFlowNode } from "@/lib/canvas/rf-adapter";
 import type {
+  CanvasNodeDataUnsettableKey,
   CanvasNodeParams,
   CanvasProductCard,
   CanvasProductState,
@@ -211,6 +218,10 @@ export const ProductNode = memo(function ProductNode({
   /**
    * 唯一的文档写入出口。**必须 spread 旧 params**(否则抹掉 params.generation),
    * 并且**检查返回值** —— 只读/未 hydrate 下它是静默 false。
+   *
+   * ⚠️ 传 `media: undefined` 表示「清空主图」,走 store 的 `unset` 删键通道而**不是**把
+   * `media` 写成 undefined —— 后者会留下值为 undefined 的 own 键,被持久化层判否,整次写入
+   * 静默失败(同文件头坑 1;2026-08-14「移除最后一张图」踩的就是这条)。
    */
   const writeNode = useCallback(
     (patch: { media?: { ossKey: string } | undefined; product?: CanvasProductState; title?: string }, failLabel: string): boolean => {
@@ -218,16 +229,23 @@ export const ProductNode = memo(function ProductNode({
       const node = state.nodes.find((item) => item.id === id);
       const oldParams: CanvasNodeParams = node?.data.params ?? {};
       const nextData: Record<string, unknown> = {};
+      const unset: CanvasNodeDataUnsettableKey[] = [];
       if (patch.title !== undefined) nextData.title = patch.title;
-      if ("media" in patch) nextData.media = patch.media;
+      if ("media" in patch) {
+        if (patch.media) nextData.media = patch.media;
+        else unset.push("media");
+      }
       if (patch.product) nextData.params = { ...oldParams, product: patch.product };
-      const ok = updateNodeData(id, nextData);
+      const ok = updateNodeData(id, nextData, unset.length > 0 ? { unset } : undefined);
       if (!ok) {
-        toast({
-          title: failLabel,
-          description: "画布当前不可写入(只读、或写者锁不在本标签页),这次改动没有保存。",
-          variant: "destructive",
-        });
+        // 三条失败路径的文案必须分开。原先一律说「只读或写者锁不在本标签页」,而真正在发生的是
+        // 第三条(补丁没过校验):它把人往锁上引,2026-08-14 就是这样查了半天写者锁。
+        const description = state.readOnly
+          ? "画布是只读态(别人正在编辑,或你没有写权限),这次改动没有保存。"
+          : !state.hydrated || state.sessionCanvasId !== state.hydratedCanvasId
+            ? "画布还没就绪,或写者锁不在本标签页,这次改动没有保存。"
+            : "这次改动没通过画布校验,内容已按原样保留。这是程序缺陷,请把刚才的操作步骤反馈给我们。";
+        toast({ title: failLabel, description, variant: "destructive" });
         return false;
       }
       commitTextEdit();
@@ -309,15 +327,15 @@ export const ProductNode = memo(function ProductNode({
     (key: string) => {
       const nextKeys = imageKeys.filter((item) => item !== key);
       const nextMain = nextKeys[0];
+      // 图变了就作废防重指纹,否则换了图还以为「解析过了」。
+      // 🔴 必须**把这个键摘掉**,不能把它写成 undefined(文件头坑 1):zod 会原样保留
+      // 这个 own 键,`isPersistableJsonValue` 随即判否,`updateNodeData` 静默返回 false ——
+      // 2026-08-14 「移除商品图」在任何画布上都用不了,根因就是这一行。
+      const { analyzedImageKeys: _fingerprintDropped, ...productWithoutFingerprint } = product;
       writeNode(
         {
           media: nextMain ? { ossKey: nextMain } : undefined,
-          // 图变了就作废防重指纹,否则换了图还以为「解析过了」。
-          product: {
-            ...product,
-            extraImageKeys: nextKeys.slice(1),
-            analyzedImageKeys: undefined,
-          },
+          product: { ...productWithoutFingerprint, extraImageKeys: nextKeys.slice(1) },
         },
         "移除商品图失败"
       );
@@ -325,16 +343,22 @@ export const ProductNode = memo(function ProductNode({
     [imageKeys, product, writeNode]
   );
 
-  const handleAnalyze = useCallback(async () => {
+  /**
+   * `force` = 用户点了「重新解析」,明确要对同一组图再跑一次(2026-08-09 用户裁决:批准可以再花一次)。
+   * 不传 force 时指纹闸仍然生效 —— 它挡的是刷新/重挂后的无意重跑,那才是白花厂商调用的地方。
+   */
+  const handleAnalyze = useCallback(async (options?: { force?: boolean }) => {
     if (busy) return;
     if (imageKeys.length === 0) {
       toast({ title: "先上传商品图", description: "卖点卡是从商品图看出来的。" });
       return;
     }
-    if (alreadyAnalyzed) {
+    if (alreadyAnalyzed && !options?.force) {
+      // 不要在这里指路去点「重新解析」—— 那个按钮就是本分支的调用方,会绕成死循环
+      // (2026-08-14 缺陷甲)。它现在带 force 进来,压根走不到这儿。
       toast({
         title: "这组图已经解析过了",
-        description: "换图或加图后会自动允许重新解析;想强制重跑就点「重新解析」。",
+        description: "下面的卡片就是上次的结果。换图或加图后会自动重新解析。",
       });
       return;
     }
@@ -506,7 +530,7 @@ export const ProductNode = memo(function ProductNode({
                     ? "这组图已解析过,点这里强制重跑(会再花一次厂商调用)"
                     : "调用视觉模型,从商品图提炼卖点卡"
               }
-              onClick={() => void handleAnalyze()}
+              onClick={() => void handleAnalyze({ force: alreadyAnalyzed })}
             >
               {busy === "analyze" ? (
                 <Loader2 className="h-3 w-3 animate-spin" />
@@ -581,7 +605,7 @@ export const ProductNode = memo(function ProductNode({
   );
 });
 
-/** 单张商品图缩略图。只在 `selected && !lowZoom` 的分支里渲染,所以不必自带降级。 */
+/** 单张商品图缩略图。只在 `!lowZoom` 分支里渲染(**与 selected 无关**),所以不必自带降级。 */
 const ProductThumb = memo(function ProductThumb({
   ossKey,
   isMain,
