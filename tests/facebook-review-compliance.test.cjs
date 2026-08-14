@@ -108,7 +108,7 @@ test('Facebook Page webhook subscription lifecycle does not put tokens in the UR
 
   await oauth.subscribeFacebookPageToWebhooks('page/unsafe', 'synthetic-page-token')
   assert.equal(calls.length, 1)
-  assert.match(calls[0].input, /\/page%2Funsafe\/subscribed_apps$/)
+  assert.match(calls[0].input, /\/v25\.0\/page%2Funsafe\/subscribed_apps$/)
   assert.doesNotMatch(calls[0].input, /synthetic-page-token/)
   assert.equal(calls[0].init.headers.Authorization, 'Bearer synthetic-page-token')
   const body = new URLSearchParams(calls[0].init.body)
@@ -121,6 +121,41 @@ test('Facebook Page webhook subscription lifecycle does not put tokens in the UR
   assert.doesNotMatch(calls[1].input, /synthetic-page-token/)
   assert.equal(calls[1].init.method, 'DELETE')
   assert.equal(calls[1].init.headers.Authorization, 'Bearer synthetic-page-token')
+})
+
+test('Facebook Page authorization fails closed when any review permission is missing', () => {
+  const oauth = loadTypeScriptModule('src/lib/facebook/oauth.ts', {
+    '@/lib/oauth-broker/client': {
+      callBroker() {
+        throw new Error('broker should not be called')
+      },
+      isBrokerEnabled: () => false,
+    },
+  }, {
+    env: {
+      FACEBOOK_CLIENT_ID: 'synthetic-client',
+      FACEBOOK_CLIENT_SECRET: 'synthetic-secret',
+      FACEBOOK_REDIRECT_URI: 'https://app.example.test/api/facebook/auth/callback',
+    },
+  })
+
+  const granted = oauth.FACEBOOK_PAGE_SCOPES.map((permission) => ({
+    permission,
+    status: 'granted',
+  }))
+  assert.doesNotThrow(() => oauth.assertFacebookRequiredPageScopes(granted))
+
+  const partial = granted.map((entry) => entry.permission === 'pages_manage_engagement'
+    ? { ...entry, status: 'declined' }
+    : entry)
+  assert.deepEqual(
+    Array.from(oauth.getMissingFacebookPageScopes(partial)),
+    ['pages_manage_engagement'],
+  )
+  assert.throws(
+    () => oauth.assertFacebookRequiredPageScopes(partial),
+    /pages_manage_engagement/,
+  )
 })
 
 test('Facebook user identity lookup keeps the user token out of the URL', async () => {
@@ -202,6 +237,7 @@ test('review callbacks, user controls, and service-role deletion primitives stay
   const supabaseConfig = fs.readFileSync(path.join(process.cwd(), 'supabase/config.toml'), 'utf8')
 
   assert.match(callback, /getFacebookUserInfo/)
+  assert.match(callback, /assertFacebookRequiredPageScopes\(permissions\)/)
   assert.match(callback, /getGrantedFacebookScopes/)
   assert.match(callback, /subscribeFacebookPageToWebhooks/)
   assert.match(callback, /authorized_by_facebook_user_id/)

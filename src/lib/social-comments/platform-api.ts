@@ -8,7 +8,7 @@ const YOUTUBE_COMMENT_THREADS_URL = 'https://www.googleapis.com/youtube/v3/comme
 const YOUTUBE_COMMENTS_URL = 'https://www.googleapis.com/youtube/v3/comments'
 const YOUTUBE_PAGE_SIZE = 100
 const YOUTUBE_MAX_TOP_LEVEL_COMMENTS = 500
-const FACEBOOK_API_VERSION = process.env.FACEBOOK_API_VERSION || 'v20.0'
+const FACEBOOK_API_VERSION = process.env.FACEBOOK_API_VERSION || 'v25.0'
 const FACEBOOK_GRAPH_URL = `https://graph.facebook.com/${FACEBOOK_API_VERSION}`
 const FACEBOOK_PAGE_SIZE = 100
 const FACEBOOK_MAX_TOP_LEVEL_COMMENTS = 500
@@ -146,8 +146,8 @@ export const COMMENT_SCOPE_REQUIREMENTS: Record<Exclude<SocialPlatform, 'tiktok'
     reply: ['https://www.googleapis.com/auth/youtube.force-ssl'],
   },
   facebook: {
-    read: ['pages_read_engagement'],
-    reply: ['pages_manage_engagement'],
+    read: ['pages_read_engagement', 'pages_read_user_content'],
+    reply: ['pages_read_engagement', 'pages_read_user_content', 'pages_manage_engagement'],
   },
 }
 
@@ -195,7 +195,7 @@ export function hasRequiredCommentScopes(
   scopes: string[]
 ) {
   const required = getCommentScopeRequirements(platform)[operation]
-  return platform === 'instagram'
+  return platform === 'instagram' || platform === 'facebook'
     ? hasAllRequiredScopes(scopes, required)
     : hasAnyRequiredScope(scopes, required)
 }

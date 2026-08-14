@@ -150,6 +150,19 @@ test('YouTube, Instagram, and Facebook reject inactive accounts before provider 
   assert.match(service, /SocialCommentApiError\('facebook', 'account_not_active'/)
 })
 
+test('Facebook comment reads and replies require every review scope they exercise', () => {
+  const api = loadPlatformApi(async () => {
+    throw new Error('provider should not be called')
+  })
+
+  const readScopes = ['pages_read_engagement', 'pages_read_user_content']
+  const replyScopes = [...readScopes, 'pages_manage_engagement']
+  assert.equal(api.hasRequiredCommentScopes('facebook', 'read', readScopes), true)
+  assert.equal(api.hasRequiredCommentScopes('facebook', 'read', ['pages_read_engagement']), false)
+  assert.equal(api.hasRequiredCommentScopes('facebook', 'reply', replyScopes), true)
+  assert.equal(api.hasRequiredCommentScopes('facebook', 'reply', ['pages_manage_engagement']), false)
+})
+
 test('Instagram Native comments use the official minimal fields and paginate without replies', async () => {
   const requests = []
   const api = loadPlatformApi(async (input, init = {}) => {
@@ -422,7 +435,7 @@ test('YouTube and Facebook reply request formats remain unchanged', async () => 
   const facebook = requests[1]
   const facebookBody = facebook.init.body
   assert.equal(facebook.url.host, 'graph.facebook.com')
-  assert.equal(facebook.url.pathname, '/v20.0/facebook-parent/comments')
+  assert.equal(facebook.url.pathname, '/v25.0/facebook-parent/comments')
   assert.equal(facebook.init.method, 'POST')
   assert.equal(facebook.headers.get('Content-Type'), 'application/x-www-form-urlencoded')
   assert.equal(facebookBody instanceof URLSearchParams, true)
