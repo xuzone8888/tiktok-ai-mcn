@@ -23,6 +23,7 @@ export type GenerationLockKind =
   | "uncertain"
   | "reconciling"
   | "missing_upstream_image"
+  | "too_many_references"
   | "syncing";
 
 export interface GenerationLockHint {
@@ -51,6 +52,11 @@ export interface GenerationLockInput {
   videoMode?: "prompt_to_video" | "image_to_video";
   /** 连进本节点的、有内容的图片节点数。 */
   incomingImageCount: number;
+  /**
+   * 本节点能接的参考图上限:图片恒 1;视频 image_to_video = 模型 maxImages;文生视频 = 0。
+   * 缺省 undefined = 调用方还没接这条,跳过超限判定(不要瞎猜成 0,那会误灰整个面板)。
+   */
+  referenceLimit?: number;
 }
 
 /**
@@ -130,6 +136,32 @@ export function resolveGenerationLockHint(
         "或用底部工具栏的「历史记录」从既往产物里挑一张,建成节点后连过来",
         "只想凭文字出片的话,把上面的「模式」改成文生视频",
       ],
+    };
+  }
+  if (
+    typeof input.referenceLimit === "number" &&
+    input.incomingImageCount > input.referenceLimit
+  ) {
+    // 排在 missing_upstream_image 之后:两者互斥(一个嫌少一个嫌多),顺序只影响可读性。
+    // 但它必须排在所有「正在忙」之后 —— 用户先该知道最硬的那条。
+    return {
+      kind: "too_many_references",
+      reason:
+        input.referenceLimit === 0
+          ? "文生视频不使用图片输入,而当前有图片连进这个节点。"
+          : `本节点最多用 ${input.referenceLimit} 张参考图,现在连进来 ${input.incomingImageCount} 张。`,
+      steps:
+        input.referenceLimit === 0
+          ? [
+              "把上面的「模式」改成图生视频,这些图就会被当作画面起点",
+              "或断开图片连线,只凭文字出片",
+            ]
+          : [
+              "断开多余的图片输入连线(点中连线按 Delete)",
+              ...(input.kind === "video"
+                ? ["或换一个支持更多参考图的视频模型"]
+                : []),
+            ],
     };
   }
   return null;

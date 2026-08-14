@@ -53,6 +53,7 @@ import {
   type CanvasGroup,
   type CanvasNode,
   type CanvasNodeData,
+  type CanvasNodeDataUnsettableKey,
   type CreateCanvasNodeInput,
   type LoadCanvasResult,
 } from "@/lib/canvas/schema";
@@ -217,8 +218,19 @@ export interface CanvasStoreActions {
    * 更新节点 data(S3 文本编辑等):合并 patch 后经 CanvasNodeDataSchema 校验 + 危险值扫描
    * (拒 dataURL/签名 URL),通过才回写;只读/节点不存在/校验失败返回 false。成功则并入(或开启)
    * 该 node 的文本编辑会话——连续编辑合并、blur/结构动作时提交为一个历史项(非每键入栈)。
+   *
+   * `options.unset` 是**删键**通道,也是移除可选键(如清空 `media`)的**唯一**办法:合并是
+   * `{...node.data, ...patch}` 浅展开,传 `key: undefined` 删不掉键,只会留下一个值为 undefined
+   * 的 own 键 —— 而 `isPersistableJsonValue` 对这种键一律判否,于是 `cloneCanvasEntity` 返回 null、
+   * 整次写入**静默失败**(2026-08-14 商品节点「移除商品图」全线不可用,根因就是这个)。
+   * 刻意**不**把 `patch` 里的 undefined 当成删除:`params`/`generation` 有「absent-or-strict」的
+   * fail-closed 守卫,把误传的 undefined 解释成「删掉计费意图」远比拒绝这次写入危险。
    */
-  updateNodeData: (id: string, patch: Partial<CanvasNodeData>) => boolean;
+  updateNodeData: (
+    id: string,
+    patch: Partial<CanvasNodeData>,
+    options?: { unset?: readonly CanvasNodeDataUnsettableKey[] }
+  ) => boolean;
   /**
    * 提交当前待提交的文本编辑会话(textarea blur 调用):把整段会话合并为一个 forward/inverse
    * 历史项(无净变化则只清会话不入栈)。清空 redo。
@@ -1133,12 +1145,17 @@ export const useCanvasStore = create<CanvasStore>()(
           return ok && edgeId ? { nodeId: node.id, edgeId } : null;
         },
 
-        updateNodeData: (id, patch) => {
+        updateNodeData: (id, patch, options) => {
           if (!canMutateCurrentDocument()) return false;
+          const unsetKeys = options?.unset ?? [];
           const prepareNextData = (node: CanvasNode): CanvasNodeData | null => {
             let prepared: CanvasNodeData;
             try {
-              prepared = CanvasNodeDataSchema.parse({ ...node.data, ...patch });
+              // 删键必须在 parse **之前**:zod 对「present 但值为 undefined」的可选键会原样保留成
+              // own 键,留到 parse 之后再删就晚了(那时 clone 已经判否)。
+              const merged: Record<string, unknown> = { ...node.data, ...patch };
+              for (const key of unsetKeys) delete merged[key];
+              prepared = CanvasNodeDataSchema.parse(merged);
             } catch {
               return null;
             }

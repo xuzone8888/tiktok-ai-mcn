@@ -45,23 +45,62 @@ function lacks(source, fragment, label) {
 }
 
 /**
- * 无依赖纯模块的离线载入(仅剥类型,不做类型检查——那是 `tsc --noEmit` 的活)。
- * 只用于本文件里**零 import** 的策略模块;有依赖的走 scripts/canvas-build.mjs。
+ * 纯模块的离线载入(仅剥类型,不做类型检查——那是 `tsc --noEmit` 的活)。
+ *
+ * 模块体以 `data:` URL 动态 import,而 **`data:` 基址不是层级 URL** ——
+ * 所以模块体里任何 import(别名、相对路径都一样)都会 `ERR_UNSUPPORTED_RESOLVE_REQUEST`。
+ *
+ * `deps` 就是为此开的口子:把依赖模块**一起从真实源码转译**、剥掉 `export ` 变成本地声明、
+ * 拼成前缀,再把模块体里对应的 import 语句删掉。这样被测的仍是仓库里那份真源码,
+ * 不是脚本里手抄的副本 —— 判据只能有一处产地(见
+ * `src/lib/canvas/generation-image-input.ts` 抬头),不允许为了让脚本跑起来而复制它。
+ * 依赖自身仍必须是零 import 的纯模块。
  */
 const requireFromHere = createRequire(import.meta.url);
-async function loadPureModule(relPath) {
+async function loadPureModule(relPath, deps = []) {
   const ts = requireFromHere("typescript");
-  const { outputText } = ts.transpileModule(read(relPath), {
-    compilerOptions: {
-      module: ts.ModuleKind.ESNext,
-      target: ts.ScriptTarget.ES2020,
-    },
-    fileName: relPath,
-  });
+  const transpile = (path) =>
+    ts.transpileModule(read(path), {
+      compilerOptions: {
+        module: ts.ModuleKind.ESNext,
+        target: ts.ScriptTarget.ES2020,
+      },
+      fileName: path,
+    }).outputText;
+
+  let body = transpile(relPath);
+  let preamble = "";
+  for (const dep of deps) {
+    preamble += `${transpile(dep.path).replace(/^export /gm, "")}\n`;
+    const escaped = dep.specifier.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const importLine = new RegExp(
+      `^import\\s+\\{[^}]*\\}\\s+from\\s+["']${escaped}["'];?[ \\t]*$`,
+      "m"
+    );
+    if (!importLine.test(body)) {
+      throw new Error(
+        `loadPureModule: ${relPath} 里找不到对 ${dep.specifier} 的 import,deps 配置已过期`
+      );
+    }
+    body = body.replace(importLine, "");
+  }
+
   return import(
-    `data:text/javascript;base64,${Buffer.from(outputText).toString("base64")}`
+    `data:text/javascript;base64,${Buffer.from(preamble + body).toString("base64")}`
   );
 }
+
+/**
+ * `generation-input-order.ts` 的唯一依赖:参考图判据。
+ * 判据本身必须只有一处产地(客户端提交 / 服务端权威重算 / 引用区编号 / #43 角标四处共用),
+ * 所以这里内联真源码而不是在脚本里手抄一份。
+ */
+const INPUT_ORDER_DEPS = [
+  {
+    specifier: "@/lib/canvas/generation-image-input",
+    path: "src/lib/canvas/generation-image-input.ts",
+  },
+];
 
 console.log("1. Polling authority and cross-canvas isolation");
 has(context, "GENERATION_LIST_LIMIT = 100", "uses the maximum bounded list size");
@@ -459,7 +498,10 @@ console.log(
   "\nN+4. CHECKLIST #44/#72/#94 — reference strip: numbered upstream thumbnails"
 );
 const { orderGenerationInputNodes, collectImageReferences } =
-  await loadPureModule("src/components/canvas/generation-input-order.ts");
+  await loadPureModule(
+    "src/components/canvas/generation-input-order.ts",
+    INPUT_ORDER_DEPS
+  );
 const img = (id, key) => ({ id, type: "image", data: { media: { ossKey: key } } });
 const txt = (id) => ({ id, type: "text", data: {} });
 const edge = (source, target) => ({ source, target });
@@ -648,6 +690,457 @@ ok(
     !/delete next\.refs/.test(groupOps),
     "refs survive duplication (stripping them would hide the copied artifact)"
   );
+}
+
+/*
+ * 画幅三处同源(CHECKLIST #78 / P1-Q2a)。
+ *
+ * 面板、客户端草稿类型、intent schema 曾各写各的(面板 6、另两处各 11),而它们的差集
+ * 正好是上游 sizeMap 够不着、会静默回落 auto 却按全价扣费的档位。tsc 的 `satisfies`
+ * 只能保证面板列的每一项**合法**,保证不了**一项不漏**;这里补上「数量与集合都相等」那一半。
+ */
+{
+  const intentSrc = read("src/lib/canvas/generation-intent.ts");
+  const apiTypes = read("src/lib/canvas/generation-api-types.ts");
+  const declared = intentSrc.match(
+    /export const CANVAS_IMAGE_ASPECT_RATIOS = \[([\s\S]*?)\] as const;/
+  );
+  ok(Boolean(declared), "image aspect ratios are declared in one named const");
+  const declaredValues = declared
+    ? [...declared[1].matchAll(/"([^"]+)"/g)].map((m) => m[1])
+    : [];
+  ok(
+    declaredValues.length === 6,
+    "canvas image aspect ratios stay at the 6 upstream sizeMap keys"
+  );
+  ok(
+    /aspectRatio: z\.enum\(CANVAS_IMAGE_ASPECT_RATIOS\)/.test(intentSrc),
+    "intent schema derives aspectRatio from the shared const (no parallel literal)"
+  );
+  ok(
+    /aspectRatio: z\.enum\(CANVAS_IMAGE_ASPECT_RATIOS\)/.test(apiTypes),
+    "estimate schema derives aspectRatio from the shared const (estimate and submit agree)"
+  );
+  ok(
+    /aspectRatio: CanvasImageAspectRatio;/.test(context),
+    "client draft type derives aspectRatio from the shared const"
+  );
+  ok(
+    /aspectValues: readonly CanvasImageDraftConfig\["aspectRatio"\]\[\] =\s*\n?\s*CANVAS_IMAGE_ASPECT_RATIOS;/.test(
+      context
+    ),
+    "stored-doc allow-list derives from the shared const"
+  );
+  const panel = controls.match(
+    /\(\s*\[([^\]]*)\] satisfies Array<\s*CanvasImageDraftConfig\["aspectRatio"\]\s*>\s*\)/
+  );
+  ok(Boolean(panel), "panel renders aspect options from one greppable ordered list");
+  const panelValues = panel
+    ? [...panel[1].matchAll(/"([^"]+)"/g)].map((m) => m[1])
+    : [];
+  ok(
+    panelValues.length === declaredValues.length &&
+      [...panelValues].sort().join(",") === [...declaredValues].sort().join(","),
+    "panel offers exactly the supported aspect ratios (no silent-fallback options, none missing)"
+  );
+  for (const dead of ["3:2", "2:3", "5:4", "4:5", "21:9"]) {
+    ok(
+      !declaredValues.includes(dead) && !panelValues.includes(dead),
+      `aspect ratio ${dead} stays out of canvas (upstream sizeMap has no pixel size for it)`
+    );
+  }
+}
+
+/*
+ * CHECKLIST #82 裁剪 —— 必须是**纯前端零扣费**,且结果走画布已有的上传链路。
+ *
+ * 这里守的不是样式,是三条会真出事的边界:
+ *  ①裁剪弹层不得出现任何生成/估价端点(一旦误接就成了「点裁剪扣一次钱」);
+ *  ②`crossOrigin` 不能丢 —— 产物在 OSS 跨域,丢了会污染 canvas 让 toBlob 抛 SecurityError,
+ *    而那是运行时才炸、离线闸门看不见的;
+ *  ③结果落节点必须**不连线** —— 画布的边语义是「上游是下游的生成参考图」,
+ *    把裁剪产物连回原图会让用户一按生成就把原图当参考送进去(要花钱才发现)。
+ */
+{
+  const crop = read("src/components/canvas/nodes/generation-crop-dialog.tsx");
+  ok(
+    !/\/api\/canvas\/generations/.test(crop) && !/estimate/.test(crop),
+    "crop dialog never touches a generation or estimate endpoint (stays free)"
+  );
+  ok(
+    /crossOrigin="anonymous"/.test(crop),
+    "crop source image is loaded with CORS so the canvas is not tainted"
+  );
+  ok(
+    /canvas\.toBlob\(/.test(crop) && /"image\/jpeg"/.test(crop),
+    "crop exports JPEG (canvas upload contract allows it and it stays under the size cap)"
+  );
+  ok(
+    /naturalWidth/.test(crop) && /naturalHeight/.test(crop),
+    "crop maps the selection back to natural pixels, not displayed pixels"
+  );
+  has(controls, "<GenerationCropDialog", "crop dialog is mounted from the panel");
+  has(
+    controls,
+    "uploadCanvasFile(file)",
+    "crop result reuses the canvas upload chain (quota/size/ownership checks apply)"
+  );
+  ok(
+    /CANVAS_UPLOAD_MAX_IMAGE_BYTES/.test(controls),
+    "crop result is size-checked before upload is attempted"
+  );
+  // 下面两条对着**裁剪回调这一段**断言,而不是全文件 —— 全文件里 addNodeAndEdge 本来就有
+  // (「推为参考」用它),对全文件做否定断言会永远为真,等于没守。
+  const cropHandler = (() => {
+    const start = controls.indexOf("onConfirm={(blob) => {");
+    ok(start > -1, "crop confirm handler is greppable");
+    return start > -1 ? controls.slice(start, start + 2400) : "";
+  })();
+  ok(
+    /data: \{ media: \{ ossKey \} \}/.test(cropHandler),
+    "crop result becomes an image node carrying only an OSS object key"
+  );
+  // 🔴 **反向断言,别改回去。** 本条曾要求 `title: "裁剪结果"`,2026-08-10 实测发现
+  // 图片/视频节点**没有「显示标题」这回事** —— `data.title` 就是提示词 textarea 的
+  // value,也是逐字送厂商的那段文本。写进去等于给新节点预填一句谁也没写过的提示词,
+  // 用户一按生成就照着它花钱。所以这里断言的是**新节点载荷里不许出现 title**。
+  // 只盯 addNode 那一段:回调里还有四个 `toast({ title: … })` 是正常的用户提示。
+  const cropAddNodePayload = (() => {
+    const start = cropHandler.indexOf(".addNode({");
+    return start > -1 ? cropHandler.slice(start, start + 420) : "";
+  })();
+  ok(
+    cropAddNodePayload.length > 0 && !/title:/.test(cropAddNodePayload),
+    "crop result must NOT prefill data.title — that field IS the vendor prompt, not a label"
+  );
+  ok(
+    /\.addNode\(\{/.test(cropHandler) && !/addNodeAndEdge/.test(cropHandler),
+    "crop result is a standalone node (an edge would mean 'use the source as a reference image')"
+  );
+  ok(
+    /kind === "image" && !readOnly && \(\s*<Button/.test(
+      controls.slice(controls.indexOf("CHECKLIST #82"))
+    ),
+    "crop is offered only for writable image artifacts"
+  );
+}
+
+/*
+ * CHECKLIST #83 整图重生成 —— **已由主生成按钮承载**,不要再加第二个入口。
+ *
+ * 2026-08-09 批 0 曾把本项误判为「确实缺」,原因是按 `整图`/`重生成`/`regenerate` 去 grep,
+ * 而实际落在界面上的字是**「生成新版本」**。这里把它钉死,免得下个窗口重复误判、
+ * 或是新加一条绕开 #185 同意闸的重生成路径。
+ */
+{
+  has(controls, '"生成新版本"', "completed artifacts expose whole-image regeneration");
+  const disabledBlock = controls.slice(
+    controls.indexOf("const actionDisabled ="),
+    controls.indexOf("const actionDisabled =") + 400
+  );
+  ok(
+    !/completed/.test(disabledBlock),
+    "regeneration stays enabled after a run completes (that is what makes #83 reachable)"
+  );
+  ok(
+    /onClick=\{\(\) => onGenerate\("button"\)\}/.test(controls),
+    "regeneration goes through the shared onGenerate path (so #185 consent and the price gates apply)"
+  );
+}
+
+/*
+ * CHECKLIST #43 「输入已更新」dirty 角标。
+ *
+ * 判定是纯函数,所以这里**真跑穷举**而不是读字符串。守两类东西:
+ *  ①比对口径 —— CHECKLIST 备注写的「只存/只比 generationId」是不完备的,
+ *    上传图/裁剪图/推参考来的图 refs.generationId 恒为 null,只比它会完全看不见换图;
+ *  ②架构决定 —— #43 必须**纯派生、零文档写入**。自动写文档要过写者租约、
+ *    会往 undo 栈插一条用户没做过的步骤、并在只读态静默失败(角标永不亮)。
+ *    第 10 条那个计数断言就是把这件事钉死,防下个窗口改回落盘式。
+ */
+{
+  const order = await loadPureModule(
+    "src/components/canvas/generation-input-order.ts",
+    INPUT_ORDER_DEPS
+  );
+  const cmp = order.compareGenerationInputSnapshots;
+  ok(typeof cmp === "function", "#43 dirty comparison is a pure exported function");
+
+  const img = (nodeId, ossKey, generationId) => ({
+    kind: "image",
+    nodeId,
+    ossKey,
+    ...(generationId ? { generationId } : {}),
+  });
+  const txt = (nodeId, sha) => ({ kind: "text", nodeId, textSha256: sha });
+
+  ok(cmp(null, [img("a", "k1")]).dirty === false, "#43 missing snapshot is never dirty (existing production docs must not all light up)");
+  ok(cmp([img("a", "k1")], null).dirty === false, "#43 unresolvable current inputs are not dirty");
+  ok(cmp([], []).dirty === false, "#43 no inputs on either side is not dirty");
+  ok(cmp([img("a", "k1")], [img("a", "k1")]).dirty === false, "#43 identical inputs are not dirty (dragging or editing this node must not light it)");
+
+  const regenerated = cmp([img("a", "k1", "u1")], [img("a", "k2", "u2")]);
+  ok(regenerated.dirty && regenerated.reasons.includes("regenerated"), "#43 upstream re-generated is dirty");
+
+  // 这一条专门证伪「只比 generationId」:两侧都没有 generationId,只有 ossKey 变了。
+  const replaced = cmp([img("a", "k1")], [img("a", "k2")]);
+  ok(replaced.dirty && replaced.reasons.includes("replaced"), "#43 upstream image swapped without any generationId is still dirty (uploads/crops have no generationId)");
+
+  const textChanged = cmp([txt("t", "sha1")], [txt("t", "sha2")]);
+  ok(textChanged.dirty && textChanged.reasons.includes("text_changed"), "#43 upstream text edit is dirty");
+
+  ok(cmp([img("a", "k1")], [img("a", "k1"), img("b", "k2")]).reasons.includes("added"), "#43 newly connected upstream is dirty");
+  ok(cmp([img("a", "k1"), img("b", "k2")], [img("a", "k1")]).reasons.includes("removed"), "#43 disconnected upstream is dirty");
+
+  const reordered = cmp([img("a", "k1"), img("b", "k2")], [img("b", "k2"), img("a", "k1")]);
+  ok(reordered.dirty && reordered.reasons.includes("reordered"), "#43 reordered upstream is dirty (order decides what 图1/图2 means in the prompt)");
+
+  // 对账把同一份产物重新登记一次(key 不变、generationId 补上)不该点亮角标。
+  ok(cmp([img("a", "k1")], [img("a", "k1", "u1")]).dirty === false, "#43 re-stamping the same artifact is not a content change");
+
+  const many = cmp([img("a", "k1"), img("a2", "k9")], [img("a", "k2"), img("a2", "k9")]);
+  ok(many.reasons.length === new Set(many.reasons).size, "#43 reasons are de-duplicated");
+  ok(many.changedNodeIds.every((id) => ["a", "a2"].includes(id)), "#43 changedNodeIds only names known upstream nodes");
+
+  // 架构 tripwire:#43 不得引入任何新的文档写入。
+  const writes = (context.match(/state\.updateNodeData\(/g) || []).length;
+  ok(
+    writes === 3,
+    `#43 stays purely derived: generation context still performs exactly 3 document writes (found ${writes}); a 4th means someone made the badge persist state`
+  );
+  has(context, "inputsDirtyNodeIds", "dirty node set is exposed on the generation context");
+  ok(
+    /data-node-inputs="dirty"/.test(nodeShell),
+    "#43 badge exposes a stable walkthrough hook"
+  );
+  ok(
+    /<span className="sr-only">\{inputsDirty\.title\}<\/span>/.test(nodeShell),
+    "#43 badge is announced to screen readers, not colour-only"
+  );
+  // 判据必须是 **import 形式**,不能是裸串 —— 注释里提到这个模块名是正当的
+  // (本文件的注释就在解释为什么不能 import 它),用裸串会把说明文字也算成违规。
+  // 这与 verify-canvas-s6.mjs 的 importsSpec 判据保持一致。
+  ok(
+    /inputsDirtyNodeIds/.test(mediaNode) &&
+      !/\bfrom\s+['"][^'"]*canvas-store/.test(mediaNode),
+    "#43 badge reaches media nodes through the generation context, never the store (ADR5)"
+  );
+}
+
+/*
+ * CHECKLIST #182 @引用素材(@节点 / @历史)。
+ *
+ * 全批的资金防线只压在**一件事**上:@ 展示与插入的「图N」必须与请求里真正的第 N 张一致。
+ * 其余失败模式在现有链路里都是结构性零扣费(超限在 fetch 之前抛、输入/提示词不一致在
+ * 扣费边界之前 409、报价与引用数无关),唯独编号错位会让用户**照着错编号写提示词、
+ * 按全价扣分、拿回不对的图**,而且要花钱才发现。
+ */
+{
+  const order = await loadPureModule(
+    "src/components/canvas/generation-input-order.ts",
+    INPUT_ORDER_DEPS
+  );
+  const mention = await loadPureModule(
+    "src/components/canvas/nodes/generation-mention-policy.ts"
+  );
+
+  const imgNode = (id, ossKey) => ({
+    id,
+    type: "image",
+    data: { media: { ossKey } },
+  });
+  const edge = (source, target) => ({ source, target });
+
+  // —— A. 编号一致性:预测 == 事实 ——
+  {
+    const nodes = [imgNode("a", "k1"), imgNode("b", "k2"), { id: "t", type: "image", data: {} }];
+    const edges = [edge("a", "t")];
+    const predicted = order.previewImageReferencesAfterConnect(nodes, edges, "t", "b");
+    const actual = order.collectImageReferences(
+      order.orderGenerationInputNodes(nodes, [...edges, edge("b", "t")], "t")
+    );
+    ok(
+      JSON.stringify(predicted) === JSON.stringify(actual),
+      "#182 predicted numbering equals what actually happens after connecting (no parallel numbering)"
+    );
+    // 新边一律 append ⇒ 后连的必然拿最大的 N。这条证伪「按候选列表下标编号」。
+    ok(
+      predicted.find((r) => r.nodeId === "b")?.label === "图2",
+      "#182 a newly mentioned image takes the LAST index, not the picker's list position"
+    );
+  }
+  {
+    // 空图片节点不占号(与提交路径判据同源)。
+    const nodes = [imgNode("a", "k1"), { id: "empty", type: "image", data: {} }];
+    const predicted = order.previewImageReferencesAfterConnect(
+      nodes, [edge("a", "t")], "t", "empty"
+    );
+    ok(predicted.length === 1, "#182 an empty image node never takes a 图N slot");
+  }
+  {
+    // 文本节点不占图片编号。
+    const nodes = [imgNode("a", "k1"), { id: "txt", type: "text", data: { title: "x" } }];
+    const predicted = order.previewImageReferencesAfterConnect(
+      nodes, [edge("a", "t")], "t", "txt"
+    );
+    ok(
+      predicted.length === 1 && predicted[0].label === "图1",
+      "#182 mentioning a text node does not shift image numbering"
+    );
+  }
+
+  // —— B. 候选可选性必须在选取之前判定(#186 纪律) ——
+  const baseCandidateInput = {
+    nodes: [imgNode("a", "k1"), imgNode("b", "k2"), { id: "txt", type: "text", data: { title: "hi" } }],
+    connectedNodeIds: [],
+    targetNodeId: "t",
+    targetKind: "image",
+    referenceLimit: 1,
+    incomingImageCount: 0,
+  };
+  {
+    const list = mention.resolveMentionCandidates(baseCandidateInput);
+    ok(list.length === 3, "#182 candidates list text/product/image only");
+    ok(list.every((c) => !c.disabled), "#182 nothing is disabled when a slot is free");
+  }
+  {
+    const full = mention.resolveMentionCandidates({
+      ...baseCandidateInput,
+      connectedNodeIds: ["a"],
+      incomingImageCount: 1,
+    });
+    ok(
+      full.find((c) => c.nodeId === "a")?.disabled === true,
+      "#182 an already-connected node is disabled"
+    );
+    ok(
+      full.find((c) => c.nodeId === "b")?.disabled === true &&
+        Boolean(full.find((c) => c.nodeId === "b")?.reason),
+      "#182 over the reference limit is disabled BEFORE picking, with a stated reason (not thrown after the spend dialog)"
+    );
+    ok(
+      full.find((c) => c.nodeId === "txt")?.disabled === false,
+      "#182 text nodes stay pickable when the image slot is full (they do not consume it)"
+    );
+  }
+  {
+    const emptyImg = mention.resolveMentionCandidates({
+      ...baseCandidateInput,
+      nodes: [{ id: "e", type: "image", data: {} }],
+    });
+    ok(emptyImg[0].disabled === true, "#182 an image node with no artifact is disabled");
+  }
+  {
+    const promptVideo = mention.resolveMentionCandidates({
+      ...baseCandidateInput,
+      targetKind: "video",
+      videoMode: "prompt_to_video",
+      referenceLimit: 0,
+    });
+    ok(
+      promptVideo.find((c) => c.nodeId === "a")?.disabled === true,
+      "#182 prompt-to-video disables image candidates (connecting one throws at submit)"
+    );
+  }
+  {
+    const self = mention.resolveMentionCandidates({
+      ...baseCandidateInput,
+      nodes: [{ id: "t", type: "image", data: { media: { ossKey: "k" } } }],
+      targetNodeId: "t",
+    });
+    ok(self.length === 0, "#182 a node never offers itself (self-loop)");
+  }
+  {
+    const vid = mention.resolveMentionCandidates({
+      ...baseCandidateInput,
+      nodes: [{ id: "v", type: "video", data: { media: { ossKey: "k" } } }],
+    });
+    ok(vid.length === 0, "#182 video nodes are not offered as generation inputs");
+  }
+
+  // —— C. 弹层开着按 Enter 绝不能变成一次付费提交 ——
+  {
+    const actions = ["insert", "navigate", "close", "passthrough"];
+    for (const key of ["Enter", "Tab", "Escape", "ArrowDown", "ArrowUp", "a", "@"]) {
+      const got = mention.decideMentionKey({
+        key, ctrlKey: false, metaKey: false, composing: false, popupOpen: true,
+      });
+      ok(actions.includes(got), `#182 mention key "${key}" resolves to a non-submitting action`);
+    }
+    ok(
+      mention.decideMentionKey({ key: "Enter", ctrlKey: false, metaKey: false, composing: false, popupOpen: true }) === "insert",
+      "#182 Enter with the popup open selects a candidate"
+    );
+    ok(
+      mention.decideMentionKey({ key: "Enter", ctrlKey: true, metaKey: false, composing: false, popupOpen: true }) === "passthrough",
+      "#182 Ctrl+Enter still reaches the submit path (the popup never swallows it)"
+    );
+    ok(
+      mention.decideMentionKey({ key: "Enter", ctrlKey: false, metaKey: false, composing: true, popupOpen: true }) === "passthrough",
+      "#182 IME composition is never intercepted"
+    );
+    ok(
+      mention.isMentionTriggerKey({ key: "＠", ctrlKey: false, metaKey: false, composing: false }) === true,
+      "#182 the full-width ＠ also opens the picker (what most Chinese IMEs emit)"
+    );
+    ok(
+      mention.isMentionTriggerKey({ key: "@", ctrlKey: false, metaKey: false, composing: true }) === false,
+      "#182 @ during IME composition does not open the picker"
+    );
+  }
+
+  // —— D. 插入必须吃掉触发用的 @(提示词逐字送厂商,留下孤立 @ 就是让用户为它付钱) ——
+  {
+    const withAt = mention.applyMentionInsert({
+      text: "主体是猫 @", caret: 6, triggerIndex: 5, label: "图1",
+    });
+    ok(
+      !withAt.text.includes("@") && withAt.text.includes("图1"),
+      "#182 the trigger @ is consumed by the insert, never shipped to the provider"
+    );
+    const noTrigger = mention.applyMentionInsert({
+      text: "主体是猫", caret: 4, triggerIndex: -1, label: "图1",
+    });
+    ok(
+      noTrigger.text === "主体是猫 图1",
+      "#182 inserting from the + tile adds the label without deleting anything"
+    );
+  }
+
+  // —— E. 结构守卫:编号只能有一处产地 ——
+  {
+    const mentionMenu = read("src/components/canvas/nodes/generation-mention-menu.tsx");
+    const policy = read("src/components/canvas/nodes/generation-mention-policy.ts");
+    for (const [name, src] of [
+      ["controls", controls], ["mention menu", mentionMenu], ["mention policy", policy],
+    ]) {
+      ok(!/图\$\{/.test(src), `#182 ${name} never builds a 图N label itself (single source of truth)`);
+    }
+    ok(
+      /previewImageReferencesAfterConnect\(/.test(controls),
+      "#182 the inserted label comes from the shared preview helper"
+    );
+    ok(
+      /addEdge\(\{/.test(controls),
+      "#182 a mention creates a real edge (text alone would reference nothing yet still bill)"
+    );
+    ok(
+      /item\.type !== "image"/.test(controls),
+      "#182 @history refuses video assets up front (a video upstream only errors after the spend dialog)"
+    );
+    ok(
+      /fromHandleType: "target"/.test(controls),
+      "#182 @history builds the node UPSTREAM of the generating node"
+    );
+    ok(
+      /createPortal\(/.test(mentionMenu) && /role="listbox"/.test(mentionMenu),
+      "#182 the picker portals out of the React Flow transform and is a listbox (canvas shortcuts yield to it)"
+    );
+    ok(
+      (policy.match(/^import /gm) || []).length === 0,
+      "#182 mention policy stays import-free so it can be exhaustively verified offline"
+    );
+  }
 }
 
 if (failed.length > 0) {

@@ -6,6 +6,7 @@ import {
   AlertCircle,
   CheckCircle2,
   Coins,
+  Crop,
   Download,
   ExternalLink,
   Loader2,
@@ -73,10 +74,23 @@ import {
   type CanvasConsentReason,
   type CanvasGenerateSource,
 } from "@/lib/canvas/generation-consent";
+import { GenerationCropDialog } from "./generation-crop-dialog";
 import { GenerationReferenceStrip } from "./generation-reference-strip";
+import { GenerationMentionMenu } from "./generation-mention-menu";
+import {
+  applyMentionInsert,
+  decideMentionKey,
+  isMentionTriggerKey,
+  resolveMentionCandidates,
+  type MentionCandidate,
+} from "./generation-mention-policy";
+import { CanvasHistoryPanel } from "../canvas-history-panel";
+import { uploadCanvasFile } from "../canvas-upload";
+import { CANVAS_UPLOAD_MAX_IMAGE_BYTES } from "@/lib/canvas/upload-contract";
 import {
   collectImageReferences,
   orderGenerationInputNodes,
+  previewImageReferencesAfterConnect,
 } from "../generation-input-order";
 import {
   planCapsuleCollapse,
@@ -85,34 +99,34 @@ import {
 import { useViewportSize } from "../use-viewport-size";
 
 /**
- * 图片画幅枚举(CHECKLIST #78「比例 13 种」)。
+ * 图片画幅选项(CHECKLIST #78)。
  *
- * **这 6 项是真实能力边界,不要照着 schema 往上加。** 三层枚举当前不齐:
- *   - 面板(本数组)6 项;
- *   - 客户端类型 `CanvasImageDraftConfig["aspectRatio"]` 与服务端
- *     `ImageGenerationConfigSchema.aspectRatio` 各 11 项;
- *   - **上游 `getVideoPlatformImageSize` 的 sizeMap 每档只有这 6 个 key**
- *     (src/lib/video-platform-image-api.ts:214-241)。
+ * **枚举本身不在这里定义**——取值唯一真相源是 `CANVAS_IMAGE_ASPECT_RATIOS`
+ * (`src/lib/canvas/generation-intent.ts`),intent schema / 估价 schema / 客户端草稿类型
+ * 与本数组四处同源。本文件只负责给每个取值配中文标签与**展示顺序**
+ * (竖屏优先,与画布主要用于短视频素材的实际用法一致)。
  *
- * 关键:该函数末行是 `sizeMap[resolution]?.[ratio] || sizeMap[resolution]?.auto || null`,
- * 多出来的 5 项(3:2/2:3/5:4/4:5/21:9)**不会报错,而是静默回落成 auto 尺寸** ——
- * 用户选了 21:9、按全价扣了分,拿回来的却是自动画幅的图。所以把面板扩到 11 项
- * 等于制造「付费得到错画幅」的静默缺陷,比少列几项更糟。
- *
- * 要真正补齐,必须先给 sizeMap 补这几档的像素尺寸并确认 gpt-image-2 接受,
- * 而那是 quick-gen / image-factory 共用的链路,不属画布单方改动(见 P0 看板 R2-Q4)。
+ * 2026-08-09 之前面板 6 项、两处 schema 各 11 项,靠这个数组单点防住
+ * 「选了上游够不着的档位 → 静默回落 auto → 按全价扣费」;现已按 P1-Q2a 收窄到同一集合,
+ * 下面那行 `satisfies` 是机器守卫:标签表漏配任一取值都会在 tsc 阶段红,drift 不会再静默发生。
  */
+const IMAGE_ASPECT_LABELS = {
+  "9:16": "竖屏 9:16",
+  "16:9": "横屏 16:9",
+  "1:1": "方图 1:1",
+  "4:3": "横图 4:3",
+  "3:4": "竖图 3:4",
+  auto: "自动",
+} satisfies Record<CanvasImageDraftConfig["aspectRatio"], string>;
+
 const IMAGE_ASPECTS: Array<{
   value: CanvasImageDraftConfig["aspectRatio"];
   label: string;
-}> = [
-  { value: "9:16", label: "竖屏 9:16" },
-  { value: "16:9", label: "横屏 16:9" },
-  { value: "1:1", label: "方图 1:1" },
-  { value: "4:3", label: "横图 4:3" },
-  { value: "3:4", label: "竖图 3:4" },
-  { value: "auto", label: "自动" },
-];
+}> = (
+  ["9:16", "16:9", "1:1", "4:3", "3:4", "auto"] satisfies Array<
+    CanvasImageDraftConfig["aspectRatio"]
+  >
+).map((value) => ({ value, label: IMAGE_ASPECT_LABELS[value] }));
 
 const ENABLED_VIDEO_MODEL_OPTIONS = VIDEO_MODEL_OPTIONS.filter((option) =>
   ENABLED_CANVAS_VIDEO_MODELS.includes(option.id)
@@ -284,6 +298,34 @@ function updateParams(nodeId: string, key: string, value: unknown): void {
 
 /** 「推为参考」新建节点的横向偏移;够远不压住源节点,又还在同屏视野内。 */
 const PUSH_AS_REFERENCE_OFFSET_X = 360;
+
+/**
+ * @引用建的是**上游**节点,方向与「推为参考」相反,所以偏移取负(CHECKLIST #182)。
+ */
+const MENTION_UPSTREAM_OFFSET_X = -360;
+
+/** 在候选里找下一个可选项;全不可选时停在原地,不会陷入死循环。 */
+function nextSelectableMentionIndex(
+  candidates: readonly { disabled: boolean }[],
+  from: number,
+  step: number
+): number {
+  if (candidates.length === 0) return 0;
+  for (let hop = 1; hop <= candidates.length; hop += 1) {
+    const index =
+      (((from + step * hop) % candidates.length) + candidates.length) %
+      candidates.length;
+    if (!candidates[index].disabled) return index;
+  }
+  return Math.max(0, from);
+}
+
+/**
+ * 裁剪结果节点的纵向偏移(CHECKLIST #82)。
+ * 与「推为参考」共用横向偏移,但**再往下错开一格** —— 否则同一张图先推参考、再裁剪,
+ * 两个新节点会精确重叠,用户只看得见后建的那个。
+ */
+const CROP_RESULT_OFFSET_Y = 220;
 
 /**
  * 提交不可逆的事前告知。与 `GENERATION_CANCEL_UNSUPPORTED_REASON`(事后想删时才出现)成对:
@@ -683,6 +725,20 @@ export function GenerationControls({
   /** 入库在途 / 已入库(CHECKLIST #64);权威在 generations.library_status,这里只做乐观标记。 */
   const [archiving, setArchiving] = useState(false);
   const [archived, setArchived] = useState(false);
+  /** 裁剪弹层与其上传在途(CHECKLIST #82)。裁剪本身零扣费,这里只防重复落节点。 */
+  const [cropOpen, setCropOpen] = useState(false);
+  const [cropUploading, setCropUploading] = useState(false);
+  /** @引用素材(CHECKLIST #182)。@ 只建边,不写任何新持久化字段。 */
+  const [mentionOpen, setMentionOpen] = useState(false);
+  const [mentionAnchor, setMentionAnchor] = useState<{ x: number; y: number } | null>(
+    null
+  );
+  const [mentionActiveIndex, setMentionActiveIndex] = useState(0);
+  /** 唤起用的那个 `@` 在文本里的下标;-1 = 由引用区「+」唤起,不需要吃字符。 */
+  const [mentionTriggerIndex, setMentionTriggerIndex] = useState(-1);
+  /** @历史:复用画布已有的历史面板,只把「加到画布」换成「建成本节点的上游」。 */
+  const [mentionHistoryOpen, setMentionHistoryOpen] = useState(false);
+  const promptRef = useRef<HTMLTextAreaElement | null>(null);
   const generation = generationByNodeId.get(nodeId);
   const unresolvedActionId = unresolvedActionByNodeId.get(nodeId) ?? null;
   const submitting = submittingNodeIds.has(nodeId);
@@ -726,6 +782,131 @@ export function GenerationControls({
    * 注意「图生视频缺上游图」这一条:此前它只在**提交后**由 buildIntent 抛错才被用户看到,
    * 等于让人先点了才知道不行。现在同一个条件在事前就讲清楚,并给出三条可自助的出路。
    */
+  /**
+   * 本节点能接几张参考图(CHECKLIST #182)。
+   * 图片恒 1(intent 契约 .max(1));视频图生视频取模型 maxImages;文生视频为 0。
+   * 这个数同时驱动「超限事前告知」与 @ 选择器的候选灰置 —— 两处必须同源。
+   */
+  const referenceLimit =
+    kind === "image"
+      ? 1
+      : (config as CanvasVideoDraftConfig).mode === "image_to_video"
+        ? getVideoModelCatalogEntry((config as CanvasVideoDraftConfig).model)
+            .maxImages
+        : 0;
+
+  /**
+   * @引用候选(CHECKLIST #182)。
+   *
+   * 可选性在**选取之前**判定 —— 超限与类型不符的报错原本发生在
+   * `buildGenerationIntent` 里,而那已经是 #185 确认花费弹窗**之后**:
+   * 用户先确认了要花钱,才被告知不能生成。这正是 #186 要消灭的模式。
+   */
+  const mentionCandidates = useMemo(
+    () =>
+      resolveMentionCandidates({
+        nodes,
+        connectedNodeIds: incoming.map((node) => node.id),
+        targetNodeId: nodeId,
+        targetKind: kind,
+        videoMode:
+          kind === "video" ? (config as CanvasVideoDraftConfig).mode : undefined,
+        referenceLimit,
+        incomingImageCount,
+      }),
+    [
+      config,
+      incoming,
+      incomingImageCount,
+      kind,
+      nodeId,
+      nodes,
+      referenceLimit,
+    ]
+  );
+
+  const mentionAddDisabledReason = settingsDisabled
+    ? "当前不可编辑本节点"
+    : null;
+
+  const closeMention = () => {
+    setMentionOpen(false);
+    setMentionTriggerIndex(-1);
+  };
+
+  const openMention = (triggerIndex: number) => {
+    const rect = promptRef.current?.getBoundingClientRect();
+    setMentionAnchor(
+      rect ? { x: rect.left, y: rect.bottom + 4 } : { x: 24, y: 96 }
+    );
+    setMentionTriggerIndex(triggerIndex);
+    setMentionActiveIndex(
+      nextSelectableMentionIndex(mentionCandidates, -1, 1)
+    );
+    setMentionOpen(true);
+  };
+
+  /**
+   * 选中一个候选:**先建边**,再(仅图片类)把「图N」插进提示词。
+   *
+   * 顺序不能反,也不能只做后者:画布上「引用」的唯一真实表达是 edge ——
+   * 只写文字等于什么引用都没建,用户会付全价拿回一张没垫图的图。
+   *
+   * 编号一律现算(`previewImageReferencesAfterConnect`),**绝不用候选列表的下标**:
+   * 新边一律 append,所以 @ 进来的图必然拿最大的 N;按列表序编号会插出「图1」而实际是图2。
+   */
+  const pickMention = (candidate: MentionCandidate) => {
+    if (candidate.disabled) return;
+    const store = useCanvasStore.getState();
+    const created = store.addEdge({
+      source: candidate.nodeId,
+      target: nodeId,
+      sourceHandle: null,
+      targetHandle: null,
+    });
+    if (!created) {
+      toast({
+        title: "无法引用该节点",
+        description: "画布当前不可写入，或这条连线已存在",
+        variant: "destructive",
+      });
+      closeMention();
+      return;
+    }
+
+    if (candidate.type === "image") {
+      const projected = previewImageReferencesAfterConnect(
+        store.nodes,
+        store.edges,
+        nodeId,
+        candidate.nodeId
+      );
+      const label =
+        projected.find((item) => item.nodeId === candidate.nodeId)?.label ?? null;
+      const textarea = promptRef.current;
+      const current = typeof data.title === "string" ? data.title : "";
+      if (label) {
+        const next = applyMentionInsert({
+          text: current,
+          caret: textarea?.selectionStart ?? current.length,
+          triggerIndex: mentionTriggerIndex,
+          label,
+        });
+        // 提示词就是 node.data.title,逐字送厂商;写下的这一刻就是最终文本。
+        useCanvasStore.getState().updateNodeData(nodeId, { title: next.text });
+        useCanvasStore.getState().commitTextEdit();
+      }
+      toast({ title: "已引用", description: `已连线，可在提示词里用「${label ?? "图1"}」指代` });
+    } else {
+      // 文本/商品节点的全文**本来就会自动拼进提示词**,再插一句字面记号只会给模型添乱。
+      toast({
+        title: "已引用",
+        description: "该节点的文字会自动加入本次提示词",
+      });
+    }
+    closeMention();
+  };
+
   const lockHint = resolveGenerationLockHint({
     readOnly,
     enabled,
@@ -740,6 +921,7 @@ export function GenerationControls({
         ? (config as CanvasVideoDraftConfig).mode
         : undefined,
     incomingImageCount,
+    referenceLimit,
   });
 
   useEffect(() => {
@@ -967,6 +1149,7 @@ export function GenerationControls({
         </p>
       )}
       <textarea
+        ref={promptRef}
         className="nodrag nopan nowheel block w-full resize-none rounded border border-border bg-background/70 px-2 py-1.5 text-[11px] leading-relaxed text-foreground outline-none focus:border-ring"
         rows={3}
         maxLength={2000}
@@ -987,6 +1170,57 @@ export function GenerationControls({
         }
         onBlur={() => useCanvasStore.getState().commitTextEdit()}
         onKeyDown={(event) => {
+          const composing =
+            event.nativeEvent.isComposing || event.keyCode === 229;
+          // 提及弹层开着时,方向键/Enter/Esc 归弹层(CHECKLIST #182)。
+          // decideMentionKey 是纯函数,它的返回值集合里**没有任何等于「提交」的值** ——
+          // 这条由 verifier 穷举断言,防止「弹层开着按 Enter 选词」变成一次付费提交。
+          if (mentionOpen) {
+            const action = decideMentionKey({
+              key: event.key,
+              ctrlKey: event.ctrlKey,
+              metaKey: event.metaKey,
+              composing,
+              popupOpen: true,
+            });
+            if (action === "close") {
+              event.preventDefault();
+              closeMention();
+              return;
+            }
+            if (action === "navigate") {
+              event.preventDefault();
+              setMentionActiveIndex((current) =>
+                nextSelectableMentionIndex(
+                  mentionCandidates,
+                  current,
+                  event.key === "ArrowUp" ? -1 : 1
+                )
+              );
+              return;
+            }
+            if (action === "insert") {
+              event.preventDefault();
+              const candidate = mentionCandidates[mentionActiveIndex];
+              if (candidate && !candidate.disabled) pickMention(candidate);
+              return;
+            }
+          }
+          // 输入 @ 唤起提及。**不 preventDefault**:字符照常上屏,
+          // 选中候选时再由 applyMentionInsert 把它替换掉(留着孤立的 @ 会逐字送进厂商提示词)。
+          if (
+            !settingsDisabled &&
+            isMentionTriggerKey({
+              key: event.key,
+              ctrlKey: event.ctrlKey,
+              metaKey: event.metaKey,
+              composing,
+            })
+          ) {
+            const caret = event.currentTarget.selectionStart ?? 0;
+            openMention(caret);
+            return;
+          }
           // CHECKLIST #188 发送快捷键。走与按钮同一个 onGenerate,因此防重复提交、
           // 报价未就绪拦截、金额阈值三道闸一并复用,不另开提交路径;`shortcut` 这个 source
           // 会再多要一次确认(见 generation-consent.ts:输入框里 Ctrl+Enter 极易误触)。
@@ -1006,7 +1240,11 @@ export function GenerationControls({
 
       {/* 引用区(CHECKLIST #44 / #72 / #94)。紧贴提示词下方,因为提示词里写「与图1保持一致」
           时需要照着这里的序号写 —— 两者离得越近越不容易写错。 */}
-      <GenerationReferenceStrip references={imageReferences} />
+      <GenerationReferenceStrip
+        references={imageReferences}
+        onAddReference={settingsDisabled ? null : () => openMention(-1)}
+        addDisabledReason={mentionAddDisabledReason}
+      />
 
       {kind === "image" ? (
         <ImageSettings
@@ -1223,6 +1461,26 @@ export function GenerationControls({
             <Maximize2 className="h-3 w-3" />
             全屏
           </Button>
+          {/* 裁剪(CHECKLIST #82)。刻意挂在这条**现成的产物动作行**上,而不是新建一条
+              React Flow `NodeToolbar`:
+              ①裁剪就是一个产物动作,与下载/全屏同类,没有理由另起一层承载面;
+              ②这条行所在的面板在 1352×642 已溢出停靠位 66px(见 P0 看板已知摩擦),
+                新增一整行会把溢出再推大约 34px,而挂进本行是**零高度增量**
+                (视频侧本来就是 3 个按钮,图片侧此前只有 2 个)。
+              只读态不给:裁剪的结果要落成新节点,那是写操作。 */}
+          {kind === "image" && !readOnly && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-7 flex-1 gap-1 px-2 text-[11px]"
+              title="在浏览器里裁掉多余的边，结果作为新的图片节点放到画布上。不消耗积分"
+              onClick={() => setCropOpen(true)}
+            >
+              <Crop className="h-3 w-3" />
+              裁剪
+            </Button>
+          )}
           {kind === "video" && (
             <Button
               type="button"
@@ -1291,7 +1549,12 @@ export function GenerationControls({
                           y: selfPosition.y,
                         }
                       : undefined,
-                    data: { title: "以图生视频" },
+                    // 🔴 **不写 title**(#64 遗留,已随 3dee031 上生产)。`data.title` 是提示词本体:
+                    // 服务端 `generation-service.ts` 的权威提示词就是
+                    // `[targetNode.data.title, ...上游文本节点.title]`。写「以图生视频」
+                    // 等于给新视频节点预置了一句用户没写过的提示词,一按生成就以这五个字
+                    // 当提示词跑一次 450 积分的视频。留空走 placeholder,由用户自己写。
+                    data: {},
                   },
                   fromNodeId: nodeId,
                   fromHandleId: null,
@@ -1358,6 +1621,167 @@ export function GenerationControls({
           ) : null}
         </DialogContent>
       </Dialog>
+
+      {/* 裁剪弹层(CHECKLIST #82)。
+          - 只吃瞬态签名 URL,与全屏预览同一个来源;
+          - 裁剪结果**走画布已有的上传链路**(`uploadCanvasFile` → `/api/canvas/uploads/*`),
+            与拖文件进画布是同一条路,因此配额、体积上限、object key 归属校验全部自动生效;
+          - 落成**独立的新节点、不连线**:画布里 A→B 的边语义是「A 是 B 的生成参考图」,
+            而裁剪产物并不是由原图“生成”的,连上去会让用户一按生成就把原图当参考送进去。 */}
+      <GenerationCropDialog
+        open={cropOpen}
+        onOpenChange={(open) => {
+          if (cropUploading) return;
+          setCropOpen(open);
+        }}
+        mediaUrl={mediaUrl}
+        busy={cropUploading}
+        onConfirm={(blob) => {
+          if (blob.size > CANVAS_UPLOAD_MAX_IMAGE_BYTES) {
+            toast({
+              title: "裁剪结果过大",
+              description: `单张图片上限 ${Math.round(
+                CANVAS_UPLOAD_MAX_IMAGE_BYTES / (1024 * 1024)
+              )}MB，请选小一点的区域`,
+              variant: "destructive",
+            });
+            return;
+          }
+          const file = new File(
+            [blob],
+            `crop-${(generation?.generationId ?? nodeId).slice(0, 8)}-${Date.now()}.jpg`,
+            { type: "image/jpeg" }
+          );
+          setCropUploading(true);
+          void uploadCanvasFile(file)
+            .then(({ ossKey }) => {
+              const created = useCanvasStore.getState().addNode({
+                type: "image",
+                position: selfPosition
+                  ? {
+                      x: selfPosition.x + PUSH_AS_REFERENCE_OFFSET_X,
+                      y: selfPosition.y + CROP_RESULT_OFFSET_Y,
+                    }
+                  : undefined,
+                // 🔴 **不写 title**。图片节点的 `data.title` 不是显示标题,它就是提示词本体
+                // (见本文件提示词 textarea 的 `value={data.title}` 与 @引用插字处那句
+                // 「提示词就是 node.data.title,逐字送厂商」)。往这里写「裁剪结果」会让新节点
+                // 带着这四个字当提示词开局,用户一按生成就把它逐字送给厂商——那是付费调用。
+                // 与拖文件进画布 / 上传 / 素材库建节点保持一致:只给 media,提示词留空走 placeholder。
+                data: { media: { ossKey } },
+              });
+              if (!created) {
+                // 图已经在 OSS 上了,不能假装没事发生 —— 明说文件在、节点没建成。
+                toast({
+                  title: "已裁剪，但新建节点失败",
+                  description: "画布当前不可写入，或已达节点上限",
+                  variant: "destructive",
+                });
+                return;
+              }
+              setCropOpen(false);
+              toast({
+                title: "已裁剪",
+                description: "裁剪结果已作为新的图片节点放到画布上",
+              });
+            })
+            .catch((error: unknown) => {
+              toast({
+                title: "裁剪结果上传失败",
+                description:
+                  error instanceof Error ? error.message : "请稍后重试",
+                variant: "destructive",
+              });
+            })
+            .finally(() => setCropUploading(false));
+        }}
+      />
+
+      {/* @引用素材(CHECKLIST #182)。
+          浮层 portal 到 body:面板在 React Flow 内会吃画布 transform 被缩放,
+          且 inline↔停靠底部切换时整块换父重挂,内联列表的展开态与焦点会当场丢失。 */}
+      <GenerationMentionMenu
+        open={mentionOpen}
+        anchor={mentionAnchor}
+        candidates={mentionCandidates}
+        activeIndex={mentionActiveIndex}
+        onActiveIndexChange={setMentionActiveIndex}
+        onPick={pickMention}
+        onClose={closeMention}
+        onPickFromHistory={
+          kind === "image" || referenceLimit > 0
+            ? () => {
+                setMentionOpen(false);
+                setMentionHistoryOpen(true);
+              }
+            : null
+        }
+      />
+
+      {/* @历史:复用画布已有的历史面板,契约一字未改 —— 只把 onAddAsset 换成
+          「建成本节点的上游并连线」。
+          🔴 **只收图片**:历史面板本身有视频页签,若把一个视频节点建成生成节点的上游,
+          那条边在画布层零拦截,要等到 #185 确认花费**之后**才在提交时报
+          「当前生成节点不支持 video 输入」——正是 #186 要消灭的「点了才知道」。 */}
+      <CanvasHistoryPanel
+        open={mentionHistoryOpen}
+        onOpenChange={setMentionHistoryOpen}
+        interactionEnabled={!readOnly && enabled}
+        onAddAsset={(item) => {
+          if (item.type !== "image") {
+            toast({
+              title: "只能引用图片素材",
+              description: "生成节点的参考输入只接受图片；视频素材请直接拖到画布上",
+              variant: "destructive",
+            });
+            return false;
+          }
+          if (incomingImageCount >= referenceLimit) {
+            toast({
+              title: "参考图已满",
+              description:
+                referenceLimit === 0
+                  ? "文生视频不使用图片输入，先把模式改成图生视频"
+                  : `本节点最多用 ${referenceLimit} 张参考图`,
+              variant: "destructive",
+            });
+            return false;
+          }
+          const media: { ossKey: string; posterKey?: string } = {
+            ossKey: item.objectKey,
+          };
+          if (item.posterKey) media.posterKey = item.posterKey;
+          const created = useCanvasStore.getState().addNodeAndEdge({
+            node: {
+              type: "image",
+              position: selfPosition
+                ? {
+                    x: selfPosition.x + MENTION_UPSTREAM_OFFSET_X,
+                    y: selfPosition.y,
+                  }
+                : undefined,
+              // 同 #82 裁剪那处:`data.title` 是逐字送厂商的提示词,不是标签。
+              // 这个节点还是**上游**,用户更不会去清它,留「引用素材」在里面等于埋了一句
+              // 谁也没写过的提示词。只给 media。
+              data: { media },
+            },
+            fromNodeId: nodeId,
+            fromHandleId: null,
+            // 不是 "source" ⇒ 新节点在**上游**(新节点 → 本节点),正是所需方向。
+            fromHandleType: "target",
+          });
+          if (!created) {
+            toast({
+              title: "无法引用该素材",
+              description: "画布当前不可写入，或已达节点上限",
+              variant: "destructive",
+            });
+            return false;
+          }
+          toast({ title: "已引用", description: "已建成本节点的上游并连好线" });
+          return true;
+        }}
+      />
 
       <AlertDialog
         open={confirmSnapshot !== null}

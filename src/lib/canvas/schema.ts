@@ -113,9 +113,60 @@ export const CanvasMediaSchema = z.strictObject({
 });
 export type CanvasMedia = z.infer<typeof CanvasMediaSchema>;
 
+export const CanvasProductSellingPointSchema = z.strictObject({
+  id: z.string().min(1).max(64),
+  text: z.string().min(1).max(100),
+  evidence: z.string().max(100).optional(),
+  selected: z.boolean(),
+});
+export type CanvasProductSellingPoint = z.infer<typeof CanvasProductSellingPointSchema>;
+
+/**
+ * 商品卖点卡的**画布持久化形状**(CHECKLIST #67)。
+ *
+ * 与 `src/lib/studio/product-vision.ts` 的 `ProductCard` 同源,但有一处**故意的结构差异**:
+ * **这里没有 `images` 字段。** 上游 `ProductCard.images` 装的是 http URL
+ * (`product-vision.ts:121` 把调用时传入的 URL 原样落进去),而画布文档只准存 OSS object key。
+ * `unsafeStringReason` 只拦 dataURL 与带签名参数的 URL,**公有 URL(media.toryxai.com/<key>,
+ * 无 query)会被放行** —— 所以「只存 key」这条铁律在这条路上原本没有任何机器守卫。
+ * 把 `images` 从持久化形状里彻底删掉,`strictObject` 就会在写入时直接拒绝带 URL 的卡片,
+ * 不必靠 review 记住。图片一律走 `data.media.ossKey` 与 `extraImageKeys`。
+ */
+export const CanvasProductCardSchema = z.strictObject({
+  title: z.string().min(1).max(200),
+  price: z.string().max(50).optional(),
+  category: z.string().max(50).optional(),
+  selling_points: z.array(CanvasProductSellingPointSchema).max(8),
+  audience: z.array(z.string().max(50)).max(6).default(() => []),
+});
+export type CanvasProductCard = z.infer<typeof CanvasProductCardSchema>;
+
+/**
+ * 商品节点状态(CHECKLIST #67)。挂在 `params.product`,**不在 `data` 顶层新增字段** ——
+ * `CanvasNodeDataSchema` 是 strictObject,旧版本读到新顶层键会把整个节点判 broken
+ * (→ recoveryRequired → 全画布自动保存停摆),等于给回滚埋雷;而 `params` 有
+ * `.catchall(z.unknown())`,旧版本读新键安全无感。
+ *
+ * 图片的唯一真相源约定:**主图恒为 `data.media.ossKey`**(它走完了归属+服务端就绪闸),
+ * `extraImageKeys` 只装第 2..9 张。解析时的入参 = `[media.ossKey, ...extraImageKeys]`。
+ */
+export const CanvasProductStateSchema = z.strictObject({
+  card: CanvasProductCardSchema.optional(),
+  /** 第 2..9 张商品图(主图在 data.media.ossKey)。 */
+  extraImageKeys: z.array(OssObjectKeySchema).max(8).default(() => []),
+  /**
+   * 已成功解析过的图 key(升序)。防重复解析的**持久**那一半:负责跨刷新/切画布/组件重挂;
+   * 同一挂载周期内的连点由组件内的 in-flight 布尔负责。**只在解析成功后写**
+   * (照 omnibox 的「失败不写指纹」纪律,否则一次失败会把这组图永久钉死)。
+   */
+  analyzedImageKeys: z.array(OssObjectKeySchema).max(9).optional(),
+});
+export type CanvasProductState = z.infer<typeof CanvasProductStateSchema>;
+
 export const CanvasNodeParamsSchema = z
   .object({
     generation: CanvasGenerationIntentV1Schema.optional(),
+    product: CanvasProductStateSchema.optional(),
   })
   .catchall(z.unknown())
   .superRefine((params, ctx) => {
@@ -127,6 +178,18 @@ export const CanvasNodeParamsSchema = z
         code: "custom",
         path: ["generation"],
         message: "generation must be absent or a strict Canvas generation intent",
+      });
+    }
+    // 与 generation 同款「absent-or-strict」:own 键值为 undefined 会被持久化层
+    // (history.ts 的 isPersistableJsonValue)判否并静默丢弃整次写入,在这里就拦掉。
+    if (
+      Object.prototype.hasOwnProperty.call(params, "product") &&
+      params.product === undefined
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["product"],
+        message: "product must be absent or a strict Canvas product state",
       });
     }
   });
@@ -141,6 +204,12 @@ export const CanvasNodeDataSchema = z
   })
   .default(() => ({ refs: createCanvasRefs() }));
 export type CanvasNodeData = z.infer<typeof CanvasNodeDataSchema>;
+
+/**
+ * `data` 上允许**删除**的可选键(store `updateNodeData` 的 `options.unset` 通道用)。
+ * `refs` 不在其列 —— 它有 `.default`,删了也会被立刻补回来,列进来只会给人「能删」的错觉。
+ */
+export type CanvasNodeDataUnsettableKey = "title" | "params" | "media";
 
 export const CanvasNodeSchema = z.strictObject({
   id: CanvasIdSchema,

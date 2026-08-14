@@ -13,10 +13,12 @@ import {
 
 import { toast } from "@/hooks/use-toast";
 import {
+  CANVAS_IMAGE_ASPECT_RATIOS,
   CanvasGenerationIntentV1Schema,
   computeCanvasGenerationTextSha256,
   normalizeCanvasGenerationText,
   type CanvasGenerationIntentV1,
+  type CanvasImageAspectRatio,
 } from "@/lib/canvas/generation-intent";
 import type { CanvasRuntimeDebugState } from "@/lib/canvas/canvas-runtime";
 import type { CanvasNode, CanvasNodeData } from "@/lib/canvas/schema";
@@ -33,7 +35,12 @@ import type {
 } from "@/lib/video-models/types";
 import { useCanvasStore } from "@/stores/canvas-store";
 
-import { orderGenerationInputNodes } from "./generation-input-order";
+import { isCanvasImageInputNode } from "@/lib/canvas/generation-image-input";
+
+import {
+  compareGenerationInputSnapshots,
+  orderGenerationInputNodes,
+} from "./generation-input-order";
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -104,18 +111,8 @@ export interface CanvasGenerationEstimate {
 
 export interface CanvasImageDraftConfig {
   resolution: "1k" | "2k" | "4k";
-  aspectRatio:
-    | "auto"
-    | "1:1"
-    | "16:9"
-    | "9:16"
-    | "4:3"
-    | "3:4"
-    | "3:2"
-    | "2:3"
-    | "5:4"
-    | "4:5"
-    | "21:9";
+  /** 画幅取值与服务端 intent 同源,见 `CANVAS_IMAGE_ASPECT_RATIOS`(CHECKLIST #78)。 */
+  aspectRatio: CanvasImageAspectRatio;
 }
 
 export interface CanvasVideoDraftConfig {
@@ -164,6 +161,8 @@ interface CanvasGenerationContextValue {
   submittingNodeIds: ReadonlySet<string>;
   unresolvedActionByNodeId: ReadonlyMap<string, string>;
   generationByNodeId: ReadonlyMap<string, CanvasGenerationView>;
+  /** 上游产物/文本自上次提交以来变过的节点(CHECKLIST #43);纯派生,不落盘。 */
+  inputsDirtyNodeIds: ReadonlySet<string>;
   submitNode(nodeId: string): Promise<CanvasGenerationView | null>;
   /** 放弃一次**未绑定**的提交(仅清本地 intent;服务端本就没有该行)。 */
   discardUnresolved(nodeId: string): void;
@@ -358,19 +357,9 @@ export function getCanvasImageDraftConfig(data: CanvasNodeData): CanvasImageDraf
     raw?.resolution === "2k" || raw?.resolution === "4k"
       ? raw.resolution
       : "1k";
-  const aspectValues: CanvasImageDraftConfig["aspectRatio"][] = [
-    "auto",
-    "1:1",
-    "16:9",
-    "9:16",
-    "4:3",
-    "3:4",
-    "3:2",
-    "2:3",
-    "5:4",
-    "4:5",
-    "21:9",
-  ];
+  // 白名单与 intent/估价 schema 同源;存量文档若带已下线的档位,这里会落回默认值而不是原样透传。
+  const aspectValues: readonly CanvasImageDraftConfig["aspectRatio"][] =
+    CANVAS_IMAGE_ASPECT_RATIOS;
   const aspectRatio = aspectValues.includes(
     raw?.aspectRatio as CanvasImageDraftConfig["aspectRatio"]
   )
@@ -451,6 +440,86 @@ function inputImageSnapshot(node: CanvasNode) {
   };
 }
 
+/**
+ * 「输入已更新」派生(CHECKLIST #43)· **零文档写入**
+ *
+ * 快照不新存:直接拿节点里已经持久化的 `params.generation.inputs`(上次提交用的上游)
+ * 与当前文档重算值比。判定逻辑在纯函数 `compareGenerationInputSnapshots` 里(可离线穷举)。
+ *
+ * 这里只负责「重算当前值」,且**刻意复用 `inputTextSnapshot` / `inputImageSnapshot` 两个
+ * 既有映射器** —— 它们带着 `generationId` 的 UUID 校验与 `.toLowerCase()` 归一,
+ * 另写一份会因为大小写不一致而让整片节点误挂角标。
+ *
+ * ⚠️ **不复用提交路径的取数与限张逻辑**:那条路在数量超限时是抛错的,
+ * 且判据吃的是未截断数组;为共用而改成先截断会把三条付费硬闸变成死代码。
+ * 本函数只读、只比、不参与提交。
+ */
+function recomputeGenerationInputs(
+  nodeId: string
+): ReturnType<typeof inputTextSnapshot>[] | null {
+  const state = useCanvasStore.getState();
+  const target = state.nodes.find((node) => node.id === nodeId);
+  if (!target || (target.type !== "image" && target.type !== "video")) return null;
+  const incoming = orderGenerationInputNodes(state.nodes, state.edges, nodeId);
+  // 🔴 **分组顺序必须与提交路径逐字一致:先全部文本、再全部图片。**
+  // 提交路径写的是 `inputs: [...textInputs, ...imageSnapshots]`(见下方三个 kind 分支),
+  // 而 `orderGenerationInputNodes` 返回的是**纯连线顺序**(不按类型分组)。
+  // 本函数原来照连线顺序交错 push —— 于是只要上游里图片节点连得比文本节点早,
+  // 持久化快照(文本在前)与重算值(交错)顺序就不同,
+  // `compareGenerationInputSnapshots` 判成 `reordered`,**角标永久常亮**。
+  // 这条在 #43 落地时没暴露:它要求「持久化快照里已含图片输入」,
+  // 而那个前置当时造不出来(厂商连续失败,判据 8 只做到一半),属真空窗。
+  const textSnapshots: ReturnType<typeof inputTextSnapshot>[] = [];
+  const imageSnapshots: ReturnType<typeof inputTextSnapshot>[] = [];
+  for (const node of incoming) {
+    if (node.type === "text" || node.type === "product") {
+      if (typeof node.data.title === "string" && node.data.title.trim()) {
+        textSnapshots.push(inputTextSnapshot(node));
+      }
+    }
+    // 商品节点可以**同时**贡献文本与主图,所以这里不是 else-if ——
+    // 提交路径的 textInputs / imageInputNodes 也是两个独立 filter,同样会各收一次。
+    if (isCanvasImageInputNode(node)) {
+      const snapshot = inputImageSnapshot(node);
+      if (snapshot) {
+        imageSnapshots.push(snapshot as unknown as ReturnType<typeof inputTextSnapshot>);
+      }
+    }
+  }
+  return [...textSnapshots, ...imageSnapshots];
+}
+
+/**
+ * 全画布一次性算出「哪些节点的输入已更新」。
+ *
+ * 只对**已经有产物**的节点判定:没有产物就谈不上「产物过时」,
+ * 对着一个还没生成过的节点说「输入已更新」只会让人困惑。
+ */
+function computeInputsDirtyNodeIds(): Set<string> {
+  const state = useCanvasStore.getState();
+  const dirty = new Set<string>();
+  for (const node of state.nodes) {
+    if (node.type !== "image" && node.type !== "video") continue;
+    if (!node.data.media?.ossKey) continue;
+    const persisted = persistedGenerationIntent(node.data);
+    if (!persisted) continue;
+    const current = recomputeGenerationInputs(node.id);
+    if (compareGenerationInputSnapshots(persisted.inputs, current).dirty) {
+      dirty.add(node.id);
+    }
+  }
+  return dirty;
+}
+
+function sameNodeIdSet(a: ReadonlySet<string>, b: ReadonlySet<string>): boolean {
+  if (a === b) return true;
+  if (a.size !== b.size) return false;
+  for (const id of a) if (!b.has(id)) return false;
+  return true;
+}
+
+const EMPTY_DIRTY_SET: ReadonlySet<string> = new Set<string>();
+
 function buildGenerationIntent(nodeId: string): CanvasGenerationIntentV1 {
   const target = useCanvasStore.getState().nodes.find((node) => node.id === nodeId);
   if (!target || (target.type !== "image" && target.type !== "video")) {
@@ -481,9 +550,8 @@ function buildGenerationIntent(nodeId: string): CanvasGenerationIntentV1 {
     .filter((node) => node.type === "text" || node.type === "product")
     .filter((node) => typeof node.data.title === "string" && node.data.title.trim())
     .map(inputTextSnapshot);
-  const imageInputNodes = incoming.filter(
-    (node) => node.type === "image" && Boolean(node.data.media?.ossKey)
-  );
+  // 参考图判据走唯一出口(含商品节点主图);服务端权威重算用的是同一个函数。
+  const imageInputNodes = incoming.filter((node) => isCanvasImageInputNode(node));
   const prompt = normalizedPrompt(target, incoming);
   if (Array.from(prompt).length < 2) {
     throw new Error("请在当前节点或相连的文本/商品节点中填写至少 2 个字的提示词");
@@ -667,6 +735,31 @@ export function CanvasGenerationProvider({
   const [generationByNodeId, setGenerationByNodeId] = useState<
     ReadonlyMap<string, CanvasGenerationView>
   >(new Map());
+  /**
+   * 「输入已更新」的节点集合(CHECKLIST #43)。
+   *
+   * 放在 provider 里整画布算一次,**不要下放到节点内各算各的**:节点内要拿上下游就得
+   * 订阅 nodes/edges,而拖动时 store 逐帧 mutate `nodes` —— 200 个节点会各自逐帧重渲
+   * 并各跑一次 O(E) 扫描,直接吃掉「200 节点 pan/zoom ≥50fps」那条性能预算。
+   */
+  const [inputsDirtyNodeIds, setInputsDirtyNodeIds] =
+    useState<ReadonlySet<string>>(EMPTY_DIRTY_SET);
+
+  useEffect(() => {
+    const apply = () => {
+      const next = computeInputsDirtyNodeIds();
+      // 集合内容没变就保留旧引用 —— 它进了 context value 的 useMemo 依赖,
+      // 每换一次引用就会让整棵画布子树重渲一次。
+      setInputsDirtyNodeIds((prev) => (sameNodeIdSet(prev, next) ? prev : next));
+    };
+    apply();
+    return useCanvasStore.subscribe((state, previous) => {
+      // 拖动帧只改 position,改不出「输入已更新」;这一条挡掉绝大多数无谓重算。
+      if (state.dragAnchor !== null) return;
+      if (state.nodes === previous.nodes && state.edges === previous.edges) return;
+      apply();
+    });
+  }, []);
   const [submittingNodeIds, setSubmittingNodeIds] = useState<ReadonlySet<string>>(
     new Set()
   );
@@ -1338,6 +1431,7 @@ export function CanvasGenerationProvider({
       submittingNodeIds,
       unresolvedActionByNodeId,
       generationByNodeId,
+      inputsDirtyNodeIds,
       submitNode,
       discardUnresolved,
       refresh,
@@ -1351,6 +1445,7 @@ export function CanvasGenerationProvider({
       submittingNodeIds,
       unresolvedActionByNodeId,
       generationByNodeId,
+      inputsDirtyNodeIds,
       submitNode,
       discardUnresolved,
       refresh,

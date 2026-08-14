@@ -1875,11 +1875,22 @@ export async function processImageGenerationQueue(
   const counters = createCounters();
   const adminClient = createAdminClient();
 
+  // 🔴 **画布的生成不归本 worker 管**(2026-08-09 实测查出的车道重叠)。
+  // 画布有自己的对账车道(`stargaze-canvas-reconciler` + `claim_canvas_generation_reconciliation_v1`),
+  // 而本 worker 原先只按 `type=image` 拉队列、不看 `source`,于是把 `source='canvas'` 的行
+  // 一并认领走:超时按本 worker 的 `maxWaitMs` 判死,退款走 `quick-image` 账本
+  // (`credit_transactions.description = "图片生成失败自动退款 - GPT Image 2"`),
+  // **不回写 `generations.credits_refunded`** —— 用户的钱是对的,但画布对账口径会少记退款,
+  // 且同一行可能被两条车道各自处理。
+  // 用 `.or(source.is.null,...)` 而不是裸 `.neq`:PostgREST 的 `neq` 会把 NULL 一起排除,
+  // 现存 1932 行 type=image 虽然都有 source,但将来若有路径漏写会静默丢任务。
+  const NOT_CANVAS = "source.is.null,source.neq.canvas";
   const { data: activeGenerationRows, error: generationError } = await adminClient
     .from("generations")
     .select("*")
     .in("status", ["processing", "pending"])
     .eq("type", "image")
+    .or(NOT_CANVAS)
     .order("created_at", { ascending: true })
       .limit(Math.max((maxGenerationItems + maxSlowGenerationItems) * 10, maxGenerationItems + maxSlowGenerationItems));
   const { data: refundPendingGenerationRows, error: generationRefundScanError } = maxGenerationItems > 0
@@ -1889,6 +1900,7 @@ export async function processImageGenerationQueue(
       .eq("status", "failed")
       .eq("type", "image")
       .eq("metadata->>refund_pending", "true")
+      .or(NOT_CANVAS)
       .order("created_at", { ascending: true })
       .limit(Math.max((maxGenerationItems + maxSlowGenerationItems) * 10, maxGenerationItems + maxSlowGenerationItems))
     : { data: [], error: null };

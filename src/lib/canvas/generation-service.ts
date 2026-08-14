@@ -13,6 +13,7 @@ import {
 import { getRegisteredVideoModel } from "../video-models/registry";
 import { getVideoModelCatalogEntry } from "../video-models/catalog";
 import { isOwnedObjectKey } from "./media-ownership";
+import { isCanvasImageInputNode } from "./generation-image-input";
 import {
   canonicalizeCanvasJson,
   computeCanvasGenerationFingerprint,
@@ -341,10 +342,9 @@ function assertCanonicalIntentMatchesConnectedInputs(
       typeof source.data.title === "string" &&
       source.data.title.trim().length > 0
   );
-  const imageNodes = incoming.filter(
-    (source) =>
-      source.type === "image" && Boolean(source.data.media?.ossKey)
-  );
+  // 参考图判据走唯一出口 `isCanvasImageInputNode`(含商品节点主图)。
+  // 客户端 `imageInputNodes` 用的是同一个函数 —— 两边漂移即 CANVAS_INPUTS_CHANGED 409。
+  const imageNodes = incoming.filter((source) => isCanvasImageInputNode(source));
   const referenceLimit =
     intent.kind === "image"
       ? 1

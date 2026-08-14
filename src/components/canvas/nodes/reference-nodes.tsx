@@ -1,17 +1,17 @@
 "use client";
 
 /**
- * 超级画布 · 商品/脚本/合成节点
+ * 超级画布 · 脚本/合成节点(只做旧文档兼容读取,不在公开创建入口出现)
  *
- * 商品节点是 P1 的轻量商品简报，可作为相连图片/视频节点的提示词输入。
- * 脚本与合成节点仍只负责兼容读取旧文档，不在公开创建入口出现。
+ * ⚠️ **商品节点已迁出到 `./product-node.tsx`**(CHECKLIST #67:上传图 + 卖点卡 +
+ * 低 zoom 降级,已经不是一张"引用摘要卡")。这里保留的 `referenceSummary` 仍带
+ * `product` 分支,是给**旧文档**里那些没有任何内容的商品节点兜底用的。
  */
 import { memo } from "react";
 import type { NodeProps } from "@xyflow/react";
 
 import type { CanvasReactFlowNode } from "@/lib/canvas/rf-adapter";
 import type { CanvasNodeData, CanvasNodeType } from "@/lib/canvas/schema";
-import { useCanvasReadOnly, useCanvasStore } from "@/stores/canvas-store";
 
 import { NODE_TYPE_ITEMS } from "../node-type-meta";
 import { NodeShell } from "./node-shell";
@@ -58,37 +58,6 @@ function makeReferenceNode(type: ReferenceNodeType) {
   Component.displayName = `${type}Node`;
   return Component;
 }
-
-export const ProductNode = memo(function ProductNode({
-  id,
-  data,
-  selected,
-}: NodeProps<CanvasReactFlowNode>) {
-  const { label, Icon } = metaFor("product");
-  const readOnly = useCanvasReadOnly();
-  const updateNodeData = useCanvasStore((state) => state.updateNodeData);
-  const commitTextEdit = useCanvasStore((state) => state.commitTextEdit);
-  const brief = typeof data?.title === "string" ? data.title : "";
-
-  return (
-    <NodeShell nodeId={id} label={label} Icon={Icon} selected={selected}>
-      <textarea
-        className="nodrag nopan block w-full resize-none rounded border border-border bg-background/60 px-2 py-1 text-xs leading-relaxed text-foreground outline-none focus:border-ring"
-        rows={4}
-        maxLength={2000}
-        value={brief}
-        placeholder="填写商品名称、卖点、材质、受众与使用场景…"
-        readOnly={readOnly}
-        aria-label="商品简报"
-        onChange={(event) => updateNodeData(id, { title: event.target.value })}
-        onBlur={() => commitTextEdit()}
-      />
-      <p className="mt-1.5 text-[10px] leading-relaxed text-muted-foreground">
-        连接到图片或视频节点后，将作为生成上下文。
-      </p>
-    </NodeShell>
-  );
-});
 
 export const ScriptNode = makeReferenceNode("script");
 export const ComposeNode = makeReferenceNode("compose");

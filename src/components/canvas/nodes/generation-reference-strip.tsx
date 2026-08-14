@@ -20,22 +20,52 @@ import { peekMediaUrl, resolveMediaUrl } from "../media-url-cache";
  */
 export function GenerationReferenceStrip({
   references,
+  onAddReference = null,
+  addDisabledReason = null,
 }: {
   references: readonly GenerationImageReference[];
+  /**
+   * 「+参考」入口(CHECKLIST #182 / #72 / #94)。给了它,0 张时这一行**仍然渲染**。
+   *
+   * 这是有意的:0 张时整块隐身正是「用户不知道连张图进来就是图生图」的成因,
+   * 而那个发现性缺口在 #92 的裁决理由里被点名过。加与看放在同一处,
+   * 「图N」的编号也就天然共用同一个真相源,不会各算各的。
+   */
+  onAddReference?: (() => void) | null;
+  /** 非 null = 「+」灰置并说明原因(事前告知,不要等点了生成才报错)。 */
+  addDisabledReason?: string | null;
 }) {
-  if (references.length === 0) return null;
+  if (references.length === 0 && !onAddReference) return null;
   return (
     <div className="space-y-1">
       <p className="text-[10px] text-muted-foreground">
         引用区 · {references.length} 张参考图
-        <span className="ml-1 opacity-70">
-          （提示词里可用「{references[0].label}」指代第一张）
-        </span>
+        {references.length > 0 ? (
+          <span className="ml-1 opacity-70">
+            （提示词里可用「{references[0].label}」指代第一张）
+          </span>
+        ) : (
+          <span className="ml-1 opacity-70">
+            （连一个图片节点进来即为图生图；也可按「+」或在提示词里输入 @ 选）
+          </span>
+        )}
       </p>
       <div className="flex flex-wrap gap-1.5">
         {references.map((reference) => (
           <ReferenceThumb key={reference.nodeId} reference={reference} />
         ))}
+        {onAddReference && (
+          <button
+            type="button"
+            className="nodrag nopan flex h-11 w-11 shrink-0 items-center justify-center rounded border border-dashed border-border text-base leading-none text-muted-foreground transition-colors hover:border-ring hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+            aria-label="添加参考素材"
+            title={addDisabledReason ?? "引用画布上的素材，或从历史记录里选一张"}
+            disabled={Boolean(addDisabledReason)}
+            onClick={onAddReference}
+          >
+            +
+          </button>
+        )}
       </div>
     </div>
   );
