@@ -2,6 +2,7 @@
 
 import { ArrowLeft, CheckCircle2, Eye, RefreshCw, Save, X } from "lucide-react";
 import { useMemo, useState } from "react";
+import { useTranslations } from "next-intl";
 
 import type { CharacterBoardCropMeta, CharacterDna } from "@/types/character";
 
@@ -33,19 +34,6 @@ const DEFAULT_CROP: CharacterBoardCropMeta = {
   right: { left: 973, top: 0, width: 1075, height: 1360 },
 };
 
-const SPECIES_LABEL: Record<CharacterDna["species"], string> = {
-  realistic: "写真真人",
-  anime: "二次元",
-  mascot: "潮玩吉盒",
-  animal: "动物精灵",
-};
-
-const GENDER_LABEL: Record<CharacterDna["gender"], string> = {
-  female: "女性",
-  male: "男性",
-  neutral: "中性",
-};
-
 function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
 }
@@ -70,16 +58,17 @@ export function CharacterBoardSuccess({
   onDiscard,
   onViewMyRoles,
 }: CharacterBoardSuccessProps) {
+  const t = useTranslations("characterCreate");
   const [showFullBoard, setShowFullBoard] = useState(false);
   const [showPrompt, setShowPrompt] = useState(false);
 
   const crop = cropMeta || DEFAULT_CROP;
   const promptToShow = boardPrompt || prompt;
   const tags = useMemo(() => {
-    const base = [SPECIES_LABEL[dnaConfig.species], GENDER_LABEL[dnaConfig.gender]];
-    if (dnaConfig.baseDna) base.push("角色设定");
+    const base = [t(`board.${dnaConfig.species}`), t(`board.${dnaConfig.gender}`)];
+    if (dnaConfig.baseDna) base.push(t("board.characterDesign"));
     return base;
-  }, [dnaConfig.baseDna, dnaConfig.gender, dnaConfig.species]);
+  }, [dnaConfig.baseDna, dnaConfig.gender, dnaConfig.species, t]);
 
   const canSave = Boolean(characterName.trim()) && !isSaving && !savedCharacterId;
 
@@ -90,7 +79,7 @@ export function CharacterBoardSuccess({
 
       <button className={styles.backButton} onClick={onBack} type="button">
         <ArrowLeft className="h-4 w-4" />
-        重新配置
+        {t("board.reconfigure")}
       </button>
 
       <button
@@ -99,21 +88,21 @@ export function CharacterBoardSuccess({
         type="button"
       >
         <X className="h-4 w-4" />
-        {savedCharacterId ? "关闭" : "放弃"}
+        {savedCharacterId ? t("board.close") : t("board.discard")}
       </button>
 
       <header className={styles.header}>
         <div className={styles.titleMark} />
         <div>
-          <h1>角色已诞生</h1>
-          <p>完整设定板已生成</p>
+          <h1>{t("board.born")}</h1>
+          <p>{t("board.generated")}</p>
         </div>
         <button
           className={styles.regenerateIconButton}
           onClick={onRegenerate}
           type="button"
-          aria-label="重新生成"
-          title="重新生成"
+          aria-label={t("board.regenerate")}
+          title={t("board.regenerate")}
         >
           <RefreshCw className="h-4 w-4" />
         </button>
@@ -128,25 +117,25 @@ export function CharacterBoardSuccess({
         >
           <div className={styles.fullBoardFrame}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={boardUrl} alt="完整角色设定板" />
+            <img src={boardUrl} alt={t("board.imageAlt")} />
           </div>
         </button>
 
         <aside className={styles.savePanel}>
-          <h2>保存角色</h2>
+          <h2>{t("board.saveCharacter")}</h2>
 
           <label className={styles.field}>
-            <span>角色名</span>
+            <span>{t("board.name")}</span>
             <input
               value={characterName}
               onChange={(event) => onNameChange(event.target.value)}
-              placeholder="输入角色名"
+              placeholder={t("board.namePlaceholder")}
               maxLength={50}
             />
           </label>
 
           <div className={styles.field}>
-            <span>类型</span>
+            <span>{t("board.type")}</span>
             <div className={styles.tags}>
               {tags.map((tag, index) => (
                 <span className={styles.tag} key={`${tag}-${index}`}>
@@ -157,10 +146,10 @@ export function CharacterBoardSuccess({
           </div>
 
           <div className={cx(styles.field, styles.promptField)}>
-            <span>创建提示词</span>
+            <span>{t("board.prompt")}</span>
             <button className={styles.promptViewButton} onClick={() => setShowPrompt(true)} type="button">
               <Eye className="h-4 w-4" />
-              查看完整提示词
+              {t("board.viewPrompt")}
             </button>
           </div>
 
@@ -169,17 +158,17 @@ export function CharacterBoardSuccess({
           {savedCharacterId ? (
             <button className={styles.savedLink} onClick={onViewMyRoles} type="button">
               <CheckCircle2 className="h-5 w-5" />
-              查看我的角色
+              {t("board.viewMine")}
             </button>
           ) : (
             <>
               <button className={styles.saveButton} onClick={onSave} disabled={!canSave} type="button">
                 <Save className="h-5 w-5" />
-                {isSaving ? "保存中..." : "保存为角色"}
+                {isSaving ? t("board.saving") : t("board.save")}
               </button>
               <button className={styles.discardButton} onClick={onDiscard} disabled={isSaving} type="button">
                 <X className="h-4 w-4" />
-                放弃并退出
+                {t("board.discardExit")}
               </button>
             </>
           )}
@@ -192,7 +181,7 @@ export function CharacterBoardSuccess({
             <X className="h-5 w-5" />
           </button>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={boardUrl} alt="完整角色设定板" onClick={(event) => event.stopPropagation()} />
+          <img src={boardUrl} alt={t("board.imageAlt")} onClick={(event) => event.stopPropagation()} />
         </div>
       )}
 
@@ -202,7 +191,7 @@ export function CharacterBoardSuccess({
             <button className={styles.promptModalClose} onClick={() => setShowPrompt(false)} type="button">
               <X className="h-5 w-5" />
             </button>
-            <h3>完整提示词</h3>
+            <h3>{t("board.fullPrompt")}</h3>
             <textarea value={promptToShow} readOnly />
           </div>
         </div>

@@ -1,0 +1,32 @@
+{
+  "language": {
+    "switch": "Switch language",
+    "chinese": "中文",
+    "english": "English"
+  },
+  "actions": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "close": "Close",
+    "retry": "Retry",
+    "reset": "Reset",
+    "zoomIn": "Zoom in",
+    "zoomOut": "Zoom out",
+    "clearFilters": "Clear filters"
+  },
+  "status": {
+    "loading": "Loading",
+    "ready": "Ready",
+    "unavailable": "Unavailable"
+  },
+  "errors": {
+    "loadFailed": "Failed to load",
+    "network": "Network error. Please try again.",
+    "operationFailed": "Operation failed",
+    "tryAgain": "Please try again"
+  },
+  "units": {
+    "credits": "{count, plural, one {# credit} other {# credits}}",
+    "images": "{count, plural, one {# image} other {# images}}"
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "language": {
+    "switch": "切换语言",
+    "chinese": "中文",
+    "english": "English"
+  },
+  "actions": {
+    "save": "保存",
+    "cancel": "取消",
+    "close": "关闭",
+    "retry": "重试",
+    "reset": "重置",
+    "zoomIn": "放大",
+    "zoomOut": "缩小",
+    "clearFilters": "清除筛选"
+  },
+  "status": {
+    "loading": "加载中",
+    "ready": "已就绪",
+    "unavailable": "暂无"
+  },
+  "errors": {
+    "loadFailed": "加载失败",
+    "network": "网络错误，请重试",
+    "operationFailed": "操作失败",
+    "tryAgain": "请重试"
+  },
+  "units": {
+    "credits": "{count} 积分",
+    "images": "{count} 张图片"
+  }
+}

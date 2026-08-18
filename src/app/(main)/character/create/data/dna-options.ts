@@ -220,8 +220,28 @@ export const outfitBySpecies: Record<string, DnaOption[]> = {
 // 获取特定 species 的选项组（6 行）
 // ============================================================================
 
-export function getDnaOptionGroups(species: string): DnaOptionGroup[] {
-  return [
+const ENGLISH_GROUP_LABELS: Record<string, string> = {
+  species: "Category & Species",
+  baseDna: "Core Traits",
+  genderAge: "Gender & Age",
+  bodyType: "Body Proportions",
+  hair: "Hair Style & Color",
+  outfit: "Default Outfit",
+};
+
+function getEnglishOptionLabel(value: string) {
+  return value
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ")
+    .replace(/3d/g, "3D")
+    .replace(/Rpg/g, "RPG")
+    .replace(/Ootd/g, "OOTD")
+    .replace(/Tee/g, "T-shirt");
+}
+
+export function getDnaOptionGroups(species: string, lang: "zh" | "en" = "zh"): DnaOptionGroup[] {
+  const groups = [
     {
       key: "species",
       label: "大类与物种",
@@ -256,6 +276,17 @@ export function getDnaOptionGroups(species: string): DnaOptionGroup[] {
       options: outfitBySpecies[species] || outfitBySpecies.realistic,
     },
   ];
+
+  if (lang === "zh") return groups;
+
+  return groups.map((group) => ({
+    ...group,
+    label: ENGLISH_GROUP_LABELS[group.key] || group.label,
+    options: group.options.map((option) => ({
+      ...option,
+      label: getEnglishOptionLabel(option.value),
+    })),
+  }));
 }
 
 // ============================================================================

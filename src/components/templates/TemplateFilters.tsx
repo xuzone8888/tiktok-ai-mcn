@@ -1,7 +1,8 @@
 "use client"
 
-import { ALL_CATEGORIES, CATEGORY_LABELS, type TemplateCategory } from '@/types/content-template'
+import { ALL_CATEGORIES, type TemplateCategory } from '@/types/content-template'
 import { Search } from 'lucide-react'
+import { useTranslations } from 'next-intl'
 
 interface TemplateFiltersProps {
   selectedCategory: TemplateCategory | null
@@ -18,15 +19,18 @@ export function TemplateFilters({
   onSearchChange,
   totalCount,
 }: TemplateFiltersProps) {
+  const t = useTranslations('templates')
+  const categoryLabels = t.raw('categories') as Record<TemplateCategory, string>
+
   return (
     <div className="space-y-6 mb-10">
       {/* 统计信息 */}
       <div className="flex items-center gap-2 text-xs font-mono text-white/40 uppercase tracking-widest">
         <span className="px-3 py-1 rounded-full bg-white/5 border border-white/10">
-          {totalCount} 个模板
+          {t('filters.templateCount', { count: totalCount })}
         </span>
         <span className="px-3 py-1 rounded-full bg-white/5 border border-white/10">
-          {ALL_CATEGORIES.length} 个类别
+          {t('filters.categoryCount', { count: ALL_CATEGORIES.length })}
         </span>
       </div>
 
@@ -41,7 +45,7 @@ export function TemplateFilters({
               : 'bg-white/5 border border-white/10 text-white/60 hover:text-white hover:bg-white/10'
           }`}
         >
-          全部模板
+          {t('filters.all')}
         </button>
 
         {/* 6 个分类 */}
@@ -55,7 +59,7 @@ export function TemplateFilters({
                 : 'bg-white/5 border border-white/10 text-white/60 hover:text-white hover:bg-white/10'
             }`}
           >
-            {CATEGORY_LABELS[cat]}
+            {categoryLabels[cat]}
           </button>
         ))}
 
@@ -66,7 +70,7 @@ export function TemplateFilters({
             type="text"
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
-            placeholder="搜索模板..."
+            placeholder={t('filters.search')}
             className="w-full bg-[#0B0C10] border border-white/10 rounded-lg py-3 pl-11 pr-4 text-sm focus:outline-none focus:border-[#00F2EA]/50 transition-all placeholder:text-white/20 font-sans"
           />
         </div>

@@ -5,10 +5,15 @@ import { TemplateFilters } from '@/components/templates/TemplateFilters'
 import { TemplateCard } from '@/components/templates/TemplateCard'
 import { TemplateDetailDialog } from '@/components/templates/TemplateDetailDialog'
 import { useToast } from '@/hooks/use-toast'
+import { useLang } from '@/contexts/LangContext'
+import { localizeTemplate } from '@/lib/template-localization'
+import { useTranslations } from 'next-intl'
 import type { ContentTemplate, TemplateCategory } from '@/types/content-template'
 
 export default function TemplatesPage() {
   const { toast } = useToast()
+  const { lang } = useLang()
+  const t = useTranslations('templates')
 
   // Data state
   const [templates, setTemplates] = useState<ContentTemplate[]>([])
@@ -53,9 +58,14 @@ export default function TemplatesPage() {
     fetchFavorites()
   }, [])
 
+  const localizedTemplates = useMemo(
+    () => templates.map((template) => localizeTemplate(template, lang)),
+    [templates, lang]
+  )
+
   // Client-side filtering
   const filteredTemplates = useMemo(() => {
-    let result = templates
+    let result = localizedTemplates
 
     if (selectedCategory) {
       result = result.filter((t) => t.category === selectedCategory)
@@ -71,7 +81,12 @@ export default function TemplatesPage() {
     }
 
     return result
-  }, [templates, selectedCategory, searchQuery])
+  }, [localizedTemplates, selectedCategory, searchQuery])
+
+  const localizedSelectedTemplate = selectedTemplate
+    ? localizedTemplates.find((template) => template.id === selectedTemplate.id) ||
+      localizeTemplate(selectedTemplate, lang)
+    : null
 
   // Toggle favorite
   const handleToggleFavorite = useCallback(async (templateId: string) => {
@@ -94,7 +109,11 @@ export default function TemplatesPage() {
         setFavorites((prev) =>
           isFav ? [...prev, templateId] : prev.filter((id) => id !== templateId)
         )
-        toast({ title: '操作失败', description: '请先登录', variant: 'destructive' })
+        toast({
+          title: t('toast.operationFailed'),
+          description: t('toast.signIn'),
+          variant: 'destructive',
+        })
       }
     } catch {
       // Revert
@@ -102,13 +121,16 @@ export default function TemplatesPage() {
         isFav ? [...prev, templateId] : prev.filter((id) => id !== templateId)
       )
     }
-  }, [favorites, toast])
+  }, [favorites, toast, t])
 
   // Copy prompt
   const handleCopyPrompt = useCallback(async (template: ContentTemplate) => {
     try {
       await navigator.clipboard.writeText(template.prompt_template)
-      toast({ title: '✅ Prompt 已复制', description: `"${template.name}" 的 Prompt 已复制到剪贴板` })
+      toast({
+        title: t('toast.promptCopied'),
+        description: t('toast.promptCopiedDescription', { name: template.name }),
+      })
 
       // Increment usage count
       fetch(`/api/content-templates/${template.id}`, { method: 'PATCH' }).catch(() => {})
@@ -120,9 +142,9 @@ export default function TemplatesPage() {
         )
       )
     } catch {
-      toast({ title: '❌ 复制失败', variant: 'destructive' })
+      toast({ title: t('toast.copyFailed'), variant: 'destructive' })
     }
-  }, [toast])
+  }, [toast, t])
 
   return (
     <div className="max-w-[1600px] mx-auto">
@@ -132,10 +154,10 @@ export default function TemplatesPage() {
           <div className="mermaid-bar h-14 mr-6" />
           <div>
             <h1 className="text-4xl md:text-5xl font-black tracking-tighter uppercase mb-1 text-white">
-              模板中心
+              {t('page.title')}
             </h1>
             <p className="text-white/50 text-xs tracking-widest uppercase">
-              发现灵感模板，一键激活创作
+              {t('page.subtitle')}
             </p>
           </div>
         </div>
@@ -157,8 +179,8 @@ export default function TemplatesPage() {
         </div>
       ) : filteredTemplates.length === 0 ? (
         <div className="flex flex-col items-center justify-center h-64 gap-4 text-center">
-          <p className="text-white/40 text-lg">没有找到相关模板</p>
-          <p className="text-white/20 text-sm">试试其他分类或关键词</p>
+          <p className="text-white/40 text-lg">{t('page.empty')}</p>
+          <p className="text-white/20 text-sm">{t('page.emptyHint')}</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
@@ -177,10 +199,10 @@ export default function TemplatesPage() {
 
       {/* Detail Dialog */}
       <TemplateDetailDialog
-        template={selectedTemplate}
-        isOpen={!!selectedTemplate}
+        template={localizedSelectedTemplate}
+        isOpen={!!localizedSelectedTemplate}
         onClose={() => setSelectedTemplate(null)}
-        isFavorited={selectedTemplate ? favorites.includes(selectedTemplate.id) : false}
+        isFavorited={localizedSelectedTemplate ? favorites.includes(localizedSelectedTemplate.id) : false}
         onToggleFavorite={handleToggleFavorite}
         onCopyPrompt={handleCopyPrompt}
       />
