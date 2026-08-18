@@ -1,0 +1,37 @@
+# StarGaze OAuth Broker —— TLS 终止（tls internal）+ L7 源 IP 闸 + 只放行 /api/oauth-broker/call。
+# Caddy 以 host 网络运行做主机级监听。**源 IP 限制主闸在这里（remote_ip）**：Caddy 看真实 TCP
+# 对端 IP，不受主机防火墙 nft/legacy/宝塔 IN_BT 多套并存的乱象影响，且可在本机自证
+#（loopback 源≠放行 IP → 被断）。主机 iptables 规则作为纵深防御的第二层。
+# transport 细节走 env：BROKER_PUBLIC_ADDR（证书 SAN/连接地址/监听地址）、BROKER_TLS_PORT、
+#   BROKER_UPSTREAM（反代目标=broker localhost 端口）、BROKER_ALLOW_IP（放行的源 IP=CN 出口）。
+{
+	admin off
+	auto_https disable_redirects
+	# 只跑 h1/h2（TCP）；关掉 HTTP/3，避免多开一个 UDP 监听面。
+	servers {
+		protocols h1 h2
+	}
+}
+
+https://{$BROKER_PUBLIC_ADDR}:{$BROKER_TLS_PORT} {
+	# 自建本地 CA 签发内部证书（SAN=BROKER_PUBLIC_ADDR）；CN 端经 NODE_EXTRA_CA_CERTS 信任其根。
+	tls internal
+
+	route {
+		# 源 IP 主闸：非放行 IP 直接断连（不回任何内容，不暴露服务存在）。
+		@notallowed not remote_ip {$BROKER_ALLOW_IP}
+		abort @notallowed
+
+		# 仅放行 broker 调用端点，反代到 broker 的 localhost 发布端口。
+		@brokercall path /api/oauth-broker/call
+		reverse_proxy @brokercall {$BROKER_UPSTREAM}
+
+		# 其余一切路径一律 404。
+		respond "Not Found" 404
+	}
+
+	# 访问日志关到最低，绝不记 Authorization 头。
+	log {
+		level ERROR
+	}
+}

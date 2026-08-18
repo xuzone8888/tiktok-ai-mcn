@@ -34,10 +34,9 @@ yarn-error.log*
 .env*.local
 .env.local*
 .env
+*.env
+worker.env
 !.env.example
-
-# vercel
-.vercel
 
 # typescript
 *.tsbuildinfo
@@ -45,9 +44,11 @@ next-env.d.ts
 
 # temp / test files
 .temp/
+.tmp/
 test-slideshow/
 *.mp4
 nohup.out
 __pycache__/
 # Template preview videos (served from OSS CDN)
 public/videos/templates/
+.env*

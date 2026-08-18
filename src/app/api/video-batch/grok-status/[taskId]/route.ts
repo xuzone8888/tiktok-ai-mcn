@@ -11,6 +11,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { queryGrokImagineResult } from "@/lib/grok-imagine-api";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
 
 export async function GET(
   request: NextRequest,
@@ -23,6 +24,31 @@ export async function GET(
       return NextResponse.json(
         { success: false, error: "Missing taskId" },
         { status: 400 }
+      );
+    }
+
+    // 归属校验：只有任务所属用户能查询与推进状态（沿用 sora-status/happyhorse-status 范式）
+    const authClient = await createClient();
+    const {
+      data: { user },
+    } = await authClient.auth.getUser();
+    if (!user) {
+      return NextResponse.json(
+        { success: false, error: "请先登录" },
+        { status: 401 }
+      );
+    }
+    const ownershipClient = createAdminClient();
+    const { data: existingGen } = await ownershipClient
+      .from("generations")
+      .select("id")
+      .eq("task_id", taskId)
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (!existingGen) {
+      return NextResponse.json(
+        { success: false, error: "任务不存在或无权查看" },
+        { status: 404 }
       );
     }
 
@@ -57,7 +83,8 @@ export async function GET(
             result_url: task.videoUrl,
             completed_at: new Date().toISOString(),
           })
-          .eq("task_id", taskId);
+          .eq("task_id", taskId)
+          .eq("user_id", user.id);
 
         if (updateError) {
           console.error("[Grok Status] Failed to update DB record:", updateError);
@@ -76,7 +103,8 @@ export async function GET(
             status: "failed",
             error_message: task.errorMessage || "生成失败",
           })
-          .eq("task_id", taskId);
+          .eq("task_id", taskId)
+          .eq("user_id", user.id);
 
         if (updateError) {
           console.error("[Grok Status] Failed to update failed status:", updateError);

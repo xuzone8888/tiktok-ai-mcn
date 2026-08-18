@@ -39,7 +39,7 @@ const SHOP_TEXT = {
 
   // ====== Step 1 — Video selection ======
   video: {
-    sectionTitle:    { en: 'Select Your Video',    zh: '选择你的视频' },
+    sectionTitle:    { en: 'Select Video',          zh: '选择视频' },
     sectionDesc:     { en: 'Upload a video file or provide a URL to an existing video',
                        zh: '上传视频文件或输入已有视频的 URL' },
     uploadTab:       { en: 'Upload Video',         zh: '上传视频' },
@@ -95,6 +95,7 @@ const SHOP_TEXT = {
   // ====== Step 4 — Settings (ShopPublishSettings) ======
   settings: {
     sectionTitle:    { en: 'Publish Settings',       zh: '发布设置' },
+    sectionDesc:     { en: 'Set the video title and product anchor text', zh: '设置视频标题与商品锚点文案' },
     videoTitle:      { en: 'Video Title',            zh: '视频标题' },
     required:        { en: '*',                      zh: '*' },
     titlePlaceholder:{ en: 'Enter a catchy title for your shoppable video...',
@@ -128,7 +129,7 @@ const SHOP_TEXT = {
     previewNotice:   { en: 'Preview is for confirmation only. Actual delivery on TikTok may vary.',
                        zh: '预览仅用于确认发布内容，实际 TikTok 展示可能略有差异' },
     singleProductHint:{ en: 'Only 1 product can be attached per video', zh: '每条视频仅挂载 1 个商品' },
-    completeFirst:   { en: 'Please complete first',  zh: '请先完成' },
+    completeFirst:   { en: 'Please complete first: ',  zh: '请先完成：' },
     precheckOn:      { en: 'Precheck ON',            zh: '预检已开启' },
     platformNotice:  { en: 'Platform Notice',        zh: '平台声明' },
     guidelinesItems: {
@@ -323,8 +324,8 @@ export function getPlatformNoticeText(lang: Lang) {
   const brand = APP_BRAND.appDisplayName
   return {
     text1: lang === 'en'
-      ? `${brand} is an AI-powered content management platform that helps creators streamline their publishing workflow.`
-      : `${brand} 是一个AI驱动的内容管理平台，帮助创作者简化发布流程。`,
+      ? `${brand} is a content management platform where creators manually prepare each publish task.`
+      : `${brand} 是一个内容管理平台，创作者在此手动准备每一条发布任务。`,
     text2: lang === 'en'
       ? 'By publishing, you acknowledge that you have reviewed this video and its associated content for accuracy and compliance. You are solely responsible for ensuring all published material meets:'
       : '提交发布即表示您已审阅视频及关联内容的准确性和合规性。您需确保所有发布内容符合：',

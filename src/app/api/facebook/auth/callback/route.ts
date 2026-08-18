@@ -2,17 +2,21 @@ import { NextRequest, NextResponse } from 'next/server'
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import {
+  assertFacebookRequiredPageScopes,
   calculateFacebookTokenExpiration,
   debugFacebookUserToken,
   exchangeFacebookCodeForToken,
   exchangeForLongLivedUserToken,
   FACEBOOK_PAGE_SCOPES,
+  getGrantedFacebookScopes,
   getFacebookGrantedPermissions,
   getFacebookOAuthConfig,
   getFacebookPagePublishPermissionError,
+  getFacebookUserInfo,
   getMyFacebookPages,
   hasFacebookPagePublishPermission,
-  scopesToArray,
+  isFacebookPageWebhookEnabled,
+  subscribeFacebookPageToWebhooks,
   type FacebookPermissionInfo,
   type FacebookTokenDebugInfo,
 } from '@/lib/facebook/oauth'
@@ -23,6 +27,12 @@ function getRequestOrigin(request: NextRequest) {
   const host = request.headers.get('host') || request.headers.get('x-forwarded-host') || request.nextUrl.host
   const protocol = request.headers.get('x-forwarded-proto') || request.nextUrl.protocol.replace(':', '') || 'http'
   return `${protocol.split(',')[0].trim()}://${host.split(',')[0].trim()}`
+}
+
+function getAppRedirectOrigin(request: NextRequest) {
+  // 跳转目标钉死可信的服务端配置（NEXT_PUBLIC_APP_URL），避免用 Host/X-Forwarded-Host 头拼跳转
+  // 造成 host 头注入 / 开放重定向（与 Instagram 回调、TikTok 参考实现保持一致）。
+  return process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, '') || getRequestOrigin(request)
 }
 
 function redirectToAccounts(origin: string, params: Record<string, string>) {
@@ -80,7 +90,9 @@ export async function GET(request: NextRequest) {
   const state = searchParams.get('state')
   const error = searchParams.get('error')
   const errorDescription = searchParams.get('error_description')
-  const redirectOrigin = getRequestOrigin(request)
+  const errorCode = searchParams.get('error_code')
+  const errorReason = searchParams.get('error_reason')
+  const redirectOrigin = getAppRedirectOrigin(request)
 
   if ((!code && !error) || !state) {
     return redirectToAccounts(redirectOrigin, { error: '缺少 Facebook 授权参数' })
@@ -99,23 +111,35 @@ export async function GET(request: NextRequest) {
       return redirectToAccounts(redirectOrigin, { error: 'Facebook 授权状态无效或已过期' })
     }
 
+    if (authState.status === 'failed' && authState.error_message) {
+      return redirectToAccounts(redirectOrigin, {
+        error: `Facebook 授权失败：${authState.error_message}`,
+      })
+    }
+
     if (authState.status !== 'pending') {
       return redirectToAccounts(redirectOrigin, { error: 'Facebook 授权状态已使用或无效，请重新绑定' })
     }
 
     if (error) {
+      const metaErrorDetails = [
+        errorDescription || error,
+        errorCode ? `Meta 错误码 ${errorCode}` : null,
+        errorReason ? `原因 ${errorReason}` : null,
+      ].filter(Boolean).join('；')
+
       await supabase
         .from('facebook_auth_states')
         .update({
           status: 'failed',
           error_code: error,
-          error_message: errorDescription || error,
+          error_message: metaErrorDetails,
           code_verifier: null,
           completed_at: new Date().toISOString(),
         })
         .eq('state', state)
 
-      return redirectToAccounts(redirectOrigin, { error: errorDescription || error })
+      return redirectToAccounts(redirectOrigin, { error: metaErrorDetails })
     }
 
     if (new Date(authState.expires_at).getTime() <= Date.now()) {
@@ -138,13 +162,15 @@ export async function GET(request: NextRequest) {
 
     const shortToken = await exchangeFacebookCodeForToken(code, authState.code_verifier)
     const longLivedToken = await exchangeForLongLivedUserToken(shortToken.access_token)
-    const pages = await getMyFacebookPages(longLivedToken.access_token)
+    const [facebookUser, pages, permissions] = await Promise.all([
+      getFacebookUserInfo(longLivedToken.access_token),
+      getMyFacebookPages(longLivedToken.access_token),
+      getFacebookGrantedPermissions(longLivedToken.access_token),
+    ])
+    assertFacebookRequiredPageScopes(permissions)
 
     if (pages.length === 0) {
-      const [permissions, tokenDebug] = await Promise.all([
-        getFacebookGrantedPermissions(longLivedToken.access_token).catch(() => []),
-        debugFacebookUserToken(longLivedToken.access_token).catch(() => null),
-      ])
+      const tokenDebug = await debugFacebookUserToken(longLivedToken.access_token).catch(() => null)
 
       throw new Error(buildFacebookNoPageError(permissions, tokenDebug))
     }
@@ -156,14 +182,21 @@ export async function GET(request: NextRequest) {
 
     const now = new Date().toISOString()
     const expiresAt = calculateFacebookTokenExpiration(longLivedToken.expires_in)?.toISOString() || null
-    const scopes = scopesToArray(shortToken.scope)
+    const scopes = getGrantedFacebookScopes(permissions)
     let savedCount = 0
+
+    if (isFacebookPageWebhookEnabled()) {
+      await Promise.all(publishablePages.map((page) =>
+        subscribeFacebookPageToWebhooks(page.pageId, page.accessToken)
+      ))
+    }
 
     for (const page of publishablePages) {
       const { data: savedAccount, error: upsertError } = await supabase
         .from('facebook_accounts')
         .upsert({
           user_id: authState.user_id,
+          authorized_by_facebook_user_id: facebookUser.id,
           channel_id: page.pageId,
           channel_title: page.name,
           channel_handle: page.category,

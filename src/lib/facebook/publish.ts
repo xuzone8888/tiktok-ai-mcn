@@ -1,3 +1,6 @@
+import { getFacebookAppSecretProof } from '@/lib/facebook/oauth'
+import { isPrivateOrLoopbackHostname } from '@/lib/publish/url-safety'
+
 export interface UploadFacebookVideoOptions {
   pageId: string
   title: string
@@ -8,13 +11,16 @@ export interface UploadFacebookVideoOptions {
 
 export interface FacebookVideoUploadResult {
   videoId: string
+  postId: string | null
   watchUrl: string | null
   published: boolean
 }
 
-const FACEBOOK_API_VERSION = process.env.FACEBOOK_API_VERSION || 'v20.0'
+const FACEBOOK_API_VERSION = process.env.FACEBOOK_API_VERSION || 'v25.0'
+const FACEBOOK_GRAPH_URL = `https://graph.facebook.com/${FACEBOOK_API_VERSION}`
 const FACEBOOK_VIDEO_GRAPH_URL = `https://graph-video.facebook.com/${FACEBOOK_API_VERSION}`
 const FACEBOOK_SINGLE_VIDEO_TEST_LIMIT_BYTES = 500 * 1024 * 1024
+const FACEBOOK_POST_ID_RESOLUTION_DELAYS_MS = [0, 750, 1_500, 3_000] as const
 const FACEBOOK_CONTENT_CATEGORIES = new Set([
   'BEAUTY_FASHION',
   'BUSINESS',
@@ -43,7 +49,10 @@ function formatMegabytes(bytes: number) {
 function isAllowedVideoUrl(videoUrl: string): boolean {
   try {
     const url = new URL(videoUrl)
-    if (url.protocol === 'https:') return true
+    if (url.protocol === 'https:') {
+      // 收紧 SSRF：放行公网 https，但拒绝指向私网/环回/链路本地（含云元数据 169.254.169.254）的地址。
+      return !isPrivateOrLoopbackHostname(url.hostname)
+    }
     if (url.protocol !== 'http:') return false
 
     const isLocalHost = ['127.0.0.1', 'localhost', '::1'].includes(url.hostname)
@@ -62,6 +71,22 @@ function trimText(value: string, maxLength: number): string {
   return value.length > maxLength ? value.slice(0, maxLength) : value
 }
 
+function describeNetworkError(error: unknown): string {
+  if (!(error instanceof Error)) return '未知网络错误'
+
+  const cause = error.cause
+  if (cause && typeof cause === 'object') {
+    const causeRecord = cause as { code?: unknown; message?: unknown }
+    const details = [
+      typeof causeRecord.code === 'string' ? causeRecord.code : null,
+      typeof causeRecord.message === 'string' ? causeRecord.message : null,
+    ].filter(Boolean)
+    if (details.length > 0) return `${error.message} (${details.join(': ')})`
+  }
+
+  return error.message
+}
+
 async function readFacebookApiError(response: Response): Promise<string> {
   const data = await response.json().catch(() => null) as any
   return data?.error?.message || data?.error_description || data?.error || response.statusText
@@ -72,7 +97,12 @@ async function fetchVideoBlob(videoUrl: string): Promise<Blob> {
     throw new Error('Facebook 发布要求视频 URL 使用 HTTPS，或使用本地测试上传生成的签名地址')
   }
 
-  const response = await fetch(videoUrl)
+  let response: Response
+  try {
+    response = await fetch(videoUrl)
+  } catch (error) {
+    throw new Error(`读取待发布视频时网络请求失败: ${describeNetworkError(error)}`)
+  }
   if (!response.ok) {
     throw new Error(`无法读取视频文件: ${response.status} ${response.statusText}`)
   }
@@ -100,6 +130,45 @@ async function fetchVideoBlob(videoUrl: string): Promise<Blob> {
   return new Blob([bytes], { type: contentType })
 }
 
+async function resolvePublishedVideoIdentity(accessToken: string, videoId: string) {
+  const url = new URL(`${FACEBOOK_GRAPH_URL}/${encodeURIComponent(videoId)}`)
+  url.searchParams.set('fields', 'id,post_id,permalink_url')
+  url.searchParams.set('appsecret_proof', getFacebookAppSecretProof(accessToken))
+
+  const response = await fetch(url, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  })
+  if (!response.ok) return null
+
+  const data = await response.json().catch(() => null) as any
+  return {
+    postId: typeof data?.post_id === 'string' && data.post_id ? data.post_id : null,
+    permalinkUrl: typeof data?.permalink_url === 'string' && data.permalink_url
+      ? data.permalink_url
+      : null,
+  }
+}
+
+async function resolvePublishedVideoIdentityWithRetry(accessToken: string, videoId: string) {
+  let bestPostId: string | null = null
+  let bestPermalinkUrl: string | null = null
+
+  for (const delayMs of FACEBOOK_POST_ID_RESOLUTION_DELAYS_MS) {
+    if (delayMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, delayMs))
+    }
+
+    const identity = await resolvePublishedVideoIdentity(accessToken, videoId).catch(() => null)
+    bestPostId = identity?.postId || bestPostId
+    bestPermalinkUrl = identity?.permalinkUrl || bestPermalinkUrl
+    if (bestPostId) return { postId: bestPostId, permalinkUrl: bestPermalinkUrl }
+  }
+
+  return bestPostId || bestPermalinkUrl
+    ? { postId: bestPostId, permalinkUrl: bestPermalinkUrl }
+    : null
+}
+
 export async function uploadFacebookVideoFromUrl(
   accessToken: string,
   videoUrl: string,
@@ -111,6 +180,7 @@ export async function uploadFacebookVideoFromUrl(
   const videoBlob = await fetchVideoBlob(videoUrl)
   const formData = new FormData()
   formData.set('access_token', accessToken)
+  formData.set('appsecret_proof', getFacebookAppSecretProof(accessToken))
   formData.set('source', videoBlob, 'video.mp4')
   formData.set('title', trimText(options.title || 'Untitled video', 255))
   formData.set('description', trimText(options.description || '', 63206))
@@ -120,10 +190,17 @@ export async function uploadFacebookVideoFromUrl(
     formData.set('content_category', contentCategory)
   }
 
-  const response = await fetch(`${FACEBOOK_VIDEO_GRAPH_URL}/${encodeURIComponent(options.pageId)}/videos`, {
-    method: 'POST',
-    body: formData,
-  })
+  let response: Response
+  try {
+    response = await fetch(`${FACEBOOK_VIDEO_GRAPH_URL}/${encodeURIComponent(options.pageId)}/videos`, {
+      method: 'POST',
+      body: formData,
+    })
+  } catch (error) {
+    // Do not retry automatically here: Meta may have accepted the upload before
+    // the connection dropped, and a blind retry could publish the same video twice.
+    throw new Error(`连接 Facebook 视频上传服务失败: ${describeNetworkError(error)}`)
+  }
 
   if (!response.ok) {
     throw new Error(`Facebook 上传失败: ${await readFacebookApiError(response)}`)
@@ -134,9 +211,14 @@ export async function uploadFacebookVideoFromUrl(
     throw new Error('Facebook 上传成功但未返回视频 ID')
   }
 
+  // Facebook may return the video before its backing Page post is queryable. Retry only
+  // this read-only identity lookup, with a fixed bound, and never repeat the upload.
+  const identity = await resolvePublishedVideoIdentityWithRetry(accessToken, data.id)
+
   return {
     videoId: data.id,
-    watchUrl: `https://www.facebook.com/watch/?v=${data.id}`,
+    postId: identity?.postId || null,
+    watchUrl: identity?.permalinkUrl || `https://www.facebook.com/watch/?v=${data.id}`,
     published: true,
   }
 }

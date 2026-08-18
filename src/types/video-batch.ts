@@ -3,6 +3,16 @@
  */
 
 import type { CharacterAssetSnapshot } from "@/lib/character-assets";
+import {
+  getVideoModelCatalogEntry,
+  getVideoModelCreditCost,
+} from "@/lib/video-models/catalog";
+import type {
+  VideoAspectRatio as SharedVideoAspectRatio,
+  VideoDurationSeconds,
+  VideoModelId,
+  VideoQuality as SharedVideoQuality,
+} from "@/lib/video-models/types";
 
 // ============================================================================
 // 基础类型
@@ -19,16 +29,16 @@ export type VideoBatchTaskStatus =
   | "failed";           // 失败
 
 /** 视频比例 */
-export type VideoAspectRatio = "9:16" | "16:9";
+export type VideoAspectRatio = SharedVideoAspectRatio;
 
 /** 视频时长 */
-export type VideoDuration = 5 | 8 | 10 | 12 | 15 | 25;
+export type VideoDuration = VideoDurationSeconds;
 
 /** 视频质量 */
-export type VideoQuality = "standard" | "hd";
+export type VideoQuality = SharedVideoQuality;
 
 /** 视频模型类型 */
-export type VideoModelType = "sora2" | "sora2-pro" | "grok" | "veo" | "omni" | "seedance" | "happyhorse";
+export type VideoModelType = VideoModelId;
 
 /** 流水线步骤 */
 export type PipelineStep = 0 | 1 | 2 | 3 | 4;
@@ -43,36 +53,13 @@ export interface VideoModelConfig {
 
 /** 获取可用的时长选项 */
 export function getAvailableDurations(modelType: VideoModelType, quality: VideoQuality): VideoDuration[] {
-  if (modelType === "sora2" || modelType === "sora2-pro") {
-    return [12];
-  } else if (modelType === "veo") {
-    return [8];
-  } else if (modelType === "grok") {
-    return [10];
-  } else if (modelType === "omni") {
-    return [10];
-  } else if (modelType === "seedance") {
-    return [5, 10];
-  } else if (modelType === "happyhorse") {
-    return [5, 12];
-  }
-  return [12];
+  void quality;
+  return Array.from(getVideoModelCatalogEntry(modelType).supportedDurations);
 }
 
 /** 获取可用的质量选项 */
 export function getAvailableQualities(modelType: VideoModelType): VideoQuality[] {
-  if (modelType === "sora2") {
-    return ["standard"];
-  } else if (modelType === "sora2-pro") {
-    return ["hd"];
-  } else if (modelType === "veo" || modelType === "grok" || modelType === "omni") {
-    return ["standard"];
-  } else if (modelType === "seedance") {
-    return ["standard", "hd"];
-  } else if (modelType === "happyhorse") {
-    return ["standard"];
-  }
-  return ["standard"];
+  return Array.from(getVideoModelCatalogEntry(modelType).supportedQualities);
 }
 
 // ============================================================================
@@ -104,6 +91,9 @@ export interface VideoBatchTask {
 
   // 任务组名称（必填，用于Tab切换和批量管理）
   groupName: string;
+
+  // Studio 批次 ID（S1：随提交透传，落 generations.batch_id）
+  batchId?: string;
 
   // 任务模式
   mode?: VideoBatchTaskMode;  // 默认 "image_to_video"
@@ -270,6 +260,7 @@ export const VIDEO_BATCH_PRICING = {
   sora2Pro_12s: 350,
   veo_8s: 50,
   grok_10s: 5,
+  grok_15s: 8,
   omni_10s: 50,
   // Seedance 2.0 标准版 (480p→1080p超分)
   seedance_5s: 233,     // Seedance 2.0 5秒 高清1080P (¥2.33)
@@ -287,33 +278,7 @@ export function getVideoBatchTotalPrice(
   duration: VideoDuration,
   quality: VideoQuality
 ): number {
-  if (modelType === "sora2") {
-    return VIDEO_BATCH_PRICING.sora2_12s;
-  }
-  if (modelType === "sora2-pro") {
-    return VIDEO_BATCH_PRICING.sora2Pro_12s;
-  }
-  if (modelType === "veo") return VIDEO_BATCH_PRICING.veo_8s;
-  if (modelType === "grok") {
-    return VIDEO_BATCH_PRICING.grok_10s;
-  }
-  if (modelType === "omni") {
-    return VIDEO_BATCH_PRICING.omni_10s;
-  }
-  if (modelType === "seedance") {
-    if (quality === "hd") {
-      if (duration === 5) return VIDEO_BATCH_PRICING.seedancePro_5s;
-      return VIDEO_BATCH_PRICING.seedancePro_10s;
-    }
-    if (duration === 5) return VIDEO_BATCH_PRICING.seedance_5s;
-    return VIDEO_BATCH_PRICING.seedance_10s;
-  }
-  if (modelType === "happyhorse") {
-    if (duration === 12) return VIDEO_BATCH_PRICING.happyhorse_12s;
-    return VIDEO_BATCH_PRICING.happyhorse_5s;
-  }
-
-  return VIDEO_BATCH_PRICING.sora2_12s;
+  return getVideoModelCreditCost(modelType, duration, quality);
 }
 
 // ============================================================================

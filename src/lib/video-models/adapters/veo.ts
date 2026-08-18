@@ -30,7 +30,9 @@ export const veoAdapter: VideoModelAdapter = {
           },
           imageUrls,
           imageFieldName: "input_reference[]",
-          paths: ["/v1/videos", "/v1/videos?async=true"],
+          paths: input.atMostOnce
+            ? ["/v1/videos"]
+            : ["/v1/videos", "/v1/videos?async=true"],
         })
       : await submitPlatformVideo(
           {
@@ -38,7 +40,9 @@ export const veoAdapter: VideoModelAdapter = {
             prompt: input.prompt,
             size: getVeoRequestSize(input.aspectRatio),
           },
-          ["/v1/videos?async=true", "/v1/videos"]
+          input.atMostOnce
+            ? ["/v1/videos?async=true"]
+            : ["/v1/videos?async=true", "/v1/videos"]
         );
 
     return {

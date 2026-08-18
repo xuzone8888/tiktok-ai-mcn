@@ -12,6 +12,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { submitVeo3Video, type GaoruiVeoModel } from "@/lib/gaorui-veo-api";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
 
 // 所有 VEO3 模型都是异步模式, maxDuration 用于 Next.js route handler 的最大运行时间
 export const maxDuration = 600;
@@ -58,11 +59,27 @@ export async function POST(request: NextRequest) {
       aspectRatio,
       modelType = "veo3-fast",
       taskId,
-      userId,
+      userId: requestedUserId,
       creditCost = 0,
       mode = "image_to_video",
       groupName,
     } = body;
+
+    // 身份以登录态为准，忽略请求体伪造的 userId（沿用 models/submit 范式）
+    const authClient = await createClient();
+    const { data: { user } } = await authClient.auth.getUser();
+    if (!user) {
+      return NextResponse.json(
+        { success: false, error: "请先登录" },
+        { status: 401 }
+      );
+    }
+    if (requestedUserId && requestedUserId !== user.id) {
+      return NextResponse.json(
+        { success: false, error: "用户身份不匹配" },
+        { status: 403 }
+      );
+    }
 
     const isPromptMode = mode === "prompt_to_video";
 
@@ -125,7 +142,7 @@ export async function POST(request: NextRequest) {
       gaoruiModel,
       aspectRatio,
       promptLength: aiVideoPrompt.length,
-      userId: userId || "(not provided)",
+      userId: user.id,
       creditCost,
       imageCount: imageUrls.length,
       hasFirstFrame: !!firstFrameUrl,
@@ -157,44 +174,42 @@ export async function POST(request: NextRequest) {
     });
 
     // 在数据库中创建记录
-    if (userId) {
-      try {
-        const supabase = createAdminClient();
-        const { data: insertedData, error: insertError } = await supabase
-          .from("generations")
-          .insert({
-            user_id: userId,
-            task_id: veoTaskId,
-            type: "video",
-            source: isPromptMode ? "batch_video_prompt_veo3" : "batch_video_veo3",
-            prompt: aiVideoPrompt,
-            model: gaoruiModel,
-            duration: 8,
-            aspect_ratio: aspectRatio,
-            quality: modelType === "veo3-4k" ? "4k" : "standard",
-            source_image_url: mainGridImageUrl || firstFrameUrl || null,
-            status: "processing",
-            result_url: null,
-            credit_cost: creditCost,
-            group_name: groupName || "默认",
-            use_pro: modelType === "veo3-4k",
-            created_at: new Date().toISOString(),
-          })
-          .select()
-          .single();
+    try {
+      const supabase = createAdminClient();
+      const { data: insertedData, error: insertError } = await supabase
+        .from("generations")
+        .insert({
+          user_id: user.id,
+          task_id: veoTaskId,
+          type: "video",
+          source: isPromptMode ? "batch_video_prompt_veo3" : "batch_video_veo3",
+          prompt: aiVideoPrompt,
+          model: gaoruiModel,
+          duration: 8,
+          aspect_ratio: aspectRatio,
+          quality: modelType === "veo3-4k" ? "4k" : "standard",
+          source_image_url: mainGridImageUrl || firstFrameUrl || null,
+          status: "processing",
+          result_url: null,
+          credit_cost: creditCost,
+          group_name: groupName || "默认",
+          use_pro: modelType === "veo3-4k",
+          created_at: new Date().toISOString(),
+        })
+        .select()
+        .single();
 
-        if (insertError) {
-          console.error("[VEO3 Batch] Failed to create DB record:", insertError);
-        } else {
-          console.log("[VEO3 Batch] Created DB record:", {
-            id: insertedData?.id,
-            taskId: veoTaskId,
-            status: "processing",
-          });
-        }
-      } catch (dbError) {
-        console.error("[VEO3 Batch] DB error:", dbError);
+      if (insertError) {
+        console.error("[VEO3 Batch] Failed to create DB record:", insertError);
+      } else {
+        console.log("[VEO3 Batch] Created DB record:", {
+          id: insertedData?.id,
+          taskId: veoTaskId,
+          status: "processing",
+        });
       }
+    } catch (dbError) {
+      console.error("[VEO3 Batch] DB error:", dbError);
     }
 
     // 返回结果

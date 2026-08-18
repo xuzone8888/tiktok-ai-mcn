@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { processFacebookPublishQueue } from '@/lib/facebook/processor'
 import { buildPlatformPublishPayload } from '@/lib/publish/platform-adapters'
+import { isPrivateOrLoopbackHostname } from '@/lib/publish/url-safety'
 
 export const dynamic = 'force-dynamic'
 
@@ -161,7 +162,7 @@ function isAllowedVideoUrl(videoUrl: string | undefined) {
 
   try {
     const url = new URL(videoUrl)
-    if (url.protocol === 'https:') return true
+    if (url.protocol === 'https:') return !isPrivateOrLoopbackHostname(url.hostname)
     if (url.protocol !== 'http:') return false
 
     const isLocalHost = ['127.0.0.1', 'localhost', '::1'].includes(url.hostname)

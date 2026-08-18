@@ -5,6 +5,38 @@
     "empty": "No matching templates found",
     "emptyHint": "Try another category or search term"
   },
+  "recipes": {
+    "pageTitle": "Recipe Library",
+    "pageSubtitle": "Turn proven content structures into reusable recipes and create in one click",
+    "tabs": {
+      "mine": "My Recipes",
+      "inspiration": "Inspiration Templates"
+    },
+    "renderModes": {
+      "slideshow": "Slideshow",
+      "assembly": "Presenter Assembly",
+      "ai_gen": "AI Generated",
+      "photo_post": "Photo Post"
+    },
+    "builtin": "Built-in",
+    "sceneCount": "{count, plural, one {# scene} other {# scenes}}",
+    "useCount": "Used {count} times",
+    "use": "Use Recipe",
+    "rename": "Rename",
+    "delete": "Delete",
+    "dbPending": "The recipe database migration (20260703_recipes.sql) is pending. Built-in recipes remain available; saved and user-created recipes will activate automatically after migration.",
+    "empty": "You have not created any recipes yet. After producing a video in /studio, open its blueprint and choose “Save as Recipe” to preserve the structure for reuse.",
+    "nameRequired": "Recipe name is required",
+    "renamed": "Recipe renamed",
+    "renameFailed": "Failed to rename recipe",
+    "deleted": "Recipe deleted",
+    "deleteFailed": "Failed to delete recipe",
+    "renameTitle": "Rename Recipe",
+    "cancel": "Cancel",
+    "save": "Save",
+    "deleteTitle": "Delete recipe “{name}”?",
+    "deleteDescription": "The recipe will disappear from the omnibox. Blueprints and videos already created with it will not be affected."
+  },
   "filters": {
     "templateCount": "{count, plural, one {# template} other {# templates}}",
     "categoryCount": "{count, plural, one {# category} other {# categories}}",

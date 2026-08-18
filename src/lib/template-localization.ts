@@ -1,4 +1,4 @@
-import type { ContentTemplate, TemplateCategory } from "@/types/content-template";
+import type { ContentTemplate } from "@/types/content-template";
 
 type EnglishTemplateCopy = {
   name: string;
@@ -123,15 +123,6 @@ const ENGLISH_TAGS: Record<string, string> = {
   "视觉": "Visual", "投票": "Poll", "话题": "Topic", "评论引导": "Comment Prompt"
 };
 
-const GENERIC_OUTLINES: Record<TemplateCategory, string[]> = {
-  ecommerce: ["Open with a product hook", "Show the main benefit", "Demonstrate the product", "Add proof or an offer", "Close with a purchase CTA"],
-  brand: ["Open with the brand promise", "Introduce the story", "Show authentic proof", "Express the brand values", "Close with the brand message"],
-  tutorial: ["Introduce the learning goal", "Explain step one", "Explain step two", "Show the result", "Close with the next action"],
-  lifestyle: ["Establish the setting", "Show the first moment", "Develop the experience", "Reveal the highlight", "Close with a personal takeaway"],
-  creative: ["Introduce the creative theme", "Present the first visual", "Build through transitions", "Reach the visual peak", "Close with a memorable final frame"],
-  engagement: ["Introduce the question", "Present option one", "Present option two", "Compare the options", "Invite the audience to respond"],
-};
-
 function containsChinese(value: string | null | undefined) {
   return Boolean(value && /[\u3400-\u9fff]/.test(value));
 }
@@ -147,12 +138,6 @@ export function localizeTemplate(template: ContentTemplate, lang: "zh" | "en"): 
     ...template,
     name,
     description,
-    prompt_template: containsChinese(template.prompt_template)
-      ? `Create a 15-second vertical video based on the “${name}” concept. ${description} Use purposeful visuals, clear pacing, concise on-screen text, and a strong closing action.`
-      : template.prompt_template,
-    script_outline: copy?.outline || template.script_outline.map((item, index) =>
-      containsChinese(item) ? (GENERIC_OUTLINES[template.category][index] || `Scene ${index + 1}`) : item
-    ),
     style_tags: template.style_tags.map((tag, index) =>
       ENGLISH_TAGS[tag] || (containsChinese(tag) ? `Style ${index + 1}` : tag)
     ),

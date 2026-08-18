@@ -1,0 +1,75 @@
+# StarGaze 跨境发布 worker —— 独立 compose project，与现有 newapi / newapi_bjx_overlay /
+# okspeak-intl / nginx-proxy-manager 容器隔离并存。只新增、不改任何现有容器。
+#
+# 机密只经 worker.env（chmod 600，已 gitignore），绝不进 git/镜像层：
+#  - 构建期：作为 BuildKit secret 挂成 .env.production.local（见 Dockerfile，不入镜像层）；
+#  - 运行期：作为 env_file 注入容器环境。
+#
+# 部署（美国机，feature 分支已 checkout 的目录内，worker.env 已就位）：
+#   docker compose -p stargaze-worker -f docker-compose.worker.yml up -d --build
+# 停止 / 回滚：
+#   docker compose -p stargaze-worker -f docker-compose.worker.yml down
+# 验证未碰现有容器：
+#   docker ps   # newapi / newapi_bjx_overlay / okspeak-intl / nginx-proxy-manager 应全未变动
+services:
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      secrets:
+        - workerenv          # 构建期挂成 .env.production.local（见 Dockerfile）
+    image: stargaze-publish-worker:latest
+    container_name: stargaze-worker
+    restart: unless-stopped
+    env_file:
+      - ./worker.env          # 运行期机密注入
+    environment:
+      NODE_ENV: production
+      PORT: "3100"
+    ports:
+      # 仅 loopback，不公网暴露（v1 无 IG re-host → 无需 NPM / 子域名 / 证书）。
+      # cron sidecar（Phase 5）经内网 / 127.0.0.1 打 /process，密钥不出栈。
+      - "127.0.0.1:3100:3100"
+    # 资源上限：保护同机的 newapi 中转站，防 worker crash-loop 饿到邻居（FB 真实内容 <10MB，4g 充裕）。
+    mem_limit: 4g
+    memswap_limit: 4g
+    cpus: 2.0
+    healthcheck:
+      # 任意 HTTP 响应=应用存活（无密钥打 /process 实际回 401，三家均 fail-closed）。
+      # node:slim 无 curl/wget，用 node 内置 http 探活。
+      test: ["CMD", "node", "-e", "require('http').get('http://127.0.0.1:3100/api/instagram/publish/process',r=>process.exit(0)).on('error',()=>process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # cron sidecar（Phase 5）：每 20s 顺序打三家 /process（顺序执行=单飞，杜绝并发 /process 叠加双发窗口）。
+  # tick 从 60s 降到 20s 缩短 pending 项拾取延迟；IG 的 in-request 短轮询可能让单次迭代（尤其 IG 那腿）
+  # 占用到 ~75s，届时下一轮自然顺延，sleep 20 只决定空闲时的拾取节奏。
+  # 经 compose 内网 worker:3100 调用、密钥不出本栈。**默认不启动**（profiles: activation）——
+  # 仅 Phase 7 切换时 `docker compose -p stargaze-worker -f docker-compose.worker.yml --profile activation up -d`
+  # 才拉起；那一刻起 worker 开始真实处理 pending 项（=开始真发布）。
+  cron:
+    image: curlimages/curl:latest
+    container_name: stargaze-worker-cron
+    restart: unless-stopped
+    depends_on:
+      - worker
+    env_file:
+      - ./worker.env            # 提供 CRON_SECRET（密钥仅在本 compose 网络内）
+    profiles:
+      - activation
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        echo "[cron] sidecar started; tick=20s (sequential = single-flight)";
+        while true; do
+          for p in instagram facebook youtube; do
+            curl -fsS -m 290 -H "Authorization: Bearer $$CRON_SECRET" "http://worker:3100/api/$$p/publish/process" >/dev/null 2>&1 || echo "[cron] $$p tick failed";
+          done;
+          sleep 20;
+        done
+
+secrets:
+  workerenv:
+    file: ./worker.env

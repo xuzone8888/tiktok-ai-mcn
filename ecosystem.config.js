@@ -14,6 +14,9 @@ module.exports = {
       env: {
         NODE_ENV: 'production',
         PORT: 3000,
+        // Node reads this only during process startup. Keep the CA outside
+        // versioned release directories so broker trust survives deployments.
+        NODE_EXTRA_CA_CERTS: process.env.NODE_EXTRA_CA_CERTS || '/var/www/tiktok-ai-mcn/certs/broker-ca.crt',
       },
       // 日志配置
       error_file: '/var/log/pm2/tiktok-ai-mcn-error.log',

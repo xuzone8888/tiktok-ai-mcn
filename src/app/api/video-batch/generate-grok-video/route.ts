@@ -11,6 +11,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { submitGrokImagine } from "@/lib/grok-imagine-api";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
 
 export const maxDuration = 60;
 
@@ -37,11 +38,27 @@ export async function POST(request: NextRequest) {
       aspectRatio = "9:16",
       durationSeconds = 10,
       taskId,
-      userId,
+      userId: requestedUserId,
       creditCost = 0,
       mode = "image_to_video",
       groupName,
     } = body;
+
+    // 身份以登录态为准，忽略请求体伪造的 userId（沿用 models/submit 范式）
+    const authClient = await createClient();
+    const { data: { user } } = await authClient.auth.getUser();
+    if (!user) {
+      return NextResponse.json(
+        { success: false, error: "请先登录" },
+        { status: 401 }
+      );
+    }
+    if (requestedUserId && requestedUserId !== user.id) {
+      return NextResponse.json(
+        { success: false, error: "用户身份不匹配" },
+        { status: 403 }
+      );
+    }
 
     const isPromptMode = mode === "prompt_to_video";
 
@@ -82,7 +99,7 @@ export async function POST(request: NextRequest) {
       duration,
       aspectRatio,
       promptLength: aiVideoPrompt.length,
-      userId: userId || "(not provided)",
+      userId: user.id,
       creditCost,
       imageCount: imageUrls.length,
       mode,
@@ -109,36 +126,34 @@ export async function POST(request: NextRequest) {
     console.log("[Grok Batch] Task submitted:", { grokTaskId });
 
     // 数据库记录
-    if (userId) {
-      try {
-        const supabase = createAdminClient();
-        const { error: insertError } = await supabase
-          .from("generations")
-          .insert({
-            user_id: userId,
-            task_id: grokTaskId,
-            type: "video",
-            source: isPromptMode ? "batch_video_prompt_grok" : "batch_video_grok",
-            prompt: aiVideoPrompt,
-            model: "grok_imagine",
-            duration,
-            aspect_ratio: aspectRatio,
-            quality: "standard",
-            source_image_url: mainGridImageUrl || null,
-            status: "processing",
-            result_url: null,
-            credit_cost: creditCost,
-            group_name: groupName || "默认",
-            use_pro: false,
-            created_at: new Date().toISOString(),
-          });
+    try {
+      const supabase = createAdminClient();
+      const { error: insertError } = await supabase
+        .from("generations")
+        .insert({
+          user_id: user.id,
+          task_id: grokTaskId,
+          type: "video",
+          source: isPromptMode ? "batch_video_prompt_grok" : "batch_video_grok",
+          prompt: aiVideoPrompt,
+          model: "grok_imagine",
+          duration,
+          aspect_ratio: aspectRatio,
+          quality: "standard",
+          source_image_url: mainGridImageUrl || null,
+          status: "processing",
+          result_url: null,
+          credit_cost: creditCost,
+          group_name: groupName || "默认",
+          use_pro: false,
+          created_at: new Date().toISOString(),
+        });
 
-        if (insertError) {
-          console.error("[Grok Batch] Failed to create DB record:", insertError);
-        }
-      } catch (dbError) {
-        console.error("[Grok Batch] DB error:", dbError);
+      if (insertError) {
+        console.error("[Grok Batch] Failed to create DB record:", insertError);
       }
+    } catch (dbError) {
+      console.error("[Grok Batch] DB error:", dbError);
     }
 
     return NextResponse.json({

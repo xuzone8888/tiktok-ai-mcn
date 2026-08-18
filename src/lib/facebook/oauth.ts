@@ -1,6 +1,8 @@
 import crypto from 'crypto'
 
-const FACEBOOK_API_VERSION = process.env.FACEBOOK_API_VERSION || 'v20.0'
+import { callBroker, isBrokerEnabled } from '@/lib/oauth-broker/client'
+
+const FACEBOOK_API_VERSION = process.env.FACEBOOK_API_VERSION || 'v25.0'
 const FACEBOOK_AUTH_URL = `https://www.facebook.com/${FACEBOOK_API_VERSION}/dialog/oauth`
 const FACEBOOK_GRAPH_URL = `https://graph.facebook.com/${FACEBOOK_API_VERSION}`
 
@@ -53,6 +55,10 @@ export interface FacebookPermissionInfo {
   status: string
 }
 
+export interface FacebookUserInfo {
+  id: string
+}
+
 const FACEBOOK_PAGE_PUBLISH_TASKS = new Set(['CREATE_CONTENT'])
 const FACEBOOK_ACCOUNT_EDGE_FIELDS = 'id,name,access_token,category,followers_count,fan_count,link,tasks,picture{url}'
 const FACEBOOK_DIRECT_PAGE_FIELDS = 'id,name,access_token,category,followers_count,fan_count,link,picture{url}'
@@ -61,8 +67,33 @@ export const FACEBOOK_PAGE_SCOPES = [
   'pages_show_list',
   'pages_manage_metadata',
   'pages_read_engagement',
+  'pages_read_user_content',
   'pages_manage_posts',
+  'pages_manage_engagement',
 ]
+
+export function getMissingFacebookPageScopes(
+  permissions: FacebookPermissionInfo[],
+): string[] {
+  const granted = new Set(
+    permissions
+      .filter((entry) => entry.status === 'granted')
+      .map((entry) => entry.permission.trim())
+      .filter(Boolean),
+  )
+  return FACEBOOK_PAGE_SCOPES.filter((scope) => !granted.has(scope))
+}
+
+export function assertFacebookRequiredPageScopes(
+  permissions: FacebookPermissionInfo[],
+): void {
+  const missing = getMissingFacebookPageScopes(permissions)
+  if (missing.length > 0) {
+    throw new Error(
+      `Facebook Page authorization is missing required permissions: ${missing.join(', ')}. Please reconnect and grant all requested Page permissions.`,
+    )
+  }
+}
 export function hasFacebookPagePublishPermission(tasks: string[] | null | undefined): boolean {
   return Array.isArray(tasks) && tasks.some((task) => FACEBOOK_PAGE_PUBLISH_TASKS.has(task))
 }
@@ -137,7 +168,110 @@ async function readFacebookApiError(response: Response): Promise<string> {
   return data?.error?.message || data?.error_description || data?.error || response.statusText
 }
 
+// appsecret_proof = HMAC-SHA256(access_token, app secret)。
+// Meta 应用开启「Require proof of app secret」后，所有携带用户/页面令牌的 Graph 调用都必须带上，
+// 否则返回 OAuthException 导致绑定/刷新/发布全部失败；同时降低令牌泄露后被直接重放的风险。
+// 仅用于携带用户/页面令牌的调用；使用 app access token 的 debug_token 不需要。
+export function getFacebookAppSecretProof(accessToken: string): string {
+  return crypto.createHmac('sha256', getFacebookOAuthConfig().clientSecret).update(accessToken).digest('hex')
+}
+
+export function isFacebookPageWebhookEnabled(): boolean {
+  return process.env.FACEBOOK_PAGE_WEBHOOK_ENABLED === 'true'
+}
+
+export async function getFacebookUserInfo(userAccessToken: string): Promise<FacebookUserInfo> {
+  if (isBrokerEnabled()) {
+    return callBroker<FacebookUserInfo>('facebook', 'getFacebookUserInfo', { userAccessToken })
+  }
+  const params = new URLSearchParams({
+    fields: 'id',
+    appsecret_proof: getFacebookAppSecretProof(userAccessToken),
+  })
+  const response = await fetch(`${FACEBOOK_GRAPH_URL}/me?${params.toString()}`, {
+    headers: { Authorization: `Bearer ${userAccessToken}` },
+  })
+  if (!response.ok) {
+    throw new Error(`Failed to fetch Facebook user identity: ${await readFacebookApiError(response)}`)
+  }
+
+  const data = await response.json().catch(() => null) as Record<string, unknown> | null
+  if (!data || typeof data.id !== 'string' || !data.id) {
+    throw new Error('Facebook user identity response is invalid.')
+  }
+  return { id: data.id }
+}
+
+export async function subscribeFacebookPageToWebhooks(
+  pageId: string,
+  pageAccessToken: string,
+): Promise<void> {
+  if (isBrokerEnabled()) {
+    await callBroker<void>('facebook', 'subscribeFacebookPageToWebhooks', {
+      pageId,
+      pageAccessToken,
+    })
+    return
+  }
+
+  const body = new URLSearchParams({
+    subscribed_fields: 'feed',
+    appsecret_proof: getFacebookAppSecretProof(pageAccessToken),
+  })
+  const response = await fetch(
+    `${FACEBOOK_GRAPH_URL}/${encodeURIComponent(pageId)}/subscribed_apps`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${pageAccessToken}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body,
+    },
+  )
+  if (!response.ok) {
+    throw new Error(`Failed to subscribe Facebook Page webhooks: ${await readFacebookApiError(response)}`)
+  }
+
+  const data = await response.json().catch(() => null) as Record<string, unknown> | null
+  if (data?.success !== true) {
+    throw new Error('Facebook Page webhook subscription returned an invalid response.')
+  }
+}
+
+export async function unsubscribeFacebookPageFromWebhooks(
+  pageId: string,
+  pageAccessToken: string,
+): Promise<void> {
+  if (isBrokerEnabled()) {
+    await callBroker<void>('facebook', 'unsubscribeFacebookPageFromWebhooks', {
+      pageId,
+      pageAccessToken,
+    })
+    return
+  }
+
+  const body = new URLSearchParams({
+    appsecret_proof: getFacebookAppSecretProof(pageAccessToken),
+  })
+  const response = await fetch(
+    `${FACEBOOK_GRAPH_URL}/${encodeURIComponent(pageId)}/subscribed_apps`,
+    {
+      method: 'DELETE',
+      headers: {
+        Authorization: `Bearer ${pageAccessToken}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body,
+    },
+  )
+  if (!response.ok) {
+    throw new Error(`Failed to unsubscribe Facebook Page webhooks: ${await readFacebookApiError(response)}`)
+  }
+}
+
 export async function exchangeFacebookCodeForToken(code: string, codeVerifier?: string | null): Promise<FacebookTokenResponse> {
+  if (isBrokerEnabled()) return callBroker<FacebookTokenResponse>('facebook', 'exchangeFacebookCodeForToken', { code, codeVerifier })
   const config = getFacebookOAuthConfig()
   const params = new URLSearchParams({
     client_id: config.clientId,
@@ -164,6 +298,7 @@ export async function exchangeFacebookCodeForToken(code: string, codeVerifier?: 
 }
 
 export async function exchangeForLongLivedUserToken(accessToken: string): Promise<FacebookTokenResponse> {
+  if (isBrokerEnabled()) return callBroker<FacebookTokenResponse>('facebook', 'exchangeForLongLivedUserToken', { accessToken })
   const config = getFacebookOAuthConfig()
   const params = new URLSearchParams({
     grant_type: 'fb_exchange_token',
@@ -174,7 +309,10 @@ export async function exchangeForLongLivedUserToken(accessToken: string): Promis
 
   const response = await fetch(`${FACEBOOK_GRAPH_URL}/oauth/access_token?${params.toString()}`)
   if (!response.ok) {
-    throw new Error(`Facebook long-lived token exchange failed: ${await readFacebookApiError(response)}`)
+    // 附带 HTTP 状态码：上层据此区分"令牌确实失效(400/401)"与"瞬时故障(5xx/429/网络)"，仅前者才标记账号 expired。
+    const error = new Error(`Facebook long-lived token exchange failed: ${await readFacebookApiError(response)}`) as Error & { httpStatus?: number }
+    error.httpStatus = response.status
+    throw error
   }
 
   const data = await response.json().catch(() => null) as Record<string, unknown> | null
@@ -186,9 +324,13 @@ export async function exchangeForLongLivedUserToken(accessToken: string): Promis
 }
 
 export async function revokeFacebookToken(token: string): Promise<void> {
-  const params = new URLSearchParams({ access_token: token })
+  if (isBrokerEnabled()) { await callBroker<void>('facebook', 'revokeFacebookToken', { token }); return }
+  const params = new URLSearchParams({
+    appsecret_proof: getFacebookAppSecretProof(token),
+  })
   const response = await fetch(`${FACEBOOK_GRAPH_URL}/me/permissions?${params.toString()}`, {
     method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
   })
 
   if (!response.ok) {
@@ -198,8 +340,13 @@ export async function revokeFacebookToken(token: string): Promise<void> {
 }
 
 export async function getFacebookGrantedPermissions(userAccessToken: string): Promise<FacebookPermissionInfo[]> {
-  const params = new URLSearchParams({ access_token: userAccessToken })
-  const response = await fetch(`${FACEBOOK_GRAPH_URL}/me/permissions?${params.toString()}`)
+  if (isBrokerEnabled()) return callBroker<FacebookPermissionInfo[]>('facebook', 'getFacebookGrantedPermissions', { userAccessToken })
+  const params = new URLSearchParams({
+    appsecret_proof: getFacebookAppSecretProof(userAccessToken),
+  })
+  const response = await fetch(`${FACEBOOK_GRAPH_URL}/me/permissions?${params.toString()}`, {
+    headers: { Authorization: `Bearer ${userAccessToken}` },
+  })
 
   if (!response.ok) {
     throw new Error(`Failed to fetch Facebook permissions: ${await readFacebookApiError(response)}`)
@@ -216,7 +363,17 @@ export async function getFacebookGrantedPermissions(userAccessToken: string): Pr
     }))
 }
 
+export function getGrantedFacebookScopes(permissions: FacebookPermissionInfo[]): string[] {
+  return [...new Set(
+    permissions
+      .filter((entry) => entry.status === 'granted')
+      .map((entry) => entry.permission.trim())
+      .filter(Boolean)
+  )]
+}
+
 export async function debugFacebookUserToken(userAccessToken: string): Promise<FacebookTokenDebugInfo> {
+  if (isBrokerEnabled()) return callBroker<FacebookTokenDebugInfo>('facebook', 'debugFacebookUserToken', { userAccessToken })
   const config = getFacebookOAuthConfig()
   const appAccessToken = `${config.clientId}|${config.clientSecret}`
   const params = new URLSearchParams({
@@ -282,10 +439,12 @@ function getDebugPageTargets(debugInfo: FacebookTokenDebugInfo): Map<string, Set
 async function getFacebookPageById(userAccessToken: string, pageId: string, fields: string, mode: string): Promise<any | null> {
   const params = new URLSearchParams({
     fields,
-    access_token: userAccessToken,
+    appsecret_proof: getFacebookAppSecretProof(userAccessToken),
   })
 
-  const response = await fetch(`${FACEBOOK_GRAPH_URL}/${encodeURIComponent(pageId)}?${params.toString()}`)
+  const response = await fetch(`${FACEBOOK_GRAPH_URL}/${encodeURIComponent(pageId)}?${params.toString()}`, {
+    headers: { Authorization: `Bearer ${userAccessToken}` },
+  })
   if (!response.ok) {
     console.warn('Facebook direct Page fallback failed:', {
       pageId,
@@ -331,13 +490,16 @@ function hasFacebookPageAccessToken(page: any): boolean {
 }
 
 export async function getMyFacebookPages(userAccessToken: string): Promise<FacebookPageInfo[]> {
+  if (isBrokerEnabled()) return callBroker<FacebookPageInfo[]>('facebook', 'getMyFacebookPages', { userAccessToken })
   const params = new URLSearchParams({
     fields: FACEBOOK_ACCOUNT_EDGE_FIELDS,
-    access_token: userAccessToken,
+    appsecret_proof: getFacebookAppSecretProof(userAccessToken),
     limit: '100',
   })
 
-  const response = await fetch(`${FACEBOOK_GRAPH_URL}/me/accounts?${params.toString()}`)
+  const response = await fetch(`${FACEBOOK_GRAPH_URL}/me/accounts?${params.toString()}`, {
+    headers: { Authorization: `Bearer ${userAccessToken}` },
+  })
   if (!response.ok) {
     throw new Error(`Failed to fetch Facebook Pages: ${await readFacebookApiError(response)}`)
   }
@@ -355,12 +517,15 @@ export async function getMyFacebookPages(userAccessToken: string): Promise<Faceb
 }
 
 export async function getFacebookPageInfo(pageId: string, pageAccessToken: string): Promise<Omit<FacebookPageInfo, 'accessToken'>> {
+  if (isBrokerEnabled()) return callBroker<Omit<FacebookPageInfo, 'accessToken'>>('facebook', 'getFacebookPageInfo', { pageId, pageAccessToken })
   const params = new URLSearchParams({
     fields: 'id,name,category,followers_count,fan_count,link,tasks,picture{url}',
-    access_token: pageAccessToken,
+    appsecret_proof: getFacebookAppSecretProof(pageAccessToken),
   })
 
-  const response = await fetch(`${FACEBOOK_GRAPH_URL}/${encodeURIComponent(pageId)}?${params.toString()}`)
+  const response = await fetch(`${FACEBOOK_GRAPH_URL}/${encodeURIComponent(pageId)}?${params.toString()}`, {
+    headers: { Authorization: `Bearer ${pageAccessToken}` },
+  })
   if (!response.ok) {
     throw new Error(`Failed to fetch Facebook Page: ${await readFacebookApiError(response)}`)
   }
@@ -383,6 +548,7 @@ export async function getFacebookPageInfo(pageId: string, pageAccessToken: strin
 }
 
 export async function refreshFacebookPageAccessToken(userAccessToken: string, pageId: string): Promise<FacebookPageTokenResponse> {
+  if (isBrokerEnabled()) return callBroker<FacebookPageTokenResponse>('facebook', 'refreshFacebookPageAccessToken', { userAccessToken, pageId })
   const longLived = await exchangeForLongLivedUserToken(userAccessToken)
   const pages = await getMyFacebookPages(longLived.access_token)
   const page = pages.find((candidate) => candidate.pageId === pageId)

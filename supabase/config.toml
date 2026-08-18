@@ -1,0 +1,5 @@
+[functions.instagram-comments-webhook]
+verify_jwt = false
+
+[functions.facebook-comments-webhook]
+verify_jwt = false

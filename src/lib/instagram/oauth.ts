@@ -1,12 +1,14 @@
 import crypto from 'crypto'
 
+import { instagramGraphHeaders } from '@/lib/instagram/graph-auth'
+import { requestSensitiveInstagramOAuthJson } from '@/lib/instagram/oauth-transport'
+import { callBroker, isBrokerEnabled } from '@/lib/oauth-broker/client'
+
 const INSTAGRAM_API_VERSION = process.env.INSTAGRAM_API_VERSION || process.env.FACEBOOK_API_VERSION || 'v20.0'
 const META_AUTH_URL = `https://www.facebook.com/${INSTAGRAM_API_VERSION}/dialog/oauth`
 const META_GRAPH_URL = `https://graph.facebook.com/${INSTAGRAM_API_VERSION}`
 const INSTAGRAM_AUTH_URL = 'https://www.instagram.com/oauth/authorize'
-const INSTAGRAM_TOKEN_URL = 'https://api.instagram.com/oauth/access_token'
 const INSTAGRAM_GRAPH_URL = `https://graph.instagram.com/${INSTAGRAM_API_VERSION}`
-const INSTAGRAM_GRAPH_ROOT_URL = 'https://graph.instagram.com'
 
 export type InstagramAuthMode = 'facebook' | 'instagram'
 
@@ -18,6 +20,11 @@ export interface InstagramOAuthConfig {
   loginConfigId: string | null
   authMode: InstagramAuthMode
   nativeEmbedUrl: string | null
+}
+
+export interface InstagramAuthorizationStateInput {
+  state: string
+  codeVerifier: string | null
 }
 
 export interface InstagramTokenResponse {
@@ -89,14 +96,41 @@ const INSTAGRAM_FACEBOOK_LOGIN_SCOPES = [
   'pages_read_engagement',
   'instagram_basic',
   'instagram_content_publish',
+  'instagram_manage_comments',
 ]
 
 const INSTAGRAM_NATIVE_LOGIN_SCOPES = [
   'instagram_business_basic',
   'instagram_business_content_publish',
+  'instagram_business_manage_comments',
 ]
 
-function getInstagramAuthMode(): InstagramAuthMode {
+export class InstagramRequiredScopeError extends Error {
+  code = 'missing_required_scopes'
+
+  constructor() {
+    super('Instagram authorization is missing required permissions.')
+    this.name = 'InstagramRequiredScopeError'
+  }
+}
+
+export function getInstagramRequiredScopes(authMode: InstagramAuthMode): string[] {
+  return authMode === 'instagram'
+    ? [...INSTAGRAM_NATIVE_LOGIN_SCOPES]
+    : [...INSTAGRAM_FACEBOOK_LOGIN_SCOPES]
+}
+
+export function assertInstagramRequiredScopes(
+  authMode: InstagramAuthMode,
+  verifiedScopes: readonly string[]
+) {
+  const verified = new Set(verifiedScopes)
+  if (!getInstagramRequiredScopes(authMode).every((scope) => verified.has(scope))) {
+    throw new InstagramRequiredScopeError()
+  }
+}
+
+export function getInstagramAuthMode(): InstagramAuthMode {
   return process.env.INSTAGRAM_AUTH_MODE === 'instagram' ? 'instagram' : 'facebook'
 }
 
@@ -136,8 +170,8 @@ export function getInstagramOAuthConfig(): InstagramOAuthConfig {
     ? process.env.INSTAGRAM_NATIVE_REDIRECT_URI || process.env.INSTAGRAM_REDIRECT_URI || nativeEmbedConfig.redirectUri
     : process.env.INSTAGRAM_REDIRECT_URI
   const scopes = authMode === 'instagram'
-    ? (nativeEmbedConfig.scopes.length > 0 ? nativeEmbedConfig.scopes : INSTAGRAM_NATIVE_LOGIN_SCOPES)
-    : INSTAGRAM_FACEBOOK_LOGIN_SCOPES
+    ? (nativeEmbedConfig.scopes.length > 0 ? nativeEmbedConfig.scopes : getInstagramRequiredScopes(authMode))
+    : getInstagramRequiredScopes(authMode)
   const loginConfigId = authMode === 'facebook' ? process.env.INSTAGRAM_LOGIN_CONFIG_ID || null : null
 
   if (!clientId || !clientSecret || !redirectUri) {
@@ -157,29 +191,40 @@ export function getInstagramOAuthConfig(): InstagramOAuthConfig {
 
 export function generateInstagramPKCE(): { codeVerifier: string; codeChallenge: string } {
   const codeVerifier = crypto.randomBytes(32).toString('base64url')
-  const codeChallenge = crypto.createHash('sha256').update(codeVerifier).digest('base64url')
+  const codeChallenge = createInstagramPKCEChallenge(codeVerifier)
   return { codeVerifier, codeChallenge }
+}
+
+export function createInstagramPKCEChallenge(codeVerifier: string): string {
+  return crypto.createHash('sha256').update(codeVerifier).digest('base64url')
 }
 
 export function generateInstagramState(userId: string): string {
   return `${crypto.randomBytes(16).toString('hex')}_${userId}`
 }
 
-export function buildInstagramAuthorizationUrl(userId: string): {
-  authUrl: string
-  state: string
-  codeVerifier: string | null
-} {
-  const config = getInstagramOAuthConfig()
-  const pkce = config.authMode === 'facebook' ? generateInstagramPKCE() : null
-  const state = generateInstagramState(userId)
+export function buildInstagramAuthorizationUrlForConfig(
+  config: InstagramOAuthConfig,
+  input: InstagramAuthorizationStateInput
+): string {
+  if (!input.state) {
+    throw new Error('Instagram OAuth state is required.')
+  }
+
+  if (config.authMode === 'instagram' && input.codeVerifier) {
+    throw new Error('Instagram Login auth state must not include a PKCE verifier.')
+  }
+
+  if (config.authMode === 'facebook' && !input.codeVerifier) {
+    throw new Error('Facebook Login auth state is missing its PKCE verifier.')
+  }
 
   const url = new URL(config.authMode === 'instagram' && config.nativeEmbedUrl ? config.nativeEmbedUrl : (config.authMode === 'instagram' ? INSTAGRAM_AUTH_URL : META_AUTH_URL))
   const params = url.searchParams
   params.set('client_id', config.clientId)
   params.set('redirect_uri', config.redirectUri)
   params.set('response_type', 'code')
-  params.set('state', state)
+  params.set('state', input.state)
 
   if (config.authMode === 'instagram') {
     params.delete('config_id')
@@ -189,8 +234,8 @@ export function buildInstagramAuthorizationUrl(userId: string): {
     params.set('auth_type', 'rerequest')
   }
 
-  if (pkce) {
-    params.set('code_challenge', pkce.codeChallenge)
+  if (input.codeVerifier) {
+    params.set('code_challenge', createInstagramPKCEChallenge(input.codeVerifier))
     params.set('code_challenge_method', 'S256')
   }
 
@@ -200,40 +245,57 @@ export function buildInstagramAuthorizationUrl(userId: string): {
     params.set('scope', config.scopes.join(','))
   }
 
+  return url.toString()
+}
+
+export function buildInstagramAuthorizationUrlFromState(input: InstagramAuthorizationStateInput): string {
+  return buildInstagramAuthorizationUrlForConfig(getInstagramOAuthConfig(), input)
+}
+
+export function buildInstagramAuthorizationUrl(userId: string): {
+  authUrl: string
+  state: string
+  codeVerifier: string | null
+} {
+  const config = getInstagramOAuthConfig()
+  const codeVerifier = config.authMode === 'facebook' ? generateInstagramPKCE().codeVerifier : null
+  const state = generateInstagramState(userId)
+
   return {
-    authUrl: url.toString(),
+    authUrl: buildInstagramAuthorizationUrlForConfig(config, { state, codeVerifier }),
     state,
-    codeVerifier: pkce?.codeVerifier || null,
+    codeVerifier,
   }
 }
 
 async function readInstagramApiError(response: Response): Promise<string> {
   const data = await response.json().catch(() => null) as any
-  return data?.error?.message || data?.error_description || data?.error || response.statusText
+  return String(data?.error?.message || data?.error_description || data?.error || response.statusText || 'Instagram request failed.')
+    .replace(/Bearer\s+[^\s,;]+/gi, 'Bearer [redacted]')
+    .replace(/\b(access_token|authorization|token|secret|code)=([^\s&]+)/gi, '$1=[redacted]')
+    .replace(/https?:\/\/[^\s]+/gi, '[redacted-url]')
+    .replace(/[\u0000-\u001f\u007f]+/g, ' ')
+    .trim()
+    .slice(0, 240) || 'Instagram request failed.'
 }
 
 export async function exchangeInstagramCodeForToken(code: string, codeVerifier?: string | null): Promise<InstagramTokenResponse> {
+  if (isBrokerEnabled()) return callBroker<InstagramTokenResponse>('instagram', 'exchangeInstagramCodeForToken', { code, codeVerifier })
   const config = getInstagramOAuthConfig()
 
   if (config.authMode === 'instagram') {
-    const body = new URLSearchParams({
-      client_id: config.clientId,
-      client_secret: config.clientSecret,
-      grant_type: 'authorization_code',
-      code,
-      redirect_uri: config.redirectUri,
-    })
-
-    const response = await fetch(INSTAGRAM_TOKEN_URL, {
+    const { json: data } = await requestSensitiveInstagramOAuthJson<InstagramTokenResponse>({
+      host: 'api.instagram.com',
+      path: '/oauth/access_token',
       method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body,
+      params: {
+        client_id: config.clientId,
+        client_secret: config.clientSecret,
+        grant_type: 'authorization_code',
+        code,
+        redirect_uri: config.redirectUri,
+      },
     })
-    if (!response.ok) {
-      throw new Error(`Instagram OAuth token exchange failed: ${await readInstagramApiError(response)}`)
-    }
-
-    const data = await response.json().catch(() => null) as Record<string, unknown> | null
     if (!data || typeof data.access_token !== 'string') {
       throw new Error('Instagram OAuth token exchange returned an invalid response.')
     }
@@ -241,23 +303,18 @@ export async function exchangeInstagramCodeForToken(code: string, codeVerifier?:
     return data as unknown as InstagramTokenResponse
   }
 
-  const params = new URLSearchParams({
-    client_id: config.clientId,
-    client_secret: config.clientSecret,
-    code,
-    redirect_uri: config.redirectUri,
+  const { json: data } = await requestSensitiveInstagramOAuthJson<InstagramTokenResponse>({
+    host: 'graph.facebook.com',
+    path: `/${INSTAGRAM_API_VERSION}/oauth/access_token`,
+    method: 'GET',
+    params: {
+      client_id: config.clientId,
+      client_secret: config.clientSecret,
+      code,
+      redirect_uri: config.redirectUri,
+      ...(codeVerifier ? { code_verifier: codeVerifier } : {}),
+    },
   })
-
-  if (codeVerifier) {
-    params.set('code_verifier', codeVerifier)
-  }
-
-  const response = await fetch(`${META_GRAPH_URL}/oauth/access_token?${params.toString()}`)
-  if (!response.ok) {
-    throw new Error(`Instagram OAuth token exchange failed: ${await readInstagramApiError(response)}`)
-  }
-
-  const data = await response.json().catch(() => null) as Record<string, unknown> | null
   if (!data || typeof data.access_token !== 'string') {
     throw new Error('Instagram OAuth token exchange returned an invalid response.')
   }
@@ -266,21 +323,20 @@ export async function exchangeInstagramCodeForToken(code: string, codeVerifier?:
 }
 
 export async function exchangeForLongLivedUserToken(accessToken: string): Promise<InstagramTokenResponse> {
+  if (isBrokerEnabled()) return callBroker<InstagramTokenResponse>('instagram', 'exchangeForLongLivedUserToken', { accessToken })
   const config = getInstagramOAuthConfig()
 
   if (config.authMode === 'instagram') {
-    const params = new URLSearchParams({
-      grant_type: 'ig_exchange_token',
-      client_secret: config.clientSecret,
-      access_token: accessToken,
+    const { json: data } = await requestSensitiveInstagramOAuthJson<InstagramTokenResponse>({
+      host: 'graph.instagram.com',
+      path: '/access_token',
+      method: 'GET',
+      params: {
+        grant_type: 'ig_exchange_token',
+        client_secret: config.clientSecret,
+        access_token: accessToken,
+      },
     })
-
-    const response = await fetch(`${INSTAGRAM_GRAPH_ROOT_URL}/access_token?${params.toString()}`)
-    if (!response.ok) {
-      throw new Error(`Instagram long-lived token exchange failed: ${await readInstagramApiError(response)}`)
-    }
-
-    const data = await response.json().catch(() => null) as Record<string, unknown> | null
     if (!data || typeof data.access_token !== 'string') {
       throw new Error('Instagram long-lived token exchange returned an invalid response.')
     }
@@ -288,19 +344,17 @@ export async function exchangeForLongLivedUserToken(accessToken: string): Promis
     return data as unknown as InstagramTokenResponse
   }
 
-  const params = new URLSearchParams({
-    grant_type: 'fb_exchange_token',
-    client_id: config.clientId,
-    client_secret: config.clientSecret,
-    fb_exchange_token: accessToken,
+  const { json: data } = await requestSensitiveInstagramOAuthJson<InstagramTokenResponse>({
+    host: 'graph.facebook.com',
+    path: `/${INSTAGRAM_API_VERSION}/oauth/access_token`,
+    method: 'GET',
+    params: {
+      grant_type: 'fb_exchange_token',
+      client_id: config.clientId,
+      client_secret: config.clientSecret,
+      fb_exchange_token: accessToken,
+    },
   })
-
-  const response = await fetch(`${META_GRAPH_URL}/oauth/access_token?${params.toString()}`)
-  if (!response.ok) {
-    throw new Error(`Instagram long-lived token exchange failed: ${await readInstagramApiError(response)}`)
-  }
-
-  const data = await response.json().catch(() => null) as Record<string, unknown> | null
   if (!data || typeof data.access_token !== 'string') {
     throw new Error('Instagram long-lived token exchange returned an invalid response.')
   }
@@ -309,17 +363,15 @@ export async function exchangeForLongLivedUserToken(accessToken: string): Promis
 }
 
 async function refreshLongLivedInstagramToken(accessToken: string): Promise<InstagramTokenResponse> {
-  const params = new URLSearchParams({
-    grant_type: 'ig_refresh_token',
-    access_token: accessToken,
+  const { json: data } = await requestSensitiveInstagramOAuthJson<InstagramTokenResponse>({
+    host: 'graph.instagram.com',
+    path: '/refresh_access_token',
+    method: 'GET',
+    params: {
+      grant_type: 'ig_refresh_token',
+      access_token: accessToken,
+    },
   })
-
-  const response = await fetch(`${INSTAGRAM_GRAPH_ROOT_URL}/refresh_access_token?${params.toString()}`)
-  if (!response.ok) {
-    throw new Error(`Instagram token refresh failed: ${await readInstagramApiError(response)}`)
-  }
-
-  const data = await response.json().catch(() => null) as Record<string, unknown> | null
   if (!data || typeof data.access_token !== 'string') {
     throw new Error('Instagram token refresh returned an invalid response.')
   }
@@ -328,9 +380,10 @@ async function refreshLongLivedInstagramToken(accessToken: string): Promise<Inst
 }
 
 export async function revokeInstagramToken(token: string): Promise<void> {
-  const params = new URLSearchParams({ access_token: token })
-  const response = await fetch(`${META_GRAPH_URL}/me/permissions?${params.toString()}`, {
+  if (isBrokerEnabled()) { await callBroker<void>('instagram', 'revokeInstagramToken', { token }); return }
+  const response = await fetch(`${META_GRAPH_URL}/me/permissions`, {
     method: 'DELETE',
+    headers: instagramGraphHeaders(token),
   })
 
   if (!response.ok) {
@@ -340,15 +393,14 @@ export async function revokeInstagramToken(token: string): Promise<void> {
 }
 
 export async function getInstagramGrantedPermissions(userAccessToken: string): Promise<InstagramPermissionInfo[]> {
-  if (getInstagramOAuthConfig().authMode === 'instagram') {
-    return getInstagramOAuthConfig().scopes.map((permission) => ({
-      permission,
-      status: 'granted',
-    }))
+  if (getInstagramAuthMode() === 'instagram') {
+    return []
   }
+  if (isBrokerEnabled()) return callBroker<InstagramPermissionInfo[]>('instagram', 'getInstagramGrantedPermissions', { userAccessToken })
 
-  const params = new URLSearchParams({ access_token: userAccessToken })
-  const response = await fetch(`${META_GRAPH_URL}/me/permissions?${params.toString()}`)
+  const response = await fetch(`${META_GRAPH_URL}/me/permissions`, {
+    headers: instagramGraphHeaders(userAccessToken),
+  })
 
   if (!response.ok) {
     throw new Error(`Failed to fetch Instagram permissions: ${await readInstagramApiError(response)}`)
@@ -366,44 +418,22 @@ export async function getInstagramGrantedPermissions(userAccessToken: string): P
 }
 
 export async function debugInstagramUserToken(userAccessToken: string): Promise<InstagramTokenDebugInfo> {
-  const config = getInstagramOAuthConfig()
-  if (config.authMode === 'instagram') {
+  if (getInstagramAuthMode() === 'instagram') {
     return {
-      appId: config.clientId,
+      appId: process.env.INSTAGRAM_NATIVE_CLIENT_ID || process.env.INSTAGRAM_CLIENT_ID || null,
       isValid: null,
-      scopes: config.scopes,
+      scopes: [],
       granularScopes: [],
     }
   }
-
-  const appAccessToken = `${config.clientId}|${config.clientSecret}`
-  const params = new URLSearchParams({
-    input_token: userAccessToken,
-    access_token: appAccessToken,
-  })
-
-  const response = await fetch(`${META_GRAPH_URL}/debug_token?${params.toString()}`)
-  if (!response.ok) {
-    throw new Error(`Failed to debug Instagram token: ${await readInstagramApiError(response)}`)
-  }
-
-  const data = await response.json().catch(() => null) as any
-  const tokenData = data?.data || {}
-  const scopes = Array.isArray(tokenData.scopes) ? tokenData.scopes.map(String) : []
-  const granularScopes = Array.isArray(tokenData.granular_scopes)
-    ? tokenData.granular_scopes
-      .filter((entry: any) => typeof entry?.scope === 'string')
-      .map((entry: any) => ({
-        scope: entry.scope,
-        targetIds: Array.isArray(entry.target_ids) ? entry.target_ids.map(String) : [],
-      }))
-    : []
-
+  if (isBrokerEnabled()) return callBroker<InstagramTokenDebugInfo>('instagram', 'debugInstagramUserToken', { userAccessToken })
+  // The direct debug_token protocol requires the inspected token in the query URL.
+  // Without the broker, fail conservatively instead of exposing a credential to request logs.
   return {
-    appId: typeof tokenData.app_id === 'string' ? tokenData.app_id : null,
-    isValid: typeof tokenData.is_valid === 'boolean' ? tokenData.is_valid : null,
-    scopes,
-    granularScopes,
+    appId: process.env.INSTAGRAM_CLIENT_ID || null,
+    isValid: null,
+    scopes: [],
+    granularScopes: [],
   }
 }
 
@@ -507,10 +537,11 @@ function getDebugPageTargetIds(debugInfo: InstagramTokenDebugInfo): string[] {
 async function getInstagramPageById(userAccessToken: string, pageId: string): Promise<any | null> {
   const params = new URLSearchParams({
     fields: INSTAGRAM_PAGE_FIELDS,
-    access_token: userAccessToken,
   })
 
-  const response = await fetch(`${META_GRAPH_URL}/${encodeURIComponent(pageId)}?${params.toString()}`)
+  const response = await fetch(`${META_GRAPH_URL}/${encodeURIComponent(pageId)}?${params.toString()}`, {
+    headers: instagramGraphHeaders(userAccessToken),
+  })
   if (!response.ok) {
     return null
   }
@@ -531,13 +562,15 @@ async function getInstagramPagesFromDebugTargets(userAccessToken: string): Promi
 }
 
 export async function discoverMyInstagramAccounts(userAccessToken: string): Promise<InstagramAccountDiscoveryResult> {
-  if (getInstagramOAuthConfig().authMode === 'instagram') {
+  if (isBrokerEnabled()) return callBroker<InstagramAccountDiscoveryResult>('instagram', 'discoverMyInstagramAccounts', { userAccessToken })
+  if (getInstagramAuthMode() === 'instagram') {
     const params = new URLSearchParams({
       fields: INSTAGRAM_NATIVE_ACCOUNT_FIELDS,
-      access_token: userAccessToken,
     })
 
-    const response = await fetch(`${INSTAGRAM_GRAPH_URL}/me?${params.toString()}`)
+    const response = await fetch(`${INSTAGRAM_GRAPH_URL}/me?${params.toString()}`, {
+      headers: instagramGraphHeaders(userAccessToken),
+    })
     if (!response.ok) {
       throw new Error(`Failed to fetch Instagram account: ${await readInstagramApiError(response)}`)
     }
@@ -553,11 +586,12 @@ export async function discoverMyInstagramAccounts(userAccessToken: string): Prom
 
   const params = new URLSearchParams({
     fields: INSTAGRAM_PAGE_FIELDS,
-    access_token: userAccessToken,
     limit: '100',
   })
 
-  const response = await fetch(`${META_GRAPH_URL}/me/accounts?${params.toString()}`)
+  const response = await fetch(`${META_GRAPH_URL}/me/accounts?${params.toString()}`, {
+    headers: instagramGraphHeaders(userAccessToken),
+  })
   if (!response.ok) {
     throw new Error(`Failed to fetch Instagram accounts: ${await readInstagramApiError(response)}`)
   }
@@ -576,7 +610,8 @@ export async function discoverMyInstagramAccounts(userAccessToken: string): Prom
 }
 
 export async function refreshInstagramAccountAccessToken(userAccessToken: string, accountId: string): Promise<InstagramAccountTokenResponse> {
-  const refreshed = getInstagramOAuthConfig().authMode === 'instagram'
+  if (isBrokerEnabled()) return callBroker<InstagramAccountTokenResponse>('instagram', 'refreshInstagramAccountAccessToken', { userAccessToken, accountId })
+  const refreshed = getInstagramAuthMode() === 'instagram'
     ? await refreshLongLivedInstagramToken(userAccessToken)
     : await exchangeForLongLivedUserToken(userAccessToken)
   const accounts = await getMyInstagramAccounts(refreshed.access_token)
@@ -587,8 +622,10 @@ export async function refreshInstagramAccountAccessToken(userAccessToken: string
   }
 
   return {
-    access_token: refreshed.access_token,
+    // 发布 token = 重新派生的 Page token（facebook 模式）；原生模式下 pageAccessToken 即刷新后的用户 token。
+    access_token: account.pageAccessToken,
     expires_in: refreshed.expires_in,
+    // 刷新凭据 = 新的长效用户 token，供下次刷新。
     user_access_token: refreshed.access_token,
     account,
   }
@@ -600,5 +637,7 @@ export function calculateInstagramTokenExpiration(expiresIn?: number): Date | nu
 }
 
 export function scopesToArray(scope: string | undefined): string[] {
-  return scope ? scope.split(/[,\s]+/).filter(Boolean) : getInstagramOAuthConfig().scopes
+  if (!scope) return []
+
+  return [...new Set(scope.split(/[,\s]+/).map((value) => value.trim()).filter(Boolean))]
 }

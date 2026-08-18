@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createServerClient } from "@/lib/supabase/server";
 import { getEcomImageCost } from "@/lib/credits";
+import { applyTaskCreditDelta } from "@/lib/credits/atomic-task-credit";
 import { submitOpenAIImage } from "@/lib/openai-image-api";
 import {
   DEFAULT_IMAGE_MODEL,
@@ -25,7 +26,7 @@ import type {
 } from "@/types/ecom-image";
 import { FIVE_PACK_TYPES } from "@/types/ecom-image";
 
-// Vercel 函数配置
+// Route runtime configuration
 export const maxDuration = 180;
 
 const ECOM_IMAGE_CONCURRENCY = 2;
@@ -34,6 +35,68 @@ const GENERATABLE_ECOM_STATUSES = new Set(["created", "generating_prompts", "fai
 function parseEcomResolution(value: unknown): EcomResolution | null {
   const normalized = typeof value === "string" ? value.toLowerCase() : value;
   return isImageResolution(normalized) ? normalized : null;
+}
+
+function getTaskMetadata(metadata: unknown): Record<string, unknown> {
+  return metadata && typeof metadata === "object" && !Array.isArray(metadata)
+    ? { ...(metadata as Record<string, unknown>) }
+    : {};
+}
+
+function getEcomBillingAttempt(metadata: Record<string, unknown>, alreadyCharged: boolean): number {
+  const stored = Number(metadata.billing_attempt || 0);
+  const previous = Number.isSafeInteger(stored) && stored > 0 ? stored : 0;
+  return alreadyCharged ? Math.max(1, previous) : previous + 1;
+}
+
+function getEcomPricingVersion(mode: EcomImageMode, billingAttempt: number): string {
+  return `ecom-image-${mode}-attempt-${billingAttempt}-v1`;
+}
+
+function getEcomRefundOperation(
+  billingAttempt: number,
+  stage: "charge-state" | "exception" | { failedCount: number; totalCount: number }
+): string {
+  return typeof stage === "string"
+    ? `refund-a${billingAttempt}-${stage}`
+    : `refund-a${billingAttempt}-f${stage.failedCount}-of-${stage.totalCount}`;
+}
+
+async function getRecordedEcomRefundAmount(
+  adminClient: ReturnType<typeof createAdminClient>,
+  taskId: string,
+  pricingVersion: string,
+  includeLegacy: boolean
+): Promise<number> {
+  const taskScopedResult = await (adminClient as any)
+    .from("credit_transactions")
+    .select("amount")
+    .eq("task_id", taskId)
+    .eq("entry_kind", "refund")
+    .eq("pricing_version", pricingVersion);
+
+  if (taskScopedResult.error) {
+    console.error("[Generate Images] Failed to inspect task-scoped refunds:", taskScopedResult.error);
+    return 0;
+  }
+
+  const taskScopedAmount = ((taskScopedResult.data || []) as Array<{ amount?: number }>)
+    .reduce((sum, row) => sum + Math.max(0, Number(row.amount || 0)), 0);
+  if (!includeLegacy) return taskScopedAmount;
+
+  const legacyResult = await adminClient
+    .from("credit_transactions")
+    .select("amount")
+    .eq("reference_type", "ecom_image_task")
+    .eq("reference_id", taskId)
+    .eq("type", "refund");
+  if (legacyResult.error) {
+    console.error("[Generate Images] Failed to inspect legacy refunds:", legacyResult.error);
+    return taskScopedAmount;
+  }
+
+  return taskScopedAmount + (legacyResult.data || [])
+    .reduce((sum, row) => sum + Math.max(0, Number((row as { amount?: number }).amount || 0)), 0);
 }
 
 interface GenerateImagesRequest {
@@ -168,6 +231,21 @@ export async function POST(request: NextRequest) {
       promptCount: Object.keys(prompts).length,
     });
 
+    const taskMetadata = getTaskMetadata(task.metadata);
+    const storedBillingAttempt = getEcomBillingAttempt(taskMetadata, true);
+    let alreadyCharged = Boolean(task.credits_charged);
+    let recoveredFullRefund = false;
+    if (alreadyCharged && resolvedCreditsCost > 0) {
+      const recordedRefundAmount = await getRecordedEcomRefundAmount(
+        adminClient,
+        task_id,
+        getEcomPricingVersion(mode, storedBillingAttempt),
+        Number(taskMetadata.billing_attempt || 0) <= 1
+      );
+      recoveredFullRefund = recordedRefundAmount >= resolvedCreditsCost;
+      alreadyCharged = !recoveredFullRefund;
+    }
+    const billingAttempt = getEcomBillingAttempt(taskMetadata, alreadyCharged);
     const { data: lockedTask, error: lockError } = await adminClient
       .from("ecom_image_tasks")
       .update({
@@ -175,6 +253,13 @@ export async function POST(request: NextRequest) {
         current_step: 3,
         credits_cost: resolvedCreditsCost,
         error_message: null,
+        metadata: {
+          ...taskMetadata,
+          billing_attempt: billingAttempt,
+          ...(recoveredFullRefund
+            ? { billing_recovered_refund_attempt: storedBillingAttempt }
+            : {}),
+        },
       })
       .eq("id", task_id)
       .eq("user_id", user.id)
@@ -210,7 +295,8 @@ export async function POST(request: NextRequest) {
       task_id,
       mode,
       resolvedCreditsCost,
-      Boolean(task.credits_charged)
+      alreadyCharged,
+      billingAttempt
     );
 
     if (!chargeResult.success) {
@@ -289,7 +375,9 @@ export async function POST(request: NextRequest) {
           user.id,
           task_id,
           chargeResult.amount,
-          `电商图片生成异常自动退款 (${task_id})`
+          `电商图片生成异常自动退款 (${task_id})`,
+          getEcomRefundOperation(billingAttempt, "exception"),
+          getEcomPricingVersion(mode, billingAttempt)
         );
       }
 
@@ -328,7 +416,12 @@ export async function POST(request: NextRequest) {
         user.id,
         task_id,
         chargeResult.amount,
-        `电商图片生成失败自动退款 (${task_id})`
+        `电商图片生成失败自动退款 (${task_id})`,
+        getEcomRefundOperation(billingAttempt, {
+          failedCount,
+          totalCount: outputItems.length,
+        }),
+        getEcomPricingVersion(mode, billingAttempt)
       );
     } else if (processingCount === 0 && failedCount > 0 && outputItems.length > 0 && chargeResult.chargedNow) {
       const partialRefundAmount = Math.round(chargeResult.amount * failedCount / outputItems.length);
@@ -338,6 +431,11 @@ export async function POST(request: NextRequest) {
         task_id,
         partialRefundAmount,
         `电商图片部分失败按比例退款 (${failedCount}/${outputItems.length}, ${task_id})`,
+        getEcomRefundOperation(billingAttempt, {
+          failedCount,
+          totalCount: outputItems.length,
+        }),
+        getEcomPricingVersion(mode, billingAttempt),
         false
       );
     }
@@ -417,60 +515,36 @@ async function chargeEcomCreditsBeforeGeneration(
   taskId: string,
   mode: EcomImageMode,
   creditCost: number,
-  alreadyCharged: boolean
+  alreadyCharged: boolean,
+  billingAttempt: number
 ): Promise<CreditChargeResult> {
   if (alreadyCharged || creditCost <= 0) {
     return { success: true, chargedNow: false, amount: creditCost };
   }
 
-  const { data: profile, error: profileError } = await adminClient
-    .from("profiles")
-    .select("credits")
-    .eq("id", userId)
-    .single();
-
-  if (profileError || !profile) {
-    return { success: false, chargedNow: false, amount: creditCost, error: "用户不存在", status: 404 };
-  }
-
-  const currentCredits = (profile as { credits: number }).credits;
-  if (currentCredits < creditCost) {
+  try {
+    await applyTaskCreditDelta({
+      supabase: adminClient,
+      userId,
+      entryKind: "consume",
+      amount: -creditCost,
+      scope: "ecom-image",
+      taskId,
+      operation: `consume-a${billingAttempt}`,
+      pricingVersion: getEcomPricingVersion(mode, billingAttempt),
+      description: `电商图片工厂 - ${getModeDisplayName(mode)}`,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "扣费失败，请重试";
+    console.error("[Generate Images] Failed to deduct credits:", error);
+    const insufficient = /insufficient credits/i.test(message);
     return {
       success: false,
       chargedNow: false,
       amount: creditCost,
-      error: `积分不足！需要 ${creditCost} 积分，当前余额 ${currentCredits}`,
-      status: 400,
+      error: insufficient ? `积分不足！需要 ${creditCost} 积分` : "扣费失败，请重试",
+      status: insufficient ? 400 : 409,
     };
-  }
-
-  const newBalance = currentCredits - creditCost;
-  const { data: updatedProfile, error: deductError } = await adminClient
-    .from("profiles")
-    .update({ credits: newBalance })
-    .eq("id", userId)
-    .eq("credits", currentCredits)
-    .select("credits")
-    .single();
-
-  if (deductError || !updatedProfile) {
-    console.error("[Generate Images] Failed to deduct credits:", deductError);
-    return { success: false, chargedNow: false, amount: creditCost, error: "扣费失败，请重试", status: 409 };
-  }
-
-  const transactionError = await adminClient.from("credit_transactions").insert({
-    user_id: userId,
-    amount: -creditCost,
-    type: "consume",
-    description: `电商图片工厂 - ${getModeDisplayName(mode)}`,
-    reference_type: "ecom_image_task",
-    reference_id: taskId,
-    balance_before: currentCredits,
-    balance_after: newBalance,
-  });
-
-  if (transactionError.error) {
-    console.error("[Generate Images] Failed to record credit transaction:", transactionError.error);
   }
 
   const { data: chargedTask, error: taskUpdateError } = await adminClient
@@ -493,6 +567,8 @@ async function chargeEcomCreditsBeforeGeneration(
       taskId,
       creditCost,
       `电商图片扣费标记失败自动退款 (${taskId})`,
+      getEcomRefundOperation(billingAttempt, "charge-state"),
+      getEcomPricingVersion(mode, billingAttempt),
       false
     );
     return { success: false, chargedNow: false, amount: creditCost, error: "扣费状态更新失败，请重试", status: 409 };
@@ -507,46 +583,27 @@ async function refundEcomCreditsAfterGenerationFailure(
   taskId: string,
   amount: number,
   description: string,
+  operation: string,
+  pricingVersion: string,
   resetChargeState = true
 ): Promise<boolean> {
   if (amount <= 0) return true;
 
-  const { data: profile } = await adminClient
-    .from("profiles")
-    .select("credits")
-    .eq("id", userId)
-    .single();
-
-  if (!profile) return false;
-
-  const currentCredits = (profile as { credits: number }).credits;
-  const newBalance = currentCredits + amount;
-  const { data: updatedProfile, error: refundError } = await adminClient
-    .from("profiles")
-    .update({ credits: newBalance })
-    .eq("id", userId)
-    .eq("credits", currentCredits)
-    .select("credits")
-    .single();
-
-  if (refundError || !updatedProfile) {
-    console.error("[Generate Images] Failed to refund credits:", refundError);
+  try {
+    await applyTaskCreditDelta({
+      supabase: adminClient,
+      userId,
+      entryKind: "refund",
+      amount,
+      scope: "ecom-image",
+      taskId,
+      operation,
+      pricingVersion,
+      description,
+    });
+  } catch (error) {
+    console.error("[Generate Images] Failed to refund credits:", error);
     return false;
-  }
-
-  const transactionError = await adminClient.from("credit_transactions").insert({
-    user_id: userId,
-    amount,
-    type: "refund",
-    description,
-    reference_type: "ecom_image_task",
-    reference_id: taskId,
-    balance_before: currentCredits,
-    balance_after: newBalance,
-  });
-
-  if (transactionError.error) {
-    console.error("[Generate Images] Failed to record refund transaction:", transactionError.error);
   }
 
   if (resetChargeState) {

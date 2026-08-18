@@ -290,16 +290,16 @@ export default function ShopAccountsPage() {
 
     return (
         <div className="space-y-6">
-            {/* Page Header */}
-            <div className="flex items-center justify-between">
+            {/* Page Header — aligned with shop-publish main page header */}
+            <div className="flex items-center justify-between gap-4 bg-white/[0.02] border border-white/5 p-4 rounded-2xl">
                 <div className="flex items-center gap-4">
-                    <div className="w-1.5 h-14 rounded-full bg-gradient-to-b from-[#CCFF00] via-[#00F2EA] to-[#EC4899]" />
+                    <div className="w-1 h-10 rounded-full bg-gradient-to-b from-[#CCFF00] via-[#00F2EA] to-[#EC4899] opacity-80" />
                     <div>
-                        <h1 className="text-2xl font-bold text-white flex items-center gap-2">
-                            <Store className="h-6 w-6" />
+                        <h1 className="text-xl font-bold text-white flex items-center gap-2">
+                            <Store className="h-5 w-5" />
                             {T.title[lang]}
                         </h1>
-                        <p className="text-white/50 text-sm mt-0.5">
+                        <p className="text-white/50 text-xs mt-1">
                             {T.subtitle[lang]}
                         </p>
                     </div>

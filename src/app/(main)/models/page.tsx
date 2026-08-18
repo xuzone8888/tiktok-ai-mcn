@@ -71,6 +71,7 @@ const PREVIEW_MIN_ZOOM = 1;
 const PREVIEW_MAX_ZOOM = 4;
 const PREVIEW_ZOOM_STEP = 0.25;
 const MARKETPLACE_PAGE_SIZE = 60;
+const MARKETPLACE_ENGLISH_SEARCH_LIMIT = 1000;
 const DETAIL_ASSET_LOAD_DELAY_MS = 0;
 const MARKETPLACE_PRIORITY_IMAGE_COUNT = 5;
 const preloadImageUrls = new Set<string>();
@@ -1046,11 +1047,13 @@ export default function ModelsPage() {
     fetchSeqRef.current = requestSeq;
     setLoading(true);
     try {
+      const normalizedSearch = searchQuery.trim();
+      const isEnglishDisplaySearch = displayLang === "en" && normalizedSearch.length >= 2;
       const result = await getMarketplaceModels({
         category: selectedCategory,
         mine: selectedCategory === "我的角色",
-        search: searchQuery.trim().length >= 2 ? searchQuery.trim() : undefined,
-        limit: MARKETPLACE_PAGE_SIZE,
+        search: normalizedSearch.length >= 2 && !isEnglishDisplaySearch ? normalizedSearch : undefined,
+        limit: isEnglishDisplaySearch ? MARKETPLACE_ENGLISH_SEARCH_LIMIT : MARKETPLACE_PAGE_SIZE,
         offset: 0,
         shuffleSeed: shuffleSeedRef.current,
       });
@@ -1060,7 +1063,11 @@ export default function ModelsPage() {
       if (result.success && result.data) {
         setModels(result.data.models);
         setTotalModels(result.data.total ?? result.data.models.length);
-        setHasMoreModels(result.data.hasMore ?? result.data.models.length === MARKETPLACE_PAGE_SIZE);
+        setHasMoreModels(
+          isEnglishDisplaySearch
+            ? false
+            : result.data.hasMore ?? result.data.models.length === MARKETPLACE_PAGE_SIZE
+        );
       } else {
         setModels([]);
         setTotalModels(0);
@@ -1086,7 +1093,7 @@ export default function ModelsPage() {
         setLoading(false);
       }
     }
-  }, [common, lang, routeReady, searchQuery, selectedCategory, toast, tr]);
+  }, [common, displayLang, lang, routeReady, searchQuery, selectedCategory, toast, tr]);
 
   const loadMoreModels = useCallback(async () => {
     if (!routeReady || loadingMore || !hasMoreModels) return;
@@ -1154,15 +1161,24 @@ export default function ModelsPage() {
   const filteredModels = useMemo(() => {
     if (searchQuery.trim().length < 2) return models;
     const query = searchQuery.trim().toLowerCase();
-    return models.filter((model) =>
-      model.name.toLowerCase().includes(query) ||
-      model.category.toLowerCase().includes(query) ||
-      model.tags.some((tag) => tag.toLowerCase().includes(query))
-    );
-  }, [models, searchQuery]);
+    return models.filter((model) => {
+      const searchableValues = [
+        model.name,
+        localizeOfficialCharacterName(model.name, model.source, displayLang),
+        model.category,
+        categoryLabels[model.category],
+        ...model.tags,
+        ...model.tags.map((tag) => localizeOfficialCharacterTag(tag, model.source, displayLang)),
+      ];
+
+      return searchableValues.some((value) => value?.toLowerCase().includes(query));
+    });
+  }, [categoryLabels, displayLang, models, searchQuery]);
 
   const hasFilters = selectedCategory !== "全部" || searchQuery.trim().length > 0;
-  const totalModelCount = Math.max(totalModels, filteredModels.length);
+  const totalModelCount = searchQuery.trim().length >= 2
+    ? filteredModels.length
+    : Math.max(totalModels, filteredModels.length);
   const selectedModelSampleImages = useMemo(() => {
     if (!selectedModel) return [];
     if (selectedModel.reference_images.length > 0) return selectedModel.reference_images;
@@ -1268,8 +1284,10 @@ export default function ModelsPage() {
     router.push(`/quick-gen?characterId=${encodeURIComponent(model.id)}`);
   };
 
-  const goVideo = (model: PublicModel) => {
-    router.push(`/pro-studio/video-batch?characterId=${encodeURIComponent(model.id)}&modelType=veo`);
+  const goVideo = (_model: PublicModel) => {
+    // S4.4:video-batch 大页已消解;Studio 里用 @ 按钮重选角色(携参预选留待
+    // omnibox 支持 characterId query 时恢复)
+    router.push("/studio");
   };
 
   let modelsContent: ReactNode;

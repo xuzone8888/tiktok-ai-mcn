@@ -1,5 +1,21 @@
+const isProduction = process.env.NODE_ENV === 'production';
+
+function resolveCanvasBuildId() {
+  const candidate = process.env.CANVAS_RELEASE_COMMIT;
+  if (candidate === undefined) return null;
+  if (!/^[0-9a-f]{40}$/.test(candidate)) {
+    throw new Error(
+      'CANVAS_RELEASE_COMMIT must be an exact lowercase 40-character Git commit',
+    );
+  }
+  return candidate;
+}
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Controlled production builds bind Next's BUILD_ID to the immutable source
+  // commit. Ordinary local builds keep Next.js's default generated ID.
+  generateBuildId: async () => resolveCanvasBuildId(),
   // ESLint 配置 - 暂时跳过以确保构建成功
   eslint: {
     ignoreDuringBuilds: true,
@@ -78,6 +94,9 @@ const nextConfig = {
   compress: true,
   // 实验性功能
   experimental: {
+    // Keep production builds within the 2 vCPU / 4 GiB deployment host.
+    // This only limits Next.js build workers; it does not change Web runtime concurrency.
+    cpus: 1,
     // 优化服务器组件 - 添加更多常用包
     optimizePackageImports: [
       'lucide-react',
@@ -122,7 +141,9 @@ const nextConfig = {
         headers: [
           {
             key: 'Cache-Control',
-            value: 'public, max-age=31536000, immutable',
+            value: isProduction
+              ? 'public, max-age=31536000, immutable'
+              : 'no-store, max-age=0, must-revalidate',
           },
         ],
       },
@@ -174,6 +195,14 @@ const nextConfig = {
             key: 'Permissions-Policy',
             value: 'camera=(), microphone=(), geolocation=()',
           },
+          ...(!isProduction
+            ? [
+                {
+                  key: 'Clear-Site-Data',
+                  value: '"cache"',
+                },
+              ]
+            : []),
         ],
       },
     ];

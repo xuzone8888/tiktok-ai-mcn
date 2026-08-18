@@ -8,48 +8,43 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { applyTaskCreditDelta, type TaskCreditScope } from "@/lib/credits/atomic-task-credit";
 import { querySora2Result } from "@/lib/suchuang-api";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
 
 // 退还积分的辅助函数
-async function refundCredits(userId: string, amount: number, taskId: string, reason: string) {
+async function refundCredits(
+  userId: string,
+  amount: number,
+  billingTaskId: string,
+  scope: TaskCreditScope,
+  taskId: string,
+  reason: string
+) {
   try {
     const supabase = createAdminClient();
-
-    // 获取用户当前积分
-    const { data: profile, error: profileError } = await supabase
-      .from("profiles")
-      .select("credits")
-      .eq("id", userId)
-      .single();
-
-    if (profileError || !profile) {
-      console.error("[Sora Status] Refund failed - user not found:", userId);
-      return false;
-    }
-
-    const newCredits = profile.credits + amount;
-
-    // 退还积分
-    const { error: updateError } = await supabase
-      .from("profiles")
-      .update({ credits: newCredits })
-      .eq("id", userId);
-
-    if (updateError) {
-      console.error("[Sora Status] Refund failed - update error:", updateError);
-      return false;
-    }
+    const refund = await applyTaskCreditDelta({
+      supabase,
+      userId,
+      entryKind: "refund",
+      amount,
+      scope,
+      taskId: billingTaskId,
+      operation: "refund",
+      pricingVersion: `${scope}-refund-v1`,
+      description: `${reason} (${taskId})`,
+    });
 
     console.log("[Sora Status] Credits refunded:", {
       userId,
       amount,
       taskId,
       reason,
-      newBalance: newCredits,
+      newBalance: refund.balanceAfter,
     });
 
-    return true;
+    return refund.applied;
   } catch (error) {
     console.error("[Sora Status] Refund exception:", error);
     return false;
@@ -71,6 +66,30 @@ export async function GET(
       return NextResponse.json(
         { success: false, error: "请提供任务ID" },
         { status: 400 }
+      );
+    }
+
+    const authClient = await createClient();
+    const {
+      data: { user },
+    } = await authClient.auth.getUser();
+    if (!user) {
+      return NextResponse.json(
+        { success: false, error: "请先登录" },
+        { status: 401 }
+      );
+    }
+    const ownershipClient = createAdminClient();
+    const { data: existingRecord, error: ownershipError } = await ownershipClient
+      .from("generations")
+      .select("id, status, user_id, credit_cost, metadata")
+      .eq("task_id", taskId)
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (ownershipError || !existingRecord) {
+      return NextResponse.json(
+        { success: false, error: "任务不存在或无权查看" },
+        { status: 404 }
       );
     }
 
@@ -125,33 +144,41 @@ export async function GET(
           updateData.error_message = task.errorMessage;
         }
 
-        // 先检查记录是否存在
-        const { data: existingRecord, error: checkError } = await supabase
-          .from("generations")
-          .select("id, status, user_id, credit_cost")
-          .eq("task_id", taskId)
-          .single();
-
-        if (checkError) {
-          console.log("[Sora Status] No existing record found for task:", taskId, checkError.message);
-        } else if (existingRecord) {
-          // 只有当状态需要更新时才更新
-          if (existingRecord.status !== task.status) {
-            const { error: updateError, count } = await supabase
+        if (existingRecord.status !== task.status) {
+            const { data: updateResult, error: updateError } = await supabase
               .from("generations")
               .update(updateData)
-              .eq("task_id", taskId);
+              .eq("id", existingRecord.id)
+              .eq("status", existingRecord.status)
+              .select("id")
+              .maybeSingle();
 
             if (updateError) {
               console.error("[Sora Status] Failed to update DB:", updateError);
-            } else {
-              console.log("[Sora Status] Updated DB for task:", taskId, "status:", task.status, "count:", count);
+            } else if (updateResult) {
+              console.log("[Sora Status] Updated DB for task:", taskId, "status:", task.status);
 
               // 🔥 如果任务失败，自动退还积分
               if (task.status === "failed" && existingRecord.user_id && existingRecord.credit_cost > 0) {
+                const metadata =
+                  existingRecord.metadata &&
+                  typeof existingRecord.metadata === "object" &&
+                  !Array.isArray(existingRecord.metadata)
+                    ? existingRecord.metadata as Record<string, unknown>
+                    : {};
+                const scope: TaskCreditScope =
+                  metadata.billing_scope === "character-video"
+                    ? "character-video"
+                    : "sora-status";
+                const billingTaskId =
+                  typeof metadata.billing_task_id === "string"
+                    ? metadata.billing_task_id
+                    : existingRecord.id;
                 const refunded = await refundCredits(
                   existingRecord.user_id,
                   existingRecord.credit_cost,
+                  billingTaskId,
+                  scope,
                   taskId,
                   `视频生成失败自动退款: ${task.errorMessage || "第三方服务返回失败"}`
                 );
@@ -160,9 +187,8 @@ export async function GET(
                 }
               }
             }
-          } else {
-            console.log("[Sora Status] Status already up to date:", taskId, task.status);
-          }
+        } else {
+          console.log("[Sora Status] Status already up to date:", taskId, task.status);
         }
       } catch (dbError) {
         console.error("[Sora Status] DB error:", dbError);

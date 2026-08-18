@@ -593,12 +593,15 @@ export function CharacterPicker({
   }
 
   // --- Inline / Cards variant ---
+  // title="" 时不渲染标题行(调用方自带标题的嵌入场景,如 Studio omnibox 浮层)
   return (
     <div className="space-y-2">
-      <h4 className="text-sm font-medium text-white/70 flex items-center gap-1.5">
-        <Users className="h-3.5 w-3.5" />
-        {title}
-      </h4>
+      {title && (
+        <h4 className="text-sm font-medium text-white/70 flex items-center gap-1.5">
+          <Users className="h-3.5 w-3.5" />
+          {title}
+        </h4>
+      )}
       {listContent}
     </div>
   );

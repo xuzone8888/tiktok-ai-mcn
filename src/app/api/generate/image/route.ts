@@ -15,6 +15,7 @@ import {
   type ImageResolution,
 } from "@/types/generation";
 import { getNewImageCost } from "@/lib/credits";
+import { applyTaskCreditDelta } from "@/lib/credits/atomic-task-credit";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createServerClient } from "@/lib/supabase/server";
 import { getImageQueueMetadata } from "@/lib/image-prompt-complexity";
@@ -83,10 +84,6 @@ interface ImageCreditChargeResult {
   balanceAfter?: number;
   error?: string;
   status?: number;
-  manualReviewRequired?: boolean;
-  transactionMissing?: boolean;
-  balanceMaybeDeducted?: boolean;
-  uncertainAmount?: number;
 }
 
 interface ImageCreditRefundResult {
@@ -96,59 +93,6 @@ interface ImageCreditRefundResult {
   error?: string;
 }
 
-async function insertImageCreditTransaction(
-  adminClient: ReturnType<typeof createAdminClient>,
-  payload: {
-    user_id: string;
-    amount: number;
-    type: "usage" | "consume" | "refund";
-    description: string;
-    reference_type: string;
-    reference_id: string;
-    balance_before: number;
-    balance_after: number;
-  }
-) {
-  const candidateTypes = payload.type === "consume" || payload.type === "usage"
-    ? ["usage", "consume"]
-    : ["refund"];
-  let lastError: unknown;
-
-  for (const type of candidateTypes) {
-    const { error } = await adminClient.from("credit_transactions").insert({
-      ...payload,
-      type,
-    } as any);
-
-    if (!error) return null;
-    lastError = error;
-  }
-
-  return lastError;
-}
-
-async function rollbackImageCreditCharge(
-  adminClient: ReturnType<typeof createAdminClient>,
-  userId: string,
-  balanceBefore: number,
-  balanceAfter: number
-): Promise<boolean> {
-  const { data: rollbackProfile, error: rollbackError } = await adminClient
-    .from("profiles")
-    .update({ credits: balanceBefore })
-    .eq("id", userId)
-    .eq("credits", balanceAfter)
-    .select("credits")
-    .single();
-
-  if (rollbackError || !rollbackProfile) {
-    console.error("[Generate Image] Failed to rollback credit charge:", rollbackError);
-    return false;
-  }
-
-  return true;
-}
-
 async function chargeImageCreditsBeforeGeneration(
   adminClient: ReturnType<typeof createAdminClient>,
   userId: string,
@@ -156,84 +100,36 @@ async function chargeImageCreditsBeforeGeneration(
   generationId: string,
   creditCost: number
 ): Promise<ImageCreditChargeResult> {
-  const maxAttempts = 3;
-
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    const { data: profile, error: profileError } = await adminClient
-      .from("profiles")
-      .select("credits")
-      .eq("id", userId)
-      .single();
-
-    if (profileError || !profile) {
-      return { success: false, amount: creditCost, error: "User not found", status: 404 };
-    }
-
-    const balanceBefore = (profile as { credits: number }).credits;
-    if (balanceBefore < creditCost) {
-      return {
-        success: false,
-        amount: creditCost,
-        balanceBefore,
-        error: `积分不足！需要 ${creditCost} 积分，当前余额 ${balanceBefore}`,
-        status: 400,
-      };
-    }
-
-    const balanceAfter = balanceBefore - creditCost;
-    const { data: updatedProfile, error: deductError } = await adminClient
-      .from("profiles")
-      .update({ credits: balanceAfter })
-      .eq("id", userId)
-      .eq("credits", balanceBefore)
-      .select("credits")
-      .single();
-
-    if (deductError || !updatedProfile) {
-      if (attempt < maxAttempts) {
-        console.log(`[Generate Image] Credits deduct retry ${attempt}/${maxAttempts}`);
-        await new Promise(r => setTimeout(r, 100 * attempt));
-        continue;
-      }
-
-      console.error("[Generate Image] Failed to deduct credits:", deductError);
-      return { success: false, amount: creditCost, error: "扣费失败，请重试", status: 409 };
-    }
-
-    const transactionError = await insertImageCreditTransaction(adminClient, {
-      user_id: userId,
+  try {
+    const result = await applyTaskCreditDelta({
+      supabase: adminClient,
+      userId,
+      entryKind: "consume",
       amount: -creditCost,
-      type: "usage",
+      scope: "quick-image",
+      taskId: generationId,
+      operation: "consume",
+      pricingVersion: "quick-image-gpt-image-2-v1",
       description: `图片生成 - GPT Image 2 (${taskId})`,
-      reference_type: "quick_gen_image",
-      reference_id: generationId,
-      balance_before: balanceBefore,
-      balance_after: balanceAfter,
     });
 
-    if (transactionError) {
-      console.error("[Generate Image] Failed to record credit transaction:", transactionError);
-      const rollbackSucceeded = await rollbackImageCreditCharge(adminClient, userId, balanceBefore, balanceAfter);
-      return {
-        success: false,
-        amount: creditCost,
-        balanceBefore,
-        balanceAfter,
-        error: rollbackSucceeded
-          ? "扣费流水记录失败，请重试"
-          : "扣费流水记录失败，余额状态需人工核查",
-        status: 500,
-        manualReviewRequired: !rollbackSucceeded,
-        transactionMissing: true,
-        balanceMaybeDeducted: !rollbackSucceeded,
-        uncertainAmount: !rollbackSucceeded ? creditCost : 0,
-      };
-    }
-
-    return { success: true, amount: creditCost, balanceBefore, balanceAfter };
+    return {
+      success: true,
+      amount: creditCost,
+      balanceBefore: result.balanceBefore,
+      balanceAfter: result.balanceAfter,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "扣费失败，请重试";
+    console.error("[Generate Image] Failed to deduct credits:", error);
+    const insufficient = /insufficient credits/i.test(message);
+    return {
+      success: false,
+      amount: creditCost,
+      error: insufficient ? `积分不足！本次需要 ${creditCost} 积分` : "扣费失败，请重试",
+      status: insufficient ? 400 : 409,
+    };
   }
-
-  return { success: false, amount: creditCost, error: "扣费失败，请重试", status: 409 };
 }
 
 async function refundImageCreditsAfterGenerationFailure(
@@ -243,49 +139,28 @@ async function refundImageCreditsAfterGenerationFailure(
   generationId: string,
   creditCost: number
 ): Promise<ImageCreditRefundResult> {
-  const { data: profile, error: profileError } = await adminClient
-    .from("profiles")
-    .select("credits")
-    .eq("id", userId)
-    .single();
+  try {
+    const result = await applyTaskCreditDelta({
+      supabase: adminClient,
+      userId,
+      entryKind: "refund",
+      amount: creditCost,
+      scope: "quick-image",
+      taskId: generationId,
+      operation: "refund",
+      pricingVersion: "quick-image-gpt-image-2-v1",
+      description: `图片生成失败自动退款 - GPT Image 2 (${taskId})`,
+    });
 
-  if (profileError || !profile) {
-    console.error("[Generate Image] Failed to load profile for refund:", profileError);
-    return { success: false, error: "退款失败：用户不存在" };
+    return {
+      success: true,
+      balanceBefore: result.balanceBefore,
+      balanceAfter: result.balanceAfter,
+    };
+  } catch (error) {
+    console.error("[Generate Image] Failed to refund credits:", error);
+    return { success: false, error: "退款失败，请联系客服处理" };
   }
-
-  const balanceBefore = (profile as { credits: number }).credits;
-  const balanceAfter = balanceBefore + creditCost;
-  const { data: updatedProfile, error: refundError } = await adminClient
-    .from("profiles")
-    .update({ credits: balanceAfter })
-    .eq("id", userId)
-    .eq("credits", balanceBefore)
-    .select("credits")
-    .single();
-
-  if (refundError || !updatedProfile) {
-    console.error("[Generate Image] Failed to refund credits:", refundError);
-    return { success: false, balanceBefore, balanceAfter, error: "退款失败，请联系客服处理" };
-  }
-
-  const transactionError = await insertImageCreditTransaction(adminClient, {
-    user_id: userId,
-    amount: creditCost,
-    type: "refund",
-    description: `图片生成失败自动退款 - GPT Image 2 (${taskId})`,
-    reference_type: "quick_gen_image",
-    reference_id: generationId,
-    balance_before: balanceBefore,
-    balance_after: balanceAfter,
-  });
-
-  if (transactionError) {
-    console.error("[Generate Image] Failed to record refund transaction:", transactionError);
-    return { success: false, balanceBefore, balanceAfter, error: "退款流水记录失败，请联系客服处理" };
-  }
-
-  return { success: true, balanceBefore, balanceAfter };
 }
 
 function getImageTaskMetadata(metadata: unknown): Record<string, unknown> {
@@ -354,11 +229,17 @@ export async function POST(request: Request) {
       qualityLevel,
       source = "quick_gen",         // "quick_gen" | "batch_image"
       requestId,                    // 前端生成的 ID
+      batchId,                      // Studio 批次 ID(UUID,落 generations.batch_id)
       characterId,
       characterName,
       characterReferenceImages,
       characterAsset,
     } = body;
+    const normalizedBatchId =
+      typeof batchId === "string" &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(batchId.trim())
+        ? batchId.trim()
+        : null;
     const sanitizedCharacterAsset = sanitizeCharacterAsset(characterAsset);
     const normalizedCharacterReferenceImages = normalizeCharacterAssetImages(characterReferenceImages);
     const characterAssetReferenceUrls = sanitizedCharacterAsset
@@ -492,9 +373,11 @@ export async function POST(request: Request) {
     // 计算积分消耗
     // ============================================
     const creditCost = getNewImageCost(imageModel, imageResolution);
+    // 兜底 id 带随机后缀:并发提交同毫秒会撞裸 Date.now(),导致 task_id 重复、轮询串台
+    const taskIdSuffix = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
     const taskId = requestId || (modeValue === "upscale" || modeValue === "nine_grid"
-      ? `openai-${modeValue}-${Date.now()}`
-      : `openai-${Date.now()}`);
+      ? `openai-${modeValue}-${taskIdSuffix}`
+      : `openai-${taskIdSuffix}`);
     const generationId = crypto.randomUUID();
 
     // ============================================
@@ -551,6 +434,7 @@ export async function POST(request: Request) {
         id: generationId,
         user_id: authUserId,
         task_id: taskId,
+        ...(normalizedBatchId ? { batch_id: normalizedBatchId } : {}),
         type: "image",
         generation_type: "image",
         source,
@@ -590,29 +474,16 @@ export async function POST(request: Request) {
     );
 
     if (!chargeResult.success) {
-      const chargeManualReviewMetadata = chargeResult.manualReviewRequired
-        ? {
-            charge_manual_review_required: true,
-            charge_transaction_missing: !!chargeResult.transactionMissing,
-            charge_balance_maybe_deducted: !!chargeResult.balanceMaybeDeducted,
-            charge_uncertain_amount: chargeResult.uncertainAmount || creditCost,
-            charge_manual_review_at: new Date().toISOString(),
-            last_charge_error: chargeResult.error || "扣费流水写入失败且余额回滚失败，需人工对账",
-          }
-        : {};
-
       await supabase
         .from("generations")
         .update({
           status: "failed",
           metadata: {
             ...baseTaskMetadata,
-            ...chargeManualReviewMetadata,
             charge: {
               status: "failed",
               amount: creditCost,
               error: chargeResult.error || "扣费失败",
-              manualReviewRequired: !!chargeResult.manualReviewRequired,
             },
           } as any,
         })

@@ -73,6 +73,14 @@ export interface SlideshowTask {
     hasSubtitle?: boolean;
     /** 原始提交参数（用于重试） */
     originalConfig?: Record<string, unknown>;
+    /**
+     * Studio 渲染腿(S1.2):BTM 幻灯片执行器的请求快照
+     * (POST /api/video-batch/generate-slideshow 的完整 body)。
+     * 旧 image-slideshow 页任务无此字段,不会被 BTM 执行器拉起。
+     */
+    renderRequest?: Record<string, unknown>;
+    /** Studio 批次 ID */
+    batchId?: string;
     /** 创建时间 */
     createdAt: string;
     /** 更新时间 */
@@ -420,6 +428,33 @@ export const useSlideshowStore = create<SlideshowState & SlideshowActions>()(
                 tasks: state.tasks,
                 activeGroupName: state.activeGroupName,
             }),
+            onRehydrateStorage: () => (state) => {
+                if (!state) return;
+                // Studio 任务孤儿归一化:刷新打断的在途渲染(fetch 已丢失)置 failed,
+                // 走批次卡的重试入口。服务端可能已完成并扣费,成片可在生成记录查看。
+                // 旧 image-slideshow 页任务(无 renderRequest)不动,保持旧页语义。
+                const orphaned = (state.tasks ?? []).some(
+                    (t) => t.renderRequest && (t.status === "generating" || t.status === "uploading")
+                );
+                if (orphaned) {
+                    // 同步 storage 的水合在 create() 初始化器内同步执行,此时
+                    // useSlideshowStore 常量仍处于 TDZ——必须延迟到模块求值完成后再 setState
+                    setTimeout(() => {
+                        useSlideshowStore.setState({
+                            tasks: useSlideshowStore.getState().tasks.map((t) =>
+                                t.renderRequest && (t.status === "generating" || t.status === "uploading")
+                                    ? {
+                                        ...t,
+                                        status: "failed" as const,
+                                        errorMessage: "页面刷新中断,请重试(若已扣费,成片可在生成记录查看)",
+                                        updatedAt: new Date().toISOString(),
+                                    }
+                                    : t
+                            ),
+                        });
+                    }, 0);
+                }
+            },
         }
     )
 );

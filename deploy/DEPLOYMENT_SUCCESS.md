@@ -80,7 +80,7 @@ pm2 restart tiktok-ai-mcn
 - **环境变量文件**: /var/www/tiktok-ai-mcn/.env.local
 
 ### 环境变量
-所有环境变量已从 Vercel 同步并配置：
+所有环境变量已从受限的生产配置备份核对并配置：
 - ✅ NEXT_PUBLIC_SUPABASE_URL
 - ✅ NEXT_PUBLIC_SUPABASE_ANON_KEY
 - ✅ SUPABASE_SERVICE_ROLE_KEY

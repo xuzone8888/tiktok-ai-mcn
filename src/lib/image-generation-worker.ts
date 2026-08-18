@@ -8,6 +8,7 @@ import {
   NORMAL_IMAGE_MAX_WAIT_MS,
   type ImageQueueLane,
 } from "@/lib/image-prompt-complexity";
+import { applyTaskCreditDelta } from "@/lib/credits/atomic-task-credit";
 import { isImageFactoryEnabled } from "@/lib/feature-flags";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
@@ -179,6 +180,23 @@ function getMetadata(metadata: unknown): Record<string, unknown> {
   }
 
   return {};
+}
+
+function getEcomBillingAttempt(metadata: Record<string, unknown>): number {
+  const value = Number(metadata.billing_attempt || 0);
+  return Number.isSafeInteger(value) && value > 0 ? value : 1;
+}
+
+function getEcomPricingVersion(task: EcomTaskRecord, billingAttempt: number): string {
+  return `ecom-image-${task.mode}-attempt-${billingAttempt}-v1`;
+}
+
+function getEcomRefundOperation(
+  billingAttempt: number,
+  failedCount: number,
+  totalCount: number
+): string {
+  return `refund-a${billingAttempt}-f${failedCount}-of-${totalCount}`;
 }
 
 function getAttempts(metadata: Record<string, unknown>): Array<Record<string, unknown>> {
@@ -419,24 +437,40 @@ async function getRecordedQuickImageRefundAmount(
   generationId?: string
 ): Promise<number> {
   const referenceId = generationId ? getUuidReferenceId(generationId) : null;
-  const { data, error } = await adminClient
-    .from("credit_transactions")
-    .select("amount, description, reference_id")
-    .eq("user_id", userId)
-    .eq("reference_type", "quick_gen_image")
-    .eq("type", "refund");
-  if (error || !data) {
-    console.error("[Image Worker] Failed to read quick-gen refund transactions:", error);
+  const [legacyResult, taskScopedResult] = await Promise.all([
+    adminClient
+      .from("credit_transactions")
+      .select("amount, description, reference_id")
+      .eq("user_id", userId)
+      .eq("reference_type", "quick_gen_image")
+      .eq("type", "refund"),
+    (adminClient as any)
+      .from("credit_transactions")
+      .select("amount")
+      .eq("user_id", userId)
+      .eq("task_id", generationId || "")
+      .eq("entry_kind", "refund")
+      .eq("pricing_version", "quick-image-gpt-image-2-v1"),
+  ]);
+  if (legacyResult.error || taskScopedResult.error) {
+    console.error(
+      "[Image Worker] Failed to read quick-gen refund transactions:",
+      legacyResult.error || taskScopedResult.error
+    );
     return 0;
   }
 
-  return data
+  const legacyAmount = (legacyResult.data || [])
     .filter((row) => {
       const record = row as { reference_id?: string | null; description?: string | null };
       return (referenceId && record.reference_id === referenceId) ||
         (!!taskId && !!record.description && record.description.includes(taskId));
     })
     .reduce((sum, row) => sum + Math.max(0, Number((row as { amount?: number }).amount || 0)), 0);
+  const taskScopedAmount = ((taskScopedResult.data || []) as Array<{ amount?: number }>)
+    .reduce((sum, row) => sum + Math.max(0, Number(row.amount || 0)), 0);
+
+  return legacyAmount + taskScopedAmount;
 }
 
 async function refundQuickGenerationCredits(
@@ -463,85 +497,24 @@ async function refundQuickGenerationCredits(
   const refundAmount = Math.max(0, amount - alreadyRefunded);
   if (refundAmount <= 0) return { status: "refunded" };
 
-  const { data: profile, error: profileError } = await adminClient
-    .from("profiles")
-    .select("credits")
-    .eq("id", generation.user_id)
-    .single();
-
-  if (profileError || !profile) {
-    console.error("[Image Worker] Failed to load profile for quick-gen refund:", profileError);
-    return { status: "retry", error: "读取用户积分失败" };
-  }
-
-  const balanceBefore = (profile as { credits: number }).credits;
-  const balanceAfter = balanceBefore + refundAmount;
-  const { data: updatedProfile, error: refundError } = await adminClient
-    .from("profiles")
-    .update({ credits: balanceAfter })
-    .eq("id", generation.user_id)
-    .eq("credits", balanceBefore)
-    .select("credits")
-    .single();
-
-  if (refundError || !updatedProfile) {
-    console.error("[Image Worker] Failed to refund quick-gen credits:", refundError);
-    return { status: "retry", error: "退款余额更新失败" };
-  }
-
-  const transactionError = await adminClient.from("credit_transactions").insert({
-    user_id: generation.user_id,
-    amount: refundAmount,
-    type: "refund",
-    description: `图片生成失败自动退款 - GPT Image 2 (${taskId})`,
-    reference_type: "quick_gen_image",
-    reference_id: getUuidReferenceId(generationId),
-    balance_before: balanceBefore,
-    balance_after: balanceAfter,
-  });
-
-  if (transactionError.error) {
-    console.error("[Image Worker] Failed to record quick-gen refund transaction:", transactionError.error);
-    const rollbackQuery = adminClient
-      .from("profiles")
-      .update({ credits: balanceBefore })
-      .eq("id", generation.user_id)
-      .eq("credits", balanceAfter);
-
-    const { data: rollbackProfile, error: rollbackError } = await rollbackQuery
-      .select("credits")
-      .single();
-
-    if (rollbackError || !rollbackProfile) {
-      console.error("[Image Worker] Failed to rollback quick-gen refund after transaction failure:", rollbackError);
-      const manualReviewAt = new Date().toISOString();
-      const manualMetadata = buildRefundMetadata(metadata, {
-        refund_pending: false,
-        refund_pending_amount: 0,
-        refund_manual_review_required: true,
-        refund_transaction_missing: true,
-        refund_balance_maybe_applied: true,
-        refund_uncertain_amount: refundAmount,
-        last_refund_error: "退款流水写入失败且余额回滚失败，需人工对账",
-        refund_manual_review_at: manualReviewAt,
-      });
-
-      const { error: manualMetadataError } = await adminClient
-        .from("generations")
-        .update({
-          status: "failed",
-          metadata: manualMetadata as any,
-        })
-        .eq("id", generation.id);
-
-      if (manualMetadataError) {
-        console.error("[Image Worker] Failed to mark quick-gen refund manual review:", manualMetadataError);
-      }
-
-      return { status: "manual_review", error: "退款流水写入失败且余额回滚失败" };
-    }
-
-    return { status: "retry", error: "退款流水写入失败，余额已回滚" };
+  try {
+    await applyTaskCreditDelta({
+      supabase: adminClient,
+      userId: generation.user_id,
+      entryKind: "refund",
+      amount: refundAmount,
+      scope: "quick-image",
+      taskId: generationId,
+      operation: "refund",
+      pricingVersion: "quick-image-gpt-image-2-v1",
+      description: `图片生成失败自动退款 - GPT Image 2 (${taskId})`,
+    });
+  } catch (error) {
+    console.error("[Image Worker] Failed to refund quick-gen credits:", error);
+    return {
+      status: "retry",
+      error: error instanceof Error ? error.message : "原子退款失败",
+    };
   }
 
   await adminClient
@@ -1063,21 +1036,40 @@ function isOpenAIOutputItemDue(task: EcomTaskRecord, item: OpenAIOutputItem, now
 
 async function getRecordedOpenAIFailureRefundAmount(
   adminClient: AdminClient,
-  taskId: string
+  taskId: string,
+  pricingVersion: string,
+  includeLegacy: boolean
 ): Promise<number> {
-  const { data, error } = await adminClient
+  const taskScopedResult = await (adminClient as any)
+    .from("credit_transactions")
+    .select("amount")
+    .eq("task_id", taskId)
+    .eq("entry_kind", "refund")
+    .eq("pricing_version", pricingVersion);
+  if (taskScopedResult.error) {
+    console.error(
+      "[Image Worker] Failed to read ecom refund transactions:",
+      taskScopedResult.error
+    );
+    return 0;
+  }
+
+  const taskScopedAmount = ((taskScopedResult.data || []) as Array<{ amount?: number }>)
+    .reduce((sum, row) => sum + Math.max(0, Number(row.amount || 0)), 0);
+  if (!includeLegacy) return taskScopedAmount;
+
+  const legacyResult = await adminClient
     .from("credit_transactions")
     .select("amount, description")
     .eq("reference_type", "ecom_image_task")
     .eq("reference_id", taskId)
     .eq("type", "refund");
-
-  if (error || !data) {
-    console.error("[Image Worker] Failed to read ecom refund transactions:", error);
-    return 0;
+  if (legacyResult.error) {
+    console.error("[Image Worker] Failed to read legacy ecom refunds:", legacyResult.error);
+    return taskScopedAmount;
   }
 
-  return data.reduce((sum, row) => {
+  const legacyAmount = (legacyResult.data || []).reduce((sum, row) => {
     const transaction = row as { amount?: number; description?: string | null };
     if (!transaction.description?.includes("GPT Image 2 失败按比例退款")) {
       return sum;
@@ -1085,6 +1077,8 @@ async function getRecordedOpenAIFailureRefundAmount(
 
     return sum + Math.max(0, transaction.amount || 0);
   }, 0);
+
+  return legacyAmount + taskScopedAmount;
 }
 
 async function refundEcomTaskCredits(
@@ -1092,65 +1086,30 @@ async function refundEcomTaskCredits(
   userId: string,
   taskId: string,
   amount: number,
-  description: string
+  description: string,
+  operation: string,
+  pricingVersion: string
 ): Promise<RefundCreditResult> {
   if (amount <= 0) return { status: "refunded" };
 
-  const { data: profile, error: profileError } = await adminClient
-    .from("profiles")
-    .select("credits")
-    .eq("id", userId)
-    .single();
-
-  if (profileError || !profile) {
-    console.error("[Image Worker] Failed to load profile for ecom refund:", profileError);
-    return { status: "retry", error: "读取用户积分失败" };
-  }
-
-  const currentCredits = (profile as { credits: number }).credits;
-  const newBalance = currentCredits + amount;
-  const { data: updatedProfile, error: refundError } = await adminClient
-    .from("profiles")
-    .update({ credits: newBalance })
-    .eq("id", userId)
-    .eq("credits", currentCredits)
-    .select("credits")
-    .single();
-
-  if (refundError || !updatedProfile) {
-    console.error("[Image Worker] Failed to refund ecom credits:", refundError);
-    return { status: "retry", error: "退款余额更新失败" };
-  }
-
-  const transactionError = await adminClient.from("credit_transactions").insert({
-    user_id: userId,
-    amount,
-    type: "refund",
-    description,
-    reference_type: "ecom_image_task",
-    reference_id: taskId,
-    balance_before: currentCredits,
-    balance_after: newBalance,
-  });
-
-  if (transactionError.error) {
-    console.error("[Image Worker] Failed to record ecom refund transaction:", transactionError.error);
-    const rollbackQuery = adminClient
-      .from("profiles")
-      .update({ credits: currentCredits })
-      .eq("id", userId)
-      .eq("credits", newBalance);
-
-    const { data: rollbackProfile, error: rollbackError } = await rollbackQuery
-      .select("credits")
-      .single();
-
-    if (rollbackError || !rollbackProfile) {
-      console.error("[Image Worker] Failed to rollback ecom refund after transaction failure:", rollbackError);
-      return { status: "manual_review", error: "退款流水写入失败且余额回滚失败" };
-    }
-
-    return { status: "retry", error: "退款流水写入失败，余额已回滚" };
+  try {
+    await applyTaskCreditDelta({
+      supabase: adminClient,
+      userId,
+      entryKind: "refund",
+      amount,
+      scope: "ecom-image",
+      taskId,
+      operation,
+      pricingVersion,
+      description,
+    });
+  } catch (error) {
+    console.error("[Image Worker] Failed to refund ecom credits:", error);
+    return {
+      status: "retry",
+      error: error instanceof Error ? error.message : "原子退款失败",
+    };
   }
 
   return { status: "refunded" };
@@ -1288,9 +1247,16 @@ async function reconcileOpenAIFailureRefund(
   }
 
   const metadata = getMetadata(task.metadata);
+  const billingAttempt = getEcomBillingAttempt(metadata);
+  const pricingVersion = getEcomPricingVersion(task, billingAttempt);
   const alreadyRefundedAmount = Math.max(
     Number(metadata.openai_failed_refund_amount || 0),
-    await getRecordedOpenAIFailureRefundAmount(adminClient, task.id)
+    await getRecordedOpenAIFailureRefundAmount(
+      adminClient,
+      task.id,
+      pricingVersion,
+      billingAttempt === 1
+    )
   );
   const alreadyRefundedFailedCount = Number(metadata.openai_failed_refund_count || 0);
 
@@ -1330,7 +1296,9 @@ async function reconcileOpenAIFailureRefund(
     task.user_id,
     task.id,
     amount,
-    `电商图片 GPT Image 2 失败按比例退款 (${refundPlan.failedCount}/${refundPlan.totalCount}, ${task.id})`
+    `电商图片 GPT Image 2 失败按比例退款 (${refundPlan.failedCount}/${refundPlan.totalCount}, ${task.id})`,
+    getEcomRefundOperation(billingAttempt, refundPlan.failedCount, refundPlan.totalCount),
+    pricingVersion
   );
 
   if (refundResult.status === "manual_review") {
@@ -1907,11 +1875,22 @@ export async function processImageGenerationQueue(
   const counters = createCounters();
   const adminClient = createAdminClient();
 
+  // 🔴 **画布的生成不归本 worker 管**(2026-08-09 实测查出的车道重叠)。
+  // 画布有自己的对账车道(`stargaze-canvas-reconciler` + `claim_canvas_generation_reconciliation_v1`),
+  // 而本 worker 原先只按 `type=image` 拉队列、不看 `source`,于是把 `source='canvas'` 的行
+  // 一并认领走:超时按本 worker 的 `maxWaitMs` 判死,退款走 `quick-image` 账本
+  // (`credit_transactions.description = "图片生成失败自动退款 - GPT Image 2"`),
+  // **不回写 `generations.credits_refunded`** —— 用户的钱是对的,但画布对账口径会少记退款,
+  // 且同一行可能被两条车道各自处理。
+  // 用 `.or(source.is.null,...)` 而不是裸 `.neq`:PostgREST 的 `neq` 会把 NULL 一起排除,
+  // 现存 1932 行 type=image 虽然都有 source,但将来若有路径漏写会静默丢任务。
+  const NOT_CANVAS = "source.is.null,source.neq.canvas";
   const { data: activeGenerationRows, error: generationError } = await adminClient
     .from("generations")
     .select("*")
     .in("status", ["processing", "pending"])
     .eq("type", "image")
+    .or(NOT_CANVAS)
     .order("created_at", { ascending: true })
       .limit(Math.max((maxGenerationItems + maxSlowGenerationItems) * 10, maxGenerationItems + maxSlowGenerationItems));
   const { data: refundPendingGenerationRows, error: generationRefundScanError } = maxGenerationItems > 0
@@ -1921,6 +1900,7 @@ export async function processImageGenerationQueue(
       .eq("status", "failed")
       .eq("type", "image")
       .eq("metadata->>refund_pending", "true")
+      .or(NOT_CANVAS)
       .order("created_at", { ascending: true })
       .limit(Math.max((maxGenerationItems + maxSlowGenerationItems) * 10, maxGenerationItems + maxSlowGenerationItems))
     : { data: [], error: null };

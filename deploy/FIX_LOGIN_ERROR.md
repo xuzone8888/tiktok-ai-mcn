@@ -16,9 +16,9 @@ Login error: {"__isAuthError":true,"name":"AuthApiError","status":400,"code":"in
 ### 方案 1: 检查账号密码（推荐）
 
 1. **确认账号密码是否正确**
-   - 在 Vercel 部署的网站上测试登录
-   - 如果 Vercel 上可以登录，说明账号密码正确
-   - 如果 Vercel 上也不能登录，说明账号密码可能错误
+   - 在本地开发环境和阿里云生产站点分别测试登录
+   - 如果本地可以登录，说明账号密码本身有效
+   - 如果两边都不能登录，说明账号密码或 Supabase 认证配置可能有误
 
 2. **尝试注册新账号**
    - 访问：http://123.56.75.68:3000/auth/register
@@ -93,7 +93,7 @@ SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 
 ## 📝 常见问题
 
-### Q: 为什么 Vercel 上可以登录，但阿里云上不能？
+### Q: 为什么本地可以登录，但阿里云上不能？
 
 A: 这通常是因为：
 1. 账号密码输入错误

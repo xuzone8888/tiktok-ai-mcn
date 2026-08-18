@@ -20,13 +20,16 @@ export async function POST(_request: NextRequest, { params }: { params: { id: st
 
     const { data: account, error: fetchError } = await (supabase as any)
       .from('instagram_accounts')
-      .select('id, channel_id')
+      .select('id, channel_id, status')
       .eq('id', params.id)
       .eq('user_id', user.id)
       .single()
 
     if (fetchError || !account) {
       return NextResponse.json({ error: '账号不存在或无权访问' }, { status: 404 })
+    }
+    if (account.status !== 'active') {
+      return NextResponse.json({ error: 'Instagram 账号已隔离，请重新绑定' }, { status: 409 })
     }
 
     const adminSupabase = createAdminClient() as any

@@ -5,6 +5,8 @@ import { buildPlatformPublishPayload } from '@/lib/publish/platform-adapters'
 
 const MAX_ITEMS_PER_RUN = 20
 const TOKEN_REFRESH_BUFFER_MS = 5 * 60 * 1000
+// 认领后超过该时长仍停留在 processing/uploading 的项视为卡死（进程崩溃/函数超时），重置回 pending 重试。
+const STALE_ITEM_THRESHOLD_MS = 15 * 60 * 1000
 
 interface FacebookPublishTaskSettings {
   privacy_status: 'private' | 'public'
@@ -66,6 +68,7 @@ export async function processFacebookPublishQueue(options: FacebookProcessOption
   }
 
   try {
+    await recoverStaleItems(supabase)
     const items = await queryPendingItems(supabase, options)
     if (items.length === 0) {
       result.duration_ms = Date.now() - startTime
@@ -105,6 +108,20 @@ export async function processFacebookPublishQueue(options: FacebookProcessOption
     result.errors.push(getErrorMessage(error, 'Facebook 发布队列处理失败'))
     result.duration_ms = Date.now() - startTime
     return result
+  }
+}
+
+async function recoverStaleItems(supabase: any) {
+  // 把卡死在 processing/uploading 的项重置回 pending，使后续 cron 能重新认领（仿 TikTok 参考的 stale 恢复）。
+  // 不重置已 published/draft_created/failed 的终态项。配合 publishItem 的 video_id 幂等保护避免重复发布。
+  const staleBefore = new Date(Date.now() - STALE_ITEM_THRESHOLD_MS).toISOString()
+  const { error } = await supabase
+    .from('facebook_publish_task_items')
+    .update({ status: 'pending', processing_started_at: null, updated_at: new Date().toISOString() })
+    .in('status', ['processing', 'uploading'])
+    .lt('processing_started_at', staleBefore)
+  if (error) {
+    console.warn('恢复 Facebook 卡死发布项失败:', error.message)
   }
 }
 
@@ -219,7 +236,22 @@ async function getValidAccessToken(supabase: any, account: FacebookAccountToken)
     return account.access_token
   }
 
-  const refreshed = await refreshFacebookPageAccessToken(account.refresh_token, account.page_id)
+  let refreshed
+  try {
+    refreshed = await refreshFacebookPageAccessToken(account.refresh_token, account.page_id)
+  } catch (error) {
+    // Facebook 长效用户令牌约 60 天硬过期且无法自动续期。仅当令牌端点明确返回失效(HTTP 400/401)时才把账号标记为
+    // expired 并提示重连；5xx/429/网络等瞬时错误直接抛出交下轮 cron 重试，避免误禁用本来有效的账号。
+    const httpStatus = (error as { httpStatus?: number })?.httpStatus
+    if (httpStatus === 400 || httpStatus === 401) {
+      await supabase
+        .from('facebook_accounts')
+        .update({ status: 'expired', updated_at: new Date().toISOString() })
+        .eq('id', account.account_id)
+      throw new Error(`Facebook 授权已过期，请重新连接账号: ${getErrorMessage(error, '令牌刷新失败')}`)
+    }
+    throw error
+  }
   const expiresAt = refreshed.expires_in ? new Date(Date.now() + refreshed.expires_in * 1000).toISOString() : null
   const now = new Date().toISOString()
 
@@ -277,6 +309,18 @@ async function publishItem(
     throw new Error('视频 URL 无效')
   }
 
+  // 幂等保护：若该项已记录 facebook_video_id，说明上一轮已成功发布、仅终态写库失败而卡住。
+  // 被卡死恢复重置回 pending 后，这里直接补记为 published，避免重复上传导致同一视频被二次公开发布。
+  const existingVideoId = await getExistingFacebookVideoId(supabase, item.id)
+  if (existingVideoId) {
+    const ts = new Date().toISOString()
+    await supabase
+      .from('facebook_publish_task_items')
+      .update({ status: 'published', published_at: ts, error_code: null, error_message: null, updated_at: ts })
+      .eq('id', item.id)
+    return
+  }
+
   const now = new Date().toISOString()
   await supabase
     .from('facebook_publish_task_items')
@@ -319,24 +363,43 @@ async function publishItem(
       contentCategory: platformPayload.content_category,
     })
 
+    // 先单独持久化 video_id（状态仍 uploading）。这样即使在终态写库前崩溃/超时，卡死恢复后 publishItem 的幂等守卫
+    // 能读到 facebook_video_id 而补记为已发布，不会重复上传导致同一视频被二次公开发布。
+    await supabase
+      .from('facebook_publish_task_items')
+      .update({
+        facebook_video_id: upload.videoId,
+        facebook_post_id: upload.postId,
+        facebook_watch_url: upload.watchUrl,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', item.id)
+
     const publishedAt = new Date().toISOString()
     await supabase
       .from('facebook_publish_task_items')
       .update({
-      status: upload.published ? 'published' : 'draft_created',
-      facebook_video_id: upload.videoId,
-      facebook_watch_url: upload.watchUrl,
-      error_code: null,
-      error_message: null,
-      published_at: upload.published ? publishedAt : null,
-      updated_at: publishedAt,
-    })
+        status: upload.published ? 'published' : 'draft_created',
+        error_code: null,
+        error_message: null,
+        published_at: upload.published ? publishedAt : null,
+        updated_at: publishedAt,
+      })
       .eq('id', item.id)
   } catch (error) {
     const message = getErrorMessage(error, 'Facebook 发布失败')
     await markItemFailed(supabase, item.id, message, 'FACEBOOK_UPLOAD_FAILED')
     throw error
   }
+}
+
+async function getExistingFacebookVideoId(supabase: any, itemId: string): Promise<string | null> {
+  const { data } = await supabase
+    .from('facebook_publish_task_items')
+    .select('facebook_video_id')
+    .eq('id', itemId)
+    .single()
+  return data?.facebook_video_id || null
 }
 
 async function markItemFailed(supabase: any, itemId: string, message: string, code: string) {

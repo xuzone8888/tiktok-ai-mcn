@@ -34,7 +34,7 @@ curl -fsSL https://raw.githubusercontent.com/xuzone8888/tiktok-ai-mcn/main/deplo
 nano .env.local
 ```
 
-**从 Vercel 获取环境变量值并填入**，然后继续运行脚本。
+**从密码管理器或受限的生产配置备份核对环境变量值并填入**，然后继续运行脚本。
 
 ---
 
@@ -60,7 +60,7 @@ bash deploy/setup-server.sh
 
 # 创建环境变量文件
 nano .env.local
-# 从 Vercel 复制环境变量值并填入
+# 从安全来源核对环境变量值并填入
 
 # 检查环境变量
 bash deploy/check-env.sh
@@ -73,16 +73,16 @@ bash deploy/deploy.sh
 
 ## 🔑 环境变量配置
 
-在 `.env.local` 文件中填入以下内容（从 Vercel 获取实际值）：
+在 `.env.local` 文件中填入以下内容（从安全来源获取实际值）：
 
 ```bash
-NEXT_PUBLIC_SUPABASE_URL=从Vercel获取
-NEXT_PUBLIC_SUPABASE_ANON_KEY=从Vercel获取
-SUPABASE_SERVICE_ROLE_KEY=从Vercel获取
-DOUBAO_API_KEY=从Vercel获取
-DOUBAO_ENDPOINT_ID=从Vercel获取
-SORA2_API_KEY=从Vercel获取
-SUCHUANG_API_KEY=从Vercel获取
+NEXT_PUBLIC_SUPABASE_URL=从安全来源获取
+NEXT_PUBLIC_SUPABASE_ANON_KEY=从安全来源获取
+SUPABASE_SERVICE_ROLE_KEY=从安全来源获取
+DOUBAO_API_KEY=从安全来源获取
+DOUBAO_ENDPOINT_ID=从安全来源获取
+SORA2_API_KEY=从安全来源获取
+SUCHUANG_API_KEY=从安全来源获取
 NEXT_PUBLIC_APP_URL=http://123.56.75.68:3000
 ADMIN_EMAIL=admin@example.com
 ```

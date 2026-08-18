@@ -10,7 +10,7 @@ import { createServerClient } from "@/lib/supabase/server";
 import { generateEcomPrompts } from "@/lib/ecom-doubao";
 import type { EcomImageMode } from "@/types/ecom-image";
 
-// Vercel 函数配置
+// Route runtime configuration
 export const maxDuration = 120;
 
 interface GeneratePromptsRequest {

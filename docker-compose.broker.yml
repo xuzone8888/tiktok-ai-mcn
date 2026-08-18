@@ -1,0 +1,86 @@
+# StarGaze OAuth Broker —— 独立 compose project（与 newapi / newapi_bjx_overlay / okspeak-intl /
+# nginx-proxy-manager / stargaze-worker 隔离并存）。**只新增、绝不改/重建任何现有容器。**
+#
+# broker 镜像**从本 feature 分支用 ./Dockerfile 重新构建**，独立标签 stargaze-oauth-broker:latest。
+# 绝不复用 stargaze-publish-worker:latest（那个镜像没有 /api/oauth-broker/call 路由）。
+# 绝不 up/down/重建正在跑的 stargaze-worker。
+#
+# 机密只经 broker.env（chmod 600、gitignore，绝不进 git/镜像层）：
+#   - 构建期作为 BuildKit secret 挂成 .env.production.local（见 Dockerfile，不入镜像层）；
+#   - 运行期作为 env_file 注入。
+# transport 细节（公网地址/端口）全走 env（broker.env），不写死。
+#
+# 部署（美国机，/opt/stargaze-broker，feature 分支 + broker.env 已就位）：
+#   docker compose -p stargaze-broker -f docker-compose.broker.yml up -d --build
+# 回滚：
+#   docker compose -p stargaze-broker -f docker-compose.broker.yml down
+# 校验未碰现有容器：
+#   docker ps   # newapi / newapi_bjx_overlay / okspeak-intl / nginx-proxy-manager / stargaze-worker 应全未变动
+#
+# 源 IP 钉死：Caddy 用 host 网络做主机级监听 → ufw（default-deny incoming）只放行 CN 出口 IP：
+#   ufw allow from 123.56.75.68 to any port 18443 proto tcp
+# 刻意不用 Docker 发布端口对外——docker-proxy 会在主机层 0.0.0.0 直接 accept、绕过 DOCKER-USER。
+# Phase 1 落实，绝不放宽成网段。broker 只发布到 127.0.0.1（外部到不了），供同机 Caddy 反代。
+services:
+  broker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      secrets:
+        - workerenv          # 构建期挂成 .env.production.local
+    image: stargaze-oauth-broker:latest
+    container_name: stargaze-broker
+    restart: unless-stopped
+    env_file:
+      - ./broker.env         # 运行期机密；**绝不含 OAUTH_BROKER_URL**（递归护栏）
+    environment:
+      NODE_ENV: production
+      PORT: "3100"
+    ports:
+      # 仅 localhost 发布给同机 Caddy(host 网络)反代；外部经公网到不了。
+      - "127.0.0.1:${BROKER_LOCAL_PORT:-3101}:3100"
+    networks:
+      - broker_net
+    mem_limit: 2g
+    memswap_limit: 2g
+    cpus: 1.0
+    healthcheck:
+      # 任意 HTTP 响应=应用存活（GET /call 无 bearer 实际回 401/405，均 fail-closed）。
+      test: ["CMD", "node", "-e", "require('http').get('http://127.0.0.1:3100/api/oauth-broker/call',r=>process.exit(0)).on('error',()=>process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  tls:
+    # Caddy 做 TLS 终止（tls internal=自建本地 CA，不依赖 NPM、不抢 80/443、不需公网 CA/LE）。
+    # Caddyfile 只放行 /api/oauth-broker/call 反代到 broker，其余一律 404。
+    image: caddy:2
+    container_name: stargaze-broker-tls
+    restart: unless-stopped
+    depends_on:
+      - broker
+    # host 网络：Caddy 作为主机级监听器，源 IP 限制交给 ufw（default-deny incoming，只放行 CN）。
+    # 避开 Docker 发布端口被 docker-proxy 绕过 DOCKER-USER 的坑。
+    network_mode: host
+    environment:
+      BROKER_PUBLIC_ADDR: "${BROKER_PUBLIC_ADDR}"           # 决定 TLS 证书 SAN + 监听地址
+      BROKER_TLS_PORT: "${BROKER_TLS_PORT:-18443}"
+      BROKER_UPSTREAM: "${BROKER_UPSTREAM:-127.0.0.1:3101}" # 反代到 broker 的 localhost 发布端口
+      BROKER_ALLOW_IP: "${BROKER_ALLOW_IP}"                 # L7 源 IP 主闸：只放行的源 IP（=CN 出口）
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - broker_caddy_data:/data
+      - broker_caddy_config:/config
+
+networks:
+  broker_net:
+    name: stargaze-broker-net   # 专用网桥，不接 newapi/okspeak/worker/NPM 的网络
+
+volumes:
+  broker_caddy_data:
+  broker_caddy_config:
+
+secrets:
+  workerenv:
+    file: ./broker.env

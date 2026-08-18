@@ -1,35 +1,37 @@
 # 阿里云服务器部署指南
 
-## ✅ 可以同时部署
+> **⚠️ 生产架构已变更（2026-08-06 更新）**
+>
+> **本项目已完全迁移到阿里云，不再使用 Vercel。** 仓库中的 Vercel 集成（`vercel.json`、相关脚本与环境变量说明）已移除。
+>
+> 若你在其它文档或旧对话里看到「主域名指向 Vercel」「海外用户走 Vercel」之类的说法，**那些都已过时，不要照做**。生产环境的唯一事实以本文件为准。
 
-**是的，您可以同时将网站部署到阿里云服务器，而不会影响 Vercel 的正常运营。**
-
-### 为什么可以同时部署？
-
-1. **共享数据库**: 两个部署都连接到同一个 Supabase 数据库
-2. **共享存储**: 都使用 Supabase Storage 存储文件
-3. **独立运行**: 两个部署是完全独立的实例，互不干扰
-4. **环境变量隔离**: 每个部署有自己的环境变量配置
-
----
-
-## 📋 部署架构
+## 📋 当前生产架构
 
 ```
-┌─────────────────┐         ┌─────────────────┐
-│   Vercel 部署    │         │   阿里云部署     │
-│                 │         │                 │
-│   www.toryxai   │         │  aliyun-domain  │
-│      .com       │         │      .com       │
-└────────┬────────┘         └────────┬────────┘
-         │                           │
-         └───────────┬───────────────┘
-                     │
-         ┌───────────▼───────────┐
-         │   Supabase 数据库      │
-         │   (共享数据源)         │
-         └───────────────────────┘
+                    toryxai.com
+                         │
+                         ▼
+        ┌────────────────────────────────┐
+        │   阿里云 ECS  123.56.75.68      │
+        │   nginx  →  127.0.0.1:3010     │
+        │   pm2 进程（蓝绿部署）           │
+        └───────────┬────────────────────┘
+                    │
+        ┌───────────┼───────────────┐
+        ▼                           ▼
+┌───────────────┐           ┌───────────────┐
+│  Supabase     │           │  阿里云 OSS    │
+│  （数据库）    │           │  （媒体存储）   │
+└───────────────┘           └───────────────┘
 ```
+
+**要点**：
+
+1. **单一部署**：只有阿里云一个生产实例，没有第二个对外站点
+2. **蓝绿发布**：新版本先在另一个端口起进程，验证通过后切 nginx 转发，旧进程保留作回滚目标
+3. **release 目录**：每次发布在 `/var/www/tiktok-ai-mcn-releases/<完整commit>/` 下建独立目录
+4. **手工发布**：**推 main 不会自动上线**，发布全程手工。注意这是靠一个环境变量开关（`LEGACY_WEBHOOK_DEPLOY_ENABLED=false`）实现的——webhook 本身仍在活跃接收 GitHub 推送，**开关一旦打开就会恢复自动部署**。详见下方「关于自动部署」
 
 ---
 
@@ -37,31 +39,23 @@
 
 ### 1. 域名解析（DNS）
 
-**重要**: 两个部署需要使用不同的域名，或者使用 DNS 负载均衡/故障转移。
+`toryxai.com` 直接解析到阿里云 ECS，由 nginx 反向代理到本机端口。
 
-**方案A: 使用不同域名**
-- Vercel: `www.toryxai.com`
-- 阿里云: `cn.toryxai.com` 或 `aliyun.toryxai.com`
+**不需要**做 DNS 智能解析或多地域分流——只有一个部署实例。
 
-**方案B: 使用 DNS 智能解析**
-- 国内用户 → 阿里云服务器
-- 海外用户 → Vercel
-
-**方案C: 主备模式**
-- 主域名指向 Vercel
-- 备用域名指向阿里云
+切换线上版本的方式是**改 nginx 的 `proxy_pass` 端口**，不是改 DNS。
 
 ### 2. 环境变量配置
 
-阿里云部署需要配置相同的环境变量：
+生产环境变量位于服务器上的 `.env*` 文件，**不在仓库里**：
 
 ```bash
-# Supabase 配置（与 Vercel 相同）
+# Supabase 配置
 NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
 SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
 
-# API 密钥（与 Vercel 相同）
+# API 密钥
 DOUBAO_API_KEY=your_doubao_key
 DOUBAO_ENDPOINT_ID=your_endpoint_id
 SORA2_API_KEY=your_sora2_key
@@ -236,49 +230,40 @@ sudo certbot --nginx -d your-aliyun-domain.com
 
 ---
 
-## 🔄 持续部署方案
+## 🔄 发布流程
 
-### 方案 1: 手动部署
+> **⚠️ 本节原有的两个「方案」已废弃，务必不要照做。**
+>
+> 旧文档写的是「在服务器上 `git pull` + `npm run build` + `pm2 restart`」以及一份「用 GitHub Actions 推 main 自动部署」的模板。这两种做法在当前架构下**都是错的**：
+>
+> 1. 它们操作的是 `/var/www/tiktok-ai-mcn`（端口 3000 的**遗留实例**），**那不是线上服务**。线上是 `/var/www/tiktok-ai-mcn-releases/<commit>/` 下的蓝绿 release。
+> 2. 直接 `pm2 restart` 是**原地覆盖**，一旦新版有问题**没有回滚余地**。
+> 3. 在服务器上 `npm run build` 会**卡内存**（可用内存约 2.1G，不够构建）。
+> 4. 自动部署会**绕过人工审核**——本项目刻意关掉了这条路（见下）。
 
-```bash
-# 在服务器上执行
-cd /var/www/tiktok-ai-mcn
-git pull origin main
-npm install
-npm run build
-pm2 restart tiktok-ai-mcn
-```
+### 当前发布方式：手工蓝绿
 
-### 方案 2: 使用 GitHub Actions 自动部署
+用画布线自带的 `deploy/canvas-blue-green.sh`：
 
-创建 `.github/workflows/deploy-aliyun.yml`:
+1. **建新 release 目录**：`/var/www/tiktok-ai-mcn-releases/<完整commit>/`，不覆盖任何现有目录
+2. **在新端口起进程**：旧进程继续服务，线上不受影响
+3. **验证新端口**：健康检查通过后才动 nginx
+4. **切 nginx 的 `proxy_pass`** 到新端口，`nginx -s reload`
+5. **旧进程和旧 release 目录保留**，作为回滚目标
 
-```yaml
-name: Deploy to Aliyun
+回滚 = 把 nginx 切回旧端口。**所以旧 release 目录在确认稳定前不要删。**
 
-on:
-  push:
-    branches: [ main ]
+### ⚠️ 关于自动部署（重要）
 
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      
-      - name: Deploy to Aliyun
-        uses: appleboy/ssh-action@master
-        with:
-          host: ${{ secrets.ALIYUN_HOST }}
-          username: ${{ secrets.ALIYUN_USER }}
-          key: ${{ secrets.ALIYUN_SSH_KEY }}
-          script: |
-            cd /var/www/tiktok-ai-mcn
-            git pull origin main
-            npm install
-            npm run build
-            pm2 restart tiktok-ai-mcn
-```
+**当前状态：GitHub push 到 main 不会自动上线。** 但这不是"功能不存在"，而是"功能被一个开关关着"：
+
+- GitHub 仓库上的 webhook **仍然是活跃的**，指向 `http://<服务器IP>:3001`，每次 push 都会送达
+- 服务器上的 webhook 服务收到 main push 后，会检查环境变量 `LEGACY_WEBHOOK_DEPLOY_ENABLED`
+- 该变量当前为 **`false`**，于是返回 503 并拒绝部署（`runDeploy` 内部还有第二道同样的检查）
+
+**谁把这个变量改成 `true` 并重启 webhook 进程，推 main 就会立刻自动部署生产。**
+
+这条路是被刻意关掉的（代码注释称其为 "legacy escape hatch"），原因就是上面列的四点。**除非经过明确评审，不要打开它，也不要新建 GitHub Actions 做同样的事**（仓库当前没有任何 workflow，这是有意为之）。
 
 ---
 
@@ -363,23 +348,22 @@ pm2 logs tiktok-ai-mcn --lines 100
 
 ## 📝 总结
 
-✅ **可以同时部署到阿里云和 Vercel**
+✅ **生产环境 = 阿里云单实例，Vercel 已完全退出**
 
-**优势**:
-- 国内访问速度更快（阿里云）
-- 海外访问速度更快（Vercel）
-- 数据完全同步
-- 互为备份，提高可用性
+**当前形态**:
+- `toryxai.com` → 阿里云 ECS → nginx → 本机端口
+- 数据在 Supabase，媒体在阿里云 OSS
+- 蓝绿发布：新版起在另一端口，验证通过再切 nginx，旧进程留作回滚
 
-**注意事项**:
-- 使用不同的域名或 DNS 智能解析
-- 配置相同的环境变量（除了 NEXT_PUBLIC_APP_URL）
-- 确保两个部署都连接到同一个 Supabase 实例
+**发布纪律**:
+- **发布是手工的**。推 main 不会自动上线——但这靠的是 `LEGACY_WEBHOOK_DEPLOY_ENABLED=false` 这个开关，webhook 本身仍活跃，**开关打开即恢复自动部署，不要随手开**
+- 切换版本靠改 nginx 的 `proxy_pass` 端口，不靠改 DNS
+- **旧 release 目录不要急着删**——它是回滚的唯一依据，确认新版稳定后再清
+- 数据库迁移需在 Supabase 控制台手工执行，**合并 PR ≠ 功能生效**
 
-**推荐方案**:
-- 主域名: Vercel（全球加速）
-- 国内域名: 阿里云（国内访问优化）
-- 或使用 DNS 智能解析自动路由
+**不要做的事**:
+- 不要按旧文档去配 Vercel，或做「国内走阿里云、海外走 Vercel」的 DNS 分流——已无 Vercel 实例
+- 不要把 `.env*` 或证书提交进仓库（本仓库为 PUBLIC）
 
 ---
 

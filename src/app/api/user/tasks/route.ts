@@ -25,11 +25,12 @@
 
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { getPublicUrl } from "@/lib/oss";
 
 export interface TaskLogItem {
   id: string;
   type: "video" | "image";
-  source: "quick_gen" | "batch_video" | "batch_image" | "link_video" | "ecom_factory" | "batch_video_prompt" | "batch_video_veo3" | "batch_video_prompt_veo3";
+  source: "quick_gen" | "batch_video" | "batch_image" | "link_video" | "ecom_factory" | "batch_video_prompt" | "batch_video_veo3" | "batch_video_prompt_veo3" | "canvas";
   status: "completed" | "failed" | "processing" | "pending";
   resultUrl: string | null;
   thumbnailUrl: string | null;
@@ -58,7 +59,7 @@ export interface TaskStats {
 // generations 表只查前端需要的字段（不再 select("*")）
 const GENERATIONS_FIELDS = [
   "id", "type", "source", "status",
-  "result_url", "video_url", "image_url", "thumbnail_url",
+  "result_url", "video_url", "image_url", "thumbnail_url", "output_oss_key",
   "prompt", "model", "credit_cost",
   "created_at", "completed_at", "group_name",
 ].join(", ");
@@ -307,7 +308,14 @@ export async function GET(request: Request) {
 
       // 望景API (备用线路) 的 /content 端点需要 Bearer Token，浏览器无法直连
       // 自动包装为代理 URL，由服务端注入鉴权
-      let resultUrl = task.result_url || task.video_url || task.image_url || null;
+      // output_oss_key is the authoritative durable Canvas result. Legacy URL
+      // columns are only a compatibility projection and may miss a transient
+      // best-effort update after generation completion.
+      let resultUrl =
+        task.result_url ||
+        task.video_url ||
+        task.image_url ||
+        (task.output_oss_key ? getPublicUrl(task.output_oss_key) : null);
       if (resultUrl && resultUrl.includes('60.205.120.27') && resultUrl.includes('/v1/videos/')) {
         resultUrl = `/api/download-proxy?url=${encodeURIComponent(resultUrl)}&filename=video.mp4`;
       }
@@ -318,7 +326,11 @@ export async function GET(request: Request) {
         source: task.source || "quick_gen",
         status: task.status || "completed",
         resultUrl,
-        thumbnailUrl: task.thumbnail_url || null,
+        thumbnailUrl:
+          task.thumbnail_url ||
+          (task.type === "image" && task.output_oss_key
+            ? getPublicUrl(task.output_oss_key)
+            : null),
         prompt: task.prompt || null,
         model: task.model || "unknown",
         credits: task.credit_cost || 0,

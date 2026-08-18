@@ -3,6 +3,7 @@ import {
   validateYouTubeTags,
   validateYouTubeTitle,
 } from '@/lib/youtube/metadata-rules'
+import { isPrivateOrLoopbackHostname } from '@/lib/publish/url-safety'
 
 export interface UploadYouTubeVideoOptions {
   title: string
@@ -58,7 +59,10 @@ function isRetryableUploadError(error: unknown) {
 function isAllowedVideoUrl(videoUrl: string): boolean {
   try {
     const url = new URL(videoUrl)
-    if (url.protocol === 'https:') return true
+    if (url.protocol === 'https:') {
+      // 收紧 SSRF：放行公网 https，但拒绝指向私网/环回/链路本地（含云元数据 169.254.169.254）的地址。
+      return !isPrivateOrLoopbackHostname(url.hostname)
+    }
     if (url.protocol !== 'http:') return false
 
     const isLocalHost = ['127.0.0.1', 'localhost', '::1'].includes(url.hostname)

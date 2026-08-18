@@ -237,7 +237,7 @@ function getEnglishOptionLabel(value: string) {
     .replace(/3d/g, "3D")
     .replace(/Rpg/g, "RPG")
     .replace(/Ootd/g, "OOTD")
-    .replace(/Tee/g, "T-shirt");
+    .replace(/\bTee\b/g, "T-shirt");
 }
 
 export function getDnaOptionGroups(species: string, lang: "zh" | "en" = "zh"): DnaOptionGroup[] {

@@ -13,10 +13,12 @@
  */
 
 import { NextResponse } from "next/server";
+import { applyTaskCreditDelta } from "@/lib/credits/atomic-task-credit";
 import { submitSeedanceTask, getSeedanceParams } from "@/lib/seedance-api";
 import { VIDEO_MODEL_CONFIG, type VideoModel } from "@/types/generation";
 import { getNewVideoCost } from "@/lib/credits";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
 
 // Seedance 模型列表
 const SEEDANCE_MODELS = ['seedance-5s', 'seedance-10s', 'seedance-5s-pro', 'seedance-10s-pro'];
@@ -30,8 +32,26 @@ export async function POST(request: Request) {
       imageUrl,
       model,           // "seedance-5s" | "seedance-10s" | "seedance-5s-pro" | "seedance-10s-pro"
       ratio = "9:16",  // "9:16" | "16:9"
-      userId,
+      userId: requestedUserId,
     } = body;
+
+    const authClient = await createClient();
+    const {
+      data: { user },
+    } = await authClient.auth.getUser();
+    if (!user) {
+      return NextResponse.json(
+        { success: false, error: "用户未登录" },
+        { status: 401 }
+      );
+    }
+    if (requestedUserId && requestedUserId !== user.id) {
+      return NextResponse.json(
+        { success: false, error: "用户身份不匹配" },
+        { status: 403 }
+      );
+    }
+    const userId = user.id;
 
     // ============================================
     // 参数验证
@@ -54,13 +74,6 @@ export async function POST(request: Request) {
       return NextResponse.json(
         { success: false, error: "比例只支持 9:16 或 16:9" },
         { status: 400 }
-      );
-    }
-
-    if (!userId) {
-      return NextResponse.json(
-        { success: false, error: "用户未登录" },
-        { status: 401 }
       );
     }
 
@@ -113,14 +126,22 @@ export async function POST(request: Request) {
       );
     }
 
-    // 扣除积分
-    const { error: deductError } = await supabase
-      .from("profiles")
-      .update({ credits: profile.credits - creditCost })
-      .eq("id", userId);
-
-    if (deductError) {
-      console.error("[Seedance Submit] Failed to deduct credits:", deductError);
+    const billingTaskId = crypto.randomUUID();
+    let chargeResult;
+    try {
+      chargeResult = await applyTaskCreditDelta({
+        supabase,
+        userId,
+        entryKind: "consume",
+        amount: -creditCost,
+        scope: "seedance",
+        taskId: billingTaskId,
+        operation: "consume",
+        pricingVersion: `seedance-${model}-v1`,
+        description: `Seedance 2.0 ${model} 扣费`,
+      });
+    } catch (error) {
+      console.error("[Seedance Submit] Failed to deduct credits:", error);
       return NextResponse.json(
         { success: false, error: "扣除积分失败" },
         { status: 500 }
@@ -130,8 +151,8 @@ export async function POST(request: Request) {
     console.log("[Seedance Submit] Credits deducted:", {
       userId,
       cost: creditCost,
-      before: profile.credits,
-      after: profile.credits - creditCost,
+      before: chargeResult.balanceBefore,
+      after: chargeResult.balanceAfter,
     });
 
     // ============================================
@@ -150,33 +171,22 @@ export async function POST(request: Request) {
       console.error("[Seedance Submit] Task failed:", result.error);
 
       try {
-        const { data: currentProfile } = await supabase
-          .from("profiles")
-          .select("credits")
-          .eq("id", userId)
-          .single();
+        await applyTaskCreditDelta({
+          supabase,
+          userId,
+          entryKind: "refund",
+          amount: creditCost,
+          scope: "seedance",
+          taskId: billingTaskId,
+          operation: "refund",
+          pricingVersion: `seedance-${model}-v1`,
+          description: "Seedance 2.0 提交失败退款",
+        });
 
-        if (currentProfile) {
-          await supabase
-            .from("profiles")
-            .update({ credits: currentProfile.credits + creditCost })
-            .eq("id", userId);
-
-          // 记录退款流水
-          await supabase.from("credit_transactions").insert({
-            user_id: userId,
-            amount: creditCost,
-            type: "refund",
-            description: `Seedance 2.0 提交失败退款`,
-            balance_before: currentProfile.credits,
-            balance_after: currentProfile.credits + creditCost,
-          });
-
-          console.log("[Seedance Submit] Credits refunded:", {
-            userId,
-            refund: creditCost,
-          });
-        }
+        console.log("[Seedance Submit] Credits refunded:", {
+          userId,
+          refund: creditCost,
+        });
       } catch (refundError) {
         console.error("[Seedance Submit] Refund failed:", refundError);
       }
@@ -190,8 +200,8 @@ export async function POST(request: Request) {
     // ============================================
     // 写入 generations 表
     // ============================================
-    try {
-      await supabase.from("generations").insert({
+    const { error: insertError } = await supabase.from("generations").insert({
+        id: billingTaskId,
         user_id: userId,
         task_id: result.taskId,
         type: "video",
@@ -212,14 +222,30 @@ export async function POST(request: Request) {
           seedance_model: model,
           resolution,
           generate_audio: true,
+          billing_task_id: billingTaskId,
+          billing_scope: "seedance",
         },
         created_at: new Date().toISOString(),
       });
-      console.log("[Seedance Submit] Saved to generations:", result.taskId);
-    } catch (dbError) {
-      console.error("[Seedance Submit] DB insert failed:", dbError);
-      // 不阻断主流程
+    if (insertError) {
+      console.error("[Seedance Submit] DB insert failed:", insertError);
+      await applyTaskCreditDelta({
+        supabase,
+        userId,
+        entryKind: "refund",
+        amount: creditCost,
+        scope: "seedance",
+        taskId: billingTaskId,
+        operation: "refund",
+        pricingVersion: `seedance-${model}-v1`,
+        description: "Seedance 2.0 任务记录失败退款",
+      });
+      return NextResponse.json(
+        { success: false, error: "任务记录失败，积分已退还" },
+        { status: 500 }
+      );
     }
+      console.log("[Seedance Submit] Saved to generations:", result.taskId);
 
     // ============================================
     // 返回结果

@@ -2,6 +2,13 @@ import { NextRequest, NextResponse } from 'next/server'
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import {
+  completeInstagramAuthState,
+  failInstagramAuthState,
+  persistInstagramCallbackAccount,
+  revokeInstagramCallbackAccounts,
+} from '@/lib/instagram/callback-persistence'
+import {
+  assertInstagramRequiredScopes,
   calculateInstagramTokenExpiration,
   debugInstagramUserToken,
   discoverMyInstagramAccounts,
@@ -35,15 +42,15 @@ function redirectToAccounts(origin: string, params: Record<string, string>) {
 }
 
 function formatInstagramDiscoveryPage(page: InstagramAccountDiscoveryPage): string {
-  const pageName = page.pageName || page.pageId || '未命名 Page'
+  const pageName = page.pageName || '未命名 Page'
 
   if (page.instagramBusinessAccount) {
-    const accountName = page.instagramBusinessAccount.username || page.instagramBusinessAccount.name || page.instagramBusinessAccount.id
+    const accountName = page.instagramBusinessAccount.username || page.instagramBusinessAccount.name || '专业账号'
     return `${pageName}: 已返回 instagram_business_account=${accountName}`
   }
 
   if (page.connectedInstagramAccount) {
-    const accountName = page.connectedInstagramAccount.username || page.connectedInstagramAccount.name || page.connectedInstagramAccount.id
+    const accountName = page.connectedInstagramAccount.username || page.connectedInstagramAccount.name || '专业账号'
     return `${pageName}: 只返回 connected_instagram_account=${accountName}，未返回可发布字段 instagram_business_account`
   }
 
@@ -83,10 +90,36 @@ function formatTokenTargetDiagnostics(tokenDebug: InstagramTokenDebugInfo | null
   const pageScopeSummaries = pageScopeNames.map((scopeName) => {
     const granularScope = tokenDebug.granularScopes.find((entry) => entry.scope === scopeName)
     if (!granularScope) return `${scopeName}: 未返回 granular scope`
-    return `${scopeName}: target_ids=${granularScope.targetIds.length > 0 ? granularScope.targetIds.join(',') : '空'}`
+    return `${scopeName}: target 数量=${granularScope.targetIds.length}`
   })
 
   return `Token 有效：${tokenDebug.isValid === null ? '未知' : tokenDebug.isValid ? '是' : '否'}；${pageScopeSummaries.join('；')}`
+}
+
+function collectVerifiedInstagramScopes(
+  shortToken: { scope?: string; permissions?: string[] },
+  longLivedToken: { scope?: string; permissions?: string[] },
+  permissions: InstagramPermissionInfo[],
+  tokenDebug: InstagramTokenDebugInfo | null
+) {
+  const verifiedSources = [
+    scopesToArray(shortToken.scope),
+    ...(shortToken.permissions || []).map((permission) => scopesToArray(permission)),
+    scopesToArray(longLivedToken.scope),
+    ...(longLivedToken.permissions || []).map((permission) => scopesToArray(permission)),
+    permissions
+      .filter((entry) => entry.status === 'granted')
+      .flatMap((entry) => scopesToArray(entry.permission)),
+  ]
+
+  if (tokenDebug?.isValid !== false) {
+    verifiedSources.push(
+      scopesToArray(tokenDebug?.scopes.join(',')),
+      scopesToArray(tokenDebug?.granularScopes.map((entry) => entry.scope).join(','))
+    )
+  }
+
+  return [...new Set(verifiedSources.flat())]
 }
 
 function buildInstagramDiscoveryError(
@@ -97,7 +130,7 @@ function buildInstagramDiscoveryError(
   const config = getInstagramOAuthConfig()
   const permissionDiagnostics = formatPermissionDiagnostics(permissions)
   const targetDiagnostics = formatTokenTargetDiagnostics(tokenDebug)
-  const configDiagnostics = `当前 App ID：${config.clientId}；授权模式：${config.authMode}；Business Login config_id：${config.loginConfigId || '未配置'}`
+  const configDiagnostics = `App ID 已配置；授权模式：${config.authMode}；Business Login config_id：${config.loginConfigId ? '已配置' : '未配置'}`
 
   if (config.authMode === 'instagram') {
     return `当前 Instagram 授权未返回可发布的专业账号。${permissionDiagnostics}。${targetDiagnostics}。${configDiagnostics}。请确认该账号是 Instagram 专业账号，并且 Instagram 登录配置包含 instagram_business_basic 和 instagram_business_content_publish。`
@@ -126,6 +159,8 @@ export async function GET(request: NextRequest) {
   }
 
   const supabase = createAdminClient() as any
+  const activatedAccountIds: string[] = []
+  let authStateUserId: string | null = null
 
   try {
     const { data: authState, error: stateError } = await supabase
@@ -137,36 +172,29 @@ export async function GET(request: NextRequest) {
     if (stateError || !authState) {
       return redirectToAccounts(redirectOrigin, { error: 'Instagram 授权状态无效或已过期' })
     }
+    authStateUserId = authState.user_id
 
     if (authState.status !== 'pending') {
       return redirectToAccounts(redirectOrigin, { error: 'Instagram 授权状态已使用或无效，请重新绑定' })
     }
 
     if (error) {
-      await supabase
-        .from('instagram_auth_states')
-        .update({
-          status: 'failed',
-          error_code: error,
-          error_message: errorDescription || error,
-          code_verifier: null,
-          completed_at: new Date().toISOString(),
-        })
-        .eq('state', state)
+      await failInstagramAuthState(supabase, state, {
+        code: safeCallbackText(error),
+        message: safeCallbackText(errorDescription || error),
+        now: new Date().toISOString(),
+      })
 
-      return redirectToAccounts(redirectOrigin, { error: errorDescription || error })
+      return redirectToAccounts(redirectOrigin, { error: safeCallbackText(errorDescription || error) })
     }
 
     if (new Date(authState.expires_at).getTime() <= Date.now()) {
-      await supabase
-        .from('instagram_auth_states')
-        .update({
-          status: 'expired',
-          error_code: 'expired',
-          error_message: 'Authorization session expired.',
-          code_verifier: null,
-        })
-        .eq('state', state)
+      await failInstagramAuthState(supabase, state, {
+        code: 'expired',
+        message: 'Authorization session expired.',
+        now: new Date().toISOString(),
+        status: 'expired',
+      })
 
       return redirectToAccounts(redirectOrigin, { error: 'Instagram 授权已过期，请重新绑定' })
     }
@@ -188,14 +216,15 @@ export async function GET(request: NextRequest) {
 
     const now = new Date().toISOString()
     const expiresAt = calculateInstagramTokenExpiration(longLivedToken.expires_in)?.toISOString() || null
-    const scopes = scopesToArray(shortToken.scope)
+    const scopes = collectVerifiedInstagramScopes(shortToken, longLivedToken, permissions, tokenDebug)
+    assertInstagramRequiredScopes(getInstagramOAuthConfig().authMode, scopes)
     let savedCount = 0
 
     for (const account of accounts) {
-      const { data: savedAccount, error: upsertError } = await supabase
-        .from('instagram_accounts')
-        .upsert({
-          user_id: authState.user_id,
+      const savedAccountId = await persistInstagramCallbackAccount(supabase, {
+        userId: authState.user_id,
+        now,
+        account: {
           channel_id: account.accountId,
           channel_title: account.name,
           channel_handle: `@${account.username}`,
@@ -205,68 +234,71 @@ export async function GET(request: NextRequest) {
           view_count: 0,
           access_token_expires_at: expiresAt,
           scopes,
-          status: 'active',
-          updated_at: now,
-        }, {
-          onConflict: 'user_id,channel_id',
-        })
-        .select('id')
-        .single()
-
-      if (upsertError) {
-        throw new Error(`保存 Instagram 账号失败: ${upsertError.message}`)
-      }
-
-      const { error: tokenError } = await supabase
-        .from('instagram_account_tokens')
-        .upsert({
-          account_id: savedAccount.id,
-          access_token: longLivedToken.access_token,
+        },
+        token: {
+          // 发布 token：facebook 模式必须是 Page access token（graph.facebook.com/{ig_id}/media 要求），
+          // instagram 原生模式下 pageAccessToken 即用户 token。两种模式都用 pageAccessToken 才正确。
+          access_token: account.pageAccessToken,
+          // 刷新凭据：保留长效用户 token，供后续重新派生 Page token。
           refresh_token: longLivedToken.access_token,
           access_token_expires_at: expiresAt,
-          updated_at: now,
-        }, {
-          onConflict: 'account_id',
-        })
+        },
+      })
 
-      if (tokenError) {
-        throw new Error(`保存 Instagram 授权令牌失败: ${tokenError.message}`)
-      }
-
+      activatedAccountIds.push(savedAccountId)
       savedCount++
     }
 
-    await supabase
-      .from('instagram_auth_states')
-      .update({
-        status: 'completed',
-        code_verifier: null,
-        completed_at: now,
-      })
-      .eq('state', state)
+    await completeInstagramAuthState(supabase, state, now)
 
     return redirectToAccounts(redirectOrigin, {
       success: 'true',
       name: `${savedCount} 个账号`,
     })
   } catch (err) {
-    console.error('Instagram callback error:', err)
+    console.error('Instagram callback error:', {
+      code: typeof (err as any)?.code === 'string' ? (err as any).code : 'callback_failed',
+    })
+
+    if (authStateUserId && activatedAccountIds.length > 0) {
+      try {
+        await revokeInstagramCallbackAccounts(
+          supabase,
+          activatedAccountIds,
+          authStateUserId,
+          new Date().toISOString()
+        )
+      } catch {
+        console.error('Instagram callback compensation failed:', { code: 'account_compensation_failed' })
+      }
+    }
 
     if (state) {
-      await supabase
-        .from('instagram_auth_states')
-        .update({
-          status: 'failed',
-          error_code: 'callback_failed',
-          error_message: err instanceof Error ? err.message : 'Instagram 授权失败',
-          code_verifier: null,
-          completed_at: new Date().toISOString(),
+      try {
+        await failInstagramAuthState(supabase, state, {
+          code: typeof (err as any)?.code === 'string' ? (err as any).code : 'callback_failed',
+          message: safeCallbackText(err instanceof Error ? err.message : 'Instagram 授权失败'),
+          now: new Date().toISOString(),
         })
-        .eq('state', state)
+      } catch {
+        console.error('Instagram callback state failure persistence failed:', {
+          code: 'auth_state_failure_persistence_failed',
+        })
+      }
     }
 
     return redirectToAccounts(redirectOrigin, {
-      error: err instanceof Error ? err.message : 'Instagram 授权失败',
+      error: safeCallbackText(err instanceof Error ? err.message : 'Instagram 授权失败'),
     })
   }
+}
+
+function safeCallbackText(value: string) {
+  return value
+    .replace(/Bearer\s+[^\s,;]+/gi, 'Bearer [redacted]')
+    .replace(/\b(access_token|authorization|client_secret|refresh_token|token|secret|code)=([^\s&]+)/gi, '$1=[redacted]')
+    .replace(/https?:\/\/[^\s]+/gi, '[redacted-url]')
+    .replace(/[\u0000-\u001f\u007f]+/g, ' ')
+    .trim()
+    .slice(0, 240) || 'Instagram 授权失败'
 }

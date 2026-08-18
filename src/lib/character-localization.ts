@@ -38,12 +38,12 @@ function romanizeChinese(text: string) {
 }
 
 export function localizeOfficialCharacterName(name: string, source: string, lang: "zh" | "en") {
-  if (lang !== "en" || !/[\u3400-\u9fff]/.test(name)) return name;
+  if (source !== "official" || lang !== "en" || !/[\u3400-\u9fff]/.test(name)) return name;
   return romanizeChinese(name);
 }
 
 export function localizeOfficialCharacterTag(tag: string, source: string, lang: "zh" | "en") {
-  if (lang !== "en") return tag;
+  if (source !== "official" || lang !== "en") return tag;
   return ENGLISH_CHARACTER_TAGS[tag] || (/[\u3400-\u9fff]/.test(tag) ? romanizeChinese(tag) : tag);
 }
 
@@ -52,7 +52,7 @@ export function localizeOfficialCharacterDescription(
   source: string,
   lang: "zh" | "en"
 ) {
-  if (!description || lang !== "en" || !/[\u3400-\u9fff]/.test(description)) {
+  if (source !== "official" || !description || lang !== "en" || !/[\u3400-\u9fff]/.test(description)) {
     return description || "";
   }
 

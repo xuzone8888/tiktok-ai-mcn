@@ -1,9 +1,11 @@
 import { createAdminClient } from '@/lib/supabase/admin'
-import { refreshYouTubeAccessToken } from '@/lib/youtube/oauth'
+import { isYouTubeAuthorizationRevokedError, refreshYouTubeAccessToken } from '@/lib/youtube/oauth'
 import { uploadYouTubeVideoFromUrl } from '@/lib/youtube/publish'
 
 const MAX_ITEMS_PER_RUN = 20
 const TOKEN_REFRESH_BUFFER_MS = 5 * 60 * 1000
+// 认领后超过该时长仍停留在 processing/uploading 的项视为卡死（进程崩溃/函数超时），重置回 pending 重试。
+const STALE_ITEM_THRESHOLD_MS = 15 * 60 * 1000
 
 interface YouTubePublishTaskSettings {
   privacy_status: 'private' | 'unlisted' | 'public'
@@ -28,6 +30,7 @@ interface YouTubePublishItem {
 
 interface YouTubeAccountToken {
   account_id: string
+  user_id: string
   access_token: string
   refresh_token: string
   access_token_expires_at: string | null
@@ -74,7 +77,7 @@ function isLocalVideoUrl(videoUrl: string) {
 }
 
 function isRemoteRuntime() {
-  return process.env.NODE_ENV === 'production' || Boolean(process.env.VERCEL || process.env.VERCEL_ENV)
+  return process.env.NODE_ENV === 'production'
 }
 
 function shouldSkipForCurrentRuntime(item: YouTubePublishItem) {
@@ -93,16 +96,32 @@ export async function processYouTubePublishQueue(options: YouTubeProcessOptions)
   }
 
   try {
+    await recoverStaleItems(supabase)
     const items = await queryPendingItems(supabase, options)
     if (items.length === 0) {
       result.duration_ms = Date.now() - startTime
       return result
     }
 
+    // 本地测试视频地址在远程/生产运行时无法被 YouTube 拉取。必须把它们标记为失败使其离开 pending，
+    // 否则会永远停留在 scheduled_at 升序队列头部，反复占用本轮窗口并最终阻塞后面的正常任务（队列静默停发）。
+    const skippedForRuntime = items.filter((item) => shouldSkipForCurrentRuntime(item))
+    for (const item of skippedForRuntime) {
+      await markItemFailed(
+        supabase,
+        item.id,
+        '本地测试视频地址无法在生产环境发布，请重新上传到可公开访问的地址后再发布',
+        'LOCAL_URL_UNREACHABLE'
+      )
+      result.failed++
+    }
+
     const runnableItems = items.filter((item) => !shouldSkipForCurrentRuntime(item))
-    result.skipped += items.length - runnableItems.length
 
     if (runnableItems.length === 0) {
+      for (const taskId of [...new Set(skippedForRuntime.map((item) => item.task_id))]) {
+        await updateTaskFinalStatus(supabase, taskId)
+      }
       result.duration_ms = Date.now() - startTime
       return result
     }
@@ -130,7 +149,7 @@ export async function processYouTubePublishQueue(options: YouTubeProcessOptions)
       }
     }
 
-    for (const taskId of [...new Set(lockedItems.map((item) => item.task_id))]) {
+    for (const taskId of [...new Set([...lockedItems, ...skippedForRuntime].map((item) => item.task_id))]) {
       await updateTaskFinalStatus(supabase, taskId)
     }
 
@@ -140,6 +159,20 @@ export async function processYouTubePublishQueue(options: YouTubeProcessOptions)
     result.errors.push(getErrorMessage(error, 'YouTube 发布队列处理失败'))
     result.duration_ms = Date.now() - startTime
     return result
+  }
+}
+
+async function recoverStaleItems(supabase: any) {
+  // 把卡死在 processing/uploading 的项重置回 pending，使后续 cron 能重新认领（仿 TikTok 参考的 stale 恢复）。
+  // 配合 publishItem 的 youtube_video_id 幂等保护，避免对已上传成功但终态写库失败的项重复上传。
+  const staleBefore = new Date(Date.now() - STALE_ITEM_THRESHOLD_MS).toISOString()
+  const { error } = await supabase
+    .from('youtube_publish_task_items')
+    .update({ status: 'pending', processing_started_at: null, updated_at: new Date().toISOString() })
+    .in('status', ['processing', 'uploading'])
+    .lt('processing_started_at', staleBefore)
+  if (error) {
+    console.warn('恢复 YouTube 卡死发布项失败:', error.message)
   }
 }
 
@@ -220,7 +253,7 @@ async function updateTasksToProcessing(supabase: any, taskIds: string[]) {
 async function getAccounts(supabase: any, accountIds: string[]): Promise<Map<string, YouTubeAccountToken>> {
   const { data: activeAccounts, error: accountsError } = await supabase
     .from('youtube_accounts')
-    .select('id')
+    .select('id, user_id')
     .in('id', accountIds)
     .eq('status', 'active')
 
@@ -229,6 +262,9 @@ async function getAccounts(supabase: any, accountIds: string[]): Promise<Map<str
   }
 
   const activeAccountIds = (activeAccounts || []).map((account: { id: string }) => account.id)
+  const accountOwners = new Map(
+    (activeAccounts || []).map((account: { id: string; user_id: string }) => [account.id, account.user_id])
+  )
   if (activeAccountIds.length === 0) {
     return new Map()
   }
@@ -244,7 +280,8 @@ async function getAccounts(supabase: any, accountIds: string[]): Promise<Map<str
 
   const accounts = new Map<string, YouTubeAccountToken>()
   for (const token of tokens || []) {
-    accounts.set(token.account_id, token)
+    const userId = accountOwners.get(token.account_id)
+    if (userId) accounts.set(token.account_id, { ...token, user_id: userId })
   }
   return accounts
 }
@@ -254,7 +291,21 @@ async function getValidAccessToken(supabase: any, account: YouTubeAccountToken):
     return account.access_token
   }
 
-  const refreshed = await refreshYouTubeAccessToken(account.refresh_token)
+  let refreshed
+  try {
+    refreshed = await refreshYouTubeAccessToken(account.refresh_token)
+  } catch (refreshError) {
+    if (isYouTubeAuthorizationRevokedError(refreshError)) {
+      const { error: invalidationError } = await supabase.rpc('mark_youtube_authorization_invalid', {
+        p_user_id: account.user_id,
+        p_account_id: account.account_id,
+      })
+      if (invalidationError) {
+        throw new Error(`Unable to record invalid YouTube authorization: ${invalidationError.message}`)
+      }
+    }
+    throw refreshError
+  }
   const expiresAt = new Date(Date.now() + refreshed.expires_in * 1000).toISOString()
   const scopes = refreshed.scope ? refreshed.scope.split(/\s+/).filter(Boolean) : undefined
   const now = new Date().toISOString()
@@ -278,6 +329,8 @@ async function getValidAccessToken(supabase: any, account: YouTubeAccountToken):
       access_token_expires_at: expiresAt,
       ...(scopes ? { scopes } : {}),
       status: 'active',
+      last_authorization_verified_at: now,
+      authorization_invalidated_at: null,
       updated_at: now,
     })
     .eq('id', account.account_id)
@@ -307,6 +360,18 @@ async function publishItem(
     throw new Error('视频 URL 无效')
   }
 
+  // 幂等保护：若该项已记录 youtube_video_id，说明上一轮已成功上传、仅终态写库失败而卡住。
+  // 被卡死恢复重置回 pending 后，这里直接补记为 published，避免重复上传同一视频到 YouTube。
+  const existingVideoId = await getExistingYouTubeVideoId(supabase, item.id)
+  if (existingVideoId) {
+    const ts = new Date().toISOString()
+    await supabase
+      .from('youtube_publish_task_items')
+      .update({ status: 'published', published_at: ts, error_code: null, error_message: null, updated_at: ts })
+      .eq('id', item.id)
+    return
+  }
+
   const now = new Date().toISOString()
   await supabase
     .from('youtube_publish_task_items')
@@ -331,16 +396,25 @@ async function publishItem(
       notifySubscribers: taskSettings.notify_subscribers,
     })
 
+    // 先单独持久化 video_id（状态仍 uploading）。这样即使在终态写库前崩溃/超时，卡死恢复后 publishItem 的幂等守卫
+    // 能读到 youtube_video_id 而补记为已发布，不会重复上传同一视频到 YouTube。
+    await supabase
+      .from('youtube_publish_task_items')
+      .update({
+        youtube_video_id: upload.videoId,
+        youtube_watch_url: upload.watchUrl,
+        publish_attempt_count: upload.attempts,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', item.id)
+
     const publishedAt = new Date().toISOString()
     await supabase
       .from('youtube_publish_task_items')
       .update({
         status: 'published',
-        youtube_video_id: upload.videoId,
-        youtube_watch_url: upload.watchUrl,
         error_code: null,
         error_message: null,
-        publish_attempt_count: upload.attempts,
         published_at: publishedAt,
         updated_at: publishedAt,
       })
@@ -353,6 +427,15 @@ async function publishItem(
     await markItemFailed(supabase, item.id, message, 'YOUTUBE_UPLOAD_FAILED', attempts)
     throw error
   }
+}
+
+async function getExistingYouTubeVideoId(supabase: any, itemId: string): Promise<string | null> {
+  const { data } = await supabase
+    .from('youtube_publish_task_items')
+    .select('youtube_video_id')
+    .eq('id', itemId)
+    .single()
+  return data?.youtube_video_id || null
 }
 
 async function markItemFailed(supabase: any, itemId: string, message: string, code: string, attempts?: number) {
