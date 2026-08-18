@@ -23,6 +23,7 @@ import {
 import { cn } from "@/lib/utils";
 import type { AIModel, RentalPeriod } from "@/types/model";
 import { useLang } from "@/contexts/LangContext";
+import { useTranslations } from "next-intl";
 
 interface HireDialogProps {
   model: AIModel | null;
@@ -33,11 +34,11 @@ interface HireDialogProps {
   onHireSuccess?: (modelId: string, newBalance: number) => void;
 }
 
-const rentalOptions: { period: RentalPeriod; label: string; days: number; discount?: string }[] = [
-  { period: "daily", label: "1 Day", days: 1 },
-  { period: "weekly", label: "7 Days", days: 7, discount: "Save 17%" },
-  { period: "monthly", label: "30 Days", days: 30, discount: "Best Value" },
-  { period: "yearly", label: "365 Days", days: 365, discount: "Save 17%" },
+const rentalOptions: { period: RentalPeriod; days: number; hasDiscount?: boolean }[] = [
+  { period: "daily", days: 1 },
+  { period: "weekly", days: 7, hasDiscount: true },
+  { period: "monthly", days: 30, hasDiscount: true },
+  { period: "yearly", days: 365, hasDiscount: true },
 ];
 
 export function HireDialog({
@@ -54,7 +55,7 @@ export function HireDialog({
   const [errorMessage, setErrorMessage] = useState("");
   const [newBalance, setNewBalance] = useState<number | null>(null);
   const { lang } = useLang();
-  const t = lang === "en";
+  const t = useTranslations("character");
 
   if (!model) return null;
 
@@ -80,7 +81,7 @@ export function HireDialog({
     if (!canAfford || !userId) {
       if (!userId) {
         setResult("error");
-        setErrorMessage(t ? "Please sign in to contract this character" : "请先登录后再进行签约");
+        setErrorMessage(t("hire.signIn"));
       }
       return;
     }
@@ -117,19 +118,19 @@ export function HireDialog({
         // 处理特定错误类型
         if (response.errorCode === "ALREADY_HIRED" || /已有有效合约|已在您的团队/.test(response.error || "")) {
           setResult("already_hired");
-          setErrorMessage(response.error || (t ? "Character already in your team" : "该模特已在您的团队中"));
+          setErrorMessage(lang === "zh" && response.error ? response.error : t("hire.alreadyError"));
         } else if (response.errorCode === "INSUFFICIENT_BALANCE" || /积分不足|余额不足/.test(response.error || "")) {
           setResult("error");
-          setErrorMessage(response.error || (t ? "Insufficient credits" : "余额不足"));
+          setErrorMessage(lang === "zh" && response.error ? response.error : t("hire.insufficientError"));
         } else {
           setResult("error");
-          setErrorMessage(response.error || (t ? "Contract failed, please retry" : "签约失败，请重试"));
+          setErrorMessage(lang === "zh" && response.error ? response.error : t("hire.contractFailed"));
         }
       }
     } catch (error) {
       console.error("[HireDialog] Error:", error);
       setResult("error");
-      setErrorMessage(error instanceof Error ? error.message : (t ? "Network error, please retry" : "网络错误，请重试"));
+      setErrorMessage(error instanceof Error && lang === "zh" ? error.message : t("hire.networkError"));
     } finally {
       setIsProcessing(false);
     }
@@ -154,10 +155,10 @@ export function HireDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-white">
             <Sparkles className="h-5 w-5 text-mermaid-cyan drop-shadow-[0_0_5px_rgba(0,242,234,0.5)]" />
-            授权引用 {model.name}
+            {t("hire.title", { name: model.name })}
           </DialogTitle>
           <DialogDescription>
-            确认积分价格后即可在创作中引用该角色
+            {t("hire.description")}
           </DialogDescription>
         </DialogHeader>
 
@@ -169,16 +170,16 @@ export function HireDialog({
                 <CheckCircle2 className="h-8 w-8 text-emerald-500" />
               </div>
               <div>
-                <h3 className="text-lg font-semibold">Welcome to the Team! 🎉</h3>
+                <h3 className="text-lg font-semibold">{t("hire.successTitle")}</h3>
                 <p className="text-sm text-muted-foreground mt-1">
-                  {model.name} has joined your creative team
+                  {t("hire.successDescription", { name: model.name })}
                 </p>
               </div>
               {newBalance !== null && (
                 <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-white/5">
                   <Coins className="h-4 w-4 text-tiktok-cyan" />
                   <span className="text-sm">
-                    Remaining Balance: <span className="font-bold">{newBalance.toLocaleString()}</span> Credits
+                    {t("hire.remainingBalance", { count: newBalance })}
                   </span>
                 </div>
               )}
@@ -194,20 +195,20 @@ export function HireDialog({
                 <AlertTriangle className="h-8 w-8 text-amber-500" />
               </div>
               <div>
-                <h3 className="text-lg font-semibold">Already in Team</h3>
+                <h3 className="text-lg font-semibold">{t("hire.alreadyTitle")}</h3>
                 <p className="text-sm text-muted-foreground mt-1 max-w-xs">
                   {errorMessage}
                 </p>
               </div>
               <div className="flex gap-2">
                 <Button variant="outline" onClick={() => setResult(null)}>
-                  Select Another
+                  {t("hire.selectAnother")}
                 </Button>
                 <Button
                   onClick={handleGoToTeam}
                   className="bg-gradient-to-r from-tiktok-cyan to-tiktok-pink text-black"
                 >
-                  Go to My Team
+                  {t("hire.goToTeam")}
                 </Button>
               </div>
             </div>
@@ -222,13 +223,13 @@ export function HireDialog({
                 <AlertCircle className="h-8 w-8 text-red-500" />
               </div>
               <div>
-                <h3 className="text-lg font-semibold">Transaction Failed</h3>
+                <h3 className="text-lg font-semibold">{t("hire.transactionFailed")}</h3>
                 <p className="text-sm text-muted-foreground mt-1 max-w-xs">
                   {errorMessage}
                 </p>
               </div>
               <Button variant="outline" onClick={() => setResult(null)}>
-                Try Again
+                {t("hire.tryAgain")}
               </Button>
             </div>
           </div>
@@ -270,7 +271,7 @@ export function HireDialog({
 
             {/* Rental Period Selection */}
             <div className="space-y-3">
-              <label className="text-sm font-medium">Select Rental Period</label>
+              <label className="text-sm font-medium">{t("hire.selectPeriod")}</label>
               <div className="grid grid-cols-2 gap-2">
                 {rentalOptions.map((option) => {
                   const price = priceMap[option.period];
@@ -290,18 +291,18 @@ export function HireDialog({
                         !isAffordable && "opacity-50 cursor-not-allowed grayscale"
                       )}
                     >
-                      {option.discount && !isCommunityCharacter && (
+                      {option.hasDiscount && !isCommunityCharacter && (
                         <span className={cn(
                           "absolute -top-2 right-2 px-2 py-0.5 text-xs font-bold rounded-full shadow-lg",
                           option.period === "monthly"
                             ? "bg-gradient-to-r from-mermaid-cyan to-mermaid-pink text-black shadow-[0_0_10px_rgba(0,242,234,0.3)]"
                             : "bg-neon-green/20 text-neon-green border border-neon-green/30"
                         )}>
-                          {option.discount}
+                          {t(`hire.discounts.${option.period}`)}
                         </span>
                       )}
                       <div className="flex items-center justify-between">
-                        <span className="font-medium">{option.label}</span>
+                        <span className="font-medium">{t(`hire.periods.${option.period}`)}</span>
                         <span className={cn(
                           "text-sm font-bold",
                           isSelected ? "text-tiktok-cyan" : "text-muted-foreground"
@@ -311,7 +312,7 @@ export function HireDialog({
                       </div>
                       <div className="flex items-center gap-1 mt-1 text-xs text-white/40 group-hover:text-white/60 transition-colors">
                         <Coins className="h-3 w-3" />
-                        Credits
+                        {t("hire.credits")}
                       </div>
                     </button>
                   );
@@ -324,24 +325,24 @@ export function HireDialog({
               <div className="flex items-center justify-between text-sm">
                 <span className="text-muted-foreground flex items-center gap-2">
                   <Coins className="h-4 w-4" />
-                  Your Balance
+                  {t("hire.yourBalance")}
                 </span>
-                <span className="font-semibold">{userCredits.toLocaleString()} Credits</span>
+                <span className="font-semibold">{userCredits.toLocaleString()} {t("hire.credits")}</span>
               </div>
               <div className="flex items-center justify-between text-sm">
                 <span className="text-muted-foreground flex items-center gap-2">
                   <Calendar className="h-4 w-4" />
-                  Duration
+                  {t("hire.duration")}
                 </span>
-                <span className="font-semibold">{selectedOption.days} Days</span>
+                <span className="font-semibold">{t("hire.days", { count: selectedOption.days })}</span>
               </div>
               <div className="flex items-center justify-between text-sm">
                 <span className="text-muted-foreground flex items-center gap-2">
                   <Clock className="h-4 w-4" />
-                  Expires On
+                  {t("hire.expiresOn")}
                 </span>
                 <span className="font-semibold">
-                  {new Date(Date.now() + selectedOption.days * 24 * 60 * 60 * 1000).toLocaleDateString("en-US", {
+                  {new Date(Date.now() + selectedOption.days * 24 * 60 * 60 * 1000).toLocaleDateString(lang === "zh" ? "zh-CN" : "en-US", {
                     month: "short",
                     day: "numeric",
                     year: "numeric",
@@ -350,21 +351,21 @@ export function HireDialog({
               </div>
               <div className="border-t border-border/50 pt-3 mt-3">
                 <div className="flex items-center justify-between">
-                  <span className="font-medium text-white">Total</span>
+                  <span className="font-medium text-white">{t("hire.total")}</span>
                   <span className="text-xl font-bold bg-gradient-to-r from-mermaid-cyan to-mermaid-pink bg-clip-text text-transparent drop-shadow-[0_0_10px_rgba(0,242,234,0.5)]">
-                    {selectedPrice.toLocaleString()} Credits
+                    {selectedPrice.toLocaleString()} {t("hire.credits")}
                   </span>
                 </div>
                 {!canAfford && (
                   <p className="text-xs text-neon-red mt-2 flex items-center gap-1 drop-shadow-[0_0_5px_rgba(239,68,68,0.5)]">
                     <AlertCircle className="h-3 w-3" />
-                    Insufficient balance. Need {(selectedPrice - userCredits).toLocaleString()} more Credits
+                    {t("hire.insufficient", { count: selectedPrice - userCredits })}
                   </p>
                 )}
                 {canAfford && (
                   <p className="text-xs text-neon-green mt-2 flex items-center gap-1 drop-shadow-[0_0_5px_rgba(34,197,94,0.5)]">
                     <CheckCircle2 className="h-3 w-3" />
-                    Balance after: {(userCredits - selectedPrice).toLocaleString()} Credits
+                    {t("hire.balanceAfter", { count: userCredits - selectedPrice })}
                   </p>
                 )}
               </div>
@@ -381,7 +382,7 @@ export function HireDialog({
               disabled={isProcessing}
               className="border-white/10 hover:bg-white/10 text-white/70 hover:text-white"
             >
-              Cancel
+              {t("hire.cancel")}
             </Button>
             <button
               onClick={handleHire}
@@ -394,12 +395,12 @@ export function HireDialog({
               {isProcessing ? (
                 <div className="relative z-10 flex items-center justify-center gap-2">
                   <Loader2 className="h-4 w-4 animate-spin text-black" />
-                  Processing...
+                  {t("hire.processing")}
                 </div>
               ) : (
                 <span className="relative z-10 flex items-center justify-center gap-2">
                   <Sparkles className="h-4 w-4 fill-black/20" />
-                  Confirm Hire
+                  {t("hire.confirm")}
                 </span>
               )}
             </button>

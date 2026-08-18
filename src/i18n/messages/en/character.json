@@ -1,0 +1,107 @@
+{
+  "assetCenter": {
+    "title": "Character Asset Center",
+    "description": "Create, license, publish, and reuse consistent character assets across images and videos.",
+    "create": "Create Character",
+    "searchPlaceholder": "Search by character name, tag, or category",
+    "assetCount": "{count, plural, one {# character asset} other {# character assets}}",
+    "ownedCount": "{count, plural, one {# character created by you} other {# characters created by you}}",
+    "licensedCount": "{count, plural, one {# licensed character} other {# licensed characters}}",
+    "loadMore": "Loading"
+  },
+  "categories": {
+    "全部": "All",
+    "现代都市": "Modern Urban",
+    "古风玄幻": "Ancient Fantasy",
+    "漫剧动画": "Comics & Animation",
+    "奇幻科幻": "Fantasy & Sci-Fi",
+    "萌宠/IP": "Mascots & IP",
+    "我的角色": "My Characters"
+  },
+  "ownership": {
+    "owned": "Created by Me",
+    "licensed": "Licensed",
+    "community": "Community",
+    "official": "Official",
+    "available": "Licensed and ready to use"
+  },
+  "empty": {
+    "filteredTitle": "No matching characters",
+    "title": "No character assets yet",
+    "filteredDescription": "Try another category or search term.",
+    "description": "Characters you create will be managed here."
+  },
+  "gallery": {
+    "preview": "Preview {modelName} {label}",
+    "sheet": "Reference Sheet",
+    "cover": "Portrait Cover",
+    "reference": "Reference Image",
+    "video": "Video",
+    "fullSheet": "Complete Multi-angle Reference Sheet",
+    "fullSheetDescription": "Keeps the character consistent across single images, batches, and videos",
+    "sheetLoading": "Preparing reference sheet",
+    "thumbnails": "Asset Thumbnails",
+    "referenceImageCount": "{count, plural, one {# reference image} other {# reference images}}",
+    "transformationVideo": "Character Preview Video"
+  },
+  "detail": {
+    "summary": "Character Summary",
+    "assetStatus": "Asset Status",
+    "description": "Character Description",
+    "authorize": "License Character",
+    "generateImage": "Create Image",
+    "authorizeForImage": "License to Create Images",
+    "generateVideo": "Create Video",
+    "authorizeForVideo": "License to Create Videos",
+    "unpublish": "Remove from Market",
+    "publish": "Publish to Market"
+  },
+  "hire": {
+    "title": "License {name}",
+    "description": "Confirm the credit price to use this character in your creations",
+    "signIn": "Sign in to license this character",
+    "alreadyError": "This character is already in your team",
+    "insufficientError": "Insufficient credits",
+    "contractFailed": "Licensing failed. Please try again.",
+    "networkError": "Network error. Please try again.",
+    "successTitle": "Character Licensed! 🎉",
+    "successDescription": "{name} has joined your creative team",
+    "remainingBalance": "Remaining balance: {count} credits",
+    "alreadyTitle": "Already in Your Team",
+    "selectAnother": "Select Another",
+    "goToTeam": "View My Characters",
+    "transactionFailed": "Transaction Failed",
+    "tryAgain": "Try Again",
+    "selectPeriod": "Select License Period",
+    "periods": {
+      "daily": "1 Day",
+      "weekly": "7 Days",
+      "monthly": "30 Days",
+      "yearly": "365 Days"
+    },
+    "discounts": {
+      "weekly": "Save 17%",
+      "monthly": "Best Value",
+      "yearly": "Save 17%"
+    },
+    "credits": "Credits",
+    "yourBalance": "Your Balance",
+    "duration": "Duration",
+    "days": "{count, plural, one {# day} other {# days}}",
+    "expiresOn": "Expires On",
+    "total": "Total",
+    "insufficient": "Insufficient balance. You need {count} more credits.",
+    "balanceAfter": "Balance after payment: {count} credits",
+    "cancel": "Cancel",
+    "processing": "Processing...",
+    "confirm": "Confirm License"
+  },
+  "notifications": {
+    "loadAssetsFailed": "Unable to load character assets",
+    "loadMoreFailed": "Unable to load more character assets",
+    "authorized": "Character licensed",
+    "authorizedDescription": "You can now use this character in single images, image batches, and videos.",
+    "published": "Published",
+    "unpublished": "Removed from market"
+  }
+}

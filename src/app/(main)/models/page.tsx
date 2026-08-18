@@ -16,6 +16,7 @@ import {
   ZoomOut,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import {
   type ImgHTMLAttributes,
   type PointerEvent as ReactPointerEvent,
@@ -43,6 +44,11 @@ import { useLang } from "@/contexts/LangContext";
 import { useToast } from "@/hooks/use-toast";
 import { getMarketplaceModels, type PublicModel } from "@/lib/actions/models";
 import { ROLE_ASSET_CATEGORIES } from "@/lib/character-assets";
+import {
+  localizeOfficialCharacterDescription,
+  localizeOfficialCharacterName,
+  localizeOfficialCharacterTag,
+} from "@/lib/character-localization";
 import { cn } from "@/lib/utils";
 import type { AIModel } from "@/types/model";
 
@@ -130,11 +136,11 @@ function preloadModelAssets(model: PublicModel) {
   if (model.avatar_url) preloadImage(model.avatar_url);
 }
 
-function getOwnershipLabel(model: PublicModel) {
-  if (model.ownership === "owned") return "自建";
-  if (model.ownership === "licensed") return "已拥有";
-  if (model.source === "user_created") return "社区";
-  return "官方";
+function getOwnershipMessageKey(model: PublicModel) {
+  if (model.ownership === "owned") return "ownership.owned" as const;
+  if (model.ownership === "licensed") return "ownership.licensed" as const;
+  if (model.source === "user_created") return "ownership.community" as const;
+  return "ownership.official" as const;
 }
 
 function blockImageSave(event: SyntheticEvent<HTMLElement>) {
@@ -239,14 +245,17 @@ function EmptyState({
   hasFilters: boolean;
   onClearFilters: () => void;
 }) {
+  const t = useTranslations("character");
+  const common = useTranslations("common");
+
   return (
     <div className="flex flex-col items-center justify-center py-24 text-center">
       <PackageOpen className="mb-5 h-20 w-20 text-white/20" />
       <h3 className="text-lg font-semibold text-white">
-        {hasFilters ? "没有找到匹配角色" : "暂无角色资产"}
+        {hasFilters ? t("empty.filteredTitle") : t("empty.title")}
       </h3>
       <p className="mt-2 max-w-sm text-sm text-white/50">
-        {hasFilters ? "换一个分类或关键词再试试。" : "创建角色后会在这里统一管理。"}
+        {hasFilters ? t("empty.filteredDescription") : t("empty.description")}
       </p>
       {hasFilters && (
         <Button
@@ -255,7 +264,7 @@ function EmptyState({
           className="mt-6 border-white/10 bg-white/5 text-white hover:bg-white/10"
         >
           <RefreshCw className="mr-2 h-4 w-4" />
-          清除筛选
+          {common("actions.clearFilters")}
         </Button>
       )}
     </div>
@@ -289,8 +298,13 @@ function CharacterAssetCard({
   selected: boolean;
   onClick: () => void;
 }) {
+  const t = useTranslations("character");
+  const common = useTranslations("common");
+  const { lang: displayLang } = useLang();
   const coverSrc = getCoverImageSrc(model);
   const owned = model.ownership === "owned" || model.has_active_contract;
+  const categoryLabels = t.raw("categories") as Record<string, string>;
+  const displayName = localizeOfficialCharacterName(model.name, model.source, displayLang);
 
   return (
     <button
@@ -305,7 +319,7 @@ function CharacterAssetCard({
     >
       <div className="relative aspect-[2/3] overflow-hidden bg-white/5">
         {coverSrc ? (
-          <CharacterCoverImage src={coverSrc} alt={model.name} loading={priority ? "eager" : "lazy"} />
+          <CharacterCoverImage src={coverSrc} alt={displayName} loading={priority ? "eager" : "lazy"} />
         ) : (
           <div className="flex h-full w-full items-center justify-center">
             <ImageIcon className="h-9 w-9 text-white/25" />
@@ -313,29 +327,29 @@ function CharacterAssetCard({
         )}
         <div className="absolute left-2 top-2 flex gap-1.5">
           <Badge className="border-0 bg-black/55 text-[10px] text-white backdrop-blur">
-            {getOwnershipLabel(model)}
+            {t(getOwnershipMessageKey(model))}
           </Badge>
           {owned && (
             <Badge className="border-0 bg-emerald-500/85 text-[10px] text-black">
-              已拥有
+              {t("ownership.licensed")}
             </Badge>
           )}
         </div>
         <div className="absolute bottom-2 right-2 rounded-full bg-black/55 px-2 py-1 text-[11px] text-white backdrop-blur">
-          {model.publish_price || model.base_price || 0} 积分
+          {common("units.credits", { count: model.publish_price || model.base_price || 0 })}
         </div>
       </div>
       <div className="space-y-2 p-3">
         <div className="flex items-start justify-between gap-2">
-          <h3 className="min-w-0 truncate text-sm font-semibold text-white">{model.name}</h3>
+          <h3 className="min-w-0 truncate text-sm font-semibold text-white">{displayName}</h3>
           <span className="shrink-0 rounded bg-white/10 px-1.5 py-0.5 text-[10px] text-white/60">
-            {model.category}
+            {categoryLabels[model.category] || model.category}
           </span>
         </div>
         <div className="flex min-h-5 flex-wrap gap-1">
           {model.tags.slice(0, 3).map((tag) => (
             <span key={tag} className="rounded bg-white/10 px-1.5 py-0.5 text-[10px] text-white/55">
-              {tag}
+              {localizeOfficialCharacterTag(tag, model.source, displayLang)}
             </span>
           ))}
         </div>
@@ -353,11 +367,13 @@ function CharacterGalleryThumbnail({
   modelName: string;
   onPreview: (item: GalleryItem) => void;
 }) {
+  const t = useTranslations("character");
+
   return (
     <button
       type="button"
       key={item.url}
-      aria-label={`预览${modelName}${item.label}`}
+      aria-label={t("gallery.preview", { modelName, label: item.label })}
       className="group/thumb relative aspect-[4/3] overflow-hidden rounded-lg border border-white/10 bg-[#05070B]"
       onClick={() => onPreview(item)}
     >
@@ -419,6 +435,7 @@ function CharacterImagePreviewDialog({
   modelName: string;
   onClose: () => void;
 }) {
+  const common = useTranslations("common");
   const [zoom, setZoom] = useState(PREVIEW_MIN_ZOOM);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [fullImageReady, setFullImageReady] = useState(false);
@@ -544,8 +561,8 @@ function CharacterImagePreviewDialog({
                     type="button"
                     size="icon"
                     variant="ghost"
-                    aria-label="缩小图片"
-                    title="缩小"
+                    aria-label={common("actions.zoomOut")}
+                    title={common("actions.zoomOut")}
                     disabled={!canZoomOut}
                     className="h-8 w-8 text-white/65 hover:bg-white/10 hover:text-white"
                     onClick={() => applyZoom(zoom - PREVIEW_ZOOM_STEP)}
@@ -559,8 +576,8 @@ function CharacterImagePreviewDialog({
                     type="button"
                     size="icon"
                     variant="ghost"
-                    aria-label="放大图片"
-                    title="放大"
+                    aria-label={common("actions.zoomIn")}
+                    title={common("actions.zoomIn")}
                     disabled={!canZoomIn}
                     className="h-8 w-8 text-white/65 hover:bg-white/10 hover:text-white"
                     onClick={() => applyZoom(zoom + PREVIEW_ZOOM_STEP)}
@@ -571,8 +588,8 @@ function CharacterImagePreviewDialog({
                     type="button"
                     size="icon"
                     variant="ghost"
-                    aria-label="重置图片缩放"
-                    title="重置"
+                    aria-label={common("actions.reset")}
+                    title={common("actions.reset")}
                     disabled={!canReset}
                     className="h-8 w-8 text-white/65 hover:bg-white/10 hover:text-white"
                     onClick={resetPreview}
@@ -639,6 +656,9 @@ function CharacterDetailDialog({
   onGoVideo: (model: PublicModel) => void;
   publishing: boolean;
 }) {
+  const t = useTranslations("character");
+  const common = useTranslations("common");
+  const { lang: displayLang } = useLang();
   const [previewItem, setPreviewItem] = useState<GalleryItem | null>(null);
   const [detailImagesReady, setDetailImagesReady] = useState(false);
 
@@ -667,6 +687,8 @@ function CharacterDetailDialog({
   const owned = model.ownership === "owned" || model.has_active_contract;
   const canPublish = model.ownership === "owned";
   const price = model.publish_price || model.base_price || 0;
+  const displayName = localizeOfficialCharacterName(model.name, model.source, displayLang);
+  const displayDescription = localizeOfficialCharacterDescription(model.description, model.source, displayLang);
   const gallery = [
     model.reference_sheet_url,
     ...model.reference_images,
@@ -680,7 +702,7 @@ function CharacterDetailDialog({
         url,
         displayUrl: getGalleryImageSrc(model, url, "thumb"),
         previewUrl: getGalleryImageSrc(model, url, "full"),
-        label: "设定板",
+        label: t("gallery.sheet"),
         kind: "sheet",
       };
     }
@@ -689,7 +711,7 @@ function CharacterDetailDialog({
         url,
         displayUrl: getGalleryImageSrc(model, url, "thumb"),
         previewUrl: getGalleryImageSrc(model, url, "full"),
-        label: "竖封面",
+        label: t("gallery.cover"),
         kind: "cover",
       };
     }
@@ -697,26 +719,26 @@ function CharacterDetailDialog({
       url,
       displayUrl: getGalleryImageSrc(model, url, "thumb"),
       previewUrl: getGalleryImageSrc(model, url, "full"),
-      label: "参考图",
+      label: t("gallery.reference"),
       kind: "reference",
     };
   });
   const assetSummary = [
-    { label: "设定板", ready: Boolean(model.reference_sheet_url) },
-    { label: "竖封面", ready: Boolean(model.avatar_url) },
-    { label: "参考图", ready: gallery.length > 0 },
-    { label: "视频", ready: Boolean(model.preview_video_url) },
+    { label: t("gallery.sheet"), ready: Boolean(model.reference_sheet_url) },
+    { label: t("gallery.cover"), ready: Boolean(model.avatar_url) },
+    { label: t("gallery.reference"), ready: gallery.length > 0 },
+    { label: t("gallery.video"), ready: Boolean(model.preview_video_url) },
   ];
-  const imageActionLabel = owned ? "去生图" : "授权后生图";
-  const videoActionLabel = owned ? "去生成视频" : "授权后视频";
-  const publishActionLabel = model.is_public ? "下架角色" : "发布到市场";
+  const imageActionLabel = owned ? t("detail.generateImage") : t("detail.authorizeForImage");
+  const videoActionLabel = owned ? t("detail.generateVideo") : t("detail.authorizeForVideo");
+  const publishActionLabel = model.is_public ? t("detail.unpublish") : t("detail.publish");
   const PublishIcon = model.is_public ? XCircle : UploadCloud;
   const referenceSheetPreviewItem: GalleryItem | null = model.reference_sheet_url
     ? {
       url: model.reference_sheet_url,
       displayUrl: getGalleryImageSrc(model, model.reference_sheet_url, "thumb"),
       previewUrl: model.reference_sheet_url,
-      label: "完整多角度设定板",
+      label: t("gallery.fullSheet"),
       kind: "sheet",
     }
     : null;
@@ -743,13 +765,15 @@ function CharacterDetailDialog({
             <div className="flex flex-col gap-3 pr-9 sm:flex-row sm:items-center sm:justify-between">
               <DialogTitle className="flex min-w-0 items-center gap-3 text-xl">
                 <Sparkles className="h-5 w-5 shrink-0 text-mermaid-cyan" />
-                <span className="truncate">{model.name}</span>
+                <span className="truncate">{displayName}</span>
               </DialogTitle>
               <div className="flex flex-wrap gap-2">
-                <Badge className="border-0 bg-white/10 text-white">{getOwnershipLabel(model)}</Badge>
-                <Badge className="border-0 bg-white/10 text-white">{model.category}</Badge>
-                {owned && <Badge className="border-0 bg-emerald-500/85 text-black">已拥有</Badge>}
-                <Badge className="border-0 bg-mermaid-cyan/15 text-mermaid-cyan">{price} 积分</Badge>
+                <Badge className="border-0 bg-white/10 text-white">{t(getOwnershipMessageKey(model))}</Badge>
+                <Badge className="border-0 bg-white/10 text-white">
+                  {(t.raw("categories") as Record<string, string>)[model.category] || model.category}
+                </Badge>
+                {owned && <Badge className="border-0 bg-emerald-500/85 text-black">{t("ownership.licensed")}</Badge>}
+                <Badge className="border-0 bg-mermaid-cyan/15 text-mermaid-cyan">{common("units.credits", { count: price })}</Badge>
               </div>
             </div>
           </DialogHeader>
@@ -758,8 +782,8 @@ function CharacterDetailDialog({
               <div className="rounded-xl border border-white/10 bg-white/[0.035] p-4">
                 <div className="mb-3 flex items-center justify-between gap-3">
                   <div>
-                    <h3 className="text-base font-semibold text-white">完整多角度设定板</h3>
-                    <p className="mt-1 text-xs text-white/45">用于单图、多图和视频保持角色一致性</p>
+                    <h3 className="text-base font-semibold text-white">{t("gallery.fullSheet")}</h3>
+                    <p className="mt-1 text-xs text-white/45">{t("gallery.fullSheetDescription")}</p>
                   </div>
                   {referenceSheetPreviewItem && (
                     <Button
@@ -769,7 +793,7 @@ function CharacterDetailDialog({
                       onClick={() => setPreviewItem(referenceSheetPreviewItem)}
                     >
                       <ImageIcon className="mr-1.5 h-3.5 w-3.5" />
-                      放大
+                      {common("actions.zoomIn")}
                     </Button>
                   )}
                 </div>
@@ -777,19 +801,19 @@ function CharacterDetailDialog({
                 {referenceSheetPreviewItem ? (
                   <button
                     type="button"
-                    aria-label={`预览${model.name}完整多角度设定板`}
+                    aria-label={t("gallery.preview", { modelName: displayName, label: t("gallery.fullSheet") })}
                     className="block w-full overflow-hidden rounded-lg border border-white/10 bg-[#05070B]"
                     onClick={() => setPreviewItem(referenceSheetPreviewItem)}
                   >
                     {detailImagesReady ? (
                       <ProtectedImage
                         src={referenceSheetPreviewItem.displayUrl}
-                        alt={`${model.name} reference sheet`}
+                        alt={`${displayName} reference sheet`}
                         loading="lazy"
                         className="max-h-[520px] w-full object-contain"
                       />
                     ) : (
-                      <DetailAssetPlaceholder coverSrc={coverSrc} label="设定板准备中" className="min-h-[260px]" />
+                      <DetailAssetPlaceholder coverSrc={coverSrc} label={t("gallery.sheetLoading")} className="min-h-[260px]" />
                     )}
                   </button>
                 ) : (
@@ -802,8 +826,8 @@ function CharacterDetailDialog({
             {galleryItems.length > 0 && (
               <div>
                 <div className="mb-2 flex items-center justify-between">
-                  <h3 className="text-sm font-semibold text-white/85">资产缩略图</h3>
-                  <span className="text-xs text-white/40">{gallery.length} 张可引用图片</span>
+                  <h3 className="text-sm font-semibold text-white/85">{t("gallery.thumbnails")}</h3>
+                  <span className="text-xs text-white/40">{t("gallery.referenceImageCount", { count: gallery.length })}</span>
                 </div>
                 <div className="grid grid-cols-3 gap-3 md:grid-cols-4">
                   {detailImagesReady
@@ -811,7 +835,7 @@ function CharacterDetailDialog({
                       <CharacterGalleryThumbnail
                         key={item.url}
                         item={item}
-                        modelName={model.name}
+                        modelName={displayName}
                         onPreview={setPreviewItem}
                       />
                     ))
@@ -831,7 +855,7 @@ function CharacterDetailDialog({
               <div className="rounded-xl border border-white/10 bg-white/[0.035] p-4">
                 <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-white/85">
                   <Video className="h-4 w-4 text-mermaid-pink" />
-                  角色转换视频
+                  {t("gallery.transformationVideo")}
                 </h3>
                 <video
                   src={model.preview_video_url}
@@ -848,7 +872,7 @@ function CharacterDetailDialog({
               <div className="grid grid-cols-[112px_1fr] gap-4">
                 <div className="aspect-[2/3] overflow-hidden rounded-lg border border-white/10 bg-white/5">
                   {coverSrc ? (
-                    <CharacterCoverImage src={coverSrc} alt={model.name} loading="eager" />
+                    <CharacterCoverImage src={coverSrc} alt={displayName} loading="eager" />
                   ) : (
                     <div className="flex h-full w-full items-center justify-center">
                       <ImageIcon className="h-8 w-8 text-white/30" />
@@ -856,12 +880,12 @@ function CharacterDetailDialog({
                   )}
                 </div>
                 <div className="min-w-0">
-                  <p className="text-xs font-medium text-white/40">角色摘要</p>
-                  <h3 className="mt-1 line-clamp-2 text-lg font-semibold text-white">{model.name}</h3>
+                  <p className="text-xs font-medium text-white/40">{t("detail.summary")}</p>
+                  <h3 className="mt-1 line-clamp-2 text-lg font-semibold text-white">{displayName}</h3>
                   <div className="mt-3 flex flex-wrap gap-1.5">
                     {model.tags.slice(0, 4).map((tag) => (
                       <span key={tag} className="rounded bg-white/10 px-2 py-1 text-[11px] text-white/65">
-                        {tag}
+                        {localizeOfficialCharacterTag(tag, model.source, displayLang)}
                       </span>
                     ))}
                   </div>
@@ -870,8 +894,8 @@ function CharacterDetailDialog({
 
               <div className="rounded-lg border border-white/10 bg-white/[0.035] p-3">
                 <div className="mb-3 flex items-center justify-between gap-2">
-                  <h3 className="text-sm font-semibold text-white/80">资产状态</h3>
-                  <span className="text-xs text-white/40">{gallery.length} 张图片</span>
+                  <h3 className="text-sm font-semibold text-white/80">{t("detail.assetStatus")}</h3>
+                  <span className="text-xs text-white/40">{common("units.images", { count: gallery.length })}</span>
                 </div>
                 <div className="space-y-2">
                 {assetSummary.map((item) => (
@@ -883,17 +907,17 @@ function CharacterDetailDialog({
                     )}
                     >
                       <span className={cn("h-1.5 w-1.5 rounded-full", item.ready ? "bg-emerald-400" : "bg-white/25")} />
-                      {item.ready ? "已就绪" : "暂无"}
+                      {item.ready ? common("status.ready") : common("status.unavailable")}
                     </span>
                   </div>
                 ))}
                 </div>
               </div>
 
-              {model.description && (
+              {displayDescription && (
                 <div className="rounded-lg border border-white/10 bg-white/[0.035] p-3">
-                  <h3 className="mb-2 text-sm font-semibold text-white/80">角色描述</h3>
-                  <p className="max-h-28 overflow-y-auto text-sm leading-6 text-white/58">{model.description}</p>
+                  <h3 className="mb-2 text-sm font-semibold text-white/80">{t("detail.description")}</h3>
+                  <p className="max-h-28 overflow-y-auto text-sm leading-6 text-white/58">{displayDescription}</p>
                 </div>
               )}
 
@@ -905,13 +929,13 @@ function CharacterDetailDialog({
                     onClick={() => onAuthorize(model)}
                   >
                     <Coins className="mr-2 h-4 w-4" />
-                    授权引用
+                    {t("detail.authorize")}
                   </button>
                 )}
                 {owned && (
                   <div className="flex h-10 items-center justify-center rounded-lg border border-emerald-400/30 bg-emerald-400/10 text-sm font-medium text-emerald-200">
                     <CheckCircle2 className="mr-2 h-4 w-4" />
-                    已拥有，可直接引用
+                    {t("ownership.available")}
                   </div>
                 )}
                 <Button
@@ -946,7 +970,7 @@ function CharacterDetailDialog({
       </Dialog>
       <CharacterImagePreviewDialog
         item={previewItem}
-        modelName={model.name}
+        modelName={displayName}
         onClose={() => setPreviewItem(null)}
       />
     </>
@@ -957,7 +981,10 @@ export default function ModelsPage() {
   const router = useRouter();
   const { toast } = useToast();
   const { lang } = useLang();
-  const t = lang === "en";
+  const tr = useTranslations("character");
+  const common = useTranslations("common");
+  const displayLang = lang;
+  const categoryLabels = tr.raw("categories") as Record<string, string>;
 
   const fetchSeqRef = useRef(0);
   const shuffleSeedRef = useRef(createMarketplaceShuffleSeed());
@@ -1040,8 +1067,8 @@ export default function ModelsPage() {
         setHasMoreModels(false);
         toast({
           variant: "destructive",
-          title: t ? "Load failed" : "加载失败",
-          description: result.error || "无法获取角色资产",
+          title: common("errors.loadFailed"),
+          description: lang === "zh" && result.error ? result.error : tr("notifications.loadAssetsFailed"),
         });
       }
     } catch (error) {
@@ -1051,15 +1078,15 @@ export default function ModelsPage() {
       setHasMoreModels(false);
       toast({
         variant: "destructive",
-        title: t ? "Load failed" : "加载失败",
-        description: "网络错误，请重试",
+        title: common("errors.loadFailed"),
+        description: common("errors.network"),
       });
     } finally {
       if (fetchSeqRef.current === requestSeq) {
         setLoading(false);
       }
     }
-  }, [routeReady, searchQuery, selectedCategory, t, toast]);
+  }, [common, lang, routeReady, searchQuery, selectedCategory, toast, tr]);
 
   const loadMoreModels = useCallback(async () => {
     if (!routeReady || loadingMore || !hasMoreModels) return;
@@ -1085,21 +1112,21 @@ export default function ModelsPage() {
       } else {
         toast({
           variant: "destructive",
-          title: t ? "Load failed" : "加载失败",
-          description: result.error || "无法继续加载角色资产",
+          title: common("errors.loadFailed"),
+          description: lang === "zh" && result.error ? result.error : tr("notifications.loadMoreFailed"),
         });
       }
     } catch (error) {
       console.error("[Models Page] Load more error:", error);
       toast({
         variant: "destructive",
-        title: t ? "Load failed" : "加载失败",
-        description: "网络错误，请重试",
+        title: common("errors.loadFailed"),
+        description: common("errors.network"),
       });
     } finally {
       setLoadingMore(false);
     }
-  }, [hasMoreModels, loadingMore, models.length, routeReady, searchQuery, selectedCategory, t, toast]);
+  }, [common, hasMoreModels, lang, loadingMore, models.length, routeReady, searchQuery, selectedCategory, toast, tr]);
 
   useEffect(() => {
     if (!routeReady) return;
@@ -1136,7 +1163,6 @@ export default function ModelsPage() {
 
   const hasFilters = selectedCategory !== "全部" || searchQuery.trim().length > 0;
   const totalModelCount = Math.max(totalModels, filteredModels.length);
-  const modelCountLabel = `${totalModelCount}`;
   const selectedModelSampleImages = useMemo(() => {
     if (!selectedModel) return [];
     if (selectedModel.reference_images.length > 0) return selectedModel.reference_images;
@@ -1147,12 +1173,12 @@ export default function ModelsPage() {
   const selectedModelAsAIModel: AIModel | null = selectedModel
     ? {
       id: selectedModel.id,
-      name: selectedModel.name,
-      description: selectedModel.description || "",
+      name: localizeOfficialCharacterName(selectedModel.name, selectedModel.source, displayLang),
+      description: localizeOfficialCharacterDescription(selectedModel.description, selectedModel.source, displayLang),
       avatar_url: selectedModel.avatar_url,
       sample_images: selectedModelSampleImages,
       sample_videos: selectedModel.preview_video_url ? [selectedModel.preview_video_url] : [],
-      style_tags: selectedModel.tags,
+      style_tags: selectedModel.tags.map((tag) => localizeOfficialCharacterTag(tag, selectedModel.source, displayLang)),
       category: selectedModel.category,
       gender: selectedModel.gender || "neutral",
       is_active: true,
@@ -1198,7 +1224,7 @@ export default function ModelsPage() {
     setSelectedModel((model) =>
       model?.id === modelId ? { ...model, has_active_contract: true, ownership: "licensed" } : model
     );
-    toast({ title: "授权成功", description: "现在可以在单图、多图和视频中引用该角色。" });
+    toast({ title: tr("notifications.authorized"), description: tr("notifications.authorizedDescription") });
   };
 
   const handlePublishToggle = async (model: PublicModel) => {
@@ -1220,15 +1246,18 @@ export default function ModelsPage() {
         }
       );
       const result = await response.json();
-      if (!result.success) throw new Error(result.error || "操作失败");
-      toast({ title: model.is_public ? "已下架" : "已发布", description: model.name });
+      if (!result.success) throw new Error(lang === "zh" && result.error ? result.error : common("errors.operationFailed"));
+      toast({
+        title: model.is_public ? tr("notifications.unpublished") : tr("notifications.published"),
+        description: model.name,
+      });
       await fetchModels();
       setSelectedModel((prev) => prev ? { ...prev, is_public: !model.is_public } : prev);
     } catch (error) {
       toast({
         variant: "destructive",
-        title: "操作失败",
-        description: error instanceof Error ? error.message : "请重试",
+        title: common("errors.operationFailed"),
+        description: error instanceof Error ? error.message : common("errors.tryAgain"),
       });
     } finally {
       setPublishing(false);
@@ -1275,7 +1304,7 @@ export default function ModelsPage() {
             {loadingMore && (
               <div className="flex items-center gap-2 text-sm text-white/55">
                 <RefreshCw className="h-4 w-4 animate-spin" />
-                加载中
+                {common("status.loading")}
               </div>
             )}
           </div>
@@ -1290,10 +1319,10 @@ export default function ModelsPage() {
         <div>
           <h1 className="flex items-center gap-3 text-3xl font-bold tracking-tight text-white">
             <span className="h-8 w-1.5 rounded-full bg-mermaid-cyan" />
-            角色资产中心
+            {tr("assetCenter.title")}
           </h1>
           <p className="mt-2 text-sm text-white/55">
-            创建、授权、发布并在单图、多图、视频中引用同一套角色资产。
+            {tr("assetCenter.description")}
           </p>
         </div>
         <Button
@@ -1301,7 +1330,7 @@ export default function ModelsPage() {
           onClick={() => router.push("/character/create")}
         >
           <Sparkles className="mr-2 h-4 w-4" />
-          创建角色
+          {tr("assetCenter.create")}
         </Button>
       </div>
 
@@ -1311,7 +1340,7 @@ export default function ModelsPage() {
           <Input
             value={searchQuery}
             onChange={(event) => setSearchQuery(event.target.value)}
-            placeholder="搜索角色名、标签或分类"
+            placeholder={tr("assetCenter.searchPlaceholder")}
             className="border-white/10 bg-white/5 pl-10 text-white placeholder:text-white/30"
           />
         </div>
@@ -1334,16 +1363,16 @@ export default function ModelsPage() {
                 setSelectedCategory(category);
               }}
             >
-              {category}
+              {categoryLabels[category] || category}
             </Button>
           ))}
         </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-4 rounded-lg border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-white/55">
-        <span><strong className="text-white">{modelCountLabel}</strong> 个角色资产</span>
-        <span><strong className="text-white">{filteredModels.filter((model) => model.ownership === "owned").length}</strong> 个自建角色</span>
-        <span><strong className="text-white">{filteredModels.filter((model) => model.has_active_contract).length}</strong> 个已授权</span>
+        <span>{tr("assetCenter.assetCount", { count: totalModelCount })}</span>
+        <span>{tr("assetCenter.ownedCount", { count: filteredModels.filter((model) => model.ownership === "owned").length })}</span>
+        <span>{tr("assetCenter.licensedCount", { count: filteredModels.filter((model) => model.has_active_contract).length })}</span>
       </div>
 
       {modelsContent}

@@ -1,0 +1,62 @@
+{
+  "page": {
+    "title": "Template Center",
+    "subtitle": "Discover inspiring templates and start creating instantly",
+    "empty": "No matching templates found",
+    "emptyHint": "Try another category or search term"
+  },
+  "filters": {
+    "templateCount": "{count, plural, one {# template} other {# templates}}",
+    "categoryCount": "{count, plural, one {# category} other {# categories}}",
+    "all": "All Templates",
+    "search": "Search templates..."
+  },
+  "categories": {
+    "ecommerce": "E-commerce",
+    "brand": "Brand Marketing",
+    "tutorial": "Tutorials",
+    "lifestyle": "Lifestyle",
+    "creative": "Creative Content",
+    "engagement": "Engagement"
+  },
+  "card": {
+    "trending": "TRENDING",
+    "uses": "{count} uses",
+    "copyPrompt": "Copy Prompt",
+    "favorite": "Add to favorites",
+    "unfavorite": "Remove from favorites"
+  },
+  "toast": {
+    "operationFailed": "Operation failed",
+    "signIn": "Please sign in first",
+    "promptCopied": "✅ Prompt copied",
+    "promptCopiedDescription": "The prompt for “{name}” was copied to your clipboard",
+    "copyFailed": "❌ Copy failed",
+    "linkCopied": "✅ Link copied",
+    "linkCopiedDescription": "The share link was copied to your clipboard"
+  },
+  "detail": {
+    "videoPreview": "Video Preview",
+    "category": "Category",
+    "duration": "Recommended Duration",
+    "used": "Uses",
+    "usedValue": "{count} uses",
+    "scene": "Recommended Scene",
+    "general": "General",
+    "promptTemplate": "Prompt Template",
+    "copyPromptTitle": "Copy Prompt",
+    "scriptOutline": "Script Outline",
+    "recommendedConfig": "Recommended Settings",
+    "description": "Template Description",
+    "share": "Share template",
+    "close": "Close",
+    "play": "Play preview",
+    "pause": "Pause preview",
+    "configKeys": {
+      "duration": "Duration",
+      "aspect_ratio": "Aspect Ratio",
+      "model": "Model",
+      "scene": "Scene"
+    }
+  }
+}
