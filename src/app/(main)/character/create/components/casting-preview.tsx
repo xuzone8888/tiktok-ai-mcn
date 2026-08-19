@@ -11,9 +11,10 @@
 
 import { Images, ListChecks, Minimize2, ScanLine, Sparkles } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState, useCallback, useEffect, useMemo } from "react";
 import { useTranslations } from "next-intl";
+import { useState, useCallback, useEffect, useMemo } from "react";
 
+import { useLang } from "@/contexts/LangContext";
 import {
   useCharacterStudioStore,
   useCharacterGenerationStatus,
@@ -25,6 +26,7 @@ import { CharacterBoardSuccess } from "./character-board-success";
 
 export function CastingPreview() {
   const t = useTranslations("characterCreate");
+  const { lang } = useLang();
   const generationLogMessages = useMemo(
     () => Object.values(t.raw("casting.logs") as Record<string, string>),
     [t]
@@ -107,7 +109,9 @@ export function CastingPreview() {
 
         // 生成失败
         if (task.status === "failed") {
-          store.setGenerationFailed(t("errors.render"));
+          store.setGenerationFailed(
+            lang === "zh" && task.errorMessage ? task.errorMessage : t("errors.render")
+          );
           return;
         }
 
@@ -137,7 +141,7 @@ export function CastingPreview() {
     return () => {
       isPolling = false;
     };
-  }, [generationStatus, store.heroTaskId, store.forgeMode, store, t]);
+  }, [generationStatus, lang, store.heroTaskId, store.forgeMode, store, t]);
 
   // ====== Sora2 视频生成轮询 ======
   useEffect(() => {
@@ -175,7 +179,9 @@ export function CastingPreview() {
         }
 
         if (task.status === "failed") {
-          store.setGenerationFailed(t("errors.soraVideo"));
+          store.setGenerationFailed(
+            lang === "zh" && task.errorMessage ? task.errorMessage : t("errors.soraVideo")
+          );
           return;
         }
 
@@ -199,7 +205,7 @@ export function CastingPreview() {
 
     pollSora2();
     return () => { isPolling = false; };
-  }, [generationStatus, store.heroTaskId, store.forgeMode, store, t]);
+  }, [generationStatus, lang, store.heroTaskId, store.forgeMode, store, t]);
   // ===================================
 
   // ====== 保存角色（通用内部函数）======

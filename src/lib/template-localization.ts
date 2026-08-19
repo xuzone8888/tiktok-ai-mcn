@@ -138,6 +138,7 @@ export function localizeTemplate(template: ContentTemplate, lang: "zh" | "en"): 
     ...template,
     name,
     description,
+    script_outline: copy?.outline || template.script_outline,
     style_tags: template.style_tags.map((tag, index) =>
       ENGLISH_TAGS[tag] || (containsChinese(tag) ? `Style ${index + 1}` : tag)
     ),

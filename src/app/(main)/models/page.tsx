@@ -997,6 +997,7 @@ export default function ModelsPage() {
   const [routeReady, setRouteReady] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string>("全部");
   const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
   const [selectedModel, setSelectedModel] = useState<PublicModel | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [hireDialogOpen, setHireDialogOpen] = useState(false);
@@ -1012,6 +1013,14 @@ export default function ModelsPage() {
     }
     setRouteReady(true);
   }, []);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery);
+    }, 300);
+
+    return () => window.clearTimeout(timer);
+  }, [searchQuery]);
 
   useEffect(() => {
     const href = "https://media.toryxai.com";
@@ -1047,7 +1056,7 @@ export default function ModelsPage() {
     fetchSeqRef.current = requestSeq;
     setLoading(true);
     try {
-      const normalizedSearch = searchQuery.trim();
+      const normalizedSearch = debouncedSearchQuery.trim();
       const isEnglishDisplaySearch = displayLang === "en" && normalizedSearch.length >= 2;
       const result = await getMarketplaceModels({
         category: selectedCategory,
@@ -1093,7 +1102,7 @@ export default function ModelsPage() {
         setLoading(false);
       }
     }
-  }, [common, displayLang, lang, routeReady, searchQuery, selectedCategory, toast, tr]);
+  }, [common, debouncedSearchQuery, displayLang, lang, routeReady, selectedCategory, toast, tr]);
 
   const loadMoreModels = useCallback(async () => {
     if (!routeReady || loadingMore || !hasMoreModels) return;
@@ -1102,7 +1111,7 @@ export default function ModelsPage() {
       const result = await getMarketplaceModels({
         category: selectedCategory,
         mine: selectedCategory === "我的角色",
-        search: searchQuery.trim().length >= 2 ? searchQuery.trim() : undefined,
+        search: debouncedSearchQuery.trim().length >= 2 ? debouncedSearchQuery.trim() : undefined,
         limit: MARKETPLACE_PAGE_SIZE,
         offset: models.length,
         shuffleSeed: shuffleSeedRef.current,
@@ -1133,7 +1142,7 @@ export default function ModelsPage() {
     } finally {
       setLoadingMore(false);
     }
-  }, [common, hasMoreModels, lang, loadingMore, models.length, routeReady, searchQuery, selectedCategory, toast, tr]);
+  }, [common, debouncedSearchQuery, hasMoreModels, lang, loadingMore, models.length, routeReady, selectedCategory, toast, tr]);
 
   useEffect(() => {
     if (!routeReady) return;
@@ -1159,8 +1168,8 @@ export default function ModelsPage() {
   }, [hasMoreModels, loadMoreModels, loading, loadingMore, routeReady]);
 
   const filteredModels = useMemo(() => {
-    if (searchQuery.trim().length < 2) return models;
-    const query = searchQuery.trim().toLowerCase();
+    if (debouncedSearchQuery.trim().length < 2) return models;
+    const query = debouncedSearchQuery.trim().toLowerCase();
     return models.filter((model) => {
       const searchableValues = [
         model.name,
@@ -1173,10 +1182,10 @@ export default function ModelsPage() {
 
       return searchableValues.some((value) => value?.toLowerCase().includes(query));
     });
-  }, [categoryLabels, displayLang, models, searchQuery]);
+  }, [categoryLabels, debouncedSearchQuery, displayLang, models]);
 
   const hasFilters = selectedCategory !== "全部" || searchQuery.trim().length > 0;
-  const totalModelCount = searchQuery.trim().length >= 2
+  const totalModelCount = debouncedSearchQuery.trim().length >= 2 && displayLang === "en"
     ? filteredModels.length
     : Math.max(totalModels, filteredModels.length);
   const selectedModelSampleImages = useMemo(() => {
