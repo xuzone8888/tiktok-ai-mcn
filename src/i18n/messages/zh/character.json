@@ -1,0 +1,107 @@
+{
+  "assetCenter": {
+    "title": "角色资产中心",
+    "description": "创建、授权、发布并在单图、多图、视频中引用同一套角色资产。",
+    "create": "创建角色",
+    "searchPlaceholder": "搜索角色名、标签或分类",
+    "assetCount": "{count} 个角色资产",
+    "ownedCount": "{count} 个自建角色",
+    "licensedCount": "{count} 个已授权",
+    "loadMore": "加载中"
+  },
+  "categories": {
+    "全部": "全部",
+    "现代都市": "现代都市",
+    "古风玄幻": "古风玄幻",
+    "漫剧动画": "漫剧动画",
+    "奇幻科幻": "奇幻科幻",
+    "萌宠/IP": "萌宠/IP",
+    "我的角色": "我的角色"
+  },
+  "ownership": {
+    "owned": "自建",
+    "licensed": "已拥有",
+    "community": "社区",
+    "official": "官方",
+    "available": "已拥有，可直接引用"
+  },
+  "empty": {
+    "filteredTitle": "没有找到匹配角色",
+    "title": "暂无角色资产",
+    "filteredDescription": "换一个分类或关键词再试试。",
+    "description": "创建角色后会在这里统一管理。"
+  },
+  "gallery": {
+    "preview": "预览{modelName}{label}",
+    "sheet": "设定板",
+    "cover": "竖封面",
+    "reference": "参考图",
+    "video": "视频",
+    "fullSheet": "完整多角度设定板",
+    "fullSheetDescription": "用于单图、多图和视频保持角色一致性",
+    "sheetLoading": "设定板准备中",
+    "thumbnails": "资产缩略图",
+    "referenceImageCount": "{count} 张可引用图片",
+    "transformationVideo": "角色转换视频"
+  },
+  "detail": {
+    "summary": "角色摘要",
+    "assetStatus": "资产状态",
+    "description": "角色描述",
+    "authorize": "授权引用",
+    "generateImage": "去生图",
+    "authorizeForImage": "授权后生图",
+    "generateVideo": "去生成视频",
+    "authorizeForVideo": "授权后视频",
+    "unpublish": "下架角色",
+    "publish": "发布到市场"
+  },
+  "hire": {
+    "title": "授权引用 {name}",
+    "description": "确认积分价格后即可在创作中引用该角色",
+    "signIn": "请先登录后再进行签约",
+    "alreadyError": "该角色已在您的团队中",
+    "insufficientError": "余额不足",
+    "contractFailed": "签约失败，请重试",
+    "networkError": "网络错误，请重试",
+    "successTitle": "授权成功！🎉",
+    "successDescription": "{name} 已加入您的创作团队",
+    "remainingBalance": "剩余积分：{count}",
+    "alreadyTitle": "已在团队中",
+    "selectAnother": "选择其他角色",
+    "goToTeam": "查看我的角色",
+    "transactionFailed": "交易失败",
+    "tryAgain": "重试",
+    "selectPeriod": "选择授权周期",
+    "periods": {
+      "daily": "1 天",
+      "weekly": "7 天",
+      "monthly": "30 天",
+      "yearly": "365 天"
+    },
+    "discounts": {
+      "weekly": "节省 17%",
+      "monthly": "最划算",
+      "yearly": "节省 17%"
+    },
+    "credits": "积分",
+    "yourBalance": "您的余额",
+    "duration": "授权周期",
+    "days": "{count} 天",
+    "expiresOn": "到期日期",
+    "total": "总计",
+    "insufficient": "余额不足，还需要 {count} 积分",
+    "balanceAfter": "支付后余额：{count} 积分",
+    "cancel": "取消",
+    "processing": "处理中...",
+    "confirm": "确认授权"
+  },
+  "notifications": {
+    "loadAssetsFailed": "无法获取角色资产",
+    "loadMoreFailed": "无法继续加载角色资产",
+    "authorized": "授权成功",
+    "authorizedDescription": "现在可以在单图、多图和视频中引用该角色。",
+    "published": "已发布",
+    "unpublished": "已下架"
+  }
+}

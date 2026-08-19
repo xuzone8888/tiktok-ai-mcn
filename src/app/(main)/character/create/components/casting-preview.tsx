@@ -11,8 +11,10 @@
 
 import { Images, ListChecks, Minimize2, ScanLine, Sparkles } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState, useCallback, useEffect } from "react";
+import { useTranslations } from "next-intl";
+import { useState, useCallback, useEffect, useMemo } from "react";
 
+import { useLang } from "@/contexts/LangContext";
 import {
   useCharacterStudioStore,
   useCharacterGenerationStatus,
@@ -22,18 +24,13 @@ import {
 
 import { CharacterBoardSuccess } from "./character-board-success";
 
-const GENERATION_LOG_MESSAGES = [
-  "[INPUT] 解析角色描述与参考图...",
-  "[IMAGE] 构建竖封面构图...",
-  "[SHEET] 合成多角度角色设定板...",
-  "[FACE] 校准面部一致性...",
-  "[STYLE] 统一服装、发型与色彩...",
-  "[QUALITY] 检查边缘与主体完整度...",
-  "[ASSET] 整理可引用角色资产...",
-  "[READY] 等待模型返回最终结果...",
-];
-
 export function CastingPreview() {
+  const t = useTranslations("characterCreate");
+  const { lang } = useLang();
+  const generationLogMessages = useMemo(
+    () => Object.values(t.raw("casting.logs") as Record<string, string>),
+    [t]
+  );
   const router = useRouter();
   const store = useCharacterStudioStore();
   const generationStatus = useCharacterGenerationStatus();
@@ -53,7 +50,7 @@ export function CastingPreview() {
   const [fakeProgress, setFakeProgress] = useState(() =>
     generationStatus === "polling" ? 60 : 0
   );
-  const [terminalLog, setTerminalLog] = useState(GENERATION_LOG_MESSAGES[0]);
+  const [terminalLog, setTerminalLog] = useState(generationLogMessages[0]);
 
   // 当进入 generating 状态时，启动进度与日志轮询
   useEffect(() => {
@@ -69,8 +66,8 @@ export function CastingPreview() {
       
       let logIndex = 0;
       const logTimer = setInterval(() => {
-        logIndex = (logIndex + 1) % GENERATION_LOG_MESSAGES.length;
-        setTerminalLog(GENERATION_LOG_MESSAGES[logIndex]);
+        logIndex = (logIndex + 1) % generationLogMessages.length;
+        setTerminalLog(generationLogMessages[logIndex]);
       }, 1000);
 
       return () => {
@@ -79,9 +76,9 @@ export function CastingPreview() {
       };
     } else if (generationStatus === "completed") {
       setFakeProgress(100);
-      setTerminalLog("[SYS] 生成就绪");
+      setTerminalLog(t("casting.readyLog"));
     }
-  }, [generationStatus]);
+  }, [generationLogMessages, generationStatus, t]);
 
   // ====== 真实 API 任务轮询机制（VEO 专用）======
   useEffect(() => {
@@ -99,7 +96,7 @@ export function CastingPreview() {
         const data = await res.json();
 
         if (!data.success || !data.task) {
-          throw new Error(data.error || "查询返回异常");
+          throw new Error(data.error || t("errors.query"));
         }
 
         const task = data.task;
@@ -112,14 +109,16 @@ export function CastingPreview() {
 
         // 生成失败
         if (task.status === "failed") {
-          store.setGenerationFailed(task.errorMessage || "模型渲染异常");
+          store.setGenerationFailed(
+            lang === "zh" && task.errorMessage ? task.errorMessage : t("errors.render")
+          );
           return;
         }
 
         // 继续轮询
         pollCount++;
         if (pollCount >= MAX_POLLS) {
-          store.setGenerationFailed("生成超时，请稍后再试");
+          store.setGenerationFailed(t("errors.timeout"));
           return;
         }
 
@@ -130,7 +129,7 @@ export function CastingPreview() {
         console.error("[Polling] Error:", err);
         pollCount++;
         if (pollCount >= MAX_POLLS) {
-          store.setGenerationFailed("网络连接断开，请重试");
+          store.setGenerationFailed(t("errors.disconnected"));
         } else if (isPolling) {
           setTimeout(pollTask, 3000); // 发生错误也稍后再试，可能只是网络波动
         }
@@ -142,7 +141,7 @@ export function CastingPreview() {
     return () => {
       isPolling = false;
     };
-  }, [generationStatus, store.heroTaskId, store.forgeMode, store]);
+  }, [generationStatus, lang, store.heroTaskId, store.forgeMode, store, t]);
 
   // ====== Sora2 视频生成轮询 ======
   useEffect(() => {
@@ -164,7 +163,7 @@ export function CastingPreview() {
           console.warn("[Sora2-Poll] No data in response:", json);
           pollCount++;
           if (pollCount >= MAX_POLLS) {
-            store.setGenerationFailed("视频生成超时，请稍后重试");
+            store.setGenerationFailed(t("errors.videoTimeout"));
           } else if (isPolling) {
             setTimeout(pollSora2, 3000);
           }
@@ -180,13 +179,15 @@ export function CastingPreview() {
         }
 
         if (task.status === "failed") {
-          store.setGenerationFailed(task.errorMessage || "Sora2 视频生成失败");
+          store.setGenerationFailed(
+            lang === "zh" && task.errorMessage ? task.errorMessage : t("errors.soraVideo")
+          );
           return;
         }
 
         pollCount++;
         if (pollCount >= MAX_POLLS) {
-          store.setGenerationFailed("视频生成超时，请稍后重试");
+          store.setGenerationFailed(t("errors.videoTimeout"));
           return;
         }
 
@@ -195,7 +196,7 @@ export function CastingPreview() {
         console.error("[Sora2-Poll] Error:", err);
         pollCount++;
         if (pollCount >= MAX_POLLS) {
-          store.setGenerationFailed("网络连接断开，请重试");
+          store.setGenerationFailed(t("errors.disconnected"));
         } else if (isPolling) {
           setTimeout(pollSora2, 3000);
         }
@@ -204,7 +205,7 @@ export function CastingPreview() {
 
     pollSora2();
     return () => { isPolling = false; };
-  }, [generationStatus, store.heroTaskId, store.forgeMode, store]);
+  }, [generationStatus, lang, store.heroTaskId, store.forgeMode, store, t]);
   // ===================================
 
   // ====== 保存角色（通用内部函数）======
@@ -216,15 +217,15 @@ export function CastingPreview() {
     );
 
     if (!store.characterName.trim()) {
-      alert("请先输入角色名称");
+      alert(t("errors.nameRequired"));
       return null;
     }
     if (!boardUrl) {
-      alert("角色设定板尚未生成完成");
+      alert(t("errors.boardIncomplete"));
       return null;
     }
     if (!store.userId) {
-      alert("请先登录");
+      alert(t("errors.signIn"));
       return null;
     }
 
@@ -260,7 +261,7 @@ export function CastingPreview() {
 
     const data = await response.json();
     if (!data.success) {
-      alert(`保存失败: ${data.error}`);
+      alert(t("errors.save"));
       return null;
     }
 
@@ -271,15 +272,15 @@ export function CastingPreview() {
   // ====== Sora2 角色保存 ======
   const doSaveSora2Character = async (): Promise<string | null> => {
     if (!store.characterName.trim()) {
-      alert("请先输入角色名称");
+      alert(t("errors.nameRequired"));
       return null;
     }
     if (!store.sora2Pid) {
-      alert("角色 PID 尚未提取完成，请稍候");
+      alert(t("errors.pidIncomplete"));
       return null;
     }
     if (!store.userId) {
-      alert("请先登录");
+      alert(t("errors.signIn"));
       return null;
     }
 
@@ -308,7 +309,7 @@ export function CastingPreview() {
 
     const data = await response.json();
     if (!data.success) {
-      alert(`保存失败: ${data.error}`);
+      alert(t("errors.save"));
       return null;
     }
 
@@ -332,7 +333,7 @@ export function CastingPreview() {
       router.push("/models?tab=my");
     } catch (error) {
       console.error("[SaveOnly] Error:", error);
-      alert("保存失败，请重试");
+      alert(t("errors.save"));
     } finally {
       store.setIsSaving(false);
     }
@@ -365,15 +366,15 @@ export function CastingPreview() {
 
   const progressValue = Math.min(99, Math.max(6, fakeProgress));
   const isVideoForge = store.forgeMode === "sora2";
-  const generationTitle = isVideoForge ? "正在生成角色视频预览" : "正在生成完整角色资产";
+  const generationTitle = isVideoForge ? t("casting.titleVideo") : t("casting.titlePhoto");
   const generationDescription = isVideoForge
-    ? "模型正在把角色描述转换成可预览的视频资产。完成后可继续保存和进入角色市场。"
-    : "模型正在同时产出竖封面、完整多角度设定板和可引用参考图，完成后你可以决定是否保存。";
+    ? t("casting.descriptionVideo")
+    : t("casting.descriptionPhoto");
   const pipelineSteps = [
-    { label: "解析角色", detail: "提示词与参考图校准", threshold: 8 },
-    { label: "生成封面", detail: "竖向展示图构图", threshold: 28 },
-    { label: isVideoForge ? "生成视频" : "合成设定板", detail: isVideoForge ? "视频角色一致性" : "多角度一致性", threshold: 54 },
-    { label: "质量检查", detail: "主体完整度与可引用资产", threshold: 78 },
+    { label: t("casting.parse"), detail: t("casting.parseDetail"), threshold: 8 },
+    { label: t("casting.cover"), detail: t("casting.coverDetail"), threshold: 28 },
+    { label: isVideoForge ? t("casting.video") : t("casting.sheet"), detail: isVideoForge ? t("casting.videoDetail") : t("casting.sheetDetail"), threshold: 54 },
+    { label: t("casting.quality"), detail: t("casting.qualityDetail"), threshold: 78 },
   ];
 
   return (
@@ -385,8 +386,8 @@ export function CastingPreview() {
           <div className="idle-icon">
             <div className="dna-helix">🧬</div>
           </div>
-          <p className="idle-text">等待创建角色资产...</p>
-          <p className="idle-hint">输入描述、上传参考图或选择 DNA 预设，然后点击生成</p>
+          <p className="idle-text">{t("casting.waiting")}</p>
+          <p className="idle-hint">{t("casting.waitingHint")}</p>
         </div>
       )}
 
@@ -399,7 +400,7 @@ export function CastingPreview() {
               <div>
                 <div className="gen-kicker">
                   <Sparkles size={16} />
-                  角色资产流水线
+                  {t("casting.pipeline")}
                 </div>
                 <h1>{generationTitle}</h1>
                 <p>{generationDescription}</p>
@@ -410,7 +411,7 @@ export function CastingPreview() {
                 className="gen-minimize-button"
               >
                 <Minimize2 size={15} />
-                收起到后台
+                {t("casting.minimize")}
               </button>
             </div>
 
@@ -419,7 +420,7 @@ export function CastingPreview() {
                 <div className="gen-status-head">
                   <span className="gen-live-pill">
                     <span className="status-dot" />
-                    {generationStatus === "polling" ? "模型处理中" : "任务启动中"}
+                    {generationStatus === "polling" ? t("casting.processing") : t("casting.starting")}
                   </span>
                   <span className="gen-percent tabular-nums">{progressValue}%</span>
                 </div>
@@ -432,10 +433,10 @@ export function CastingPreview() {
                 </div>
               </section>
 
-              <section className="gen-preview-card" aria-label="角色资产生成预览">
+              <section className="gen-preview-card" aria-label={t("casting.previewLabel")}>
                 <div className="gen-preview-cover">
                   <Images size={22} />
-                  <span>竖封面</span>
+                  <span>{t("casting.portraitCover")}</span>
                 </div>
                 <div className="gen-preview-sheet">
                   {Array.from({ length: 6 }).map((_, index) => (
@@ -444,7 +445,7 @@ export function CastingPreview() {
                 </div>
                 <div className="gen-preview-caption">
                   <ListChecks size={15} />
-                  生成完成后进入保存确认
+                  {t("casting.saveAfter")}
                 </div>
               </section>
             </div>
@@ -478,16 +479,16 @@ export function CastingPreview() {
             style={{ position: "absolute", top: 24, left: 24, zIndex: 10 }}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/></svg>
-            返回配置
+            {t("casting.back")}
           </button>
           <div className="failed-icon">❌</div>
-          <p className="failed-text">{store.errorMessage || "生成失败"}</p>
+          <p className="failed-text">{store.errorMessage || t("casting.failed")}</p>
           <button
             className="retry-btn"
             onClick={() => store.startGeneration()}
             type="button"
           >
-            🔄 重试
+            {t("casting.retry")}
           </button>
         </div>
       )}
@@ -522,7 +523,7 @@ export function CastingPreview() {
             type="button"
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/></svg>
-            重新配置
+            {t("casting.reconfigure")}
           </button>
 
           <div className="hero-card-stage">
@@ -554,7 +555,7 @@ export function CastingPreview() {
                       // 先缓存视频 URL — 防止异步过程中 store 状态被清空
                       const videoUrl = store.sora2VideoUrl;
                       if (!videoUrl) {
-                        alert("视频 URL 丢失，请重新铸造角色");
+                        alert(t("casting.videoMissing"));
                         return;
                       }
                       setSora2Confirming(true);
@@ -611,14 +612,14 @@ export function CastingPreview() {
                               if (data.status === "failed") {
                                 setSora2Confirming(false);
                                 setSora2ConfirmStep("error");
-                                setSora2PidError(data.error || "提取失败，请重试");
+                                setSora2PidError(t("errors.pidExtract"));
                                 return;
                               }
                               pidPollCount++;
                               if (pidPollCount >= MAX_PID_POLLS) {
                                 setSora2Confirming(false);
                                 setSora2ConfirmStep("error");
-                                setSora2PidError("提取超时（服务繁忙），请点击重试");
+                                setSora2PidError(t("errors.pidTimeout"));
                                 return;
                               }
                               setTimeout(pollPid, 3000);
@@ -630,19 +631,19 @@ export function CastingPreview() {
                           pollPid();
                         } else {
                           setSora2ConfirmStep("error");
-                          setSora2PidError(pidResult.error || "提交失败，请重试");
+                          setSora2PidError(t("errors.pidSubmit"));
                           setSora2Confirming(false);
                         }
                       } catch (error) {
                         console.error("[Sora2-Confirm] Error:", error);
-                        alert("确认角色失败，请重试");
+                        alert(t("casting.confirmFailed"));
                         setSora2Confirming(false);
                         setSora2ConfirmStep("");
                       }
                     }}
                     type="button"
                   >
-                    ✅ 确认角色
+                    {t("casting.confirm")}
                   </button>
                   <button
                     className="hero-btn"
@@ -653,7 +654,7 @@ export function CastingPreview() {
                     type="button"
                     style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.15)", color: "rgba(255,255,255,0.7)" }}
                   >
-                    🔄 重新铸造
+                    {t("casting.recast")}
                   </button>
                 </>
               )}
@@ -662,8 +663,8 @@ export function CastingPreview() {
                 <div style={{ textAlign: "center", color: "rgba(255,255,255,0.7)", fontSize: 14 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "center", marginBottom: 8 }}>
                     <span style={{ width: 10, height: 10, borderRadius: "50%", background: "#a855f7", boxShadow: "0 0 8px #a855f7", animation: "dotBlink 1.5s ease-in-out infinite", display: "inline-block" }} />
-                    {sora2ConfirmStep === "oss" && "正在转存视频到永久存储..."}
-                    {sora2ConfirmStep === "pid" && "正在提取角色特征编码...(可能需要数分钟)"}
+                    {sora2ConfirmStep === "oss" && t("casting.transferring")}
+                    {sora2ConfirmStep === "pid" && t("casting.extracting")}
                   </div>
                 </div>
               )}
@@ -683,7 +684,7 @@ export function CastingPreview() {
                     type="button"
                     style={{ fontSize: 14 }}
                   >
-                    🔄 重新提取 PID
+                    {t("casting.retryPid")}
                   </button>
                 </div>
               )}
@@ -694,7 +695,7 @@ export function CastingPreview() {
                   onClick={() => setShowSavePanel(true)}
                   type="button"
                 >
-                  ✦ 保存角色 (PID: {store.sora2Pid.substring(0, 15)}...)
+                  ✦ {t("casting.saveCharacter")} (PID: {store.sora2Pid.substring(0, 15)}...)
                 </button>
               )}
             </div>
@@ -712,7 +713,7 @@ export function CastingPreview() {
             type="button"
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/></svg>
-            返回预览
+            {t("casting.backPreview")}
           </button>
 
           {/* 全屏沉浸英雄图层 */}
@@ -735,11 +736,11 @@ export function CastingPreview() {
             <div className="console-glow-dot"></div>
 
             <div className="console-section">
-              <label className="console-label">角色名称 <span className="text-[#00F2EA]">*</span></label>
+              <label className="console-label">{t("casting.characterName")} <span className="text-[#00F2EA]">*</span></label>
               <input 
                 type="text" 
                 className="mer-input" 
-                placeholder="请输入角色名称" 
+                placeholder={t("casting.namePlaceholder")}
                 value={store.characterName}
                 onChange={(e) => store.setCharacterName(e.target.value)}
                 maxLength={50}
@@ -747,7 +748,7 @@ export function CastingPreview() {
             </div>
 
             <div className="console-section" style={{ marginBottom: "1.5rem" }}>
-              <label className="console-label">核心风格序列</label>
+              <label className="console-label">{t("casting.styleTags")}</label>
               <div className="pill-group">
                 {store.characterTags.length > 0 ? (
                   store.characterTags.map((tag) => (
@@ -766,14 +767,14 @@ export function CastingPreview() {
                     </span>
                   ))
                 ) : (
-                  <span className="text-white/40 text-xs">暂无风格标签</span>
+                  <span className="text-white/40 text-xs">{t("casting.noTags")}</span>
                 )}
                 
                 <div style={{ display: 'flex', gap: '8px', width: '100%', marginTop: '8px' }}>
                   <input
                     type="text"
                     className="tag-input-ghost"
-                    placeholder="添加标签..."
+                    placeholder={t("casting.tagPlaceholder")}
                     value={tagInput}
                     onChange={(e) => setTagInput(e.target.value)}
                     onKeyDown={(e) => e.key === "Enter" && handleAddTag()}
@@ -785,7 +786,7 @@ export function CastingPreview() {
                     disabled={!tagInput.trim()}
                     type="button"
                   >
-                    添加
+                    {t("casting.addTag")}
                   </button>
                 </div>
               </div>
@@ -797,10 +798,10 @@ export function CastingPreview() {
               <>
                 <div className="btn-save" style={{ opacity: 1, cursor: 'default', background: 'linear-gradient(135deg, rgba(0, 200, 83, 0.15), rgba(0, 200, 83, 0.08))', borderColor: 'rgba(0, 200, 83, 0.4)' }}>
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#00c853" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '8px' }}><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-                  角色已保存
+                  {t("casting.saved")}
                 </div>
                 <div className="helper-text" style={{ marginBottom: '0.5rem' }}>
-                  <a href="/models?tab=my" style={{ color: 'rgba(0, 242, 234, 0.8)', textDecoration: 'none', fontSize: '0.75rem' }}>查看角色资产中心 →</a>
+                  <a href="/models?tab=my" style={{ color: 'rgba(0, 242, 234, 0.8)', textDecoration: 'none', fontSize: '0.75rem' }}>{t("casting.viewAssets")}</a>
                 </div>
               </>
             ) : (
@@ -813,15 +814,15 @@ export function CastingPreview() {
                   type="button"
                 >
                   {store.isSaving ? (
-                    <><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '8px', animation: 'spin 2s linear infinite' }}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> 保存中...</>
+                    <><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '8px', animation: 'spin 2s linear infinite' }}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> {t("casting.saving")}</>
                   ) : store.sora2Pid ? (
-                    <><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '8px' }}><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg> 保存角色</>
+                    <><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '8px' }}><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg> {t("casting.saveCharacter")}</>
                   ) : (
-                    <><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '8px', animation: 'spin 2s linear infinite' }}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> 角色编码确认中...</>
+                    <><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '8px', animation: 'spin 2s linear infinite' }}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> {t("casting.encoding")}</>
                   )}
                 </button>
                 <div className="helper-text">
-                  保存后可在「角色市场」的我的角色中继续使用
+                  {t("casting.savedHint")}
                 </div>
               </>
             )}

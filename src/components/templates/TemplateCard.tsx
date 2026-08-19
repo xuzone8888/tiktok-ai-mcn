@@ -2,7 +2,8 @@
 
 import { useRef, useState } from 'react'
 import { Heart } from 'lucide-react'
-import { CATEGORY_LABELS, type ContentTemplate } from '@/types/content-template'
+import type { ContentTemplate, TemplateCategory } from '@/types/content-template'
+import { useTranslations } from 'next-intl'
 
 interface TemplateCardProps {
   template: ContentTemplate
@@ -19,6 +20,8 @@ export function TemplateCard({
   onCopyPrompt,
   onClick,
 }: TemplateCardProps) {
+  const t = useTranslations('templates')
+  const categoryLabels = t.raw('categories') as Record<TemplateCategory, string>
   const videoRef = useRef<HTMLVideoElement>(null)
   const [isHovered, setIsHovered] = useState(false)
 
@@ -77,6 +80,8 @@ export function TemplateCard({
             e.stopPropagation()
             onToggleFavorite(template.id)
           }}
+          aria-label={t(isFavorited ? 'card.unfavorite' : 'card.favorite')}
+          title={t(isFavorited ? 'card.unfavorite' : 'card.favorite')}
           className="absolute top-4 right-4 p-2 rounded-full bg-black/40 backdrop-blur-md border border-white/10 text-white/60 hover:text-pink-400 transition-colors z-10"
         >
           <Heart
@@ -92,17 +97,17 @@ export function TemplateCard({
           <div className="flex items-center gap-2 mb-2">
             {/* 分类标签 */}
             <span className="text-[10px] text-[#00F2EA] bg-[#00F2EA]/10 px-2 py-0.5 rounded border border-[#00F2EA]/20 font-medium">
-              {CATEGORY_LABELS[template.category]}
+              {categoryLabels[template.category]}
             </span>
             {/* Featured 标记 */}
             {template.is_featured && (
               <span className="text-[10px] text-[#c3f400] bg-[#c3f400]/10 px-2 py-0.5 rounded border border-[#c3f400]/20 font-medium">
-                TRENDING
+                {t('card.trending')}
               </span>
             )}
             {/* 使用次数 */}
             <span className="font-mono text-[10px] text-white/40 uppercase tracking-widest">
-              {formatUsageCount(template.usage_count)} Uses
+              {t('card.uses', { count: formatUsageCount(template.usage_count) })}
             </span>
           </div>
           <h3 className="text-xl font-bold tracking-tight text-white">
@@ -120,7 +125,7 @@ export function TemplateCard({
           }}
           className="w-full mermaid-gradient shimmer-sweep py-3 rounded text-black font-black text-xs uppercase tracking-[0.2em] shadow-xl hover:opacity-95 active:scale-[0.98] transition-all"
         >
-          Copy Prompt
+          {t('card.copyPrompt')}
         </button>
       </div>
     </article>

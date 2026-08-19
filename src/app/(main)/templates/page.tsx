@@ -10,13 +10,14 @@
  * 浏览区——prompt 复制/收藏不动,旧链接不断。
  */
 
-import { useState, useEffect, useCallback, useMemo } from 'react'
-import { useRouter } from 'next/navigation'
 import { Loader2, Pencil, Play, Trash2 } from 'lucide-react'
-import { TemplateFilters } from '@/components/templates/TemplateFilters'
+import { useRouter } from 'next/navigation'
+import { useFormatter, useTranslations } from 'next-intl'
+import { useState, useEffect, useCallback, useMemo } from 'react'
+
 import { TemplateCard } from '@/components/templates/TemplateCard'
 import { TemplateDetailDialog } from '@/components/templates/TemplateDetailDialog'
-import { Button } from '@/components/ui/button'
+import { TemplateFilters } from '@/components/templates/TemplateFilters'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -27,8 +28,11 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
+import { Button } from '@/components/ui/button'
+import { useLang } from '@/contexts/LangContext'
 import { useToast } from '@/hooks/use-toast'
 import { BUILTIN_RECIPES } from '@/lib/studio/recipes'
+import { localizeTemplate } from '@/lib/template-localization'
 import { cn } from '@/lib/utils'
 import type { ContentTemplate, TemplateCategory } from '@/types/content-template'
 
@@ -39,7 +43,9 @@ import type { ContentTemplate, TemplateCategory } from '@/types/content-template
 interface RecipeRow {
   id: string
   name: string
+  name_en?: string | null
   description?: string | null
+  description_en?: string | null
   scenes?: unknown[]
   hooks?: unknown[]
   render_mode?: string | null
@@ -48,16 +54,13 @@ interface RecipeRow {
   builtin?: boolean
 }
 
-const LEG_LABELS: Record<string, string> = {
-  slideshow: '幻灯片',
-  assembly: '拼装口播',
-  ai_gen: 'AI 生成',
-  photo_post: '图文帖',
-}
-
 function RecipeLibrary() {
   const router = useRouter()
   const { toast } = useToast()
+  const { lang } = useLang()
+  const t = useTranslations('templates')
+  const format = useFormatter()
+  const renderModeLabels = t.raw('recipes.renderModes') as Record<string, string>
   const [recipes, setRecipes] = useState<RecipeRow[]>([])
   const [dbReady, setDbReady] = useState(true)
   const [loading, setLoading] = useState(true)
@@ -87,7 +90,9 @@ function RecipeLibrary() {
       BUILTIN_RECIPES.map((r) => ({
         id: r.id,
         name: r.name,
+        name_en: r.name_en,
         description: r.description,
+        description_en: r.description_en,
         scenes: r.scenes,
         hooks: r.hooks,
         render_mode: r.render_mode,
@@ -96,7 +101,7 @@ function RecipeLibrary() {
     []
   )
 
-  const useRecipe = (id: string) => {
+  const openRecipe = (id: string) => {
     router.push(`/studio?recipe=${encodeURIComponent(id)}`)
   }
 
@@ -104,7 +109,7 @@ function RecipeLibrary() {
     if (!renaming) return
     const name = renameValue.trim()
     if (!name) {
-      toast({ title: '配方名不能为空', variant: 'destructive' })
+      toast({ title: t('recipes.nameRequired'), variant: 'destructive' })
       return
     }
     setBusy(true)
@@ -115,16 +120,16 @@ function RecipeLibrary() {
         body: JSON.stringify({ name }),
       })
       const result = await res.json()
-      if (!result.success) throw new Error(result.error || '重命名失败')
+      if (!result.success) throw new Error(result.error || t('recipes.renameFailed'))
       setRecipes((prev) => prev.map((r) => (r.id === renaming.id ? { ...r, name } : r)))
       // omnibox 配方下拉同步刷新(S3.5 既有事件)
       window.dispatchEvent(new Event('recipes-updated'))
       setRenaming(null)
-      toast({ title: '已重命名' })
+      toast({ title: t('recipes.renamed') })
     } catch (error) {
       toast({
-        title: '重命名失败',
-        description: error instanceof Error ? error.message : undefined,
+        title: t('recipes.renameFailed'),
+        description: lang === 'zh' && error instanceof Error ? error.message : undefined,
         variant: 'destructive',
       })
     } finally {
@@ -138,15 +143,15 @@ function RecipeLibrary() {
     try {
       const res = await fetch(`/api/studio/recipes/${deleting.id}`, { method: 'DELETE' })
       const result = await res.json()
-      if (!result.success) throw new Error(result.error || '删除失败')
+      if (!result.success) throw new Error(result.error || t('recipes.deleteFailed'))
       setRecipes((prev) => prev.filter((r) => r.id !== deleting.id))
       window.dispatchEvent(new Event('recipes-updated'))
       setDeleting(null)
-      toast({ title: '配方已删除' })
+      toast({ title: t('recipes.deleted') })
     } catch (error) {
       toast({
-        title: '删除失败',
-        description: error instanceof Error ? error.message : undefined,
+        title: t('recipes.deleteFailed'),
+        description: lang === 'zh' && error instanceof Error ? error.message : undefined,
         variant: 'destructive',
       })
     } finally {
@@ -156,7 +161,11 @@ function RecipeLibrary() {
 
   const renderCard = (recipe: RecipeRow) => {
     const sceneCount = Array.isArray(recipe.scenes) ? recipe.scenes.length : 0
-    const legLabel = recipe.render_mode ? LEG_LABELS[recipe.render_mode] : null
+    const legLabel = recipe.render_mode ? renderModeLabels[recipe.render_mode] : null
+    const displayName = lang === 'en' && recipe.name_en ? recipe.name_en : recipe.name
+    const displayDescription = lang === 'en' && recipe.description_en
+      ? recipe.description_en
+      : recipe.description
     return (
       <div
         key={recipe.id}
@@ -165,16 +174,16 @@ function RecipeLibrary() {
         <div className="mb-1 flex items-start justify-between gap-2">
           <h3 className="min-w-0 flex-1 truncate text-sm font-semibold text-white">
             {recipe.builtin ? '📐 ' : '📕 '}
-            {recipe.name}
+            {displayName}
           </h3>
           {recipe.builtin && (
             <span className="shrink-0 rounded border border-white/10 bg-white/5 px-1.5 py-0.5 text-[10px] text-zinc-500">
-              内置
+              {t('recipes.builtin')}
             </span>
           )}
         </div>
-        {recipe.description && (
-          <p className="mb-2 line-clamp-2 text-xs text-zinc-500">{recipe.description}</p>
+        {displayDescription && (
+          <p className="mb-2 line-clamp-2 text-xs text-zinc-500">{displayDescription}</p>
         )}
         <div className="mb-3 flex flex-wrap items-center gap-1.5 text-[11px] text-zinc-500">
           {legLabel && (
@@ -182,10 +191,16 @@ function RecipeLibrary() {
               {legLabel}
             </span>
           )}
-          <span>{sceneCount} 镜</span>
-          {typeof recipe.use_count === 'number' && <span>· 用过 {recipe.use_count} 次</span>}
+          <span>{t('recipes.sceneCount', { count: sceneCount })}</span>
+          {typeof recipe.use_count === 'number' && (
+            <span>· {t('recipes.useCount', { count: recipe.use_count })}</span>
+          )}
           {recipe.created_at && (
-            <span>· {new Date(recipe.created_at).toLocaleDateString('zh-CN')}</span>
+            <span>· {format.dateTime(new Date(recipe.created_at), {
+              year: 'numeric',
+              month: 'short',
+              day: 'numeric',
+            })}</span>
           )}
         </div>
         <div className="mt-auto flex items-center gap-1.5">
@@ -193,10 +208,10 @@ function RecipeLibrary() {
             size="sm"
             variant="outline"
             className="h-7 flex-1 gap-1 text-xs text-amber-400 hover:text-amber-300"
-            onClick={() => useRecipe(recipe.id)}
+            onClick={() => openRecipe(recipe.id)}
           >
             <Play className="h-3 w-3" />
-            去使用
+            {t('recipes.use')}
           </Button>
           {!recipe.builtin && (
             <>
@@ -204,7 +219,8 @@ function RecipeLibrary() {
                 size="sm"
                 variant="ghost"
                 className="h-7 px-2 text-zinc-500 hover:text-zinc-200"
-                title="重命名"
+                title={t('recipes.rename')}
+                aria-label={t('recipes.rename')}
                 onClick={() => {
                   setRenaming(recipe)
                   setRenameValue(recipe.name)
@@ -216,7 +232,8 @@ function RecipeLibrary() {
                 size="sm"
                 variant="ghost"
                 className="h-7 px-2 text-zinc-500 hover:text-red-400"
-                title="删除"
+                title={t('recipes.delete')}
+                aria-label={t('recipes.delete')}
                 onClick={() => setDeleting(recipe)}
               >
                 <Trash2 className="h-3 w-3" />
@@ -232,7 +249,7 @@ function RecipeLibrary() {
     <div>
       {!dbReady && (
         <p className="mb-4 rounded-lg border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
-          配方表迁移(20260703_recipes.sql)待执行——内置配方可正常使用,「存为配方」与用户配方在迁移执行后自动激活
+          {t('recipes.dbPending')}
         </p>
       )}
       {loading ? (
@@ -243,7 +260,7 @@ function RecipeLibrary() {
         <>
           {recipes.length === 0 && (
             <p className="mb-4 text-xs text-zinc-600">
-              还没有自建配方——在 /studio 出片后打开蓝图,点「存为配方」即可把爆款结构沉淀为可复用模板
+              {t('recipes.empty')}
             </p>
           )}
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
@@ -256,7 +273,7 @@ function RecipeLibrary() {
       <AlertDialog open={!!renaming} onOpenChange={(open) => !open && setRenaming(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>重命名配方</AlertDialogTitle>
+            <AlertDialogTitle>{t('recipes.renameTitle')}</AlertDialogTitle>
             <AlertDialogDescription asChild>
               <input
                 value={renameValue}
@@ -274,9 +291,9 @@ function RecipeLibrary() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={busy}>取消</AlertDialogCancel>
+            <AlertDialogCancel disabled={busy}>{t('recipes.cancel')}</AlertDialogCancel>
             <AlertDialogAction disabled={busy} onClick={() => void confirmRename()}>
-              保存
+              {t('recipes.save')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -286,15 +303,17 @@ function RecipeLibrary() {
       <AlertDialog open={!!deleting} onOpenChange={(open) => !open && setDeleting(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>删除配方「{deleting?.name}」?</AlertDialogTitle>
+            <AlertDialogTitle>
+              {t('recipes.deleteTitle', { name: deleting?.name || '' })}
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              删除后 omnibox 配方列表不再显示;已用该配方生成的蓝图与成片不受影响。
+              {t('recipes.deleteDescription')}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={busy}>取消</AlertDialogCancel>
+            <AlertDialogCancel disabled={busy}>{t('recipes.cancel')}</AlertDialogCancel>
             <AlertDialogAction disabled={busy} onClick={() => void confirmDelete()}>
-              删除
+              {t('recipes.delete')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -309,6 +328,8 @@ function RecipeLibrary() {
 
 function LegacyTemplates() {
   const { toast } = useToast()
+  const { lang } = useLang()
+  const t = useTranslations('templates')
   const [templates, setTemplates] = useState<ContentTemplate[]>([])
   const [favorites, setFavorites] = useState<string[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -345,8 +366,14 @@ function LegacyTemplates() {
     fetchFavorites()
   }, [])
 
+  const localizedTemplates = useMemo(
+    () => templates.map((template) => localizeTemplate(template, lang)),
+    [templates, lang]
+  )
+
+  // Client-side filtering
   const filteredTemplates = useMemo(() => {
-    let result = templates
+    let result = localizedTemplates
     if (selectedCategory) {
       result = result.filter((t) => t.category === selectedCategory)
     }
@@ -359,7 +386,12 @@ function LegacyTemplates() {
       )
     }
     return result
-  }, [templates, selectedCategory, searchQuery])
+  }, [localizedTemplates, selectedCategory, searchQuery])
+
+  const localizedSelectedTemplate = selectedTemplate
+    ? localizedTemplates.find((template) => template.id === selectedTemplate.id) ||
+      localizeTemplate(selectedTemplate, lang)
+    : null
 
   const handleToggleFavorite = useCallback(
     async (templateId: string) => {
@@ -377,22 +409,33 @@ function LegacyTemplates() {
           setFavorites((prev) =>
             isFav ? [...prev, templateId] : prev.filter((id) => id !== templateId)
           )
-          toast({ title: '操作失败', description: '请先登录', variant: 'destructive' })
+          toast({
+            title: t('toast.operationFailed'),
+            description: t('toast.signIn'),
+            variant: 'destructive',
+          })
         }
       } catch {
         setFavorites((prev) =>
           isFav ? [...prev, templateId] : prev.filter((id) => id !== templateId)
         )
+        toast({
+          title: t('toast.operationFailed'),
+          variant: 'destructive',
+        })
       }
     },
-    [favorites, toast]
+    [favorites, toast, t]
   )
 
   const handleCopyPrompt = useCallback(
     async (template: ContentTemplate) => {
       try {
         await navigator.clipboard.writeText(template.prompt_template)
-        toast({ title: '✅ Prompt 已复制', description: `"${template.name}" 的 Prompt 已复制到剪贴板` })
+        toast({
+          title: t('toast.promptCopied'),
+          description: t('toast.promptCopiedDescription', { name: template.name }),
+        })
         fetch(`/api/content-templates/${template.id}`, { method: 'PATCH' }).catch(() => {})
         setTemplates((prev) =>
           prev.map((t) =>
@@ -400,11 +443,45 @@ function LegacyTemplates() {
           )
         )
       } catch {
-        toast({ title: '❌ 复制失败', variant: 'destructive' })
+        toast({ title: t('toast.copyFailed'), variant: 'destructive' })
       }
     },
-    [toast]
+    [toast, t]
   )
+
+  const renderTemplateList = () => {
+    if (isLoading) {
+      return (
+        <div className="flex items-center justify-center h-64">
+          <div className="w-8 h-8 border-2 border-[#00F2EA] border-t-transparent rounded-full animate-spin" />
+        </div>
+      )
+    }
+
+    if (filteredTemplates.length === 0) {
+      return (
+        <div className="flex flex-col items-center justify-center h-64 gap-4 text-center">
+          <p className="text-white/40 text-lg">{t('page.empty')}</p>
+          <p className="text-white/20 text-sm">{t('page.emptyHint')}</p>
+        </div>
+      )
+    }
+
+    return (
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
+        {filteredTemplates.map((template) => (
+          <TemplateCard
+            key={template.id}
+            template={template}
+            isFavorited={favorites.includes(template.id)}
+            onToggleFavorite={handleToggleFavorite}
+            onCopyPrompt={handleCopyPrompt}
+            onClick={setSelectedTemplate}
+          />
+        ))}
+      </div>
+    )
+  }
 
   return (
     <div>
@@ -416,35 +493,13 @@ function LegacyTemplates() {
         totalCount={templates.length}
       />
 
-      {isLoading ? (
-        <div className="flex items-center justify-center h-64">
-          <div className="w-8 h-8 border-2 border-[#00F2EA] border-t-transparent rounded-full animate-spin" />
-        </div>
-      ) : filteredTemplates.length === 0 ? (
-        <div className="flex flex-col items-center justify-center h-64 gap-4 text-center">
-          <p className="text-white/40 text-lg">没有找到相关模板</p>
-          <p className="text-white/20 text-sm">试试其他分类或关键词</p>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
-          {filteredTemplates.map((template) => (
-            <TemplateCard
-              key={template.id}
-              template={template}
-              isFavorited={favorites.includes(template.id)}
-              onToggleFavorite={handleToggleFavorite}
-              onCopyPrompt={handleCopyPrompt}
-              onClick={setSelectedTemplate}
-            />
-          ))}
-        </div>
-      )}
+      {renderTemplateList()}
 
       <TemplateDetailDialog
-        template={selectedTemplate}
-        isOpen={!!selectedTemplate}
+        template={localizedSelectedTemplate}
+        isOpen={!!localizedSelectedTemplate}
         onClose={() => setSelectedTemplate(null)}
-        isFavorited={selectedTemplate ? favorites.includes(selectedTemplate.id) : false}
+        isFavorited={localizedSelectedTemplate ? favorites.includes(localizedSelectedTemplate.id) : false}
         onToggleFavorite={handleToggleFavorite}
         onCopyPrompt={handleCopyPrompt}
       />
@@ -458,6 +513,7 @@ function LegacyTemplates() {
 
 export default function RecipeLibraryPage() {
   const [tab, setTab] = useState<'recipes' | 'inspiration'>('recipes')
+  const t = useTranslations('templates')
 
   return (
     <div className="max-w-[1600px] mx-auto">
@@ -467,10 +523,10 @@ export default function RecipeLibraryPage() {
           <div className="mermaid-bar h-14 mr-6" />
           <div>
             <h1 className="text-4xl md:text-5xl font-black tracking-tighter uppercase mb-1 text-white">
-              配方库
+              {t('recipes.pageTitle')}
             </h1>
             <p className="text-white/50 text-xs tracking-widest uppercase">
-              爆款结构沉淀为可复用配方,一键实例化出片
+              {t('recipes.pageSubtitle')}
             </p>
           </div>
         </div>
@@ -480,8 +536,8 @@ export default function RecipeLibraryPage() {
       <div className="mb-6 flex items-center gap-1 border-b border-white/10">
         {(
           [
-            { key: 'recipes', label: '我的配方' },
-            { key: 'inspiration', label: '灵感模板' },
+            { key: 'recipes', label: t('recipes.tabs.mine') },
+            { key: 'inspiration', label: t('recipes.tabs.inspiration') },
           ] as const
         ).map((t) => (
           <button

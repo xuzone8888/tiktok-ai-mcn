@@ -35,7 +35,9 @@ export interface RecipeHook {
 export interface Recipe {
   id: string;
   name: string;
+  name_en?: string;
   description?: string;
+  description_en?: string;
   hooks: RecipeHook[];
   scenes: RecipeScene[];
   globals: Record<string, unknown>;
@@ -114,7 +116,9 @@ export const BUILTIN_RECIPES: Recipe[] = [
   {
     id: "seed-product-3beat",
     name: "三镜带货(钩子→卖点→转化)",
+    name_en: "Three-Shot Product Pitch (Hook → Benefit → Conversion)",
     description: "10 秒经典结构:强钩子开场→核心卖点演示→紧迫 CTA。幻灯片/拼装通用。",
+    description_en: "A classic 10-second structure with a strong hook, core benefit demo, and urgent CTA. Works for slideshows and assembled videos.",
     builtin: true,
     render_mode: "slideshow",
     hooks: [
@@ -152,7 +156,9 @@ export const BUILTIN_RECIPES: Recipe[] = [
   {
     id: "seed-oral-5beat",
     name: "口播种草(痛点→展开→演示→证明→转化)",
+    name_en: "Five-Beat Talking-Head Pitch (Pain → Detail → Demo → Proof → Conversion)",
     description: "15 秒口播结构:痛点共鸣开场,两段卖点铺陈,CTA 收尾。拼装口播腿最佳。",
+    description_en: "A 15-second talking-head structure with a relatable pain point, two benefit beats, and a closing CTA. Best for assembled presenter videos.",
     builtin: true,
     render_mode: "assembly",
     hooks: [
@@ -206,7 +212,9 @@ export const BUILTIN_RECIPES: Recipe[] = [
   {
     id: "seed-listicle",
     name: "清单体(3 个理由式)",
+    name_en: "Listicle (Three Reasons)",
     description: "轮播清单结构:开场设问 + 三个理由逐条展开 + CTA。图文感强,适合幻灯片。",
+    description_en: "A carousel list structure with an opening question, three reasons, and a CTA. Designed for visual slideshow content.",
     builtin: true,
     render_mode: "slideshow",
     hooks: [

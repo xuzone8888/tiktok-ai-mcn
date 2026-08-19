@@ -2,8 +2,9 @@
 
 import { useRef, useState, useEffect } from 'react'
 import { X, Heart, Share2, Copy, Play, Pause } from 'lucide-react'
-import { CATEGORY_LABELS, type ContentTemplate } from '@/types/content-template'
+import type { ContentTemplate, TemplateCategory } from '@/types/content-template'
 import { useToast } from '@/hooks/use-toast'
+import { useTranslations } from 'next-intl'
 
 interface TemplateDetailDialogProps {
   template: ContentTemplate | null
@@ -25,6 +26,9 @@ export function TemplateDetailDialog({
   const videoRef = useRef<HTMLVideoElement>(null)
   const [isPlaying, setIsPlaying] = useState(false)
   const { toast } = useToast()
+  const t = useTranslations('templates')
+  const categoryLabels = t.raw('categories') as Record<TemplateCategory, string>
+  const configKeyLabels = t.raw('detail.configKeys') as Record<string, string>
 
   // reset video state on template change
   useEffect(() => {
@@ -59,9 +63,12 @@ export function TemplateDetailDialog({
   const handleShare = async () => {
     try {
       await navigator.clipboard.writeText(window.location.origin + '/templates?id=' + template.id)
-      toast({ title: '✅ 链接已复制', description: '分享链接已复制到剪贴板' })
+      toast({
+        title: t('toast.linkCopied'),
+        description: t('toast.linkCopiedDescription'),
+      })
     } catch {
-      toast({ title: '❌ 复制失败', variant: 'destructive' })
+      toast({ title: t('toast.copyFailed'), variant: 'destructive' })
     }
   }
 
@@ -114,6 +121,8 @@ export function TemplateDetailDialog({
                 <div className="flex items-center gap-4">
                   <button
                     onClick={togglePlay}
+                    aria-label={t(isPlaying ? 'detail.pause' : 'detail.play')}
+                    title={t(isPlaying ? 'detail.pause' : 'detail.play')}
                     className="w-12 h-12 rounded-full bg-white/10 backdrop-blur-md flex items-center justify-center border border-white/20 hover:scale-110 transition-transform cursor-pointer"
                   >
                     {isPlaying ? (
@@ -124,7 +133,7 @@ export function TemplateDetailDialog({
                   </button>
                   <div>
                     <p className="text-xs text-white/60 tracking-widest uppercase font-medium">
-                      视频预览
+                      {t('detail.videoPreview')}
                     </p>
                     <p className="text-white font-bold tracking-tight">
                       {template.name}
@@ -150,11 +159,11 @@ export function TemplateDetailDialog({
                   </h1>
                   <div className="flex gap-3">
                     <span className="text-[10px] font-bold uppercase tracking-[0.2em] px-2 py-0.5 rounded-sm bg-[#00F2EA]/20 text-[#00F2EA] border border-[#00F2EA]/30">
-                      {CATEGORY_LABELS[template.category]}
+                      {categoryLabels[template.category]}
                     </span>
                     {template.is_featured && (
                       <span className="text-[10px] font-bold uppercase tracking-[0.2em] px-2 py-0.5 rounded-sm bg-[#c3f400]/20 text-[#c3f400] border border-[#c3f400]/30">
-                        TRENDING
+                        {t('card.trending')}
                       </span>
                     )}
                   </div>
@@ -164,26 +173,26 @@ export function TemplateDetailDialog({
               {/* Metadata Grid */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10">
                 <div className="bg-[#0B0C10] p-4 rounded-lg border border-white/5">
-                  <p className="text-[10px] text-white/50 uppercase tracking-widest mb-1">分类</p>
-                  <p className="text-sm text-white font-medium">{CATEGORY_LABELS[template.category]}</p>
+                  <p className="text-[10px] text-white/50 uppercase tracking-widest mb-1">{t('detail.category')}</p>
+                  <p className="text-sm text-white font-medium">{categoryLabels[template.category]}</p>
                 </div>
                 <div className="bg-[#0B0C10] p-4 rounded-lg border border-white/5">
-                  <p className="text-[10px] text-white/50 uppercase tracking-widest mb-1">推荐时长</p>
+                  <p className="text-[10px] text-white/50 uppercase tracking-widest mb-1">{t('detail.duration')}</p>
                   <p className="text-sm text-white font-medium">{config.duration || '15s'}</p>
                 </div>
                 <div className="bg-[#0B0C10] p-4 rounded-lg border border-white/5">
-                  <p className="text-[10px] text-white/50 uppercase tracking-widest mb-1">已使用</p>
-                  <p className="text-sm text-white font-medium">{formatUsageCount(template.usage_count)} 次</p>
+                  <p className="text-[10px] text-white/50 uppercase tracking-widest mb-1">{t('detail.used')}</p>
+                  <p className="text-sm text-white font-medium">{t('detail.usedValue', { count: formatUsageCount(template.usage_count) })}</p>
                 </div>
                 <div className="bg-[#0B0C10] p-4 rounded-lg border border-white/5">
-                  <p className="text-[10px] text-white/50 uppercase tracking-widest mb-1">推荐场景</p>
-                  <p className="text-sm text-white font-medium">{config.scene || '通用'}</p>
+                  <p className="text-[10px] text-white/50 uppercase tracking-widest mb-1">{t('detail.scene')}</p>
+                  <p className="text-sm text-white font-medium">{config.scene || t('detail.general')}</p>
                 </div>
               </div>
 
               {/* Prompt */}
               <div className="mb-8">
-                <h3 className="text-xs text-white/50 uppercase tracking-[0.3em] mb-4">Prompt 模板</h3>
+                <h3 className="text-xs text-white/50 uppercase tracking-[0.3em] mb-4">{t('detail.promptTemplate')}</h3>
                 <div className="relative group rounded-lg overflow-hidden border border-white/10 bg-[#0B0C10]">
                   <div className="p-4 min-h-[80px]">
                     <p className="text-sm leading-relaxed font-mono text-white/80 whitespace-pre-wrap">
@@ -193,7 +202,8 @@ export function TemplateDetailDialog({
                   <button
                     onClick={() => onCopyPrompt(template)}
                     className="absolute top-3 right-3 p-2 rounded-md bg-white/5 border border-white/10 text-white/60 hover:text-[#00F2EA] hover:border-[#00F2EA]/30 transition-all opacity-0 group-hover:opacity-100"
-                    title="复制 Prompt"
+                    title={t('detail.copyPromptTitle')}
+                    aria-label={t('detail.copyPromptTitle')}
                   >
                     <Copy className="w-4 h-4" />
                   </button>
@@ -203,7 +213,7 @@ export function TemplateDetailDialog({
               {/* Script Outline */}
               {outlineItems.length > 0 && (
                 <div className="mb-8">
-                  <h3 className="text-xs text-white/50 uppercase tracking-[0.3em] mb-4">脚本大纲</h3>
+                  <h3 className="text-xs text-white/50 uppercase tracking-[0.3em] mb-4">{t('detail.scriptOutline')}</h3>
                   <ol className="space-y-2">
                     {outlineItems.map((item, i) => (
                       <li key={i} className="flex items-start gap-3 text-sm text-white/70">
@@ -220,11 +230,11 @@ export function TemplateDetailDialog({
               {/* Recommended Config */}
               {configEntries.length > 0 && (
                 <div className="mb-8">
-                  <h3 className="text-xs text-white/50 uppercase tracking-[0.3em] mb-4">推荐配置</h3>
+                  <h3 className="text-xs text-white/50 uppercase tracking-[0.3em] mb-4">{t('detail.recommendedConfig')}</h3>
                   <div className="grid grid-cols-2 gap-3">
                     {configEntries.map(([key, value]) => (
                       <div key={key} className="flex items-center gap-2 text-sm">
-                        <span className="text-white/40 capitalize">{key}:</span>
+                        <span className="text-white/40 capitalize">{configKeyLabels[key] || key.replaceAll('_', ' ')}:</span>
                         <span className="text-white font-medium">{String(value)}</span>
                       </div>
                     ))}
@@ -235,7 +245,7 @@ export function TemplateDetailDialog({
               {/* Description */}
               {template.description && (
                 <div className="mb-10">
-                  <h3 className="text-xs text-white/50 uppercase tracking-[0.3em] mb-4">模板描述</h3>
+                  <h3 className="text-xs text-white/50 uppercase tracking-[0.3em] mb-4">{t('detail.description')}</h3>
                   <p className="text-white/60 leading-relaxed max-w-xl">
                     {template.description}
                   </p>
@@ -263,12 +273,14 @@ export function TemplateDetailDialog({
                 onClick={() => onCopyPrompt(template)}
                 className="w-full sm:flex-1 h-14 mermaid-glass-cta flex items-center justify-center gap-3 text-sm rounded-sm"
               >
-                <span>复制 Prompt</span>
+                <span>{t('card.copyPrompt')}</span>
                 <Copy className="w-5 h-5" />
               </button>
               <div className="flex gap-3 w-full sm:w-auto">
                 <button
                   onClick={() => onToggleFavorite(template.id)}
+                  aria-label={t(isFavorited ? 'card.unfavorite' : 'card.favorite')}
+                  title={t(isFavorited ? 'card.unfavorite' : 'card.favorite')}
                   className="h-14 w-14 flex items-center justify-center rounded-sm bg-white/5 border border-white/10 text-white/60 hover:text-pink-400 transition-all group"
                 >
                   <Heart
@@ -279,6 +291,8 @@ export function TemplateDetailDialog({
                 </button>
                 <button
                   onClick={handleShare}
+                  aria-label={t('detail.share')}
+                  title={t('detail.share')}
                   className="h-14 w-14 flex items-center justify-center rounded-sm bg-white/5 border border-white/10 text-white/60 hover:text-pink-400 transition-all group"
                 >
                   <Share2 className="w-5 h-5 transition-transform group-hover:rotate-12" />
@@ -290,6 +304,8 @@ export function TemplateDetailDialog({
           {/* Close Button */}
           <button
             onClick={onClose}
+            aria-label={t('detail.close')}
+            title={t('detail.close')}
             className="absolute top-6 right-6 z-20 w-10 h-10 flex items-center justify-center rounded-full bg-black/20 hover:bg-white/10 transition-all text-white/50 hover:text-white border border-transparent hover:border-white/10"
           >
             <X className="w-6 h-6" />

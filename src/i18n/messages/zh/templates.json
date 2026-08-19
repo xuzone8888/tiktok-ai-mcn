@@ -1,0 +1,94 @@
+{
+  "page": {
+    "title": "模板中心",
+    "subtitle": "发现灵感模板，一键激活创作",
+    "empty": "没有找到相关模板",
+    "emptyHint": "试试其他分类或关键词"
+  },
+  "recipes": {
+    "pageTitle": "配方库",
+    "pageSubtitle": "爆款结构沉淀为可复用配方，一键实例化出片",
+    "tabs": {
+      "mine": "我的配方",
+      "inspiration": "灵感模板"
+    },
+    "renderModes": {
+      "slideshow": "幻灯片",
+      "assembly": "拼装口播",
+      "ai_gen": "AI 生成",
+      "photo_post": "图文帖"
+    },
+    "builtin": "内置",
+    "sceneCount": "{count} 镜",
+    "useCount": "用过 {count} 次",
+    "use": "去使用",
+    "rename": "重命名",
+    "delete": "删除",
+    "dbPending": "配方表迁移（20260703_recipes.sql）待执行——内置配方可正常使用；“存为配方”与用户配方将在迁移执行后自动激活。",
+    "empty": "还没有自建配方——在 /studio 出片后打开蓝图，点击“存为配方”即可把爆款结构沉淀为可复用模板。",
+    "nameRequired": "配方名不能为空",
+    "renamed": "已重命名",
+    "renameFailed": "重命名失败",
+    "deleted": "配方已删除",
+    "deleteFailed": "删除失败",
+    "renameTitle": "重命名配方",
+    "cancel": "取消",
+    "save": "保存",
+    "deleteTitle": "删除配方“{name}”？",
+    "deleteDescription": "删除后 omnibox 配方列表不再显示；已用该配方生成的蓝图与成片不受影响。"
+  },
+  "filters": {
+    "templateCount": "{count} 个模板",
+    "categoryCount": "{count} 个类别",
+    "all": "全部模板",
+    "search": "搜索模板..."
+  },
+  "categories": {
+    "ecommerce": "电商带货",
+    "brand": "品牌营销",
+    "tutorial": "知识教程",
+    "lifestyle": "生活方式",
+    "creative": "创意内容",
+    "engagement": "互动引导"
+  },
+  "card": {
+    "trending": "热门",
+    "uses": "{count} 次使用",
+    "copyPrompt": "复制 Prompt",
+    "favorite": "收藏模板",
+    "unfavorite": "取消收藏模板"
+  },
+  "toast": {
+    "operationFailed": "操作失败",
+    "signIn": "请先登录",
+    "promptCopied": "✅ Prompt 已复制",
+    "promptCopiedDescription": "“{name}”的 Prompt 已复制到剪贴板",
+    "copyFailed": "❌ 复制失败",
+    "linkCopied": "✅ 链接已复制",
+    "linkCopiedDescription": "分享链接已复制到剪贴板"
+  },
+  "detail": {
+    "videoPreview": "视频预览",
+    "category": "分类",
+    "duration": "推荐时长",
+    "used": "已使用",
+    "usedValue": "{count} 次",
+    "scene": "推荐场景",
+    "general": "通用",
+    "promptTemplate": "Prompt 模板",
+    "copyPromptTitle": "复制 Prompt",
+    "scriptOutline": "脚本大纲",
+    "recommendedConfig": "推荐配置",
+    "description": "模板描述",
+    "share": "分享模板",
+    "close": "关闭",
+    "play": "播放预览",
+    "pause": "暂停预览",
+    "configKeys": {
+      "duration": "时长",
+      "aspect_ratio": "画面比例",
+      "model": "模型",
+      "scene": "场景"
+    }
+  }
+}

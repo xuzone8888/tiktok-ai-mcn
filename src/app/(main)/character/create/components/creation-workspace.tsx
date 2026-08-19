@@ -1,6 +1,8 @@
 "use client";
 
-import { useState, useCallback, useRef, useEffect, Fragment } from "react";
+import { useState, useCallback, useRef, useEffect, useMemo, Fragment } from "react";
+import { useTranslations } from "next-intl";
+import { useLang } from "@/contexts/LangContext";
 import {
   useCharacterStudioStore,
   useCharacterIsGenerating,
@@ -80,6 +82,8 @@ function TypewriterTextArea({ value, onChange, placeholders, className }: { valu
 }
 
 function GenerateButton({ store, isGenerating, handleGenerate }: { store: any, isGenerating: boolean, handleGenerate: () => void }) {
+  const t = useTranslations("characterCreate");
+
   return (
     <button
       onClick={handleGenerate}
@@ -97,10 +101,10 @@ function GenerateButton({ store, isGenerating, handleGenerate }: { store: any, i
       {isGenerating ? (
         <>
           <Loader2 className="w-5 h-5 animate-spin text-black/50" />
-          正在铸造...
+          {t("workspace.generating")}
         </>
       ) : (
-        <><Sparkles className="w-5 h-5" /> 消耗 <span className="tabular-lining">20</span> 积分 · 开始铸造</>
+        <><Sparkles className="w-5 h-5" /> {t("workspace.generate", { credits: 20 })}</>
       )}
     </button>
   );
@@ -143,6 +147,16 @@ function DnaGroup({ group, store, handleSelect, getSelected }: any) {
 }
 
 export function CreationWorkspace() {
+  const t = useTranslations("characterCreate");
+  const { lang } = useLang();
+  const descriptionPlaceholders = useMemo(
+    () => Object.values(t.raw("workspace.descriptionPlaceholders") as Record<string, string>),
+    [t]
+  );
+  const dnaPlaceholders = useMemo(
+    () => Object.values(t.raw("workspace.dnaPlaceholders") as Record<string, string>),
+    [t]
+  );
   const store = useCharacterStudioStore();
   const isGenerating = useCharacterIsGenerating();
 
@@ -150,7 +164,7 @@ export function CreationWorkspace() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const workspaceRef = useRef<HTMLDivElement>(null);
 
-  const optionGroups = getDnaOptionGroups(store.dnaConfig.species);
+  const optionGroups = getDnaOptionGroups(store.dnaConfig.species, lang);
 
   useEffect(() => {
     if (store.creationMode !== "dna" || store.prompt.trim()) return;
@@ -301,7 +315,7 @@ export function CreationWorkspace() {
         } catch (err) {}
       }
       if (!userId) {
-        store.setGenerationFailed("请先登录后再生成角色");
+        store.setGenerationFailed(t("errors.signIn"));
         return;
       }
 
@@ -319,7 +333,7 @@ export function CreationWorkspace() {
         });
         const data = await response.json();
         if (!data.success) {
-          store.setGenerationFailed(data.error || "生成失败");
+          store.setGenerationFailed(lang === "zh" && data.error ? data.error : t("errors.generate"));
           return;
         }
         const boardUrl = data.characterBoardUrl || data.referenceSheetUrl || data.heroImageUrl;
@@ -332,7 +346,7 @@ export function CreationWorkspace() {
             data.avatarUrl || null
           );
         } else {
-          store.setGenerationFailed("角色设定板生成失败，未返回图片");
+          store.setGenerationFailed(t("errors.board"));
         }
       } else {
         // 影视角色：调 Sora2 生成角色视频
@@ -346,14 +360,14 @@ export function CreationWorkspace() {
         });
         const data = await response.json();
         if (!data.success) {
-          store.setGenerationFailed(data.error || "视频生成失败");
+          store.setGenerationFailed(lang === "zh" && data.error ? data.error : t("errors.video"));
           return;
         }
         // 存任务 ID，轮询在 casting-preview 中进行
         store.setTaskIds(data.taskId, null);
       }
     } catch (error) {
-      store.setGenerationFailed("网络错误，请重试");
+      store.setGenerationFailed(t("errors.network"));
     }
   };
 
@@ -379,10 +393,10 @@ export function CreationWorkspace() {
         <div>
           <div className="flex items-center gap-3">
             <Sparkles className="w-8 h-8 lg:w-10 lg:h-10 text-[#5ffff7]" fill="currentColor" />
-            <h1 className="text-3xl lg:text-5xl font-extrabold text-white drop-shadow-lg tracking-tight">创建角色</h1>
+            <h1 className="text-3xl lg:text-5xl font-extrabold text-white drop-shadow-lg tracking-tight">{t("workspace.title")}</h1>
           </div>
-          <p className="text-lg lg:text-xl font-bold text-white/50 mt-1">Character Forge</p>
-          <p className="mt-2 text-white/50 text-xs lg:text-sm flex items-center gap-1.5"><Keyboard className="w-3.5 h-3.5" /> 用文字描述和参考图创建角色资产，DNA Forge 可作为预设辅助</p>
+          <p className="text-lg lg:text-xl font-bold text-white/50 mt-1">{t("workspace.forgeSubtitle")}</p>
+          <p className="mt-2 text-white/50 text-xs lg:text-sm flex items-center gap-1.5"><Keyboard className="w-3.5 h-3.5" /> {t("workspace.subtitle")}</p>
         </div>
         
         {/* iOS 原生级 Tab 滑块 (提至 Header) */}
@@ -391,13 +405,13 @@ export function CreationWorkspace() {
             type="button"
             onClick={() => store.setCreationMode("freeform")}
             className={`flex-1 sm:px-8 py-2.5 rounded-full text-sm font-bold tracking-tight-ios transition-all duration-300 flex items-center justify-center gap-2 ${store.creationMode === 'freeform' ? 'bg-gradient-to-b from-white to-white/90 shadow-[0_4px_15px_rgba(255,255,255,0.2),inset_0_-2px_5px_rgba(0,0,0,0.05)] border border-white/80 text-black' : 'text-white/70 hover:text-white border border-transparent'}`}>
-             <Keyboard className="w-4 h-4" /> 自定义创建
+             <Keyboard className="w-4 h-4" /> {t("workspace.customCreate")}
           </button>
           <button 
             type="button"
             onClick={() => store.setCreationMode("dna")}
             className={`flex-1 sm:px-8 py-2.5 rounded-full text-sm font-bold tracking-tight-ios transition-all duration-300 flex items-center justify-center gap-2 ${store.creationMode === 'dna' ? 'bg-gradient-to-b from-white to-white/90 shadow-[0_4px_15px_rgba(255,255,255,0.2),inset_0_-2px_5px_rgba(0,0,0,0.05)] border border-white/80 text-black' : 'text-white/70 hover:text-white border border-transparent'}`}>
-             <Dna className="w-4 h-4" /> DNA Forge
+             <Dna className="w-4 h-4" /> {t("workspace.dnaForge")}
           </button>
         </div>
       </div>
@@ -420,17 +434,13 @@ export function CreationWorkspace() {
           ) : (
             <div className="freeform-area h-[400px] lg:h-[500px] shrink-0 relative group !rounded-[32px] animate-in fade-in zoom-in-95 duration-500 ease-out" style={{ animationFillMode: 'backwards' }}>
                <TypewriterTextArea 
+                 key={`description-${lang}`}
                  className="w-full h-full bg-white/[0.03] backdrop-blur-[20px] border border-white/10 shadow-[inset_0_1px_3px_rgba(255,255,255,0.1),0_10px_40px_rgba(0,0,0,0.4)] rounded-[32px] p-6 lg:p-8 text-white/90 text-base lg:text-lg font-mono leading-loose tracking-wide focus:border-[#00F2EA]/40 focus:bg-[#00F2EA]/[0.02] focus:shadow-[0_0_30px_rgba(0,242,234,0.15),inset_0_1px_3px_rgba(255,255,255,0.3)] focus:outline-none transition-all duration-500 ease-spring resize-none custom-scrollbar group-hover:border-[#00F2EA]/30 selection:bg-[#00F2EA]/30"
                  value={store.prompt}
                  onChange={(val) => store.setPrompt(val)}
-                 placeholders={[
-                   "描述你想要的角色特征...",
-                   "例如：一位身穿新中式汉服的清冷精神少女，肤白如玉...",
-                   "正在构思：白发红眼的吸血鬼贵族，身穿复古晚礼服...",
-                   "灵感：一位赛博朋克风格的机甲特工，霓虹雨夜..."
-                 ]}
+                 placeholders={descriptionPlaceholders}
                />
-               <div className="absolute top-0 right-8 px-4 py-2 bg-white/10 rounded-b-xl border-x border-b border-white/30 text-[10px] text-white/50 tracking-widest font-bold backdrop-blur-md pointer-events-none">FREEFORM CANVAS</div>
+               <div className="absolute top-0 right-8 px-4 py-2 bg-white/10 rounded-b-xl border-x border-b border-white/30 text-[10px] text-white/50 tracking-widest font-bold backdrop-blur-md pointer-events-none">{t("workspace.freeformCanvas")}</div>
             </div>
           )}
         </div>
@@ -447,14 +457,14 @@ export function CreationWorkspace() {
               {store.creationMode === "dna" && (
                 <div className="prompt-section flex flex-col gap-3 shrink-0 flex-1">
                   <div className="flex justify-between items-center">
-                    <span className="text-xs lg:text-sm font-bold text-white/80 flex items-center gap-1.5"><Lightbulb className="w-4 h-4 text-[#5ffff7]" /> 智能提示词联动</span>
+                    <span className="text-xs lg:text-sm font-bold text-white/80 flex items-center gap-1.5"><Lightbulb className="w-4 h-4 text-[#5ffff7]" /> {t("workspace.smartPrompt")}</span>
                     <button
                       type="button"
                       onClick={handleEnhancePrompt}
                       disabled={!store.prompt.trim() || store.isEnhancing}
                       className="px-4 py-1.5 rounded-full border backdrop-blur-md bg-white/[0.06] text-[#5ffff7] border-white/[0.08] hover:bg-white/[0.1] transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5 min-w-[90px] text-xs font-bold group/enhance"
                     >
-                      {store.isEnhancing ? <><Loader2 className="w-3.5 h-3.5 animate-spin text-[#CCFF00]" />施法中</> : <><Wand2 className="w-3.5 h-3.5 text-[#EC4899] group-hover/enhance:drop-shadow-[0_0_8px_rgba(236,72,153,0.8)] transition-all" /> AI 扩写</>}
+                      {store.isEnhancing ? <><Loader2 className="w-3.5 h-3.5 animate-spin text-[#CCFF00]" />{t("workspace.enhancing")}</> : <><Wand2 className="w-3.5 h-3.5 text-[#EC4899] group-hover/enhance:drop-shadow-[0_0_8px_rgba(236,72,153,0.8)] transition-all" /> {t("workspace.aiExpand")}</>}
                     </button>
                   </div>
 
@@ -494,18 +504,15 @@ export function CreationWorkspace() {
                       <div className="absolute inset-0 border-2 border-[#CCFF00]/50 rounded-2xl animate-pulse pointer-events-none z-10" />
                     )}
                     <TypewriterTextArea
+                      key={`dna-${lang}`}
                       className="flex-1 w-full min-h-[140px] bg-transparent p-4 lg:p-6 text-white/90 text-[15px] font-mono leading-loose tracking-wide focus:outline-none resize-none relative z-0 custom-scrollbar block selection:bg-[#00F2EA]/30"
                       value={store.prompt}
                       onChange={(val) => store.setPrompt(val)}
-                      placeholders={[
-                        "点击左侧特征胶囊会自动在这里组装...",
-                        "灵感：身穿霓虹机能服的元气少女星推官...",
-                        "或者在这里输入你天马行空的灵感，让 AI 施展魔法..."
-                      ]}
+                      placeholders={dnaPlaceholders}
                     />
                     {/* Stitch V3: Prompt 脚注 */}
                     <div className="absolute bottom-3 right-4 text-[10px] text-white/30 flex items-center gap-1 bg-black/40 px-2 py-1 rounded backdrop-blur pointer-events-none">
-                      <Info className="w-3 h-3" /> 输入词将自动结合左侧 DNA 特征
+                      <Info className="w-3 h-3" /> {t("workspace.dnaHint")}
                     </div>
                   </div>
                 </div>
@@ -514,9 +521,9 @@ export function CreationWorkspace() {
               {/* 参考图上传区 */}
               <div className="reference-upload-section shrink-0 relative z-10">
                 <div className="text-xs lg:text-sm font-medium text-white/70 mb-3 flex items-center justify-between">
-                  <span className="flex items-center gap-1.5"><ImagePlus className="w-4 h-4 opacity-70" /> 参考图上传 (可选)</span>
+                  <span className="flex items-center gap-1.5"><ImagePlus className="w-4 h-4 opacity-70" /> {t("workspace.referenceUpload")}</span>
                   {store.referenceImageUrl && (
-                     <button type="button" onClick={() => store.setReferenceImageUrl(null)} className="text-[11px] lg:text-xs text-red-400 hover:text-red-300 bg-red-400/10 px-2 py-1 rounded">清除图</button>
+                     <button type="button" onClick={() => store.setReferenceImageUrl(null)} className="text-[11px] lg:text-xs text-red-400 hover:text-red-300 bg-red-400/10 px-2 py-1 rounded">{t("workspace.clearImage")}</button>
                   )}
                 </div>
                 
@@ -540,7 +547,7 @@ export function CreationWorkspace() {
                       <img src={store.referenceImageUrl} alt="Reference" className="w-full h-full object-cover" />
                       <div className="absolute inset-0 bg-black/60 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center backdrop-blur-sm">
                         <button type="button" onClick={(e) => {e.stopPropagation(); fileInputRef.current?.click();}} className="px-5 py-2.5 bg-white/20 border border-white/40 rounded-full text-xs lg:text-sm font-bold text-white hover:bg-white/30 hover:scale-105 transition-all shadow-[0_4px_15px_rgba(0,0,0,0.2)] flex items-center gap-2">
-                          <RefreshCw className="w-4 h-4" /> 更换图片
+                          <RefreshCw className="w-4 h-4" /> {t("workspace.changeImage")}
                         </button>
                       </div>
                     </div>
@@ -550,7 +557,7 @@ export function CreationWorkspace() {
                         {isUploading ? <Hourglass className="w-5 h-5 text-white/80 animate-pulse" /> : <CloudUpload className="w-5 h-5 text-white/80" />}
                       </div>
                       <span className="text-[11px] lg:text-xs text-white/50 font-medium tracking-wide flex items-center gap-1.5">
-                         {isUploading ? '正在解析维度...' : '拖拽或点击上传参考图像'}
+                         {isUploading ? t("workspace.uploading") : t("workspace.uploadHint")}
                       </span>
                     </>
                   )}
@@ -561,7 +568,7 @@ export function CreationWorkspace() {
             {/* PC 端的悬浮生成按钮 (绝对固定在右侧控制台底部) */}
             <div className="hidden lg:block shrink-0 pt-6 mt-auto relative z-10">
               <GenerateButton store={store} isGenerating={isGenerating} handleGenerate={handleGenerate} />
-              <p className="text-center text-xs text-white/30 mt-3 font-medium">预计生成时间: 15-20 秒</p>
+              <p className="text-center text-xs text-white/30 mt-3 font-medium">{t("workspace.eta")}</p>
             </div>
             
           </div>
@@ -582,8 +589,8 @@ export function CreationWorkspace() {
             <button onClick={() => setShowForgeDialog(false)} className="absolute top-4 right-4 text-white/40 hover:text-white/80 transition-colors">
               <X className="w-5 h-5" />
             </button>
-            <h3 className="text-xl font-bold text-white mb-1">选择铸造方式</h3>
-            <p className="text-sm text-white/40 mb-5">不同铸造方式适用于不同的使用场景</p>
+            <h3 className="text-xl font-bold text-white mb-1">{t("workspace.chooseForge")}</h3>
+            <p className="text-sm text-white/40 mb-5">{t("workspace.chooseForgeDescription")}</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {/* 写真角色 */}
               <button
@@ -595,14 +602,14 @@ export function CreationWorkspace() {
                     <Camera className="w-5 h-5 text-cyan-400" />
                   </div>
                   <div>
-                    <p className="text-white font-bold text-[15px]">写真角色</p>
-                    <p className="text-[11px] text-white/30">使用模型：VEO</p>
+                    <p className="text-white font-bold text-[15px]">{t("workspace.photoCharacter")}</p>
+                    <p className="text-[11px] text-white/30">{t("workspace.photoModel")}</p>
                   </div>
                 </div>
-                <p className="text-xs text-white/50 leading-relaxed mb-3">可用于单图生成、多图生成、VEO 视频生成</p>
+                <p className="text-xs text-white/50 leading-relaxed mb-3">{t("workspace.photoUsage")}</p>
                 <div className="flex items-center justify-between text-[11px]">
-                  <span className="text-white/30">⏱️ ~20秒</span>
-                  <span className="text-cyan-400/70 font-medium">20 积分</span>
+                  <span className="text-white/30">{t("workspace.photoDuration")}</span>
+                  <span className="text-cyan-400/70 font-medium">{t("workspace.credits", { credits: 20 })}</span>
                 </div>
               </button>
               {/* 影视角色 */}
@@ -615,14 +622,14 @@ export function CreationWorkspace() {
                     <Film className="w-5 h-5 text-purple-400" />
                   </div>
                   <div>
-                    <p className="text-white font-bold text-[15px]">影视角色</p>
-                    <p className="text-[11px] text-white/30">使用模型：Sora2</p>
+                    <p className="text-white font-bold text-[15px]">{t("workspace.videoCharacter")}</p>
+                    <p className="text-[11px] text-white/30">{t("workspace.videoModel")}</p>
                   </div>
                 </div>
-                <p className="text-xs text-white/50 leading-relaxed mb-3">可用于 Sora2 视频生成，角色形象精准一致</p>
+                <p className="text-xs text-white/50 leading-relaxed mb-3">{t("workspace.videoUsage")}</p>
                 <div className="flex items-center justify-between text-[11px]">
-                  <span className="text-white/30">⏱️ ~3-5分钟</span>
-                  <span className="text-purple-400/70 font-medium">20 积分</span>
+                  <span className="text-white/30">{t("workspace.videoDuration")}</span>
+                  <span className="text-purple-400/70 font-medium">{t("workspace.credits", { credits: 20 })}</span>
                 </div>
               </button>
             </div>

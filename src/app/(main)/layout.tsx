@@ -1,11 +1,12 @@
-import { Sidebar, Header, MainContentFrame, type HeaderUser } from "@/components/layout";
 import { BackgroundTaskManager } from "@/components/background-task-manager";
 import { DownloadWidget } from "@/components/download-widget";
 import { ForgeStatusFloat } from "@/components/forge-status-float";
+import { Sidebar, Header, MainContentFrame, type HeaderUser } from "@/components/layout";
+import { AppIntlProvider } from "@/components/providers/app-intl-provider";
+import type { UserRole } from "@/lib/admin";
+import { isImageFactoryUiEnabled } from "@/lib/feature-flags";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
-import { isImageFactoryUiEnabled } from "@/lib/feature-flags";
-import type { UserRole } from "@/lib/admin";
 
 async function getInitialHeaderUser(): Promise<HeaderUser | null> {
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
@@ -53,23 +54,25 @@ export default async function MainLayout({
   const showImageFactory = isImageFactoryUiEnabled();
 
   return (
-    <div className="flex min-h-screen h-screen overflow-hidden bg-titanium-grid relative selection:bg-white/20">
-      {/* JCUI 1.0: 已移除旧版彩色渐变光球，使用干净的钛空银网格背景 */}
+    <AppIntlProvider>
+      <div className="flex min-h-screen h-screen overflow-hidden bg-titanium-grid relative selection:bg-white/20">
+        {/* JCUI 1.0: 已移除旧版彩色渐变光球，使用干净的钛空银网格背景 */}
 
-      <Sidebar showImageFactory={showImageFactory} />
-      <div className="flex flex-1 flex-col overflow-hidden relative z-10">
-        <Header initialUser={initialUser} />
-        <main className="flex-1 overflow-y-auto relative">
-          {/* 按路由豁免 container/渐变(S0.5):普通路由 DOM 与原实现一致,/studio 全屏 */}
-          <MainContentFrame>{children}</MainContentFrame>
-        </main>
+        <Sidebar showImageFactory={showImageFactory} />
+        <div className="flex flex-1 flex-col overflow-hidden relative z-10">
+          <Header initialUser={initialUser} />
+          <main className="flex-1 overflow-y-auto relative">
+            {/* 按路由豁免 container/渐变(S0.5):普通路由 DOM 与原实现一致,/studio 全屏 */}
+            <MainContentFrame>{children}</MainContentFrame>
+          </main>
+        </div>
+        {/* 后台任务管理器 - 处理视频/图片批量任务 */}
+        <BackgroundTaskManager />
+        {/* 全局下载管理器浮窗 */}
+        <DownloadWidget />
+        {/* 全局铸造状态浮窗 — 离开角色创建页面后仍可见 */}
+        <ForgeStatusFloat />
       </div>
-      {/* 后台任务管理器 - 处理视频/图片批量任务 */}
-      <BackgroundTaskManager />
-      {/* 全局下载管理器浮窗 */}
-      <DownloadWidget />
-      {/* 全局铸造状态浮窗 — 离开角色创建页面后仍可见 */}
-      <ForgeStatusFloat />
-    </div>
+    </AppIntlProvider>
   );
 }

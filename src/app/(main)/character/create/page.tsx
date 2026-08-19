@@ -12,6 +12,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { useTranslations } from "next-intl";
 import { CreationWorkspace } from "./components/creation-workspace";
 import { CastingPreview } from "./components/casting-preview";
 import {
@@ -20,6 +21,7 @@ import {
 } from "@/stores/character-studio-store";
 
 export default function CharacterCreatePage() {
+  const t = useTranslations("characterCreate");
   const setUserInfo = useCharacterStudioStore((s) => s.setUserInfo);
   const setCurrentStep = useCharacterStudioStore((s) => s.setCurrentStep);
   const heroImageUrl = useCharacterStudioStore((s) => s.heroImageUrl);
@@ -31,8 +33,8 @@ export default function CharacterCreatePage() {
 
   // 页面标题
   useEffect(() => {
-    document.title = "创建角色 | Star Gaze";
-  }, []);
+    document.title = t("page.documentTitle");
+  }, [t]);
 
   // 获取用户 ID 和积分
   useEffect(() => {
@@ -69,7 +71,7 @@ export default function CharacterCreatePage() {
           type="button"
         >
           <span className="view-result-dot" />
-          👁 查看已生成角色
+          {t("page.viewGenerated")}
         </button>
       )}
 
@@ -79,14 +81,14 @@ export default function CharacterCreatePage() {
           <div className="status-bar-content">
             <span className="status-bar-dot" />
             <span className="status-bar-text">
-              {forgeMode === "sora2" ? "🎬 影视角色铸造中..." : "🖼️ 写真角色铸造中..."}
+              {forgeMode === "sora2" ? t("page.forgingVideo") : t("page.forgingPhoto")}
             </span>
             <button
               type="button"
               className="status-bar-expand"
               onClick={() => setIsMinimized(false)}
             >
-              展开
+              {t("page.expand")}
             </button>
           </div>
         </div>
