@@ -47,7 +47,7 @@ function loadFacebookOAuth() {
   return loadedModule.exports
 }
 
-test('Facebook business login follows the selected Star Gaze language', () => {
+test('Facebook authorization keeps the provider URL stable while state tracks the app language', () => {
   const oauth = loadFacebookOAuth()
   const english = oauth.buildFacebookAuthorizationUrl('user-1', 'en_US')
   const chinese = oauth.buildFacebookAuthorizationUrl('user-1', 'zh_CN')
@@ -56,8 +56,8 @@ test('Facebook business login follows the selected Star Gaze language', () => {
 
   assert.equal(englishUrl.searchParams.get('config_id'), 'facebook-page-config')
   assert.equal(englishUrl.searchParams.get('auth_type'), 'rerequest')
-  assert.equal(englishUrl.searchParams.get('locale'), 'en_US')
-  assert.equal(chineseUrl.searchParams.get('locale'), 'zh_CN')
+  assert.equal(englishUrl.searchParams.has('locale'), false)
+  assert.equal(chineseUrl.searchParams.has('locale'), false)
   assert.equal(oauth.getFacebookUiLocaleFromState(english.state), 'en_US')
   assert.equal(oauth.getFacebookUiLocaleFromState(chinese.state), 'zh_CN')
 })

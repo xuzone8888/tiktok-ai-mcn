@@ -157,7 +157,6 @@ export function buildFacebookAuthorizationUrl(userId: string, locale: FacebookUi
     auth_type: 'rerequest',
     code_challenge: codeChallenge,
     code_challenge_method: 'S256',
-    locale,
   })
 
   if (config.pageLoginConfigId) {
