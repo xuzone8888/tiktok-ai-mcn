@@ -1,8 +1,9 @@
 "use client";
 
-import { ArrowLeft, Sparkles, Shield, Globe, FileText, Users, UserCheck, AlertTriangle, BookOpen, Scale, Gavel, RefreshCw, Phone, CreditCard, Megaphone, Receipt, ShieldX, Layers, Baby, MoreHorizontal, Music2, DollarSign, Share2 } from "lucide-react";
+import { ArrowLeft, Sparkles, Shield, Globe, FileText, Users, UserCheck, AlertTriangle, BookOpen, Scale, Gavel, RefreshCw, Phone, CreditCard, Megaphone, Receipt, ShieldX, Layers, Baby, MoreHorizontal, Music2, DollarSign } from "lucide-react";
 import Link from "next/link";
 
+import { FacebookBrandIcon } from "@/components/brand/FacebookBrandIcon";
 import { YouTubeBrandIcon } from "@/components/brand/YouTubeBrandIcon";
 import { Button } from "@/components/ui/button";
 import ReflectiveCard from "@/components/ui/ReflectiveCard";
@@ -364,7 +365,7 @@ export default function TermsPage() {
             {/* 21. Facebook Platform Integration Terms */}
             <ReflectiveCard className="!rounded-xl">
               <div className="flex items-start gap-4 p-6">
-                <div className="p-3 rounded-lg bg-blue-500/10 text-blue-400 shrink-0"><Share2 className="h-6 w-6" /></div>
+                <div className="p-3 rounded-lg bg-blue-500/10 text-blue-400 shrink-0"><FacebookBrandIcon className="h-6 w-6" /></div>
                 <div>
                   <h2 className="text-xl font-bold text-white mb-3">{lang === "en" ? "21. Facebook Platform Integration Terms" : "二十一、Facebook 平台集成条款"}</h2>
                   <p className="leading-loose">{lang === "en" ? "21.1 Service Description: Subject to availability and your authorization, Star Gaze uses Meta Platform APIs to connect Facebook Pages you manage, display Page information, publish or schedule Page videos and posts, synchronize Page comments through API calls and webhooks, and submit replies that you initiate or confirm." : "21.1 服务说明：在相关功能可用且您已完成授权的前提下，Star Gaze 使用 Meta 平台 API 绑定您管理的 Facebook Page、展示 Page 信息、发布或预约发布 Page 视频与帖子、通过 API 调用和 webhook 同步 Page 评论，以及提交由您主动发起或确认的回复。"}</p>

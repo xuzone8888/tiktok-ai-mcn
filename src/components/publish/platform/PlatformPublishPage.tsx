@@ -1730,7 +1730,9 @@ export function PlatformPublishPage({
       <div className="flex items-center justify-between">
         <div>
           <h1 className="flex items-center gap-3 text-3xl font-bold tracking-tight">
-            <div className="h-8 w-1.5 rounded-full bg-gradient-to-b from-mermaid-lime to-mermaid-cyan shadow-[0_0_10px_rgba(0,242,234,0.5)]" />
+            {config.platform === 'facebook' && config.icon ? config.icon : (
+              <div className="h-8 w-1.5 rounded-full bg-gradient-to-b from-mermaid-lime to-mermaid-cyan shadow-[0_0_10px_rgba(0,242,234,0.5)]" />
+            )}
             <span className="text-white drop-shadow-lg">{pageTitle}</span>
           </h1>
           <p className="ml-[19px] mt-1 text-white/60">

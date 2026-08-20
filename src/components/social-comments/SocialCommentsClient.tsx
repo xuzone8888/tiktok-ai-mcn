@@ -11,9 +11,9 @@ import {
   Music2,
   RefreshCw,
   Send,
-  Share2,
 } from "lucide-react"
 
+import { FacebookBrandIcon } from "@/components/brand/FacebookBrandIcon"
 import { YouTubeBrandIcon } from "@/components/brand/YouTubeBrandIcon"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -272,7 +272,7 @@ function PlatformIcon({ platform, className }: { platform: Platform; className?:
   if (platform === "youtube") return <YouTubeBrandIcon className={className} />
   if (platform === "tiktok") return <Music2 className={className} />
   if (platform === "instagram") return <Instagram className={className} />
-  if (platform === "facebook") return <Share2 className={className} />
+  if (platform === "facebook") return <FacebookBrandIcon className={className} />
   return <MessageCircle className={className} />
 }
 

@@ -47,6 +47,12 @@ export interface PlatformPublishConfig {
   requireLegalConsent?: boolean
   legalConsentText?: string
   legalConsentTextEn?: string
+  providerLanguageNotice?: string
+  providerLanguageNoticeEn?: string
+  providerLanguageSettingsUrl?: string
+  providerLanguageSettingsLabel?: string
+  providerLanguageSettingsLabelEn?: string
+  localizeLegalDialogClose?: boolean
   deleteAllDataEndpoint?: string
   dataControlsTitle?: string
   dataControlsTitleEn?: string
@@ -142,6 +148,12 @@ export const META_PLATFORM_CONFIGS: Record<MetaPublishPlatform, Omit<PlatformPub
     requireLegalConsent: true,
     legalConsentText: '绑定 Facebook 前，我已阅读并同意当前隐私政策与服务条款，并授权 Star Gaze 按所述方式处理 Facebook Page 数据。',
     legalConsentTextEn: 'Before connecting Facebook, I have read and accept the current Privacy Policy and Terms, and authorize Star Gaze to process Facebook Page data as described.',
+    providerLanguageNotice: 'Meta 授权页面由 Facebook 托管，并使用你的 Facebook 账号语言。为了保持中文，请先确认 Facebook 账号语言为“中文（简体）”。',
+    providerLanguageNoticeEn: 'Meta hosts the authorization screens and uses the language selected in your Facebook account. To keep the full flow in English, set your Facebook account language to English (US) before continuing.',
+    providerLanguageSettingsUrl: 'https://www.facebook.com/settings/?tab=language_and_region',
+    providerLanguageSettingsLabel: '打开 Facebook 语言设置',
+    providerLanguageSettingsLabelEn: 'Open Facebook language settings',
+    localizeLegalDialogClose: true,
     disconnectConfirmation: '解绑将移除此 Page 的 webhook 订阅，并删除它在 Star Gaze 中的账号令牌、评论缓存和关联发布记录。其他已绑定 Page 不受影响；Facebook 上已发布的内容不会被删除。是否继续？',
     disconnectConfirmationEn: 'Disconnecting removes this Page’s webhook subscription and deletes its tokens, cached comments, and related publishing history from Star Gaze. Other connected Pages are not affected, and Facebook-hosted content is not deleted. Continue?',
     deleteAllDataEndpoint: '/api/facebook/data',

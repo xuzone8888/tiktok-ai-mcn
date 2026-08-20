@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-import { createAdminClient } from '@/lib/supabase/admin'
 import {
   assertFacebookRequiredPageScopes,
   calculateFacebookTokenExpiration,
@@ -11,6 +10,7 @@ import {
   getGrantedFacebookScopes,
   getFacebookGrantedPermissions,
   getFacebookOAuthConfig,
+  getFacebookUiLocaleFromState,
   getFacebookPagePublishPermissionError,
   getFacebookUserInfo,
   getMyFacebookPages,
@@ -20,6 +20,7 @@ import {
   type FacebookPermissionInfo,
   type FacebookTokenDebugInfo,
 } from '@/lib/facebook/oauth'
+import { createAdminClient } from '@/lib/supabase/admin'
 
 export const dynamic = 'force-dynamic'
 
@@ -42,9 +43,9 @@ function redirectToAccounts(origin: string, params: Record<string, string>) {
   return NextResponse.redirect(redirectUrl)
 }
 
-function formatFacebookPermissionDiagnostics(permissions: FacebookPermissionInfo[]) {
+function formatFacebookPermissionDiagnostics(permissions: FacebookPermissionInfo[], isEnglish: boolean) {
   if (permissions.length === 0) {
-    return 'Meta 未返回权限列表'
+    return isEnglish ? 'Meta did not return a permission list' : 'Meta 未返回权限列表'
   }
 
   const granted = permissions
@@ -52,42 +53,69 @@ function formatFacebookPermissionDiagnostics(permissions: FacebookPermissionInfo
     .map((entry) => entry.permission)
   const missingRequired = FACEBOOK_PAGE_SCOPES.filter((scope) => !granted.includes(scope))
 
-  const grantedText = granted.length > 0 ? granted.join(', ') : '无'
-  const missingText = missingRequired.length > 0 ? missingRequired.join(', ') : '无'
+  const noneText = isEnglish ? 'none' : '无'
+  const grantedText = granted.length > 0 ? granted.join(', ') : noneText
+  const missingText = missingRequired.length > 0 ? missingRequired.join(', ') : noneText
 
-  return `已授权权限：${grantedText}。缺失 Facebook Page 必需权限：${missingText}`
+  return isEnglish
+    ? `Granted permissions: ${grantedText}. Missing required Facebook Page permissions: ${missingText}`
+    : `已授权权限：${grantedText}。缺失 Facebook Page 必需权限：${missingText}`
 }
 
-function formatFacebookTokenTargetDiagnostics(tokenDebug: FacebookTokenDebugInfo | null) {
+function formatFacebookTokenTargetDiagnostics(tokenDebug: FacebookTokenDebugInfo | null, isEnglish: boolean) {
   if (!tokenDebug) {
-    return 'Token target 诊断不可用'
+    return isEnglish ? 'Token target diagnostics are unavailable' : 'Token target 诊断不可用'
   }
 
   const pageScopeSummaries = FACEBOOK_PAGE_SCOPES.map((scopeName) => {
     const granularScope = tokenDebug.granularScopes.find((entry) => entry.scope === scopeName)
-    if (!granularScope) return `${scopeName}: 未返回 granular scope`
-    return `${scopeName}: target_ids 数量=${granularScope.targetIds.length}`
+    if (!granularScope) return `${scopeName}: ${isEnglish ? 'granular scope was not returned' : '未返回 granular scope'}`
+    return isEnglish
+      ? `${scopeName}: ${granularScope.targetIds.length} target_id(s)`
+      : `${scopeName}: target_ids 数量=${granularScope.targetIds.length}`
   })
 
+  if (isEnglish) {
+    const validity = tokenDebug.isValid === null ? 'unknown' : tokenDebug.isValid ? 'yes' : 'no'
+    return `Token valid: ${validity}; ${pageScopeSummaries.join('; ')}`
+  }
   return `Token 有效：${tokenDebug.isValid === null ? '未知' : tokenDebug.isValid ? '是' : '否'}；${pageScopeSummaries.join('；')}`
 }
 
 function buildFacebookNoPageError(
   permissions: FacebookPermissionInfo[],
-  tokenDebug: FacebookTokenDebugInfo | null
+  tokenDebug: FacebookTokenDebugInfo | null,
+  isEnglish: boolean,
 ) {
   const config = getFacebookOAuthConfig()
-  const permissionDiagnostics = formatFacebookPermissionDiagnostics(permissions)
-  const targetDiagnostics = formatFacebookTokenTargetDiagnostics(tokenDebug)
-  const configDiagnostics = `授权配置：Facebook Page config_id=${config.pageLoginConfigId ? '已配置' : '未配置'}`
+  const permissionDiagnostics = formatFacebookPermissionDiagnostics(permissions, isEnglish)
+  const targetDiagnostics = formatFacebookTokenTargetDiagnostics(tokenDebug, isEnglish)
+  const configDiagnostics = isEnglish
+    ? `Authorization configuration: Facebook Page config_id is ${config.pageLoginConfigId ? 'configured' : 'not configured'}`
+    : `授权配置：Facebook Page config_id=${config.pageLoginConfigId ? '已配置' : '未配置'}`
 
-  return `当前 Facebook 授权未返回可保存的 Page 或 Page access token。${permissionDiagnostics}。${targetDiagnostics}。${configDiagnostics}。请确认 Facebook Page 登录配置包含 pages_manage_metadata，并确认该 Facebook 账号拥有 Page 的完整控制权限；如果之前授权时没勾选 Page 或配置权限后来有调整，请先到 Facebook 设置的企业集成中移除本应用后重新绑定。`
+  return isEnglish
+    ? `Facebook authorization did not return a Page or Page access token that can be saved. ${permissionDiagnostics}. ${targetDiagnostics}. ${configDiagnostics}. Confirm that the Facebook Page login configuration includes pages_manage_metadata and that this Facebook account has full control of the Page. If the Page was not selected during an earlier authorization or the configuration changed later, remove this app from Facebook Business Integrations and reconnect.`
+    : `当前 Facebook 授权未返回可保存的 Page 或 Page access token。${permissionDiagnostics}。${targetDiagnostics}。${configDiagnostics}。请确认 Facebook Page 登录配置包含 pages_manage_metadata，并确认该 Facebook 账号拥有 Page 的完整控制权限；如果之前授权时没勾选 Page 或配置权限后来有调整，请先到 Facebook 设置的企业集成中移除本应用后重新绑定。`
+}
+
+function localizeFacebookCallbackError(error: unknown, isEnglish: boolean) {
+  const message = error instanceof Error ? error.message : ''
+  if (!isEnglish) return message || 'Facebook 授权失败'
+  if (!message) return 'Facebook authorization failed.'
+  if (/Facebook Page authorization is missing required permissions:/.test(message)) return message
+  if (/Facebook authorization did not return a Page/.test(message)) return message
+  if (/does not have permission to publish content/.test(message)) return message
+  if (!/[\u3400-\u9fff]/.test(message)) return message
+  return 'Facebook authorization could not be completed. Reconnect and grant access to the required Pages and permissions.'
 }
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams
   const code = searchParams.get('code')
   const state = searchParams.get('state')
+  const locale = getFacebookUiLocaleFromState(state)
+  const isEnglish = locale === 'en_US'
   const error = searchParams.get('error')
   const errorDescription = searchParams.get('error_description')
   const errorCode = searchParams.get('error_code')
@@ -95,7 +123,9 @@ export async function GET(request: NextRequest) {
   const redirectOrigin = getAppRedirectOrigin(request)
 
   if ((!code && !error) || !state) {
-    return redirectToAccounts(redirectOrigin, { error: '缺少 Facebook 授权参数' })
+    return redirectToAccounts(redirectOrigin, {
+      error: isEnglish ? 'Missing Facebook authorization parameters.' : '缺少 Facebook 授权参数',
+    })
   }
 
   const supabase = createAdminClient() as any
@@ -108,38 +138,46 @@ export async function GET(request: NextRequest) {
       .single()
 
     if (stateError || !authState) {
-      return redirectToAccounts(redirectOrigin, { error: 'Facebook 授权状态无效或已过期' })
+      return redirectToAccounts(redirectOrigin, {
+        error: isEnglish ? 'The Facebook authorization session is invalid or expired.' : 'Facebook 授权状态无效或已过期',
+      })
     }
 
     if (authState.status === 'failed' && authState.error_message) {
+      const storedError = localizeFacebookCallbackError(new Error(authState.error_message), isEnglish)
       return redirectToAccounts(redirectOrigin, {
-        error: `Facebook 授权失败：${authState.error_message}`,
+        error: isEnglish
+          ? `Facebook authorization failed: ${storedError}`
+          : `Facebook 授权失败：${storedError}`,
       })
     }
 
     if (authState.status !== 'pending') {
-      return redirectToAccounts(redirectOrigin, { error: 'Facebook 授权状态已使用或无效，请重新绑定' })
+      return redirectToAccounts(redirectOrigin, {
+        error: isEnglish ? 'The Facebook authorization session was already used or is invalid. Please reconnect.' : 'Facebook 授权状态已使用或无效，请重新绑定',
+      })
     }
 
     if (error) {
       const metaErrorDetails = [
         errorDescription || error,
-        errorCode ? `Meta 错误码 ${errorCode}` : null,
-        errorReason ? `原因 ${errorReason}` : null,
-      ].filter(Boolean).join('；')
+        errorCode ? (isEnglish ? `Meta error code ${errorCode}` : `Meta 错误码 ${errorCode}`) : null,
+        errorReason ? (isEnglish ? `Reason: ${errorReason}` : `原因 ${errorReason}`) : null,
+      ].filter(Boolean).join(isEnglish ? '; ' : '；')
+      const localizedMetaError = localizeFacebookCallbackError(new Error(metaErrorDetails), isEnglish)
 
       await supabase
         .from('facebook_auth_states')
         .update({
           status: 'failed',
           error_code: error,
-          error_message: metaErrorDetails,
+          error_message: localizedMetaError,
           code_verifier: null,
           completed_at: new Date().toISOString(),
         })
         .eq('state', state)
 
-      return redirectToAccounts(redirectOrigin, { error: metaErrorDetails })
+      return redirectToAccounts(redirectOrigin, { error: localizedMetaError })
     }
 
     if (new Date(authState.expires_at).getTime() <= Date.now()) {
@@ -153,11 +191,13 @@ export async function GET(request: NextRequest) {
         })
         .eq('state', state)
 
-      return redirectToAccounts(redirectOrigin, { error: 'Facebook 授权已过期，请重新绑定' })
+      return redirectToAccounts(redirectOrigin, {
+        error: isEnglish ? 'Facebook authorization expired. Please reconnect.' : 'Facebook 授权已过期，请重新绑定',
+      })
     }
 
     if (!code) {
-      throw new Error('缺少 Facebook authorization code')
+      throw new Error(isEnglish ? 'Missing Facebook authorization code.' : '缺少 Facebook authorization code')
     }
 
     const shortToken = await exchangeFacebookCodeForToken(code, authState.code_verifier)
@@ -172,12 +212,12 @@ export async function GET(request: NextRequest) {
     if (pages.length === 0) {
       const tokenDebug = await debugFacebookUserToken(longLivedToken.access_token).catch(() => null)
 
-      throw new Error(buildFacebookNoPageError(permissions, tokenDebug))
+      throw new Error(buildFacebookNoPageError(permissions, tokenDebug, isEnglish))
     }
     const publishablePages = pages.filter((page) => hasFacebookPagePublishPermission(page.tasks))
 
     if (publishablePages.length === 0) {
-      throw new Error(getFacebookPagePublishPermissionError(pages[0]?.name))
+      throw new Error(getFacebookPagePublishPermissionError(pages[0]?.name, locale))
     }
 
     const now = new Date().toISOString()
@@ -215,7 +255,7 @@ export async function GET(request: NextRequest) {
         .single()
 
       if (upsertError) {
-        throw new Error(`保存 Facebook Page 失败: ${upsertError.message}`)
+        throw new Error(isEnglish ? `Failed to save Facebook Page: ${upsertError.message}` : `保存 Facebook Page 失败: ${upsertError.message}`)
       }
 
       const { error: tokenError } = await supabase
@@ -231,7 +271,7 @@ export async function GET(request: NextRequest) {
         })
 
       if (tokenError) {
-        throw new Error(`保存 Facebook 授权令牌失败: ${tokenError.message}`)
+        throw new Error(isEnglish ? `Failed to save the Facebook authorization token: ${tokenError.message}` : `保存 Facebook 授权令牌失败: ${tokenError.message}`)
       }
 
       savedCount++
@@ -248,7 +288,9 @@ export async function GET(request: NextRequest) {
 
     return redirectToAccounts(redirectOrigin, {
       success: 'true',
-      name: `${savedCount} 个 Page`,
+      name: isEnglish
+        ? `${savedCount} Page${savedCount === 1 ? '' : 's'}`
+        : `${savedCount} 个 Page`,
     })
   } catch (err) {
     console.error('Facebook callback error:', err)
@@ -259,7 +301,7 @@ export async function GET(request: NextRequest) {
         .update({
           status: 'failed',
           error_code: 'callback_failed',
-          error_message: err instanceof Error ? err.message : 'Facebook 授权失败',
+          error_message: localizeFacebookCallbackError(err, isEnglish),
           code_verifier: null,
           completed_at: new Date().toISOString(),
         })
@@ -267,7 +309,7 @@ export async function GET(request: NextRequest) {
     }
 
     return redirectToAccounts(redirectOrigin, {
-      error: err instanceof Error ? err.message : 'Facebook 授权失败',
+      error: localizeFacebookCallbackError(err, isEnglish),
     })
   }
 }

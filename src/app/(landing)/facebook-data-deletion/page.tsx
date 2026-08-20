@@ -1,5 +1,6 @@
 import Link from 'next/link'
 
+import { FacebookBrandIcon } from '@/components/brand/FacebookBrandIcon'
 import { createAdminClient } from '@/lib/supabase/admin'
 
 export const dynamic = 'force-dynamic'
@@ -53,7 +54,10 @@ export default async function FacebookDataDeletionPage({
     <main className="min-h-screen bg-[#09090b] px-6 py-20 text-white">
       <section className="mx-auto max-w-2xl rounded-2xl border border-white/10 bg-white/[0.04] p-8">
         <p className="text-sm font-semibold uppercase tracking-[0.2em] text-cyan-300">Star Gaze</p>
-        <h1 className="mt-4 text-3xl font-bold">{copy.title}</h1>
+        <h1 className="mt-4 flex items-center gap-3 text-3xl font-bold">
+          <FacebookBrandIcon className="h-10 w-10" />
+          {copy.title}
+        </h1>
         <p className="mt-4 leading-7 text-white/65">{copy.description}</p>
         {code && (
           <div className="mt-6 rounded-xl border border-white/10 bg-black/20 p-4">

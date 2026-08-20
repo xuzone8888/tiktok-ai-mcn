@@ -16,7 +16,6 @@ import {
   CreditCard,
   LayoutTemplate,
   ShoppingBag,
-  Share2,
   Instagram,
   Loader2,
   Network,
@@ -25,6 +24,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import { FacebookBrandIcon } from "@/components/brand/FacebookBrandIcon";
 import { YouTubeBrandIcon } from "@/components/brand/YouTubeBrandIcon";
 import { Button } from "@/components/ui/button";
 import {
@@ -210,14 +210,14 @@ function getNavGroups(
         {
           title: t ? "Facebook Account Management" : "Facebook 账号管理",
           href: "/facebook-publish/accounts",
-          icon: Share2,
+          icon: FacebookBrandIcon,
           description: t ? "Manage Facebook Pages" : "管理 Facebook Page 与授权",
           beta: true,
         },
         {
           title: t ? "Facebook Video Management" : "Facebook 视频管理",
           href: "/facebook-publish",
-          icon: Share2,
+          icon: FacebookBrandIcon,
           description: t ? "Manage and publish Facebook videos" : "管理并发布 Facebook 视频",
           beta: true,
         },
@@ -314,6 +314,8 @@ export function Sidebar({
   const renderNavItem = (item: NavItem, isActive: boolean) => {
     const Icon = item.icon;
     const isYouTubeBrandIcon = Icon === YouTubeBrandIcon;
+    const isFacebookBrandIcon = Icon === FacebookBrandIcon;
+    const isPlatformBrandIcon = isYouTubeBrandIcon || isFacebookBrandIcon;
     const isComingSoon = item.comingSoon;
     const isNavigating = pendingHref === item.href && !isActive;
     let renderedIcon = <Icon className="h-4 w-4 transition-transform duration-300 group-hover:scale-110" />;
@@ -322,6 +324,8 @@ export function Sidebar({
       renderedIcon = <Loader2 className="h-4 w-4 animate-spin text-mermaid-cyan" />;
     } else if (isYouTubeBrandIcon) {
       renderedIcon = <YouTubeBrandIcon compact className="h-[38px] w-11" />;
+    } else if (isFacebookBrandIcon) {
+      renderedIcon = <FacebookBrandIcon compact className="h-7 w-7" />;
     }
 
     // Coming Soon items — not clickable, soft display
@@ -411,7 +415,7 @@ export function Sidebar({
         <div
           className={cn(
             "flex shrink-0 items-center justify-center rounded-lg",
-            isYouTubeBrandIcon
+            isPlatformBrandIcon
               ? "h-8 w-8 bg-[#18181b]"
               : cn(
                   "h-8 w-8",

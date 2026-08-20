@@ -3,6 +3,7 @@
 import { ArrowLeft, Sparkles, Shield, Globe, FileText, Eye, Database, Share2, Lock, UserCheck, Cookie, Users, RefreshCw, Phone, BookOpen, Server, Key, Settings, ExternalLink, ShoppingBag, Cpu } from "lucide-react";
 import Link from "next/link";
 
+import { FacebookBrandIcon } from "@/components/brand/FacebookBrandIcon";
 import { YouTubeBrandIcon } from "@/components/brand/YouTubeBrandIcon";
 import { Button } from "@/components/ui/button";
 import ReflectiveCard from "@/components/ui/ReflectiveCard";
@@ -265,7 +266,7 @@ export default function PrivacyPage() {
             {/* Facebook Platform Data */}
             <ReflectiveCard className="!rounded-xl">
               <div className="flex items-start gap-4 p-6">
-                <div className="p-3 rounded-lg bg-blue-500/10 text-blue-400 shrink-0"><Share2 className="h-6 w-6" /></div>
+                <div className="p-3 rounded-lg bg-blue-500/10 text-blue-400 shrink-0"><FacebookBrandIcon className="h-6 w-6" /></div>
                 <div>
                   <h2 className="text-xl font-bold text-white mb-3">{lang === "en" ? "Facebook Platform Data" : "Facebook 平台数据"}</h2>
                   <p className="leading-relaxed">{lang === "en" ? "With your authorization, Star Gaze uses Meta Platform APIs to connect Facebook Pages you manage, display Page information, publish or schedule Page videos and posts, synchronize Page comments through API calls and webhooks, and send replies that you initiate or confirm. We do not request or store your Facebook password." : "在您授权后，Star Gaze 使用 Meta 平台 API 绑定您管理的 Facebook Page、展示 Page 信息、发布或预约发布 Page 视频与帖子、通过 API 调用和 webhook 同步 Page 评论，以及发送由您主动发起或确认的回复。我们不会请求或存储您的 Facebook 密码。"}</p>

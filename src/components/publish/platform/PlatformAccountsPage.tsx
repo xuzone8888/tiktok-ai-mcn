@@ -76,6 +76,12 @@ export interface PlatformAccountsConfig {
   requireLegalConsent?: boolean
   legalConsentText?: string
   legalConsentTextEn?: string
+  providerLanguageNotice?: string
+  providerLanguageNoticeEn?: string
+  providerLanguageSettingsUrl?: string
+  providerLanguageSettingsLabel?: string
+  providerLanguageSettingsLabelEn?: string
+  localizeLegalDialogClose?: boolean
   deleteAllDataEndpoint?: string
   dataControlsTitle?: string
   dataControlsTitleEn?: string
@@ -85,6 +91,7 @@ export interface PlatformAccountsConfig {
   deleteAllDataLabelEn?: string
   deleteAllDataConfirmation?: string
   deleteAllDataConfirmationEn?: string
+  passLanguageToAuth?: boolean
 }
 
 interface PlatformAccountsPageProps {
@@ -358,7 +365,15 @@ export function PlatformAccountsPage({ config }: PlatformAccountsPageProps) {
     bindingInFlightRef.current = true
     setBinding(true)
     try {
-      const response = await fetch(`${config.apiBase}/auth/url`, { method: 'POST' })
+      const response = await fetch(`${config.apiBase}/auth/url`, {
+        method: 'POST',
+        ...(config.passLanguageToAuth
+          ? {
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ locale: isEnglish ? 'en_US' : 'zh_CN' }),
+            }
+          : {}),
+      })
       const data = await response.json().catch(() => null)
       if (!response.ok) throw new Error(localizeError(data?.error, isEnglish, `Unable to create ${config.platformName} authorization link`))
       window.location.href = data.authUrl
@@ -523,7 +538,10 @@ export function PlatformAccountsPage({ config }: PlatformAccountsPageProps) {
               if (!open) setLegalAccepted(false)
             }}
           >
-            <DialogContent className="border-white/10 bg-zinc-950 text-white sm:max-w-lg">
+            <DialogContent
+              className="border-white/10 bg-zinc-950 text-white sm:max-w-lg"
+              closeLabel={config.localizeLegalDialogClose ? t(isEnglish, '关闭', 'Close') : undefined}
+            >
               <DialogHeader>
                 <DialogTitle>
                   {t(isEnglish, `连接 ${config.platformName} 前请确认`, `Before connecting ${config.platformName}`)}
@@ -536,6 +554,30 @@ export function PlatformAccountsPage({ config }: PlatformAccountsPageProps) {
                   )}
                 </DialogDescription>
               </DialogHeader>
+
+              {config.providerLanguageNotice && config.providerLanguageSettingsUrl && (
+                <div className="rounded-xl border border-amber-400/25 bg-amber-400/[0.08] p-4 text-sm text-amber-100/90">
+                  <p>
+                    {t(
+                      isEnglish,
+                      config.providerLanguageNotice,
+                      config.providerLanguageNoticeEn || config.providerLanguageNotice,
+                    )}
+                  </p>
+                  <a
+                    href={config.providerLanguageSettingsUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-2 inline-flex font-medium text-amber-200 underline underline-offset-4 hover:text-amber-100"
+                  >
+                    {t(
+                      isEnglish,
+                      config.providerLanguageSettingsLabel || '打开平台语言设置',
+                      config.providerLanguageSettingsLabelEn || 'Open platform language settings',
+                    )}
+                  </a>
+                </div>
+              )}
 
               <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-white/10 bg-white/[0.04] p-4 text-sm text-white/75">
                 <input
