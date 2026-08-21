@@ -1184,7 +1184,7 @@ export default function ModelsPage() {
     });
   }, [categoryLabels, debouncedSearchQuery, displayLang, models]);
 
-  const hasFilters = selectedCategory !== "全部" || searchQuery.trim().length > 0;
+  const hasFilters = selectedCategory !== "全部" || debouncedSearchQuery.trim().length > 0;
   const totalModelCount = debouncedSearchQuery.trim().length >= 2 && displayLang === "en"
     ? filteredModels.length
     : Math.max(totalModels, filteredModels.length);

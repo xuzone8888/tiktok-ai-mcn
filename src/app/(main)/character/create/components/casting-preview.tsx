@@ -261,7 +261,7 @@ export function CastingPreview() {
 
     const data = await response.json();
     if (!data.success) {
-      alert(t("errors.save"));
+      alert(lang === "zh" && data.error ? data.error : t("errors.save"));
       return null;
     }
 
@@ -309,7 +309,7 @@ export function CastingPreview() {
 
     const data = await response.json();
     if (!data.success) {
-      alert(t("errors.save"));
+      alert(lang === "zh" && data.error ? data.error : t("errors.save"));
       return null;
     }
 
@@ -612,7 +612,7 @@ export function CastingPreview() {
                               if (data.status === "failed") {
                                 setSora2Confirming(false);
                                 setSora2ConfirmStep("error");
-                                setSora2PidError(t("errors.pidExtract"));
+                                setSora2PidError(lang === "zh" && data.error ? data.error : t("errors.pidExtract"));
                                 return;
                               }
                               pidPollCount++;
@@ -631,7 +631,7 @@ export function CastingPreview() {
                           pollPid();
                         } else {
                           setSora2ConfirmStep("error");
-                          setSora2PidError(t("errors.pidSubmit"));
+                          setSora2PidError(lang === "zh" && pidResult.error ? pidResult.error : t("errors.pidSubmit"));
                           setSora2Confirming(false);
                         }
                       } catch (error) {
