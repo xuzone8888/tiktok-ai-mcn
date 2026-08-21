@@ -59,6 +59,8 @@ export interface FacebookUserInfo {
   id: string
 }
 
+export type FacebookUiLocale = 'en_US' | 'zh_CN'
+
 const FACEBOOK_PAGE_PUBLISH_TASKS = new Set(['CREATE_CONTENT'])
 const FACEBOOK_ACCOUNT_EDGE_FIELDS = 'id,name,access_token,category,followers_count,fan_count,link,tasks,picture{url}'
 const FACEBOOK_DIRECT_PAGE_FIELDS = 'id,name,access_token,category,followers_count,fan_count,link,picture{url}'
@@ -98,7 +100,10 @@ export function hasFacebookPagePublishPermission(tasks: string[] | null | undefi
   return Array.isArray(tasks) && tasks.some((task) => FACEBOOK_PAGE_PUBLISH_TASKS.has(task))
 }
 
-export function getFacebookPagePublishPermissionError(pageName?: string): string {
+export function getFacebookPagePublishPermissionError(pageName?: string, locale: FacebookUiLocale = 'zh_CN'): string {
+  if (locale === 'en_US') {
+    return `${pageName ? `Facebook Page "${pageName}"` : 'This Facebook Page'} does not have permission to publish content. Confirm that the Facebook account has full control of the Page, then reconnect and grant access to that Page.`
+  }
   return `${pageName ? `Facebook Page「${pageName}」` : '当前 Facebook Page'}没有发布内容权限。请确认该 Facebook 账号拥有 Page 完整控制权限，并重新授权时勾选允许访问对应 Page。`
 }
 
@@ -127,18 +132,22 @@ export function generateFacebookPKCE(): { codeVerifier: string; codeChallenge: s
   return { codeVerifier, codeChallenge }
 }
 
-export function generateFacebookState(userId: string): string {
-  return `${crypto.randomBytes(16).toString('hex')}_${userId}`
+export function generateFacebookState(userId: string, locale: FacebookUiLocale = 'zh_CN'): string {
+  return `${crypto.randomBytes(16).toString('hex')}_${userId}_${locale === 'en_US' ? 'en' : 'zh'}`
 }
 
-export function buildFacebookAuthorizationUrl(userId: string): {
+export function getFacebookUiLocaleFromState(state: string | null | undefined): FacebookUiLocale {
+  return state?.endsWith('_en') ? 'en_US' : 'zh_CN'
+}
+
+export function buildFacebookAuthorizationUrl(userId: string, locale: FacebookUiLocale = 'zh_CN'): {
   authUrl: string
   state: string
   codeVerifier: string
 } {
   const config = getFacebookOAuthConfig()
   const { codeVerifier, codeChallenge } = generateFacebookPKCE()
-  const state = generateFacebookState(userId)
+  const state = generateFacebookState(userId, locale)
 
   const params = new URLSearchParams({
     client_id: config.clientId,
