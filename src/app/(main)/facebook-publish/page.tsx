@@ -1,5 +1,3 @@
-import Link from 'next/link'
-
 import { FacebookBrandIcon } from '@/components/brand/FacebookBrandIcon'
 import { PlatformPublishPage } from '@/components/publish/platform/PlatformPublishPage'
 import { META_PLATFORM_CONFIGS } from '@/lib/publish/platform-config'
@@ -10,11 +8,7 @@ export default function FacebookPublishPage() {
     <PlatformPublishPage
       config={{
         ...META_PLATFORM_CONFIGS.facebook,
-        icon: (
-          <Link href="/facebook-publish" aria-label="Facebook Video Management">
-            <FacebookBrandIcon className="h-12 w-14" />
-          </Link>
-        ),
+        icon: <FacebookBrandIcon className="h-8 w-8" />,
       }}
       showCommentManagement={isFacebookCommentsPageEnabled()}
     />

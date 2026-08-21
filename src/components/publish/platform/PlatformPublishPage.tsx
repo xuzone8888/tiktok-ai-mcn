@@ -1735,7 +1735,7 @@ export function PlatformPublishPage({
             )}
             <span className="text-white drop-shadow-lg">{pageTitle}</span>
           </h1>
-          <p className="ml-[19px] mt-1 text-white/60">
+          <p className={cn('mt-1 text-white/60', config.platform === 'facebook' ? 'ml-[44px]' : 'ml-[19px]')}>
             {pageDescription}
           </p>
         </div>

@@ -75,12 +75,22 @@ test('Facebook surfaces use the Facebook brand icon instead of the generic share
   assert.match(sidebar, /Facebook Video Management[\s\S]*?icon: FacebookBrandIcon/)
   assert.match(accounts, /FacebookBrandIcon/)
   assert.doesNotMatch(accounts, /Share2/)
+  assert.doesNotMatch(accounts, /<Link/)
+  assert.match(accounts, /FacebookBrandIcon className="h-8 w-8"/)
   assert.match(publish, /FacebookBrandIcon/)
   assert.doesNotMatch(publish, /Share2/)
+  assert.doesNotMatch(publish, /<Link/)
+  assert.match(publish, /FacebookBrandIcon className="h-8 w-8"/)
   assert.match(comments, /platform === "facebook"\) return <FacebookBrandIcon/)
   assert.match(privacy, /Facebook Platform Data[\s\S]*?<FacebookBrandIcon/)
   assert.match(terms, /Facebook Platform Integration Terms[\s\S]*?<FacebookBrandIcon/)
   assert.match(deletion, /<FacebookBrandIcon/)
+})
+
+test('Facebook publish header aligns its description with the title text', () => {
+  const publishShell = read('src/components/publish/platform/PlatformPublishPage.tsx')
+
+  assert.match(publishShell, /config\.platform === 'facebook' \? 'ml-\[44px\]' : 'ml-\[19px\]'/)
 })
 
 test('Facebook account binding sends language and callback messages remain localizable', () => {
