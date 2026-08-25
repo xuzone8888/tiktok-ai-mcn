@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import {
   assertFacebookRequiredPageScopes,
   calculateFacebookTokenExpiration,
-  debugFacebookUserToken,
+  discoverMyFacebookPages,
   exchangeFacebookCodeForToken,
   exchangeForLongLivedUserToken,
   FACEBOOK_PAGE_SCOPES,
@@ -11,11 +11,9 @@ import {
   getFacebookGrantedPermissions,
   getFacebookOAuthConfig,
   getFacebookUiLocaleFromState,
-  getFacebookPagePublishPermissionError,
   getFacebookUserInfo,
-  getMyFacebookPages,
-  hasFacebookPagePublishPermission,
   isFacebookPageWebhookEnabled,
+  planFacebookPageBinding,
   subscribeFacebookPageToWebhooks,
   type FacebookPermissionInfo,
   type FacebookTokenDebugInfo,
@@ -101,7 +99,15 @@ function buildFacebookNoPageError(
 
 function localizeFacebookCallbackError(error: unknown, isEnglish: boolean) {
   const message = error instanceof Error ? error.message : ''
-  if (!isEnglish) return message || 'Facebook 授权失败'
+  if (!isEnglish) {
+    if (/temporarily unavailable/.test(message)) {
+      return 'Meta 暂时无法验证全部已选择的 Facebook Page，请稍后重试。'
+    }
+    if (/Page discovery broker is out of date/.test(message)) {
+      return 'Facebook 授权服务正在更新，请稍后重试。'
+    }
+    return message || 'Facebook 授权失败'
+  }
   if (!message) return 'Facebook authorization failed.'
   if (/Facebook Page authorization is missing required permissions:/.test(message)) return message
   if (/Facebook authorization did not return a Page/.test(message)) return message
@@ -202,27 +208,17 @@ export async function GET(request: NextRequest) {
 
     const shortToken = await exchangeFacebookCodeForToken(code, authState.code_verifier)
     const longLivedToken = await exchangeForLongLivedUserToken(shortToken.access_token)
-    const [facebookUser, pages, permissions] = await Promise.all([
+    const [facebookUser, pageDiscovery, permissions] = await Promise.all([
       getFacebookUserInfo(longLivedToken.access_token),
-      getMyFacebookPages(longLivedToken.access_token),
+      discoverMyFacebookPages(longLivedToken.access_token),
       getFacebookGrantedPermissions(longLivedToken.access_token),
     ])
     assertFacebookRequiredPageScopes(permissions)
 
-    if (pages.length === 0) {
-      const tokenDebug = await debugFacebookUserToken(longLivedToken.access_token).catch(() => null)
-
-      throw new Error(buildFacebookNoPageError(permissions, tokenDebug, isEnglish))
+    if (pageDiscovery.pages.length === 0) {
+      throw new Error(buildFacebookNoPageError(permissions, null, isEnglish))
     }
-    const publishablePages = pages.filter((page) => hasFacebookPagePublishPermission(page.tasks))
-    const nonPublishablePages = pages.filter((page) => !hasFacebookPagePublishPermission(page.tasks))
-
-    if (nonPublishablePages.length > 0) {
-      throw new Error(getFacebookPagePublishPermissionError(
-        nonPublishablePages.map((page) => page.name).join(', '),
-        locale,
-      ))
-    }
+    const bindingPlan = planFacebookPageBinding(pageDiscovery, locale)
 
     const now = new Date().toISOString()
     const expiresAt = calculateFacebookTokenExpiration(longLivedToken.expires_in)?.toISOString() || null
@@ -230,12 +226,12 @@ export async function GET(request: NextRequest) {
     let savedCount = 0
 
     if (isFacebookPageWebhookEnabled()) {
-      await Promise.all(publishablePages.map((page) =>
+      await Promise.all(bindingPlan.pagesToSave.map((page) =>
         subscribeFacebookPageToWebhooks(page.pageId, page.accessToken)
       ))
     }
 
-    for (const page of publishablePages) {
+    for (const page of bindingPlan.pagesToSave) {
       const { data: savedAccount, error: upsertError } = await supabase
         .from('facebook_accounts')
         .upsert({
@@ -290,12 +286,17 @@ export async function GET(request: NextRequest) {
       })
       .eq('state', state)
 
-    return redirectToAccounts(redirectOrigin, {
+    const redirectParams: Record<string, string> = {
       success: 'true',
       name: isEnglish
         ? `${savedCount} Page${savedCount === 1 ? '' : 's'}`
         : `${savedCount} 个 Page`,
-    })
+    }
+    if (bindingPlan.warning) {
+      redirectParams.warning = bindingPlan.warning
+    }
+
+    return redirectToAccounts(redirectOrigin, redirectParams)
   } catch (err) {
     console.error('Facebook callback error:', err)
 

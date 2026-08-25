@@ -124,18 +124,19 @@ Complete these in order after the branch is deployed:
    - API version: `v25.0`
    - subscribed field: `feed` (currently subscribed)
 5. Set `FACEBOOK_PAGE_WEBHOOK_ENABLED=true` only after Meta verifies the endpoint.
-6. Deploy the Next.js application and confirm these public endpoints return the expected non-success response to an unsigned request rather than a 404:
+6. If production has `OAUTH_BROKER_URL` enabled, deploy the United States OAuth broker **first** from the exact same release commit as the Alibaba Cloud application. Confirm the broker accepts the versioned `discoverMyFacebookPages` operation; an old broker must fail closed instead of silently returning the legacy partial `/me/accounts` result.
+7. Deploy the Next.js application and confirm these public endpoints return the expected non-success response to an unsigned request rather than a 404:
    - `/api/facebook/deauthorize`
    - `/api/facebook/data-deletion`
    - `/facebook-data-deletion`
-7. In Meta App Settings:
+8. In Meta App Settings:
    - set the deauthorization callback to `https://www.toryxai.com/api/facebook/deauthorize`;
    - change User Data Deletion from an instruction URL to the callback `https://www.toryxai.com/api/facebook/data-deletion`;
    - keep Privacy Policy `https://toryxai.com/privacy` (Meta's crawler-resolved canonical URL);
    - keep Terms `https://www.toryxai.com/terms`.
-8. Reconnect or refresh every existing review/test Page once so `authorized_by_facebook_user_id` is populated and the Page webhook is subscribed.
-9. Verify the Business Login configuration includes exactly the six Page permissions in the submission scope.
-10. Run the full reviewer path with the test Page and retain screenshots of successful webhook verification, publish, comment sync, reply, disconnect, and deletion status.
+9. Reconnect or refresh every existing review/test Page once so `authorized_by_facebook_user_id` is populated and the Page webhook is subscribed.
+10. Verify the Business Login configuration includes exactly the six Page permissions in the submission scope.
+11. Run the full reviewer path with the test Page and retain screenshots of successful webhook verification, publish, comment sync, reply, disconnect, and deletion status.
 
 ## Current verified status
 
@@ -183,6 +184,7 @@ Complete these in order after the branch is deployed:
 - [x] Webhook endpoint deployed, Page object selected, callback verified, and app-level `feed` subscribed
 - [ ] Confirm production `FACEBOOK_PAGE_WEBHOOK_ENABLED=true`
 - [ ] Confirm `NEXT_PUBLIC_FACEBOOK_COMMENTS_ENABLED=true`, `SOCIAL_COMMENTS_API_ENABLED=true`, and `SOCIAL_COMMENTS_ENABLED_PLATFORMS` contains `facebook`
+- [ ] If `OAUTH_BROKER_URL` is enabled, rebuild the United States broker from the same release commit before deploying the Alibaba Cloud application, then verify a two-Page connection through the broker path
 - [x] Confirm the deauthorization URL in Meta matches the production callback above
 - [x] User Data Deletion uses callback mode with `https://www.toryxai.com/api/facebook/data-deletion`
 - [x] Locate and confirm the Meta deauthorization callback is `https://www.toryxai.com/api/facebook/deauthorize`

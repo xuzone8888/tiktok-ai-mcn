@@ -26,6 +26,7 @@ const OPS: Record<BrokerPlatform, Record<string, { fn: BrokerFn; params: string[
   facebook: {
     exchangeFacebookCodeForToken: { fn: facebookOAuth.exchangeFacebookCodeForToken as BrokerFn, params: ['code', 'codeVerifier'] },
     exchangeForLongLivedUserToken: { fn: facebookOAuth.exchangeForLongLivedUserToken as BrokerFn, params: ['accessToken'] },
+    discoverMyFacebookPages: { fn: facebookOAuth.discoverMyFacebookPages as BrokerFn, params: ['userAccessToken'] },
     getMyFacebookPages: { fn: facebookOAuth.getMyFacebookPages as BrokerFn, params: ['userAccessToken'] },
     getFacebookUserInfo: { fn: facebookOAuth.getFacebookUserInfo as BrokerFn, params: ['userAccessToken'] },
     getFacebookPageInfo: { fn: facebookOAuth.getFacebookPageInfo as BrokerFn, params: ['pageId', 'pageAccessToken'] },
