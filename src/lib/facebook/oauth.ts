@@ -33,6 +33,28 @@ export interface FacebookPageInfo {
   accessToken: string
 }
 
+export const FACEBOOK_PAGE_DISCOVERY_CONTRACT_VERSION = 2
+
+export type FacebookPageDiscoveryWarningCode =
+  | 'selection_diagnostics_unavailable'
+  | 'selected_pages_unavailable'
+
+export interface FacebookPageDiscoveryWarning {
+  code: FacebookPageDiscoveryWarningCode
+  count?: number
+}
+
+export interface FacebookPageDiscoveryResult {
+  contractVersion: typeof FACEBOOK_PAGE_DISCOVERY_CONTRACT_VERSION
+  pages: FacebookPageInfo[]
+  warnings: FacebookPageDiscoveryWarning[]
+}
+
+export interface FacebookPageBindingPlan {
+  pagesToSave: FacebookPageInfo[]
+  warning: string | null
+}
+
 export interface FacebookPageTokenResponse {
   access_token: string
   expires_in?: number
@@ -445,7 +467,24 @@ function getDebugPageTargets(debugInfo: FacebookTokenDebugInfo): Map<string, Set
   return targets
 }
 
-async function getFacebookPageById(userAccessToken: string, pageId: string, fields: string, mode: string): Promise<any | null> {
+interface FacebookRawPage extends Record<string, unknown> {
+  id?: unknown
+  name?: unknown
+  access_token?: unknown
+  tasks?: unknown
+}
+
+interface FacebookPageLookupResult {
+  page: FacebookRawPage | null
+  httpStatus: number | null
+}
+
+async function getFacebookPageById(
+  userAccessToken: string,
+  pageId: string,
+  fields: string,
+  mode: string,
+): Promise<FacebookPageLookupResult> {
   const params = new URLSearchParams({
     fields,
     appsecret_proof: getFacebookAppSecretProof(userAccessToken),
@@ -460,28 +499,48 @@ async function getFacebookPageById(userAccessToken: string, pageId: string, fiel
       mode,
       error: await readFacebookApiError(response),
     })
-    return null
+    return { page: null, httpStatus: response.status }
   }
 
-  const page = await response.json().catch(() => null) as any
-  return page?.id && page?.name && page?.access_token ? page : null
+  const page = await response.json().catch(() => null) as FacebookRawPage | null
+  return {
+    page: typeof page?.id === 'string' && typeof page.name === 'string' && typeof page.access_token === 'string'
+      ? page
+      : null,
+    httpStatus: null,
+  }
 }
 
-async function getFacebookPageByIdWithFallback(userAccessToken: string, pageId: string): Promise<any | null> {
-  const page = await getFacebookPageById(userAccessToken, pageId, FACEBOOK_DIRECT_PAGE_FIELDS, 'direct_page')
-  if (page) return page
+async function getFacebookPageByIdWithFallback(userAccessToken: string, pageId: string): Promise<FacebookRawPage | null> {
+  const primary = await getFacebookPageById(userAccessToken, pageId, FACEBOOK_DIRECT_PAGE_FIELDS, 'direct_page')
+  if (primary.page) return primary.page
 
-  return getFacebookPageById(userAccessToken, pageId, FACEBOOK_DIRECT_PAGE_MINIMAL_FIELDS, 'direct_page_minimal')
+  const minimal = await getFacebookPageById(
+    userAccessToken,
+    pageId,
+    FACEBOOK_DIRECT_PAGE_MINIMAL_FIELDS,
+    'direct_page_minimal',
+  )
+  if (minimal.page) return minimal.page
+
+  const retryableStatus = [primary.httpStatus, minimal.httpStatus]
+    .find((status) => status === 429 || (typeof status === 'number' && status >= 500))
+  if (retryableStatus) {
+    const error = new Error('Facebook could not verify all selected Pages because Meta is temporarily unavailable. Please try again.') as Error & { httpStatus?: number }
+    error.httpStatus = retryableStatus
+    throw error
+  }
+
+  return null
 }
 
-async function getFacebookPagesFromDebugTargets(userAccessToken: string): Promise<any[]> {
-  const debugInfo = await debugFacebookUserToken(userAccessToken).catch(() => null)
-  if (!debugInfo) return []
-
-  const pageTargets = getDebugPageTargets(debugInfo)
-  if (pageTargets.size === 0) return []
-
-  const pages = await Promise.all([...pageTargets.entries()].map(async ([pageId, scopes]) => {
+async function getFacebookPagesFromDebugTargets(
+  userAccessToken: string,
+  pageTargets: Map<string, Set<string>>,
+  targetIds: string[],
+): Promise<FacebookRawPage[]> {
+  const pages = await Promise.all(targetIds.map(async (pageId) => {
+    const scopes = pageTargets.get(pageId) || new Set<string>()
     const page = await getFacebookPageByIdWithFallback(userAccessToken, pageId)
     if (!page) return null
 
@@ -491,38 +550,185 @@ async function getFacebookPagesFromDebugTargets(userAccessToken: string): Promis
     }
   }))
 
-  return pages.filter(Boolean)
+  return pages.filter((page): page is FacebookRawPage & { tasks: string[] } => Boolean(page))
 }
 
 function hasFacebookPageAccessToken(page: any): boolean {
   return Boolean(page?.id && page?.name && page?.access_token)
 }
 
-export async function getMyFacebookPages(userAccessToken: string): Promise<FacebookPageInfo[]> {
-  if (isBrokerEnabled()) return callBroker<FacebookPageInfo[]>('facebook', 'getMyFacebookPages', { userAccessToken })
+async function discoverFacebookPages(
+  userAccessToken: string,
+  options: { requireAllSelectedTargets: boolean; targetPageId?: string },
+): Promise<FacebookPageDiscoveryResult> {
   const params = new URLSearchParams({
     fields: FACEBOOK_ACCOUNT_EDGE_FIELDS,
     appsecret_proof: getFacebookAppSecretProof(userAccessToken),
     limit: '100',
   })
 
-  const response = await fetch(`${FACEBOOK_GRAPH_URL}/me/accounts?${params.toString()}`, {
+  const accountsResponsePromise = fetch(`${FACEBOOK_GRAPH_URL}/me/accounts?${params.toString()}`, {
     headers: { Authorization: `Bearer ${userAccessToken}` },
   })
+  let response: Response
+  let debugInfo: FacebookTokenDebugInfo | null = null
+  if (options.requireAllSelectedTargets) {
+    [response, debugInfo] = await Promise.all([
+      accountsResponsePromise,
+      debugFacebookUserToken(userAccessToken).catch(() => null),
+    ])
+  } else {
+    response = await accountsResponsePromise
+  }
   if (!response.ok) {
     throw new Error(`Failed to fetch Facebook Pages: ${await readFacebookApiError(response)}`)
   }
 
   const data = await response.json().catch(() => null) as any
-  let pages = Array.isArray(data?.data) ? data.data : []
+  const edgePages = Array.isArray(data?.data) ? data.data : []
+  const pagesById = new Map<string, any>()
 
-  if (pages.length === 0) {
-    pages = await getFacebookPagesFromDebugTargets(userAccessToken)
+  for (const page of edgePages) {
+    if (hasFacebookPageAccessToken(page)) {
+      pagesById.set(String(page.id), page)
+    }
   }
 
-  return pages
-    .filter(hasFacebookPageAccessToken)
-    .map(mapFacebookPage)
+  if (!options.requireAllSelectedTargets && options.targetPageId && pagesById.has(options.targetPageId)) {
+    return {
+      contractVersion: FACEBOOK_PAGE_DISCOVERY_CONTRACT_VERSION,
+      pages: [...pagesById.values()].map((page) => mapFacebookPage(page)),
+      warnings: [],
+    }
+  }
+
+  if (options.requireAllSelectedTargets && !debugInfo) {
+    return {
+      contractVersion: FACEBOOK_PAGE_DISCOVERY_CONTRACT_VERSION,
+      pages: [...pagesById.values()].map((page) => mapFacebookPage(page)),
+      warnings: [{ code: 'selection_diagnostics_unavailable' }],
+    }
+  }
+
+  const resolvedDebugInfo = debugInfo || await debugFacebookUserToken(userAccessToken)
+  const pageTargets = getDebugPageTargets(resolvedDebugInfo)
+  const missingTargetIds = [...pageTargets.keys()].filter((pageId) => !pagesById.has(pageId))
+  const targetIdsToRecover = options.requireAllSelectedTargets
+    ? missingTargetIds
+    : missingTargetIds.filter((pageId) => pageId === options.targetPageId)
+  const recoveredPages = await getFacebookPagesFromDebugTargets(
+    userAccessToken,
+    pageTargets,
+    targetIdsToRecover,
+  )
+
+  for (const page of recoveredPages) {
+    if (hasFacebookPageAccessToken(page)) {
+      pagesById.set(String(page.id), page)
+    }
+  }
+
+  const unresolvedTargetCount = [...pageTargets.keys()].filter((pageId) => !pagesById.has(pageId)).length
+  const warnings: FacebookPageDiscoveryWarning[] = []
+  if (options.requireAllSelectedTargets && pageTargets.size === 0) {
+    warnings.push({ code: 'selection_diagnostics_unavailable' })
+  }
+  if (options.requireAllSelectedTargets && unresolvedTargetCount > 0) {
+    warnings.push({ code: 'selected_pages_unavailable', count: unresolvedTargetCount })
+  }
+
+  return {
+    contractVersion: FACEBOOK_PAGE_DISCOVERY_CONTRACT_VERSION,
+    pages: [...pagesById.values()].map((page) => mapFacebookPage(page)),
+    warnings,
+  }
+}
+
+function assertFacebookPageDiscoveryContract(result: FacebookPageDiscoveryResult): FacebookPageDiscoveryResult {
+  if (result?.contractVersion !== FACEBOOK_PAGE_DISCOVERY_CONTRACT_VERSION || !Array.isArray(result.pages) || !Array.isArray(result.warnings)) {
+    throw new Error('Facebook Page discovery broker is out of date. Rebuild the OAuth broker with the same application release before reconnecting.')
+  }
+  return result
+}
+
+export async function discoverMyFacebookPages(userAccessToken: string): Promise<FacebookPageDiscoveryResult> {
+  if (isBrokerEnabled()) {
+    try {
+      const result = await callBroker<FacebookPageDiscoveryResult>(
+        'facebook',
+        'discoverMyFacebookPages',
+        { userAccessToken },
+        { timeoutMs: 30_000 },
+      )
+      return assertFacebookPageDiscoveryContract(result)
+    } catch (error) {
+      // An older broker does not know this versioned operation and returns its
+      // closed-whitelist HTTP 400. Convert that transport-only response into a
+      // specific, localizable rollout error instead of showing a raw status.
+      const errorMessage = error && typeof error === 'object' && 'message' in error
+        ? String(error.message)
+        : String(error || '')
+      if (/OAuth broker returned transport status 400/.test(errorMessage)) {
+        throw new Error('Facebook Page discovery broker is out of date. Rebuild the OAuth broker with the same application release before reconnecting.')
+      }
+      throw error
+    }
+  }
+  return assertFacebookPageDiscoveryContract(
+    await discoverFacebookPages(userAccessToken, { requireAllSelectedTargets: true }),
+  )
+}
+
+export async function getMyFacebookPages(userAccessToken: string): Promise<FacebookPageInfo[]> {
+  return (await discoverMyFacebookPages(userAccessToken)).pages
+}
+
+function formatPageNames(names: string[], isEnglish: boolean): string {
+  const visible = names.slice(0, 3)
+  const remaining = names.length - visible.length
+  const list = visible.map((name) => `“${name}”`).join(isEnglish ? ', ' : '、')
+  if (remaining <= 0) return list
+  return isEnglish ? `${list} and ${remaining} more` : `${list}等 ${names.length} 个 Page`
+}
+
+export function planFacebookPageBinding(
+  discovery: FacebookPageDiscoveryResult,
+  locale: FacebookUiLocale = 'zh_CN',
+): FacebookPageBindingPlan {
+  const isEnglish = locale === 'en_US'
+  const pagesToSave = discovery.pages.filter((page) => hasFacebookPagePublishPermission(page.tasks))
+  const pagesWithoutPublishPermission = discovery.pages.filter((page) => !hasFacebookPagePublishPermission(page.tasks))
+
+  if (pagesToSave.length === 0 && pagesWithoutPublishPermission.length > 0) {
+    throw new Error(getFacebookPagePublishPermissionError(pagesWithoutPublishPermission[0]?.name, locale))
+  }
+
+  const warningParts: string[] = []
+  if (pagesWithoutPublishPermission.length > 0) {
+    const pageNames = formatPageNames(pagesWithoutPublishPermission.map((page) => page.name), isEnglish)
+    warningParts.push(isEnglish
+      ? `Skipped ${pageNames} because this Facebook account does not have permission to publish to ${pagesWithoutPublishPermission.length === 1 ? 'that Page' : 'those Pages'}.`
+      : `已跳过 ${pageNames}，因为当前 Facebook 账号没有这些 Page 的发布权限。`)
+  }
+
+  for (const warning of discovery.warnings) {
+    if (warning.code === 'selected_pages_unavailable' && Number(warning.count) > 0) {
+      const count = Number(warning.count)
+      warningParts.push(isEnglish
+        ? `${count} selected Page${count === 1 ? '' : 's'} could not be connected because Meta did not return Page access data.`
+        : `另有 ${count} 个已选择的 Page 因 Meta 未返回 Page 访问数据而未能连接。`)
+    }
+    if (warning.code === 'selection_diagnostics_unavailable') {
+      warningParts.push(isEnglish
+        ? 'Meta Page-selection diagnostics were temporarily unavailable. Confirm that every selected Page appears in the account list.'
+        : 'Meta 的 Page 选择诊断暂时不可用，请确认账号列表中是否显示了全部已选择的 Page。')
+    }
+  }
+
+  return {
+    pagesToSave,
+    warning: warningParts.length > 0 ? warningParts.join(' ') : null,
+  }
 }
 
 export async function getFacebookPageInfo(pageId: string, pageAccessToken: string): Promise<Omit<FacebookPageInfo, 'accessToken'>> {
@@ -559,7 +765,11 @@ export async function getFacebookPageInfo(pageId: string, pageAccessToken: strin
 export async function refreshFacebookPageAccessToken(userAccessToken: string, pageId: string): Promise<FacebookPageTokenResponse> {
   if (isBrokerEnabled()) return callBroker<FacebookPageTokenResponse>('facebook', 'refreshFacebookPageAccessToken', { userAccessToken, pageId })
   const longLived = await exchangeForLongLivedUserToken(userAccessToken)
-  const pages = await getMyFacebookPages(longLived.access_token)
+  const discovery = await discoverFacebookPages(longLived.access_token, {
+    requireAllSelectedTargets: false,
+    targetPageId: pageId,
+  })
+  const pages = discovery.pages
   const page = pages.find((candidate) => candidate.pageId === pageId)
 
   if (!page) {

@@ -9,6 +9,7 @@ export default function FacebookAccountsPage() {
         ...META_PLATFORM_CONFIGS.facebook,
         icon: <FacebookBrandIcon className="h-8 w-8" />,
         passLanguageToAuth: true,
+        showAuthCallbackWarning: true,
       }}
     />
   )

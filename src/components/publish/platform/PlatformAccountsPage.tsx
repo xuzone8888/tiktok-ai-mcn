@@ -92,6 +92,7 @@ export interface PlatformAccountsConfig {
   deleteAllDataConfirmation?: string
   deleteAllDataConfirmationEn?: string
   passLanguageToAuth?: boolean
+  showAuthCallbackWarning?: boolean
 }
 
 interface PlatformAccountsPageProps {
@@ -99,7 +100,7 @@ interface PlatformAccountsPageProps {
 }
 
 type AuthNotice = {
-  type: 'success' | 'error'
+  type: 'success' | 'warning' | 'error'
   title: string
   description: string
 }
@@ -313,16 +314,27 @@ export function PlatformAccountsPage({ config }: PlatformAccountsPageProps) {
     const success = params.get('success')
     const error = params.get('error')
     const name = params.get('name')
+    const warning = config.showAuthCallbackWarning ? params.get('warning') : null
 
     if (success) {
+      const connectedDescription = name
+        ? t(isEnglish, `已连接账号：${name}`, `Connected account: ${name}`)
+        : t(isEnglish, '授权完成', 'Authorization completed')
+      const warningDescription = warning
+        ? localizeError(warning, isEnglish, `${config.platformName} connected, but some selected accounts could not be added.`)
+        : null
       setAuthNotice({
-        type: 'success',
-        title: t(isEnglish, `${config.platformName} 账号已绑定`, `${config.platformName} account connected`),
-        description: name ? t(isEnglish, `已连接账号：${name}`, `Connected account: ${name}`) : t(isEnglish, '授权完成', 'Authorization completed'),
+        type: warning ? 'warning' : 'success',
+        title: warning
+          ? t(isEnglish, `${config.platformName} 账号已部分绑定`, `${config.platformName} account connected with a warning`)
+          : t(isEnglish, `${config.platformName} 账号已绑定`, `${config.platformName} account connected`),
+        description: warningDescription ? `${connectedDescription} ${warningDescription}` : connectedDescription,
       })
       toast({
-        title: t(isEnglish, `${config.platformName} 账号已绑定`, `${config.platformName} account connected`),
-        description: name ? t(isEnglish, `已连接账号：${name}`, `Connected account: ${name}`) : t(isEnglish, '授权完成', 'Authorization completed'),
+        title: warning
+          ? t(isEnglish, `${config.platformName} 账号已部分绑定`, `${config.platformName} account connected with a warning`)
+          : t(isEnglish, `${config.platformName} 账号已绑定`, `${config.platformName} account connected`),
+        description: warningDescription ? `${connectedDescription} ${warningDescription}` : connectedDescription,
       })
       window.history.replaceState({}, '', `${config.routeBase}/accounts`)
     } else if (error) {
@@ -338,7 +350,7 @@ export function PlatformAccountsPage({ config }: PlatformAccountsPageProps) {
       })
       window.history.replaceState({}, '', `${config.routeBase}/accounts`)
     }
-  }, [config.platformName, config.routeBase, isEnglish, languageReady, toast])
+  }, [config.platformName, config.routeBase, config.showAuthCallbackWarning, isEnglish, languageReady, toast])
 
   const overview = useMemo(() => ({
     total: accounts.length,
