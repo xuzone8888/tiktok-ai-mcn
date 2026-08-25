@@ -474,14 +474,13 @@ async function getFacebookPageByIdWithFallback(userAccessToken: string, pageId: 
   return getFacebookPageById(userAccessToken, pageId, FACEBOOK_DIRECT_PAGE_MINIMAL_FIELDS, 'direct_page_minimal')
 }
 
-async function getFacebookPagesFromDebugTargets(userAccessToken: string): Promise<any[]> {
-  const debugInfo = await debugFacebookUserToken(userAccessToken).catch(() => null)
-  if (!debugInfo) return []
-
-  const pageTargets = getDebugPageTargets(debugInfo)
-  if (pageTargets.size === 0) return []
-
-  const pages = await Promise.all([...pageTargets.entries()].map(async ([pageId, scopes]) => {
+async function getFacebookPagesFromDebugTargets(
+  userAccessToken: string,
+  pageTargets: Map<string, Set<string>>,
+  targetIds: string[],
+): Promise<any[]> {
+  const pages = await Promise.all(targetIds.map(async (pageId) => {
+    const scopes = pageTargets.get(pageId) || new Set<string>()
     const page = await getFacebookPageByIdWithFallback(userAccessToken, pageId)
     if (!page) return null
 
@@ -498,31 +497,86 @@ function hasFacebookPageAccessToken(page: any): boolean {
   return Boolean(page?.id && page?.name && page?.access_token)
 }
 
-export async function getMyFacebookPages(userAccessToken: string): Promise<FacebookPageInfo[]> {
-  if (isBrokerEnabled()) return callBroker<FacebookPageInfo[]>('facebook', 'getMyFacebookPages', { userAccessToken })
+async function discoverFacebookPages(
+  userAccessToken: string,
+  options: { requireAllSelectedTargets: boolean; targetPageId?: string },
+): Promise<FacebookPageInfo[]> {
   const params = new URLSearchParams({
     fields: FACEBOOK_ACCOUNT_EDGE_FIELDS,
     appsecret_proof: getFacebookAppSecretProof(userAccessToken),
     limit: '100',
   })
 
-  const response = await fetch(`${FACEBOOK_GRAPH_URL}/me/accounts?${params.toString()}`, {
+  const accountsResponsePromise = fetch(`${FACEBOOK_GRAPH_URL}/me/accounts?${params.toString()}`, {
     headers: { Authorization: `Bearer ${userAccessToken}` },
   })
+  let response: Response
+  let debugInfo: FacebookTokenDebugInfo | null = null
+  if (options.requireAllSelectedTargets) {
+    [response, debugInfo] = await Promise.all([
+      accountsResponsePromise,
+      debugFacebookUserToken(userAccessToken),
+    ])
+  } else {
+    response = await accountsResponsePromise
+  }
   if (!response.ok) {
     throw new Error(`Failed to fetch Facebook Pages: ${await readFacebookApiError(response)}`)
   }
 
   const data = await response.json().catch(() => null) as any
-  let pages = Array.isArray(data?.data) ? data.data : []
+  const edgePages = Array.isArray(data?.data) ? data.data : []
+  const pagesById = new Map<string, any>()
 
-  if (pages.length === 0) {
-    pages = await getFacebookPagesFromDebugTargets(userAccessToken)
+  for (const page of edgePages) {
+    if (hasFacebookPageAccessToken(page)) {
+      pagesById.set(String(page.id), page)
+    }
   }
 
-  return pages
-    .filter(hasFacebookPageAccessToken)
-    .map(mapFacebookPage)
+  if (!options.requireAllSelectedTargets && options.targetPageId && pagesById.has(options.targetPageId)) {
+    return [...pagesById.values()].map((page) => mapFacebookPage(page))
+  }
+
+  const resolvedDebugInfo = debugInfo || await debugFacebookUserToken(userAccessToken)
+  const pageTargets = getDebugPageTargets(resolvedDebugInfo)
+  const missingTargetIds = [...pageTargets.keys()].filter((pageId) => !pagesById.has(pageId))
+  const targetIdsToRecover = options.requireAllSelectedTargets
+    ? missingTargetIds
+    : missingTargetIds.filter((pageId) => pageId === options.targetPageId)
+  const recoveredPages = await getFacebookPagesFromDebugTargets(
+    userAccessToken,
+    pageTargets,
+    targetIdsToRecover,
+  )
+
+  for (const page of recoveredPages) {
+    if (hasFacebookPageAccessToken(page)) {
+      pagesById.set(String(page.id), page)
+    }
+  }
+
+  const unresolvedTargetIds = [...pageTargets.keys()].filter((pageId) => !pagesById.has(pageId))
+  if (options.requireAllSelectedTargets && unresolvedTargetIds.length > 0) {
+    throw new Error(
+      `Facebook authorization selected ${pageTargets.size} Page${pageTargets.size === 1 ? '' : 's'}, but Meta did not return Page access data for: ${unresolvedTargetIds.join(', ')}. Confirm that the Facebook account has full control of every selected Page, then reconnect.`,
+    )
+  }
+
+  return [...pagesById.values()]
+    .map((page) => mapFacebookPage(page))
+}
+
+export async function getMyFacebookPages(userAccessToken: string): Promise<FacebookPageInfo[]> {
+  if (isBrokerEnabled()) {
+    return callBroker<FacebookPageInfo[]>(
+      'facebook',
+      'getMyFacebookPages',
+      { userAccessToken },
+      { timeoutMs: 30_000 },
+    )
+  }
+  return discoverFacebookPages(userAccessToken, { requireAllSelectedTargets: true })
 }
 
 export async function getFacebookPageInfo(pageId: string, pageAccessToken: string): Promise<Omit<FacebookPageInfo, 'accessToken'>> {
@@ -559,7 +613,10 @@ export async function getFacebookPageInfo(pageId: string, pageAccessToken: strin
 export async function refreshFacebookPageAccessToken(userAccessToken: string, pageId: string): Promise<FacebookPageTokenResponse> {
   if (isBrokerEnabled()) return callBroker<FacebookPageTokenResponse>('facebook', 'refreshFacebookPageAccessToken', { userAccessToken, pageId })
   const longLived = await exchangeForLongLivedUserToken(userAccessToken)
-  const pages = await getMyFacebookPages(longLived.access_token)
+  const pages = await discoverFacebookPages(longLived.access_token, {
+    requireAllSelectedTargets: false,
+    targetPageId: pageId,
+  })
   const page = pages.find((candidate) => candidate.pageId === pageId)
 
   if (!page) {

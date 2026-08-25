@@ -225,6 +225,162 @@ test('Facebook permission lookup stores only permissions Meta actually granted',
   assert.equal(request.init.headers.Authorization, 'Bearer synthetic-user-token')
 })
 
+test('Facebook Page discovery recovers every selected granular target when the accounts edge is partial', async () => {
+  const calls = []
+  const oauth = loadTypeScriptModule('src/lib/facebook/oauth.ts', {
+    '@/lib/oauth-broker/client': {
+      callBroker() {
+        throw new Error('broker should not be called')
+      },
+      isBrokerEnabled: () => false,
+    },
+  }, {
+    env: {
+      FACEBOOK_CLIENT_ID: 'synthetic-client',
+      FACEBOOK_CLIENT_SECRET: 'synthetic-secret',
+      FACEBOOK_REDIRECT_URI: 'https://app.example.test/api/facebook/auth/callback',
+    },
+    async fetch(input) {
+      const url = String(input)
+      calls.push(url)
+      if (url.includes('/me/accounts?')) {
+        return new Response(JSON.stringify({
+          data: [{
+            id: 'page-1',
+            name: 'First Page',
+            access_token: 'page-token-1',
+            tasks: ['CREATE_CONTENT'],
+          }],
+        }), { headers: { 'Content-Type': 'application/json' } })
+      }
+      if (url.includes('/debug_token?')) {
+        return new Response(JSON.stringify({
+          data: {
+            is_valid: true,
+            granular_scopes: [{
+              scope: 'pages_manage_posts',
+              target_ids: ['page-1', 'page-2'],
+            }],
+          },
+        }), { headers: { 'Content-Type': 'application/json' } })
+      }
+      if (url.includes('/page-2?')) {
+        return new Response(JSON.stringify({
+          id: 'page-2',
+          name: 'Second Page',
+          access_token: 'page-token-2',
+        }), { headers: { 'Content-Type': 'application/json' } })
+      }
+      throw new Error(`Unexpected Facebook request: ${url}`)
+    },
+  })
+
+  const pages = await oauth.getMyFacebookPages('synthetic-user-token')
+
+  assert.deepEqual(Array.from(pages, (page) => page.pageId), ['page-1', 'page-2'])
+  assert.deepEqual(Array.from(pages[1].tasks), ['CREATE_CONTENT'])
+  assert.equal(calls.filter((url) => url.includes('/page-1?')).length, 0)
+  assert.equal(calls.filter((url) => url.includes('/page-2?')).length, 1)
+})
+
+test('Facebook Page discovery fails instead of silently dropping an unrecoverable selected target', async () => {
+  const oauth = loadTypeScriptModule('src/lib/facebook/oauth.ts', {
+    '@/lib/oauth-broker/client': {
+      callBroker() {
+        throw new Error('broker should not be called')
+      },
+      isBrokerEnabled: () => false,
+    },
+  }, {
+    env: {
+      FACEBOOK_CLIENT_ID: 'synthetic-client',
+      FACEBOOK_CLIENT_SECRET: 'synthetic-secret',
+      FACEBOOK_REDIRECT_URI: 'https://app.example.test/api/facebook/auth/callback',
+    },
+    async fetch(input) {
+      const url = String(input)
+      if (url.includes('/me/accounts?')) {
+        return new Response(JSON.stringify({
+          data: [{
+            id: 'page-1',
+            name: 'First Page',
+            access_token: 'page-token-1',
+            tasks: ['CREATE_CONTENT'],
+          }],
+        }), { headers: { 'Content-Type': 'application/json' } })
+      }
+      if (url.includes('/debug_token?')) {
+        return new Response(JSON.stringify({
+          data: {
+            is_valid: true,
+            granular_scopes: [{
+              scope: 'pages_manage_posts',
+              target_ids: ['page-1', 'page-2'],
+            }],
+          },
+        }), { headers: { 'Content-Type': 'application/json' } })
+      }
+      if (url.includes('/page-2?')) {
+        return new Response(JSON.stringify({ error: { message: 'Page is unavailable' } }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+      throw new Error(`Unexpected Facebook request: ${url}`)
+    },
+  })
+
+  await assert.rejects(
+    oauth.getMyFacebookPages('synthetic-user-token'),
+    /selected 2 Pages.*page-2/,
+  )
+})
+
+test('Facebook Page refresh does not depend on diagnostics for a target already returned by the accounts edge', async () => {
+  const oauth = loadTypeScriptModule('src/lib/facebook/oauth.ts', {
+    '@/lib/oauth-broker/client': {
+      callBroker() {
+        throw new Error('broker should not be called')
+      },
+      isBrokerEnabled: () => false,
+    },
+  }, {
+    env: {
+      FACEBOOK_CLIENT_ID: 'synthetic-client',
+      FACEBOOK_CLIENT_SECRET: 'synthetic-secret',
+      FACEBOOK_REDIRECT_URI: 'https://app.example.test/api/facebook/auth/callback',
+    },
+    async fetch(input) {
+      const url = String(input)
+      if (url.includes('/oauth/access_token?')) {
+        return new Response(JSON.stringify({
+          access_token: 'long-lived-user-token',
+          expires_in: 3600,
+        }), { headers: { 'Content-Type': 'application/json' } })
+      }
+      if (url.includes('/me/accounts?')) {
+        return new Response(JSON.stringify({
+          data: [{
+            id: 'page-1',
+            name: 'First Page',
+            access_token: 'page-token-1',
+            tasks: ['CREATE_CONTENT'],
+          }],
+        }), { headers: { 'Content-Type': 'application/json' } })
+      }
+      if (url.includes('/debug_token?')) {
+        throw new Error('refresh should not call debug_token when its target Page is already available')
+      }
+      throw new Error(`Unexpected Facebook request: ${url}`)
+    },
+  })
+
+  const refreshed = await oauth.refreshFacebookPageAccessToken('existing-user-token', 'page-1')
+
+  assert.equal(refreshed.page.pageId, 'page-1')
+  assert.equal(refreshed.access_token, 'page-token-1')
+})
+
 test('review callbacks, user controls, and service-role deletion primitives stay wired together', () => {
   const callback = fs.readFileSync(path.join(process.cwd(), 'src/app/api/facebook/auth/callback/route.ts'), 'utf8')
   const broker = fs.readFileSync(path.join(process.cwd(), 'src/app/api/oauth-broker/call/route.ts'), 'utf8')
@@ -238,6 +394,7 @@ test('review callbacks, user controls, and service-role deletion primitives stay
 
   assert.match(callback, /getFacebookUserInfo/)
   assert.match(callback, /assertFacebookRequiredPageScopes\(permissions\)/)
+  assert.match(callback, /nonPublishablePages\.length > 0/)
   assert.match(callback, /getGrantedFacebookScopes/)
   assert.match(callback, /subscribeFacebookPageToWebhooks/)
   assert.match(callback, /authorized_by_facebook_user_id/)

@@ -215,9 +215,13 @@ export async function GET(request: NextRequest) {
       throw new Error(buildFacebookNoPageError(permissions, tokenDebug, isEnglish))
     }
     const publishablePages = pages.filter((page) => hasFacebookPagePublishPermission(page.tasks))
+    const nonPublishablePages = pages.filter((page) => !hasFacebookPagePublishPermission(page.tasks))
 
-    if (publishablePages.length === 0) {
-      throw new Error(getFacebookPagePublishPermissionError(pages[0]?.name, locale))
+    if (nonPublishablePages.length > 0) {
+      throw new Error(getFacebookPagePublishPermissionError(
+        nonPublishablePages.map((page) => page.name).join(', '),
+        locale,
+      ))
     }
 
     const now = new Date().toISOString()
